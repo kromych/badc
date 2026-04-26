@@ -126,6 +126,19 @@ fn shebang_line_is_skipped() {
 }
 
 #[test]
+fn sizeof_handles_type_names() {
+    // sizeof(int) / sizeof(char) / sizeof(<ptr>) all return the platform
+    // word size (1 for char, 8 otherwise). Returns 0 on success.
+    assert_eq!(run_fixture("sizeof_basic.c"), 0);
+}
+
+#[test]
+fn sizeof_handles_expressions() {
+    // sizeof(x), sizeof(*p) etc. — the operand isn't evaluated.
+    assert_eq!(run_fixture("sizeof_expr.c"), 0);
+}
+
+#[test]
 fn quicksort() {
     assert_eq!(run_fixture("quicksort.c"), 0);
 }

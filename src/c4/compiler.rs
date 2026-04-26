@@ -120,16 +120,29 @@ impl Compiler {
                     self.lex.line
                 )));
             }
-            self.ty = Ty::Int as i64;
-            if self.lex.tk == Token::Int as i64 {
+            if self.lex.tk == Token::Int as i64 || self.lex.tk == Token::Char as i64 {
+                // sizeof(<type>): an explicit type name, optionally with
+                // pointer markers (`int **` etc.). No bytecode is emitted
+                // for the operand at all in this branch.
+                self.ty = if self.lex.tk == Token::Int as i64 {
+                    Ty::Int as i64
+                } else {
+                    Ty::Char as i64
+                };
                 self.next()?;
-            } else if self.lex.tk == Token::Char as i64 {
-                self.next()?;
-                self.ty = Ty::Char as i64;
-            }
-            while self.lex.tk == Token::MulOp as i64 {
-                self.next()?;
-                self.ty += Ty::Ptr as i64;
+                while self.lex.tk == Token::MulOp as i64 {
+                    self.next()?;
+                    self.ty += Ty::Ptr as i64;
+                }
+            } else {
+                // sizeof(<expr>): parse the expression to learn its type,
+                // then drop whatever bytecode it emitted. sizeof is
+                // compile-time — the operand is never actually evaluated,
+                // so e.g. `sizeof(*p)` doesn't dereference p, and
+                // `sizeof(f())` doesn't call f.
+                let saved_text_len = self.text.len();
+                self.expr(Token::Assign as i64)?;
+                self.text.truncate(saved_text_len);
             }
             if self.lex.tk == ')' as i64 {
                 self.next()?;

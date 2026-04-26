@@ -4,7 +4,7 @@
 //! delegates to a method here. The split keeps `mod.rs` focused on the
 //! interpreter mechanics (dispatch, memory, allocation tracking,
 //! mprotect) while `syscalls.rs` is a flat catalogue of "what the C
-//! standard-library names do under c4rs". Adding a new syscall is now
+//! standard-library names do under badc". Adding a new syscall is now
 //! "register a name in `lexer::LIB_OPS`, add an `Op::*` variant, write
 //! one method here, and one match arm in `run`".
 //!

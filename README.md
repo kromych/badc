@@ -1,21 +1,25 @@
-# c4rs
+# badc
 
-A Rust port of [c4](https://github.com/rswier/c4), Robert Swierczek's small
-self-hosting C compiler. The compiler accepts a subset of C and targets a
-stack-machine bytecode that runs in an in-process VM.
+A Rust compiler / VM for the [c4](https://github.com/rswier/c4) dialect
+(Robert Swierczek's small self-hosting C subset), with a growing set of
+extensions on top. Started life as a straight Rust port — hence the
+internal `c4` module name — but has since grown enough features and
+safety machinery to deserve its own identity. The compiler accepts a
+subset of C and targets a stack-machine bytecode that runs in an
+in-process VM.
 
-c4rs is a strict superset of the original c4: anything c4 compiles, c4rs
-compiles too, with the same exit code. The original `c4.c` itself is
-included as a fixture (`fixtures/c/c4.c`) and self-hosts under c4rs —
-`c4rs c4.c hello.c` and even `c4rs c4.c c4.c hello.c` both work.
+badc is a strict superset of the original c4: anything c4 compiles,
+badc compiles too, with the same exit code. The original `c4.c` itself
+is included as a fixture (`fixtures/c/c4.c`) and self-hosts under badc
+— `badc c4.c hello.c` and even `badc c4.c c4.c hello.c` both work.
 Across the test suite's 53 C programs, 27 run identically under c4 and
-under c4rs; the other 26 use c4rs extensions and c4 rejects them at
+under badc; the other 26 use badc extensions and c4 rejects them at
 parse time. None show divergent behaviour on c4-compatible code.
 
 ## Build and run
 
     cargo build --release
-    ./target/release/c4rs path/to/file.c [program args...]
+    ./target/release/badc path/to/file.c [program args...]
 
 Running the included example:
 
@@ -30,9 +34,9 @@ becomes `argv[0]`.
 ## Shebang
 
 A `.c` file may start with a shebang line; the lexer skips it the same way it
-skips `#include`. With `c4rs` on `PATH`:
+skips `#include`. With `badc` on `PATH`:
 
-    #!/usr/bin/env c4rs
+    #!/usr/bin/env badc
     int main() {
         printf("hi\n");
         return 0;
@@ -50,7 +54,7 @@ Same core as c4:
 - library calls c4 already had: `printf`, `malloc`, `free`, `memset`,
   `memcmp`, `open`, `read`, `close`, `exit`
 
-c4rs extensions on top of that:
+badc extensions on top of that:
 
 - Control flow: `do`/`while`, `for`, `switch`/`case`/`default`, `break`,
   `continue`, `goto` + labels
@@ -75,7 +79,7 @@ following c4 itself.
 
 ### Predefined constants
 
-Because there's no `#define`, c4rs pre-binds the POSIX-conventional
+Because there's no `#define`, badc pre-binds the POSIX-conventional
 constants you'd otherwise hardcode as magic numbers. They're visible to
 any program without `#include`:
 
@@ -84,8 +88,8 @@ any program without `#include`:
     STDIN_FILENO STDOUT_FILENO STDERR_FILENO
     NULL EXIT_SUCCESS EXIT_FAILURE
 
-Run `c4rs --list-symbols` to dump them along with the keyword and
-library-call lists. Values are c4rs's, not the host's libc — `mprotect`
+Run `badc --list-symbols` to dump them along with the keyword and
+library-call lists. Values are badc's, not the host's libc — `mprotect`
 honours `PROT_READ = 1` and `PROT_WRITE = 2` as a bitmask exactly.
 
 ## Runtime safety

@@ -1,6 +1,6 @@
 //! Optional bytecode optimizer. Runs after `Compiler::compile()` and
 //! returns a semantically-equivalent `Program` with fewer / faster
-//! instructions. Off by default — enable with `c4rs --optimize <file>`
+//! instructions. Off by default — enable with `badc --optimize <file>`
 //! or by calling [`optimize`] directly on a [`Program`].
 //!
 //! The pipeline is intentionally local — no SSA, no real control-flow

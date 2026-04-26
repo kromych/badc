@@ -119,7 +119,7 @@ fn memcpy_copies_bytes_between_allocations() {
 
 #[test]
 fn shebang_line_is_skipped() {
-    // A leading `#!/usr/bin/env c4rs` line lets a .c file be made
+    // A leading `#!/usr/bin/env badc` line lets a .c file be made
     // executable; the lexer absorbs it the same way it absorbs
     // `#include`. The fixture's `main` returns 7.
     assert_eq!(run_fixture("shebang.c"), 7);
@@ -186,7 +186,7 @@ fn predefined_constants_are_visible() {
 #[test]
 fn original_c4_compiles_and_runs_hello() {
     // The canonical self-hosting test: Robert Swierczek's original c4.c
-    // runs under c4rs, compiles hello.c, and runs the resulting program
+    // runs under badc, compiles hello.c, and runs the resulting program
     // — which prints "Hello 123" then exits 0. We only check the exit
     // code; the printed output goes to the real stdout.
     let exit = super::run_fixture_with_args(

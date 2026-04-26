@@ -156,7 +156,7 @@ impl Compiler {
 
     /// Test whether `actual` is assignable / passable where `declared`
     /// is expected. Returns a human-readable warning string when they
-    /// don't match under c4rs's rules; `None` when they do.
+    /// don't match under badc's rules; `None` when they do.
     ///
     /// Compatibility is intentionally lax — c4 itself does no checking,
     /// so jumping straight to ISO-C strictness would drown the suite.

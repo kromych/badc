@@ -1,4 +1,4 @@
-#!/usr/bin/env c4rs
+#!/usr/bin/env badc
 int main() {
     return 7;
 }

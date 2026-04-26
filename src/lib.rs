@@ -1,4 +1,7 @@
-//! c4rs — Rust port of the c4 compiler/VM.
+//! badc — a Rust compiler / VM for the c4 dialect (and several
+//! extensions on top). Started as a port of Robert Swierczek's c4 —
+//! the `c4` module name and `C4Error` type are kept to acknowledge
+//! that lineage.
 //!
 //! See `README.md` for the dialect, runtime safety story, and CLI.
 //! This crate is the library half of the project; the binary lives in

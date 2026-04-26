@@ -1,13 +1,13 @@
-use c4rs::{Compiler, PredefinedKind, Vm, optimize, predefined_symbols};
+use badc::{Compiler, PredefinedKind, Vm, optimize, predefined_symbols};
 
 const USAGE: &str =
-    "usage: c4rs [--track-pointers] [--trace] [--list-symbols] [--optimize|-O] <file> [args...]";
+    "usage: badc [--track-pointers] [--trace] [--list-symbols] [--optimize|-O] <file> [args...]";
 
 fn main() {
     let raw: Vec<String> = std::env::args().collect();
 
     // Strip leading flags (in any order, anywhere before the source file)
-    // so the remaining argv looks like `c4rs <file> [args...]`.
+    // so the remaining argv looks like `badc <file> [args...]`.
     let mut track_pointers = false;
     let mut trace = false;
     let mut list_symbols = false;
@@ -100,7 +100,7 @@ fn main() {
 
 /// Print every name the compiler pre-binds before parsing — keywords,
 /// library functions, and integer constants — grouped by kind. Useful
-/// for scripting (`c4rs --list-symbols | grep PROT_`) and for spotting
+/// for scripting (`badc --list-symbols | grep PROT_`) and for spotting
 /// what's available without `#include`.
 fn print_predefined_symbols() {
     let symbols = predefined_symbols();

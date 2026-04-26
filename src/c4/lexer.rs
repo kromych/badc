@@ -58,7 +58,7 @@ impl Lexer {
                 // preprocessor directives (`#include`, `#define`, …) — c4
                 // doesn't run a preprocessor, it just ignores them — and
                 // a leading shebang line so source files can be made
-                // executable with `#!/usr/bin/env c4rs`.
+                // executable with `#!/usr/bin/env badc`.
                 while self.pos < self.src.len() && self.src[self.pos] as char != '\n' {
                     self.pos += 1;
                 }
@@ -390,7 +390,7 @@ const CONSTANTS: &[(&str, i64)] = &[
 ];
 
 /// Kind of a predefined identifier — used by `--list-symbols` and any
-/// future tooling that wants to enumerate the c4rs prelude.
+/// future tooling that wants to enumerate the badc prelude.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PredefinedKind {
     Keyword,

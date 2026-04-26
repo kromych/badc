@@ -108,6 +108,14 @@ fn mprotect_write_only_refuses_reads() {
 }
 
 #[test]
+fn negative_size_argument_is_caught() {
+    // memset(p, 0, -1) used to walk the address space (and accidentally
+    // trip the code-segment guard). With the new size validation it
+    // surfaces a clear "negative size" error at the syscall boundary.
+    expect_error_containing("negative_size_memset.c", "negative size");
+}
+
+#[test]
 fn mprotect_read_only_still_allows_reads() {
     use super::try_run_fixture;
     // After mprotect(PROT_READ), the existing data is still readable —

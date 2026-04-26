@@ -1,9 +1,14 @@
-use super::*;
+use super::{Compiler, Op, Program, Vm};
 
-fn setup_and_compile(code: &str) -> C4 {
-    let mut vm = C4::new(code.to_string(), false);
-    vm.compile().unwrap();
-    vm
+/// Compile + run, returning the exit code.
+fn run(code: &str) -> i64 {
+    let program = Compiler::new(code.to_string()).compile().unwrap();
+    Vm::new(program, false).run().unwrap()
+}
+
+/// Compile and return the program for codegen inspection.
+fn compile(code: &str) -> Program {
+    Compiler::new(code.to_string()).compile().unwrap()
 }
 
 #[test]
@@ -13,8 +18,7 @@ fn test_arithmetic() {
         return (10 + 20) * 2;
     }
     "#;
-    let mut vm = setup_and_compile(code);
-    assert_eq!(vm.run().unwrap(), 60);
+    assert_eq!(run(code), 60);
 }
 
 #[test]
@@ -32,8 +36,7 @@ fn test_goto() {
         return a;
     }
     "#;
-    let mut vm = setup_and_compile(code);
-    assert_eq!(vm.run().unwrap(), 5);
+    assert_eq!(run(code), 5);
 }
 
 #[test]
@@ -52,8 +55,7 @@ fn test_function_pointers() {
         return res1 * res2;
     }
     "#;
-    let mut vm = setup_and_compile(code);
-    assert_eq!(vm.run().unwrap(), 150); // 30 * 5 = 150
+    assert_eq!(run(code), 150); // 30 * 5 = 150
 }
 
 #[test]
@@ -71,8 +73,7 @@ fn test_switch_statement() {
         return res;
     }
     "#;
-    let mut vm = setup_and_compile(code);
-    assert_eq!(vm.run().unwrap(), 25);
+    assert_eq!(run(code), 25);
 }
 
 #[test]
@@ -89,8 +90,7 @@ fn test_switch_default_routing() {
         return res;
     }
     "#;
-    let mut vm = setup_and_compile(code);
-    assert_eq!(vm.run().unwrap(), 100);
+    assert_eq!(run(code), 100);
 }
 
 #[test]
@@ -106,8 +106,7 @@ fn test_control_flow() {
         return 0;
     }
     "#;
-    let mut vm = setup_and_compile(code);
-    assert_eq!(vm.run().unwrap(), 1);
+    assert_eq!(run(code), 1);
 }
 
 #[test]
@@ -122,8 +121,7 @@ fn test_do_while() {
         return i;
     }
     "#;
-    let mut vm = setup_and_compile(code);
-    assert_eq!(vm.run().unwrap(), 5);
+    assert_eq!(run(code), 5);
 }
 
 #[test]
@@ -141,8 +139,7 @@ fn test_break_continue() {
         return sum; // Should be 1 + 3 = 4
     }
     "#;
-    let mut vm = setup_and_compile(code);
-    assert_eq!(vm.run().unwrap(), 4);
+    assert_eq!(run(code), 4);
 }
 
 #[test]
@@ -158,8 +155,7 @@ fn test_for_loop() {
         return sum;
     }
     "#;
-    let mut vm = setup_and_compile(code);
-    assert_eq!(vm.run().unwrap(), 10);
+    assert_eq!(run(code), 10);
 }
 
 #[test]
@@ -173,8 +169,7 @@ fn test_recursion_factorial() {
         return fact(5);
     }
     "#;
-    let mut vm = setup_and_compile(code);
-    assert_eq!(vm.run().unwrap(), 120);
+    assert_eq!(run(code), 120);
 }
 
 #[test]
@@ -189,8 +184,7 @@ fn test_pointers() {
         return a;
     }
     "#;
-    let mut vm = setup_and_compile(code);
-    assert_eq!(vm.run().unwrap(), 200);
+    assert_eq!(run(code), 200);
 }
 
 #[test]
@@ -203,8 +197,7 @@ fn test_nested_function_calls() {
         return add(add(10, 20), add(30, 40));
     }
     "#;
-    let mut vm = setup_and_compile(code);
-    assert_eq!(vm.run().unwrap(), 100);
+    assert_eq!(run(code), 100);
 }
 
 #[test]
@@ -215,8 +208,7 @@ fn test_printf() {
         return 0;
     }
     "#;
-    let mut vm = setup_and_compile(code);
-    assert_eq!(vm.run().unwrap(), 0);
+    assert_eq!(run(code), 0);
 }
 
 #[test]
@@ -237,8 +229,7 @@ fn test_memory_ops() {
         return 0;
     }
     "#;
-    let mut vm = setup_and_compile(code);
-    assert_eq!(vm.run().unwrap(), 0);
+    assert_eq!(run(code), 0);
 }
 
 #[test]
@@ -260,35 +251,32 @@ fn test_file_io() {
         return 0;
     }
     "#;
-    let mut vm = setup_and_compile(code);
-    let res = vm.run().unwrap();
+    let res = run(code);
 
     std::fs::remove_file("test_dummy.txt").unwrap();
     assert_eq!(res, 0);
 }
 
+/// Build a Program by hand and execute it directly — confirms the VM is
+/// usable without going through the compiler.
 #[test]
 fn test_ir_execution() {
-    let mut vm = C4::new("".to_string(), false);
-    vm.text = vec![
-        Op::Ent as i64,
-        0,
-        Op::Imm as i64,
-        5,
-        Op::Psh as i64,
-        Op::Imm as i64,
-        10,
-        Op::Add as i64,
-        Op::Lev as i64,
-    ];
-
-    let name: &[u8] = b"main";
-    let _ = vm.resolve_symbol(name, vm.hash_name(name));
-    let main_sym = vm.find_symbol("main").unwrap();
-    vm.symbols[main_sym].val = 0;
-
-    let res = vm.run().unwrap();
-    assert_eq!(res, 15);
+    let program = Program {
+        text: vec![
+            Op::Ent as i64,
+            0,
+            Op::Imm as i64,
+            5,
+            Op::Psh as i64,
+            Op::Imm as i64,
+            10,
+            Op::Add as i64,
+            Op::Lev as i64,
+        ],
+        data: vec![],
+        entry_pc: 0,
+    };
+    assert_eq!(Vm::new(program, false).run().unwrap(), 15);
 }
 
 #[test]
@@ -298,8 +286,7 @@ fn test_ir_translation_simple() {
         return 42;
     }
     "#;
-    let mut vm = C4::new(code.to_string(), false);
-    vm.compile().unwrap();
+    let program = compile(code);
 
     let expected_text = vec![
         Op::Ent as i64,
@@ -309,7 +296,7 @@ fn test_ir_translation_simple() {
         Op::Lev as i64,
         Op::Lev as i64,
     ];
-    assert_eq!(vm.text, expected_text);
+    assert_eq!(program.text, expected_text);
 }
 
 #[test]
@@ -323,7 +310,7 @@ fn test_ir_translation_if() {
         }
     }
     "#;
-    let vm = setup_and_compile(code);
+    let program = compile(code);
 
     let bz_target = 11;
     let jmp_target = 14;
@@ -345,7 +332,7 @@ fn test_ir_translation_if() {
         Op::Lev as i64,
         Op::Lev as i64,
     ];
-    assert_eq!(vm.text, expected_text);
+    assert_eq!(program.text, expected_text);
 }
 
 #[test]
@@ -357,7 +344,7 @@ fn test_ir_translation_while() {
         }
     }
     "#;
-    let vm = setup_and_compile(code);
+    let program = compile(code);
 
     let bz_target = 11;
     let jmp_target = 2;
@@ -376,7 +363,7 @@ fn test_ir_translation_while() {
         jmp_target,
         Op::Lev as i64,
     ];
-    assert_eq!(vm.text, expected_text);
+    assert_eq!(program.text, expected_text);
 }
 
 #[test]
@@ -388,15 +375,13 @@ fn test_pointer_arithmetic_scaling() {
             return p + 1; // Should return 108, not 101
         }
         "#;
-    let mut vm = setup_and_compile(code);
-    assert_eq!(vm.run().unwrap(), 108);
+    assert_eq!(run(code), 108);
 }
 
 #[test]
 fn test_expression_precedence() {
     let code = "int main() { return 2 + 3 * 4 == 14; }";
-    let mut vm = setup_and_compile(code);
-    assert_eq!(vm.run().unwrap(), 1);
+    assert_eq!(run(code), 1);
 }
 
 #[test]
@@ -408,8 +393,7 @@ fn test_variable_shadowing() {
         return i;
     }
     "#;
-    let mut vm = setup_and_compile(code);
-    assert_eq!(vm.run().unwrap(), 10);
+    assert_eq!(run(code), 10);
 }
 
 #[test]
@@ -423,8 +407,7 @@ fn test_pointer_arithmetic() {
         return *p + *(p + 1);
     }
     "#;
-    let mut vm = setup_and_compile(code);
-    assert_eq!(vm.run().unwrap(), 3);
+    assert_eq!(run(code), 3);
 }
 
 #[test]
@@ -438,8 +421,7 @@ fn test_memset_mcmp() {
         return 0;
     }
     "#;
-    let mut vm = setup_and_compile(code);
-    assert_eq!(vm.run().unwrap(), 42);
+    assert_eq!(run(code), 42);
 }
 
 #[test]
@@ -497,8 +479,7 @@ fn test_quicksort() {
             return 0; // Success
         }
         "#;
-    let mut vm = setup_and_compile(code);
-    assert_eq!(vm.run().unwrap(), 0);
+    assert_eq!(run(code), 0);
 }
 
 #[test]
@@ -529,8 +510,7 @@ fn test_linked_list() {
             return sum; // Expected: 4+3+2+1+0 = 10
         }
         "#;
-    let mut vm = setup_and_compile(code);
-    assert_eq!(vm.run().unwrap(), 10);
+    assert_eq!(run(code), 10);
 }
 
 #[test]
@@ -575,8 +555,7 @@ fn test_binary_search_tree() {
             return 0; // Success
         }
         "#;
-    let mut vm = setup_and_compile(code);
-    assert_eq!(vm.run().unwrap(), 0);
+    assert_eq!(run(code), 0);
 }
 
 #[test]
@@ -616,8 +595,7 @@ fn test_bst_free() {
             return 0; // Success if no VM crash
         }
         "#;
-    let mut vm = setup_and_compile(code);
-    assert_eq!(vm.run().unwrap(), 0);
+    assert_eq!(run(code), 0);
 }
 
 #[test]
@@ -651,7 +629,5 @@ fn test_double_pointers() {
             return 0; // Success
         }
         "#;
-
-    let mut vm = setup_and_compile(code);
-    assert_eq!(vm.run().unwrap(), 0);
+    assert_eq!(run(code), 0);
 }

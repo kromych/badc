@@ -1,5 +1,7 @@
 mod c4;
 
+use c4::{Compiler, Vm};
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
@@ -12,13 +14,15 @@ fn main() {
     let mut contents = String::new();
     std::io::Read::read_to_string(&mut file, &mut contents).expect("Could not read file");
 
-    let mut vm = c4::C4::new(contents, false);
-    if let Err(e) = vm.compile() {
-        eprintln!("{}", e);
-        std::process::exit(1);
-    }
+    let program = match Compiler::new(contents).compile() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    };
 
-    match vm.run() {
+    match Vm::new(program, false).run() {
         Ok(res) => println!("exit({})", res),
         Err(e) => {
             eprintln!("{}", e);

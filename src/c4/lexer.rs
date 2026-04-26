@@ -1,0 +1,330 @@
+use super::error::C4Error;
+use super::op::Op;
+use super::symbol::Symbol;
+use super::token::{Token, Ty};
+
+pub(crate) struct Lexer {
+    src: Vec<u8>,
+    pos: usize,
+    pub line: usize,
+
+    // Output of the most recent next() call.
+    pub tk: i64,
+    pub ival: i64,
+    pub curr_id_idx: usize,
+}
+
+impl Lexer {
+    pub fn new(source: String) -> Self {
+        Self {
+            src: source.into_bytes(),
+            pos: 0,
+            line: 1,
+            tk: 0,
+            ival: 0,
+            curr_id_idx: 0,
+        }
+    }
+
+    /// Return true if the next non-whitespace byte (after the current position) equals `b`.
+    /// Used by the compiler to detect `name:` label syntax without consuming the colon.
+    pub fn peek_after_whitespace(&self, b: u8) -> bool {
+        let mut p = self.pos;
+        while p < self.src.len() && self.src[p].is_ascii_whitespace() {
+            p += 1;
+        }
+        p < self.src.len() && self.src[p] == b
+    }
+
+    /// Advance to the next token. Identifiers are interned into `symbols`; string
+    /// literals are appended to `data` and `ival` is set to their start address.
+    pub fn next(&mut self, symbols: &mut Vec<Symbol>, data: &mut Vec<u8>) -> Result<(), C4Error> {
+        loop {
+            if self.pos >= self.src.len() {
+                self.tk = 0;
+                return Ok(());
+            }
+
+            let c = self.src[self.pos] as char;
+            self.pos += 1;
+
+            if c == '\n' {
+                self.line += 1;
+            } else if c == '#' {
+                while self.pos < self.src.len() && self.src[self.pos] as char != '\n' {
+                    self.pos += 1;
+                }
+            } else if c.is_ascii_alphabetic() || c == '_' {
+                let start = self.pos - 1;
+                let mut hash: i64 = c as i64;
+                while self.pos < self.src.len() {
+                    let nc = self.src[self.pos] as char;
+                    if !nc.is_ascii_alphanumeric() && nc != '_' {
+                        break;
+                    }
+                    hash = hash.wrapping_mul(147).wrapping_add(nc as i64);
+                    self.pos += 1;
+                }
+                let name_vec = self.src[start..self.pos].to_vec();
+                self.curr_id_idx = resolve_symbol(symbols, &name_vec, hash);
+                self.tk = symbols[self.curr_id_idx].token;
+                return Ok(());
+            } else if c.is_ascii_digit() {
+                let mut val = (c as u8 - b'0') as i64;
+                if val == 0
+                    && self.pos < self.src.len()
+                    && (self.src[self.pos] as char == 'x' || self.src[self.pos] as char == 'X')
+                {
+                    self.pos += 1;
+                    while self.pos < self.src.len() {
+                        let nc = self.src[self.pos] as char;
+                        if nc.is_ascii_digit() {
+                            val = val * 16 + (nc as u8 - b'0') as i64;
+                        } else if ('a'..='f').contains(&nc) {
+                            val = val * 16 + (nc as u8 - b'a' + 10) as i64;
+                        } else if ('A'..='F').contains(&nc) {
+                            val = val * 16 + (nc as u8 - b'A' + 10) as i64;
+                        } else {
+                            break;
+                        }
+                        self.pos += 1;
+                    }
+                } else {
+                    while self.pos < self.src.len() {
+                        let nc = self.src[self.pos] as char;
+                        if !nc.is_ascii_digit() {
+                            break;
+                        }
+                        val = val * 10 + (nc as u8 - b'0') as i64;
+                        self.pos += 1;
+                    }
+                }
+                self.ival = val;
+                self.tk = Token::Num as i64;
+                return Ok(());
+            } else if c == '/' {
+                if self.pos < self.src.len() && self.src[self.pos] as char == '/' {
+                    self.pos += 1;
+                    while self.pos < self.src.len() && self.src[self.pos] as char != '\n' {
+                        self.pos += 1;
+                    }
+                } else {
+                    self.tk = Token::DivOp as i64;
+                    return Ok(());
+                }
+            } else if c == '\'' || c == '"' {
+                let start_data = data.len() as i64;
+                while self.pos < self.src.len() && self.src[self.pos] as char != c {
+                    let mut val = self.src[self.pos] as i64;
+                    self.pos += 1;
+                    if val == '\\' as i64 {
+                        val = self.src[self.pos] as i64;
+                        self.pos += 1;
+                        if val == 'n' as i64 {
+                            val = '\n' as i64;
+                        }
+                    }
+                    if c == '"' {
+                        data.push(val as u8);
+                    } else {
+                        self.ival = val;
+                    }
+                }
+                self.pos += 1;
+                if c == '"' {
+                    data.push(0);
+                    self.ival = start_data;
+                    self.tk = '"' as i64;
+                } else {
+                    self.tk = Token::Num as i64;
+                }
+                return Ok(());
+            } else {
+                let next_char = if self.pos < self.src.len() {
+                    self.src[self.pos] as char
+                } else {
+                    '\0'
+                };
+                match c {
+                    '=' => {
+                        if next_char == '=' {
+                            self.pos += 1;
+                            self.tk = Token::EqOp as i64;
+                        } else {
+                            self.tk = Token::Assign as i64;
+                        }
+                    }
+                    '+' => {
+                        if next_char == '+' {
+                            self.pos += 1;
+                            self.tk = Token::Inc as i64;
+                        } else {
+                            self.tk = Token::AddOp as i64;
+                        }
+                    }
+                    '-' => {
+                        if next_char == '-' {
+                            self.pos += 1;
+                            self.tk = Token::Dec as i64;
+                        } else {
+                            self.tk = Token::SubOp as i64;
+                        }
+                    }
+                    '!' => {
+                        if next_char == '=' {
+                            self.pos += 1;
+                            self.tk = Token::NeOp as i64;
+                        } else {
+                            self.tk = 0;
+                        }
+                    }
+                    '<' => {
+                        if next_char == '=' {
+                            self.pos += 1;
+                            self.tk = Token::LeOp as i64;
+                        } else if next_char == '<' {
+                            self.pos += 1;
+                            self.tk = Token::ShlOp as i64;
+                        } else {
+                            self.tk = Token::LtOp as i64;
+                        }
+                    }
+                    '>' => {
+                        if next_char == '=' {
+                            self.pos += 1;
+                            self.tk = Token::GeOp as i64;
+                        } else if next_char == '>' {
+                            self.pos += 1;
+                            self.tk = Token::ShrOp as i64;
+                        } else {
+                            self.tk = Token::GtOp as i64;
+                        }
+                    }
+                    '|' => {
+                        if next_char == '|' {
+                            self.pos += 1;
+                            self.tk = Token::Lor as i64;
+                        } else {
+                            self.tk = Token::OrOp as i64;
+                        }
+                    }
+                    '&' => {
+                        if next_char == '&' {
+                            self.pos += 1;
+                            self.tk = Token::Lan as i64;
+                        } else {
+                            self.tk = Token::AndOp as i64;
+                        }
+                    }
+                    '^' => self.tk = Token::XorOp as i64,
+                    '%' => self.tk = Token::ModOp as i64,
+                    '*' => self.tk = Token::MulOp as i64,
+                    '[' => self.tk = Token::Brak as i64,
+                    '?' => self.tk = Token::Cond as i64,
+                    _ => {
+                        if "!~;{}()],:".contains(c) {
+                            self.tk = c as i64;
+                        } else {
+                            continue;
+                        }
+                    }
+                }
+                return Ok(());
+            }
+        }
+    }
+}
+
+pub(crate) fn hash_name(name: &[u8]) -> i64 {
+    let mut h: i64 = 0;
+    for &b in name {
+        h = h.wrapping_mul(147).wrapping_add(b as i64);
+    }
+    h
+}
+
+pub(crate) fn find_symbol(symbols: &[Symbol], name: &str) -> Option<usize> {
+    symbols.iter().position(|s| s.name == name)
+}
+
+pub(crate) fn resolve_symbol(symbols: &mut Vec<Symbol>, name: &[u8], hash: i64) -> usize {
+    for (i, s) in symbols.iter().enumerate().rev() {
+        if s.hash == hash && s.token != 0 && s.name.as_bytes() == name {
+            return i;
+        }
+    }
+    symbols.push(Symbol {
+        name: String::from_utf8_lossy(name).to_string(),
+        hash,
+        token: Token::Id as i64,
+        ..Default::default()
+    });
+    symbols.len() - 1
+}
+
+fn add_keyword(symbols: &mut Vec<Symbol>, name: &str, token: i64) {
+    let hash = hash_name(name.as_bytes());
+    symbols.push(Symbol {
+        name: name.to_string(),
+        hash,
+        token,
+        ..Default::default()
+    });
+}
+
+/// Seed the symbol table with C keywords and library function bindings.
+pub(crate) fn init_symbols(symbols: &mut Vec<Symbol>) {
+    let keywords: &[(&str, Token)] = &[
+        ("char", Token::Char),
+        ("else", Token::Else),
+        ("enum", Token::Enum),
+        ("for", Token::For),
+        ("if", Token::If),
+        ("int", Token::Int),
+        ("return", Token::Return),
+        ("sizeof", Token::Sizeof),
+        ("while", Token::While),
+        ("do", Token::Do),
+        ("break", Token::Break),
+        ("continue", Token::Continue),
+        ("goto", Token::Goto),
+        ("switch", Token::Switch),
+        ("case", Token::Case),
+        ("default", Token::Default),
+        ("open", Token::Id),
+        ("read", Token::Id),
+        ("close", Token::Id),
+        ("printf", Token::Id),
+        ("malloc", Token::Id),
+        ("free", Token::Id),
+        ("memset", Token::Id),
+        ("memcmp", Token::Id),
+        ("exit", Token::Id),
+        ("void", Token::Char),
+        ("main", Token::Id),
+    ];
+
+    let lib_ops: &[(&str, Op)] = &[
+        ("open", Op::Open),
+        ("read", Op::Read),
+        ("close", Op::Clos),
+        ("printf", Op::Prtf),
+        ("malloc", Op::Malc),
+        ("free", Op::Free),
+        ("memset", Op::Mset),
+        ("memcmp", Op::Mcmp),
+        ("exit", Op::Exit),
+    ];
+
+    for (name, tok) in keywords {
+        add_keyword(symbols, name, *tok as i64);
+    }
+    for (name, op) in lib_ops {
+        let idx = find_symbol(symbols, name).unwrap();
+        symbols[idx].class = Token::Sys as i64;
+        symbols[idx].type_ = Ty::Int as i64;
+        symbols[idx].val = *op as i64;
+    }
+    // Ensure main is registered so the compiler's later lookup sees it.
+    let _ = find_symbol(symbols, "main").unwrap();
+}

@@ -1,365 +1,157 @@
-use super::{C4, C4Error, Op, Symbol, Token, Ty};
+use std::collections::HashMap;
 
-impl C4 {
-    pub(super) fn init_symbols(&mut self) {
-        let keywords = [
-            ("char", Token::Char),
-            ("else", Token::Else),
-            ("enum", Token::Enum),
-            ("for", Token::For),
-            ("if", Token::If),
-            ("int", Token::Int),
-            ("return", Token::Return),
-            ("sizeof", Token::Sizeof),
-            ("while", Token::While),
-            ("do", Token::Do),
-            ("break", Token::Break),
-            ("continue", Token::Continue),
-            ("goto", Token::Goto),
-            ("switch", Token::Switch),
-            ("case", Token::Case),
-            ("default", Token::Default),
-            ("open", Token::Id),
-            ("read", Token::Id),
-            ("close", Token::Id),
-            ("printf", Token::Id),
-            ("malloc", Token::Id),
-            ("free", Token::Id),
-            ("memset", Token::Id),
-            ("memcmp", Token::Id),
-            ("exit", Token::Id),
-            ("void", Token::Char),
-            ("main", Token::Id),
-        ];
+use super::error::C4Error;
+use super::lexer::{self, Lexer};
+use super::op::Op;
+use super::program::Program;
+use super::symbol::Symbol;
+use super::token::{Token, Ty};
 
-        let lib_ops = [
-            ("open", Op::Open),
-            ("read", Op::Read),
-            ("close", Op::Clos),
-            ("printf", Op::Prtf),
-            ("malloc", Op::Malc),
-            ("free", Op::Free),
-            ("memset", Op::Mset),
-            ("memcmp", Op::Mcmp),
-            ("exit", Op::Exit),
-        ];
+/// Single-pass C compiler. Holds the lexer, the symbol table, and the
+/// codegen scaffolding. `compile(self)` consumes the compiler and produces
+/// a [`Program`] ready for the VM.
+pub struct Compiler {
+    lex: Lexer,
+    symbols: Vec<Symbol>,
 
-        for (name, tok) in keywords.iter() {
-            self.add_keyword(name, *tok as i64);
+    // --- Codegen state ---
+    text: Vec<i64>,
+    data: Vec<u8>,
+    /// Type of the current expression — set by `expr` callees, read by callers
+    /// to decide between byte and word loads/stores and for pointer scaling.
+    ty: i64,
+    /// Number of local-variable slots currently reserved in the active stack
+    /// frame; patched into `Op::Ent` at the end of the function.
+    loc_offs: i64,
+
+    // --- Patch lists ---
+    loop_breaks: Vec<Vec<usize>>,
+    loop_continues: Vec<Vec<usize>>,
+    labels: HashMap<String, usize>,
+    unresolved_gotos: Vec<(String, usize)>,
+    switch_cases: Vec<Vec<(i64, usize)>>,
+    switch_defaults: Vec<Option<usize>>,
+}
+
+impl Compiler {
+    pub fn new(source: String) -> Self {
+        let mut symbols = Vec::new();
+        lexer::init_symbols(&mut symbols);
+        Self {
+            lex: Lexer::new(source),
+            symbols,
+            text: Vec::new(),
+            data: Vec::new(),
+            ty: 0,
+            loc_offs: 0,
+            loop_breaks: Vec::new(),
+            loop_continues: Vec::new(),
+            labels: HashMap::new(),
+            unresolved_gotos: Vec::new(),
+            switch_cases: Vec::new(),
+            switch_defaults: Vec::new(),
         }
+    }
 
-        for (name, op) in lib_ops.iter() {
-            let idx = self.find_symbol(name).unwrap();
-            self.symbols[idx].class = Token::Sys as i64;
-            self.symbols[idx].type_ = Ty::Int as i64;
-            self.symbols[idx].val = *op as i64;
+    /// Compile the source. On success, the returned `Program` contains the
+    /// bytecode, the static data segment, and the PC of `main`.
+    pub fn compile(mut self) -> Result<Program, C4Error> {
+        self.run_compile()?;
+        let main_idx = lexer::find_symbol(&self.symbols, "main")
+            .ok_or_else(|| C4Error::Compile("main() not defined".to_string()))?;
+        if self.symbols[main_idx].class != Token::Fun as i64 {
+            return Err(C4Error::Compile("main() not defined".to_string()));
         }
-
-        let _ = self.find_symbol("main").unwrap();
+        let entry_pc = self.symbols[main_idx].val as usize;
+        Ok(Program {
+            text: self.text,
+            data: self.data,
+            entry_pc,
+        })
     }
 
-    fn add_keyword(&mut self, name: &str, token: i64) {
-        let hash = self.hash_name(name.as_bytes());
-        self.symbols.push(Symbol {
-            name: name.to_string(),
-            hash,
-            token,
-            ..Default::default()
-        });
-    }
-
-    pub fn hash_name(&self, name: &[u8]) -> i64 {
-        let mut h: i64 = 0;
-        for &b in name {
-            h = h.wrapping_mul(147).wrapping_add(b as i64);
-        }
-        h
-    }
-
-    pub fn find_symbol(&self, name: &str) -> Option<usize> {
-        self.symbols.iter().position(|s| s.name == name)
-    }
-
-    pub fn resolve_symbol(&mut self, name: &[u8], hash: i64) -> usize {
-        for (i, s) in self.symbols.iter().enumerate().rev() {
-            if s.hash == hash && s.token != 0 && s.name.as_bytes() == name {
-                return i;
-            }
-        }
-
-        let sym = Symbol {
-            name: String::from_utf8_lossy(name).to_string(),
-            hash,
-            token: Token::Id as i64,
-            ..Default::default()
-        };
-        self.symbols.push(sym);
-        self.symbols.len() - 1
-    }
+    // ---- Lexer plumbing ----
 
     fn next(&mut self) -> Result<(), C4Error> {
-        loop {
-            if self.src_pos >= self.src.len() {
-                self.tk = 0;
-                return Ok(());
-            }
-
-            let c = self.src[self.src_pos] as char;
-            self.src_pos += 1;
-
-            if c == '\n' {
-                self.line += 1;
-            } else if c == '#' {
-                while self.src_pos < self.src.len() && self.src[self.src_pos] as char != '\n' {
-                    self.src_pos += 1;
-                }
-            } else if c.is_ascii_alphabetic() || c == '_' {
-                let start = self.src_pos - 1;
-                let mut hash: i64 = c as i64;
-                while self.src_pos < self.src.len() {
-                    let nc = self.src[self.src_pos] as char;
-                    if !nc.is_ascii_alphanumeric() && nc != '_' {
-                        break;
-                    }
-                    hash = hash.wrapping_mul(147).wrapping_add(nc as i64);
-                    self.src_pos += 1;
-                }
-                let name_vec = self.src[start..self.src_pos].to_vec();
-                self.curr_id_idx = self.resolve_symbol(&name_vec, hash);
-                self.tk = self.symbols[self.curr_id_idx].token;
-                return Ok(());
-            } else if c.is_ascii_digit() {
-                let mut val = (c as u8 - b'0') as i64;
-                if val == 0
-                    && self.src_pos < self.src.len()
-                    && (self.src[self.src_pos] as char == 'x'
-                        || self.src[self.src_pos] as char == 'X')
-                {
-                    self.src_pos += 1;
-                    while self.src_pos < self.src.len() {
-                        let nc = self.src[self.src_pos] as char;
-                        if nc.is_ascii_digit() {
-                            val = val * 16 + (nc as u8 - b'0') as i64;
-                        } else if ('a'..='f').contains(&nc) {
-                            val = val * 16 + (nc as u8 - b'a' + 10) as i64;
-                        } else if ('A'..='F').contains(&nc) {
-                            val = val * 16 + (nc as u8 - b'A' + 10) as i64;
-                        } else {
-                            break;
-                        }
-                        self.src_pos += 1;
-                    }
-                } else {
-                    while self.src_pos < self.src.len() {
-                        let nc = self.src[self.src_pos] as char;
-                        if !nc.is_ascii_digit() {
-                            break;
-                        }
-                        val = val * 10 + (nc as u8 - b'0') as i64;
-                        self.src_pos += 1;
-                    }
-                }
-                self.ival = val;
-                self.tk = Token::Num as i64;
-                return Ok(());
-            } else if c == '/' {
-                if self.src_pos < self.src.len() && self.src[self.src_pos] as char == '/' {
-                    self.src_pos += 1;
-                    while self.src_pos < self.src.len()
-                        && self.src[self.src_pos] as char != '\n'
-                    {
-                        self.src_pos += 1;
-                    }
-                } else {
-                    self.tk = Token::DivOp as i64;
-                    return Ok(());
-                }
-            } else if c == '\'' || c == '"' {
-                let start_data = self.data.len() as i64;
-                while self.src_pos < self.src.len() && self.src[self.src_pos] as char != c {
-                    let mut val = self.src[self.src_pos] as i64;
-                    self.src_pos += 1;
-                    if val == '\\' as i64 {
-                        val = self.src[self.src_pos] as i64;
-                        self.src_pos += 1;
-                        if val == 'n' as i64 {
-                            val = '\n' as i64;
-                        }
-                    }
-                    if c == '"' {
-                        self.data.push(val as u8);
-                    } else {
-                        self.ival = val;
-                    }
-                }
-                self.src_pos += 1;
-                if c == '"' {
-                    self.data.push(0);
-                    self.ival = start_data;
-                    self.tk = '"' as i64;
-                } else {
-                    self.tk = Token::Num as i64;
-                }
-                return Ok(());
-            } else {
-                let next_char = if self.src_pos < self.src.len() {
-                    self.src[self.src_pos] as char
-                } else {
-                    '\0'
-                };
-                match c {
-                    '=' => {
-                        if next_char == '=' {
-                            self.src_pos += 1;
-                            self.tk = Token::EqOp as i64;
-                        } else {
-                            self.tk = Token::Assign as i64;
-                        }
-                    }
-                    '+' => {
-                        if next_char == '+' {
-                            self.src_pos += 1;
-                            self.tk = Token::Inc as i64;
-                        } else {
-                            self.tk = Token::AddOp as i64;
-                        }
-                    }
-                    '-' => {
-                        if next_char == '-' {
-                            self.src_pos += 1;
-                            self.tk = Token::Dec as i64;
-                        } else {
-                            self.tk = Token::SubOp as i64;
-                        }
-                    }
-                    '!' => {
-                        if next_char == '=' {
-                            self.src_pos += 1;
-                            self.tk = Token::NeOp as i64;
-                        } else {
-                            self.tk = 0;
-                        }
-                    }
-                    '<' => {
-                        if next_char == '=' {
-                            self.src_pos += 1;
-                            self.tk = Token::LeOp as i64;
-                        } else if next_char == '<' {
-                            self.src_pos += 1;
-                            self.tk = Token::ShlOp as i64;
-                        } else {
-                            self.tk = Token::LtOp as i64;
-                        }
-                    }
-                    '>' => {
-                        if next_char == '=' {
-                            self.src_pos += 1;
-                            self.tk = Token::GeOp as i64;
-                        } else if next_char == '>' {
-                            self.src_pos += 1;
-                            self.tk = Token::ShrOp as i64;
-                        } else {
-                            self.tk = Token::GtOp as i64;
-                        }
-                    }
-                    '|' => {
-                        if next_char == '|' {
-                            self.src_pos += 1;
-                            self.tk = Token::Lor as i64;
-                        } else {
-                            self.tk = Token::OrOp as i64;
-                        }
-                    }
-                    '&' => {
-                        if next_char == '&' {
-                            self.src_pos += 1;
-                            self.tk = Token::Lan as i64;
-                        } else {
-                            self.tk = Token::AndOp as i64;
-                        }
-                    }
-                    '^' => self.tk = Token::XorOp as i64,
-                    '%' => self.tk = Token::ModOp as i64,
-                    '*' => self.tk = Token::MulOp as i64,
-                    '[' => self.tk = Token::Brak as i64,
-                    '?' => self.tk = Token::Cond as i64,
-                    _ => {
-                        if "!~;{}()],:".contains(c) {
-                            self.tk = c as i64;
-                        } else {
-                            continue;
-                        }
-                    }
-                }
-                return Ok(());
-            }
-        }
+        self.lex.next(&mut self.symbols, &mut self.data)
     }
+
+    // ---- Code emission ----
+
+    fn emit_op(&mut self, op: Op) {
+        self.text.push(op as i64);
+    }
+
+    fn emit_val(&mut self, val: i64) {
+        self.text.push(val);
+    }
+
+    // ---- Recursive descent ----
 
     fn expr(&mut self, lev: i64) -> Result<(), C4Error> {
         let mut t: i64;
 
-        if self.tk == 0 {
+        if self.lex.tk == 0 {
             return Err(C4Error::Compile(format!(
                 "{}: unexpected eof in expression",
-                self.line
+                self.lex.line
             )));
-        } else if self.tk == Token::Num as i64 {
+        } else if self.lex.tk == Token::Num as i64 {
             self.emit_op(Op::Imm);
-            self.emit_val(self.ival);
+            self.emit_val(self.lex.ival);
             self.next()?;
             self.ty = Ty::Int as i64;
-        } else if self.tk == '"' as i64 {
+        } else if self.lex.tk == '"' as i64 {
             self.emit_op(Op::Imm);
-            self.emit_val(self.ival);
+            self.emit_val(self.lex.ival);
             self.next()?;
-            while self.tk == '"' as i64 {
+            while self.lex.tk == '"' as i64 {
                 self.next()?;
             }
             self.ty = Ty::Ptr as i64;
-        } else if self.tk == Token::Sizeof as i64 {
+        } else if self.lex.tk == Token::Sizeof as i64 {
             self.next()?;
-            if self.tk == '(' as i64 {
+            if self.lex.tk == '(' as i64 {
                 self.next()?;
             } else {
                 return Err(C4Error::Compile(format!(
                     "{}: open paren expected in sizeof",
-                    self.line
+                    self.lex.line
                 )));
             }
             self.ty = Ty::Int as i64;
-            if self.tk == Token::Int as i64 {
+            if self.lex.tk == Token::Int as i64 {
                 self.next()?;
-            } else if self.tk == Token::Char as i64 {
+            } else if self.lex.tk == Token::Char as i64 {
                 self.next()?;
                 self.ty = Ty::Char as i64;
             }
-            while self.tk == Token::MulOp as i64 {
+            while self.lex.tk == Token::MulOp as i64 {
                 self.next()?;
                 self.ty += Ty::Ptr as i64;
             }
-            if self.tk == ')' as i64 {
+            if self.lex.tk == ')' as i64 {
                 self.next()?;
             } else {
                 return Err(C4Error::Compile(format!(
                     "{}: close paren expected in sizeof",
-                    self.line
+                    self.lex.line
                 )));
             }
             self.emit_op(Op::Imm);
             self.emit_val(if self.ty == Ty::Char as i64 { 1 } else { 8 });
             self.ty = Ty::Int as i64;
-        } else if self.tk == Token::Id as i64 {
-            let id_idx = self.curr_id_idx;
+        } else if self.lex.tk == Token::Id as i64 {
+            let id_idx = self.lex.curr_id_idx;
             self.next()?;
-            if self.tk == '(' as i64 {
+            if self.lex.tk == '(' as i64 {
                 self.next()?;
                 let mut nargs = 0;
-                while self.tk != ')' as i64 {
+                while self.lex.tk != ')' as i64 {
                     self.expr(Token::Assign as i64)?;
                     self.emit_op(Op::Psh);
                     nargs += 1;
-                    if self.tk == ',' as i64 {
+                    if self.lex.tk == ',' as i64 {
                         self.next()?;
                     }
                 }
@@ -384,7 +176,7 @@ impl C4 {
                 } else {
                     return Err(C4Error::Compile(format!(
                         "{}: bad function call",
-                        self.line
+                        self.lex.line
                     )));
                 }
                 if nargs > 0 {
@@ -410,7 +202,7 @@ impl C4 {
                 } else {
                     return Err(C4Error::Compile(format!(
                         "{}: undefined variable {}",
-                        self.line, self.symbols[id_idx].name
+                        self.lex.line, self.symbols[id_idx].name
                     )));
                 }
                 self.ty = self.symbols[id_idx].type_;
@@ -420,59 +212,65 @@ impl C4 {
                     Op::Li
                 });
             }
-        } else if self.tk == '(' as i64 {
+        } else if self.lex.tk == '(' as i64 {
             self.next()?;
-            if self.tk == Token::Int as i64 || self.tk == Token::Char as i64 {
-                t = if self.tk == Token::Int as i64 {
+            if self.lex.tk == Token::Int as i64 || self.lex.tk == Token::Char as i64 {
+                t = if self.lex.tk == Token::Int as i64 {
                     Ty::Int as i64
                 } else {
                     Ty::Char as i64
                 };
                 self.next()?;
-                while self.tk == Token::MulOp as i64 {
+                while self.lex.tk == Token::MulOp as i64 {
                     self.next()?;
                     t += Ty::Ptr as i64;
                 }
-                if self.tk == ')' as i64 {
+                if self.lex.tk == ')' as i64 {
                     self.next()?;
                 } else {
-                    return Err(C4Error::Compile(format!("{}: bad cast", self.line)));
+                    return Err(C4Error::Compile(format!("{}: bad cast", self.lex.line)));
                 }
                 self.expr(Token::Inc as i64)?;
                 self.ty = t;
             } else {
                 self.expr(Token::Assign as i64)?;
-                if self.tk == ')' as i64 {
+                if self.lex.tk == ')' as i64 {
                     self.next()?;
                 } else {
                     return Err(C4Error::Compile(format!(
                         "{}: close paren expected",
-                        self.line
+                        self.lex.line
                     )));
                 }
             }
-        } else if self.tk == Token::MulOp as i64 {
+        } else if self.lex.tk == Token::MulOp as i64 {
             self.next()?;
             self.expr(Token::Inc as i64)?;
             if self.ty > Ty::Int as i64 {
                 self.ty -= Ty::Ptr as i64;
             } else {
-                return Err(C4Error::Compile(format!("{}: bad dereference", self.line)));
+                return Err(C4Error::Compile(format!(
+                    "{}: bad dereference",
+                    self.lex.line
+                )));
             }
             self.emit_op(if self.ty == Ty::Char as i64 {
                 Op::Lc
             } else {
                 Op::Li
             });
-        } else if self.tk == Token::AndOp as i64 {
+        } else if self.lex.tk == Token::AndOp as i64 {
             self.next()?;
             self.expr(Token::Inc as i64)?;
             let last = self.text.pop().unwrap();
             if last != Op::Lc as i64 && last != Op::Li as i64 {
-                return Err(C4Error::Compile(format!("{}: bad address-of", self.line)));
+                return Err(C4Error::Compile(format!(
+                    "{}: bad address-of",
+                    self.lex.line
+                )));
             }
             self.ty += Ty::Ptr as i64;
-        } else if self.tk == '!' as i64 {
+        } else if self.lex.tk == '!' as i64 {
             self.next()?;
             self.expr(Token::Inc as i64)?;
             self.emit_op(Op::Psh);
@@ -480,7 +278,7 @@ impl C4 {
             self.emit_val(0);
             self.emit_op(Op::Eq);
             self.ty = Ty::Int as i64;
-        } else if self.tk == '~' as i64 {
+        } else if self.lex.tk == '~' as i64 {
             self.next()?;
             self.expr(Token::Inc as i64)?;
             self.emit_op(Op::Psh);
@@ -488,15 +286,15 @@ impl C4 {
             self.emit_val(-1);
             self.emit_op(Op::Xor);
             self.ty = Ty::Int as i64;
-        } else if self.tk == Token::AddOp as i64 {
+        } else if self.lex.tk == Token::AddOp as i64 {
             self.next()?;
             self.expr(Token::Inc as i64)?;
             self.ty = Ty::Int as i64;
-        } else if self.tk == Token::SubOp as i64 {
+        } else if self.lex.tk == Token::SubOp as i64 {
             self.next()?;
             self.emit_op(Op::Imm);
-            if self.tk == Token::Num as i64 {
-                self.emit_val(-self.ival);
+            if self.lex.tk == Token::Num as i64 {
+                self.emit_val(-self.lex.ival);
                 self.next()?;
             } else {
                 self.emit_val(-1);
@@ -505,8 +303,8 @@ impl C4 {
                 self.emit_op(Op::Mul);
             }
             self.ty = Ty::Int as i64;
-        } else if self.tk == Token::Inc as i64 || self.tk == Token::Dec as i64 {
-            t = self.tk;
+        } else if self.lex.tk == Token::Inc as i64 || self.lex.tk == Token::Dec as i64 {
+            t = self.lex.tk;
             self.next()?;
             self.expr(Token::Inc as i64)?;
             let last = *self.text.last().unwrap();
@@ -519,7 +317,7 @@ impl C4 {
             } else {
                 return Err(C4Error::Compile(format!(
                     "{}: bad lvalue in pre-increment",
-                    self.line
+                    self.lex.line
                 )));
             }
             self.emit_op(Op::Psh);
@@ -538,13 +336,13 @@ impl C4 {
         } else {
             return Err(C4Error::Compile(format!(
                 "{}: bad expression tk={}",
-                self.line, self.tk
+                self.lex.line, self.lex.tk
             )));
         }
 
-        while self.tk >= lev {
+        while self.lex.tk >= lev {
             t = self.ty;
-            if self.tk == Token::Assign as i64 {
+            if self.lex.tk == Token::Assign as i64 {
                 self.next()?;
                 let last = *self.text.last().unwrap();
                 if last == Op::Lc as i64 || last == Op::Li as i64 {
@@ -552,7 +350,7 @@ impl C4 {
                 } else {
                     return Err(C4Error::Compile(format!(
                         "{}: bad lvalue in assignment",
-                        self.line
+                        self.lex.line
                     )));
                 }
                 self.expr(Token::Assign as i64)?;
@@ -562,18 +360,18 @@ impl C4 {
                 } else {
                     Op::Si
                 });
-            } else if self.tk == Token::Cond as i64 {
+            } else if self.lex.tk == Token::Cond as i64 {
                 self.next()?;
                 self.emit_op(Op::Bz);
                 let b_else = self.text.len();
                 self.emit_val(0);
                 self.expr(Token::Assign as i64)?;
-                if self.tk == ':' as i64 {
+                if self.lex.tk == ':' as i64 {
                     self.next()?;
                 } else {
                     return Err(C4Error::Compile(format!(
                         "{}: conditional missing colon",
-                        self.line
+                        self.lex.line
                     )));
                 }
                 let b_end_val = (self.text.len() + 2) as i64;
@@ -583,7 +381,7 @@ impl C4 {
                 self.emit_val(0);
                 self.expr(Token::Cond as i64)?;
                 self.text[b_end] = self.text.len() as i64;
-            } else if self.tk == Token::Lor as i64 {
+            } else if self.lex.tk == Token::Lor as i64 {
                 self.next()?;
                 self.emit_op(Op::Bnz);
                 let b = self.text.len();
@@ -591,7 +389,7 @@ impl C4 {
                 self.expr(Token::Lan as i64)?;
                 self.text[b] = self.text.len() as i64;
                 self.ty = Ty::Int as i64;
-            } else if self.tk == Token::Lan as i64 {
+            } else if self.lex.tk == Token::Lan as i64 {
                 self.next()?;
                 self.emit_op(Op::Bz);
                 let b = self.text.len();
@@ -599,73 +397,73 @@ impl C4 {
                 self.expr(Token::OrOp as i64)?;
                 self.text[b] = self.text.len() as i64;
                 self.ty = Ty::Int as i64;
-            } else if self.tk == Token::OrOp as i64 {
+            } else if self.lex.tk == Token::OrOp as i64 {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::XorOp as i64)?;
                 self.emit_op(Op::Or);
                 self.ty = Ty::Int as i64;
-            } else if self.tk == Token::XorOp as i64 {
+            } else if self.lex.tk == Token::XorOp as i64 {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::AndOp as i64)?;
                 self.emit_op(Op::Xor);
                 self.ty = Ty::Int as i64;
-            } else if self.tk == Token::AndOp as i64 {
+            } else if self.lex.tk == Token::AndOp as i64 {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::EqOp as i64)?;
                 self.emit_op(Op::And);
                 self.ty = Ty::Int as i64;
-            } else if self.tk == Token::EqOp as i64 {
+            } else if self.lex.tk == Token::EqOp as i64 {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::LtOp as i64)?;
                 self.emit_op(Op::Eq);
                 self.ty = Ty::Int as i64;
-            } else if self.tk == Token::NeOp as i64 {
+            } else if self.lex.tk == Token::NeOp as i64 {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::LtOp as i64)?;
                 self.emit_op(Op::Ne);
                 self.ty = Ty::Int as i64;
-            } else if self.tk == Token::LtOp as i64 {
+            } else if self.lex.tk == Token::LtOp as i64 {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::ShlOp as i64)?;
                 self.emit_op(Op::Lt);
                 self.ty = Ty::Int as i64;
-            } else if self.tk == Token::GtOp as i64 {
+            } else if self.lex.tk == Token::GtOp as i64 {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::ShlOp as i64)?;
                 self.emit_op(Op::Gt);
                 self.ty = Ty::Int as i64;
-            } else if self.tk == Token::LeOp as i64 {
+            } else if self.lex.tk == Token::LeOp as i64 {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::ShlOp as i64)?;
                 self.emit_op(Op::Le);
                 self.ty = Ty::Int as i64;
-            } else if self.tk == Token::GeOp as i64 {
+            } else if self.lex.tk == Token::GeOp as i64 {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::ShlOp as i64)?;
                 self.emit_op(Op::Ge);
                 self.ty = Ty::Int as i64;
-            } else if self.tk == Token::ShlOp as i64 {
+            } else if self.lex.tk == Token::ShlOp as i64 {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::AddOp as i64)?;
                 self.emit_op(Op::Shl);
                 self.ty = Ty::Int as i64;
-            } else if self.tk == Token::ShrOp as i64 {
+            } else if self.lex.tk == Token::ShrOp as i64 {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::AddOp as i64)?;
                 self.emit_op(Op::Shr);
                 self.ty = Ty::Int as i64;
-            } else if self.tk == Token::AddOp as i64 {
+            } else if self.lex.tk == Token::AddOp as i64 {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::MulOp as i64)?;
@@ -677,7 +475,7 @@ impl C4 {
                 }
                 self.emit_op(Op::Add);
                 self.ty = t;
-            } else if self.tk == Token::SubOp as i64 {
+            } else if self.lex.tk == Token::SubOp as i64 {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::MulOp as i64)?;
@@ -699,25 +497,25 @@ impl C4 {
                     self.emit_op(Op::Sub);
                     self.ty = t;
                 }
-            } else if self.tk == Token::MulOp as i64 {
+            } else if self.lex.tk == Token::MulOp as i64 {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::Inc as i64)?;
                 self.emit_op(Op::Mul);
                 self.ty = Ty::Int as i64;
-            } else if self.tk == Token::DivOp as i64 {
+            } else if self.lex.tk == Token::DivOp as i64 {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::Inc as i64)?;
                 self.emit_op(Op::Div);
                 self.ty = Ty::Int as i64;
-            } else if self.tk == Token::ModOp as i64 {
+            } else if self.lex.tk == Token::ModOp as i64 {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::Inc as i64)?;
                 self.emit_op(Op::Mod);
                 self.ty = Ty::Int as i64;
-            } else if self.tk == Token::Inc as i64 || self.tk == Token::Dec as i64 {
+            } else if self.lex.tk == Token::Inc as i64 || self.lex.tk == Token::Dec as i64 {
                 let last = *self.text.last().unwrap();
                 if last == Op::Lc as i64 {
                     *self.text.last_mut().unwrap() = Op::Psh as i64;
@@ -728,13 +526,13 @@ impl C4 {
                 } else {
                     return Err(C4Error::Compile(format!(
                         "{}: bad lvalue in post-increment",
-                        self.line
+                        self.lex.line
                     )));
                 }
                 self.emit_op(Op::Psh);
                 self.emit_op(Op::Imm);
                 self.emit_val(if self.ty > Ty::Ptr as i64 { 8 } else { 1 });
-                self.emit_op(if self.tk == Token::Inc as i64 {
+                self.emit_op(if self.lex.tk == Token::Inc as i64 {
                     Op::Add
                 } else {
                     Op::Sub
@@ -747,22 +545,22 @@ impl C4 {
                 self.emit_op(Op::Psh);
                 self.emit_op(Op::Imm);
                 self.emit_val(if self.ty > Ty::Ptr as i64 { 8 } else { 1 });
-                self.emit_op(if self.tk == Token::Inc as i64 {
+                self.emit_op(if self.lex.tk == Token::Inc as i64 {
                     Op::Sub
                 } else {
                     Op::Add
                 });
                 self.next()?;
-            } else if self.tk == Token::Brak as i64 {
+            } else if self.lex.tk == Token::Brak as i64 {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::Assign as i64)?;
-                if self.tk == ']' as i64 {
+                if self.lex.tk == ']' as i64 {
                     self.next()?;
                 } else {
                     return Err(C4Error::Compile(format!(
                         "{}: close bracket expected",
-                        self.line
+                        self.lex.line
                     )));
                 }
                 if t > Ty::Ptr as i64 {
@@ -773,7 +571,7 @@ impl C4 {
                 } else if t < Ty::Ptr as i64 {
                     return Err(C4Error::Compile(format!(
                         "{}: pointer type expected",
-                        self.line
+                        self.lex.line
                     )));
                 }
                 self.emit_op(Op::Add);
@@ -786,7 +584,7 @@ impl C4 {
             } else {
                 return Err(C4Error::Compile(format!(
                     "{}: compiler error tk={}",
-                    self.line, self.tk
+                    self.lex.line, self.lex.tk
                 )));
             }
         }
@@ -794,45 +592,25 @@ impl C4 {
     }
 
     fn stmt(&mut self) -> Result<(), C4Error> {
-        if self.tk == Token::Id as i64 {
-            let mut p = self.src_pos;
-            while p < self.src.len() && self.src[p].is_ascii_whitespace() {
-                p += 1;
-            }
-            if p < self.src.len() && self.src[p] == b':' {
-                let name = self.symbols[self.curr_id_idx].name.clone();
-                self.labels.insert(name, self.text.len());
-                self.next()?; // consume Id
-                self.next()?; // consume ':'
-                self.stmt()?;
-                return Ok(());
-            }
+        if self.lex.tk == Token::Id as i64 && self.lex.peek_after_whitespace(b':') {
+            let name = self.symbols[self.lex.curr_id_idx].name.clone();
+            self.labels.insert(name, self.text.len());
+            self.next()?; // consume Id
+            self.next()?; // consume ':'
+            self.stmt()?;
+            return Ok(());
         }
 
-        if self.tk == Token::If as i64 {
+        if self.lex.tk == Token::If as i64 {
             self.next()?;
-            if self.tk == '(' as i64 {
-                self.next()?;
-            } else {
-                return Err(C4Error::Compile(format!(
-                    "{}: open paren expected",
-                    self.line
-                )));
-            }
+            self.consume(b'(', "open paren expected")?;
             self.expr(Token::Assign as i64)?;
-            if self.tk == ')' as i64 {
-                self.next()?;
-            } else {
-                return Err(C4Error::Compile(format!(
-                    "{}: close paren expected",
-                    self.line
-                )));
-            }
+            self.consume(b')', "close paren expected")?;
             self.emit_op(Op::Bz);
             let b = self.text.len();
             self.emit_val(0);
             self.stmt()?;
-            if self.tk == Token::Else as i64 {
+            if self.lex.tk == Token::Else as i64 {
                 self.text[b] = (self.text.len() + 2) as i64;
                 self.emit_op(Op::Jmp);
                 let b_else = self.text.len();
@@ -843,26 +621,12 @@ impl C4 {
             } else {
                 self.text[b] = self.text.len() as i64;
             }
-        } else if self.tk == Token::While as i64 {
+        } else if self.lex.tk == Token::While as i64 {
             self.next()?;
             let cond_pc = self.text.len();
-            if self.tk == '(' as i64 {
-                self.next()?;
-            } else {
-                return Err(C4Error::Compile(format!(
-                    "{}: open paren expected",
-                    self.line
-                )));
-            }
+            self.consume(b'(', "open paren expected")?;
             self.expr(Token::Assign as i64)?;
-            if self.tk == ')' as i64 {
-                self.next()?;
-            } else {
-                return Err(C4Error::Compile(format!(
-                    "{}: close paren expected",
-                    self.line
-                )));
-            }
+            self.consume(b')', "close paren expected")?;
             self.emit_op(Op::Bz);
             let bz_pc = self.text.len();
             self.emit_val(0);
@@ -872,7 +636,6 @@ impl C4 {
 
             self.stmt()?;
 
-            // Patch continues
             for pc in self.loop_continues.pop().unwrap() {
                 self.text[pc] = cond_pc as i64;
             }
@@ -880,13 +643,12 @@ impl C4 {
             self.emit_op(Op::Jmp);
             self.emit_val(cond_pc as i64);
 
-            // Patch condition end / breaks
             self.text[bz_pc] = self.text.len() as i64;
             let end_pc = self.text.len();
             for pc in self.loop_breaks.pop().unwrap() {
                 self.text[pc] = end_pc as i64;
             }
-        } else if self.tk == Token::Do as i64 {
+        } else if self.lex.tk == Token::Do as i64 {
             self.next()?;
             let start_pc = self.text.len();
 
@@ -895,12 +657,12 @@ impl C4 {
 
             self.stmt()?;
 
-            if self.tk == Token::While as i64 {
+            if self.lex.tk == Token::While as i64 {
                 self.next()?;
             } else {
                 return Err(C4Error::Compile(format!(
                     "{}: while expected after do",
-                    self.line
+                    self.lex.line
                 )));
             }
 
@@ -909,67 +671,32 @@ impl C4 {
                 self.text[pc] = cond_pc as i64;
             }
 
-            if self.tk == '(' as i64 {
-                self.next()?;
-            } else {
-                return Err(C4Error::Compile(format!(
-                    "{}: open paren expected",
-                    self.line
-                )));
-            }
+            self.consume(b'(', "open paren expected")?;
             self.expr(Token::Assign as i64)?;
-            if self.tk == ')' as i64 {
-                self.next()?;
-            } else {
-                return Err(C4Error::Compile(format!(
-                    "{}: close paren expected",
-                    self.line
-                )));
-            }
+            self.consume(b')', "close paren expected")?;
 
             self.emit_op(Op::Bnz);
             self.emit_val(start_pc as i64);
 
-            if self.tk == ';' as i64 {
-                self.next()?;
-            } else {
-                return Err(C4Error::Compile(format!(
-                    "{}: semicolon expected after do-while",
-                    self.line
-                )));
-            }
+            self.consume(b';', "semicolon expected after do-while")?;
 
             let end_pc = self.text.len();
             for pc in self.loop_breaks.pop().unwrap() {
                 self.text[pc] = end_pc as i64;
             }
-        } else if self.tk == Token::For as i64 {
+        } else if self.lex.tk == Token::For as i64 {
             self.next()?;
-            if self.tk == '(' as i64 {
-                self.next()?;
-            } else {
-                return Err(C4Error::Compile(format!(
-                    "{}: open paren expected",
-                    self.line
-                )));
-            }
+            self.consume(b'(', "open paren expected")?;
 
             // Initialization
-            if self.tk != ';' as i64 {
+            if self.lex.tk != ';' as i64 {
                 self.expr(Token::Assign as i64)?;
             }
-            if self.tk == ';' as i64 {
-                self.next()?;
-            } else {
-                return Err(C4Error::Compile(format!(
-                    "{}: semicolon expected after for-init",
-                    self.line
-                )));
-            }
+            self.consume(b';', "semicolon expected after for-init")?;
 
             // Condition
             let cond_pc = self.text.len();
-            if self.tk != ';' as i64 {
+            if self.lex.tk != ';' as i64 {
                 self.expr(Token::Assign as i64)?;
             } else {
                 self.emit_op(Op::Imm);
@@ -983,31 +710,17 @@ impl C4 {
             let body_jmp_pc = self.text.len();
             self.emit_val(0);
 
-            if self.tk == ';' as i64 {
-                self.next()?;
-            } else {
-                return Err(C4Error::Compile(format!(
-                    "{}: semicolon expected after for-cond",
-                    self.line
-                )));
-            }
+            self.consume(b';', "semicolon expected after for-cond")?;
 
             // Step
             let step_pc = self.text.len();
-            if self.tk != ')' as i64 {
+            if self.lex.tk != ')' as i64 {
                 self.expr(Token::Assign as i64)?;
             }
             self.emit_op(Op::Jmp);
             self.emit_val(cond_pc as i64);
 
-            if self.tk == ')' as i64 {
-                self.next()?;
-            } else {
-                return Err(C4Error::Compile(format!(
-                    "{}: close paren expected",
-                    self.line
-                )));
-            }
+            self.consume(b')', "close paren expected")?;
 
             // Body
             self.text[body_jmp_pc] = self.text.len() as i64;
@@ -1024,22 +737,14 @@ impl C4 {
             self.emit_op(Op::Jmp);
             self.emit_val(step_pc as i64);
 
-            // End of loop / Patch Breaks
             self.text[end_jmp_pc] = self.text.len() as i64;
             let end_pc = self.text.len();
             for pc in self.loop_breaks.pop().unwrap() {
                 self.text[pc] = end_pc as i64;
             }
-        } else if self.tk == Token::Switch as i64 {
+        } else if self.lex.tk == Token::Switch as i64 {
             self.next()?;
-            if self.tk == '(' as i64 {
-                self.next()?;
-            } else {
-                return Err(C4Error::Compile(format!(
-                    "{}: open paren expected",
-                    self.line
-                )));
-            }
+            self.consume(b'(', "open paren expected")?;
 
             self.loc_offs += 1;
             let switch_val_offset = -self.loc_offs;
@@ -1048,18 +753,11 @@ impl C4 {
             self.emit_op(Op::Psh);
 
             self.expr(Token::Assign as i64)?;
-            if self.tk == ')' as i64 {
-                self.next()?;
-            } else {
-                return Err(C4Error::Compile(format!(
-                    "{}: close paren expected",
-                    self.line
-                )));
-            }
+            self.consume(b')', "close paren expected")?;
 
             self.emit_op(Op::Si);
 
-            // 1. Jump immediately to the dispatcher (the case checks)
+            // Jump to the dispatcher emitted after the body.
             self.emit_op(Op::Jmp);
             let disp_pc_patch = self.text.len();
             self.emit_val(0);
@@ -1068,15 +766,14 @@ impl C4 {
             self.switch_defaults.push(None);
             self.loop_breaks.push(Vec::new());
 
-            // 2. Parse the body (the case labels and code)
             self.stmt()?;
 
-            // 3. After the body, if we haven't broken out, jump to the end of the switch
+            // Fall-through past the body skips the dispatcher entirely.
             self.emit_op(Op::Jmp);
             let end_switch_patch = self.text.len();
             self.emit_val(0);
 
-            // 4. Define the dispatcher block
+            // Dispatcher block.
             self.text[disp_pc_patch] = self.text.len() as i64;
             let cases = self.switch_cases.pop().unwrap();
             let default_pc = self.switch_defaults.pop().unwrap();
@@ -1093,79 +790,65 @@ impl C4 {
                 self.emit_val(pc as i64);
             }
 
-            // 5. If no cases match, jump to default or the end
             if let Some(dpc) = default_pc {
                 self.emit_op(Op::Jmp);
                 self.emit_val(dpc as i64);
             } else {
-                // If no default, jump to the end
+                // No default: fall to the end (patched below alongside breaks).
                 self.emit_op(Op::Jmp);
-                self.emit_val(0); // Will be patched below
+                self.emit_val(0);
                 self.loop_breaks
                     .last_mut()
                     .unwrap()
                     .push(self.text.len() - 1);
             }
 
-            // 6. Patch the jump that skips the dispatcher and the breaks
             self.text[end_switch_patch] = self.text.len() as i64;
             let end_pc = self.text.len();
             for pc in self.loop_breaks.pop().unwrap() {
                 self.text[pc] = end_pc as i64;
             }
-        } else if self.tk == Token::Case as i64 {
+        } else if self.lex.tk == Token::Case as i64 {
             self.next()?;
-            if self.tk != Token::Num as i64 {
+            if self.lex.tk != Token::Num as i64 {
                 return Err(C4Error::Compile(format!(
                     "{}: invalid case value",
-                    self.line
+                    self.lex.line
                 )));
             }
-            let val = self.ival;
+            let val = self.lex.ival;
             self.next()?;
-            if self.tk != ':' as i64 {
-                return Err(C4Error::Compile(format!(
-                    "{}: expected colon after case",
-                    self.line
-                )));
-            }
-            self.next()?;
+            self.consume(b':', "expected colon after case")?;
             if let Some(cases) = self.switch_cases.last_mut() {
                 cases.push((val, self.text.len()));
             } else {
                 return Err(C4Error::Compile(format!(
                     "{}: case outside switch",
-                    self.line
+                    self.lex.line
                 )));
             }
             self.stmt()?;
-        } else if self.tk == Token::Default as i64 {
+        } else if self.lex.tk == Token::Default as i64 {
             self.next()?;
-            if self.tk != ':' as i64 {
-                return Err(C4Error::Compile(format!(
-                    "{}: expected colon after default",
-                    self.line
-                )));
-            }
-            self.next()?;
+            self.consume(b':', "expected colon after default")?;
             if let Some(def) = self.switch_defaults.last_mut() {
                 *def = Some(self.text.len());
             } else {
                 return Err(C4Error::Compile(format!(
                     "{}: default outside switch",
-                    self.line
+                    self.lex.line
                 )));
             }
             self.stmt()?;
-        } else if self.tk == Token::Goto as i64 {
+        } else if self.lex.tk == Token::Goto as i64 {
             self.next()?;
-            if self.tk != Token::Id as i64 {
+            if self.lex.tk != Token::Id as i64 {
                 return Err(C4Error::Compile(format!(
                     "{}: expected identifier after goto",
-                    self.line
+                    self.lex.line
                 )));
             }
-            let target_name = self.symbols[self.curr_id_idx].name.clone();
+            let target_name = self.symbols[self.lex.curr_id_idx].name.clone();
             self.next()?;
 
             self.emit_op(Op::Jmp);
@@ -1178,95 +861,65 @@ impl C4 {
                 self.unresolved_gotos.push((target_name, pc));
             }
 
-            if self.tk == ';' as i64 {
-                self.next()?;
-            } else {
-                return Err(C4Error::Compile(format!(
-                    "{}: semicolon expected after goto",
-                    self.line
-                )));
-            }
-        } else if self.tk == Token::Break as i64 {
+            self.consume(b';', "semicolon expected after goto")?;
+        } else if self.lex.tk == Token::Break as i64 {
             self.next()?;
             if self.loop_breaks.is_empty() {
                 return Err(C4Error::Compile(format!(
                     "{}: break outside of loop or switch",
-                    self.line
+                    self.lex.line
                 )));
             }
             self.emit_op(Op::Jmp);
             let pc = self.text.len();
             self.emit_val(0);
             self.loop_breaks.last_mut().unwrap().push(pc);
-
-            if self.tk == ';' as i64 {
-                self.next()?;
-            } else {
-                return Err(C4Error::Compile(format!(
-                    "{}: semicolon expected after break",
-                    self.line
-                )));
-            }
-        } else if self.tk == Token::Continue as i64 {
+            self.consume(b';', "semicolon expected after break")?;
+        } else if self.lex.tk == Token::Continue as i64 {
             self.next()?;
             if self.loop_continues.is_empty() {
                 return Err(C4Error::Compile(format!(
                     "{}: continue outside of loop",
-                    self.line
+                    self.lex.line
                 )));
             }
             self.emit_op(Op::Jmp);
             let pc = self.text.len();
             self.emit_val(0);
             self.loop_continues.last_mut().unwrap().push(pc);
-
-            if self.tk == ';' as i64 {
-                self.next()?;
-            } else {
-                return Err(C4Error::Compile(format!(
-                    "{}: semicolon expected after continue",
-                    self.line
-                )));
-            }
-        } else if self.tk == Token::Return as i64 {
+            self.consume(b';', "semicolon expected after continue")?;
+        } else if self.lex.tk == Token::Return as i64 {
             self.next()?;
-            if self.tk != ';' as i64 {
+            if self.lex.tk != ';' as i64 {
                 self.expr(Token::Assign as i64)?;
             }
             self.emit_op(Op::Lev);
-            if self.tk == ';' as i64 {
-                self.next()?;
-            } else {
-                return Err(C4Error::Compile(format!(
-                    "{}: semicolon expected",
-                    self.line
-                )));
-            }
-        } else if self.tk == '{' as i64 {
+            self.consume(b';', "semicolon expected")?;
+        } else if self.lex.tk == '{' as i64 {
             self.next()?;
             let mut block_symbols = Vec::new();
 
-            // Parse block-scoped local variables
-            while self.tk == Token::Int as i64 || self.tk == Token::Char as i64 {
-                let lbt = if self.tk == Token::Int as i64 {
+            // Block-scoped local variables (declared at the top of the block).
+            while self.lex.tk == Token::Int as i64 || self.lex.tk == Token::Char as i64 {
+                let lbt = if self.lex.tk == Token::Int as i64 {
                     Ty::Int as i64
                 } else {
                     Ty::Char as i64
                 };
                 self.next()?;
-                while self.tk != ';' as i64 {
+                while self.lex.tk != ';' as i64 {
                     self.ty = lbt;
-                    while self.tk == Token::MulOp as i64 {
+                    while self.lex.tk == Token::MulOp as i64 {
                         self.next()?;
                         self.ty += Ty::Ptr as i64;
                     }
-                    if self.tk != Token::Id as i64 {
+                    if self.lex.tk != Token::Id as i64 {
                         return Err(C4Error::Compile(format!(
                             "{}: bad local declaration",
-                            self.line
+                            self.lex.line
                         )));
                     }
-                    let loc_idx = self.curr_id_idx;
+                    let loc_idx = self.lex.curr_id_idx;
 
                     block_symbols.push((
                         loc_idx,
@@ -1281,73 +934,76 @@ impl C4 {
                     self.symbols[loc_idx].val = -self.loc_offs;
 
                     self.next()?;
-                    if self.tk == ',' as i64 {
+                    if self.lex.tk == ',' as i64 {
                         self.next()?;
                     }
                 }
                 self.next()?;
             }
 
-            while self.tk != '}' as i64 {
+            while self.lex.tk != '}' as i64 {
                 self.stmt()?;
             }
             self.next()?;
 
-            // Restore shadowed variables
+            // Restore shadowed bindings.
             for (idx, class, ty, val) in block_symbols.into_iter().rev() {
                 self.symbols[idx].class = class;
                 self.symbols[idx].type_ = ty;
                 self.symbols[idx].val = val;
             }
-        } else if self.tk == ';' as i64 {
+        } else if self.lex.tk == ';' as i64 {
             self.next()?;
         } else {
             self.expr(Token::Assign as i64)?;
-            if self.tk == ';' as i64 {
-                self.next()?;
-            } else {
-                return Err(C4Error::Compile(format!(
-                    "{}: semicolon expected",
-                    self.line
-                )));
-            }
+            self.consume(b';', "semicolon expected")?;
         }
         Ok(())
     }
 
+    /// Consume a single-byte token, returning a labelled compile error otherwise.
+    fn consume(&mut self, expected: u8, msg: &str) -> Result<(), C4Error> {
+        if self.lex.tk == expected as i64 {
+            self.next()?;
+            Ok(())
+        } else {
+            Err(C4Error::Compile(format!("{}: {}", self.lex.line, msg)))
+        }
+    }
+
     fn parse_enum_decl(&mut self) -> Result<(), C4Error> {
         self.next()?;
-        if self.tk != '{' as i64 {
+        if self.lex.tk != '{' as i64 {
             self.next()?;
         }
-        if self.tk == '{' as i64 {
+        if self.lex.tk == '{' as i64 {
             self.next()?;
             let mut i = 0;
-            while self.tk != '}' as i64 {
-                if self.tk != Token::Id as i64 {
+            while self.lex.tk != '}' as i64 {
+                if self.lex.tk != Token::Id as i64 {
                     return Err(C4Error::Compile(format!(
                         "{}: bad enum identifier",
-                        self.line
+                        self.lex.line
                     )));
                 }
-                let idx = self.curr_id_idx;
+                let idx = self.lex.curr_id_idx;
                 self.next()?;
-                if self.tk == Token::Assign as i64 {
+                if self.lex.tk == Token::Assign as i64 {
                     self.next()?;
-                    if self.tk != Token::Num as i64 {
+                    if self.lex.tk != Token::Num as i64 {
                         return Err(C4Error::Compile(format!(
                             "{}: bad enum initializer",
-                            self.line
+                            self.lex.line
                         )));
                     }
-                    i = self.ival;
+                    i = self.lex.ival;
                     self.next()?;
                 }
                 self.symbols[idx].class = Token::Num as i64;
                 self.symbols[idx].type_ = Ty::Int as i64;
                 self.symbols[idx].val = i;
                 i += 1;
-                if self.tk == ',' as i64 {
+                if self.lex.tk == ',' as i64 {
                     self.next()?;
                 }
             }
@@ -1358,29 +1014,29 @@ impl C4 {
 
     fn parse_function_params(&mut self) -> Result<Vec<usize>, C4Error> {
         let mut args = Vec::new();
-        while self.tk != ')' as i64 {
+        while self.lex.tk != ')' as i64 {
             self.ty = Ty::Int as i64;
-            if self.tk == Token::Int as i64 {
+            if self.lex.tk == Token::Int as i64 {
                 self.next()?;
-            } else if self.tk == Token::Char as i64 {
+            } else if self.lex.tk == Token::Char as i64 {
                 self.next()?;
                 self.ty = Ty::Char as i64;
             }
-            while self.tk == Token::MulOp as i64 {
+            while self.lex.tk == Token::MulOp as i64 {
                 self.next()?;
                 self.ty += Ty::Ptr as i64;
             }
-            if self.tk != Token::Id as i64 {
+            if self.lex.tk != Token::Id as i64 {
                 return Err(C4Error::Compile(format!(
                     "{}: bad parameter declaration",
-                    self.line
+                    self.lex.line
                 )));
             }
-            let param_idx = self.curr_id_idx;
+            let param_idx = self.lex.curr_id_idx;
             if self.symbols[param_idx].class == Token::Loc as i64 {
                 return Err(C4Error::Compile(format!(
                     "{}: duplicate parameter definition",
-                    self.line
+                    self.lex.line
                 )));
             }
 
@@ -1393,7 +1049,7 @@ impl C4 {
             args.push(param_idx);
 
             self.next()?;
-            if self.tk == ',' as i64 {
+            if self.lex.tk == ',' as i64 {
                 self.next()?;
             }
         }
@@ -1401,53 +1057,53 @@ impl C4 {
         Ok(args)
     }
 
-    pub fn compile(&mut self) -> Result<(), C4Error> {
+    fn run_compile(&mut self) -> Result<(), C4Error> {
         self.next()?;
-        while self.tk != 0 {
+        while self.lex.tk != 0 {
             let mut bt = Ty::Int as i64;
-            if self.tk == Token::Int as i64 {
+            if self.lex.tk == Token::Int as i64 {
                 self.next()?;
                 bt = Ty::Int as i64;
-            } else if self.tk == Token::Char as i64 {
+            } else if self.lex.tk == Token::Char as i64 {
                 self.next()?;
                 bt = Ty::Char as i64;
-            } else if self.tk == Token::Enum as i64 {
+            } else if self.lex.tk == Token::Enum as i64 {
                 self.parse_enum_decl()?;
             }
 
-            while self.tk != ';' as i64 && self.tk != '}' as i64 {
+            while self.lex.tk != ';' as i64 && self.lex.tk != '}' as i64 {
                 self.ty = bt;
-                while self.tk == Token::MulOp as i64 {
+                while self.lex.tk == Token::MulOp as i64 {
                     self.next()?;
                     self.ty += Ty::Ptr as i64;
                 }
-                if self.tk != Token::Id as i64 {
+                if self.lex.tk != Token::Id as i64 {
                     return Err(C4Error::Compile(format!(
                         "{}: bad global declaration",
-                        self.line
+                        self.lex.line
                     )));
                 }
-                let id_idx = self.curr_id_idx;
+                let id_idx = self.lex.curr_id_idx;
                 if self.symbols[id_idx].class != 0 {
                     return Err(C4Error::Compile(format!(
                         "{}: duplicate global definition",
-                        self.line
+                        self.lex.line
                     )));
                 }
                 self.next()?;
                 self.symbols[id_idx].type_ = self.ty;
 
-                if self.tk == '(' as i64 {
+                if self.lex.tk == '(' as i64 {
                     self.symbols[id_idx].class = Token::Fun as i64;
                     self.symbols[id_idx].val = self.text.len() as i64;
                     self.next()?;
 
                     let args = self.parse_function_params()?;
 
-                    if self.tk != '{' as i64 {
+                    if self.lex.tk != '{' as i64 {
                         return Err(C4Error::Compile(format!(
                             "{}: bad function definition",
-                            self.line
+                            self.lex.line
                         )));
                     }
                     self.next()?;
@@ -1461,30 +1117,30 @@ impl C4 {
                     self.labels.clear();
                     self.unresolved_gotos.clear();
 
-                    while self.tk == Token::Int as i64 || self.tk == Token::Char as i64 {
-                        let lbt = if self.tk == Token::Int as i64 {
+                    while self.lex.tk == Token::Int as i64 || self.lex.tk == Token::Char as i64 {
+                        let lbt = if self.lex.tk == Token::Int as i64 {
                             Ty::Int as i64
                         } else {
                             Ty::Char as i64
                         };
                         self.next()?;
-                        while self.tk != ';' as i64 {
+                        while self.lex.tk != ';' as i64 {
                             self.ty = lbt;
-                            while self.tk == Token::MulOp as i64 {
+                            while self.lex.tk == Token::MulOp as i64 {
                                 self.next()?;
                                 self.ty += Ty::Ptr as i64;
                             }
-                            if self.tk != Token::Id as i64 {
+                            if self.lex.tk != Token::Id as i64 {
                                 return Err(C4Error::Compile(format!(
                                     "{}: bad local declaration",
-                                    self.line
+                                    self.lex.line
                                 )));
                             }
-                            let loc_idx = self.curr_id_idx;
+                            let loc_idx = self.lex.curr_id_idx;
                             if self.symbols[loc_idx].class == Token::Loc as i64 {
                                 return Err(C4Error::Compile(format!(
                                     "{}: duplicate local definition",
-                                    self.line
+                                    self.lex.line
                                 )));
                             }
 
@@ -1498,7 +1154,7 @@ impl C4 {
                             self.symbols[loc_idx].val = -self.loc_offs;
 
                             self.next()?;
-                            if self.tk == ',' as i64 {
+                            if self.lex.tk == ',' as i64 {
                                 self.next()?;
                             }
                         }
@@ -1507,25 +1163,20 @@ impl C4 {
 
                     let ent_pc = self.text.len();
                     self.emit_op(Op::Ent);
-                    self.emit_val(0); // Placeholder patched at the end of function body
+                    self.emit_val(0); // patched below
 
-                    while self.tk != '}' as i64 {
+                    while self.lex.tk != '}' as i64 {
                         self.stmt()?;
                     }
                     self.emit_op(Op::Lev);
 
-                    // Patch the 'Ent' placeholder instruction
                     self.text[ent_pc + 1] = self.loc_offs;
 
-                    // Resolve pending gotos against recorded function labels
                     for (name, pc) in &self.unresolved_gotos {
                         if let Some(&target) = self.labels.get(name) {
                             self.text[*pc] = target as i64;
                         } else {
-                            return Err(C4Error::Compile(format!(
-                                "unresolved label: {}",
-                                name
-                            )));
+                            return Err(C4Error::Compile(format!("unresolved label: {}", name)));
                         }
                     }
 
@@ -1543,7 +1194,7 @@ impl C4 {
                         self.data.push(0);
                     }
                 }
-                if self.tk == ',' as i64 {
+                if self.lex.tk == ',' as i64 {
                     self.next()?;
                 }
             }

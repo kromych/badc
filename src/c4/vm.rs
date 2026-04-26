@@ -1,8 +1,38 @@
+use std::collections::HashMap;
+use std::fs::File;
 use std::io::Read;
 
-use super::{C4, C4Error, Op, STACK_BASE, STACK_CAPACITY};
+use super::error::C4Error;
+use super::op::Op;
+use super::program::Program;
 
-impl C4 {
+const STACK_CAPACITY: usize = 256 * 1024;
+const STACK_BASE: usize = 0x1000_0000;
+
+/// Virtual machine that executes a [`Program`].
+pub struct Vm {
+    pub(crate) text: Vec<i64>,
+    pub(crate) data: Vec<u8>,
+    entry_pc: usize,
+    stack: Vec<i64>,
+    fd_table: HashMap<i64, File>,
+    next_fd: i64,
+    debug: bool,
+}
+
+impl Vm {
+    pub fn new(program: Program, debug: bool) -> Self {
+        Self {
+            text: program.text,
+            data: program.data,
+            entry_pc: program.entry_pc,
+            stack: vec![0; STACK_CAPACITY],
+            fd_table: HashMap::new(),
+            next_fd: 3,
+            debug,
+        }
+    }
+
     fn get_stack_idx(&self, addr: usize) -> Option<usize> {
         if addr >= STACK_BASE {
             Some((addr - STACK_BASE) / 8)
@@ -102,17 +132,15 @@ impl C4 {
     }
 
     pub fn run(&mut self) -> Result<i64, C4Error> {
-        let main_sym = self
-            .find_symbol("main")
-            .ok_or_else(|| C4Error::Runtime("main() not defined".to_string()))?;
-        let pc_start = self.symbols[main_sym].val;
-        if pc_start == 0 && self.text.is_empty() {
-            return Err(C4Error::Runtime("main() not defined".to_string()));
+        if self.text.is_empty() {
+            return Err(C4Error::Runtime("empty program".to_string()));
         }
 
         let mut sp = STACK_BASE + STACK_CAPACITY * 8;
         let mut bp = sp;
 
+        // Append a Psh+Exit bootstrap so main's `Lev` returns into it
+        // and terminates with the value left in the accumulator.
         let bootstrap_addr = self.text.len() as i64;
         self.text.push(Op::Psh as i64);
         self.text.push(Op::Exit as i64);
@@ -121,11 +149,10 @@ impl C4 {
         self.store_i64(sp, 0)?;
         sp -= 8;
         self.store_i64(sp, 0)?;
-
         sp -= 8;
         self.store_i64(sp, bootstrap_addr)?;
 
-        let mut pc = pc_start as usize;
+        let mut pc = self.entry_pc;
         let mut _cycle = 0;
         let mut a: i64 = 0;
 
@@ -288,7 +315,7 @@ impl C4 {
                     let name_addr = self.load_i64(sp + 8)? as usize;
                     let _flags = self.load_i64(sp)?;
                     let name = self.read_cstring(name_addr)?;
-                    if let Ok(file) = std::fs::File::open(&name) {
+                    if let Ok(file) = File::open(&name) {
                         let fd = self.next_fd;
                         self.next_fd += 1;
                         self.fd_table.insert(fd, file);

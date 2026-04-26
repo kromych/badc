@@ -2213,6 +2213,10 @@ pub mod c4 {
                     Op::Malc => {
                         let size = self.load_i64(sp)? as usize;
                         let aligned_size = (size + 7) & !7;
+                        if self.data.is_empty() {
+                            // Reserve address 0 so allocations never alias NULL.
+                            self.data.resize(8, 0);
+                        }
                         a = self.data.len() as i64;
                         self.data.resize(self.data.len() + aligned_size, 0);
                     }

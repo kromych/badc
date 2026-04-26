@@ -35,7 +35,7 @@ void quicksort(int *arr, int low, int high) {
 int main() {
     int *arr;
     int i;
-    arr = malloc(40); // 5 integers * 8 bytes
+    arr = malloc(5 * sizeof(int));
     arr[0] = 12; arr[1] = 7; arr[2] = 15; arr[3] = 5; arr[4] = 10;
 
     quicksort(arr, 0, 4);

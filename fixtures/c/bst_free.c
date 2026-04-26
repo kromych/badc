@@ -10,7 +10,7 @@ void free_tree(int *root) {
 
 int* insert(int *root, int val) {
     if (root == 0) {
-        root = malloc(24);
+        root = malloc(sizeof(int) + 2 * sizeof(int *));
         root[0] = val; root[1] = 0; root[2] = 0;
         return root;
     }

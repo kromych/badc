@@ -7,7 +7,8 @@ int main() {
 
     // Create a list of 5 nodes: [4, 3, 2, 1, 0]
     for (i = 0; i < 5; i++) {
-        node = malloc(16); // 8 bytes for value, 8 bytes for next pointer
+        // One slot for value, one for the next pointer.
+        node = malloc(sizeof(int) + sizeof(int *));
         node[0] = i;       // data
         node[1] = head;    // next
         head = node;

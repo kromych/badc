@@ -139,6 +139,15 @@ fn sizeof_handles_expressions() {
 }
 
 #[test]
+fn sizeof_threads_through_malloc_write_and_return() {
+    // sizeof(struct Packet) used in three positions in one program:
+    // malloc size, write count, and the function's return value. Tests
+    // that the same constant survives arithmetic and call-site
+    // propagation. struct Packet has 3 × 8-byte fields → 24.
+    assert_eq!(run_fixture("sizeof_with_write.c"), 24);
+}
+
+#[test]
 fn struct_basic_field_access() {
     // struct Point { int x; int y; }; allocate, set fields, read them.
     // Returns 3*3 + 4*4 = 25.

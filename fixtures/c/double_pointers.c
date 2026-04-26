@@ -15,8 +15,8 @@ int main() {
     if (*p != 42) return 2;
 
     // 2. Dynamic memory and 2D array syntax
-    matrix = malloc(8);    // Allocate array of 1 pointer (8 bytes)
-    matrix[0] = malloc(8); // Allocate array of 1 integer for the first row
+    matrix = malloc(sizeof(int *));    // one row pointer
+    matrix[0] = malloc(sizeof(int));   // one int in that row
 
     matrix[0][0] = 123;    // Write via chained brackets
 

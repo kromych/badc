@@ -1,6 +1,7 @@
 int* insert(int *root, int val) {
     if (root == 0) {
-        root = malloc(24); // [0]=val, [1]=left, [2]=right
+        // [0]=val, [1]=left, [2]=right
+        root = malloc(sizeof(int) + 2 * sizeof(int *));
         root[0] = val;
         root[1] = 0;
         root[2] = 0;

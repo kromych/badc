@@ -1,9 +1,9 @@
 int main() {
     char *src;
     char *dst;
-    src = malloc(8);
-    dst = malloc(8);
-    memset(src, 65, 8); // 'AAAAAAAA'
-    memcpy(dst, src, 8);
+    src = malloc(sizeof(int));
+    dst = malloc(sizeof(int));
+    memset(src, 65, sizeof(int)); // fill with 'A'
+    memcpy(dst, src, sizeof(int));
     return dst[0]; // 'A' = 65
 }

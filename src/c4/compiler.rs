@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use super::CODE_BASE;
 use super::error::C4Error;
 use super::lexer::{self, Lexer};
 use super::op::Op;
@@ -189,8 +190,12 @@ impl Compiler {
                 self.emit_val(self.symbols[id_idx].val);
                 self.ty = Ty::Int as i64;
             } else if self.symbols[id_idx].class == Token::Fun as i64 {
+                // Bare function reference (e.g. `fp = add;`). The value
+                // becomes a user-visible pointer, so it gets the CODE_BASE
+                // bias — that lets the VM tell apart "function pointer"
+                // from "data pointer", and refuse to deref the former.
                 self.emit_op(Op::Imm);
-                self.emit_val(self.symbols[id_idx].val);
+                self.emit_val(CODE_BASE as i64 + self.symbols[id_idx].val);
                 self.ty = Ty::Ptr as i64;
             } else {
                 if self.symbols[id_idx].class == Token::Loc as i64 {

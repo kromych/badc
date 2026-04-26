@@ -17,7 +17,10 @@ fn expect_error_containing(name: &str, needle: &str) {
                 msg,
             );
         }
-        Ok(code) => panic!("expected error containing {:?}, but program exited with {}", needle, code),
+        Ok(code) => panic!(
+            "expected error containing {:?}, but program exited with {}",
+            needle, code
+        ),
     }
 }
 
@@ -73,4 +76,44 @@ fn memcpy_with_oversized_destination_is_caught() {
     // memcpy writes 100 bytes into an 8-byte dst — src is fine, dst trips
     // the block check.
     expect_error_containing("memcpy_oob_dst.c", "out-of-bounds");
+}
+
+// ---- Code/data segregation ----
+
+#[test]
+fn dereferencing_a_function_pointer_is_refused() {
+    // *fp where fp = target. The function pointer carries the CODE_BASE
+    // bias, so the load lands in the code segment and the access check
+    // refuses it.
+    expect_error_containing("code_as_data.c", "code is not data");
+}
+
+#[test]
+fn calling_a_forged_code_pointer_is_refused() {
+    // `fp = 42; fp(0);` — 42 isn't in the code address space, so Jsri's
+    // decode rejects it instead of jumping to a garbage PC.
+    expect_error_containing("forge_code_pointer.c", "non-code address");
+}
+
+// ---- mprotect ----
+
+#[test]
+fn mprotect_read_only_refuses_writes() {
+    expect_error_containing("mprotect_blocks_write.c", "permission denied");
+}
+
+#[test]
+fn mprotect_write_only_refuses_reads() {
+    expect_error_containing("mprotect_blocks_read.c", "permission denied");
+}
+
+#[test]
+fn mprotect_read_only_still_allows_reads() {
+    use super::try_run_fixture;
+    // After mprotect(PROT_READ), the existing data is still readable —
+    // the program returns 'X' (88).
+    assert_eq!(
+        try_run_fixture("mprotect_allows_read.c").unwrap(),
+        'X' as i64
+    );
 }

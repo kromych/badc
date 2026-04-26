@@ -2,12 +2,57 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Write as IoWrite};
 
+use super::CODE_BASE;
 use super::error::C4Error;
 use super::op::Op;
 use super::program::Program;
 
 const STACK_CAPACITY: usize = 256 * 1024;
 const STACK_BASE: usize = 0x1000_0000;
+
+/// What an access through `check_data_access` is doing — used both for
+/// diagnostic wording and for matching `mprotect` permissions.
+#[derive(Clone, Copy, Debug)]
+enum AccessKind {
+    Read,
+    Write,
+}
+
+impl AccessKind {
+    fn label(self) -> &'static str {
+        match self {
+            AccessKind::Read => "read",
+            AccessKind::Write => "write",
+        }
+    }
+
+    /// Bit (1=read, 2=write) the access requires from a `prot` mask. Same
+    /// numbering as POSIX `PROT_READ` / `PROT_WRITE`.
+    fn prot_bit(self) -> u8 {
+        match self {
+            AccessKind::Read => 1,
+            AccessKind::Write => 2,
+        }
+    }
+}
+
+/// A region with reduced access rights, as installed by `mprotect`. Walked
+/// linearly on every data access — for tests this is fine; for tight
+/// hot-loop programs it would want a sorted/indexed layout.
+#[derive(Debug, Clone)]
+struct ProtectedRegion {
+    start: usize,
+    len: usize,
+    /// Bitmask: 1=read allowed, 2=write allowed. 0 means no access.
+    prot: u8,
+}
+
+/// Encode a raw text-PC as a user-visible code pointer. Used wherever a PC
+/// would otherwise leak into program-observable state (function pointers,
+/// return addresses on the stack).
+fn encode_pc(pc: usize) -> i64 {
+    (CODE_BASE + pc) as i64
+}
 
 /// Metadata for a single heap allocation. The VM never recycles heap
 /// addresses, so each allocation gets a fresh `[start, start+len)` window
@@ -48,6 +93,9 @@ pub struct Vm {
     /// When true, every heap-side load/store goes through
     /// [`Vm::check_data_access`] and `free` validates its argument.
     track_pointers: bool,
+    /// Regions installed by `mprotect`. Always honoured, regardless of
+    /// `track_pointers`.
+    protections: Vec<ProtectedRegion>,
 }
 
 impl Vm {
@@ -64,7 +112,22 @@ impl Vm {
             allocations: Vec::new(),
             static_end: 0,
             track_pointers: false,
+            protections: Vec::new(),
         }
+    }
+
+    /// Decode a code-pointer value back into a raw text PC. Errors if the
+    /// value isn't in `[CODE_BASE, CODE_BASE + text.len())` — i.e. the
+    /// program built a "function pointer" out of an integer that never
+    /// came from the compiler or from a Jsr/Jsri push.
+    fn decode_pc(&self, v: i64) -> Result<usize, C4Error> {
+        let raw = v as usize;
+        if raw < CODE_BASE || raw >= CODE_BASE + self.text.len() {
+            return Err(C4Error::Runtime(format!(
+                "jump to non-code address 0x{raw:x} — not a function pointer or return address"
+            )));
+        }
+        Ok(raw - CODE_BASE)
     }
 
     /// Set the argv list seen by `main`. Conventional first entry is the
@@ -101,12 +164,45 @@ impl Vm {
         });
     }
 
-    /// Validate that `[addr, addr+len)` lies within a live heap allocation
-    /// (or in static data). No-op when tracking is off, when the access is
-    /// to the stack, or when the access lands in static data (string
-    /// literals / globals / argv staged before `run` started).
-    fn check_data_access(&self, addr: usize, len: usize) -> Result<(), C4Error> {
-        if !self.track_pointers || addr >= STACK_BASE || len == 0 {
+    /// Validate `[addr, addr+len)` for a `kind` access.
+    ///
+    /// Three layered checks:
+    ///   1. Code segment — always rejected, regardless of tracking. A
+    ///      function-pointer value isn't supposed to be dereferenced as
+    ///      data, and a return address pulled off the stack isn't either.
+    ///   2. mprotect — always honoured. If the address falls in a
+    ///      protected region whose `prot` mask doesn't allow `kind`,
+    ///      refuse the access.
+    ///   3. Allocation tracking — opt-in. Heap accesses must land inside
+    ///      a live allocation; static data is implicitly trusted.
+    fn check_data_access(&self, addr: usize, len: usize, kind: AccessKind) -> Result<(), C4Error> {
+        // 1. Code segment is not addressable as data.
+        if addr >= CODE_BASE && addr < CODE_BASE + self.text.len() {
+            return Err(C4Error::Runtime(format!(
+                "{} access at code pointer 0x{addr:x} ({len} bytes) — code is not data",
+                kind.label()
+            )));
+        }
+        if len == 0 {
+            return Ok(());
+        }
+        // 2. mprotect — independent of tracking.
+        for region in &self.protections {
+            if addr < region.start || addr >= region.start + region.len {
+                continue;
+            }
+            if region.prot & kind.prot_bit() == 0 {
+                return Err(C4Error::Runtime(format!(
+                    "permission denied: {} of {len} bytes at 0x{addr:x} in protected region [0x{:x}, 0x{:x}) (prot=0x{:x})",
+                    kind.label(),
+                    region.start,
+                    region.start + region.len,
+                    region.prot
+                )));
+            }
+        }
+        // 3. Allocation tracking — opt-in.
+        if !self.track_pointers {
             return Ok(());
         }
         if addr < self.static_end {
@@ -187,7 +283,10 @@ impl Vm {
     }
 
     fn get_stack_idx(&self, addr: usize) -> Option<usize> {
-        if addr >= STACK_BASE {
+        // Tight upper bound: only the actual stack window classifies as
+        // stack. Without this, code-pointer addresses (`>= STACK_BASE`)
+        // would be misclassified and bypass the code-segment check.
+        if (STACK_BASE..STACK_BASE + STACK_CAPACITY * 8).contains(&addr) {
             Some((addr - STACK_BASE) / 8)
         } else {
             None
@@ -205,7 +304,7 @@ impl Vm {
                 )))
             }
         } else {
-            self.check_data_access(addr, 8)?;
+            self.check_data_access(addr, 8, AccessKind::Read)?;
             if addr + 8 <= self.data.len() {
                 let mut bytes = [0u8; 8];
                 bytes.copy_from_slice(&self.data[addr..addr + 8]);
@@ -228,7 +327,7 @@ impl Vm {
                 )))
             }
         } else {
-            self.check_data_access(addr, 8)?;
+            self.check_data_access(addr, 8, AccessKind::Write)?;
             if addr + 8 > self.data.len() {
                 self.data.resize(addr + 8, 0);
             }
@@ -249,7 +348,7 @@ impl Vm {
                 Ok(0)
             }
         } else {
-            self.check_data_access(addr, 1)?;
+            self.check_data_access(addr, 1, AccessKind::Read)?;
             if addr < self.data.len() {
                 Ok(self.data[addr])
             } else {
@@ -269,7 +368,7 @@ impl Vm {
                 self.stack[idx] = new_val;
             }
         } else {
-            self.check_data_access(addr, 1)?;
+            self.check_data_access(addr, 1, AccessKind::Write)?;
             if addr >= self.data.len() {
                 self.data.resize(addr + 1, 0);
             }
@@ -302,7 +401,7 @@ impl Vm {
 
         // Append a Psh+Exit bootstrap so main's `Lev` returns into it
         // and terminates with the value left in the accumulator.
-        let bootstrap_addr = self.text.len() as i64;
+        let bootstrap_addr = self.text.len();
         self.text.push(Op::Psh as i64);
         self.text.push(Op::Exit as i64);
 
@@ -327,7 +426,10 @@ impl Vm {
         sp -= 8;
         self.store_i64(sp, argv_addr)?;
         sp -= 8;
-        self.store_i64(sp, bootstrap_addr)?;
+        // Bootstrap return address is encoded so main's Lev decodes it via
+        // the same path as any other function-return: this is the only
+        // value pushed as a return address that doesn't come from Jsr/Jsri.
+        self.store_i64(sp, encode_pc(bootstrap_addr))?;
 
         let mut pc = self.entry_pc;
         let mut _cycle = 0;
@@ -364,13 +466,20 @@ impl Vm {
                 }
                 Op::Jsr => {
                     sp -= 8;
-                    self.store_i64(sp, (pc + 1) as i64)?;
+                    // Return address is user-visible (sits on the stack),
+                    // so encode it before pushing.
+                    self.store_i64(sp, encode_pc(pc + 1))?;
                     pc = self.text[pc] as usize;
                 }
                 Op::Jsri => {
                     sp -= 8;
-                    self.store_i64(sp, pc as i64)?;
-                    pc = a as usize;
+                    self.store_i64(sp, encode_pc(pc))?;
+                    // The accumulator holds an encoded function pointer
+                    // produced either by the compiler (`Op::Imm` for a
+                    // function symbol) or pushed by Jsr/Jsri. Reject any
+                    // other value — calling through an arbitrary integer
+                    // is the user trying to forge a code pointer.
+                    pc = self.decode_pc(a)?;
                 }
                 Op::Bz => {
                     pc = if a == 0 {
@@ -401,7 +510,8 @@ impl Vm {
                     sp = bp;
                     bp = self.load_i64(sp)? as usize;
                     sp += 8;
-                    pc = self.load_i64(sp)? as usize;
+                    let raw = self.load_i64(sp)?;
+                    pc = self.decode_pc(raw)?;
                     sp += 8;
                 }
                 Op::Li => {
@@ -573,7 +683,7 @@ impl Vm {
                     // Block-level access check up front so a single OOB
                     // memset surfaces one block-level diagnostic instead of
                     // a per-byte one. No-op when tracking is off.
-                    self.check_data_access(dst_addr, size)?;
+                    self.check_data_access(dst_addr, size, AccessKind::Write)?;
                     for i in 0..size {
                         self.store_u8(dst_addr + i, val)?;
                     }
@@ -583,8 +693,8 @@ impl Vm {
                     let s1_addr = self.load_i64(sp + 16)? as usize;
                     let s2_addr = self.load_i64(sp + 8)? as usize;
                     let size = self.load_i64(sp)? as usize;
-                    self.check_data_access(s1_addr, size)?;
-                    self.check_data_access(s2_addr, size)?;
+                    self.check_data_access(s1_addr, size, AccessKind::Read)?;
+                    self.check_data_access(s2_addr, size, AccessKind::Read)?;
                     a = 0;
                     for i in 0..size {
                         let c1 = self.load_u8(s1_addr + i)?;
@@ -602,13 +712,31 @@ impl Vm {
                     // Block-level checks for src (read) and dst (write).
                     // Standard memcpy is undefined for overlapping regions;
                     // we copy front-to-back without diagnosing overlap.
-                    self.check_data_access(src_addr, size)?;
-                    self.check_data_access(dst_addr, size)?;
+                    self.check_data_access(src_addr, size, AccessKind::Read)?;
+                    self.check_data_access(dst_addr, size, AccessKind::Write)?;
                     for i in 0..size {
                         let byte = self.load_u8(src_addr + i)?;
                         self.store_u8(dst_addr + i, byte)?;
                     }
                     a = dst_addr as i64;
+                }
+                Op::Mpro => {
+                    let addr = self.load_i64(sp + 16)? as usize;
+                    let len = self.load_i64(sp + 8)? as usize;
+                    let prot = self.load_i64(sp)? as u8;
+                    // Record the region. Subsequent loads/stores into
+                    // [addr, addr+len) will go through check_data_access
+                    // and be filtered against `prot`. Multiple mprotects
+                    // on the same range stack — the most recent matching
+                    // entry wins, but in practice the loop in check
+                    // returns at the first failing region, so any ONE
+                    // overlapping no-access region is enough to refuse.
+                    self.protections.push(ProtectedRegion {
+                        start: addr,
+                        len,
+                        prot,
+                    });
+                    a = 0;
                 }
                 Op::Prtf => {
                     if pc < self.text.len() && self.text[pc] == Op::Adj as i64 {

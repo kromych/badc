@@ -16,3 +16,14 @@ mod tests;
 // intended public API.
 #[allow(unused_imports)]
 pub use {compiler::Compiler, error::C4Error, op::Op, program::Program, vm::Vm};
+
+/// Base offset that separates the code address space from the data /
+/// stack address spaces. Function-pointer values seen by user code are
+/// `CODE_BASE + text_pc`; return addresses pushed by Jsr/Jsri/bootstrap
+/// are encoded the same way. Any attempt to read or write through one of
+/// those values lands here and is refused by the VM, keeping code and
+/// data strictly separate.
+///
+/// Picked well above `STACK_BASE` (0x1000_0000) so a runaway data segment
+/// can't accidentally collide with code addresses.
+pub(crate) const CODE_BASE: usize = 0x2000_0000;

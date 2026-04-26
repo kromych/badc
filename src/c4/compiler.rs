@@ -900,6 +900,196 @@ impl Compiler {
         Ok(())
     }
 
+    /// `for (init; cond; step) body`. The body is emitted between the
+    /// condition (which falls through to it) and the step (which the
+    /// body's tail jumps back to). `continue` patches into the step
+    /// position; `break` patches past the loop end.
+    fn parse_for_stmt(&mut self) -> Result<(), C4Error> {
+        self.next()?;
+        self.consume(b'(', "open paren expected")?;
+
+        // Initialization (optional).
+        if self.lex.tk != ';' as i64 {
+            self.expr(Token::Assign as i64)?;
+        }
+        self.consume(b';', "semicolon expected after for-init")?;
+
+        // Condition (optional — empty means `1`).
+        let cond_pc = self.text.len();
+        if self.lex.tk != ';' as i64 {
+            self.expr(Token::Assign as i64)?;
+        } else {
+            self.emit_op(Op::Imm);
+            self.emit_val(1);
+        }
+        self.emit_op(Op::Bz);
+        let end_jmp_pc = self.text.len();
+        self.emit_val(0);
+
+        self.emit_op(Op::Jmp);
+        let body_jmp_pc = self.text.len();
+        self.emit_val(0);
+
+        self.consume(b';', "semicolon expected after for-cond")?;
+
+        // Step (optional). Compiled before the body so the body can jump
+        // back to it; the body itself is reached via the `body_jmp_pc`
+        // patched a few lines below.
+        let step_pc = self.text.len();
+        if self.lex.tk != ')' as i64 {
+            self.expr(Token::Assign as i64)?;
+        }
+        self.emit_op(Op::Jmp);
+        self.emit_val(cond_pc as i64);
+
+        self.consume(b')', "close paren expected")?;
+
+        // Body — patched to start at the current PC.
+        self.text[body_jmp_pc] = self.text.len() as i64;
+        self.loop_breaks.push(Vec::new());
+        self.loop_continues.push(Vec::new());
+        self.stmt()?;
+
+        for pc in self.loop_continues.pop().unwrap() {
+            self.text[pc] = step_pc as i64;
+        }
+        self.emit_op(Op::Jmp);
+        self.emit_val(step_pc as i64);
+
+        self.text[end_jmp_pc] = self.text.len() as i64;
+        let end_pc = self.text.len();
+        for pc in self.loop_breaks.pop().unwrap() {
+            self.text[pc] = end_pc as i64;
+        }
+        Ok(())
+    }
+
+    /// `switch (expr) { ... }`. Three phases: stash the scrutinee in a
+    /// fresh local slot, parse the body (which records `case`/`default`
+    /// label positions in `switch_cases`/`switch_defaults`), then emit a
+    /// trailing dispatcher that compares the stashed value against each
+    /// case label and jumps. Breaks inside the body are pushed onto
+    /// `loop_breaks` and patched to land just past the dispatcher.
+    fn parse_switch_stmt(&mut self) -> Result<(), C4Error> {
+        self.next()?;
+        self.consume(b'(', "open paren expected")?;
+
+        self.loc_offs += 1;
+        let switch_val_offset = -self.loc_offs;
+        self.emit_op(Op::Lea);
+        self.emit_val(switch_val_offset);
+        self.emit_op(Op::Psh);
+
+        self.expr(Token::Assign as i64)?;
+        self.consume(b')', "close paren expected")?;
+
+        self.emit_op(Op::Si);
+
+        // Jump past the body to the dispatcher emitted at the end.
+        self.emit_op(Op::Jmp);
+        let disp_pc_patch = self.text.len();
+        self.emit_val(0);
+
+        self.switch_cases.push(Vec::new());
+        self.switch_defaults.push(None);
+        self.loop_breaks.push(Vec::new());
+
+        self.stmt()?;
+
+        // Fall-through past the body skips the dispatcher entirely.
+        self.emit_op(Op::Jmp);
+        let end_switch_patch = self.text.len();
+        self.emit_val(0);
+
+        // Dispatcher block.
+        self.text[disp_pc_patch] = self.text.len() as i64;
+        let cases = self.switch_cases.pop().unwrap();
+        let default_pc = self.switch_defaults.pop().unwrap();
+
+        for (val, pc) in cases {
+            self.emit_op(Op::Lea);
+            self.emit_val(switch_val_offset);
+            self.emit_op(Op::Li);
+            self.emit_op(Op::Psh);
+            self.emit_op(Op::Imm);
+            self.emit_val(val);
+            self.emit_op(Op::Eq);
+            self.emit_op(Op::Bnz);
+            self.emit_val(pc as i64);
+        }
+
+        if let Some(dpc) = default_pc {
+            self.emit_op(Op::Jmp);
+            self.emit_val(dpc as i64);
+        } else {
+            // No default: fall through to the end (patched below alongside
+            // explicit `break`s).
+            self.emit_op(Op::Jmp);
+            self.emit_val(0);
+            self.loop_breaks
+                .last_mut()
+                .unwrap()
+                .push(self.text.len() - 1);
+        }
+
+        self.text[end_switch_patch] = self.text.len() as i64;
+        let end_pc = self.text.len();
+        for pc in self.loop_breaks.pop().unwrap() {
+            self.text[pc] = end_pc as i64;
+        }
+        Ok(())
+    }
+
+    /// `{ <decls> <stmts> }`. C4-style block scoping: any local
+    /// declarations must come first; the names they bind shadow outer
+    /// symbols for the duration of the block and are restored on exit.
+    fn parse_block_stmt(&mut self) -> Result<(), C4Error> {
+        self.next()?;
+        let mut block_symbols = Vec::new();
+
+        // Block-scoped local variables (declared at the top of the block).
+        while self.lex.tk == Token::Int as i64
+            || self.lex.tk == Token::Char as i64
+            || self.lex.tk == Token::Struct as i64
+        {
+            let lbt = self.parse_decl_base_type()?;
+            while self.lex.tk != ';' as i64 {
+                let (loc_idx, ty) = self.parse_declarator(lbt)?;
+                self.ty = ty;
+
+                block_symbols.push((
+                    loc_idx,
+                    self.symbols[loc_idx].class,
+                    self.symbols[loc_idx].type_,
+                    self.symbols[loc_idx].val,
+                ));
+
+                self.symbols[loc_idx].class = Token::Loc as i64;
+                self.symbols[loc_idx].type_ = ty;
+                self.loc_offs += 1;
+                self.symbols[loc_idx].val = -self.loc_offs;
+
+                if self.lex.tk == ',' as i64 {
+                    self.next()?;
+                }
+            }
+            self.next()?;
+        }
+
+        while self.lex.tk != '}' as i64 {
+            self.stmt()?;
+        }
+        self.next()?;
+
+        // Restore shadowed bindings on block exit.
+        for (idx, class, ty, val) in block_symbols.into_iter().rev() {
+            self.symbols[idx].class = class;
+            self.symbols[idx].type_ = ty;
+            self.symbols[idx].val = val;
+        }
+        Ok(())
+    }
+
     fn stmt(&mut self) -> Result<(), C4Error> {
         if self.lex.tk == Token::Id as i64 && self.lex.peek_after_whitespace(b':') {
             let name = self.symbols[self.lex.curr_id_idx].name.clone();
@@ -994,129 +1184,9 @@ impl Compiler {
                 self.text[pc] = end_pc as i64;
             }
         } else if self.lex.tk == Token::For as i64 {
-            self.next()?;
-            self.consume(b'(', "open paren expected")?;
-
-            // Initialization
-            if self.lex.tk != ';' as i64 {
-                self.expr(Token::Assign as i64)?;
-            }
-            self.consume(b';', "semicolon expected after for-init")?;
-
-            // Condition
-            let cond_pc = self.text.len();
-            if self.lex.tk != ';' as i64 {
-                self.expr(Token::Assign as i64)?;
-            } else {
-                self.emit_op(Op::Imm);
-                self.emit_val(1);
-            }
-            self.emit_op(Op::Bz);
-            let end_jmp_pc = self.text.len();
-            self.emit_val(0);
-
-            self.emit_op(Op::Jmp);
-            let body_jmp_pc = self.text.len();
-            self.emit_val(0);
-
-            self.consume(b';', "semicolon expected after for-cond")?;
-
-            // Step
-            let step_pc = self.text.len();
-            if self.lex.tk != ')' as i64 {
-                self.expr(Token::Assign as i64)?;
-            }
-            self.emit_op(Op::Jmp);
-            self.emit_val(cond_pc as i64);
-
-            self.consume(b')', "close paren expected")?;
-
-            // Body
-            self.text[body_jmp_pc] = self.text.len() as i64;
-
-            self.loop_breaks.push(Vec::new());
-            self.loop_continues.push(Vec::new());
-
-            self.stmt()?;
-
-            for pc in self.loop_continues.pop().unwrap() {
-                self.text[pc] = step_pc as i64;
-            }
-
-            self.emit_op(Op::Jmp);
-            self.emit_val(step_pc as i64);
-
-            self.text[end_jmp_pc] = self.text.len() as i64;
-            let end_pc = self.text.len();
-            for pc in self.loop_breaks.pop().unwrap() {
-                self.text[pc] = end_pc as i64;
-            }
+            self.parse_for_stmt()?;
         } else if self.lex.tk == Token::Switch as i64 {
-            self.next()?;
-            self.consume(b'(', "open paren expected")?;
-
-            self.loc_offs += 1;
-            let switch_val_offset = -self.loc_offs;
-            self.emit_op(Op::Lea);
-            self.emit_val(switch_val_offset);
-            self.emit_op(Op::Psh);
-
-            self.expr(Token::Assign as i64)?;
-            self.consume(b')', "close paren expected")?;
-
-            self.emit_op(Op::Si);
-
-            // Jump to the dispatcher emitted after the body.
-            self.emit_op(Op::Jmp);
-            let disp_pc_patch = self.text.len();
-            self.emit_val(0);
-
-            self.switch_cases.push(Vec::new());
-            self.switch_defaults.push(None);
-            self.loop_breaks.push(Vec::new());
-
-            self.stmt()?;
-
-            // Fall-through past the body skips the dispatcher entirely.
-            self.emit_op(Op::Jmp);
-            let end_switch_patch = self.text.len();
-            self.emit_val(0);
-
-            // Dispatcher block.
-            self.text[disp_pc_patch] = self.text.len() as i64;
-            let cases = self.switch_cases.pop().unwrap();
-            let default_pc = self.switch_defaults.pop().unwrap();
-
-            for (val, pc) in cases {
-                self.emit_op(Op::Lea);
-                self.emit_val(switch_val_offset);
-                self.emit_op(Op::Li);
-                self.emit_op(Op::Psh);
-                self.emit_op(Op::Imm);
-                self.emit_val(val);
-                self.emit_op(Op::Eq);
-                self.emit_op(Op::Bnz);
-                self.emit_val(pc as i64);
-            }
-
-            if let Some(dpc) = default_pc {
-                self.emit_op(Op::Jmp);
-                self.emit_val(dpc as i64);
-            } else {
-                // No default: fall to the end (patched below alongside breaks).
-                self.emit_op(Op::Jmp);
-                self.emit_val(0);
-                self.loop_breaks
-                    .last_mut()
-                    .unwrap()
-                    .push(self.text.len() - 1);
-            }
-
-            self.text[end_switch_patch] = self.text.len() as i64;
-            let end_pc = self.text.len();
-            for pc in self.loop_breaks.pop().unwrap() {
-                self.text[pc] = end_pc as i64;
-            }
+            self.parse_switch_stmt()?;
         } else if self.lex.tk == Token::Case as i64 {
             self.next()?;
             if self.lex.tk != Token::Num as i64 {
@@ -1203,49 +1273,7 @@ impl Compiler {
             self.emit_op(Op::Lev);
             self.consume(b';', "semicolon expected")?;
         } else if self.lex.tk == '{' as i64 {
-            self.next()?;
-            let mut block_symbols = Vec::new();
-
-            // Block-scoped local variables (declared at the top of the block).
-            while self.lex.tk == Token::Int as i64
-                || self.lex.tk == Token::Char as i64
-                || self.lex.tk == Token::Struct as i64
-            {
-                let lbt = self.parse_decl_base_type()?;
-                while self.lex.tk != ';' as i64 {
-                    let (loc_idx, ty) = self.parse_declarator(lbt)?;
-                    self.ty = ty;
-
-                    block_symbols.push((
-                        loc_idx,
-                        self.symbols[loc_idx].class,
-                        self.symbols[loc_idx].type_,
-                        self.symbols[loc_idx].val,
-                    ));
-
-                    self.symbols[loc_idx].class = Token::Loc as i64;
-                    self.symbols[loc_idx].type_ = ty;
-                    self.loc_offs += 1;
-                    self.symbols[loc_idx].val = -self.loc_offs;
-
-                    if self.lex.tk == ',' as i64 {
-                        self.next()?;
-                    }
-                }
-                self.next()?;
-            }
-
-            while self.lex.tk != '}' as i64 {
-                self.stmt()?;
-            }
-            self.next()?;
-
-            // Restore shadowed bindings.
-            for (idx, class, ty, val) in block_symbols.into_iter().rev() {
-                self.symbols[idx].class = class;
-                self.symbols[idx].type_ = ty;
-                self.symbols[idx].val = val;
-            }
+            self.parse_block_stmt()?;
         } else if self.lex.tk == ';' as i64 {
             self.next()?;
         } else {

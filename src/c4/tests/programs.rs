@@ -182,10 +182,7 @@ fn original_c4_compiles_and_runs_hello() {
     // code; the printed output goes to the real stdout.
     let exit = super::run_fixture_with_args(
         "c4.c",
-        [
-            "c4.c",
-            concat!(env!("CARGO_MANIFEST_DIR"), "/hello.c"),
-        ],
+        ["c4.c", concat!(env!("CARGO_MANIFEST_DIR"), "/hello.c")],
     );
     assert_eq!(exit, 0);
 }

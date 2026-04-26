@@ -644,7 +644,11 @@ impl Vm {
                 }
                 Op::Clos => {
                     let fd = self.load_i64(sp)?;
-                    a = if self.fd_table.remove(&fd).is_some() { 0 } else { -1 };
+                    a = if self.fd_table.remove(&fd).is_some() {
+                        0
+                    } else {
+                        -1
+                    };
                 }
                 Op::Malc => {
                     let size = self.load_i64(sp)? as usize;

@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+# A pushed branch + the PR it opens would otherwise run twice. Cancel
+# the older run on every new push.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  lint:
+    name: fmt + clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+      - name: cargo clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.os }}
+      - name: cargo test (default features)
+        run: cargo test --locked --verbose
+      - name: cargo build --no-default-features --lib
+        # The no_std variant — no StdHost adapter, alloc only. Library-
+        # only because the binary needs std for argv / stdio.
+        run: cargo build --locked --no-default-features --lib --verbose
+
+  features:
+    name: feature combos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: features
+      # Explicit matrix of feature flags. Each row mirrors a way a real
+      # consumer might depend on the crate. If you add a new feature to
+      # Cargo.toml, add a row here so an empty / single-feature config
+      # can't silently regress.
+      - name: default (std)
+        run: cargo build --locked --verbose
+      - name: --no-default-features --lib
+        run: cargo build --locked --no-default-features --lib --verbose
+      - name: --all-features
+        run: cargo build --locked --all-features --verbose

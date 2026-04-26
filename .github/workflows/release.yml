@@ -1,0 +1,113 @@
+name: Release
+
+# Trigger on a `v*` tag (e.g. `v0.2.0`). Each runner builds a binary
+# for one target and uploads it to the GitHub Release the first job
+# creates. Use `workflow_dispatch` to dry-run without cutting a tag.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Native runners across the matrix — avoids the cross-compile
+          # toolchain churn. The arm64 Linux + Windows runners are
+          # GitHub-hosted (free for public repos) and target-native.
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            archive: tar.gz
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+            archive: tar.gz
+          - target: x86_64-apple-darwin
+            os: macos-13
+            archive: tar.gz
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            archive: tar.gz
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            archive: zip
+          - target: aarch64-pc-windows-msvc
+            os: windows-11-arm
+            archive: zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.target }}
+
+      # Re-run the test suite on each target — a release artifact that
+      # fails its own tests is worse than no artifact at all. Tests run
+      # in debug for speed; release flags don't change observable
+      # behavior in this codebase.
+      - name: cargo test
+        run: cargo test --locked --verbose
+
+      - name: cargo build --release
+        run: cargo build --locked --release --target ${{ matrix.target }} --verbose
+
+      # Stage the binary + README + LICENSE under a target-named dir so
+      # the archive unpacks cleanly into one folder.
+      - name: Stage artifacts (unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="badc-${{ github.ref_name }}-${{ matrix.target }}"
+          mkdir -p "$stage"
+          cp "target/${{ matrix.target }}/release/badc" "$stage/"
+          cp README.md "$stage/" 2>/dev/null || true
+          cp LICENSE* "$stage/" 2>/dev/null || true
+          tar czf "$stage.tar.gz" "$stage"
+          echo "ASSET=$stage.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Stage artifacts (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $stage = "badc-${{ github.ref_name }}-${{ matrix.target }}"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/badc.exe" $stage/
+          if (Test-Path README.md) { Copy-Item README.md $stage/ }
+          Get-ChildItem -Filter LICENSE* -ErrorAction SilentlyContinue |
+            ForEach-Object { Copy-Item $_.FullName $stage/ }
+          Compress-Archive -Path $stage -DestinationPath "$stage.zip"
+          "ASSET=$stage.zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      # Upload as a workflow artifact too — useful for `workflow_dispatch`
+      # dry runs that don't have a tag to attach to.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: badc-${{ matrix.target }}
+          path: ${{ env.ASSET }}
+          if-no-files-found: error
+
+      # Attach to the Release tied to the tag. Skipped on
+      # workflow_dispatch (no tag → no release).
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ASSET }}
+          fail_on_unmatched_files: true
+          # Auto-generate notes from commits since the previous tag.
+          # Override by editing the release after the run finishes.
+          generate_release_notes: true

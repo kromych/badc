@@ -4,6 +4,14 @@ A Rust port of [c4](https://github.com/rswier/c4), Robert Swierczek's small
 self-hosting C compiler. The compiler accepts a subset of C and targets a
 stack-machine bytecode that runs in an in-process VM.
 
+c4rs is a strict superset of the original c4: anything c4 compiles, c4rs
+compiles too, with the same exit code. The original `c4.c` itself is
+included as a fixture (`fixtures/c/c4.c`) and self-hosts under c4rs —
+`c4rs c4.c hello.c` and even `c4rs c4.c c4.c hello.c` both work.
+Across the test suite's 53 C programs, 27 run identically under c4 and
+under c4rs; the other 26 use c4rs extensions and c4 rejects them at
+parse time. None show divergent behaviour on c4-compatible code.
+
 ## Build and run
 
     cargo build --release
@@ -34,18 +42,25 @@ After `chmod +x script.c`, the file is directly executable.
 
 ## Supported C dialect
 
-Roughly what the original c4 accepts:
+Same core as c4:
 
-- `int`, `char`, pointers (`*`, `**`, ...), arrays via `p[i]`
-- `if` / `else`, `while`, `do`/`while`, `for`, `switch`/`case`/`default`,
-  `break`, `continue`, `goto` + labels, `return`
-- enums, function pointers
-- structs via pointer (`struct Foo *p`, `p->field`, `sizeof(struct Foo)`).
+- `int`, `char`, pointers (`*`, `**`, …), arrays via `p[i]`
+- `if` / `else`, `while`, `return`
+- enums, function calls, function pointers via Jsri
+- library calls c4 already had: `printf`, `malloc`, `free`, `memset`,
+  `memcmp`, `open`, `read`, `close`, `exit`
+
+c4rs extensions on top of that:
+
+- Control flow: `do`/`while`, `for`, `switch`/`case`/`default`, `break`,
+  `continue`, `goto` + labels
+- Block-scoped local declarations (c4 only allowed locals at function top)
+- Bare function references (`fp = add;`), so function pointers are ergonomic
+- `sizeof(<expr>)`, not just `sizeof(<type>)`
+- Structs via pointer (`struct Foo *p`, `p->field`, `sizeof(struct Foo)`).
   Self-referential pointer fields work; struct-value locals/parameters do
   not — use a pointer.
-- function-style library calls: `printf`, `malloc`, `free`, `memset`, `memcmp`,
-  `memcpy`, `open`, `read`, `write`, `close`, `getenv`, `setenv`, `mprotect`,
-  `exit`
+- More syscalls: `memcpy`, `write`, `getenv`, `setenv`, `mprotect`
 
 No preprocessor — `#`-prefixed lines (and the shebang) are silently skipped.
 No floats, no struct values, no unions. `void` is a synonym for `char`,

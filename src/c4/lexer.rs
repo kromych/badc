@@ -51,6 +51,11 @@ impl Lexer {
             if c == '\n' {
                 self.line += 1;
             } else if c == '#' {
+                // Skip the rest of the line. Covers both C-style
+                // preprocessor directives (`#include`, `#define`, …) — c4
+                // doesn't run a preprocessor, it just ignores them — and
+                // a leading shebang line so source files can be made
+                // executable with `#!/usr/bin/env c4rs`.
                 while self.pos < self.src.len() && self.src[self.pos] as char != '\n' {
                     self.pos += 1;
                 }

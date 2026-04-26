@@ -118,6 +118,14 @@ fn memcpy_copies_bytes_between_allocations() {
 }
 
 #[test]
+fn shebang_line_is_skipped() {
+    // A leading `#!/usr/bin/env c4rs` line lets a .c file be made
+    // executable; the lexer absorbs it the same way it absorbs
+    // `#include`. The fixture's `main` returns 7.
+    assert_eq!(run_fixture("shebang.c"), 7);
+}
+
+#[test]
 fn quicksort() {
     assert_eq!(run_fixture("quicksort.c"), 0);
 }

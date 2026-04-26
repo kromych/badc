@@ -173,6 +173,18 @@ fn preprocessor_lines_are_skipped() {
 }
 
 #[test]
+fn shebang_line_is_skipped_and_line_counter_advances() {
+    // The first character of a shebang is `#`, which the lexer treats
+    // the same as a `#include` directive — gobble to end-of-line. The
+    // following newline still bumps the line counter so error messages
+    // point at the right line in the user's source.
+    let mut h = LexHarness::new("#!/usr/bin/env c4rs\n42");
+    assert_eq!(h.next(), NUM);
+    assert_eq!(h.ival(), 42);
+    assert_eq!(h.line(), 2);
+}
+
+#[test]
 fn line_counter_advances_with_newlines() {
     let mut h = LexHarness::new("1\n\n2\n3");
     assert_eq!(h.line(), 1);

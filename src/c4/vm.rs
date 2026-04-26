@@ -9,6 +9,20 @@ use super::program::Program;
 const STACK_CAPACITY: usize = 256 * 1024;
 const STACK_BASE: usize = 0x1000_0000;
 
+/// Metadata for a single heap allocation. The VM never recycles heap
+/// addresses, so each allocation gets a fresh `[start, start+len)` window
+/// recorded here. `freed` is flipped by `free()` so subsequent loads/stores
+/// land in a `use-after-free` diagnostic instead of silently succeeding.
+#[derive(Debug, Clone)]
+struct Allocation {
+    start: usize,
+    len: usize,
+    freed: bool,
+    /// Sequence number used in error messages to identify the offending
+    /// allocation independently of its address.
+    id: u64,
+}
+
 /// Virtual machine that executes a [`Program`].
 pub struct Vm {
     pub(crate) text: Vec<i64>,
@@ -21,6 +35,19 @@ pub struct Vm {
     /// Arguments passed to `main(int argc, char **argv)`. Empty by default;
     /// populated via [`Vm::with_args`].
     args: Vec<String>,
+
+    // ---- Pointer-tracking state ----
+    /// Recorded heap allocations (malloc + getenv-returned strings). Always
+    /// populated regardless of `track_pointers` so the lists stay consistent
+    /// across feature toggles.
+    allocations: Vec<Allocation>,
+    /// `data.len()` captured at the start of [`Vm::run`] (after argv has
+    /// been staged). Anything below this address is static data — string
+    /// literals, globals, argv — and is implicitly trusted by access checks.
+    static_end: usize,
+    /// When true, every heap-side load/store goes through
+    /// [`Vm::check_data_access`] and `free` validates its argument.
+    track_pointers: bool,
 }
 
 impl Vm {
@@ -34,6 +61,9 @@ impl Vm {
             next_fd: 3,
             debug,
             args: Vec::new(),
+            allocations: Vec::new(),
+            static_end: 0,
+            track_pointers: false,
         }
     }
 
@@ -48,9 +78,68 @@ impl Vm {
         self
     }
 
+    /// Enable runtime tracking of heap allocations. With this on, every
+    /// load/store into the heap region is checked against the allocation
+    /// table and produces a `Runtime` error on use-after-free, double-free,
+    /// or out-of-bounds access. Off by default — the checks add a per-access
+    /// linear scan over the allocations list.
+    pub fn with_pointer_tracking(mut self) -> Self {
+        self.track_pointers = true;
+        self
+    }
+
+    /// Record a freshly-allocated heap region. Always called, regardless of
+    /// the `track_pointers` flag, so the allocations list reflects every
+    /// allocation that has ever happened during the run.
+    fn record_allocation(&mut self, start: usize, len: usize) {
+        let id = self.allocations.len() as u64;
+        self.allocations.push(Allocation {
+            start,
+            len,
+            freed: false,
+            id,
+        });
+    }
+
+    /// Validate that `[addr, addr+len)` lies within a live heap allocation
+    /// (or in static data). No-op when tracking is off, when the access is
+    /// to the stack, or when the access lands in static data (string
+    /// literals / globals / argv staged before `run` started).
+    fn check_data_access(&self, addr: usize, len: usize) -> Result<(), C4Error> {
+        if !self.track_pointers || addr >= STACK_BASE {
+            return Ok(());
+        }
+        if addr < self.static_end {
+            return Ok(());
+        }
+        for alloc in &self.allocations {
+            if addr >= alloc.start && addr < alloc.start + alloc.len {
+                if alloc.freed {
+                    return Err(C4Error::Runtime(format!(
+                        "use-after-free: access at 0x{addr:x} inside freed allocation #{} (start=0x{:x}, len={})",
+                        alloc.id, alloc.start, alloc.len
+                    )));
+                }
+                if addr + len > alloc.start + alloc.len {
+                    return Err(C4Error::Runtime(format!(
+                        "out-of-bounds: {len}-byte access at 0x{addr:x} runs past allocation #{} end=0x{:x}",
+                        alloc.id,
+                        alloc.start + alloc.len
+                    )));
+                }
+                return Ok(());
+            }
+        }
+        Err(C4Error::Runtime(format!(
+            "out-of-bounds: heap access at 0x{addr:x} ({len} bytes) is not inside any live allocation"
+        )))
+    }
+
     /// Append `s` (as a NUL-terminated C string) to the data segment and
     /// return the address of its first byte. Reserves the NULL page on the
-    /// first allocation so the returned pointer is never 0.
+    /// first allocation so the returned pointer is never 0. The string is
+    /// recorded as a live allocation so pointer-tracking allows reads of it
+    /// (`getenv` returns into here).
     fn install_cstring(&mut self, s: &[u8]) -> usize {
         if self.data.is_empty() {
             self.data.resize(8, 0);
@@ -58,6 +147,7 @@ impl Vm {
         let addr = self.data.len();
         self.data.extend_from_slice(s);
         self.data.push(0);
+        self.record_allocation(addr, s.len() + 1);
         addr
     }
 
@@ -114,12 +204,15 @@ impl Vm {
                     addr
                 )))
             }
-        } else if addr + 8 <= self.data.len() {
-            let mut bytes = [0u8; 8];
-            bytes.copy_from_slice(&self.data[addr..addr + 8]);
-            Ok(i64::from_le_bytes(bytes))
         } else {
-            Ok(0)
+            self.check_data_access(addr, 8)?;
+            if addr + 8 <= self.data.len() {
+                let mut bytes = [0u8; 8];
+                bytes.copy_from_slice(&self.data[addr..addr + 8]);
+                Ok(i64::from_le_bytes(bytes))
+            } else {
+                Ok(0)
+            }
         }
     }
 
@@ -135,6 +228,7 @@ impl Vm {
                 )))
             }
         } else {
+            self.check_data_access(addr, 8)?;
             if addr + 8 > self.data.len() {
                 self.data.resize(addr + 8, 0);
             }
@@ -154,10 +248,13 @@ impl Vm {
             } else {
                 Ok(0)
             }
-        } else if addr < self.data.len() {
-            Ok(self.data[addr])
         } else {
-            Ok(0)
+            self.check_data_access(addr, 1)?;
+            if addr < self.data.len() {
+                Ok(self.data[addr])
+            } else {
+                Ok(0)
+            }
         }
     }
 
@@ -172,6 +269,7 @@ impl Vm {
                 self.stack[idx] = new_val;
             }
         } else {
+            self.check_data_access(addr, 1)?;
             if addr >= self.data.len() {
                 self.data.resize(addr + 1, 0);
             }
@@ -217,6 +315,12 @@ impl Vm {
         // parameters simply ignores them.
         let argv_addr = self.install_argv();
         let argc = self.args.len() as i64;
+
+        // Freeze the static-data boundary now: anything below this address
+        // (string literals, globals, argv) is implicitly trusted by the
+        // pointer-tracking access check; anything at-or-above must come
+        // from a tracked allocation.
+        self.static_end = self.data.len();
 
         sp -= 8;
         self.store_i64(sp, argc)?;
@@ -437,10 +541,29 @@ impl Vm {
                         // Reserve address 0 so allocations never alias NULL.
                         self.data.resize(8, 0);
                     }
-                    a = self.data.len() as i64;
-                    self.data.resize(self.data.len() + aligned_size, 0);
+                    let start = self.data.len();
+                    self.data.resize(start + aligned_size, 0);
+                    self.record_allocation(start, aligned_size);
+                    a = start as i64;
                 }
                 Op::Free => {
+                    let ptr = self.load_i64(sp)? as usize;
+                    if self.track_pointers {
+                        match self.allocations.iter_mut().find(|a| a.start == ptr) {
+                            Some(alloc) if alloc.freed => {
+                                return Err(C4Error::Runtime(format!(
+                                    "double free: allocation #{} at 0x{ptr:x} freed twice",
+                                    alloc.id
+                                )));
+                            }
+                            Some(alloc) => alloc.freed = true,
+                            None => {
+                                return Err(C4Error::Runtime(format!(
+                                    "free of unknown pointer 0x{ptr:x} (not returned by malloc)"
+                                )));
+                            }
+                        }
+                    }
                     a = 0;
                 }
                 Op::Mset => {

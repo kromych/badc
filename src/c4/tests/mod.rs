@@ -16,11 +16,12 @@ use std::path::PathBuf;
 use super::lexer::{self as lex_helpers, Lexer};
 use super::symbol::Symbol;
 use super::token::{Token, Ty};
-use super::{Compiler, Op, Program, Vm};
+use super::{C4Error, Compiler, Op, Program, Vm};
 
 mod codegen;
 mod lexer;
 mod parser;
+mod pointer_tracking;
 mod programs;
 mod syscalls;
 mod vm;
@@ -69,6 +70,14 @@ where
 {
     let program = compile_fixture(name);
     Vm::new(program, false).with_args(args).run().unwrap()
+}
+
+/// Compile + run a fixture with pointer tracking turned on. Returns the
+/// raw `Result` so callers can assert on either the exit code (no error)
+/// or the diagnostic message (use-after-free / double-free / OOB).
+pub fn run_fixture_tracked(name: &str) -> Result<i64, C4Error> {
+    let program = compile_fixture(name);
+    Vm::new(program, false).with_pointer_tracking().run()
 }
 
 /// Tiny harness that owns the `Lexer`, its symbol table, and the data

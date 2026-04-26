@@ -1475,6 +1475,13 @@ pub mod c4 {
                         self.line
                     )));
                 }
+
+                self.loc_offs += 1;
+                let switch_val_offset = -self.loc_offs;
+                self.emit_op(Op::Lea);
+                self.emit_val(switch_val_offset);
+                self.emit_op(Op::Psh);
+
                 self.expr(Token::Assign as i64)?;
                 if self.tk == ')' as i64 {
                     self.next()?;
@@ -1485,10 +1492,6 @@ pub mod c4 {
                     )));
                 }
 
-                self.loc_offs += 1;
-                let switch_val_offset = -self.loc_offs;
-                self.emit_op(Op::Lea);
-                self.emit_val(switch_val_offset);
                 self.emit_op(Op::Si);
 
                 // 1. Jump immediately to the dispatcher (the case checks)

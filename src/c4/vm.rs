@@ -606,14 +606,15 @@ impl Vm {
                     let name_addr = self.load_i64(sp + 8)? as usize;
                     let _flags = self.load_i64(sp)?;
                     let name = self.read_cstring(name_addr)?;
-                    if let Ok(file) = File::open(&name) {
-                        let fd = self.next_fd;
-                        self.next_fd += 1;
-                        self.fd_table.insert(fd, file);
-                        a = fd;
-                    } else {
-                        a = -1;
-                    }
+                    a = match File::open(&name) {
+                        Ok(file) => {
+                            let fd = self.next_fd;
+                            self.next_fd += 1;
+                            self.fd_table.insert(fd, file);
+                            fd
+                        }
+                        Err(_) => -1,
+                    };
                 }
                 Op::Read => {
                     let fd = self.load_i64(sp + 16)?;
@@ -623,11 +624,12 @@ impl Vm {
 
                     let read_result: std::io::Result<usize> = if fd == 0 {
                         std::io::stdin().read(&mut buf)
-                    } else if let Some(file) = self.fd_table.get_mut(&fd) {
-                        file.read(&mut buf)
                     } else {
-                        a = -1;
-                        continue;
+                        let Some(file) = self.fd_table.get_mut(&fd) else {
+                            a = -1;
+                            continue;
+                        };
+                        file.read(&mut buf)
                     };
 
                     a = match read_result {
@@ -642,11 +644,7 @@ impl Vm {
                 }
                 Op::Clos => {
                     let fd = self.load_i64(sp)?;
-                    if self.fd_table.remove(&fd).is_some() {
-                        a = 0;
-                    } else {
-                        a = -1;
-                    }
+                    a = if self.fd_table.remove(&fd).is_some() { 0 } else { -1 };
                 }
                 Op::Malc => {
                     let size = self.load_i64(sp)? as usize;

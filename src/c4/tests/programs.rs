@@ -167,6 +167,14 @@ fn adjacent_string_literals_concatenate() {
 }
 
 #[test]
+fn predefined_constants_are_visible() {
+    // PROT_*, O_*, STDIN_FILENO, NULL, EXIT_SUCCESS/FAILURE — each is
+    // an integer constant the lexer pre-binds before any user code is
+    // parsed. Returns 0 if every comparison holds.
+    assert_eq!(run_fixture("predefined_constants.c"), 0);
+}
+
+#[test]
 fn original_c4_compiles_and_runs_hello() {
     // The canonical self-hosting test: Robert Swierczek's original c4.c
     // runs under c4rs, compiles hello.c, and runs the resulting program

@@ -1,7 +1,7 @@
 int main() {
     int fd;
     char *buf;
-    fd = open("test_dummy.txt", 0);
+    fd = open("test_dummy.txt", O_RDONLY);
     if (fd < 0) return 1;
 
     buf = malloc(10);

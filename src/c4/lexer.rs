@@ -288,69 +288,166 @@ fn add_keyword(symbols: &mut Vec<Symbol>, name: &str, token: i64) {
     });
 }
 
-/// Seed the symbol table with C keywords and library function bindings.
+/// Reserved words that map to a non-`Id` token. Library function names
+/// (`printf`, `malloc`, …) are listed as `Token::Id` here so they get
+/// registered first; the lib-ops table below then upgrades them to
+/// `Token::Sys`-class symbols pointing at their opcode.
+const KEYWORDS: &[(&str, Token)] = &[
+    ("char", Token::Char),
+    ("else", Token::Else),
+    ("enum", Token::Enum),
+    ("for", Token::For),
+    ("if", Token::If),
+    ("int", Token::Int),
+    ("return", Token::Return),
+    ("sizeof", Token::Sizeof),
+    ("while", Token::While),
+    ("do", Token::Do),
+    ("break", Token::Break),
+    ("continue", Token::Continue),
+    ("goto", Token::Goto),
+    ("switch", Token::Switch),
+    ("case", Token::Case),
+    ("default", Token::Default),
+    ("struct", Token::Struct),
+    ("open", Token::Id),
+    ("read", Token::Id),
+    ("close", Token::Id),
+    ("printf", Token::Id),
+    ("malloc", Token::Id),
+    ("free", Token::Id),
+    ("memset", Token::Id),
+    ("memcmp", Token::Id),
+    ("memcpy", Token::Id),
+    ("mprotect", Token::Id),
+    ("exit", Token::Id),
+    ("write", Token::Id),
+    ("getenv", Token::Id),
+    ("setenv", Token::Id),
+    ("void", Token::Char),
+    ("main", Token::Id),
+];
+
+const LIB_OPS: &[(&str, Op)] = &[
+    ("open", Op::Open),
+    ("read", Op::Read),
+    ("close", Op::Clos),
+    ("printf", Op::Prtf),
+    ("malloc", Op::Malc),
+    ("free", Op::Free),
+    ("memset", Op::Mset),
+    ("memcmp", Op::Mcmp),
+    ("memcpy", Op::Mcpy),
+    ("mprotect", Op::Mpro),
+    ("exit", Op::Exit),
+    ("write", Op::Write),
+    ("getenv", Op::Genv),
+    ("setenv", Op::Senv),
+];
+
+/// Pre-registered integer constants — the c4 dialect doesn't have
+/// `#define`, so things like `PROT_READ` would otherwise be magic
+/// numbers. They're seeded as `Token::Num`-class symbols so the compiler
+/// emits `Op::Imm <value>` exactly as if the user had written the
+/// literal. POSIX-conventional values; portable across platforms because
+/// our VM honours these masks itself rather than calling out to libc.
+const CONSTANTS: &[(&str, i64)] = &[
+    // mprotect prot bits — the values our VM reads.
+    ("PROT_NONE", 0),
+    ("PROT_READ", 1),
+    ("PROT_WRITE", 2),
+    ("PROT_EXEC", 4), // accepted but our VM has no executable-data concept
+    // open() flags — currently advisory; our VM always opens read-only.
+    ("O_RDONLY", 0),
+    ("O_WRONLY", 1),
+    ("O_RDWR", 2),
+    // standard file descriptors
+    ("STDIN_FILENO", 0),
+    ("STDOUT_FILENO", 1),
+    ("STDERR_FILENO", 2),
+    // misc
+    ("NULL", 0),
+    ("EXIT_SUCCESS", 0),
+    ("EXIT_FAILURE", 1),
+];
+
+/// Kind of a predefined identifier — used by `--list-symbols` and any
+/// future tooling that wants to enumerate the c4rs prelude.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PredefinedKind {
+    Keyword,
+    Syscall,
+    Constant,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct PredefinedSymbol {
+    pub name: &'static str,
+    pub kind: PredefinedKind,
+    /// For keywords this is the token discriminant, for syscalls the op
+    /// discriminant, and for constants the actual integer value.
+    pub value: i64,
+}
+
+/// Flatten the keyword/syscall/constant tables into a single iterable.
+/// Used by the `--list-symbols` CLI flag.
+///
+/// Lib-function names appear in `KEYWORDS` as `Token::Id` placeholders so
+/// they're interned before `LIB_OPS` upgrades their class — but they
+/// aren't really keywords from the user's perspective, so we filter the
+/// Id-class entries out of the keyword listing.
+pub fn predefined_symbols() -> Vec<PredefinedSymbol> {
+    let mut out = Vec::with_capacity(KEYWORDS.len() + LIB_OPS.len() + CONSTANTS.len());
+    for (name, tok) in KEYWORDS {
+        if *tok as i64 == Token::Id as i64 {
+            continue;
+        }
+        out.push(PredefinedSymbol {
+            name,
+            kind: PredefinedKind::Keyword,
+            value: *tok as i64,
+        });
+    }
+    for (name, op) in LIB_OPS {
+        out.push(PredefinedSymbol {
+            name,
+            kind: PredefinedKind::Syscall,
+            value: *op as i64,
+        });
+    }
+    for (name, val) in CONSTANTS {
+        out.push(PredefinedSymbol {
+            name,
+            kind: PredefinedKind::Constant,
+            value: *val,
+        });
+    }
+    out
+}
+
+/// Seed the symbol table with C keywords, library function bindings, and
+/// integer constants like `PROT_READ`.
 pub(crate) fn init_symbols(symbols: &mut Vec<Symbol>) {
-    let keywords: &[(&str, Token)] = &[
-        ("char", Token::Char),
-        ("else", Token::Else),
-        ("enum", Token::Enum),
-        ("for", Token::For),
-        ("if", Token::If),
-        ("int", Token::Int),
-        ("return", Token::Return),
-        ("sizeof", Token::Sizeof),
-        ("while", Token::While),
-        ("do", Token::Do),
-        ("break", Token::Break),
-        ("continue", Token::Continue),
-        ("goto", Token::Goto),
-        ("switch", Token::Switch),
-        ("case", Token::Case),
-        ("default", Token::Default),
-        ("struct", Token::Struct),
-        ("open", Token::Id),
-        ("read", Token::Id),
-        ("close", Token::Id),
-        ("printf", Token::Id),
-        ("malloc", Token::Id),
-        ("free", Token::Id),
-        ("memset", Token::Id),
-        ("memcmp", Token::Id),
-        ("memcpy", Token::Id),
-        ("mprotect", Token::Id),
-        ("exit", Token::Id),
-        ("write", Token::Id),
-        ("getenv", Token::Id),
-        ("setenv", Token::Id),
-        ("void", Token::Char),
-        ("main", Token::Id),
-    ];
-
-    let lib_ops: &[(&str, Op)] = &[
-        ("open", Op::Open),
-        ("read", Op::Read),
-        ("close", Op::Clos),
-        ("printf", Op::Prtf),
-        ("malloc", Op::Malc),
-        ("free", Op::Free),
-        ("memset", Op::Mset),
-        ("memcmp", Op::Mcmp),
-        ("memcpy", Op::Mcpy),
-        ("mprotect", Op::Mpro),
-        ("exit", Op::Exit),
-        ("write", Op::Write),
-        ("getenv", Op::Genv),
-        ("setenv", Op::Senv),
-    ];
-
-    for (name, tok) in keywords {
+    for (name, tok) in KEYWORDS {
         add_keyword(symbols, name, *tok as i64);
     }
-    for (name, op) in lib_ops {
+    for (name, op) in LIB_OPS {
         let idx = find_symbol(symbols, name).unwrap();
         symbols[idx].class = Token::Sys as i64;
         symbols[idx].type_ = Ty::Int as i64;
         symbols[idx].val = *op as i64;
+    }
+    for (name, val) in CONSTANTS {
+        let hash = hash_name(name.as_bytes());
+        symbols.push(Symbol {
+            name: name.to_string(),
+            hash,
+            token: Token::Id as i64,
+            class: Token::Num as i64,
+            type_: Ty::Int as i64,
+            val: *val,
+            ..Default::default()
+        });
     }
     // Ensure main is registered so the compiler's later lookup sees it.
     let _ = find_symbol(symbols, "main").unwrap();

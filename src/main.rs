@@ -1,31 +1,38 @@
 mod c4;
 
-use c4::{Compiler, Vm};
+use c4::{Compiler, PredefinedKind, Vm, predefined_symbols};
+
+const USAGE: &str = "usage: c4rs [--track-pointers] [--list-symbols] <file> [args...]";
 
 fn main() {
     let raw: Vec<String> = std::env::args().collect();
-    if raw.len() < 2 {
-        eprintln!("usage: c4_rust [--track-pointers] <file> [args...]");
-        return;
-    }
 
-    // Strip a leading `--track-pointers` flag (anywhere before the source
-    // file) so the remaining argv looks like `c4_rust <file> [args...]`.
+    // Strip leading flags (in any order, anywhere before the source file)
+    // so the remaining argv looks like `c4rs <file> [args...]`.
     let mut track_pointers = false;
+    let mut list_symbols = false;
     let args: Vec<String> = raw
         .into_iter()
-        .filter(|a| {
-            if a == "--track-pointers" {
+        .filter(|a| match a.as_str() {
+            "--track-pointers" => {
                 track_pointers = true;
                 false
-            } else {
-                true
             }
+            "--list-symbols" => {
+                list_symbols = true;
+                false
+            }
+            _ => true,
         })
         .collect();
 
+    if list_symbols {
+        print_predefined_symbols();
+        return;
+    }
+
     if args.len() < 2 {
-        eprintln!("usage: c4_rust [--track-pointers] <file> [args...]");
+        eprintln!("{USAGE}");
         std::process::exit(1);
     }
 
@@ -57,5 +64,47 @@ fn main() {
             eprintln!("{}", e);
             std::process::exit(1);
         }
+    }
+}
+
+/// Print every name the compiler pre-binds before parsing — keywords,
+/// library functions, and integer constants — grouped by kind. Useful
+/// for scripting (`c4rs --list-symbols | grep PROT_`) and for spotting
+/// what's available without `#include`.
+fn print_predefined_symbols() {
+    let symbols = predefined_symbols();
+
+    let mut names: Vec<&str> = symbols
+        .iter()
+        .filter(|s| s.kind == PredefinedKind::Keyword)
+        .map(|s| s.name)
+        .collect();
+    names.sort_unstable();
+    println!("Keywords:");
+    for name in names {
+        println!("  {name}");
+    }
+
+    let mut names: Vec<&str> = symbols
+        .iter()
+        .filter(|s| s.kind == PredefinedKind::Syscall)
+        .map(|s| s.name)
+        .collect();
+    names.sort_unstable();
+    println!("\nLibrary calls:");
+    for name in names {
+        println!("  {name}");
+    }
+
+    let mut consts: Vec<(&str, i64)> = symbols
+        .iter()
+        .filter(|s| s.kind == PredefinedKind::Constant)
+        .map(|s| (s.name, s.value))
+        .collect();
+    consts.sort_unstable_by_key(|(n, _)| *n);
+    let max_name_width = consts.iter().map(|(n, _)| n.len()).max().unwrap_or(0);
+    println!("\nConstants:");
+    for (name, value) in consts {
+        println!("  {name:<max_name_width$} = {value}");
     }
 }

@@ -66,6 +66,21 @@ No preprocessor — `#`-prefixed lines (and the shebang) are silently skipped.
 No floats, no struct values, no unions. `void` is a synonym for `char`,
 following c4 itself.
 
+### Predefined constants
+
+Because there's no `#define`, c4rs pre-binds the POSIX-conventional
+constants you'd otherwise hardcode as magic numbers. They're visible to
+any program without `#include`:
+
+    PROT_NONE PROT_READ PROT_WRITE PROT_EXEC
+    O_RDONLY O_WRONLY O_RDWR
+    STDIN_FILENO STDOUT_FILENO STDERR_FILENO
+    NULL EXIT_SUCCESS EXIT_FAILURE
+
+Run `c4rs --list-symbols` to dump them along with the keyword and
+library-call lists. Values are c4rs's, not the host's libc — `mprotect`
+honours `PROT_READ = 1` and `PROT_WRITE = 2` as a bitmask exactly.
+
 ## Runtime safety
 
 The VM keeps code, stack, and data in distinct address ranges and refuses to
@@ -75,7 +90,8 @@ mix them:
   (`*fp`) is always rejected as `code is not data`. Calling through a
   fabricated integer (`fp = 42; fp();`) is rejected at the call site.
 - `mprotect(addr, len, prot)` is honoured on every load/store. `prot` uses
-  the POSIX bits — `1 = read`, `2 = write`, `0 = none`.
+  the POSIX bits — `PROT_READ = 1`, `PROT_WRITE = 2`, `PROT_NONE = 0`
+  (all pre-bound as constants — see above).
 - Pass `--track-pointers` to enable allocation tracking. With it on, `free`
   on an unknown or already-freed pointer errors, and any access into a freed
   allocation, or past the end of a live one, is reported with the offending

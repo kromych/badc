@@ -15,7 +15,14 @@ mod tests;
 // resolve through the inner module path) — they are still part of the
 // intended public API.
 #[allow(unused_imports)]
-pub use {compiler::Compiler, error::C4Error, op::Op, program::Program, vm::Vm};
+pub use {
+    compiler::Compiler,
+    error::C4Error,
+    lexer::{PredefinedKind, PredefinedSymbol, predefined_symbols},
+    op::Op,
+    program::Program,
+    vm::Vm,
+};
 
 /// Base offset that separates the code address space from the data /
 /// stack address spaces. Function-pointer values seen by user code are

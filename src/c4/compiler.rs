@@ -1128,26 +1128,24 @@ impl Compiler {
             let val = self.lex.ival;
             self.next()?;
             self.consume(b':', "expected colon after case")?;
-            if let Some(cases) = self.switch_cases.last_mut() {
-                cases.push((val, self.text.len()));
-            } else {
+            let Some(cases) = self.switch_cases.last_mut() else {
                 return Err(C4Error::Compile(format!(
                     "{}: case outside switch",
                     self.lex.line
                 )));
-            }
+            };
+            cases.push((val, self.text.len()));
             self.stmt()?;
         } else if self.lex.tk == Token::Default as i64 {
             self.next()?;
             self.consume(b':', "expected colon after default")?;
-            if let Some(def) = self.switch_defaults.last_mut() {
-                *def = Some(self.text.len());
-            } else {
+            let Some(def) = self.switch_defaults.last_mut() else {
                 return Err(C4Error::Compile(format!(
                     "{}: default outside switch",
                     self.lex.line
                 )));
-            }
+            };
+            *def = Some(self.text.len());
             self.stmt()?;
         } else if self.lex.tk == Token::Goto as i64 {
             self.next()?;

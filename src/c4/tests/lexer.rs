@@ -1,0 +1,200 @@
+//! Token-stream tests that exercise `Lexer::next` in isolation.
+
+use super::{LexHarness, Token, Ty};
+
+const NUM: i64 = Token::Num as i64;
+
+#[test]
+fn empty_source_yields_eof() {
+    let mut h = LexHarness::new("");
+    assert_eq!(h.next(), 0);
+}
+
+#[test]
+fn whitespace_only_yields_eof() {
+    let mut h = LexHarness::new("   \t\n   ");
+    assert_eq!(h.next(), 0);
+}
+
+#[test]
+fn integer_literal() {
+    let mut h = LexHarness::new("42");
+    assert_eq!(h.next(), NUM);
+    assert_eq!(h.ival(), 42);
+    assert_eq!(h.next(), 0);
+}
+
+#[test]
+fn hex_literal_lower_and_upper() {
+    let mut h = LexHarness::new("0xff 0xABCD");
+    assert_eq!(h.next(), NUM);
+    assert_eq!(h.ival(), 0xff);
+    assert_eq!(h.next(), NUM);
+    assert_eq!(h.ival(), 0xABCD);
+}
+
+#[test]
+fn keywords_resolve_to_their_tokens() {
+    let mut h = LexHarness::new("int char if else while return sizeof");
+    let expected = [
+        Token::Int,
+        Token::Char,
+        Token::If,
+        Token::Else,
+        Token::While,
+        Token::Return,
+        Token::Sizeof,
+    ];
+    for tok in expected {
+        assert_eq!(h.next(), tok as i64);
+    }
+    assert_eq!(h.next(), 0);
+}
+
+#[test]
+fn identifier_interned_in_symbol_table() {
+    let mut h = LexHarness::new("foo bar foo");
+    assert_eq!(h.next(), Token::Id as i64);
+    assert_eq!(h.name(), "foo");
+    let foo_idx = h.symbols.len() - 1;
+
+    assert_eq!(h.next(), Token::Id as i64);
+    assert_eq!(h.name(), "bar");
+    assert_ne!(h.symbols.len() - 1, foo_idx);
+
+    // The second `foo` reuses the existing symbol.
+    let prev_len = h.symbols.len();
+    assert_eq!(h.next(), Token::Id as i64);
+    assert_eq!(h.name(), "foo");
+    assert_eq!(h.symbols.len(), prev_len);
+}
+
+#[test]
+fn string_literal_lands_in_data_segment() {
+    let mut h = LexHarness::new(r#""abc""#);
+    assert_eq!(h.next(), '"' as i64);
+    let addr = h.ival() as usize;
+    assert_eq!(&h.data[addr..addr + 4], b"abc\0");
+}
+
+#[test]
+fn string_literal_escape_sequences() {
+    let mut h = LexHarness::new(r#""a\nb""#);
+    assert_eq!(h.next(), '"' as i64);
+    let addr = h.ival() as usize;
+    assert_eq!(&h.data[addr..addr + 4], b"a\nb\0");
+}
+
+#[test]
+fn char_literal_returns_num_token() {
+    let mut h = LexHarness::new("'A'");
+    assert_eq!(h.next(), NUM);
+    assert_eq!(h.ival(), 'A' as i64);
+}
+
+#[test]
+fn char_literal_newline_escape() {
+    let mut h = LexHarness::new(r"'\n'");
+    assert_eq!(h.next(), NUM);
+    assert_eq!(h.ival(), '\n' as i64);
+}
+
+#[test]
+fn compound_operators_disambiguated() {
+    let mut h = LexHarness::new("== != <= >= && || << >> ++ --");
+    let expected = [
+        Token::EqOp,
+        Token::NeOp,
+        Token::LeOp,
+        Token::GeOp,
+        Token::Lan,
+        Token::Lor,
+        Token::ShlOp,
+        Token::ShrOp,
+        Token::Inc,
+        Token::Dec,
+    ];
+    for tok in expected {
+        assert_eq!(h.next(), tok as i64);
+    }
+}
+
+#[test]
+fn single_char_operators() {
+    let mut h = LexHarness::new("+ - * / % = < > & | ^");
+    let expected = [
+        Token::AddOp,
+        Token::SubOp,
+        Token::MulOp,
+        Token::DivOp,
+        Token::ModOp,
+        Token::Assign,
+        Token::LtOp,
+        Token::GtOp,
+        Token::AndOp,
+        Token::OrOp,
+        Token::XorOp,
+    ];
+    for tok in expected {
+        assert_eq!(h.next(), tok as i64);
+    }
+}
+
+#[test]
+fn punctuation_tokens_are_their_byte_values() {
+    // `[` is special-cased to Token::Brak; everything in this set comes
+    // back as its raw byte value.
+    let mut h = LexHarness::new("(){};,:]");
+    for c in "(){};,:]".chars() {
+        assert_eq!(h.next(), c as i64);
+    }
+}
+
+#[test]
+fn open_bracket_maps_to_brak_token() {
+    let mut h = LexHarness::new("[");
+    assert_eq!(h.next(), Token::Brak as i64);
+}
+
+#[test]
+fn line_comments_are_skipped() {
+    let mut h = LexHarness::new("1 // ignored\n 2");
+    assert_eq!(h.next(), NUM);
+    assert_eq!(h.ival(), 1);
+    assert_eq!(h.next(), NUM);
+    assert_eq!(h.ival(), 2);
+}
+
+#[test]
+fn preprocessor_lines_are_skipped() {
+    let mut h = LexHarness::new("#include <stdio.h>\n42");
+    assert_eq!(h.next(), NUM);
+    assert_eq!(h.ival(), 42);
+}
+
+#[test]
+fn line_counter_advances_with_newlines() {
+    let mut h = LexHarness::new("1\n\n2\n3");
+    assert_eq!(h.line(), 1);
+    assert_eq!(h.next(), NUM);
+    assert_eq!(h.line(), 1);
+    assert_eq!(h.next(), NUM);
+    assert_eq!(h.line(), 3);
+    assert_eq!(h.next(), NUM);
+    assert_eq!(h.line(), 4);
+}
+
+#[test]
+fn library_function_names_are_pre_seeded() {
+    // `init_symbols` registers C library names like `malloc` as `Token::Id`,
+    // and the symbol they resolve to carries its syscall opcode in `val`.
+    let mut h = LexHarness::new("malloc");
+    assert_eq!(h.next(), Token::Id as i64);
+    assert_eq!(h.name(), "malloc");
+    let sym = h
+        .symbols
+        .iter()
+        .find(|s| s.name == "malloc")
+        .expect("malloc should be pre-seeded");
+    assert_eq!(sym.type_, Ty::Int as i64);
+}

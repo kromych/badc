@@ -22,6 +22,7 @@ mod codegen;
 mod lexer;
 mod parser;
 mod programs;
+mod syscalls;
 mod vm;
 
 /// Absolute path of `fixtures/c/<name>` relative to the crate root.
@@ -58,6 +59,16 @@ pub fn run_str(src: &str) -> i64 {
 /// Compile + run a fixture.
 pub fn run_fixture(name: &str) -> i64 {
     run_str(&load_fixture(name))
+}
+
+/// Compile + run a fixture with `args` exposed to `main(int argc, char **argv)`.
+pub fn run_fixture_with_args<I, S>(name: &str, args: I) -> i64
+where
+    I: IntoIterator<Item = S>,
+    S: Into<String>,
+{
+    let program = compile_fixture(name);
+    Vm::new(program, false).with_args(args).run().unwrap()
 }
 
 /// Tiny harness that owns the `Lexer`, its symbol table, and the data

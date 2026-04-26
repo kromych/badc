@@ -83,9 +83,15 @@ pub enum Op {
     Mcmp,
     /// Syscall: Terminate program with exit code
     Exit,
+    /// Syscall: Write a buffer to a file descriptor (fd 1=stdout, 2=stderr).
+    Write,
+    /// Syscall: Read an environment variable into the data segment.
+    Genv,
+    /// Syscall: Set an environment variable.
+    Senv,
 }
 
-const OPS: [Op; 40] = [
+const OPS: [Op; 43] = [
     Op::Lea,
     Op::Imm,
     Op::Jmp,
@@ -126,6 +132,9 @@ const OPS: [Op; 40] = [
     Op::Mset,
     Op::Mcmp,
     Op::Exit,
+    Op::Write,
+    Op::Genv,
+    Op::Senv,
 ];
 
 impl Op {

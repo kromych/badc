@@ -15,7 +15,10 @@ fn expect_compile_error(src: &str, needle: &str) {
                 msg,
             );
         }
-        Ok(_) => panic!("expected compile error containing {:?}, but compile succeeded", needle),
+        Ok(_) => panic!(
+            "expected compile error containing {:?}, but compile succeeded",
+            needle
+        ),
     }
 }
 
@@ -79,26 +82,17 @@ fn continue_outside_loop() {
 
 #[test]
 fn unresolved_goto_label() {
-    expect_compile_error(
-        "int main() { goto nowhere; return 0; }",
-        "unresolved label",
-    );
+    expect_compile_error("int main() { goto nowhere; return 0; }", "unresolved label");
 }
 
 #[test]
 fn missing_close_paren_in_if() {
-    expect_compile_error(
-        "int main() { if (1 return 0; }",
-        "close paren expected",
-    );
+    expect_compile_error("int main() { if (1 return 0; }", "close paren expected");
 }
 
 #[test]
 fn missing_open_paren_after_while() {
-    expect_compile_error(
-        "int main() { while 1) return 0; }",
-        "open paren expected",
-    );
+    expect_compile_error("int main() { while 1) return 0; }", "open paren expected");
 }
 
 #[test]

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Write as IoWrite};
 
 use super::error::C4Error;
 use super::op::Op;
@@ -18,6 +18,9 @@ pub struct Vm {
     fd_table: HashMap<i64, File>,
     next_fd: i64,
     debug: bool,
+    /// Arguments passed to `main(int argc, char **argv)`. Empty by default;
+    /// populated via [`Vm::with_args`].
+    args: Vec<String>,
 }
 
 impl Vm {
@@ -30,7 +33,67 @@ impl Vm {
             fd_table: HashMap::new(),
             next_fd: 3,
             debug,
+            args: Vec::new(),
         }
+    }
+
+    /// Set the argv list seen by `main`. Conventional first entry is the
+    /// program name. Builder-style: `Vm::new(p, false).with_args(["x", "y"])`.
+    pub fn with_args<I, S>(mut self, args: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.args = args.into_iter().map(Into::into).collect();
+        self
+    }
+
+    /// Append `s` (as a NUL-terminated C string) to the data segment and
+    /// return the address of its first byte. Reserves the NULL page on the
+    /// first allocation so the returned pointer is never 0.
+    fn install_cstring(&mut self, s: &[u8]) -> usize {
+        if self.data.is_empty() {
+            self.data.resize(8, 0);
+        }
+        let addr = self.data.len();
+        self.data.extend_from_slice(s);
+        self.data.push(0);
+        addr
+    }
+
+    /// Build the argv array (and per-arg cstrings) in the data segment and
+    /// return the address of argv. Returns 0 when there are no arguments.
+    fn install_argv(&mut self) -> i64 {
+        if self.args.is_empty() {
+            return 0;
+        }
+        if self.data.is_empty() {
+            self.data.resize(8, 0);
+        }
+        let argc = self.args.len();
+        let argv_addr = self.data.len();
+        // Reserve `argc + 1` pointer slots (the trailing slot is NULL by C
+        // convention), then back-fill them after the strings are placed.
+        self.data.resize(argv_addr + (argc + 1) * 8, 0);
+
+        let mut entries = Vec::with_capacity(argc);
+        // Take ownership of the args list to avoid aliasing self.data and
+        // self.args during the loop body.
+        let args = std::mem::take(&mut self.args);
+        for arg in &args {
+            let start = self.data.len();
+            self.data.extend_from_slice(arg.as_bytes());
+            self.data.push(0);
+            entries.push(start as i64);
+        }
+        self.args = args;
+
+        for (i, &addr) in entries.iter().enumerate() {
+            let slot = argv_addr + i * 8;
+            self.data[slot..slot + 8].copy_from_slice(&addr.to_le_bytes());
+        }
+
+        argv_addr as i64
     }
 
     fn get_stack_idx(&self, addr: usize) -> Option<usize> {
@@ -145,10 +208,20 @@ impl Vm {
         self.text.push(Op::Psh as i64);
         self.text.push(Op::Exit as i64);
 
+        // Stage argv strings + array in the data segment, then push argc /
+        // argv_addr as the two parameters of `main`. The compiler maps
+        //   int main(int argc, char **argv)
+        // to read argc from bp+24 and argv from bp+16, so argc must be the
+        // FIRST push (it sits deeper on the stack). When `args` is empty
+        // these slots are both zero, and a `main()` defined without
+        // parameters simply ignores them.
+        let argv_addr = self.install_argv();
+        let argc = self.args.len() as i64;
+
         sp -= 8;
-        self.store_i64(sp, 0)?;
+        self.store_i64(sp, argc)?;
         sp -= 8;
-        self.store_i64(sp, 0)?;
+        self.store_i64(sp, argv_addr)?;
         sp -= 8;
         self.store_i64(sp, bootstrap_addr)?;
 
@@ -328,20 +401,26 @@ impl Vm {
                     let fd = self.load_i64(sp + 16)?;
                     let buf_addr = self.load_i64(sp + 8)? as usize;
                     let size = self.load_i64(sp)? as usize;
+                    let mut buf = vec![0u8; size];
 
-                    if let Some(file) = self.fd_table.get_mut(&fd) {
-                        let mut buf = vec![0u8; size];
-                        if let Ok(bytes_read) = file.read(&mut buf) {
+                    let read_result: std::io::Result<usize> = if fd == 0 {
+                        std::io::stdin().read(&mut buf)
+                    } else if let Some(file) = self.fd_table.get_mut(&fd) {
+                        file.read(&mut buf)
+                    } else {
+                        a = -1;
+                        continue;
+                    };
+
+                    a = match read_result {
+                        Ok(bytes_read) => {
                             for (i, &byte) in buf.iter().enumerate().take(bytes_read) {
                                 self.store_u8(buf_addr + i, byte)?;
                             }
-                            a = bytes_read as i64;
-                        } else {
-                            a = -1;
+                            bytes_read as i64
                         }
-                    } else {
-                        a = -1;
-                    }
+                        Err(_) => -1,
+                    };
                 }
                 Op::Clos => {
                     let fd = self.load_i64(sp)?;
@@ -434,6 +513,51 @@ impl Vm {
                 }
                 Op::Exit => {
                     return self.load_i64(sp);
+                }
+                Op::Write => {
+                    let fd = self.load_i64(sp + 16)?;
+                    let buf_addr = self.load_i64(sp + 8)? as usize;
+                    let size = self.load_i64(sp)? as usize;
+                    let mut buf = vec![0u8; size];
+                    for (i, byte) in buf.iter_mut().enumerate() {
+                        *byte = self.load_u8(buf_addr + i)?;
+                    }
+                    a = match fd {
+                        1 => std::io::stdout()
+                            .write(&buf)
+                            .map(|n| n as i64)
+                            .unwrap_or(-1),
+                        2 => std::io::stderr()
+                            .write(&buf)
+                            .map(|n| n as i64)
+                            .unwrap_or(-1),
+                        _ => match self.fd_table.get_mut(&fd) {
+                            Some(file) => file.write(&buf).map(|n| n as i64).unwrap_or(-1),
+                            None => -1,
+                        },
+                    };
+                }
+                Op::Genv => {
+                    let name_addr = self.load_i64(sp)? as usize;
+                    let name = self.read_cstring(name_addr)?;
+                    a = match std::env::var(&name) {
+                        Ok(value) => self.install_cstring(value.as_bytes()) as i64,
+                        Err(_) => 0,
+                    };
+                }
+                Op::Senv => {
+                    let name_addr = self.load_i64(sp + 16)? as usize;
+                    let val_addr = self.load_i64(sp + 8)? as usize;
+                    let overwrite = self.load_i64(sp)?;
+                    let name = self.read_cstring(name_addr)?;
+                    let value = self.read_cstring(val_addr)?;
+                    if overwrite != 0 || std::env::var(&name).is_err() {
+                        // SAFETY: env mutation is process-global; tests must
+                        // pick unique variable names to avoid races. The
+                        // 2024 edition flags this as unsafe for that reason.
+                        unsafe { std::env::set_var(&name, &value) };
+                    }
+                    a = 0;
                 }
             }
         }

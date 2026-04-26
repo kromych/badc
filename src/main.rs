@@ -22,7 +22,11 @@ fn main() {
         }
     };
 
-    match Vm::new(program, false).run() {
+    // Pass everything from argv[1] onward to the C program — argv[0] of the
+    // hosted program is the source file name, argv[1..] are its own args.
+    let c_args: Vec<String> = args[1..].to_vec();
+
+    match Vm::new(program, false).with_args(c_args).run() {
         Ok(res) => println!("exit({})", res),
         Err(e) => {
             eprintln!("{}", e);

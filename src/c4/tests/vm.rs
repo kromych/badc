@@ -35,9 +35,9 @@ fn conditional_branch_taken() {
         Op::Ent as i64,
         0,
         Op::Imm as i64,
-        1,           // a = 1 (truthy)
+        1, // a = 1 (truthy)
         Op::Bz as i64,
-        9,           // skip to else branch when a == 0
+        9, // skip to else branch when a == 0
         Op::Imm as i64,
         7,
         Op::Lev as i64,

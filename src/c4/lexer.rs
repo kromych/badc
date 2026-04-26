@@ -300,6 +300,9 @@ pub(crate) fn init_symbols(symbols: &mut Vec<Symbol>) {
         ("memset", Token::Id),
         ("memcmp", Token::Id),
         ("exit", Token::Id),
+        ("write", Token::Id),
+        ("getenv", Token::Id),
+        ("setenv", Token::Id),
         ("void", Token::Char),
         ("main", Token::Id),
     ];
@@ -314,6 +317,9 @@ pub(crate) fn init_symbols(symbols: &mut Vec<Symbol>) {
         ("memset", Op::Mset),
         ("memcmp", Op::Mcmp),
         ("exit", Op::Exit),
+        ("write", Op::Write),
+        ("getenv", Op::Genv),
+        ("setenv", Op::Senv),
     ];
 
     for (name, tok) in keywords {

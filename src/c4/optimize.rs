@@ -368,10 +368,8 @@ fn collect_branch_targets(insns: &[Insn]) -> Vec<bool> {
     let mut targets = vec![false; insns.len()];
     for ins in insns {
         match ins {
-            Insn::Branch(_, t) | Insn::ImmCode(t) => {
-                if *t < targets.len() {
-                    targets[*t] = true;
-                }
+            Insn::Branch(_, t) | Insn::ImmCode(t) if *t < targets.len() => {
+                targets[*t] = true;
             }
             _ => {}
         }

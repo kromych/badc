@@ -71,18 +71,22 @@ fn identifier_interned_in_symbol_table() {
 
 #[test]
 fn string_literal_lands_in_data_segment() {
+    // The lexer alone leaves the trailing NUL off so adjacent string
+    // literals can concatenate; the parser adds it back. So in raw
+    // lexer output we only see the bytes themselves.
     let mut h = LexHarness::new(r#""abc""#);
     assert_eq!(h.next(), '"' as i64);
     let addr = h.ival() as usize;
-    assert_eq!(&h.data[addr..addr + 4], b"abc\0");
+    assert_eq!(&h.data[addr..addr + 3], b"abc");
 }
 
 #[test]
 fn string_literal_escape_sequences() {
+    // Lexer alone — no trailing NUL (parser adds it).
     let mut h = LexHarness::new(r#""a\nb""#);
     assert_eq!(h.next(), '"' as i64);
     let addr = h.ival() as usize;
-    assert_eq!(&h.data[addr..addr + 4], b"a\nb\0");
+    assert_eq!(&h.data[addr..addr + 3], b"a\nb");
 }
 
 #[test]
@@ -97,6 +101,17 @@ fn char_literal_newline_escape() {
     let mut h = LexHarness::new(r"'\n'");
     assert_eq!(h.next(), NUM);
     assert_eq!(h.ival(), '\n' as i64);
+}
+
+#[test]
+fn standalone_bang_is_not_eof() {
+    // Regression: `!` used to be lexed as `tk=0` (EOF) when not followed
+    // by `=`, which broke unary NOT and made `!1` look like an empty
+    // expression to the parser.
+    let mut h = LexHarness::new("!1");
+    assert_eq!(h.next(), '!' as i64);
+    assert_eq!(h.next(), NUM);
+    assert_eq!(h.ival(), 1);
 }
 
 #[test]

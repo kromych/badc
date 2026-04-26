@@ -319,9 +319,13 @@ impl Compiler {
             self.emit_op(Op::Imm);
             self.emit_val(self.lex.ival);
             self.next()?;
+            // C concatenates adjacent string literals — `"a" "b"` is one
+            // string. The lexer leaves the NUL off so the bytes flow
+            // straight together; we add the single trailing NUL here.
             while self.lex.tk == '"' as i64 {
                 self.next()?;
             }
+            self.data.push(0);
             self.ty = Ty::Ptr as i64;
         } else if self.lex.tk == Token::Sizeof as i64 {
             self.next()?;

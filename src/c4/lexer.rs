@@ -137,7 +137,10 @@ impl Lexer {
                 }
                 self.pos += 1;
                 if c == '"' {
-                    data.push(0);
+                    // NB: no NUL terminator pushed here. Adjacent string
+                    // literals (`"a" "b"`) concatenate in C, so the
+                    // parser is the right place to add the single
+                    // trailing NUL once all the parts have been read.
                     self.ival = start_data;
                     self.tk = '"' as i64;
                 } else {
@@ -183,7 +186,12 @@ impl Lexer {
                             self.pos += 1;
                             self.tk = Token::NeOp as i64;
                         } else {
-                            self.tk = 0;
+                            // Standalone `!` (logical NOT). Falling
+                            // through to tk=0 here used to silently
+                            // signal EOF, breaking any expression like
+                            // `!x` — the parser would then complain
+                            // about an unexpected eof.
+                            self.tk = '!' as i64;
                         }
                     }
                     '<' => {

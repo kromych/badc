@@ -159,6 +159,30 @@ fn struct_sizeof_reports_aggregate_size() {
 }
 
 #[test]
+fn adjacent_string_literals_concatenate() {
+    // C concatenates `"abc" "def" "ghi"` into one string. The lexer used
+    // to put a NUL between each part, breaking lookups past the first
+    // segment — which made original c4.c's keyword table truncate.
+    assert_eq!(run_fixture("adjacent_strings.c"), 'f' as i64);
+}
+
+#[test]
+fn original_c4_compiles_and_runs_hello() {
+    // The canonical self-hosting test: Robert Swierczek's original c4.c
+    // runs under c4rs, compiles hello.c, and runs the resulting program
+    // — which prints "Hello 123" then exits 0. We only check the exit
+    // code; the printed output goes to the real stdout.
+    let exit = super::run_fixture_with_args(
+        "c4.c",
+        [
+            "c4.c",
+            concat!(env!("CARGO_MANIFEST_DIR"), "/hello.c"),
+        ],
+    );
+    assert_eq!(exit, 0);
+}
+
+#[test]
 fn quicksort() {
     assert_eq!(run_fixture("quicksort.c"), 0);
 }

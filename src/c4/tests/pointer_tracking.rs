@@ -4,10 +4,10 @@
 //! load/store into the heap region consults the allocations table and
 //! turns dangling-pointer access into a `Runtime` error.
 
-use super::run_fixture_tracked;
+use super::try_run_fixture;
 
 fn expect_error_containing(name: &str, needle: &str) {
-    match run_fixture_tracked(name) {
+    match try_run_fixture(name) {
         Err(e) => {
             let msg = e.to_string();
             assert!(
@@ -42,7 +42,7 @@ fn heap_oob_read_is_caught() {
 fn correct_allocate_then_free_is_silent() {
     // bst_free.c builds a small tree, then frees every node post-order
     // and returns 0. No use-after-free; tracking should not trip.
-    let result = run_fixture_tracked("bst_free.c");
+    let result = try_run_fixture("bst_free.c");
     assert_eq!(result.unwrap(), 0);
 }
 
@@ -50,6 +50,27 @@ fn correct_allocate_then_free_is_silent() {
 fn long_lived_allocations_are_silent() {
     // binary_search_tree.c never frees — every alloc stays live for the
     // whole run, so the access check should never see a freed entry.
-    let result = run_fixture_tracked("binary_search_tree.c");
+    let result = try_run_fixture("binary_search_tree.c");
     assert_eq!(result.unwrap(), 0);
+}
+
+#[test]
+fn memset_overrunning_allocation_is_caught() {
+    // memset(p, 0, 100) where p is an 8-byte alloc — the block check sees
+    // the run extends past the allocation and emits a single OOB error.
+    expect_error_containing("memset_oob.c", "out-of-bounds");
+}
+
+#[test]
+fn memcpy_with_oversized_source_is_caught() {
+    // memcpy reads 100 bytes from an 8-byte src — flagged at the source
+    // pointer before any bytes are copied.
+    expect_error_containing("memcpy_oob_src.c", "out-of-bounds");
+}
+
+#[test]
+fn memcpy_with_oversized_destination_is_caught() {
+    // memcpy writes 100 bytes into an 8-byte dst — src is fine, dst trips
+    // the block check.
+    expect_error_containing("memcpy_oob_dst.c", "out-of-bounds");
 }

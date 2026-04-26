@@ -106,7 +106,7 @@ impl Vm {
     /// to the stack, or when the access lands in static data (string
     /// literals / globals / argv staged before `run` started).
     fn check_data_access(&self, addr: usize, len: usize) -> Result<(), C4Error> {
-        if !self.track_pointers || addr >= STACK_BASE {
+        if !self.track_pointers || addr >= STACK_BASE || len == 0 {
             return Ok(());
         }
         if addr < self.static_end {
@@ -570,6 +570,10 @@ impl Vm {
                     let dst_addr = self.load_i64(sp + 16)? as usize;
                     let val = self.load_i64(sp + 8)? as u8;
                     let size = self.load_i64(sp)? as usize;
+                    // Block-level access check up front so a single OOB
+                    // memset surfaces one block-level diagnostic instead of
+                    // a per-byte one. No-op when tracking is off.
+                    self.check_data_access(dst_addr, size)?;
                     for i in 0..size {
                         self.store_u8(dst_addr + i, val)?;
                     }
@@ -579,6 +583,8 @@ impl Vm {
                     let s1_addr = self.load_i64(sp + 16)? as usize;
                     let s2_addr = self.load_i64(sp + 8)? as usize;
                     let size = self.load_i64(sp)? as usize;
+                    self.check_data_access(s1_addr, size)?;
+                    self.check_data_access(s2_addr, size)?;
                     a = 0;
                     for i in 0..size {
                         let c1 = self.load_u8(s1_addr + i)?;
@@ -588,6 +594,21 @@ impl Vm {
                             break;
                         }
                     }
+                }
+                Op::Mcpy => {
+                    let dst_addr = self.load_i64(sp + 16)? as usize;
+                    let src_addr = self.load_i64(sp + 8)? as usize;
+                    let size = self.load_i64(sp)? as usize;
+                    // Block-level checks for src (read) and dst (write).
+                    // Standard memcpy is undefined for overlapping regions;
+                    // we copy front-to-back without diagnosing overlap.
+                    self.check_data_access(src_addr, size)?;
+                    self.check_data_access(dst_addr, size)?;
+                    for i in 0..size {
+                        let byte = self.load_u8(src_addr + i)?;
+                        self.store_u8(dst_addr + i, byte)?;
+                    }
+                    a = dst_addr as i64;
                 }
                 Op::Prtf => {
                     if pc < self.text.len() && self.text[pc] == Op::Adj as i64 {

@@ -112,6 +112,12 @@ fn memset_mcmp() {
 }
 
 #[test]
+fn memcpy_copies_bytes_between_allocations() {
+    // memset src to 'A', memcpy into dst, return dst[0].
+    assert_eq!(run_fixture("memcpy_basic.c"), 'A' as i64);
+}
+
+#[test]
 fn quicksort() {
     assert_eq!(run_fixture("quicksort.c"), 0);
 }

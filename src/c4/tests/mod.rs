@@ -52,9 +52,15 @@ pub fn compile_fixture(name: &str) -> Program {
     compile_str(&load_fixture(name))
 }
 
-/// Compile + run inline source.
+/// Compile + run inline source. Pointer tracking is on by default so the
+/// test suite catches use-after-free / double-free / OOB regressions for
+/// free; tests that need to inspect a deliberate failure use
+/// [`try_run_fixture`] instead.
 pub fn run_str(src: &str) -> i64 {
-    Vm::new(compile_str(src), false).run().unwrap()
+    Vm::new(compile_str(src), false)
+        .with_pointer_tracking()
+        .run()
+        .unwrap()
 }
 
 /// Compile + run a fixture.
@@ -69,13 +75,18 @@ where
     S: Into<String>,
 {
     let program = compile_fixture(name);
-    Vm::new(program, false).with_args(args).run().unwrap()
+    Vm::new(program, false)
+        .with_pointer_tracking()
+        .with_args(args)
+        .run()
+        .unwrap()
 }
 
-/// Compile + run a fixture with pointer tracking turned on. Returns the
-/// raw `Result` so callers can assert on either the exit code (no error)
-/// or the diagnostic message (use-after-free / double-free / OOB).
-pub fn run_fixture_tracked(name: &str) -> Result<i64, C4Error> {
+/// Compile + run a fixture and return the raw `Result` so callers can
+/// assert on either the exit code (no error) or the diagnostic message
+/// (use-after-free / double-free / OOB). Pointer tracking is on, same as
+/// the unwrapping helpers above.
+pub fn try_run_fixture(name: &str) -> Result<i64, C4Error> {
     let program = compile_fixture(name);
     Vm::new(program, false).with_pointer_tracking().run()
 }

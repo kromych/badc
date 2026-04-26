@@ -81,6 +81,8 @@ pub enum Op {
     Mset,
     /// Syscall: Compare memory blocks
     Mcmp,
+    /// Syscall: Copy memory block from src to dst.
+    Mcpy,
     /// Syscall: Terminate program with exit code
     Exit,
     /// Syscall: Write a buffer to a file descriptor (fd 1=stdout, 2=stderr).
@@ -91,7 +93,7 @@ pub enum Op {
     Senv,
 }
 
-const OPS: [Op; 43] = [
+const OPS: [Op; 44] = [
     Op::Lea,
     Op::Imm,
     Op::Jmp,
@@ -131,6 +133,7 @@ const OPS: [Op; 43] = [
     Op::Free,
     Op::Mset,
     Op::Mcmp,
+    Op::Mcpy,
     Op::Exit,
     Op::Write,
     Op::Genv,

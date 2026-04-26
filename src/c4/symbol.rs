@@ -1,3 +1,5 @@
+use alloc::string::String;
+
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Symbol {
     pub name: String,

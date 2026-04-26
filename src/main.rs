@@ -1,8 +1,6 @@
-mod c4;
+use c4rs::{Compiler, PredefinedKind, Vm, predefined_symbols};
 
-use c4::{Compiler, PredefinedKind, Vm, predefined_symbols};
-
-const USAGE: &str = "usage: c4rs [--track-pointers] [--list-symbols] <file> [args...]";
+const USAGE: &str = "usage: c4rs [--track-pointers] [--trace] [--list-symbols] <file> [args...]";
 
 fn main() {
     let raw: Vec<String> = std::env::args().collect();
@@ -10,12 +8,17 @@ fn main() {
     // Strip leading flags (in any order, anywhere before the source file)
     // so the remaining argv looks like `c4rs <file> [args...]`.
     let mut track_pointers = false;
+    let mut trace = false;
     let mut list_symbols = false;
     let args: Vec<String> = raw
         .into_iter()
         .filter(|a| match a.as_str() {
             "--track-pointers" => {
                 track_pointers = true;
+                false
+            }
+            "--trace" => {
+                trace = true;
                 false
             }
             "--list-symbols" => {
@@ -53,9 +56,12 @@ fn main() {
     // hosted program is the source file name, argv[1..] are its own args.
     let c_args: Vec<String> = args[1..].to_vec();
 
-    let mut vm = Vm::new(program, false).with_args(c_args);
+    let mut vm = Vm::new(program).with_args(c_args);
     if track_pointers {
         vm = vm.with_pointer_tracking();
+    }
+    if trace {
+        vm = vm.with_trace();
     }
 
     match vm.run() {

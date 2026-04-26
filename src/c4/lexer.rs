@@ -1,3 +1,6 @@
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+
 use super::error::C4Error;
 use super::op::Op;
 use super::symbol::Symbol;

@@ -1,4 +1,6 @@
-use std::collections::HashMap;
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 use super::CODE_BASE;
 use super::error::C4Error;
@@ -93,7 +95,11 @@ pub struct Compiler {
     // --- Patch lists ---
     loop_breaks: Vec<Vec<usize>>,
     loop_continues: Vec<Vec<usize>>,
-    labels: HashMap<String, usize>,
+    /// Linear table of `(label_name, text_pc)`. Per-function (cleared
+    /// at every function start), so it stays small — typically 0-2
+    /// entries even in code that uses `goto`. Linear scan beats
+    /// pulling in `HashMap` (which would force `std`).
+    labels: Vec<(String, usize)>,
     unresolved_gotos: Vec<(String, usize)>,
     switch_cases: Vec<Vec<(i64, usize)>>,
     switch_defaults: Vec<Option<usize>>,
@@ -115,7 +121,7 @@ impl Compiler {
             loc_offs: 0,
             loop_breaks: Vec::new(),
             loop_continues: Vec::new(),
-            labels: HashMap::new(),
+            labels: Vec::new(),
             unresolved_gotos: Vec::new(),
             switch_cases: Vec::new(),
             switch_defaults: Vec::new(),
@@ -1093,7 +1099,7 @@ impl Compiler {
     fn stmt(&mut self) -> Result<(), C4Error> {
         if self.lex.tk == Token::Id as i64 && self.lex.peek_after_whitespace(b':') {
             let name = self.symbols[self.lex.curr_id_idx].name.clone();
-            self.labels.insert(name, self.text.len());
+            self.labels.push((name, self.text.len()));
             self.next()?; // consume Id
             self.next()?; // consume ':'
             self.stmt()?;
@@ -1232,10 +1238,9 @@ impl Compiler {
             let pc = self.text.len();
             self.emit_val(0);
 
-            if let Some(&target) = self.labels.get(&target_name) {
-                self.text[pc] = target as i64;
-            } else {
-                self.unresolved_gotos.push((target_name, pc));
+            match self.labels.iter().find(|(n, _)| n == &target_name) {
+                Some(&(_, target)) => self.text[pc] = target as i64,
+                None => self.unresolved_gotos.push((target_name, pc)),
             }
 
             self.consume(b';', "semicolon expected after goto")?;
@@ -1487,10 +1492,14 @@ impl Compiler {
                     self.text[ent_pc + 1] = self.loc_offs;
 
                     for (name, pc) in &self.unresolved_gotos {
-                        if let Some(&target) = self.labels.get(name) {
-                            self.text[*pc] = target as i64;
-                        } else {
-                            return Err(C4Error::Compile(format!("unresolved label: {}", name)));
+                        match self.labels.iter().find(|(n, _)| n == name) {
+                            Some(&(_, target)) => self.text[*pc] = target as i64,
+                            None => {
+                                return Err(C4Error::Compile(format!(
+                                    "unresolved label: {}",
+                                    name
+                                )));
+                            }
                         }
                     }
 

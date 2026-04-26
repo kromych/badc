@@ -9,7 +9,7 @@ fn run(text: Vec<i64>) -> i64 {
         data: vec![],
         entry_pc: 0,
     };
-    Vm::new(program, false).run().unwrap()
+    Vm::new(program).run().unwrap()
 }
 
 #[test]
@@ -97,7 +97,7 @@ fn invalid_opcode_is_a_runtime_error() {
         data: vec![],
         entry_pc: 0,
     };
-    let err = Vm::new(program, false).run().unwrap_err();
+    let err = Vm::new(program).run().unwrap_err();
     assert!(
         err.to_string().contains("Invalid instruction"),
         "unexpected error: {err}"
@@ -111,7 +111,7 @@ fn empty_program_errors_cleanly() {
         data: vec![],
         entry_pc: 0,
     };
-    let err = Vm::new(program, false).run().unwrap_err();
+    let err = Vm::new(program).run().unwrap_err();
     assert!(
         err.to_string().contains("empty program"),
         "unexpected error: {err}"

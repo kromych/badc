@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 /// Compiled program ready for the VM.
 ///
 /// `text` holds the bytecode, `data` is the static data segment (string

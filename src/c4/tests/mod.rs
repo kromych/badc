@@ -57,7 +57,7 @@ pub fn compile_fixture(name: &str) -> Program {
 /// free; tests that need to inspect a deliberate failure use
 /// [`try_run_fixture`] instead.
 pub fn run_str(src: &str) -> i64 {
-    Vm::new(compile_str(src), false)
+    Vm::new(compile_str(src))
         .with_pointer_tracking()
         .run()
         .unwrap()
@@ -75,7 +75,7 @@ where
     S: Into<String>,
 {
     let program = compile_fixture(name);
-    Vm::new(program, false)
+    Vm::new(program)
         .with_pointer_tracking()
         .with_args(args)
         .run()
@@ -88,7 +88,7 @@ where
 /// the unwrapping helpers above.
 pub fn try_run_fixture(name: &str) -> Result<i64, C4Error> {
     let program = compile_fixture(name);
-    Vm::new(program, false).with_pointer_tracking().run()
+    Vm::new(program).with_pointer_tracking().run()
 }
 
 /// Tiny harness that owns the `Lexer`, its symbol table, and the data

@@ -1,8 +1,11 @@
-use std::collections::HashMap;
-use std::fs::File;
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec;
+use alloc::vec::Vec;
 
 use super::CODE_BASE;
 use super::error::C4Error;
+use super::host::Host;
 use super::op::Op;
 use super::program::Program;
 
@@ -69,15 +72,32 @@ struct Allocation {
     id: u64,
 }
 
+/// Whether the VM should emit a per-instruction trace to the host's
+/// stdout during `run`. Only honoured under the `std` feature; in
+/// `no_std` the trace branch is cfg'd out.
+///
+/// Replaces what used to be a bare `bool` parameter to `Vm::new` —
+/// `Vm::new(prog, true)` left the reader guessing what the second
+/// argument toggled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Trace {
+    #[default]
+    Off,
+    On,
+}
+
 /// Virtual machine that executes a [`Program`].
-pub struct Vm {
+pub struct Vm<H: Host> {
     pub(crate) text: Vec<i64>,
     pub(crate) data: Vec<u8>,
     entry_pc: usize,
     stack: Vec<i64>,
-    fd_table: HashMap<i64, File>,
-    next_fd: i64,
-    debug: bool,
+    /// Pluggable host bridge — file IO, env access, real stdio. The
+    /// `fd_table` and `next_fd` that used to live on `Vm` are now
+    /// `StdHost` state.
+    host: H,
+    #[cfg_attr(not(feature = "std"), allow(dead_code))]
+    trace: Trace,
     /// Arguments passed to `main(int argc, char **argv)`. Empty by default;
     /// populated via [`Vm::with_args`].
     args: Vec<String>,
@@ -99,22 +119,45 @@ pub struct Vm {
     protections: Vec<ProtectedRegion>,
 }
 
-impl Vm {
-    pub fn new(program: Program, debug: bool) -> Self {
+/// `Vm::new` is only available with the `std` feature; it picks the
+/// `StdHost` adapter as the default. In `no_std`, callers must use
+/// [`Vm::with_host`] and supply their own host.
+#[cfg(feature = "std")]
+impl Vm<super::host::StdHost> {
+    /// Construct a `Vm` with the default (std-backed) host. Trace is
+    /// off by default — chain [`Vm::with_trace`] to opt in.
+    pub fn new(program: Program) -> Self {
+        Self::with_host(program, super::host::StdHost::default())
+    }
+}
+
+impl<H: Host> Vm<H> {
+    /// Construct a `Vm` with an explicit `Host`. Required in `no_std`
+    /// where there's no default; convenient in `std` for tests that
+    /// want to stub IO. Trace defaults to off.
+    pub fn with_host(program: Program, host: H) -> Self {
         Self {
             text: program.text,
             data: program.data,
             entry_pc: program.entry_pc,
             stack: vec![0; STACK_CAPACITY],
-            fd_table: HashMap::new(),
-            next_fd: 3,
-            debug,
+            host,
+            trace: Trace::Off,
             args: Vec::new(),
             allocations: Vec::new(),
             static_end: 0,
             track_pointers: false,
             protections: Vec::new(),
         }
+    }
+
+    /// Enable per-instruction trace output. Mirrors
+    /// [`Vm::with_pointer_tracking`]: the absence of the call leaves
+    /// the feature off, calling once turns it on. There's no `off`
+    /// builder — just don't call this.
+    pub fn with_trace(mut self) -> Self {
+        self.trace = Trace::On;
+        self
     }
 
     /// Decode a code-pointer value back into a raw text PC. Errors if the
@@ -266,10 +309,11 @@ impl Vm {
         let mut entries = Vec::with_capacity(argc);
         // Take ownership of the args list to avoid aliasing self.data and
         // self.args during the loop body.
-        let args = std::mem::take(&mut self.args);
+        let args = core::mem::take(&mut self.args);
         for arg in &args {
             let start = self.data.len();
-            self.data.extend_from_slice(arg.as_bytes());
+            let bytes: &[u8] = arg.as_bytes();
+            self.data.extend_from_slice(bytes);
             self.data.push(0);
             entries.push(start as i64);
         }
@@ -452,7 +496,11 @@ impl Vm {
             })?;
             pc += 1;
 
-            if self.debug {
+            // Debug tracing requires real stdio — gated to `std`. In
+            // `no_std` builds, the `trace` flag is silently a no-op
+            // (a future enhancement could route this through Host too).
+            #[cfg(feature = "std")]
+            if self.trace == Trace::On {
                 println!("{} op: {:?}", _cycle, op);
             }
 

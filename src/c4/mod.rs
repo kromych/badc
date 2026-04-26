@@ -1,5 +1,6 @@
 mod compiler;
 mod error;
+mod host;
 mod lexer;
 mod op;
 mod program;
@@ -18,11 +19,15 @@ mod tests;
 pub use {
     compiler::Compiler,
     error::C4Error,
+    host::{Host, Overwrite},
     lexer::{PredefinedKind, PredefinedSymbol, predefined_symbols},
     op::Op,
     program::Program,
-    vm::Vm,
+    vm::{Trace, Vm},
 };
+
+#[cfg(feature = "std")]
+pub use host::StdHost;
 
 /// Base offset that separates the code address space from the data /
 /// stack address spaces. Function-pointer values seen by user code are

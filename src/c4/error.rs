@@ -1,4 +1,5 @@
-use std::fmt;
+use alloc::string::String;
+use core::fmt;
 
 #[derive(Debug, Clone)]
 pub enum C4Error {
@@ -15,4 +16,8 @@ impl fmt::Display for C4Error {
     }
 }
 
+// std::error::Error doesn't exist in core; only register as an Error
+// when std is available. Any Display impl is enough for `?` propagation
+// either way.
+#[cfg(feature = "std")]
 impl std::error::Error for C4Error {}

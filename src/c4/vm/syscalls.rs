@@ -7,17 +7,22 @@
 //! standard-library names do under c4rs". Adding a new syscall is now
 //! "register a name in `lexer::LIB_OPS`, add an `Op::*` variant, write
 //! one method here, and one match arm in `run`".
-
-use std::fs::File;
-use std::io::{Read, Write as IoWrite};
+//!
+//! All host-side IO goes through `self.host` (the `Host` trait); this
+//! is what keeps the file `no_std`-clean.
 
 // Rust's default visibility ("private to declaring module + descendants")
 // means we can reach into mod.rs's private fields and methods without
 // any pub annotations — `syscalls` is a child of `vm`, so all of vm's
 // internals are in scope.
-use super::{AccessKind, C4Error, Op, ProtectedRegion, Vm};
+use alloc::format;
+use alloc::string::ToString;
+use alloc::vec;
 
-impl Vm {
+use super::super::host::Overwrite;
+use super::{AccessKind, C4Error, Host, Op, ProtectedRegion, Vm};
+
+impl<H: Host> Vm<H> {
     /// Load an `i64` size argument from the stack and validate it as a
     /// non-negative `usize`. Without this, a negative size silently
     /// becomes `~2^63` after the `as usize` cast — the sort of value
@@ -34,60 +39,36 @@ impl Vm {
     }
 
     /// `int open(const char *path, int flags)` — opens for reading
-    /// regardless of `flags` (we don't actually have an O_WRONLY path).
+    /// regardless of `flags` (the host trait doesn't model write modes).
     /// Returns a fresh non-negative fd, or -1 on error.
     pub(super) fn syscall_open(&mut self, sp: usize) -> Result<i64, C4Error> {
         let name_addr = self.load_i64(sp + 8)? as usize;
         let _flags = self.load_i64(sp)?;
         let name = self.read_cstring(name_addr)?;
-        Ok(match File::open(&name) {
-            Ok(file) => {
-                let fd = self.next_fd;
-                self.next_fd += 1;
-                self.fd_table.insert(fd, file);
-                fd
-            }
-            Err(_) => -1,
-        })
+        Ok(self.host.open(&name))
     }
 
     /// `int read(int fd, void *buf, int count)` — reads up to `count`
-    /// bytes. fd 0 reads stdin; other fds must come from a previous
-    /// `open()`.
+    /// bytes through the host. fd 0 is conventionally stdin.
     pub(super) fn syscall_read(&mut self, sp: usize) -> Result<i64, C4Error> {
         let fd = self.load_i64(sp + 16)?;
         let buf_addr = self.load_i64(sp + 8)? as usize;
         let size = self.read_size(sp, "read")?;
         let mut buf = vec![0u8; size];
-
-        let read_result: std::io::Result<usize> = if fd == 0 {
-            std::io::stdin().read(&mut buf)
-        } else {
-            let Some(file) = self.fd_table.get_mut(&fd) else {
-                return Ok(-1);
-            };
-            file.read(&mut buf)
-        };
-
-        match read_result {
-            Ok(n) => {
-                for (i, &byte) in buf.iter().enumerate().take(n) {
-                    self.store_u8(buf_addr + i, byte)?;
-                }
-                Ok(n as i64)
-            }
-            Err(_) => Ok(-1),
+        let n = self.host.read(fd, &mut buf);
+        if n < 0 {
+            return Ok(-1);
         }
+        for (i, &byte) in buf.iter().enumerate().take(n as usize) {
+            self.store_u8(buf_addr + i, byte)?;
+        }
+        Ok(n)
     }
 
     /// `int close(int fd)` — returns 0 on success, -1 if `fd` wasn't open.
     pub(super) fn syscall_close(&mut self, sp: usize) -> Result<i64, C4Error> {
         let fd = self.load_i64(sp)?;
-        Ok(if self.fd_table.remove(&fd).is_some() {
-            0
-        } else {
-            -1
-        })
+        Ok(self.host.close(fd))
     }
 
     /// `void *malloc(size_t size)` — bump-allocates from the data
@@ -197,7 +178,7 @@ impl Vm {
     /// `int printf(const char *fmt, ...)` — limited subset (`%d`, `%c`,
     /// `%s`). Reads the arg count by peeking at the next instruction
     /// (it'll be `Op::Adj N` if main called us with N args). Always
-    /// returns 0; printed bytes go to the host stdout.
+    /// returns 0; printed bytes go to `Host::write(1, …)` (stdout).
     pub(super) fn syscall_printf(&mut self, sp: usize, pc: usize) -> Result<i64, C4Error> {
         // The caller emits a trailing `Op::Adj N` after every printf so
         // we can recover N (the c4 calling convention pushes args but
@@ -211,7 +192,7 @@ impl Vm {
         let s = self.read_cstring(fmt_addr)?;
 
         let mut arg_idx = 1;
-        let mut output = String::new();
+        let mut output = alloc::string::String::new();
         let mut chars = s.chars();
         while let Some(c) = chars.next() {
             if c == '%' {
@@ -237,12 +218,12 @@ impl Vm {
                 output.push(c);
             }
         }
-        print!("{}", output);
+        self.host.write(1, output.as_bytes());
         Ok(0)
     }
 
-    /// `int write(int fd, const void *buf, size_t n)` — fd 1=stdout,
-    /// 2=stderr, anything else goes through the fd table.
+    /// `int write(int fd, const void *buf, size_t n)` — copies `n`
+    /// bytes from the data segment and hands them to the host.
     pub(super) fn syscall_write(&mut self, sp: usize) -> Result<i64, C4Error> {
         let fd = self.load_i64(sp + 16)?;
         let buf_addr = self.load_i64(sp + 8)? as usize;
@@ -251,49 +232,37 @@ impl Vm {
         for (i, byte) in buf.iter_mut().enumerate() {
             *byte = self.load_u8(buf_addr + i)?;
         }
-        Ok(match fd {
-            1 => std::io::stdout()
-                .write(&buf)
-                .map(|n| n as i64)
-                .unwrap_or(-1),
-            2 => std::io::stderr()
-                .write(&buf)
-                .map(|n| n as i64)
-                .unwrap_or(-1),
-            _ => match self.fd_table.get_mut(&fd) {
-                Some(file) => file.write(&buf).map(|n| n as i64).unwrap_or(-1),
-                None => -1,
-            },
-        })
+        Ok(self.host.write(fd, &buf))
     }
 
-    /// `char *getenv(const char *name)` — looks up `name` in the host
-    /// environment. On hit, the value is copied into the data segment
-    /// (and recorded as an allocation so `--track-pointers` allows
-    /// reads through the returned pointer); 0 on miss.
+    /// `char *getenv(const char *name)` — looks up `name` through the
+    /// host. On hit, the value is copied into the data segment (and
+    /// recorded as an allocation so `--track-pointers` allows reads
+    /// through the returned pointer); 0 on miss.
     pub(super) fn syscall_getenv(&mut self, sp: usize) -> Result<i64, C4Error> {
         let name_addr = self.load_i64(sp)? as usize;
         let name = self.read_cstring(name_addr)?;
-        Ok(match std::env::var(&name) {
-            Ok(value) => self.install_cstring(value.as_bytes()) as i64,
-            Err(_) => 0,
+        Ok(match self.host.getenv(&name) {
+            Some(value) => self.install_cstring(value.as_bytes()) as i64,
+            None => 0,
         })
     }
 
-    /// `int setenv(const char *name, const char *value, int overwrite)`
-    /// — process-global env mutation, hence the `unsafe` block.
+    /// `int setenv(const char *name, const char *value, int overwrite)` —
+    /// the C-side `int` is converted to [`Overwrite`] at the trait
+    /// boundary so host impls don't have to remember "non-zero means
+    /// replace" themselves.
     pub(super) fn syscall_setenv(&mut self, sp: usize) -> Result<i64, C4Error> {
         let name_addr = self.load_i64(sp + 16)? as usize;
         let val_addr = self.load_i64(sp + 8)? as usize;
-        let overwrite = self.load_i64(sp)?;
+        let overwrite = if self.load_i64(sp)? != 0 {
+            Overwrite::Force
+        } else {
+            Overwrite::Skip
+        };
         let name = self.read_cstring(name_addr)?;
         let value = self.read_cstring(val_addr)?;
-        if overwrite != 0 || std::env::var(&name).is_err() {
-            // SAFETY: env mutation is process-global; tests serialise
-            // via a Mutex. The 2024 edition flags this as unsafe to
-            // surface that exposure.
-            unsafe { std::env::set_var(&name, &value) };
-        }
+        self.host.setenv(&name, &value, overwrite);
         Ok(0)
     }
 }

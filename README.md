@@ -40,12 +40,15 @@ Roughly what the original c4 accepts:
 - `if` / `else`, `while`, `do`/`while`, `for`, `switch`/`case`/`default`,
   `break`, `continue`, `goto` + labels, `return`
 - enums, function pointers
+- structs via pointer (`struct Foo *p`, `p->field`, `sizeof(struct Foo)`).
+  Self-referential pointer fields work; struct-value locals/parameters do
+  not — use a pointer.
 - function-style library calls: `printf`, `malloc`, `free`, `memset`, `memcmp`,
   `memcpy`, `open`, `read`, `write`, `close`, `getenv`, `setenv`, `mprotect`,
   `exit`
 
 No preprocessor — `#`-prefixed lines (and the shebang) are silently skipped.
-No structs, no floats, no `sizeof(struct ...)`. `void` is a synonym for `char`,
+No floats, no struct values, no unions. `void` is a synonym for `char`,
 following c4 itself.
 
 ## Runtime safety

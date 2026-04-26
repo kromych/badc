@@ -102,3 +102,22 @@ fn bad_lvalue_in_assignment() {
         "bad lvalue in assignment",
     );
 }
+
+#[test]
+fn struct_value_declaration_rejected() {
+    // c4rs allows struct pointers but not by-value struct locals — the
+    // value form needs variable-sized stack slots which the simple
+    // `Op::Ent N` model doesn't accommodate.
+    expect_compile_error(
+        "struct Foo { int x; }; int main() { struct Foo bad; return 0; }",
+        "struct-value declarations are not supported",
+    );
+}
+
+#[test]
+fn unknown_struct_name_is_rejected() {
+    expect_compile_error(
+        "int main() { struct Missing *p; return 0; }",
+        "unknown struct Missing",
+    );
+}

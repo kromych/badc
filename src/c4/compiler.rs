@@ -8,6 +8,51 @@ use super::program::Program;
 use super::symbol::Symbol;
 use super::token::{Token, Ty};
 
+/// Encoding of struct types into the same `i64` namespace as primitives.
+///
+/// Primitives sit in `[0, STRUCT_BASE)`; struct id `N` occupies the band
+/// `[STRUCT_BASE + N*STRUCT_STRIDE, STRUCT_BASE + (N+1)*STRUCT_STRIDE)`.
+/// Within a band, the existing `+= Ty::Ptr` arithmetic still adds a
+/// pointer level, so `struct Foo *` is `STRUCT_BASE + N*STRIDE + 2` and
+/// `struct Foo **` is `+ 4`. The wide stride leaves room for hundreds of
+/// pointer levels per struct without colliding with the next struct id —
+/// far more than anyone will ever write.
+const STRUCT_BASE: i64 = 1000;
+const STRUCT_STRIDE: i64 = 1000;
+
+fn is_struct_ty(ty: i64) -> bool {
+    ty >= STRUCT_BASE
+}
+
+fn struct_id_of(ty: i64) -> usize {
+    ((ty - STRUCT_BASE) / STRUCT_STRIDE) as usize
+}
+
+fn struct_ptr_depth(ty: i64) -> i64 {
+    ((ty - STRUCT_BASE) % STRUCT_STRIDE) / Ty::Ptr as i64
+}
+
+fn struct_ty_for(id: usize) -> i64 {
+    STRUCT_BASE + (id as i64) * STRUCT_STRIDE
+}
+
+#[derive(Debug, Clone)]
+struct StructDef {
+    name: String,
+    /// Total size in bytes — sum of field sizes, padded to 8.
+    size: usize,
+    fields: Vec<StructField>,
+}
+
+#[derive(Debug, Clone)]
+struct StructField {
+    name: String,
+    /// Byte offset of the field from the start of the struct.
+    offset: usize,
+    /// `ty`-encoded type of the field.
+    ty: i64,
+}
+
 /// Single-pass C compiler. Holds the lexer, the symbol table, and the
 /// codegen scaffolding. `compile(self)` consumes the compiler and produces
 /// a [`Program`] ready for the VM.
@@ -32,6 +77,9 @@ pub struct Compiler {
     unresolved_gotos: Vec<(String, usize)>,
     switch_cases: Vec<Vec<(i64, usize)>>,
     switch_defaults: Vec<Option<usize>>,
+
+    /// Defined struct types, indexed by struct id.
+    structs: Vec<StructDef>,
 }
 
 impl Compiler {
@@ -51,7 +99,172 @@ impl Compiler {
             unresolved_gotos: Vec::new(),
             switch_cases: Vec::new(),
             switch_defaults: Vec::new(),
+            structs: Vec::new(),
         }
+    }
+
+    /// Linear lookup of a struct by its tag name. Returns the id used in
+    /// `struct_ty_for(id)` and as an index into `self.structs`.
+    fn find_struct_id(&self, name: &str) -> Option<usize> {
+        self.structs.iter().position(|s| s.name == name)
+    }
+
+    /// Size in bytes of a value of the given `ty`. Pointers are always 8;
+    /// `char` is 1; `int` (and any other primitive that isn't a `char`) is
+    /// 8; struct values use the size recorded in the struct table.
+    fn size_of_type(&self, ty: i64) -> usize {
+        if is_struct_ty(ty) {
+            if struct_ptr_depth(ty) > 0 {
+                8
+            } else {
+                self.structs[struct_id_of(ty)].size
+            }
+        } else if ty == Ty::Char as i64 {
+            1
+        } else {
+            8
+        }
+    }
+
+    /// Parse the base type of a declaration: `int`, `char`, or
+    /// `struct Name`. Caller has already verified the current token is
+    /// one of those — used by the three local/parameter declaration
+    /// loops, where struct definitions are not allowed (only references
+    /// to pre-defined structs).
+    fn parse_decl_base_type(&mut self) -> Result<i64, C4Error> {
+        if self.lex.tk == Token::Int as i64 {
+            self.next()?;
+            Ok(Ty::Int as i64)
+        } else if self.lex.tk == Token::Char as i64 {
+            self.next()?;
+            Ok(Ty::Char as i64)
+        } else if self.lex.tk == Token::Struct as i64 {
+            self.next()?;
+            if self.lex.tk != Token::Id as i64 {
+                return Err(C4Error::Compile(format!(
+                    "{}: struct name expected",
+                    self.lex.line
+                )));
+            }
+            let name = self.symbols[self.lex.curr_id_idx].name.clone();
+            self.next()?;
+            let id = self.find_struct_id(&name).ok_or_else(|| {
+                C4Error::Compile(format!("{}: unknown struct {}", self.lex.line, name))
+            })?;
+            Ok(struct_ty_for(id))
+        } else {
+            Err(C4Error::Compile(format!(
+                "{}: type expected",
+                self.lex.line
+            )))
+        }
+    }
+
+    /// Parse a `struct Name { ... }` definition. The struct is registered
+    /// before its fields are parsed, so a field of type `struct Name *`
+    /// (self-reference) resolves correctly. Field offsets are 8-byte
+    /// aligned, which matches the natural alignment of every type c4
+    /// supports — even `char` fields take a full slot, but that buys us a
+    /// trivially simple layout.
+    ///
+    /// On entry `tk` is `{`; on exit `tk` is the token AFTER the closing
+    /// `}` (typically `;`).
+    fn parse_struct_body(&mut self, name: &str) -> Result<usize, C4Error> {
+        // Pre-register so self-referential pointer fields can find this
+        // struct mid-definition.
+        let struct_id = self.structs.len();
+        self.structs.push(StructDef {
+            name: name.to_string(),
+            size: 0,
+            fields: Vec::new(),
+        });
+
+        self.next()?; // consume `{`
+
+        let mut offset = 0usize;
+        while self.lex.tk != '}' as i64 {
+            // Field type prefix: int, char, or struct Name.
+            let field_base = if self.lex.tk == Token::Int as i64 {
+                self.next()?;
+                Ty::Int as i64
+            } else if self.lex.tk == Token::Char as i64 {
+                self.next()?;
+                Ty::Char as i64
+            } else if self.lex.tk == Token::Struct as i64 {
+                self.next()?;
+                if self.lex.tk != Token::Id as i64 {
+                    return Err(C4Error::Compile(format!(
+                        "{}: struct name expected in field type",
+                        self.lex.line
+                    )));
+                }
+                let inner_name = self.symbols[self.lex.curr_id_idx].name.clone();
+                self.next()?;
+                let inner_id = self.find_struct_id(&inner_name).ok_or_else(|| {
+                    C4Error::Compile(format!("{}: unknown struct {}", self.lex.line, inner_name))
+                })?;
+                struct_ty_for(inner_id)
+            } else {
+                return Err(C4Error::Compile(format!(
+                    "{}: type expected in struct field",
+                    self.lex.line
+                )));
+            };
+
+            // One or more comma-separated declarators sharing the prefix.
+            loop {
+                let mut field_ty = field_base;
+                while self.lex.tk == Token::MulOp as i64 {
+                    self.next()?;
+                    field_ty += Ty::Ptr as i64;
+                }
+                if self.lex.tk != Token::Id as i64 {
+                    return Err(C4Error::Compile(format!(
+                        "{}: field name expected",
+                        self.lex.line
+                    )));
+                }
+                if is_struct_ty(field_ty) && struct_ptr_depth(field_ty) == 0 {
+                    return Err(C4Error::Compile(format!(
+                        "{}: struct-value fields are not supported (use a pointer)",
+                        self.lex.line
+                    )));
+                }
+
+                let field_name = self.symbols[self.lex.curr_id_idx].name.clone();
+                self.next()?;
+
+                // 8-byte align every field. Even `char` fields take a full
+                // slot — wasteful but keeps offset arithmetic obvious.
+                offset = (offset + 7) & !7;
+                let field_size = self.size_of_type(field_ty);
+                self.structs[struct_id].fields.push(StructField {
+                    name: field_name,
+                    offset,
+                    ty: field_ty,
+                });
+                offset += field_size;
+
+                if self.lex.tk == ',' as i64 {
+                    self.next()?;
+                    continue;
+                }
+                break;
+            }
+
+            if self.lex.tk != ';' as i64 {
+                return Err(C4Error::Compile(format!(
+                    "{}: semicolon expected after struct field",
+                    self.lex.line
+                )));
+            }
+            self.next()?;
+        }
+        self.next()?; // consume `}`
+
+        let total = (offset + 7) & !7;
+        self.structs[struct_id].size = total.max(8); // never zero-sized
+        Ok(struct_id)
     }
 
     /// Compile the source. On success, the returned `Program` contains the
@@ -120,16 +333,15 @@ impl Compiler {
                     self.lex.line
                 )));
             }
-            if self.lex.tk == Token::Int as i64 || self.lex.tk == Token::Char as i64 {
+            if self.lex.tk == Token::Int as i64
+                || self.lex.tk == Token::Char as i64
+                || self.lex.tk == Token::Struct as i64
+            {
                 // sizeof(<type>): an explicit type name, optionally with
-                // pointer markers (`int **` etc.). No bytecode is emitted
-                // for the operand at all in this branch.
-                self.ty = if self.lex.tk == Token::Int as i64 {
-                    Ty::Int as i64
-                } else {
-                    Ty::Char as i64
-                };
-                self.next()?;
+                // pointer markers (`int **`, `struct Foo *`, …). No
+                // bytecode is emitted for the operand at all in this
+                // branch.
+                self.ty = self.parse_decl_base_type()?;
                 while self.lex.tk == Token::MulOp as i64 {
                     self.next()?;
                     self.ty += Ty::Ptr as i64;
@@ -153,7 +365,7 @@ impl Compiler {
                 )));
             }
             self.emit_op(Op::Imm);
-            self.emit_val(if self.ty == Ty::Char as i64 { 1 } else { 8 });
+            self.emit_val(self.size_of_type(self.ty) as i64);
             self.ty = Ty::Int as i64;
         } else if self.lex.tk == Token::Id as i64 {
             let id_idx = self.lex.curr_id_idx;
@@ -599,6 +811,55 @@ impl Compiler {
                 } else {
                     Op::Li
                 });
+            } else if self.lex.tk == Token::Arrow as i64 {
+                // p->field. Preceding subexpression already evaluated as
+                // an rvalue, so the loaded pointer is in `a`. Look the
+                // field up in the struct's table, add the byte offset,
+                // then load the field with the right size.
+                if !is_struct_ty(t) || struct_ptr_depth(t) != 1 {
+                    return Err(C4Error::Compile(format!(
+                        "{}: -> requires a single-level struct pointer",
+                        self.lex.line
+                    )));
+                }
+                self.next()?;
+                if self.lex.tk != Token::Id as i64 {
+                    return Err(C4Error::Compile(format!(
+                        "{}: field name expected after ->",
+                        self.lex.line
+                    )));
+                }
+                let field_name = self.symbols[self.lex.curr_id_idx].name.clone();
+                self.next()?;
+
+                let sid = struct_id_of(t);
+                let field = self.structs[sid]
+                    .fields
+                    .iter()
+                    .find(|f| f.name == field_name)
+                    .ok_or_else(|| {
+                        C4Error::Compile(format!(
+                            "{}: struct {} has no field {}",
+                            self.lex.line, self.structs[sid].name, field_name
+                        ))
+                    })?
+                    .clone();
+
+                if field.offset > 0 {
+                    self.emit_op(Op::Psh);
+                    self.emit_op(Op::Imm);
+                    self.emit_val(field.offset as i64);
+                    self.emit_op(Op::Add);
+                }
+                self.ty = field.ty;
+                // Trailing Lc/Li loads the field. The assignment handler
+                // (in the same loop) converts a trailing Li/Lc to Psh, so
+                // `p->x = value` works the same way as `*ptr = value`.
+                self.emit_op(if self.ty == Ty::Char as i64 {
+                    Op::Lc
+                } else {
+                    Op::Li
+                });
             } else {
                 return Err(C4Error::Compile(format!(
                     "{}: compiler error tk={}",
@@ -918,13 +1179,11 @@ impl Compiler {
             let mut block_symbols = Vec::new();
 
             // Block-scoped local variables (declared at the top of the block).
-            while self.lex.tk == Token::Int as i64 || self.lex.tk == Token::Char as i64 {
-                let lbt = if self.lex.tk == Token::Int as i64 {
-                    Ty::Int as i64
-                } else {
-                    Ty::Char as i64
-                };
-                self.next()?;
+            while self.lex.tk == Token::Int as i64
+                || self.lex.tk == Token::Char as i64
+                || self.lex.tk == Token::Struct as i64
+            {
+                let lbt = self.parse_decl_base_type()?;
                 while self.lex.tk != ';' as i64 {
                     self.ty = lbt;
                     while self.lex.tk == Token::MulOp as i64 {
@@ -934,6 +1193,12 @@ impl Compiler {
                     if self.lex.tk != Token::Id as i64 {
                         return Err(C4Error::Compile(format!(
                             "{}: bad local declaration",
+                            self.lex.line
+                        )));
+                    }
+                    if is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0 {
+                        return Err(C4Error::Compile(format!(
+                            "{}: struct-value declarations are not supported (use a pointer)",
                             self.lex.line
                         )));
                     }
@@ -1033,13 +1298,14 @@ impl Compiler {
     fn parse_function_params(&mut self) -> Result<Vec<usize>, C4Error> {
         let mut args = Vec::new();
         while self.lex.tk != ')' as i64 {
-            self.ty = Ty::Int as i64;
-            if self.lex.tk == Token::Int as i64 {
-                self.next()?;
-            } else if self.lex.tk == Token::Char as i64 {
-                self.next()?;
-                self.ty = Ty::Char as i64;
-            }
+            self.ty = if self.lex.tk == Token::Int as i64
+                || self.lex.tk == Token::Char as i64
+                || self.lex.tk == Token::Struct as i64
+            {
+                self.parse_decl_base_type()?
+            } else {
+                Ty::Int as i64
+            };
             while self.lex.tk == Token::MulOp as i64 {
                 self.next()?;
                 self.ty += Ty::Ptr as i64;
@@ -1047,6 +1313,12 @@ impl Compiler {
             if self.lex.tk != Token::Id as i64 {
                 return Err(C4Error::Compile(format!(
                     "{}: bad parameter declaration",
+                    self.lex.line
+                )));
+            }
+            if is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0 {
+                return Err(C4Error::Compile(format!(
+                    "{}: struct-value parameters are not supported (use a pointer)",
                     self.lex.line
                 )));
             }
@@ -1087,6 +1359,31 @@ impl Compiler {
                 bt = Ty::Char as i64;
             } else if self.lex.tk == Token::Enum as i64 {
                 self.parse_enum_decl()?;
+            } else if self.lex.tk == Token::Struct as i64 {
+                // Two shapes:
+                //   struct Foo { ... };       — definition only
+                //   struct Foo *p;            — type use, declarators follow
+                self.next()?; // consume `struct`
+                if self.lex.tk != Token::Id as i64 {
+                    return Err(C4Error::Compile(format!(
+                        "{}: struct name expected",
+                        self.lex.line
+                    )));
+                }
+                let name = self.symbols[self.lex.curr_id_idx].name.clone();
+                self.next()?;
+
+                if self.lex.tk == '{' as i64 {
+                    self.parse_struct_body(&name)?;
+                    // tk is now whatever follows `}` (typically `;`); the
+                    // declarator inner loop sees `;` immediately and the
+                    // outer `next()` below consumes it.
+                } else {
+                    let id = self.find_struct_id(&name).ok_or_else(|| {
+                        C4Error::Compile(format!("{}: unknown struct {}", self.lex.line, name))
+                    })?;
+                    bt = struct_ty_for(id);
+                }
             }
 
             while self.lex.tk != ';' as i64 && self.lex.tk != '}' as i64 {
@@ -1098,6 +1395,12 @@ impl Compiler {
                 if self.lex.tk != Token::Id as i64 {
                     return Err(C4Error::Compile(format!(
                         "{}: bad global declaration",
+                        self.lex.line
+                    )));
+                }
+                if is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0 {
+                    return Err(C4Error::Compile(format!(
+                        "{}: struct-value declarations are not supported (use a pointer)",
                         self.lex.line
                     )));
                 }
@@ -1135,13 +1438,11 @@ impl Compiler {
                     self.labels.clear();
                     self.unresolved_gotos.clear();
 
-                    while self.lex.tk == Token::Int as i64 || self.lex.tk == Token::Char as i64 {
-                        let lbt = if self.lex.tk == Token::Int as i64 {
-                            Ty::Int as i64
-                        } else {
-                            Ty::Char as i64
-                        };
-                        self.next()?;
+                    while self.lex.tk == Token::Int as i64
+                        || self.lex.tk == Token::Char as i64
+                        || self.lex.tk == Token::Struct as i64
+                    {
+                        let lbt = self.parse_decl_base_type()?;
                         while self.lex.tk != ';' as i64 {
                             self.ty = lbt;
                             while self.lex.tk == Token::MulOp as i64 {
@@ -1151,6 +1452,12 @@ impl Compiler {
                             if self.lex.tk != Token::Id as i64 {
                                 return Err(C4Error::Compile(format!(
                                     "{}: bad local declaration",
+                                    self.lex.line
+                                )));
+                            }
+                            if is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0 {
+                                return Err(C4Error::Compile(format!(
+                                    "{}: struct-value declarations are not supported (use a pointer)",
                                     self.lex.line
                                 )));
                             }

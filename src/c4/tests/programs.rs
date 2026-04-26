@@ -139,6 +139,26 @@ fn sizeof_handles_expressions() {
 }
 
 #[test]
+fn struct_basic_field_access() {
+    // struct Point { int x; int y; }; allocate, set fields, read them.
+    // Returns 3*3 + 4*4 = 25.
+    assert_eq!(run_fixture("struct_basic.c"), 25);
+}
+
+#[test]
+fn struct_self_referential_linked_list() {
+    // struct Node { int v; struct Node *next; };
+    // Build list of [4,3,2,1,0], sum via traversal — expects 10.
+    assert_eq!(run_fixture("struct_linked_list.c"), 10);
+}
+
+#[test]
+fn struct_sizeof_reports_aggregate_size() {
+    // sizeof(struct Three) == 24, etc. Returns 0 on success.
+    assert_eq!(run_fixture("struct_sizeof.c"), 0);
+}
+
+#[test]
 fn quicksort() {
     assert_eq!(run_fixture("quicksort.c"), 0);
 }

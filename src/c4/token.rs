@@ -84,6 +84,10 @@ pub(crate) enum Token {
     Switch,
     Case,
     Default,
+    /// `struct` keyword.
+    Struct,
+    /// `->` operator (struct pointer field access).
+    Arrow,
 }
 
 /// Primitive Types

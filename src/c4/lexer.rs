@@ -171,6 +171,9 @@ impl Lexer {
                         if next_char == '-' {
                             self.pos += 1;
                             self.tk = Token::Dec as i64;
+                        } else if next_char == '>' {
+                            self.pos += 1;
+                            self.tk = Token::Arrow as i64;
                         } else {
                             self.tk = Token::SubOp as i64;
                         }
@@ -296,6 +299,7 @@ pub(crate) fn init_symbols(symbols: &mut Vec<Symbol>) {
         ("switch", Token::Switch),
         ("case", Token::Case),
         ("default", Token::Default),
+        ("struct", Token::Struct),
         ("open", Token::Id),
         ("read", Token::Id),
         ("close", Token::Id),

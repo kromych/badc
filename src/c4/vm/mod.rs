@@ -651,6 +651,76 @@ impl<H: Host> Vm<H> {
                     a = self.load_i64(sp)? % a;
                     sp += 8;
                 }
+                // Immediate-form arithmetic / comparison: `a = a <op> N`.
+                // Folded by the optimizer from `Psh; Imm N; <op>`. Saves
+                // one stack push and two dispatches per call site.
+                Op::AddI => {
+                    a = a.wrapping_add(self.text[pc]);
+                    pc += 1;
+                }
+                Op::SubI => {
+                    a = a.wrapping_sub(self.text[pc]);
+                    pc += 1;
+                }
+                Op::MulI => {
+                    a = a.wrapping_mul(self.text[pc]);
+                    pc += 1;
+                }
+                Op::AndI => {
+                    a &= self.text[pc];
+                    pc += 1;
+                }
+                Op::OrI => {
+                    a |= self.text[pc];
+                    pc += 1;
+                }
+                Op::XorI => {
+                    a ^= self.text[pc];
+                    pc += 1;
+                }
+                Op::ShlI => {
+                    a = a.wrapping_shl(self.text[pc] as u32);
+                    pc += 1;
+                }
+                Op::ShrI => {
+                    a = a.wrapping_shr(self.text[pc] as u32);
+                    pc += 1;
+                }
+                Op::EqI => {
+                    a = (a == self.text[pc]) as i64;
+                    pc += 1;
+                }
+                Op::NeI => {
+                    a = (a != self.text[pc]) as i64;
+                    pc += 1;
+                }
+                Op::LtI => {
+                    a = (a < self.text[pc]) as i64;
+                    pc += 1;
+                }
+                Op::GtI => {
+                    a = (a > self.text[pc]) as i64;
+                    pc += 1;
+                }
+                Op::LeI => {
+                    a = (a <= self.text[pc]) as i64;
+                    pc += 1;
+                }
+                Op::GeI => {
+                    a = (a >= self.text[pc]) as i64;
+                    pc += 1;
+                }
+                // Local-load fusion: `a = *(bp + N*8)`.
+                Op::LdLocI => {
+                    let addr = (bp as i64 + self.text[pc] * 8) as usize;
+                    a = self.load_i64(addr)?;
+                    pc += 1;
+                }
+                Op::LdLocC => {
+                    let addr = (bp as i64 + self.text[pc] * 8) as usize;
+                    a = self.load_u8(addr)? as i64;
+                    pc += 1;
+                }
                 Op::Open => a = self.syscall_open(sp)?,
                 Op::Read => a = self.syscall_read(sp)?,
                 Op::Clos => a = self.syscall_close(sp)?,

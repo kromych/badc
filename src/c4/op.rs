@@ -95,9 +95,50 @@ pub enum Op {
     Genv,
     /// Syscall: Set an environment variable.
     Senv,
+
+    // --- Immediate-form arithmetic / comparison ---
+    //
+    // Each takes one operand `N`. They fuse the common `Psh; Imm N; <op>`
+    // sequence emitted for `<expr> <op> <constant>` patterns into a
+    // single dispatch — `a = a <op> N`. The optimizer pass produces them;
+    // the compiler never emits them directly.
+    /// `a = a + N`
+    AddI,
+    /// `a = a - N`
+    SubI,
+    /// `a = a * N`
+    MulI,
+    /// `a = a & N`
+    AndI,
+    /// `a = a | N`
+    OrI,
+    /// `a = a ^ N`
+    XorI,
+    /// `a = a << N`
+    ShlI,
+    /// `a = a >> N`
+    ShrI,
+    /// `a = (a == N) as i64`
+    EqI,
+    /// `a = (a != N) as i64`
+    NeI,
+    /// `a = (a < N) as i64`
+    LtI,
+    /// `a = (a > N) as i64`
+    GtI,
+    /// `a = (a <= N) as i64`
+    LeI,
+    /// `a = (a >= N) as i64`
+    GeI,
+
+    // --- Load-local fusion ---
+    /// `a = *(i64*)(bp + N*8)` — fused `Lea N; Li`.
+    LdLocI,
+    /// `a = *(u8*)(bp + N*8)` — fused `Lea N; Lc`.
+    LdLocC,
 }
 
-const OPS: [Op; 45] = [
+const OPS: [Op; 61] = [
     Op::Lea,
     Op::Imm,
     Op::Jmp,
@@ -143,6 +184,23 @@ const OPS: [Op; 45] = [
     Op::Write,
     Op::Genv,
     Op::Senv,
+    // Immediate-form ops (optimizer-emitted).
+    Op::AddI,
+    Op::SubI,
+    Op::MulI,
+    Op::AndI,
+    Op::OrI,
+    Op::XorI,
+    Op::ShlI,
+    Op::ShrI,
+    Op::EqI,
+    Op::NeI,
+    Op::LtI,
+    Op::GtI,
+    Op::LeI,
+    Op::GeI,
+    Op::LdLocI,
+    Op::LdLocC,
 ];
 
 impl Op {

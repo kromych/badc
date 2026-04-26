@@ -3,6 +3,7 @@ mod error;
 mod host;
 mod lexer;
 mod op;
+mod optimize;
 mod program;
 mod symbol;
 mod token;
@@ -22,6 +23,7 @@ pub use {
     host::{Host, Overwrite},
     lexer::{PredefinedKind, PredefinedSymbol, predefined_symbols},
     op::Op,
+    optimize::optimize,
     program::Program,
     vm::{Trace, Vm},
 };

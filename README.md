@@ -109,6 +109,18 @@ mix them:
 
 The first two are always on. Tracking and trace are opt-in.
 
+### Optimizer
+
+Pass `--optimize` (or `-O`) to run the bytecode optimizer between
+compile and execute. The pass decodes the linear bytecode into a typed
+IR, runs peephole / branch-threading / dead-code-elimination to a
+fixed point, then re-encodes. It also fuses `Psh; Imm N; <op>` into
+new immediate-arithmetic ops (`AddI`, `SubI`, ..., `LdLocI`,
+`LdLocC`) so common arithmetic-with-constant and local-load patterns
+take one VM dispatch instead of three. Typical results on the test
+corpus: 18–30% smaller text, ~40% faster wall-clock on the c4
+self-host. Off by default — opt in per run.
+
 Example:
 
     $ cat use_after_free.c

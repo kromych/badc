@@ -1,6 +1,7 @@
-use c4rs::{Compiler, PredefinedKind, Vm, predefined_symbols};
+use c4rs::{Compiler, PredefinedKind, Vm, optimize, predefined_symbols};
 
-const USAGE: &str = "usage: c4rs [--track-pointers] [--trace] [--list-symbols] <file> [args...]";
+const USAGE: &str =
+    "usage: c4rs [--track-pointers] [--trace] [--list-symbols] [--optimize|-O] <file> [args...]";
 
 fn main() {
     let raw: Vec<String> = std::env::args().collect();
@@ -10,6 +11,7 @@ fn main() {
     let mut track_pointers = false;
     let mut trace = false;
     let mut list_symbols = false;
+    let mut optimize_flag = false;
     let args: Vec<String> = raw
         .into_iter()
         .filter(|a| match a.as_str() {
@@ -23,6 +25,10 @@ fn main() {
             }
             "--list-symbols" => {
                 list_symbols = true;
+                false
+            }
+            "--optimize" | "-O" => {
+                optimize_flag = true;
                 false
             }
             _ => true,
@@ -50,6 +56,18 @@ fn main() {
             eprintln!("{}", e);
             std::process::exit(1);
         }
+    };
+
+    let program = if optimize_flag {
+        match optimize(program) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("{}", e);
+                std::process::exit(1);
+            }
+        }
+    } else {
+        program
     };
 
     // Type-mismatch and arity warnings (if any) — print once, before

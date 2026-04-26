@@ -100,7 +100,7 @@ pub enum Op {
     //
     // Each takes one operand `N`. They fuse the common `Psh; Imm N; <op>`
     // sequence emitted for `<expr> <op> <constant>` patterns into a
-    // single dispatch — `a = a <op> N`. The optimizer pass produces them;
+    // single dispatch -- `a = a <op> N`. The optimizer pass produces them;
     // the compiler never emits them directly.
     /// `a = a + N`
     AddI,
@@ -132,9 +132,9 @@ pub enum Op {
     GeI,
 
     // --- Load-local fusion ---
-    /// `a = *(i64*)(bp + N*8)` — fused `Lea N; Li`.
+    /// `a = *(i64*)(bp + N*8)` -- fused `Lea N; Li`.
     LdLocI,
-    /// `a = *(u8*)(bp + N*8)` — fused `Lea N; Lc`.
+    /// `a = *(u8*)(bp + N*8)` -- fused `Lea N; Lc`.
     LdLocC,
 }
 

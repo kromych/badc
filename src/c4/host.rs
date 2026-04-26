@@ -1,4 +1,4 @@
-//! Host bridge — the trait that abstracts every system-level service the
+//! Host bridge -- the trait that abstracts every system-level service the
 //! VM's syscall layer needs (file IO, env, real stdio).
 //!
 //! The split is what makes the rest of the library `no_std`-clean: the
@@ -45,7 +45,7 @@ pub trait Host {
     fn read(&mut self, fd: i64, buf: &mut [u8]) -> i64;
 
     /// Write `buf` to `fd`. Returns bytes written, or `-1` on failure.
-    /// fd 1 → stdout, fd 2 → stderr.
+    /// fd 1 -> stdout, fd 2 -> stderr.
     fn write(&mut self, fd: i64, buf: &[u8]) -> i64;
 
     /// Look up `name` in the host environment. None on miss.

@@ -2,7 +2,7 @@
 //! and write to standard file descriptors.
 //!
 //! Environment-variable tests use process-unique names so they don't race
-//! when cargo runs tests in parallel — `set_var` is process-global state
+//! when cargo runs tests in parallel -- `set_var` is process-global state
 //! (and `unsafe` to call in the 2024 edition).
 
 use std::sync::Mutex;
@@ -32,7 +32,7 @@ fn argc_is_zero_when_no_args_passed() {
 
 #[test]
 fn argv_first_argument_is_readable() {
-    // argv[1] = "Q…" — the program returns its first byte (0x51).
+    // argv[1] = "Q..." -- the program returns its first byte (0x51).
     assert_eq!(
         run_fixture_with_args("argv_first_char.c", ["prog", "Q"]),
         'Q' as i64

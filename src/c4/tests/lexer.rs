@@ -82,7 +82,7 @@ fn string_literal_lands_in_data_segment() {
 
 #[test]
 fn string_literal_escape_sequences() {
-    // Lexer alone — no trailing NUL (parser adds it).
+    // Lexer alone -- no trailing NUL (parser adds it).
     let mut h = LexHarness::new(r#""a\nb""#);
     assert_eq!(h.next(), '"' as i64);
     let addr = h.ival() as usize;
@@ -190,7 +190,7 @@ fn preprocessor_lines_are_skipped() {
 #[test]
 fn shebang_line_is_skipped_and_line_counter_advances() {
     // The first character of a shebang is `#`, which the lexer treats
-    // the same as a `#include` directive — gobble to end-of-line. The
+    // the same as a `#include` directive -- gobble to end-of-line. The
     // following newline still bumps the line counter so error messages
     // point at the right line in the user's source.
     let mut h = LexHarness::new("#!/usr/bin/env badc\n42");

@@ -1,9 +1,9 @@
 //! Optional bytecode optimizer. Runs after `Compiler::compile()` and
 //! returns a semantically-equivalent `Program` with fewer / faster
-//! instructions. Off by default — enable with `badc --optimize <file>`
+//! instructions. Off by default -- enable with `badc --optimize <file>`
 //! or by calling [`optimize`] directly on a [`Program`].
 //!
-//! The pipeline is intentionally local — no SSA, no real control-flow
+//! The pipeline is intentionally local -- no SSA, no real control-flow
 //! graph. We decode the linear text into a typed IR (`Insn`), run the
 //! peephole / branch-threading / DCE passes to a fixed point, then
 //! re-encode with a single PC-remap step. Branch and call targets are
@@ -11,16 +11,16 @@
 //! think about byte offsets.
 //!
 //! ## Passes
-//! * **Constant fold** — `Imm A; Psh; Imm B; <arith|cmp>` → `Imm <result>`.
-//! * **Branch-on-constant** — `Imm K; Bz/Bnz` → either `Jmp` or removed.
-//! * **Jump-to-next** — `Jmp T` where `T` is the next live instruction
+//! * **Constant fold** -- `Imm A; Psh; Imm B; <arith|cmp>` -> `Imm <result>`.
+//! * **Branch-on-constant** -- `Imm K; Bz/Bnz` -> either `Jmp` or removed.
+//! * **Jump-to-next** -- `Jmp T` where `T` is the next live instruction
 //!   is removed.
-//! * **Immediate-arithmetic fusion** — `Psh; Imm N; <op>` → `<op>I N`,
+//! * **Immediate-arithmetic fusion** -- `Psh; Imm N; <op>` -> `<op>I N`,
 //!   one VM dispatch instead of three.
-//! * **Local-load fusion** — `Lea N; Li/Lc` → `LdLocI/LdLocC N`.
-//! * **Branch threading** — `Bz/Bnz/Jmp T` where `T` itself is a `Jmp`
+//! * **Local-load fusion** -- `Lea N; Li/Lc` -> `LdLocI/LdLocC N`.
+//! * **Branch threading** -- `Bz/Bnz/Jmp T` where `T` itself is a `Jmp`
 //!   retargets through the chain.
-//! * **DCE** — sweep reachability from `entry_pc` and every function
+//! * **DCE** -- sweep reachability from `entry_pc` and every function
 //!   entry (every `Ent`); drop instructions never touched.
 
 use alloc::format;
@@ -65,7 +65,7 @@ impl BrKind {
     /// Branch-style ops fall through to the next instruction unless the
     /// branch is taken. `Jmp` and `Jsr` (return-to-fall-through is the
     /// reason `Jsr` falls through) all reach the next insn at runtime.
-    /// `Jmp` is the only one that *doesn't* — it's pure control transfer.
+    /// `Jmp` is the only one that *doesn't* -- it's pure control transfer.
     fn falls_through(self) -> bool {
         !matches!(self, BrKind::Jmp)
     }
@@ -77,17 +77,17 @@ impl BrKind {
 enum Insn {
     /// Op with no operand: arithmetic, loads, stores, syscalls, Lev, Psh.
     NoArg(Op),
-    /// `Lea <off>` — local-frame offset.
+    /// `Lea <off>` -- local-frame offset.
     Lea(i64),
-    /// `Imm <value>` — arbitrary integer immediate.
+    /// `Imm <value>` -- arbitrary integer immediate.
     Imm(i64),
-    /// `Imm <CODE_BASE + pc>` — a function-pointer literal. Operand is
+    /// `Imm <CODE_BASE + pc>` -- a function-pointer literal. Operand is
     /// the IR index of the target function's `Ent`. The encoder rebuilds
     /// the `CODE_BASE | pc` word from the post-DCE PC of that Ent.
     ImmCode(usize),
-    /// `Ent <frame_size>` — function entry; allocate locals.
+    /// `Ent <frame_size>` -- function entry; allocate locals.
     Ent(i64),
-    /// `Adj <n>` — drop n words from the stack post-call.
+    /// `Adj <n>` -- drop n words from the stack post-call.
     Adj(i64),
     /// Branch-style op (`Jmp`/`Jsr`/`Bz`/`Bnz`); operand is the IR index
     /// of the target instruction.
@@ -137,7 +137,7 @@ pub fn optimize(program: Program) -> Result<Program, C4Error> {
 
     // Run rewrites to a fixed point. Each pass returns true if it made
     // a change; we loop until none of them did. Bound the loop with a
-    // hard cap to defend against an oscillation bug — the normal case
+    // hard cap to defend against an oscillation bug -- the normal case
     // converges in 2-3 passes.
     for _ in 0..16 {
         let mut changed = false;
@@ -167,7 +167,7 @@ pub fn optimize(program: Program) -> Result<Program, C4Error> {
 /// indices into the returned `Vec<Insn>`.
 fn decode(text: &[i64]) -> Result<Vec<Insn>, C4Error> {
     // Pass A: parse each instruction, recording where in the text each
-    // IR instruction starts so we can build PC → index later.
+    // IR instruction starts so we can build PC -> index later.
     let mut insns: Vec<Insn> = Vec::new();
     // Sentinel value usize::MAX means "no instruction starts at this PC".
     let mut pc_to_idx: Vec<usize> = vec![usize::MAX; text.len() + 1];
@@ -222,11 +222,11 @@ fn decode(text: &[i64]) -> Result<Vec<Insn>, C4Error> {
     }
 
     // Pass B: collect "is this index an `Ent`?" to identify function
-    // entries — we'll only treat an `Imm` as a function-pointer literal
+    // entries -- we'll only treat an `Imm` as a function-pointer literal
     // if its decoded PC lands on one.
     let is_ent: Vec<bool> = insns.iter().map(|i| matches!(i, Insn::Ent(_))).collect();
 
-    // Pass C: rewrite branch targets PC → index, and upgrade
+    // Pass C: rewrite branch targets PC -> index, and upgrade
     // `Imm <CODE_BASE + pc>` whose target is an Ent to `ImmCode`.
     for ins in insns.iter_mut() {
         match ins {
@@ -261,7 +261,7 @@ fn lookup_idx(pc_to_idx: &[usize], pc: usize) -> Option<usize> {
 }
 
 /// Convert an old PC (into the original `text`) to its IR index by
-/// re-walking the IR. Only used once for `entry_pc` — too rare to
+/// re-walking the IR. Only used once for `entry_pc` -- too rare to
 /// justify keeping the decode-time `pc_to_idx` table around.
 fn pc_to_index_in(insns: &[Insn], text: &[i64], target_pc: usize) -> Result<usize, C4Error> {
     let mut pc = 0usize;
@@ -298,7 +298,7 @@ fn encode(insns: &[Insn], entry_idx: usize) -> (Vec<i64>, usize) {
     }
 
     // Branch-threading and jump-to-next removal can leave a target
-    // pointing at a Removed slot — the original instruction is gone,
+    // pointing at a Removed slot -- the original instruction is gone,
     // but we never rewrote the incoming branch. Walk forward to the
     // next live instruction so the resolved PC is always valid.
     // Past-the-end falls back to `pc` (the natural fall-through point
@@ -362,7 +362,7 @@ fn next_live(insns: &[Insn], from: usize) -> Option<usize> {
 }
 
 /// Set of indices that are reachable from any branch / call / function
-/// pointer. Recomputed after any pass that adds or removes branches —
+/// pointer. Recomputed after any pass that adds or removes branches --
 /// it's not held across the pipeline because changes invalidate it.
 fn collect_branch_targets(insns: &[Insn]) -> Vec<bool> {
     let mut targets = vec![false; insns.len()];
@@ -379,10 +379,10 @@ fn collect_branch_targets(insns: &[Insn]) -> Vec<bool> {
 
 // --- Passes -------------------------------------------------------
 
-/// `Imm A; Psh; Imm B; <arith|cmp>` → `Imm <A op B>`. The first three
+/// `Imm A; Psh; Imm B; <arith|cmp>` -> `Imm <A op B>`. The first three
 /// instructions become `Removed`; the fourth carries the folded value.
 /// Skip the fold if any of the intermediate instructions is itself a
-/// branch target — somebody might land mid-sequence.
+/// branch target -- somebody might land mid-sequence.
 fn peephole_constant_fold(insns: &mut [Insn]) -> bool {
     let targets = collect_branch_targets(insns);
     let mut changed = false;
@@ -393,7 +393,7 @@ fn peephole_constant_fold(insns: &mut [Insn]) -> bool {
         let i2 = i + 1;
         let i3 = i + 2;
         let i4 = i + 3;
-        // No tombstones in scope yet — first pass always runs on a
+        // No tombstones in scope yet -- first pass always runs on a
         // freshly-decoded IR. Once other passes start removing things,
         // this loop still works because it only matches contiguous
         // four-tuples (a Removed in the middle simply prevents a match).
@@ -403,7 +403,7 @@ fn peephole_constant_fold(insns: &mut [Insn]) -> bool {
             i += 1;
             continue;
         };
-        // Don't fold across a branch target — the branch could land on
+        // Don't fold across a branch target -- the branch could land on
         // i2/i3/i4 and the fold would change semantics.
         if targets[i2] || targets[i3] || targets[i4] {
             i += 1;
@@ -425,8 +425,8 @@ fn peephole_constant_fold(insns: &mut [Insn]) -> bool {
         insns[i3] = Insn::Removed;
         insns[i4] = Insn::Removed;
         changed = true;
-        // Don't advance — the new Imm at i1 might participate in a
-        // higher-level fold (`Imm; Psh; Imm; Add` → `Imm`, which itself
+        // Don't advance -- the new Imm at i1 might participate in a
+        // higher-level fold (`Imm; Psh; Imm; Add` -> `Imm`, which itself
         // might be the inner of another fold).
         i = i.saturating_sub(2);
     }
@@ -502,7 +502,7 @@ fn peephole_branch_on_constant(insns: &mut [Insn]) -> bool {
             continue;
         }
         if targets[i2] {
-            // The branch itself is a target — somebody jumps directly to
+            // The branch itself is a target -- somebody jumps directly to
             // it, so we can't drop the leading Imm.
             i += 1;
             continue;
@@ -552,7 +552,7 @@ fn peephole_jump_to_next(insns: &mut [Insn]) -> bool {
     changed
 }
 
-/// `Psh; Imm N; <arith|cmp>` → fused `<op>I N`. Saves one VM dispatch
+/// `Psh; Imm N; <arith|cmp>` -> fused `<op>I N`. Saves one VM dispatch
 /// per arithmetic-with-constant. Hugely common (`i + 1`, `p + sizeof(int)`,
 /// `n < limit`, etc.).
 fn peephole_immediate_arith(insns: &mut [Insn]) -> bool {
@@ -614,7 +614,7 @@ fn immediate_form(op: Op) -> Option<Op> {
     })
 }
 
-/// `Lea N; Li/Lc` → `LdLocI N` / `LdLocC N`. Local reads dominate
+/// `Lea N; Li/Lc` -> `LdLocI N` / `LdLocC N`. Local reads dominate
 /// non-trivial programs; this halves their dispatch overhead.
 fn peephole_local_load(insns: &mut [Insn]) -> bool {
     let targets = collect_branch_targets(insns);
@@ -749,13 +749,13 @@ fn dead_code_elimination(insns: &mut [Insn], entry_idx: usize) -> bool {
 mod tests {
     //! Hand-built `Program` literals, so each test pins one optimizer
     //! pass. PC layout per test is annotated in a `// PC N:` comment
-    //! against each line — the encoded operand of every branch / Jsr
+    //! against each line -- the encoded operand of every branch / Jsr
     //! must point at one of those starts.
     //!
     //! C4 calling conventions reminder used by these tests:
     //!   * `Lev` returns whatever's in the accumulator.
     //!   * `Lea N` computes `bp + N*8`. Local 0 is at `Lea -1`, etc.
-    //!   * Stores are `<addr>; Psh; <value>; Si` — Si pops the address.
+    //!   * Stores are `<addr>; Psh; <value>; Si` -- Si pops the address.
 
     use super::*;
     use crate::Vm;
@@ -940,10 +940,10 @@ mod tests {
     fn branch_threading_collapses_chain() {
         // PC layout:
         //   0:  Ent 0
-        //   2:  Jmp 7        ; → L1
+        //   2:  Jmp 7        ; -> L1
         //   4:  Imm 0        ; dead
         //   6:  Lev          ; dead
-        //   7:  L1: Jmp 12   ; → L2
+        //   7:  L1: Jmp 12   ; -> L2
         //   9:  Imm 0        ; dead
         //  11: Lev           ; dead
         //  12:  L2: Imm 9
@@ -977,7 +977,7 @@ mod tests {
         // PC layout:
         //   0:  Ent 0
         //   2:  Jmp 6        ; skip dead block
-        //   4:  Imm 999      ; dead — DCE should drop
+        //   4:  Imm 999      ; dead -- DCE should drop
         //   6:  Imm <CODE_BASE+12>  ; &add (will be remapped)
         //   8:  Adj 1        ; drop the temporary &add
         //  10:  Jsr 12       ; call add
@@ -985,22 +985,22 @@ mod tests {
         //  13:  Ent 0        ; add: returns 7
         //  15:  Imm 7
         //  17:  Lev
-        // Wait — Jsr returns to PC 12 (after the operand at 11), which
-        // is `Lev`. Good. Then Adj 1 doesn't fit in this layout — drop
+        // Wait -- Jsr returns to PC 12 (after the operand at 11), which
+        // is `Lev`. Good. Then Adj 1 doesn't fit in this layout -- drop
         // it and just verify the ImmCode survives.
         // Simpler layout:
         //   0:  Ent 0
         //   2:  Jmp 6
         //   4:  Imm 999      ; dead
-        //   6:  Imm <CODE_BASE+10>  ; &add  — kept just to test remap
+        //   6:  Imm <CODE_BASE+10>  ; &add  -- kept just to test remap
         //   8:  Jsr 10       ; call add
-        //  10:  Ent 0        ; add — but we'd come back here and infinite-loop
-        // No — Jsr's return address is the PC AFTER the operand (i.e.
+        //  10:  Ent 0        ; add -- but we'd come back here and infinite-loop
+        // No -- Jsr's return address is the PC AFTER the operand (i.e.
         // the byte right after PC 9). In our layout PC 10 is `Ent`,
         // so the return would land mid-add. Need a Lev before add.
         // Final layout:
         //   0:  Ent 0
-        //   2:  Imm <CODE_BASE+9>   ; take &add → keep ImmCode alive
+        //   2:  Imm <CODE_BASE+9>   ; take &add -> keep ImmCode alive
         //   4:  Jsr 9               ; call add
         //   6:  Imm 5               ; ignore the &add we computed (a = 5)
         //   8:  Lev                 ; main returns 5

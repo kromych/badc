@@ -70,14 +70,14 @@ fn main() {
         program
     };
 
-    // Type-mismatch and arity warnings (if any) — print once, before
+    // Type-mismatch and arity warnings (if any) -- print once, before
     // the program runs. They never fail the compile, but they do go to
     // stderr so a `2>/dev/null` user can suppress.
     for w in &program.warnings {
         eprintln!("{w}");
     }
 
-    // Pass everything from argv[1] onward to the C program — argv[0] of the
+    // Pass everything from argv[1] onward to the C program -- argv[0] of the
     // hosted program is the source file name, argv[1..] are its own args.
     let c_args: Vec<String> = args[1..].to_vec();
 
@@ -98,8 +98,8 @@ fn main() {
     }
 }
 
-/// Print every name the compiler pre-binds before parsing — keywords,
-/// library functions, and integer constants — grouped by kind. Useful
+/// Print every name the compiler pre-binds before parsing -- keywords,
+/// library functions, and integer constants -- grouped by kind. Useful
 /// for scripting (`badc --list-symbols | grep PROT_`) and for spotting
 /// what's available without `#include`.
 fn print_predefined_symbols() {

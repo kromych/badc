@@ -1,4 +1,4 @@
-//! Hand-built `Program` execution tests — exercise the VM without going
+//! Hand-built `Program` execution tests -- exercise the VM without going
 //! through the compiler.
 
 use super::{Op, Program, Vm};
@@ -31,7 +31,7 @@ fn add_two_immediates() {
 
 #[test]
 fn conditional_branch_taken() {
-    // if (1) return 7 else return 0;  — encoded directly.
+    // if (1) return 7 else return 0;  -- encoded directly.
     let text = vec![
         Op::Ent as i64,
         0,
@@ -71,7 +71,7 @@ fn conditional_branch_not_taken() {
 
 #[test]
 fn jsr_calls_subroutine_and_returns() {
-    // main: ent 0; jsr 5; lev   — subroutine returns 42.
+    // main: ent 0; jsr 5; lev   -- subroutine returns 42.
     // PC: 0 Ent, 1 0, 2 Jsr, 3 5, 4 Lev,
     //     5 Ent, 6 0, 7 Imm, 8 42, 9 Lev
     let text = vec![

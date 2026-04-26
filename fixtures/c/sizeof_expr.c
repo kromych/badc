@@ -13,6 +13,6 @@ int main() {
     if (sizeof(*p) != 8) return 5;
     if (sizeof(*s) != 1) return 6;
 
-    // Operand is not evaluated — p is uninitialised, but sizeof(*p) is fine.
+    // Operand is not evaluated -- p is uninitialised, but sizeof(*p) is fine.
     return 0;
 }

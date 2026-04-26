@@ -55,8 +55,8 @@ impl Lexer {
                 self.line += 1;
             } else if c == '#' {
                 // Skip the rest of the line. Covers both C-style
-                // preprocessor directives (`#include`, `#define`, …) — c4
-                // doesn't run a preprocessor, it just ignores them — and
+                // preprocessor directives (`#include`, `#define`, ...) -- c4
+                // doesn't run a preprocessor, it just ignores them -- and
                 // a leading shebang line so source files can be made
                 // executable with `#!/usr/bin/env badc`.
                 while self.pos < self.src.len() && self.src[self.pos] as char != '\n' {
@@ -192,7 +192,7 @@ impl Lexer {
                             // Standalone `!` (logical NOT). Falling
                             // through to tk=0 here used to silently
                             // signal EOF, breaking any expression like
-                            // `!x` — the parser would then complain
+                            // `!x` -- the parser would then complain
                             // about an unexpected eof.
                             self.tk = '!' as i64;
                         }
@@ -241,7 +241,7 @@ impl Lexer {
                     '[' => self.tk = Token::Brak as i64,
                     '?' => self.tk = Token::Cond as i64,
                     '.' => {
-                        // Three consecutive dots → variadic ellipsis. A
+                        // Three consecutive dots -> variadic ellipsis. A
                         // single dot isn't a token anywhere in the c4
                         // dialect, so treat anything else as junk and
                         // skip it (same fall-through as the catch-all).
@@ -307,7 +307,7 @@ fn add_keyword(symbols: &mut Vec<Symbol>, name: &str, token: i64) {
 }
 
 /// Reserved words that map to a non-`Id` token. Library function names
-/// (`printf`, `malloc`, …) are listed as `Token::Id` here so they get
+/// (`printf`, `malloc`, ...) are listed as `Token::Id` here so they get
 /// registered first; the lib-ops table below then upgrades them to
 /// `Token::Sys`-class symbols pointing at their opcode.
 const KEYWORDS: &[(&str, Token)] = &[
@@ -363,19 +363,19 @@ const LIB_OPS: &[(&str, Op)] = &[
     ("setenv", Op::Senv),
 ];
 
-/// Pre-registered integer constants — the c4 dialect doesn't have
+/// Pre-registered integer constants -- the c4 dialect doesn't have
 /// `#define`, so things like `PROT_READ` would otherwise be magic
 /// numbers. They're seeded as `Token::Num`-class symbols so the compiler
 /// emits `Op::Imm <value>` exactly as if the user had written the
 /// literal. POSIX-conventional values; portable across platforms because
 /// our VM honours these masks itself rather than calling out to libc.
 const CONSTANTS: &[(&str, i64)] = &[
-    // mprotect prot bits — the values our VM reads.
+    // mprotect prot bits -- the values our VM reads.
     ("PROT_NONE", 0),
     ("PROT_READ", 1),
     ("PROT_WRITE", 2),
     ("PROT_EXEC", 4), // accepted but our VM has no executable-data concept
-    // open() flags — currently advisory; our VM always opens read-only.
+    // open() flags -- currently advisory; our VM always opens read-only.
     ("O_RDONLY", 0),
     ("O_WRONLY", 1),
     ("O_RDWR", 2),
@@ -389,7 +389,7 @@ const CONSTANTS: &[(&str, i64)] = &[
     ("EXIT_FAILURE", 1),
 ];
 
-/// Kind of a predefined identifier — used by `--list-symbols` and any
+/// Kind of a predefined identifier -- used by `--list-symbols` and any
 /// future tooling that wants to enumerate the badc prelude.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PredefinedKind {
@@ -411,7 +411,7 @@ pub struct PredefinedSymbol {
 /// Used by the `--list-symbols` CLI flag.
 ///
 /// Lib-function names appear in `KEYWORDS` as `Token::Id` placeholders so
-/// they're interned before `LIB_OPS` upgrades their class — but they
+/// they're interned before `LIB_OPS` upgrades their class -- but they
 /// aren't really keywords from the user's perspective, so we filter the
 /// Id-class entries out of the keyword listing.
 pub fn predefined_symbols() -> Vec<PredefinedSymbol> {

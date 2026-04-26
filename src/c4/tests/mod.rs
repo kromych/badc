@@ -1,10 +1,10 @@
 //! Test suite split by phase.
 //!
-//! - [`lexer`]    — drives `Lexer::next` directly and inspects the token stream.
-//! - [`parser`]   — feeds malformed C to the compiler and asserts on errors.
-//! - [`codegen`]  — compiles valid C and inspects `program.text`.
-//! - [`vm`]       — builds `Program` literals by hand and runs them.
-//! - [`programs`] — end-to-end: load a `.c` fixture, compile, run, assert exit code.
+//! - [`lexer`]    -- drives `Lexer::next` directly and inspects the token stream.
+//! - [`parser`]   -- feeds malformed C to the compiler and asserts on errors.
+//! - [`codegen`]  -- compiles valid C and inspects `program.text`.
+//! - [`vm`]       -- builds `Program` literals by hand and runs them.
+//! - [`programs`] -- end-to-end: load a `.c` fixture, compile, run, assert exit code.
 //!
 //! Tests that contain meaningful C source load it from `fixtures/c/<name>.c`
 //! via [`load_fixture`] / [`run_fixture`] / [`compile_fixture`]. Lexer- and

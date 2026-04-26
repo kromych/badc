@@ -14,7 +14,7 @@ mod syscalls;
 const STACK_CAPACITY: usize = 256 * 1024;
 const STACK_BASE: usize = 0x1000_0000;
 
-/// What an access through `check_data_access` is doing — used both for
+/// What an access through `check_data_access` is doing -- used both for
 /// diagnostic wording and for matching `mprotect` permissions.
 #[derive(Clone, Copy, Debug)]
 enum AccessKind {
@@ -41,7 +41,7 @@ impl AccessKind {
 }
 
 /// A region with reduced access rights, as installed by `mprotect`. Walked
-/// linearly on every data access — for tests this is fine; for tight
+/// linearly on every data access -- for tests this is fine; for tight
 /// hot-loop programs it would want a sorted/indexed layout.
 #[derive(Debug, Clone)]
 struct ProtectedRegion {
@@ -76,7 +76,7 @@ struct Allocation {
 /// stdout during `run`. Only honoured under the `std` feature; in
 /// `no_std` the trace branch is cfg'd out.
 ///
-/// Replaces what used to be a bare `bool` parameter to `Vm::new` —
+/// Replaces what used to be a bare `bool` parameter to `Vm::new` --
 /// `Vm::new(prog, true)` left the reader guessing what the second
 /// argument toggled.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -92,7 +92,7 @@ pub struct Vm<H: Host> {
     pub(crate) data: Vec<u8>,
     entry_pc: usize,
     stack: Vec<i64>,
-    /// Pluggable host bridge — file IO, env access, real stdio. The
+    /// Pluggable host bridge -- file IO, env access, real stdio. The
     /// `fd_table` and `next_fd` that used to live on `Vm` are now
     /// `StdHost` state.
     host: H,
@@ -108,8 +108,8 @@ pub struct Vm<H: Host> {
     /// across feature toggles.
     allocations: Vec<Allocation>,
     /// `data.len()` captured at the start of [`Vm::run`] (after argv has
-    /// been staged). Anything below this address is static data — string
-    /// literals, globals, argv — and is implicitly trusted by access checks.
+    /// been staged). Anything below this address is static data -- string
+    /// literals, globals, argv -- and is implicitly trusted by access checks.
     static_end: usize,
     /// When true, every heap-side load/store goes through
     /// [`Vm::check_data_access`] and `free` validates its argument.
@@ -125,7 +125,7 @@ pub struct Vm<H: Host> {
 #[cfg(feature = "std")]
 impl Vm<super::host::StdHost> {
     /// Construct a `Vm` with the default (std-backed) host. Trace is
-    /// off by default — chain [`Vm::with_trace`] to opt in.
+    /// off by default -- chain [`Vm::with_trace`] to opt in.
     pub fn new(program: Program) -> Self {
         Self::with_host(program, super::host::StdHost::default())
     }
@@ -154,21 +154,21 @@ impl<H: Host> Vm<H> {
     /// Enable per-instruction trace output. Mirrors
     /// [`Vm::with_pointer_tracking`]: the absence of the call leaves
     /// the feature off, calling once turns it on. There's no `off`
-    /// builder — just don't call this.
+    /// builder -- just don't call this.
     pub fn with_trace(mut self) -> Self {
         self.trace = Trace::On;
         self
     }
 
     /// Decode a code-pointer value back into a raw text PC. Errors if the
-    /// value isn't in `[CODE_BASE, CODE_BASE + text.len())` — i.e. the
+    /// value isn't in `[CODE_BASE, CODE_BASE + text.len())` -- i.e. the
     /// program built a "function pointer" out of an integer that never
     /// came from the compiler or from a Jsr/Jsri push.
     fn decode_pc(&self, v: i64) -> Result<usize, C4Error> {
         let raw = v as usize;
         if raw < CODE_BASE || raw >= CODE_BASE + self.text.len() {
             return Err(C4Error::Runtime(format!(
-                "jump to non-code address 0x{raw:x} — not a function pointer or return address"
+                "jump to non-code address 0x{raw:x} -- not a function pointer or return address"
             )));
         }
         Ok(raw - CODE_BASE)
@@ -188,7 +188,7 @@ impl<H: Host> Vm<H> {
     /// Enable runtime tracking of heap allocations. With this on, every
     /// load/store into the heap region is checked against the allocation
     /// table and produces a `Runtime` error on use-after-free, double-free,
-    /// or out-of-bounds access. Off by default — the checks add a per-access
+    /// or out-of-bounds access. Off by default -- the checks add a per-access
     /// linear scan over the allocations list.
     pub fn with_pointer_tracking(mut self) -> Self {
         self.track_pointers = true;
@@ -211,26 +211,26 @@ impl<H: Host> Vm<H> {
     /// Validate `[addr, addr+len)` for a `kind` access.
     ///
     /// Three layered checks:
-    ///   1. Code segment — always rejected, regardless of tracking. A
+    ///   1. Code segment -- always rejected, regardless of tracking. A
     ///      function-pointer value isn't supposed to be dereferenced as
     ///      data, and a return address pulled off the stack isn't either.
-    ///   2. mprotect — always honoured. If the address falls in a
+    ///   2. mprotect -- always honoured. If the address falls in a
     ///      protected region whose `prot` mask doesn't allow `kind`,
     ///      refuse the access.
-    ///   3. Allocation tracking — opt-in. Heap accesses must land inside
+    ///   3. Allocation tracking -- opt-in. Heap accesses must land inside
     ///      a live allocation; static data is implicitly trusted.
     fn check_data_access(&self, addr: usize, len: usize, kind: AccessKind) -> Result<(), C4Error> {
         // 1. Code segment is not addressable as data.
         if addr >= CODE_BASE && addr < CODE_BASE + self.text.len() {
             return Err(C4Error::Runtime(format!(
-                "{} access at code pointer 0x{addr:x} ({len} bytes) — code is not data",
+                "{} access at code pointer 0x{addr:x} ({len} bytes) -- code is not data",
                 kind.label()
             )));
         }
         if len == 0 {
             return Ok(());
         }
-        // 2. mprotect — independent of tracking.
+        // 2. mprotect -- independent of tracking.
         for region in &self.protections {
             if addr < region.start || addr >= region.start + region.len {
                 continue;
@@ -245,7 +245,7 @@ impl<H: Host> Vm<H> {
                 )));
             }
         }
-        // 3. Allocation tracking — opt-in.
+        // 3. Allocation tracking -- opt-in.
         if !self.track_pointers {
             return Ok(());
         }
@@ -438,7 +438,7 @@ impl<H: Host> Vm<H> {
 
     /// Execute the program. Consumes the VM because `run` mutates `text`
     /// (appending the bootstrap), `data` (staging argv), and the recorded
-    /// `static_end`/heap state — invoking it twice would corrupt those
+    /// `static_end`/heap state -- invoking it twice would corrupt those
     /// invariants. Build a fresh `Vm` for each run.
     pub fn run(mut self) -> Result<i64, C4Error> {
         if self.text.is_empty() {
@@ -496,7 +496,7 @@ impl<H: Host> Vm<H> {
             })?;
             pc += 1;
 
-            // Debug tracing requires real stdio — gated to `std`. In
+            // Debug tracing requires real stdio -- gated to `std`. In
             // `no_std` builds, the `trace` flag is silently a no-op
             // (a future enhancement could route this through Host too).
             #[cfg(feature = "std")]
@@ -530,7 +530,7 @@ impl<H: Host> Vm<H> {
                     // The accumulator holds an encoded function pointer
                     // produced either by the compiler (`Op::Imm` for a
                     // function symbol) or pushed by Jsr/Jsri. Reject any
-                    // other value — calling through an arbitrary integer
+                    // other value -- calling through an arbitrary integer
                     // is the user trying to forge a code pointer.
                     pc = self.decode_pc(a)?;
                 }

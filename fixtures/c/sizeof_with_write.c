@@ -23,6 +23,6 @@ int main() {
     // count.
     write(STDOUT_FILENO, (char *)p, sizeof(struct Packet));
 
-    // sizeof(struct Packet) — three 8-byte fields → 24.
+    // sizeof(struct Packet) -- three 8-byte fields -> 24.
     return sizeof(struct Packet);
 }

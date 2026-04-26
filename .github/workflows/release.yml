@@ -21,7 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Native runners across the matrix — avoids the cross-compile
+          # Native runners across the matrix -- avoids the cross-compile
           # toolchain churn. The arm64 Linux + Windows runners are
           # GitHub-hosted (free for public repos) and target-native.
           - target: x86_64-unknown-linux-gnu
@@ -54,7 +54,7 @@ jobs:
         with:
           key: release-${{ matrix.target }}
 
-      # Re-run the test suite on each target — a release artifact that
+      # Re-run the test suite on each target -- a release artifact that
       # fails its own tests is worse than no artifact at all. Tests run
       # in debug for speed; release flags don't change observable
       # behavior in this codebase.
@@ -92,7 +92,7 @@ jobs:
           Compress-Archive -Path $stage -DestinationPath "$stage.zip"
           "ASSET=$stage.zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      # Upload as a workflow artifact too — useful for `workflow_dispatch`
+      # Upload as a workflow artifact too -- useful for `workflow_dispatch`
       # dry runs that don't have a tag to attach to.
       - uses: actions/upload-artifact@v4
         with:
@@ -101,7 +101,7 @@ jobs:
           if-no-files-found: error
 
       # Attach to the Release tied to the tag. Skipped on
-      # workflow_dispatch (no tag → no release).
+      # workflow_dispatch (no tag -> no release).
       - name: Attach to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2

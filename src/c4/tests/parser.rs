@@ -105,7 +105,7 @@ fn bad_lvalue_in_assignment() {
 
 #[test]
 fn struct_value_declaration_rejected() {
-    // badc allows struct pointers but not by-value struct locals — the
+    // badc allows struct pointers but not by-value struct locals -- the
     // value form needs variable-sized stack slots which the simple
     // `Op::Ent N` model doesn't accommodate.
     expect_compile_error(

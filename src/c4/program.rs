@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 /// literals plus zero-initialised globals), `entry_pc` points at the
 /// first instruction of `main` inside `text`, and `warnings` carries
 /// any non-fatal diagnostics the compiler emitted (type mismatches,
-/// arity issues). The compiler never fails on a warning — callers
+/// arity issues). The compiler never fails on a warning -- callers
 /// decide whether to print, ignore, or treat them as errors.
 #[derive(Debug, Clone)]
 pub struct Program {

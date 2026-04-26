@@ -17,7 +17,7 @@ use super::token::{Token, Ty};
 /// Within a band, the existing `+= Ty::Ptr` arithmetic still adds a
 /// pointer level, so `struct Foo *` is `STRUCT_BASE + N*STRIDE + 2` and
 /// `struct Foo **` is `+ 4`. The wide stride leaves room for hundreds of
-/// pointer levels per struct without colliding with the next struct id —
+/// pointer levels per struct without colliding with the next struct id --
 /// far more than anyone will ever write.
 const STRUCT_BASE: i64 = 1000;
 const STRUCT_STRIDE: i64 = 1000;
@@ -61,7 +61,7 @@ fn store_op_for(ty: i64) -> Op {
 #[derive(Debug, Clone)]
 struct StructDef {
     name: String,
-    /// Total size in bytes — sum of field sizes, padded to 8.
+    /// Total size in bytes -- sum of field sizes, padded to 8.
     size: usize,
     fields: Vec<StructField>,
 }
@@ -75,7 +75,7 @@ struct StructField {
     ty: i64,
 }
 
-/// Bundle returned from `parse_function_params` — keeps the per-param
+/// Bundle returned from `parse_function_params` -- keeps the per-param
 /// symbol indices (needed by the function-body binding step) together
 /// with the declared types and the variadic flag (needed by the type
 /// checker at every call site).
@@ -95,7 +95,7 @@ pub struct Compiler {
     // --- Codegen state ---
     text: Vec<i64>,
     data: Vec<u8>,
-    /// Type of the current expression — set by `expr` callees, read by callers
+    /// Type of the current expression -- set by `expr` callees, read by callers
     /// to decide between byte and word loads/stores and for pointer scaling.
     ty: i64,
     /// Number of local-variable slots currently reserved in the active stack
@@ -106,7 +106,7 @@ pub struct Compiler {
     loop_breaks: Vec<Vec<usize>>,
     loop_continues: Vec<Vec<usize>>,
     /// Linear table of `(label_name, text_pc)`. Per-function (cleared
-    /// at every function start), so it stays small — typically 0-2
+    /// at every function start), so it stays small -- typically 0-2
     /// entries even in code that uses `goto`. Linear scan beats
     /// pulling in `HashMap` (which would force `std`).
     labels: Vec<(String, usize)>,
@@ -119,8 +119,8 @@ pub struct Compiler {
 
     /// Type-mismatch warnings collected during compilation. Stored as
     /// formatted lines so the final consumer (CLI / test) can dump them
-    /// without knowing their structure. Warnings never fail the compile —
-    /// c4 was permissive by design and many idioms (NULL=0, void*≈char*)
+    /// without knowing their structure. Warnings never fail the compile --
+    /// c4 was permissive by design and many idioms (NULL=0, void*~char*)
     /// would otherwise drown the output.
     warnings: Vec<String>,
 }
@@ -148,7 +148,7 @@ impl Compiler {
     }
 
     /// Append a type-checking warning. We never fail compilation on a
-    /// type mismatch — it always lands here. Callers grab the list off
+    /// type mismatch -- it always lands here. Callers grab the list off
     /// `Program.warnings` after `compile()`.
     fn warn(&mut self, msg: alloc::string::String) {
         self.warnings.push(msg);
@@ -158,20 +158,20 @@ impl Compiler {
     /// is expected. Returns a human-readable warning string when they
     /// don't match under badc's rules; `None` when they do.
     ///
-    /// Compatibility is intentionally lax — c4 itself does no checking,
+    /// Compatibility is intentionally lax -- c4 itself does no checking,
     /// so jumping straight to ISO-C strictness would drown the suite.
     /// What we *do* catch:
-    ///   * pointer ↔ non-zero scalar (one side a pointer, the other an
+    ///   * pointer <-> non-zero scalar (one side a pointer, the other an
     ///     integer that isn't a literal 0)
     ///   * struct of different concrete types
     ///   * struct value vs anything non-struct
     ///
     /// What we deliberately *don't* catch (yet):
-    ///   * pointer base mismatch (`int*` ↔ `char*`); both pointers, both
+    ///   * pointer base mismatch (`int*` <-> `char*`); both pointers, both
     ///     fit in a register, common in c4 idioms
-    ///   * char ↔ int width difference; c convention
+    ///   * char <-> int width difference; c convention
     ///
-    /// `actual_is_zero_literal` is a hint from the caller — when an
+    /// `actual_is_zero_literal` is a hint from the caller -- when an
     /// expression compiles to exactly `Imm 0`, treat the value as the
     /// NULL pointer for the purposes of this check.
     fn type_warning(
@@ -199,19 +199,19 @@ impl Compiler {
         }
 
         match (decl_is_ptr, act_is_ptr) {
-            // Both pointers (any base/depth) — fine.
+            // Both pointers (any base/depth) -- fine.
             (true, true) => None,
-            // Pointer ↔ literal 0: NULL idiom.
+            // Pointer <-> literal 0: NULL idiom.
             (true, false) if actual_is_zero_literal => None,
-            // Pointer ↔ non-zero integer: warn.
+            // Pointer <-> non-zero integer: warn.
             (true, false) => Some("integer assigned to pointer"),
             (false, true) => Some("pointer assigned to integer"),
-            // Both numeric (char vs int) — c convention, silent.
+            // Both numeric (char vs int) -- c convention, silent.
             (false, false) => None,
         }
     }
 
-    /// True when the most recently emitted instruction is `Imm 0` —
+    /// True when the most recently emitted instruction is `Imm 0` --
     /// i.e. the expression that just finished compiling was the literal
     /// `0`. Used by [`Compiler::type_warning`] to suppress the NULL
     /// idiom warning on `pointer = 0`.
@@ -245,7 +245,7 @@ impl Compiler {
 
     /// Parse the base type of a declaration: `int`, `char`, or
     /// `struct Name`. Caller has already verified the current token is
-    /// one of those — used by the three local/parameter declaration
+    /// one of those -- used by the three local/parameter declaration
     /// loops, where struct definitions are not allowed (only references
     /// to pre-defined structs).
     /// Parse the declarator part of a declaration: zero-or-more `*` markers
@@ -255,8 +255,8 @@ impl Compiler {
     ///
     /// Returns `(symbol_index, declarator_type)`. On exit, `tk` points at
     /// whatever followed the identifier (typically `,`, `;`, `(`, or `=`).
-    /// Used by every declaration site — globals, parameters, function-top
-    /// locals, block-scoped locals — so the four near-identical loops it
+    /// Used by every declaration site -- globals, parameters, function-top
+    /// locals, block-scoped locals -- so the four near-identical loops it
     /// replaced share one definition of "what counts as a valid name" and
     /// "we don't allow struct values".
     fn parse_declarator(&mut self, base: i64) -> Result<(usize, i64), C4Error> {
@@ -315,7 +315,7 @@ impl Compiler {
     /// before its fields are parsed, so a field of type `struct Name *`
     /// (self-reference) resolves correctly. Field offsets are 8-byte
     /// aligned, which matches the natural alignment of every type c4
-    /// supports — even `char` fields take a full slot, but that buys us a
+    /// supports -- even `char` fields take a full slot, but that buys us a
     /// trivially simple layout.
     ///
     /// On entry `tk` is `{`; on exit `tk` is the token AFTER the closing
@@ -386,7 +386,7 @@ impl Compiler {
                 self.next()?;
 
                 // 8-byte align every field. Even `char` fields take a full
-                // slot — wasteful but keeps offset arithmetic obvious.
+                // slot -- wasteful but keeps offset arithmetic obvious.
                 offset = (offset + 7) & !7;
                 let field_size = self.size_of_type(field_ty);
                 self.structs[struct_id].fields.push(StructField {
@@ -471,7 +471,7 @@ impl Compiler {
             self.emit_op(Op::Imm);
             self.emit_val(self.lex.ival);
             self.next()?;
-            // C concatenates adjacent string literals — `"a" "b"` is one
+            // C concatenates adjacent string literals -- `"a" "b"` is one
             // string. The lexer leaves the NUL off so the bytes flow
             // straight together; we add the single trailing NUL here.
             while self.lex.tk == '"' as i64 {
@@ -494,7 +494,7 @@ impl Compiler {
                 || self.lex.tk == Token::Struct as i64
             {
                 // sizeof(<type>): an explicit type name, optionally with
-                // pointer markers (`int **`, `struct Foo *`, …). No
+                // pointer markers (`int **`, `struct Foo *`, ...). No
                 // bytecode is emitted for the operand at all in this
                 // branch.
                 self.ty = self.parse_decl_base_type()?;
@@ -505,7 +505,7 @@ impl Compiler {
             } else {
                 // sizeof(<expr>): parse the expression to learn its type,
                 // then drop whatever bytecode it emitted. sizeof is
-                // compile-time — the operand is never actually evaluated,
+                // compile-time -- the operand is never actually evaluated,
                 // so e.g. `sizeof(*p)` doesn't dereference p, and
                 // `sizeof(f())` doesn't call f.
                 let saved_text_len = self.text.len();
@@ -623,7 +623,7 @@ impl Compiler {
             } else if self.symbols[id_idx].class == Token::Fun as i64 {
                 // Bare function reference (e.g. `fp = add;`). The value
                 // becomes a user-visible pointer, so it gets the CODE_BASE
-                // bias — that lets the VM tell apart "function pointer"
+                // bias -- that lets the VM tell apart "function pointer"
                 // from "data pointer", and refuse to deref the former.
                 self.emit_op(Op::Imm);
                 self.emit_val(CODE_BASE as i64 + self.symbols[id_idx].val);
@@ -1075,7 +1075,7 @@ impl Compiler {
         }
         self.consume(b';', "semicolon expected after for-init")?;
 
-        // Condition (optional — empty means `1`).
+        // Condition (optional -- empty means `1`).
         let cond_pc = self.text.len();
         if self.lex.tk != ';' as i64 {
             self.expr(Token::Assign as i64)?;
@@ -1105,7 +1105,7 @@ impl Compiler {
 
         self.consume(b')', "close paren expected")?;
 
-        // Body — patched to start at the current PC.
+        // Body -- patched to start at the current PC.
         self.text[body_jmp_pc] = self.text.len() as i64;
         self.loop_breaks.push(Vec::new());
         self.loop_continues.push(Vec::new());
@@ -1568,8 +1568,8 @@ impl Compiler {
                 self.parse_enum_decl()?;
             } else if self.lex.tk == Token::Struct as i64 {
                 // Two shapes:
-                //   struct Foo { ... };       — definition only
-                //   struct Foo *p;            — type use, declarators follow
+                //   struct Foo { ... };       -- definition only
+                //   struct Foo *p;            -- type use, declarators follow
                 self.next()?; // consume `struct`
                 if self.lex.tk != Token::Id as i64 {
                     return Err(C4Error::Compile(format!(

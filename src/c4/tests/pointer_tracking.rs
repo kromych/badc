@@ -36,7 +36,7 @@ fn double_free_is_caught() {
 
 #[test]
 fn heap_oob_read_is_caught() {
-    // p[100] lands far past the 8-byte allocation — not inside any live
+    // p[100] lands far past the 8-byte allocation -- not inside any live
     // allocation, so the access check rejects it.
     expect_error_containing("oob_read.c", "out-of-bounds");
 }
@@ -51,7 +51,7 @@ fn correct_allocate_then_free_is_silent() {
 
 #[test]
 fn long_lived_allocations_are_silent() {
-    // binary_search_tree.c never frees — every alloc stays live for the
+    // binary_search_tree.c never frees -- every alloc stays live for the
     // whole run, so the access check should never see a freed entry.
     let result = try_run_fixture("binary_search_tree.c");
     assert_eq!(result.unwrap(), 0);
@@ -59,21 +59,21 @@ fn long_lived_allocations_are_silent() {
 
 #[test]
 fn memset_overrunning_allocation_is_caught() {
-    // memset(p, 0, 100) where p is an 8-byte alloc — the block check sees
+    // memset(p, 0, 100) where p is an 8-byte alloc -- the block check sees
     // the run extends past the allocation and emits a single OOB error.
     expect_error_containing("memset_oob.c", "out-of-bounds");
 }
 
 #[test]
 fn memcpy_with_oversized_source_is_caught() {
-    // memcpy reads 100 bytes from an 8-byte src — flagged at the source
+    // memcpy reads 100 bytes from an 8-byte src -- flagged at the source
     // pointer before any bytes are copied.
     expect_error_containing("memcpy_oob_src.c", "out-of-bounds");
 }
 
 #[test]
 fn memcpy_with_oversized_destination_is_caught() {
-    // memcpy writes 100 bytes into an 8-byte dst — src is fine, dst trips
+    // memcpy writes 100 bytes into an 8-byte dst -- src is fine, dst trips
     // the block check.
     expect_error_containing("memcpy_oob_dst.c", "out-of-bounds");
 }
@@ -90,7 +90,7 @@ fn dereferencing_a_function_pointer_is_refused() {
 
 #[test]
 fn calling_a_forged_code_pointer_is_refused() {
-    // `fp = 42; fp(0);` — 42 isn't in the code address space, so Jsri's
+    // `fp = 42; fp(0);` -- 42 isn't in the code address space, so Jsri's
     // decode rejects it instead of jumping to a garbage PC.
     expect_error_containing("forge_code_pointer.c", "non-code address");
 }
@@ -118,7 +118,7 @@ fn negative_size_argument_is_caught() {
 #[test]
 fn mprotect_read_only_still_allows_reads() {
     use super::try_run_fixture;
-    // After mprotect(PROT_READ), the existing data is still readable —
+    // After mprotect(PROT_READ), the existing data is still readable --
     // the program returns 'X' (88).
     assert_eq!(
         try_run_fixture("mprotect_allows_read.c").unwrap(),

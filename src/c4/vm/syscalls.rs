@@ -13,7 +13,7 @@
 
 // Rust's default visibility ("private to declaring module + descendants")
 // means we can reach into mod.rs's private fields and methods without
-// any pub annotations — `syscalls` is a child of `vm`, so all of vm's
+// any pub annotations -- `syscalls` is a child of `vm`, so all of vm's
 // internals are in scope.
 use alloc::format;
 use alloc::string::ToString;
@@ -25,7 +25,7 @@ use super::{AccessKind, C4Error, Host, Op, ProtectedRegion, Vm};
 impl<H: Host> Vm<H> {
     /// Load an `i64` size argument from the stack and validate it as a
     /// non-negative `usize`. Without this, a negative size silently
-    /// becomes `~2^63` after the `as usize` cast — the sort of value
+    /// becomes `~2^63` after the `as usize` cast -- the sort of value
     /// that turns `Vec::resize`/`vec![0; n]` into a host-process panic
     /// or sends `memset` looping until it walks off the heap. The
     /// `name` is included in the error so the diagnostic points at the
@@ -38,7 +38,7 @@ impl<H: Host> Vm<H> {
         Ok(n as usize)
     }
 
-    /// `int open(const char *path, int flags)` — opens for reading
+    /// `int open(const char *path, int flags)` -- opens for reading
     /// regardless of `flags` (the host trait doesn't model write modes).
     /// Returns a fresh non-negative fd, or -1 on error.
     pub(super) fn syscall_open(&mut self, sp: usize) -> Result<i64, C4Error> {
@@ -48,7 +48,7 @@ impl<H: Host> Vm<H> {
         Ok(self.host.open(&name))
     }
 
-    /// `int read(int fd, void *buf, int count)` — reads up to `count`
+    /// `int read(int fd, void *buf, int count)` -- reads up to `count`
     /// bytes through the host. fd 0 is conventionally stdin.
     pub(super) fn syscall_read(&mut self, sp: usize) -> Result<i64, C4Error> {
         let fd = self.load_i64(sp + 16)?;
@@ -65,13 +65,13 @@ impl<H: Host> Vm<H> {
         Ok(n)
     }
 
-    /// `int close(int fd)` — returns 0 on success, -1 if `fd` wasn't open.
+    /// `int close(int fd)` -- returns 0 on success, -1 if `fd` wasn't open.
     pub(super) fn syscall_close(&mut self, sp: usize) -> Result<i64, C4Error> {
         let fd = self.load_i64(sp)?;
         Ok(self.host.close(fd))
     }
 
-    /// `void *malloc(size_t size)` — bump-allocates from the data
+    /// `void *malloc(size_t size)` -- bump-allocates from the data
     /// segment. Always rounds up to 8 bytes. Reserves the NULL page on
     /// the first call so the returned pointer is never 0.
     pub(super) fn syscall_malloc(&mut self, sp: usize) -> Result<i64, C4Error> {
@@ -86,7 +86,7 @@ impl<H: Host> Vm<H> {
         Ok(start as i64)
     }
 
-    /// `void free(void *ptr)` — no actual reclamation (the data segment
+    /// `void free(void *ptr)` -- no actual reclamation (the data segment
     /// only grows). Under `--track-pointers`, marks the allocation
     /// freed so subsequent access errors with `use-after-free`. Errors
     /// on double-free or an unknown pointer.
@@ -111,7 +111,7 @@ impl<H: Host> Vm<H> {
         Ok(0)
     }
 
-    /// `void *memset(void *dst, int val, size_t n)` — block-checks the
+    /// `void *memset(void *dst, int val, size_t n)` -- block-checks the
     /// destination range up front, then writes byte-by-byte.
     pub(super) fn syscall_memset(&mut self, sp: usize) -> Result<i64, C4Error> {
         let dst_addr = self.load_i64(sp + 16)? as usize;
@@ -124,7 +124,7 @@ impl<H: Host> Vm<H> {
         Ok(dst_addr as i64)
     }
 
-    /// `int memcmp(const void *s1, const void *s2, size_t n)` — block-
+    /// `int memcmp(const void *s1, const void *s2, size_t n)` -- block-
     /// checks both reads, then compares byte-by-byte.
     pub(super) fn syscall_memcmp(&mut self, sp: usize) -> Result<i64, C4Error> {
         let s1_addr = self.load_i64(sp + 16)? as usize;
@@ -142,7 +142,7 @@ impl<H: Host> Vm<H> {
         Ok(0)
     }
 
-    /// `void *memcpy(void *dst, const void *src, size_t n)` — block-
+    /// `void *memcpy(void *dst, const void *src, size_t n)` -- block-
     /// checks src (read) and dst (write), copies front-to-back. Standard
     /// memcpy is undefined for overlapping regions; we don't diagnose
     /// overlap.
@@ -159,7 +159,7 @@ impl<H: Host> Vm<H> {
         Ok(dst_addr as i64)
     }
 
-    /// `int mprotect(void *addr, size_t len, int prot)` — record a
+    /// `int mprotect(void *addr, size_t len, int prot)` -- record a
     /// permission window. Subsequent loads/stores into `[addr, addr+len)`
     /// are filtered by `check_data_access`. Always honoured, regardless
     /// of `--track-pointers`.
@@ -175,15 +175,15 @@ impl<H: Host> Vm<H> {
         Ok(0)
     }
 
-    /// `int printf(const char *fmt, ...)` — limited subset (`%d`, `%c`,
+    /// `int printf(const char *fmt, ...)` -- limited subset (`%d`, `%c`,
     /// `%s`). Reads the arg count by peeking at the next instruction
     /// (it'll be `Op::Adj N` if main called us with N args). Always
-    /// returns 0; printed bytes go to `Host::write(1, …)` (stdout).
+    /// returns 0; printed bytes go to `Host::write(1, ...)` (stdout).
     pub(super) fn syscall_printf(&mut self, sp: usize, pc: usize) -> Result<i64, C4Error> {
         // The caller emits a trailing `Op::Adj N` after every printf so
         // we can recover N (the c4 calling convention pushes args but
         // doesn't tell the callee how many). If that's missing, do
-        // nothing — silently a no-op rather than reading garbage.
+        // nothing -- silently a no-op rather than reading garbage.
         if pc >= self.text.len() || self.text[pc] != Op::Adj as i64 {
             return Ok(0);
         }
@@ -222,7 +222,7 @@ impl<H: Host> Vm<H> {
         Ok(0)
     }
 
-    /// `int write(int fd, const void *buf, size_t n)` — copies `n`
+    /// `int write(int fd, const void *buf, size_t n)` -- copies `n`
     /// bytes from the data segment and hands them to the host.
     pub(super) fn syscall_write(&mut self, sp: usize) -> Result<i64, C4Error> {
         let fd = self.load_i64(sp + 16)?;
@@ -235,7 +235,7 @@ impl<H: Host> Vm<H> {
         Ok(self.host.write(fd, &buf))
     }
 
-    /// `char *getenv(const char *name)` — looks up `name` through the
+    /// `char *getenv(const char *name)` -- looks up `name` through the
     /// host. On hit, the value is copied into the data segment (and
     /// recorded as an allocation so `--track-pointers` allows reads
     /// through the returned pointer); 0 on miss.
@@ -248,7 +248,7 @@ impl<H: Host> Vm<H> {
         })
     }
 
-    /// `int setenv(const char *name, const char *value, int overwrite)` —
+    /// `int setenv(const char *name, const char *value, int overwrite)` --
     /// the C-side `int` is converted to [`Overwrite`] at the trait
     /// boundary so host impls don't have to remember "non-zero means
     /// replace" themselves.

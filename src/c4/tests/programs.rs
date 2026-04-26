@@ -21,7 +21,7 @@ fn function_pointers() {
 
 #[test]
 fn switch_statement() {
-    // a == 2 → res = 20, falls through to case 3 → res += 5 → 25
+    // a == 2 -> res = 20, falls through to case 3 -> res += 5 -> 25
     assert_eq!(run_fixture("switch_statement.c"), 25);
 }
 
@@ -134,7 +134,7 @@ fn sizeof_handles_type_names() {
 
 #[test]
 fn sizeof_handles_expressions() {
-    // sizeof(x), sizeof(*p) etc. — the operand isn't evaluated.
+    // sizeof(x), sizeof(*p) etc. -- the operand isn't evaluated.
     assert_eq!(run_fixture("sizeof_expr.c"), 0);
 }
 
@@ -143,7 +143,7 @@ fn sizeof_threads_through_malloc_write_and_return() {
     // sizeof(struct Packet) used in three positions in one program:
     // malloc size, write count, and the function's return value. Tests
     // that the same constant survives arithmetic and call-site
-    // propagation. struct Packet has 3 × 8-byte fields → 24.
+    // propagation. struct Packet has 3 x 8-byte fields -> 24.
     assert_eq!(run_fixture("sizeof_with_write.c"), 24);
 }
 
@@ -157,7 +157,7 @@ fn struct_basic_field_access() {
 #[test]
 fn struct_self_referential_linked_list() {
     // struct Node { int v; struct Node *next; };
-    // Build list of [4,3,2,1,0], sum via traversal — expects 10.
+    // Build list of [4,3,2,1,0], sum via traversal -- expects 10.
     assert_eq!(run_fixture("struct_linked_list.c"), 10);
 }
 
@@ -171,13 +171,13 @@ fn struct_sizeof_reports_aggregate_size() {
 fn adjacent_string_literals_concatenate() {
     // C concatenates `"abc" "def" "ghi"` into one string. The lexer used
     // to put a NUL between each part, breaking lookups past the first
-    // segment — which made original c4.c's keyword table truncate.
+    // segment -- which made original c4.c's keyword table truncate.
     assert_eq!(run_fixture("adjacent_strings.c"), 'f' as i64);
 }
 
 #[test]
 fn predefined_constants_are_visible() {
-    // PROT_*, O_*, STDIN_FILENO, NULL, EXIT_SUCCESS/FAILURE — each is
+    // PROT_*, O_*, STDIN_FILENO, NULL, EXIT_SUCCESS/FAILURE -- each is
     // an integer constant the lexer pre-binds before any user code is
     // parsed. Returns 0 if every comparison holds.
     assert_eq!(run_fixture("predefined_constants.c"), 0);
@@ -187,7 +187,7 @@ fn predefined_constants_are_visible() {
 fn original_c4_compiles_and_runs_hello() {
     // The canonical self-hosting test: Robert Swierczek's original c4.c
     // runs under badc, compiles hello.c, and runs the resulting program
-    // — which prints "Hello 123" then exits 0. We only check the exit
+    // -- which prints "Hello 123" then exits 0. We only check the exit
     // code; the printed output goes to the real stdout.
     let exit = super::run_fixture_with_args(
         "c4.c",

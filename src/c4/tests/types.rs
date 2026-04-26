@@ -1,4 +1,4 @@
-//! Type-checking tests — assignments and call sites should warn (not
+//! Type-checking tests -- assignments and call sites should warn (not
 //! error) on type mismatches, and a C-style cast should silence the
 //! warning. Variadic functions skip type-check past the fixed prefix.
 
@@ -6,7 +6,7 @@ use super::{compile_fixture, run_fixture};
 
 #[test]
 fn warn_int_to_pointer_assignment() {
-    // `int *p; p = 5;` — assigning a non-zero integer to a pointer.
+    // `int *p; p = 5;` -- assigning a non-zero integer to a pointer.
     let p = compile_fixture("type_warning_int_to_ptr.c");
     assert!(
         p.warnings
@@ -19,7 +19,7 @@ fn warn_int_to_pointer_assignment() {
 
 #[test]
 fn cast_silences_int_to_pointer_warning() {
-    // Same shape, but with `p = (int *)5;` — the cast tells the compiler
+    // Same shape, but with `p = (int *)5;` -- the cast tells the compiler
     // the conversion is intentional, so no warning.
     let p = compile_fixture("type_warning_silenced_by_cast.c");
     assert!(
@@ -47,7 +47,7 @@ fn warn_call_arity_mismatch() {
 
 #[test]
 fn cast_to_struct_pointer_compiles_and_runs() {
-    // `(struct Node *)malloc(...)` — the cast operator must accept a
+    // `(struct Node *)malloc(...)` -- the cast operator must accept a
     // struct type expression, not only `int`/`char [*]`.
     assert_eq!(run_fixture("cast_to_struct_pointer.c"), 42);
     let p = compile_fixture("cast_to_struct_pointer.c");

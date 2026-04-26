@@ -88,7 +88,7 @@ pub(crate) enum Token {
     Struct,
     /// `->` operator (struct pointer field access).
     Arrow,
-    /// `...` — variadic-function marker in parameter lists.
+    /// `...` -- variadic-function marker in parameter lists.
     Ellipsis,
 }
 

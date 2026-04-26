@@ -1,19 +1,22 @@
-//! badc — a Rust compiler / VM for the c4 dialect (and several
-//! extensions on top). Started as a port of Robert Swierczek's c4 —
-//! the `c4` module name and `C4Error` type are kept to acknowledge
-//! that lineage.
+//! badc -- a Rust compiler / VM for the c4 dialect, plus a handful of
+//! extensions. The pipeline is straight-line: `Compiler::new(source)
+//! .compile()` returns a [`Program`], and `Vm::new(program).run()`
+//! runs it. `optimize(program)` sits between them when you want it.
 //!
-//! See `README.md` for the dialect, runtime safety story, and CLI.
-//! This crate is the library half of the project; the binary lives in
-//! `src/main.rs` and just wires the CLI flags around `Compiler` + `Vm`.
+//! Started as a Rust port of Robert Swierczek's c4 -- the `c4` module
+//! name and [`C4Error`] type are kept as a nod to that lineage. The
+//! README covers the dialect, the runtime safety story, and the CLI.
+//! The binary in `src/main.rs` is little more than CLI plumbing
+//! around the types this module re-exports.
 //!
 //! ## no_std
 //!
-//! The library compiles under `--no-default-features` (no `std`
-//! feature). In that mode the `StdHost` adapter (file IO, env vars,
-//! real stdin/stdout) is not available; consumers must provide their
-//! own [`Host`] impl. Everything else — lexer, compiler, VM dispatch,
-//! pointer tracking, mprotect — works on `extern crate alloc`.
+//! Build the library with `--no-default-features` to drop `std`. In
+//! that mode the [`StdHost`] adapter -- file IO, env vars, real
+//! stdin/stdout -- goes with it; consumers wire up their own [`Host`]
+//! and construct the VM with `Vm::with_host(program, my_host)`.
+//! Everything else -- lexer, compiler, VM dispatch, pointer tracking,
+//! mprotect, optimizer -- runs on `extern crate alloc`.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 

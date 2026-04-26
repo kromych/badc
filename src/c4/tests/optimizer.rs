@@ -3,7 +3,7 @@
 //! DCE rewrite changes observable behavior, this is where it surfaces.
 //!
 //! We also assert `optimized.text.len() <= original.text.len()` for
-//! each fixture — the passes are size-preserving by construction, so a
+//! each fixture -- the passes are size-preserving by construction, so a
 //! growth here means a bug in the encoder (e.g. failing to skip
 //! `Removed` slots).
 
@@ -93,7 +93,7 @@ fn optimizer_actually_shrinks_typical_fixtures() {
         let opt = optimize(original).expect("optimize failed");
         assert!(
             opt.text.len() < original_len,
-            "fixture {name}: expected -O to shrink text, got {} → {}",
+            "fixture {name}: expected -O to shrink text, got {} -> {}",
             original_len,
             opt.text.len()
         );
@@ -102,7 +102,7 @@ fn optimizer_actually_shrinks_typical_fixtures() {
 
 #[test]
 fn optimizer_handles_c4_self_host() {
-    // The big one — c4.c parsing hello.c. Optimization must not break
+    // The big one -- c4.c parsing hello.c. Optimization must not break
     // self-host compilation; this is the canonical end-to-end check.
     let exit = run_optimized_fixture_with_args(
         "c4.c",

@@ -75,6 +75,16 @@ struct StructField {
     ty: i64,
 }
 
+/// Bundle returned from `parse_function_params` — keeps the per-param
+/// symbol indices (needed by the function-body binding step) together
+/// with the declared types and the variadic flag (needed by the type
+/// checker at every call site).
+struct ParsedParams {
+    indices: Vec<usize>,
+    types: Vec<i64>,
+    is_variadic: bool,
+}
+
 /// Single-pass C compiler. Holds the lexer, the symbol table, and the
 /// codegen scaffolding. `compile(self)` consumes the compiler and produces
 /// a [`Program`] ready for the VM.
@@ -106,6 +116,13 @@ pub struct Compiler {
 
     /// Defined struct types, indexed by struct id.
     structs: Vec<StructDef>,
+
+    /// Type-mismatch warnings collected during compilation. Stored as
+    /// formatted lines so the final consumer (CLI / test) can dump them
+    /// without knowing their structure. Warnings never fail the compile —
+    /// c4 was permissive by design and many idioms (NULL=0, void*≈char*)
+    /// would otherwise drown the output.
+    warnings: Vec<String>,
 }
 
 impl Compiler {
@@ -126,7 +143,81 @@ impl Compiler {
             switch_cases: Vec::new(),
             switch_defaults: Vec::new(),
             structs: Vec::new(),
+            warnings: Vec::new(),
         }
+    }
+
+    /// Append a type-checking warning. We never fail compilation on a
+    /// type mismatch — it always lands here. Callers grab the list off
+    /// `Program.warnings` after `compile()`.
+    fn warn(&mut self, msg: alloc::string::String) {
+        self.warnings.push(msg);
+    }
+
+    /// Test whether `actual` is assignable / passable where `declared`
+    /// is expected. Returns a human-readable warning string when they
+    /// don't match under c4rs's rules; `None` when they do.
+    ///
+    /// Compatibility is intentionally lax — c4 itself does no checking,
+    /// so jumping straight to ISO-C strictness would drown the suite.
+    /// What we *do* catch:
+    ///   * pointer ↔ non-zero scalar (one side a pointer, the other an
+    ///     integer that isn't a literal 0)
+    ///   * struct of different concrete types
+    ///   * struct value vs anything non-struct
+    ///
+    /// What we deliberately *don't* catch (yet):
+    ///   * pointer base mismatch (`int*` ↔ `char*`); both pointers, both
+    ///     fit in a register, common in c4 idioms
+    ///   * char ↔ int width difference; c convention
+    ///
+    /// `actual_is_zero_literal` is a hint from the caller — when an
+    /// expression compiles to exactly `Imm 0`, treat the value as the
+    /// NULL pointer for the purposes of this check.
+    fn type_warning(
+        declared: i64,
+        actual: i64,
+        actual_is_zero_literal: bool,
+    ) -> Option<&'static str> {
+        if declared == actual {
+            return None;
+        }
+        let decl_is_struct = is_struct_ty(declared);
+        let act_is_struct = is_struct_ty(actual);
+        let decl_is_ptr = decl_is_struct || declared >= Ty::Ptr as i64;
+        let act_is_ptr = act_is_struct || actual >= Ty::Ptr as i64;
+
+        // Struct types must match exactly (when one side is a struct).
+        if decl_is_struct || act_is_struct {
+            // Already returned None above when declared == actual; if we
+            // reach here, the struct sides differ. But allow struct
+            // pointer vs untyped 0 (NULL).
+            if (decl_is_ptr && actual_is_zero_literal) || (act_is_ptr && declared == 0) {
+                return None;
+            }
+            return Some("incompatible struct types");
+        }
+
+        match (decl_is_ptr, act_is_ptr) {
+            // Both pointers (any base/depth) — fine.
+            (true, true) => None,
+            // Pointer ↔ literal 0: NULL idiom.
+            (true, false) if actual_is_zero_literal => None,
+            // Pointer ↔ non-zero integer: warn.
+            (true, false) => Some("integer assigned to pointer"),
+            (false, true) => Some("pointer assigned to integer"),
+            // Both numeric (char vs int) — c convention, silent.
+            (false, false) => None,
+        }
+    }
+
+    /// True when the most recently emitted instruction is `Imm 0` —
+    /// i.e. the expression that just finished compiling was the literal
+    /// `0`. Used by [`Compiler::type_warning`] to suppress the NULL
+    /// idiom warning on `pointer = 0`.
+    fn last_emit_is_zero(&self) -> bool {
+        let n = self.text.len();
+        n >= 2 && self.text[n - 1] == 0 && self.text[n - 2] == Op::Imm as i64
     }
 
     /// Linear lookup of a struct by its tag name. Returns the id used in
@@ -341,6 +432,7 @@ impl Compiler {
             text: self.text,
             data: self.data,
             entry_pc,
+            warnings: self.warnings,
         })
     }
 
@@ -436,14 +528,64 @@ impl Compiler {
             self.next()?;
             if self.lex.tk == '(' as i64 {
                 self.next()?;
+                // Snapshot the declared signature up front: the per-arg
+                // type checks read from `expected_params` and `is_variadic`,
+                // and we don't want a recursive call to clobber them via
+                // self-mutation. Cloning the Vec is cheap (typically 1-3
+                // i64s) compared to the cost of the type check itself.
+                let expected_params = self.symbols[id_idx].params.clone();
+                let is_variadic = self.symbols[id_idx].is_variadic;
+                let fn_name_for_warn = self.symbols[id_idx].name.clone();
                 let mut nargs = 0;
                 while self.lex.tk != ')' as i64 {
+                    let arg_line = self.lex.line;
                     self.expr(Token::Assign as i64)?;
+                    // Type-check this arg against the declared param,
+                    // unless it's a vararg position (i.e. nargs is past
+                    // the fixed param count of a variadic function) or
+                    // the function has no recorded signature (legacy or
+                    // non-Sys/Fun symbol).
+                    if (nargs as usize) < expected_params.len() {
+                        let want = expected_params[nargs as usize];
+                        let zero = self.last_emit_is_zero();
+                        if let Some(reason) = Self::type_warning(want, self.ty, zero) {
+                            self.warn(format!(
+                                "{arg_line}: warning: {reason} in argument {} of `{}` (param={want}, arg={})",
+                                nargs + 1,
+                                fn_name_for_warn,
+                                self.ty
+                            ));
+                        }
+                    } else if !expected_params.is_empty() && !is_variadic {
+                        // Has a signature, isn't variadic, but we got
+                        // more args than declared. Worth a warning.
+                        self.warn(format!(
+                            "{arg_line}: warning: too many arguments to `{}` (expected {}, got at least {})",
+                            fn_name_for_warn,
+                            expected_params.len(),
+                            nargs + 1,
+                        ));
+                    }
                     self.emit_op(Op::Psh);
                     nargs += 1;
                     if self.lex.tk == ',' as i64 {
                         self.next()?;
                     }
+                }
+                // Arity underflow check (after the loop, when nargs is
+                // final). Only fires for non-variadic functions with a
+                // recorded signature.
+                if !is_variadic
+                    && !expected_params.is_empty()
+                    && (nargs as usize) < expected_params.len()
+                {
+                    self.warn(format!(
+                        "{}: warning: too few arguments to `{}` (expected {}, got {})",
+                        self.lex.line,
+                        fn_name_for_warn,
+                        expected_params.len(),
+                        nargs,
+                    ));
                 }
                 self.next()?;
                 if self.symbols[id_idx].class == Token::Sys as i64 {
@@ -485,7 +627,10 @@ impl Compiler {
                 // from "data pointer", and refuse to deref the former.
                 self.emit_op(Op::Imm);
                 self.emit_val(CODE_BASE as i64 + self.symbols[id_idx].val);
-                self.ty = Ty::Ptr as i64;
+                // Type as `int*` rather than `char*`: matches the
+                // conventional `int *fp = some_function;` idiom and
+                // keeps the type-check loose-but-not-wrong.
+                self.ty = Ty::Int as i64 + Ty::Ptr as i64;
             } else {
                 if self.symbols[id_idx].class == Token::Loc as i64 {
                     self.emit_op(Op::Lea);
@@ -504,13 +649,13 @@ impl Compiler {
             }
         } else if self.lex.tk == '(' as i64 {
             self.next()?;
-            if self.lex.tk == Token::Int as i64 || self.lex.tk == Token::Char as i64 {
-                t = if self.lex.tk == Token::Int as i64 {
-                    Ty::Int as i64
-                } else {
-                    Ty::Char as i64
-                };
-                self.next()?;
+            if self.lex.tk == Token::Int as i64
+                || self.lex.tk == Token::Char as i64
+                || self.lex.tk == Token::Struct as i64
+            {
+                // C-style cast: `(<type>)expr`. Accepts int, char, or
+                // struct base, with any number of `*` markers.
+                t = self.parse_decl_base_type()?;
                 while self.lex.tk == Token::MulOp as i64 {
                     self.next()?;
                     t += Ty::Ptr as i64;
@@ -635,7 +780,17 @@ impl Compiler {
                         self.lex.line
                     )));
                 }
+                let line = self.lex.line;
                 self.expr(Token::Assign as i64)?;
+                // RHS just compiled; self.ty is the RHS type, t is the
+                // declared LHS type. Compare before we overwrite ty.
+                let rhs_is_zero = self.last_emit_is_zero();
+                if let Some(reason) = Self::type_warning(t, self.ty, rhs_is_zero) {
+                    self.warn(format!(
+                        "{line}: warning: {reason} in assignment (lhs={t}, rhs={})",
+                        self.ty
+                    ));
+                }
                 self.ty = t;
                 self.emit_op(store_op_for(self.ty));
             } else if self.lex.tk == Token::Cond as i64 {
@@ -1339,9 +1494,28 @@ impl Compiler {
         Ok(())
     }
 
-    fn parse_function_params(&mut self) -> Result<Vec<usize>, C4Error> {
+    /// Returned from [`Compiler::parse_function_params`]. Carries the
+    /// param symbol indices (for binding to stack slots in the function
+    /// body), the declared types (for the function signature), and the
+    /// variadic flag.
+    fn parse_function_params(&mut self) -> Result<ParsedParams, C4Error> {
         let mut args = Vec::new();
+        let mut types = Vec::new();
+        let mut is_variadic = false;
         while self.lex.tk != ')' as i64 {
+            // `...` ends the typed-parameter list and marks the function
+            // variadic. Anything after is a syntax error.
+            if self.lex.tk == Token::Ellipsis as i64 {
+                self.next()?;
+                if self.lex.tk != ')' as i64 {
+                    return Err(C4Error::Compile(format!(
+                        "{}: `...` must be the last parameter",
+                        self.lex.line
+                    )));
+                }
+                is_variadic = true;
+                break;
+            }
             let base = if self.lex.tk == Token::Int as i64
                 || self.lex.tk == Token::Char as i64
                 || self.lex.tk == Token::Struct as i64
@@ -1366,13 +1540,18 @@ impl Compiler {
             self.symbols[param_idx].h_val = self.symbols[param_idx].val;
 
             args.push(param_idx);
+            types.push(ty);
 
             if self.lex.tk == ',' as i64 {
                 self.next()?;
             }
         }
         self.next()?;
-        Ok(args)
+        Ok(ParsedParams {
+            indices: args,
+            types,
+            is_variadic,
+        })
     }
 
     fn run_compile(&mut self) -> Result<(), C4Error> {
@@ -1430,7 +1609,7 @@ impl Compiler {
                     self.symbols[id_idx].val = self.text.len() as i64;
                     self.next()?;
 
-                    let args = self.parse_function_params()?;
+                    let params = self.parse_function_params()?;
 
                     if self.lex.tk != '{' as i64 {
                         return Err(C4Error::Compile(format!(
@@ -1440,10 +1619,14 @@ impl Compiler {
                     }
                     self.next()?;
 
-                    let nargs = args.len() as i64;
-                    for (i, &idx) in args.iter().enumerate() {
+                    let nargs = params.indices.len() as i64;
+                    for (i, &idx) in params.indices.iter().enumerate() {
                         self.symbols[idx].val = nargs - (i as i64) + 1;
                     }
+                    // Stash the signature on the function symbol so call
+                    // sites can type-check arguments later.
+                    self.symbols[id_idx].params = params.types;
+                    self.symbols[id_idx].is_variadic = params.is_variadic;
 
                     self.loc_offs = 0;
                     self.labels.clear();

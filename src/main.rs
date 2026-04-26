@@ -52,6 +52,13 @@ fn main() {
         }
     };
 
+    // Type-mismatch and arity warnings (if any) — print once, before
+    // the program runs. They never fail the compile, but they do go to
+    // stderr so a `2>/dev/null` user can suppress.
+    for w in &program.warnings {
+        eprintln!("{w}");
+    }
+
     // Pass everything from argv[1] onward to the C program — argv[0] of the
     // hosted program is the source file name, argv[1..] are its own args.
     let c_args: Vec<String> = args[1..].to_vec();

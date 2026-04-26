@@ -240,6 +240,21 @@ impl Lexer {
                     '*' => self.tk = Token::MulOp as i64,
                     '[' => self.tk = Token::Brak as i64,
                     '?' => self.tk = Token::Cond as i64,
+                    '.' => {
+                        // Three consecutive dots → variadic ellipsis. A
+                        // single dot isn't a token anywhere in the c4
+                        // dialect, so treat anything else as junk and
+                        // skip it (same fall-through as the catch-all).
+                        if self.pos + 1 < self.src.len()
+                            && self.src[self.pos] == b'.'
+                            && self.src[self.pos + 1] == b'.'
+                        {
+                            self.pos += 2;
+                            self.tk = Token::Ellipsis as i64;
+                        } else {
+                            continue;
+                        }
+                    }
                     _ => {
                         if "!~;{}()],:".contains(c) {
                             self.tk = c as i64;
@@ -428,6 +443,46 @@ pub fn predefined_symbols() -> Vec<PredefinedSymbol> {
     out
 }
 
+/// Helper for declaring sys-function signatures.
+///
+/// Encodings:
+///   * `INT = Ty::Int as i64 = 1`
+///   * `CHAR_PTR = Ty::Char as i64 + Ty::Ptr as i64 = 2` (our void* analogue)
+///
+/// The values are inlined here so this module doesn't need to know about
+/// the wider `Ty` arithmetic the compiler uses.
+const INT_TY: i64 = 1;
+const CHAR_PTR_TY: i64 = 2;
+
+/// `(name, ret_type, param_types, is_variadic)` for each library call,
+/// used by [`init_symbols`] to populate the function signature on each
+/// `Sys` symbol so the compiler can type-check call sites.
+const LIB_SIGNATURES: &[(&str, i64, &[i64], bool)] = &[
+    // I/O
+    ("open", INT_TY, &[CHAR_PTR_TY, INT_TY], false),
+    ("close", INT_TY, &[INT_TY], false),
+    ("read", INT_TY, &[INT_TY, CHAR_PTR_TY, INT_TY], false),
+    ("write", INT_TY, &[INT_TY, CHAR_PTR_TY, INT_TY], false),
+    ("printf", INT_TY, &[CHAR_PTR_TY], true), // variadic
+    // Memory
+    ("malloc", CHAR_PTR_TY, &[INT_TY], false),
+    ("free", INT_TY, &[CHAR_PTR_TY], false),
+    ("memset", CHAR_PTR_TY, &[CHAR_PTR_TY, INT_TY, INT_TY], false),
+    ("memcmp", INT_TY, &[CHAR_PTR_TY, CHAR_PTR_TY, INT_TY], false),
+    (
+        "memcpy",
+        CHAR_PTR_TY,
+        &[CHAR_PTR_TY, CHAR_PTR_TY, INT_TY],
+        false,
+    ),
+    ("mprotect", INT_TY, &[CHAR_PTR_TY, INT_TY, INT_TY], false),
+    // Env
+    ("getenv", CHAR_PTR_TY, &[CHAR_PTR_TY], false),
+    ("setenv", INT_TY, &[CHAR_PTR_TY, CHAR_PTR_TY, INT_TY], false),
+    // Process
+    ("exit", INT_TY, &[INT_TY], false),
+];
+
 /// Seed the symbol table with C keywords, library function bindings, and
 /// integer constants like `PROT_READ`.
 pub(crate) fn init_symbols(symbols: &mut Vec<Symbol>) {
@@ -439,6 +494,14 @@ pub(crate) fn init_symbols(symbols: &mut Vec<Symbol>) {
         symbols[idx].class = Token::Sys as i64;
         symbols[idx].type_ = Ty::Int as i64;
         symbols[idx].val = *op as i64;
+    }
+    // Patch return type + param signature for each lib function so the
+    // compiler's call-site checks have something to compare against.
+    for (name, ret, params, variadic) in LIB_SIGNATURES {
+        let idx = find_symbol(symbols, name).unwrap();
+        symbols[idx].type_ = *ret;
+        symbols[idx].params = params.to_vec();
+        symbols[idx].is_variadic = *variadic;
     }
     for (name, val) in CONSTANTS {
         let hash = hash_name(name.as_bytes());

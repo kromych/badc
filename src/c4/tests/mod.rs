@@ -24,6 +24,7 @@ mod parser;
 mod pointer_tracking;
 mod programs;
 mod syscalls;
+mod types;
 mod vm;
 
 /// Absolute path of `fixtures/c/<name>` relative to the crate root.

@@ -8,6 +8,7 @@ fn run(text: Vec<i64>) -> i64 {
         text,
         data: vec![],
         entry_pc: 0,
+        warnings: vec![],
     };
     Vm::new(program).run().unwrap()
 }
@@ -96,6 +97,7 @@ fn invalid_opcode_is_a_runtime_error() {
         text: vec![Op::Ent as i64, 0, 0xdead_beef, Op::Lev as i64],
         data: vec![],
         entry_pc: 0,
+        warnings: vec![],
     };
     let err = Vm::new(program).run().unwrap_err();
     assert!(
@@ -110,6 +112,7 @@ fn empty_program_errors_cleanly() {
         text: vec![],
         data: vec![],
         entry_pc: 0,
+        warnings: vec![],
     };
     let err = Vm::new(program).run().unwrap_err();
     assert!(

@@ -61,6 +61,13 @@ c4rs extensions on top of that:
   Self-referential pointer fields work; struct-value locals/parameters do
   not — use a pointer.
 - More syscalls: `memcpy`, `write`, `getenv`, `setenv`, `mprotect`
+- Variadic functions: declare with `int f(int x, ...)`, call sites past the
+  fixed prefix skip type-check (used by `printf`).
+- Lax type checking at assignments and call sites: mismatched pointer/integer
+  combos and arity errors emit a warning to stderr but never fail the
+  compile. A C-style cast (`p = (int *)5;`, `(struct Foo *)malloc(...)`)
+  silences the warning — the cast accepts `int`, `char`, any pointer depth,
+  and `struct <Tag> *`.
 
 No preprocessor — `#`-prefixed lines (and the shebang) are silently skipped.
 No floats, no struct values, no unions. `void` is a synonym for `char`,

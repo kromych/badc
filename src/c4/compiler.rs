@@ -36,6 +36,26 @@ fn struct_ty_for(id: usize) -> i64 {
     STRUCT_BASE + (id as i64) * STRUCT_STRIDE
 }
 
+/// Pick the right load op for the given `ty`. `char`-typed lvalues take
+/// `Op::Lc` (one-byte load); anything else (`int`, pointers, struct
+/// pointers) goes through `Op::Li` (eight-byte load).
+fn load_op_for(ty: i64) -> Op {
+    if ty == Ty::Char as i64 {
+        Op::Lc
+    } else {
+        Op::Li
+    }
+}
+
+/// Mirror of [`load_op_for`] for stores: `Sc` for `char`, `Si` otherwise.
+fn store_op_for(ty: i64) -> Op {
+    if ty == Ty::Char as i64 {
+        Op::Sc
+    } else {
+        Op::Si
+    }
+}
+
 #[derive(Debug, Clone)]
 struct StructDef {
     name: String,
@@ -131,6 +151,40 @@ impl Compiler {
     /// one of those — used by the three local/parameter declaration
     /// loops, where struct definitions are not allowed (only references
     /// to pre-defined structs).
+    /// Parse the declarator part of a declaration: zero-or-more `*` markers
+    /// followed by an identifier. The `base` is the type prefix already
+    /// parsed by the caller (e.g. `int` or `struct Foo`); pointer markers
+    /// raise the resulting type by `Ty::Ptr` per `*`.
+    ///
+    /// Returns `(symbol_index, declarator_type)`. On exit, `tk` points at
+    /// whatever followed the identifier (typically `,`, `;`, `(`, or `=`).
+    /// Used by every declaration site — globals, parameters, function-top
+    /// locals, block-scoped locals — so the four near-identical loops it
+    /// replaced share one definition of "what counts as a valid name" and
+    /// "we don't allow struct values".
+    fn parse_declarator(&mut self, base: i64) -> Result<(usize, i64), C4Error> {
+        let mut ty = base;
+        while self.lex.tk == Token::MulOp as i64 {
+            self.next()?;
+            ty += Ty::Ptr as i64;
+        }
+        if self.lex.tk != Token::Id as i64 {
+            return Err(C4Error::Compile(format!(
+                "{}: identifier expected in declaration",
+                self.lex.line
+            )));
+        }
+        if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+            return Err(C4Error::Compile(format!(
+                "{}: struct-value declarations are not supported (use a pointer)",
+                self.lex.line
+            )));
+        }
+        let idx = self.lex.curr_id_idx;
+        self.next()?;
+        Ok((idx, ty))
+    }
+
     fn parse_decl_base_type(&mut self) -> Result<i64, C4Error> {
         if self.lex.tk == Token::Int as i64 {
             self.next()?;
@@ -440,11 +494,7 @@ impl Compiler {
                     )));
                 }
                 self.ty = self.symbols[id_idx].type_;
-                self.emit_op(if self.ty == Ty::Char as i64 {
-                    Op::Lc
-                } else {
-                    Op::Li
-                });
+                self.emit_op(load_op_for(self.ty));
             }
         } else if self.lex.tk == '(' as i64 {
             self.next()?;
@@ -488,11 +538,7 @@ impl Compiler {
                     self.lex.line
                 )));
             }
-            self.emit_op(if self.ty == Ty::Char as i64 {
-                Op::Lc
-            } else {
-                Op::Li
-            });
+            self.emit_op(load_op_for(self.ty));
         } else if self.lex.tk == Token::AndOp as i64 {
             self.next()?;
             self.expr(Token::Inc as i64)?;
@@ -562,11 +608,7 @@ impl Compiler {
             } else {
                 Op::Sub
             });
-            self.emit_op(if self.ty == Ty::Char as i64 {
-                Op::Sc
-            } else {
-                Op::Si
-            });
+            self.emit_op(store_op_for(self.ty));
         } else {
             return Err(C4Error::Compile(format!(
                 "{}: bad expression tk={}",
@@ -589,11 +631,7 @@ impl Compiler {
                 }
                 self.expr(Token::Assign as i64)?;
                 self.ty = t;
-                self.emit_op(if self.ty == Ty::Char as i64 {
-                    Op::Sc
-                } else {
-                    Op::Si
-                });
+                self.emit_op(store_op_for(self.ty));
             } else if self.lex.tk == Token::Cond as i64 {
                 self.next()?;
                 self.emit_op(Op::Bz);
@@ -771,11 +809,7 @@ impl Compiler {
                 } else {
                     Op::Sub
                 });
-                self.emit_op(if self.ty == Ty::Char as i64 {
-                    Op::Sc
-                } else {
-                    Op::Si
-                });
+                self.emit_op(store_op_for(self.ty));
                 self.emit_op(Op::Psh);
                 self.emit_op(Op::Imm);
                 self.emit_val(if self.ty > Ty::Ptr as i64 { 8 } else { 1 });
@@ -810,11 +844,7 @@ impl Compiler {
                 }
                 self.emit_op(Op::Add);
                 self.ty = t - Ty::Ptr as i64;
-                self.emit_op(if self.ty == Ty::Char as i64 {
-                    Op::Lc
-                } else {
-                    Op::Li
-                });
+                self.emit_op(load_op_for(self.ty));
             } else if self.lex.tk == Token::Arrow as i64 {
                 // p->field. Preceding subexpression already evaluated as
                 // an rvalue, so the loaded pointer is in `a`. Look the
@@ -859,11 +889,7 @@ impl Compiler {
                 // Trailing Lc/Li loads the field. The assignment handler
                 // (in the same loop) converts a trailing Li/Lc to Psh, so
                 // `p->x = value` works the same way as `*ptr = value`.
-                self.emit_op(if self.ty == Ty::Char as i64 {
-                    Op::Lc
-                } else {
-                    Op::Li
-                });
+                self.emit_op(load_op_for(self.ty));
             } else {
                 return Err(C4Error::Compile(format!(
                     "{}: compiler error tk={}",
@@ -1189,24 +1215,8 @@ impl Compiler {
             {
                 let lbt = self.parse_decl_base_type()?;
                 while self.lex.tk != ';' as i64 {
-                    self.ty = lbt;
-                    while self.lex.tk == Token::MulOp as i64 {
-                        self.next()?;
-                        self.ty += Ty::Ptr as i64;
-                    }
-                    if self.lex.tk != Token::Id as i64 {
-                        return Err(C4Error::Compile(format!(
-                            "{}: bad local declaration",
-                            self.lex.line
-                        )));
-                    }
-                    if is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0 {
-                        return Err(C4Error::Compile(format!(
-                            "{}: struct-value declarations are not supported (use a pointer)",
-                            self.lex.line
-                        )));
-                    }
-                    let loc_idx = self.lex.curr_id_idx;
+                    let (loc_idx, ty) = self.parse_declarator(lbt)?;
+                    self.ty = ty;
 
                     block_symbols.push((
                         loc_idx,
@@ -1216,11 +1226,10 @@ impl Compiler {
                     ));
 
                     self.symbols[loc_idx].class = Token::Loc as i64;
-                    self.symbols[loc_idx].type_ = self.ty;
+                    self.symbols[loc_idx].type_ = ty;
                     self.loc_offs += 1;
                     self.symbols[loc_idx].val = -self.loc_offs;
 
-                    self.next()?;
                     if self.lex.tk == ',' as i64 {
                         self.next()?;
                     }
@@ -1302,7 +1311,7 @@ impl Compiler {
     fn parse_function_params(&mut self) -> Result<Vec<usize>, C4Error> {
         let mut args = Vec::new();
         while self.lex.tk != ')' as i64 {
-            self.ty = if self.lex.tk == Token::Int as i64
+            let base = if self.lex.tk == Token::Int as i64
                 || self.lex.tk == Token::Char as i64
                 || self.lex.tk == Token::Struct as i64
             {
@@ -1310,23 +1319,8 @@ impl Compiler {
             } else {
                 Ty::Int as i64
             };
-            while self.lex.tk == Token::MulOp as i64 {
-                self.next()?;
-                self.ty += Ty::Ptr as i64;
-            }
-            if self.lex.tk != Token::Id as i64 {
-                return Err(C4Error::Compile(format!(
-                    "{}: bad parameter declaration",
-                    self.lex.line
-                )));
-            }
-            if is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0 {
-                return Err(C4Error::Compile(format!(
-                    "{}: struct-value parameters are not supported (use a pointer)",
-                    self.lex.line
-                )));
-            }
-            let param_idx = self.lex.curr_id_idx;
+            let (param_idx, ty) = self.parse_declarator(base)?;
+            self.ty = ty;
             if self.symbols[param_idx].class == Token::Loc as i64 {
                 return Err(C4Error::Compile(format!(
                     "{}: duplicate parameter definition",
@@ -1337,12 +1331,11 @@ impl Compiler {
             self.symbols[param_idx].h_class = self.symbols[param_idx].class;
             self.symbols[param_idx].class = Token::Loc as i64;
             self.symbols[param_idx].h_type = self.symbols[param_idx].type_;
-            self.symbols[param_idx].type_ = self.ty;
+            self.symbols[param_idx].type_ = ty;
             self.symbols[param_idx].h_val = self.symbols[param_idx].val;
 
             args.push(param_idx);
 
-            self.next()?;
             if self.lex.tk == ',' as i64 {
                 self.next()?;
             }
@@ -1391,32 +1384,15 @@ impl Compiler {
             }
 
             while self.lex.tk != ';' as i64 && self.lex.tk != '}' as i64 {
-                self.ty = bt;
-                while self.lex.tk == Token::MulOp as i64 {
-                    self.next()?;
-                    self.ty += Ty::Ptr as i64;
-                }
-                if self.lex.tk != Token::Id as i64 {
-                    return Err(C4Error::Compile(format!(
-                        "{}: bad global declaration",
-                        self.lex.line
-                    )));
-                }
-                if is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0 {
-                    return Err(C4Error::Compile(format!(
-                        "{}: struct-value declarations are not supported (use a pointer)",
-                        self.lex.line
-                    )));
-                }
-                let id_idx = self.lex.curr_id_idx;
+                let (id_idx, ty) = self.parse_declarator(bt)?;
+                self.ty = ty;
                 if self.symbols[id_idx].class != 0 {
                     return Err(C4Error::Compile(format!(
                         "{}: duplicate global definition",
                         self.lex.line
                     )));
                 }
-                self.next()?;
-                self.symbols[id_idx].type_ = self.ty;
+                self.symbols[id_idx].type_ = ty;
 
                 if self.lex.tk == '(' as i64 {
                     self.symbols[id_idx].class = Token::Fun as i64;
@@ -1448,24 +1424,8 @@ impl Compiler {
                     {
                         let lbt = self.parse_decl_base_type()?;
                         while self.lex.tk != ';' as i64 {
-                            self.ty = lbt;
-                            while self.lex.tk == Token::MulOp as i64 {
-                                self.next()?;
-                                self.ty += Ty::Ptr as i64;
-                            }
-                            if self.lex.tk != Token::Id as i64 {
-                                return Err(C4Error::Compile(format!(
-                                    "{}: bad local declaration",
-                                    self.lex.line
-                                )));
-                            }
-                            if is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0 {
-                                return Err(C4Error::Compile(format!(
-                                    "{}: struct-value declarations are not supported (use a pointer)",
-                                    self.lex.line
-                                )));
-                            }
-                            let loc_idx = self.lex.curr_id_idx;
+                            let (loc_idx, ty) = self.parse_declarator(lbt)?;
+                            self.ty = ty;
                             if self.symbols[loc_idx].class == Token::Loc as i64 {
                                 return Err(C4Error::Compile(format!(
                                     "{}: duplicate local definition",
@@ -1476,13 +1436,12 @@ impl Compiler {
                             self.symbols[loc_idx].h_class = self.symbols[loc_idx].class;
                             self.symbols[loc_idx].class = Token::Loc as i64;
                             self.symbols[loc_idx].h_type = self.symbols[loc_idx].type_;
-                            self.symbols[loc_idx].type_ = self.ty;
+                            self.symbols[loc_idx].type_ = ty;
                             self.symbols[loc_idx].h_val = self.symbols[loc_idx].val;
 
                             self.loc_offs += 1;
                             self.symbols[loc_idx].val = -self.loc_offs;
 
-                            self.next()?;
                             if self.lex.tk == ',' as i64 {
                                 self.next()?;
                             }

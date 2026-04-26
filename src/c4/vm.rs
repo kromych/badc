@@ -391,7 +391,11 @@ impl Vm {
         Ok(s)
     }
 
-    pub fn run(&mut self) -> Result<i64, C4Error> {
+    /// Execute the program. Consumes the VM because `run` mutates `text`
+    /// (appending the bootstrap), `data` (staging argv), and the recorded
+    /// `static_end`/heap state — invoking it twice would corrupt those
+    /// invariants. Build a fresh `Vm` for each run.
+    pub fn run(mut self) -> Result<i64, C4Error> {
         if self.text.is_empty() {
             return Err(C4Error::Runtime("empty program".to_string()));
         }

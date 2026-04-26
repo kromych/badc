@@ -1,39 +1,48 @@
-use badc::{Compiler, PredefinedKind, Vm, optimize, predefined_symbols};
+use std::path::PathBuf;
 
-const USAGE: &str =
-    "usage: badc [--track-pointers] [--trace] [--list-symbols] [--optimize|-O] <file> [args...]";
+use badc::{Compiler, PredefinedKind, Target, Vm, emit_native, optimize, predefined_symbols};
+
+const USAGE: &str = "usage: badc [--track-pointers] [--trace] [--list-symbols] [--optimize|-O] \
+                     [--emit-native [-o <out>]] <file> [args...]";
+
+/// Where the AOT codesign tool lives on every macOS install. Hardcoded
+/// so we don't accidentally pick up a homebrew shim that signs differently.
+#[cfg(target_os = "macos")]
+const CODESIGN: &str = "/usr/bin/codesign";
 
 fn main() {
     let raw: Vec<String> = std::env::args().collect();
 
-    // Strip leading flags (in any order, anywhere before the source file)
-    // so the remaining argv looks like `badc <file> [args...]`.
+    // Strip flags off `raw` and stash a normalised positional list in
+    // `args`. The two-arg form (`-o <path>`) needs a peeking iterator,
+    // which is why this isn't a simple `.filter()` like before.
     let mut track_pointers = false;
     let mut trace = false;
     let mut list_symbols = false;
     let mut optimize_flag = false;
-    let args: Vec<String> = raw
-        .into_iter()
-        .filter(|a| match a.as_str() {
-            "--track-pointers" => {
-                track_pointers = true;
-                false
-            }
-            "--trace" => {
-                trace = true;
-                false
-            }
-            "--list-symbols" => {
-                list_symbols = true;
-                false
-            }
-            "--optimize" | "-O" => {
-                optimize_flag = true;
-                false
-            }
-            _ => true,
-        })
-        .collect();
+    let mut emit_native_flag = false;
+    let mut output_path: Option<PathBuf> = None;
+
+    let mut iter = raw.into_iter();
+    let prog0 = iter.next().unwrap_or_default();
+    let mut args: Vec<String> = vec![prog0];
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--track-pointers" => track_pointers = true,
+            "--trace" => trace = true,
+            "--list-symbols" => list_symbols = true,
+            "--optimize" | "-O" => optimize_flag = true,
+            "--emit-native" => emit_native_flag = true,
+            "-o" => match iter.next() {
+                Some(p) => output_path = Some(PathBuf::from(p)),
+                None => {
+                    eprintln!("badc: -o requires a path argument");
+                    std::process::exit(1);
+                }
+            },
+            _ => args.push(arg),
+        }
+    }
 
     if list_symbols {
         print_predefined_symbols();
@@ -77,6 +86,17 @@ fn main() {
         eprintln!("{w}");
     }
 
+    if emit_native_flag {
+        let out = output_path.unwrap_or_else(|| default_output_path(path));
+        emit_native_binary(&program, &out);
+        return;
+    }
+
+    if output_path.is_some() {
+        eprintln!("badc: -o is only meaningful with --emit-native");
+        std::process::exit(1);
+    }
+
     // Pass everything from argv[1] onward to the C program -- argv[0] of the
     // hosted program is the source file name, argv[1..] are its own args.
     let c_args: Vec<String> = args[1..].to_vec();
@@ -94,6 +114,77 @@ fn main() {
         Err(e) => {
             eprintln!("{}", e);
             std::process::exit(1);
+        }
+    }
+}
+
+/// Default `-o` value when the user passes `--emit-native` without one:
+/// drop the extension off the source path. `foo/bar.c` -> `foo/bar`,
+/// `script` -> `script.bin` (don't overwrite the source itself when
+/// there's no extension to strip).
+fn default_output_path(source: &str) -> PathBuf {
+    let p = PathBuf::from(source);
+    match p.extension() {
+        Some(_) => p.with_extension(""),
+        None => p.with_extension("bin"),
+    }
+}
+
+/// Lower the program to a native binary, write it, mark it executable,
+/// and (on macOS) shell out to `codesign --sign -` so the loader
+/// will accept it. Anything goes wrong, exit non-zero.
+fn emit_native_binary(program: &badc::Program, out: &std::path::Path) {
+    let bytes = match emit_native(program, Target::MacOSAarch64) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    };
+    if let Err(e) = std::fs::write(out, &bytes) {
+        eprintln!("badc: failed to write {}: {e}", out.display());
+        std::process::exit(1);
+    }
+    set_executable(out);
+    #[cfg(target_os = "macos")]
+    codesign(out);
+    #[cfg(not(target_os = "macos"))]
+    {
+        eprintln!(
+            "badc: --emit-native produced a Mach-O binary on a non-macOS host; \
+             you'll need to copy it to macOS to run it."
+        );
+    }
+}
+
+#[cfg(unix)]
+fn set_executable(path: &std::path::Path) {
+    use std::os::unix::fs::PermissionsExt;
+    if let Ok(meta) = std::fs::metadata(path) {
+        let mut perms = meta.permissions();
+        perms.set_mode(perms.mode() | 0o111);
+        let _ = std::fs::set_permissions(path, perms);
+    }
+}
+
+#[cfg(not(unix))]
+fn set_executable(_path: &std::path::Path) {
+    // Windows treats `.exe` extension as the executable signal; nothing to do.
+}
+
+#[cfg(target_os = "macos")]
+fn codesign(path: &std::path::Path) {
+    let status = std::process::Command::new(CODESIGN)
+        .args(["--sign", "-", "--force"])
+        .arg(path)
+        .status();
+    match status {
+        Ok(s) if s.success() => {}
+        Ok(s) => {
+            eprintln!("badc: codesign exited with status {s} -- binary may not run");
+        }
+        Err(e) => {
+            eprintln!("badc: failed to invoke {CODESIGN}: {e}");
         }
     }
 }

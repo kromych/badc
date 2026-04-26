@@ -1,3 +1,4 @@
+mod codegen;
 mod compiler;
 mod error;
 mod host;
@@ -18,6 +19,7 @@ mod tests;
 // intended public API.
 #[allow(unused_imports)]
 pub use {
+    codegen::{Target, emit_native},
     compiler::Compiler,
     error::C4Error,
     host::{Host, Overwrite},

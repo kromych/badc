@@ -34,6 +34,7 @@ use super::error::C4Error;
 use super::program::Program;
 
 mod aarch64;
+mod disasm;
 mod elf;
 mod mach_o;
 mod x86_64;
@@ -118,6 +119,13 @@ pub(crate) struct Build {
     /// left for a function-pointer literal. The writer patches it with
     /// the page-relative address of `__text + target_native_offset`.
     pub func_fixups: Vec<FuncFixup>,
+    /// Sparse map from bytecode PC (index into `Program::text`) to
+    /// the byte offset within `Build::text` where that op's emitted
+    /// instructions start. `usize::MAX` for indices that aren't a
+    /// bytecode instruction's first word (operand slots, etc.). The
+    /// last entry is the total code length, so `[i+1] - [i]` gives
+    /// the byte length of the op at PC `i`.
+    pub bytecode_to_native: Vec<usize>,
 }
 
 /// Refer-by-index relocation between a code site and a `__got` slot.
@@ -168,20 +176,39 @@ pub(crate) struct FuncFixup {
 /// Returns the raw image bytes so the caller can decide whether to
 /// write them to disk, embed them, hash them, etc.
 pub fn emit_native(program: &Program, target: Target) -> Result<Vec<u8>, C4Error> {
+    let build = lower_for(program, target)?;
+    write_for(&build, target)
+}
+
+/// Lower the program for `target`, returning the per-arch `Build`
+/// without writing to any container. Used by both [`emit_native`]
+/// (which then runs the container writer) and the listing-dump path
+/// (which inspects the lowered bytes directly).
+fn lower_for(program: &Program, target: Target) -> Result<Build, C4Error> {
     match target {
-        Target::MacOSAarch64 => {
-            let build = aarch64::lower(program, target)?;
-            mach_o::write(&build)
-        }
-        Target::LinuxAarch64 => {
-            let build = aarch64::lower(program, target)?;
-            elf::write(&build, Machine::Aarch64)
-        }
-        Target::LinuxX64 => {
-            let build = x86_64::lower(program, target)?;
-            elf::write(&build, Machine::X86_64)
-        }
+        Target::MacOSAarch64 | Target::LinuxAarch64 => aarch64::lower(program, target),
+        Target::LinuxX64 => x86_64::lower(program, target),
     }
+}
+
+fn write_for(build: &Build, target: Target) -> Result<Vec<u8>, C4Error> {
+    match target {
+        Target::MacOSAarch64 => mach_o::write(build),
+        Target::LinuxAarch64 => elf::write(build, Machine::Aarch64),
+        Target::LinuxX64 => elf::write(build, Machine::X86_64),
+    }
+}
+
+/// Render a textual listing of the lowered native code for `target`,
+/// grouped by the c4 op that produced each region. Output is hex
+/// bytes per op plus header metadata (target, sizes, entry offset,
+/// fixup counts). Triggered by the CLI's `--dump-asm` flag.
+pub fn dump_native_listing(
+    program: &Program,
+    target: Target,
+) -> Result<alloc::string::String, C4Error> {
+    let build = lower_for(program, target)?;
+    Ok(disasm::dump(program, &build, target))
 }
 
 /// Per-target ABI knobs that affect lowering, not just the final

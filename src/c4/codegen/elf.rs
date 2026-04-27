@@ -967,6 +967,7 @@ mod tests {
             got_fixups: Vec::new(),
             data_fixups: Vec::new(),
             func_fixups: Vec::new(),
+            bytecode_to_native: Vec::new(),
         }
     }
 

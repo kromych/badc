@@ -1,9 +1,12 @@
 use std::path::PathBuf;
 
-use badc::{Compiler, PredefinedKind, Target, Vm, emit_native, optimize, predefined_symbols};
+use badc::{
+    Compiler, PredefinedKind, Target, Vm, dump_native_listing, emit_native, optimize,
+    predefined_symbols,
+};
 
 const USAGE: &str = "usage: badc [--track-pointers] [--trace] [--list-symbols] [--optimize|-O] \
-                     [--emit-native [--target=<spec>] [-o <out>]] <file> [args...]";
+                     [--emit-native [--target=<spec>] [-o <out>]] [--dump-asm] <file> [args...]";
 
 /// Where the AOT codesign tool lives on every macOS install. Hardcoded
 /// so we don't accidentally pick up a homebrew shim that signs differently.
@@ -23,6 +26,7 @@ fn main() {
     let mut emit_native_flag = false;
     let mut output_path: Option<PathBuf> = None;
     let mut target_spec: Option<String> = None;
+    let mut dump_asm = false;
 
     let mut iter = raw.into_iter();
     let prog0 = iter.next().unwrap_or_default();
@@ -34,6 +38,7 @@ fn main() {
             "--list-symbols" => list_symbols = true,
             "--optimize" | "-O" => optimize_flag = true,
             "--emit-native" => emit_native_flag = true,
+            "--dump-asm" => dump_asm = true,
             "-o" => match iter.next() {
                 Some(p) => output_path = Some(PathBuf::from(p)),
                 None => {
@@ -96,6 +101,17 @@ fn main() {
     // stderr so a `2>/dev/null` user can suppress.
     for w in &program.warnings {
         eprintln!("{w}");
+    }
+
+    if dump_asm {
+        match dump_native_listing(&program, target) {
+            Ok(s) => print!("{s}"),
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+        return;
     }
 
     if emit_native_flag {

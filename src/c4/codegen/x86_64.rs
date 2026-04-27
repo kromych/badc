@@ -753,6 +753,7 @@ pub(super) fn lower(program: &Program, target: Target) -> Result<Build, C4Error>
         got_fixups,
         data_fixups,
         func_fixups,
+        bytecode_to_native,
     })
 }
 

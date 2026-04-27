@@ -1326,6 +1326,17 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool) {
         emit(code, enc_str_pre(Reg::X0, Reg::SP, -16));
         emit(code, enc_str_pre(Reg::X1, Reg::SP, -16));
     }
+    // Save fp/lr; set up the new frame; reserve local storage; save
+    // x19 below the locals.
+    //
+    // x19 is callee-saved per AAPCS64. Self-hosted c4-to-c4 calls
+    // don't actually rely on the saved value (the caller refills
+    // its accumulator from the return value), but JIT entry from
+    // Rust and any other external caller does -- without this
+    // save, the host's x19 gets silently clobbered and downstream
+    // Rust crashes once it tries to use a value it had stashed
+    // there. Stashing x19 *below* the locals keeps the c4 `Lea`
+    // mapping (bp - 8*N for local N) intact.
     emit(code, enc_stp_pre(Reg::X29, Reg::X30, Reg::SP, -16));
     emit(code, enc_add_imm(Reg::X29, Reg::SP, 0));
     if locals > 0 {
@@ -1333,14 +1344,19 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool) {
         let aligned = (bytes + 15) & !15;
         emit(code, enc_sub_imm(Reg::SP, Reg::SP, aligned));
     }
+    emit(code, enc_str_pre(Reg::X19, Reg::SP, -16));
 }
 
 /// Mirror of [`emit_prologue`]. Move the VM accumulator into `x0`
-/// (the return register), tear down the frame, return. For main we
-/// also drop the two 16-byte argc/argv slots so the stack pointer is
-/// back to what libdyld handed us.
+/// (the return register), restore the saved x19, tear down the
+/// frame, return. For main we also drop the two 16-byte argc/argv
+/// slots so the stack pointer is back to what the kernel / Rust
+/// caller handed us.
 fn emit_epilogue(code: &mut Vec<u8>, is_main: bool) {
     emit(code, enc_mov_reg(Reg::X0, Reg::X19));
+    // Pop saved x19 first (it sits below locals), then restore sp
+    // to bp (drops locals), then pop saved fp/lr.
+    emit(code, enc_ldr_post(Reg::X19, Reg::SP, 16));
     emit(code, enc_add_imm(Reg::SP, Reg::X29, 0));
     emit(code, enc_ldp_post(Reg::X29, Reg::X30, Reg::SP, 16));
     if is_main {

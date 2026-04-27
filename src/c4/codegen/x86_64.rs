@@ -1255,16 +1255,27 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool) {
         let aligned = (bytes + 15) & !15;
         emit_sub_rsp_imm32(code, aligned);
     }
+    // Save r13 (the VM accumulator) below the locals. r13 is
+    // callee-saved per System V x86_64 ABI -- self-hosted c4-to-c4
+    // calls don't actually need the saved value (the caller refills
+    // its accumulator from the return value), but JIT entry from
+    // Rust and any other external caller does. Use a 16-byte slot so
+    // rsp stays 16-aligned across libc call sites.
+    emit_sub_rsp_imm32(code, 16);
+    emit_mov_mem_r(code, Reg::RSP, 0, Reg::R13);
 }
 
 /// Mirror of [`emit_prologue`]. Move the VM accumulator into rax
-/// (return register), tear down the frame, return. For main we also
-/// drop the two 16-byte argc / argv slots inserted by the prologue --
-/// they sit between the saved rbp and the return address, so we have
-/// to pop the ret addr into a temp, drop the slots, then push it back
-/// before `ret` consumes it.
+/// (return register), restore r13, tear down the frame, return. For
+/// main we also drop the two 16-byte argc / argv slots inserted by
+/// the prologue -- they sit between the saved rbp and the return
+/// address, so we pop the ret addr into a temp, drop the slots, then
+/// push it back before `ret` consumes it.
 fn emit_epilogue(code: &mut Vec<u8>, is_main: bool) {
     emit_mov_rr(code, Reg::RAX, Reg::R13);
+    // Restore r13 from its 16-byte slot at [rsp]. We then drop both
+    // the locals and the saved-r13 slot via `mov rsp, rbp`.
+    emit_mov_r_mem(code, Reg::R13, Reg::RSP, 0);
     emit_mov_rr(code, Reg::RSP, Reg::RBP);
     emit_pop_r(code, Reg::RBP);
     if is_main {

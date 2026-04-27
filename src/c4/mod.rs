@@ -19,7 +19,7 @@ mod tests;
 // intended public API.
 #[allow(unused_imports)]
 pub use {
-    codegen::{Target, dump_native_listing, emit_native},
+    codegen::{Target, dump_native_listing, emit_native, jit_run},
     compiler::Compiler,
     error::C4Error,
     host::{Host, Overwrite},

@@ -36,8 +36,11 @@ use super::program::Program;
 mod aarch64;
 mod disasm;
 mod elf;
+mod jit;
 mod mach_o;
 mod x86_64;
+
+pub use jit::jit_run;
 
 /// Which native binary to produce. Adding a target is a structural
 /// change (new variant, new match arm in [`emit_native`]) rather than

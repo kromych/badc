@@ -15,22 +15,22 @@
 //! ```text
 //!   file                                                  segment / contents
 //!   ------------------------------------------------------------------------
-//!   0x0000   mach_header_64                                ┐
-//!            LC_SEGMENT_64 __PAGEZERO                      │
-//!            LC_SEGMENT_64 __TEXT (1 sect: __text)         │
-//!            LC_SEGMENT_64 __DATA (2 sects: __got, __data) │ __TEXT
-//!            LC_SEGMENT_64 __LINKEDIT                      │
-//!            LC_DYLD_INFO_ONLY                             │
-//!            LC_SYMTAB                                     │
-//!            LC_DYSYMTAB                                   │
-//!            LC_LOAD_DYLINKER /usr/lib/dyld                │
-//!            LC_LOAD_DYLIB   /usr/lib/libSystem...         │
-//!            LC_BUILD_VERSION                              │
-//!            LC_MAIN entry_off=...                         │
-//!            <padding>                                     │
-//!            <machine code from build.text>                │
-//!            <pad to 16 KiB>                               ┘
-//!   0x4000   __DATA: __got at section start, __data after  ─ __DATA
+//!   0x0000   mach_header_64                                \
+//!            LC_SEGMENT_64 __PAGEZERO                      |
+//!            LC_SEGMENT_64 __TEXT (1 sect: __text)         |
+//!            LC_SEGMENT_64 __DATA (2 sects: __got, __data) | __TEXT
+//!            LC_SEGMENT_64 __LINKEDIT                      |
+//!            LC_DYLD_INFO_ONLY                             |
+//!            LC_SYMTAB                                     |
+//!            LC_DYSYMTAB                                   |
+//!            LC_LOAD_DYLINKER /usr/lib/dyld                |
+//!            LC_LOAD_DYLIB   /usr/lib/libSystem...         |
+//!            LC_BUILD_VERSION                              |
+//!            LC_MAIN entry_off=...                         |
+//!            <padding>                                     |
+//!            <machine code from build.text>                |
+//!            <pad to 16 KiB>                               /
+//!   0x4000   __DATA: __got at section start, __data after  - __DATA
 //!            (page-aligned, may span more than one page if
 //!             build.data is large)
 //!   0x8000+  __LINKEDIT contents:                          bind opcodes,

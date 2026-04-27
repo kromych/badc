@@ -315,7 +315,7 @@ pub(super) fn enc_b(imm26: i32) -> u32 {
 }
 
 /// `CBZ <Xt>, <label>` -- compare `Xt` with zero and branch if equal.
-/// `imm19` is signed, in instructions. ±1 MiB range.
+/// `imm19` is signed, in instructions. +/-1 MiB range.
 pub(super) fn enc_cbz(rt: Reg, imm19: i32) -> u32 {
     debug_assert!(
         (-(1 << 18)..(1 << 18)).contains(&imm19),

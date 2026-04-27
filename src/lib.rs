@@ -26,8 +26,9 @@ pub mod c4;
 
 #[allow(unused_imports)]
 pub use c4::{
-    C4Error, Compiler, Host, Op, Overwrite, PredefinedKind, PredefinedSymbol, Program, Target,
-    Trace, Vm, dump_native_listing, emit_native, jit_run, optimize, predefined_symbols,
+    C4Error, Compiler, Host, NativeOptions, Op, Overwrite, PredefinedKind, PredefinedSymbol,
+    Program, Target, Trace, Vm, dump_native_listing, dump_native_listing_with_options, emit_native,
+    emit_native_with_options, jit_run, jit_run_with_options, optimize, predefined_symbols,
 };
 
 #[cfg(feature = "std")]

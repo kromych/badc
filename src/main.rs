@@ -1,13 +1,13 @@
 use std::path::PathBuf;
 
 use badc::{
-    Compiler, PredefinedKind, Target, Vm, dump_native_listing, emit_native, jit_run, optimize,
-    predefined_symbols,
+    Compiler, NativeOptions, PredefinedKind, Target, Vm, dump_native_listing_with_options,
+    emit_native_with_options, jit_run_with_options, optimize, predefined_symbols,
 };
 
 const USAGE: &str = "usage: badc [--track-pointers] [--trace] [--list-symbols] [--optimize|-O] \
                      [--emit-native [--target=<spec>] [-o <out>]] [--dump-asm] [--jit] \
-                     <file> [args...]";
+                     [--native-optimize] <file> [args...]";
 
 /// Where the AOT codesign tool lives on every macOS install. Hardcoded
 /// so we don't accidentally pick up a homebrew shim that signs differently.
@@ -29,6 +29,7 @@ fn main() {
     let mut target_spec: Option<String> = None;
     let mut dump_asm = false;
     let mut jit = false;
+    let mut native_optimize = false;
 
     let mut iter = raw.into_iter();
     let prog0 = iter.next().unwrap_or_default();
@@ -42,6 +43,7 @@ fn main() {
             "--emit-native" => emit_native_flag = true,
             "--dump-asm" => dump_asm = true,
             "--jit" => jit = true,
+            "--native-optimize" => native_optimize = true,
             "-o" => match iter.next() {
                 Some(p) => output_path = Some(PathBuf::from(p)),
                 None => {
@@ -106,8 +108,14 @@ fn main() {
         eprintln!("{w}");
     }
 
+    let native_opts = if native_optimize {
+        NativeOptions::new().with_register_alloc()
+    } else {
+        NativeOptions::new()
+    };
+
     if dump_asm {
-        match dump_native_listing(&program, target) {
+        match dump_native_listing_with_options(&program, target, native_opts) {
             Ok(s) => print!("{s}"),
             Err(e) => {
                 eprintln!("{e}");
@@ -119,9 +127,10 @@ fn main() {
 
     if jit {
         // The JIT loader picks the host arch on its own; --target is
-        // ignored (and anyway only Linux is supported today).
+        // ignored (the JIT can't cross-compile, and the lowering it
+        // does is determined by the host).
         let c_args: Vec<String> = args[1..].to_vec();
-        match jit_run(&program, &c_args) {
+        match jit_run_with_options(&program, &c_args, native_opts) {
             Ok(code) => std::process::exit(code),
             Err(e) => {
                 eprintln!("{e}");
@@ -132,7 +141,7 @@ fn main() {
 
     if emit_native_flag {
         let out = output_path.unwrap_or_else(|| default_output_path(path));
-        emit_native_binary(&program, &out, target);
+        emit_native_binary(&program, &out, target, native_opts);
         return;
     }
 
@@ -179,8 +188,13 @@ fn default_output_path(source: &str) -> PathBuf {
 /// out to `codesign --sign -` so the loader will accept it. ELF
 /// binaries don't need signing; cross-format combinations print an
 /// advisory line and skip the signing step.
-fn emit_native_binary(program: &badc::Program, out: &std::path::Path, target: Target) {
-    let bytes = match emit_native(program, target) {
+fn emit_native_binary(
+    program: &badc::Program,
+    out: &std::path::Path,
+    target: Target,
+    options: NativeOptions,
+) {
+    let bytes = match emit_native_with_options(program, target, options) {
         Ok(b) => b,
         Err(e) => {
             eprintln!("{e}");

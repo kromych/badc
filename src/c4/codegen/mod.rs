@@ -40,7 +40,7 @@ mod jit;
 mod mach_o;
 mod x86_64;
 
-pub use jit::jit_run;
+pub use jit::{jit_run, jit_run_with_options};
 
 /// Which native binary to produce. Adding a target is a structural
 /// change (new variant, new match arm in [`emit_native`]) rather than
@@ -170,6 +170,38 @@ pub(crate) struct FuncFixup {
     pub target_native_offset: usize,
 }
 
+/// User-controllable knobs for the native lowering pass. Distinct
+/// from [`TargetOptions`] (which encodes platform ABI -- not user
+/// choosable). Threaded through [`emit_native_with_options`],
+/// [`dump_native_listing_with_options`], and
+/// [`jit_run_with_options`]; the zero-arg public functions
+/// (`emit_native`, ...) construct `NativeOptions::default()` and
+/// delegate.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NativeOptions {
+    /// Promote per-expression "stack" pushes to callee-saved
+    /// registers (x20..x27 on aarch64, rbx/r12/r14/r15 on x86_64)
+    /// when the matching pop is a binary operator. Real-stack pushes
+    /// for call arguments are unaffected. Off by default; the CLI
+    /// flag `--native-optimize` flips it on.
+    pub register_alloc: bool,
+}
+
+impl NativeOptions {
+    /// Convenience builder. `NativeOptions::new().with_register_alloc()`.
+    pub const fn new() -> Self {
+        Self {
+            register_alloc: false,
+        }
+    }
+
+    /// Set [`Self::register_alloc`] = true and return self.
+    pub const fn with_register_alloc(mut self) -> Self {
+        self.register_alloc = true;
+        self
+    }
+}
+
 /// Translate a [`Program`] into a native binary. The bytes are written
 /// to `out` in whatever format the [`Target`] requires; on macOS, the
 /// caller is responsible for invoking `codesign` afterwards (handled
@@ -178,8 +210,22 @@ pub(crate) struct FuncFixup {
 ///
 /// Returns the raw image bytes so the caller can decide whether to
 /// write them to disk, embed them, hash them, etc.
+///
+/// This is the zero-options shorthand; pass `NativeOptions` via
+/// [`emit_native_with_options`] to enable optimization knobs like
+/// the register allocator.
 pub fn emit_native(program: &Program, target: Target) -> Result<Vec<u8>, C4Error> {
-    let build = lower_for(program, target)?;
+    emit_native_with_options(program, target, NativeOptions::default())
+}
+
+/// Variant of [`emit_native`] that accepts user-controllable
+/// optimization knobs.
+pub fn emit_native_with_options(
+    program: &Program,
+    target: Target,
+    options: NativeOptions,
+) -> Result<Vec<u8>, C4Error> {
+    let build = lower_for(program, target, options)?;
     write_for(&build, target)
 }
 
@@ -187,10 +233,10 @@ pub fn emit_native(program: &Program, target: Target) -> Result<Vec<u8>, C4Error
 /// without writing to any container. Used by both [`emit_native`]
 /// (which then runs the container writer) and the listing-dump path
 /// (which inspects the lowered bytes directly).
-fn lower_for(program: &Program, target: Target) -> Result<Build, C4Error> {
+fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Result<Build, C4Error> {
     match target {
-        Target::MacOSAarch64 | Target::LinuxAarch64 => aarch64::lower(program, target),
-        Target::LinuxX64 => x86_64::lower(program, target),
+        Target::MacOSAarch64 | Target::LinuxAarch64 => aarch64::lower(program, target, options),
+        Target::LinuxX64 => x86_64::lower(program, target, options),
     }
 }
 
@@ -210,7 +256,18 @@ pub fn dump_native_listing(
     program: &Program,
     target: Target,
 ) -> Result<alloc::string::String, C4Error> {
-    let build = lower_for(program, target)?;
+    dump_native_listing_with_options(program, target, NativeOptions::default())
+}
+
+/// Variant of [`dump_native_listing`] that accepts optimization
+/// knobs. The returned listing reflects whatever lowering the
+/// options selected.
+pub fn dump_native_listing_with_options(
+    program: &Program,
+    target: Target,
+    options: NativeOptions,
+) -> Result<alloc::string::String, C4Error> {
+    let build = lower_for(program, target, options)?;
     Ok(disasm::dump(program, &build, target))
 }
 

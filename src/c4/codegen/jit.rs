@@ -45,25 +45,36 @@ use alloc::string::{String, ToString};
 
 use super::super::error::C4Error;
 use super::super::program::Program;
-use super::Target;
+use super::{NativeOptions, Target};
 
 /// Compile, lower, and run `program` in-process. Returns the exit
 /// code as it would appear from a child process. `args` becomes the
 /// hosted program's argv.
 pub fn jit_run(program: &Program, args: &[String]) -> Result<i32, C4Error> {
+    jit_run_with_options(program, args, NativeOptions::default())
+}
+
+/// Variant of [`jit_run`] that accepts user-controllable optimization
+/// knobs. Currently the only knob is [`NativeOptions::register_alloc`];
+/// future ones will land here too.
+pub fn jit_run_with_options(
+    program: &Program,
+    args: &[String],
+    options: NativeOptions,
+) -> Result<i32, C4Error> {
     #[cfg(all(
         feature = "std",
         any(target_os = "linux", all(target_os = "macos", target_arch = "aarch64"),),
     ))]
     {
-        jit_impl::jit_run(program, args)
+        jit_impl::jit_run(program, args, options)
     }
     #[cfg(not(all(
         feature = "std",
         any(target_os = "linux", all(target_os = "macos", target_arch = "aarch64"),),
     )))]
     {
-        let _ = (program, args);
+        let _ = (program, args, options);
         Err(C4Error::Compile(
             "JIT: requires the `std` feature on Linux (any arch) or macOS/aarch64".to_string(),
         ))
@@ -96,7 +107,7 @@ mod jit_impl {
     use super::super::super::error::C4Error;
     use super::super::super::program::Program;
     use super::super::Target;
-    use super::super::{Build, aarch64, x86_64};
+    use super::super::{Build, NativeOptions, aarch64, x86_64};
     use super::host_target;
     use alloc::format;
     use alloc::string::{String, ToString};
@@ -104,9 +115,13 @@ mod jit_impl {
     use std::ffi::CString;
     use std::os::raw::{c_char, c_int, c_void};
 
-    pub fn jit_run(program: &Program, args: &[String]) -> Result<i32, C4Error> {
+    pub fn jit_run(
+        program: &Program,
+        args: &[String],
+        options: NativeOptions,
+    ) -> Result<i32, C4Error> {
         let target = host_target()?;
-        let build = lower_for_jit(program, target)?;
+        let build = lower_for_jit(program, target, options)?;
 
         // Allocate a writable data region, copy `build.data` in. The
         // page is RW (no exec permission); programs that try to
@@ -169,10 +184,14 @@ mod jit_impl {
         Ok(exit_code as i32)
     }
 
-    fn lower_for_jit(program: &Program, target: Target) -> Result<Build, C4Error> {
+    fn lower_for_jit(
+        program: &Program,
+        target: Target,
+        options: NativeOptions,
+    ) -> Result<Build, C4Error> {
         match target {
-            Target::MacOSAarch64 | Target::LinuxAarch64 => aarch64::lower(program, target),
-            Target::LinuxX64 => x86_64::lower(program, target),
+            Target::MacOSAarch64 | Target::LinuxAarch64 => aarch64::lower(program, target, options),
+            Target::LinuxX64 => x86_64::lower(program, target, options),
         }
     }
 

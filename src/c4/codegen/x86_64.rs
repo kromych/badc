@@ -27,7 +27,7 @@ use super::super::CODE_BASE;
 use super::super::error::C4Error;
 use super::super::op::Op;
 use super::super::program::Program;
-use super::{Build, DataFixup, FuncFixup, GotFixup, Target, TargetOptions, aarch64};
+use super::{Build, DataFixup, FuncFixup, GotFixup, NativeOptions, Target, TargetOptions, aarch64};
 
 // ------------------------------------------------------------------
 // Register encoding.
@@ -669,7 +669,15 @@ fn lea_offset_bytes(offset: i64) -> i64 {
 // records branch fixups for later patching. Mirrors aarch64::lower.
 // ------------------------------------------------------------------
 
-pub(super) fn lower(program: &Program, target: Target) -> Result<Build, C4Error> {
+pub(super) fn lower(
+    program: &Program,
+    target: Target,
+    native: NativeOptions,
+) -> Result<Build, C4Error> {
+    // See the same comment in `aarch64::lower`. N5 wires `native`
+    // up to the register-pool lowering; for now we accept it for
+    // symmetry and ignore it.
+    let _ = native;
     let _options: TargetOptions = target.options();
 
     let mut code: Vec<u8> = Vec::new();

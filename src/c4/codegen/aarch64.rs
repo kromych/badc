@@ -34,7 +34,7 @@ use super::super::CODE_BASE;
 use super::super::error::C4Error;
 use super::super::op::Op;
 use super::super::program::Program;
-use super::{Build, DataFixup, FuncFixup, GotFixup, Target, TargetOptions};
+use super::{Build, DataFixup, FuncFixup, GotFixup, NativeOptions, Target, TargetOptions};
 
 /// Libc symbol metadata. macOS prefixes everything with `_` (the classic
 /// Mach-O calling convention); Linux uses the bare C name. The codegen
@@ -640,7 +640,16 @@ struct Fixup {
 ///
 /// Syscall ops (`Open`...`Senv`) lower to `adrp + ldr + blr` through
 /// a __got slot the writer fills in at link time.
-pub(super) fn lower(program: &Program, target: Target) -> Result<Build, C4Error> {
+pub(super) fn lower(
+    program: &Program,
+    target: Target,
+    native: NativeOptions,
+) -> Result<Build, C4Error> {
+    // `native` is accepted for API symmetry with the public surface;
+    // N4 wires it up to the register-pool lowering. For now the
+    // lowering is unchanged so this commit can't introduce a
+    // behavioural delta. Touching it silences the dead-code lint.
+    let _ = native;
     let options = target.options();
     let mut code = Vec::new();
     let mut bytecode_to_native: Vec<usize> = vec![usize::MAX; program.text.len() + 1];

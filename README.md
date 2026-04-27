@@ -159,8 +159,8 @@ For example:
 ## Native compilation
 
 `--emit-native` skips the VM and lowers the bytecode straight to
-AArch64 machine code, then wraps it in whatever container the target
-OS wants. Two targets ship today:
+machine code, then wraps it in whatever container the target OS
+wants. Three targets ship today:
 
 | `--target=`              | format        | notes                                       |
 |--------------------------|---------------|---------------------------------------------|

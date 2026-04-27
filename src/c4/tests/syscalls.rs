@@ -85,7 +85,16 @@ fn write_to_stdout_runs_to_completion() {
 }
 
 // ---- runtime dynamic linking (dlopen / dlsym / dlclose) ----
+//
+// These VM-side tests rely on POSIX `dlopen(NULL, RTLD_NOW)`
+// returning a handle whose symbol scope includes libc -- so
+// `dlsym(h, "atoi")` finds something. Windows' GetModuleHandleA(NULL)
+// only covers the main executable, not loaded DLLs, so the same
+// shape doesn't yield a libc symbol there. Skip on Windows; the
+// Host-trait Windows impl is exercised structurally by the build
+// itself + native tests on Unix runners.
 
+#[cfg(unix)]
 #[test]
 fn dlopen_returns_a_non_zero_handle_in_vm_mode() {
     // dlopen(NULL, RTLD_NOW) -- ask the host for the global symbol
@@ -106,6 +115,7 @@ fn dlopen_returns_a_non_zero_handle_in_vm_mode() {
     assert_eq!(result, 0);
 }
 
+#[cfg(unix)]
 #[test]
 fn dlsym_finds_a_real_libc_symbol_in_vm_mode() {
     // Look up libc atoi -- it's in every conforming libc, so the
@@ -129,6 +139,7 @@ fn dlsym_finds_a_real_libc_symbol_in_vm_mode() {
     assert_eq!(result, 0);
 }
 
+#[cfg(unix)]
 #[test]
 fn jsri_through_a_dlsym_pointer_is_rejected_in_vm_mode() {
     // VM mode has no FFI -- decode_pc only accepts CODE_BASE-biased

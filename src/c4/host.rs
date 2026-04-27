@@ -162,13 +162,15 @@ mod std_host {
             }
         }
 
-        // ---- libdl bridge. The `extern "C"` block declares the
-        // four POSIX dl-family functions; their bodies are in the
-        // host's libc / libdl (libSystem on macOS, libdl.so.2 or
-        // libc.so.6 on glibc 2.34+ Linux). We do not link the libdl
-        // crate -- avoiding a Cargo dependency keeps the no_std
-        // story clean.
+        // ---- libdl bridge. POSIX has `dlopen` / `dlsym` /
+        // `dlclose` / `dlerror`; Windows ships analogous functions
+        // (`LoadLibraryA` / `GetProcAddress` / `FreeLibrary` /
+        // `GetLastError`) under different names in `kernel32`. The
+        // two cfg arms below pick the right one per host. We don't
+        // link the `libloading` crate -- avoiding a Cargo dependency
+        // keeps the no_std story clean.
 
+        #[cfg(unix)]
         fn dlopen(&mut self, path: Option<&str>, flags: i64) -> i64 {
             unsafe extern "C" {
                 fn dlopen(
@@ -192,6 +194,7 @@ mod std_host {
             }
         }
 
+        #[cfg(unix)]
         fn dlsym(&mut self, handle: i64, name: &str) -> i64 {
             unsafe extern "C" {
                 fn dlsym(
@@ -206,6 +209,7 @@ mod std_host {
             unsafe { dlsym(handle as *mut _, cs.as_ptr()) as i64 }
         }
 
+        #[cfg(unix)]
         fn dlclose(&mut self, handle: i64) -> i64 {
             unsafe extern "C" {
                 fn dlclose(handle: *mut std::os::raw::c_void) -> std::os::raw::c_int;
@@ -213,6 +217,7 @@ mod std_host {
             unsafe { dlclose(handle as *mut _) as i64 }
         }
 
+        #[cfg(unix)]
         fn dlerror(&mut self) -> Option<String> {
             unsafe extern "C" {
                 fn dlerror() -> *const std::os::raw::c_char;
@@ -230,6 +235,108 @@ mod std_host {
                         .into_owned(),
                 )
             }
+        }
+
+        // ---- Windows. `LoadLibraryA` / `GetProcAddress` /
+        // `FreeLibrary` map cleanly to dlopen / dlsym / dlclose. For
+        // dlopen(NULL) we return `GetModuleHandleA(NULL)` -- the
+        // main process handle -- which lets `GetProcAddress` look up
+        // symbols in the executable itself. POSIX's "search every
+        // loaded library" behaviour is not reproduced; callers that
+        // need a libc symbol should `dlopen("ucrtbase.dll")`
+        // explicitly. dlerror is approximated via `GetLastError +
+        // FormatMessageA`.
+
+        #[cfg(windows)]
+        fn dlopen(&mut self, path: Option<&str>, _flags: i64) -> i64 {
+            type Hmodule = *mut std::os::raw::c_void;
+            unsafe extern "system" {
+                fn LoadLibraryA(name: *const std::os::raw::c_char) -> Hmodule;
+                fn GetModuleHandleA(name: *const std::os::raw::c_char) -> Hmodule;
+            }
+            match path {
+                Some(s) => {
+                    let cs = match std::ffi::CString::new(s) {
+                        Ok(cs) => cs,
+                        Err(_) => return 0,
+                    };
+                    unsafe { LoadLibraryA(cs.as_ptr()) as i64 }
+                }
+                None => unsafe { GetModuleHandleA(std::ptr::null()) as i64 },
+            }
+        }
+
+        #[cfg(windows)]
+        fn dlsym(&mut self, handle: i64, name: &str) -> i64 {
+            type Hmodule = *mut std::os::raw::c_void;
+            unsafe extern "system" {
+                fn GetProcAddress(
+                    handle: Hmodule,
+                    name: *const std::os::raw::c_char,
+                ) -> *mut std::os::raw::c_void;
+            }
+            if handle == 0 {
+                return 0;
+            }
+            let cs = match std::ffi::CString::new(name) {
+                Ok(cs) => cs,
+                Err(_) => return 0,
+            };
+            unsafe { GetProcAddress(handle as Hmodule, cs.as_ptr()) as i64 }
+        }
+
+        #[cfg(windows)]
+        fn dlclose(&mut self, handle: i64) -> i64 {
+            type Hmodule = *mut std::os::raw::c_void;
+            unsafe extern "system" {
+                fn FreeLibrary(h: Hmodule) -> std::os::raw::c_int;
+            }
+            if handle == 0 {
+                return -1;
+            }
+            // FreeLibrary returns nonzero on success, zero on
+            // failure -- the inverse of POSIX dlclose. Translate.
+            let r = unsafe { FreeLibrary(handle as Hmodule) };
+            if r != 0 { 0 } else { -1 }
+        }
+
+        #[cfg(windows)]
+        fn dlerror(&mut self) -> Option<String> {
+            unsafe extern "system" {
+                fn GetLastError() -> u32;
+                fn FormatMessageA(
+                    flags: u32,
+                    src: *const std::os::raw::c_void,
+                    msg_id: u32,
+                    lang_id: u32,
+                    buf: *mut std::os::raw::c_char,
+                    size: u32,
+                    args: *mut *mut std::os::raw::c_void,
+                ) -> u32;
+            }
+            const FORMAT_MESSAGE_FROM_SYSTEM: u32 = 0x0000_1000;
+            const FORMAT_MESSAGE_IGNORE_INSERTS: u32 = 0x0000_0200;
+            let err = unsafe { GetLastError() };
+            if err == 0 {
+                return None;
+            }
+            let mut buf = [0u8; 512];
+            let n = unsafe {
+                FormatMessageA(
+                    FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                    std::ptr::null(),
+                    err,
+                    0,
+                    buf.as_mut_ptr() as *mut _,
+                    buf.len() as u32,
+                    std::ptr::null_mut(),
+                )
+            };
+            if n == 0 {
+                return Some(format!("Windows error {err}"));
+            }
+            let slice = &buf[..n as usize];
+            Some(String::from_utf8_lossy(slice).trim_end().to_string())
         }
     }
 }

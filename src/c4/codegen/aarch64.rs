@@ -21,15 +21,16 @@
 //! Anything more sophisticated (real allocation, dead-store elimination)
 //! happens in the optimizer pass before we get here.
 
-// Encoder catalogue + Reg constants are dead-code through M1.3; M1.4
-// is the first phase that wires them into a real lowering pipeline.
-// The encoders are unit-tested directly in the meantime, so the
-// allow is narrow and time-bounded.
+// Encoder catalogue: a few entries are still ahead of where the
+// lowering pass uses them (full op coverage lands in M1.6). Anything
+// referenced from `lower` doesn't trip the allow.
 #![allow(dead_code)]
 
+use alloc::format;
 use alloc::vec::Vec;
 
 use super::super::error::C4Error;
+use super::super::op::Op;
 use super::super::program::Program;
 use super::Build;
 
@@ -138,6 +139,30 @@ pub(super) fn enc_ldp_post(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
         | (rt.0 as u32)
 }
 
+/// `MOV <Xd>, <Xn>` -- alias for `ORR <Xd>, XZR, <Xn>`. Note that ARM
+/// uses two distinct mov forms: this one (register-to-register, where
+/// `Rn` field 31 means XZR) and `add xd, sp, #0` (which is what you
+/// need when the source is SP itself, because in `add` field 31 means
+/// SP). Use [`enc_add_imm`] with `imm=0` for the `mov xd, sp` case.
+pub(super) fn enc_mov_reg(rd: Reg, rn: Reg) -> u32 {
+    0xAA00_0000 | ((rn.0 as u32) << 16) | ((Reg::SP.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `ADD <Xd>, <Xn|SP>, #imm12` -- 12-bit unsigned immediate, no shift.
+/// Larger immediates need either the `lsl #12` shift form or the
+/// load-into-register-and-add long form; we don't need either yet.
+pub(super) fn enc_add_imm(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+    debug_assert!(imm12 < 4096, "add imm: {imm12} > 12-bit max");
+    0x9100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `SUB <Xd>, <Xn|SP>, #imm12` -- 12-bit unsigned immediate, no shift.
+/// Used to allocate stack space in function prologues.
+pub(super) fn enc_sub_imm(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+    debug_assert!(imm12 < 4096, "sub imm: {imm12} > 12-bit max");
+    0xD100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
 /// Build an arbitrary 64-bit immediate into `rd` using a `movz` plus
 /// up to three `movk`s. Picks the shortest sequence by skipping
 /// 16-bit lanes that are zero.
@@ -185,14 +210,106 @@ pub(super) fn emit(code: &mut Vec<u8>, word: u32) {
     code.extend_from_slice(&word.to_le_bytes());
 }
 
-/// Lower a bytecode [`Program`] to AArch64 machine code. Phase 1
-/// stub -- returns a not-yet-implemented error so the CLI flag can be
-/// wired and the rest of the pipeline can be tested before the
-/// real lowering lands in M1.6.
-pub(super) fn lower(_program: &Program) -> Result<Build, C4Error> {
-    Err(C4Error::Compile(
-        "native codegen for macOS aarch64 is not yet implemented (M1.0 scaffolding only)".into(),
-    ))
+/// Lower a bytecode [`Program`] to AArch64 machine code.
+///
+/// M1.4 milestone: only `Op::Ent`, `Op::Imm`, and `Op::Lev` are
+/// lowered -- enough for `int main() { return N; }`. Anything else
+/// returns a not-yet-implemented error so the test suite shows
+/// exactly which fixtures need M1.6's full op coverage.
+///
+/// Calling convention (Phase 1):
+/// * VM accumulator `a` lives in `x19` (callee-saved across calls).
+/// * Each function's prologue is `stp x29, x30, [sp, #-16]!` then
+///   `mov x29, sp`, plus an optional `sub sp, sp, #(locals*16)`.
+/// * Epilogue moves `x19` into `x0` (the AAPCS64 return register),
+///   tears down the frame, and `ret`s.
+pub(super) fn lower(program: &Program) -> Result<Build, C4Error> {
+    let mut code = Vec::new();
+    let mut bytecode_to_native: Vec<usize> = vec![0; program.text.len() + 1];
+
+    let mut pc = 0usize;
+    while pc < program.text.len() {
+        bytecode_to_native[pc] = code.len();
+        let raw = program.text[pc];
+        let op = Op::from_i64(raw).ok_or_else(|| {
+            C4Error::Compile(format!("native codegen: bad opcode at PC {pc}: {raw}"))
+        })?;
+        pc += 1;
+        match op {
+            Op::Ent => {
+                let locals = read_operand(&program.text, &mut pc, "Ent")?;
+                emit_prologue(&mut code, locals);
+            }
+            Op::Imm => {
+                let v = read_operand(&program.text, &mut pc, "Imm")?;
+                load_imm64(&mut code, Reg::X19, v as u64);
+            }
+            Op::Lev => emit_epilogue(&mut code),
+            other => {
+                return Err(C4Error::Compile(format!(
+                    "native codegen (M1.4): op {other:?} not yet supported -- coming in M1.6"
+                )));
+            }
+        }
+    }
+    bytecode_to_native[program.text.len()] = code.len();
+
+    let entry_offset = bytecode_to_native
+        .get(program.entry_pc)
+        .copied()
+        .ok_or_else(|| {
+            C4Error::Compile(format!(
+                "native codegen: entry_pc {} is out of bytecode range",
+                program.entry_pc
+            ))
+        })?;
+
+    Ok(Build {
+        text: code,
+        data: program.data.clone(),
+        entry_offset,
+    })
+}
+
+/// Read the i64 operand following an opcode, advancing `pc` past it.
+/// Errors if the bytecode ends mid-instruction (badly truncated input).
+fn read_operand(text: &[i64], pc: &mut usize, op_name: &str) -> Result<i64, C4Error> {
+    if *pc >= text.len() {
+        return Err(C4Error::Compile(format!(
+            "native codegen: {op_name} missing operand at end of bytecode"
+        )));
+    }
+    let v = text[*pc];
+    *pc += 1;
+    Ok(v)
+}
+
+/// Standard AAPCS64 prologue: save fp/lr in one paired store, set the
+/// new frame pointer, and (if the function declares locals) allocate
+/// the slot space. Locals are 8 bytes each; we round up to 16 to keep
+/// SP 16-byte aligned, which the AAPCS requires at every call site.
+fn emit_prologue(code: &mut Vec<u8>, locals: i64) {
+    emit(code, enc_stp_pre(Reg::X29, Reg::X30, Reg::SP, -16));
+    emit(code, enc_add_imm(Reg::X29, Reg::SP, 0));
+    if locals > 0 {
+        let bytes = (locals as u32) * 8;
+        let aligned = (bytes + 15) & !15;
+        emit(code, enc_sub_imm(Reg::SP, Reg::SP, aligned));
+    }
+}
+
+/// Mirror of [`emit_prologue`]. Move the VM accumulator into `x0`
+/// (the return register), tear down the frame, return.
+///
+/// Phase 1 doesn't yet track the per-function `locals` count to undo
+/// the prologue's `sub sp, ...` -- it relies on `mov sp, x29` (via
+/// `add sp, x29, #0`) to restore SP from the saved frame pointer
+/// before the `ldp` reloads fp/lr.
+fn emit_epilogue(code: &mut Vec<u8>) {
+    emit(code, enc_mov_reg(Reg::X0, Reg::X19));
+    emit(code, enc_add_imm(Reg::SP, Reg::X29, 0));
+    emit(code, enc_ldp_post(Reg::X29, Reg::X30, Reg::SP, 16));
+    emit(code, enc_ret(Reg::X30));
 }
 
 #[cfg(test)]
@@ -264,6 +381,30 @@ mod tests {
     fn ldp_post_fp_lr_plus_16() {
         // ldp x29, x30, [sp], #16  ->  0xA8C17BFD
         assert_eq!(enc_ldp_post(Reg::X29, Reg::X30, Reg::SP, 16), 0xA8C1_7BFD);
+    }
+
+    #[test]
+    fn mov_x0_x19() {
+        // mov x0, x19  =  orr x0, xzr, x19  ->  0xAA1303E0
+        assert_eq!(enc_mov_reg(Reg::X0, Reg::X19), 0xAA13_03E0);
+    }
+
+    #[test]
+    fn add_x29_sp_zero() {
+        // add x29, sp, #0  ->  0x910003FD  (frame-pointer setup)
+        assert_eq!(enc_add_imm(Reg::X29, Reg::SP, 0), 0x9100_03FD);
+    }
+
+    #[test]
+    fn sub_sp_sp_16() {
+        // sub sp, sp, #16  ->  0xD10043FF  (one local slot, padded)
+        assert_eq!(enc_sub_imm(Reg::SP, Reg::SP, 16), 0xD100_43FF);
+    }
+
+    #[test]
+    fn sub_sp_sp_32() {
+        // sub sp, sp, #32  ->  0xD10083FF  (covers the 12-bit shift)
+        assert_eq!(enc_sub_imm(Reg::SP, Reg::SP, 32), 0xD100_83FF);
     }
 
     #[test]

@@ -563,11 +563,26 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
         + main_size;
 
     // ---- step 4: figure out file/vmaddr layout ----
+    //
+    // Apple's `codesign --sign -` runs after we write the binary and
+    // edits it in-place. To register the signature it appends a new
+    // `LC_CODE_SIGNATURE` (16 bytes) to the load-command stream --
+    // overwriting whatever bytes immediately followed our LCs. If our
+    // code starts there, dyld will jump into bytes that are now LC
+    // metadata and SIGILL on the cmd word.
+    //
+    // The fix is the same one Apple's own linker uses: pad between the
+    // end of the LC stream and the start of the code, leaving room for
+    // codesign to grow into. 64 bytes is more than codesign needs for
+    // LC_CODE_SIGNATURE alone, but cheap insurance against future
+    // load commands and keeps the start of code 16-byte aligned.
+    const CODESIGN_LC_PAD: u64 = 64;
 
     let header_plus_lcs = mh_size + sizeofcmds;
-    let entry_file_offset = header_plus_lcs;
+    let entry_file_offset = round_up(header_plus_lcs + CODESIGN_LC_PAD, 16);
+    let lc_pad_bytes = (entry_file_offset - header_plus_lcs) as usize;
     let code_size = code.len() as u64;
-    let text_filesize = round_up(header_plus_lcs + code_size, PAGE_SIZE);
+    let text_filesize = round_up(entry_file_offset + code_size, PAGE_SIZE);
     let text_vmsize = text_filesize;
 
     // __DATA: one page right after __TEXT, with __got at offset 0.
@@ -679,6 +694,11 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
 
     debug_assert_eq!(out.len() as u64, header_plus_lcs);
 
+    // Pad LCs out to entry_file_offset so codesign has room to insert
+    // LC_CODE_SIGNATURE without trampling the code.
+    out.resize(out.len() + lc_pad_bytes, 0);
+    debug_assert_eq!(out.len() as u64, entry_file_offset);
+
     // __TEXT: code, then page-pad.
     out.extend_from_slice(code);
     while (out.len() as u64) < text_filesize {
@@ -759,14 +779,37 @@ mod tests {
     }
 
     #[test]
-    fn sizeofcmds_matches_distance_to_first_byte_after_lcs() {
+    fn lc_main_entry_lands_on_first_instruction_byte() {
+        // Find LC_MAIN, read entryoff, check the byte at that offset
+        // is the first instruction byte we passed in (the `movz x0,
+        // #42` from tiny_build() starts with 0x40 in little-endian).
+        // We have to look up entryoff rather than computing it as
+        // (32 + sizeofcmds), because we leave padding between the LC
+        // stream and the code so codesign can grow the LCs in place
+        // without overwriting the entry point.
         let bytes = write(&tiny_build()).unwrap();
-        let sizeofcmds = read_u32(&bytes, 20);
-        // The byte at file offset (32 + sizeofcmds) is where the code
-        // starts; the first instruction we emitted was 0x40 (the low
-        // byte of `movz x0, #42`).
-        let code_start = 32 + sizeofcmds as usize;
-        assert_eq!(bytes[code_start], 0x40);
+        let sizeofcmds = read_u32(&bytes, 20) as usize;
+        let mut p = 32usize;
+        let lc_end = 32 + sizeofcmds;
+        while p < lc_end {
+            let cmd = read_u32(&bytes, p);
+            let cmdsize = read_u32(&bytes, p + 4) as usize;
+            if cmd == LC_MAIN {
+                let entryoff =
+                    u64::from_le_bytes(bytes[p + 8..p + 16].try_into().unwrap()) as usize;
+                assert_eq!(
+                    bytes[entryoff], 0x40,
+                    "first byte at entry offset {entryoff:#x} != 0x40"
+                );
+                assert!(
+                    entryoff > lc_end,
+                    "entry offset {entryoff:#x} should sit past LC stream end {lc_end:#x}"
+                );
+                return;
+            }
+            p += cmdsize;
+        }
+        panic!("LC_MAIN not found");
     }
 
     #[test]

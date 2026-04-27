@@ -1,9 +1,10 @@
 //! x86_64 instruction encoder + bytecode -> x86_64 lowering.
 //!
-//! M3.1 (this file, current state): just enough of the encoder
-//! catalogue and the lowering pass to produce a "return 42" ELF that
-//! exits cleanly. Full Op coverage and libc/data fixups land in
-//! follow-on milestones (see the project memory).
+//! M3.2 covers every non-syscall Op (arithmetic, control flow,
+//! comparisons, loads/stores, locals, function calls direct and
+//! indirect). Syscall ops still error out with a "M3.4 will land
+//! libc binding" message; data-segment + function-pointer fixups
+//! are M3.3.
 //!
 //! ## Register convention
 //!
@@ -261,6 +262,238 @@ pub(super) fn emit_add_rsp_imm32(code: &mut Vec<u8>, imm: u32) {
     emit_u32(code, imm);
 }
 
+// ---- Two-register integer ALU. The `r/m, r` family of opcodes:
+//      ADD=01 SUB=29 AND=21 OR=09 XOR=31 CMP=39. ModR/M.reg=src,
+//      r/m=dst.
+
+/// `ADD dst, src` -- 64-bit, `dst += src`.
+pub(super) fn emit_add_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_alu_rr(code, 0x01, dst, src);
+}
+
+/// `SUB dst, src` -- 64-bit, `dst -= src`.
+pub(super) fn emit_sub_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_alu_rr(code, 0x29, dst, src);
+}
+
+/// `AND dst, src` -- 64-bit, `dst &= src`.
+pub(super) fn emit_and_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_alu_rr(code, 0x21, dst, src);
+}
+
+/// `OR dst, src` -- 64-bit, `dst |= src`.
+pub(super) fn emit_or_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_alu_rr(code, 0x09, dst, src);
+}
+
+/// `XOR dst, src` -- 64-bit, `dst ^= src`.
+pub(super) fn emit_xor_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_alu_rr(code, 0x31, dst, src);
+}
+
+/// `CMP dst, src` -- 64-bit; sets flags = `dst - src` without storing.
+pub(super) fn emit_cmp_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_alu_rr(code, 0x39, dst, src);
+}
+
+fn emit_alu_rr(code: &mut Vec<u8>, opcode: u8, dst: Reg, src: Reg) {
+    emit_byte(code, rex(true, src.high(), false, dst.high()));
+    emit_byte(code, opcode);
+    emit_byte(code, modrm(0b11, src.lo(), dst.lo()));
+}
+
+/// `IMUL dst, src` -- two-operand signed multiply, `dst = dst * src`.
+/// Encoding: `REX.W + 0F AF /r`.
+pub(super) fn emit_imul_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_byte(code, rex(true, dst.high(), false, src.high()));
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0xAF);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
+/// `IDIV r/m64` -- signed divide `rdx:rax / r`. Quotient -> rax,
+/// remainder -> rdx. The caller must sign-extend rax into rdx with
+/// [`emit_cqo`] first.
+pub(super) fn emit_idiv_r(code: &mut Vec<u8>, divisor: Reg) {
+    emit_byte(code, rex(true, false, false, divisor.high()));
+    emit_byte(code, 0xF7);
+    emit_byte(code, modrm(0b11, 7, divisor.lo()));
+}
+
+/// `CQO` (`CDQE` for 32-bit; we want the 64-bit form) -- sign-extend
+/// rax into rdx:rax. Encoding: `REX.W + 99`.
+pub(super) fn emit_cqo(code: &mut Vec<u8>) {
+    emit_byte(code, rex(true, false, false, false));
+    emit_byte(code, 0x99);
+}
+
+// ---- Shifts. The `D3` opcode shifts by `cl`; `C1` shifts by an
+//      8-bit immediate. We expose both forms because the optimizer
+//      emits constant-shift IR ops (`ShlI N`, `ShrI N`) that benefit
+//      from the immediate path.
+
+/// `SHL r/m64, cl`. ModR/M.reg = 4. `cl` is implicit.
+pub(super) fn emit_shl_r_cl(code: &mut Vec<u8>, dst: Reg) {
+    emit_byte(code, rex(true, false, false, dst.high()));
+    emit_byte(code, 0xD3);
+    emit_byte(code, modrm(0b11, 4, dst.lo()));
+}
+
+/// `SAR r/m64, cl` -- arithmetic right shift (signed; sign bit
+/// replicates). ModR/M.reg = 7.
+pub(super) fn emit_sar_r_cl(code: &mut Vec<u8>, dst: Reg) {
+    emit_byte(code, rex(true, false, false, dst.high()));
+    emit_byte(code, 0xD3);
+    emit_byte(code, modrm(0b11, 7, dst.lo()));
+}
+
+/// `SHL r/m64, imm8`. ModR/M.reg = 4, imm at end.
+pub(super) fn emit_shl_r_imm8(code: &mut Vec<u8>, dst: Reg, imm: u8) {
+    emit_byte(code, rex(true, false, false, dst.high()));
+    emit_byte(code, 0xC1);
+    emit_byte(code, modrm(0b11, 4, dst.lo()));
+    emit_byte(code, imm);
+}
+
+/// `SAR r/m64, imm8`. ModR/M.reg = 7, imm at end.
+pub(super) fn emit_sar_r_imm8(code: &mut Vec<u8>, dst: Reg, imm: u8) {
+    emit_byte(code, rex(true, false, false, dst.high()));
+    emit_byte(code, 0xC1);
+    emit_byte(code, modrm(0b11, 7, dst.lo()));
+    emit_byte(code, imm);
+}
+
+// ---- Immediate-form ALU. `ADD r/m64, imm32` / `SUB r/m64, imm32`,
+//      etc. All share opcode `81` with a different /N digit.
+
+fn emit_alu_r_imm32(code: &mut Vec<u8>, digit: u8, dst: Reg, imm: i32) {
+    emit_byte(code, rex(true, false, false, dst.high()));
+    emit_byte(code, 0x81);
+    emit_byte(code, modrm(0b11, digit, dst.lo()));
+    emit_i32(code, imm);
+}
+
+/// `ADD r64, imm32` -- 32-bit immediate, sign-extended to 64.
+pub(super) fn emit_add_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
+    emit_alu_r_imm32(code, 0, dst, imm);
+}
+
+/// `SUB r64, imm32`.
+pub(super) fn emit_sub_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
+    emit_alu_r_imm32(code, 5, dst, imm);
+}
+
+/// `AND r64, imm32`.
+pub(super) fn emit_and_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
+    emit_alu_r_imm32(code, 4, dst, imm);
+}
+
+/// `OR r64, imm32`.
+pub(super) fn emit_or_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
+    emit_alu_r_imm32(code, 1, dst, imm);
+}
+
+/// `XOR r64, imm32`.
+pub(super) fn emit_xor_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
+    emit_alu_r_imm32(code, 6, dst, imm);
+}
+
+/// `CMP r64, imm32` -- sets flags = `dst - imm`.
+pub(super) fn emit_cmp_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
+    emit_alu_r_imm32(code, 7, dst, imm);
+}
+
+// ---- 8-bit memory + setcc. Used for `Op::Lc` / `Op::Sc` and for
+//      the comparison ops that produce 0/1 in the low byte.
+
+/// Condition codes for `Jcc` and `setcc`. Values match Intel's CC
+/// encoding so the opcode byte for `Jcc` is `0F 8X+cc` and for
+/// `setcc` it is `0F 9X+cc`.
+#[derive(Debug, Clone, Copy)]
+pub(super) enum Cc {
+    /// Equal / zero.
+    E = 0x4,
+    /// Not equal.
+    Ne = 0x5,
+    /// Less than (signed).
+    L = 0xC,
+    /// Greater than (signed).
+    G = 0xF,
+    /// Less than or equal (signed).
+    Le = 0xE,
+    /// Greater than or equal (signed).
+    Ge = 0xD,
+}
+
+/// `SETcc r/m8` -- write byte = 1 if condition holds, else 0. The
+/// upper bits of the destination are *not* zeroed -- the caller is
+/// expected to zero the register first (we use `xor r, r`).
+pub(super) fn emit_setcc_r8(code: &mut Vec<u8>, cc: Cc, dst: Reg) {
+    // SET<cc> r/m8 needs a REX prefix to address SPL/BPL/SIL/DIL or
+    // R8B..R15B; using REX with the low GPRs disables the
+    // AH/CH/DH/BH high-byte aliases, which is exactly what we want.
+    emit_byte(code, rex(false, false, false, dst.high()));
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x90 | (cc as u8));
+    emit_byte(code, modrm(0b11, 0, dst.lo()));
+}
+
+/// `MOVZX r64, byte ptr [base + disp]` -- load a byte zero-extended
+/// into a 64-bit register. Encoding: `REX.W + 0F B6 /r`.
+pub(super) fn emit_movzx_r_mem8(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+    emit_byte(code, rex(true, dst.high(), false, base.high()));
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0xB6);
+    emit_modrm_mem(code, dst, base, disp);
+}
+
+/// `MOVZX r64, r/m8` -- zero-extend a byte register into a 64-bit
+/// register. Encoding: `REX.W + 0F B6 /r` with `mod=11`. The REX
+/// prefix also disables the AH/CH/DH/BH high-byte aliases so we
+/// can treat any of the 16 GPRs as an 8-bit source.
+pub(super) fn emit_movzx_r_r8(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_byte(code, rex(true, dst.high(), false, src.high()));
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0xB6);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
+/// `MOV byte ptr [base + disp], r8` -- store the low byte of `src`.
+/// Encoding: `MOV r/m8, r8` = `88 /r`. REX is mandatory when storing
+/// from one of the upper or new low-byte registers.
+pub(super) fn emit_mov_mem8_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
+    emit_byte(code, rex(false, src.high(), false, base.high()));
+    emit_byte(code, 0x88);
+    emit_modrm_mem(code, src, base, disp);
+}
+
+// ---- Branches. All forms encode the displacement relative to the
+//      *byte after* the instruction. `JMP rel32` is 5 bytes; `Jcc
+//      rel32` is 6.
+
+/// `JMP rel32` -- unconditional branch, 5 bytes.
+pub(super) fn emit_jmp_rel32(code: &mut Vec<u8>, rel32: i32) {
+    emit_byte(code, 0xE9);
+    emit_i32(code, rel32);
+}
+
+/// `Jcc rel32` -- conditional branch, 6 bytes.
+pub(super) fn emit_jcc_rel32(code: &mut Vec<u8>, cc: Cc, rel32: i32) {
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x80 | (cc as u8));
+    emit_i32(code, rel32);
+}
+
+/// `CALL r64` -- indirect call through a register. Encoding:
+/// `FF /2`.
+pub(super) fn emit_call_r(code: &mut Vec<u8>, target: Reg) {
+    if target.high() {
+        emit_byte(code, rex(false, false, false, true));
+    }
+    emit_byte(code, 0xFF);
+    emit_byte(code, modrm(0b11, 2, target.lo()));
+}
+
 // ------------------------------------------------------------------
 // ModR/M + SIB + displacement encoding for memory operands.
 //
@@ -361,10 +594,44 @@ pub(super) fn emit_start_stub(code: &mut Vec<u8>, main_offset_in_code: u64) {
 }
 
 // ------------------------------------------------------------------
-// Lowering pass. M3.1 only handles Op::Ent / Op::Imm / Op::Lev --
-// enough for `int main() { return 42; }`. Everything else returns a
-// "not yet implemented" error so we don't ship a binary that
-// silently misbehaves.
+// Branch fixups. Bytecode branches target absolute bytecode PCs, but
+// the native PC of those targets isn't known until the whole function
+// body is laid out. Two-pass approach mirrors aarch64.rs: emit a
+// 5-byte (jmp / call) or 6-byte (jcc) placeholder, record (offset,
+// target bc PC, kind), patch after the walk.
+// ------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy)]
+enum BranchKind {
+    Jmp,
+    Jcc(Cc),
+    Call,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Fixup {
+    /// Byte offset within `code` of the placeholder's first byte.
+    native_offset: usize,
+    target_bytecode_pc: usize,
+    kind: BranchKind,
+}
+
+/// Translate a c4 `Op::Lea` offset (in 8-byte VM-slot units) into
+/// the matching native byte offset from rbp. Same convention as the
+/// aarch64 backend: locals (val < 2) keep `* 8`; args (val >= 2)
+/// switch to `* 16` because Op::Psh writes 16-byte slots so SP stays
+/// aligned at libc-call sites.
+fn lea_offset_bytes(offset: i64) -> i64 {
+    if offset >= 2 {
+        (offset - 1) * 16
+    } else {
+        offset * 8
+    }
+}
+
+// ------------------------------------------------------------------
+// Lowering pass. Walks the bytecode once, emits native code per Op,
+// records branch fixups for later patching. Mirrors aarch64::lower.
 // ------------------------------------------------------------------
 
 pub(super) fn lower(program: &Program, target: Target) -> Result<Build, C4Error> {
@@ -372,8 +639,9 @@ pub(super) fn lower(program: &Program, target: Target) -> Result<Build, C4Error>
 
     let mut code: Vec<u8> = Vec::new();
     let mut bytecode_to_native: Vec<usize> = alloc::vec![usize::MAX; program.text.len() + 1];
+    let mut fixups: Vec<Fixup> = Vec::new();
 
-    // Walk the bytecode, dispatching per Op.
+    let mut in_main = false;
     let mut pc = 0usize;
     while pc < program.text.len() {
         let op_pc = pc;
@@ -385,9 +653,14 @@ pub(super) fn lower(program: &Program, target: Target) -> Result<Build, C4Error>
             ))
         })?;
         pc += 1;
-        lower_op(op, &program.text, &mut pc, &mut code)?;
+        if matches!(op, Op::Ent) {
+            in_main = op_pc == program.entry_pc;
+        }
+        lower_op(op, &program.text, &mut pc, &mut code, &mut fixups, in_main)?;
     }
     bytecode_to_native[program.text.len()] = code.len();
+
+    apply_fixups(&mut code, &fixups, &bytecode_to_native, program.text.len())?;
 
     let entry_offset = bytecode_to_native
         .get(program.entry_pc)
@@ -410,30 +683,352 @@ pub(super) fn lower(program: &Program, target: Target) -> Result<Build, C4Error>
     })
 }
 
-fn lower_op(op: Op, text: &[i64], pc: &mut usize, code: &mut Vec<u8>) -> Result<(), C4Error> {
+fn apply_fixups(
+    code: &mut [u8],
+    fixups: &[Fixup],
+    bc_to_native: &[usize],
+    bc_len: usize,
+) -> Result<(), C4Error> {
+    for f in fixups {
+        if f.target_bytecode_pc > bc_len {
+            return Err(C4Error::Compile(format!(
+                "native codegen (x86_64): branch target {} past end of bytecode",
+                f.target_bytecode_pc
+            )));
+        }
+        let target = bc_to_native[f.target_bytecode_pc];
+        if target == usize::MAX {
+            return Err(C4Error::Compile(format!(
+                "native codegen (x86_64): branch target {} did not land on an instruction",
+                f.target_bytecode_pc
+            )));
+        }
+        // The rel32 displacement is computed from the byte *after*
+        // the placeholder. Layouts:
+        //   JMP rel32:  E9 dd dd dd dd        (5 bytes, rel32 at +1)
+        //   Jcc rel32:  0F 8x dd dd dd dd     (6 bytes, rel32 at +2)
+        //   CALL rel32: E8 dd dd dd dd        (5 bytes, rel32 at +1)
+        let (placeholder_len, rel32_offset) = match f.kind {
+            BranchKind::Jmp => (5usize, 1usize),
+            BranchKind::Jcc(_) => (6usize, 2usize),
+            BranchKind::Call => (5usize, 1usize),
+        };
+        let after = (f.native_offset + placeholder_len) as i64;
+        let rel32 = (target as i64 - after) as i32;
+        let lo = f.native_offset + rel32_offset;
+        code[lo..lo + 4].copy_from_slice(&rel32.to_le_bytes());
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn lower_op(
+    op: Op,
+    text: &[i64],
+    pc: &mut usize,
+    code: &mut Vec<u8>,
+    fixups: &mut Vec<Fixup>,
+    in_main: bool,
+) -> Result<(), C4Error> {
     match op {
         // ---- Function frame ----
         Op::Ent => {
             let locals = read_operand(text, pc, "Ent")?;
-            emit_prologue(code, locals);
+            emit_prologue(code, locals, in_main);
         }
-        Op::Lev => {
-            emit_epilogue(code);
+        Op::Lev => emit_epilogue(code, in_main),
+        Op::Adj => {
+            // Drop N pushed slots (16 bytes each, matching Op::Psh).
+            let n = read_operand(text, pc, "Adj")?;
+            if n != 0 {
+                emit_add_rsp_imm32(code, (n as u32) * 16);
+            }
         }
 
-        // ---- Constants ----
+        // ---- Constants and addresses ----
         Op::Imm => {
             let v = read_operand(text, pc, "Imm")?;
             emit_mov_r_imm64(code, Reg::R13, v);
         }
+        Op::Lea => {
+            // a = bp + lea_offset_bytes(off). lea r13, [rbp + N].
+            let off = read_operand(text, pc, "Lea")?;
+            let bytes = lea_offset_bytes(off) as i32;
+            emit_lea_r_mem(code, Reg::R13, Reg::RBP, bytes);
+        }
 
-        // Everything else lands here. M3.2+ will fill these in.
-        _ => {
+        // ---- Memory loads / stores ----
+        Op::Li => {
+            // r13 = *(i64*)r13. r13 is the BP-aliased register, so
+            // emit_modrm_mem encodes [r13] as mod=01 disp8=0.
+            emit_mov_r_mem(code, Reg::R13, Reg::R13, 0);
+        }
+        Op::Lc => emit_movzx_r_mem8(code, Reg::R13, Reg::R13, 0),
+        Op::Si => {
+            pop_into(code, Reg::R10);
+            emit_mov_mem_r(code, Reg::R10, 0, Reg::R13);
+        }
+        Op::Sc => {
+            pop_into(code, Reg::R10);
+            emit_mov_mem8_r(code, Reg::R10, 0, Reg::R13);
+        }
+        Op::Psh => {
+            // Push r13 onto the VM stack in a 16-byte slot. We claim
+            // 16 bytes per push so rsp stays 16-byte aligned across
+            // any libc call we might issue later.
+            emit_sub_rsp_imm32(code, 16);
+            emit_mov_mem_r(code, Reg::RSP, 0, Reg::R13);
+        }
+
+        // ---- Bitwise + arithmetic. The c4 VM does `popped <op> a`
+        //      with the popped value as LHS. On x86_64: pop into r10,
+        //      perform `r10 op= r13`, mov r10 -> r13 to update the
+        //      accumulator.
+        Op::Or => binop_with_pop(code, emit_or_rr),
+        Op::Xor => binop_with_pop(code, emit_xor_rr),
+        Op::And => binop_with_pop(code, emit_and_rr),
+        Op::Add => binop_with_pop(code, emit_add_rr),
+        Op::Sub => binop_with_pop(code, emit_sub_rr),
+        Op::Mul => binop_with_pop(code, emit_imul_rr),
+
+        // ---- Comparisons. cmp popped, r13 sets flags so the cc
+        //      reflects `popped <cmp> r13`. Then xor r13d, r13d to
+        //      zero the result, and setcc r13b for the 0/1 byte.
+        Op::Eq => cmp_with_pop(code, Cc::E),
+        Op::Ne => cmp_with_pop(code, Cc::Ne),
+        Op::Lt => cmp_with_pop(code, Cc::L),
+        Op::Gt => cmp_with_pop(code, Cc::G),
+        Op::Le => cmp_with_pop(code, Cc::Le),
+        Op::Ge => cmp_with_pop(code, Cc::Ge),
+
+        // ---- Shifts. Pop into r10, shift r10 by cl (=r13 lo byte),
+        //      then move r10 back into r13.
+        Op::Shl => shift_with_pop(code, /*arithmetic=*/ false),
+        Op::Shr => shift_with_pop(code, /*arithmetic=*/ true),
+
+        Op::Div => div_or_mod_with_pop(code, /*want_remainder=*/ false),
+        Op::Mod => div_or_mod_with_pop(code, /*want_remainder=*/ true),
+
+        // ---- Control flow ----
+        Op::Jmp => {
+            let target = read_operand(text, pc, "Jmp")? as usize;
+            fixups.push(Fixup {
+                native_offset: code.len(),
+                target_bytecode_pc: target,
+                kind: BranchKind::Jmp,
+            });
+            emit_jmp_rel32(code, 0);
+        }
+        Op::Bz => {
+            emit_cmp_r_imm32(code, Reg::R13, 0);
+            let target = read_operand(text, pc, "Bz")? as usize;
+            fixups.push(Fixup {
+                native_offset: code.len(),
+                target_bytecode_pc: target,
+                kind: BranchKind::Jcc(Cc::E),
+            });
+            emit_jcc_rel32(code, Cc::E, 0);
+        }
+        Op::Bnz => {
+            emit_cmp_r_imm32(code, Reg::R13, 0);
+            let target = read_operand(text, pc, "Bnz")? as usize;
+            fixups.push(Fixup {
+                native_offset: code.len(),
+                target_bytecode_pc: target,
+                kind: BranchKind::Jcc(Cc::Ne),
+            });
+            emit_jcc_rel32(code, Cc::Ne, 0);
+        }
+        Op::Jsr => {
+            let target = read_operand(text, pc, "Jsr")? as usize;
+            fixups.push(Fixup {
+                native_offset: code.len(),
+                target_bytecode_pc: target,
+                kind: BranchKind::Call,
+            });
+            emit_call_rel32(code, 0);
+            // Callee returned with rax = result; copy into the
+            // accumulator.
+            emit_mov_rr(code, Reg::R13, Reg::RAX);
+        }
+        Op::Jsri => {
+            // Indirect call: target in r13, args already pushed onto
+            // the VM stack in 16-byte slots. As on aarch64, peek for
+            // an Op::Adj N and load args into rdi..r9 *in addition
+            // to* leaving them on the stack -- c4 callees ignore the
+            // registers; libc / dlsym'd callees expect them per
+            // System V ABI.
+            let nargs = match Op::from_i64(text.get(*pc).copied().unwrap_or(0)) {
+                Some(Op::Adj) => text[*pc + 1] as usize,
+                _ => 0,
+            };
+            if nargs > 6 {
+                return Err(C4Error::Compile(format!(
+                    "native codegen (x86_64): Jsri arg count {nargs} exceeds 6 (rdi..r9)"
+                )));
+            }
+            let arg_regs = [Reg::RDI, Reg::RSI, Reg::RDX, Reg::RCX, Reg::R8, Reg::R9];
+            for (i, &r) in arg_regs.iter().take(nargs).enumerate() {
+                let off = ((nargs - 1 - i) as i32) * 16;
+                emit_mov_r_mem(code, r, Reg::RSP, off);
+            }
+            // Move r13 into r10 so the callee doesn't trample it.
+            emit_mov_rr(code, Reg::R10, Reg::R13);
+            emit_call_r(code, Reg::R10);
+            emit_mov_rr(code, Reg::R13, Reg::RAX);
+        }
+
+        // ---- Immediate-form ALU (optimizer-emitted). Each takes
+        //      one operand and folds with the accumulator.
+        Op::AddI => {
+            let n = read_operand(text, pc, "AddI")? as i32;
+            emit_add_r_imm32(code, Reg::R13, n);
+        }
+        Op::SubI => {
+            let n = read_operand(text, pc, "SubI")? as i32;
+            emit_sub_r_imm32(code, Reg::R13, n);
+        }
+        Op::AndI => {
+            let n = read_operand(text, pc, "AndI")? as i32;
+            emit_and_r_imm32(code, Reg::R13, n);
+        }
+        Op::OrI => {
+            let n = read_operand(text, pc, "OrI")? as i32;
+            emit_or_r_imm32(code, Reg::R13, n);
+        }
+        Op::XorI => {
+            let n = read_operand(text, pc, "XorI")? as i32;
+            emit_xor_r_imm32(code, Reg::R13, n);
+        }
+        Op::MulI => {
+            // `imul r64, r/m64, imm32` -- 3-operand form; let dst
+            // and src both be r13. Encoding: REX.W + 69 /r id.
+            let n = read_operand(text, pc, "MulI")? as i32;
+            emit_byte(code, rex(true, Reg::R13.high(), false, Reg::R13.high()));
+            emit_byte(code, 0x69);
+            emit_byte(code, modrm(0b11, Reg::R13.lo(), Reg::R13.lo()));
+            emit_i32(code, n);
+        }
+        Op::ShlI => {
+            let n = read_operand(text, pc, "ShlI")? as u32;
+            emit_shl_r_imm8(code, Reg::R13, (n & 0x3f) as u8);
+        }
+        Op::ShrI => {
+            let n = read_operand(text, pc, "ShrI")? as u32;
+            emit_sar_r_imm8(code, Reg::R13, (n & 0x3f) as u8);
+        }
+        Op::EqI => imm_cmp(code, text, pc, "EqI", Cc::E)?,
+        Op::NeI => imm_cmp(code, text, pc, "NeI", Cc::Ne)?,
+        Op::LtI => imm_cmp(code, text, pc, "LtI", Cc::L)?,
+        Op::GtI => imm_cmp(code, text, pc, "GtI", Cc::G)?,
+        Op::LeI => imm_cmp(code, text, pc, "LeI", Cc::Le)?,
+        Op::GeI => imm_cmp(code, text, pc, "GeI", Cc::Ge)?,
+        Op::LdLocI => {
+            let off = read_operand(text, pc, "LdLocI")?;
+            let bytes = lea_offset_bytes(off) as i32;
+            emit_mov_r_mem(code, Reg::R13, Reg::RBP, bytes);
+        }
+        Op::LdLocC => {
+            let off = read_operand(text, pc, "LdLocC")?;
+            let bytes = lea_offset_bytes(off) as i32;
+            emit_movzx_r_mem8(code, Reg::R13, Reg::RBP, bytes);
+        }
+
+        // ---- Syscalls -- M3.4 will route these through the GOT.
+        Op::Open
+        | Op::Read
+        | Op::Clos
+        | Op::Prtf
+        | Op::Malc
+        | Op::Free
+        | Op::Mset
+        | Op::Mcmp
+        | Op::Mcpy
+        | Op::Mpro
+        | Op::Exit
+        | Op::Write
+        | Op::Genv
+        | Op::Senv
+        | Op::Dlop
+        | Op::Dlsm
+        | Op::Dlcl
+        | Op::Dler => {
             return Err(C4Error::Compile(format!(
-                "native codegen (x86_64): {op:?} not yet implemented (M3.1 covers Ent/Imm/Lev only)"
+                "native codegen (x86_64): {op:?} requires libc binding (lands in M3.4)"
             )));
         }
     }
+    Ok(())
+}
+
+/// Pop the top of the VM stack into `dst`. Mirrors the aarch64
+/// `enc_ldr_post(Reg::X16, Reg::SP, 16)` shape -- load the value,
+/// then bump rsp by 16.
+fn pop_into(code: &mut Vec<u8>, dst: Reg) {
+    emit_mov_r_mem(code, dst, Reg::RSP, 0);
+    emit_add_rsp_imm32(code, 16);
+}
+
+/// Pop, perform `r10 op= r13`, then mov result back into r13.
+fn binop_with_pop<F: Fn(&mut Vec<u8>, Reg, Reg)>(code: &mut Vec<u8>, op_rr: F) {
+    pop_into(code, Reg::R10);
+    op_rr(code, Reg::R10, Reg::R13);
+    emit_mov_rr(code, Reg::R13, Reg::R10);
+}
+
+/// Pop, compare, set r13 = 0/1 by condition. The setcc/movzx pair
+/// avoids clobbering the cmp's flags between cmp and setcc -- we
+/// can't `xor r13, r13` first because xor sets the flags.
+fn cmp_with_pop(code: &mut Vec<u8>, cc: Cc) {
+    pop_into(code, Reg::R10);
+    emit_cmp_rr(code, Reg::R10, Reg::R13);
+    emit_setcc_r8(code, cc, Reg::R10);
+    emit_movzx_r_r8(code, Reg::R13, Reg::R10);
+}
+
+/// Pop into r10, shift r10 by cl (lo byte of r13), mov r10 to r13.
+fn shift_with_pop(code: &mut Vec<u8>, arithmetic_right: bool) {
+    pop_into(code, Reg::R10);
+    // mov rcx, r13 -- the shift count register is fixed to cl.
+    emit_mov_rr(code, Reg::RCX, Reg::R13);
+    if arithmetic_right {
+        emit_sar_r_cl(code, Reg::R10);
+    } else {
+        emit_shl_r_cl(code, Reg::R10);
+    }
+    emit_mov_rr(code, Reg::R13, Reg::R10);
+}
+
+/// Signed divide. c4 semantics: `popped / r13` (or `% r13`). On
+/// x86_64: load popped into rax, sign-extend to rdx:rax via cqo,
+/// idiv divisor (we keep the divisor in r10 because rax/rdx can't
+/// host it), then move rax (quotient) or rdx (remainder) into r13.
+fn div_or_mod_with_pop(code: &mut Vec<u8>, want_remainder: bool) {
+    // The divisor must not be in rax or rdx (idiv overwrites both).
+    emit_mov_rr(code, Reg::R10, Reg::R13); // r10 = divisor
+    pop_into(code, Reg::RAX); // rax = dividend
+    emit_cqo(code); // rdx:rax = sign-extend rax
+    emit_idiv_r(code, Reg::R10);
+    if want_remainder {
+        emit_mov_rr(code, Reg::R13, Reg::RDX);
+    } else {
+        emit_mov_rr(code, Reg::R13, Reg::RAX);
+    }
+}
+
+/// Comparison-with-immediate optimizer-emitted op: `cmp r13, imm32;
+/// setcc r13b` (with a zeroing xor first to clear high bits).
+fn imm_cmp(
+    code: &mut Vec<u8>,
+    text: &[i64],
+    pc: &mut usize,
+    op_name: &str,
+    cc: Cc,
+) -> Result<(), C4Error> {
+    let n = read_operand(text, pc, op_name)? as i32;
+    emit_cmp_r_imm32(code, Reg::R13, n);
+    emit_setcc_r8(code, cc, Reg::R10);
+    emit_movzx_r_r8(code, Reg::R13, Reg::R10);
     Ok(())
 }
 
@@ -450,26 +1045,47 @@ fn read_operand(text: &[i64], pc: &mut usize, op_name: &str) -> Result<i64, C4Er
 
 /// Standard System V ABI prologue: save rbp, set new frame, allocate
 /// locals (rounded up to keep rsp 16-byte aligned at any call site).
-fn emit_prologue(code: &mut Vec<u8>, locals: i64) {
+///
+/// For the program's entry function (`is_main = true`) we additionally
+/// push rdi (argc) then rsi (argv) into their own 16-byte slots, the
+/// same shape user-function args use. After the prologue's `push rbp`
+/// the layout is:
+///   rbp + 16: argv  (top arg, c4 val=2)
+///   rbp + 32: argc  (deeper arg, c4 val=3)
+/// matching [`lea_offset_bytes`].
+fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool) {
+    if is_main {
+        // Push argc (rdi) first (deeper), then argv (rsi) (shallower).
+        // 16-byte slots so the layout matches the user-function arg
+        // convention.
+        emit_sub_rsp_imm32(code, 16);
+        emit_mov_mem_r(code, Reg::RSP, 0, Reg::RDI);
+        emit_sub_rsp_imm32(code, 16);
+        emit_mov_mem_r(code, Reg::RSP, 0, Reg::RSI);
+    }
     emit_push_r(code, Reg::RBP);
     emit_mov_rr(code, Reg::RBP, Reg::RSP);
     if locals > 0 {
         let bytes = (locals as u32) * 8;
-        // Keep rsp 16-aligned. After `push rbp` rsp was 8-misaligned
-        // (call instruction pushed a 8-byte return addr, then we
-        // pushed rbp) -- 16-byte total. So local space rounded up to
-        // 16 keeps the alignment.
+        // Keep rsp 16-aligned. After `call` (pushed return addr,
+        // 8 bytes) and `push rbp` (8 more) rsp is at -16 mod 16
+        // again. Round local space up to 16 to preserve that.
         let aligned = (bytes + 15) & !15;
         emit_sub_rsp_imm32(code, aligned);
     }
 }
 
 /// Mirror of [`emit_prologue`]. Move the VM accumulator into rax
-/// (return register), tear down the frame, return.
-fn emit_epilogue(code: &mut Vec<u8>) {
+/// (return register), tear down the frame, return. For main we also
+/// drop the two 16-byte argc/argv slots so rsp is back to what
+/// `_start` handed us.
+fn emit_epilogue(code: &mut Vec<u8>, is_main: bool) {
     emit_mov_rr(code, Reg::RAX, Reg::R13);
     emit_mov_rr(code, Reg::RSP, Reg::RBP);
     emit_pop_r(code, Reg::RBP);
+    if is_main {
+        emit_add_rsp_imm32(code, 32);
+    }
     emit_ret(code);
 }
 

@@ -163,6 +163,256 @@ pub(super) fn enc_sub_imm(rd: Reg, rn: Reg, imm12: u32) -> u32 {
     0xD100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+// ---- 3-register arithmetic / bitwise (shifted-register form, no shift). ----
+// Each follows the same template: a base opcode | Rm<<16 | Rn<<5 | Rd.
+// Verified against `clang -c -arch arm64` on Apple Silicon.
+
+/// `ADD <Xd>, <Xn>, <Xm>` -- 64-bit register add, no shift.
+pub(super) fn enc_add_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    0x8B00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `SUB <Xd>, <Xn>, <Xm>` -- 64-bit register subtract.
+pub(super) fn enc_sub_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    0xCB00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `AND <Xd>, <Xn>, <Xm>` -- bitwise and.
+pub(super) fn enc_and_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    0x8A00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `ORR <Xd>, <Xn>, <Xm>` -- bitwise or.
+pub(super) fn enc_orr_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    0xAA00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `EOR <Xd>, <Xn>, <Xm>` -- bitwise xor.
+pub(super) fn enc_eor_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    0xCA00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `MUL <Xd>, <Xn>, <Xm>` -- alias for `MADD Xd, Xn, Xm, XZR`.
+/// We bake in `Ra = XZR (31)` so this stays a 3-register helper.
+pub(super) fn enc_mul(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    0x9B00_7C00 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `SDIV <Xd>, <Xn>, <Xm>` -- signed integer division. Pairs with
+/// [`enc_msub`] when computing modulo.
+pub(super) fn enc_sdiv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    0x9AC0_0C00 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `MSUB <Xd>, <Xn>, <Xm>, <Xa>` -- `Xd = Xa - (Xn * Xm)`. The
+/// AArch64 idiom for `mod` is `sdiv q, a, b ; msub r, q, b, a`,
+/// which yields `r = a - (a/b)*b`.
+pub(super) fn enc_msub(rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> u32 {
+    0x9B00_8000
+        | ((rm.0 as u32) << 16)
+        | ((ra.0 as u32) << 10)
+        | ((rn.0 as u32) << 5)
+        | (rd.0 as u32)
+}
+
+/// `LSLV <Xd>, <Xn>, <Xm>` -- variable left shift, masking the shift
+/// amount to 6 bits (i.e., shifting by `Xm % 64`).
+pub(super) fn enc_lslv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    0x9AC0_2000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `LSRV <Xd>, <Xn>, <Xm>` -- variable logical right shift.
+pub(super) fn enc_lsrv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    0x9AC0_2400 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `ASRV <Xd>, <Xn>, <Xm>` -- variable arithmetic right shift. The
+/// signed counterpart to `LSRV`; we use it for the c4 `>>` operator
+/// since c4 ints are signed.
+pub(super) fn enc_asrv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    0x9AC0_2800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+// ---- Comparisons + condition-set. ----
+
+/// `CMP <Xn>, <Xm>` = `SUBS XZR, <Xn>, <Xm>` -- compare two registers,
+/// updating the NZCV flags but discarding the result.
+pub(super) fn enc_cmp_reg(rn: Reg, rm: Reg) -> u32 {
+    0xEB00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (Reg::SP.0 as u32)
+}
+
+/// AArch64 condition codes -- the 4-bit field that follows comparisons
+/// and conditional moves. Names match the ARM ARM.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Cond {
+    Eq = 0,
+    Ne = 1,
+    Lt = 0xB,
+    Gt = 0xC,
+    Le = 0xD,
+    Ge = 0xA,
+}
+
+impl Cond {
+    /// CSET emits `CSINC Xd, XZR, XZR, INVERT(cond)`. The ARM
+    /// invariant is that bit 0 of the condition field flips meaning
+    /// (EQ <-> NE, LT <-> GE, GT <-> LE), so we just XOR with 1.
+    fn invert(self) -> u32 {
+        (self as u32) ^ 1
+    }
+}
+
+/// `CSET <Xd>, <cond>` = `CSINC Xd, XZR, XZR, invert(cond)`.
+/// Sets `Xd` to 1 if `cond` holds, 0 otherwise. The c4 comparison
+/// ops compile to `cmp + cset`.
+pub(super) fn enc_cset(rd: Reg, cond: Cond) -> u32 {
+    0x9A80_0400
+        | ((Reg::SP.0 as u32) << 16) // Rm = XZR
+        | (cond.invert() << 12)
+        | ((Reg::SP.0 as u32) << 5)  // Rn = XZR
+        | (rd.0 as u32)
+}
+
+// ---- Branches. ----
+
+/// `B <label>` -- unconditional branch, PC-relative offset measured
+/// in instructions. Same encoding family as `BL` minus the link bit.
+pub(super) fn enc_b(imm26: i32) -> u32 {
+    debug_assert!(
+        (-(1 << 25)..(1 << 25)).contains(&imm26),
+        "b: offset {imm26} out of range"
+    );
+    0x1400_0000 | ((imm26 as u32) & 0x03FF_FFFF)
+}
+
+/// `CBZ <Xt>, <label>` -- compare `Xt` with zero and branch if equal.
+/// `imm19` is signed, in instructions. ±1 MiB range.
+pub(super) fn enc_cbz(rt: Reg, imm19: i32) -> u32 {
+    debug_assert!(
+        (-(1 << 18)..(1 << 18)).contains(&imm19),
+        "cbz: offset {imm19} out of range (must fit in signed 19 bits)"
+    );
+    0xB400_0000 | (((imm19 as u32) & 0x7_FFFF) << 5) | (rt.0 as u32)
+}
+
+/// `CBNZ <Xt>, <label>` -- branch if `Xt` is not zero.
+pub(super) fn enc_cbnz(rt: Reg, imm19: i32) -> u32 {
+    debug_assert!(
+        (-(1 << 18)..(1 << 18)).contains(&imm19),
+        "cbnz: offset {imm19} out of range"
+    );
+    0xB500_0000 | (((imm19 as u32) & 0x7_FFFF) << 5) | (rt.0 as u32)
+}
+
+/// `BLR <Xn>` -- branch with link to the address in `Xn`. Used for
+/// indirect calls (function pointer through GOT).
+pub(super) fn enc_blr(rn: Reg) -> u32 {
+    0xD63F_0000 | ((rn.0 as u32) << 5)
+}
+
+// ---- Loads / stores (scaled 12-bit unsigned offset). ----
+
+/// `LDR <Xt>, [<Xn|SP>, #imm]` -- 64-bit load, immediate offset
+/// scaled by 8. `imm` is the byte offset; range `[0, 32760]`.
+pub(super) fn enc_ldr_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    debug_assert!(imm.is_multiple_of(8), "ldr imm: {imm} not 8-byte aligned");
+    let scaled = imm / 8;
+    debug_assert!(scaled < 4096, "ldr imm: {imm} > 32760");
+    0xF940_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STR <Xt>, [<Xn|SP>, #imm]` -- 64-bit store. Same scaling as `LDR`.
+pub(super) fn enc_str_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    debug_assert!(imm.is_multiple_of(8), "str imm: {imm} not 8-byte aligned");
+    let scaled = imm / 8;
+    debug_assert!(scaled < 4096, "str imm: {imm} > 32760");
+    0xF900_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LDRB <Wt>, [<Xn|SP>, #imm]` -- byte load, zero-extended into a
+/// 32-bit register (which on AArch64 means the high 32 bits of the
+/// 64-bit register are also cleared). c4 promotes char to int on
+/// load; this matches.
+pub(super) fn enc_ldrb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    debug_assert!(imm < 4096, "ldrb imm: {imm} > 4095");
+    0x3940_0000 | (imm << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STRB <Wt>, [<Xn|SP>, #imm]` -- byte store. Stores the low 8 bits
+/// of `Wt` and ignores the rest, which is what c4's `Sc` opcode
+/// expects.
+pub(super) fn enc_strb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    debug_assert!(imm < 4096, "strb imm: {imm} > 4095");
+    0x3900_0000 | (imm << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+// ---- Loads / stores (unscaled 9-bit signed offset). Used for negative
+//      stack-frame offsets (locals at fp - N*8).
+
+/// `LDUR <Xt>, [<Xn|SP>, #imm]` -- unscaled 9-bit signed offset.
+/// Range `[-256, 255]`. Locals sit at `fp - 8`, `fp - 16`, ... so we
+/// reach for this whenever `LDR`'s unsigned scaled form can't fit
+/// the negative offset.
+pub(super) fn enc_ldur(rt: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!((-256..256).contains(&imm), "ldur imm: {imm} out of range");
+    let imm9 = (imm as u32) & 0x1FF;
+    0xF840_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STUR <Xt>, [<Xn|SP>, #imm]` -- unscaled 9-bit signed offset.
+/// Mirror of [`enc_ldur`].
+pub(super) fn enc_stur(rt: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!((-256..256).contains(&imm), "stur imm: {imm} out of range");
+    let imm9 = (imm as u32) & 0x1FF;
+    0xF800_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+// ---- Pre-/post-indexed loads & stores. The c4 VM stack push/pop
+//      compiles to these because they update sp in the same instruction.
+
+/// `STR <Xt>, [<Xn|SP>, #imm]!` -- pre-indexed store with writeback.
+/// Use with `imm = -16` for `Op::Psh`: store accumulator and bump sp
+/// down by 16 bytes (we keep sp 16-byte aligned even for 8-byte
+/// pushes so calls into libc satisfy AAPCS64).
+pub(super) fn enc_str_pre(rt: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!(
+        (-256..256).contains(&imm),
+        "str-pre imm: {imm} out of range"
+    );
+    let imm9 = (imm as u32) & 0x1FF;
+    0xF800_0C00 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LDR <Xt>, [<Xn|SP>], #imm` -- post-indexed load with writeback.
+/// Mirror for VM pop.
+pub(super) fn enc_ldr_post(rt: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!(
+        (-256..256).contains(&imm),
+        "ldr-post imm: {imm} out of range"
+    );
+    let imm9 = (imm as u32) & 0x1FF;
+    0xF840_0400 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+// ---- Page-relative address load. Pairs with `add xd, xd, #pageoff`
+//      to materialize an address relative to the program's load
+//      address; needed once we start referring to data segment offsets.
+
+/// `ADRP <Xd>, <label>` -- load the page-aligned base address of a
+/// PC-relative label. `imm21` is signed, in *pages* (4096 bytes).
+/// Pair with [`enc_add_imm`] using the in-page offset to get the
+/// final address.
+pub(super) fn enc_adrp(rd: Reg, imm21: i32) -> u32 {
+    debug_assert!(
+        (-(1 << 20)..(1 << 20)).contains(&imm21),
+        "adrp: page offset {imm21} out of signed 21-bit range"
+    );
+    let v = (imm21 as u32) & 0x1F_FFFF;
+    let immlo = v & 0x3;
+    let immhi = (v >> 2) & 0x7_FFFF;
+    0x9000_0000 | (immlo << 29) | (immhi << 5) | (rd.0 as u32)
+}
+
 /// Build an arbitrary 64-bit immediate into `rd` using a `movz` plus
 /// up to three `movk`s. Picks the shortest sequence by skipping
 /// 16-bit lanes that are zero.
@@ -405,6 +655,84 @@ mod tests {
     fn sub_sp_sp_32() {
         // sub sp, sp, #32  ->  0xD10083FF  (covers the 12-bit shift)
         assert_eq!(enc_sub_imm(Reg::SP, Reg::SP, 32), 0xD100_83FF);
+    }
+
+    // ---- M1.5 encoders. Each `clang -c -arch arm64` byte string was
+    //      pasted from `otool -t -X` on the assembler's output; if you
+    //      change one, run the same trip and update.
+
+    fn r(n: u8) -> Reg {
+        Reg(n)
+    }
+
+    #[test]
+    fn arith_register_forms() {
+        assert_eq!(enc_add_reg(r(0), r(1), r(2)), 0x8B02_0020);
+        assert_eq!(enc_sub_reg(r(0), r(1), r(2)), 0xCB02_0020);
+        assert_eq!(enc_and_reg(r(0), r(1), r(2)), 0x8A02_0020);
+        assert_eq!(enc_orr_reg(r(0), r(1), r(2)), 0xAA02_0020);
+        assert_eq!(enc_eor_reg(r(0), r(1), r(2)), 0xCA02_0020);
+        assert_eq!(enc_mul(r(0), r(1), r(2)), 0x9B02_7C20);
+        assert_eq!(enc_sdiv(r(0), r(1), r(2)), 0x9AC2_0C20);
+        assert_eq!(enc_msub(r(0), r(1), r(2), r(3)), 0x9B02_8C20);
+        assert_eq!(enc_lslv(r(0), r(1), r(2)), 0x9AC2_2020);
+        assert_eq!(enc_asrv(r(0), r(1), r(2)), 0x9AC2_2820);
+        assert_eq!(enc_lsrv(r(0), r(1), r(2)), 0x9AC2_2420);
+    }
+
+    #[test]
+    fn cmp_and_cset() {
+        // cmp x0, x1
+        assert_eq!(enc_cmp_reg(r(0), r(1)), 0xEB01_001F);
+        // cset x0, eq / ne / lt / gt / le / ge
+        assert_eq!(enc_cset(r(0), Cond::Eq), 0x9A9F_17E0);
+        assert_eq!(enc_cset(r(0), Cond::Ne), 0x9A9F_07E0);
+        assert_eq!(enc_cset(r(0), Cond::Lt), 0x9A9F_A7E0);
+        assert_eq!(enc_cset(r(0), Cond::Gt), 0x9A9F_D7E0);
+        assert_eq!(enc_cset(r(0), Cond::Le), 0x9A9F_C7E0);
+        assert_eq!(enc_cset(r(0), Cond::Ge), 0x9A9F_B7E0);
+    }
+
+    #[test]
+    fn branches() {
+        // b . - 44 bytes (-11 instructions)  ->  0x17FFFFF5
+        assert_eq!(enc_b(-11), 0x17FF_FFF5);
+        // cbz x19, . - 48 (-12 instructions)
+        assert_eq!(enc_cbz(Reg::X19, -12), 0xB4FF_FE93);
+        // cbnz x19, . - 52 (-13 instructions)
+        assert_eq!(enc_cbnz(Reg::X19, -13), 0xB5FF_FE73);
+        // blr x16
+        assert_eq!(enc_blr(r(16)), 0xD63F_0200);
+    }
+
+    #[test]
+    fn loads_stores_scaled() {
+        assert_eq!(enc_ldr_imm(r(0), r(1), 16), 0xF940_0820);
+        assert_eq!(enc_str_imm(r(0), r(1), 24), 0xF900_0C20);
+        assert_eq!(enc_ldrb_imm(r(0), r(1), 1), 0x3940_0420);
+        assert_eq!(enc_strb_imm(r(0), r(1), 2), 0x3900_0820);
+    }
+
+    #[test]
+    fn loads_stores_unscaled_negative() {
+        // ldur x0, [x29, #-8]  ->  0xF85F83A0
+        assert_eq!(enc_ldur(r(0), Reg::X29, -8), 0xF85F_83A0);
+        // stur x0, [x29, #-16] ->  0xF81F03A0
+        assert_eq!(enc_stur(r(0), Reg::X29, -16), 0xF81F_03A0);
+    }
+
+    #[test]
+    fn pre_post_indexed_for_vm_stack() {
+        // str x19, [sp, #-16]!  ->  0xF81F0FF3
+        assert_eq!(enc_str_pre(Reg::X19, Reg::SP, -16), 0xF81F_0FF3);
+        // ldr x19, [sp], #16    ->  0xF84107F3
+        assert_eq!(enc_ldr_post(Reg::X19, Reg::SP, 16), 0xF841_07F3);
+    }
+
+    #[test]
+    fn adrp_zero_offset() {
+        // adrp x0, .  ->  0x90000000
+        assert_eq!(enc_adrp(r(0), 0), 0x9000_0000);
     }
 
     #[test]

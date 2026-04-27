@@ -19,6 +19,7 @@ use super::token::{Token, Ty};
 use super::{C4Error, Compiler, Op, Program, Vm, optimize};
 
 mod codegen;
+mod jit;
 mod lexer;
 mod native;
 mod native_elf;

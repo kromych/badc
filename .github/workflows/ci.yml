@@ -63,12 +63,15 @@ jobs:
         #  * macos-latest        -> src/c4/tests/native.rs (Mach-O,
         #    `/usr/bin/codesign`)
         #  * ubuntu-24.04-arm    -> src/c4/tests/native_elf.rs
-        #    (Linux/aarch64 ELF, host kernel exec)
+        #    (Linux/aarch64 ELF, host kernel exec) +
+        #    src/c4/tests/jit.rs (in-process JIT)
         #  * ubuntu-latest       -> src/c4/tests/native_elf_x64.rs
-        #    (Linux/x86_64 ELF, host kernel exec)
-        # All three modules are cfg-gated to their respective triples,
-        # so the other runners compile them out and only verify the
-        # VM, lexer, parser, codegen-as-bytecode, and optimizer paths.
+        #    (Linux/x86_64 ELF, host kernel exec) +
+        #    src/c4/tests/jit.rs (in-process JIT)
+        # All four backend test modules are cfg-gated to their
+        # respective triples, so the other runners compile them out
+        # and only verify the VM, lexer, parser, codegen-as-bytecode,
+        # and optimizer paths.
         run: cargo test --locked --verbose
       - name: cargo build --no-default-features --lib
         # The no_std variant -- no StdHost adapter, alloc only. Library-

@@ -192,6 +192,35 @@ What the native backend doesn't have: the VM's runtime safety net
 (`--track-pointers`, mprotect enforcement, code-vs-data separation
 checks). Run under the VM if you want those.
 
+### In-process JIT
+
+`--jit` lowers the program with the same encoder + relocations the
+AOT path uses, mmaps the result into a writable page, mprotects it
+to `PROT_READ | PROT_EXEC`, and calls `main` directly via a transmuted
+function pointer. No subprocess, no on-disk binary -- arg-parsing,
+compile, lower, and exec all happen in the badc process:
+
+    badc --jit fixtures/c/c4.c hello.c       # JIT'd c4 self-hosts hello.c
+
+`--jit` is Linux-only today. The host arch picks the backend
+automatically (aarch64 vs x86_64 -- there's no cross-arch JIT). libc
+binding is done at JIT time: a writable "fake GOT" region is
+allocated, `dlopen(NULL, RTLD_NOW)` + `dlsym` resolves each libc
+symbol the program imports, and the codegen's existing GOT-call
+relocations are patched against this region. macOS arm64 lands in a
+later phase: the kernel enforces W^X via `MAP_JIT` +
+`pthread_jit_write_protect_np` toggling, which has to be threaded
+through carefully.
+
+`--dump-asm` produces a textual listing of the lowered code grouped
+by the c4 op that produced each region. Hex bytes per op plus
+header metadata (target, sizes, entry offset, fixup counts):
+
+    badc --emit-native --target=linux-x64 --dump-asm hello.c | head
+
+Useful for following what the codegen does on a small program
+without reading the encoder source.
+
 ### Runtime dynamic linking
 
 `dlopen` / `dlsym` / `dlclose` / `dlerror` are first-class library
@@ -263,6 +292,8 @@ The CLI binary always builds with the default `std` feature.
         mach_o.rs           Mach-O writer (macOS, ad-hoc-signed)
         elf.rs              ELF writer (Linux/aarch64 + Linux/x86_64,
                             ET_EXEC + libc + libdl)
+        disasm.rs           --dump-asm textual listing
+        jit.rs              in-process JIT loader (Linux only)
       tests/
         lexer.rs, parser.rs, codegen.rs, vm.rs    phase tests
         programs.rs, syscalls.rs, types.rs        end-to-end tests
@@ -270,6 +301,7 @@ The CLI binary always builds with the default `std` feature.
         native.rs                                 macOS Mach-O end-to-end
         native_elf.rs                             Linux/aarch64 ELF e2e
         native_elf_x64.rs                         Linux/x86_64 ELF e2e
+        jit.rs                                    Linux JIT e2e
     fixtures/c/             C programs the test suite loads + the
                             original c4.c
 
@@ -301,6 +333,7 @@ weren't written to fail.
 
 CI runs the matrix on `ubuntu-latest`, `ubuntu-24.04-arm`,
 `macos-latest`, and `windows-latest`. The macOS runner exercises
-Mach-O end-to-end; `ubuntu-24.04-arm` exercises Linux/aarch64 ELF;
-`ubuntu-latest` exercises Linux/x86_64 ELF; `windows-latest` builds
-the VM-only paths without native bits compiled in.
+Mach-O end-to-end; `ubuntu-24.04-arm` exercises Linux/aarch64 ELF
+and the JIT loader; `ubuntu-latest` exercises Linux/x86_64 ELF and
+the JIT loader; `windows-latest` builds the VM-only paths without
+native bits compiled in.

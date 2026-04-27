@@ -100,13 +100,16 @@ impl RegStackPlan {
 
 /// Bytecode-op width: 2 for ops with an inline operand word, 1
 /// otherwise. Mirrors the dispatch in `vm/mod.rs` and
-/// `aarch64.rs::lower_op`.
+/// `aarch64.rs::lower_op`. Notably `Op::Jsri` is **1-word** -- the
+/// indirect-call target lives in the VM accumulator, not in the
+/// instruction stream; the lowering just peeks at the *next* op
+/// for an Adj N to figure out arg count.
 fn op_width(op: Op) -> usize {
     use Op::*;
     match op {
         // PC + 1 word of operand.
-        Lea | Imm | Jmp | Jsr | Jsri | Bz | Bnz | Ent | Adj | AddI | SubI | MulI | AndI | OrI
-        | XorI | ShlI | ShrI | EqI | NeI | LtI | GtI | LeI | GeI | LdLocI | LdLocC => 2,
+        Lea | Imm | Jmp | Jsr | Bz | Bnz | Ent | Adj | AddI | SubI | MulI | AndI | OrI | XorI
+        | ShlI | ShrI | EqI | NeI | LtI | GtI | LeI | GeI | LdLocI | LdLocC => 2,
         _ => 1,
     }
 }

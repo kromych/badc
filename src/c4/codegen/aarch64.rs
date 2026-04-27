@@ -34,7 +34,43 @@ use super::super::CODE_BASE;
 use super::super::error::C4Error;
 use super::super::op::Op;
 use super::super::program::Program;
+use super::regalloc::{self, PushKind, RegStackPlan};
 use super::{Build, DataFixup, FuncFixup, GotFixup, NativeOptions, Target, TargetOptions};
+
+/// Per-function lowering state for the register-pool optimization.
+/// `--native-optimize` populates `plan` with a [`regalloc::analyze`]
+/// result and the lowering consults it on every Psh / pop. With the
+/// flag off, `plan` is `None` and the lowering follows the existing
+/// real-stack path verbatim.
+struct RegState<'a> {
+    /// Analyzer output. `None` means `--native-optimize` was off.
+    plan: Option<&'a RegStackPlan>,
+    /// True iff we're currently inside a function whose plan opted
+    /// in to the pool. Updated on each `Op::Ent`.
+    use_pool: bool,
+    /// How many pool slots the *current* function actually uses,
+    /// per its plan. The prologue saved this many registers; the
+    /// epilogue must restore the same number. `0` when `use_pool`
+    /// is false (overflow case) or when the function has no
+    /// register-eligible Psh's.
+    current_max_depth: u8,
+    /// Runtime mirror of the c4 push-stack: each Psh appends an
+    /// entry, each pop op pops one. `Some(slot)` means the value
+    /// is live in `Reg(POOL_BASE.0 + slot)`; `None` means it's on
+    /// the real stack the existing lowering uses.
+    pseudo_stack: Vec<Option<u8>>,
+}
+
+impl<'a> RegState<'a> {
+    fn new(plan: Option<&'a RegStackPlan>) -> Self {
+        Self {
+            plan,
+            use_pool: false,
+            current_max_depth: 0,
+            pseudo_stack: Vec::new(),
+        }
+    }
+}
 
 /// Libc symbol metadata. macOS prefixes everything with `_` (the classic
 /// Mach-O calling convention); Linux uses the bare C name. The codegen
@@ -169,6 +205,12 @@ impl Reg {
     pub const X16: Reg = Reg(16); // IP0 -- temp scratch
     pub const X17: Reg = Reg(17); // IP1 -- second temp
     pub const X19: Reg = Reg(19); // VM accumulator (callee-saved)
+    /// Base of the `--native-optimize` pseudo-stack pool. With pool
+    /// size 8, slot N maps to `Reg(POOL_BASE.0 + N)` -- x20..x27.
+    /// All of x20..x27 are AAPCS64 callee-saved, so the prologue
+    /// only has to save the prefix the function actually uses
+    /// (per [`regalloc::FunctionPlan::max_depth`]).
+    pub const POOL_BASE: Reg = Reg(20);
     pub const X29: Reg = Reg(29); // frame pointer (fp)
     pub const X30: Reg = Reg(30); // link register (lr)
     /// AArch64 conflates SP and the zero register at field-31 depending
@@ -176,6 +218,9 @@ impl Reg {
     /// every instruction we use here treats field-31 as SP.
     pub const SP: Reg = Reg(31);
 }
+
+/// Number of register-pool slots available on aarch64. x20..x27 = 8.
+pub(super) const POOL_SIZE: u8 = 8;
 
 // ---------------------------------------------------------------
 // Encoders. Each `enc_*` returns the 32-bit instruction word; the
@@ -645,12 +690,19 @@ pub(super) fn lower(
     target: Target,
     native: NativeOptions,
 ) -> Result<Build, C4Error> {
-    // `native` is accepted for API symmetry with the public surface;
-    // N4 wires it up to the register-pool lowering. For now the
-    // lowering is unchanged so this commit can't introduce a
-    // behavioural delta. Touching it silences the dead-code lint.
-    let _ = native;
     let options = target.options();
+
+    // Run the regalloc analyzer once if --native-optimize is on.
+    // The plan is consulted at each Op::Ent / Op::Psh / pop op so
+    // we keep it in scope for the entire walk.
+    let plan_storage: Option<RegStackPlan> = if native.register_alloc {
+        Some(regalloc::analyze(&program.text, POOL_SIZE)?)
+    } else {
+        None
+    };
+    let plan: Option<&RegStackPlan> = plan_storage.as_ref();
+    let mut reg_state = RegState::new(plan);
+
     let mut code = Vec::new();
     let mut bytecode_to_native: Vec<usize> = vec![usize::MAX; program.text.len() + 1];
     let mut fixups: Vec<Fixup> = Vec::new();
@@ -684,6 +736,23 @@ pub(super) fn lower(
         pc += 1;
         if matches!(op, Op::Ent) {
             in_main = op_pc == program.entry_pc;
+            // Refresh per-function regalloc state. With no plan,
+            // both stay at their default (use_pool=false, depth=0).
+            if let Some(p) = reg_state.plan {
+                if let Some(f) = p.function_at(op_pc) {
+                    reg_state.use_pool = f.use_pool;
+                    reg_state.current_max_depth = if f.use_pool { f.max_depth } else { 0 };
+                } else {
+                    // Should be unreachable -- analyzer records every Ent --
+                    // but stay correct rather than panicking.
+                    reg_state.use_pool = false;
+                    reg_state.current_max_depth = 0;
+                }
+                debug_assert!(
+                    reg_state.pseudo_stack.is_empty(),
+                    "pseudo stack non-empty at fn entry"
+                );
+            }
         }
         lower_op(
             op,
@@ -697,6 +766,8 @@ pub(super) fn lower(
             data_imm_positions,
             in_main,
             options,
+            &mut reg_state,
+            op_pc,
         )?;
     }
     bytecode_to_native[program.text.len()] = code.len();
@@ -822,21 +893,35 @@ fn lower_op(
     data_imm_positions: &[usize],
     in_main: bool,
     options: TargetOptions,
+    reg_state: &mut RegState<'_>,
+    op_pc: usize,
 ) -> Result<(), C4Error> {
     match op {
         // ---- Function frame ----
         Op::Ent => {
             let locals = read_operand(text, pc, "Ent")?;
-            emit_prologue(code, locals, in_main);
+            emit_prologue(code, locals, in_main, reg_state.current_max_depth);
         }
-        Op::Lev => emit_epilogue(code, in_main),
+        Op::Lev => emit_epilogue(code, in_main, reg_state.current_max_depth),
         Op::Adj => {
-            // Adj N drops N pushed slots (each slot is 16 bytes
-            // on our native stack -- see Op::Psh below for why).
+            // Adj N drops N pushed slots (each slot is 16 bytes on
+            // our native stack -- see Op::Psh below for why). With
+            // the regalloc plan in play, the analyzer guarantees
+            // every slot popped here was a Real (real-stack) push;
+            // we still update the runtime tracker so the per-op
+            // "what's on top of the pseudo-stack" picture stays
+            // consistent.
             let n = read_operand(text, pc, "Adj")?;
             if n != 0 {
                 let bytes = (n as u32) * 16;
                 emit(code, enc_add_imm(Reg::SP, Reg::SP, bytes));
+            }
+            for _ in 0..(n as usize) {
+                let popped = reg_state.pseudo_stack.pop();
+                debug_assert!(
+                    matches!(popped, None | Some(None)),
+                    "Adj popped a Pseudo slot -- analyzer mis-classified"
+                );
             }
         }
 
@@ -899,51 +984,77 @@ fn lower_op(
         Op::Li => emit(code, enc_ldr_imm(Reg::X19, Reg::X19, 0)),
         Op::Lc => emit(code, enc_ldrb_imm(Reg::X19, Reg::X19, 0)),
         Op::Si => {
-            // pop addr -> x16; *x16 = x19
-            emit(code, enc_ldr_post(Reg::X16, Reg::SP, 16));
-            emit(code, enc_str_imm(Reg::X19, Reg::X16, 0));
+            // pop addr; *addr = x19. With pool: addr is in xN
+            // (skip the ldr). Without pool: pop from real stack.
+            let lhs = pop_lhs_reg(code, reg_state);
+            emit(code, enc_str_imm(Reg::X19, lhs, 0));
         }
         Op::Sc => {
-            emit(code, enc_ldr_post(Reg::X16, Reg::SP, 16));
-            emit(code, enc_strb_imm(Reg::X19, Reg::X16, 0));
+            let lhs = pop_lhs_reg(code, reg_state);
+            emit(code, enc_strb_imm(Reg::X19, lhs, 0));
         }
         Op::Psh => {
-            // Push the accumulator onto the VM stack. We claim 16
-            // bytes per push so that SP stays 16-byte aligned --
-            // any libc call we make later (`Op::Prtf` etc.) needs
-            // that, and re-aligning on every call would be a wash.
-            emit(code, enc_str_pre(Reg::X19, Reg::SP, -16));
+            // With --native-optimize on AND a Pseudo classification
+            // for this PC, materialise the push as `mov xN, x19`
+            // into the next pool slot. Otherwise fall through to
+            // the original real-stack push (str x19, [sp, -16]!).
+            let slot = reg_state
+                .use_pool
+                .then(|| {
+                    reg_state
+                        .plan
+                        .and_then(|p| p.push_kind(op_pc))
+                        .and_then(|k| match k {
+                            PushKind::Pseudo { slot } => Some(slot),
+                            PushKind::Real => None,
+                        })
+                })
+                .flatten();
+            match slot {
+                Some(s) => {
+                    emit(code, enc_mov_reg(Reg(Reg::POOL_BASE.0 + s), Reg::X19));
+                    reg_state.pseudo_stack.push(Some(s));
+                }
+                None => {
+                    // 16 bytes per push so that SP stays 16-byte
+                    // aligned -- any libc call we make later
+                    // (`Op::Prtf` etc.) needs that, and re-aligning
+                    // on every call would be a wash.
+                    emit(code, enc_str_pre(Reg::X19, Reg::SP, -16));
+                    reg_state.pseudo_stack.push(None);
+                }
+            }
         }
 
         // ---- Bitwise ----
-        Op::Or => binop_with_pop(code, enc_orr_reg, /*reverse=*/ false),
-        Op::Xor => binop_with_pop(code, enc_eor_reg, false),
-        Op::And => binop_with_pop(code, enc_and_reg, false),
+        Op::Or => binop_with_pop(code, reg_state, enc_orr_reg),
+        Op::Xor => binop_with_pop(code, reg_state, enc_eor_reg),
+        Op::And => binop_with_pop(code, reg_state, enc_and_reg),
 
         // ---- Comparisons. The c4 VM does `popped <cmp> a`, which
-        //      maps to `cmp x16, x19; cset x19, <cond>`.
-        Op::Eq => cmp_with_pop(code, Cond::Eq),
-        Op::Ne => cmp_with_pop(code, Cond::Ne),
-        Op::Lt => cmp_with_pop(code, Cond::Lt),
-        Op::Gt => cmp_with_pop(code, Cond::Gt),
-        Op::Le => cmp_with_pop(code, Cond::Le),
-        Op::Ge => cmp_with_pop(code, Cond::Ge),
+        //      maps to `cmp lhs, x19; cset x19, <cond>`.
+        Op::Eq => cmp_with_pop(code, reg_state, Cond::Eq),
+        Op::Ne => cmp_with_pop(code, reg_state, Cond::Ne),
+        Op::Lt => cmp_with_pop(code, reg_state, Cond::Lt),
+        Op::Gt => cmp_with_pop(code, reg_state, Cond::Gt),
+        Op::Le => cmp_with_pop(code, reg_state, Cond::Le),
+        Op::Ge => cmp_with_pop(code, reg_state, Cond::Ge),
 
         // ---- Shifts (signed >> matches c4 `int` semantics). ----
-        Op::Shl => binop_with_pop(code, enc_lslv, false),
-        Op::Shr => binop_with_pop(code, enc_asrv, false),
+        Op::Shl => binop_with_pop(code, reg_state, enc_lslv),
+        Op::Shr => binop_with_pop(code, reg_state, enc_asrv),
 
         // ---- Arithmetic. Sub, Div, Mod are not commutative, so the
         //      pop goes on the LHS of the operation.
-        Op::Add => binop_with_pop(code, enc_add_reg, false),
-        Op::Sub => binop_with_pop(code, enc_sub_reg, true),
-        Op::Mul => binop_with_pop(code, enc_mul, false),
-        Op::Div => binop_with_pop(code, enc_sdiv, true),
+        Op::Add => binop_with_pop(code, reg_state, enc_add_reg),
+        Op::Sub => binop_with_pop(code, reg_state, enc_sub_reg),
+        Op::Mul => binop_with_pop(code, reg_state, enc_mul),
+        Op::Div => binop_with_pop(code, reg_state, enc_sdiv),
         Op::Mod => {
-            // pop -> x16; x17 = x16 / x19; x19 = x16 - x17 * x19.
-            emit(code, enc_ldr_post(Reg::X16, Reg::SP, 16));
-            emit(code, enc_sdiv(Reg::X17, Reg::X16, Reg::X19));
-            emit(code, enc_msub(Reg::X19, Reg::X17, Reg::X19, Reg::X16));
+            // pop lhs; x17 = lhs / x19; x19 = lhs - x17 * x19.
+            let lhs = pop_lhs_reg(code, reg_state);
+            emit(code, enc_sdiv(Reg::X17, lhs, Reg::X19));
+            emit(code, enc_msub(Reg::X19, Reg::X17, Reg::X19, lhs));
         }
 
         // ---- Control flow ----
@@ -1203,21 +1314,48 @@ fn emit_got_call(code: &mut Vec<u8>, got_fixups: &mut Vec<GotFixup>, import_inde
     emit(code, enc_blr(Reg::X16));
 }
 
-/// Pop the top of the VM stack into `x16`, then combine with `x19`.
-/// `reverse = false` -> `x19 = x16 OP x19` (popped is LHS, matches
-/// commutative + the c4 VM semantics for sub/div/shifts).
-/// `reverse = true` is identical here because every encoder we pass
-/// already takes (rd, rn, rm) in (dest, lhs, rhs) order; the flag
-/// stays as a structural reminder of which operand is the popped one.
-fn binop_with_pop<F: Fn(Reg, Reg, Reg) -> u32>(code: &mut Vec<u8>, enc: F, _reverse: bool) {
-    emit(code, enc_ldr_post(Reg::X16, Reg::SP, 16));
-    emit(code, enc(Reg::X19, Reg::X16, Reg::X19));
+/// Pop the top of the VM push-stack -- either a pool register `xN`
+/// or `x16` after a `ldr` from the real stack -- and return whatever
+/// register now holds the LHS value. Updates `reg_state.pseudo_stack`.
+///
+/// The choice between the two paths is per-Psh, recorded by the
+/// analyzer in `reg_state.pseudo_stack`. With `--native-optimize`
+/// off, every push went to the real stack and this function is
+/// exactly the old `ldr x16, [sp], 16` sequence.
+fn pop_lhs_reg(code: &mut Vec<u8>, reg_state: &mut RegState<'_>) -> Reg {
+    match reg_state.pseudo_stack.pop() {
+        Some(Some(slot)) => {
+            // Value lives in a pool register; nothing to emit.
+            // The slot itself stays valid for re-use on the next
+            // push (slot allocation is a depth counter, not a
+            // free-list).
+            Reg(Reg::POOL_BASE.0 + slot)
+        }
+        // Real stack push -- the existing path.
+        Some(None) | None => {
+            emit(code, enc_ldr_post(Reg::X16, Reg::SP, 16));
+            Reg::X16
+        }
+    }
 }
 
-/// Pop, compare, and condition-set into `x19`.
-fn cmp_with_pop(code: &mut Vec<u8>, cond: Cond) {
-    emit(code, enc_ldr_post(Reg::X16, Reg::SP, 16));
-    emit(code, enc_cmp_reg(Reg::X16, Reg::X19));
+/// Pop the LHS, then run a register-form encoder against (x19, lhs,
+/// x19) to produce `x19 = lhs OP x19`. The c4 VM has the popped
+/// value as the LHS for sub / div / shifts; for the commutative ops
+/// the operand order doesn't matter.
+fn binop_with_pop<F: Fn(Reg, Reg, Reg) -> u32>(
+    code: &mut Vec<u8>,
+    reg_state: &mut RegState<'_>,
+    enc: F,
+) {
+    let lhs = pop_lhs_reg(code, reg_state);
+    emit(code, enc(Reg::X19, lhs, Reg::X19));
+}
+
+/// Pop the LHS, compare against x19, condition-set into x19.
+fn cmp_with_pop(code: &mut Vec<u8>, reg_state: &mut RegState<'_>, cond: Cond) {
+    let lhs = pop_lhs_reg(code, reg_state);
+    emit(code, enc_cmp_reg(lhs, Reg::X19));
     emit(code, enc_cset(Reg::X19, cond));
 }
 
@@ -1327,7 +1465,7 @@ fn emit_local_load(code: &mut Vec<u8>, offset: i64, byte: bool) {
 ///   bp + 16: argv  (top arg, c4 val=2)
 ///   bp + 32: argc  (deeper arg, c4 val=3)
 /// matching [`lea_offset_bytes`].
-fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool) {
+fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool, pool_depth: u8) {
     if is_main {
         // Push argc first (deeper), then argv (shallower). 16-byte
         // slots so the layout matches the c4 calling convention as
@@ -1336,7 +1474,7 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool) {
         emit(code, enc_str_pre(Reg::X1, Reg::SP, -16));
     }
     // Save fp/lr; set up the new frame; reserve local storage; save
-    // x19 below the locals.
+    // x19 below the locals; save the pool registers below that.
     //
     // x19 is callee-saved per AAPCS64. Self-hosted c4-to-c4 calls
     // don't actually rely on the saved value (the caller refills
@@ -1346,6 +1484,12 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool) {
     // Rust crashes once it tries to use a value it had stashed
     // there. Stashing x19 *below* the locals keeps the c4 `Lea`
     // mapping (bp - 8*N for local N) intact.
+    //
+    // The pool registers x20..x20+pool_depth-1 are also AAPCS64
+    // callee-saved. With `--native-optimize` on, the regalloc
+    // analyzer told us how many slots this function actually uses;
+    // we save exactly that many so functions that don't push deep
+    // don't pay for the full 8-slot pool.
     emit(code, enc_stp_pre(Reg::X29, Reg::X30, Reg::SP, -16));
     emit(code, enc_add_imm(Reg::X29, Reg::SP, 0));
     if locals > 0 {
@@ -1354,17 +1498,23 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool) {
         emit(code, enc_sub_imm(Reg::SP, Reg::SP, aligned));
     }
     emit(code, enc_str_pre(Reg::X19, Reg::SP, -16));
+    emit_save_pool(code, pool_depth);
 }
 
 /// Mirror of [`emit_prologue`]. Move the VM accumulator into `x0`
-/// (the return register), restore the saved x19, tear down the
-/// frame, return. For main we also drop the two 16-byte argc/argv
-/// slots so the stack pointer is back to what the kernel / Rust
-/// caller handed us.
-fn emit_epilogue(code: &mut Vec<u8>, is_main: bool) {
+/// (the return register), restore the pool registers, restore the
+/// saved x19, tear down the frame, return. For main we also drop
+/// the two 16-byte argc/argv slots so the stack pointer is back to
+/// what the kernel / Rust caller handed us.
+fn emit_epilogue(code: &mut Vec<u8>, is_main: bool, pool_depth: u8) {
     emit(code, enc_mov_reg(Reg::X0, Reg::X19));
-    // Pop saved x19 first (it sits below locals), then restore sp
-    // to bp (drops locals), then pop saved fp/lr.
+    // Stack layout below this point (top-down):
+    //   pool regs (`pool_depth` of them, 16 bytes per slot)
+    //   saved x19
+    //   locals
+    //   saved fp/lr
+    // Pop in reverse order.
+    emit_restore_pool(code, pool_depth);
     emit(code, enc_ldr_post(Reg::X19, Reg::SP, 16));
     emit(code, enc_add_imm(Reg::SP, Reg::X29, 0));
     emit(code, enc_ldp_post(Reg::X29, Reg::X30, Reg::SP, 16));
@@ -1372,6 +1522,56 @@ fn emit_epilogue(code: &mut Vec<u8>, is_main: bool) {
         emit(code, enc_add_imm(Reg::SP, Reg::SP, 32));
     }
     emit(code, enc_ret(Reg::X30));
+}
+
+/// Save x20..x20+depth-1 to the stack as a contiguous run of
+/// 16-byte slots. Pairs (`stp`) when possible -- 2 regs per 16
+/// bytes -- with a single `str` for an odd trailing register.
+fn emit_save_pool(code: &mut Vec<u8>, depth: u8) {
+    let mut i = 0u8;
+    while i + 1 < depth {
+        emit(
+            code,
+            enc_stp_pre(
+                Reg(Reg::POOL_BASE.0 + i),
+                Reg(Reg::POOL_BASE.0 + i + 1),
+                Reg::SP,
+                -16,
+            ),
+        );
+        i += 2;
+    }
+    if i < depth {
+        emit(code, enc_str_pre(Reg(Reg::POOL_BASE.0 + i), Reg::SP, -16));
+    }
+}
+
+/// Reverse of [`emit_save_pool`]. Pop in opposite order so a
+/// solo top-of-stack register (odd `depth`) gets restored before
+/// the paired ones.
+fn emit_restore_pool(code: &mut Vec<u8>, depth: u8) {
+    if depth == 0 {
+        return;
+    }
+    let mut i = depth;
+    if depth.is_multiple_of(2) {
+        // pair-only restore
+    } else {
+        i -= 1;
+        emit(code, enc_ldr_post(Reg(Reg::POOL_BASE.0 + i), Reg::SP, 16));
+    }
+    while i >= 2 {
+        i -= 2;
+        emit(
+            code,
+            enc_ldp_post(
+                Reg(Reg::POOL_BASE.0 + i),
+                Reg(Reg::POOL_BASE.0 + i + 1),
+                Reg::SP,
+                16,
+            ),
+        );
+    }
 }
 
 #[cfg(test)]

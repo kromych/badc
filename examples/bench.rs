@@ -21,7 +21,7 @@
 
 use std::time::{Duration, Instant};
 
-use badc::{Compiler, Program, Vm, jit_run, optimize};
+use badc::{Compiler, NativeOptions, Program, Vm, jit_run_with_options, optimize};
 
 /// One pipeline = one column in the output table.
 struct Pipeline {
@@ -54,6 +54,16 @@ const PIPELINES: &[Pipeline] = &[
         needs_jit: true,
         run: run_jit,
     },
+    Pipeline {
+        label: "jit-N",
+        needs_jit: true,
+        run: run_jit_native_optimized,
+    },
+    Pipeline {
+        label: "jit-ON",
+        needs_jit: true,
+        run: run_jit_native_optimized,
+    },
 ];
 
 /// VM run. Pre-cloned by `measure` so the timed region excludes
@@ -65,10 +75,15 @@ fn run_vm(program: &Program, args: &[String]) -> i32 {
         .expect("vm run") as i32
 }
 
-/// JIT run. Lowering + mmap + dlsym happen inside `jit_run`, so the
-/// timed region includes them.
+/// JIT run with default (no register pool) options.
 fn run_jit(program: &Program, args: &[String]) -> i32 {
-    jit_run(program, args).expect("jit run")
+    jit_run_with_options(program, args, NativeOptions::default()).expect("jit run")
+}
+
+/// JIT run with `--native-optimize` (register pool on).
+fn run_jit_native_optimized(program: &Program, args: &[String]) -> i32 {
+    jit_run_with_options(program, args, NativeOptions::new().with_register_alloc())
+        .expect("jit run")
 }
 
 /// Inline workloads. Each is a (name, source, argv, expected exit)
@@ -225,7 +240,8 @@ fn measure(pipeline: &Pipeline, program: &Program, args: &[String], iter: usize)
     // when comparing across pipelines.
     let argv: Vec<String> = args.to_vec();
     let prepared: Program = match pipeline.label {
-        "vm-O" | "jit-O" => optimize(program.clone()).expect("optimize"),
+        // Pipelines whose label implies the bytecode optimizer ran first.
+        "vm-O" | "jit-O" | "jit-ON" => optimize(program.clone()).expect("optimize"),
         _ => program.clone(),
     };
     let mut samples = Vec::with_capacity(iter);

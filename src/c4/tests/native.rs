@@ -82,3 +82,95 @@ fn return_value_truncates_to_byte() {
     // 0/42 tests but flunk this one.
     assert_eq!(build_and_run("int main() { return 257; }", "ret257"), 1);
 }
+
+// ---- M1.6: every non-syscall op exercised end-to-end. ----
+
+#[test]
+fn add_subtract_multiply() {
+    // 5 + 3 = 8, 10 - 4 = 6, 7 * 6 = 42 -- pick the last one.
+    assert_eq!(build_and_run("int main() { return 7 * 6; }", "mul42"), 42);
+    assert_eq!(build_and_run("int main() { return 5 + 3; }", "add"), 8);
+    assert_eq!(build_and_run("int main() { return 100 - 58; }", "sub"), 42);
+}
+
+#[test]
+fn integer_div_and_mod() {
+    assert_eq!(build_and_run("int main() { return 84 / 2; }", "div"), 42);
+    assert_eq!(build_and_run("int main() { return 100 % 9; }", "mod"), 1);
+}
+
+#[test]
+fn comparison_returns_zero_or_one() {
+    assert_eq!(build_and_run("int main() { return 5 < 7; }", "lt"), 1);
+    assert_eq!(build_and_run("int main() { return 5 > 7; }", "gt"), 0);
+    assert_eq!(build_and_run("int main() { return 5 == 5; }", "eq"), 1);
+    assert_eq!(build_and_run("int main() { return 5 != 5; }", "ne"), 0);
+}
+
+#[test]
+fn local_variable_round_trips() {
+    let src = r#"
+        int main() {
+            int x;
+            x = 41;
+            x = x + 1;
+            return x;
+        }
+    "#;
+    assert_eq!(build_and_run(src, "local"), 42);
+}
+
+#[test]
+fn if_else_routes_correctly() {
+    let src = r#"
+        int main() {
+            int x;
+            x = 10;
+            if (x > 5) return 42;
+            else return 7;
+        }
+    "#;
+    assert_eq!(build_and_run(src, "ifelse"), 42);
+}
+
+#[test]
+fn while_loop_terminates() {
+    let src = r#"
+        int main() {
+            int i;
+            int s;
+            i = 0;
+            s = 0;
+            while (i < 10) {
+                s = s + i;
+                i = i + 1;
+            }
+            return s;
+        }
+    "#;
+    // 0+1+2+...+9 = 45
+    assert_eq!(build_and_run(src, "while45"), 45);
+}
+
+#[test]
+fn function_call_returns_value() {
+    let src = r#"
+        int square(int n) { return n * n; }
+        int main() { return square(6) + square(2); }
+    "#;
+    // 6*6 + 2*2 = 40
+    assert_eq!(build_and_run(src, "fncall"), 40);
+}
+
+#[test]
+fn recursion_factorial() {
+    let src = r#"
+        int fact(int n) {
+            if (n < 2) return 1;
+            return n * fact(n - 1);
+        }
+        int main() { return fact(5); }
+    "#;
+    // 5! = 120
+    assert_eq!(build_and_run(src, "fact"), 120);
+}

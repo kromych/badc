@@ -46,7 +46,9 @@ impl Reg {
     pub const X0: Reg = Reg(0);
     pub const X1: Reg = Reg(1);
     pub const X2: Reg = Reg(2);
-    pub const X19: Reg = Reg(19);
+    pub const X16: Reg = Reg(16); // IP0 -- temp scratch
+    pub const X17: Reg = Reg(17); // IP1 -- second temp
+    pub const X19: Reg = Reg(19); // VM accumulator (callee-saved)
     pub const X29: Reg = Reg(29); // frame pointer (fp)
     pub const X30: Reg = Reg(30); // link register (lr)
     /// AArch64 conflates SP and the zero register at field-31 depending
@@ -460,22 +462,56 @@ pub(super) fn emit(code: &mut Vec<u8>, word: u32) {
     code.extend_from_slice(&word.to_le_bytes());
 }
 
-/// Lower a bytecode [`Program`] to AArch64 machine code.
-///
-/// M1.4 milestone: only `Op::Ent`, `Op::Imm`, and `Op::Lev` are
-/// lowered -- enough for `int main() { return N; }`. Anything else
-/// returns a not-yet-implemented error so the test suite shows
-/// exactly which fixtures need M1.6's full op coverage.
+// ---- Branch fixups. Bytecode branches target absolute bytecode PCs;
+//      the native PC of those targets isn't known until after the
+//      whole function body is laid out. Two-pass approach: emit a
+//      placeholder branch instruction, record (its native offset, the
+//      target bytecode PC, the kind), then patch the placeholder
+//      after lowering completes.
+
+#[derive(Debug, Clone, Copy)]
+enum BranchKind {
+    /// Unconditional `B` (PC-relative, 26-bit signed offset).
+    B,
+    /// Conditional `CBZ <Xt>` (compare-and-branch on zero).
+    Cbz(Reg),
+    /// Conditional `CBNZ <Xt>`.
+    Cbnz(Reg),
+    /// `BL` for direct subroutine calls. Same encoding family as `B`,
+    /// distinguished only by the link bit.
+    Bl,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Fixup {
+    /// Byte offset within `code` where the placeholder branch lives.
+    native_offset: usize,
+    /// Bytecode PC the branch is supposed to land on.
+    target_bytecode_pc: usize,
+    kind: BranchKind,
+}
+
+/// Lower a bytecode [`Program`] to AArch64 machine code. Walks the
+/// bytecode once, emitting native code for each op; control-flow ops
+/// emit a placeholder branch and record a fixup to be patched after
+/// the whole layout is known.
 ///
 /// Calling convention (Phase 1):
 /// * VM accumulator `a` lives in `x19` (callee-saved across calls).
-/// * Each function's prologue is `stp x29, x30, [sp, #-16]!` then
-///   `mov x29, sp`, plus an optional `sub sp, sp, #(locals*16)`.
-/// * Epilogue moves `x19` into `x0` (the AAPCS64 return register),
-///   tears down the frame, and `ret`s.
+/// * The VM stack rides on the native stack: `Op::Psh` is `str x19,
+///   [sp, #-16]!`, every binary op pops with `ldr <tmp>, [sp], #16`.
+///   Push slots are 16 bytes (not 8) so SP stays aligned for libc calls.
+/// * `x16`/`x17` (IP0/IP1) are the AAPCS64-blessed temporaries we use
+///   for popped operands and large-immediate scratch.
+/// * Each function's prologue is the standard AAPCS64 sequence;
+///   epilogue moves `x19` into `x0` (the return register).
+///
+/// Syscall ops (`Open`...`Senv`) are not yet lowered -- they need the
+/// extended bind machinery from M1.7.
 pub(super) fn lower(program: &Program) -> Result<Build, C4Error> {
     let mut code = Vec::new();
-    let mut bytecode_to_native: Vec<usize> = vec![0; program.text.len() + 1];
+    let mut bytecode_to_native: Vec<usize> = vec![usize::MAX; program.text.len() + 1];
+    let mut fixups: Vec<Fixup> = Vec::new();
 
     let mut pc = 0usize;
     while pc < program.text.len() {
@@ -485,24 +521,12 @@ pub(super) fn lower(program: &Program) -> Result<Build, C4Error> {
             C4Error::Compile(format!("native codegen: bad opcode at PC {pc}: {raw}"))
         })?;
         pc += 1;
-        match op {
-            Op::Ent => {
-                let locals = read_operand(&program.text, &mut pc, "Ent")?;
-                emit_prologue(&mut code, locals);
-            }
-            Op::Imm => {
-                let v = read_operand(&program.text, &mut pc, "Imm")?;
-                load_imm64(&mut code, Reg::X19, v as u64);
-            }
-            Op::Lev => emit_epilogue(&mut code),
-            other => {
-                return Err(C4Error::Compile(format!(
-                    "native codegen (M1.4): op {other:?} not yet supported -- coming in M1.6"
-                )));
-            }
-        }
+        lower_op(op, &program.text, &mut pc, &mut code, &mut fixups)?;
     }
     bytecode_to_native[program.text.len()] = code.len();
+
+    // Patch the placeholders we left behind for branch / call ops.
+    apply_fixups(&mut code, &fixups, &bytecode_to_native, program.text.len())?;
 
     let entry_offset = bytecode_to_native
         .get(program.entry_pc)
@@ -513,6 +537,12 @@ pub(super) fn lower(program: &Program) -> Result<Build, C4Error> {
                 program.entry_pc
             ))
         })?;
+    if entry_offset == usize::MAX {
+        return Err(C4Error::Compile(format!(
+            "native codegen: entry_pc {} did not align with any instruction start",
+            program.entry_pc
+        )));
+    }
 
     Ok(Build {
         text: code,
@@ -522,7 +552,6 @@ pub(super) fn lower(program: &Program) -> Result<Build, C4Error> {
 }
 
 /// Read the i64 operand following an opcode, advancing `pc` past it.
-/// Errors if the bytecode ends mid-instruction (badly truncated input).
 fn read_operand(text: &[i64], pc: &mut usize, op_name: &str) -> Result<i64, C4Error> {
     if *pc >= text.len() {
         return Err(C4Error::Compile(format!(
@@ -532,6 +561,351 @@ fn read_operand(text: &[i64], pc: &mut usize, op_name: &str) -> Result<i64, C4Er
     let v = text[*pc];
     *pc += 1;
     Ok(v)
+}
+
+/// Walk through the patch list, computing the actual native offset
+/// of each branch's target and writing the encoded instruction back
+/// into `code` over the placeholder we left.
+fn apply_fixups(
+    code: &mut [u8],
+    fixups: &[Fixup],
+    bc_to_native: &[usize],
+    bc_len: usize,
+) -> Result<(), C4Error> {
+    for f in fixups {
+        if f.target_bytecode_pc > bc_len {
+            return Err(C4Error::Compile(format!(
+                "native codegen: branch target {} past end of bytecode",
+                f.target_bytecode_pc
+            )));
+        }
+        let target = bc_to_native[f.target_bytecode_pc];
+        if target == usize::MAX {
+            return Err(C4Error::Compile(format!(
+                "native codegen: branch target {} did not land on an instruction",
+                f.target_bytecode_pc
+            )));
+        }
+        let pc_after = f.native_offset as isize;
+        let delta_bytes = target as isize - pc_after;
+        // All AArch64 branches measure the offset in instructions
+        // (4 bytes each).
+        if delta_bytes & 3 != 0 {
+            return Err(C4Error::Compile(format!(
+                "native codegen: branch delta {delta_bytes} not 4-byte aligned"
+            )));
+        }
+        let delta_insns = (delta_bytes / 4) as i32;
+        let word = match f.kind {
+            BranchKind::B => enc_b(delta_insns),
+            BranchKind::Cbz(rt) => enc_cbz(rt, delta_insns),
+            BranchKind::Cbnz(rt) => enc_cbnz(rt, delta_insns),
+            BranchKind::Bl => enc_bl(delta_insns),
+        };
+        code[f.native_offset..f.native_offset + 4].copy_from_slice(&word.to_le_bytes());
+    }
+    Ok(())
+}
+
+/// Lower one bytecode op. Hot-path helpers for common patterns
+/// (`pop into x16`, `binop pop+combine`, etc.) live below.
+fn lower_op(
+    op: Op,
+    text: &[i64],
+    pc: &mut usize,
+    code: &mut Vec<u8>,
+    fixups: &mut Vec<Fixup>,
+) -> Result<(), C4Error> {
+    match op {
+        // ---- Function frame ----
+        Op::Ent => {
+            let locals = read_operand(text, pc, "Ent")?;
+            emit_prologue(code, locals);
+        }
+        Op::Lev => emit_epilogue(code),
+        Op::Adj => {
+            // Adj N drops N pushed slots (each slot is 16 bytes
+            // on our native stack -- see Op::Psh below for why).
+            let n = read_operand(text, pc, "Adj")?;
+            if n != 0 {
+                let bytes = (n as u32) * 16;
+                emit(code, enc_add_imm(Reg::SP, Reg::SP, bytes));
+            }
+        }
+
+        // ---- Constants and addresses ----
+        Op::Imm => {
+            let v = read_operand(text, pc, "Imm")?;
+            load_imm64(code, Reg::X19, v as u64);
+        }
+        Op::Lea => {
+            // a = bp + offset*8. Emit add/sub against x29 depending
+            // on sign; for offsets that don't fit in 12-bit imm we
+            // load into x16 and use the register form.
+            let offset = read_operand(text, pc, "Lea")?;
+            let bytes = offset.unsigned_abs() * 8;
+            if bytes < 4096 {
+                let imm = bytes as u32;
+                let word = if offset >= 0 {
+                    enc_add_imm(Reg::X19, Reg::X29, imm)
+                } else {
+                    enc_sub_imm(Reg::X19, Reg::X29, imm)
+                };
+                emit(code, word);
+            } else {
+                load_imm64(code, Reg::X16, bytes);
+                let word = if offset >= 0 {
+                    enc_add_reg(Reg::X19, Reg::X29, Reg::X16)
+                } else {
+                    enc_sub_reg(Reg::X19, Reg::X29, Reg::X16)
+                };
+                emit(code, word);
+            }
+        }
+
+        // ---- Memory loads / stores ----
+        Op::Li => emit(code, enc_ldr_imm(Reg::X19, Reg::X19, 0)),
+        Op::Lc => emit(code, enc_ldrb_imm(Reg::X19, Reg::X19, 0)),
+        Op::Si => {
+            // pop addr -> x16; *x16 = x19
+            emit(code, enc_ldr_post(Reg::X16, Reg::SP, 16));
+            emit(code, enc_str_imm(Reg::X19, Reg::X16, 0));
+        }
+        Op::Sc => {
+            emit(code, enc_ldr_post(Reg::X16, Reg::SP, 16));
+            emit(code, enc_strb_imm(Reg::X19, Reg::X16, 0));
+        }
+        Op::Psh => {
+            // Push the accumulator onto the VM stack. We claim 16
+            // bytes per push so that SP stays 16-byte aligned --
+            // any libc call we make later (`Op::Prtf` etc.) needs
+            // that, and re-aligning on every call would be a wash.
+            emit(code, enc_str_pre(Reg::X19, Reg::SP, -16));
+        }
+
+        // ---- Bitwise ----
+        Op::Or => binop_with_pop(code, enc_orr_reg, /*reverse=*/ false),
+        Op::Xor => binop_with_pop(code, enc_eor_reg, false),
+        Op::And => binop_with_pop(code, enc_and_reg, false),
+
+        // ---- Comparisons. The c4 VM does `popped <cmp> a`, which
+        //      maps to `cmp x16, x19; cset x19, <cond>`.
+        Op::Eq => cmp_with_pop(code, Cond::Eq),
+        Op::Ne => cmp_with_pop(code, Cond::Ne),
+        Op::Lt => cmp_with_pop(code, Cond::Lt),
+        Op::Gt => cmp_with_pop(code, Cond::Gt),
+        Op::Le => cmp_with_pop(code, Cond::Le),
+        Op::Ge => cmp_with_pop(code, Cond::Ge),
+
+        // ---- Shifts (signed >> matches c4 `int` semantics). ----
+        Op::Shl => binop_with_pop(code, enc_lslv, false),
+        Op::Shr => binop_with_pop(code, enc_asrv, false),
+
+        // ---- Arithmetic. Sub, Div, Mod are not commutative, so the
+        //      pop goes on the LHS of the operation.
+        Op::Add => binop_with_pop(code, enc_add_reg, false),
+        Op::Sub => binop_with_pop(code, enc_sub_reg, true),
+        Op::Mul => binop_with_pop(code, enc_mul, false),
+        Op::Div => binop_with_pop(code, enc_sdiv, true),
+        Op::Mod => {
+            // pop -> x16; x17 = x16 / x19; x19 = x16 - x17 * x19.
+            emit(code, enc_ldr_post(Reg::X16, Reg::SP, 16));
+            emit(code, enc_sdiv(Reg::X17, Reg::X16, Reg::X19));
+            emit(code, enc_msub(Reg::X19, Reg::X17, Reg::X19, Reg::X16));
+        }
+
+        // ---- Control flow ----
+        Op::Jmp => {
+            let target = read_operand(text, pc, "Jmp")? as usize;
+            fixups.push(Fixup {
+                native_offset: code.len(),
+                target_bytecode_pc: target,
+                kind: BranchKind::B,
+            });
+            emit(code, 0); // placeholder, patched in apply_fixups
+        }
+        Op::Bz => {
+            let target = read_operand(text, pc, "Bz")? as usize;
+            fixups.push(Fixup {
+                native_offset: code.len(),
+                target_bytecode_pc: target,
+                kind: BranchKind::Cbz(Reg::X19),
+            });
+            emit(code, 0);
+        }
+        Op::Bnz => {
+            let target = read_operand(text, pc, "Bnz")? as usize;
+            fixups.push(Fixup {
+                native_offset: code.len(),
+                target_bytecode_pc: target,
+                kind: BranchKind::Cbnz(Reg::X19),
+            });
+            emit(code, 0);
+        }
+        Op::Jsr => {
+            let target = read_operand(text, pc, "Jsr")? as usize;
+            fixups.push(Fixup {
+                native_offset: code.len(),
+                target_bytecode_pc: target,
+                kind: BranchKind::Bl,
+            });
+            emit(code, 0);
+            // The called function's epilogue moved its return value
+            // into x0. Copy it back into x19 so the caller continues
+            // with `a` set to the return value, matching VM semantics.
+            emit(code, enc_mov_reg(Reg::X19, Reg::X0));
+        }
+        Op::Jsri => {
+            // Indirect call: target address in x19. Move it to x16
+            // before the call so the callee's prologue/epilogue
+            // doesn't trample our accumulator slot. After the call,
+            // copy x0 back into x19 (same dance as Op::Jsr).
+            emit(code, enc_mov_reg(Reg::X16, Reg::X19));
+            emit(code, enc_blr(Reg::X16));
+            emit(code, enc_mov_reg(Reg::X19, Reg::X0));
+        }
+
+        // ---- Immediate-form arithmetic / comparison (optimizer-emitted).
+        //      All of them resolve to "load operand into x16 then run
+        //      the register-form encoder against x19". Comparisons
+        //      additionally do cmp+cset.
+        Op::AddI => imm_arith(code, text, pc, "AddI", enc_add_reg)?,
+        Op::SubI => imm_arith(code, text, pc, "SubI", enc_sub_reg)?,
+        Op::MulI => imm_arith(code, text, pc, "MulI", enc_mul)?,
+        Op::AndI => imm_arith(code, text, pc, "AndI", enc_and_reg)?,
+        Op::OrI => imm_arith(code, text, pc, "OrI", enc_orr_reg)?,
+        Op::XorI => imm_arith(code, text, pc, "XorI", enc_eor_reg)?,
+        Op::ShlI => imm_arith(code, text, pc, "ShlI", enc_lslv)?,
+        Op::ShrI => imm_arith(code, text, pc, "ShrI", enc_asrv)?,
+        Op::EqI => imm_cmp(code, text, pc, "EqI", Cond::Eq)?,
+        Op::NeI => imm_cmp(code, text, pc, "NeI", Cond::Ne)?,
+        Op::LtI => imm_cmp(code, text, pc, "LtI", Cond::Lt)?,
+        Op::GtI => imm_cmp(code, text, pc, "GtI", Cond::Gt)?,
+        Op::LeI => imm_cmp(code, text, pc, "LeI", Cond::Le)?,
+        Op::GeI => imm_cmp(code, text, pc, "GeI", Cond::Ge)?,
+        Op::LdLocI => {
+            // `Lea N + Li` fused. a = *(bp + N*8)
+            let offset = read_operand(text, pc, "LdLocI")?;
+            emit_local_load(code, offset, /*byte=*/ false);
+        }
+        Op::LdLocC => {
+            let offset = read_operand(text, pc, "LdLocC")?;
+            emit_local_load(code, offset, /*byte=*/ true);
+        }
+
+        // ---- Syscalls (deferred to M1.7). ----
+        Op::Open
+        | Op::Read
+        | Op::Clos
+        | Op::Prtf
+        | Op::Malc
+        | Op::Free
+        | Op::Mset
+        | Op::Mcmp
+        | Op::Mcpy
+        | Op::Mpro
+        | Op::Exit
+        | Op::Write
+        | Op::Genv
+        | Op::Senv => {
+            return Err(C4Error::Compile(format!(
+                "native codegen (M1.6): syscall op {op:?} not yet lowered -- coming in M1.7"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Pop the top of the VM stack into `x16`, then combine with `x19`.
+/// `reverse = false` -> `x19 = x16 OP x19` (popped is LHS, matches
+/// commutative + the c4 VM semantics for sub/div/shifts).
+/// `reverse = true` is identical here because every encoder we pass
+/// already takes (rd, rn, rm) in (dest, lhs, rhs) order; the flag
+/// stays as a structural reminder of which operand is the popped one.
+fn binop_with_pop<F: Fn(Reg, Reg, Reg) -> u32>(code: &mut Vec<u8>, enc: F, _reverse: bool) {
+    emit(code, enc_ldr_post(Reg::X16, Reg::SP, 16));
+    emit(code, enc(Reg::X19, Reg::X16, Reg::X19));
+}
+
+/// Pop, compare, and condition-set into `x19`.
+fn cmp_with_pop(code: &mut Vec<u8>, cond: Cond) {
+    emit(code, enc_ldr_post(Reg::X16, Reg::SP, 16));
+    emit(code, enc_cmp_reg(Reg::X16, Reg::X19));
+    emit(code, enc_cset(Reg::X19, cond));
+}
+
+/// Optimizer-emitted `<op>I N` lowering: load `N` into x16, then run
+/// the register-form encoder. A future enhancement could fold small
+/// `N` into the immediate form of add/sub directly; for now we keep
+/// the 1-instruction-per-immediate-op count predictable.
+fn imm_arith<F: Fn(Reg, Reg, Reg) -> u32>(
+    code: &mut Vec<u8>,
+    text: &[i64],
+    pc: &mut usize,
+    name: &str,
+    enc: F,
+) -> Result<(), C4Error> {
+    let v = read_operand(text, pc, name)?;
+    load_imm64(code, Reg::X16, v as u64);
+    emit(code, enc(Reg::X19, Reg::X19, Reg::X16));
+    Ok(())
+}
+
+/// Same shape as [`imm_arith`] but for comparison-immediate ops.
+fn imm_cmp(
+    code: &mut Vec<u8>,
+    text: &[i64],
+    pc: &mut usize,
+    name: &str,
+    cond: Cond,
+) -> Result<(), C4Error> {
+    let v = read_operand(text, pc, name)?;
+    load_imm64(code, Reg::X16, v as u64);
+    emit(code, enc_cmp_reg(Reg::X19, Reg::X16));
+    emit(code, enc_cset(Reg::X19, cond));
+    Ok(())
+}
+
+/// Fused `Lea N; Li/Lc` -- load the local at `bp + N*8` into x19.
+/// Picks `ldur` for offsets that fit in the 9-bit signed range
+/// (covers locals up to fp - 256), otherwise computes the address
+/// explicitly via `Lea`-style add/sub then loads.
+fn emit_local_load(code: &mut Vec<u8>, offset: i64, byte: bool) {
+    let bytes = offset * 8;
+    if (-256..256).contains(&bytes) {
+        if byte {
+            // No `ldurb` in our encoder; do the compute-address path.
+            // Locals stored as char are rare enough that the extra
+            // instruction won't matter.
+        } else {
+            emit(code, enc_ldur(Reg::X19, Reg::X29, bytes as i32));
+            return;
+        }
+    }
+    // Fallback: address compute, then load.
+    let abs = offset.unsigned_abs() * 8;
+    if abs < 4096 {
+        let imm = abs as u32;
+        let word = if offset >= 0 {
+            enc_add_imm(Reg::X19, Reg::X29, imm)
+        } else {
+            enc_sub_imm(Reg::X19, Reg::X29, imm)
+        };
+        emit(code, word);
+    } else {
+        load_imm64(code, Reg::X16, abs);
+        let word = if offset >= 0 {
+            enc_add_reg(Reg::X19, Reg::X29, Reg::X16)
+        } else {
+            enc_sub_reg(Reg::X19, Reg::X29, Reg::X16)
+        };
+        emit(code, word);
+    }
+    if byte {
+        emit(code, enc_ldrb_imm(Reg::X19, Reg::X19, 0));
+    } else {
+        emit(code, enc_ldr_imm(Reg::X19, Reg::X19, 0));
+    }
 }
 
 /// Standard AAPCS64 prologue: save fp/lr in one paired store, set the
@@ -551,10 +925,9 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64) {
 /// Mirror of [`emit_prologue`]. Move the VM accumulator into `x0`
 /// (the return register), tear down the frame, return.
 ///
-/// Phase 1 doesn't yet track the per-function `locals` count to undo
-/// the prologue's `sub sp, ...` -- it relies on `mov sp, x29` (via
-/// `add sp, x29, #0`) to restore SP from the saved frame pointer
-/// before the `ldp` reloads fp/lr.
+/// We restore SP from the saved fp before reloading fp/lr, so any
+/// stack space the function allocated for locals (or left over from
+/// VM pushes) gets reclaimed in one step.
 fn emit_epilogue(code: &mut Vec<u8>) {
     emit(code, enc_mov_reg(Reg::X0, Reg::X19));
     emit(code, enc_add_imm(Reg::SP, Reg::X29, 0));

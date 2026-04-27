@@ -653,7 +653,10 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
         strtab.len() as u32,
     );
     let dysymtab_lc = dysymtab_command(imports.len() as u32);
-    let main_lc = main_command(entry_file_offset);
+    // LC_MAIN's entryoff is a *file* offset, but `main` may live partway
+    // through the emitted code if the compiler placed helper functions
+    // first. `build.entry_offset` carries that intra-code offset.
+    let main_lc = main_command(entry_file_offset + build.entry_offset as u64);
 
     debug_assert_eq!(text_segment.len() as u64, text_seg_size);
     debug_assert_eq!(data_segment.len() as u64, data_seg_size);

@@ -229,6 +229,44 @@ header metadata (target, sizes, entry offset, fixup counts):
 Useful for following what the codegen does on a small program
 without reading the encoder source.
 
+### Native optimization
+
+`--native-optimize` runs a per-function register-pool pass on top
+of the bytecode-level `--optimize`. The c4 bytecode pushes a
+left-operand onto the stack before every binary operator; lowered
+straight that becomes a `str x19, [sp, -16]!` (aarch64) or `sub
+rsp, 16; mov [rsp], r13` (x86_64) at every `+` / `-` / `<` / etc.
+Most of those pushes can ride in callee-saved registers instead.
+
+A pre-pass walks the bytecode once and classifies each `Psh`:
+binary-op-LHS pushes go into a register pool (x20..x27 on aarch64,
+rbx/r12/r14/r15 on x86_64), call-argument pushes stay on the real
+stack so libc / user callees find their args at the expected
+`bp + offset`. Per-function the analyzer also tracks max
+simultaneous depth so the prologue/epilogue saves only the pool
+slots actually used.
+
+Bench numbers on macos/aarch64 (Apple M-series, `--release`,
+15 iters, see `examples/bench.rs` for the workloads):
+
+    workload          jit      jit-O    jit-N   jit-ON
+    fib32          18.04ms  10.64ms  11.94ms  11.40ms
+    quicksort-50k  11.19ms   8.27ms   6.66ms   6.22ms
+    matmul-50       1.21ms 945.08us 360.42us 345.54us
+
+`jit-N` = `--jit --native-optimize`; `jit-ON` = `--jit --optimize
+--native-optimize`. matmul wins 3.4x from the register pool alone;
+quicksort 1.7x. fib32 regresses ~7% relative to `jit-O` because
+the bytecode optimizer's `*I` immediate-form fusion already
+eliminated most of fib's pushes, leaving just enough remaining
+that the prologue saves cost more than the per-push savings
+return. Workload-dependent -- the flag is opt-in.
+
+The pool falls back to real-stack pushes verbatim for any function
+whose max depth exceeds the per-arch pool size (8 slots on
+aarch64, 4 on x86_64). The c4 self-host stays comfortably within
+both.
+
 ### Runtime dynamic linking
 
 `dlopen` / `dlsym` / `dlclose` / `dlerror` are first-class library
@@ -301,7 +339,8 @@ The CLI binary always builds with the default `std` feature.
         elf.rs              ELF writer (Linux/aarch64 + Linux/x86_64,
                             ET_EXEC + libc + libdl)
         disasm.rs           --dump-asm textual listing
-        jit.rs              in-process JIT loader (Linux only)
+        jit.rs              in-process JIT loader (Linux + macOS arm64)
+        regalloc.rs         --native-optimize register-pool analyzer
       tests/
         lexer.rs, parser.rs, codegen.rs, vm.rs    phase tests
         programs.rs, syscalls.rs, types.rs        end-to-end tests
@@ -312,6 +351,8 @@ The CLI binary always builds with the default `std` feature.
         jit.rs                                    Linux JIT e2e
     fixtures/c/             C programs the test suite loads + the
                             original c4.c
+    examples/bench.rs       wall-clock harness for VM / VM-O / JIT /
+                            JIT-N / JIT-ON pipelines
 
 The two-line summary:
 `Compiler::new(source).compile()` returns a `Program`, and

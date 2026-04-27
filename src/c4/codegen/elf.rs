@@ -478,6 +478,69 @@ fn patch_adrp_ldr(
     Ok(())
 }
 
+/// Per-machine dispatch for "load an absolute address into the
+/// accumulator". aarch64 uses an `adrp + add` pair; x86_64 uses a
+/// single `lea r13, [rip + disp32]`. The codegen records the
+/// instruction's start offset under the same field name; the
+/// per-arch patcher knows the encoding.
+fn patch_addr_load(
+    machine: Machine,
+    out: &mut [u8],
+    code_base_in_file: u64,
+    code_vmaddr_base: u64,
+    instr_offset_in_code: u64,
+    target_vmaddr: u64,
+    label: &str,
+) -> Result<(), C4Error> {
+    match machine {
+        Machine::Aarch64 => patch_adrp_add(
+            out,
+            code_base_in_file,
+            code_vmaddr_base,
+            instr_offset_in_code,
+            target_vmaddr,
+            label,
+        ),
+        Machine::X86_64 => patch_lea_rip32(
+            out,
+            code_base_in_file,
+            code_vmaddr_base,
+            instr_offset_in_code,
+            target_vmaddr,
+            label,
+        ),
+    }
+}
+
+/// Patch the disp32 field of `lea r64, [rip + disp32]` so the
+/// instruction computes `target_vmaddr` into its destination. The
+/// `disp32` is measured from the byte *after* the lea (i.e. from
+/// `instr_vmaddr + LEA_RIP32_LEN`). 32-bit signed range, ~+/-2 GiB.
+fn patch_lea_rip32(
+    out: &mut [u8],
+    code_base_in_file: u64,
+    code_vmaddr_base: u64,
+    instr_offset_in_code: u64,
+    target_vmaddr: u64,
+    label: &str,
+) -> Result<(), C4Error> {
+    let lea_len = x86_64::LEA_RIP32_LEN as u64;
+    let instr_vmaddr = code_vmaddr_base + instr_offset_in_code;
+    let after = instr_vmaddr + lea_len;
+    let delta = target_vmaddr as i64 - after as i64;
+    if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
+        return Err(C4Error::Compile(format!(
+            "ELF: {label} disp {delta} doesn't fit in 32 bits"
+        )));
+    }
+    let disp32 = delta as i32;
+    // disp32 is the last 4 bytes of a 7-byte LEA encoding:
+    //   REX.W + 0x8D + ModR/M + 4*disp
+    let disp_file_off = (code_base_in_file + instr_offset_in_code + lea_len - 4) as usize;
+    out[disp_file_off..disp_file_off + 4].copy_from_slice(&disp32.to_le_bytes());
+    Ok(())
+}
+
 /// Patch an `adrp Xd, page; add Xd, Xd, #imm12` pair so the result
 /// equals `target_vmaddr`. Used for data-segment references and
 /// function-pointer literals; both are absolute-address materializations.
@@ -774,9 +837,11 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
         )?;
     }
 
-    // Data-segment references (string literals / globals).
+    // Data-segment references (string literals / globals). Per-arch
+    // patch shape: aarch64 uses adrp+add, x86_64 uses lea + RIP-rel.
     for fx in &build.data_fixups {
-        patch_adrp_add(
+        patch_addr_load(
+            machine,
             &mut out,
             code_file_offset,
             code_vmaddr,
@@ -790,7 +855,8 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
     for fx in &build.func_fixups {
         // Targets are byte offsets within build.text -- shift by
         // stub len.
-        patch_adrp_add(
+        patch_addr_load(
+            machine,
             &mut out,
             code_file_offset,
             code_vmaddr,

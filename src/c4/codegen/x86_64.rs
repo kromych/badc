@@ -23,10 +23,11 @@
 use alloc::format;
 use alloc::vec::Vec;
 
+use super::super::CODE_BASE;
 use super::super::error::C4Error;
 use super::super::op::Op;
 use super::super::program::Program;
-use super::{Build, Target, TargetOptions};
+use super::{Build, DataFixup, FuncFixup, Target, TargetOptions};
 
 // ------------------------------------------------------------------
 // Register encoding.
@@ -234,6 +235,24 @@ pub(super) fn emit_lea_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32)
     emit_byte(code, 0x8D);
     emit_modrm_mem(code, dst, base, disp);
 }
+
+/// `LEA r64, [rip + disp32]` -- the RIP-relative addressing form
+/// (mod=00, r/m=101). 7 bytes total. The writer patches `disp32`
+/// after layout to point at a data-segment address or another
+/// function inside the code blob.
+pub(super) fn emit_lea_r_rip32(code: &mut Vec<u8>, dst: Reg, disp32: i32) {
+    emit_byte(code, rex(true, dst.high(), false, false));
+    emit_byte(code, 0x8D);
+    // mod=00, reg=dst.lo(), r/m=101 -- the magic "RIP-relative"
+    // r/m encoding under mod=00.
+    emit_byte(code, modrm(0b00, dst.lo(), 0b101));
+    emit_i32(code, disp32);
+}
+
+/// Byte length of [`emit_lea_r_rip32`]. The writer needs this to
+/// compute the RIP that the disp32 is measured from (i.e. the byte
+/// just after the lea, which is `instr_offset + LEA_RIP32_LEN`).
+pub(super) const LEA_RIP32_LEN: usize = 7;
 
 /// `CALL rel32`. The 5-byte direct-call form. `rel32` is a signed
 /// 32-bit displacement from the byte *after* the instruction.
@@ -640,6 +659,11 @@ pub(super) fn lower(program: &Program, target: Target) -> Result<Build, C4Error>
     let mut code: Vec<u8> = Vec::new();
     let mut bytecode_to_native: Vec<usize> = alloc::vec![usize::MAX; program.text.len() + 1];
     let mut fixups: Vec<Fixup> = Vec::new();
+    let mut data_fixups: Vec<DataFixup> = Vec::new();
+    // Function-pointer Imms get their target resolved post-walk
+    // against `bytecode_to_native`, mirroring aarch64::lower.
+    let mut pending_func_fixups: Vec<(usize, usize)> = Vec::new();
+    let data_imm_positions: &[usize] = &program.data_imm_positions;
 
     let mut in_main = false;
     let mut pc = 0usize;
@@ -656,11 +680,42 @@ pub(super) fn lower(program: &Program, target: Target) -> Result<Build, C4Error>
         if matches!(op, Op::Ent) {
             in_main = op_pc == program.entry_pc;
         }
-        lower_op(op, &program.text, &mut pc, &mut code, &mut fixups, in_main)?;
+        lower_op(
+            op,
+            &program.text,
+            &mut pc,
+            &mut code,
+            &mut fixups,
+            &mut data_fixups,
+            &mut pending_func_fixups,
+            data_imm_positions,
+            in_main,
+        )?;
     }
     bytecode_to_native[program.text.len()] = code.len();
 
     apply_fixups(&mut code, &fixups, &bytecode_to_native, program.text.len())?;
+
+    // Resolve pending function-pointer fixups now that the bc-to-
+    // native map is complete.
+    let mut func_fixups: Vec<FuncFixup> = Vec::with_capacity(pending_func_fixups.len());
+    for (instr_offset, target_bc_pc) in pending_func_fixups {
+        if target_bc_pc > program.text.len() {
+            return Err(C4Error::Compile(format!(
+                "native codegen (x86_64): function pointer target {target_bc_pc} past end of bytecode"
+            )));
+        }
+        let target = bytecode_to_native[target_bc_pc];
+        if target == usize::MAX {
+            return Err(C4Error::Compile(format!(
+                "native codegen (x86_64): function pointer target {target_bc_pc} did not land on an instruction"
+            )));
+        }
+        func_fixups.push(FuncFixup {
+            adrp_offset: instr_offset,
+            target_native_offset: target,
+        });
+    }
 
     let entry_offset = bytecode_to_native
         .get(program.entry_pc)
@@ -678,8 +733,8 @@ pub(super) fn lower(program: &Program, target: Target) -> Result<Build, C4Error>
         data: program.data.clone(),
         entry_offset,
         got_fixups: Vec::new(),
-        data_fixups: Vec::new(),
-        func_fixups: Vec::new(),
+        data_fixups,
+        func_fixups,
     })
 }
 
@@ -728,6 +783,9 @@ fn lower_op(
     pc: &mut usize,
     code: &mut Vec<u8>,
     fixups: &mut Vec<Fixup>,
+    data_fixups: &mut Vec<DataFixup>,
+    pending_func_fixups: &mut Vec<(usize, usize)>,
+    data_imm_positions: &[usize],
     in_main: bool,
 ) -> Result<(), C4Error> {
     match op {
@@ -747,8 +805,30 @@ fn lower_op(
 
         // ---- Constants and addresses ----
         Op::Imm => {
+            // The operand sits at `*pc` *before* read_operand bumps
+            // it; the side-channel uses that index.
+            let operand_pc = *pc;
             let v = read_operand(text, pc, "Imm")?;
-            emit_mov_r_imm64(code, Reg::R13, v);
+            if data_imm_positions.binary_search(&operand_pc).is_ok() {
+                // Address of a string literal or global: emit
+                // `lea r13, [rip + 0]` placeholder, record the data
+                // offset for the writer to patch.
+                let instr_offset = code.len();
+                data_fixups.push(DataFixup {
+                    adrp_offset: instr_offset,
+                    data_offset: v as u64,
+                });
+                emit_lea_r_rip32(code, Reg::R13, 0);
+            } else if (v as usize) >= CODE_BASE && ((v as usize) - CODE_BASE) < text.len() {
+                // Function-pointer literal. Resolve the target
+                // bytecode PC to a native offset post-walk.
+                let target_bc_pc = (v as usize) - CODE_BASE;
+                let instr_offset = code.len();
+                pending_func_fixups.push((instr_offset, target_bc_pc));
+                emit_lea_r_rip32(code, Reg::R13, 0);
+            } else {
+                emit_mov_r_imm64(code, Reg::R13, v);
+            }
         }
         Op::Lea => {
             // a = bp + lea_offset_bytes(off). lea r13, [rbp + N].

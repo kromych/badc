@@ -38,6 +38,7 @@ mod disasm;
 mod elf;
 mod jit;
 mod mach_o;
+mod regalloc;
 mod x86_64;
 
 pub use jit::{jit_run, jit_run_with_options};

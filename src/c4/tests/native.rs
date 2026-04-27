@@ -289,20 +289,22 @@ fn build_and_run_fixture(name: &str) -> RunOutcome {
 /// fixture's filename plus the exit code it yields under the VM
 /// (cross-checked in `tests::programs`).
 ///
-/// Excluded fixtures fall into two buckets that the native pipeline
-/// genuinely can't run identically to the VM:
+/// Fixtures that need argv, a CWD-relative input file, or an env var
+/// set by the harness are exercised by their own `*_natively` tests
+/// (see `file_io_natively`, `getenv_value_natively`,
+/// `original_c4_compiles_and_runs_hello_natively`). Everything else
+/// that runs the same way on both backends lives in the table below.
 ///
-/// * **Safety-net checks** (`oob_*`, `mprotect_*`, `forge_code_pointer`,
-///   `use_after_free`, `double_free`, `negative_size_memset`, etc.).
-///   The VM has dedicated guards that exit -1 on a violation; the
-///   native binary just runs into the OS's protections (or doesn't),
-///   so it can't reproduce the VM's exact exit.
+/// The remaining excluded fixtures are the **safety-net checks**
+/// (`oob_*`, `mprotect_blocks_*`, `forge_code_pointer`,
+/// `use_after_free`, `double_free`, `negative_size_memset`,
+/// `code_as_data`, `memcpy_oob_*`, `memset_oob`). The VM has dedicated
+/// guards that exit -1 on a violation; the native binary either hits
+/// the OS's protections (SIGSEGV / SIGABRT) or silently smashes
+/// memory and exits 0, so the two backends genuinely diverge by
+/// design. `struct_value_rejected.c` is also excluded because it's a
+/// compile-error fixture (the build itself fails, which is the test).
 ///
-/// * **External setup** (`file_io.c` needs `test_dummy.txt` in CWD,
-///   `getenv_value.c` / `setenv_then_get.c` need env vars set by the
-///   harness, `c4.c` is the self-host bootstrap).
-///
-/// Everything that runs the same way on both backends lives below.
 /// Data-segment lowering and function-pointer translation, the two
 /// known gaps in the M1 codegen, both close in M2 -- string literals
 /// flow through __DATA via `DataFixup` and function pointers resolve
@@ -351,7 +353,144 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("sizeof_basic.c", 0),
     ("sizeof_expr.c", 0),
     ("write_stdout.c", 0),
+    // M2 follow-up: trivial fixtures that exit with the same code
+    // under both backends. The type-warning fixtures emit warnings
+    // at compile time but run to a clean exit. `mprotect_allows_read`
+    // exercises the success path (the VM-aborting "blocks_*" cases
+    // intentionally diverge from native and live in the excluded set).
+    ("ir_translation_simple.c", 42),
+    ("ir_translation_if.c", 2),
+    ("ir_translation_while.c", 0),
+    ("type_warning_int_to_ptr.c", 0),
+    ("type_warning_silenced_by_cast.c", 0),
+    ("type_warning_arity.c", 0),
+    ("mprotect_allows_read.c", 'X' as i32),
+    ("setenv_then_get.c", 'Z' as i32),
 ];
+
+/// Build a fixture, sign it, run it with the given args, and return
+/// the outcome. Like [`build_and_run_fixture`] but exposes the binary
+/// to a `main(argc, argv)` it can act on.
+fn build_and_run_fixture_with_args<I, S>(name: &str, args: I) -> RunOutcome
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("fixtures");
+    path.push("c");
+    path.push(name);
+    let src =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    let stem = name.trim_end_matches(".c");
+
+    let program = match Compiler::new(src).compile() {
+        Ok(p) => p,
+        Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
+    };
+    let bytes = match emit_native(&program, Target::MacOSAarch64) {
+        Ok(b) => b,
+        Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),
+    };
+
+    let bin_path = std::env::temp_dir().join(format!("badc-test-{stem}.bin"));
+    {
+        let mut f = std::fs::File::create(&bin_path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+    }
+    set_executable(&bin_path);
+    codesign(&bin_path);
+
+    let output = Command::new(&bin_path)
+        .args(args.into_iter().map(|s| s.as_ref().to_string()))
+        .output()
+        .expect("could not exec the produced binary");
+    let _ = std::fs::remove_file(&bin_path);
+    if let Some(code) = output.status.code() {
+        RunOutcome::Exit(code)
+    } else {
+        use std::os::unix::process::ExitStatusExt;
+        let signal = output.status.signal().unwrap_or(0);
+        RunOutcome::Signal(signal)
+    }
+}
+
+#[test]
+fn file_io_natively() {
+    // Native counterpart of `tests::programs::file_io`. Drops a
+    // 10-byte test_dummy.txt next to where the binary will run, then
+    // expects the fixture's open/read/close path to exit 0.
+    // The fixture hard-codes the filename `test_dummy.txt`, so we
+    // can't rename it -- instead we put it inside the temp dir we'll
+    // use as the binary's CWD.
+    let dummy_path = std::env::temp_dir().join("test_dummy.txt");
+    std::fs::write(&dummy_path, "1234567890").unwrap();
+    let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("fixtures");
+    path.push("c");
+    path.push("file_io.c");
+    let src = std::fs::read_to_string(&path).unwrap();
+    let program = Compiler::new(src).compile().expect("compile file_io.c");
+    let bytes = emit_native(&program, Target::MacOSAarch64).expect("emit_native");
+    let bin_path = std::env::temp_dir().join("badc-test-file_io.bin");
+    std::fs::write(&bin_path, &bytes).unwrap();
+    set_executable(&bin_path);
+    codesign(&bin_path);
+
+    let output = Command::new(&bin_path)
+        .current_dir(std::env::temp_dir())
+        .output()
+        .expect("exec native binary");
+    let _ = std::fs::remove_file(&bin_path);
+    let _ = std::fs::remove_file(&dummy_path);
+    assert_eq!(output.status.code(), Some(0));
+}
+
+#[test]
+fn getenv_value_natively() {
+    // Set the env var the fixture reads, then exec. The binary
+    // returns the first byte of the value, so 'V' (86) confirms the
+    // libc getenv path threads through correctly.
+    let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("fixtures");
+    path.push("c");
+    path.push("getenv_value.c");
+    let src = std::fs::read_to_string(&path).unwrap();
+    let program = Compiler::new(src)
+        .compile()
+        .expect("compile getenv_value.c");
+    let bytes = emit_native(&program, Target::MacOSAarch64).expect("emit_native");
+    let bin_path = std::env::temp_dir().join("badc-test-getenv.bin");
+    std::fs::write(&bin_path, &bytes).unwrap();
+    set_executable(&bin_path);
+    codesign(&bin_path);
+
+    let output = Command::new(&bin_path)
+        .env("C4RS_TEST_GETENV", "Vox")
+        .output()
+        .expect("exec native binary");
+    let _ = std::fs::remove_file(&bin_path);
+    assert_eq!(output.status.code(), Some('V' as i32));
+}
+
+#[test]
+fn original_c4_compiles_and_runs_hello_natively() {
+    // Native counterpart of `tests::programs::original_c4_compiles_and_runs_hello`.
+    // The native build of c4.c reads its first user argv entry as the
+    // source file to compile-and-run; we hand it the absolute path to
+    // hello.c and let c4.c (running natively) parse + execute it. The
+    // expected output is "Hello 123" with exit 0.
+    //
+    // Unlike the VM-side test, the native binary's argv[0] is set by
+    // `Command::new` to the binary path -- so we only need to pass
+    // hello.c's absolute path; c4.c does `--argc; ++argv;` itself.
+    let outcome =
+        build_and_run_fixture_with_args("c4.c", [concat!(env!("CARGO_MANIFEST_DIR"), "/hello.c")]);
+    assert!(
+        matches!(outcome, RunOutcome::Exit(0)),
+        "expected clean exit, got {outcome:?}"
+    );
+}
 
 #[test]
 fn fixture_parity() {

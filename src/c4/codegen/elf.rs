@@ -196,21 +196,15 @@ fn start_stub_len(machine: Machine) -> u64 {
     }
 }
 
-/// Emit the `_start` prologue for the given machine. Returns
-/// `Some(adrp/call_offset)` if the stub uses libc exit through the
-/// GOT (the caller registers a `GotFixup` for it), or `None` if the
-/// stub does its own raw exit and needs no GOT lookup.
-fn emit_start_stub(
-    machine: Machine,
-    code: &mut Vec<u8>,
-    main_offset_in_code: u64,
-) -> Option<usize> {
+/// Emit the `_start` prologue for the given machine. Returns the
+/// byte offset of the libc-exit GOT call placeholder so the caller
+/// can register a `GotFixup` for it. Both arches now route exit
+/// through libc -- x86_64 used to do a raw syscall (M3.1) but
+/// switched in M3.4 so glibc flushes stdio.
+fn emit_start_stub(machine: Machine, code: &mut Vec<u8>, main_offset_in_code: u64) -> usize {
     match machine {
-        Machine::Aarch64 => Some(emit_start_stub_aarch64(code, main_offset_in_code)),
-        Machine::X86_64 => {
-            x86_64::emit_start_stub(code, main_offset_in_code);
-            None
-        }
+        Machine::Aarch64 => emit_start_stub_aarch64(code, main_offset_in_code),
+        Machine::X86_64 => x86_64::emit_start_stub(code, main_offset_in_code),
     }
 }
 
@@ -512,6 +506,67 @@ fn patch_addr_load(
     }
 }
 
+/// Per-machine dispatch for "call a libc function whose address
+/// lives in the GOT". aarch64 emits adrp+ldr+blr -- patch the
+/// adrp+ldr immediates. x86_64 emits `call qword [rip + disp32]` --
+/// patch the disp32.
+fn patch_got_call(
+    machine: Machine,
+    out: &mut [u8],
+    code_base_in_file: u64,
+    code_vmaddr_base: u64,
+    instr_offset_in_code: u64,
+    target_vmaddr: u64,
+    label: &str,
+) -> Result<(), C4Error> {
+    match machine {
+        Machine::Aarch64 => patch_adrp_ldr(
+            out,
+            code_base_in_file,
+            code_vmaddr_base,
+            instr_offset_in_code,
+            target_vmaddr,
+            label,
+        ),
+        Machine::X86_64 => patch_call_qword_rip32(
+            out,
+            code_base_in_file,
+            code_vmaddr_base,
+            instr_offset_in_code,
+            target_vmaddr,
+            label,
+        ),
+    }
+}
+
+/// Patch the disp32 field of `call qword [rip + disp32]` so the
+/// loaded pointer is at `target_vmaddr`. The `disp32` is measured
+/// from the byte *after* the call (i.e. from
+/// `instr_vmaddr + CALL_QWORD_RIP32_LEN`).
+fn patch_call_qword_rip32(
+    out: &mut [u8],
+    code_base_in_file: u64,
+    code_vmaddr_base: u64,
+    instr_offset_in_code: u64,
+    target_vmaddr: u64,
+    label: &str,
+) -> Result<(), C4Error> {
+    let call_len = x86_64::CALL_QWORD_RIP32_LEN as u64;
+    let instr_vmaddr = code_vmaddr_base + instr_offset_in_code;
+    let after = instr_vmaddr + call_len;
+    let delta = target_vmaddr as i64 - after as i64;
+    if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
+        return Err(C4Error::Compile(format!(
+            "ELF: {label} disp {delta} doesn't fit in 32 bits"
+        )));
+    }
+    let disp32 = delta as i32;
+    // disp32 is the last 4 bytes of `FF 15 dd dd dd dd`.
+    let disp_file_off = (code_base_in_file + instr_offset_in_code + call_len - 4) as usize;
+    out[disp_file_off..disp_file_off + 4].copy_from_slice(&disp32.to_le_bytes());
+    Ok(())
+}
+
 /// Patch the disp32 field of `lea r64, [rip + disp32]` so the
 /// instruction computes `target_vmaddr` into its destination. The
 /// `disp32` is measured from the byte *after* the lea (i.e. from
@@ -808,26 +863,26 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
     // ---- Patch fixups. ----
     // The code blob layout is [_start stub][build.text]. The codegen's
     // adrp_offset is relative to build.text, so we shift by stub len.
-    // The exit-call adrp from _start is patched here when the stub
-    // chose to use libc (aarch64 case); x86_64's stub returns None
-    // because it does a raw syscall and needs no GOT lookup.
-    if let Some(adrp_off) = exit_adrp_offset {
-        let exit_idx = exit_import_index();
-        patch_adrp_ldr(
-            &mut out,
-            code_file_offset,
-            code_vmaddr,
-            adrp_off as u64,
-            got_vmaddr + (exit_idx as u64) * 8,
-            "_start exit fixup",
-        )?;
-    }
+    // The exit-call from _start: aarch64's `_start` ends with an
+    // adrp+ldr+blr through the libc-exit GOT slot; x86_64's ends
+    // with `call qword [rip + disp32]` against the same slot. The
+    // per-arch GOT-call patcher knows which encoding to write.
+    let exit_idx = exit_import_index();
+    patch_got_call(
+        machine,
+        &mut out,
+        code_file_offset,
+        code_vmaddr,
+        exit_adrp_offset as u64,
+        got_vmaddr + (exit_idx as u64) * 8,
+        "_start exit fixup",
+    )?;
 
-    // GOT fixups for libc calls inside build.text. M3.4 will switch
-    // these to a per-arch dispatch when the x86_64 GOT-call shape
-    // (`call qword [rip + disp]`) lands; today they're aarch64-only.
+    // GOT fixups for libc calls inside build.text. Same per-arch
+    // dispatch as the _start exit call.
     for fx in &build.got_fixups {
-        patch_adrp_ldr(
+        patch_got_call(
+            machine,
             &mut out,
             code_file_offset,
             code_vmaddr,

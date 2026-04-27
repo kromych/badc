@@ -27,7 +27,7 @@ use super::super::CODE_BASE;
 use super::super::error::C4Error;
 use super::super::op::Op;
 use super::super::program::Program;
-use super::{Build, DataFixup, FuncFixup, Target, TargetOptions};
+use super::{Build, DataFixup, FuncFixup, GotFixup, Target, TargetOptions, aarch64};
 
 // ------------------------------------------------------------------
 // Register encoding.
@@ -513,6 +513,30 @@ pub(super) fn emit_call_r(code: &mut Vec<u8>, target: Reg) {
     emit_byte(code, modrm(0b11, 2, target.lo()));
 }
 
+/// `CALL qword ptr [rip + disp32]` -- PC-relative indirect call
+/// through a memory operand. Encoding: `FF /2` with ModR/M
+/// `mod=00 reg=2 r/m=101` (the magic "RIP-relative" encoding under
+/// mod=00) + disp32. 6 bytes total. Used for GOT calls on Linux
+/// x86_64; the writer patches `disp32` so the load points at the
+/// right `.got` slot.
+pub(super) fn emit_call_qword_rip32(code: &mut Vec<u8>, disp32: i32) {
+    emit_byte(code, 0xFF);
+    emit_byte(code, modrm(0b00, 2, 0b101));
+    emit_i32(code, disp32);
+}
+
+/// Byte length of [`emit_call_qword_rip32`]. Used by the writer to
+/// compute the `disp32` measurement origin (just after the call).
+pub(super) const CALL_QWORD_RIP32_LEN: usize = 6;
+
+/// `XOR eax, eax` -- 32-bit form, zero-extends to 64 (sets rax = 0).
+/// Used as the System V variadic-ABI "no XMM args" marker before
+/// printf-shape calls: AL must be 0 going in.
+pub(super) fn emit_xor_eax_eax(code: &mut Vec<u8>) {
+    emit_byte(code, 0x31);
+    emit_byte(code, 0xC0);
+}
+
 // ------------------------------------------------------------------
 // ModR/M + SIB + displacement encoding for memory operands.
 //
@@ -557,24 +581,20 @@ fn emit_modrm_mem(code: &mut Vec<u8>, reg: Reg, base: Reg, disp: i32) {
 //   [rsp + 16] : argv[1]
 //   ...
 //
-// We:
-//   * load argc into rdi, argv into rsi (System V ABI: first two args)
-//   * call main
-//   * pass main's return value (rax) as the exit-syscall arg
-//   * SYS_exit = 60 on Linux x86_64; nr in rax, arg in rdi
-//
-// M3.1 uses raw syscall exit -- libc isn't linked yet, so there's
-// nothing to flush. M3.4 will switch to libc `exit` through the GOT
-// once the dynamic-linking machinery comes online.
+// We load argc/argv into rdi/rsi, call main, then call libc `exit`
+// through the GOT so atexit hooks and stdio flushing run -- without
+// that, printf("...\n") to a pipe loses output because glibc
+// block-buffers non-tty stdout.
 // ------------------------------------------------------------------
 
-/// Length of the `_start` stub in bytes. Used by [`lower`] / the ELF
-/// writer to compute branch offsets and segment sizes.
-pub(super) const START_STUB_LEN: u64 = 24;
+/// Length of the `_start` stub in bytes. Used by the ELF writer to
+/// compute branch offsets and segment sizes.
+pub(super) const START_STUB_LEN: u64 = 23;
 
-/// Emit the `_start` prologue. Returns `Ok(())` on success; the byte
-/// length always equals [`START_STUB_LEN`].
-pub(super) fn emit_start_stub(code: &mut Vec<u8>, main_offset_in_code: u64) {
+/// Emit the `_start` prologue. Returns the byte offset (within the
+/// emitted code blob) of the `call qword [rip+...]` placeholder for
+/// libc `exit` -- the writer registers a GotFixup against it.
+pub(super) fn emit_start_stub(code: &mut Vec<u8>, main_offset_in_code: u64) -> usize {
     let stub_start = code.len();
 
     // mov rdi, [rsp]            -- argc into 1st arg register
@@ -591,25 +611,21 @@ pub(super) fn emit_start_stub(code: &mut Vec<u8>, main_offset_in_code: u64) {
     let rel32 = (main_byte - after_call) as i32;
     emit_call_rel32(code, rel32);
 
-    // mov rdi, rax              -- pass main's return into the exit
-    //                              syscall's first arg.
+    // mov rdi, rax              -- pass main's return value into
+    //                              libc `exit`'s first arg.
     emit_mov_rr(code, Reg::RDI, Reg::RAX);
 
-    // mov eax, 60               -- SYS_exit on Linux x86_64. Using
-    //                              the 5-byte `mov r32, imm32` form
-    //                              (no REX.W); writing eax zero-
-    //                              extends into rax.
-    emit_byte(code, 0xB8 | Reg::RAX.lo());
-    emit_u32(code, 60);
-
-    // syscall
-    emit_syscall(code);
+    // call qword [rip + disp32] -- placeholder, writer patches the
+    // disp32 to point at the libc `exit` GOT slot.
+    let exit_call_offset = code.len() - stub_start;
+    emit_call_qword_rip32(code, 0);
 
     debug_assert_eq!(
         (code.len() - stub_start) as u64,
         START_STUB_LEN,
         "_start stub length mismatch"
     );
+    stub_start + exit_call_offset
 }
 
 // ------------------------------------------------------------------
@@ -660,6 +676,7 @@ pub(super) fn lower(program: &Program, target: Target) -> Result<Build, C4Error>
     let mut bytecode_to_native: Vec<usize> = alloc::vec![usize::MAX; program.text.len() + 1];
     let mut fixups: Vec<Fixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();
+    let mut got_fixups: Vec<GotFixup> = Vec::new();
     // Function-pointer Imms get their target resolved post-walk
     // against `bytecode_to_native`, mirroring aarch64::lower.
     let mut pending_func_fixups: Vec<(usize, usize)> = Vec::new();
@@ -687,6 +704,7 @@ pub(super) fn lower(program: &Program, target: Target) -> Result<Build, C4Error>
             &mut code,
             &mut fixups,
             &mut data_fixups,
+            &mut got_fixups,
             &mut pending_func_fixups,
             data_imm_positions,
             in_main,
@@ -732,7 +750,7 @@ pub(super) fn lower(program: &Program, target: Target) -> Result<Build, C4Error>
         text: code,
         data: program.data.clone(),
         entry_offset,
-        got_fixups: Vec::new(),
+        got_fixups,
         data_fixups,
         func_fixups,
     })
@@ -784,6 +802,7 @@ fn lower_op(
     code: &mut Vec<u8>,
     fixups: &mut Vec<Fixup>,
     data_fixups: &mut Vec<DataFixup>,
+    got_fixups: &mut Vec<GotFixup>,
     pending_func_fixups: &mut Vec<(usize, usize)>,
     data_imm_positions: &[usize],
     in_main: bool,
@@ -1014,7 +1033,9 @@ fn lower_op(
             emit_movzx_r_mem8(code, Reg::R13, Reg::RBP, bytes);
         }
 
-        // ---- Syscalls -- M3.4 will route these through the GOT.
+        // ---- Syscalls -- routed through the GOT. The codegen
+        //      records a GotFixup at the call site; the ELF writer
+        //      patches the disp32 to point at the right .got slot.
         Op::Open
         | Op::Read
         | Op::Clos
@@ -1032,11 +1053,89 @@ fn lower_op(
         | Op::Dlop
         | Op::Dlsm
         | Op::Dlcl
-        | Op::Dler => {
+        | Op::Dler => emit_libc_call(op, text, *pc, code, got_fixups)?,
+    }
+    Ok(())
+}
+
+/// Lower a syscall op to a libc call through the GOT. The caller
+/// pushed args onto the VM stack in 16-byte slots; we peek (don't
+/// pop) to load them into rdi..r9 per the System V ABI. The c4
+/// emitter follows every libc call with `Op::Adj N` which the next
+/// loop iteration lowers to `add rsp, N*16` to drop the args.
+///
+/// Variadic functions (printf) on Linux/x86_64 follow standard
+/// AAPCS-style register-passing for integer args (no special stack
+/// packing like macOS arm64 needs); the only extra requirement is
+/// `al = 0` to indicate "no XMM regs used", which we set
+/// unconditionally before the call.
+fn emit_libc_call(
+    op: Op,
+    text: &[i64],
+    pc_after_op: usize,
+    code: &mut Vec<u8>,
+    got_fixups: &mut Vec<GotFixup>,
+) -> Result<(), C4Error> {
+    let import_index = aarch64::IMPORTS
+        .iter()
+        .position(|imp| imp.op == op)
+        .ok_or_else(|| {
+            C4Error::Compile(format!(
+                "native codegen (x86_64): no import index for {op:?}"
+            ))
+        })?;
+
+    // Peek for the trailing Op::Adj N; Op::Exit and Op::Dler are
+    // emitted without one (Exit doesn't return; Dler takes 0 args).
+    let arg_count = match Op::from_i64(text.get(pc_after_op).copied().unwrap_or(0)) {
+        Some(Op::Adj) => text[pc_after_op + 1] as usize,
+        _ if matches!(op, Op::Exit) => 1,
+        _ if matches!(op, Op::Dler) => 0,
+        _ => {
             return Err(C4Error::Compile(format!(
-                "native codegen (x86_64): {op:?} requires libc binding (lands in M3.4)"
+                "native codegen (x86_64): {op:?} not followed by Adj"
             )));
         }
+    };
+    if arg_count > 6 {
+        return Err(C4Error::Compile(format!(
+            "native codegen (x86_64): {op:?} arg count {arg_count} out of supported range (0..=6)"
+        )));
+    }
+
+    // Load args into rdi..r9. c4-arg-K is at sp + (arg_count-1-K)*16.
+    let arg_regs = [Reg::RDI, Reg::RSI, Reg::RDX, Reg::RCX, Reg::R8, Reg::R9];
+    for (i, &r) in arg_regs.iter().take(arg_count).enumerate() {
+        let off = ((arg_count - 1 - i) as i32) * 16;
+        emit_mov_r_mem(code, r, Reg::RSP, off);
+    }
+
+    // Variadic ABI: AL = number of XMM regs used. c4 has no float
+    // ops, so it's always 0. Do this for Op::Prtf only (plain libc
+    // calls preserve rax across argument loads anyway, but xor'ing
+    // it where unnecessary just churns bytes).
+    if matches!(op, Op::Prtf) {
+        emit_xor_eax_eax(code);
+    }
+
+    // call qword [rip + disp32] -- placeholder, writer patches
+    // disp32 to point at the right .got slot.
+    let instr_offset = code.len();
+    got_fixups.push(GotFixup {
+        adrp_offset: instr_offset,
+        import_index,
+    });
+    emit_call_qword_rip32(code, 0);
+
+    if matches!(op, Op::Exit) {
+        // exit() doesn't return; the c4 compiler emits no Adj after.
+        // Drop the 1 pushed arg ourselves so any stale code after is
+        // SP-balanced.
+        emit_add_rsp_imm32(code, 16);
+    } else {
+        // Move the libc return value into r13 so the c4 caller sees
+        // it as the new accumulator.
+        emit_mov_rr(code, Reg::R13, Reg::RAX);
     }
     Ok(())
 }
@@ -1309,19 +1408,29 @@ mod tests {
     #[test]
     fn start_stub_decodes_to_known_bytes() {
         // Spot-check the full stub for entry_offset = 0 (main lives
-        // immediately after the stub).
+        // immediately after the stub). The stub is:
+        //   mov rdi, [rsp]              ; argc
+        //   lea rsi, [rsp+8]            ; argv
+        //   call main                   ; rel32 placeholder
+        //   mov rdi, rax                ; pass to libc exit
+        //   call qword [rip + disp32]   ; libc exit slot
         let mut buf = Vec::new();
-        emit_start_stub(&mut buf, 0);
+        let exit_off = emit_start_stub(&mut buf, 0);
         assert_eq!(buf.len() as u64, START_STUB_LEN);
-        // First instruction: mov rdi, [rsp]  ->  48 8B 3C 24
+        // mov rdi, [rsp]              -> 48 8B 3C 24
         assert_eq!(&buf[0..4], &[0x48, 0x8B, 0x3C, 0x24]);
-        // Second: lea rsi, [rsp+8]  ->  48 8D 74 24 08
+        // lea rsi, [rsp+8]            -> 48 8D 74 24 08
         assert_eq!(&buf[4..9], &[0x48, 0x8D, 0x74, 0x24, 0x08]);
-        // Third: call rel32 = (24 - (9+5)) = 10  ->  E8 0A 00 00 00
-        assert_eq!(&buf[9..14], &[0xE8, 0x0A, 0x00, 0x00, 0x00]);
-        // Last three: mov rdi, rax; mov eax, 60; syscall
+        // call main rel32 = (23 - (9+5)) = 9 -> E8 09 00 00 00
+        assert_eq!(&buf[9..14], &[0xE8, 0x09, 0x00, 0x00, 0x00]);
+        // mov rdi, rax                -> 48 89 C7
         assert_eq!(&buf[14..17], &[0x48, 0x89, 0xC7]);
-        assert_eq!(&buf[17..22], &[0xB8, 0x3C, 0x00, 0x00, 0x00]);
-        assert_eq!(&buf[22..24], &[0x0F, 0x05]);
+        // call qword [rip + 0]        -> FF 15 00 00 00 00
+        assert_eq!(exit_off, 17);
+        assert_eq!(
+            &buf[17..23],
+            &[0xFF, 0x15, 0x00, 0x00, 0x00, 0x00],
+            "call qword [rip+0] placeholder"
+        );
     }
 }

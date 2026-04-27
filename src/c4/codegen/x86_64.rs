@@ -27,7 +27,43 @@ use super::super::CODE_BASE;
 use super::super::error::C4Error;
 use super::super::op::Op;
 use super::super::program::Program;
+use super::regalloc::{self, PushKind, RegStackPlan};
 use super::{Build, DataFixup, FuncFixup, GotFixup, NativeOptions, Target, TargetOptions, aarch64};
+
+/// `--native-optimize` register-pool size on x86_64. We have four
+/// callee-saved registers free after subtracting rbp (frame
+/// pointer) and r13 (VM accumulator) from System V's callee-saved
+/// set: rbx, r12, r14, r15. Slot 0..3 maps via [`pool_reg`].
+pub(super) const POOL_SIZE: u8 = 4;
+
+/// Map a regalloc slot index to its pool register. RBX is at index
+/// 3, R12/R14/R15 are at 12/14/15 -- not contiguous, so an array is
+/// the simplest mapping.
+fn pool_reg(slot: u8) -> Reg {
+    const POOL: [Reg; POOL_SIZE as usize] = [Reg::RBX, Reg::R12, Reg::R14, Reg::R15];
+    POOL[slot as usize]
+}
+
+/// Per-function lowering state, mirror of the aarch64 `RegState`.
+/// See `aarch64.rs` for the design notes; the only difference here
+/// is the per-arch pool size and register set.
+struct RegState<'a> {
+    plan: Option<&'a RegStackPlan>,
+    use_pool: bool,
+    current_max_depth: u8,
+    pseudo_stack: Vec<Option<u8>>,
+}
+
+impl<'a> RegState<'a> {
+    fn new(plan: Option<&'a RegStackPlan>) -> Self {
+        Self {
+            plan,
+            use_pool: false,
+            current_max_depth: 0,
+            pseudo_stack: Vec::new(),
+        }
+    }
+}
 
 // ------------------------------------------------------------------
 // Register encoding.
@@ -674,11 +710,16 @@ pub(super) fn lower(
     target: Target,
     native: NativeOptions,
 ) -> Result<Build, C4Error> {
-    // See the same comment in `aarch64::lower`. N5 wires `native`
-    // up to the register-pool lowering; for now we accept it for
-    // symmetry and ignore it.
-    let _ = native;
     let _options: TargetOptions = target.options();
+
+    // Build the regalloc plan once if --native-optimize is on.
+    let plan_storage: Option<RegStackPlan> = if native.register_alloc {
+        Some(regalloc::analyze(&program.text, POOL_SIZE)?)
+    } else {
+        None
+    };
+    let plan: Option<&RegStackPlan> = plan_storage.as_ref();
+    let mut reg_state = RegState::new(plan);
 
     let mut code: Vec<u8> = Vec::new();
     let mut bytecode_to_native: Vec<usize> = alloc::vec![usize::MAX; program.text.len() + 1];
@@ -704,6 +745,21 @@ pub(super) fn lower(
         pc += 1;
         if matches!(op, Op::Ent) {
             in_main = op_pc == program.entry_pc;
+            // Refresh per-function regalloc state. With no plan,
+            // both stay at their default (use_pool=false, depth=0).
+            if let Some(p) = reg_state.plan {
+                if let Some(f) = p.function_at(op_pc) {
+                    reg_state.use_pool = f.use_pool;
+                    reg_state.current_max_depth = if f.use_pool { f.max_depth } else { 0 };
+                } else {
+                    reg_state.use_pool = false;
+                    reg_state.current_max_depth = 0;
+                }
+                debug_assert!(
+                    reg_state.pseudo_stack.is_empty(),
+                    "pseudo stack non-empty at fn entry"
+                );
+            }
         }
         lower_op(
             op,
@@ -716,6 +772,8 @@ pub(super) fn lower(
             &mut pending_func_fixups,
             data_imm_positions,
             in_main,
+            &mut reg_state,
+            op_pc,
         )?;
     }
     bytecode_to_native[program.text.len()] = code.len();
@@ -815,19 +873,30 @@ fn lower_op(
     pending_func_fixups: &mut Vec<(usize, usize)>,
     data_imm_positions: &[usize],
     in_main: bool,
+    reg_state: &mut RegState<'_>,
+    op_pc: usize,
 ) -> Result<(), C4Error> {
     match op {
         // ---- Function frame ----
         Op::Ent => {
             let locals = read_operand(text, pc, "Ent")?;
-            emit_prologue(code, locals, in_main);
+            emit_prologue(code, locals, in_main, reg_state.current_max_depth);
         }
-        Op::Lev => emit_epilogue(code, in_main),
+        Op::Lev => emit_epilogue(code, in_main, reg_state.current_max_depth),
         Op::Adj => {
             // Drop N pushed slots (16 bytes each, matching Op::Psh).
+            // The analyzer guarantees these were all Real pushes;
+            // we still pop the runtime tracker so it stays in sync.
             let n = read_operand(text, pc, "Adj")?;
             if n != 0 {
                 emit_add_rsp_imm32(code, (n as u32) * 16);
+            }
+            for _ in 0..(n as usize) {
+                let popped = reg_state.pseudo_stack.pop();
+                debug_assert!(
+                    matches!(popped, None | Some(None)),
+                    "Adj popped a Pseudo slot -- analyzer mis-classified"
+                );
             }
         }
 
@@ -873,49 +942,74 @@ fn lower_op(
         }
         Op::Lc => emit_movzx_r_mem8(code, Reg::R13, Reg::R13, 0),
         Op::Si => {
-            pop_into(code, Reg::R10);
-            emit_mov_mem_r(code, Reg::R10, 0, Reg::R13);
+            // pop addr; *addr = r13. With pool: addr is in rN
+            // (no load needed). Without pool: pop r10 from stack.
+            let lhs = pop_lhs_reg(code, reg_state);
+            emit_mov_mem_r(code, lhs, 0, Reg::R13);
         }
         Op::Sc => {
-            pop_into(code, Reg::R10);
-            emit_mov_mem8_r(code, Reg::R10, 0, Reg::R13);
+            let lhs = pop_lhs_reg(code, reg_state);
+            emit_mov_mem8_r(code, lhs, 0, Reg::R13);
         }
         Op::Psh => {
-            // Push r13 onto the VM stack in a 16-byte slot. We claim
-            // 16 bytes per push so rsp stays 16-byte aligned across
-            // any libc call we might issue later.
-            emit_sub_rsp_imm32(code, 16);
-            emit_mov_mem_r(code, Reg::RSP, 0, Reg::R13);
+            // With --native-optimize on AND a Pseudo classification,
+            // emit `mov rN, r13` into the next pool slot. Otherwise
+            // claim a 16-byte slot on the real stack so rsp stays
+            // 16-byte aligned across any libc call we make later.
+            let slot = reg_state
+                .use_pool
+                .then(|| {
+                    reg_state
+                        .plan
+                        .and_then(|p| p.push_kind(op_pc))
+                        .and_then(|k| match k {
+                            PushKind::Pseudo { slot } => Some(slot),
+                            PushKind::Real => None,
+                        })
+                })
+                .flatten();
+            match slot {
+                Some(s) => {
+                    emit_mov_rr(code, pool_reg(s), Reg::R13);
+                    reg_state.pseudo_stack.push(Some(s));
+                }
+                None => {
+                    emit_sub_rsp_imm32(code, 16);
+                    emit_mov_mem_r(code, Reg::RSP, 0, Reg::R13);
+                    reg_state.pseudo_stack.push(None);
+                }
+            }
         }
 
         // ---- Bitwise + arithmetic. The c4 VM does `popped <op> a`
-        //      with the popped value as LHS. On x86_64: pop into r10,
-        //      perform `r10 op= r13`, mov r10 -> r13 to update the
-        //      accumulator.
-        Op::Or => binop_with_pop(code, emit_or_rr),
-        Op::Xor => binop_with_pop(code, emit_xor_rr),
-        Op::And => binop_with_pop(code, emit_and_rr),
-        Op::Add => binop_with_pop(code, emit_add_rr),
-        Op::Sub => binop_with_pop(code, emit_sub_rr),
-        Op::Mul => binop_with_pop(code, emit_imul_rr),
+        //      with the popped value as LHS. With pool: lhs is rN,
+        //      we either fold to `r13 op= rN` (commutative) or do
+        //      `rN op= r13; mov r13, rN` (non-commutative). Without
+        //      pool: same shape but with r10 popped from the stack.
+        Op::Or => binop_with_pop(code, reg_state, /*commutative=*/ true, emit_or_rr),
+        Op::Xor => binop_with_pop(code, reg_state, true, emit_xor_rr),
+        Op::And => binop_with_pop(code, reg_state, true, emit_and_rr),
+        Op::Add => binop_with_pop(code, reg_state, true, emit_add_rr),
+        Op::Mul => binop_with_pop(code, reg_state, true, emit_imul_rr),
+        Op::Sub => binop_with_pop(code, reg_state, /*commutative=*/ false, emit_sub_rr),
 
         // ---- Comparisons. cmp popped, r13 sets flags so the cc
-        //      reflects `popped <cmp> r13`. Then xor r13d, r13d to
-        //      zero the result, and setcc r13b for the 0/1 byte.
-        Op::Eq => cmp_with_pop(code, Cc::E),
-        Op::Ne => cmp_with_pop(code, Cc::Ne),
-        Op::Lt => cmp_with_pop(code, Cc::L),
-        Op::Gt => cmp_with_pop(code, Cc::G),
-        Op::Le => cmp_with_pop(code, Cc::Le),
-        Op::Ge => cmp_with_pop(code, Cc::Ge),
+        //      reflects `popped <cmp> r13`. Then setcc r10b and
+        //      movzx r13, r10b for the 0/1 byte.
+        Op::Eq => cmp_with_pop(code, reg_state, Cc::E),
+        Op::Ne => cmp_with_pop(code, reg_state, Cc::Ne),
+        Op::Lt => cmp_with_pop(code, reg_state, Cc::L),
+        Op::Gt => cmp_with_pop(code, reg_state, Cc::G),
+        Op::Le => cmp_with_pop(code, reg_state, Cc::Le),
+        Op::Ge => cmp_with_pop(code, reg_state, Cc::Ge),
 
-        // ---- Shifts. Pop into r10, shift r10 by cl (=r13 lo byte),
-        //      then move r10 back into r13.
-        Op::Shl => shift_with_pop(code, /*arithmetic=*/ false),
-        Op::Shr => shift_with_pop(code, /*arithmetic=*/ true),
+        // ---- Shifts. Pop into lhs (rN or r10), shift by cl (=r13
+        //      lo byte), then mov r13 = lhs.
+        Op::Shl => shift_with_pop(code, reg_state, /*arithmetic=*/ false),
+        Op::Shr => shift_with_pop(code, reg_state, /*arithmetic=*/ true),
 
-        Op::Div => div_or_mod_with_pop(code, /*want_remainder=*/ false),
-        Op::Mod => div_or_mod_with_pop(code, /*want_remainder=*/ true),
+        Op::Div => div_or_mod_with_pop(code, reg_state, /*want_remainder=*/ false),
+        Op::Mod => div_or_mod_with_pop(code, reg_state, /*want_remainder=*/ true),
 
         // ---- Control flow ----
         Op::Jmp => {
@@ -1157,44 +1251,80 @@ fn pop_into(code: &mut Vec<u8>, dst: Reg) {
     emit_add_rsp_imm32(code, 16);
 }
 
-/// Pop, perform `r10 op= r13`, then mov result back into r13.
-fn binop_with_pop<F: Fn(&mut Vec<u8>, Reg, Reg)>(code: &mut Vec<u8>, op_rr: F) {
-    pop_into(code, Reg::R10);
-    op_rr(code, Reg::R10, Reg::R13);
-    emit_mov_rr(code, Reg::R13, Reg::R10);
+/// Pop the top of the VM push-stack -- either the pool register
+/// `pool_reg(slot)` (no instructions emitted) or `r10` after a
+/// pop_into from the real stack -- and return the holding register.
+/// Updates `reg_state.pseudo_stack`.
+fn pop_lhs_reg(code: &mut Vec<u8>, reg_state: &mut RegState<'_>) -> Reg {
+    match reg_state.pseudo_stack.pop() {
+        Some(Some(slot)) => pool_reg(slot),
+        Some(None) | None => {
+            pop_into(code, Reg::R10);
+            Reg::R10
+        }
+    }
 }
 
-/// Pop, compare, set r13 = 0/1 by condition. The setcc/movzx pair
-/// avoids clobbering the cmp's flags between cmp and setcc -- we
-/// can't `xor r13, r13` first because xor sets the flags.
-fn cmp_with_pop(code: &mut Vec<u8>, cc: Cc) {
-    pop_into(code, Reg::R10);
-    emit_cmp_rr(code, Reg::R10, Reg::R13);
+/// Pop the LHS, then run the encoder. `commutative = true` collapses
+/// to a single `r13 op= lhs` (one instruction). `commutative = false`
+/// keeps the c4 VM order with `lhs op= r13; mov r13, lhs` (two
+/// instructions; clobbers `lhs` but it's already popped from the
+/// pseudo stack so it's dead by then).
+fn binop_with_pop<F: Fn(&mut Vec<u8>, Reg, Reg)>(
+    code: &mut Vec<u8>,
+    reg_state: &mut RegState<'_>,
+    commutative: bool,
+    op_rr: F,
+) {
+    let lhs = pop_lhs_reg(code, reg_state);
+    if commutative {
+        op_rr(code, Reg::R13, lhs);
+    } else {
+        op_rr(code, lhs, Reg::R13);
+        emit_mov_rr(code, Reg::R13, lhs);
+    }
+}
+
+/// Pop the LHS, compare against r13, set r13 = 0/1 by `cc`.
+fn cmp_with_pop(code: &mut Vec<u8>, reg_state: &mut RegState<'_>, cc: Cc) {
+    let lhs = pop_lhs_reg(code, reg_state);
+    emit_cmp_rr(code, lhs, Reg::R13);
+    // Set into r10b and movzx into r13. We can't `xor r13, r13`
+    // first because xor sets the flags the setcc would read.
     emit_setcc_r8(code, cc, Reg::R10);
     emit_movzx_r_r8(code, Reg::R13, Reg::R10);
 }
 
-/// Pop into r10, shift r10 by cl (lo byte of r13), mov r10 to r13.
-fn shift_with_pop(code: &mut Vec<u8>, arithmetic_right: bool) {
-    pop_into(code, Reg::R10);
-    // mov rcx, r13 -- the shift count register is fixed to cl.
+/// Pop the LHS, shift it by cl (lo byte of r13), mov r13 = lhs.
+fn shift_with_pop(code: &mut Vec<u8>, reg_state: &mut RegState<'_>, arithmetic_right: bool) {
+    let lhs = pop_lhs_reg(code, reg_state);
+    // The shift count register is fixed to cl. mov rcx, r13 first
+    // since the shift will overwrite r13's role on the read side.
     emit_mov_rr(code, Reg::RCX, Reg::R13);
     if arithmetic_right {
-        emit_sar_r_cl(code, Reg::R10);
+        emit_sar_r_cl(code, lhs);
     } else {
-        emit_shl_r_cl(code, Reg::R10);
+        emit_shl_r_cl(code, lhs);
     }
-    emit_mov_rr(code, Reg::R13, Reg::R10);
+    emit_mov_rr(code, Reg::R13, lhs);
 }
 
-/// Signed divide. c4 semantics: `popped / r13` (or `% r13`). On
-/// x86_64: load popped into rax, sign-extend to rdx:rax via cqo,
-/// idiv divisor (we keep the divisor in r10 because rax/rdx can't
-/// host it), then move rax (quotient) or rdx (remainder) into r13.
-fn div_or_mod_with_pop(code: &mut Vec<u8>, want_remainder: bool) {
-    // The divisor must not be in rax or rdx (idiv overwrites both).
+/// Signed divide. c4 semantics: `popped / r13` (or `% r13`). The
+/// divisor must not be in rax or rdx (idiv overwrites both), so we
+/// stash it in r10 first. The dividend ends up in rax via either
+/// `mov rax, lhs_pool_reg` or `pop_into(rax)`.
+fn div_or_mod_with_pop(code: &mut Vec<u8>, reg_state: &mut RegState<'_>, want_remainder: bool) {
     emit_mov_rr(code, Reg::R10, Reg::R13); // r10 = divisor
-    pop_into(code, Reg::RAX); // rax = dividend
+    match reg_state.pseudo_stack.pop() {
+        Some(Some(slot)) => {
+            // dividend is in pool reg; mov it to rax.
+            emit_mov_rr(code, Reg::RAX, pool_reg(slot));
+        }
+        Some(None) | None => {
+            // dividend on real stack; pop into rax.
+            pop_into(code, Reg::RAX);
+        }
+    }
     emit_cqo(code); // rdx:rax = sign-extend rax
     emit_idiv_r(code, Reg::R10);
     if want_remainder {
@@ -1243,7 +1373,7 @@ fn read_operand(text: &[i64], pc: &mut usize, op_name: &str) -> Result<i64, C4Er
 /// push argc / argv as 16-byte slots in caller-style, then re-push
 /// the ret addr; the resulting layout matches what
 /// [`lea_offset_bytes`] expects.
-fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool) {
+fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool, pool_depth: u8) {
     if is_main {
         emit_pop_r(code, Reg::R10); // r10 = ret addr
         // Push argc (rdi) first (deeper), then argv (rsi) (shallower).
@@ -1271,16 +1401,28 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool) {
     // rsp stays 16-aligned across libc call sites.
     emit_sub_rsp_imm32(code, 16);
     emit_mov_mem_r(code, Reg::RSP, 0, Reg::R13);
+
+    // Save the pool registers actually used by this function.
+    // System V x86_64 makes rbx, r12, r14, r15 callee-saved, so
+    // we don't need to spill them at every call site -- one save
+    // per function entry is enough. Layout below saved-r13:
+    //   [rsp + 0]: pool slot 0 (rbx)
+    //   [rsp + 8]: pool slot 1 (r12)
+    //   ... up to pool_depth - 1 ...
+    // padded to 16 bytes for alignment.
+    emit_save_pool(code, pool_depth);
 }
 
 /// Mirror of [`emit_prologue`]. Move the VM accumulator into rax
-/// (return register), restore r13, tear down the frame, return. For
-/// main we also drop the two 16-byte argc / argv slots inserted by
-/// the prologue -- they sit between the saved rbp and the return
-/// address, so we pop the ret addr into a temp, drop the slots, then
-/// push it back before `ret` consumes it.
-fn emit_epilogue(code: &mut Vec<u8>, is_main: bool) {
+/// (return register), restore the pool, restore r13, tear down the
+/// frame, return. For main we also drop the two 16-byte argc / argv
+/// slots inserted by the prologue -- they sit between the saved rbp
+/// and the return address, so we pop the ret addr into a temp, drop
+/// the slots, then push it back before `ret` consumes it.
+fn emit_epilogue(code: &mut Vec<u8>, is_main: bool, pool_depth: u8) {
     emit_mov_rr(code, Reg::RAX, Reg::R13);
+    // Restore the pool first (it sits on top of saved-r13).
+    emit_restore_pool(code, pool_depth);
     // Restore r13 from its 16-byte slot at [rsp]. We then drop both
     // the locals and the saved-r13 slot via `mov rsp, rbp`.
     emit_mov_r_mem(code, Reg::R13, Reg::RSP, 0);
@@ -1292,6 +1434,34 @@ fn emit_epilogue(code: &mut Vec<u8>, is_main: bool) {
         emit_push_r(code, Reg::R10);
     }
     emit_ret(code);
+}
+
+/// Reserve a 16-aligned region on the stack and store the first
+/// `depth` pool registers into it at slot * 8 byte offsets. Using a
+/// contiguous region (rather than per-reg push) keeps a stable
+/// layout across the [save, restore] pair regardless of `depth`'s
+/// parity.
+fn emit_save_pool(code: &mut Vec<u8>, depth: u8) {
+    if depth == 0 {
+        return;
+    }
+    let aligned = (((depth as u32) * 8) + 15) & !15;
+    emit_sub_rsp_imm32(code, aligned);
+    for i in 0..depth {
+        emit_mov_mem_r(code, Reg::RSP, (i as i32) * 8, pool_reg(i));
+    }
+}
+
+/// Reverse of [`emit_save_pool`].
+fn emit_restore_pool(code: &mut Vec<u8>, depth: u8) {
+    if depth == 0 {
+        return;
+    }
+    let aligned = (((depth as u32) * 8) + 15) & !15;
+    for i in 0..depth {
+        emit_mov_r_mem(code, pool_reg(i), Reg::RSP, (i as i32) * 8);
+    }
+    emit_add_rsp_imm32(code, aligned);
 }
 
 // ------------------------------------------------------------------

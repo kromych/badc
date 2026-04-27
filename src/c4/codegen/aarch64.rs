@@ -27,6 +27,7 @@
 #![allow(dead_code)]
 
 use alloc::format;
+use alloc::vec;
 use alloc::vec::Vec;
 
 use super::super::CODE_BASE;

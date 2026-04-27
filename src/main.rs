@@ -179,6 +179,13 @@ fn emit_native_binary(program: &badc::Program, out: &std::path::Path, target: Ta
                  run it on a Linux/arm64 box, or via Docker `--platform linux/arm64`."
             );
         }
+        Target::LinuxX64 => {
+            #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
+            eprintln!(
+                "badc: produced a Linux/x86_64 ELF on a different host; \
+                 run it on a Linux/x64 box, or via Docker `--platform linux/amd64`."
+            );
+        }
     }
 }
 

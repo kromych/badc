@@ -48,8 +48,8 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use super::super::error::C4Error;
-use super::Build;
-use super::aarch64;
+use super::{Build, Machine};
+use super::{aarch64, x86_64};
 
 // ------------------------------------------------------------------
 // ELF constants. Names mirror `<elf.h>` so cross-checking is mechanical.
@@ -66,6 +66,7 @@ const ELFOSABI_SYSV: u8 = 0;
 const ET_EXEC: u16 = 2;
 
 const EM_AARCH64: u16 = 183;
+const EM_X86_64: u16 = 62;
 
 const PT_LOAD: u32 = 1;
 const PT_DYNAMIC: u32 = 2;
@@ -100,6 +101,7 @@ const SHN_UNDEF: u16 = 0;
 
 // Relocation types we emit.
 const R_AARCH64_GLOB_DAT: u64 = 1025;
+const R_X86_64_GLOB_DAT: u64 = 6;
 
 /// 4 KiB page alignment is the AArch64 minimum and what most Linuxes
 /// expect for ELF segment alignment. (Kernel page size on arm64 is
@@ -120,7 +122,32 @@ const ELF64_SYM_SIZE: u64 = 24;
 const ELF64_RELA_SIZE: u64 = 24;
 const ELF64_DYN_SIZE: u64 = 16;
 
-const INTERP_PATH: &str = "/lib/ld-linux-aarch64.so.1";
+/// Dynamic linker path. Selected per machine: `aarch64` lives at
+/// `/lib/`, x86_64 at `/lib64/`. Mirrors what the host distro
+/// expects.
+fn interp_path(machine: Machine) -> &'static str {
+    match machine {
+        Machine::Aarch64 => "/lib/ld-linux-aarch64.so.1",
+        Machine::X86_64 => "/lib64/ld-linux-x86-64.so.2",
+    }
+}
+
+/// `e_machine` field in the ELF header.
+fn e_machine(machine: Machine) -> u16 {
+    match machine {
+        Machine::Aarch64 => EM_AARCH64,
+        Machine::X86_64 => EM_X86_64,
+    }
+}
+
+/// `R_*_GLOB_DAT` relocation type: stores the symbol's resolved
+/// address into the GOT slot. Different value on each arch.
+fn r_glob_dat(machine: Machine) -> u64 {
+    match machine {
+        Machine::Aarch64 => R_AARCH64_GLOB_DAT,
+        Machine::X86_64 => R_X86_64_GLOB_DAT,
+    }
+}
 
 /// Libraries the binary declares as `DT_NEEDED`. The order is
 /// cosmetic; the loader pulls in everything reachable from the set
@@ -153,29 +180,51 @@ fn round_up(n: u64, align: u64) -> u64 {
 
 // ------------------------------------------------------------------
 // `_start` prologue. Linux/aarch64 process startup hands control to
-// e_entry with sp pointing at argc. We:
-//   * load argc into x0, argv into x1
-//   * bl main          (target patched to start_stub_len + entry_offset)
-//   * call libc exit(x0) through the GOT (adrp+ldr+blr)
-// We use libc exit rather than a raw svc syscall so atexit hooks and
-// stdio flushing run -- without that, printf("...\n") to a pipe loses
-// output because glibc block-buffers non-tty stdout.
+// e_entry with sp pointing at argc.
+//
+// Per-arch variants live in `aarch64::emit_start_stub_elf` and
+// `x86_64::emit_start_stub`. aarch64 routes its exit through libc
+// (so glibc flushes stdio); x86_64 currently uses a raw `SYS_exit`
+// syscall (M3.4 will switch it to libc exit through the GOT).
 // ------------------------------------------------------------------
 
-const START_STUB_LEN: u64 = 6 * 4;
+/// Stub byte length per machine. Used for layout calculations.
+fn start_stub_len(machine: Machine) -> u64 {
+    match machine {
+        Machine::Aarch64 => 6 * 4, // 6 aarch64 instructions
+        Machine::X86_64 => x86_64::START_STUB_LEN,
+    }
+}
 
-/// Emit the _start prologue. The `bl` to main and the `adrp/ldr` to
-/// the libc `exit` GOT slot are placeholders; the caller patches them
-/// once the final layout is known.
-fn emit_start_stub(code: &mut Vec<u8>, main_offset_in_code: u64) -> usize {
+/// Emit the `_start` prologue for the given machine. Returns
+/// `Some(adrp/call_offset)` if the stub uses libc exit through the
+/// GOT (the caller registers a `GotFixup` for it), or `None` if the
+/// stub does its own raw exit and needs no GOT lookup.
+fn emit_start_stub(
+    machine: Machine,
+    code: &mut Vec<u8>,
+    main_offset_in_code: u64,
+) -> Option<usize> {
+    match machine {
+        Machine::Aarch64 => Some(emit_start_stub_aarch64(code, main_offset_in_code)),
+        Machine::X86_64 => {
+            x86_64::emit_start_stub(code, main_offset_in_code);
+            None
+        }
+    }
+}
+
+/// AArch64 `_start`: ldr argc; add argv; bl main; adrp/ldr/blr libc
+/// exit.
+fn emit_start_stub_aarch64(code: &mut Vec<u8>, main_offset_in_code: u64) -> usize {
     use aarch64::Reg;
+    let stub_len = 6 * 4;
 
     aarch64::emit(code, aarch64::enc_ldr_imm(Reg::X0, Reg::SP, 0));
     aarch64::emit(code, aarch64::enc_add_imm(Reg::X1, Reg::SP, 8));
 
-    // bl main -- offset in instruction units from the bl PC.
     let bl_pc = 8i64;
-    let main_pc = (START_STUB_LEN as i64) + main_offset_in_code as i64;
+    let main_pc = stub_len as i64 + main_offset_in_code as i64;
     let delta_insns = ((main_pc - bl_pc) / 4) as i32;
     aarch64::emit(code, aarch64::enc_bl(delta_insns));
 
@@ -188,7 +237,7 @@ fn emit_start_stub(code: &mut Vec<u8>, main_offset_in_code: u64) -> usize {
     aarch64::emit(code, aarch64::enc_ldr_imm(Reg::X16, Reg::X16, 0));
     aarch64::emit(code, aarch64::enc_blr(Reg::X16));
 
-    debug_assert_eq!(code.len() as u64, START_STUB_LEN);
+    debug_assert_eq!(code.len() as u64, stub_len);
     exit_adrp_offset
 }
 
@@ -320,19 +369,21 @@ fn name_bytes(strtab: &[u8], offset: usize) -> &[u8] {
     &strtab[offset..end]
 }
 
-/// Build .rela.dyn -- one R_AARCH64_GLOB_DAT relocation per import.
+/// Build .rela.dyn -- one `R_*_GLOB_DAT` relocation per import.
 /// `got_vmaddr` is the runtime address of the start of the .got
-/// section so r_offset can name the correct slot.
-fn build_rela_dyn(got_vmaddr: u64, n_imports: usize) -> Vec<u8> {
+/// section so `r_offset` can name the correct slot. The relocation
+/// type varies by machine.
+fn build_rela_dyn(got_vmaddr: u64, n_imports: usize, machine: Machine) -> Vec<u8> {
+    let r_type = r_glob_dat(machine);
     let mut out = Vec::with_capacity(n_imports * ELF64_RELA_SIZE as usize);
     for i in 0..n_imports {
         // Elf64_Rela:
         //   uint64_t r_offset    -- where to write
         //   uint64_t r_info      -- (sym << 32) | type
-        //   int64_t  r_addend    -- ignored for R_AARCH64_GLOB_DAT
+        //   int64_t  r_addend    -- ignored for GLOB_DAT
         let sym_idx = (i as u64) + 1; // +1 for sentinel
         put_u64(&mut out, got_vmaddr + (i as u64) * 8);
-        put_u64(&mut out, (sym_idx << 32) | R_AARCH64_GLOB_DAT);
+        put_u64(&mut out, (sym_idx << 32) | r_type);
         put_u64(&mut out, 0);
     }
     out
@@ -464,8 +515,9 @@ fn patch_adrp_add(
 // Top-level writer.
 // ------------------------------------------------------------------
 
-pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
+pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error> {
     let n_imports = aarch64::IMPORTS.len();
+    let stub_len = start_stub_len(machine);
 
     // ---- Build the dynamic-linking metadata up front so we know the
     //      sizes for layout calculations. ----
@@ -474,9 +526,11 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
     let hash = build_hash(&name_offsets, &dynstr);
     // .rela.dyn is built later -- it needs got_vmaddr.
 
+    let interp_path_str = interp_path(machine);
+
     // .interp string (NUL-terminated). Round up to 8 so the next
     // section starts aligned.
-    let mut interp = INTERP_PATH.as_bytes().to_vec();
+    let mut interp = interp_path_str.as_bytes().to_vec();
     interp.push(0);
     while !interp.len().is_multiple_of(8) {
         interp.push(0);
@@ -495,9 +549,10 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
     let code_off = round_up(rela_off + rela_size, 16);
 
     // Build the code blob: _start stub + build.text (with shifted
-    // fixup offsets at write time).
-    let mut code: Vec<u8> = Vec::with_capacity(START_STUB_LEN as usize + build.text.len());
-    let exit_adrp_offset = emit_start_stub(&mut code, build.entry_offset as u64) as u64;
+    // fixup offsets at write time). The stub may or may not register
+    // a libc-exit GOT fixup depending on the machine.
+    let mut code: Vec<u8> = Vec::with_capacity(stub_len as usize + build.text.len());
+    let exit_adrp_offset = emit_start_stub(machine, &mut code, build.entry_offset as u64);
     code.extend_from_slice(&build.text);
     let code_size = code.len() as u64;
 
@@ -542,7 +597,7 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
     out.extend_from_slice(&e_ident);
 
     put_u16(&mut out, ET_EXEC);
-    put_u16(&mut out, EM_AARCH64);
+    put_u16(&mut out, e_machine(machine));
     put_u32(&mut out, EV_CURRENT as u32);
     put_u64(&mut out, code_vmaddr); // e_entry -- start of _start stub
     put_u64(&mut out, phoff);
@@ -568,15 +623,15 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
         8,
     );
 
-    // PT_INTERP -- "/lib/ld-linux-aarch64.so.1\0".
+    // PT_INTERP -- per-machine path (aarch64 vs x86_64).
     write_phdr(
         &mut out,
         PT_INTERP,
         PF_R,
         interp_off,
         interp_vmaddr,
-        INTERP_PATH.len() as u64 + 1,
-        INTERP_PATH.len() as u64 + 1,
+        interp_path_str.len() as u64 + 1,
+        interp_path_str.len() as u64 + 1,
         1,
     );
 
@@ -639,7 +694,7 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
     debug_assert_eq!(out.len() as u64, rela_off);
 
     // .rela.dyn
-    let rela = build_rela_dyn(got_vmaddr, n_imports);
+    let rela = build_rela_dyn(got_vmaddr, n_imports, machine);
     debug_assert_eq!(rela.len() as u64, rela_size);
     out.extend_from_slice(&rela);
 
@@ -690,26 +745,30 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
     // ---- Patch fixups. ----
     // The code blob layout is [_start stub][build.text]. The codegen's
     // adrp_offset is relative to build.text, so we shift by stub len.
-    // The exit-call adrp from _start is recorded separately.
-    let exit_idx = exit_import_index();
+    // The exit-call adrp from _start is patched here when the stub
+    // chose to use libc (aarch64 case); x86_64's stub returns None
+    // because it does a raw syscall and needs no GOT lookup.
+    if let Some(adrp_off) = exit_adrp_offset {
+        let exit_idx = exit_import_index();
+        patch_adrp_ldr(
+            &mut out,
+            code_file_offset,
+            code_vmaddr,
+            adrp_off as u64,
+            got_vmaddr + (exit_idx as u64) * 8,
+            "_start exit fixup",
+        )?;
+    }
 
-    // _start's exit() call.
-    patch_adrp_ldr(
-        &mut out,
-        code_file_offset,
-        code_vmaddr,
-        exit_adrp_offset,
-        got_vmaddr + (exit_idx as u64) * 8,
-        "_start exit fixup",
-    )?;
-
-    // GOT fixups for libc calls inside build.text.
+    // GOT fixups for libc calls inside build.text. M3.4 will switch
+    // these to a per-arch dispatch when the x86_64 GOT-call shape
+    // (`call qword [rip + disp]`) lands; today they're aarch64-only.
     for fx in &build.got_fixups {
         patch_adrp_ldr(
             &mut out,
             code_file_offset,
             code_vmaddr,
-            START_STUB_LEN + fx.adrp_offset as u64,
+            stub_len + fx.adrp_offset as u64,
             got_vmaddr + (fx.import_index as u64) * 8,
             "GOT fixup",
         )?;
@@ -721,7 +780,7 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
             &mut out,
             code_file_offset,
             code_vmaddr,
-            START_STUB_LEN + fx.adrp_offset as u64,
+            stub_len + fx.adrp_offset as u64,
             data_vmaddr + fx.data_offset,
             "data fixup",
         )?;
@@ -735,8 +794,8 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
             &mut out,
             code_file_offset,
             code_vmaddr,
-            START_STUB_LEN + fx.adrp_offset as u64,
-            code_vmaddr + START_STUB_LEN + fx.target_native_offset as u64,
+            stub_len + fx.adrp_offset as u64,
+            code_vmaddr + stub_len + fx.target_native_offset as u64,
             "func fixup",
         )?;
     }
@@ -799,27 +858,27 @@ mod tests {
 
     #[test]
     fn writes_elf_magic() {
-        let bytes = write(&tiny_build()).unwrap();
+        let bytes = write(&tiny_build(), Machine::Aarch64).unwrap();
         assert_eq!(&bytes[0..4], &ELFMAG);
     }
 
     #[test]
     fn class_is_64_bit_le() {
-        let bytes = write(&tiny_build()).unwrap();
+        let bytes = write(&tiny_build(), Machine::Aarch64).unwrap();
         assert_eq!(bytes[4], ELFCLASS64);
         assert_eq!(bytes[5], ELFDATA2LSB);
     }
 
     #[test]
     fn machine_is_aarch64() {
-        let bytes = write(&tiny_build()).unwrap();
+        let bytes = write(&tiny_build(), Machine::Aarch64).unwrap();
         let e_machine = u16::from_le_bytes(bytes[18..20].try_into().unwrap());
         assert_eq!(e_machine, EM_AARCH64);
     }
 
     #[test]
     fn program_header_table_self_describes() {
-        let bytes = write(&tiny_build()).unwrap();
+        let bytes = write(&tiny_build(), Machine::Aarch64).unwrap();
         let phoff = read_u64(&bytes, 32);
         let phentsize = u16::from_le_bytes(bytes[54..56].try_into().unwrap()) as u64;
         let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
@@ -842,7 +901,7 @@ mod tests {
 
     #[test]
     fn pt_load_covers_entry_point() {
-        let bytes = write(&tiny_build()).unwrap();
+        let bytes = write(&tiny_build(), Machine::Aarch64).unwrap();
         let e_entry = read_u64(&bytes, 24);
         let phoff = read_u64(&bytes, 32);
         let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
@@ -870,7 +929,7 @@ mod tests {
 
     #[test]
     fn interp_string_is_correct() {
-        let bytes = write(&tiny_build()).unwrap();
+        let bytes = write(&tiny_build(), Machine::Aarch64).unwrap();
         let phoff = read_u64(&bytes, 32);
         let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
         for i in 0..phnum {
@@ -881,7 +940,7 @@ mod tests {
             let p_offset = read_u64(&bytes, off + 8) as usize;
             let p_filesz = read_u64(&bytes, off + 32) as usize;
             let s = &bytes[p_offset..p_offset + p_filesz - 1]; // drop NUL
-            assert_eq!(s, INTERP_PATH.as_bytes());
+            assert_eq!(s, interp_path(Machine::Aarch64).as_bytes());
             return;
         }
         panic!("PT_INTERP not found");
@@ -889,7 +948,7 @@ mod tests {
 
     #[test]
     fn dynamic_section_present_and_terminated() {
-        let bytes = write(&tiny_build()).unwrap();
+        let bytes = write(&tiny_build(), Machine::Aarch64).unwrap();
         let phoff = read_u64(&bytes, 32);
         let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
         let mut dyn_off = 0u64;
@@ -925,7 +984,7 @@ mod tests {
         // Each .rela.dyn entry must target a valid GOT slot. Walk
         // PT_DYNAMIC for DT_RELA / DT_RELASZ, then verify each entry's
         // r_offset lies inside the rw PT_LOAD segment.
-        let bytes = write(&tiny_build()).unwrap();
+        let bytes = write(&tiny_build(), Machine::Aarch64).unwrap();
         let phoff = read_u64(&bytes, 32);
         let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
 

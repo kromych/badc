@@ -36,6 +36,7 @@ use super::program::Program;
 mod aarch64;
 mod elf;
 mod mach_o;
+mod x86_64;
 
 /// Which native binary to produce. Adding a target is a structural
 /// change (new variant, new match arm in [`emit_native`]) rather than
@@ -49,6 +50,10 @@ pub enum Target {
     /// Linux on AArch64. ELF / EM_AARCH64, links against `libc.so.6`
     /// via `/lib/ld-linux-aarch64.so.1`. No code-signing step.
     LinuxAarch64,
+    /// Linux on x86_64. ELF / EM_X86_64, same scheme as
+    /// `LinuxAarch64` but with a different encoder and a different
+    /// dynamic-linker path (`/lib64/ld-linux-x86-64.so.2`).
+    LinuxX64,
 }
 
 impl Target {
@@ -59,11 +64,25 @@ impl Target {
         match spec {
             None | Some("macos-aarch64") | Some("aarch64-apple-darwin") => Ok(Target::MacOSAarch64),
             Some("linux-aarch64") | Some("aarch64-unknown-linux-gnu") => Ok(Target::LinuxAarch64),
+            Some("linux-x64") | Some("linux-x86-64") | Some("x86_64-unknown-linux-gnu") => {
+                Ok(Target::LinuxX64)
+            }
             Some(other) => Err(C4Error::Compile(format!(
-                "unsupported native target: {other:?} (try `macos-aarch64` or `linux-aarch64`)"
+                "unsupported native target: {other:?} \
+                 (try `macos-aarch64`, `linux-aarch64`, or `linux-x64`)"
             ))),
         }
     }
+}
+
+/// ELF machine type discriminator -- which instruction set the
+/// emitted code is for. The ELF writer reads this to pick the right
+/// `e_machine`, dynamic-linker path, relocation type, and `_start`
+/// stub generator. Mach-O has its own dispatch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Machine {
+    Aarch64,
+    X86_64,
 }
 
 /// Where each piece of the program-being-built ends up in the final
@@ -149,10 +168,19 @@ pub(crate) struct FuncFixup {
 /// Returns the raw image bytes so the caller can decide whether to
 /// write them to disk, embed them, hash them, etc.
 pub fn emit_native(program: &Program, target: Target) -> Result<Vec<u8>, C4Error> {
-    let build = aarch64::lower(program, target)?;
     match target {
-        Target::MacOSAarch64 => mach_o::write(&build),
-        Target::LinuxAarch64 => elf::write(&build),
+        Target::MacOSAarch64 => {
+            let build = aarch64::lower(program, target)?;
+            mach_o::write(&build)
+        }
+        Target::LinuxAarch64 => {
+            let build = aarch64::lower(program, target)?;
+            elf::write(&build, Machine::Aarch64)
+        }
+        Target::LinuxX64 => {
+            let build = x86_64::lower(program, target)?;
+            elf::write(&build, Machine::X86_64)
+        }
     }
 }
 
@@ -176,6 +204,9 @@ impl Target {
                 variadic_on_stack: true,
             },
             Target::LinuxAarch64 => TargetOptions {
+                variadic_on_stack: false,
+            },
+            Target::LinuxX64 => TargetOptions {
                 variadic_on_stack: false,
             },
         }

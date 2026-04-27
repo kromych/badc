@@ -14,9 +14,23 @@ The original `c4.c` ships as a fixture and self-hosts under badc:
     badc fixtures/c/c4.c hello.c                   # badc -> c4 -> hello
     badc fixtures/c/c4.c fixtures/c/c4.c hello.c   # badc -> c4 -> c4 -> hello
 
-Of the 53 C programs in `fixtures/c/`, 27 run identically under both
-compilers; the other 26 use badc extensions and the original c4 rejects
+Of the 62 C programs in `fixtures/c/`, 27 run identically under both
+compilers; the rest use badc extensions and the original c4 rejects
 them at parse.
+
+badc also has a native backend: `--emit-native` lowers the bytecode
+straight to AArch64 machine code wrapped in a Mach-O (macOS) or ELF
+(Linux/aarch64) executable. The same self-host above works against
+the native build:
+
+    badc --emit-native fixtures/c/c4.c -o c4-native       # macOS Mach-O
+    ./c4-native hello.c
+
+Or for Linux/arm64, cross-compile from any host and run via Docker /
+qemu / a real arm64 box:
+
+    badc --emit-native --target=linux-aarch64 fixtures/c/c4.c -o c4
+    docker run --platform linux/arm64 -v $PWD:/w debian:stable-slim /w/c4 /w/hello.c
 
 ## Build and run
 
@@ -71,7 +85,7 @@ What badc adds on top:
   `sizeof(struct Foo)`. Self-referential pointer fields are fine.
   Struct-value locals and parameters are not -- pass a pointer.
 - A few more syscalls: `memcpy`, `write`, `getenv`, `setenv`,
-  `mprotect`
+  `mprotect`, `dlopen`, `dlsym`, `dlclose`, `dlerror`
 - Variadic functions: declare with `int f(int x, ...);`. Arguments
   past the fixed prefix skip type-checking, which is what `printf`
   needs.
@@ -136,6 +150,57 @@ For example:
     $ cargo run --quiet -- --track-pointers use_after_free.c
     Runtime Error: use-after-free: access at 0x50 inside freed allocation #0 (start=0x50, len=8)
 
+## Native compilation
+
+`--emit-native` skips the VM and lowers the bytecode straight to
+AArch64 machine code, then wraps it in whatever container the target
+OS wants. Two targets ship today:
+
+| `--target=`              | format       | notes                          |
+|--------------------------|--------------|--------------------------------|
+| `macos-aarch64` (default) | Mach-O      | ad-hoc-signed via `codesign`   |
+| `linux-aarch64`           | ELF (ET_EXEC) | links libc.so.6 + libdl.so.2  |
+
+Both share the encoder, lowering, and fixup machinery; only the image
+writer differs. The Mach-O writer hand-rolls load commands, the
+__got/__data sections, and bind opcodes; the ELF writer hand-rolls
+program headers, .dynamic, .dynsym, .dynstr, DT_HASH, .rela.dyn, and
+DT_BIND_NOW eager binding.
+
+What the native backend executes faithfully: every fixture in
+`fixtures/c/` that runs under the VM and isn't a deliberate
+safety-net check (`oob_*`, `mprotect_blocks_*`, `use_after_free`,
+`double_free`, ...) -- the VM diagnoses those at runtime, the native
+binary just hits SIGSEGV / SIGABRT or silently smashes memory, so
+they're excluded by design. 47 fixtures run identically across the
+VM and both native targets; the macOS and Linux paths are mirrored
+test-for-test.
+
+What the native backend doesn't have: the VM's runtime safety net
+(`--track-pointers`, mprotect enforcement, code-vs-data separation
+checks). Run under the VM if you want those.
+
+### Runtime dynamic linking
+
+`dlopen` / `dlsym` / `dlclose` / `dlerror` are first-class library
+calls just like `printf` / `malloc`. Native binaries resolve them
+through libc / libdl; in the VM they delegate to the host's `Host`
+trait, which `StdHost` implements via real `extern "C"` libc calls.
+
+    int main() {
+        int *h;
+        int *atoi_fn;
+        h = dlopen(0, 2);                  // RTLD_NOW
+        atoi_fn = dlsym(h, "atoi");
+        return atoi_fn("123");             // exits 123
+    }
+
+Calling the dlsym'd pointer works in native mode (`Op::Jsri` loads
+args into x0..x7 in addition to the c4 stack, so the AAPCS64 callee
+finds them). VM mode rejects the indirect call -- there's no FFI
+from the VM, so the VM diagnoses "non-code address" rather than
+jumping to a real libc address.
+
 ## Optimizer
 
 `--optimize` (or `-O`) runs a bytecode optimizer between compile and
@@ -179,10 +244,17 @@ The CLI binary always builds with the default `std` feature.
       vm/
         mod.rs              instruction dispatch, memory model, mprotect
         syscalls.rs         libc-shaped syscalls (printf, malloc, ...)
+      codegen/
+        mod.rs              Target enum + dispatch + Build/fixup types
+        aarch64.rs          AArch64 encoder + bytecode->aarch64 lowering
+        mach_o.rs           Mach-O writer (macOS, ad-hoc-signed)
+        elf.rs              ELF writer (Linux/aarch64, ET_EXEC + libdl)
       tests/
         lexer.rs, parser.rs, codegen.rs, vm.rs    phase tests
         programs.rs, syscalls.rs, types.rs        end-to-end tests
         pointer_tracking.rs, optimizer.rs         opt-in feature tests
+        native.rs                                 macOS Mach-O end-to-end
+        native_elf.rs                             Linux ELF end-to-end
     fixtures/c/             C programs the test suite loads + the
                             original c4.c
 
@@ -202,7 +274,17 @@ sources from `fixtures/c/`, compile, run, and check the exit code.
 hatch. `pointer_tracking` deliberately reaches into freed memory to
 make sure the safety net catches it. `optimizer` re-runs every
 fixture under `-O` and asserts the exit code didn't change.
+`native` (macOS) and `native_elf` (Linux/arm64) compile each fixture
+through the native backend, sign / chmod-x the result, and exec it
+under the host kernel; they're cfg-gated to their respective triples
+and skipped on other CI lanes.
 
 The shared scaffold turns pointer tracking on by default for every
 test, so the suite exercises the safety checks even on programs that
 weren't written to fail.
+
+CI runs the matrix on `ubuntu-latest`, `ubuntu-24.04-arm`,
+`macos-latest`, and `windows-latest`. The arm64 Linux runner exercises
+the ELF path end-to-end; the macOS runner exercises Mach-O; the others
+verify VM-only paths build and pass without the native bits compiled
+in.

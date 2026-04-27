@@ -48,24 +48,62 @@ fn build_and_run_outcome(src: &str, stem: &str) -> RunOutcome {
         Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),
     };
 
-    let path = std::env::temp_dir().join(format!("badc-elf-test-{stem}.bin"));
+    let path = unique_temp_path("badc-elf-test", stem);
     {
         let mut f = std::fs::File::create(&path).expect("create temp file");
         f.write_all(&bytes).expect("write temp file");
+        // sync_all so the page cache is flushed before exec --
+        // otherwise the kernel can briefly hold a writable
+        // reference and exec returns ETXTBUSY.
+        f.sync_all().expect("sync temp file");
     }
     set_executable(&path);
 
-    let output = Command::new(&path)
-        .output()
-        .expect("could not exec the produced binary");
+    let output = exec_with_retry(&path);
     let _ = std::fs::remove_file(&path);
-    if let Some(code) = output.status.code() {
-        RunOutcome::Exit(code)
-    } else {
-        use std::os::unix::process::ExitStatusExt;
-        let signal = output.status.signal().unwrap_or(0);
-        RunOutcome::Signal(signal)
+    match output {
+        Ok(o) => {
+            if let Some(code) = o.status.code() {
+                RunOutcome::Exit(code)
+            } else {
+                use std::os::unix::process::ExitStatusExt;
+                let signal = o.status.signal().unwrap_or(0);
+                RunOutcome::Signal(signal)
+            }
+        }
+        Err(e) => panic!("could not exec the produced binary: {e}"),
     }
+}
+
+/// Build a per-process, per-test temp path so concurrent tests can't
+/// step on each other and leftover files from previous runs can't
+/// confuse the kernel's "is this executable busy?" check.
+fn unique_temp_path(prefix: &str, stem: &str) -> std::path::PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let pid = std::process::id();
+    std::env::temp_dir().join(format!("{prefix}-{pid}-{n}-{stem}.bin"))
+}
+
+/// Run the binary at `path`, retrying briefly on ETXTBUSY. Linux
+/// occasionally returns this when an exec races with a still-being-
+/// closed writable fd, even though `File` was already dropped --
+/// the kernel's writeback isn't strictly synchronous and parallel
+/// `cargo test` threads can amplify the window.
+fn exec_with_retry(path: &Path) -> std::io::Result<std::process::Output> {
+    for attempt in 0..10 {
+        match Command::new(path).output() {
+            Ok(o) => return Ok(o),
+            Err(e) if e.raw_os_error() == Some(26) => {
+                // ETXTBUSY -- back off and retry.
+                std::thread::sleep(std::time::Duration::from_millis(10 * (attempt + 1)));
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    // One last attempt with a propagated error.
+    Command::new(path).output()
 }
 
 fn set_executable(path: &Path) {

@@ -1225,22 +1225,24 @@ fn read_operand(text: &[i64], pc: &mut usize, op_name: &str) -> Result<i64, C4Er
 /// Standard System V ABI prologue: save rbp, set new frame, allocate
 /// locals (rounded up to keep rsp 16-byte aligned at any call site).
 ///
-/// For the program's entry function (`is_main = true`) we additionally
-/// push rdi (argc) then rsi (argv) into their own 16-byte slots, the
-/// same shape user-function args use. After the prologue's `push rbp`
-/// the layout is:
-///   rbp + 16: argv  (top arg, c4 val=2)
-///   rbp + 32: argc  (deeper arg, c4 val=3)
-/// matching [`lea_offset_bytes`].
+/// For the program's entry function (`is_main = true`) the c4
+/// calling convention wants argv at `rbp + 16` (top arg, val=2) and
+/// argc at `rbp + 32` (deeper arg, val=3). On x86_64 the `call` from
+/// `_start` has already pushed the return address to the stack, so
+/// we can't just push argc / argv before saving rbp -- they'd land
+/// *below* the saved rbp. Instead we pop the ret addr into a temp,
+/// push argc / argv as 16-byte slots in caller-style, then re-push
+/// the ret addr; the resulting layout matches what
+/// [`lea_offset_bytes`] expects.
 fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool) {
     if is_main {
+        emit_pop_r(code, Reg::R10); // r10 = ret addr
         // Push argc (rdi) first (deeper), then argv (rsi) (shallower).
-        // 16-byte slots so the layout matches the user-function arg
-        // convention.
         emit_sub_rsp_imm32(code, 16);
         emit_mov_mem_r(code, Reg::RSP, 0, Reg::RDI);
         emit_sub_rsp_imm32(code, 16);
         emit_mov_mem_r(code, Reg::RSP, 0, Reg::RSI);
+        emit_push_r(code, Reg::R10); // restore ret addr above the slots
     }
     emit_push_r(code, Reg::RBP);
     emit_mov_rr(code, Reg::RBP, Reg::RSP);
@@ -1256,14 +1258,18 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool) {
 
 /// Mirror of [`emit_prologue`]. Move the VM accumulator into rax
 /// (return register), tear down the frame, return. For main we also
-/// drop the two 16-byte argc/argv slots so rsp is back to what
-/// `_start` handed us.
+/// drop the two 16-byte argc / argv slots inserted by the prologue --
+/// they sit between the saved rbp and the return address, so we have
+/// to pop the ret addr into a temp, drop the slots, then push it back
+/// before `ret` consumes it.
 fn emit_epilogue(code: &mut Vec<u8>, is_main: bool) {
     emit_mov_rr(code, Reg::RAX, Reg::R13);
     emit_mov_rr(code, Reg::RSP, Reg::RBP);
     emit_pop_r(code, Reg::RBP);
     if is_main {
-        emit_add_rsp_imm32(code, 32);
+        emit_pop_r(code, Reg::R10); // ret addr
+        emit_add_rsp_imm32(code, 32); // drop argc + argv slots
+        emit_push_r(code, Reg::R10);
     }
     emit_ret(code);
 }

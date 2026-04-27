@@ -195,22 +195,30 @@ checks). Run under the VM if you want those.
 ### In-process JIT
 
 `--jit` lowers the program with the same encoder + relocations the
-AOT path uses, mmaps the result into a writable page, mprotects it
-to `PROT_READ | PROT_EXEC`, and calls `main` directly via a transmuted
-function pointer. No subprocess, no on-disk binary -- arg-parsing,
-compile, lower, and exec all happen in the badc process:
+AOT path uses, mmaps the result into an executable page, and calls
+`main` directly via a transmuted function pointer. No subprocess,
+no on-disk binary -- arg-parsing, compile, lower, and exec all
+happen in the badc process:
 
     badc --jit fixtures/c/c4.c hello.c       # JIT'd c4 self-hosts hello.c
 
-`--jit` is Linux-only today. The host arch picks the backend
-automatically (aarch64 vs x86_64 -- there's no cross-arch JIT). libc
-binding is done at JIT time: a writable "fake GOT" region is
+The host OS / arch picks the backend automatically (there's no
+cross-arch JIT). Three hosts ship today:
+
+| host             | mapping                                   | I-cache                  |
+|------------------|-------------------------------------------|--------------------------|
+| Linux/aarch64    | mmap RW -> mprotect RX                    | manual dc cvau / ic ivau |
+| Linux/x86_64     | mmap RW -> mprotect RX                    | hardware-coherent (no-op) |
+| macOS/aarch64    | mmap RWX + `MAP_JIT`, `pthread_jit_write_protect_np` toggle | `sys_icache_invalidate` |
+
+libc binding is done at JIT time: a writable "fake GOT" region is
 allocated, `dlopen(NULL, RTLD_NOW)` + `dlsym` resolves each libc
 symbol the program imports, and the codegen's existing GOT-call
-relocations are patched against this region. macOS arm64 lands in a
-later phase: the kernel enforces W^X via `MAP_JIT` +
-`pthread_jit_write_protect_np` toggling, which has to be threaded
-through carefully.
+relocations are patched against this region. macOS uses Apple's
+`MAP_JIT` + per-thread W^X toggle to satisfy the hardware-enforced
+W^X on Apple Silicon -- this works with cargo's ad-hoc-signed
+binaries; a hardened-runtime binary would need
+`com.apple.security.cs.allow-jit`.
 
 `--dump-asm` produces a textual listing of the lowered code grouped
 by the c4 op that produced each region. Hex bytes per op plus
@@ -332,8 +340,9 @@ test, so the suite exercises the safety checks even on programs that
 weren't written to fail.
 
 CI runs the matrix on `ubuntu-latest`, `ubuntu-24.04-arm`,
-`macos-latest`, and `windows-latest`. The macOS runner exercises
-Mach-O end-to-end; `ubuntu-24.04-arm` exercises Linux/aarch64 ELF
-and the JIT loader; `ubuntu-latest` exercises Linux/x86_64 ELF and
-the JIT loader; `windows-latest` builds the VM-only paths without
-native bits compiled in.
+`macos-latest`, and `windows-latest`. `macos-latest` exercises
+Mach-O end-to-end and the `MAP_JIT` JIT loader; `ubuntu-24.04-arm`
+exercises Linux/aarch64 ELF and the mprotect JIT loader;
+`ubuntu-latest` exercises Linux/x86_64 ELF and the mprotect JIT
+loader; `windows-latest` builds the VM-only paths without native
+bits compiled in.

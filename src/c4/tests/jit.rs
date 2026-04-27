@@ -4,18 +4,21 @@
 //! how the produced code is loaded -- mmap + mprotect + a transmuted
 //! function pointer, instead of an ELF on disk + exec.
 //!
-//! Gated to `linux` because that's the only OS where `jit_run` is
-//! implemented today (macOS arm64 W^X handling lands in a later
-//! milestone). Both `aarch64` and `x86_64` are exercised, since
-//! `host_target()` picks the right backend at runtime.
+//! Gated to the OS / arch combinations where `jit_run` is
+//! implemented: Linux (aarch64 + x86_64) and macOS arm64. The
+//! `host_target()` helper inside `jit.rs` picks the right backend
+//! at runtime, so the test body is platform-agnostic.
 //!
 //! Output from the JIT'd program (printf, etc.) goes to the test
 //! process's stdout. Tests assert only on the exit code, so the
 //! interleaving with `cargo test`'s output is cosmetic.
 
-#![cfg(all(
-    target_os = "linux",
-    any(target_arch = "aarch64", target_arch = "x86_64")
+#![cfg(any(
+    all(
+        target_os = "linux",
+        any(target_arch = "aarch64", target_arch = "x86_64")
+    ),
+    all(target_os = "macos", target_arch = "aarch64"),
 ))]
 
 use crate::{Compiler, jit_run};

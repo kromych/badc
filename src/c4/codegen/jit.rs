@@ -3,13 +3,20 @@
 //! Lowers the program with the same encoder + lowering pass the AOT
 //! native backend uses, then loads the result into an mmap'd
 //! executable page and calls into it. No `_start` stub: Rust calls
-//! `main` directly with argc/argv in System V ABI registers, which
-//! is exactly what the AOT `_start` stub would have set up.
+//! `main` directly with argc/argv in System V / AAPCS64 ABI
+//! registers, which is exactly what the AOT `_start` stub would have
+//! set up.
 //!
-//! Gated to Linux for now -- the mmap / mprotect / munmap shape is
-//! straightforward there. macOS arm64 enforces W^X in hardware via
-//! `MAP_JIT` + `pthread_jit_write_protect_np` toggling and lands in
-//! a follow-on milestone.
+//! ## Supported hosts
+//!
+//! * **Linux/aarch64** -- mmap RW, mprotect to RX, dc cvau / ic ivau
+//!   I-cache flush.
+//! * **Linux/x86_64** -- mmap RW, mprotect to RX, no I-cache flush
+//!   (x86 has coherent I-cache).
+//! * **macOS/aarch64 (Apple Silicon)** -- mmap RWX with `MAP_JIT`,
+//!   then toggle the per-thread W^X bit via `pthread_jit_write_protect_np`
+//!   to enable writes during patching, again to enable execution
+//!   before the call. `sys_icache_invalidate` flushes the I-cache.
 //!
 //! ## Milestones in this file
 //!
@@ -18,14 +25,21 @@
 //!   user calls.
 //! * **J3**: data + function-pointer relocations against the runtime
 //!   mmap addresses.
-//! * **J4** (current): libc binding via dlsym at JIT time. We
-//!   allocate a writable "fake GOT" region (one `u64` slot per
-//!   [`aarch64::IMPORTS`] entry), `dlopen(NULL)` + `dlsym(...)` to
-//!   resolve each symbol, write the resulting address into its slot,
-//!   and patch the codegen's `got_fixups` against this region using
-//!   the same instruction-encoding logic the ELF writer uses. There
-//!   is no `_start` libc-exit fixup -- Rust catches `main`'s return
-//!   value directly via the `extern "C"` transmute call.
+//! * **J4**: libc binding via dlsym at JIT time. Allocates a writable
+//!   "fake GOT" region (one `u64` slot per [`aarch64::IMPORTS`]
+//!   entry), `dlopen(NULL)` + `dlsym(...)` to resolve each symbol,
+//!   writes the resulting address into its slot, and patches the
+//!   codegen's `got_fixups` against this region using the same
+//!   instruction-encoding logic the ELF writer uses. There is no
+//!   `_start` libc-exit fixup -- Rust catches `main`'s return value
+//!   directly via the `extern "C"` transmute call.
+//! * **J6** (current): macOS/aarch64 host. Lowers with
+//!   [`Target::MacOSAarch64`] (so variadic printf packs args on the
+//!   stack the way the platform ABI requires) and uses Apple's
+//!   `MAP_JIT` + `pthread_jit_write_protect_np` toggle to satisfy
+//!   the hardware-enforced W^X. Works with cargo's ad-hoc-signed
+//!   binaries; a hardened-runtime binary would need
+//!   `com.apple.security.cs.allow-jit`.
 
 use alloc::string::{String, ToString};
 
@@ -37,17 +51,21 @@ use super::Target;
 /// code as it would appear from a child process. `args` becomes the
 /// hosted program's argv.
 pub fn jit_run(program: &Program, args: &[String]) -> Result<i32, C4Error> {
-    #[cfg(all(target_os = "linux", feature = "std"))]
+    #[cfg(all(
+        feature = "std",
+        any(target_os = "linux", all(target_os = "macos", target_arch = "aarch64"),),
+    ))]
     {
-        linux_impl::jit_run(program, args)
+        jit_impl::jit_run(program, args)
     }
-    #[cfg(not(all(target_os = "linux", feature = "std")))]
+    #[cfg(not(all(
+        feature = "std",
+        any(target_os = "linux", all(target_os = "macos", target_arch = "aarch64"),),
+    )))]
     {
         let _ = (program, args);
         Err(C4Error::Compile(
-            "JIT: currently supported only on Linux with the `std` feature \
-             (macOS arm64 W^X handling lands later)"
-                .to_string(),
+            "JIT: requires the `std` feature on Linux (any arch) or macOS/aarch64".to_string(),
         ))
     }
 }
@@ -56,19 +74,25 @@ pub fn jit_run(program: &Program, args: &[String]) -> Result<i32, C4Error> {
 /// how to lower for the host arch -- there's no cross-arch JIT.
 #[allow(dead_code)]
 fn host_target() -> Result<Target, C4Error> {
-    if cfg!(target_arch = "aarch64") {
+    if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        Ok(Target::MacOSAarch64)
+    } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
         Ok(Target::LinuxAarch64)
-    } else if cfg!(target_arch = "x86_64") {
+    } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
         Ok(Target::LinuxX64)
     } else {
         Err(C4Error::Compile(
-            "JIT: host arch unsupported (need aarch64 or x86_64)".to_string(),
+            "JIT: host OS/arch unsupported (need Linux/aarch64, Linux/x86_64, or macOS/aarch64)"
+                .to_string(),
         ))
     }
 }
 
-#[cfg(all(target_os = "linux", feature = "std"))]
-mod linux_impl {
+#[cfg(all(
+    feature = "std",
+    any(target_os = "linux", all(target_os = "macos", target_arch = "aarch64"),),
+))]
+mod jit_impl {
     use super::super::super::error::C4Error;
     use super::super::super::program::Program;
     use super::super::Target;
@@ -147,13 +171,8 @@ mod linux_impl {
 
     fn lower_for_jit(program: &Program, target: Target) -> Result<Build, C4Error> {
         match target {
-            Target::LinuxAarch64 => aarch64::lower(program, target),
+            Target::MacOSAarch64 | Target::LinuxAarch64 => aarch64::lower(program, target),
             Target::LinuxX64 => x86_64::lower(program, target),
-            // host_target only returns Linux variants, so this arm
-            // is unreachable in practice; spell it out anyway.
-            _ => Err(C4Error::Compile(
-                "JIT: target not Linux/aarch64 or Linux/x86_64".to_string(),
-            )),
         }
     }
 
@@ -161,14 +180,29 @@ mod linux_impl {
     // Memory allocation. We use raw mmap / mprotect / munmap because
     // pulling in `libc` or `region` as Cargo deps would change the
     // crate's no-deps story for one feature; the syscall surface here
-    // is small and stable on Linux.
+    // is small and stable on Linux + Darwin.
     // ----------------------------------------------------------------
 
     const PROT_READ: c_int = 1;
     const PROT_WRITE: c_int = 2;
     const PROT_EXEC: c_int = 4;
     const MAP_PRIVATE: c_int = 0x02;
+
+    // Linux's MAP_ANONYMOUS = 0x20; Darwin's MAP_ANON = 0x1000. The
+    // headers spell them differently but the runtime semantics --
+    // "back the mapping with anonymous pages" -- are identical.
+    #[cfg(target_os = "linux")]
     const MAP_ANONYMOUS: c_int = 0x20;
+    #[cfg(target_os = "macos")]
+    const MAP_ANONYMOUS: c_int = 0x1000;
+
+    /// macOS-only `MAP_JIT`. Required for any region we want to be
+    /// both writable and executable on Apple Silicon -- without it,
+    /// asking for `PROT_EXEC` on a writable mapping is rejected by
+    /// the kernel. The hardware-enforced W^X toggle that gates each
+    /// access lives in `pthread_jit_write_protect_np`.
+    #[cfg(target_os = "macos")]
+    const MAP_JIT: c_int = 0x800;
 
     /// `(void *) -1` -- the sentinel mmap returns on failure.
     fn map_failed() -> *mut c_void {
@@ -195,22 +229,37 @@ mod linux_impl {
                 ) -> *mut c_void;
             }
             let len = round_up_to_page(code.len());
-            let ptr = unsafe {
-                mmap(
-                    std::ptr::null_mut(),
-                    len,
-                    PROT_READ | PROT_WRITE,
-                    MAP_PRIVATE | MAP_ANONYMOUS,
-                    -1,
-                    0,
-                )
-            };
+
+            // Linux: ask for RW now, mprotect to RX once we're
+            // done writing. macOS arm64: ask for RWX with MAP_JIT,
+            // then toggle the per-thread W^X bit to enable writes.
+            // The two paths converge at "writable region holding
+            // the JIT'd bytes" by the time we return.
+            #[cfg(target_os = "linux")]
+            let (prot, flags) = (PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS);
+            #[cfg(target_os = "macos")]
+            let (prot, flags) = (
+                PROT_READ | PROT_WRITE | PROT_EXEC,
+                MAP_PRIVATE | MAP_ANONYMOUS | MAP_JIT,
+            );
+
+            let ptr = unsafe { mmap(std::ptr::null_mut(), len, prot, flags, -1, 0) };
             if ptr == map_failed() {
                 return Err(C4Error::Compile(format!(
                     "JIT: mmap failed: {}",
                     std::io::Error::last_os_error()
                 )));
             }
+
+            // macOS: a freshly mmap'd MAP_JIT region defaults to RX
+            // for the executing thread. Flip the per-thread toggle to
+            // enable writes before we copy the code in or apply
+            // fixups; `make_executable` flips it back.
+            #[cfg(target_os = "macos")]
+            unsafe {
+                jit_write_protect(false);
+            }
+
             // SAFETY: `ptr` points at `len` writable bytes; `code`
             // fits since `len >= code.len()`. Both regions are
             // disjoint by construction (fresh mmap).
@@ -224,15 +273,28 @@ mod linux_impl {
         }
 
         fn make_executable(&self) -> Result<(), C4Error> {
-            unsafe extern "C" {
-                fn mprotect(addr: *mut c_void, len: usize, prot: c_int) -> c_int;
+            #[cfg(target_os = "linux")]
+            {
+                unsafe extern "C" {
+                    fn mprotect(addr: *mut c_void, len: usize, prot: c_int) -> c_int;
+                }
+                let r =
+                    unsafe { mprotect(self.ptr as *mut c_void, self.len, PROT_READ | PROT_EXEC) };
+                if r != 0 {
+                    return Err(C4Error::Compile(format!(
+                        "JIT: mprotect failed: {}",
+                        std::io::Error::last_os_error()
+                    )));
+                }
             }
-            let r = unsafe { mprotect(self.ptr as *mut c_void, self.len, PROT_READ | PROT_EXEC) };
-            if r != 0 {
-                return Err(C4Error::Compile(format!(
-                    "JIT: mprotect failed: {}",
-                    std::io::Error::last_os_error()
-                )));
+            #[cfg(target_os = "macos")]
+            unsafe {
+                // Re-enable the W^X bit so the just-patched region is
+                // executable. The mapping was already PROT_READ |
+                // PROT_EXEC at the page-table level (MAP_JIT keeps
+                // both bits set); the toggle is what the hardware
+                // enforces per-access.
+                jit_write_protect(true);
             }
             Ok(())
         }
@@ -248,6 +310,20 @@ mod linux_impl {
         fn len(&self) -> usize {
             self.len
         }
+    }
+
+    /// Per-thread Apple Silicon W^X toggle. `enable_writes = true`
+    /// makes every MAP_JIT region on this thread writable and
+    /// non-executable; `false` makes them executable and read-only.
+    /// Called only on macOS; the shim is what `pthread_jit_write_protect_np`
+    /// expects (`int enabled` -- 1 means "write-protect on" =
+    /// executable, 0 means "writable").
+    #[cfg(target_os = "macos")]
+    unsafe fn jit_write_protect(executable: bool) {
+        unsafe extern "C" {
+            fn pthread_jit_write_protect_np(enabled: c_int);
+        }
+        unsafe { pthread_jit_write_protect_np(if executable { 1 } else { 0 }) };
     }
 
     /// Read-write data region. Same mmap shape as `JitRegion` but
@@ -500,15 +576,12 @@ mod linux_impl {
         label: &str,
     ) -> Result<(), C4Error> {
         match target {
-            Target::LinuxAarch64 => {
+            Target::MacOSAarch64 | Target::LinuxAarch64 => {
                 patch_adrp_ldr(code, code_vmaddr, instr_offset, target_vmaddr, label)
             }
             Target::LinuxX64 => {
                 patch_call_qword_rip32(code, code_vmaddr, instr_offset, target_vmaddr, label)
             }
-            _ => Err(C4Error::Compile(format!(
-                "JIT: {label} unsupported for target {target:?}"
-            ))),
         }
     }
 
@@ -588,15 +661,12 @@ mod linux_impl {
         label: &str,
     ) -> Result<(), C4Error> {
         match target {
-            Target::LinuxAarch64 => {
+            Target::MacOSAarch64 | Target::LinuxAarch64 => {
                 patch_adrp_add(code, code_vmaddr, instr_offset, target_vmaddr, label)
             }
             Target::LinuxX64 => {
                 patch_lea_rip32(code, code_vmaddr, instr_offset, target_vmaddr, label)
             }
-            _ => Err(C4Error::Compile(format!(
-                "JIT: {label} unsupported for target {target:?}"
-            ))),
         }
     }
 
@@ -692,12 +762,25 @@ mod linux_impl {
     #[cfg(target_arch = "x86_64")]
     fn flush_icache(_ptr: *const u8, _len: usize) {}
 
-    #[cfg(target_arch = "aarch64")]
+    /// macOS arm64: defer to Apple's published API. `sys_icache_invalidate`
+    /// is in libSystem (always linked) and is the supported interface
+    /// for JITs on Apple Silicon -- it does the dc cvau / ic ivau /
+    /// dsb / isb dance with the right cache-line size for the host.
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     fn flush_icache(ptr: *const u8, len: usize) {
-        // ARM ARM allows D-cache and I-cache to have different line
-        // sizes; the smallest possible per spec is 16 bytes. Using
-        // 16 means more iterations than necessary on most cores
-        // (typical line is 64) but is always correct.
+        unsafe extern "C" {
+            fn sys_icache_invalidate(start: *mut c_void, len: usize);
+        }
+        unsafe { sys_icache_invalidate(ptr as *mut c_void, len) };
+    }
+
+    /// Linux aarch64: roll the dance by hand. ARM ARM allows D-cache
+    /// and I-cache to have different line sizes; the smallest possible
+    /// per spec is 16 bytes. Using 16 means more iterations than
+    /// necessary on most cores (typical line is 64) but is always
+    /// correct.
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    fn flush_icache(ptr: *const u8, len: usize) {
         let line: usize = 16;
         let start = ptr as usize;
         let end = start + len;

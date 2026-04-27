@@ -61,13 +61,14 @@ jobs:
         # Each runner exercises the native-codegen path that targets
         # its own host:
         #  * macos-latest        -> src/c4/tests/native.rs (Mach-O,
-        #    `/usr/bin/codesign`)
+        #    `/usr/bin/codesign`) + src/c4/tests/jit.rs (in-process
+        #    JIT via MAP_JIT + pthread_jit_write_protect_np)
         #  * ubuntu-24.04-arm    -> src/c4/tests/native_elf.rs
         #    (Linux/aarch64 ELF, host kernel exec) +
-        #    src/c4/tests/jit.rs (in-process JIT)
+        #    src/c4/tests/jit.rs (mprotect-based JIT)
         #  * ubuntu-latest       -> src/c4/tests/native_elf_x64.rs
         #    (Linux/x86_64 ELF, host kernel exec) +
-        #    src/c4/tests/jit.rs (in-process JIT)
+        #    src/c4/tests/jit.rs (mprotect-based JIT)
         # All four backend test modules are cfg-gated to their
         # respective triples, so the other runners compile them out
         # and only verify the VM, lexer, parser, codegen-as-bytecode,

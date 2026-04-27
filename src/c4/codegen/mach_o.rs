@@ -687,7 +687,7 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
     // those slots by index. We pull just the names here.
     let imports: Vec<&str> = super::aarch64::IMPORTS
         .iter()
-        .map(|(name, _)| *name)
+        .map(|imp| imp.macos_symbol)
         .collect();
 
     // ---- step 2: build __LINKEDIT contents ----

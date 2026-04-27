@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use badc::{Compiler, PredefinedKind, Target, Vm, emit_native, optimize, predefined_symbols};
 
 const USAGE: &str = "usage: badc [--track-pointers] [--trace] [--list-symbols] [--optimize|-O] \
-                     [--emit-native [-o <out>]] <file> [args...]";
+                     [--emit-native [--target=<spec>] [-o <out>]] <file> [args...]";
 
 /// Where the AOT codesign tool lives on every macOS install. Hardcoded
 /// so we don't accidentally pick up a homebrew shim that signs differently.
@@ -22,6 +22,7 @@ fn main() {
     let mut optimize_flag = false;
     let mut emit_native_flag = false;
     let mut output_path: Option<PathBuf> = None;
+    let mut target_spec: Option<String> = None;
 
     let mut iter = raw.into_iter();
     let prog0 = iter.next().unwrap_or_default();
@@ -40,9 +41,20 @@ fn main() {
                     std::process::exit(1);
                 }
             },
+            s if s.starts_with("--target=") => {
+                target_spec = Some(s["--target=".len()..].to_string());
+            }
             _ => args.push(arg),
         }
     }
+
+    let target = match Target::parse(target_spec.as_deref()) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    };
 
     if list_symbols {
         print_predefined_symbols();
@@ -88,7 +100,7 @@ fn main() {
 
     if emit_native_flag {
         let out = output_path.unwrap_or_else(|| default_output_path(path));
-        emit_native_binary(&program, &out);
+        emit_native_binary(&program, &out, target);
         return;
     }
 
@@ -131,10 +143,12 @@ fn default_output_path(source: &str) -> PathBuf {
 }
 
 /// Lower the program to a native binary, write it, mark it executable,
-/// and (on macOS) shell out to `codesign --sign -` so the loader
-/// will accept it. Anything goes wrong, exit non-zero.
-fn emit_native_binary(program: &badc::Program, out: &std::path::Path) {
-    let bytes = match emit_native(program, Target::MacOSAarch64) {
+/// and -- when the produced format is Mach-O on a macOS host -- shell
+/// out to `codesign --sign -` so the loader will accept it. ELF
+/// binaries don't need signing; cross-format combinations print an
+/// advisory line and skip the signing step.
+fn emit_native_binary(program: &badc::Program, out: &std::path::Path, target: Target) {
+    let bytes = match emit_native(program, target) {
         Ok(b) => b,
         Err(e) => {
             eprintln!("{e}");
@@ -146,14 +160,25 @@ fn emit_native_binary(program: &badc::Program, out: &std::path::Path) {
         std::process::exit(1);
     }
     set_executable(out);
-    #[cfg(target_os = "macos")]
-    codesign(out);
-    #[cfg(not(target_os = "macos"))]
-    {
-        eprintln!(
-            "badc: --emit-native produced a Mach-O binary on a non-macOS host; \
-             you'll need to copy it to macOS to run it."
-        );
+    match target {
+        Target::MacOSAarch64 => {
+            #[cfg(target_os = "macos")]
+            codesign(out);
+            #[cfg(not(target_os = "macos"))]
+            eprintln!(
+                "badc: produced a Mach-O on a non-macOS host; copy to macOS \
+                 and `codesign --sign - <path>` before running."
+            );
+        }
+        Target::LinuxAarch64 => {
+            // ELF binaries don't need signing. If the host isn't
+            // Linux/aarch64, the user has to ship the result there.
+            #[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
+            eprintln!(
+                "badc: produced a Linux/aarch64 ELF on a different host; \
+                 run it on a Linux/arm64 box, or via Docker `--platform linux/arm64`."
+            );
+        }
     }
 }
 

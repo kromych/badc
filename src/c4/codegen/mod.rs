@@ -34,18 +34,21 @@ use super::error::C4Error;
 use super::program::Program;
 
 mod aarch64;
+mod elf;
 mod mach_o;
 
-/// Which native binary to produce. The single-variant enum is
-/// deliberate -- it makes adding the next target a structural change
-/// (new variant, new match arm in [`emit_native`]) rather than a
-/// silent string parse, and gives `--emit-native` somewhere to grow.
+/// Which native binary to produce. Adding a target is a structural
+/// change (new variant, new match arm in [`emit_native`]) rather than
+/// a silent string parse, and gives `--emit-native` somewhere to grow.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Target {
     /// macOS on Apple Silicon. Mach-O / arm64e-not-required, links
     /// against `libSystem.B.dylib` for libc, signed ad-hoc with
     /// `codesign --sign -` so dyld will load it.
     MacOSAarch64,
+    /// Linux on AArch64. ELF / EM_AARCH64, links against `libc.so.6`
+    /// via `/lib/ld-linux-aarch64.so.1`. No code-signing step.
+    LinuxAarch64,
 }
 
 impl Target {
@@ -55,8 +58,9 @@ impl Target {
     pub fn parse(spec: Option<&str>) -> Result<Self, C4Error> {
         match spec {
             None | Some("macos-aarch64") | Some("aarch64-apple-darwin") => Ok(Target::MacOSAarch64),
+            Some("linux-aarch64") | Some("aarch64-unknown-linux-gnu") => Ok(Target::LinuxAarch64),
             Some(other) => Err(C4Error::Compile(format!(
-                "unsupported native target: {other:?} (try `macos-aarch64`)"
+                "unsupported native target: {other:?} (try `macos-aarch64` or `linux-aarch64`)"
             ))),
         }
     }
@@ -145,10 +149,35 @@ pub(crate) struct FuncFixup {
 /// Returns the raw image bytes so the caller can decide whether to
 /// write them to disk, embed them, hash them, etc.
 pub fn emit_native(program: &Program, target: Target) -> Result<Vec<u8>, C4Error> {
+    let build = aarch64::lower(program, target)?;
     match target {
-        Target::MacOSAarch64 => {
-            let build = aarch64::lower(program)?;
-            mach_o::write(&build)
+        Target::MacOSAarch64 => mach_o::write(&build),
+        Target::LinuxAarch64 => elf::write(&build),
+    }
+}
+
+/// Per-target ABI knobs that affect lowering, not just the final
+/// container. Today the only divergence between MacOSAarch64 and
+/// LinuxAarch64 is variadic-call ABI; future targets will add to
+/// this struct rather than growing the lower-fn signature.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TargetOptions {
+    /// macOS arm64 packs variadic args into stack scratch slots
+    /// (8-byte spaced) regardless of how many would fit in
+    /// x0..x7. Standard AAPCS64 (Linux) uses the same registers as
+    /// non-variadic calls. `true` selects the macOS dance.
+    pub variadic_on_stack: bool,
+}
+
+impl Target {
+    pub(crate) fn options(self) -> TargetOptions {
+        match self {
+            Target::MacOSAarch64 => TargetOptions {
+                variadic_on_stack: true,
+            },
+            Target::LinuxAarch64 => TargetOptions {
+                variadic_on_stack: false,
+            },
         }
     }
 }

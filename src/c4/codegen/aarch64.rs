@@ -34,31 +34,98 @@ use super::super::CODE_BASE;
 use super::super::error::C4Error;
 use super::super::op::Op;
 use super::super::program::Program;
-use super::{Build, DataFixup, FuncFixup, GotFixup};
+use super::{Build, DataFixup, FuncFixup, GotFixup, Target, TargetOptions};
 
-/// Libc symbols badc binaries import. The bind opcode stream and the
-/// __got layout walk this list in order; codegen picks slots out of
-/// it via [`import_index_for_op`]. **Order matters** -- the index in
-/// this slice is the GOT slot index in __DATA.
-pub(crate) const IMPORTS: &[(&str, Op)] = &[
-    ("_open", Op::Open),
-    ("_read", Op::Read),
-    ("_close", Op::Clos),
-    ("_printf", Op::Prtf),
-    ("_malloc", Op::Malc),
-    ("_free", Op::Free),
-    ("_memset", Op::Mset),
-    ("_memcmp", Op::Mcmp),
-    ("_memcpy", Op::Mcpy),
-    ("_mprotect", Op::Mpro),
-    ("_exit", Op::Exit),
-    ("_write", Op::Write),
-    ("_getenv", Op::Genv),
-    ("_setenv", Op::Senv),
+/// Libc symbol metadata. macOS prefixes everything with `_` (the classic
+/// Mach-O calling convention); Linux uses the bare C name. The codegen
+/// records GOT slot indices into [`IMPORTS`]; per-target writers read
+/// whichever name field they need.
+pub(crate) struct Import {
+    pub macos_symbol: &'static str,
+    pub linux_symbol: &'static str,
+    pub op: Op,
+}
+
+/// Libc symbols badc binaries import. **Order matters** -- the index
+/// in this slice is the GOT slot index in `__DATA` (Mach-O) or `.got`
+/// (ELF), and the codegen embeds those indices in the GOT-fixup
+/// records. Adding a row never breaks existing binaries; reordering
+/// silently miscompiles every previously-emitted call site.
+pub(crate) const IMPORTS: &[Import] = &[
+    Import {
+        macos_symbol: "_open",
+        linux_symbol: "open",
+        op: Op::Open,
+    },
+    Import {
+        macos_symbol: "_read",
+        linux_symbol: "read",
+        op: Op::Read,
+    },
+    Import {
+        macos_symbol: "_close",
+        linux_symbol: "close",
+        op: Op::Clos,
+    },
+    Import {
+        macos_symbol: "_printf",
+        linux_symbol: "printf",
+        op: Op::Prtf,
+    },
+    Import {
+        macos_symbol: "_malloc",
+        linux_symbol: "malloc",
+        op: Op::Malc,
+    },
+    Import {
+        macos_symbol: "_free",
+        linux_symbol: "free",
+        op: Op::Free,
+    },
+    Import {
+        macos_symbol: "_memset",
+        linux_symbol: "memset",
+        op: Op::Mset,
+    },
+    Import {
+        macos_symbol: "_memcmp",
+        linux_symbol: "memcmp",
+        op: Op::Mcmp,
+    },
+    Import {
+        macos_symbol: "_memcpy",
+        linux_symbol: "memcpy",
+        op: Op::Mcpy,
+    },
+    Import {
+        macos_symbol: "_mprotect",
+        linux_symbol: "mprotect",
+        op: Op::Mpro,
+    },
+    Import {
+        macos_symbol: "_exit",
+        linux_symbol: "exit",
+        op: Op::Exit,
+    },
+    Import {
+        macos_symbol: "_write",
+        linux_symbol: "write",
+        op: Op::Write,
+    },
+    Import {
+        macos_symbol: "_getenv",
+        linux_symbol: "getenv",
+        op: Op::Genv,
+    },
+    Import {
+        macos_symbol: "_setenv",
+        linux_symbol: "setenv",
+        op: Op::Senv,
+    },
 ];
 
 fn import_index_for_op(op: Op) -> Option<usize> {
-    IMPORTS.iter().position(|(_, o)| *o == op)
+    IMPORTS.iter().position(|imp| imp.op == op)
 }
 
 /// AArch64 register name. Wraps the 5-bit register field that nearly
@@ -73,6 +140,7 @@ impl Reg {
     pub const X0: Reg = Reg(0);
     pub const X1: Reg = Reg(1);
     pub const X2: Reg = Reg(2);
+    pub const X8: Reg = Reg(8); // Linux/aarch64 syscall number register
     pub const X16: Reg = Reg(16); // IP0 -- temp scratch
     pub const X17: Reg = Reg(17); // IP1 -- second temp
     pub const X19: Reg = Reg(19); // VM accumulator (callee-saved)
@@ -339,6 +407,13 @@ pub(super) fn enc_blr(rn: Reg) -> u32 {
     0xD63F_0000 | ((rn.0 as u32) << 5)
 }
 
+/// `SVC #imm16` -- supervisor call (system call). On Linux/aarch64
+/// the kernel reads the syscall number from `x8` and the arguments
+/// from `x0..x5`; the immediate is conventionally zero.
+pub(super) fn enc_svc(imm16: u16) -> u32 {
+    0xD400_0001 | ((imm16 as u32) << 5)
+}
+
 // ---- Loads / stores (scaled 12-bit unsigned offset). ----
 
 /// `LDR <Xt>, [<Xn|SP>, #imm]` -- 64-bit load, immediate offset
@@ -540,7 +615,8 @@ struct Fixup {
 ///
 /// Syscall ops (`Open`...`Senv`) lower to `adrp + ldr + blr` through
 /// a __got slot the writer fills in at link time.
-pub(super) fn lower(program: &Program) -> Result<Build, C4Error> {
+pub(super) fn lower(program: &Program, target: Target) -> Result<Build, C4Error> {
+    let options = target.options();
     let mut code = Vec::new();
     let mut bytecode_to_native: Vec<usize> = vec![usize::MAX; program.text.len() + 1];
     let mut fixups: Vec<Fixup> = Vec::new();
@@ -586,6 +662,7 @@ pub(super) fn lower(program: &Program) -> Result<Build, C4Error> {
             &mut pending_func_fixups,
             data_imm_positions,
             in_main,
+            options,
         )?;
     }
     bytecode_to_native[program.text.len()] = code.len();
@@ -709,6 +786,7 @@ fn lower_op(
     pending_func_fixups: &mut Vec<(usize, usize)>,
     data_imm_positions: &[usize],
     in_main: bool,
+    options: TargetOptions,
 ) -> Result<(), C4Error> {
     match op {
         // ---- Function frame ----
@@ -926,7 +1004,7 @@ fn lower_op(
         | Op::Exit
         | Op::Write
         | Op::Genv
-        | Op::Senv => emit_libc_call(op, text, *pc, code, got_fixups)?,
+        | Op::Senv => emit_libc_call(op, text, *pc, code, got_fixups, options)?,
     }
     Ok(())
 }
@@ -953,6 +1031,7 @@ fn emit_libc_call(
     pc_after_op: usize,
     code: &mut Vec<u8>,
     got_fixups: &mut Vec<GotFixup>,
+    options: TargetOptions,
 ) -> Result<(), C4Error> {
     let import_index = import_index_for_op(op)
         .ok_or_else(|| C4Error::Compile(format!("native codegen: no import index for {op:?}")))?;
@@ -976,7 +1055,11 @@ fn emit_libc_call(
         )));
     }
 
-    let is_variadic = matches!(op, Op::Prtf);
+    // macOS arm64 has a non-standard variadic ABI that puts the
+    // variadic args on the stack rather than in x0..x7. Standard
+    // AAPCS64 (Linux) treats variadic args identically to fixed ones,
+    // so the register-loading path handles both.
+    let is_variadic = matches!(op, Op::Prtf) && options.variadic_on_stack;
 
     if is_variadic {
         // Format string is the first c4 arg = deepest on the stack.

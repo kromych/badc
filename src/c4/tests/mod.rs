@@ -21,6 +21,7 @@ use super::{C4Error, Compiler, Op, Program, Vm, optimize};
 mod codegen;
 mod lexer;
 mod native;
+mod native_elf;
 mod optimizer;
 mod parser;
 mod pointer_tracking;

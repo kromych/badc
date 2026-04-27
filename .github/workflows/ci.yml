@@ -49,7 +49,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -58,11 +58,15 @@ jobs:
         with:
           key: ${{ matrix.os }}
       - name: cargo test (default features)
-        # On macos-latest this also runs the native-codegen tests in
-        # src/c4/tests/native.rs, which compile fixtures to Mach-O,
-        # shell to /usr/bin/codesign, and exec the result. Both tools
-        # ship with macOS so no extra setup is needed; the tests are
-        # cfg-gated to target_os = "macos" and skipped elsewhere.
+        # Each runner exercises the native-codegen path that targets
+        # its own host:
+        #  * macos-latest        -> src/c4/tests/native.rs (Mach-O,
+        #    `/usr/bin/codesign`)
+        #  * ubuntu-24.04-arm    -> src/c4/tests/native_elf.rs (Linux
+        #    ELF, executed directly by the host kernel)
+        # The tests are cfg-gated to their respective triples, so the
+        # other runners compile them out and only verify the VM,
+        # lexer, parser, codegen-as-bytecode, and optimizer paths.
         run: cargo test --locked --verbose
       - name: cargo build --no-default-features --lib
         # The no_std variant -- no StdHost adapter, alloc only. Library-

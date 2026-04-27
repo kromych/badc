@@ -1,7 +1,10 @@
-# badc
+# `badc`
 
-badc compiles a subset of C to a stack-machine bytecode and runs it
-in-process. It started as a straight Rust port of Robert Swierczek's
+`badc` compiles a subset of C to a bespoke stack-machine bytecode and runs it
+in-process. It also is capable of producing the native code and binaries
+under macOS and Linux.
+
+It started as a straight Rust port of Robert Swierczek's
 [c4](https://github.com/rswier/c4) -- the internal `c4` module name and
 `C4Error` type are kept as a nod to that lineage -- and grew structs,
 type warnings, an optimizer, runtime memory protection, and a no_std
@@ -19,18 +22,21 @@ compilers; the rest use badc extensions and the original c4 rejects
 them at parse.
 
 badc also has a native backend: `--emit-native` lowers the bytecode
-straight to AArch64 machine code wrapped in a Mach-O (macOS) or ELF
-(Linux/aarch64) executable. The same self-host above works against
-the native build:
+straight to machine code wrapped in a Mach-O (macOS arm64) or ELF
+(Linux arm64 / Linux x86_64) executable. The same self-host above
+works against any of the three targets:
 
     badc --emit-native fixtures/c/c4.c -o c4-native       # macOS Mach-O
     ./c4-native hello.c
 
-Or for Linux/arm64, cross-compile from any host and run via Docker /
-qemu / a real arm64 box:
+Cross-compile to Linux from any host and run via Docker / qemu / a
+real Linux box:
 
-    badc --emit-native --target=linux-aarch64 fixtures/c/c4.c -o c4
-    docker run --platform linux/arm64 -v $PWD:/w debian:stable-slim /w/c4 /w/hello.c
+    badc --emit-native --target=linux-aarch64 fixtures/c/c4.c -o c4-arm
+    docker run --platform linux/arm64 -v $PWD:/w debian:stable-slim /w/c4-arm /w/hello.c
+
+    badc --emit-native --target=linux-x64 fixtures/c/c4.c -o c4-x64
+    docker run --platform linux/amd64 -v $PWD:/w debian:stable-slim /w/c4-x64 /w/hello.c
 
 ## Build and run
 
@@ -156,16 +162,22 @@ For example:
 AArch64 machine code, then wraps it in whatever container the target
 OS wants. Two targets ship today:
 
-| `--target=`              | format       | notes                          |
-|--------------------------|--------------|--------------------------------|
-| `macos-aarch64` (default) | Mach-O      | ad-hoc-signed via `codesign`   |
-| `linux-aarch64`           | ELF (ET_EXEC) | links libc.so.6 + libdl.so.2  |
+| `--target=`              | format        | notes                                       |
+|--------------------------|---------------|---------------------------------------------|
+| `macos-aarch64` (default) | Mach-O       | ad-hoc-signed via `codesign`                |
+| `linux-aarch64`           | ELF (ET_EXEC) | links libc.so.6 + libdl.so.2               |
+| `linux-x64`               | ELF (ET_EXEC) | x86_64; links libc.so.6 + libdl.so.2       |
 
-Both share the encoder, lowering, and fixup machinery; only the image
-writer differs. The Mach-O writer hand-rolls load commands, the
-__got/__data sections, and bind opcodes; the ELF writer hand-rolls
-program headers, .dynamic, .dynsym, .dynstr, DT_HASH, .rela.dyn, and
-DT_BIND_NOW eager binding.
+All three share the lowering pass, branch-fixup machinery, and
+data-segment / function-pointer relocation shape; the encoder and
+image writer differ per arch / OS. The Mach-O writer hand-rolls load
+commands, the __got/__data sections, and bind opcodes; the ELF writer
+hand-rolls program headers, .dynamic, .dynsym, .dynstr, DT_HASH,
+.rela.dyn, and DT_BIND_NOW eager binding -- shared between the two
+ELF targets via a `Machine::{Aarch64, X86_64}` enum that picks
+`e_machine`, the dynamic-linker path, the relocation type
+(R_AARCH64_GLOB_DAT vs R_X86_64_GLOB_DAT), and the per-arch
+`_start` stub generator.
 
 What the native backend executes faithfully: every fixture in
 `fixtures/c/` that runs under the VM and isn't a deliberate
@@ -245,16 +257,19 @@ The CLI binary always builds with the default `std` feature.
         mod.rs              instruction dispatch, memory model, mprotect
         syscalls.rs         libc-shaped syscalls (printf, malloc, ...)
       codegen/
-        mod.rs              Target enum + dispatch + Build/fixup types
+        mod.rs              Target enum + Machine + Build/fixup types
         aarch64.rs          AArch64 encoder + bytecode->aarch64 lowering
+        x86_64.rs           x86_64 encoder + bytecode->x86_64 lowering
         mach_o.rs           Mach-O writer (macOS, ad-hoc-signed)
-        elf.rs              ELF writer (Linux/aarch64, ET_EXEC + libdl)
+        elf.rs              ELF writer (Linux/aarch64 + Linux/x86_64,
+                            ET_EXEC + libc + libdl)
       tests/
         lexer.rs, parser.rs, codegen.rs, vm.rs    phase tests
         programs.rs, syscalls.rs, types.rs        end-to-end tests
         pointer_tracking.rs, optimizer.rs         opt-in feature tests
         native.rs                                 macOS Mach-O end-to-end
-        native_elf.rs                             Linux ELF end-to-end
+        native_elf.rs                             Linux/aarch64 ELF e2e
+        native_elf_x64.rs                         Linux/x86_64 ELF e2e
     fixtures/c/             C programs the test suite loads + the
                             original c4.c
 
@@ -274,17 +289,18 @@ sources from `fixtures/c/`, compile, run, and check the exit code.
 hatch. `pointer_tracking` deliberately reaches into freed memory to
 make sure the safety net catches it. `optimizer` re-runs every
 fixture under `-O` and asserts the exit code didn't change.
-`native` (macOS) and `native_elf` (Linux/arm64) compile each fixture
-through the native backend, sign / chmod-x the result, and exec it
-under the host kernel; they're cfg-gated to their respective triples
-and skipped on other CI lanes.
+`native` (macOS), `native_elf` (Linux/aarch64), and `native_elf_x64`
+(Linux/x86_64) compile each fixture through the matching native
+backend, sign / chmod-x the result, and exec it under the host
+kernel; they're cfg-gated to their respective triples and skipped on
+other CI lanes.
 
 The shared scaffold turns pointer tracking on by default for every
 test, so the suite exercises the safety checks even on programs that
 weren't written to fail.
 
 CI runs the matrix on `ubuntu-latest`, `ubuntu-24.04-arm`,
-`macos-latest`, and `windows-latest`. The arm64 Linux runner exercises
-the ELF path end-to-end; the macOS runner exercises Mach-O; the others
-verify VM-only paths build and pass without the native bits compiled
-in.
+`macos-latest`, and `windows-latest`. The macOS runner exercises
+Mach-O end-to-end; `ubuntu-24.04-arm` exercises Linux/aarch64 ELF;
+`ubuntu-latest` exercises Linux/x86_64 ELF; `windows-latest` builds
+the VM-only paths without native bits compiled in.

@@ -174,3 +174,60 @@ fn recursion_factorial() {
     // 5! = 120
     assert_eq!(build_and_run(src, "fact"), 120);
 }
+
+// ---- M1.7: libc syscalls through the GOT. We can only exercise
+//      syscalls that don't need string literals, since data-segment
+//      support hasn't landed yet (the `Build.data` field is
+//      explicitly noted as TODO in src/c4/codegen/mod.rs).
+
+#[test]
+fn exit_with_value() {
+    // exit(N) compiles to the c4 `Op::Exit` op, which our codegen
+    // routes through a libc call to _exit.
+    assert_eq!(
+        build_and_run("int main() { exit(7); return 0; }", "exit7"),
+        7
+    );
+}
+
+#[test]
+fn malloc_returns_nonzero_pointer() {
+    let src = r#"
+        int main() {
+            int *p;
+            p = malloc(64);
+            return p != 0;
+        }
+    "#;
+    assert_eq!(build_and_run(src, "malloc-nonzero"), 1);
+}
+
+#[test]
+fn malloc_memset_memcmp_roundtrip() {
+    let src = r#"
+        int main() {
+            int *a;
+            int *b;
+            a = malloc(16);
+            b = malloc(16);
+            memset(a, 7, 16);
+            memset(b, 7, 16);
+            if (memcmp(a, b, 16) == 0) {
+                free(a);
+                free(b);
+                return 42;
+            }
+            return 1;
+        }
+    "#;
+    assert_eq!(build_and_run(src, "memset-cmp"), 42);
+}
+
+#[test]
+fn argc_threads_through_main() {
+    // No args passed -- argc should be 1 (just the binary path).
+    let src = r#"
+        int main(int argc, char **argv) { return argc; }
+    "#;
+    assert_eq!(build_and_run(src, "argc"), 1);
+}

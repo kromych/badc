@@ -32,7 +32,32 @@ use alloc::vec::Vec;
 use super::super::error::C4Error;
 use super::super::op::Op;
 use super::super::program::Program;
-use super::Build;
+use super::{Build, GotFixup};
+
+/// Libc symbols badc binaries import. The bind opcode stream and the
+/// __got layout walk this list in order; codegen picks slots out of
+/// it via [`import_index_for_op`]. **Order matters** -- the index in
+/// this slice is the GOT slot index in __DATA.
+pub(crate) const IMPORTS: &[(&str, Op)] = &[
+    ("_open", Op::Open),
+    ("_read", Op::Read),
+    ("_close", Op::Clos),
+    ("_printf", Op::Prtf),
+    ("_malloc", Op::Malc),
+    ("_free", Op::Free),
+    ("_memset", Op::Mset),
+    ("_memcmp", Op::Mcmp),
+    ("_memcpy", Op::Mcpy),
+    ("_mprotect", Op::Mpro),
+    ("_exit", Op::Exit),
+    ("_write", Op::Write),
+    ("_getenv", Op::Genv),
+    ("_setenv", Op::Senv),
+];
+
+fn import_index_for_op(op: Op) -> Option<usize> {
+    IMPORTS.iter().position(|(_, o)| *o == op)
+}
 
 /// AArch64 register name. Wraps the 5-bit register field that nearly
 /// every instruction needs in some position; using a newtype prevents
@@ -505,27 +530,49 @@ struct Fixup {
 ///   for popped operands and large-immediate scratch.
 /// * Each function's prologue is the standard AAPCS64 sequence;
 ///   epilogue moves `x19` into `x0` (the return register).
+/// * `main`'s prologue additionally pushes `x0` and `x1` (argc/argv,
+///   passed by libdyld) so the c4-style `Lea 2` / `Lea 3` lookups
+///   land on them.
 ///
-/// Syscall ops (`Open`...`Senv`) are not yet lowered -- they need the
-/// extended bind machinery from M1.7.
+/// Syscall ops (`Open`...`Senv`) lower to `adrp + ldr + blr` through
+/// a __got slot the writer fills in at link time.
 pub(super) fn lower(program: &Program) -> Result<Build, C4Error> {
     let mut code = Vec::new();
     let mut bytecode_to_native: Vec<usize> = vec![usize::MAX; program.text.len() + 1];
     let mut fixups: Vec<Fixup> = Vec::new();
+    let mut got_fixups: Vec<GotFixup> = Vec::new();
+
+    // Track which function we're currently inside so the prologue
+    // and epilogue agree on whether to push/pop the argc/argv pair.
+    // c4 doesn't mark function boundaries explicitly -- we assume
+    // every Ent starts a new function and we're "in" that function
+    // until the next Ent.
+    let mut in_main = false;
 
     let mut pc = 0usize;
     while pc < program.text.len() {
-        bytecode_to_native[pc] = code.len();
+        let op_pc = pc;
+        bytecode_to_native[op_pc] = code.len();
         let raw = program.text[pc];
         let op = Op::from_i64(raw).ok_or_else(|| {
             C4Error::Compile(format!("native codegen: bad opcode at PC {pc}: {raw}"))
         })?;
         pc += 1;
-        lower_op(op, &program.text, &mut pc, &mut code, &mut fixups)?;
+        if matches!(op, Op::Ent) {
+            in_main = op_pc == program.entry_pc;
+        }
+        lower_op(
+            op,
+            &program.text,
+            &mut pc,
+            &mut code,
+            &mut fixups,
+            &mut got_fixups,
+            in_main,
+        )?;
     }
     bytecode_to_native[program.text.len()] = code.len();
 
-    // Patch the placeholders we left behind for branch / call ops.
     apply_fixups(&mut code, &fixups, &bytecode_to_native, program.text.len())?;
 
     let entry_offset = bytecode_to_native
@@ -548,6 +595,7 @@ pub(super) fn lower(program: &Program) -> Result<Build, C4Error> {
         text: code,
         data: program.data.clone(),
         entry_offset,
+        got_fixups,
     })
 }
 
@@ -609,20 +657,23 @@ fn apply_fixups(
 
 /// Lower one bytecode op. Hot-path helpers for common patterns
 /// (`pop into x16`, `binop pop+combine`, etc.) live below.
+#[allow(clippy::too_many_arguments)]
 fn lower_op(
     op: Op,
     text: &[i64],
     pc: &mut usize,
     code: &mut Vec<u8>,
     fixups: &mut Vec<Fixup>,
+    got_fixups: &mut Vec<GotFixup>,
+    in_main: bool,
 ) -> Result<(), C4Error> {
     match op {
         // ---- Function frame ----
         Op::Ent => {
             let locals = read_operand(text, pc, "Ent")?;
-            emit_prologue(code, locals);
+            emit_prologue(code, locals, in_main);
         }
-        Op::Lev => emit_epilogue(code),
+        Op::Lev => emit_epilogue(code, in_main),
         Op::Adj => {
             // Adj N drops N pushed slots (each slot is 16 bytes
             // on our native stack -- see Op::Psh below for why).
@@ -793,7 +844,7 @@ fn lower_op(
             emit_local_load(code, offset, /*byte=*/ true);
         }
 
-        // ---- Syscalls (deferred to M1.7). ----
+        // ---- Syscalls -- lower to a libc call through __got. ----
         Op::Open
         | Op::Read
         | Op::Clos
@@ -807,13 +858,127 @@ fn lower_op(
         | Op::Exit
         | Op::Write
         | Op::Genv
-        | Op::Senv => {
-            return Err(C4Error::Compile(format!(
-                "native codegen (M1.6): syscall op {op:?} not yet lowered -- coming in M1.7"
-            )));
-        }
+        | Op::Senv => emit_libc_call(op, text, *pc, code, got_fixups)?,
     }
     Ok(())
+}
+
+/// Lower a syscall op to a libc call. Args were already pushed onto
+/// our 16-byte VM stack slots by the c4 emitter; we *peek* (not pop)
+/// to load them into x0..x7. The c4 emitter follows every call with
+/// `Op::Adj N` which the next loop iteration will lower into the SP
+/// adjustment that drops them.
+///
+/// Variadic functions (`printf`) need extra setup: AAPCS64 on macOS
+/// puts variadic args entirely on the native stack at SP, 8-byte
+/// spaced -- not on the 16-byte slots we used for VM pushes. So
+/// `printf("%d %d", a, b)` looks like:
+///   * x0 = format
+///   * sub sp, sp, #16        (room for 2 8-byte slots, padded to 16)
+///   * str a, [sp, #0]
+///   * str b, [sp, #8]
+///   * call printf
+///   * add sp, sp, #16        (free that scratch)
+fn emit_libc_call(
+    op: Op,
+    text: &[i64],
+    pc_after_op: usize,
+    code: &mut Vec<u8>,
+    got_fixups: &mut Vec<GotFixup>,
+) -> Result<(), C4Error> {
+    let import_index = import_index_for_op(op)
+        .ok_or_else(|| C4Error::Compile(format!("native codegen: no import index for {op:?}")))?;
+
+    // Peek at the next instruction; if it's Adj N, that gives us the
+    // arg count. Op::Exit is the c4-emitted form of `exit(N)` which
+    // doesn't have a trailing Adj because exit doesn't return -- treat
+    // it as a 1-arg call that we pop manually.
+    let arg_count = match Op::from_i64(text.get(pc_after_op).copied().unwrap_or(0)) {
+        Some(Op::Adj) => text[pc_after_op + 1] as usize,
+        _ if matches!(op, Op::Exit) => 1,
+        _ => {
+            return Err(C4Error::Compile(format!(
+                "native codegen: {op:?} not followed by Adj"
+            )));
+        }
+    };
+    if arg_count == 0 || arg_count > 8 {
+        return Err(C4Error::Compile(format!(
+            "native codegen: {op:?} arg count {arg_count} out of supported range (1..=8)"
+        )));
+    }
+
+    let is_variadic = matches!(op, Op::Prtf);
+
+    if is_variadic {
+        // Format string is the first c4 arg = deepest on the stack.
+        // c4 pushes left-to-right, so the deepest slot is at
+        // sp + (arg_count-1)*16.
+        let format_off = ((arg_count - 1) as u32) * 16;
+        emit(code, enc_ldr_imm(Reg::X0, Reg::SP, format_off));
+
+        let n_var = arg_count - 1;
+        if n_var > 0 {
+            // Pack the variadic args into a fresh stack region. macOS
+            // arm64 wants 8-byte spacing for variadic args; we still
+            // need to keep SP 16-byte aligned overall.
+            let scratch_bytes = ((n_var * 8 + 15) & !15) as u32;
+            emit(code, enc_sub_imm(Reg::SP, Reg::SP, scratch_bytes));
+            for i in 0..n_var {
+                // arg index from the c4 viewpoint: 1, 2, ..., n_var.
+                // Stack offset of c4-arg-K (post sub): scratch_bytes
+                // + (arg_count - 1 - K) * 16.
+                let c4_arg_index = i + 1;
+                let src = scratch_bytes + ((arg_count - 1 - c4_arg_index) as u32) * 16;
+                emit(code, enc_ldr_imm(Reg::X16, Reg::SP, src));
+                // Variadic packed slot: i*8 from new SP.
+                emit(code, enc_str_imm(Reg::X16, Reg::SP, (i * 8) as u32));
+            }
+            emit_got_call(code, got_fixups, import_index);
+            emit(code, enc_add_imm(Reg::SP, Reg::SP, scratch_bytes));
+        } else {
+            emit_got_call(code, got_fixups, import_index);
+        }
+    } else {
+        // Non-variadic: each c4 arg goes into the matching xN.
+        // c4-arg-K is at sp + (arg_count - 1 - K) * 16.
+        for i in 0..arg_count {
+            let off = ((arg_count - 1 - i) as u32) * 16;
+            emit(code, enc_ldr_imm(Reg(i as u8), Reg::SP, off));
+        }
+        emit_got_call(code, got_fixups, import_index);
+    }
+
+    if matches!(op, Op::Exit) {
+        // exit() doesn't return; the call above will tear down the
+        // process. But the c4 compiler emits no Adj after Op::Exit,
+        // so we must pop the arg ourselves to keep SP balanced for
+        // any stale code after.
+        emit(code, enc_add_imm(Reg::SP, Reg::SP, 16));
+    } else {
+        // Move the libc return value into x19 so the caller sees it
+        // as the new accumulator.
+        emit(code, enc_mov_reg(Reg::X19, Reg::X0));
+    }
+    Ok(())
+}
+
+/// Emit `adrp x16, GOT_PAGE; ldr x16, [x16, #GOT_OFF]; blr x16` --
+/// the standard macOS PC-relative GOT call sequence. Both the adrp
+/// and the ldr are placeholders; the writer patches them once the
+/// data segment vmaddr is known.
+fn emit_got_call(code: &mut Vec<u8>, got_fixups: &mut Vec<GotFixup>, import_index: usize) {
+    let adrp_offset = code.len();
+    got_fixups.push(GotFixup {
+        adrp_offset,
+        import_index,
+    });
+    // adrp + ldr placeholder -- patched later. We still emit valid
+    // skeleton bytes (with rd = x16) so an unpatched binary at least
+    // reads as adrp+ldr in disassembly.
+    emit(code, enc_adrp(Reg::X16, 0));
+    emit(code, enc_ldr_imm(Reg::X16, Reg::X16, 0));
+    emit(code, enc_blr(Reg::X16));
 }
 
 /// Pop the top of the VM stack into `x16`, then combine with `x19`.
@@ -912,7 +1077,17 @@ fn emit_local_load(code: &mut Vec<u8>, offset: i64, byte: bool) {
 /// new frame pointer, and (if the function declares locals) allocate
 /// the slot space. Locals are 8 bytes each; we round up to 16 to keep
 /// SP 16-byte aligned, which the AAPCS requires at every call site.
-fn emit_prologue(code: &mut Vec<u8>, locals: i64) {
+///
+/// For the program's entry function (`is_main = true`) we additionally
+/// push x1 then x0 -- those carry argv and argc from libdyld. Pushing
+/// them in this order lands argv at `x29 + 16` and argc at `x29 + 24`,
+/// which is what the c4 compiler expects when it assigns Lea offsets:
+/// `int main(int argc, char **argv)` makes argc the first declared
+/// arg and the deepest pushed VM-stack slot, hence the higher offset.
+fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool) {
+    if is_main {
+        emit(code, enc_stp_pre(Reg::X1, Reg::X0, Reg::SP, -16));
+    }
     emit(code, enc_stp_pre(Reg::X29, Reg::X30, Reg::SP, -16));
     emit(code, enc_add_imm(Reg::X29, Reg::SP, 0));
     if locals > 0 {
@@ -923,15 +1098,16 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64) {
 }
 
 /// Mirror of [`emit_prologue`]. Move the VM accumulator into `x0`
-/// (the return register), tear down the frame, return.
-///
-/// We restore SP from the saved fp before reloading fp/lr, so any
-/// stack space the function allocated for locals (or left over from
-/// VM pushes) gets reclaimed in one step.
-fn emit_epilogue(code: &mut Vec<u8>) {
+/// (the return register), tear down the frame, return. For main we
+/// also drop the saved argv/argc pair so the stack pointer is back
+/// to what libdyld handed us.
+fn emit_epilogue(code: &mut Vec<u8>, is_main: bool) {
     emit(code, enc_mov_reg(Reg::X0, Reg::X19));
     emit(code, enc_add_imm(Reg::SP, Reg::X29, 0));
     emit(code, enc_ldp_post(Reg::X29, Reg::X30, Reg::SP, 16));
+    if is_main {
+        emit(code, enc_add_imm(Reg::SP, Reg::SP, 16));
+    }
     emit(code, enc_ret(Reg::X30));
 }
 

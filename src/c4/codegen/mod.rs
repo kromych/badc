@@ -64,21 +64,42 @@ impl Target {
 
 /// Where each piece of the program-being-built ends up in the final
 /// image. The codegen and image-writer halves both populate this --
-/// the codegen knows the code bytes and pinned-data bytes, the writer
-/// arranges them into segments and tells the codegen what virtual
-/// addresses they landed at so it can finalize PC-relative refs.
+/// the codegen knows the code bytes, the pinned data bytes, and which
+/// libc symbols the code wants to call; the writer arranges them into
+/// segments and patches the codegen's GOT placeholders with the actual
+/// data-segment vmaddrs.
 #[derive(Debug, Default)]
-#[allow(dead_code)] // fields land in M1.1+
 pub(crate) struct Build {
-    /// Machine code, ready to be placed in `__TEXT,__text` (or its
-    /// per-OS equivalent).
+    /// Machine code, ready to be placed in `__TEXT,__text`.
     pub text: Vec<u8>,
     /// Initialised data segment: string literals + zero-initialised
-    /// globals (badc currently uses one segment for both).
+    /// globals. Not yet copied into the binary; landing data-segment
+    /// support is a follow-on milestone (string literals through
+    /// `printf` won't work natively until then).
+    #[allow(dead_code)]
     pub data: Vec<u8>,
     /// Offset (within `text`) of the program's entry point. Becomes
-    /// the entry address of `LC_MAIN` / `e_entry` / etc.
+    /// the entry address of `LC_MAIN`.
     pub entry_offset: usize,
+    /// Each `(adrp_offset, import_index)` records a pair of
+    /// placeholder instructions (adrp + ldr) the codegen left for the
+    /// image writer to patch with the resolved page address of the
+    /// matching __got slot. See [`aarch64::IMPORTS`] for the symbol
+    /// order; the writer relies on the same indexing.
+    pub got_fixups: Vec<GotFixup>,
+}
+
+/// Refer-by-index relocation between a code site and a `__got` slot.
+/// The codegen emits zero bytes where the adrp + ldr would go, then
+/// records this so the Mach-O writer can fill them in once it knows
+/// the data segment's final vmaddr.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct GotFixup {
+    /// Byte offset within `Build::text` of the adrp instruction.
+    /// `adrp_offset + 4` is the matching ldr.
+    pub adrp_offset: usize,
+    /// Index into [`aarch64::IMPORTS`].
+    pub import_index: usize,
 }
 
 /// Translate a [`Program`] into a native binary. The bytes are written

@@ -448,23 +448,83 @@ fn dysymtab_command(nundefsym: u32) -> Vec<u8> {
 }
 
 // ------------------------------------------------------------------
+// GOT fixup patching. Each codegen-emitted `adrp + ldr` pair points
+// at a __got slot; we now know the data vmaddr so we can fill in
+// the page-relative offset and the in-page byte offset.
+// ------------------------------------------------------------------
+
+/// Patch each adrp/ldr pair the codegen left behind. `code_base_in_file`
+/// is the file offset where the code blob starts; `code_vmaddr_base`
+/// is the matching vmaddr; `got_base_vmaddr` is the vmaddr of GOT
+/// slot 0 in __DATA.
+fn apply_got_fixups(
+    out: &mut [u8],
+    code_base_in_file: usize,
+    code_vmaddr_base: u64,
+    got_base_vmaddr: u64,
+    fixups: &[super::GotFixup],
+) -> Result<(), C4Error> {
+    for fx in fixups {
+        let adrp_file_off = code_base_in_file + fx.adrp_offset;
+        let ldr_file_off = adrp_file_off + 4;
+
+        let adrp_vmaddr = code_vmaddr_base + fx.adrp_offset as u64;
+        let target_vmaddr = got_base_vmaddr + (fx.import_index as u64) * 8;
+
+        // adrp computes (PC & ~0xFFF) + (imm21 << 12). Solve for imm21.
+        let adrp_page = adrp_vmaddr & !0xFFF;
+        let target_page = target_vmaddr & !0xFFF;
+        let page_diff = target_page as i64 - adrp_page as i64;
+        if page_diff & 0xFFF != 0 {
+            return Err(C4Error::Compile(format!(
+                "Mach-O: GOT page diff {page_diff} not 4 KiB aligned"
+            )));
+        }
+        let imm21 = (page_diff >> 12) as i32;
+
+        // ldr xN, [xN, #imm12] uses a 12-bit unsigned offset scaled
+        // by 8 for 64-bit loads. The in-page byte offset must be
+        // 8-aligned.
+        let in_page = (target_vmaddr & 0xFFF) as u32;
+        if !in_page.is_multiple_of(8) {
+            return Err(C4Error::Compile(format!(
+                "Mach-O: GOT slot offset {in_page:#x} not 8-aligned"
+            )));
+        }
+
+        let adrp_word = super::aarch64::enc_adrp(super::aarch64::Reg::X16, imm21);
+        let ldr_word = super::aarch64::enc_ldr_imm(
+            super::aarch64::Reg::X16,
+            super::aarch64::Reg::X16,
+            in_page,
+        );
+        out[adrp_file_off..adrp_file_off + 4].copy_from_slice(&adrp_word.to_le_bytes());
+        out[ldr_file_off..ldr_file_off + 4].copy_from_slice(&ldr_word.to_le_bytes());
+    }
+    Ok(())
+}
+
+// ------------------------------------------------------------------
 // __LINKEDIT contents: bind opcodes, nlist entries, string table.
 // ------------------------------------------------------------------
 
-/// Bind opcode stream that resolves one libSystem symbol into the
-/// pointer slot at `(__DATA, +offset)`. The format is documented in
-/// `<mach-o/loader.h>` -- it's a tiny stack machine that dyld walks
-/// at load time, so we just emit the moves it needs.
-fn bind_opcodes_for_libsystem(symbol: &str, segment: u8, offset: u64) -> Vec<u8> {
+/// Bind opcode stream that resolves a list of libSystem symbols into
+/// consecutive 8-byte slots starting at `(__DATA, +0)`. The opcode
+/// stream is a tiny dyld-side state machine: we set the dylib once,
+/// set the bind type once, then for each symbol set its name + the
+/// absolute offset (then DO_BIND).
+fn bind_opcodes_for_libsystem_imports(symbols: &[&str], segment: u8) -> Vec<u8> {
     let mut out = Vec::new();
     out.push(BIND_OPCODE_SET_DYLIB_ORDINAL_IMM | (LIBSYSTEM_ORDINAL as u8 & 0x0F));
     out.push(BIND_OPCODE_SET_TYPE_IMM | BIND_TYPE_POINTER);
-    out.push(BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM); // flags = 0
-    out.extend_from_slice(symbol.as_bytes());
-    out.push(0); // NUL terminator on symbol name
-    out.push(BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB | (segment & 0x0F));
-    put_uleb128(&mut out, offset);
-    out.push(BIND_OPCODE_DO_BIND);
+    for (i, sym) in symbols.iter().enumerate() {
+        out.push(BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM); // flags = 0
+        out.extend_from_slice(sym.as_bytes());
+        out.push(0); // NUL terminator
+        out.push(BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB | (segment & 0x0F));
+        put_uleb128(&mut out, (i * 8) as u64);
+        out.push(BIND_OPCODE_DO_BIND);
+    }
     out.push(BIND_OPCODE_DONE);
     pad_to(&mut out, 8);
     out
@@ -513,10 +573,14 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
 
     // ---- step 1: pick the imported symbol set ----
     //
-    // M1.3 only proves that the bind machinery works. We hard-code one
-    // import (`_write`) so otool -bind has something to display. M1.7
-    // expands this to the full libc surface badc programs use.
-    let imports = ["_write"];
+    // The aarch64 codegen and this writer share the symbol order via
+    // [`super::aarch64::IMPORTS`] -- index N in IMPORTS is GOT slot N
+    // in __DATA, and the codegen's adrp+ldr placeholders refer to
+    // those slots by index. We pull just the names here.
+    let imports: Vec<&str> = super::aarch64::IMPORTS
+        .iter()
+        .map(|(name, _)| *name)
+        .collect();
 
     // ---- step 2: build __LINKEDIT contents ----
     //
@@ -524,7 +588,7 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
     // table. Each subsection is 8-byte aligned so file offsets stay
     // nice. We need the sizes of all three to size __LINKEDIT, which
     // in turn sizes the LC stream.
-    let bind_ops = bind_opcodes_for_libsystem(imports[0], SEG_INDEX_DATA, 0);
+    let bind_ops = bind_opcodes_for_libsystem_imports(&imports, SEG_INDEX_DATA);
     let (strtab, str_indices) = build_strtab(&imports);
     let mut symtab = Vec::with_capacity(16 * imports.len());
     for n_strx in &str_indices {
@@ -702,8 +766,17 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
     out.resize(out.len() + lc_pad_bytes, 0);
     debug_assert_eq!(out.len() as u64, entry_file_offset);
 
-    // __TEXT: code, then page-pad.
+    // __TEXT: copy code in, patch GOT placeholders against the now-
+    // known data segment vmaddr, then page-pad.
+    let code_file_offset = out.len();
     out.extend_from_slice(code);
+    apply_got_fixups(
+        &mut out,
+        code_file_offset,
+        TEXT_VMADDR_BASE + entry_file_offset,
+        data_vmaddr,
+        &build.got_fixups,
+    )?;
     while (out.len() as u64) < text_filesize {
         out.push(0);
     }
@@ -742,6 +815,7 @@ mod tests {
             text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],
             data: Vec::new(),
             entry_offset: 0,
+            got_fixups: Vec::new(),
         }
     }
 
@@ -886,11 +960,12 @@ mod tests {
             if cmd == LC_SYMTAB {
                 let stroff = read_u32(&bytes, p + 16) as usize;
                 assert_eq!(bytes[stroff], 0, "string table must start with NUL");
-                // And `_write` should appear right after it.
+                // The first import in our IMPORTS table is `_open` --
+                // it lands immediately after the leading NUL.
                 assert_eq!(
-                    &bytes[stroff + 1..stroff + 7],
-                    b"_write",
-                    "expected symbol name immediately after leading NUL"
+                    &bytes[stroff + 1..stroff + 6],
+                    b"_open",
+                    "expected first import name immediately after leading NUL"
                 );
                 return;
             }

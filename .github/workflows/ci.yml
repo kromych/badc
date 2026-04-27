@@ -58,6 +58,11 @@ jobs:
         with:
           key: ${{ matrix.os }}
       - name: cargo test (default features)
+        # On macos-latest this also runs the native-codegen tests in
+        # src/c4/tests/native.rs, which compile fixtures to Mach-O,
+        # shell to /usr/bin/codesign, and exec the result. Both tools
+        # ship with macOS so no extra setup is needed; the tests are
+        # cfg-gated to target_os = "macos" and skipped elsewhere.
         run: cargo test --locked --verbose
       - name: cargo build --no-default-features --lib
         # The no_std variant -- no StdHost adapter, alloc only. Library-

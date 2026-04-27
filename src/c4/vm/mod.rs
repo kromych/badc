@@ -735,6 +735,10 @@ impl<H: Host> Vm<H> {
                 Op::Write => a = self.syscall_write(sp)?,
                 Op::Genv => a = self.syscall_getenv(sp)?,
                 Op::Senv => a = self.syscall_setenv(sp)?,
+                Op::Dlop => a = self.syscall_dlopen(sp)?,
+                Op::Dlsm => a = self.syscall_dlsym(sp)?,
+                Op::Dlcl => a = self.syscall_dlclose(sp)?,
+                Op::Dler => a = self.syscall_dlerror()?,
             }
         }
     }

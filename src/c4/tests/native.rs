@@ -366,6 +366,11 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("type_warning_arity.c", 0),
     ("mprotect_allows_read.c", 'X' as i32),
     ("setenv_then_get.c", 'Z' as i32),
+    // Runtime dynamic linking. Opens the global symbol table,
+    // resolves libc atoi via dlsym, calls it through Op::Jsri
+    // (which loads args into x0..x7 in case the target is native),
+    // exits with atoi("123") = 123.
+    ("dlopen_atoi.c", 123),
 ];
 
 /// Build a fixture, sign it, run it with the given args, and return

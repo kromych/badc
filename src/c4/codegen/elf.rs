@@ -121,7 +121,17 @@ const ELF64_RELA_SIZE: u64 = 24;
 const ELF64_DYN_SIZE: u64 = 16;
 
 const INTERP_PATH: &str = "/lib/ld-linux-aarch64.so.1";
-const LIBC_NAME: &str = "libc.so.6";
+
+/// Libraries the binary declares as `DT_NEEDED`. The order is
+/// cosmetic; the loader pulls in everything reachable from the set
+/// regardless of order.
+///
+/// `libdl.so.2` is included unconditionally for `dlopen` / `dlsym` /
+/// `dlclose` / `dlerror` support. On glibc 2.34+ this is a stub that
+/// re-exports from libc.so.6; on older systems it carries the actual
+/// implementation. Listing it always means the same binary runs on
+/// both.
+const NEEDED_LIBS: &[&str] = &["libc.so.6", "libdl.so.2"];
 
 // ------------------------------------------------------------------
 // Tiny serialization helpers.
@@ -191,10 +201,10 @@ fn emit_start_stub(code: &mut Vec<u8>, main_offset_in_code: u64) -> usize {
 // ------------------------------------------------------------------
 
 /// Build .dynstr -- the dynamic string table. Returns
-/// `(bytes, name_offsets, libc_offset)` where `name_offsets[i]` is the
-/// byte offset of `IMPORTS[i].linux_symbol` inside the table and
-/// `libc_offset` is the offset of the LIBC_NAME entry.
-fn build_dynstr() -> (Vec<u8>, Vec<u32>, u32) {
+/// `(bytes, name_offsets, lib_offsets)` where `name_offsets[i]` is
+/// the byte offset of `IMPORTS[i].linux_symbol` inside the table and
+/// `lib_offsets[i]` is the offset of `NEEDED_LIBS[i]`.
+fn build_dynstr() -> (Vec<u8>, Vec<u32>, Vec<u32>) {
     let mut bytes = Vec::new();
     bytes.push(0); // index 0 is conventionally the empty string
 
@@ -205,16 +215,19 @@ fn build_dynstr() -> (Vec<u8>, Vec<u32>, u32) {
         bytes.push(0);
     }
 
-    let libc_offset = bytes.len() as u32;
-    bytes.extend_from_slice(LIBC_NAME.as_bytes());
-    bytes.push(0);
+    let mut lib_offsets = Vec::with_capacity(NEEDED_LIBS.len());
+    for lib in NEEDED_LIBS {
+        lib_offsets.push(bytes.len() as u32);
+        bytes.extend_from_slice(lib.as_bytes());
+        bytes.push(0);
+    }
 
     // Pad to 8 so the next section starts aligned.
     while !bytes.len().is_multiple_of(8) {
         bytes.push(0);
     }
 
-    (bytes, name_offsets, libc_offset)
+    (bytes, name_offsets, lib_offsets)
 }
 
 /// Build .dynsym -- one Elf64_Sym per import plus a leading sentinel.
@@ -326,37 +339,46 @@ fn build_rela_dyn(got_vmaddr: u64, n_imports: usize) -> Vec<u8> {
 }
 
 /// Build .dynamic -- the table the loader walks to find every other
-/// section. Each entry is `(d_tag, d_un)` 16 bytes.
-#[allow(clippy::too_many_arguments)]
-fn build_dynamic(
-    libc_name_strtab_offset: u32,
+/// section. Each entry is `(d_tag, d_un)` 16 bytes. One DT_NEEDED
+/// per [`NEEDED_LIBS`] entry, then the standard pointer-and-size
+/// tags for the symbol / string / hash / rela sections.
+fn build_dynamic(lib_strtab_offsets: &[u32], info: DynamicInfo) -> Vec<u8> {
+    let mut out = Vec::with_capacity((NEEDED_LIBS.len() + 11) * ELF64_DYN_SIZE as usize);
+    for &off in lib_strtab_offsets {
+        put_u64(&mut out, DT_NEEDED);
+        put_u64(&mut out, off as u64);
+    }
+    let entries: &[(u64, u64)] = &[
+        (DT_HASH, info.hash_vmaddr),
+        (DT_STRTAB, info.strtab_vmaddr),
+        (DT_SYMTAB, info.symtab_vmaddr),
+        (DT_STRSZ, info.strtab_size),
+        (DT_SYMENT, ELF64_SYM_SIZE),
+        (DT_RELA, info.rela_vmaddr),
+        (DT_RELASZ, info.rela_size),
+        (DT_RELAENT, ELF64_RELA_SIZE),
+        (DT_BIND_NOW, 0),
+        (DT_FLAGS, DF_BIND_NOW),
+        (DT_NULL, 0),
+    ];
+    for (tag, val) in entries {
+        put_u64(&mut out, *tag);
+        put_u64(&mut out, *val);
+    }
+    out
+}
+
+/// Group of vmaddr/size values [`build_dynamic`] consumes. Only
+/// exists to keep the signature short -- the writer computes them
+/// all in one pass.
+#[derive(Debug, Clone, Copy)]
+struct DynamicInfo {
     hash_vmaddr: u64,
     strtab_vmaddr: u64,
     symtab_vmaddr: u64,
     rela_vmaddr: u64,
     rela_size: u64,
     strtab_size: u64,
-) -> Vec<u8> {
-    let entries: &[(u64, u64)] = &[
-        (DT_NEEDED, libc_name_strtab_offset as u64),
-        (DT_HASH, hash_vmaddr),
-        (DT_STRTAB, strtab_vmaddr),
-        (DT_SYMTAB, symtab_vmaddr),
-        (DT_STRSZ, strtab_size),
-        (DT_SYMENT, ELF64_SYM_SIZE),
-        (DT_RELA, rela_vmaddr),
-        (DT_RELASZ, rela_size),
-        (DT_RELAENT, ELF64_RELA_SIZE),
-        (DT_BIND_NOW, 0),
-        (DT_FLAGS, DF_BIND_NOW),
-        (DT_NULL, 0),
-    ];
-    let mut out = Vec::with_capacity(entries.len() * ELF64_DYN_SIZE as usize);
-    for (tag, val) in entries {
-        put_u64(&mut out, *tag);
-        put_u64(&mut out, *val);
-    }
-    out
 }
 
 // ------------------------------------------------------------------
@@ -447,7 +469,7 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
 
     // ---- Build the dynamic-linking metadata up front so we know the
     //      sizes for layout calculations. ----
-    let (dynstr, name_offsets, libc_strtab_off) = build_dynstr();
+    let (dynstr, name_offsets, lib_strtab_offsets) = build_dynstr();
     let dynsym = build_dynsym(&name_offsets);
     let hash = build_hash(&name_offsets, &dynstr);
     // .rela.dyn is built later -- it needs got_vmaddr.
@@ -485,8 +507,9 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
     // ---- Layout pass 2: rw segment (.dynamic, .got, build.data). ----
     let segment2_off = segment1_end;
     let dynamic_off = segment2_off;
-    // `build_dynamic` emits a fixed entry count; size it ahead.
-    let dynamic_size = 12 * ELF64_DYN_SIZE;
+    // `build_dynamic` emits one entry per NEEDED_LIBS plus 11 fixed
+    // tags (DT_HASH, DT_STRTAB, ..., DT_NULL terminator).
+    let dynamic_size = (NEEDED_LIBS.len() as u64 + 11) * ELF64_DYN_SIZE;
     let got_off = dynamic_off + dynamic_size;
     let got_size = (n_imports as u64) * 8;
     let data_off = got_off + got_size;
@@ -638,13 +661,15 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
 
     // .dynamic
     let dynamic = build_dynamic(
-        libc_strtab_off,
-        hash_vmaddr,
-        dynstr_vmaddr,
-        dynsym_vmaddr,
-        rela_vmaddr,
-        rela_size,
-        dynstr.len() as u64,
+        &lib_strtab_offsets,
+        DynamicInfo {
+            hash_vmaddr,
+            strtab_vmaddr: dynstr_vmaddr,
+            symtab_vmaddr: dynsym_vmaddr,
+            rela_vmaddr,
+            rela_size,
+            strtab_size: dynstr.len() as u64,
+        },
     );
     debug_assert_eq!(dynamic.len() as u64, dynamic_size);
     out.extend_from_slice(&dynamic);

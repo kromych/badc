@@ -122,6 +122,31 @@ pub(crate) const IMPORTS: &[Import] = &[
         linux_symbol: "setenv",
         op: Op::Senv,
     },
+    // POSIX libdl. On Linux these live in libdl.so.2 (still shipped
+    // as a stub on glibc 2.34+ which folded the bodies back into
+    // libc); on macOS they live in libSystem alongside the rest.
+    // The codegen treats them like any other libc call -- adrp+ldr+blr
+    // through `.got`.
+    Import {
+        macos_symbol: "_dlopen",
+        linux_symbol: "dlopen",
+        op: Op::Dlop,
+    },
+    Import {
+        macos_symbol: "_dlsym",
+        linux_symbol: "dlsym",
+        op: Op::Dlsm,
+    },
+    Import {
+        macos_symbol: "_dlclose",
+        linux_symbol: "dlclose",
+        op: Op::Dlcl,
+    },
+    Import {
+        macos_symbol: "_dlerror",
+        linux_symbol: "dlerror",
+        op: Op::Dler,
+    },
 ];
 
 fn import_index_for_op(op: Op) -> Option<usize> {
@@ -953,10 +978,31 @@ fn lower_op(
             emit(code, enc_mov_reg(Reg::X19, Reg::X0));
         }
         Op::Jsri => {
-            // Indirect call: target address in x19. Move it to x16
-            // before the call so the callee's prologue/epilogue
-            // doesn't trample our accumulator slot. After the call,
-            // copy x0 back into x19 (same dance as Op::Jsr).
+            // Indirect call: target address in x19, args already
+            // pushed onto the VM stack in 16-byte slots by preceding
+            // Op::Psh's. The callee may be a c4 function (reads args
+            // from `bp + offset` via Op::Lea) or a native libc
+            // function obtained via dlsym (reads args from x0..x7).
+            // To work for both, peek at the next instruction for the
+            // arg count (c4 emits an Op::Adj after every non-zero-arg
+            // call) and load args into x0..x7 *in addition to* leaving
+            // them on the stack. c4 callees ignore the registers; libc
+            // callees ignore the stack.
+            let nargs = match Op::from_i64(text.get(*pc).copied().unwrap_or(0)) {
+                Some(Op::Adj) => text[*pc + 1] as usize,
+                _ => 0,
+            };
+            if nargs > 8 {
+                return Err(C4Error::Compile(format!(
+                    "native codegen: Jsri arg count {nargs} exceeds 8 (x0..x7)"
+                )));
+            }
+            for i in 0..nargs {
+                let off = ((nargs - 1 - i) as u32) * 16;
+                emit(code, enc_ldr_imm(Reg(i as u8), Reg::SP, off));
+            }
+            // Move the function pointer into x16 so the callee's
+            // prologue/epilogue can't trample our accumulator slot.
             emit(code, enc_mov_reg(Reg::X16, Reg::X19));
             emit(code, enc_blr(Reg::X16));
             emit(code, enc_mov_reg(Reg::X19, Reg::X0));
@@ -1004,7 +1050,11 @@ fn lower_op(
         | Op::Exit
         | Op::Write
         | Op::Genv
-        | Op::Senv => emit_libc_call(op, text, *pc, code, got_fixups, options)?,
+        | Op::Senv
+        | Op::Dlop
+        | Op::Dlsm
+        | Op::Dlcl
+        | Op::Dler => emit_libc_call(op, text, *pc, code, got_fixups, options)?,
     }
     Ok(())
 }
@@ -1037,21 +1087,22 @@ fn emit_libc_call(
         .ok_or_else(|| C4Error::Compile(format!("native codegen: no import index for {op:?}")))?;
 
     // Peek at the next instruction; if it's Adj N, that gives us the
-    // arg count. Op::Exit is the c4-emitted form of `exit(N)` which
-    // doesn't have a trailing Adj because exit doesn't return -- treat
-    // it as a 1-arg call that we pop manually.
+    // arg count. The c4 compiler omits the Adj when the call has zero
+    // args, and also for `Op::Exit` (1 arg, never returns), so both
+    // need their own dispatch here.
     let arg_count = match Op::from_i64(text.get(pc_after_op).copied().unwrap_or(0)) {
         Some(Op::Adj) => text[pc_after_op + 1] as usize,
         _ if matches!(op, Op::Exit) => 1,
+        _ if matches!(op, Op::Dler) => 0,
         _ => {
             return Err(C4Error::Compile(format!(
                 "native codegen: {op:?} not followed by Adj"
             )));
         }
     };
-    if arg_count == 0 || arg_count > 8 {
+    if arg_count > 8 {
         return Err(C4Error::Compile(format!(
-            "native codegen: {op:?} arg count {arg_count} out of supported range (1..=8)"
+            "native codegen: {op:?} arg count {arg_count} out of supported range (0..=8)"
         )));
     }
 

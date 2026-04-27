@@ -53,6 +53,27 @@ pub trait Host {
 
     /// Set `name` to `value`, honouring `overwrite`.
     fn setenv(&mut self, name: &str, value: &str, overwrite: Overwrite);
+
+    /// `dlopen` -- load a shared library at runtime. `path = None`
+    /// is POSIX `dlopen(NULL, ...)` (the global symbol table). Return
+    /// value is an opaque handle the host gets to interpret -- 0
+    /// signals failure, anything else is a valid handle. Host impls
+    /// that don't support runtime loading return 0 and `dlerror`
+    /// returns a "not supported" message.
+    fn dlopen(&mut self, path: Option<&str>, flags: i64) -> i64;
+
+    /// `dlsym` -- look up `name` in `handle`. Returns the symbol's
+    /// native address (as an integer) or 0 on miss / unsupported.
+    fn dlsym(&mut self, handle: i64, name: &str) -> i64;
+
+    /// `dlclose` -- unload a previously dlopened handle. Returns 0
+    /// on success, non-zero on failure.
+    fn dlclose(&mut self, handle: i64) -> i64;
+
+    /// `dlerror` -- the most recent loader error message (or None
+    /// if no error has occurred since the last call). Mirrors POSIX:
+    /// fetching the error consumes it.
+    fn dlerror(&mut self) -> Option<String>;
 }
 
 #[cfg(feature = "std")]
@@ -138,6 +159,76 @@ mod std_host {
                 // 2024 edition flags this as unsafe to surface that
                 // exposure.
                 unsafe { std::env::set_var(name, value) };
+            }
+        }
+
+        // ---- libdl bridge. The `extern "C"` block declares the
+        // four POSIX dl-family functions; their bodies are in the
+        // host's libc / libdl (libSystem on macOS, libdl.so.2 or
+        // libc.so.6 on glibc 2.34+ Linux). We do not link the libdl
+        // crate -- avoiding a Cargo dependency keeps the no_std
+        // story clean.
+
+        fn dlopen(&mut self, path: Option<&str>, flags: i64) -> i64 {
+            unsafe extern "C" {
+                fn dlopen(
+                    filename: *const std::os::raw::c_char,
+                    flags: std::os::raw::c_int,
+                ) -> *mut std::os::raw::c_void;
+            }
+            let flags_c = flags as std::os::raw::c_int;
+            match path {
+                Some(s) => {
+                    let cs = match std::ffi::CString::new(s) {
+                        Ok(cs) => cs,
+                        // Embedded NUL -- not a legal path. POSIX
+                        // would also refuse, just sets dlerror; we
+                        // mirror that with a 0 handle.
+                        Err(_) => return 0,
+                    };
+                    unsafe { dlopen(cs.as_ptr(), flags_c) as i64 }
+                }
+                None => unsafe { dlopen(std::ptr::null(), flags_c) as i64 },
+            }
+        }
+
+        fn dlsym(&mut self, handle: i64, name: &str) -> i64 {
+            unsafe extern "C" {
+                fn dlsym(
+                    handle: *mut std::os::raw::c_void,
+                    name: *const std::os::raw::c_char,
+                ) -> *mut std::os::raw::c_void;
+            }
+            let cs = match std::ffi::CString::new(name) {
+                Ok(cs) => cs,
+                Err(_) => return 0,
+            };
+            unsafe { dlsym(handle as *mut _, cs.as_ptr()) as i64 }
+        }
+
+        fn dlclose(&mut self, handle: i64) -> i64 {
+            unsafe extern "C" {
+                fn dlclose(handle: *mut std::os::raw::c_void) -> std::os::raw::c_int;
+            }
+            unsafe { dlclose(handle as *mut _) as i64 }
+        }
+
+        fn dlerror(&mut self) -> Option<String> {
+            unsafe extern "C" {
+                fn dlerror() -> *const std::os::raw::c_char;
+            }
+            let ptr = unsafe { dlerror() };
+            if ptr.is_null() {
+                None
+            } else {
+                // The pointer is valid until the *next* dlerror
+                // call; copy out before returning so callers can
+                // hold the message past further dl* operations.
+                Some(
+                    unsafe { std::ffi::CStr::from_ptr(ptr) }
+                        .to_string_lossy()
+                        .into_owned(),
+                )
             }
         }
     }

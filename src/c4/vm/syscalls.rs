@@ -265,4 +265,50 @@ impl<H: Host> Vm<H> {
         self.host.setenv(&name, &value, overwrite);
         Ok(0)
     }
+
+    /// `void *dlopen(const char *filename, int flags)` -- delegates
+    /// to the host's libdl bridge. A NULL filename (c4 pointer 0)
+    /// is mapped to `Option::None` so [`Host::dlopen`] can produce
+    /// `dlopen(NULL, ...)` (the global symbol table).
+    pub(super) fn syscall_dlopen(&mut self, sp: usize) -> Result<i64, C4Error> {
+        let path_addr = self.load_i64(sp + 8)? as usize;
+        let flags = self.load_i64(sp)?;
+        let path = if path_addr == 0 {
+            None
+        } else {
+            Some(self.read_cstring(path_addr)?)
+        };
+        Ok(self.host.dlopen(path.as_deref(), flags))
+    }
+
+    /// `void *dlsym(void *handle, const char *name)` -- look up a
+    /// symbol's native address in a previously-opened library.
+    /// Returned address is a real pointer in the host process; the
+    /// VM treats it as an opaque integer (calling through it via
+    /// `Op::Jsri` is rejected because `decode_pc` requires a
+    /// CODE_BASE-biased c4 PC, not a libc address).
+    pub(super) fn syscall_dlsym(&mut self, sp: usize) -> Result<i64, C4Error> {
+        let handle = self.load_i64(sp + 8)?;
+        let name_addr = self.load_i64(sp)? as usize;
+        let name = self.read_cstring(name_addr)?;
+        Ok(self.host.dlsym(handle, &name))
+    }
+
+    /// `int dlclose(void *handle)` -- pass through to the host.
+    pub(super) fn syscall_dlclose(&mut self, sp: usize) -> Result<i64, C4Error> {
+        let handle = self.load_i64(sp)?;
+        Ok(self.host.dlclose(handle))
+    }
+
+    /// `char *dlerror(void)` -- the most recent loader error
+    /// message, copied into the data segment so the c4-side pointer
+    /// stays valid after subsequent dl-family calls (the libc
+    /// version's static buffer would otherwise be clobbered). 0 if
+    /// no error pending.
+    pub(super) fn syscall_dlerror(&mut self) -> Result<i64, C4Error> {
+        Ok(match self.host.dlerror() {
+            Some(msg) => self.install_cstring(msg.as_bytes()) as i64,
+            None => 0,
+        })
+    }
 }

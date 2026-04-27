@@ -95,6 +95,23 @@ pub enum Op {
     Genv,
     /// Syscall: Set an environment variable.
     Senv,
+    /// Syscall: `dlopen(path, flags)` -- load a shared library at
+    /// runtime. Returns an opaque handle (or 0 on failure). In VM
+    /// mode the handle is a real native pointer; calling through it
+    /// via `Op::Jsri` is rejected (no FFI from the VM).
+    Dlop,
+    /// Syscall: `dlsym(handle, name)` -- look up a symbol in a loaded
+    /// library. Returns a function pointer (or 0 on miss). Native
+    /// binaries can call the result through `Op::Jsri`; VM mode can
+    /// only inspect it.
+    Dlsm,
+    /// Syscall: `dlclose(handle)` -- unload a previously dlopen'd
+    /// library. Returns 0 on success, non-zero on failure.
+    Dlcl,
+    /// Syscall: `dlerror()` -- return the most recent dynamic-loader
+    /// error message as a C string, or 0 if none. The returned
+    /// pointer is valid until the next dlerror call (POSIX).
+    Dler,
 
     // --- Immediate-form arithmetic / comparison ---
     //
@@ -138,7 +155,7 @@ pub enum Op {
     LdLocC,
 }
 
-const OPS: [Op; 61] = [
+const OPS: [Op; 65] = [
     Op::Lea,
     Op::Imm,
     Op::Jmp,
@@ -184,6 +201,10 @@ const OPS: [Op; 61] = [
     Op::Write,
     Op::Genv,
     Op::Senv,
+    Op::Dlop,
+    Op::Dlsm,
+    Op::Dlcl,
+    Op::Dler,
     // Immediate-form ops (optimizer-emitted).
     Op::AddI,
     Op::SubI,

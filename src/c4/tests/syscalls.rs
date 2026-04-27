@@ -83,3 +83,72 @@ fn write_to_stdout_runs_to_completion() {
     // path and asserts no runtime error.
     assert_eq!(run_fixture("write_stdout.c"), 0);
 }
+
+// ---- runtime dynamic linking (dlopen / dlsym / dlclose) ----
+
+#[test]
+fn dlopen_returns_a_non_zero_handle_in_vm_mode() {
+    // dlopen(NULL, RTLD_NOW) -- ask the host for the global symbol
+    // table. StdHost forwards to libc::dlopen, which returns a real
+    // handle (non-zero) on success. We just check that's reachable
+    // through the VM's syscall layer.
+    let src = r#"
+        int main() {
+            int *h;
+            h = dlopen(0, 2);
+            if (h == 0) return 1;
+            dlclose(h);
+            return 0;
+        }
+    "#;
+    let p = crate::Compiler::new(src.to_string()).compile().unwrap();
+    let result = crate::Vm::new(p).run().unwrap();
+    assert_eq!(result, 0);
+}
+
+#[test]
+fn dlsym_finds_a_real_libc_symbol_in_vm_mode() {
+    // Look up libc atoi -- it's in every conforming libc, so the
+    // returned address is non-zero on macOS, glibc, and musl. We
+    // can't *call* it from the VM (no FFI), but seeing a non-zero
+    // address back confirms the dlopen + dlsym round-trip works.
+    let src = r#"
+        int main() {
+            int *h;
+            int *fn;
+            h = dlopen(0, 2);
+            if (h == 0) return 1;
+            fn = dlsym(h, "atoi");
+            dlclose(h);
+            if (fn == 0) return 2;
+            return 0;
+        }
+    "#;
+    let p = crate::Compiler::new(src.to_string()).compile().unwrap();
+    let result = crate::Vm::new(p).run().unwrap();
+    assert_eq!(result, 0);
+}
+
+#[test]
+fn jsri_through_a_dlsym_pointer_is_rejected_in_vm_mode() {
+    // VM mode has no FFI -- decode_pc only accepts CODE_BASE-biased
+    // c4 PCs, so jumping through a real libc address must error. The
+    // documented behaviour is "Runtime Error: jump to non-code
+    // address ...".
+    let src = r#"
+        int main() {
+            int *h;
+            int *fn;
+            h = dlopen(0, 2);
+            fn = dlsym(h, "atoi");
+            return fn("123");
+        }
+    "#;
+    let p = crate::Compiler::new(src.to_string()).compile().unwrap();
+    let err = crate::Vm::new(p).run().unwrap_err();
+    let msg = format!("{err}");
+    assert!(
+        msg.contains("non-code address"),
+        "expected non-code-address rejection, got: {msg}"
+    );
+}

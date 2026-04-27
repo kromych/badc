@@ -342,6 +342,10 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("write", Token::Id),
     ("getenv", Token::Id),
     ("setenv", Token::Id),
+    ("dlopen", Token::Id),
+    ("dlsym", Token::Id),
+    ("dlclose", Token::Id),
+    ("dlerror", Token::Id),
     ("void", Token::Char),
     ("main", Token::Id),
 ];
@@ -361,6 +365,10 @@ const LIB_OPS: &[(&str, Op)] = &[
     ("write", Op::Write),
     ("getenv", Op::Genv),
     ("setenv", Op::Senv),
+    ("dlopen", Op::Dlop),
+    ("dlsym", Op::Dlsm),
+    ("dlclose", Op::Dlcl),
+    ("dlerror", Op::Dler),
 ];
 
 /// Pre-registered integer constants -- the c4 dialect doesn't have

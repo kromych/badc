@@ -123,6 +123,14 @@ pub struct Compiler {
     /// c4 was permissive by design and many idioms (NULL=0, void*~char*)
     /// would otherwise drown the output.
     warnings: Vec<String>,
+
+    /// Bytecode positions (indices into `text`) of `Op::Imm` operands
+    /// that hold an offset into the data segment. Recorded at emit time
+    /// because the native backend can't rediscover them from the
+    /// bytecode alone -- a small Imm could be a global's address or
+    /// just an integer literal. The VM doesn't care; this rides along
+    /// in `Program` for the native codegen to consume.
+    data_imm_positions: Vec<usize>,
 }
 
 impl Compiler {
@@ -144,6 +152,7 @@ impl Compiler {
             switch_defaults: Vec::new(),
             structs: Vec::new(),
             warnings: Vec::new(),
+            data_imm_positions: Vec::new(),
         }
     }
 
@@ -433,6 +442,7 @@ impl Compiler {
             data: self.data,
             entry_pc,
             warnings: self.warnings,
+            data_imm_positions: self.data_imm_positions,
         })
     }
 
@@ -452,6 +462,18 @@ impl Compiler {
         self.text.push(val);
     }
 
+    /// Emit `Op::Imm <data_offset>` and record the operand's bytecode
+    /// position in [`Compiler::data_imm_positions`]. Use this anywhere
+    /// the immediate is the address of a string literal or a global --
+    /// the VM treats the result identically to a plain `Op::Imm`, but
+    /// the native backend needs the side channel to relocate the value
+    /// against the real `__data` vmaddr at link time.
+    fn emit_data_imm(&mut self, data_offset: i64) {
+        self.emit_op(Op::Imm);
+        self.data_imm_positions.push(self.text.len());
+        self.emit_val(data_offset);
+    }
+
     // ---- Recursive descent ----
 
     fn expr(&mut self, lev: i64) -> Result<(), C4Error> {
@@ -468,8 +490,7 @@ impl Compiler {
             self.next()?;
             self.ty = Ty::Int as i64;
         } else if self.lex.tk == '"' as i64 {
-            self.emit_op(Op::Imm);
-            self.emit_val(self.lex.ival);
+            self.emit_data_imm(self.lex.ival);
             self.next()?;
             // C concatenates adjacent string literals -- `"a" "b"` is one
             // string. The lexer leaves the NUL off so the bytes flow
@@ -600,8 +621,7 @@ impl Compiler {
                         self.emit_op(Op::Lea);
                         self.emit_val(self.symbols[id_idx].val);
                     } else {
-                        self.emit_op(Op::Imm);
-                        self.emit_val(self.symbols[id_idx].val);
+                        self.emit_data_imm(self.symbols[id_idx].val);
                     }
                     self.emit_op(Op::Li);
                     self.emit_op(Op::Jsri);
@@ -636,8 +656,7 @@ impl Compiler {
                     self.emit_op(Op::Lea);
                     self.emit_val(self.symbols[id_idx].val);
                 } else if self.symbols[id_idx].class == Token::Glo as i64 {
-                    self.emit_op(Op::Imm);
-                    self.emit_val(self.symbols[id_idx].val);
+                    self.emit_data_imm(self.symbols[id_idx].val);
                 } else {
                     return Err(C4Error::Compile(format!(
                         "{}: undefined variable {}",

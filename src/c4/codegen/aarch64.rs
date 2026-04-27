@@ -29,10 +29,11 @@
 use alloc::format;
 use alloc::vec::Vec;
 
+use super::super::CODE_BASE;
 use super::super::error::C4Error;
 use super::super::op::Op;
 use super::super::program::Program;
-use super::{Build, GotFixup};
+use super::{Build, DataFixup, FuncFixup, GotFixup};
 
 /// Libc symbols badc binaries import. The bind opcode stream and the
 /// __got layout walk this list in order; codegen picks slots out of
@@ -423,7 +424,9 @@ pub(super) fn enc_ldr_post(rt: Reg, rn: Reg, imm: i32) -> u32 {
 
 // ---- Page-relative address load. Pairs with `add xd, xd, #pageoff`
 //      to materialize an address relative to the program's load
-//      address; needed once we start referring to data segment offsets.
+//      address. Used both for libc-call thunks (the GOT slot lookup)
+//      and for data / function-pointer immediates patched by the
+//      Mach-O writer.
 
 /// `ADRP <Xd>, <label>` -- load the page-aligned base address of a
 /// PC-relative label. `imm21` is signed, in *pages* (4096 bytes).
@@ -541,6 +544,16 @@ pub(super) fn lower(program: &Program) -> Result<Build, C4Error> {
     let mut bytecode_to_native: Vec<usize> = vec![usize::MAX; program.text.len() + 1];
     let mut fixups: Vec<Fixup> = Vec::new();
     let mut got_fixups: Vec<GotFixup> = Vec::new();
+    let mut data_fixups: Vec<DataFixup> = Vec::new();
+    // Function-pointer Imms get their target resolved post-walk against
+    // `bytecode_to_native`, so we record (adrp_offset, target_bytecode_pc)
+    // here and rewrite into `Build::func_fixups` once the map is final.
+    let mut pending_func_fixups: Vec<(usize, usize)> = Vec::new();
+
+    // Compiler's data-Imm side channel as a sorted slice (binary search
+    // is fine -- this list grows linearly with the number of distinct
+    // string-literal / global references in the program).
+    let data_imm_positions: &[usize] = &program.data_imm_positions;
 
     // Track which function we're currently inside so the prologue
     // and epilogue agree on whether to push/pop the argc/argv pair.
@@ -568,12 +581,36 @@ pub(super) fn lower(program: &Program) -> Result<Build, C4Error> {
             &mut code,
             &mut fixups,
             &mut got_fixups,
+            &mut data_fixups,
+            &mut pending_func_fixups,
+            data_imm_positions,
             in_main,
         )?;
     }
     bytecode_to_native[program.text.len()] = code.len();
 
     apply_fixups(&mut code, &fixups, &bytecode_to_native, program.text.len())?;
+
+    // Resolve pending function-pointer fixups now that the bytecode-to-
+    // native map is complete.
+    let mut func_fixups: Vec<FuncFixup> = Vec::with_capacity(pending_func_fixups.len());
+    for (adrp_offset, target_bc_pc) in pending_func_fixups {
+        if target_bc_pc > program.text.len() {
+            return Err(C4Error::Compile(format!(
+                "native codegen: function pointer target {target_bc_pc} past end of bytecode"
+            )));
+        }
+        let target = bytecode_to_native[target_bc_pc];
+        if target == usize::MAX {
+            return Err(C4Error::Compile(format!(
+                "native codegen: function pointer target {target_bc_pc} did not land on an instruction"
+            )));
+        }
+        func_fixups.push(FuncFixup {
+            adrp_offset,
+            target_native_offset: target,
+        });
+    }
 
     let entry_offset = bytecode_to_native
         .get(program.entry_pc)
@@ -596,6 +633,8 @@ pub(super) fn lower(program: &Program) -> Result<Build, C4Error> {
         data: program.data.clone(),
         entry_offset,
         got_fixups,
+        data_fixups,
+        func_fixups,
     })
 }
 
@@ -665,6 +704,9 @@ fn lower_op(
     code: &mut Vec<u8>,
     fixups: &mut Vec<Fixup>,
     got_fixups: &mut Vec<GotFixup>,
+    data_fixups: &mut Vec<DataFixup>,
+    pending_func_fixups: &mut Vec<(usize, usize)>,
+    data_imm_positions: &[usize],
     in_main: bool,
 ) -> Result<(), C4Error> {
     match op {
@@ -686,26 +728,51 @@ fn lower_op(
 
         // ---- Constants and addresses ----
         Op::Imm => {
+            // The operand sits at `*pc` *before* read_operand bumps it;
+            // the side channel uses that index, so capture it first.
+            let operand_pc = *pc;
             let v = read_operand(text, pc, "Imm")?;
-            load_imm64(code, Reg::X19, v as u64);
+            if data_imm_positions.binary_search(&operand_pc).is_ok() {
+                // Address of a string literal or global. Emit ADRP+ADD
+                // placeholders against `__data + v`; the writer fills
+                // in the page-relative immediates.
+                let adrp_offset = code.len();
+                data_fixups.push(DataFixup {
+                    adrp_offset,
+                    data_offset: v as u64,
+                });
+                emit_adrp_add_placeholder(code);
+            } else if (v as usize) >= CODE_BASE && ((v as usize) - CODE_BASE) < text.len() {
+                // Function-pointer literal. Resolve after the walk so
+                // we can map the bytecode PC to a native offset.
+                let target_bc_pc = (v as usize) - CODE_BASE;
+                let adrp_offset = code.len();
+                pending_func_fixups.push((adrp_offset, target_bc_pc));
+                emit_adrp_add_placeholder(code);
+            } else {
+                load_imm64(code, Reg::X19, v as u64);
+            }
         }
         Op::Lea => {
-            // a = bp + offset*8. Emit add/sub against x29 depending
-            // on sign; for offsets that don't fit in 12-bit imm we
-            // load into x16 and use the register form.
+            // c4 emits `Lea` offsets in 8-byte units (its VM uses one
+            // 8-byte slot per push and per local). Our native stack
+            // pushes 16 bytes per arg slot for AAPCS64 alignment, so
+            // for the args region (val >= 2) we use 16-byte spacing
+            // instead. Locals (val < 0) stay 8-byte. See `lea_offset`.
             let offset = read_operand(text, pc, "Lea")?;
-            let bytes = offset.unsigned_abs() * 8;
-            if bytes < 4096 {
-                let imm = bytes as u32;
-                let word = if offset >= 0 {
+            let signed_bytes = lea_offset_bytes(offset);
+            let abs = signed_bytes.unsigned_abs();
+            if abs < 4096 {
+                let imm = abs as u32;
+                let word = if signed_bytes >= 0 {
                     enc_add_imm(Reg::X19, Reg::X29, imm)
                 } else {
                     enc_sub_imm(Reg::X19, Reg::X29, imm)
                 };
                 emit(code, word);
             } else {
-                load_imm64(code, Reg::X16, bytes);
-                let word = if offset >= 0 {
+                load_imm64(code, Reg::X16, abs);
+                let word = if signed_bytes >= 0 {
                     enc_add_reg(Reg::X19, Reg::X29, Reg::X16)
                 } else {
                     enc_sub_reg(Reg::X19, Reg::X29, Reg::X16)
@@ -963,6 +1030,16 @@ fn emit_libc_call(
     Ok(())
 }
 
+/// Emit a placeholder `adrp x19, 0; add x19, x19, #0` pair that
+/// materializes a PC-relative absolute address into the VM accumulator.
+/// The writer patches both immediates once the target's vmaddr is
+/// known. We still emit valid skeleton bytes (rd = x19 in both halves)
+/// so an unpatched binary disassembles cleanly for debugging.
+fn emit_adrp_add_placeholder(code: &mut Vec<u8>) {
+    emit(code, enc_adrp(Reg::X19, 0));
+    emit(code, enc_add_imm(Reg::X19, Reg::X19, 0));
+}
+
 /// Emit `adrp x16, GOT_PAGE; ldr x16, [x16, #GOT_OFF]; blr x16` --
 /// the standard macOS PC-relative GOT call sequence. Both the adrp
 /// and the ldr are placeholders; the writer patches them once the
@@ -1031,12 +1108,32 @@ fn imm_cmp(
     Ok(())
 }
 
-/// Fused `Lea N; Li/Lc` -- load the local at `bp + N*8` into x19.
-/// Picks `ldur` for offsets that fit in the 9-bit signed range
-/// (covers locals up to fp - 256), otherwise computes the address
-/// explicitly via `Lea`-style add/sub then loads.
+/// Translate a c4 `Lea` offset (in 8-byte VM-slot units) into the
+/// matching native byte offset from x29 (the frame pointer).
+///
+/// Locals (val < 0) keep the c4 `* 8` mapping because the prologue
+/// reserves them as 8-byte slots. Args (val >= 2) get `* 16` because
+/// `Op::Psh` writes 16-byte slots on the native stack -- AAPCS64
+/// requires SP 16-byte aligned at libc-call sites and re-aligning
+/// per call would dwarf the wasted half-slot. The two outliers --
+/// val == 0 and val == 1 -- aren't emitted by the c4 compiler, but
+/// fall through to `* 8` so a stray reference still lands inside
+/// the saved x29/x30 region rather than past the args.
+fn lea_offset_bytes(offset: i64) -> i64 {
+    if offset >= 2 {
+        (offset - 1) * 16
+    } else {
+        offset * 8
+    }
+}
+
+/// Fused `Lea N; Li/Lc` -- load the local at the matching native
+/// byte offset (see [`lea_offset_bytes`]) into x19. Picks `ldur` for
+/// offsets that fit in the 9-bit signed range (covers locals up to
+/// fp - 256), otherwise computes the address explicitly via
+/// `Lea`-style add/sub then loads.
 fn emit_local_load(code: &mut Vec<u8>, offset: i64, byte: bool) {
-    let bytes = offset * 8;
+    let bytes = lea_offset_bytes(offset);
     if (-256..256).contains(&bytes) {
         if byte {
             // No `ldurb` in our encoder; do the compute-address path.
@@ -1048,10 +1145,10 @@ fn emit_local_load(code: &mut Vec<u8>, offset: i64, byte: bool) {
         }
     }
     // Fallback: address compute, then load.
-    let abs = offset.unsigned_abs() * 8;
+    let abs = bytes.unsigned_abs();
     if abs < 4096 {
         let imm = abs as u32;
-        let word = if offset >= 0 {
+        let word = if bytes >= 0 {
             enc_add_imm(Reg::X19, Reg::X29, imm)
         } else {
             enc_sub_imm(Reg::X19, Reg::X29, imm)
@@ -1059,7 +1156,7 @@ fn emit_local_load(code: &mut Vec<u8>, offset: i64, byte: bool) {
         emit(code, word);
     } else {
         load_imm64(code, Reg::X16, abs);
-        let word = if offset >= 0 {
+        let word = if bytes >= 0 {
             enc_add_reg(Reg::X19, Reg::X29, Reg::X16)
         } else {
             enc_sub_reg(Reg::X19, Reg::X29, Reg::X16)
@@ -1079,14 +1176,19 @@ fn emit_local_load(code: &mut Vec<u8>, offset: i64, byte: bool) {
 /// SP 16-byte aligned, which the AAPCS requires at every call site.
 ///
 /// For the program's entry function (`is_main = true`) we additionally
-/// push x1 then x0 -- those carry argv and argc from libdyld. Pushing
-/// them in this order lands argv at `x29 + 16` and argc at `x29 + 24`,
-/// which is what the c4 compiler expects when it assigns Lea offsets:
-/// `int main(int argc, char **argv)` makes argc the first declared
-/// arg and the deepest pushed VM-stack slot, hence the higher offset.
+/// push x0 (argc) then x1 (argv) into their own 16-byte slots, the same
+/// shape user-function args use. After the prologue's stp(x29,x30) the
+/// layout is:
+///   bp + 16: argv  (top arg, c4 val=2)
+///   bp + 32: argc  (deeper arg, c4 val=3)
+/// matching [`lea_offset_bytes`].
 fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool) {
     if is_main {
-        emit(code, enc_stp_pre(Reg::X1, Reg::X0, Reg::SP, -16));
+        // Push argc first (deeper), then argv (shallower). 16-byte
+        // slots so the layout matches the c4 calling convention as
+        // [`Op::Psh`] uses it for user-function args.
+        emit(code, enc_str_pre(Reg::X0, Reg::SP, -16));
+        emit(code, enc_str_pre(Reg::X1, Reg::SP, -16));
     }
     emit(code, enc_stp_pre(Reg::X29, Reg::X30, Reg::SP, -16));
     emit(code, enc_add_imm(Reg::X29, Reg::SP, 0));
@@ -1099,14 +1201,14 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool) {
 
 /// Mirror of [`emit_prologue`]. Move the VM accumulator into `x0`
 /// (the return register), tear down the frame, return. For main we
-/// also drop the saved argv/argc pair so the stack pointer is back
-/// to what libdyld handed us.
+/// also drop the two 16-byte argc/argv slots so the stack pointer is
+/// back to what libdyld handed us.
 fn emit_epilogue(code: &mut Vec<u8>, is_main: bool) {
     emit(code, enc_mov_reg(Reg::X0, Reg::X19));
     emit(code, enc_add_imm(Reg::SP, Reg::X29, 0));
     emit(code, enc_ldp_post(Reg::X29, Reg::X30, Reg::SP, 16));
     if is_main {
-        emit(code, enc_add_imm(Reg::SP, Reg::SP, 16));
+        emit(code, enc_add_imm(Reg::SP, Reg::SP, 32));
     }
     emit(code, enc_ret(Reg::X30));
 }

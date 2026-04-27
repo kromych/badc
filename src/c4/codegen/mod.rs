@@ -66,17 +66,17 @@ impl Target {
 /// image. The codegen and image-writer halves both populate this --
 /// the codegen knows the code bytes, the pinned data bytes, and which
 /// libc symbols the code wants to call; the writer arranges them into
-/// segments and patches the codegen's GOT placeholders with the actual
-/// data-segment vmaddrs.
+/// segments and patches the codegen's GOT / data / function-pointer
+/// placeholders with the actual vmaddrs.
 #[derive(Debug, Default)]
 pub(crate) struct Build {
     /// Machine code, ready to be placed in `__TEXT,__text`.
     pub text: Vec<u8>,
     /// Initialised data segment: string literals + zero-initialised
-    /// globals. Not yet copied into the binary; landing data-segment
-    /// support is a follow-on milestone (string literals through
-    /// `printf` won't work natively until then).
-    #[allow(dead_code)]
+    /// globals. Copied into `__DATA,__data` by the writer; offsets
+    /// into this buffer match the bytecode's view of the data segment,
+    /// so a `DataFixup { data_offset: K }` resolves to byte K of this
+    /// `Vec`.
     pub data: Vec<u8>,
     /// Offset (within `text`) of the program's entry point. Becomes
     /// the entry address of `LC_MAIN`.
@@ -87,6 +87,14 @@ pub(crate) struct Build {
     /// matching __got slot. See [`aarch64::IMPORTS`] for the symbol
     /// order; the writer relies on the same indexing.
     pub got_fixups: Vec<GotFixup>,
+    /// Each entry records an `adrp + add` placeholder pair the codegen
+    /// left for a load-of-data-address sequence. The writer patches it
+    /// with the page-relative address of `__data + data_offset`.
+    pub data_fixups: Vec<DataFixup>,
+    /// Each entry records an `adrp + add` placeholder pair the codegen
+    /// left for a function-pointer literal. The writer patches it with
+    /// the page-relative address of `__text + target_native_offset`.
+    pub func_fixups: Vec<FuncFixup>,
 }
 
 /// Refer-by-index relocation between a code site and a `__got` slot.
@@ -100,6 +108,32 @@ pub(crate) struct GotFixup {
     pub adrp_offset: usize,
     /// Index into [`aarch64::IMPORTS`].
     pub import_index: usize,
+}
+
+/// Relocation for `Op::Imm <data_offset>`: the codegen emits an
+/// `adrp + add` placeholder pair to materialize the address into the
+/// VM accumulator, and the writer patches both halves once it knows
+/// where `__data` lands in vmaddr space.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct DataFixup {
+    /// Byte offset within `Build::text` of the adrp instruction.
+    /// `adrp_offset + 4` is the matching add.
+    pub adrp_offset: usize,
+    /// Offset into `Build::data`.
+    pub data_offset: u64,
+}
+
+/// Relocation for a function-pointer literal (`Op::Imm <CODE_BASE+pc>`).
+/// Same `adrp + add` shape as [`DataFixup`], but the target is another
+/// position inside `Build::text` rather than `Build::data`.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct FuncFixup {
+    /// Byte offset within `Build::text` of the adrp instruction.
+    pub adrp_offset: usize,
+    /// Byte offset within `Build::text` of the target function's first
+    /// instruction. Resolved by the codegen during `lower()` so the
+    /// writer doesn't need a bytecode-to-native map.
+    pub target_native_offset: usize,
 }
 
 /// Translate a [`Program`] into a native binary. The bytes are written

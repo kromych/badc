@@ -85,6 +85,14 @@ enum Insn {
     /// the IR index of the target function's `Ent`. The encoder rebuilds
     /// the `CODE_BASE | pc` word from the post-DCE PC of that Ent.
     ImmCode(usize),
+    /// `Imm <data_offset>` -- the address of a string literal or global,
+    /// flagged by the compiler via `Program::data_imm_positions`. The VM
+    /// treats it identically to `Imm`; the native backend reads it back
+    /// out of the re-encoded `data_imm_positions` to relocate the value
+    /// against the real `__data` vmaddr. Kept distinct from `Imm` so
+    /// peephole passes (constant-fold, immediate-arith) skip it -- the
+    /// value is an address, not a number to fold.
+    ImmData(i64),
     /// `Ent <frame_size>` -- function entry; allocate locals.
     Ent(i64),
     /// `Adj <n>` -- drop n words from the stack post-call.
@@ -113,6 +121,7 @@ impl Insn {
             Insn::Lea(_)
             | Insn::Imm(_)
             | Insn::ImmCode(_)
+            | Insn::ImmData(_)
             | Insn::Ent(_)
             | Insn::Adj(_)
             | Insn::Branch(_, _)
@@ -130,9 +139,10 @@ pub fn optimize(program: Program) -> Result<Program, C4Error> {
         data,
         entry_pc,
         warnings,
+        data_imm_positions,
     } = program;
 
-    let mut insns = decode(&text)?;
+    let mut insns = decode(&text, &data_imm_positions)?;
     let entry_idx = pc_to_index_in(&insns, &text, entry_pc)?;
 
     // Run rewrites to a fixed point. Each pass returns true if it made
@@ -153,19 +163,26 @@ pub fn optimize(program: Program) -> Result<Program, C4Error> {
         }
     }
 
-    let (text, entry_pc) = encode(&insns, entry_idx);
+    let (text, entry_pc, data_imm_positions) = encode(&insns, entry_idx);
     Ok(Program {
         text,
         data,
         entry_pc,
         warnings,
+        data_imm_positions,
     })
 }
 
 /// Decode a raw bytecode `text` vector into the typed IR. Branch and
 /// `Imm <code_addr>` operands are converted from absolute PCs to
-/// indices into the returned `Vec<Insn>`.
-fn decode(text: &[i64]) -> Result<Vec<Insn>, C4Error> {
+/// indices into the returned `Vec<Insn>`. `data_imm_positions` is the
+/// compiler's side channel for `Op::Imm` operands that hold a data-
+/// segment offset; we promote those to `Insn::ImmData` so peephole
+/// passes leave them alone (folding a pointer with an int would be
+/// wrong) and the encoder can re-emit a fresh position list.
+fn decode(text: &[i64], data_imm_positions: &[usize]) -> Result<Vec<Insn>, C4Error> {
+    let is_data_imm: alloc::collections::BTreeSet<usize> =
+        data_imm_positions.iter().copied().collect();
     // Pass A: parse each instruction, recording where in the text each
     // IR instruction starts so we can build PC -> index later.
     let mut insns: Vec<Insn> = Vec::new();
@@ -195,11 +212,17 @@ fn decode(text: &[i64]) -> Result<Vec<Insn>, C4Error> {
                 Insn::Lea(v)
             }
             Op::Imm => {
+                let operand_pc = pc;
                 let v = text[pc];
                 pc += 1;
                 // ImmCode gets resolved in pass B once we know which
-                // PCs are function entries.
-                Insn::Imm(v)
+                // PCs are function entries. Data-segment Imms are
+                // tagged via the compiler-supplied side channel.
+                if is_data_imm.contains(&operand_pc) {
+                    Insn::ImmData(v)
+                } else {
+                    Insn::Imm(v)
+                }
             }
             Op::Ent => {
                 let v = text[pc];
@@ -280,8 +303,12 @@ fn pc_to_index_in(insns: &[Insn], text: &[i64], target_pc: usize) -> Result<usiz
     )))
 }
 
-/// Re-encode the IR to a flat bytecode vector. Returns `(text, entry_pc)`.
-fn encode(insns: &[Insn], entry_idx: usize) -> (Vec<i64>, usize) {
+/// Re-encode the IR to a flat bytecode vector. Returns
+/// `(text, entry_pc, data_imm_positions)` -- the third element is the
+/// fresh side channel of operand positions for `Op::Imm` words that
+/// hold a data-segment offset, so the native codegen can locate them
+/// in the rewritten bytecode.
+fn encode(insns: &[Insn], entry_idx: usize) -> (Vec<i64>, usize, Vec<usize>) {
     // Pass A: assign post-DCE PCs, skipping Removed slots.
     let mut new_pc: Vec<usize> = vec![usize::MAX; insns.len() + 1];
     let mut pc = 0usize;
@@ -313,6 +340,7 @@ fn encode(insns: &[Insn], entry_idx: usize) -> (Vec<i64>, usize) {
 
     // Pass B: emit, resolving targets through new_pc.
     let mut text = Vec::with_capacity(pc);
+    let mut data_imm_positions: Vec<usize> = Vec::new();
     for ins in insns {
         match ins {
             Insn::NoArg(op) => text.push(*op as i64),
@@ -328,6 +356,11 @@ fn encode(insns: &[Insn], entry_idx: usize) -> (Vec<i64>, usize) {
                 let resolved = resolve_target(*target);
                 text.push(Op::Imm as i64);
                 text.push((CODE_BASE + resolved) as i64);
+            }
+            Insn::ImmData(v) => {
+                text.push(Op::Imm as i64);
+                data_imm_positions.push(text.len());
+                text.push(*v);
             }
             Insn::Ent(v) => {
                 text.push(Op::Ent as i64);
@@ -350,7 +383,7 @@ fn encode(insns: &[Insn], entry_idx: usize) -> (Vec<i64>, usize) {
         }
     }
 
-    (text, resolve_target(entry_idx))
+    (text, resolve_target(entry_idx), data_imm_positions)
 }
 
 // --- Helpers shared across passes ---------------------------------
@@ -766,6 +799,7 @@ mod tests {
             data: Vec::new(),
             entry_pc: 0,
             warnings: Vec::new(),
+            data_imm_positions: Vec::new(),
         }
     }
 
@@ -1028,6 +1062,7 @@ mod tests {
             data: Vec::new(),
             entry_pc: 0,
             warnings: Vec::new(),
+            data_imm_positions: Vec::new(),
         };
         let opt = optimize(p).unwrap();
         // Main returns 5; if the ImmCode operand remapped wrong, the

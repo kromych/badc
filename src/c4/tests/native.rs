@@ -212,10 +212,9 @@ fn recursion_factorial() {
     assert_eq!(build_and_run(src, "fact"), 120);
 }
 
-// ---- M1.7: libc syscalls through the GOT. We can only exercise
-//      syscalls that don't need string literals, since data-segment
-//      support hasn't landed yet (the `Build.data` field is
-//      explicitly noted as TODO in src/c4/codegen/mod.rs).
+// ---- M1.7: libc syscalls through the GOT. The pre-M2 cases below
+//      avoid string literals (the data-segment fixtures further down
+//      cover that path).
 
 #[test]
 fn exit_with_value() {
@@ -269,11 +268,11 @@ fn argc_threads_through_main() {
     assert_eq!(build_and_run(src, "argc"), 1);
 }
 
-// ---- M1.8: fixture parity. Compile each named fixture through the
-//      native pipeline and confirm the exit code matches what the VM
-//      would have produced. Until data-segment support lands, we skip
-//      fixtures that depend on string literals (printf format strings,
-//      open() with a path argument).
+// ---- M1.8 / M2: fixture parity. Compile each named fixture through
+//      the native pipeline and confirm the exit code matches what the
+//      VM would have produced. Post-M2 the suite includes fixtures
+//      that rely on the data segment (string literals, globals) and
+//      function pointers.
 
 fn build_and_run_fixture(name: &str) -> RunOutcome {
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -290,24 +289,24 @@ fn build_and_run_fixture(name: &str) -> RunOutcome {
 /// fixture's filename plus the exit code it yields under the VM
 /// (cross-checked in `tests::programs`).
 ///
-/// Two known limitations exclude the rest of the suite:
+/// Excluded fixtures fall into two buckets that the native pipeline
+/// genuinely can't run identically to the VM:
 ///
-/// * **String literals / argv strings** -- `program.data` isn't yet
-///   copied into __DATA, so any fixture that hands a c4-side data
-///   pointer to libc (printf format strings, open() paths, etc.)
-///   passes a meaningless number. Fixtures: `printf.c`, `shebang.c`,
-///   `adjacent_strings.c`, `file_io.c`, `sizeof_with_write.c`.
+/// * **Safety-net checks** (`oob_*`, `mprotect_*`, `forge_code_pointer`,
+///   `use_after_free`, `double_free`, `negative_size_memset`, etc.).
+///   The VM has dedicated guards that exit -1 on a violation; the
+///   native binary just runs into the OS's protections (or doesn't),
+///   so it can't reproduce the VM's exact exit.
 ///
-/// * **Function pointers as values** -- `fp = add;` compiles to
-///   `Imm CODE_BASE+bytecode_pc`, which is the VM's address space, not
-///   the native one. The native binary loads a garbage pointer and
-///   calls through it -> SIGSEGV. Fixtures: `function_pointers.c`,
-///   `nested_function_calls.c`, `quicksort.c`, `binary_search_tree.c`,
-///   `bst_free.c`, `cast_to_struct_pointer.c` (uses malloc-cast +
-///   function pointer combo in some constructors).
+/// * **External setup** (`file_io.c` needs `test_dummy.txt` in CWD,
+///   `getenv_value.c` / `setenv_then_get.c` need env vars set by the
+///   harness, `c4.c` is the self-host bootstrap).
 ///
-/// Both gaps are tracked for a follow-on milestone; the current list
-/// covers everything that the present codegen can faithfully execute.
+/// Everything that runs the same way on both backends lives below.
+/// Data-segment lowering and function-pointer translation, the two
+/// known gaps in the M1 codegen, both close in M2 -- string literals
+/// flow through __DATA via `DataFixup` and function pointers resolve
+/// to native offsets via `FuncFixup`.
 const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("arithmetic.c", 60),
     ("goto.c", 5),
@@ -332,6 +331,26 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("memory_ops.c", 0),
     ("linked_list.c", 10),
     ("double_pointers.c", 0),
+    // M2: data segment + function-pointer translation. Both gaps now
+    // close through the `data_imm_positions` side channel + ADRP+ADD
+    // fixups. The fixtures below stress one or both.
+    ("printf.c", 0),
+    ("shebang.c", 7),
+    ("adjacent_strings.c", 'f' as i32),
+    ("sizeof_with_write.c", 24),
+    ("function_pointers.c", 150),
+    ("nested_function_calls.c", 100),
+    ("quicksort.c", 0),
+    ("binary_search_tree.c", 0),
+    ("bst_free.c", 0),
+    ("cast_to_struct_pointer.c", 42),
+    // Picked up for free now that argc/argv layout matches user
+    // calls, multi-arg Lea works, and __data is mapped.
+    ("argc.c", 1),
+    ("argv_first_char.c", 0),
+    ("sizeof_basic.c", 0),
+    ("sizeof_expr.c", 0),
+    ("write_stdout.c", 0),
 ];
 
 #[test]

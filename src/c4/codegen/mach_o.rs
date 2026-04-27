@@ -10,38 +10,43 @@
 //! `<mach-o/loader.h>` and Apple's open-source `dyld`, and a hand-rolled
 //! writer keeps us free of any binary-writer dependency.
 //!
-//! ## Layout we emit (M1.3)
+//! ## Layout we emit
 //!
 //! ```text
-//!   file                                              segment / contents
-//!   --------------------------------------------------------------------
-//!   0x0000   mach_header_64                           ┐
-//!            LC_SEGMENT_64 __PAGEZERO                 │
-//!            LC_SEGMENT_64 __TEXT (1 sect: __text)    │
-//!            LC_SEGMENT_64 __DATA (1 sect: __got)     │ __TEXT
-//!            LC_SEGMENT_64 __LINKEDIT                 │
-//!            LC_DYLD_INFO_ONLY                        │
-//!            LC_SYMTAB                                │
-//!            LC_DYSYMTAB                              │
-//!            LC_LOAD_DYLINKER /usr/lib/dyld           │
-//!            LC_LOAD_DYLIB   /usr/lib/libSystem...    │
-//!            LC_BUILD_VERSION                         │
-//!            LC_MAIN entry_off=...                    │
-//!            <padding>                                │
-//!            <machine code from build.text>           │
-//!            <pad to 16 KiB>                          ┘
-//!   0x4000   <16 KiB __DATA -- __got at offset 0, rest zero>
-//!   0x8000   __LINKEDIT contents:                     bind opcodes,
-//!                                                     symbol table,
-//!                                                     string table.
+//!   file                                                  segment / contents
+//!   ------------------------------------------------------------------------
+//!   0x0000   mach_header_64                                ┐
+//!            LC_SEGMENT_64 __PAGEZERO                      │
+//!            LC_SEGMENT_64 __TEXT (1 sect: __text)         │
+//!            LC_SEGMENT_64 __DATA (2 sects: __got, __data) │ __TEXT
+//!            LC_SEGMENT_64 __LINKEDIT                      │
+//!            LC_DYLD_INFO_ONLY                             │
+//!            LC_SYMTAB                                     │
+//!            LC_DYSYMTAB                                   │
+//!            LC_LOAD_DYLINKER /usr/lib/dyld                │
+//!            LC_LOAD_DYLIB   /usr/lib/libSystem...         │
+//!            LC_BUILD_VERSION                              │
+//!            LC_MAIN entry_off=...                         │
+//!            <padding>                                     │
+//!            <machine code from build.text>                │
+//!            <pad to 16 KiB>                               ┘
+//!   0x4000   __DATA: __got at section start, __data after  ─ __DATA
+//!            (page-aligned, may span more than one page if
+//!             build.data is large)
+//!   0x8000+  __LINKEDIT contents:                          bind opcodes,
+//!                                                          symbol table,
+//!                                                          string table.
 //! ```
 //!
 //! __PAGEZERO is an unmapped 4 GiB segment at vmaddr 0 -- the standard
 //! null-pointer-deref catcher. __TEXT carries the header plus the code.
-//! __DATA holds the GOT (one pointer-sized slot per imported symbol);
-//! dyld fills the slots in at launch via the bind opcode stream in
-//! __LINKEDIT. __LINKEDIT also holds the symbol + string tables so
-//! tools like `otool -bind` can name what's being bound.
+//! __DATA holds two sections: __got (one pointer-sized slot per imported
+//! symbol; dyld fills the slots in at launch via the bind opcode stream
+//! in __LINKEDIT) and __data (the program's static data segment, copied
+//! into the file by the writer and patched into the code via the
+//! `DataFixup` adrp+add pairs). __LINKEDIT also holds the symbol +
+//! string tables so tools like `otool -bind` can name what's being
+//! bound.
 //!
 //! Apple Silicon mandates 16 KiB pages for arm64 (`vm_page_size`).
 //!
@@ -268,9 +273,12 @@ fn segment_text(
     out
 }
 
-/// `LC_SEGMENT_64` for `__DATA` containing the `__got` section.
-/// dyld's bind opcodes write resolved symbol addresses into __got at
-/// load time; the section starts zero-filled. 72 + 80 bytes total.
+/// `LC_SEGMENT_64` for `__DATA` containing two sections: `__got`
+/// (filled by dyld via bind opcodes) and `__data` (the program's
+/// initialised data segment, copied into the image at write time).
+/// Both sections live within a single page; the writer guarantees
+/// that __data ends before the page boundary by sizing __DATA up.
+/// 72 + 80 + 80 bytes total.
 #[allow(clippy::too_many_arguments)]
 fn segment_data(
     vmaddr: u64,
@@ -280,10 +288,13 @@ fn segment_data(
     got_addr: u64,
     got_size: u64,
     got_offset: u32,
+    data_addr: u64,
+    data_size: u64,
+    data_offset: u32,
 ) -> Vec<u8> {
-    let mut out = Vec::with_capacity(72 + 80);
+    let mut out = Vec::with_capacity(72 + 80 + 80);
     put_u32(&mut out, LC_SEGMENT_64);
-    put_u32(&mut out, 72 + 80);
+    put_u32(&mut out, 72 + 80 + 80);
     put_name16(&mut out, "__DATA");
     put_u64(&mut out, vmaddr);
     put_u64(&mut out, vmsize);
@@ -291,7 +302,7 @@ fn segment_data(
     put_u64(&mut out, filesize);
     put_u32(&mut out, VM_PROT_READ | VM_PROT_WRITE); // maxprot
     put_u32(&mut out, VM_PROT_READ | VM_PROT_WRITE); // initprot
-    put_u32(&mut out, 1); // nsects
+    put_u32(&mut out, 2); // nsects
     put_u32(&mut out, 0); // flags
 
     // __got section. We fill it via bind opcodes, not the indirect
@@ -310,7 +321,23 @@ fn segment_data(
     put_u32(&mut out, 0); // reserved1 (no indirect entries)
     put_u32(&mut out, 0); // reserved2
     put_u32(&mut out, 0); // reserved3
-    debug_assert_eq!(out.len(), 72 + 80);
+
+    // __data section. Holds the program's static data segment --
+    // string literals + zero-initialised globals. Copied into the
+    // file at write time; dyld maps it RW alongside __got.
+    put_name16(&mut out, "__data");
+    put_name16(&mut out, "__DATA");
+    put_u64(&mut out, data_addr);
+    put_u64(&mut out, data_size);
+    put_u32(&mut out, data_offset);
+    put_u32(&mut out, 3); // align (log2 -- 8 bytes is enough for any c4 access)
+    put_u32(&mut out, 0); // reloff
+    put_u32(&mut out, 0); // nreloc
+    put_u32(&mut out, 0); // flags = S_REGULAR
+    put_u32(&mut out, 0); // reserved1
+    put_u32(&mut out, 0); // reserved2
+    put_u32(&mut out, 0); // reserved3
+    debug_assert_eq!(out.len(), 72 + 80 + 80);
     out
 }
 
@@ -504,6 +531,87 @@ fn apply_got_fixups(
     Ok(())
 }
 
+/// Patch the `adrp + add` pair the codegen emitted for an absolute-
+/// address materialization. `target_vmaddr` is the runtime address
+/// the pair should compute into x19. The codegen uses the same shape
+/// for both data-segment references and function-pointer literals;
+/// the only difference between callers is how they compute the target.
+fn patch_adrp_add(
+    out: &mut [u8],
+    code_base_in_file: usize,
+    code_vmaddr_base: u64,
+    adrp_offset: usize,
+    target_vmaddr: u64,
+    label: &str,
+) -> Result<(), C4Error> {
+    let adrp_file_off = code_base_in_file + adrp_offset;
+    let add_file_off = adrp_file_off + 4;
+    let adrp_vmaddr = code_vmaddr_base + adrp_offset as u64;
+
+    let adrp_page = adrp_vmaddr & !0xFFF;
+    let target_page = target_vmaddr & !0xFFF;
+    let page_diff = target_page as i64 - adrp_page as i64;
+    if page_diff & 0xFFF != 0 {
+        return Err(C4Error::Compile(format!(
+            "Mach-O: {label} page diff {page_diff} not 4 KiB aligned"
+        )));
+    }
+    let imm21 = (page_diff >> 12) as i32;
+    let in_page = (target_vmaddr & 0xFFF) as u32;
+
+    let adrp_word = super::aarch64::enc_adrp(super::aarch64::Reg::X19, imm21);
+    let add_word =
+        super::aarch64::enc_add_imm(super::aarch64::Reg::X19, super::aarch64::Reg::X19, in_page);
+    out[adrp_file_off..adrp_file_off + 4].copy_from_slice(&adrp_word.to_le_bytes());
+    out[add_file_off..add_file_off + 4].copy_from_slice(&add_word.to_le_bytes());
+    Ok(())
+}
+
+/// Patch each `Op::Imm <data_offset>` site. The target is
+/// `data_section_vmaddr + data_offset`.
+fn apply_data_fixups(
+    out: &mut [u8],
+    code_base_in_file: usize,
+    code_vmaddr_base: u64,
+    data_section_vmaddr: u64,
+    fixups: &[super::DataFixup],
+) -> Result<(), C4Error> {
+    for fx in fixups {
+        let target = data_section_vmaddr + fx.data_offset;
+        patch_adrp_add(
+            out,
+            code_base_in_file,
+            code_vmaddr_base,
+            fx.adrp_offset,
+            target,
+            "data fixup",
+        )?;
+    }
+    Ok(())
+}
+
+/// Patch each function-pointer literal site. The target is the
+/// vmaddr of the called function's first instruction.
+fn apply_func_fixups(
+    out: &mut [u8],
+    code_base_in_file: usize,
+    code_vmaddr_base: u64,
+    fixups: &[super::FuncFixup],
+) -> Result<(), C4Error> {
+    for fx in fixups {
+        let target = code_vmaddr_base + fx.target_native_offset as u64;
+        patch_adrp_add(
+            out,
+            code_base_in_file,
+            code_vmaddr_base,
+            fx.adrp_offset,
+            target,
+            "func fixup",
+        )?;
+    }
+    Ok(())
+}
+
 // ------------------------------------------------------------------
 // __LINKEDIT contents: bind opcodes, nlist entries, string table.
 // ------------------------------------------------------------------
@@ -603,7 +711,7 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
     let mh_size = 32u64;
     let pagezero_size = 72u64;
     let text_seg_size = 72u64 + 80;
-    let data_seg_size = 72u64 + 80;
+    let data_seg_size = 72u64 + 80 + 80;
     let linkedit_seg_size = 72u64;
     let dyld_info_size = 48u64;
     let symtab_size = 24u64;
@@ -649,14 +757,24 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
     let text_filesize = round_up(entry_file_offset + code_size, PAGE_SIZE);
     let text_vmsize = text_filesize;
 
-    // __DATA: one page right after __TEXT, with __got at offset 0.
-    // The got_size only counts the bytes dyld will actually write
-    // into; the rest of the page is padding. dyld doesn't care.
+    // __DATA holds two sections back to back: __got (filled in by
+    // dyld via the bind opcode stream) followed by __data (the
+    // program's static data segment, which we copy into the file).
+    // Both are 8-byte aligned; we pick __data's offset as the
+    // 8-byte ceiling of __got's end. __DATA is page-aligned and
+    // sized to fit both, paying for an extra page only if __data
+    // overflows the first.
     let data_fileoff = text_filesize;
-    let data_filesize = PAGE_SIZE;
     let data_vmaddr = TEXT_VMADDR_BASE + text_vmsize;
-    let data_vmsize = PAGE_SIZE;
     let got_size = (imports.len() * 8) as u64;
+    let got_section_offset_in_segment: u64 = 0;
+    let data_section_offset_in_segment: u64 = round_up(got_size, 8);
+    let program_data_size = build.data.len() as u64;
+    let data_segment_used = data_section_offset_in_segment + program_data_size;
+    let data_filesize = round_up(data_segment_used.max(PAGE_SIZE), PAGE_SIZE);
+    let data_vmsize = data_filesize;
+    let data_section_vmaddr = data_vmaddr + data_section_offset_in_segment;
+    let data_section_fileoff = data_fileoff + data_section_offset_in_segment;
 
     // __LINKEDIT: bind opcodes, then symtab, then strtab.
     let linkedit_fileoff = data_fileoff + data_filesize;
@@ -685,9 +803,12 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
         data_vmsize,
         data_fileoff,
         data_filesize,
-        data_vmaddr,
+        data_vmaddr + got_section_offset_in_segment,
         got_size,
-        data_fileoff as u32,
+        (data_fileoff + got_section_offset_in_segment) as u32,
+        data_section_vmaddr,
+        program_data_size,
+        data_section_fileoff as u32,
     );
     let linkedit = segment_no_sections(
         "__LINKEDIT",
@@ -766,23 +887,42 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
     out.resize(out.len() + lc_pad_bytes, 0);
     debug_assert_eq!(out.len() as u64, entry_file_offset);
 
-    // __TEXT: copy code in, patch GOT placeholders against the now-
-    // known data segment vmaddr, then page-pad.
+    // __TEXT: copy code in, patch GOT / data / function-pointer
+    // placeholders against the now-known segment vmaddrs, then
+    // page-pad.
     let code_file_offset = out.len();
+    let code_vmaddr_base = TEXT_VMADDR_BASE + entry_file_offset;
     out.extend_from_slice(code);
     apply_got_fixups(
         &mut out,
         code_file_offset,
-        TEXT_VMADDR_BASE + entry_file_offset,
-        data_vmaddr,
+        code_vmaddr_base,
+        data_vmaddr + got_section_offset_in_segment,
         &build.got_fixups,
+    )?;
+    apply_data_fixups(
+        &mut out,
+        code_file_offset,
+        code_vmaddr_base,
+        data_section_vmaddr,
+        &build.data_fixups,
+    )?;
+    apply_func_fixups(
+        &mut out,
+        code_file_offset,
+        code_vmaddr_base,
+        &build.func_fixups,
     )?;
     while (out.len() as u64) < text_filesize {
         out.push(0);
     }
 
-    // __DATA: a full page of zero bytes. dyld writes the GOT entries
-    // at load time using the bind opcodes from __LINKEDIT.
+    // __DATA: zero-pad up to where __data starts, then copy the
+    // program's static data segment, then zero-pad to the next page.
+    // dyld writes the GOT entries (which live in __got at the front
+    // of __DATA) at load time using the bind opcodes from __LINKEDIT.
+    out.resize(data_section_fileoff as usize, 0);
+    out.extend_from_slice(&build.data);
     out.resize((data_fileoff + data_filesize) as usize, 0);
 
     // __LINKEDIT contents.
@@ -816,6 +956,8 @@ mod tests {
             data: Vec::new(),
             entry_offset: 0,
             got_fixups: Vec::new(),
+            data_fixups: Vec::new(),
+            func_fixups: Vec::new(),
         }
     }
 

@@ -13,14 +13,47 @@ use std::process::Command;
 
 use crate::{Compiler, Target, emit_native};
 
-/// Compile inline C source, emit native, sign, run. Returns the exit
-/// code the OS reported (typically what `int main` returned, modulo
-/// the 8-bit truncation that `wait()` does).
+/// Outcome of compiling-and-running a native binary. The fine-grained
+/// variants let the parity test report which kind of failure each
+/// fixture hit instead of panicking at the first crash.
+#[derive(Debug)]
+#[allow(dead_code)] // payloads are read via the derived Debug fmt only
+enum RunOutcome {
+    /// Process exited normally with this code.
+    Exit(i32),
+    /// Process was killed by a signal -- typically SIGSEGV (11) when
+    /// our codegen produces something the CPU rejects.
+    Signal(i32),
+    /// Compiling or emit_native returned an error.
+    BuildError(String),
+}
+
+impl RunOutcome {
+    fn matches(&self, expected: i32) -> bool {
+        matches!(self, RunOutcome::Exit(c) if *c == expected)
+    }
+}
+
+/// Convenience wrapper for the M1.4-M1.7 tests that expect a clean
+/// exit. Panics on anything other than a normal exit.
 fn build_and_run(src: &str, stem: &str) -> i32 {
-    let program = Compiler::new(src.to_string())
-        .compile()
-        .expect("compile failed");
-    let bytes = emit_native(&program, Target::MacOSAarch64).expect("emit_native failed");
+    match build_and_run_outcome(src, stem) {
+        RunOutcome::Exit(c) => c,
+        other => panic!("expected normal exit, got {other:?}"),
+    }
+}
+
+/// Compile inline C source, emit native, sign, run. Returns a
+/// [`RunOutcome`] describing what happened.
+fn build_and_run_outcome(src: &str, stem: &str) -> RunOutcome {
+    let program = match Compiler::new(src.to_string()).compile() {
+        Ok(p) => p,
+        Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
+    };
+    let bytes = match emit_native(&program, Target::MacOSAarch64) {
+        Ok(b) => b,
+        Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),
+    };
 
     let path = std::env::temp_dir().join(format!("badc-test-{stem}.bin"));
     {
@@ -30,13 +63,17 @@ fn build_and_run(src: &str, stem: &str) -> i32 {
     set_executable(&path);
     codesign(&path);
 
-    let status = Command::new(&path)
-        .status()
+    let output = Command::new(&path)
+        .output()
         .expect("could not exec the produced binary");
     let _ = std::fs::remove_file(&path);
-    status.code().unwrap_or_else(|| {
-        panic!("native binary terminated by signal: {status:?}");
-    })
+    if let Some(code) = output.status.code() {
+        RunOutcome::Exit(code)
+    } else {
+        use std::os::unix::process::ExitStatusExt;
+        let signal = output.status.signal().unwrap_or(0);
+        RunOutcome::Signal(signal)
+    }
 }
 
 fn set_executable(path: &Path) {
@@ -230,4 +267,87 @@ fn argc_threads_through_main() {
         int main(int argc, char **argv) { return argc; }
     "#;
     assert_eq!(build_and_run(src, "argc"), 1);
+}
+
+// ---- M1.8: fixture parity. Compile each named fixture through the
+//      native pipeline and confirm the exit code matches what the VM
+//      would have produced. Until data-segment support lands, we skip
+//      fixtures that depend on string literals (printf format strings,
+//      open() with a path argument).
+
+fn build_and_run_fixture(name: &str) -> RunOutcome {
+    let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("fixtures");
+    path.push("c");
+    path.push(name);
+    let src =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    let stem = name.trim_end_matches(".c");
+    build_and_run_outcome(&src, stem)
+}
+
+/// Native-runnable subset of the fixture suite. Each entry is the
+/// fixture's filename plus the exit code it yields under the VM
+/// (cross-checked in `tests::programs`).
+///
+/// Two known limitations exclude the rest of the suite:
+///
+/// * **String literals / argv strings** -- `program.data` isn't yet
+///   copied into __DATA, so any fixture that hands a c4-side data
+///   pointer to libc (printf format strings, open() paths, etc.)
+///   passes a meaningless number. Fixtures: `printf.c`, `shebang.c`,
+///   `adjacent_strings.c`, `file_io.c`, `sizeof_with_write.c`.
+///
+/// * **Function pointers as values** -- `fp = add;` compiles to
+///   `Imm CODE_BASE+bytecode_pc`, which is the VM's address space, not
+///   the native one. The native binary loads a garbage pointer and
+///   calls through it -> SIGSEGV. Fixtures: `function_pointers.c`,
+///   `nested_function_calls.c`, `quicksort.c`, `binary_search_tree.c`,
+///   `bst_free.c`, `cast_to_struct_pointer.c` (uses malloc-cast +
+///   function pointer combo in some constructors).
+///
+/// Both gaps are tracked for a follow-on milestone; the current list
+/// covers everything that the present codegen can faithfully execute.
+const NATIVE_FIXTURES: &[(&str, i32)] = &[
+    ("arithmetic.c", 60),
+    ("goto.c", 5),
+    ("switch_statement.c", 25),
+    ("switch_default_routing.c", 100),
+    ("control_flow.c", 1),
+    ("do_while.c", 5),
+    ("break_continue.c", 4),
+    ("for_loop.c", 10),
+    ("recursion_factorial.c", 120),
+    ("pointers.c", 200),
+    ("pointer_arithmetic_scaling.c", 108),
+    ("expression_precedence.c", 1),
+    ("variable_shadowing.c", 10),
+    ("pointer_arithmetic.c", 3),
+    ("predefined_constants.c", 0),
+    ("memset_mcmp.c", 42),
+    ("memcpy_basic.c", 'A' as i32),
+    ("struct_basic.c", 25),
+    ("struct_linked_list.c", 10),
+    ("struct_sizeof.c", 0),
+    ("memory_ops.c", 0),
+    ("linked_list.c", 10),
+    ("double_pointers.c", 0),
+];
+
+#[test]
+fn fixture_parity() {
+    let mut failures: Vec<String> = Vec::new();
+    for (name, expected) in NATIVE_FIXTURES {
+        let outcome = build_and_run_fixture(name);
+        if !outcome.matches(*expected) {
+            failures.push(format!("{name}: expected exit {expected}, got {outcome:?}"));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{} of {} native fixtures regressed:\n  {}",
+        failures.len(),
+        NATIVE_FIXTURES.len(),
+        failures.join("\n  ")
+    );
 }

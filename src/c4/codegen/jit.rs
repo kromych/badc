@@ -78,23 +78,40 @@ mod linux_impl {
         let target = host_target()?;
         let build = lower_for_jit(program, target)?;
 
-        // J2 limit: programs with relocations need J3/J4. Reject
-        // them up front so we don't ship a binary that mysteriously
-        // SIGSEGVs through an unpatched placeholder.
-        if !build.got_fixups.is_empty()
-            || !build.data_fixups.is_empty()
-            || !build.func_fixups.is_empty()
-        {
+        // J3 limit: GOT (libc) fixups are still rejected -- those
+        // need dlsym + a writable "fake GOT" region (J4). Data and
+        // function-pointer fixups patch against the runtime mmap
+        // addresses below.
+        if !build.got_fixups.is_empty() {
             return Err(C4Error::Compile(format!(
-                "JIT (J2): program needs {} GOT, {} data, {} func fixups; \
-                 relocations land in J3/J4",
-                build.got_fixups.len(),
-                build.data_fixups.len(),
-                build.func_fixups.len()
+                "JIT (J3): program needs {} GOT fixups; libc binding lands in J4",
+                build.got_fixups.len()
             )));
         }
 
+        // Allocate a writable data region, copy `build.data` in. The
+        // page is RW (no exec permission); programs that try to
+        // execute through it would fault, which is what we want.
+        let data_region = if !build.data.is_empty() {
+            Some(DataRegion::new(&build.data)?)
+        } else {
+            None
+        };
+        let data_vmaddr = data_region.as_ref().map(|r| r.as_ptr() as u64).unwrap_or(0);
+
+        // Allocate the code region. Patch fixups against the mmap'd
+        // addresses *before* flipping to RX -- the writes need to
+        // hit RW pages. Once exec is enabled the page is read-only
+        // for the lifetime of the run.
         let region = JitRegion::new(&build.text)?;
+        let code_vmaddr = region.as_ptr() as u64;
+        apply_jit_fixups(
+            target,
+            unsafe { core::slice::from_raw_parts_mut(region.as_mut_ptr(), build.text.len()) },
+            code_vmaddr,
+            data_vmaddr,
+            &build,
+        )?;
         region.make_executable()?;
         flush_icache(region.as_ptr(), region.len());
 
@@ -221,9 +238,192 @@ mod linux_impl {
             self.ptr
         }
 
+        fn as_mut_ptr(&self) -> *mut u8 {
+            self.ptr
+        }
+
         fn len(&self) -> usize {
             self.len
         }
+    }
+
+    /// Read-write data region. Same mmap shape as `JitRegion` but
+    /// stays RW for the lifetime of the run -- the JIT'd code reads
+    /// strings + globals here through RIP-relative / ADRP+ADD
+    /// loads patched by [`apply_jit_fixups`].
+    struct DataRegion {
+        ptr: *mut u8,
+        len: usize,
+    }
+
+    impl DataRegion {
+        fn new(data: &[u8]) -> Result<Self, C4Error> {
+            unsafe extern "C" {
+                fn mmap(
+                    addr: *mut c_void,
+                    len: usize,
+                    prot: c_int,
+                    flags: c_int,
+                    fd: c_int,
+                    offset: i64,
+                ) -> *mut c_void;
+            }
+            let len = round_up_to_page(data.len());
+            let ptr = unsafe {
+                mmap(
+                    std::ptr::null_mut(),
+                    len,
+                    PROT_READ | PROT_WRITE,
+                    MAP_PRIVATE | MAP_ANONYMOUS,
+                    -1,
+                    0,
+                )
+            };
+            if ptr == map_failed() {
+                return Err(C4Error::Compile(format!(
+                    "JIT: data mmap failed: {}",
+                    std::io::Error::last_os_error()
+                )));
+            }
+            unsafe {
+                std::ptr::copy_nonoverlapping(data.as_ptr(), ptr as *mut u8, data.len());
+            }
+            Ok(DataRegion {
+                ptr: ptr as *mut u8,
+                len,
+            })
+        }
+
+        fn as_ptr(&self) -> *const u8 {
+            self.ptr
+        }
+    }
+
+    impl Drop for DataRegion {
+        fn drop(&mut self) {
+            unsafe extern "C" {
+                fn munmap(addr: *mut c_void, len: usize) -> c_int;
+            }
+            unsafe {
+                munmap(self.ptr as *mut c_void, self.len);
+            }
+        }
+    }
+
+    /// Patch the lowered code's data + function-pointer fixups
+    /// against the runtime mmap addresses. The patch math mirrors
+    /// the ELF writer's `patch_addr_load` / `patch_adrp_add` /
+    /// `patch_lea_rip32` -- the difference is that here `code_vmaddr`
+    /// is the mmap'd page's runtime address, not a fixed ELF
+    /// vmaddr_base. (`build.entry_offset` is unaffected: there's no
+    /// `_start` stub prepended in JIT, so byte offsets in `build.text`
+    /// match runtime offsets exactly.)
+    fn apply_jit_fixups(
+        target: Target,
+        code: &mut [u8],
+        code_vmaddr: u64,
+        data_vmaddr: u64,
+        build: &Build,
+    ) -> Result<(), C4Error> {
+        for fx in &build.data_fixups {
+            patch_addr_load(
+                target,
+                code,
+                code_vmaddr,
+                fx.adrp_offset as u64,
+                data_vmaddr + fx.data_offset,
+                "data fixup",
+            )?;
+        }
+        for fx in &build.func_fixups {
+            patch_addr_load(
+                target,
+                code,
+                code_vmaddr,
+                fx.adrp_offset as u64,
+                code_vmaddr + fx.target_native_offset as u64,
+                "func fixup",
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Patch a "load this address into the accumulator" sequence at
+    /// `instr_offset` so the loaded value equals `target_vmaddr`.
+    /// aarch64 uses an `adrp + add` pair; x86_64 uses a single
+    /// `lea r13, [rip + disp32]`.
+    fn patch_addr_load(
+        target: Target,
+        code: &mut [u8],
+        code_vmaddr: u64,
+        instr_offset: u64,
+        target_vmaddr: u64,
+        label: &str,
+    ) -> Result<(), C4Error> {
+        match target {
+            Target::LinuxAarch64 => {
+                patch_adrp_add(code, code_vmaddr, instr_offset, target_vmaddr, label)
+            }
+            Target::LinuxX64 => {
+                patch_lea_rip32(code, code_vmaddr, instr_offset, target_vmaddr, label)
+            }
+            _ => Err(C4Error::Compile(format!(
+                "JIT: {label} unsupported for target {target:?}"
+            ))),
+        }
+    }
+
+    fn patch_adrp_add(
+        code: &mut [u8],
+        code_vmaddr: u64,
+        instr_offset: u64,
+        target_vmaddr: u64,
+        label: &str,
+    ) -> Result<(), C4Error> {
+        let off = instr_offset as usize;
+        let adrp_vmaddr = code_vmaddr + instr_offset;
+        let adrp_page = adrp_vmaddr & !0xFFF;
+        let target_page = target_vmaddr & !0xFFF;
+        let page_diff = target_page as i64 - adrp_page as i64;
+        if page_diff & 0xFFF != 0 {
+            return Err(C4Error::Compile(format!(
+                "JIT: {label} page diff {page_diff} not 4 KiB aligned"
+            )));
+        }
+        let imm21 = (page_diff >> 12) as i32;
+        let in_page = (target_vmaddr & 0xFFF) as u32;
+
+        let adrp_word = super::super::aarch64::enc_adrp(super::super::aarch64::Reg::X19, imm21);
+        let add_word = super::super::aarch64::enc_add_imm(
+            super::super::aarch64::Reg::X19,
+            super::super::aarch64::Reg::X19,
+            in_page,
+        );
+        code[off..off + 4].copy_from_slice(&adrp_word.to_le_bytes());
+        code[off + 4..off + 8].copy_from_slice(&add_word.to_le_bytes());
+        Ok(())
+    }
+
+    fn patch_lea_rip32(
+        code: &mut [u8],
+        code_vmaddr: u64,
+        instr_offset: u64,
+        target_vmaddr: u64,
+        label: &str,
+    ) -> Result<(), C4Error> {
+        const LEA_LEN: u64 = super::super::x86_64::LEA_RIP32_LEN as u64;
+        let instr_vmaddr = code_vmaddr + instr_offset;
+        let after = instr_vmaddr + LEA_LEN;
+        let delta = target_vmaddr as i64 - after as i64;
+        if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
+            return Err(C4Error::Compile(format!(
+                "JIT: {label} disp {delta} doesn't fit in 32 bits"
+            )));
+        }
+        let disp32 = delta as i32;
+        let off = (instr_offset + LEA_LEN - 4) as usize;
+        code[off..off + 4].copy_from_slice(&disp32.to_le_bytes());
+        Ok(())
     }
 
     impl Drop for JitRegion {

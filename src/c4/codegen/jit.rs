@@ -13,13 +13,19 @@
 //!
 //! ## Milestones in this file
 //!
-//! * **J2** (current): mmap + mprotect + transmute. Supports
-//!   programs with no relocations -- arithmetic, control flow,
-//!   recursion, multi-arg user calls. Programs that need libc /
-//!   data / function-pointer fixups are rejected at JIT time.
-//! * **J3**: data + function-pointer relocations.
-//! * **J4**: libc binding via dlsym at JIT time + a writable "fake
-//!   GOT" region.
+//! * **J2**: mmap + mprotect + transmute. Supports programs with no
+//!   relocations -- arithmetic, control flow, recursion, multi-arg
+//!   user calls.
+//! * **J3**: data + function-pointer relocations against the runtime
+//!   mmap addresses.
+//! * **J4** (current): libc binding via dlsym at JIT time. We
+//!   allocate a writable "fake GOT" region (one `u64` slot per
+//!   [`aarch64::IMPORTS`] entry), `dlopen(NULL)` + `dlsym(...)` to
+//!   resolve each symbol, write the resulting address into its slot,
+//!   and patch the codegen's `got_fixups` against this region using
+//!   the same instruction-encoding logic the ELF writer uses. There
+//!   is no `_start` libc-exit fixup -- Rust catches `main`'s return
+//!   value directly via the `extern "C"` transmute call.
 
 use alloc::string::{String, ToString};
 
@@ -72,22 +78,11 @@ mod linux_impl {
     use alloc::string::{String, ToString};
     use alloc::vec::Vec;
     use std::ffi::CString;
-    use std::os::raw::{c_int, c_void};
+    use std::os::raw::{c_char, c_int, c_void};
 
     pub fn jit_run(program: &Program, args: &[String]) -> Result<i32, C4Error> {
         let target = host_target()?;
         let build = lower_for_jit(program, target)?;
-
-        // J3 limit: GOT (libc) fixups are still rejected -- those
-        // need dlsym + a writable "fake GOT" region (J4). Data and
-        // function-pointer fixups patch against the runtime mmap
-        // addresses below.
-        if !build.got_fixups.is_empty() {
-            return Err(C4Error::Compile(format!(
-                "JIT (J3): program needs {} GOT fixups; libc binding lands in J4",
-                build.got_fixups.len()
-            )));
-        }
 
         // Allocate a writable data region, copy `build.data` in. The
         // page is RW (no exec permission); programs that try to
@@ -98,6 +93,15 @@ mod linux_impl {
             None
         };
         let data_vmaddr = data_region.as_ref().map(|r| r.as_ptr() as u64).unwrap_or(0);
+
+        // Allocate a "fake GOT" -- one u64 per IMPORTS entry, each
+        // holding the runtime address of the corresponding libc
+        // symbol resolved via dlsym. The codegen's adrp+ldr / call
+        // qword [rip+disp32] sequences will read through this region
+        // exactly the way the ELF loader's relocations would.
+        let mut got_region = GotRegion::new()?;
+        got_region.bind_imports()?;
+        let got_vmaddr = got_region.as_ptr() as u64;
 
         // Allocate the code region. Patch fixups against the mmap'd
         // addresses *before* flipping to RX -- the writes need to
@@ -110,6 +114,7 @@ mod linux_impl {
             unsafe { core::slice::from_raw_parts_mut(region.as_mut_ptr(), build.text.len()) },
             code_vmaddr,
             data_vmaddr,
+            got_vmaddr,
             &build,
         )?;
         region.make_executable()?;
@@ -123,10 +128,8 @@ mod linux_impl {
             .iter()
             .map(|s| CString::new(s.as_str()).unwrap_or_default())
             .collect();
-        let mut argv_ptrs: Vec<*const u8> = argv_cstrings
-            .iter()
-            .map(|cs| cs.as_ptr() as *const u8)
-            .collect();
+        let mut argv_ptrs: Vec<*const c_char> =
+            argv_cstrings.iter().map(|cs| cs.as_ptr()).collect();
         argv_ptrs.push(std::ptr::null());
 
         let entry_ptr = unsafe { region.as_ptr().add(build.entry_offset) };
@@ -136,7 +139,7 @@ mod linux_impl {
         // a parent function would make). main reads argc/argv from
         // the System V argument registers and returns its exit code
         // in rax / x0.
-        let main_fn: extern "C" fn(c_int, *const *const u8) -> c_int =
+        let main_fn: extern "C" fn(c_int, *const *const c_char) -> c_int =
             unsafe { std::mem::transmute(entry_ptr) };
         let exit_code = main_fn(args.len() as c_int, argv_ptrs.as_ptr());
         Ok(exit_code as i32)
@@ -310,21 +313,157 @@ mod linux_impl {
         }
     }
 
-    /// Patch the lowered code's data + function-pointer fixups
-    /// against the runtime mmap addresses. The patch math mirrors
-    /// the ELF writer's `patch_addr_load` / `patch_adrp_add` /
-    /// `patch_lea_rip32` -- the difference is that here `code_vmaddr`
-    /// is the mmap'd page's runtime address, not a fixed ELF
-    /// vmaddr_base. (`build.entry_offset` is unaffected: there's no
-    /// `_start` stub prepended in JIT, so byte offsets in `build.text`
-    /// match runtime offsets exactly.)
+    // ----------------------------------------------------------------
+    // "Fake GOT": a writable page of u64 slots, one per IMPORTS row.
+    // The JIT'd code accesses libc symbols by loading through these
+    // slots, exactly the way the ELF loader-resolved .got would be
+    // accessed in the AOT path. Resolving is done at JIT time via
+    // dlopen(NULL, RTLD_NOW) + dlsym -- failure to resolve a name
+    // leaves a 0 in the slot, which will fault if (and only if) the
+    // code tries to call it. This lets a program that imports
+    // `dlopen` keep working even if `dlopen` itself isn't reachable
+    // through the global handle -- as long as no codepath actually
+    // invokes it.
+    // ----------------------------------------------------------------
+
+    /// `dlopen` flags. `RTLD_NOW` resolves all undefined symbols at
+    /// load time; with `path = NULL` the returned handle searches
+    /// every library already loaded into the process, which is what
+    /// gives us libc + libdl + Rust's own deps in one shot.
+    const RTLD_NOW: c_int = 2;
+
+    /// Writable region holding one libc-symbol address per IMPORTS
+    /// row. RAII: `Drop` munmaps + dlcloses.
+    struct GotRegion {
+        ptr: *mut u8,
+        len: usize,
+        dl_handle: *mut c_void,
+    }
+
+    impl GotRegion {
+        fn new() -> Result<Self, C4Error> {
+            unsafe extern "C" {
+                fn mmap(
+                    addr: *mut c_void,
+                    len: usize,
+                    prot: c_int,
+                    flags: c_int,
+                    fd: c_int,
+                    offset: i64,
+                ) -> *mut c_void;
+            }
+            let n_imports = aarch64::IMPORTS.len();
+            // Round up to a page; the GOT itself is much smaller
+            // (~152 bytes for ~19 imports) but mmap allocates pages
+            // anyway, and a full page keeps the address-load
+            // patching's 4 KiB-alignment check trivially satisfied.
+            let len = round_up_to_page(n_imports * 8);
+            let ptr = unsafe {
+                mmap(
+                    std::ptr::null_mut(),
+                    len,
+                    PROT_READ | PROT_WRITE,
+                    MAP_PRIVATE | MAP_ANONYMOUS,
+                    -1,
+                    0,
+                )
+            };
+            if ptr == map_failed() {
+                return Err(C4Error::Compile(format!(
+                    "JIT: GOT mmap failed: {}",
+                    std::io::Error::last_os_error()
+                )));
+            }
+            Ok(GotRegion {
+                ptr: ptr as *mut u8,
+                len,
+                dl_handle: std::ptr::null_mut(),
+            })
+        }
+
+        /// Resolve every libc symbol named in `IMPORTS` and write the
+        /// resulting address into the slot at `IMPORTS[i] * 8`. Open
+        /// a fresh `dlopen(NULL, RTLD_NOW)` handle owned by this
+        /// region; symbols missing at the global level (none, today,
+        /// on glibc/musl Linux) leave a 0 slot rather than aborting.
+        fn bind_imports(&mut self) -> Result<(), C4Error> {
+            unsafe extern "C" {
+                fn dlopen(filename: *const c_char, flags: c_int) -> *mut c_void;
+                fn dlsym(handle: *mut c_void, name: *const c_char) -> *mut c_void;
+            }
+            let handle = unsafe { dlopen(std::ptr::null(), RTLD_NOW) };
+            if handle.is_null() {
+                return Err(C4Error::Compile(
+                    "JIT: dlopen(NULL, RTLD_NOW) returned null -- can't resolve libc symbols"
+                        .to_string(),
+                ));
+            }
+            self.dl_handle = handle;
+
+            for (i, imp) in aarch64::IMPORTS.iter().enumerate() {
+                let cs = match CString::new(imp.linux_symbol) {
+                    Ok(cs) => cs,
+                    Err(_) => continue, // unreachable: symbol names are static ASCII
+                };
+                let addr = unsafe { dlsym(handle, cs.as_ptr()) } as u64;
+                let slot_off = i * 8;
+                unsafe {
+                    let dst = self.ptr.add(slot_off) as *mut u64;
+                    std::ptr::write_unaligned(dst, addr);
+                }
+            }
+            Ok(())
+        }
+
+        fn as_ptr(&self) -> *const u8 {
+            self.ptr
+        }
+    }
+
+    impl Drop for GotRegion {
+        fn drop(&mut self) {
+            unsafe extern "C" {
+                fn munmap(addr: *mut c_void, len: usize) -> c_int;
+                fn dlclose(handle: *mut c_void) -> c_int;
+            }
+            if !self.dl_handle.is_null() {
+                unsafe {
+                    dlclose(self.dl_handle);
+                }
+            }
+            unsafe {
+                munmap(self.ptr as *mut c_void, self.len);
+            }
+        }
+    }
+
+    /// Patch the lowered code's GOT, data, and function-pointer
+    /// fixups against the runtime mmap addresses. The patch math
+    /// mirrors the ELF writer's `patch_got_call` / `patch_addr_load`
+    /// helpers -- the difference is that here `code_vmaddr` /
+    /// `data_vmaddr` / `got_vmaddr` are mmap'd page runtime
+    /// addresses, not fixed ELF vmaddr_base values.
+    /// (`build.entry_offset` is unaffected: there's no `_start` stub
+    /// prepended in JIT, so byte offsets in `build.text` match
+    /// runtime offsets exactly.)
     fn apply_jit_fixups(
         target: Target,
         code: &mut [u8],
         code_vmaddr: u64,
         data_vmaddr: u64,
+        got_vmaddr: u64,
         build: &Build,
     ) -> Result<(), C4Error> {
+        for fx in &build.got_fixups {
+            patch_got_call(
+                target,
+                code,
+                code_vmaddr,
+                fx.adrp_offset as u64,
+                got_vmaddr + (fx.import_index as u64) * 8,
+                "GOT fixup",
+            )?;
+        }
         for fx in &build.data_fixups {
             patch_addr_load(
                 target,
@@ -345,6 +484,94 @@ mod linux_impl {
                 "func fixup",
             )?;
         }
+        Ok(())
+    }
+
+    /// Patch a "call libc through GOT slot" sequence. aarch64
+    /// emits `adrp + ldr + blr` -- patch the adrp+ldr immediates so
+    /// the loaded pointer is the GOT slot. x86_64 emits
+    /// `call qword [rip + disp32]` -- patch the disp32.
+    fn patch_got_call(
+        target: Target,
+        code: &mut [u8],
+        code_vmaddr: u64,
+        instr_offset: u64,
+        target_vmaddr: u64,
+        label: &str,
+    ) -> Result<(), C4Error> {
+        match target {
+            Target::LinuxAarch64 => {
+                patch_adrp_ldr(code, code_vmaddr, instr_offset, target_vmaddr, label)
+            }
+            Target::LinuxX64 => {
+                patch_call_qword_rip32(code, code_vmaddr, instr_offset, target_vmaddr, label)
+            }
+            _ => Err(C4Error::Compile(format!(
+                "JIT: {label} unsupported for target {target:?}"
+            ))),
+        }
+    }
+
+    /// aarch64 `adrp Xd, page; ldr Xd, [Xd, #imm12]` patcher. The
+    /// loaded value at `target_vmaddr` is the GOT slot's stored
+    /// libc address; the JIT'd `blr xd` then dispatches there.
+    fn patch_adrp_ldr(
+        code: &mut [u8],
+        code_vmaddr: u64,
+        instr_offset: u64,
+        target_vmaddr: u64,
+        label: &str,
+    ) -> Result<(), C4Error> {
+        let off = instr_offset as usize;
+        let adrp_vmaddr = code_vmaddr + instr_offset;
+        let adrp_page = adrp_vmaddr & !0xFFF;
+        let target_page = target_vmaddr & !0xFFF;
+        let page_diff = target_page as i64 - adrp_page as i64;
+        if page_diff & 0xFFF != 0 {
+            return Err(C4Error::Compile(format!(
+                "JIT: {label} page diff {page_diff} not 4 KiB aligned"
+            )));
+        }
+        let imm21 = (page_diff >> 12) as i32;
+        let in_page = (target_vmaddr & 0xFFF) as u32;
+        if !in_page.is_multiple_of(8) {
+            return Err(C4Error::Compile(format!(
+                "JIT: {label} slot offset {in_page:#x} not 8-aligned"
+            )));
+        }
+        let adrp_word = super::super::aarch64::enc_adrp(super::super::aarch64::Reg::X16, imm21);
+        let ldr_word = super::super::aarch64::enc_ldr_imm(
+            super::super::aarch64::Reg::X16,
+            super::super::aarch64::Reg::X16,
+            in_page,
+        );
+        code[off..off + 4].copy_from_slice(&adrp_word.to_le_bytes());
+        code[off + 4..off + 8].copy_from_slice(&ldr_word.to_le_bytes());
+        Ok(())
+    }
+
+    /// x86_64 `call qword [rip + disp32]` patcher. disp32 is
+    /// measured from the byte just past the call (i.e. from
+    /// `instr_vmaddr + CALL_QWORD_RIP32_LEN`).
+    fn patch_call_qword_rip32(
+        code: &mut [u8],
+        code_vmaddr: u64,
+        instr_offset: u64,
+        target_vmaddr: u64,
+        label: &str,
+    ) -> Result<(), C4Error> {
+        const CALL_LEN: u64 = super::super::x86_64::CALL_QWORD_RIP32_LEN as u64;
+        let instr_vmaddr = code_vmaddr + instr_offset;
+        let after = instr_vmaddr + CALL_LEN;
+        let delta = target_vmaddr as i64 - after as i64;
+        if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
+            return Err(C4Error::Compile(format!(
+                "JIT: {label} disp {delta} doesn't fit in 32 bits"
+            )));
+        }
+        let disp32 = delta as i32;
+        let off = (instr_offset + CALL_LEN - 4) as usize;
+        code[off..off + 4].copy_from_slice(&disp32.to_le_bytes());
         Ok(())
     }
 

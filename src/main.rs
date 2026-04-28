@@ -7,7 +7,7 @@ use badc::{
 
 const USAGE: &str = "usage: badc [--track-pointers] [--trace] [--list-symbols] [--optimize|-O] \
                      [--emit-native [--target=<spec>] [-o <out>]] [--dump-asm] [--jit] \
-                     [--native-optimize] <file> [args...]";
+                     <file> [args...]";
 
 /// Where the AOT codesign tool lives on every macOS install. Hardcoded
 /// so we don't accidentally pick up a homebrew shim that signs differently.
@@ -29,7 +29,6 @@ fn main() {
     let mut target_spec: Option<String> = None;
     let mut dump_asm = false;
     let mut jit = false;
-    let mut native_optimize = false;
 
     let mut iter = raw.into_iter();
     let prog0 = iter.next().unwrap_or_default();
@@ -43,7 +42,6 @@ fn main() {
             "--emit-native" => emit_native_flag = true,
             "--dump-asm" => dump_asm = true,
             "--jit" => jit = true,
-            "--native-optimize" => native_optimize = true,
             "-o" => match iter.next() {
                 Some(p) => output_path = Some(PathBuf::from(p)),
                 None => {
@@ -108,8 +106,13 @@ fn main() {
         eprintln!("{w}");
     }
 
-    let native_opts = if native_optimize {
-        NativeOptions::new().with_register_alloc()
+    // `--optimize` / `-O` enables both the bytecode optimizer (above)
+    // and the native peephole + register allocator. The two halves are
+    // independent -- the native pass is correct on either pre- or
+    // post-bytecode-optimizer input -- but turning them on together
+    // produces the fastest emitted code.
+    let native_opts = if optimize_flag {
+        NativeOptions::new().with_optimize()
     } else {
         NativeOptions::new()
     };

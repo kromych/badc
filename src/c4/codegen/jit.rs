@@ -55,7 +55,7 @@ pub fn jit_run(program: &Program, args: &[String]) -> Result<i32, C4Error> {
 }
 
 /// Variant of [`jit_run`] that accepts user-controllable optimization
-/// knobs. Currently the only knob is [`NativeOptions::register_alloc`];
+/// knobs. Currently the only knob is [`NativeOptions::optimize`];
 /// future ones will land here too.
 pub fn jit_run_with_options(
     program: &Program,

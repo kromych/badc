@@ -18,30 +18,29 @@
 //!   libc call sites (System V ABI).
 //! * `r10/r11` -- caller-saved scratch.
 //!
-//! ## Peepholes at lower time
+//! ## Always-on peepholes
 //!
-//! Two cheap rewrites the lowering bakes in (mirror of the aarch64
-//! backend):
+//! Same two rewrites as the aarch64 backend, applied unconditionally
+//! because both are strict wins.
 //!
-//! * [`emit_mov_rr`] elides `mov rd, rd` -- the move would be 3
-//!   bytes of no-op. The lowering pass goes through this helper for
-//!   every reg-to-reg move (including dynamically-chosen pool
-//!   registers), so the guard catches every emit site without
-//!   spreading the check across the lowering.
+//! [`emit_mov_rr`] drops `mov rd, rd` instead of emitting it. Every
+//! reg-to-reg move in the lowering goes through this helper, so the
+//! check catches dynamically-chosen pool registers too without
+//! sprinkling guards across the lowering.
 //!
-//! * Compare+branch fusion: when a compare op (`Lt`, `Eq`, ...,
-//!   `EqI`, `NeI`, ...) is followed immediately by `Op::Bz` /
-//!   `Op::Bnz`, [`lower_cmp`] / [`imm_cmp`] skip the trailing
-//!   `setcc r10b` + `movzx r13, r10b`, and the matching branch op
-//!   emits `jcc rel32` directly without the redundant `cmp r13, 0`.
-//!   Saves 15 bytes and three µops per pattern (the biggest single
-//!   peephole on this backend). Gated by [`fusion_candidate`]: same
-//!   safety conditions as aarch64 -- refuses the rewrite when the
-//!   `Bz` PC is reachable from another branch, or when either the
-//!   taken-target or fall-through path's first op reads `r13`
-//!   (the elided `setcc + movzx` would otherwise leave it stale --
-//!   the c4 short-circuit pattern `a && b` lands on a second
-//!   `Bz`/`Bnz` reading the first compare's boolean).
+//! Compare-and-branch fusion is more impactful here than on
+//! aarch64. Naive lowering of `<cmp>; Bz` is `cmp; setcc r10b;
+//! movzx r13, r10b; cmp r13, 0; jcc rel32` -- 24 bytes and four
+//! uops. Fused, the compare emits just `cmp` and the branch emits
+//! `jcc rel32` reading the flags, for a total of 9 bytes and two
+//! uops. The same safety gates as aarch64 apply: refuse to fuse
+//! if another branch lands on the `Bz`/`Bnz` PC, or if the
+//! taken-target or fall-through op reads `r13` before writing it.
+//! The latter check matters because the elided `setcc + movzx`
+//! leaves `r13` holding the rhs of the compare instead of the 0/1
+//! boolean, which would miscompile c4's short-circuit `a && b`
+//! pattern (one `Bz` lands on another `Bz` expecting that
+//! boolean).
 
 #![allow(dead_code)] // Encoders ahead of lowering coverage.
 
@@ -55,8 +54,8 @@ use super::super::program::Program;
 use super::regalloc::{self, PoolBank, PushKind, RegStackPlan};
 use super::{Build, DataFixup, FuncFixup, GotFixup, NativeOptions, Target, TargetOptions, aarch64};
 
-/// `--native-optimize` register-pool sizes on x86_64. Four
-/// callee-saved registers free after subtracting rbp (frame
+/// Register-pool sizes used by the native optimizer on x86_64.
+/// Four callee-saved registers free after subtracting rbp (frame
 /// pointer) and r13 (VM accumulator) from System V's callee-saved
 /// set: rbx, r12, r14, r15. The caller-saved bank is disabled on
 /// x86_64 because the only candidates (r10, r11) are already
@@ -86,6 +85,12 @@ fn pool_reg(slot: u8, bank: PoolBank) -> Reg {
 /// See `aarch64.rs` for the design notes; the only difference here
 /// is the per-arch pool size and register set.
 struct RegState<'a> {
+    /// Whether the user requested the register-pool pass
+    /// ([`NativeOptions::optimize`]). When `false`, every Pseudo
+    /// `Op::Psh` lands on the real stack. The cmp+branch fusion
+    /// peephole is *not* gated on this flag -- it runs
+    /// unconditionally as a safety-checked strict win.
+    optimize: bool,
     plan: Option<&'a RegStackPlan>,
     use_pool: bool,
     current_callee_depth: u8,
@@ -95,12 +100,15 @@ struct RegState<'a> {
     /// because the next op is a fusable `Bz`/`Bnz`, the condition
     /// is stashed here. The matching branch op consumes it and
     /// emits `jcc` directly without the redundant `cmp r13, 0`.
+    /// Independent of [`Self::optimize`] -- always-on like the
+    /// self-mov elision check.
     pending_cmp_cond: Option<Cc>,
 }
 
 impl<'a> RegState<'a> {
-    fn new(plan: Option<&'a RegStackPlan>) -> Self {
+    fn new(optimize: bool, plan: Option<&'a RegStackPlan>) -> Self {
         Self {
+            optimize,
             plan,
             use_pool: false,
             current_callee_depth: 0,
@@ -894,14 +902,14 @@ pub(super) fn lower(
 ) -> Result<Build, C4Error> {
     let _options: TargetOptions = target.options();
 
-    // Build the regalloc plan once if --native-optimize is on.
-    let plan_storage: Option<RegStackPlan> = if native.register_alloc {
+    // Build the regalloc plan once if `--optimize` is on.
+    let plan_storage: Option<RegStackPlan> = if native.optimize {
         Some(regalloc::analyze(&program.text, POOL_SIZES)?)
     } else {
         None
     };
     let plan: Option<&RegStackPlan> = plan_storage.as_ref();
-    let mut reg_state = RegState::new(plan);
+    let mut reg_state = RegState::new(native.optimize, plan);
 
     // Pre-scan for branch targets so the cmp+branch fusion peephole
     // refuses to fuse when the matching Bz/Bnz is reachable from a
@@ -1145,7 +1153,7 @@ fn lower_op(
             emit_mov_mem8_r(code, lhs, 0, Reg::R13);
         }
         Op::Psh => {
-            // With --native-optimize on AND a Pseudo classification,
+            // With the native optimizer on AND a Pseudo classification,
             // emit `mov rN, r13` into the assigned pool slot.
             // Otherwise claim a 16-byte slot on the real stack so
             // rsp stays 16-byte aligned across any libc call we make
@@ -1818,7 +1826,7 @@ mod tests {
         let build = super::lower(
             &program,
             super::Target::LinuxX64,
-            super::NativeOptions::new().with_register_alloc(),
+            super::NativeOptions::new().with_optimize(),
         )
         .expect("lower");
         // Find the Lt op's PC (must exist in the bytecode).

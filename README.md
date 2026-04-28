@@ -231,41 +231,64 @@ without reading the encoder source.
 
 ### Native optimization
 
-`--native-optimize` runs a per-function register-pool pass on top
-of the bytecode-level `--optimize`. The c4 bytecode pushes a
-left-operand onto the stack before every binary operator; lowered
-straight that becomes a `str x19, [sp, -16]!` (aarch64) or `sub
-rsp, 16; mov [rsp], r13` (x86_64) at every `+` / `-` / `<` / etc.
-Most of those pushes can ride in callee-saved registers instead.
+A couple of cheap rewrites the native lowering does on its own,
+and one heavier pass behind `--optimize`.
 
-A pre-pass walks the bytecode once and classifies each `Psh`:
-binary-op-LHS pushes go into a register pool (x20..x27 on aarch64,
-rbx/r12/r14/r15 on x86_64), call-argument pushes stay on the real
-stack so libc / user callees find their args at the expected
-`bp + offset`. Per-function the analyzer also tracks max
-simultaneous depth so the prologue/epilogue saves only the pool
-slots actually used.
+The encoder helpers `emit_mov_reg` and `emit_mov_rr` drop
+`mov xd, xd` / `mov rd, rd` instead of emitting them. The current
+lowering doesn't actually produce a self-mov, but the check costs
+nothing and protects future refactors.
 
-Bench numbers on macos/aarch64 (Apple M-series, `--release`,
-15 iters, see `examples/bench.rs` for the workloads):
+The bigger always-on rewrite is compare-and-branch fusion. c4's
+`Lt`, `Eq`, etc. normally materialize a 0/1 boolean (`cset` on
+aarch64, `setcc + movzx` on x86_64) which the following `Op::Bz`
+or `Op::Bnz` then tests against zero. When the compare feeds
+directly into the branch we skip that round-trip: the compare
+emits just `cmp`, and the branch emits `b.cond` / `jcc` reading
+the flags. That saves one uop per pattern on aarch64 and three
+on x86_64. Two safety checks gate the rewrite. We refuse to fuse
+if another branch lands on the `Bz`'s PC, since that path would
+arrive without our `cmp` setting flags. We also refuse if the
+taken-target or fall-through op reads the accumulator before
+overwriting it, which would otherwise miscompile c4's
+short-circuit pattern `a && b` -- the inner `Bz` lands on a
+second `Bz` that expects to read the first compare's boolean.
 
-    workload          jit      jit-O    jit-N   jit-ON
-    fib32          18.04ms  10.64ms  11.94ms  11.40ms
-    quicksort-50k  11.19ms   8.27ms   6.66ms   6.22ms
-    matmul-50       1.21ms 945.08us 360.42us 345.54us
+`--optimize` (or `-O`) adds the per-function register allocator.
+c4 bytecode pushes the left operand of every binary operator onto
+the stack, which lowers naively to a `str` (or `sub rsp; mov`)
+per arithmetic op. The regalloc analyses each push and routes
+most of them through registers instead. Each push lands in one of
+two banks: a callee-saved bank (x20..x27 on aarch64,
+rbx/r12/r14/r15 on x86_64) for values live across a call, and a
+caller-saved bank (x9..x15 on aarch64) for short-lived values
+where no prologue/epilogue save is needed. Call arguments still
+go on the real stack so libc and user callees find them at the
+expected `bp + offset`. The prologue saves only the callee-saved
+slots a particular function actually uses. If a function's depth
+exceeds the pool capacity (15 slots total on aarch64, 4 on
+x86_64) it falls back to real-stack pushes; the c4 self-host
+stays well within both.
 
-`jit-N` = `--jit --native-optimize`; `jit-ON` = `--jit --optimize
---native-optimize`. matmul wins 3.4x from the register pool alone;
-quicksort 1.7x. fib32 regresses ~7% relative to `jit-O` because
-the bytecode optimizer's `*I` immediate-form fusion already
-eliminated most of fib's pushes, leaving just enough remaining
-that the prologue saves cost more than the per-push savings
-return. Workload-dependent -- the flag is opt-in.
+The regalloc isn't always-on because the prologue/epilogue saves
+aren't free -- on tight functions like `fib` they can wash out
+the per-push savings. `--optimize` also enables the bytecode
+optimizer; the two passes are independent (each is correct on
+the other's input) but together produce the fastest code.
 
-The pool falls back to real-stack pushes verbatim for any function
-whose max depth exceeds the per-arch pool size (8 slots on
-aarch64, 4 on x86_64). The c4 self-host stays comfortably within
-both.
+Bench on macos/aarch64 (Apple M-series, `--release`, 10 iters;
+see `examples/bench.rs`):
+
+    workload          jit      jit-O
+    fib32          18.05ms  10.65ms
+    quicksort-50k  10.93ms   5.89ms
+    matmul-50       1.31ms 345.12us
+
+`-O` is roughly 1.7x on fib, 1.86x on quicksort, and 3.8x on
+matmul. On linux/x86_64 the cmp+branch fusion alone (already
+firing in the `jit` column) is worth 6-10% across the same
+workloads -- it saves three uops per pattern there instead of
+one -- and stacks with the regalloc on top.
 
 ### Runtime dynamic linking
 
@@ -291,8 +314,8 @@ jumping to a real libc address.
 ## Optimizer
 
 `--optimize` (or `-O`) runs a bytecode optimizer between compile and
-execute. It decodes the linear text into a typed IR, runs peephole /
-branch-threading / dead-code-elimination passes to a fixed point, then
+execute. It decodes the linear text into a typed IR, runs peephole,
+branch-threading, and dead-code passes to a fixed point, then
 re-encodes. It also fuses common 3-instruction patterns
 (`Psh; Imm N; <op>` -> `<op>I N`; `Lea N; Li/Lc` -> `LdLocI/LdLocC N`)
 into single-dispatch immediate-form ops, since arithmetic-with-constant
@@ -302,6 +325,9 @@ Typical results on the test corpus: 18-30% smaller bytecode, ~40%
 faster wall-clock on the c4 self-host. Off by default -- opt in per
 run. The optimizer is a separate module (`src/c4/optimize.rs`); the
 compiler itself stays single-pass.
+
+The same flag also enables the native register allocator described
+above, so a single `-O` covers both halves of the pipeline.
 
 ## no_std
 
@@ -340,7 +366,7 @@ The CLI binary always builds with the default `std` feature.
                             ET_EXEC + libc + libdl)
         disasm.rs           --dump-asm textual listing
         jit.rs              in-process JIT loader (Linux + macOS arm64)
-        regalloc.rs         --native-optimize register-pool analyzer
+        regalloc.rs         --optimize register-pool analyzer
       tests/
         lexer.rs, parser.rs, codegen.rs, vm.rs    phase tests
         programs.rs, syscalls.rs, types.rs        end-to-end tests

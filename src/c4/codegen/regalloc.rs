@@ -6,7 +6,8 @@
 //! pair around every `+`, `-`, `<`, etc., even though the c4
 //! compiler emits expressions that rarely nest more than a handful
 //! deep. Most of those pushes can live in a register instead --
-//! which is what `--native-optimize` enables.
+//! which is what `--optimize` (via [`NativeOptions::optimize`])
+//! enables.
 //!
 //! This module is the analysis half. Given a [`Program::text`] and
 //! a per-arch register-pool size, it returns a [`RegStackPlan`]
@@ -27,19 +28,19 @@
 //!
 //! ## Pool banks
 //!
-//! Two banks split the cost of saving the pool:
+//! The pool is split across two register banks so the prologue
+//! cost lines up with how long each value lives. The callee-saved
+//! bank (e.g. x20..x27 on aarch64) is for slots that are live
+//! across at least one call op; the prologue saves them once and
+//! the epilogue restores them, so a `bl` in between is fine. The
+//! caller-saved bank (e.g. x9..x15 on aarch64) is for short-lived
+//! slots whose `Psh` and matching pop straddle no call op -- since
+//! nothing between them can clobber the register, we don't need
+//! to save anything in the prologue at all.
 //!
-//! * **Callee-saved bank** (e.g. x20..x27 on aarch64). Saved once
-//!   in the prologue and restored in the epilogue. Cheap if the
-//!   slot is live across at least one call -- without callee-save
-//!   semantics, we'd have to spill at every crossed call.
-//! * **Caller-saved bank** (e.g. x9..x15 on aarch64). Free when
-//!   the slot is short-lived (never live across a call) -- no
-//!   prologue / epilogue burden. The analyzer assigns a Pseudo
-//!   push to this bank only when no call op lies between its `Psh`
-//!   and its matching pop, so spilling at calls is unnecessary.
-//!
-//! See `aarch64.rs` / `x86_64.rs` for the consumers.
+//! The classification is a per-`Psh` decision in pass 1, and pass 2
+//! only has to assign a slot index within the chosen bank. See
+//! `aarch64.rs` / `x86_64.rs` for the consumers.
 
 // Most of this module's surface is used by the per-arch lowering
 // passes once N4/N5 land. Keep the dead-code lint quiet while we

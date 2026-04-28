@@ -52,17 +52,7 @@ const PIPELINES: &[Pipeline] = &[
     Pipeline {
         label: "jit-O",
         needs_jit: true,
-        run: run_jit,
-    },
-    Pipeline {
-        label: "jit-N",
-        needs_jit: true,
-        run: run_jit_native_optimized,
-    },
-    Pipeline {
-        label: "jit-ON",
-        needs_jit: true,
-        run: run_jit_native_optimized,
+        run: run_jit_optimized,
     },
 ];
 
@@ -75,15 +65,17 @@ fn run_vm(program: &Program, args: &[String]) -> i32 {
         .expect("vm run") as i32
 }
 
-/// JIT run with default (no register pool) options.
+/// JIT run with default options (no register allocator). The
+/// always-on peepholes in the lowering -- self-mov elision and
+/// cmp+branch fusion -- still fire here.
 fn run_jit(program: &Program, args: &[String]) -> i32 {
     jit_run_with_options(program, args, NativeOptions::default()).expect("jit run")
 }
 
-/// JIT run with `--native-optimize` (register pool on).
-fn run_jit_native_optimized(program: &Program, args: &[String]) -> i32 {
-    jit_run_with_options(program, args, NativeOptions::new().with_register_alloc())
-        .expect("jit run")
+/// JIT run with the register allocator turned on, mirroring what
+/// `--optimize` / `-O` does from the CLI.
+fn run_jit_optimized(program: &Program, args: &[String]) -> i32 {
+    jit_run_with_options(program, args, NativeOptions::new().with_optimize()).expect("jit run")
 }
 
 /// Inline workloads. Each is a (name, source, argv, expected exit)
@@ -241,7 +233,9 @@ fn measure(pipeline: &Pipeline, program: &Program, args: &[String], iter: usize)
     let argv: Vec<String> = args.to_vec();
     let prepared: Program = match pipeline.label {
         // Pipelines whose label implies the bytecode optimizer ran first.
-        "vm-O" | "jit-O" | "jit-ON" => optimize(program.clone()).expect("optimize"),
+        // For JIT, "jit-O" also flips on the native optimizer via
+        // [`run_jit_optimized`] -- single-flag model.
+        "vm-O" | "jit-O" => optimize(program.clone()).expect("optimize"),
         _ => program.clone(),
     };
     let mut samples = Vec::with_capacity(iter);

@@ -180,25 +180,37 @@ pub(crate) struct FuncFixup {
 /// delegate.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct NativeOptions {
-    /// Promote per-expression "stack" pushes to callee-saved
-    /// registers (x20..x27 on aarch64, rbx/r12/r14/r15 on x86_64)
-    /// when the matching pop is a binary operator. Real-stack pushes
-    /// for call arguments are unaffected. Off by default; the CLI
-    /// flag `--native-optimize` flips it on.
-    pub register_alloc: bool,
+    /// Run the per-function register allocator. The c4 bytecode
+    /// pushes the left operand of every binary op onto the stack;
+    /// the regalloc routes most of those pushes through registers
+    /// instead (x20..x27 + x9..x15 on aarch64; rbx/r12/r14/r15 on
+    /// x86_64) so the matching binary op / `Si` / `Sc` reads its
+    /// operand from a register. The prologue saves only the
+    /// callee-saved slots actually used, and any function whose
+    /// max depth exceeds the per-arch pool capacity falls back to
+    /// real-stack pushes verbatim.
+    ///
+    /// Off by default. `--optimize` / `-O` flips it on, alongside
+    /// the bytecode optimizer. The two passes are independent --
+    /// each is correct on the other's input -- but together they
+    /// produce the fastest emitted code.
+    ///
+    /// The two always-on peepholes -- self-mov elision (in
+    /// `emit_mov_reg` / `emit_mov_rr`) and the cmp+branch fusion
+    /// described in the per-backend module docs -- run regardless
+    /// of this flag, since neither has a tradeoff worth gating.
+    pub optimize: bool,
 }
 
 impl NativeOptions {
-    /// Convenience builder. `NativeOptions::new().with_register_alloc()`.
+    /// Convenience builder. `NativeOptions::new().with_optimize()`.
     pub const fn new() -> Self {
-        Self {
-            register_alloc: false,
-        }
+        Self { optimize: false }
     }
 
-    /// Set [`Self::register_alloc`] = true and return self.
-    pub const fn with_register_alloc(mut self) -> Self {
-        self.register_alloc = true;
+    /// Set [`Self::optimize`] = true and return self.
+    pub const fn with_optimize(mut self) -> Self {
+        self.optimize = true;
         self
     }
 }

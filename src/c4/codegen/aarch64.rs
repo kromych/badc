@@ -21,27 +21,34 @@
 //! Anything more sophisticated (real allocation, dead-store elimination)
 //! happens in the optimizer pass before we get here.
 //!
-//! ## Peepholes at lower time
+//! ## Always-on peepholes
 //!
-//! Two cheap rewrites the lowering bakes in:
+//! Two rewrites the lowering applies regardless of any flag,
+//! since both are strict wins.
 //!
-//! * [`emit_mov_reg`] elides `mov xd, xd` -- the move would be a
-//!   4-byte no-op. Defensive: today's lowering doesn't emit a
-//!   self-mov, but the guard collapses any future case (e.g. a
-//!   regalloc tweak that overlaps source and destination) to zero
-//!   bytes for free.
+//! [`emit_mov_reg`] drops `mov xd, xd` instead of emitting it.
+//! Today's lowering doesn't actually produce a self-mov, but the
+//! check costs nothing and protects future refactors -- if a
+//! regalloc tweak ever lets source and destination coincide, it
+//! collapses to zero bytes automatically.
 //!
-//! * Compare+branch fusion: when a compare op (`Lt`, `Eq`, ...,
-//!   `EqI`, `NeI`, ...) is followed immediately by `Op::Bz` /
-//!   `Op::Bnz`, [`lower_cmp`] / [`imm_cmp`] skip the trailing
-//!   `cset` and the matching branch op emits `b.cond` instead of
-//!   `cbz` / `cbnz`. Saves 4 bytes and one µop per pattern.
-//!   Gated by [`fusion_candidate`]: refuses the rewrite when the
-//!   `Bz` PC is reachable from another branch, or when either the
-//!   taken-target or the fall-through path's first op reads `x19`
-//!   (since the elided `cset` would have left it stale -- the
-//!   classic c4 short-circuit pattern `a && b` lands on a second
-//!   `Bz`/`Bnz` reading the first compare's boolean).
+//! The bigger one is compare-and-branch fusion. When a compare op
+//! (`Lt`, `Eq`, ..., or one of the immediate forms `EqI`, `NeI`,
+//! ...) feeds directly into `Op::Bz` / `Op::Bnz`, the compare emits
+//! just `cmp` and the branch emits `b.cond` instead of `cbz` /
+//! `cbnz`. The eliminated `cset` plus the eliminated comparison
+//! against zero buy us 4 bytes and one uop per pattern. The rewrite
+//! is gated by [`fusion_candidate`], which refuses to fuse if any
+//! other branch lands on the `Bz`/`Bnz` PC -- that path would
+//! arrive without our `cmp` having set the flags -- or if either
+//! the taken-target op or the fall-through op reads `x19` before
+//! writing it. The whitelist matters because the elided `cset`
+//! leaves `x19` holding the rhs of the compare instead of the
+//! 0/1 boolean, and c4's `a && b` short-circuit pattern is exactly
+//! a sequence where one `Bz` lands on another `Bz` that wants to
+//! read that boolean. Without the gate the compiler quietly
+//! miscompiles short-circuits; with it we caught the bug while
+//! bringing up the c4 self-host.
 
 // Encoder catalogue: a few entries are still ahead of where the
 // lowering pass uses them (full op coverage lands in M1.6). Anything
@@ -60,12 +67,19 @@ use super::regalloc::{self, PoolBank, PushKind, RegStackPlan};
 use super::{Build, DataFixup, FuncFixup, GotFixup, NativeOptions, Target, TargetOptions};
 
 /// Per-function lowering state for the register-pool optimization.
-/// `--native-optimize` populates `plan` with a [`regalloc::analyze`]
-/// result and the lowering consults it on every Psh / pop. With the
-/// flag off, `plan` is `None` and the lowering follows the existing
-/// real-stack path verbatim.
+/// [`NativeOptions::optimize`] populates `plan` with a
+/// [`regalloc::analyze`] result and the lowering consults it on
+/// every Psh / pop. With the flag off, `plan` is `None` and the
+/// lowering follows the existing real-stack path verbatim.
 struct RegState<'a> {
-    /// Analyzer output. `None` means `--native-optimize` was off.
+    /// Whether the user requested the register-pool pass
+    /// ([`NativeOptions::optimize`]). When `false`, every Pseudo
+    /// `Op::Psh` lands on the real stack regardless of its
+    /// classification. The cmp+branch fusion peephole is *not*
+    /// gated on this flag -- it's a strict, safety-checked
+    /// improvement and runs unconditionally, like self-mov elision.
+    optimize: bool,
+    /// Analyzer output. `None` when [`Self::optimize`] is off.
     plan: Option<&'a RegStackPlan>,
     /// True iff we're currently inside a function whose plan opted
     /// in to the pool. Updated on each `Op::Ent`.
@@ -87,13 +101,15 @@ struct RegState<'a> {
     /// would only be consumed by the matching branch) and stashes
     /// its condition here. The matching `Op::Bz`/`Op::Bnz` then
     /// emits a single `b.cond` reading the flags directly. Always
-    /// `None` outside the compare-then-branch window.
+    /// `None` outside the compare-then-branch window. Independent
+    /// of [`Self::optimize`] -- the fusion is a strict win.
     pending_cmp_cond: Option<Cond>,
 }
 
 impl<'a> RegState<'a> {
-    fn new(plan: Option<&'a RegStackPlan>) -> Self {
+    fn new(optimize: bool, plan: Option<&'a RegStackPlan>) -> Self {
         Self {
+            optimize,
             plan,
             use_pool: false,
             current_callee_depth: 0,
@@ -236,8 +252,8 @@ impl Reg {
     pub const X16: Reg = Reg(16); // IP0 -- temp scratch
     pub const X17: Reg = Reg(17); // IP1 -- second temp
     pub const X19: Reg = Reg(19); // VM accumulator (callee-saved)
-    /// Base of the `--native-optimize` callee-saved pseudo-stack
-    /// pool. Slot N (in [`PoolBank::Callee`]) maps to
+    /// Base of the callee-saved pseudo-stack pool used by the
+    /// native optimizer. Slot N (in [`PoolBank::Callee`]) maps to
     /// `Reg(CALLEE_POOL_BASE.0 + N)` -- x20..x27. All eight regs
     /// are AAPCS64 callee-saved, so the prologue only has to save
     /// the prefix the function actually uses
@@ -919,16 +935,16 @@ pub(super) fn lower(
 ) -> Result<Build, C4Error> {
     let options = target.options();
 
-    // Run the regalloc analyzer once if --native-optimize is on.
-    // The plan is consulted at each Op::Ent / Op::Psh / pop op so
-    // we keep it in scope for the entire walk.
-    let plan_storage: Option<RegStackPlan> = if native.register_alloc {
+    // Run the regalloc analyzer once if `--optimize` is on. The
+    // plan is consulted at each Op::Ent / Op::Psh / pop op so we
+    // keep it in scope for the entire walk.
+    let plan_storage: Option<RegStackPlan> = if native.optimize {
         Some(regalloc::analyze(&program.text, POOL_SIZES)?)
     } else {
         None
     };
     let plan: Option<&RegStackPlan> = plan_storage.as_ref();
-    let mut reg_state = RegState::new(plan);
+    let mut reg_state = RegState::new(native.optimize, plan);
 
     // Pre-scan for branch targets so the cmp+branch fusion peephole
     // can refuse to fuse when the matching Bz/Bnz is reachable from
@@ -1234,7 +1250,7 @@ fn lower_op(
             emit(code, enc_strb_imm(Reg::X19, lhs, 0));
         }
         Op::Psh => {
-            // With --native-optimize on AND a Pseudo classification
+            // With the native optimizer on AND a Pseudo classification
             // for this PC, materialise the push as `mov xN, x19`
             // into the assigned pool slot. The bank decides which
             // physical register: callee-saved (x20+) for slots that
@@ -1581,7 +1597,7 @@ fn emit_got_call(code: &mut Vec<u8>, got_fixups: &mut Vec<GotFixup>, import_inde
 /// register now holds the LHS value. Updates `reg_state.pseudo_stack`.
 ///
 /// The choice between the two paths is per-Psh, recorded by the
-/// analyzer in `reg_state.pseudo_stack`. With `--native-optimize`
+/// analyzer in `reg_state.pseudo_stack`. With the native optimizer
 /// off, every push went to the real stack and this function is
 /// exactly the old `ldr x16, [sp], 16` sequence.
 fn pop_lhs_reg(code: &mut Vec<u8>, reg_state: &mut RegState<'_>) -> Reg {

@@ -34,14 +34,15 @@ fn jit_exit(src: &str, args: &[&str]) -> i32 {
     jit_run(&program, &argv).expect("jit_run failed")
 }
 
-/// JIT-run with `--native-optimize` (register pool on). Used to
-/// guard parity between the default and optimized lowerings.
+/// JIT-run with the native optimizer on (the same pipeline that
+/// `--optimize` / `-O` triggers from the CLI). Used to guard parity
+/// between the default and optimized lowerings.
 fn jit_exit_native_optimized(src: &str, args: &[&str]) -> i32 {
     let program = Compiler::new(src.to_string())
         .compile()
         .expect("compile failed");
     let argv: Vec<String> = args.iter().map(|s| s.to_string()).collect();
-    let opts = NativeOptions::new().with_register_alloc();
+    let opts = NativeOptions::new().with_optimize();
     jit_run_with_options(&program, &argv, opts).expect("jit_run_with_options failed")
 }
 
@@ -223,11 +224,12 @@ fn fixture_parity() {
     );
 }
 
-/// Parity for `--native-optimize`: every fixture in the same
-/// table must produce the same exit code with the register pool
-/// enabled as without. Catches lowering regressions in the
-/// register-eligible Psh path, the prologue/epilogue save shape,
-/// or any per-arch helper (binop_with_pop, cmp_with_pop, etc).
+/// Parity for the native optimizer (the pipeline that `--optimize`
+/// turns on): every fixture in the same table must produce the same
+/// exit code with the optimizer enabled as without. Catches lowering
+/// regressions in the register-eligible Psh path, the prologue /
+/// epilogue save shape, the cmp+branch fusion peephole, or any
+/// per-arch helper (binop_with_pop, cmp_with_pop, etc).
 #[test]
 fn fixture_parity_native_optimized() {
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -242,13 +244,13 @@ fn fixture_parity_native_optimized() {
         let got = jit_exit_native_optimized(&src, &[name]);
         if got != *expected {
             failures.push(format!(
-                "{name} (--native-optimize): expected {expected}, got {got}"
+                "{name} (native optimizer on): expected {expected}, got {got}"
             ));
         }
     }
     assert!(
         failures.is_empty(),
-        "{} of {} JIT fixtures regressed under --native-optimize:\n  {}",
+        "{} of {} JIT fixtures regressed under the native optimizer:\n  {}",
         failures.len(),
         JIT_FIXTURES.len(),
         failures.join("\n  ")
@@ -278,10 +280,10 @@ fn original_c4_compiles_and_runs_hello_jit() {
 
 #[test]
 fn original_c4_compiles_and_runs_hello_jit_native_optimized() {
-    // Same as above but with --native-optimize on. c4.c is the
+    // Same as above but with the native optimizer on. c4.c is the
     // most complex program in the fixture set; if anything in the
-    // register-pool lowering breaks under heavy bytecode load, this
-    // is the test that catches it first.
+    // register-pool lowering or cmp+branch fusion breaks under
+    // heavy bytecode load, this is the test that catches it first.
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("fixtures");
     path.push("c");
@@ -291,6 +293,6 @@ fn original_c4_compiles_and_runs_hello_jit_native_optimized() {
     let exit = jit_exit_native_optimized(&src, &["c4", hello]);
     assert_eq!(
         exit, 0,
-        "c4 self-host JIT (--native-optimize) exited {exit}"
+        "c4 self-host JIT (native optimizer on) exited {exit}"
     );
 }

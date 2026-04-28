@@ -62,14 +62,21 @@ jobs:
         # its own host:
         #  * macos-latest        -> src/c4/tests/native.rs (Mach-O,
         #    `/usr/bin/codesign`) + src/c4/tests/jit.rs (in-process
-        #    JIT via MAP_JIT + pthread_jit_write_protect_np)
+        #    JIT via MAP_JIT + pthread_jit_write_protect_np). The
+        #    PE-via-WINE tests in src/c4/tests/native_pe_x64.rs
+        #    compile here too but skip at runtime when WINE isn't
+        #    installed (it isn't on the macos-latest image).
         #  * ubuntu-24.04-arm    -> src/c4/tests/native_elf.rs
         #    (Linux/aarch64 ELF, host kernel exec) +
         #    src/c4/tests/jit.rs (mprotect-based JIT)
         #  * ubuntu-latest       -> src/c4/tests/native_elf_x64.rs
         #    (Linux/x86_64 ELF, host kernel exec) +
         #    src/c4/tests/jit.rs (mprotect-based JIT)
-        # All four backend test modules are cfg-gated to their
+        #  * windows-latest      -> src/c4/tests/native_pe_x64.rs
+        #    (Windows/x86_64 PE, host kernel exec). Runs the
+        #    produced .exe directly; no JIT lane on Windows because
+        #    the in-process JIT loader hasn't been ported.
+        # The backend test modules are cfg-gated to their
         # respective triples, so the other runners compile them out
         # and only verify the VM, lexer, parser, codegen-as-bytecode,
         # and optimizer paths.

@@ -38,6 +38,7 @@ mod disasm;
 mod elf;
 mod jit;
 mod mach_o;
+mod pe;
 mod regalloc;
 mod x86_64;
 
@@ -59,6 +60,12 @@ pub enum Target {
     /// `LinuxAarch64` but with a different encoder and a different
     /// dynamic-linker path (`/lib64/ld-linux-x86-64.so.2`).
     LinuxX64,
+    /// Windows on x86_64. PE32+ with a console subsystem; binds
+    /// against `msvcrt.dll` for the libc shapes and `kernel32.dll`
+    /// for `VirtualProtect` / `LoadLibraryA` / friends. Tested via
+    /// WINE on macOS hosts since native Windows runners aren't in
+    /// the CI matrix.
+    WindowsX64,
 }
 
 impl Target {
@@ -72,9 +79,13 @@ impl Target {
             Some("linux-x64") | Some("linux-x86-64") | Some("x86_64-unknown-linux-gnu") => {
                 Ok(Target::LinuxX64)
             }
+            Some("windows-x64")
+            | Some("windows-x86-64")
+            | Some("x86_64-pc-windows-gnu")
+            | Some("x86_64-pc-windows-msvc") => Ok(Target::WindowsX64),
             Some(other) => Err(C4Error::Compile(format!(
                 "unsupported native target: {other:?} \
-                 (try `macos-aarch64`, `linux-aarch64`, or `linux-x64`)"
+                 (try `macos-aarch64`, `linux-aarch64`, `linux-x64`, or `windows-x64`)"
             ))),
         }
     }
@@ -249,7 +260,7 @@ pub fn emit_native_with_options(
 fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Result<Build, C4Error> {
     match target {
         Target::MacOSAarch64 | Target::LinuxAarch64 => aarch64::lower(program, target, options),
-        Target::LinuxX64 => x86_64::lower(program, target, options),
+        Target::LinuxX64 | Target::WindowsX64 => x86_64::lower(program, target, options),
     }
 }
 
@@ -258,6 +269,7 @@ fn write_for(build: &Build, target: Target) -> Result<Vec<u8>, C4Error> {
         Target::MacOSAarch64 => mach_o::write(build),
         Target::LinuxAarch64 => elf::write(build, Machine::Aarch64),
         Target::LinuxX64 => elf::write(build, Machine::X86_64),
+        Target::WindowsX64 => pe::write(build),
     }
 }
 
@@ -285,9 +297,8 @@ pub fn dump_native_listing_with_options(
 }
 
 /// Per-target ABI knobs that affect lowering, not just the final
-/// container. Today the only divergence between MacOSAarch64 and
-/// LinuxAarch64 is variadic-call ABI; future targets will add to
-/// this struct rather than growing the lower-fn signature.
+/// container. Each native backend reads only the fields it needs;
+/// adding a target normally just means adding a row to `options()`.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct TargetOptions {
     /// macOS arm64 packs variadic args into stack scratch slots
@@ -295,6 +306,13 @@ pub(crate) struct TargetOptions {
     /// x0..x7. Standard AAPCS64 (Linux) uses the same registers as
     /// non-variadic calls. `true` selects the macOS dance.
     pub variadic_on_stack: bool,
+    /// Use the Windows x64 calling convention rather than System V:
+    /// integer args go in `rcx`, `rdx`, `r8`, `r9` (only four
+    /// register slots, not six), the caller reserves a 32-byte
+    /// shadow space below each call site, and the entry point comes
+    /// in 16-aligned with the OS-pushed return address on top of
+    /// the stack instead of a Linux-style argc-on-stack vector.
+    pub win64_abi: bool,
 }
 
 impl Target {
@@ -302,12 +320,19 @@ impl Target {
         match self {
             Target::MacOSAarch64 => TargetOptions {
                 variadic_on_stack: true,
+                win64_abi: false,
             },
             Target::LinuxAarch64 => TargetOptions {
                 variadic_on_stack: false,
+                win64_abi: false,
             },
             Target::LinuxX64 => TargetOptions {
                 variadic_on_stack: false,
+                win64_abi: false,
+            },
+            Target::WindowsX64 => TargetOptions {
+                variadic_on_stack: false,
+                win64_abi: true,
             },
         }
     }

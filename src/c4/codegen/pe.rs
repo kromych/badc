@@ -1,0 +1,987 @@
+//! Windows PE32+ writer for x86_64 executables.
+//!
+//! Takes a [`Build`] from the x86_64 lowering and packages it as a
+//! console-subsystem PE binary that runs on Windows (and under WINE
+//! on macOS / Linux). Sibling of `elf.rs` (Linux) and `mach_o.rs`
+//! (macOS): the lowering is platform-agnostic, only the writer
+//! differs.
+//!
+//! ## Layout
+//!
+//! ```text
+//!   file                                                   memory (RVA from ImageBase)
+//!   ----------------------------------------------------------------------------------
+//!   0x000   DOS header (64 bytes)                          0x000   (headers)
+//!           DOS stub (zero-padded, 64 bytes)
+//!   0x080   PE signature "PE\0\0" (4 bytes)
+//!   0x084   COFF header (20 bytes)
+//!   0x098   Optional64 header + 16 data directories (240)
+//!   0x188   Section table: 3 * 40 bytes
+//!   0x200   .text: entry stub + build.text                 0x1000  (R-X)
+//!           .idata: import descriptors + IAT + names       0x?000  (RW-)
+//!           .data: build.data                              0x?000  (RW-)
+//! ```
+//!
+//! ## Imports
+//!
+//! Two DLLs: `msvcrt.dll` (libc shapes) and `kernel32.dll`
+//! (`VirtualProtect` for `mprotect`, `LoadLibraryA` / `GetProcAddress`
+//! / `FreeLibrary` for `dlopen` / `dlsym` / `dlclose`, plus the
+//! entry stub's `ExitProcess`). The codegen's `call qword
+//! ptr [rip+disp32]` shape is unchanged from the Linux backend --
+//! the writer just patches `disp32` to point at an IAT slot rather
+//! than a `.got` slot.
+//!
+//! ## Entry stub
+//!
+//! Windows hands control to the entry point with `rsp` 16-aligned
+//! and the OS-pushed return address on top, so the stub looks like
+//! a normal function prologue. We fetch argc / argv via msvcrt's
+//! `__p___argc` / `__p___argv` (each returns a pointer to its
+//! respective global), call the program's `main` with those values
+//! in `rcx` / `rdx`, then route the result through `ExitProcess`
+//! so the CRT atexit chain runs (without it printf to a pipe loses
+//! its tail line because msvcrt block-buffers non-tty stdout).
+//!
+//! ## Op-to-DLL binding
+//!
+//! Most c4 ops map straight onto a msvcrt or kernel32 export. Two
+//! corners worth flagging:
+//!
+//! * `Op::Senv` (POSIX `setenv(name, value, overwrite)`) binds to
+//!   msvcrt's `_putenv_s(name, value)`. The 3rd arg lands in `r8`
+//!   per Win64 calling convention; `_putenv_s` ignores it. The
+//!   semantics differ when `overwrite == 0`, but most c4 callers
+//!   pass `overwrite = 1` and don't notice.
+//! * `Op::Dler` (POSIX `dlerror()`) binds to kernel32's
+//!   `GetLastError`. Both return zero when there's no pending
+//!   error; a c4 program that *prints* `dlerror()` would see
+//!   garbage on Windows, but the common `if (dlerror()) { ... }`
+//!   shape works.
+//! * `Op::Mpro` (POSIX `mprotect(addr, len, prot)`) is not
+//!   currently supported on Windows; the binding goes to
+//!   `VirtualProtect`, but the calling convention mismatch (Windows
+//!   takes a 4th `OldProt` out-pointer the c4 program doesn't
+//!   provide) makes it unsafe to invoke. Programs that don't call
+//!   `mprotect` are unaffected.
+
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec;
+use alloc::vec::Vec;
+
+use super::super::error::C4Error;
+use super::super::op::Op;
+use super::Build;
+use super::aarch64;
+use super::x86_64;
+
+// ----------------------------------------------------------------
+// PE constants. Names mirror `winnt.h` so cross-checking is easy.
+// ----------------------------------------------------------------
+
+const IMAGE_BASE: u64 = 0x1_4000_0000;
+const SECTION_ALIGNMENT: u32 = 0x1000;
+const FILE_ALIGNMENT: u32 = 0x200;
+
+const IMAGE_FILE_MACHINE_AMD64: u16 = 0x8664;
+const IMAGE_FILE_EXECUTABLE_IMAGE: u16 = 0x0002;
+const IMAGE_FILE_LARGE_ADDRESS_AWARE: u16 = 0x0020;
+
+const PE32_PLUS_MAGIC: u16 = 0x20B;
+const IMAGE_SUBSYSTEM_WINDOWS_CUI: u16 = 3;
+const IMAGE_DLLCHARACTERISTICS_NX_COMPAT: u16 = 0x0100;
+
+const IMAGE_SCN_CNT_CODE: u32 = 0x0000_0020;
+const IMAGE_SCN_CNT_INITIALIZED_DATA: u32 = 0x0000_0040;
+const IMAGE_SCN_MEM_EXECUTE: u32 = 0x2000_0000;
+const IMAGE_SCN_MEM_READ: u32 = 0x4000_0000;
+const IMAGE_SCN_MEM_WRITE: u32 = 0x8000_0000;
+
+const NUM_DATA_DIRS: u32 = 16;
+const NUM_SECTIONS: usize = 3;
+
+const DOS_HEADER_AND_STUB: usize = 128; // 64 byte DOS header + 64 byte stub
+const PE_SIG_SIZE: usize = 4;
+const COFF_HEADER_SIZE: usize = 20;
+const OPTIONAL64_HEADER_SIZE: usize = 240;
+const SECTION_HEADER_SIZE: usize = 40;
+
+const HEADERS_RAW_SIZE: usize = DOS_HEADER_AND_STUB
+    + PE_SIG_SIZE
+    + COFF_HEADER_SIZE
+    + OPTIONAL64_HEADER_SIZE
+    + SECTION_HEADER_SIZE * NUM_SECTIONS; // = 0x200
+
+const IMAGE_IMPORT_DESCRIPTOR_SIZE: usize = 20;
+const IAT_ENTRY_SIZE: usize = 8;
+
+const DATA_DIRECTORY_IMPORT: usize = 1;
+const DATA_DIRECTORY_IAT: usize = 12;
+
+// ----------------------------------------------------------------
+// Op-to-DLL binding. For each c4 op listed in `aarch64::IMPORTS`,
+// pick the matching Windows export and which DLL it lives in.
+// ----------------------------------------------------------------
+
+const MSVCRT: &str = "msvcrt.dll";
+const KERNEL32: &str = "kernel32.dll";
+
+fn windows_binding_for_op(op: Op) -> (&'static str, &'static str) {
+    use Op::*;
+    match op {
+        Open => ("_open", MSVCRT),
+        Read => ("_read", MSVCRT),
+        Clos => ("_close", MSVCRT),
+        Prtf => ("printf", MSVCRT),
+        Malc => ("malloc", MSVCRT),
+        Free => ("free", MSVCRT),
+        Mset => ("memset", MSVCRT),
+        Mcmp => ("memcmp", MSVCRT),
+        Mcpy => ("memcpy", MSVCRT),
+        Mpro => ("VirtualProtect", KERNEL32),
+        Exit => ("exit", MSVCRT),
+        Write => ("_write", MSVCRT),
+        Genv => ("getenv", MSVCRT),
+        Senv => ("_putenv_s", MSVCRT),
+        Dlop => ("LoadLibraryA", KERNEL32),
+        Dlsm => ("GetProcAddress", KERNEL32),
+        Dlcl => ("FreeLibrary", KERNEL32),
+        Dler => ("GetLastError", KERNEL32),
+        other => panic!("pe writer: op {other:?} is not a libc import"),
+    }
+}
+
+// Stub-only imports we add on top of the standard `aarch64::IMPORTS`
+// list. msvcrt's `__getmainargs` is the canonical way to populate
+// argc/argv on a Windows host: it fills out the int / char**
+// out-pointers we hand it. WINE's msvcrt doesn't export the
+// alternative `__p___argc` / `__p___argv` thunks, so this is the
+// portable shape. ExitProcess routes the exit through the kernel32
+// thunk so the CRT atexit chain runs (without it, printf to a pipe
+// loses its tail line because msvcrt block-buffers stdout).
+const STUB_IMPORT_GETMAINARGS: (&str, &str) = ("__getmainargs", MSVCRT);
+const STUB_IMPORT_EXIT: (&str, &str) = ("ExitProcess", KERNEL32);
+
+// ----------------------------------------------------------------
+// Top-level writer.
+// ----------------------------------------------------------------
+
+pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
+    // 1) Combined imports list. Index N becomes IAT slot N. The
+    //    standard ops occupy 0..n_program_imports; the entry stub's
+    //    three additional imports come after.
+    let n_program_imports = aarch64::IMPORTS.len();
+    let mut imports: Vec<(String, &'static str)> = Vec::with_capacity(n_program_imports + 3);
+    for imp in aarch64::IMPORTS {
+        let (sym, dll) = windows_binding_for_op(imp.op);
+        imports.push((sym.to_string(), dll));
+    }
+    let stub_getmainargs_idx = imports.len();
+    imports.push((
+        STUB_IMPORT_GETMAINARGS.0.to_string(),
+        STUB_IMPORT_GETMAINARGS.1,
+    ));
+    let stub_exit_idx = imports.len();
+    imports.push((STUB_IMPORT_EXIT.0.to_string(), STUB_IMPORT_EXIT.1));
+
+    // 2) Group imports by DLL while preserving each one's IAT index.
+    //    `dlls` holds (dll_name, [import_index, ...]); the IAT is
+    //    laid out DLL-by-DLL so we keep the per-DLL slot offsets to
+    //    recover the global IAT slot of each import.
+    let dlls = group_imports_by_dll(&imports);
+
+    // 3) Build the entry stub and the mprotect thunk. We need their
+    //    sizes to lay out the rest, but disp32 patching waits until
+    //    the IAT RVAs are known.
+    let stub = build_entry_stub();
+    let thunk = build_mprotect_thunk();
+    let mpro_idx = aarch64::IMPORTS
+        .iter()
+        .position(|imp| imp.op == Op::Mpro)
+        .expect("Op::Mpro must be present in IMPORTS");
+
+    // 4) Compute layout. Combined .text is `entry stub | mprotect
+    //    thunk | build.text`; .idata gets an extra 8-byte slot
+    //    appended at the end to hold the thunk's absolute address
+    //    (the c4 program's `Op::Mpro` calls go through that slot).
+    let stub_len = stub.bytes.len() as u32;
+    let thunk_len = thunk.bytes.len() as u32;
+    let text_prologue_len = stub_len + thunk_len;
+    let thunk_rva = SECTION_ALIGNMENT + stub_len;
+
+    let text_rva: u32 = SECTION_ALIGNMENT;
+    let text_file_off: u32 = HEADERS_RAW_SIZE as u32;
+    let text_size: u32 = text_prologue_len + build.text.len() as u32;
+    let text_raw_size: u32 = round_up(text_size, FILE_ALIGNMENT);
+
+    let idata_rva: u32 = round_up(text_rva + text_size, SECTION_ALIGNMENT);
+    let idata_file_off: u32 = text_file_off + text_raw_size;
+
+    let idata_layout = plan_idata(&dlls, &imports, idata_rva);
+    // Append an 8-byte slot for the thunk's absolute address. The
+    // c4 program's `Op::Mpro` fixups will be patched to point at
+    // this slot rather than VirtualProtect's IAT entry, so calls
+    // run through the thunk instead of straight to VirtualProtect.
+    let mut idata_bytes = idata_layout.bytes;
+    let thunk_ptr_offset = idata_bytes.len() as u32;
+    idata_bytes.resize(idata_bytes.len() + 8, 0);
+    let thunk_ptr_rva = idata_rva + thunk_ptr_offset;
+    let thunk_abs_addr = IMAGE_BASE + thunk_rva as u64;
+    idata_bytes[thunk_ptr_offset as usize..(thunk_ptr_offset + 8) as usize]
+        .copy_from_slice(&thunk_abs_addr.to_le_bytes());
+    let idata_size: u32 = idata_bytes.len() as u32;
+    let idata_raw_size: u32 = round_up(idata_size, FILE_ALIGNMENT);
+
+    let data_rva: u32 = round_up(idata_rva + idata_size, SECTION_ALIGNMENT);
+    let data_file_off: u32 = idata_file_off + idata_raw_size;
+    let data_size: u32 = build.data.len() as u32;
+    let data_raw_size: u32 = round_up(data_size, FILE_ALIGNMENT);
+
+    let total_file_size = (data_file_off + data_raw_size) as usize;
+    let image_size = round_up(data_rva + data_size.max(1), SECTION_ALIGNMENT);
+
+    // 5) Stitch the .text bytes together and patch every fixup
+    //    that references something outside the section.
+    let mut text_bytes: Vec<u8> = Vec::with_capacity(text_size as usize);
+    text_bytes.extend_from_slice(&stub.bytes);
+    text_bytes.extend_from_slice(&thunk.bytes);
+    text_bytes.extend_from_slice(&build.text);
+
+    // Stub-internal fixup: the `call main` rel32. main starts at
+    // offset text_prologue_len within the combined .text (past
+    // the entry stub and the mprotect thunk).
+    patch_call_rel32(
+        &mut text_bytes,
+        stub.call_main_offset as usize,
+        text_prologue_len + build.entry_offset as u32,
+    )?;
+
+    // Stub-emitted IAT calls. Each is a
+    // `call qword ptr [rip+disp32]` whose target is the IAT slot
+    // for the given global import index.
+    patch_rip_rel_disp32(
+        &mut text_bytes,
+        stub.call_getmainargs_disp32_off as usize,
+        text_rva + (stub.call_getmainargs_disp32_off + 4) as u32,
+        idata_layout.iat_rva_for_import[stub_getmainargs_idx],
+    )?;
+    patch_rip_rel_disp32(
+        &mut text_bytes,
+        stub.call_exit_disp32_off as usize,
+        text_rva + (stub.call_exit_disp32_off + 4) as u32,
+        idata_layout.iat_rva_for_import[stub_exit_idx],
+    )?;
+
+    // Thunk-internal fixup: the `call qword [rip+disp32]` to
+    // VirtualProtect via its IAT slot.
+    let thunk_vp_disp32_off = stub_len + thunk.call_vp_disp32_off;
+    patch_rip_rel_disp32(
+        &mut text_bytes,
+        thunk_vp_disp32_off as usize,
+        text_rva + thunk_vp_disp32_off + 4,
+        idata_layout.iat_rva_for_import[mpro_idx],
+    )?;
+
+    // Program-side fixups land inside build.text, which is offset
+    // by text_prologue_len in the combined .text. Op::Mpro is
+    // re-routed through the thunk_ptr slot.
+    for f in &build.got_fixups {
+        let call_off_in_combined = (f.adrp_offset as u32) + text_prologue_len;
+        // disp32 is at `call_off + 2`; "after byte" is at +6.
+        let disp32_off = call_off_in_combined + 2;
+        let after_off = call_off_in_combined + 6;
+        let target_rva = if f.import_index == mpro_idx {
+            thunk_ptr_rva
+        } else {
+            idata_layout.iat_rva_for_import[f.import_index]
+        };
+        patch_rip_rel_disp32(
+            &mut text_bytes,
+            disp32_off as usize,
+            text_rva + after_off,
+            target_rva,
+        )?;
+    }
+    for f in &build.data_fixups {
+        // `lea r13, [rip + disp32]` is 7 bytes; disp32 starts at +3.
+        let lea_off_in_combined = (f.adrp_offset as u32) + text_prologue_len;
+        let disp32_off = lea_off_in_combined + 3;
+        let after_off = lea_off_in_combined + (x86_64::LEA_RIP32_LEN as u32);
+        patch_rip_rel_disp32(
+            &mut text_bytes,
+            disp32_off as usize,
+            text_rva + after_off,
+            data_rva + f.data_offset as u32,
+        )?;
+    }
+    for f in &build.func_fixups {
+        let lea_off_in_combined = (f.adrp_offset as u32) + text_prologue_len;
+        let disp32_off = lea_off_in_combined + 3;
+        let after_off = lea_off_in_combined + (x86_64::LEA_RIP32_LEN as u32);
+        // Function pointer literals point at offsets within
+        // build.text -- shift by text_prologue_len to land in
+        // the combined .text past entry stub + thunk.
+        let target_rva = text_rva + text_prologue_len + f.target_native_offset as u32;
+        patch_rip_rel_disp32(
+            &mut text_bytes,
+            disp32_off as usize,
+            text_rva + after_off,
+            target_rva,
+        )?;
+    }
+
+    // 6) Assemble the final image.
+    let mut out: Vec<u8> = Vec::with_capacity(total_file_size);
+    write_dos_header_and_stub(&mut out);
+    write_pe_signature(&mut out);
+    write_coff_header(&mut out, OPTIONAL64_HEADER_SIZE);
+    write_optional_header(
+        &mut out,
+        OptionalHeaderInputs {
+            entry_rva: text_rva, // entry point is at start of .text
+            base_of_code: text_rva,
+            size_of_code: text_size,
+            size_of_initialized_data: idata_size + data_size,
+            size_of_image: image_size,
+            size_of_headers: HEADERS_RAW_SIZE as u32,
+            import_table_rva: idata_layout.import_directory_rva,
+            import_table_size: idata_layout.import_directory_size,
+            iat_rva: idata_layout.iat_rva_base,
+            iat_size: idata_layout.iat_size,
+        },
+    );
+    write_section_headers(
+        &mut out,
+        &[
+            SectionHeader {
+                name: *b".text\0\0\0",
+                virtual_size: text_size,
+                virtual_address: text_rva,
+                size_of_raw_data: text_raw_size,
+                pointer_to_raw_data: text_file_off,
+                characteristics: IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ,
+            },
+            SectionHeader {
+                name: *b".idata\0\0",
+                virtual_size: idata_size,
+                virtual_address: idata_rva,
+                size_of_raw_data: idata_raw_size,
+                pointer_to_raw_data: idata_file_off,
+                characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA
+                    | IMAGE_SCN_MEM_READ
+                    | IMAGE_SCN_MEM_WRITE,
+            },
+            SectionHeader {
+                name: *b".data\0\0\0",
+                virtual_size: data_size,
+                virtual_address: data_rva,
+                size_of_raw_data: data_raw_size,
+                pointer_to_raw_data: data_file_off,
+                characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA
+                    | IMAGE_SCN_MEM_READ
+                    | IMAGE_SCN_MEM_WRITE,
+            },
+        ],
+    );
+    pad_to(&mut out, text_file_off as usize);
+    out.extend_from_slice(&text_bytes);
+    pad_to(&mut out, (text_file_off + text_raw_size) as usize);
+    out.extend_from_slice(&idata_bytes);
+    pad_to(&mut out, (idata_file_off + idata_raw_size) as usize);
+    out.extend_from_slice(&build.data);
+    pad_to(&mut out, total_file_size);
+    debug_assert_eq!(out.len(), total_file_size, "file size mismatch");
+    Ok(out)
+}
+
+// ----------------------------------------------------------------
+// Header writers.
+// ----------------------------------------------------------------
+
+fn write_dos_header_and_stub(out: &mut Vec<u8>) {
+    let start = out.len();
+    // Minimal DOS header. Only `e_magic` and `e_lfanew` matter to
+    // the modern loader; everything else can stay zero.
+    let mut dos = [0u8; DOS_HEADER_AND_STUB];
+    dos[0] = b'M';
+    dos[1] = b'Z';
+    // e_lfanew at byte 60: file offset of the PE signature.
+    let pe_sig_off = (DOS_HEADER_AND_STUB) as u32;
+    dos[60..64].copy_from_slice(&pe_sig_off.to_le_bytes());
+    out.extend_from_slice(&dos);
+    debug_assert_eq!(out.len() - start, DOS_HEADER_AND_STUB);
+}
+
+fn write_pe_signature(out: &mut Vec<u8>) {
+    out.extend_from_slice(b"PE\0\0");
+}
+
+fn write_coff_header(out: &mut Vec<u8>, optional_header_size: usize) {
+    out.extend_from_slice(&IMAGE_FILE_MACHINE_AMD64.to_le_bytes()); // Machine
+    out.extend_from_slice(&(NUM_SECTIONS as u16).to_le_bytes()); // NumberOfSections
+    out.extend_from_slice(&0u32.to_le_bytes()); // TimeDateStamp
+    out.extend_from_slice(&0u32.to_le_bytes()); // PointerToSymbolTable (deprecated)
+    out.extend_from_slice(&0u32.to_le_bytes()); // NumberOfSymbols
+    out.extend_from_slice(&(optional_header_size as u16).to_le_bytes()); // SizeOfOptionalHeader
+    out.extend_from_slice(
+        &(IMAGE_FILE_EXECUTABLE_IMAGE | IMAGE_FILE_LARGE_ADDRESS_AWARE).to_le_bytes(),
+    );
+}
+
+struct OptionalHeaderInputs {
+    entry_rva: u32,
+    base_of_code: u32,
+    size_of_code: u32,
+    size_of_initialized_data: u32,
+    size_of_image: u32,
+    size_of_headers: u32,
+    import_table_rva: u32,
+    import_table_size: u32,
+    iat_rva: u32,
+    iat_size: u32,
+}
+
+fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
+    let start = out.len();
+
+    // Standard fields (24 bytes for PE32+).
+    out.extend_from_slice(&PE32_PLUS_MAGIC.to_le_bytes());
+    out.push(14); // MajorLinkerVersion (cosmetic)
+    out.push(0); // MinorLinkerVersion
+    out.extend_from_slice(&inp.size_of_code.to_le_bytes());
+    out.extend_from_slice(&inp.size_of_initialized_data.to_le_bytes());
+    out.extend_from_slice(&0u32.to_le_bytes()); // SizeOfUninitializedData
+    out.extend_from_slice(&inp.entry_rva.to_le_bytes());
+    out.extend_from_slice(&inp.base_of_code.to_le_bytes());
+
+    // Windows-specific fields (88 bytes).
+    out.extend_from_slice(&IMAGE_BASE.to_le_bytes());
+    out.extend_from_slice(&SECTION_ALIGNMENT.to_le_bytes());
+    out.extend_from_slice(&FILE_ALIGNMENT.to_le_bytes());
+    out.extend_from_slice(&6u16.to_le_bytes()); // MajorOperatingSystemVersion
+    out.extend_from_slice(&0u16.to_le_bytes()); // Minor
+    out.extend_from_slice(&0u16.to_le_bytes()); // MajorImageVersion
+    out.extend_from_slice(&0u16.to_le_bytes()); // Minor
+    out.extend_from_slice(&6u16.to_le_bytes()); // MajorSubsystemVersion
+    out.extend_from_slice(&0u16.to_le_bytes()); // Minor
+    out.extend_from_slice(&0u32.to_le_bytes()); // Win32VersionValue (reserved)
+    out.extend_from_slice(&inp.size_of_image.to_le_bytes());
+    out.extend_from_slice(&inp.size_of_headers.to_le_bytes());
+    out.extend_from_slice(&0u32.to_le_bytes()); // CheckSum
+    out.extend_from_slice(&IMAGE_SUBSYSTEM_WINDOWS_CUI.to_le_bytes());
+    out.extend_from_slice(&IMAGE_DLLCHARACTERISTICS_NX_COMPAT.to_le_bytes());
+    out.extend_from_slice(&0x10_0000u64.to_le_bytes()); // SizeOfStackReserve = 1 MiB
+    out.extend_from_slice(&0x1000u64.to_le_bytes()); // SizeOfStackCommit
+    out.extend_from_slice(&0x10_0000u64.to_le_bytes()); // SizeOfHeapReserve
+    out.extend_from_slice(&0x1000u64.to_le_bytes()); // SizeOfHeapCommit
+    out.extend_from_slice(&0u32.to_le_bytes()); // LoaderFlags
+    out.extend_from_slice(&NUM_DATA_DIRS.to_le_bytes());
+
+    // Data directories: 16 entries of (RVA, Size). We only fill the
+    // Import Table (index 1) and the IAT (index 12); everything
+    // else stays zeroed.
+    for i in 0..NUM_DATA_DIRS as usize {
+        let (rva, size) = match i {
+            DATA_DIRECTORY_IMPORT => (inp.import_table_rva, inp.import_table_size),
+            DATA_DIRECTORY_IAT => (inp.iat_rva, inp.iat_size),
+            _ => (0u32, 0u32),
+        };
+        out.extend_from_slice(&rva.to_le_bytes());
+        out.extend_from_slice(&size.to_le_bytes());
+    }
+
+    debug_assert_eq!(out.len() - start, OPTIONAL64_HEADER_SIZE);
+}
+
+struct SectionHeader {
+    name: [u8; 8],
+    virtual_size: u32,
+    virtual_address: u32,
+    size_of_raw_data: u32,
+    pointer_to_raw_data: u32,
+    characteristics: u32,
+}
+
+fn write_section_headers(out: &mut Vec<u8>, sections: &[SectionHeader]) {
+    for sec in sections {
+        out.extend_from_slice(&sec.name);
+        out.extend_from_slice(&sec.virtual_size.to_le_bytes());
+        out.extend_from_slice(&sec.virtual_address.to_le_bytes());
+        out.extend_from_slice(&sec.size_of_raw_data.to_le_bytes());
+        out.extend_from_slice(&sec.pointer_to_raw_data.to_le_bytes());
+        out.extend_from_slice(&0u32.to_le_bytes()); // PointerToRelocations
+        out.extend_from_slice(&0u32.to_le_bytes()); // PointerToLinenumbers
+        out.extend_from_slice(&0u16.to_le_bytes()); // NumberOfRelocations
+        out.extend_from_slice(&0u16.to_le_bytes()); // NumberOfLinenumbers
+        out.extend_from_slice(&sec.characteristics.to_le_bytes());
+    }
+}
+
+// ----------------------------------------------------------------
+// Imports + IAT layout.
+// ----------------------------------------------------------------
+
+struct DllGroup {
+    dll_name: &'static str,
+    /// Indices into the global imports list (== IAT slot indices).
+    members: Vec<usize>,
+}
+
+fn group_imports_by_dll(imports: &[(String, &'static str)]) -> Vec<DllGroup> {
+    // Preserve the order DLLs first appear in. Two DLLs total
+    // (msvcrt, kernel32), but the structure scales if we add more.
+    let mut groups: Vec<DllGroup> = Vec::new();
+    for (idx, (_, dll)) in imports.iter().enumerate() {
+        if let Some(g) = groups.iter_mut().find(|g| g.dll_name == *dll) {
+            g.members.push(idx);
+        } else {
+            groups.push(DllGroup {
+                dll_name: dll,
+                members: vec![idx],
+            });
+        }
+    }
+    groups
+}
+
+struct IDataLayout {
+    bytes: Vec<u8>,
+    import_directory_rva: u32,
+    import_directory_size: u32,
+    /// RVA of the start of the unified IAT region. The contents are
+    /// laid out DLL-by-DLL (each DLL's run terminated by a zero
+    /// entry), so the position of import N in the IAT does *not*
+    /// match its position in the global imports list -- look up
+    /// [`Self::iat_rva_for_import`] instead.
+    iat_rva_base: u32,
+    /// Total IAT size, including the per-DLL terminator entries.
+    iat_size: u32,
+    /// `iat_rva_for_import[N]` is the RVA of the IAT slot for
+    /// import index N in the global list. Indexed straight by
+    /// `GotFixup::import_index` and by the entry stub's stub-only
+    /// indices.
+    iat_rva_for_import: Vec<u32>,
+}
+
+fn plan_idata(dlls: &[DllGroup], imports: &[(String, &'static str)], base_rva: u32) -> IDataLayout {
+    // Fixed-size pieces: import descriptors (one per DLL plus a
+    // zero-terminator) and the IATs / ILTs (each per-DLL section
+    // plus a zero terminator).
+    let n_dlls = dlls.len();
+    let n_imports = imports.len();
+
+    let import_dir_off: usize = 0;
+    let import_dir_size = (n_dlls + 1) * IMAGE_IMPORT_DESCRIPTOR_SIZE;
+
+    let iat_off = import_dir_off + import_dir_size;
+    // IAT layout: per-DLL block of (n_members + 1) u64 entries (the
+    // final entry per DLL is a NULL terminator).
+    let iat_size = dlls
+        .iter()
+        .map(|g| (g.members.len() + 1) * IAT_ENTRY_SIZE)
+        .sum::<usize>();
+
+    let ilt_off = iat_off + iat_size;
+    let ilt_size = iat_size; // mirror of IAT
+
+    // Hint/Name table starts after the ILT. Each import gets:
+    //   IMAGE_IMPORT_BY_NAME { Hint: u16, Name: NUL-terminated bytes }
+    // We round each entry up to 2 bytes to keep the next entry's
+    // u16 hint aligned (the spec is lenient, but the typical
+    // toolchain output rounds).
+    let hint_table_off = ilt_off + ilt_size;
+    let mut hint_table_size = 0usize;
+    let mut hint_offsets: Vec<usize> = Vec::with_capacity(n_imports);
+    for (sym, _) in imports {
+        hint_offsets.push(hint_table_off + hint_table_size);
+        hint_table_size += 2 + sym.len() + 1;
+        if hint_table_size & 1 != 0 {
+            hint_table_size += 1; // align to 2
+        }
+    }
+
+    // DLL name strings come after the hint table.
+    let dll_strings_off = hint_table_off + hint_table_size;
+    let mut dll_strings_size = 0usize;
+    let mut dll_name_offsets: Vec<usize> = Vec::with_capacity(n_dlls);
+    for g in dlls {
+        dll_name_offsets.push(dll_strings_off + dll_strings_size);
+        dll_strings_size += g.dll_name.len() + 1;
+    }
+
+    let total = dll_strings_off + dll_strings_size;
+    let mut bytes = vec![0u8; total];
+
+    // Per-DLL IAT base offsets within the IAT region (each member
+    // of group g sits at iat_off + group_iat_offsets[g_idx] +
+    // member_pos * 8).
+    let mut group_iat_offsets: Vec<usize> = Vec::with_capacity(n_dlls);
+    let mut group_ilt_offsets: Vec<usize> = Vec::with_capacity(n_dlls);
+    {
+        let mut iat_cur = 0usize;
+        let mut ilt_cur = 0usize;
+        for g in dlls {
+            group_iat_offsets.push(iat_cur);
+            group_ilt_offsets.push(ilt_cur);
+            iat_cur += (g.members.len() + 1) * IAT_ENTRY_SIZE;
+            ilt_cur += (g.members.len() + 1) * IAT_ENTRY_SIZE;
+        }
+    }
+
+    // ---- Write import descriptors (one per DLL + zero terminator).
+    for (g_idx, group) in dlls.iter().enumerate() {
+        let _ = group; // descriptor just needs the indexed offsets below
+        let off = import_dir_off + g_idx * IMAGE_IMPORT_DESCRIPTOR_SIZE;
+        let ilt_rva = base_rva + (ilt_off + group_ilt_offsets[g_idx]) as u32;
+        let iat_rva = base_rva + (iat_off + group_iat_offsets[g_idx]) as u32;
+        let name_rva = base_rva + dll_name_offsets[g_idx] as u32;
+        bytes[off..off + 4].copy_from_slice(&ilt_rva.to_le_bytes()); // OriginalFirstThunk
+        bytes[off + 4..off + 8].copy_from_slice(&0u32.to_le_bytes()); // TimeDateStamp
+        bytes[off + 8..off + 12].copy_from_slice(&0u32.to_le_bytes()); // ForwarderChain
+        bytes[off + 12..off + 16].copy_from_slice(&name_rva.to_le_bytes()); // Name
+        bytes[off + 16..off + 20].copy_from_slice(&iat_rva.to_le_bytes()); // FirstThunk
+    }
+    // The terminating descriptor is already zeroed.
+
+    // ---- Write IAT and ILT entries. We layout the IAT so that
+    // import_index N (in the global list) lives in slot
+    // [iat_off + offset_to_global_index(N)], where the offset is
+    // chosen so the global ordering is preserved (program imports
+    // first, then stub-only imports). To make that work we compute
+    // each global index's IAT offset directly.
+    let mut iat_slot_for_global_index: Vec<usize> = vec![0; n_imports];
+    for (g_idx, g) in dlls.iter().enumerate() {
+        for (member_pos, &global_idx) in g.members.iter().enumerate() {
+            iat_slot_for_global_index[global_idx] =
+                iat_off + group_iat_offsets[g_idx] + member_pos * IAT_ENTRY_SIZE;
+        }
+    }
+    for (g_idx, group) in dlls.iter().enumerate() {
+        for (member_pos, &global_idx) in group.members.iter().enumerate() {
+            let entry_value = base_rva + hint_offsets[global_idx] as u32; // RVA -> hint/name
+            let entry = entry_value as u64; // high bit clear -> name import
+            let iat_slot = iat_off + group_iat_offsets[g_idx] + member_pos * IAT_ENTRY_SIZE;
+            let ilt_slot = ilt_off + group_ilt_offsets[g_idx] + member_pos * IAT_ENTRY_SIZE;
+            bytes[iat_slot..iat_slot + IAT_ENTRY_SIZE].copy_from_slice(&entry.to_le_bytes());
+            bytes[ilt_slot..ilt_slot + IAT_ENTRY_SIZE].copy_from_slice(&entry.to_le_bytes());
+        }
+        // Terminator zero entry per DLL: already zeroed.
+    }
+
+    // ---- Write hint/name table.
+    for (i, (sym, _)) in imports.iter().enumerate() {
+        let off = hint_offsets[i];
+        // Hint = 0 (we don't pre-resolve ordinals).
+        bytes[off..off + 2].copy_from_slice(&0u16.to_le_bytes());
+        bytes[off + 2..off + 2 + sym.len()].copy_from_slice(sym.as_bytes());
+        // The trailing NUL is already in place from vec![0; total].
+    }
+
+    // ---- Write DLL name strings.
+    for (g_idx, g) in dlls.iter().enumerate() {
+        let off = dll_name_offsets[g_idx];
+        bytes[off..off + g.dll_name.len()].copy_from_slice(g.dll_name.as_bytes());
+    }
+
+    let iat_rva_for_import: Vec<u32> = iat_slot_for_global_index
+        .iter()
+        .map(|off| base_rva + *off as u32)
+        .collect();
+
+    IDataLayout {
+        bytes,
+        import_directory_rva: base_rva + import_dir_off as u32,
+        import_directory_size: import_dir_size as u32,
+        iat_rva_base: base_rva + iat_off as u32,
+        iat_size: iat_size as u32,
+        iat_rva_for_import,
+    }
+}
+
+// ----------------------------------------------------------------
+// Entry stub.
+// ----------------------------------------------------------------
+
+struct EntryStub {
+    bytes: Vec<u8>,
+    /// Offset of the `call qword [rip+disp32]` for `__getmainargs`.
+    /// disp32 sits at `+2`; the "after byte" used for RIP is at `+6`.
+    call_getmainargs_disp32_off: u32,
+    /// Offset of the `call rel32` to the program's `main`. The
+    /// rel32 is at `+1`; "after byte" is at `+5`.
+    call_main_offset: u32,
+    /// Offset of the `call qword [rip+disp32]` for `ExitProcess`.
+    call_exit_disp32_off: u32,
+}
+
+fn build_entry_stub() -> EntryStub {
+    // Stack frame for the call to `__getmainargs(int* pargc,
+    // char*** pargv, char*** penvp, int doWildcardExpand,
+    // _startupinfo* sinfo)`. Win64 passes the first four args in
+    // rcx/rdx/r8/r9 and the fifth on the stack at [rsp + 0x20]
+    // (right above the 32-byte shadow space).
+    //
+    // We carve 0x48 bytes from rsp for:
+    //   [rsp + 0x00..0x20]  shadow space for our callees
+    //   [rsp + 0x20..0x28]  fifth arg slot (pointer to _startupinfo)
+    //   [rsp + 0x28..0x30]  argc out (int, but the slot is 8 bytes
+    //                        so it stays aligned for the next thing)
+    //   [rsp + 0x30..0x38]  argv out (char**)
+    //   [rsp + 0x38..0x40]  envp out (char**), unused
+    //   [rsp + 0x40..0x48]  _startupinfo struct (`int newmode`,
+    //                        zero-initialised) plus 4 bytes pad
+    //
+    // 0x48 is 8 mod 16, so subtracting it from the entry rsp (also
+    // 8 mod 16, since the OS-pushed return address sits on top)
+    // leaves rsp 16-aligned for the call.
+    let mut bytes: Vec<u8> = Vec::with_capacity(80);
+
+    // sub rsp, 0x48                    (4 bytes)
+    bytes.extend_from_slice(&[0x48, 0x83, 0xEC, 0x48]);
+
+    // Zero the _startupinfo struct (4 bytes is enough).
+    // xor eax, eax                      (2 bytes)
+    bytes.extend_from_slice(&[0x31, 0xC0]);
+    // mov [rsp+0x40], eax              (4 bytes)
+    bytes.extend_from_slice(&[0x89, 0x44, 0x24, 0x40]);
+
+    // 5th arg: pointer to _startupinfo, stored at [rsp+0x20].
+    // lea rax, [rsp+0x40]              (5 bytes)
+    bytes.extend_from_slice(&[0x48, 0x8D, 0x44, 0x24, 0x40]);
+    // mov [rsp+0x20], rax              (5 bytes)
+    bytes.extend_from_slice(&[0x48, 0x89, 0x44, 0x24, 0x20]);
+
+    // arg1 = &argc -> &[rsp+0x28].   lea rcx, [rsp+0x28]  (5 bytes)
+    bytes.extend_from_slice(&[0x48, 0x8D, 0x4C, 0x24, 0x28]);
+    // arg2 = &argv -> &[rsp+0x30].   lea rdx, [rsp+0x30]  (5 bytes)
+    bytes.extend_from_slice(&[0x48, 0x8D, 0x54, 0x24, 0x30]);
+    // arg3 = &envp -> &[rsp+0x38].   lea r8, [rsp+0x38]   (5 bytes)
+    bytes.extend_from_slice(&[0x4C, 0x8D, 0x44, 0x24, 0x38]);
+    // arg4 = 0 (no wildcard expansion).   xor r9d, r9d   (3 bytes)
+    bytes.extend_from_slice(&[0x45, 0x31, 0xC9]);
+
+    // call qword [rip + 0]  __getmainargs   (6 bytes)
+    let call_gma_off = bytes.len() as u32;
+    bytes.extend_from_slice(&[0xFF, 0x15, 0, 0, 0, 0]);
+
+    // mov rcx, [rsp+0x28]             (5 bytes)  -- argc
+    bytes.extend_from_slice(&[0x48, 0x8B, 0x4C, 0x24, 0x28]);
+    // mov rdx, [rsp+0x30]             (5 bytes)  -- argv
+    bytes.extend_from_slice(&[0x48, 0x8B, 0x54, 0x24, 0x30]);
+
+    // call main rel32 (placeholder, 5 bytes)
+    let call_main_off = bytes.len() as u32;
+    bytes.extend_from_slice(&[0xE8, 0, 0, 0, 0]);
+
+    // mov rcx, rax                    (3 bytes)  -- main return value
+    bytes.extend_from_slice(&[0x48, 0x89, 0xC1]);
+
+    // call qword [rip + 0]  ExitProcess  (6 bytes)
+    let call_exit_off = bytes.len() as u32;
+    bytes.extend_from_slice(&[0xFF, 0x15, 0, 0, 0, 0]);
+
+    EntryStub {
+        bytes,
+        call_getmainargs_disp32_off: call_gma_off + 2,
+        call_main_offset: call_main_off,
+        call_exit_disp32_off: call_exit_off + 2,
+    }
+}
+
+// ----------------------------------------------------------------
+// mprotect -> VirtualProtect thunk.
+//
+// POSIX `int mprotect(void *addr, size_t len, int prot)` and
+// Win64 `BOOL VirtualProtect(LPVOID addr, SIZE_T size,
+// DWORD newProt, PDWORD oldProt)` differ in:
+//
+//   1. Arity: mprotect takes 3 args, VirtualProtect takes 4
+//      (the trailing `oldProt` out-pointer).
+//   2. Protection encoding: POSIX uses a bitmask of PROT_READ
+//      (1) / PROT_WRITE (2) / PROT_EXEC (4), Windows uses the
+//      PAGE_* family (PAGE_NOACCESS=1, PAGE_READONLY=2, ...).
+//   3. Return convention: mprotect returns 0/-1, VirtualProtect
+//      returns BOOL (0 = failure, nonzero = success).
+//
+// The thunk closes those gaps: looks up the right PAGE_* via a
+// small table indexed by `prot & 7`, allocates a stack slot for
+// the throwaway oldProt, calls VirtualProtect, and translates
+// the BOOL back to 0/-1. The c4 program's `Op::Mpro` calls go
+// through a single 8-byte slot in `.idata` whose value is the
+// thunk's absolute address (set up at PE-write time); the codegen
+// emits the same `call qword [rip+disp32]` shape it would for any
+// other libc-shaped op.
+// ----------------------------------------------------------------
+
+struct MprotectThunk {
+    bytes: Vec<u8>,
+    /// Offset within [`Self::bytes`] of the disp32 inside the
+    /// thunk's own `call qword [rip+disp32]` for VirtualProtect.
+    /// "After byte" used as the RIP base sits at +4.
+    call_vp_disp32_off: u32,
+}
+
+fn build_mprotect_thunk() -> MprotectThunk {
+    let mut bytes: Vec<u8> = Vec::with_capacity(64);
+
+    // sub rsp, 0x38                            (4 bytes)
+    //   [rsp + 0x00..0x20]  shadow space for VirtualProtect
+    //   [rsp + 0x20..0x24]  oldProtect (4 bytes used; slot is 8)
+    //   [rsp + 0x28..0x37]  padding to keep rsp 16-aligned
+    bytes.extend_from_slice(&[0x48, 0x83, 0xEC, 0x38]);
+
+    // and r8d, 7                               (4 bytes)
+    // Mask the POSIX prot value to the low 3 bits.
+    bytes.extend_from_slice(&[0x41, 0x83, 0xE0, 0x07]);
+
+    // lea rax, [rip + 0x1F]                    (7 bytes)
+    // The disp32 is fixed: prot_table sits 0x1F bytes past the
+    // byte after this lea (lea ends at thunk offset 0x0F; table
+    // starts at 0x2E -> 0x2E - 0x0F = 0x1F).
+    bytes.extend_from_slice(&[0x48, 0x8D, 0x05, 0x1F, 0x00, 0x00, 0x00]);
+
+    // movzx r8d, byte ptr [rax + r8]           (5 bytes)
+    // r8 = prot_table[prot & 7]
+    bytes.extend_from_slice(&[0x46, 0x0F, 0xB6, 0x04, 0x00]);
+
+    // lea r9, [rsp + 0x20]                     (5 bytes)
+    // r9 = &oldProtect (output parameter)
+    bytes.extend_from_slice(&[0x4C, 0x8D, 0x4C, 0x24, 0x20]);
+
+    // call qword [rip + 0]                     (6 bytes; disp32 patched)
+    // Calls VirtualProtect via the .idata IAT slot.
+    let call_vp_off = bytes.len() as u32;
+    bytes.extend_from_slice(&[0xFF, 0x15, 0, 0, 0, 0]);
+
+    // BOOL -> int translation: 0 (failure) -> -1, nonzero -> 0.
+    // test eax, eax                            (2 bytes)
+    bytes.extend_from_slice(&[0x85, 0xC0]);
+    // setz al                                  (3 bytes)
+    bytes.extend_from_slice(&[0x0F, 0x94, 0xC0]);
+    // movzx eax, al                            (3 bytes)
+    bytes.extend_from_slice(&[0x0F, 0xB6, 0xC0]);
+    // neg eax                                  (2 bytes)
+    bytes.extend_from_slice(&[0xF7, 0xD8]);
+
+    // add rsp, 0x38                            (4 bytes)
+    bytes.extend_from_slice(&[0x48, 0x83, 0xC4, 0x38]);
+    // ret                                      (1 byte)
+    bytes.extend_from_slice(&[0xC3]);
+
+    // prot_table: 8 bytes mapping POSIX prot bits 0..7 to Windows
+    // PAGE_* constants. Bit 1 = PROT_READ, bit 2 = PROT_WRITE,
+    // bit 4 = PROT_EXEC. Windows has no write-only protection, so
+    // PROT_WRITE alone maps to PAGE_READWRITE (the closest
+    // permissive equivalent).
+    bytes.extend_from_slice(&[
+        0x01, // 0  (no access)        -> PAGE_NOACCESS
+        0x02, // 1  (R)                -> PAGE_READONLY
+        0x04, // 2  (W)                -> PAGE_READWRITE
+        0x04, // 3  (RW)               -> PAGE_READWRITE
+        0x10, // 4  (X)                -> PAGE_EXECUTE
+        0x20, // 5  (RX)               -> PAGE_EXECUTE_READ
+        0x40, // 6  (WX)               -> PAGE_EXECUTE_READWRITE
+        0x40, // 7  (RWX)              -> PAGE_EXECUTE_READWRITE
+    ]);
+
+    debug_assert_eq!(
+        bytes.len(),
+        54,
+        "mprotect thunk size changed -- update prot_table disp32 (currently 0x1F)"
+    );
+
+    MprotectThunk {
+        bytes,
+        call_vp_disp32_off: call_vp_off + 2,
+    }
+}
+
+// ----------------------------------------------------------------
+// Fixup helpers.
+// ----------------------------------------------------------------
+
+/// Patch a `call rel32` placeholder so it targets `target_rva`,
+/// given that the call's first byte is at `call_offset_in_text`
+/// inside the combined `.text` (counted from `text_rva`).
+fn patch_call_rel32(
+    text: &mut [u8],
+    call_offset_in_text: usize,
+    target_rva_in_text: u32,
+) -> Result<(), C4Error> {
+    // rel32 = target - (call_after_byte). The call instruction is
+    // 5 bytes (E8 + 4-byte disp); its after-byte is +5 from start.
+    let after = call_offset_in_text + 5;
+    let delta = target_rva_in_text as i64 - after as i64;
+    if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
+        return Err(C4Error::Compile(format!(
+            "PE: rel32 displacement {delta} doesn't fit in 32 bits"
+        )));
+    }
+    let disp32 = delta as i32;
+    let off = call_offset_in_text + 1;
+    text[off..off + 4].copy_from_slice(&disp32.to_le_bytes());
+    Ok(())
+}
+
+/// Patch a RIP-relative `disp32` field at `disp32_off` in the
+/// combined `.text` so that `RIP_at_after = target_rva`. The
+/// caller computes `after_rva` (the RVA of the byte right after
+/// the disp32 field, which the CPU treats as RIP for this kind of
+/// instruction).
+fn patch_rip_rel_disp32(
+    text: &mut [u8],
+    disp32_off: usize,
+    after_rva: u32,
+    target_rva: u32,
+) -> Result<(), C4Error> {
+    let delta = target_rva as i64 - after_rva as i64;
+    if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
+        return Err(C4Error::Compile(format!(
+            "PE: disp32 {delta} doesn't fit in 32 bits"
+        )));
+    }
+    let disp32 = delta as i32;
+    text[disp32_off..disp32_off + 4].copy_from_slice(&disp32.to_le_bytes());
+    Ok(())
+}
+
+// ----------------------------------------------------------------
+// Misc.
+// ----------------------------------------------------------------
+
+fn round_up(value: u32, align: u32) -> u32 {
+    (value + align - 1) & !(align - 1)
+}
+
+fn pad_to(out: &mut Vec<u8>, target_len: usize) {
+    if out.len() < target_len {
+        out.resize(target_len, 0);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn round_up_aligns_correctly() {
+        assert_eq!(round_up(0, 0x200), 0);
+        assert_eq!(round_up(1, 0x200), 0x200);
+        assert_eq!(round_up(0x200, 0x200), 0x200);
+        assert_eq!(round_up(0x201, 0x200), 0x400);
+    }
+
+    #[test]
+    fn entry_stub_layout_matches_expected_size() {
+        let s = build_entry_stub();
+        // 4 + 2 + 4 + 5 + 5 + 5 + 5 + 5 + 3 + 6 + 5 + 5 + 5 + 3 + 6 = 68 bytes.
+        assert_eq!(s.bytes.len(), 68);
+        // The stub has three patchable disp32 / rel32 fields. Their
+        // offsets fall out of the encoded byte sequence above; if
+        // any encoding above changes, recompute and update.
+        assert_eq!(s.call_getmainargs_disp32_off, 40);
+        assert_eq!(s.call_main_offset, 54);
+        assert_eq!(s.call_exit_disp32_off, 64);
+    }
+}

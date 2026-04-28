@@ -24,6 +24,7 @@ mod lexer;
 mod native;
 mod native_elf;
 mod native_elf_x64;
+mod native_pe_x64;
 mod optimizer;
 mod parser;
 mod pointer_tracking;

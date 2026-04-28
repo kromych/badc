@@ -900,7 +900,7 @@ pub(super) fn lower(
     target: Target,
     native: NativeOptions,
 ) -> Result<Build, C4Error> {
-    let _options: TargetOptions = target.options();
+    let options: TargetOptions = target.options();
 
     // Build the regalloc plan once if `--optimize` is on.
     let plan_storage: Option<RegStackPlan> = if native.optimize {
@@ -971,6 +971,7 @@ pub(super) fn lower(
             &mut pending_func_fixups,
             data_imm_positions,
             in_main,
+            options,
             &mut reg_state,
             op_pc,
             &branch_targets,
@@ -1073,6 +1074,7 @@ fn lower_op(
     pending_func_fixups: &mut Vec<(usize, usize)>,
     data_imm_positions: &[usize],
     in_main: bool,
+    options: TargetOptions,
     reg_state: &mut RegState<'_>,
     op_pc: usize,
     branch_targets: &[bool],
@@ -1081,7 +1083,13 @@ fn lower_op(
         // ---- Function frame ----
         Op::Ent => {
             let locals = read_operand(text, pc, "Ent")?;
-            emit_prologue(code, locals, in_main, reg_state.current_callee_depth);
+            emit_prologue(
+                code,
+                locals,
+                in_main,
+                options,
+                reg_state.current_callee_depth,
+            );
         }
         Op::Lev => emit_epilogue(code, in_main, reg_state.current_callee_depth),
         Op::Adj => {
@@ -1282,27 +1290,41 @@ fn lower_op(
         }
         Op::Jsri => {
             // Indirect call: target in r13, args already pushed onto
-            // the VM stack in 16-byte slots. As on aarch64, peek for
-            // an Op::Adj N and load args into rdi..r9 *in addition
-            // to* leaving them on the stack -- c4 callees ignore the
-            // registers; libc / dlsym'd callees expect them per
-            // System V ABI.
+            // the VM stack in 16-byte slots.
+            //
+            // The two flavours of Jsri target -- a c4 function
+            // (reads args via `Lea N; Li` from `[rbp + offset]`)
+            // or a libc / dlsym'd target (reads args from the
+            // host ABI's integer registers) -- want incompatible
+            // calling conventions on Win64. The c4 case needs the
+            // args to sit immediately above the saved rbp; Win64
+            // libc needs a 32-byte shadow space wedged between the
+            // call and the args, plus the first four args in
+            // rcx/rdx/r8/r9. We can't satisfy both, and the c4
+            // self-host (the workload that actually uses Jsri)
+            // wants the c4 layout, so on Win64 we go with that:
+            // just `mov r10, r13; call r10; mov r13, rax`. The
+            // SysV path keeps the existing both-paths shape since
+            // there's no shadow space to break the c4 layout.
             let nargs = match Op::from_i64(text.get(*pc).copied().unwrap_or(0)) {
                 Some(Op::Adj) => text[*pc + 1] as usize,
                 _ => 0,
             };
-            if nargs > 6 {
-                return Err(C4Error::Compile(format!(
-                    "native codegen (x86_64): Jsri arg count {nargs} exceeds 6 (rdi..r9)"
-                )));
-            }
-            let arg_regs = [Reg::RDI, Reg::RSI, Reg::RDX, Reg::RCX, Reg::R8, Reg::R9];
-            for (i, &r) in arg_regs.iter().take(nargs).enumerate() {
-                let off = ((nargs - 1 - i) as i32) * 16;
-                emit_mov_r_mem(code, r, Reg::RSP, off);
-            }
-            // Move r13 into r10 so the callee doesn't trample it.
             emit_mov_rr(code, Reg::R10, Reg::R13);
+            if !options.win64_abi {
+                const SYSV_ARGS: [Reg; 6] =
+                    [Reg::RDI, Reg::RSI, Reg::RDX, Reg::RCX, Reg::R8, Reg::R9];
+                if nargs > SYSV_ARGS.len() {
+                    return Err(C4Error::Compile(format!(
+                        "native codegen (x86_64): Jsri SysV arg count {nargs} \
+                         exceeds the 6-register cap"
+                    )));
+                }
+                for (i, &r) in SYSV_ARGS.iter().take(nargs).enumerate() {
+                    let off = ((nargs - 1 - i) as i32) * 16;
+                    emit_mov_r_mem(code, r, Reg::RSP, off);
+                }
+            }
             emit_call_r(code, Reg::R10);
             emit_mov_rr(code, Reg::R13, Reg::RAX);
         }
@@ -1383,28 +1405,34 @@ fn lower_op(
         | Op::Dlop
         | Op::Dlsm
         | Op::Dlcl
-        | Op::Dler => emit_libc_call(op, text, *pc, code, got_fixups)?,
+        | Op::Dler => emit_libc_call(op, text, *pc, code, got_fixups, options)?,
     }
     Ok(())
 }
 
-/// Lower a syscall op to a libc call through the GOT. The caller
-/// pushed args onto the VM stack in 16-byte slots; we peek (don't
-/// pop) to load them into rdi..r9 per the System V ABI. The c4
-/// emitter follows every libc call with `Op::Adj N` which the next
-/// loop iteration lowers to `add rsp, N*16` to drop the args.
+/// Lower a syscall op to a libc call through the GOT (System V) /
+/// IAT (Win64). The caller pushed args onto the VM stack in 16-byte
+/// slots; we peek (don't pop) to load them into the platform's
+/// integer arg registers. The c4 emitter follows every libc call
+/// with `Op::Adj N` which the next loop iteration lowers to
+/// `add rsp, N*16` to drop the args.
 ///
-/// Variadic functions (printf) on Linux/x86_64 follow standard
-/// AAPCS-style register-passing for integer args (no special stack
-/// packing like macOS arm64 needs); the only extra requirement is
-/// `al = 0` to indicate "no XMM regs used", which we set
-/// unconditionally before the call.
+/// Two ABI flavours diverge in this function:
+///
+/// * System V (Linux): integer args go in rdi, rsi, rdx, rcx, r8,
+///   r9 (up to 6). Variadic functions like printf require AL = 0 to
+///   signal "zero XMM regs used".
+/// * Win64 (Windows): integer args go in rcx, rdx, r8, r9 (up to
+///   4). The caller reserves a 32-byte shadow space below each
+///   call site for the callee to spill the four register args. No
+///   AL = 0 dance for variadics.
 fn emit_libc_call(
     op: Op,
     text: &[i64],
     pc_after_op: usize,
     code: &mut Vec<u8>,
     got_fixups: &mut Vec<GotFixup>,
+    options: TargetOptions,
 ) -> Result<(), C4Error> {
     let import_index = aarch64::IMPORTS
         .iter()
@@ -1427,35 +1455,79 @@ fn emit_libc_call(
             )));
         }
     };
-    if arg_count > 6 {
+    // SysV passes up to 6 ints in registers; Win64 takes 4 in
+    // registers and the rest above the 32-byte shadow space at
+    // [rsp+0x20], [rsp+0x28], ... (8 bytes per slot).
+    const SYSV_ARGS: [Reg; 6] = [Reg::RDI, Reg::RSI, Reg::RDX, Reg::RCX, Reg::R8, Reg::R9];
+    const WIN64_ARGS: [Reg; 4] = [Reg::RCX, Reg::RDX, Reg::R8, Reg::R9];
+    let arg_regs: &[Reg] = if options.win64_abi {
+        &WIN64_ARGS
+    } else {
+        &SYSV_ARGS
+    };
+    if !options.win64_abi && arg_count > arg_regs.len() {
         return Err(C4Error::Compile(format!(
-            "native codegen (x86_64): {op:?} arg count {arg_count} out of supported range (0..=6)"
+            "native codegen (x86_64): {op:?} SysV arg count {arg_count} \
+             exceeds the 6-register cap"
         )));
     }
 
-    // Load args into rdi..r9. c4-arg-K is at sp + (arg_count-1-K)*16.
-    let arg_regs = [Reg::RDI, Reg::RSI, Reg::RDX, Reg::RCX, Reg::R8, Reg::R9];
-    for (i, &r) in arg_regs.iter().take(arg_count).enumerate() {
-        let off = ((arg_count - 1 - i) as i32) * 16;
-        emit_mov_r_mem(code, r, Reg::RSP, off);
-    }
-
-    // Variadic ABI: AL = number of XMM regs used. c4 has no float
-    // ops, so it's always 0. Do this for Op::Prtf only (plain libc
-    // calls preserve rax across argument loads anyway, but xor'ing
-    // it where unnecessary just churns bytes).
-    if matches!(op, Op::Prtf) {
-        emit_xor_eax_eax(code);
+    if options.win64_abi {
+        // 32 byte shadow space + 8 bytes per arg above the 4 in
+        // registers, rounded up to 16 so rsp stays aligned at the
+        // call.
+        let extras = arg_count.saturating_sub(arg_regs.len()) as u32;
+        let shadow_size = (32 + extras * 8 + 15) & !15;
+        emit_sub_rsp_imm32(code, shadow_size);
+        // Args 1..=4 land in registers; arg K (0-indexed) was at
+        // rsp + (arg_count-1-K)*16 before the sub, so shift by
+        // shadow_size now.
+        for (i, &r) in arg_regs
+            .iter()
+            .take(arg_count.min(arg_regs.len()))
+            .enumerate()
+        {
+            let src = shadow_size + ((arg_count - 1 - i) as u32) * 16;
+            emit_mov_r_mem(code, r, Reg::RSP, src as i32);
+        }
+        // Args 5+ go on the new stack at [rsp+0x20], [rsp+0x28], ...
+        // Use r10 as a scratch courier; it's caller-saved and the
+        // lowering uses it for the same role elsewhere.
+        for i in arg_regs.len()..arg_count {
+            let src = shadow_size + ((arg_count - 1 - i) as u32) * 16;
+            let dst = 0x20u32 + ((i - arg_regs.len()) as u32) * 8;
+            emit_mov_r_mem(code, Reg::R10, Reg::RSP, src as i32);
+            emit_mov_mem_r(code, Reg::RSP, dst as i32, Reg::R10);
+        }
+    } else {
+        // SysV: just load args from the existing 16-byte slots.
+        for (i, &r) in arg_regs.iter().take(arg_count).enumerate() {
+            let src = ((arg_count - 1 - i) as i32) * 16;
+            emit_mov_r_mem(code, r, Reg::RSP, src);
+        }
+        if matches!(op, Op::Prtf) {
+            // Variadic System V: AL = number of XMM regs used. c4
+            // has no floats, so always 0. Plain libc calls preserve
+            // rax across argument loads anyway; printf-shape calls
+            // are the ones that need it.
+            emit_xor_eax_eax(code);
+        }
     }
 
     // call qword [rip + disp32] -- placeholder, writer patches
-    // disp32 to point at the right .got slot.
+    // disp32 to point at the right .got / IAT slot.
     let instr_offset = code.len();
     got_fixups.push(GotFixup {
         adrp_offset: instr_offset,
         import_index,
     });
     emit_call_qword_rip32(code, 0);
+
+    if options.win64_abi {
+        let extras = arg_count.saturating_sub(arg_regs.len()) as u32;
+        let shadow_size = (32 + extras * 8 + 15) & !15;
+        emit_add_rsp_imm32(code, shadow_size);
+    }
 
     if matches!(op, Op::Exit) {
         // exit() doesn't return; the c4 compiler emits no Adj after.
@@ -1637,14 +1709,31 @@ fn read_operand(text: &[i64], pc: &mut usize, op_name: &str) -> Result<i64, C4Er
 /// push argc / argv as 16-byte slots in caller-style, then re-push
 /// the ret addr; the resulting layout matches what
 /// [`lea_offset_bytes`] expects.
-fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool, pool_depth: u8) {
+fn emit_prologue(
+    code: &mut Vec<u8>,
+    locals: i64,
+    is_main: bool,
+    options: TargetOptions,
+    pool_depth: u8,
+) {
     if is_main {
+        // The entry stub passed argc / argv via the platform's first
+        // two integer arg registers: System V uses rdi/rsi, Win64
+        // uses rcx/rdx. The c4 calling convention then expects
+        // them at `rbp + 16` (argv, top arg, val=2) and `rbp + 32`
+        // (argc, deeper arg, val=3). We pop the ret addr into a
+        // temp, push argc then argv as 16-byte slots, then re-push
+        // the ret addr so the rest of the prologue lines up.
+        let (argc_reg, argv_reg) = if options.win64_abi {
+            (Reg::RCX, Reg::RDX)
+        } else {
+            (Reg::RDI, Reg::RSI)
+        };
         emit_pop_r(code, Reg::R10); // r10 = ret addr
-        // Push argc (rdi) first (deeper), then argv (rsi) (shallower).
         emit_sub_rsp_imm32(code, 16);
-        emit_mov_mem_r(code, Reg::RSP, 0, Reg::RDI);
+        emit_mov_mem_r(code, Reg::RSP, 0, argc_reg);
         emit_sub_rsp_imm32(code, 16);
-        emit_mov_mem_r(code, Reg::RSP, 0, Reg::RSI);
+        emit_mov_mem_r(code, Reg::RSP, 0, argv_reg);
         emit_push_r(code, Reg::R10); // restore ret addr above the slots
     }
     emit_push_r(code, Reg::RBP);

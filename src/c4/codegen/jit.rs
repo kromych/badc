@@ -191,7 +191,7 @@ mod jit_impl {
     ) -> Result<Build, C4Error> {
         match target {
             Target::MacOSAarch64 | Target::LinuxAarch64 => aarch64::lower(program, target, options),
-            Target::LinuxX64 => x86_64::lower(program, target, options),
+            Target::LinuxX64 | Target::WindowsX64 => x86_64::lower(program, target, options),
         }
     }
 
@@ -598,7 +598,7 @@ mod jit_impl {
             Target::MacOSAarch64 | Target::LinuxAarch64 => {
                 patch_adrp_ldr(code, code_vmaddr, instr_offset, target_vmaddr, label)
             }
-            Target::LinuxX64 => {
+            Target::LinuxX64 | Target::WindowsX64 => {
                 patch_call_qword_rip32(code, code_vmaddr, instr_offset, target_vmaddr, label)
             }
         }
@@ -683,7 +683,7 @@ mod jit_impl {
             Target::MacOSAarch64 | Target::LinuxAarch64 => {
                 patch_adrp_add(code, code_vmaddr, instr_offset, target_vmaddr, label)
             }
-            Target::LinuxX64 => {
+            Target::LinuxX64 | Target::WindowsX64 => {
                 patch_lea_rip32(code, code_vmaddr, instr_offset, target_vmaddr, label)
             }
         }

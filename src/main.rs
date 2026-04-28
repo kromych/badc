@@ -235,6 +235,13 @@ fn emit_native_binary(
                  run it on a Linux/x64 box, or via Docker `--platform linux/amd64`."
             );
         }
+        Target::WindowsX64 => {
+            #[cfg(not(all(target_os = "windows", target_arch = "x86_64")))]
+            eprintln!(
+                "badc: produced a Windows/x86_64 PE on a non-Windows host; \
+                 run it on Windows or under WINE (`wine path.exe`)."
+            );
+        }
     }
 }
 

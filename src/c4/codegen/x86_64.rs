@@ -17,6 +17,31 @@
 //! * `rdi/rsi/rdx/rcx/r8/r9` -- argument-passing registers, used at
 //!   libc call sites (System V ABI).
 //! * `r10/r11` -- caller-saved scratch.
+//!
+//! ## Peepholes at lower time
+//!
+//! Two cheap rewrites the lowering bakes in (mirror of the aarch64
+//! backend):
+//!
+//! * [`emit_mov_rr`] elides `mov rd, rd` -- the move would be 3
+//!   bytes of no-op. The lowering pass goes through this helper for
+//!   every reg-to-reg move (including dynamically-chosen pool
+//!   registers), so the guard catches every emit site without
+//!   spreading the check across the lowering.
+//!
+//! * Compare+branch fusion: when a compare op (`Lt`, `Eq`, ...,
+//!   `EqI`, `NeI`, ...) is followed immediately by `Op::Bz` /
+//!   `Op::Bnz`, [`lower_cmp`] / [`imm_cmp`] skip the trailing
+//!   `setcc r10b` + `movzx r13, r10b`, and the matching branch op
+//!   emits `jcc rel32` directly without the redundant `cmp r13, 0`.
+//!   Saves 15 bytes and three µops per pattern (the biggest single
+//!   peephole on this backend). Gated by [`fusion_candidate`]: same
+//!   safety conditions as aarch64 -- refuses the rewrite when the
+//!   `Bz` PC is reachable from another branch, or when either the
+//!   taken-target or fall-through path's first op reads `r13`
+//!   (the elided `setcc + movzx` would otherwise leave it stale --
+//!   the c4 short-circuit pattern `a && b` lands on a second
+//!   `Bz`/`Bnz` reading the first compare's boolean).
 
 #![allow(dead_code)] // Encoders ahead of lowering coverage.
 
@@ -27,20 +52,33 @@ use super::super::CODE_BASE;
 use super::super::error::C4Error;
 use super::super::op::Op;
 use super::super::program::Program;
-use super::regalloc::{self, PushKind, RegStackPlan};
+use super::regalloc::{self, PoolBank, PushKind, RegStackPlan};
 use super::{Build, DataFixup, FuncFixup, GotFixup, NativeOptions, Target, TargetOptions, aarch64};
 
-/// `--native-optimize` register-pool size on x86_64. We have four
+/// `--native-optimize` register-pool sizes on x86_64. Four
 /// callee-saved registers free after subtracting rbp (frame
 /// pointer) and r13 (VM accumulator) from System V's callee-saved
-/// set: rbx, r12, r14, r15. Slot 0..3 maps via [`pool_reg`].
-pub(super) const POOL_SIZE: u8 = 4;
+/// set: rbx, r12, r14, r15. The caller-saved bank is disabled on
+/// x86_64 because the only candidates (r10, r11) are already
+/// claimed by the lowering as scratch (popped operands, indirect
+/// call targets, divisor stash) -- making them pool slots would
+/// conflict.
+pub(super) const POOL_SIZES: regalloc::PoolSizes = regalloc::PoolSizes {
+    callee: 4,
+    caller: 0,
+};
 
-/// Map a regalloc slot index to its pool register. RBX is at index
-/// 3, R12/R14/R15 are at 12/14/15 -- not contiguous, so an array is
-/// the simplest mapping.
-fn pool_reg(slot: u8) -> Reg {
-    const POOL: [Reg; POOL_SIZE as usize] = [Reg::RBX, Reg::R12, Reg::R14, Reg::R15];
+/// Map a regalloc slot index to its pool register. Bank is always
+/// [`PoolBank::Callee`] on x86_64 (the analyzer never assigns
+/// caller bank when its size is 0). RBX is at index 3, R12/R14/R15
+/// are at 12/14/15 -- not contiguous, so an array is the simplest
+/// mapping.
+fn pool_reg(slot: u8, bank: PoolBank) -> Reg {
+    debug_assert!(
+        matches!(bank, PoolBank::Callee),
+        "x86_64 has no caller bank; got {bank:?}"
+    );
+    const POOL: [Reg; POOL_SIZES.callee as usize] = [Reg::RBX, Reg::R12, Reg::R14, Reg::R15];
     POOL[slot as usize]
 }
 
@@ -50,8 +88,14 @@ fn pool_reg(slot: u8) -> Reg {
 struct RegState<'a> {
     plan: Option<&'a RegStackPlan>,
     use_pool: bool,
-    current_max_depth: u8,
-    pseudo_stack: Vec<Option<u8>>,
+    current_callee_depth: u8,
+    pseudo_stack: Vec<Option<(u8, PoolBank)>>,
+    /// cmp+branch fusion peephole, mirror of the aarch64 field.
+    /// When a compare op (`Lt`/`Eq`/...) elides its `setcc + movzx`
+    /// because the next op is a fusable `Bz`/`Bnz`, the condition
+    /// is stashed here. The matching branch op consumes it and
+    /// emits `jcc` directly without the redundant `cmp r13, 0`.
+    pending_cmp_cond: Option<Cc>,
 }
 
 impl<'a> RegState<'a> {
@@ -59,8 +103,9 @@ impl<'a> RegState<'a> {
         Self {
             plan,
             use_pool: false,
-            current_max_depth: 0,
+            current_callee_depth: 0,
             pseudo_stack: Vec::new(),
+            pending_cmp_cond: None,
         }
     }
 }
@@ -204,7 +249,16 @@ fn emit_i64(code: &mut Vec<u8>, v: i64) {
 
 /// `MOV r64, r64` -- register-to-register move.
 /// Encoding: `REX.W + 89 /r` with ModR/M.reg = src, r/m = dst.
+///
+/// Skips emission entirely when `dst == src`: the move would be a
+/// no-op but cost 3 bytes of code. The lowering pass calls this on
+/// dynamically-chosen register pairs (e.g. moving a popped pool
+/// register into r13), so guarding here catches every emit site
+/// without the lowering having to spell out the check.
 pub(super) fn emit_mov_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    if dst == src {
+        return;
+    }
     emit_byte(code, rex(true, src.high(), false, dst.high()));
     emit_byte(code, 0x89);
     emit_byte(code, modrm(0b11, src.lo(), dst.lo()));
@@ -464,7 +518,7 @@ pub(super) fn emit_cmp_r_imm32(code: &mut Vec<u8>, dst: Reg, imm: i32) {
 /// Condition codes for `Jcc` and `setcc`. Values match Intel's CC
 /// encoding so the opcode byte for `Jcc` is `0F 8X+cc` and for
 /// `setcc` it is `0F 9X+cc`.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Cc {
     /// Equal / zero.
     E = 0x4,
@@ -478,6 +532,24 @@ pub(super) enum Cc {
     Le = 0xE,
     /// Greater than or equal (signed).
     Ge = 0xD,
+}
+
+impl Cc {
+    /// Logical complement of the condition. Used by the cmp+branch
+    /// fusion peephole when `Op::Bz` (test for boolean zero) lands
+    /// on a compare op whose `setcc` was elided -- we need the
+    /// branch to fire on the inverted predicate. Mirror of
+    /// [`super::aarch64::Cond::flip`].
+    fn flip(self) -> Cc {
+        match self {
+            Cc::E => Cc::Ne,
+            Cc::Ne => Cc::E,
+            Cc::L => Cc::Ge,
+            Cc::Ge => Cc::L,
+            Cc::G => Cc::Le,
+            Cc::Le => Cc::G,
+        }
+    }
 }
 
 /// `SETcc r/m8` -- write byte = 1 if condition holds, else 0. The
@@ -700,6 +772,116 @@ fn lea_offset_bytes(offset: i64) -> i64 {
     }
 }
 
+/// Mark every bytecode PC that is the target of some `Jmp` / `Bz`
+/// / `Bnz` / `Jsr`. The cmp+branch fusion peephole consults this
+/// to skip fusion when the matching `Bz`/`Bnz` PC is reachable
+/// from elsewhere -- the alternate path would arrive without the
+/// preceding `cmp` and read stale flags. Mirror of the aarch64
+/// helper of the same name.
+fn collect_branch_targets(text: &[i64]) -> Vec<bool> {
+    let mut targets = alloc::vec![false; text.len() + 1];
+    let mut pc = 0usize;
+    while pc < text.len() {
+        let Some(op) = Op::from_i64(text[pc]) else {
+            break;
+        };
+        match op {
+            Op::Jmp | Op::Bz | Op::Bnz | Op::Jsr => {
+                if pc + 1 < text.len() {
+                    let target = text[pc + 1] as usize;
+                    if target < targets.len() {
+                        targets[target] = true;
+                    }
+                }
+            }
+            _ => {}
+        }
+        pc += match op {
+            Op::Lea
+            | Op::Imm
+            | Op::Jmp
+            | Op::Jsr
+            | Op::Bz
+            | Op::Bnz
+            | Op::Ent
+            | Op::Adj
+            | Op::AddI
+            | Op::SubI
+            | Op::MulI
+            | Op::AndI
+            | Op::OrI
+            | Op::XorI
+            | Op::ShlI
+            | Op::ShrI
+            | Op::EqI
+            | Op::NeI
+            | Op::LtI
+            | Op::GtI
+            | Op::LeI
+            | Op::GeI
+            | Op::LdLocI
+            | Op::LdLocC => 2,
+            _ => 1,
+        };
+    }
+    targets
+}
+
+/// Decide whether a compare op can fuse with the immediately
+/// following `Bz`/`Bnz`. Returns the c4-`Bz`/c4-`Bnz` opcode if
+/// fusion is safe; otherwise `None`. Same gates as the aarch64
+/// backend:
+///
+/// * the next op must be `Bz`/`Bnz`,
+/// * landing on the `Bz`/`Bnz` from elsewhere must be impossible,
+/// * the taken-target op AND the fall-through op must each write
+///   `r13` before reading it (the elided `setcc + movzx` would
+///   otherwise leave `r13` holding the rhs of the compare instead
+///   of a 0/1 boolean, which the c4 short-circuit pattern
+///   `a && b` consumes via a downstream `Bz`/`Bnz`).
+///
+/// `next_pc` is the bytecode PC of the candidate `Bz`/`Bnz`,
+/// i.e. `*pc` after the compare op consumed itself.
+fn fusion_candidate(text: &[i64], next_pc: usize, branch_targets: &[bool]) -> Option<Op> {
+    let raw = *text.get(next_pc)?;
+    let next_op = Op::from_i64(raw)?;
+    if !matches!(next_op, Op::Bz | Op::Bnz) {
+        return None;
+    }
+    if branch_targets.get(next_pc).copied().unwrap_or(false) {
+        return None;
+    }
+    // Bz/Bnz are 2-word ops (opcode + target operand).
+    let target_pc = (*text.get(next_pc + 1)?) as usize;
+    let target_op = Op::from_i64(*text.get(target_pc)?)?;
+    let fallthrough_op = Op::from_i64(*text.get(next_pc + 2)?)?;
+    if !writes_r13_first(target_op) || !writes_r13_first(fallthrough_op) {
+        return None;
+    }
+    Some(next_op)
+}
+
+/// Set of c4 ops whose x86_64 lowering writes `r13` before reading
+/// any prior value. Same membership as the aarch64 mirror -- the
+/// classification is an abstract property of c4's lowering rules,
+/// not the per-arch encoding.
+fn writes_r13_first(op: Op) -> bool {
+    use Op::*;
+    matches!(
+        op,
+        Imm | Lea
+        | LdLocI | LdLocC
+        // Direct call: `call rel32; mov r13, rax`. The call reads
+        // no r13-derived state and the trailing mov overwrites r13.
+        | Jsr
+        // libc thunks: load args from rsp offsets (r13-independent),
+        // call, then `mov r13, rax`.
+        | Open | Read | Clos | Prtf | Malc | Free
+        | Mset | Mcmp | Mcpy | Mpro | Exit | Write
+        | Genv | Senv | Dlop | Dlsm | Dlcl | Dler
+    )
+}
+
 // ------------------------------------------------------------------
 // Lowering pass. Walks the bytecode once, emits native code per Op,
 // records branch fixups for later patching. Mirrors aarch64::lower.
@@ -714,12 +896,17 @@ pub(super) fn lower(
 
     // Build the regalloc plan once if --native-optimize is on.
     let plan_storage: Option<RegStackPlan> = if native.register_alloc {
-        Some(regalloc::analyze(&program.text, POOL_SIZE)?)
+        Some(regalloc::analyze(&program.text, POOL_SIZES)?)
     } else {
         None
     };
     let plan: Option<&RegStackPlan> = plan_storage.as_ref();
     let mut reg_state = RegState::new(plan);
+
+    // Pre-scan for branch targets so the cmp+branch fusion peephole
+    // refuses to fuse when the matching Bz/Bnz is reachable from a
+    // path bypassing the compare.
+    let branch_targets = collect_branch_targets(&program.text);
 
     let mut code: Vec<u8> = Vec::new();
     let mut bytecode_to_native: Vec<usize> = alloc::vec![usize::MAX; program.text.len() + 1];
@@ -745,15 +932,19 @@ pub(super) fn lower(
         pc += 1;
         if matches!(op, Op::Ent) {
             in_main = op_pc == program.entry_pc;
+            // Clear cmp+branch fusion state at function boundaries
+            // -- pending_cmp_cond is only legal for the gap between
+            // a compare op and its matching Bz/Bnz.
+            reg_state.pending_cmp_cond = None;
             // Refresh per-function regalloc state. With no plan,
             // both stay at their default (use_pool=false, depth=0).
             if let Some(p) = reg_state.plan {
                 if let Some(f) = p.function_at(op_pc) {
                     reg_state.use_pool = f.use_pool;
-                    reg_state.current_max_depth = if f.use_pool { f.max_depth } else { 0 };
+                    reg_state.current_callee_depth = if f.use_pool { f.callee_depth } else { 0 };
                 } else {
                     reg_state.use_pool = false;
-                    reg_state.current_max_depth = 0;
+                    reg_state.current_callee_depth = 0;
                 }
                 debug_assert!(
                     reg_state.pseudo_stack.is_empty(),
@@ -774,6 +965,7 @@ pub(super) fn lower(
             in_main,
             &mut reg_state,
             op_pc,
+            &branch_targets,
         )?;
     }
     bytecode_to_native[program.text.len()] = code.len();
@@ -875,14 +1067,15 @@ fn lower_op(
     in_main: bool,
     reg_state: &mut RegState<'_>,
     op_pc: usize,
+    branch_targets: &[bool],
 ) -> Result<(), C4Error> {
     match op {
         // ---- Function frame ----
         Op::Ent => {
             let locals = read_operand(text, pc, "Ent")?;
-            emit_prologue(code, locals, in_main, reg_state.current_max_depth);
+            emit_prologue(code, locals, in_main, reg_state.current_callee_depth);
         }
-        Op::Lev => emit_epilogue(code, in_main, reg_state.current_max_depth),
+        Op::Lev => emit_epilogue(code, in_main, reg_state.current_callee_depth),
         Op::Adj => {
             // Drop N pushed slots (16 bytes each, matching Op::Psh).
             // The analyzer guarantees these were all Real pushes;
@@ -953,25 +1146,28 @@ fn lower_op(
         }
         Op::Psh => {
             // With --native-optimize on AND a Pseudo classification,
-            // emit `mov rN, r13` into the next pool slot. Otherwise
-            // claim a 16-byte slot on the real stack so rsp stays
-            // 16-byte aligned across any libc call we make later.
-            let slot = reg_state
+            // emit `mov rN, r13` into the assigned pool slot.
+            // Otherwise claim a 16-byte slot on the real stack so
+            // rsp stays 16-byte aligned across any libc call we make
+            // later. On x86_64 the analyzer never assigns the caller
+            // bank (POOL_SIZES.caller == 0), so `bank` is always
+            // Callee here.
+            let slot_and_bank = reg_state
                 .use_pool
                 .then(|| {
                     reg_state
                         .plan
                         .and_then(|p| p.push_kind(op_pc))
                         .and_then(|k| match k {
-                            PushKind::Pseudo { slot } => Some(slot),
+                            PushKind::Pseudo { slot, bank } => Some((slot, bank)),
                             PushKind::Real => None,
                         })
                 })
                 .flatten();
-            match slot {
-                Some(s) => {
-                    emit_mov_rr(code, pool_reg(s), Reg::R13);
-                    reg_state.pseudo_stack.push(Some(s));
+            match slot_and_bank {
+                Some((s, bank)) => {
+                    emit_mov_rr(code, pool_reg(s, bank), Reg::R13);
+                    reg_state.pseudo_stack.push(Some((s, bank)));
                 }
                 None => {
                     emit_sub_rsp_imm32(code, 16);
@@ -995,13 +1191,17 @@ fn lower_op(
 
         // ---- Comparisons. cmp popped, r13 sets flags so the cc
         //      reflects `popped <cmp> r13`. Then setcc r10b and
-        //      movzx r13, r10b for the 0/1 byte.
-        Op::Eq => cmp_with_pop(code, reg_state, Cc::E),
-        Op::Ne => cmp_with_pop(code, reg_state, Cc::Ne),
-        Op::Lt => cmp_with_pop(code, reg_state, Cc::L),
-        Op::Gt => cmp_with_pop(code, reg_state, Cc::G),
-        Op::Le => cmp_with_pop(code, reg_state, Cc::Le),
-        Op::Ge => cmp_with_pop(code, reg_state, Cc::Ge),
+        //      movzx r13, r10b for the 0/1 byte. With the cmp+
+        //      branch fusion peephole (when next op is `Bz`/`Bnz`
+        //      and the gates pass), the setcc + movzx are skipped
+        //      and the matching branch op consumes the condition
+        //      directly via `jcc`.
+        Op::Eq => lower_cmp(code, text, *pc, reg_state, branch_targets, Cc::E),
+        Op::Ne => lower_cmp(code, text, *pc, reg_state, branch_targets, Cc::Ne),
+        Op::Lt => lower_cmp(code, text, *pc, reg_state, branch_targets, Cc::L),
+        Op::Gt => lower_cmp(code, text, *pc, reg_state, branch_targets, Cc::G),
+        Op::Le => lower_cmp(code, text, *pc, reg_state, branch_targets, Cc::Le),
+        Op::Ge => lower_cmp(code, text, *pc, reg_state, branch_targets, Cc::Ge),
 
         // ---- Shifts. Pop into lhs (rN or r10), shift by cl (=r13
         //      lo byte), then mov r13 = lhs.
@@ -1022,24 +1222,43 @@ fn lower_op(
             emit_jmp_rel32(code, 0);
         }
         Op::Bz => {
-            emit_cmp_r_imm32(code, Reg::R13, 0);
+            // Fusion: if the previous compare op stashed a
+            // condition, skip the redundant `cmp r13, 0` and emit
+            // `jcc<flip(cond)>` directly. Bz tests for "boolean was
+            // 0" which is "the compare condition did NOT hold".
+            let cc = match reg_state.pending_cmp_cond.take() {
+                Some(cond) => cond.flip(),
+                None => {
+                    emit_cmp_r_imm32(code, Reg::R13, 0);
+                    Cc::E
+                }
+            };
             let target = read_operand(text, pc, "Bz")? as usize;
             fixups.push(Fixup {
                 native_offset: code.len(),
                 target_bytecode_pc: target,
-                kind: BranchKind::Jcc(Cc::E),
+                kind: BranchKind::Jcc(cc),
             });
-            emit_jcc_rel32(code, Cc::E, 0);
+            emit_jcc_rel32(code, cc, 0);
         }
         Op::Bnz => {
-            emit_cmp_r_imm32(code, Reg::R13, 0);
+            // Fusion: Bnz tests for "boolean was 1" which is "the
+            // compare condition held" -- same condition as the
+            // compare itself.
+            let cc = match reg_state.pending_cmp_cond.take() {
+                Some(cond) => cond,
+                None => {
+                    emit_cmp_r_imm32(code, Reg::R13, 0);
+                    Cc::Ne
+                }
+            };
             let target = read_operand(text, pc, "Bnz")? as usize;
             fixups.push(Fixup {
                 native_offset: code.len(),
                 target_bytecode_pc: target,
-                kind: BranchKind::Jcc(Cc::Ne),
+                kind: BranchKind::Jcc(cc),
             });
-            emit_jcc_rel32(code, Cc::Ne, 0);
+            emit_jcc_rel32(code, cc, 0);
         }
         Op::Jsr => {
             let target = read_operand(text, pc, "Jsr")? as usize;
@@ -1119,12 +1338,12 @@ fn lower_op(
             let n = read_operand(text, pc, "ShrI")? as u32;
             emit_sar_r_imm8(code, Reg::R13, (n & 0x3f) as u8);
         }
-        Op::EqI => imm_cmp(code, text, pc, "EqI", Cc::E)?,
-        Op::NeI => imm_cmp(code, text, pc, "NeI", Cc::Ne)?,
-        Op::LtI => imm_cmp(code, text, pc, "LtI", Cc::L)?,
-        Op::GtI => imm_cmp(code, text, pc, "GtI", Cc::G)?,
-        Op::LeI => imm_cmp(code, text, pc, "LeI", Cc::Le)?,
-        Op::GeI => imm_cmp(code, text, pc, "GeI", Cc::Ge)?,
+        Op::EqI => imm_cmp(code, text, pc, "EqI", Cc::E, reg_state, branch_targets)?,
+        Op::NeI => imm_cmp(code, text, pc, "NeI", Cc::Ne, reg_state, branch_targets)?,
+        Op::LtI => imm_cmp(code, text, pc, "LtI", Cc::L, reg_state, branch_targets)?,
+        Op::GtI => imm_cmp(code, text, pc, "GtI", Cc::G, reg_state, branch_targets)?,
+        Op::LeI => imm_cmp(code, text, pc, "LeI", Cc::Le, reg_state, branch_targets)?,
+        Op::GeI => imm_cmp(code, text, pc, "GeI", Cc::Ge, reg_state, branch_targets)?,
         Op::LdLocI => {
             let off = read_operand(text, pc, "LdLocI")?;
             let bytes = lea_offset_bytes(off) as i32;
@@ -1252,12 +1471,12 @@ fn pop_into(code: &mut Vec<u8>, dst: Reg) {
 }
 
 /// Pop the top of the VM push-stack -- either the pool register
-/// `pool_reg(slot)` (no instructions emitted) or `r10` after a
-/// pop_into from the real stack -- and return the holding register.
-/// Updates `reg_state.pseudo_stack`.
+/// `pool_reg(slot, bank)` (no instructions emitted) or `r10` after
+/// a pop_into from the real stack -- and return the holding
+/// register. Updates `reg_state.pseudo_stack`.
 fn pop_lhs_reg(code: &mut Vec<u8>, reg_state: &mut RegState<'_>) -> Reg {
     match reg_state.pseudo_stack.pop() {
-        Some(Some(slot)) => pool_reg(slot),
+        Some(Some((slot, bank))) => pool_reg(slot, bank),
         Some(None) | None => {
             pop_into(code, Reg::R10);
             Reg::R10
@@ -1295,6 +1514,35 @@ fn cmp_with_pop(code: &mut Vec<u8>, reg_state: &mut RegState<'_>, cc: Cc) {
     emit_movzx_r_r8(code, Reg::R13, Reg::R10);
 }
 
+/// Lower a register-register compare op (`Lt`/`Eq`/...). When the
+/// next bytecode op is `Bz`/`Bnz` and the peephole gate
+/// ([`fusion_candidate`]) clears it, emit `cmp` only and stash the
+/// condition in `reg_state.pending_cmp_cond` for the matching
+/// branch op to consume as a `jcc`. Otherwise fall back to
+/// `cmp + setcc + movzx`.
+///
+/// `next_pc` is the bytecode PC of the next op (i.e. `*pc` after
+/// the compare op consumed itself; the compare ops are 1-word).
+fn lower_cmp(
+    code: &mut Vec<u8>,
+    text: &[i64],
+    next_pc: usize,
+    reg_state: &mut RegState<'_>,
+    branch_targets: &[bool],
+    cc: Cc,
+) {
+    let lhs = pop_lhs_reg(code, reg_state);
+    emit_cmp_rr(code, lhs, Reg::R13);
+    if fusion_candidate(text, next_pc, branch_targets).is_some() {
+        // Skip setcc + movzx; the matching Bz/Bnz will read flags
+        // via jcc.
+        reg_state.pending_cmp_cond = Some(cc);
+    } else {
+        emit_setcc_r8(code, cc, Reg::R10);
+        emit_movzx_r_r8(code, Reg::R13, Reg::R10);
+    }
+}
+
 /// Pop the LHS, shift it by cl (lo byte of r13), mov r13 = lhs.
 fn shift_with_pop(code: &mut Vec<u8>, reg_state: &mut RegState<'_>, arithmetic_right: bool) {
     let lhs = pop_lhs_reg(code, reg_state);
@@ -1316,9 +1564,9 @@ fn shift_with_pop(code: &mut Vec<u8>, reg_state: &mut RegState<'_>, arithmetic_r
 fn div_or_mod_with_pop(code: &mut Vec<u8>, reg_state: &mut RegState<'_>, want_remainder: bool) {
     emit_mov_rr(code, Reg::R10, Reg::R13); // r10 = divisor
     match reg_state.pseudo_stack.pop() {
-        Some(Some(slot)) => {
+        Some(Some((slot, bank))) => {
             // dividend is in pool reg; mov it to rax.
-            emit_mov_rr(code, Reg::RAX, pool_reg(slot));
+            emit_mov_rr(code, Reg::RAX, pool_reg(slot, bank));
         }
         Some(None) | None => {
             // dividend on real stack; pop into rax.
@@ -1336,17 +1584,25 @@ fn div_or_mod_with_pop(code: &mut Vec<u8>, reg_state: &mut RegState<'_>, want_re
 
 /// Comparison-with-immediate optimizer-emitted op: `cmp r13, imm32;
 /// setcc r13b` (with a zeroing xor first to clear high bits).
+/// Participates in the cmp+branch fusion peephole the same way
+/// [`lower_cmp`] does.
 fn imm_cmp(
     code: &mut Vec<u8>,
     text: &[i64],
     pc: &mut usize,
     op_name: &str,
     cc: Cc,
+    reg_state: &mut RegState<'_>,
+    branch_targets: &[bool],
 ) -> Result<(), C4Error> {
     let n = read_operand(text, pc, op_name)? as i32;
     emit_cmp_r_imm32(code, Reg::R13, n);
-    emit_setcc_r8(code, cc, Reg::R10);
-    emit_movzx_r_r8(code, Reg::R13, Reg::R10);
+    if fusion_candidate(text, *pc, branch_targets).is_some() {
+        reg_state.pending_cmp_cond = Some(cc);
+    } else {
+        emit_setcc_r8(code, cc, Reg::R10);
+        emit_movzx_r_r8(code, Reg::R13, Reg::R10);
+    }
     Ok(())
 }
 
@@ -1448,7 +1704,12 @@ fn emit_save_pool(code: &mut Vec<u8>, depth: u8) {
     let aligned = (((depth as u32) * 8) + 15) & !15;
     emit_sub_rsp_imm32(code, aligned);
     for i in 0..depth {
-        emit_mov_mem_r(code, Reg::RSP, (i as i32) * 8, pool_reg(i));
+        emit_mov_mem_r(
+            code,
+            Reg::RSP,
+            (i as i32) * 8,
+            pool_reg(i, PoolBank::Callee),
+        );
     }
 }
 
@@ -1459,7 +1720,12 @@ fn emit_restore_pool(code: &mut Vec<u8>, depth: u8) {
     }
     let aligned = (((depth as u32) * 8) + 15) & !15;
     for i in 0..depth {
-        emit_mov_r_mem(code, pool_reg(i), Reg::RSP, (i as i32) * 8);
+        emit_mov_r_mem(
+            code,
+            pool_reg(i, PoolBank::Callee),
+            Reg::RSP,
+            (i as i32) * 8,
+        );
     }
     emit_add_rsp_imm32(code, aligned);
 }
@@ -1510,6 +1776,70 @@ mod tests {
         assert_eq!(
             assemble(|c| emit_mov_rr(c, Reg::RAX, Reg::R13)),
             vec![0x4C, 0x89, 0xE8]
+        );
+    }
+
+    #[test]
+    fn mov_rr_self_is_elided() {
+        // mov r13, r13 -- no bytes. Same for rax, rax (which would
+        // cost a REX even if the encoder chose the no-REX form).
+        assert!(assemble(|c| emit_mov_rr(c, Reg::R13, Reg::R13)).is_empty());
+        assert!(assemble(|c| emit_mov_rr(c, Reg::RAX, Reg::RAX)).is_empty());
+        // Distinct regs still produce the 3-byte mov.
+        assert_eq!(assemble(|c| emit_mov_rr(c, Reg::R13, Reg::RAX)).len(), 3);
+    }
+
+    #[test]
+    fn cc_flip_round_trips() {
+        for c in [Cc::E, Cc::Ne, Cc::L, Cc::Ge, Cc::G, Cc::Le] {
+            assert_eq!(c.flip().flip(), c, "double flip should be identity");
+        }
+        assert_eq!(Cc::E.flip(), Cc::Ne);
+        assert_eq!(Cc::L.flip(), Cc::Ge);
+        assert_eq!(Cc::G.flip(), Cc::Le);
+    }
+
+    #[test]
+    fn cmp_branch_fusion_collapses_lt_bz_in_fib_shape() {
+        // Mirror of the aarch64 fusion check, but at the lowering
+        // level. Compile a small fib-shape function and confirm the
+        // Op::Lt + Op::Bz pair shrinks from 24 bytes (3 + 4 + 4 + 7
+        // + 6) to 9 bytes (3 + 6) when fusion fires.
+        use crate::Compiler;
+        let src = r#"
+            int main() {
+                int x;
+                x = 5;
+                if (x < 2) return x;
+                return 0;
+            }
+        "#;
+        let program = Compiler::new(src.to_string()).compile().expect("compile");
+        let build = super::lower(
+            &program,
+            super::Target::LinuxX64,
+            super::NativeOptions::new().with_register_alloc(),
+        )
+        .expect("lower");
+        // Find the Lt op's PC (must exist in the bytecode).
+        let lt_pc = (0..program.text.len())
+            .find(|&pc| Op::from_i64(program.text[pc]) == Some(Op::Lt))
+            .expect("Lt should appear in fib-shape program");
+        // bytecode_to_native gives the start of each op's emit;
+        // the gap between Lt and the next entry (Bz) is Lt's
+        // emitted bytes. Bz is 2 words further on.
+        let lt_native = build.bytecode_to_native[lt_pc];
+        let bz_native = build.bytecode_to_native[lt_pc + 1];
+        let lt_bytes = bz_native - lt_native;
+        // Fused Lt should emit just `cmp lhs, r13` -- 3 bytes (no
+        // REX.W on cmp r13 with rbx since rbx is callee-saved
+        // pool slot 0; with caller bank, lhs would be a different
+        // pool reg but still 3 bytes via the standard cmp r/m64,
+        // r64 encoding).
+        assert!(
+            lt_bytes <= 4,
+            "fused Lt should be at most 4 bytes (cmp+REX), got {lt_bytes}: {:02x?}",
+            &build.text[lt_native..bz_native]
         );
     }
 

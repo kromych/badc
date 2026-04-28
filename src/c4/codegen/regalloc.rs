@@ -5,24 +5,39 @@
 //! by the operator. Lowered straight, that becomes a `str/ldr`
 //! pair around every `+`, `-`, `<`, etc., even though the c4
 //! compiler emits expressions that rarely nest more than a handful
-//! deep. Most of those pushes can live in a callee-saved register
-//! instead -- which is what `--native-optimize` enables.
+//! deep. Most of those pushes can live in a register instead --
+//! which is what `--native-optimize` enables.
 //!
 //! This module is the analysis half. Given a [`Program::text`] and
 //! a per-arch register-pool size, it returns a [`RegStackPlan`]
 //! that the per-arch lowering consults at each `Op::Ent` /
 //! `Op::Psh` / pop-shaped op:
 //!
-//! * Each `Op::Psh` is classified `Pseudo { slot }` (matching pop
-//!   is a binary op / `Si` / `Sc` -> goes to the register pool) or
-//!   `Real` (matching pop is an `Adj N` -> stays on the real stack
-//!   so the libc / user-call sees args at expected `bp + offset`).
-//! * Each `Op::Ent` records the function's max pseudo-stack depth
-//!   so the prologue knows how many `xN` slots to save.
+//! * Each `Op::Psh` is classified `Pseudo { slot, bank }` (matching
+//!   pop is a binary op / `Si` / `Sc` -> goes to the register pool)
+//!   or `Real` (matching pop is an `Adj N` -> stays on the real
+//!   stack so the libc / user-call sees args at expected
+//!   `bp + offset`).
+//! * Each `Op::Ent` records the function's per-bank pool depth so
+//!   the prologue knows how many `xN` slots to save.
 //! * If a function's depth exceeds the pool size, we forcibly mark
 //!   its plan `use_pool = false`. The lowering then treats every
 //!   Psh in that function as Real (the existing real-stack
 //!   behaviour) -- correct fallback rather than spilling.
+//!
+//! ## Pool banks
+//!
+//! Two banks split the cost of saving the pool:
+//!
+//! * **Callee-saved bank** (e.g. x20..x27 on aarch64). Saved once
+//!   in the prologue and restored in the epilogue. Cheap if the
+//!   slot is live across at least one call -- without callee-save
+//!   semantics, we'd have to spill at every crossed call.
+//! * **Caller-saved bank** (e.g. x9..x15 on aarch64). Free when
+//!   the slot is short-lived (never live across a call) -- no
+//!   prologue / epilogue burden. The analyzer assigns a Pseudo
+//!   push to this bank only when no call op lies between its `Psh`
+//!   and its matching pop, so spilling at calls is unnecessary.
 //!
 //! See `aarch64.rs` / `x86_64.rs` for the consumers.
 
@@ -38,17 +53,50 @@ use alloc::vec::Vec;
 use super::super::error::C4Error;
 use super::super::op::Op;
 
+/// Which bank a [`PushKind::Pseudo`] slot lives in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PoolBank {
+    /// Callee-saved register (e.g. x20..x27 on aarch64). Saved
+    /// once in the prologue, restored in the epilogue. Used when
+    /// the slot is live across at least one call op -- a
+    /// caller-saved register would have to be spilled at every
+    /// such crossing, which is more expensive than the single
+    /// prologue/epilogue pair.
+    Callee,
+    /// Caller-saved register (e.g. x9..x15 on aarch64). Free at
+    /// function entry: no prologue / epilogue cost. Used when the
+    /// slot's `Op::Psh` and its matching pop straddle no call op,
+    /// so there's nothing for a `bl` / `blr` / libc thunk to
+    /// trample.
+    Caller,
+}
+
 /// Where a single `Op::Psh` lives at runtime.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PushKind {
-    /// Slot in the register pool (0..pool_size). The lowering maps
-    /// slot N to a per-arch callee-saved register (e.g. x20 + N on
-    /// aarch64, or one of rbx/r12/r14/r15 on x86_64).
-    Pseudo { slot: u8 },
+    /// Slot in the register pool. `bank` says whether it's the
+    /// callee-saved or caller-saved bank; `slot` is the index
+    /// within that bank. The lowering picks the matching arch
+    /// register from the bank/slot pair.
+    Pseudo { slot: u8, bank: PoolBank },
     /// The push lands on the real stack, exactly as in the no-options
     /// lowering. Used for call argument pushes (consumed by `Op::Adj`)
     /// and for any push in a function that overflows the pool.
     Real,
+}
+
+/// Pool-size budget for the analyzer.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct PoolSizes {
+    /// Maximum simultaneous callee-saved bank slots. Slots are
+    /// indexed 0..callee on the [`PoolBank::Callee`] bank.
+    pub callee: u8,
+    /// Maximum simultaneous caller-saved bank slots. `0` disables
+    /// the caller bank entirely (every Pseudo push then routes
+    /// through the callee bank); used by x86_64 today since its
+    /// caller-saved registers (r10, r11) are already claimed by
+    /// the lowering as scratch.
+    pub caller: u8,
 }
 
 /// Per-function metadata produced by the analyzer. Indexed via
@@ -59,10 +107,15 @@ pub(crate) struct FunctionPlan {
     /// Bytecode PC of the function's `Op::Ent`. Stored mostly for
     /// debugging -- the lookup table is keyed on it already.
     pub ent_pc: usize,
-    /// Maximum simultaneous register-eligible push depth in this
-    /// function. `0` means "no register-pool pushes at all"; the
-    /// prologue saves zero scratch regs.
-    pub max_depth: u8,
+    /// Maximum simultaneous callee-saved-bank slots used. The
+    /// prologue saves exactly this many `xN` registers.
+    pub callee_depth: u8,
+    /// Maximum simultaneous caller-saved-bank slots used. The
+    /// prologue saves zero of these (caller-saved means *the
+    /// caller* is responsible for any save it wants -- and there's
+    /// nothing to save here because they're allocated only when
+    /// not live across any call).
+    pub caller_depth: u8,
     /// Whether the lowering should consult `push_kind` at all for
     /// this function. `false` means a depth overflow forced us to
     /// fall back to real-stack pushes everywhere -- treat every
@@ -114,23 +167,73 @@ fn op_width(op: Op) -> usize {
     }
 }
 
-/// Run the analyzer on `text`. `pool_size` caps register-pool
-/// depth; functions that would push deeper get `use_pool = false`
-/// and fall back to real-stack pushes.
-pub(crate) fn analyze(text: &[i64], pool_size: u8) -> Result<RegStackPlan, C4Error> {
-    // Pass 1: classify each Psh as Pseudo vs Real by walking forward
-    // and matching pops. Slot indices come from pass 2.
-    let mut push_kind: Vec<Option<PushKind>> = vec![None; text.len()];
+/// True if `op` lowers to something that trampes caller-saved
+/// registers -- direct call (`Jsr`), indirect call (`Jsri`), or any
+/// of the libc syscall ops (which lower to a `bl` / `call` through
+/// the GOT). The analyzer uses this to decide whether a Pseudo push
+/// that's live across `op` must use the callee-saved bank.
+fn is_call_op(op: Op) -> bool {
+    use Op::*;
+    matches!(
+        op,
+        Jsr | Jsri
+            | Open
+            | Read
+            | Clos
+            | Prtf
+            | Malc
+            | Free
+            | Mset
+            | Mcmp
+            | Mcpy
+            | Mpro
+            | Exit
+            | Write
+            | Genv
+            | Senv
+            | Dlop
+            | Dlsm
+            | Dlcl
+            | Dler
+    )
+}
 
-    // Pending pushes at this point in the walk: PCs whose matching
-    // consumer hasn't been seen yet. LIFO.
-    let mut pending: Vec<usize> = Vec::new();
+/// Run the analyzer on `text`. `pool` caps callee-saved and
+/// caller-saved bank depth; functions that would overflow either
+/// get `use_pool = false` and fall back to real-stack pushes
+/// everywhere.
+pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C4Error> {
+    // Pass 1: classify each Psh as Pseudo vs Real by walking forward
+    // and matching pops. Bank choice and slot index come from pass 2.
+    //
+    // While walking, also track which Pseudo pushes are "live across
+    // a call op" (Jsr / Jsri / libc thunk) -- those must land in the
+    // callee-saved bank since the call would clobber a caller-saved
+    // register. We mark each entry of `pending` with its
+    // across-call flag, set when any call op is observed while it's
+    // pending; the flag transfers to the matching Psh's classification
+    // at pop time.
+    let mut push_kind: Vec<Option<PushKind>> = vec![None; text.len()];
+    let mut across_call: Vec<bool> = vec![false; text.len()];
+
+    // Pending pushes: (psh_pc, across_call). LIFO.
+    let mut pending: Vec<(usize, bool)> = Vec::new();
 
     let mut pc = 0usize;
     while pc < text.len() {
         let raw = text[pc];
         let op = Op::from_i64(raw)
             .ok_or_else(|| C4Error::Compile(format!("regalloc: bad opcode at pc {pc}: {raw}")))?;
+        // Any call-shaped op observed while pushes are pending
+        // taints them: they're live across a call. The taint sticks
+        // even if subsequent pops happen before the eventual matching
+        // pop, since the analyzer's job is to mark a *worst-case*
+        // need for callee-save semantics.
+        if is_call_op(op) {
+            for entry in pending.iter_mut() {
+                entry.1 = true;
+            }
+        }
         match op {
             Op::Ent if !pending.is_empty() => {
                 // Function boundary -- c4 emits well-balanced
@@ -143,12 +246,12 @@ pub(crate) fn analyze(text: &[i64], pool_size: u8) -> Result<RegStackPlan, C4Err
             }
             Op::Ent => {}
             Op::Psh => {
-                pending.push(pc);
+                pending.push((pc, false));
             }
             Op::Adj => {
                 let n = text[pc + 1] as usize;
                 for _ in 0..n {
-                    let psh_pc = pending.pop().ok_or_else(|| {
+                    let (psh_pc, _) = pending.pop().ok_or_else(|| {
                         C4Error::Compile(format!("regalloc: Adj at pc {pc} pops past empty stack"))
                     })?;
                     push_kind[psh_pc] = Some(PushKind::Real);
@@ -172,11 +275,15 @@ pub(crate) fn analyze(text: &[i64], pool_size: u8) -> Result<RegStackPlan, C4Err
             | Op::Mod
             | Op::Si
             | Op::Sc => {
-                let psh_pc = pending.pop().ok_or_else(|| {
+                let (psh_pc, ac) = pending.pop().ok_or_else(|| {
                     C4Error::Compile(format!("regalloc: pop op {op:?} at pc {pc} on empty stack"))
                 })?;
-                // Slot is filled in pass 2.
-                push_kind[psh_pc] = Some(PushKind::Pseudo { slot: 0 });
+                // Bank + slot are filled in pass 2; placeholder for now.
+                push_kind[psh_pc] = Some(PushKind::Pseudo {
+                    slot: 0,
+                    bank: PoolBank::Callee,
+                });
+                across_call[psh_pc] = ac;
             }
             _ => {} // no stack effect we care about
         }
@@ -190,25 +297,45 @@ pub(crate) fn analyze(text: &[i64], pool_size: u8) -> Result<RegStackPlan, C4Err
         )));
     }
 
-    // Pass 2: walk again, this time assigning slot numbers to
-    // Pseudo pushes and tracking per-function max_depth. Functions
-    // whose depth exceeds `pool_size` get `use_pool = false`.
+    // Pass 2: walk again, this time assigning bank + slot to each
+    // Pseudo push and tracking per-function callee/caller depths.
+    // Functions whose depth exceeds the pool size get
+    // `use_pool = false`.
+    //
+    // Bank assignment policy:
+    //   * across_call=true  -> Callee bank (must survive a call).
+    //   * across_call=false -> Caller bank if there's room, else
+    //                          Callee (graceful overflow).
+    // If either bank's depth would exceed the matching pool size,
+    // mark the function `use_pool = false` and let the lowering
+    // route everything through the real stack -- correct fallback.
     let mut funcs: Vec<FunctionPlan> = Vec::new();
     let mut func_at_pc: Vec<Option<u32>> = vec![None; text.len()];
     let mut current_ent: Option<usize> = None;
-    let mut pseudo_depth: u32 = 0;
-    let mut max_pseudo: u32 = 0;
+    let mut callee_depth: u32 = 0;
+    let mut caller_depth: u32 = 0;
+    let mut max_callee: u32 = 0;
+    let mut max_caller: u32 = 0;
+    let mut overflow: bool = false;
+    // Per-function pseudo-pop trail: each entry is the bank chosen
+    // at push time, so the matching pop knows which counter to
+    // decrement.
+    let mut pseudo_trail: Vec<PoolBank> = Vec::new();
 
     let close_function = |funcs: &mut Vec<FunctionPlan>,
                           func_at_pc: &mut [Option<u32>],
                           ent_pc: usize,
-                          max_depth: u32| {
-        let saturated = max_depth.min(u8::MAX as u32) as u8;
-        let use_pool = saturated <= pool_size;
+                          max_callee: u32,
+                          max_caller: u32,
+                          overflow: bool| {
+        let cs = max_callee.min(u8::MAX as u32) as u8;
+        let cr = max_caller.min(u8::MAX as u32) as u8;
+        let use_pool = !overflow && cs <= pool.callee && cr <= pool.caller;
         let idx = funcs.len() as u32;
         funcs.push(FunctionPlan {
             ent_pc,
-            max_depth: saturated,
+            callee_depth: if use_pool { cs } else { 0 },
+            caller_depth: if use_pool { cr } else { 0 },
             use_pool,
         });
         func_at_pc[ent_pc] = Some(idx);
@@ -220,27 +347,66 @@ pub(crate) fn analyze(text: &[i64], pool_size: u8) -> Result<RegStackPlan, C4Err
         match op {
             Op::Ent => {
                 if let Some(prev) = current_ent {
-                    close_function(&mut funcs, &mut func_at_pc, prev, max_pseudo);
+                    close_function(
+                        &mut funcs,
+                        &mut func_at_pc,
+                        prev,
+                        max_callee,
+                        max_caller,
+                        overflow,
+                    );
                 }
                 current_ent = Some(pc);
-                pseudo_depth = 0;
-                max_pseudo = 0;
+                callee_depth = 0;
+                caller_depth = 0;
+                max_callee = 0;
+                max_caller = 0;
+                overflow = false;
+                pseudo_trail.clear();
             }
             Op::Psh => {
                 if let Some(PushKind::Pseudo { .. }) = push_kind[pc] {
-                    if pseudo_depth >= u8::MAX as u32 {
+                    let prefer_caller = !across_call[pc] && pool.caller > 0;
+                    let bank = if prefer_caller && caller_depth < pool.caller as u32 {
+                        PoolBank::Caller
+                    } else {
+                        PoolBank::Callee
+                    };
+                    let slot_index = match bank {
+                        PoolBank::Callee => callee_depth,
+                        PoolBank::Caller => caller_depth,
+                    };
+                    if slot_index >= u8::MAX as u32 {
                         return Err(C4Error::Compile(
                             "regalloc: pseudo-stack depth overflowed u8".into(),
                         ));
                     }
                     push_kind[pc] = Some(PushKind::Pseudo {
-                        slot: pseudo_depth as u8,
+                        slot: slot_index as u8,
+                        bank,
                     });
-                    pseudo_depth += 1;
-                    if pseudo_depth > max_pseudo {
-                        max_pseudo = pseudo_depth;
+                    match bank {
+                        PoolBank::Callee => {
+                            callee_depth += 1;
+                            if callee_depth > max_callee {
+                                max_callee = callee_depth;
+                            }
+                            if callee_depth > pool.callee as u32 {
+                                overflow = true;
+                            }
+                        }
+                        PoolBank::Caller => {
+                            caller_depth += 1;
+                            if caller_depth > max_caller {
+                                max_caller = caller_depth;
+                            }
+                        }
                     }
+                    pseudo_trail.push(bank);
                 }
+            }
+            Op::Adj => {
+                // Real-stack pops don't perturb pool counters.
             }
             Op::Or
             | Op::Xor
@@ -260,14 +426,26 @@ pub(crate) fn analyze(text: &[i64], pool_size: u8) -> Result<RegStackPlan, C4Err
             | Op::Mod
             | Op::Si
             | Op::Sc => {
-                pseudo_depth -= 1;
+                if let Some(bank) = pseudo_trail.pop() {
+                    match bank {
+                        PoolBank::Callee => callee_depth -= 1,
+                        PoolBank::Caller => caller_depth -= 1,
+                    }
+                }
             }
             _ => {}
         }
         pc += op_width(op);
     }
     if let Some(prev) = current_ent {
-        close_function(&mut funcs, &mut func_at_pc, prev, max_pseudo);
+        close_function(
+            &mut funcs,
+            &mut func_at_pc,
+            prev,
+            max_callee,
+            max_caller,
+            overflow,
+        );
     }
 
     Ok(RegStackPlan {
@@ -291,9 +469,26 @@ mod tests {
         o as i64
     }
 
+    /// Default-shape pool sizes for tests: 8 callee + 7 caller, the
+    /// aarch64 layout. Tests that want to disable the caller bank
+    /// (mirroring x86_64's policy) build their own [`PoolSizes`].
+    const POOL: PoolSizes = PoolSizes {
+        callee: 8,
+        caller: 7,
+    };
+
+    /// Pool sizes with the caller bank turned off -- mirrors the
+    /// pre-N6 behaviour where all Pseudo pushes went to the
+    /// callee-saved bank.
+    const CALLEE_ONLY: PoolSizes = PoolSizes {
+        callee: 8,
+        caller: 0,
+    };
+
     #[test]
     fn binary_op_classifies_psh_as_pseudo() {
         // Ent 0; Imm 1; Psh; Imm 2; Add; Lev
+        // No call between Psh and Add -> caller-bank slot 0.
         let text = build(vec![
             op(Op::Ent),
             0,
@@ -305,11 +500,45 @@ mod tests {
             op(Op::Add),
             op(Op::Lev),
         ]);
-        let plan = analyze(&text, 8).unwrap();
-        assert_eq!(plan.push_kind(4), Some(PushKind::Pseudo { slot: 0 }));
+        let plan = analyze(&text, POOL).unwrap();
+        assert_eq!(
+            plan.push_kind(4),
+            Some(PushKind::Pseudo {
+                slot: 0,
+                bank: PoolBank::Caller,
+            })
+        );
         let f = plan.function_at(0).unwrap();
-        assert_eq!(f.max_depth, 1);
+        assert_eq!(f.callee_depth, 0);
+        assert_eq!(f.caller_depth, 1);
         assert!(f.use_pool);
+    }
+
+    #[test]
+    fn callee_only_routes_pseudo_to_callee_bank() {
+        // Same shape, but with caller=0 -> Pseudo lands in Callee.
+        let text = build(vec![
+            op(Op::Ent),
+            0,
+            op(Op::Imm),
+            1,
+            op(Op::Psh),
+            op(Op::Imm),
+            2,
+            op(Op::Add),
+            op(Op::Lev),
+        ]);
+        let plan = analyze(&text, CALLEE_ONLY).unwrap();
+        assert_eq!(
+            plan.push_kind(4),
+            Some(PushKind::Pseudo {
+                slot: 0,
+                bank: PoolBank::Callee,
+            })
+        );
+        let f = plan.function_at(0).unwrap();
+        assert_eq!(f.callee_depth, 1);
+        assert_eq!(f.caller_depth, 0);
     }
 
     #[test]
@@ -330,18 +559,19 @@ mod tests {
             2,
             op(Op::Lev),
         ]);
-        let plan = analyze(&text, 8).unwrap();
+        let plan = analyze(&text, POOL).unwrap();
         assert_eq!(plan.push_kind(4), Some(PushKind::Real));
         assert_eq!(plan.push_kind(7), Some(PushKind::Real));
         let f = plan.function_at(0).unwrap();
-        assert_eq!(f.max_depth, 0);
+        assert_eq!(f.callee_depth, 0);
+        assert_eq!(f.caller_depth, 0);
         assert!(f.use_pool);
     }
 
     #[test]
-    fn mixed_pseudo_and_real_within_one_expr() {
-        // a + foo(b)  -- Psh(a) consumed by Add (Pseudo);
-        // Psh(b) consumed by Adj (Real)
+    fn pseudo_live_across_call_uses_callee_bank() {
+        // a + foo(b): Psh(a), then Jsr touches caller-saved regs,
+        // so a must end up in the Callee bank to survive the call.
         // Ent 0; Imm 10; Psh; Imm 20; Psh; Jsr 99; Adj 1; Add; Lev
         let text = build(vec![
             op(Op::Ent),
@@ -359,18 +589,58 @@ mod tests {
             op(Op::Add),
             op(Op::Lev),
         ]);
-        let plan = analyze(&text, 8).unwrap();
-        // Outer Psh (the `a`) -- Pseudo at slot 0 (only Pseudo push live there).
-        assert_eq!(plan.push_kind(4), Some(PushKind::Pseudo { slot: 0 }));
+        let plan = analyze(&text, POOL).unwrap();
+        // Outer Psh (the `a`) -- Pseudo, callee bank because Jsr
+        // is between Psh and Add.
+        assert_eq!(
+            plan.push_kind(4),
+            Some(PushKind::Pseudo {
+                slot: 0,
+                bank: PoolBank::Callee,
+            })
+        );
         // Inner Psh (the `b`, call arg) -- Real.
         assert_eq!(plan.push_kind(7), Some(PushKind::Real));
         let f = plan.function_at(0).unwrap();
-        assert_eq!(f.max_depth, 1);
+        assert_eq!(f.callee_depth, 1);
+        assert_eq!(f.caller_depth, 0);
     }
 
     #[test]
-    fn nested_binary_uses_separate_slots() {
-        // (a + b) + c -- Psh(a+b's left), Psh(a)
+    fn libc_op_taints_pending_pseudo() {
+        // a + printf("hi"): Psh(a), then Op::Prtf is a libc thunk
+        // (call-shaped), so a needs the callee bank.
+        // Ent 0; Imm 10; Psh; Imm "hi"; Psh; Prtf; Adj 1; Add; Lev
+        let text = build(vec![
+            op(Op::Ent),
+            0,
+            op(Op::Imm),
+            10,
+            op(Op::Psh),
+            op(Op::Imm),
+            0xDEAD,
+            op(Op::Psh),
+            op(Op::Prtf),
+            op(Op::Adj),
+            1,
+            op(Op::Add),
+            op(Op::Lev),
+        ]);
+        let plan = analyze(&text, POOL).unwrap();
+        assert_eq!(
+            plan.push_kind(4),
+            Some(PushKind::Pseudo {
+                slot: 0,
+                bank: PoolBank::Callee,
+            })
+        );
+    }
+
+    #[test]
+    fn nested_binary_uses_separate_slots_in_caller_bank() {
+        // (a + b) + c -- two Pseudo pushes alive simultaneously,
+        // no call between them or their pops, so both ride in the
+        // caller bank.
         // Ent 0; Imm 1; Psh; Imm 2; Psh; Imm 3; Add; Add; Lev
         let text = build(vec![
             op(Op::Ent),
@@ -387,16 +657,86 @@ mod tests {
             op(Op::Add),
             op(Op::Lev),
         ]);
-        let plan = analyze(&text, 8).unwrap();
-        assert_eq!(plan.push_kind(4), Some(PushKind::Pseudo { slot: 0 }));
-        assert_eq!(plan.push_kind(7), Some(PushKind::Pseudo { slot: 1 }));
+        let plan = analyze(&text, POOL).unwrap();
+        assert_eq!(
+            plan.push_kind(4),
+            Some(PushKind::Pseudo {
+                slot: 0,
+                bank: PoolBank::Caller,
+            })
+        );
+        assert_eq!(
+            plan.push_kind(7),
+            Some(PushKind::Pseudo {
+                slot: 1,
+                bank: PoolBank::Caller,
+            })
+        );
         let f = plan.function_at(0).unwrap();
-        assert_eq!(f.max_depth, 2);
+        assert_eq!(f.callee_depth, 0);
+        assert_eq!(f.caller_depth, 2);
+    }
+
+    #[test]
+    fn caller_bank_overflow_spills_to_callee() {
+        // Three concurrent within-expr pushes with caller_size=2:
+        // first two go to the caller bank, the third spills onto
+        // the callee bank.
+        // Ent 0; Imm 1; Psh; Imm 2; Psh; Imm 3; Psh; Imm 4; Add; Add; Add; Lev
+        let text = build(vec![
+            op(Op::Ent),
+            0,
+            op(Op::Imm),
+            1,
+            op(Op::Psh),
+            op(Op::Imm),
+            2,
+            op(Op::Psh),
+            op(Op::Imm),
+            3,
+            op(Op::Psh),
+            op(Op::Imm),
+            4,
+            op(Op::Add),
+            op(Op::Add),
+            op(Op::Add),
+            op(Op::Lev),
+        ]);
+        let pool = PoolSizes {
+            callee: 4,
+            caller: 2,
+        };
+        let plan = analyze(&text, pool).unwrap();
+        assert_eq!(
+            plan.push_kind(4),
+            Some(PushKind::Pseudo {
+                slot: 0,
+                bank: PoolBank::Caller,
+            })
+        );
+        assert_eq!(
+            plan.push_kind(7),
+            Some(PushKind::Pseudo {
+                slot: 1,
+                bank: PoolBank::Caller,
+            })
+        );
+        // Third push: caller bank full, falls back to callee.
+        assert_eq!(
+            plan.push_kind(10),
+            Some(PushKind::Pseudo {
+                slot: 0,
+                bank: PoolBank::Callee,
+            })
+        );
+        let f = plan.function_at(0).unwrap();
+        assert_eq!(f.callee_depth, 1);
+        assert_eq!(f.caller_depth, 2);
     }
 
     #[test]
     fn function_overflow_falls_back_to_real_stack() {
-        // Stack 9 deep with pool_size=8 -> use_pool=false.
+        // Stack 9 deep with callee=8 caller=0 -> use_pool=false.
         let mut text = vec![op(Op::Ent), 0];
         for _ in 0..9 {
             text.push(op(Op::Imm));
@@ -410,13 +750,14 @@ mod tests {
         }
         text.push(op(Op::Lev));
 
-        let plan = analyze(&text, 8).unwrap();
+        let plan = analyze(&text, CALLEE_ONLY).unwrap();
         let f = plan.function_at(0).unwrap();
-        assert_eq!(f.max_depth, 9);
         assert!(
             !f.use_pool,
-            "depth 9 with pool_size=8 should disable the pool"
+            "depth 9 with callee=8 caller=0 should disable the pool"
         );
+        assert_eq!(f.callee_depth, 0);
+        assert_eq!(f.caller_depth, 0);
     }
 
     /// Smoke test against a real compiled program. Catches any
@@ -430,7 +771,7 @@ mod tests {
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/c/quicksort.c");
         let src = std::fs::read_to_string(&path).expect("read quicksort.c");
         let program = Compiler::new(src).compile().expect("compile");
-        let plan = analyze(&program.text, 8).expect("analyze");
+        let plan = analyze(&program.text, POOL).expect("analyze");
         // Shouldn't throw, and should classify at least some pushes
         // as Pseudo (binary ops in the body).
         let any_pseudo = (0..program.text.len())
@@ -447,10 +788,7 @@ mod tests {
         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/c/c4.c");
         let src = std::fs::read_to_string(&path).expect("read c4.c");
         let program = Compiler::new(src).compile().expect("compile");
-        let plan = analyze(&program.text, 8).expect("analyze");
-        // c4.c is literally "C in four functions" -- it actually
-        // has 4. The assertion just protects against the analyzer
-        // dropping function entries.
+        let plan = analyze(&program.text, POOL).expect("analyze");
         let mut funcs = Vec::new();
         for pc in 0..program.text.len() {
             if let Some(f) = plan.function_at(pc) {
@@ -462,18 +800,27 @@ mod tests {
             "c4.c should have >= 4 functions; got {}",
             funcs.len()
         );
-        // Validate that pool=8 is enough for the c4 self-host's
-        // expression nesting -- if any function's max_depth exceeds
-        // 8 we'd silently fall back to real-stack and lose the win.
-        let max = funcs.iter().map(|f| f.max_depth).max().unwrap_or(0);
-        assert!(
-            max <= 8,
-            "c4.c hit pseudo-stack depth {max}; pool_size 8 not enough"
-        );
+        // Validate that the combined pool depth fits -- if any
+        // function would need more than what we offer, we'd fall
+        // back to real-stack pushes.
+        for f in &funcs {
+            assert!(
+                f.callee_depth <= POOL.callee,
+                "c4.c hit callee_depth {} (limit {})",
+                f.callee_depth,
+                POOL.callee
+            );
+            assert!(
+                f.caller_depth <= POOL.caller,
+                "c4.c hit caller_depth {} (limit {})",
+                f.caller_depth,
+                POOL.caller
+            );
+        }
     }
 
     #[test]
-    fn multiple_functions_have_independent_max_depth() {
+    fn multiple_functions_have_independent_depths() {
         // Function 1: depth 1. Function 2: depth 2.
         let text = build(vec![
             // Function 1 at pc 0:
@@ -501,10 +848,10 @@ mod tests {
             op(Op::Add),
             op(Op::Lev),
         ]);
-        let plan = analyze(&text, 8).unwrap();
+        let plan = analyze(&text, POOL).unwrap();
         let f1 = plan.function_at(0).unwrap();
         let f2 = plan.function_at(9).unwrap();
-        assert_eq!(f1.max_depth, 1);
-        assert_eq!(f2.max_depth, 2);
+        assert_eq!(f1.caller_depth, 1);
+        assert_eq!(f2.caller_depth, 2);
     }
 }

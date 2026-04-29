@@ -104,16 +104,20 @@ const IMAGE_SCN_MEM_WRITE: u32 = 0x8000_0000;
 
 const NUM_DATA_DIRS: u32 = 16;
 
-/// Section layout: every 64-bit Windows PE carries `.text` /
-/// `.pdata` / `.idata` / `.data`. The `.pdata` Exception Directory
-/// is mandatory under the 64-bit Windows ABI -- the loader looks up
-/// `RUNTIME_FUNCTION` entries there to handle stack unwinding, and
-/// wine refuses to load AArch64 PEs that omit it. x86_64 doesn't
-/// fail to load without one, but the spec requires it and stricter
-/// hosts (verifier, hardened loaders, future Windows revisions) can
-/// reject a missing entry, so we emit it on both arches.
-fn num_sections(_machine: Machine) -> usize {
-    4
+/// Section layout: every 64-bit Windows PE always carries `.text`,
+/// `.pdata`, and `.idata`. The optional `.data` only appears when
+/// the c4 program has initialized data -- string literals or
+/// globals -- because real Windows kernels reject images that list
+/// a zero-sized section.
+///
+/// `.pdata` is the Exception Directory, mandatory under the 64-bit
+/// Windows ABI: the loader looks up `RUNTIME_FUNCTION` entries
+/// there to handle stack unwinding, and wine refuses to load
+/// AArch64 PEs that omit it. x86_64 doesn't fail to load without
+/// one, but the spec requires it and stricter hosts can reject a
+/// missing entry, so we emit it on both arches.
+fn num_sections(data_section_present: bool) -> usize {
+    if data_section_present { 4 } else { 3 }
 }
 
 const DOS_HEADER_AND_STUB: usize = 128; // 64 byte DOS header + 64 byte stub
@@ -125,12 +129,12 @@ const SECTION_HEADER_SIZE: usize = 40;
 /// Raw on-disk size of the PE headers (DOS + PE sig + COFF +
 /// Optional + section table), rounded up to FILE_ALIGNMENT.
 /// 3 sections fit in 0x200; 4 sections need 0x400.
-fn headers_raw_size(machine: Machine) -> usize {
+fn headers_raw_size(data_section_present: bool) -> usize {
     let unaligned = DOS_HEADER_AND_STUB
         + PE_SIG_SIZE
         + COFF_HEADER_SIZE
         + OPTIONAL64_HEADER_SIZE
-        + SECTION_HEADER_SIZE * num_sections(machine);
+        + SECTION_HEADER_SIZE * num_sections(data_section_present);
     (unaligned + FILE_ALIGNMENT as usize - 1) & !(FILE_ALIGNMENT as usize - 1)
 }
 
@@ -238,7 +242,11 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
     let text_prologue_len = stub_len + thunk_len;
     let thunk_rva = SECTION_ALIGNMENT + stub_len;
 
-    let headers_size = headers_raw_size(machine) as u32;
+    // The `.data` section is only present when the c4 program has
+    // initialized data. See `num_sections` for why an empty
+    // section can't be left in.
+    let data_section_present = !build.data.is_empty();
+    let headers_size = headers_raw_size(data_section_present) as u32;
 
     let text_rva: u32 = SECTION_ALIGNMENT;
     let text_file_off: u32 = headers_size;
@@ -291,13 +299,34 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
     let idata_size: u32 = idata_bytes.len() as u32;
     let idata_raw_size: u32 = round_up(idata_size, FILE_ALIGNMENT);
 
+    // The `.data` section only appears when the c4 program has at
+    // least one byte of initialized data (string literals or
+    // globals). An empty section is a real-Windows-kernel reject
+    // reason: CreateProcess returns ERROR_BAD_EXE_FORMAT for any
+    // image that lists a zero-sized section. wine is more
+    // tolerant, which is how this slipped past the local test
+    // lanes for so long. (`data_section_present` is computed once
+    // up-front for the header-size math; this is the data layout
+    // it gates.)
+    let data_size: u32 = build.data.len() as u32;
     let data_rva: u32 = round_up(idata_rva + idata_size, SECTION_ALIGNMENT);
     let data_file_off: u32 = idata_file_off + idata_raw_size;
-    let data_size: u32 = build.data.len() as u32;
-    let data_raw_size: u32 = round_up(data_size, FILE_ALIGNMENT);
+    let data_raw_size: u32 = if data_section_present {
+        round_up(data_size, FILE_ALIGNMENT)
+    } else {
+        0
+    };
 
-    let total_file_size = (data_file_off + data_raw_size) as usize;
-    let image_size = round_up(data_rva + data_size.max(1), SECTION_ALIGNMENT);
+    let total_file_size = if data_section_present {
+        (data_file_off + data_raw_size) as usize
+    } else {
+        idata_file_off as usize + idata_raw_size as usize
+    };
+    let image_size = if data_section_present {
+        round_up(data_rva + data_size, SECTION_ALIGNMENT)
+    } else {
+        round_up(idata_rva + idata_size, SECTION_ALIGNMENT)
+    };
 
     // 5) Stitch the .text bytes together and patch every fixup
     //    that references something outside the section.
@@ -377,7 +406,12 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
     let mut out: Vec<u8> = Vec::with_capacity(total_file_size);
     write_dos_header_and_stub(&mut out);
     write_pe_signature(&mut out);
-    write_coff_header(&mut out, OPTIONAL64_HEADER_SIZE, machine);
+    write_coff_header(
+        &mut out,
+        OPTIONAL64_HEADER_SIZE,
+        machine,
+        data_section_present,
+    );
     write_optional_header(
         &mut out,
         OptionalHeaderInputs {
@@ -395,7 +429,7 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
             iat_size: idata_layout.iat_size,
         },
     );
-    let mut sections: Vec<SectionHeader> = Vec::with_capacity(num_sections(machine));
+    let mut sections: Vec<SectionHeader> = Vec::with_capacity(num_sections(data_section_present));
     sections.push(SectionHeader {
         name: *b".text\0\0\0",
         virtual_size: text_size,
@@ -420,14 +454,18 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
         pointer_to_raw_data: idata_file_off,
         characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE,
     });
-    sections.push(SectionHeader {
-        name: *b".data\0\0\0",
-        virtual_size: data_size,
-        virtual_address: data_rva,
-        size_of_raw_data: data_raw_size,
-        pointer_to_raw_data: data_file_off,
-        characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE,
-    });
+    if data_section_present {
+        sections.push(SectionHeader {
+            name: *b".data\0\0\0",
+            virtual_size: data_size,
+            virtual_address: data_rva,
+            size_of_raw_data: data_raw_size,
+            pointer_to_raw_data: data_file_off,
+            characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA
+                | IMAGE_SCN_MEM_READ
+                | IMAGE_SCN_MEM_WRITE,
+        });
+    }
     write_section_headers(&mut out, &sections);
     pad_to(&mut out, text_file_off as usize);
     out.extend_from_slice(&text_bytes);
@@ -436,7 +474,9 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
     pad_to(&mut out, (pdata_file_off + pdata_raw_size) as usize);
     out.extend_from_slice(&idata_bytes);
     pad_to(&mut out, (idata_file_off + idata_raw_size) as usize);
-    out.extend_from_slice(&build.data);
+    if data_section_present {
+        out.extend_from_slice(&build.data);
+    }
     pad_to(&mut out, total_file_size);
     debug_assert_eq!(out.len(), total_file_size, "file size mismatch");
     Ok(out)
@@ -464,13 +504,18 @@ fn write_pe_signature(out: &mut Vec<u8>) {
     out.extend_from_slice(b"PE\0\0");
 }
 
-fn write_coff_header(out: &mut Vec<u8>, optional_header_size: usize, machine: Machine) {
+fn write_coff_header(
+    out: &mut Vec<u8>,
+    optional_header_size: usize,
+    machine: Machine,
+    data_section_present: bool,
+) {
     let machine_id = match machine {
         Machine::X86_64 => IMAGE_FILE_MACHINE_AMD64,
         Machine::Aarch64 => IMAGE_FILE_MACHINE_ARM64,
     };
     out.extend_from_slice(&machine_id.to_le_bytes()); // Machine
-    out.extend_from_slice(&(num_sections(machine) as u16).to_le_bytes()); // NumberOfSections
+    out.extend_from_slice(&(num_sections(data_section_present) as u16).to_le_bytes()); // NumberOfSections
     out.extend_from_slice(&0u32.to_le_bytes()); // TimeDateStamp
     out.extend_from_slice(&0u32.to_le_bytes()); // PointerToSymbolTable (deprecated)
     out.extend_from_slice(&0u32.to_le_bytes()); // NumberOfSymbols

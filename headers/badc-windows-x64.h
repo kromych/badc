@@ -30,6 +30,12 @@
 #define EXIT_SUCCESS 0
 #define EXIT_FAILURE 1
 
+// Convenience macro for cross-platform sources that need to gate
+// out POSIX-only ops the Windows headers don't bind (mprotect for
+// instance, since VirtualProtect has a different shape and there
+// is no in-text translation thunk anymore).
+#define BADC_WINDOWS 1
+
 #pragma dylib(msvcrt, "msvcrt.dll")
 #pragma dylib(kernel32, "kernel32.dll")
 
@@ -46,7 +52,6 @@
 #pragma binding(msvcrt::getenv, "getenv")
 #pragma binding(msvcrt::setenv, "_putenv_s")
 
-#pragma binding(kernel32::mprotect, "VirtualProtect")
 #pragma binding(kernel32::exit, "ExitProcess")
 #pragma binding(kernel32::dlopen, "LoadLibraryA")
 #pragma binding(kernel32::dlsym, "GetProcAddress")
@@ -65,7 +70,6 @@ int free(char *ptr);
 char *memset(char *dst, int byte, int n);
 int memcmp(char *a, char *b, int n);
 char *memcpy(char *dst, char *src, int n);
-int mprotect(char *addr, int len, int prot);
 int exit(int status);
 int write(int fd, char *buf, int n);
 char *getenv(char *name);

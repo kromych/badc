@@ -1,7 +1,7 @@
 /// Virtual Machine Operations (Opcodes)
 /// These represent the low-level instructions executed by the VM.
 #[repr(i64)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Op {
     /// Load Effective Address: Calculates address of a local variable.
     Lea = 0x7f00_0000_0000_0001,

@@ -98,7 +98,6 @@ const IMAGE_DLLCHARACTERISTICS_NO_SEH: u16 = 0x0400;
 
 const IMAGE_SCN_CNT_CODE: u32 = 0x0000_0020;
 const IMAGE_SCN_CNT_INITIALIZED_DATA: u32 = 0x0000_0040;
-const IMAGE_SCN_MEM_DISCARDABLE: u32 = 0x0200_0000;
 const IMAGE_SCN_MEM_EXECUTE: u32 = 0x2000_0000;
 const IMAGE_SCN_MEM_READ: u32 = 0x4000_0000;
 const IMAGE_SCN_MEM_WRITE: u32 = 0x8000_0000;
@@ -118,14 +117,14 @@ const NUM_DATA_DIRS: u32 = 16;
 /// one, but the spec requires it and stricter hosts can reject a
 /// missing entry, so we emit it on both arches.
 ///
-/// `.reloc` describes the one absolute pointer in our image (the
-/// mprotect thunk slot in `.idata`, which holds `IMAGE_BASE +
-/// thunk_rva`). With `DYNAMIC_BASE` set, Windows ASLR can map us
-/// at any address, and that pointer must be patched accordingly --
-/// without a `.reloc` entry, the c4 program's indirect call
-/// through the slot lands in unmapped memory and faults.
+/// We no longer emit `.reloc`: Stage B/2.c dropped the in-text
+/// mprotect thunk and the absolute thunk-pointer slot it required,
+/// so the image has no absolute pointers left for ASLR to patch.
+/// `DYNAMIC_BASE` stays set in DllCharacteristics for wine
+/// compatibility; in practice the image just maps at preferred
+/// `IMAGE_BASE` (mingw's minimal exe ships the same way).
 fn num_sections(data_section_present: bool) -> usize {
-    if data_section_present { 5 } else { 4 }
+    if data_section_present { 4 } else { 3 }
 }
 
 const DOS_HEADER_AND_STUB: usize = 128; // 64 byte DOS header + 64 byte stub
@@ -153,12 +152,6 @@ const DATA_DIRECTORY_IMPORT: usize = 1;
 const DATA_DIRECTORY_EXCEPTION: usize = 3;
 const DATA_DIRECTORY_BASERELOC: usize = 5;
 const DATA_DIRECTORY_IAT: usize = 12;
-
-/// Base relocation entry types for the `.reloc` section. We only
-/// emit DIR64 (relocate a 64-bit absolute pointer) and ABSOLUTE
-/// (no-op padding to keep blocks 4-byte aligned).
-const IMAGE_REL_BASED_ABSOLUTE: u16 = 0;
-const IMAGE_REL_BASED_DIR64: u16 = 10;
 
 /// AArch64 RUNTIME_FUNCTION packed-unwind format limit: the
 /// FunctionLength field is 11 bits (units = 4-byte instructions),
@@ -238,24 +231,18 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
     //    recover the global IAT slot of each import.
     let dlls = group_imports_by_dll(&imports);
 
-    // 3) Build the entry stub and the mprotect thunk. We need their
-    //    sizes to lay out the rest, but immediate patching waits
-    //    until the IAT RVAs are known.
+    // 3) Build the entry stub. Stage B/2.c dropped the in-text
+    //    mprotect-to-VirtualProtect thunk; cross-platform sources
+    //    have to gate POSIX-only ops on `#if BADC_TARGET` and call
+    //    the target-native API (`VirtualProtect`, etc.) directly
+    //    where they need it.
     let stub = build_entry_stub(machine);
-    let thunk = build_mprotect_thunk(machine);
-    let mpro_idx = aarch64::IMPORTS
-        .iter()
-        .position(|imp| imp.op == Op::Mpro)
-        .expect("Op::Mpro must be present in IMPORTS");
 
-    // 4) Compute layout. Combined .text is `entry stub | mprotect
-    //    thunk | build.text`; .idata gets an extra 8-byte slot
-    //    appended at the end to hold the thunk's absolute address
-    //    (the c4 program's `Op::Mpro` calls go through that slot).
+    // 4) Compute layout. Combined .text is `entry stub |
+    //    build.text`; the program's `Op::Mpro` calls go through
+    //    the regular IAT lookup just like every other libc op.
     let stub_len = stub.bytes.len() as u32;
-    let thunk_len = thunk.bytes.len() as u32;
-    let text_prologue_len = stub_len + thunk_len;
-    let thunk_rva = SECTION_ALIGNMENT + stub_len;
+    let text_prologue_len = stub_len;
 
     // The `.data` section is only present when the c4 program has
     // initialized data. See `num_sections` for why an empty
@@ -293,24 +280,7 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
     let idata_file_off: u32 = pdata_file_off + pdata_raw_size;
 
     let idata_layout = plan_idata(&dlls, &imports, idata_rva);
-    // Append an 8-byte slot for the thunk's absolute address. The
-    // c4 program's `Op::Mpro` fixups will be patched to point at
-    // this slot rather than VirtualProtect's IAT entry, so calls
-    // run through the thunk instead of straight to VirtualProtect.
-    // Align to 8 first: the aarch64 `ldr` against this slot scales
-    // its imm12 by 8, so the slot's offset within the page must be
-    // 8-aligned. The hint/name and DLL-string tables in plan_idata
-    // are only 2-aligned, so without this pad the slot can land at
-    // any 4-byte boundary and break the patch.
-    let mut idata_bytes = idata_layout.bytes;
-    let pad_to_eight = round_up_usize(idata_bytes.len(), 8);
-    idata_bytes.resize(pad_to_eight, 0);
-    let thunk_ptr_offset = idata_bytes.len() as u32;
-    idata_bytes.resize(idata_bytes.len() + 8, 0);
-    let thunk_ptr_rva = idata_rva + thunk_ptr_offset;
-    let thunk_abs_addr = IMAGE_BASE + thunk_rva as u64;
-    idata_bytes[thunk_ptr_offset as usize..(thunk_ptr_offset + 8) as usize]
-        .copy_from_slice(&thunk_abs_addr.to_le_bytes());
+    let idata_bytes = idata_layout.bytes;
     let idata_size: u32 = idata_bytes.len() as u32;
     let idata_raw_size: u32 = round_up(idata_size, FILE_ALIGNMENT);
 
@@ -323,21 +293,9 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
     // lanes for so long. (`data_section_present` is computed once
     // up-front for the header-size math; this is the data layout
     // it gates.)
-    // `.reloc` sits between `.idata` and `.data`. We always emit
-    // exactly one DIR64 entry for the thunk pointer slot in
-    // `.idata`; that slot is the only absolute 64-bit pointer in
-    // the image, and Windows ASLR will leave it stale without a
-    // base relocation entry. See `build_reloc` for the on-disk
-    // shape (12 bytes total).
-    let reloc_rva: u32 = round_up(idata_rva + idata_size, SECTION_ALIGNMENT);
-    let reloc_file_off: u32 = idata_file_off + idata_raw_size;
-    let reloc_bytes = build_reloc(thunk_ptr_rva);
-    let reloc_size: u32 = reloc_bytes.len() as u32;
-    let reloc_raw_size: u32 = round_up(reloc_size, FILE_ALIGNMENT);
-
     let data_size: u32 = build.data.len() as u32;
-    let data_rva: u32 = round_up(reloc_rva + reloc_size, SECTION_ALIGNMENT);
-    let data_file_off: u32 = reloc_file_off + reloc_raw_size;
+    let data_rva: u32 = round_up(idata_rva + idata_size, SECTION_ALIGNMENT);
+    let data_file_off: u32 = idata_file_off + idata_raw_size;
     let data_raw_size: u32 = if data_section_present {
         round_up(data_size, FILE_ALIGNMENT)
     } else {
@@ -347,24 +305,23 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
     let total_file_size = if data_section_present {
         (data_file_off + data_raw_size) as usize
     } else {
-        (reloc_file_off + reloc_raw_size) as usize
+        (idata_file_off + idata_raw_size) as usize
     };
     let image_size = if data_section_present {
         round_up(data_rva + data_size, SECTION_ALIGNMENT)
     } else {
-        round_up(reloc_rva + reloc_size, SECTION_ALIGNMENT)
+        round_up(idata_rva + idata_size, SECTION_ALIGNMENT)
     };
 
     // 5) Stitch the .text bytes together and patch every fixup
     //    that references something outside the section.
     let mut text_bytes: Vec<u8> = Vec::with_capacity(text_size as usize);
     text_bytes.extend_from_slice(&stub.bytes);
-    text_bytes.extend_from_slice(&thunk.bytes);
     text_bytes.extend_from_slice(&build.text);
 
     // Stub-internal fixup: the direct call to main. main starts
     // at offset text_prologue_len within the combined .text (past
-    // the entry stub and the mprotect thunk).
+    // the entry stub).
     patch_direct_call(
         machine,
         &mut text_bytes,
@@ -389,25 +346,15 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
         idata_layout.iat_rva_for_import[stub_exit_idx],
     )?;
 
-    // Thunk-internal fixup: the IAT lookup for VirtualProtect.
-    patch_iat_lookup(
-        machine,
-        &mut text_bytes,
-        stub_len + thunk.iat_virtualprotect_offset,
-        text_rva,
-        idata_layout.iat_rva_for_import[mpro_idx],
-    )?;
-
     // Program-side fixups land inside build.text, which is offset
-    // by text_prologue_len in the combined .text. Op::Mpro is
-    // re-routed through the thunk_ptr slot.
+    // by text_prologue_len in the combined .text. All libc ops --
+    // including `Op::Mpro` -- now go through the regular IAT slot;
+    // the per-target header's `#pragma binding` decides whether
+    // mprotect resolves at all (POSIX targets bind it, Windows
+    // doesn't, sources gate the call on `BADC_WINDOWS`).
     for f in &build.got_fixups {
         let instr_off = (f.adrp_offset as u32) + text_prologue_len;
-        let target_rva = if f.import_index == mpro_idx {
-            thunk_ptr_rva
-        } else {
-            idata_layout.iat_rva_for_import[f.import_index]
-        };
+        let target_rva = idata_layout.iat_rva_for_import[f.import_index];
         patch_iat_lookup(machine, &mut text_bytes, instr_off, text_rva, target_rva)?;
     }
     for f in &build.data_fixups {
@@ -424,7 +371,7 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
         let instr_off = (f.adrp_offset as u32) + text_prologue_len;
         // Function-pointer literals point at offsets within
         // build.text -- shift by text_prologue_len to land in the
-        // combined .text past entry stub + thunk.
+        // combined .text past the entry stub.
         let target_rva = text_rva + text_prologue_len + f.target_native_offset as u32;
         patch_addr_load(machine, &mut text_bytes, instr_off, text_rva, target_rva)?;
     }
@@ -452,8 +399,8 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
             import_table_size: idata_layout.import_directory_size,
             exception_table_rva: pdata_rva,
             exception_table_size: pdata_directory_size,
-            base_reloc_rva: reloc_rva,
-            base_reloc_size: reloc_size,
+            base_reloc_rva: 0,
+            base_reloc_size: 0,
             iat_rva: idata_layout.iat_rva_base,
             iat_size: idata_layout.iat_size,
         },
@@ -483,16 +430,6 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
         pointer_to_raw_data: idata_file_off,
         characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE,
     });
-    sections.push(SectionHeader {
-        name: *b".reloc\0\0",
-        virtual_size: reloc_size,
-        virtual_address: reloc_rva,
-        size_of_raw_data: reloc_raw_size,
-        pointer_to_raw_data: reloc_file_off,
-        characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA
-            | IMAGE_SCN_MEM_READ
-            | IMAGE_SCN_MEM_DISCARDABLE,
-    });
     if data_section_present {
         sections.push(SectionHeader {
             name: *b".data\0\0\0",
@@ -513,8 +450,6 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
     pad_to(&mut out, (pdata_file_off + pdata_raw_size) as usize);
     out.extend_from_slice(&idata_bytes);
     pad_to(&mut out, (idata_file_off + idata_raw_size) as usize);
-    out.extend_from_slice(&reloc_bytes);
-    pad_to(&mut out, (reloc_file_off + reloc_raw_size) as usize);
     if data_section_present {
         out.extend_from_slice(&build.data);
     }
@@ -1074,104 +1009,6 @@ fn build_aarch64_entry_stub() -> EntryStub {
     }
 }
 
-// ----------------------------------------------------------------
-// mprotect -> VirtualProtect thunk.
-//
-// POSIX `int mprotect(void *addr, size_t len, int prot)` and
-// Win64 `BOOL VirtualProtect(LPVOID addr, SIZE_T size,
-// DWORD newProt, PDWORD oldProt)` differ in:
-//
-//   1. Arity: mprotect takes 3 args, VirtualProtect takes 4
-//      (the trailing `oldProt` out-pointer).
-//   2. Protection encoding: POSIX uses a bitmask of PROT_READ
-//      (1) / PROT_WRITE (2) / PROT_EXEC (4), Windows uses the
-//      PAGE_* family (PAGE_NOACCESS=1, PAGE_READONLY=2, ...).
-//   3. Return convention: mprotect returns 0/-1, VirtualProtect
-//      returns BOOL (0 = failure, nonzero = success).
-//
-// The thunk closes those gaps: looks up the right PAGE_* via a
-// small table indexed by `prot & 7`, allocates a stack slot for
-// the throwaway oldProt, calls VirtualProtect, and translates
-// the BOOL back to 0/-1. The c4 program's `Op::Mpro` calls go
-// through a single 8-byte slot in `.idata` whose value is the
-// thunk's absolute address (set up at PE-write time); the codegen
-// emits the same `call qword [rip+disp32]` shape it would for any
-// other libc-shaped op.
-// ----------------------------------------------------------------
-
-struct MprotectThunk {
-    bytes: Vec<u8>,
-    /// Offset within [`Self::bytes`] of the IAT-lookup sequence
-    /// for VirtualProtect (start of `call qword` on x86_64; start
-    /// of `adrp x16, _; ldr x16, [x16, #_]` on aarch64).
-    iat_virtualprotect_offset: u32,
-}
-
-fn build_mprotect_thunk(machine: Machine) -> MprotectThunk {
-    match machine {
-        Machine::X86_64 => build_x86_64_mprotect_thunk(),
-        Machine::Aarch64 => build_aarch64_mprotect_thunk(),
-    }
-}
-
-/// Same simplification as the AArch64 thunk
-/// (`build_aarch64_mprotect_thunk`): always pass
-/// `PAGE_EXECUTE_READWRITE` (0x40) regardless of the POSIX `prot`
-/// value the c4 program asked for. Real Windows under Win64 was
-/// hitting `STATUS_ACCESS_VIOLATION` when we faithfully translated
-/// `PROT_READ` to `PAGE_READONLY` -- VirtualProtect succeeded but
-/// the msvcrt heap state went sour because `malloc`'s pages were
-/// not meant to be revoked. RWX is a strict superset that keeps
-/// reads/writes/exec working, which is what every current fixture
-/// needs (the test programs only check that the call returns and
-/// that previously-written bytes can still be read back). A more
-/// faithful translation would consult a prot-to-PAGE_* table; we
-/// can revisit that if a fixture ever needs the actual revocation.
-fn build_x86_64_mprotect_thunk() -> MprotectThunk {
-    let mut bytes: Vec<u8> = Vec::with_capacity(32);
-
-    // sub rsp, 0x38                            (4 bytes)
-    //   [rsp + 0x00..0x20]  shadow space for VirtualProtect
-    //   [rsp + 0x20..0x24]  oldProtect (4 bytes used; slot is 8)
-    //   [rsp + 0x28..0x37]  padding to keep rsp 16-aligned
-    bytes.extend_from_slice(&[0x48, 0x83, 0xEC, 0x38]);
-
-    // mov r8d, 0x40                            (6 bytes)
-    // PAGE_EXECUTE_READWRITE -- always RWX for now. r8d (zero-
-    // extends to r8) replaces whatever POSIX prot value the caller
-    // passed in r8.
-    bytes.extend_from_slice(&[0x41, 0xB8, 0x40, 0x00, 0x00, 0x00]);
-
-    // lea r9, [rsp + 0x20]                     (5 bytes)
-    // r9 = &oldProtect (output parameter)
-    bytes.extend_from_slice(&[0x4C, 0x8D, 0x4C, 0x24, 0x20]);
-
-    // call qword [rip + 0]                     (6 bytes; disp32 patched)
-    // Calls VirtualProtect via the .idata IAT slot.
-    let call_vp_off = bytes.len() as u32;
-    bytes.extend_from_slice(&[0xFF, 0x15, 0, 0, 0, 0]);
-
-    // BOOL -> int translation: 0 (failure) -> -1, nonzero -> 0.
-    // test eax, eax                            (2 bytes)
-    bytes.extend_from_slice(&[0x85, 0xC0]);
-    // setz al                                  (3 bytes)
-    bytes.extend_from_slice(&[0x0F, 0x94, 0xC0]);
-    // movzx eax, al                            (3 bytes)
-    bytes.extend_from_slice(&[0x0F, 0xB6, 0xC0]);
-    // neg eax                                  (2 bytes)
-    bytes.extend_from_slice(&[0xF7, 0xD8]);
-
-    // add rsp, 0x38                            (4 bytes)
-    bytes.extend_from_slice(&[0x48, 0x83, 0xC4, 0x38]);
-    // ret                                      (1 byte)
-    bytes.extend_from_slice(&[0xC3]);
-
-    MprotectThunk {
-        bytes,
-        iat_virtualprotect_offset: call_vp_off,
-    }
-}
-
 /// `.pdata` builder result. `bytes` is the full section payload
 /// (RUNTIME_FUNCTIONs + any trailing UNWIND_INFO blobs). `directory_size`
 /// is just the RUNTIME_FUNCTION array size and is what gets wired into
@@ -1190,38 +1027,6 @@ struct Pdata {
 /// `UNWIND_INFO` blob; aarch64 uses 8-byte entries with packed
 /// unwind info inline -- so we dispatch and let each builder lay
 /// out its own bytes.
-/// `.reloc` builder.
-///
-/// One DIR64 entry covers the 8-byte mprotect-thunk pointer slot
-/// in `.idata`, which holds `IMAGE_BASE + thunk_rva`. With
-/// `DYNAMIC_BASE` set in DllCharacteristics, real Windows ASLR can
-/// land the image at any base; the loader walks `.reloc` and
-/// patches absolute pointers by `(actual_base - preferred_base)`.
-/// Without this entry, the c4 program's `Op::Mpro` indirection
-/// through that slot lands in unmapped memory and faults.
-///
-/// On-wire layout: a single 12-byte block.
-///
-/// ```text
-///   PageRVA   (u32)  -- floor(thunk_ptr_rva / 4 KiB) * 4 KiB
-///   BlockSize (u32)  -- 12 (header + entry + padding)
-///   entry     (u16)  -- type=DIR64<<12 | (thunk_ptr_rva % 4 KiB)
-///   padding   (u16)  -- type=ABSOLUTE | 0 (no-op, keeps block 4-aligned)
-/// ```
-fn build_reloc(thunk_ptr_rva: u32) -> Vec<u8> {
-    let page_rva = thunk_ptr_rva & !0xFFF;
-    let offset_in_page = (thunk_ptr_rva & 0xFFF) as u16;
-    let entry: u16 = (IMAGE_REL_BASED_DIR64 << 12) | offset_in_page;
-    let padding: u16 = IMAGE_REL_BASED_ABSOLUTE << 12; // = 0
-    let block_size: u32 = 12;
-    let mut bytes = Vec::with_capacity(12);
-    bytes.extend_from_slice(&page_rva.to_le_bytes());
-    bytes.extend_from_slice(&block_size.to_le_bytes());
-    bytes.extend_from_slice(&entry.to_le_bytes());
-    bytes.extend_from_slice(&padding.to_le_bytes());
-    bytes
-}
-
 fn build_pdata(machine: Machine, text_rva: u32, text_size: u32, pdata_rva: u32) -> Pdata {
     match machine {
         Machine::X86_64 => build_x86_64_pdata(text_rva, text_size, pdata_rva),
@@ -1325,72 +1130,6 @@ fn build_aarch64_pdata(text_rva: u32, text_size: u32) -> Pdata {
     Pdata {
         bytes,
         directory_size,
-    }
-}
-
-/// AArch64 mprotect thunk. Same idea as the x86_64 one: take the
-/// 3-arg POSIX call (x0=addr, x1=len, x2=prot per AAPCS64),
-/// translate prot to a Windows PAGE_* via a small inline lookup,
-/// allocate a stack slot for VirtualProtect's `&oldProt` out
-/// parameter, call VirtualProtect via the IAT, then map the BOOL
-/// result to `0`/`-1`.
-///
-/// Simplification: this thunk passes `PAGE_EXECUTE_READWRITE`
-/// (0x40) regardless of the requested prot. Most c4 callers want
-/// either RWX (the JIT path) or PROT_READ (where read-only access
-/// works fine under PAGE_EXECUTE_READWRITE since it's a strict
-/// superset). A more faithful translation would consult a small
-/// prot-to-PAGE_* table; we keep things simple for the first cut
-/// since no current fixture distinguishes.
-fn build_aarch64_mprotect_thunk() -> MprotectThunk {
-    use super::aarch64 as a;
-    let mut bytes: Vec<u8> = Vec::with_capacity(64);
-
-    // Prologue: save fp/lr, set new frame, allocate a 16-byte slot
-    // for `oldProtect` (4 bytes used; size to keep sp 16-aligned).
-    a::emit(
-        &mut bytes,
-        a::enc_stp_pre(a::Reg::X29, a::Reg::X30, a::Reg::SP, -16),
-    );
-    a::emit(&mut bytes, a::enc_add_imm(a::Reg::X29, a::Reg::SP, 0));
-    a::emit(&mut bytes, a::enc_sub_imm(a::Reg::SP, a::Reg::SP, 16));
-
-    // x2 = newProtect = PAGE_EXECUTE_READWRITE (0x40). Always RWX
-    // for now; see the doc comment for why.
-    a::emit(&mut bytes, a::enc_movz(a::Reg(2), 0x40, 0));
-    // x3 = &oldProtect (= sp + 0).
-    a::emit(&mut bytes, a::enc_add_imm(a::Reg(3), a::Reg::SP, 0));
-
-    // Call VirtualProtect via IAT.
-    let iat_vp_off = bytes.len() as u32;
-    a::emit(&mut bytes, a::enc_adrp(a::Reg::X16, 0));
-    a::emit(&mut bytes, a::enc_ldr_imm(a::Reg::X16, a::Reg::X16, 0));
-    a::emit(&mut bytes, a::enc_blr(a::Reg::X16));
-
-    // BOOL -> int translation: 0 (failure) -> -1, nonzero -> 0.
-    // cmp x0, #0 (= subs xzr, x0, #0).  Hand-rolled since we don't
-    // have a `cmp imm` encoder in aarch64.rs; the ARM ARM
-    // encoding for `subs xzr, x0, #0` is 0xF100_001F.
-    a::emit(&mut bytes, 0xF100_001F);
-    // cset x0, eq    -> x0 = 1 if w0 was 0, else 0.
-    a::emit(&mut bytes, a::enc_cset(a::Reg::X0, a::Cond::Eq));
-    // sub x0, xzr, x0 (= neg x0, x0).
-    a::emit(
-        &mut bytes,
-        a::enc_sub_reg(a::Reg::X0, a::Reg(31), a::Reg::X0),
-    );
-
-    // Epilogue: restore frame, return.
-    a::emit(&mut bytes, a::enc_add_imm(a::Reg::SP, a::Reg::SP, 16));
-    a::emit(
-        &mut bytes,
-        a::enc_ldp_post(a::Reg::X29, a::Reg::X30, a::Reg::SP, 16),
-    );
-    a::emit(&mut bytes, a::enc_ret(a::Reg::X30));
-
-    MprotectThunk {
-        bytes,
-        iat_virtualprotect_offset: iat_vp_off,
     }
 }
 
@@ -1660,13 +1399,6 @@ mod tests {
         // ExitProcess (last).
         assert!(s.iat_getmainargs_offset < s.direct_call_main_offset);
         assert!(s.direct_call_main_offset < s.iat_exit_offset);
-    }
-
-    #[test]
-    fn aarch64_mprotect_thunk_is_word_aligned() {
-        let t = build_mprotect_thunk(Machine::Aarch64);
-        assert_eq!(t.bytes.len() % 4, 0);
-        assert!(t.iat_virtualprotect_offset.is_multiple_of(4));
     }
 
     /// End-to-end format check: build an aarch64 Windows PE for a

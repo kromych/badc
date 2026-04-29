@@ -290,25 +290,29 @@ pub fn emit_native_with_options(
 /// Pre-codegen sanity check on the per-target header's
 /// `#pragma dylib(...)` / `#pragma binding(...)` block.
 ///
-/// Coverage only: every libc op the codegen knows how to emit
-/// (the [`aarch64::IMPORTS`] table) must be declared in the
-/// header's bindings. A missing binding is a header omission and
-/// would otherwise surface much later as a confusing relocation
-/// failure or a "symbol not found" at load time.
+/// Coverage check, narrowed to **only the libc ops the program
+/// actually uses**. This makes the per-target headers honestly
+/// reflect "what's available on this target": a header that omits
+/// (say) `mprotect` is fine for Windows, where mprotect isn't a
+/// thing -- the source has to use `#if BADC_TARGET` to call
+/// `VirtualProtect` instead. Unused absences only become errors
+/// when the program reaches for them.
 ///
 /// We deliberately do **not** check that the dylib path exists on
-/// the host filesystem. Cross-compilation is a first-class case --
-/// emitting a Windows PE from a macOS host has no `msvcrt.dll`
-/// nearby, and emitting a Linux ELF from any host won't have
-/// `libc.so.6` at the same path the target loader will resolve --
-/// so requiring the file at compile time would break exactly the
-/// workflow the per-target header is for.
+/// the host filesystem. Cross-compilation is a first-class case
+/// (emitting a Windows PE from a macOS host has no `msvcrt.dll`
+/// nearby, etc.); requiring the file at compile time would defeat
+/// the purpose of the per-target header.
 fn validate_bindings(program: &Program) -> Result<(), C4Error> {
+    let used = used_libc_ops(&program.text);
     for imp in aarch64::IMPORTS {
+        if !used.contains(&imp.op) {
+            continue;
+        }
         // The lexer's `LIB_OPS` table uses the same name we expect
-        // here; the linux symbol-name field happens to match it
-        // exactly (no leading underscore), so we use it as the
-        // c4-side key.
+        // here; the linux-symbol field happens to match the c4-side
+        // name verbatim (no leading underscore), so we reuse it as
+        // the lookup key.
         let c4_name = imp.linux_symbol;
         let bound = program
             .dylibs
@@ -318,13 +322,62 @@ fn validate_bindings(program: &Program) -> Result<(), C4Error> {
         if !bound {
             return Err(C4Error::Compile(alloc::format!(
                 "no `#pragma binding(<dylib>::{c4_name}, ...)` in this target's \
-                 `headers/badc-{{target}}.h` -- the codegen needs every \
-                 libc op to be declared so it knows which dylib to \
-                 import the symbol from"
+                 `headers/badc-{{target}}.h` -- the program calls `{c4_name}` and \
+                 the codegen has nowhere to import it from"
             )));
         }
     }
     Ok(())
+}
+
+/// Walk the bytecode and collect the set of libc ops that appear.
+/// Operands are skipped using each op's known shape (a small set
+/// of ops carry a single i64 operand; everything else is bare).
+/// This mirrors what the optimizer's decoder does, but boils down
+/// to just the libc-op question we care about here.
+fn used_libc_ops(text: &[i64]) -> alloc::collections::BTreeSet<crate::c4::Op> {
+    use crate::c4::Op;
+    let mut used = alloc::collections::BTreeSet::new();
+    let mut pc = 0;
+    while pc < text.len() {
+        let Some(op) = Op::from_i64(text[pc]) else {
+            // Unknown opcode -- the optimizer would error here too.
+            // For our purposes, just stop scanning; a real compile
+            // error will surface elsewhere.
+            return used;
+        };
+        pc += 1;
+        if matches!(
+            op,
+            Op::Lea | Op::Imm | Op::Ent | Op::Adj | Op::Jmp | Op::Jsr | Op::Bz | Op::Bnz
+        ) {
+            pc += 1;
+        }
+        if matches!(
+            op,
+            Op::Open
+                | Op::Read
+                | Op::Clos
+                | Op::Prtf
+                | Op::Malc
+                | Op::Free
+                | Op::Mset
+                | Op::Mcmp
+                | Op::Mcpy
+                | Op::Mpro
+                | Op::Exit
+                | Op::Write
+                | Op::Genv
+                | Op::Senv
+                | Op::Dlop
+                | Op::Dlsm
+                | Op::Dlcl
+                | Op::Dler
+        ) {
+            used.insert(op);
+        }
+    }
+    used
 }
 
 /// Lower the program for `target`, returning the per-arch `Build`

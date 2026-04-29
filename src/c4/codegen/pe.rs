@@ -98,6 +98,7 @@ const IMAGE_DLLCHARACTERISTICS_NO_SEH: u16 = 0x0400;
 
 const IMAGE_SCN_CNT_CODE: u32 = 0x0000_0020;
 const IMAGE_SCN_CNT_INITIALIZED_DATA: u32 = 0x0000_0040;
+const IMAGE_SCN_MEM_DISCARDABLE: u32 = 0x0200_0000;
 const IMAGE_SCN_MEM_EXECUTE: u32 = 0x2000_0000;
 const IMAGE_SCN_MEM_READ: u32 = 0x4000_0000;
 const IMAGE_SCN_MEM_WRITE: u32 = 0x8000_0000;
@@ -105,10 +106,10 @@ const IMAGE_SCN_MEM_WRITE: u32 = 0x8000_0000;
 const NUM_DATA_DIRS: u32 = 16;
 
 /// Section layout: every 64-bit Windows PE always carries `.text`,
-/// `.pdata`, and `.idata`. The optional `.data` only appears when
-/// the c4 program has initialized data -- string literals or
-/// globals -- because real Windows kernels reject images that list
-/// a zero-sized section.
+/// `.pdata`, `.idata`, and `.reloc`. The optional `.data` only
+/// appears when the c4 program has initialized data -- string
+/// literals or globals -- because real Windows kernels reject
+/// images that list a zero-sized section.
 ///
 /// `.pdata` is the Exception Directory, mandatory under the 64-bit
 /// Windows ABI: the loader looks up `RUNTIME_FUNCTION` entries
@@ -116,8 +117,15 @@ const NUM_DATA_DIRS: u32 = 16;
 /// AArch64 PEs that omit it. x86_64 doesn't fail to load without
 /// one, but the spec requires it and stricter hosts can reject a
 /// missing entry, so we emit it on both arches.
+///
+/// `.reloc` describes the one absolute pointer in our image (the
+/// mprotect thunk slot in `.idata`, which holds `IMAGE_BASE +
+/// thunk_rva`). With `DYNAMIC_BASE` set, Windows ASLR can map us
+/// at any address, and that pointer must be patched accordingly --
+/// without a `.reloc` entry, the c4 program's indirect call
+/// through the slot lands in unmapped memory and faults.
 fn num_sections(data_section_present: bool) -> usize {
-    if data_section_present { 4 } else { 3 }
+    if data_section_present { 5 } else { 4 }
 }
 
 const DOS_HEADER_AND_STUB: usize = 128; // 64 byte DOS header + 64 byte stub
@@ -143,7 +151,14 @@ const IAT_ENTRY_SIZE: usize = 8;
 
 const DATA_DIRECTORY_IMPORT: usize = 1;
 const DATA_DIRECTORY_EXCEPTION: usize = 3;
+const DATA_DIRECTORY_BASERELOC: usize = 5;
 const DATA_DIRECTORY_IAT: usize = 12;
+
+/// Base relocation entry types for the `.reloc` section. We only
+/// emit DIR64 (relocate a 64-bit absolute pointer) and ABSOLUTE
+/// (no-op padding to keep blocks 4-byte aligned).
+const IMAGE_REL_BASED_ABSOLUTE: u16 = 0;
+const IMAGE_REL_BASED_DIR64: u16 = 10;
 
 /// AArch64 RUNTIME_FUNCTION packed-unwind format limit: the
 /// FunctionLength field is 11 bits (units = 4-byte instructions),
@@ -308,9 +323,21 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
     // lanes for so long. (`data_section_present` is computed once
     // up-front for the header-size math; this is the data layout
     // it gates.)
+    // `.reloc` sits between `.idata` and `.data`. We always emit
+    // exactly one DIR64 entry for the thunk pointer slot in
+    // `.idata`; that slot is the only absolute 64-bit pointer in
+    // the image, and Windows ASLR will leave it stale without a
+    // base relocation entry. See `build_reloc` for the on-disk
+    // shape (12 bytes total).
+    let reloc_rva: u32 = round_up(idata_rva + idata_size, SECTION_ALIGNMENT);
+    let reloc_file_off: u32 = idata_file_off + idata_raw_size;
+    let reloc_bytes = build_reloc(thunk_ptr_rva);
+    let reloc_size: u32 = reloc_bytes.len() as u32;
+    let reloc_raw_size: u32 = round_up(reloc_size, FILE_ALIGNMENT);
+
     let data_size: u32 = build.data.len() as u32;
-    let data_rva: u32 = round_up(idata_rva + idata_size, SECTION_ALIGNMENT);
-    let data_file_off: u32 = idata_file_off + idata_raw_size;
+    let data_rva: u32 = round_up(reloc_rva + reloc_size, SECTION_ALIGNMENT);
+    let data_file_off: u32 = reloc_file_off + reloc_raw_size;
     let data_raw_size: u32 = if data_section_present {
         round_up(data_size, FILE_ALIGNMENT)
     } else {
@@ -320,12 +347,12 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
     let total_file_size = if data_section_present {
         (data_file_off + data_raw_size) as usize
     } else {
-        idata_file_off as usize + idata_raw_size as usize
+        (reloc_file_off + reloc_raw_size) as usize
     };
     let image_size = if data_section_present {
         round_up(data_rva + data_size, SECTION_ALIGNMENT)
     } else {
-        round_up(idata_rva + idata_size, SECTION_ALIGNMENT)
+        round_up(reloc_rva + reloc_size, SECTION_ALIGNMENT)
     };
 
     // 5) Stitch the .text bytes together and patch every fixup
@@ -425,6 +452,8 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
             import_table_size: idata_layout.import_directory_size,
             exception_table_rva: pdata_rva,
             exception_table_size: pdata_directory_size,
+            base_reloc_rva: reloc_rva,
+            base_reloc_size: reloc_size,
             iat_rva: idata_layout.iat_rva_base,
             iat_size: idata_layout.iat_size,
         },
@@ -454,6 +483,16 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
         pointer_to_raw_data: idata_file_off,
         characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE,
     });
+    sections.push(SectionHeader {
+        name: *b".reloc\0\0",
+        virtual_size: reloc_size,
+        virtual_address: reloc_rva,
+        size_of_raw_data: reloc_raw_size,
+        pointer_to_raw_data: reloc_file_off,
+        characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA
+            | IMAGE_SCN_MEM_READ
+            | IMAGE_SCN_MEM_DISCARDABLE,
+    });
     if data_section_present {
         sections.push(SectionHeader {
             name: *b".data\0\0\0",
@@ -474,6 +513,8 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
     pad_to(&mut out, (pdata_file_off + pdata_raw_size) as usize);
     out.extend_from_slice(&idata_bytes);
     pad_to(&mut out, (idata_file_off + idata_raw_size) as usize);
+    out.extend_from_slice(&reloc_bytes);
+    pad_to(&mut out, (reloc_file_off + reloc_raw_size) as usize);
     if data_section_present {
         out.extend_from_slice(&build.data);
     }
@@ -535,9 +576,14 @@ struct OptionalHeaderInputs {
     import_table_rva: u32,
     import_table_size: u32,
     /// Exception Directory (data directory entry 3) -- the
-    /// `.pdata` section's RVA / size on aarch64; zero on x86_64.
+    /// `.pdata` section's RUNTIME_FUNCTION array (the array only,
+    /// excluding any trailing UNWIND_INFO blob in the same section).
     exception_table_rva: u32,
     exception_table_size: u32,
+    /// Base Relocation Directory (data directory entry 5) -- the
+    /// `.reloc` section's RVA / size.
+    base_reloc_rva: u32,
+    base_reloc_size: u32,
     iat_rva: u32,
     iat_size: u32,
 }
@@ -616,6 +662,7 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
         let (rva, size) = match i {
             DATA_DIRECTORY_IMPORT => (inp.import_table_rva, inp.import_table_size),
             DATA_DIRECTORY_EXCEPTION => (inp.exception_table_rva, inp.exception_table_size),
+            DATA_DIRECTORY_BASERELOC => (inp.base_reloc_rva, inp.base_reloc_size),
             DATA_DIRECTORY_IAT => (inp.iat_rva, inp.iat_size),
             _ => (0u32, 0u32),
         };
@@ -1160,6 +1207,38 @@ struct Pdata {
 /// `UNWIND_INFO` blob; aarch64 uses 8-byte entries with packed
 /// unwind info inline -- so we dispatch and let each builder lay
 /// out its own bytes.
+/// `.reloc` builder.
+///
+/// One DIR64 entry covers the 8-byte mprotect-thunk pointer slot
+/// in `.idata`, which holds `IMAGE_BASE + thunk_rva`. With
+/// `DYNAMIC_BASE` set in DllCharacteristics, real Windows ASLR can
+/// land the image at any base; the loader walks `.reloc` and
+/// patches absolute pointers by `(actual_base - preferred_base)`.
+/// Without this entry, the c4 program's `Op::Mpro` indirection
+/// through that slot lands in unmapped memory and faults.
+///
+/// On-wire layout: a single 12-byte block.
+///
+/// ```text
+///   PageRVA   (u32)  -- floor(thunk_ptr_rva / 4 KiB) * 4 KiB
+///   BlockSize (u32)  -- 12 (header + entry + padding)
+///   entry     (u16)  -- type=DIR64<<12 | (thunk_ptr_rva % 4 KiB)
+///   padding   (u16)  -- type=ABSOLUTE | 0 (no-op, keeps block 4-aligned)
+/// ```
+fn build_reloc(thunk_ptr_rva: u32) -> Vec<u8> {
+    let page_rva = thunk_ptr_rva & !0xFFF;
+    let offset_in_page = (thunk_ptr_rva & 0xFFF) as u16;
+    let entry: u16 = (IMAGE_REL_BASED_DIR64 << 12) | offset_in_page;
+    let padding: u16 = IMAGE_REL_BASED_ABSOLUTE << 12; // = 0
+    let block_size: u32 = 12;
+    let mut bytes = Vec::with_capacity(12);
+    bytes.extend_from_slice(&page_rva.to_le_bytes());
+    bytes.extend_from_slice(&block_size.to_le_bytes());
+    bytes.extend_from_slice(&entry.to_le_bytes());
+    bytes.extend_from_slice(&padding.to_le_bytes());
+    bytes
+}
+
 fn build_pdata(machine: Machine, text_rva: u32, text_size: u32, pdata_rva: u32) -> Pdata {
     match machine {
         Machine::X86_64 => build_x86_64_pdata(text_rva, text_size, pdata_rva),

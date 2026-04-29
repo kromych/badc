@@ -1,26 +1,86 @@
-//! End-to-end Windows/AArch64 PE tests, run natively on
-//! Windows-on-ARM hosts.
+//! End-to-end Windows/AArch64 PE tests.
 //!
 //! Compile a c4 program to a PE32+ binary with `Machine =
-//! IMAGE_FILE_MACHINE_ARM64`, drop it in `tmp`, and execute it via
-//! `Command::new(path.exe)`. There's no WINE path on macOS for
-//! AArch64 PEs (Wine on Apple Silicon ships only the
-//! `x86_64-windows` and `i386-windows` DLL sets, no
-//! `aarch64-windows`), so the runtime suite gates to
-//! `windows + aarch64`. The host-portable format check that the PE
-//! file is well-formed lives in [`super::super::codegen::pe::tests`]
-//! and runs everywhere.
+//! IMAGE_FILE_MACHINE_ARM64`, drop it in `tmp`, and execute it.
+//! Two host paths run the same surface:
 //!
-//! On the GitHub Actions matrix the `windows-11-arm` runner
-//! exercises this module; other lanes compile it out.
+//! * On `windows-aarch64` the binary runs natively via
+//!   `Command::new(path.exe)`.
+//! * On `linux-aarch64` the binary runs through WINE 10's
+//!   `aarch64-windows` DLL set (`wine path.exe`). WINE on Apple
+//!   Silicon ships only the `x86_64-windows` and `i386-windows`
+//!   DLL sets, not `aarch64-windows`, so macOS hosts only get the
+//!   format-validation check in [`super::super::codegen::pe::tests`].
+//!
+//! On the GitHub Actions matrix the `windows-11-arm` runner runs
+//! the suite natively; the `ubuntu-24.04-arm` runner runs it via
+//! wine (when the apt-installed wine is available).
 
-#![cfg(all(target_os = "windows", target_arch = "aarch64"))]
+#![cfg(any(
+    all(target_os = "windows", target_arch = "aarch64"),
+    all(target_os = "linux", target_arch = "aarch64"),
+))]
 
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::{Compiler, Target, emit_native};
+
+/// On Windows we run the binary directly; on Linux we go through
+/// WINE. Returns `None` on Linux hosts that don't have wine
+/// installed (so the test can skip gracefully instead of panicking).
+fn run_pe(path: &Path, args: &[&str]) -> Option<std::io::Result<std::process::Output>> {
+    #[cfg(target_os = "windows")]
+    {
+        Some(Command::new(path).args(args).output())
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let wine = wine_binary()?;
+        Some(Command::new(&wine).arg(path).args(args).output())
+    }
+}
+
+/// `which wine` on Linux. The Ubuntu wine 10 package puts it at
+/// `/usr/bin/wine`; we also fall back to PATH.
+#[cfg(target_os = "linux")]
+fn wine_binary() -> Option<PathBuf> {
+    let p = PathBuf::from("/usr/bin/wine");
+    if p.exists() {
+        return Some(p);
+    }
+    Command::new("which")
+        .arg("wine")
+        .output()
+        .ok()
+        .and_then(|o| {
+            if o.status.success() {
+                let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(PathBuf::from(s))
+                }
+            } else {
+                None
+            }
+        })
+}
+
+/// True when this host can actually execute the produced PE
+/// binary. On Windows the answer is always yes; on Linux it
+/// depends on whether WINE is installed.
+fn host_can_run_pe() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        true
+    }
+    #[cfg(target_os = "linux")]
+    {
+        wine_binary().is_some()
+    }
+}
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -28,6 +88,9 @@ enum RunOutcome {
     Exit(i32),
     Signal(i32),
     BuildError(String),
+    /// Host can't execute PE binaries (Linux without wine
+    /// installed). The test should skip rather than fail.
+    HostCannotRun,
 }
 
 impl RunOutcome {
@@ -53,17 +116,28 @@ fn build_and_run(src: &str, stem: &str, args: &[&str]) -> RunOutcome {
         f.sync_all().expect("sync temp file");
     }
 
-    let output = Command::new(&path).args(args).output();
+    let output = match run_pe(&path, args) {
+        Some(r) => r,
+        None => {
+            let _ = std::fs::remove_file(&path);
+            return RunOutcome::HostCannotRun;
+        }
+    };
     let _ = std::fs::remove_file(&path);
     match output {
         Ok(o) => {
             if let Some(code) = o.status.code() {
                 RunOutcome::Exit(code)
             } else {
-                // Windows ExitStatus always has a code; this branch
-                // is unreachable in practice but kept for symmetry
-                // with the unix-shaped sibling module.
-                RunOutcome::Signal(0)
+                #[cfg(unix)]
+                {
+                    use std::os::unix::process::ExitStatusExt;
+                    RunOutcome::Signal(o.status.signal().unwrap_or(0))
+                }
+                #[cfg(not(unix))]
+                {
+                    RunOutcome::Signal(0)
+                }
             }
         }
         Err(e) => panic!("could not exec PE binary: {e}"),
@@ -85,6 +159,7 @@ fn assert_exit(src: &str, stem: &str, args: &[&str], expected: i32) {
         }
         RunOutcome::Signal(s) => panic!("{stem}: exited via signal {s}"),
         RunOutcome::BuildError(e) => panic!("{stem}: {e}"),
+        RunOutcome::HostCannotRun => eprintln!("skip {stem}: no PE runner on this host"),
     }
 }
 
@@ -267,6 +342,10 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
 
 #[test]
 fn fixture_parity() {
+    if !host_can_run_pe() {
+        eprintln!("skip fixture_parity: no PE runner on this host");
+        return;
+    }
     let mut failures: Vec<String> = Vec::new();
     for (name, expected) in NATIVE_PE_ARM64_FIXTURES {
         let outcome = build_and_run_fixture(name);
@@ -285,6 +364,10 @@ fn fixture_parity() {
 
 #[test]
 fn original_c4_compiles_and_runs_hello_pe() {
+    if !host_can_run_pe() {
+        eprintln!("skip c4 self-host: no PE runner on this host");
+        return;
+    }
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("fixtures");
     path.push("c");
@@ -301,5 +384,6 @@ fn original_c4_compiles_and_runs_hello_pe() {
         RunOutcome::Exit(c) => assert_eq!(c, 0, "c4 self-host PE-arm64 exited {c}"),
         RunOutcome::Signal(s) => panic!("c4 self-host PE-arm64 killed by signal {s}"),
         RunOutcome::BuildError(e) => panic!("c4 self-host PE-arm64 build error: {e}"),
+        RunOutcome::HostCannotRun => {} // already logged above
     }
 }

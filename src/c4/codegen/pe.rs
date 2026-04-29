@@ -91,6 +91,7 @@ const IMAGE_FILE_LARGE_ADDRESS_AWARE: u16 = 0x0020;
 
 const PE32_PLUS_MAGIC: u16 = 0x20B;
 const IMAGE_SUBSYSTEM_WINDOWS_CUI: u16 = 3;
+const IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE: u16 = 0x0040;
 const IMAGE_DLLCHARACTERISTICS_NX_COMPAT: u16 = 0x0100;
 
 const IMAGE_SCN_CNT_CODE: u32 = 0x0000_0020;
@@ -100,7 +101,18 @@ const IMAGE_SCN_MEM_READ: u32 = 0x4000_0000;
 const IMAGE_SCN_MEM_WRITE: u32 = 0x8000_0000;
 
 const NUM_DATA_DIRS: u32 = 16;
-const NUM_SECTIONS: usize = 3;
+
+/// Section layout: every 64-bit Windows PE carries `.text` /
+/// `.pdata` / `.idata` / `.data`. The `.pdata` Exception Directory
+/// is mandatory under the 64-bit Windows ABI -- the loader looks up
+/// `RUNTIME_FUNCTION` entries there to handle stack unwinding, and
+/// wine refuses to load AArch64 PEs that omit it. x86_64 doesn't
+/// fail to load without one, but the spec requires it and stricter
+/// hosts (verifier, hardened loaders, future Windows revisions) can
+/// reject a missing entry, so we emit it on both arches.
+fn num_sections(_machine: Machine) -> usize {
+    4
+}
 
 const DOS_HEADER_AND_STUB: usize = 128; // 64 byte DOS header + 64 byte stub
 const PE_SIG_SIZE: usize = 4;
@@ -108,17 +120,30 @@ const COFF_HEADER_SIZE: usize = 20;
 const OPTIONAL64_HEADER_SIZE: usize = 240;
 const SECTION_HEADER_SIZE: usize = 40;
 
-const HEADERS_RAW_SIZE: usize = DOS_HEADER_AND_STUB
-    + PE_SIG_SIZE
-    + COFF_HEADER_SIZE
-    + OPTIONAL64_HEADER_SIZE
-    + SECTION_HEADER_SIZE * NUM_SECTIONS; // = 0x200
+/// Raw on-disk size of the PE headers (DOS + PE sig + COFF +
+/// Optional + section table), rounded up to FILE_ALIGNMENT.
+/// 3 sections fit in 0x200; 4 sections need 0x400.
+fn headers_raw_size(machine: Machine) -> usize {
+    let unaligned = DOS_HEADER_AND_STUB
+        + PE_SIG_SIZE
+        + COFF_HEADER_SIZE
+        + OPTIONAL64_HEADER_SIZE
+        + SECTION_HEADER_SIZE * num_sections(machine);
+    (unaligned + FILE_ALIGNMENT as usize - 1) & !(FILE_ALIGNMENT as usize - 1)
+}
 
 const IMAGE_IMPORT_DESCRIPTOR_SIZE: usize = 20;
 const IAT_ENTRY_SIZE: usize = 8;
 
 const DATA_DIRECTORY_IMPORT: usize = 1;
+const DATA_DIRECTORY_EXCEPTION: usize = 3;
 const DATA_DIRECTORY_IAT: usize = 12;
+
+/// AArch64 RUNTIME_FUNCTION packed-unwind format limit: the
+/// FunctionLength field is 11 bits (units = 4-byte instructions),
+/// so a single packed entry covers at most 2048 instructions
+/// = 8192 bytes. Larger `.text` sections need multiple entries.
+const ARM64_PACKED_FUNCTION_MAX_BYTES: u32 = 2048 * 4;
 
 // ----------------------------------------------------------------
 // Op-to-DLL binding. For each c4 op listed in `aarch64::IMPORTS`,
@@ -211,20 +236,40 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
     let text_prologue_len = stub_len + thunk_len;
     let thunk_rva = SECTION_ALIGNMENT + stub_len;
 
+    let headers_size = headers_raw_size(machine) as u32;
+
     let text_rva: u32 = SECTION_ALIGNMENT;
-    let text_file_off: u32 = HEADERS_RAW_SIZE as u32;
+    let text_file_off: u32 = headers_size;
     let text_size: u32 = text_prologue_len + build.text.len() as u32;
     let text_raw_size: u32 = round_up(text_size, FILE_ALIGNMENT);
 
-    let idata_rva: u32 = round_up(text_rva + text_size, SECTION_ALIGNMENT);
-    let idata_file_off: u32 = text_file_off + text_raw_size;
+    // 64-bit Windows requires a `.pdata` Exception Directory
+    // between `.text` and `.idata` on both x86_64 and AArch64. The
+    // builder dispatches on machine: AArch64 uses packed-unwind
+    // RUNTIME_FUNCTIONs; x86_64 uses begin/end/UNWIND_INFO triples
+    // with a co-located UNWIND_INFO blob in the same section.
+    let pdata_rva: u32 = round_up(text_rva + text_size, SECTION_ALIGNMENT);
+    let pdata_file_off: u32 = text_file_off + text_raw_size;
+    let pdata_bytes = build_pdata(machine, text_rva, text_size, pdata_rva);
+    let pdata_size: u32 = pdata_bytes.len() as u32;
+    let pdata_raw_size: u32 = round_up(pdata_size, FILE_ALIGNMENT);
+
+    let idata_rva: u32 = round_up(pdata_rva + pdata_size, SECTION_ALIGNMENT);
+    let idata_file_off: u32 = pdata_file_off + pdata_raw_size;
 
     let idata_layout = plan_idata(&dlls, &imports, idata_rva);
     // Append an 8-byte slot for the thunk's absolute address. The
     // c4 program's `Op::Mpro` fixups will be patched to point at
     // this slot rather than VirtualProtect's IAT entry, so calls
     // run through the thunk instead of straight to VirtualProtect.
+    // Align to 8 first: the aarch64 `ldr` against this slot scales
+    // its imm12 by 8, so the slot's offset within the page must be
+    // 8-aligned. The hint/name and DLL-string tables in plan_idata
+    // are only 2-aligned, so without this pad the slot can land at
+    // any 4-byte boundary and break the patch.
     let mut idata_bytes = idata_layout.bytes;
+    let pad_to_eight = round_up_usize(idata_bytes.len(), 8);
+    idata_bytes.resize(pad_to_eight, 0);
     let thunk_ptr_offset = idata_bytes.len() as u32;
     idata_bytes.resize(idata_bytes.len() + 8, 0);
     let thunk_ptr_rva = idata_rva + thunk_ptr_offset;
@@ -329,49 +374,54 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
             size_of_code: text_size,
             size_of_initialized_data: idata_size + data_size,
             size_of_image: image_size,
-            size_of_headers: HEADERS_RAW_SIZE as u32,
+            size_of_headers: headers_size,
             import_table_rva: idata_layout.import_directory_rva,
             import_table_size: idata_layout.import_directory_size,
+            exception_table_rva: pdata_rva,
+            exception_table_size: pdata_size,
             iat_rva: idata_layout.iat_rva_base,
             iat_size: idata_layout.iat_size,
         },
     );
-    write_section_headers(
-        &mut out,
-        &[
-            SectionHeader {
-                name: *b".text\0\0\0",
-                virtual_size: text_size,
-                virtual_address: text_rva,
-                size_of_raw_data: text_raw_size,
-                pointer_to_raw_data: text_file_off,
-                characteristics: IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ,
-            },
-            SectionHeader {
-                name: *b".idata\0\0",
-                virtual_size: idata_size,
-                virtual_address: idata_rva,
-                size_of_raw_data: idata_raw_size,
-                pointer_to_raw_data: idata_file_off,
-                characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA
-                    | IMAGE_SCN_MEM_READ
-                    | IMAGE_SCN_MEM_WRITE,
-            },
-            SectionHeader {
-                name: *b".data\0\0\0",
-                virtual_size: data_size,
-                virtual_address: data_rva,
-                size_of_raw_data: data_raw_size,
-                pointer_to_raw_data: data_file_off,
-                characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA
-                    | IMAGE_SCN_MEM_READ
-                    | IMAGE_SCN_MEM_WRITE,
-            },
-        ],
-    );
+    let mut sections: Vec<SectionHeader> = Vec::with_capacity(num_sections(machine));
+    sections.push(SectionHeader {
+        name: *b".text\0\0\0",
+        virtual_size: text_size,
+        virtual_address: text_rva,
+        size_of_raw_data: text_raw_size,
+        pointer_to_raw_data: text_file_off,
+        characteristics: IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ,
+    });
+    sections.push(SectionHeader {
+        name: *b".pdata\0\0",
+        virtual_size: pdata_size,
+        virtual_address: pdata_rva,
+        size_of_raw_data: pdata_raw_size,
+        pointer_to_raw_data: pdata_file_off,
+        characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ,
+    });
+    sections.push(SectionHeader {
+        name: *b".idata\0\0",
+        virtual_size: idata_size,
+        virtual_address: idata_rva,
+        size_of_raw_data: idata_raw_size,
+        pointer_to_raw_data: idata_file_off,
+        characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE,
+    });
+    sections.push(SectionHeader {
+        name: *b".data\0\0\0",
+        virtual_size: data_size,
+        virtual_address: data_rva,
+        size_of_raw_data: data_raw_size,
+        pointer_to_raw_data: data_file_off,
+        characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE,
+    });
+    write_section_headers(&mut out, &sections);
     pad_to(&mut out, text_file_off as usize);
     out.extend_from_slice(&text_bytes);
     pad_to(&mut out, (text_file_off + text_raw_size) as usize);
+    out.extend_from_slice(&pdata_bytes);
+    pad_to(&mut out, (pdata_file_off + pdata_raw_size) as usize);
     out.extend_from_slice(&idata_bytes);
     pad_to(&mut out, (idata_file_off + idata_raw_size) as usize);
     out.extend_from_slice(&build.data);
@@ -408,7 +458,7 @@ fn write_coff_header(out: &mut Vec<u8>, optional_header_size: usize, machine: Ma
         Machine::Aarch64 => IMAGE_FILE_MACHINE_ARM64,
     };
     out.extend_from_slice(&machine_id.to_le_bytes()); // Machine
-    out.extend_from_slice(&(NUM_SECTIONS as u16).to_le_bytes()); // NumberOfSections
+    out.extend_from_slice(&(num_sections(machine) as u16).to_le_bytes()); // NumberOfSections
     out.extend_from_slice(&0u32.to_le_bytes()); // TimeDateStamp
     out.extend_from_slice(&0u32.to_le_bytes()); // PointerToSymbolTable (deprecated)
     out.extend_from_slice(&0u32.to_le_bytes()); // NumberOfSymbols
@@ -427,6 +477,10 @@ struct OptionalHeaderInputs {
     size_of_headers: u32,
     import_table_rva: u32,
     import_table_size: u32,
+    /// Exception Directory (data directory entry 3) -- the
+    /// `.pdata` section's RVA / size on aarch64; zero on x86_64.
+    exception_table_rva: u32,
+    exception_table_size: u32,
     iat_rva: u32,
     iat_size: u32,
 }
@@ -448,18 +502,30 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
     out.extend_from_slice(&IMAGE_BASE.to_le_bytes());
     out.extend_from_slice(&SECTION_ALIGNMENT.to_le_bytes());
     out.extend_from_slice(&FILE_ALIGNMENT.to_le_bytes());
-    out.extend_from_slice(&6u16.to_le_bytes()); // MajorOperatingSystemVersion
+    // OS version: 10.0 -- AArch64 Windows requires Win10+, and
+    // wine's loader checks this when deciding to accept an
+    // ARM64 PE. x86_64 is happy with anything Vista+ but bumping
+    // both kept the writer simple.
+    out.extend_from_slice(&10u16.to_le_bytes()); // MajorOperatingSystemVersion
     out.extend_from_slice(&0u16.to_le_bytes()); // Minor
     out.extend_from_slice(&0u16.to_le_bytes()); // MajorImageVersion
     out.extend_from_slice(&0u16.to_le_bytes()); // Minor
-    out.extend_from_slice(&6u16.to_le_bytes()); // MajorSubsystemVersion
+    out.extend_from_slice(&10u16.to_le_bytes()); // MajorSubsystemVersion
     out.extend_from_slice(&0u16.to_le_bytes()); // Minor
     out.extend_from_slice(&0u32.to_le_bytes()); // Win32VersionValue (reserved)
     out.extend_from_slice(&inp.size_of_image.to_le_bytes());
     out.extend_from_slice(&inp.size_of_headers.to_le_bytes());
     out.extend_from_slice(&0u32.to_le_bytes()); // CheckSum
     out.extend_from_slice(&IMAGE_SUBSYSTEM_WINDOWS_CUI.to_le_bytes());
-    out.extend_from_slice(&IMAGE_DLLCHARACTERISTICS_NX_COMPAT.to_le_bytes());
+    // Wine's PE validation rejects non-x86 64-bit PEs that don't
+    // set both NX_COMPAT and DYNAMIC_BASE. The DYNAMIC_BASE flag
+    // promises the image is relocatable; we don't actually ship
+    // a .reloc table, so loading at any address other than
+    // ImageBase would fail -- but the typical AArch64 / x86_64
+    // Windows preferred base of 0x140000000 is reachable, so the
+    // loader should land us there in practice.
+    let dll_chars = IMAGE_DLLCHARACTERISTICS_NX_COMPAT | IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE;
+    out.extend_from_slice(&dll_chars.to_le_bytes());
     out.extend_from_slice(&0x10_0000u64.to_le_bytes()); // SizeOfStackReserve = 1 MiB
     out.extend_from_slice(&0x1000u64.to_le_bytes()); // SizeOfStackCommit
     out.extend_from_slice(&0x10_0000u64.to_le_bytes()); // SizeOfHeapReserve
@@ -467,12 +533,13 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
     out.extend_from_slice(&0u32.to_le_bytes()); // LoaderFlags
     out.extend_from_slice(&NUM_DATA_DIRS.to_le_bytes());
 
-    // Data directories: 16 entries of (RVA, Size). We only fill the
-    // Import Table (index 1) and the IAT (index 12); everything
-    // else stays zeroed.
+    // Data directories: 16 entries of (RVA, Size). Three are
+    // populated: Import (1), Exception (3), and IAT
+    // (12). Everything else stays zeroed.
     for i in 0..NUM_DATA_DIRS as usize {
         let (rva, size) = match i {
             DATA_DIRECTORY_IMPORT => (inp.import_table_rva, inp.import_table_size),
+            DATA_DIRECTORY_EXCEPTION => (inp.exception_table_rva, inp.exception_table_size),
             DATA_DIRECTORY_IAT => (inp.iat_rva, inp.iat_size),
             _ => (0u32, 0u32),
         };
@@ -997,6 +1064,102 @@ fn build_x86_64_mprotect_thunk() -> MprotectThunk {
         bytes,
         iat_virtualprotect_offset: call_vp_off,
     }
+}
+
+/// `.pdata` Exception Directory dispatcher.
+///
+/// Both x86_64 and aarch64 are covered. The two formats are
+/// different on the wire -- x86_64 uses 12-byte
+/// (begin/end/UnwindInfoAddress) entries plus a co-located
+/// `UNWIND_INFO` blob; aarch64 uses 8-byte entries with packed
+/// unwind info inline -- so we dispatch and let each builder lay
+/// out its own bytes.
+fn build_pdata(machine: Machine, text_rva: u32, text_size: u32, pdata_rva: u32) -> Vec<u8> {
+    match machine {
+        Machine::X86_64 => build_x86_64_pdata(text_rva, text_size, pdata_rva),
+        Machine::Aarch64 => build_aarch64_pdata(text_rva, text_size),
+    }
+}
+
+/// x86_64 `.pdata` builder.
+///
+/// The x86_64 Windows ABI requires every non-leaf function to have
+/// a `RUNTIME_FUNCTION` entry pointing at an `UNWIND_INFO` struct;
+/// the OS loader and `RtlLookupFunctionEntry` consult these for
+/// SEH unwinding. Older Windows revisions tolerated a missing
+/// Exception Directory, but the spec has always required it on
+/// 64-bit targets and stricter loaders / verifiers reject without
+/// one.
+///
+/// We emit a single coarse entry covering the entire `.text`
+/// region, paired with a minimal `UNWIND_INFO` (version=1,
+/// flags=0, no prolog, no codes). The unwinder would treat every
+/// address as a leaf with no frame -- a lie, but the c4 program
+/// never raises a Windows exception, and the loader doesn't
+/// validate the unwind codes against the actual prolog. This
+/// mirrors the coarse approach the AArch64 builder uses.
+///
+/// Layout: [12 bytes: RUNTIME_FUNCTION][4 bytes: UNWIND_INFO].
+/// The UNWIND_INFO sits immediately after the RUNTIME_FUNCTION in
+/// the same section, which keeps everything in one place and
+/// honors the 4-byte alignment requirement.
+fn build_x86_64_pdata(text_rva: u32, text_size: u32, pdata_rva: u32) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(16);
+    let runtime_function_size: u32 = 12;
+    let unwind_info_rva = pdata_rva + runtime_function_size;
+    // RUNTIME_FUNCTION { BeginAddress, EndAddress, UnwindInfoAddress }
+    bytes.extend_from_slice(&text_rva.to_le_bytes());
+    bytes.extend_from_slice(&(text_rva + text_size).to_le_bytes());
+    bytes.extend_from_slice(&unwind_info_rva.to_le_bytes());
+    // UNWIND_INFO:
+    //   byte 0: Version (3 bits) | Flags (5 bits) -- v1, no flags
+    //   byte 1: SizeOfProlog                       -- 0
+    //   byte 2: CountOfCodes                       -- 0
+    //   byte 3: FrameRegister (4) | FrameOffset(4) -- 0
+    bytes.extend_from_slice(&[0x01, 0x00, 0x00, 0x00]);
+    bytes
+}
+
+/// AArch64 `.pdata` builder.
+///
+/// The AArch64 Windows ABI requires every executable code region
+/// to be covered by a `RUNTIME_FUNCTION` entry in the Exception
+/// Directory; the OS loader looks these up to handle stack
+/// unwinding for SEH-style exceptions. wine on Linux/arm64 follows
+/// the same rule and refuses to load PEs that omit `.pdata`.
+///
+/// Each `RUNTIME_FUNCTION` is two `u32`s: `BeginAddress` (RVA of
+/// the first instruction) and `UnwindData`. The `UnwindData` can
+/// either point to an `.xdata` blob or carry packed unwind info
+/// inline -- packed format has `Flag != 0` in its low two bits and
+/// is sufficient for our purposes since the c4 program never
+/// raises a Windows-style exception. We use `Flag = 2` ("packed
+/// unwind, leaf or unchained") with all other fields zero, which
+/// claims "no saves, no frame" -- a lie, but the loader doesn't
+/// validate that, only the unwinder would (and we never unwind).
+///
+/// One catch: the `FunctionLength` field is 11 bits (instruction
+/// count), so a single packed entry covers at most 8192 bytes of
+/// code. We split larger `.text` into 8 KiB chunks, one packed
+/// entry per chunk.
+fn build_aarch64_pdata(text_rva: u32, text_size: u32) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    let mut covered = 0u32;
+    while covered < text_size {
+        let remaining = text_size - covered;
+        let chunk = remaining.min(ARM64_PACKED_FUNCTION_MAX_BYTES);
+        // Round chunk down to a multiple of 4 (instruction size).
+        // Any tail (non-multiple-of-4) shouldn't appear in our
+        // codegen, but guard against it just in case.
+        let chunk_words = chunk / 4;
+        let function_length = chunk_words & 0x7FF; // 11 bits
+        let unwind_data: u32 = (function_length << 2) | 0b10; // Flag=2
+        let begin_address = text_rva + covered;
+        bytes.extend_from_slice(&begin_address.to_le_bytes());
+        bytes.extend_from_slice(&unwind_data.to_le_bytes());
+        covered += chunk;
+    }
+    bytes
 }
 
 /// AArch64 mprotect thunk. Same idea as the x86_64 one: take the

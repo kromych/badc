@@ -248,10 +248,20 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
     // builder dispatches on machine: AArch64 uses packed-unwind
     // RUNTIME_FUNCTIONs; x86_64 uses begin/end/UNWIND_INFO triples
     // with a co-located UNWIND_INFO blob in the same section.
+    //
+    // The Exception Directory entry in the data directories must
+    // span exactly the RUNTIME_FUNCTION array -- the loader divides
+    // `Size / sizeof(RUNTIME_FUNCTION)` to count entries, so any
+    // trailing bytes (e.g. an x86_64 UNWIND_INFO blob) live inside
+    // the section but outside the directory range. The builder
+    // returns both numbers so we wire the section header and the
+    // data directory entry up separately.
     let pdata_rva: u32 = round_up(text_rva + text_size, SECTION_ALIGNMENT);
     let pdata_file_off: u32 = text_file_off + text_raw_size;
-    let pdata_bytes = build_pdata(machine, text_rva, text_size, pdata_rva);
+    let pdata = build_pdata(machine, text_rva, text_size, pdata_rva);
+    let pdata_bytes = pdata.bytes;
     let pdata_size: u32 = pdata_bytes.len() as u32;
+    let pdata_directory_size: u32 = pdata.directory_size;
     let pdata_raw_size: u32 = round_up(pdata_size, FILE_ALIGNMENT);
 
     let idata_rva: u32 = round_up(pdata_rva + pdata_size, SECTION_ALIGNMENT);
@@ -378,7 +388,7 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
             import_table_rva: idata_layout.import_directory_rva,
             import_table_size: idata_layout.import_directory_size,
             exception_table_rva: pdata_rva,
-            exception_table_size: pdata_size,
+            exception_table_size: pdata_directory_size,
             iat_rva: idata_layout.iat_rva_base,
             iat_size: idata_layout.iat_size,
         },
@@ -1066,6 +1076,16 @@ fn build_x86_64_mprotect_thunk() -> MprotectThunk {
     }
 }
 
+/// `.pdata` builder result. `bytes` is the full section payload
+/// (RUNTIME_FUNCTIONs + any trailing UNWIND_INFO blobs). `directory_size`
+/// is just the RUNTIME_FUNCTION array size and is what gets wired into
+/// the Optional Header's Exception Directory entry. The two are equal
+/// for AArch64 (no trailing data) and differ for x86_64.
+struct Pdata {
+    bytes: Vec<u8>,
+    directory_size: u32,
+}
+
 /// `.pdata` Exception Directory dispatcher.
 ///
 /// Both x86_64 and aarch64 are covered. The two formats are
@@ -1074,7 +1094,7 @@ fn build_x86_64_mprotect_thunk() -> MprotectThunk {
 /// `UNWIND_INFO` blob; aarch64 uses 8-byte entries with packed
 /// unwind info inline -- so we dispatch and let each builder lay
 /// out its own bytes.
-fn build_pdata(machine: Machine, text_rva: u32, text_size: u32, pdata_rva: u32) -> Vec<u8> {
+fn build_pdata(machine: Machine, text_rva: u32, text_size: u32, pdata_rva: u32) -> Pdata {
     match machine {
         Machine::X86_64 => build_x86_64_pdata(text_rva, text_size, pdata_rva),
         Machine::Aarch64 => build_aarch64_pdata(text_rva, text_size),
@@ -1102,11 +1122,14 @@ fn build_pdata(machine: Machine, text_rva: u32, text_size: u32, pdata_rva: u32) 
 /// Layout: [12 bytes: RUNTIME_FUNCTION][4 bytes: UNWIND_INFO].
 /// The UNWIND_INFO sits immediately after the RUNTIME_FUNCTION in
 /// the same section, which keeps everything in one place and
-/// honors the 4-byte alignment requirement.
-fn build_x86_64_pdata(text_rva: u32, text_size: u32, pdata_rva: u32) -> Vec<u8> {
+/// honors the 4-byte alignment requirement. The Exception
+/// Directory only spans the RUNTIME_FUNCTION (the loader uses
+/// `Size / sizeof(RUNTIME_FUNCTION)` to count entries, so the
+/// trailing UNWIND_INFO must not be counted).
+fn build_x86_64_pdata(text_rva: u32, text_size: u32, pdata_rva: u32) -> Pdata {
+    const RUNTIME_FUNCTION_SIZE: u32 = 12;
     let mut bytes = Vec::with_capacity(16);
-    let runtime_function_size: u32 = 12;
-    let unwind_info_rva = pdata_rva + runtime_function_size;
+    let unwind_info_rva = pdata_rva + RUNTIME_FUNCTION_SIZE;
     // RUNTIME_FUNCTION { BeginAddress, EndAddress, UnwindInfoAddress }
     bytes.extend_from_slice(&text_rva.to_le_bytes());
     bytes.extend_from_slice(&(text_rva + text_size).to_le_bytes());
@@ -1117,7 +1140,10 @@ fn build_x86_64_pdata(text_rva: u32, text_size: u32, pdata_rva: u32) -> Vec<u8> 
     //   byte 2: CountOfCodes                       -- 0
     //   byte 3: FrameRegister (4) | FrameOffset(4) -- 0
     bytes.extend_from_slice(&[0x01, 0x00, 0x00, 0x00]);
-    bytes
+    Pdata {
+        bytes,
+        directory_size: RUNTIME_FUNCTION_SIZE,
+    }
 }
 
 /// AArch64 `.pdata` builder.
@@ -1133,16 +1159,24 @@ fn build_x86_64_pdata(text_rva: u32, text_size: u32, pdata_rva: u32) -> Vec<u8> 
 /// either point to an `.xdata` blob or carry packed unwind info
 /// inline -- packed format has `Flag != 0` in its low two bits and
 /// is sufficient for our purposes since the c4 program never
-/// raises a Windows-style exception. We use `Flag = 2` ("packed
-/// unwind, leaf or unchained") with all other fields zero, which
-/// claims "no saves, no frame" -- a lie, but the loader doesn't
-/// validate that, only the unwinder would (and we never unwind).
+/// raises a Windows-style exception. We use `Flag = 1` ("packed
+/// unwind, canonical -- complete function") with all other fields
+/// zero, which claims "no saves, no frame, no chained context, no
+/// LR home". The Microsoft compiler emits this exact pattern for
+/// frameless leaf functions. The unwinder would interpret every
+/// address as a frameless leaf, which is a lie, but the loader
+/// only validates structural properties (begin within image, no
+/// overlap, ranges sorted) and never runs the unwinder against
+/// our binary. We previously used `Flag = 2` (fragment) here;
+/// real Windows ARM rejected those binaries with
+/// `STATUS_INVALID_IMAGE_FORMAT` even though wine on Linux/arm64
+/// accepted them, so we picked the canonical encoding.
 ///
 /// One catch: the `FunctionLength` field is 11 bits (instruction
 /// count), so a single packed entry covers at most 8192 bytes of
 /// code. We split larger `.text` into 8 KiB chunks, one packed
 /// entry per chunk.
-fn build_aarch64_pdata(text_rva: u32, text_size: u32) -> Vec<u8> {
+fn build_aarch64_pdata(text_rva: u32, text_size: u32) -> Pdata {
     let mut bytes = Vec::new();
     let mut covered = 0u32;
     while covered < text_size {
@@ -1153,13 +1187,17 @@ fn build_aarch64_pdata(text_rva: u32, text_size: u32) -> Vec<u8> {
         // codegen, but guard against it just in case.
         let chunk_words = chunk / 4;
         let function_length = chunk_words & 0x7FF; // 11 bits
-        let unwind_data: u32 = (function_length << 2) | 0b10; // Flag=2
+        let unwind_data: u32 = (function_length << 2) | 0b01; // Flag=1
         let begin_address = text_rva + covered;
         bytes.extend_from_slice(&begin_address.to_le_bytes());
         bytes.extend_from_slice(&unwind_data.to_le_bytes());
         covered += chunk;
     }
-    bytes
+    let directory_size = bytes.len() as u32;
+    Pdata {
+        bytes,
+        directory_size,
+    }
 }
 
 /// AArch64 mprotect thunk. Same idea as the x86_64 one: take the

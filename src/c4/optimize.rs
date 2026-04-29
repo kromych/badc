@@ -75,7 +75,7 @@ impl BrKind {
 /// instruction; the size of the encoded form is given by [`Insn::word_size`].
 #[derive(Debug, Clone)]
 enum Insn {
-    /// Op with no operand: arithmetic, loads, stores, syscalls, Lev, Psh.
+    /// Op with no operand: arithmetic, loads, stores, intrinsics, Lev, Psh.
     NoArg(Op),
     /// `Lea <off>` -- local-frame offset.
     Lea(i64),

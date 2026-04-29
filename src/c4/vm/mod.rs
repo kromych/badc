@@ -9,7 +9,7 @@ use super::host::Host;
 use super::op::Op;
 use super::program::Program;
 
-mod syscalls;
+mod intrinsics;
 
 const STACK_CAPACITY: usize = 256 * 1024;
 const STACK_BASE: usize = 0x1000_0000;
@@ -682,23 +682,23 @@ impl<H: Host> Vm<H> {
                     a = self.load_u8(addr)? as i64;
                     pc += 1;
                 }
-                Op::Open => a = self.syscall_open(sp)?,
-                Op::Read => a = self.syscall_read(sp)?,
-                Op::Clos => a = self.syscall_close(sp)?,
-                Op::Malc => a = self.syscall_malloc(sp)?,
-                Op::Free => a = self.syscall_free(sp)?,
-                Op::Mset => a = self.syscall_memset(sp)?,
-                Op::Mcmp => a = self.syscall_memcmp(sp)?,
-                Op::Mcpy => a = self.syscall_memcpy(sp)?,
-                Op::Prtf => a = self.syscall_printf(sp, pc)?,
+                Op::Open => a = self.intrinsic_open(sp)?,
+                Op::Read => a = self.intrinsic_read(sp)?,
+                Op::Clos => a = self.intrinsic_close(sp)?,
+                Op::Malc => a = self.intrinsic_malloc(sp)?,
+                Op::Free => a = self.intrinsic_free(sp)?,
+                Op::Mset => a = self.intrinsic_memset(sp)?,
+                Op::Mcmp => a = self.intrinsic_memcmp(sp)?,
+                Op::Mcpy => a = self.intrinsic_memcpy(sp)?,
+                Op::Prtf => a = self.intrinsic_printf(sp, pc)?,
                 Op::Exit => return self.load_i64(sp),
-                Op::Write => a = self.syscall_write(sp)?,
-                Op::Genv => a = self.syscall_getenv(sp)?,
-                Op::Senv => a = self.syscall_setenv(sp)?,
-                Op::Dlop => a = self.syscall_dlopen(sp)?,
-                Op::Dlsm => a = self.syscall_dlsym(sp)?,
-                Op::Dlcl => a = self.syscall_dlclose(sp)?,
-                Op::Dler => a = self.syscall_dlerror()?,
+                Op::Write => a = self.intrinsic_write(sp)?,
+                Op::Genv => a = self.intrinsic_getenv(sp)?,
+                Op::Senv => a = self.intrinsic_setenv(sp)?,
+                Op::Dlop => a = self.intrinsic_dlopen(sp)?,
+                Op::Dlsm => a = self.intrinsic_dlsym(sp)?,
+                Op::Dlcl => a = self.intrinsic_dlclose(sp)?,
+                Op::Dler => a = self.intrinsic_dlerror()?,
             }
         }
     }

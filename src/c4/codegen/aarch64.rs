@@ -243,7 +243,7 @@ impl Reg {
     pub const X0: Reg = Reg(0);
     pub const X1: Reg = Reg(1);
     pub const X2: Reg = Reg(2);
-    pub const X8: Reg = Reg(8); // Linux/aarch64 syscall number register
+    pub const X8: Reg = Reg(8); // Linux/aarch64 intrinsic number register
     pub const X16: Reg = Reg(16); // IP0 -- temp scratch
     pub const X17: Reg = Reg(17); // IP1 -- second temp
     pub const X19: Reg = Reg(19); // VM accumulator (callee-saved)
@@ -569,7 +569,7 @@ pub(super) fn enc_blr(rn: Reg) -> u32 {
 }
 
 /// `SVC #imm16` -- supervisor call (system call). On Linux/aarch64
-/// the kernel reads the syscall number from `x8` and the arguments
+/// the kernel reads the intrinsic number from `x8` and the arguments
 /// from `x0..x5`; the immediate is conventionally zero.
 pub(super) fn enc_svc(imm16: u16) -> u32 {
     0xD400_0001 | ((imm16 as u32) << 5)
@@ -1450,7 +1450,7 @@ fn lower_op(
     Ok(())
 }
 
-/// Lower a syscall op to a libc call. Args were already pushed onto
+/// Lower a intrinsic op to a libc call. Args were already pushed onto
 /// our 16-byte VM stack slots by the c4 emitter; we *peek* (not pop)
 /// to load them into x0..x7. The c4 emitter follows every call with
 /// `Op::Adj N` which the next loop iteration will lower into the SP

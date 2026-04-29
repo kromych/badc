@@ -382,7 +382,13 @@ const LIB_OPS: &[(&str, Op)] = &[
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PredefinedKind {
     Keyword,
-    Syscall,
+    /// Compiler intrinsic: a libc-shaped function (`printf`, `malloc`,
+    /// ...) the compiler knows how to lower directly to a call into
+    /// whatever the target system exposes (libSystem on macOS,
+    /// libc.so.6 on Linux, msvcrt.dll on Windows). Not a real
+    /// intrinsic in the kernel-trap sense -- the older `Syscall`
+    /// spelling was misleading.
+    Intrinsic,
     Constant,
 }
 
@@ -390,13 +396,13 @@ pub enum PredefinedKind {
 pub struct PredefinedSymbol {
     pub name: &'static str,
     pub kind: PredefinedKind,
-    /// For keywords this is the token discriminant, for syscalls the op
-    /// discriminant, and for constants the actual integer value.
+    /// For keywords this is the token discriminant, for intrinsics the
+    /// op discriminant, and for constants the actual integer value.
     pub value: i64,
 }
 
-/// Flatten the keyword/syscall/constant tables into a single iterable.
-/// Used by the `--list-symbols` CLI flag.
+/// Flatten the keyword / intrinsic / constant tables into a single
+/// iterable. Used by the `--list-symbols` CLI flag.
 ///
 /// Lib-function names appear in `KEYWORDS` as `Token::Id` placeholders so
 /// they're interned before `LIB_OPS` upgrades their class -- but they
@@ -417,7 +423,7 @@ pub fn predefined_symbols() -> Vec<PredefinedSymbol> {
     for (name, op) in LIB_OPS {
         out.push(PredefinedSymbol {
             name,
-            kind: PredefinedKind::Syscall,
+            kind: PredefinedKind::Intrinsic,
             value: *op as i64,
         });
     }

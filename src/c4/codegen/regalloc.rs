@@ -170,7 +170,7 @@ fn op_width(op: Op) -> usize {
 
 /// True if `op` lowers to something that trampes caller-saved
 /// registers -- direct call (`Jsr`), indirect call (`Jsri`), or any
-/// of the libc syscall ops (which lower to a `bl` / `call` through
+/// of the libc intrinsic ops (which lower to a `bl` / `call` through
 /// the GOT). The analyzer uses this to decide whether a Pseudo push
 /// that's live across `op` must use the callee-saved bank.
 fn is_call_op(op: Op) -> bool {

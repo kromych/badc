@@ -65,46 +65,46 @@ pub enum Op {
     Div,
     /// Modulo `%`
     Mod,
-    /// Syscall: Open a file
+    /// Intrinsic: Open a file
     Open,
-    /// Syscall: Read from a file descriptor
+    /// Intrinsic: Read from a file descriptor
     Read,
-    /// Syscall: Close a file descriptor
+    /// Intrinsic: Close a file descriptor
     Clos,
-    /// Syscall: Formatted print to stdout
+    /// Intrinsic: Formatted print to stdout
     Prtf,
-    /// Syscall: Dynamic memory allocation
+    /// Intrinsic: Dynamic memory allocation
     Malc,
-    /// Syscall: Deallocate memory
+    /// Intrinsic: Deallocate memory
     Free,
-    /// Syscall: Set memory block to value
+    /// Intrinsic: Set memory block to value
     Mset,
-    /// Syscall: Compare memory blocks
+    /// Intrinsic: Compare memory blocks
     Mcmp,
-    /// Syscall: Copy memory block from src to dst.
+    /// Intrinsic: Copy memory block from src to dst.
     Mcpy,
-    /// Syscall: Terminate program with exit code
+    /// Intrinsic: Terminate program with exit code
     Exit,
-    /// Syscall: Write a buffer to a file descriptor (fd 1=stdout, 2=stderr).
+    /// Intrinsic: Write a buffer to a file descriptor (fd 1=stdout, 2=stderr).
     Write,
-    /// Syscall: Read an environment variable into the data segment.
+    /// Intrinsic: Read an environment variable into the data segment.
     Genv,
-    /// Syscall: Set an environment variable.
+    /// Intrinsic: Set an environment variable.
     Senv,
-    /// Syscall: `dlopen(path, flags)` -- load a shared library at
+    /// Intrinsic: `dlopen(path, flags)` -- load a shared library at
     /// runtime. Returns an opaque handle (or 0 on failure). In VM
     /// mode the handle is a real native pointer; calling through it
     /// via `Op::Jsri` is rejected (no FFI from the VM).
     Dlop,
-    /// Syscall: `dlsym(handle, name)` -- look up a symbol in a loaded
+    /// Intrinsic: `dlsym(handle, name)` -- look up a symbol in a loaded
     /// library. Returns a function pointer (or 0 on miss). Native
     /// binaries can call the result through `Op::Jsri`; VM mode can
     /// only inspect it.
     Dlsm,
-    /// Syscall: `dlclose(handle)` -- unload a previously dlopen'd
+    /// Intrinsic: `dlclose(handle)` -- unload a previously dlopen'd
     /// library. Returns 0 on success, non-zero on failure.
     Dlcl,
-    /// Syscall: `dlerror()` -- return the most recent dynamic-loader
+    /// Intrinsic: `dlerror()` -- return the most recent dynamic-loader
     /// error message as a C string, or 0 if none. The returned
     /// pointer is valid until the next dlerror call (POSIX).
     Dler,

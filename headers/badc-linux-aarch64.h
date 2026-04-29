@@ -45,6 +45,37 @@
 #pragma binding(libdl::dlclose, "dlclose")
 #pragma binding(libdl::dlerror, "dlerror")
 
+// More libc surface. Declarative only -- reach via `dlopen(NULL,
+// RTLD_NOW)` + `dlsym` from c4 source. See the README's
+// "Fun recipes".
+#pragma binding(libc::sprintf, "sprintf")
+#pragma binding(libc::snprintf, "snprintf")
+#pragma binding(libc::sscanf, "sscanf")
+#pragma binding(libc::fputs, "fputs")
+#pragma binding(libc::fgets, "fgets")
+#pragma binding(libc::fopen, "fopen")
+#pragma binding(libc::fclose, "fclose")
+#pragma binding(libc::fread, "fread")
+#pragma binding(libc::fwrite, "fwrite")
+#pragma binding(libc::strlen, "strlen")
+#pragma binding(libc::strcpy, "strcpy")
+#pragma binding(libc::strncpy, "strncpy")
+#pragma binding(libc::strcmp, "strcmp")
+#pragma binding(libc::strncmp, "strncmp")
+#pragma binding(libc::strchr, "strchr")
+#pragma binding(libc::strstr, "strstr")
+#pragma binding(libc::atoi, "atoi")
+#pragma binding(libc::atol, "atol")
+#pragma binding(libc::abs, "abs")
+#pragma binding(libc::abort, "abort")
+#pragma binding(libc::system, "system")
+#pragma binding(libc::getaddrinfo, "getaddrinfo")
+#pragma binding(libc::freeaddrinfo, "freeaddrinfo")
+#pragma binding(libc::socket, "socket")
+#pragma binding(libc::connect, "connect")
+#pragma binding(libc::send, "send")
+#pragma binding(libc::recv, "recv")
+
 // Function prototypes -- the parser's type signatures. `char` is
 // one byte; `int` is the c4 machine word (8 bytes). Forward
 // declarations only; bindings above point at the actual symbols.

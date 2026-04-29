@@ -310,7 +310,7 @@ fn print_predefined_symbols() {
 
     let mut names: Vec<&str> = symbols
         .iter()
-        .filter(|s| s.kind == PredefinedKind::Syscall)
+        .filter(|s| s.kind == PredefinedKind::Intrinsic)
         .map(|s| s.name)
         .collect();
     names.sort_unstable();

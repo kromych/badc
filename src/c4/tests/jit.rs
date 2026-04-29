@@ -203,6 +203,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     // dlopen+dlsym+blr finds libc atoi and the indirect call passes
     // "123" in the System V argument register.
     ("dlopen_atoi.c", 123),
+    ("dlopen_strlen.c", 13),
 ];
 
 #[test]

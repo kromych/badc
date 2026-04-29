@@ -19,6 +19,7 @@ use super::token::Token;
 use super::{C4Error, Compiler, Op, Program, Vm, optimize};
 
 mod codegen;
+mod intrinsics;
 mod jit;
 mod lexer;
 mod native;
@@ -30,7 +31,6 @@ mod optimizer;
 mod parser;
 mod pointer_tracking;
 mod programs;
-mod syscalls;
 mod types;
 mod vm;
 

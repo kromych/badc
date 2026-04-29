@@ -100,7 +100,7 @@ fn dlopen_returns_a_non_zero_handle_in_vm_mode() {
     // dlopen(NULL, RTLD_NOW) -- ask the host for the global symbol
     // table. StdHost forwards to libc::dlopen, which returns a real
     // handle (non-zero) on success. We just check that's reachable
-    // through the VM's syscall layer.
+    // through the VM's intrinsic layer.
     let src = r#"
         int main() {
             int *h;

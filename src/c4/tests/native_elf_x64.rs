@@ -258,6 +258,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("type_warning_arity.c", 0),
     ("setenv_then_get.c", 'Z' as i32),
     ("dlopen_atoi.c", 123),
+    ("dlopen_strlen.c", 13),
 ];
 
 #[test]

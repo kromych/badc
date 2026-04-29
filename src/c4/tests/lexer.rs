@@ -214,7 +214,7 @@ fn line_counter_advances_with_newlines() {
 #[test]
 fn library_function_names_are_pre_seeded() {
     // `init_symbols` registers C library names like `malloc` as
-    // `Token::Sys` carrying the matching syscall opcode in `val`.
+    // `Token::Sys` carrying the matching intrinsic opcode in `val`.
     // The type signature (return type + params + variadic) is no
     // longer seeded here -- it now arrives via the per-target
     // header's forward-declaration prototype (`char *malloc(int);`)

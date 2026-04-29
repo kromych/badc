@@ -200,7 +200,7 @@ mod jit_impl {
     // ----------------------------------------------------------------
     // Memory allocation. We use raw mmap / mprotect / munmap because
     // pulling in `libc` or `region` as Cargo deps would change the
-    // crate's no-deps story for one feature; the syscall surface here
+    // crate's no-deps story for one feature; the intrinsic surface here
     // is small and stable on Linux + Darwin.
     // ----------------------------------------------------------------
 

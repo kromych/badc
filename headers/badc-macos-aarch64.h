@@ -48,6 +48,39 @@
 #pragma binding(libsystem::dlclose, "_dlclose")
 #pragma binding(libsystem::dlerror, "_dlerror")
 
+// More of the libc surface, for `dlsym`-flavoured callers. These
+// are declarative -- the codegen has no `Op` for them, so calling
+// them directly from c4 source isn't wired up. The `dlopen(NULL,
+// RTLD_NOW)` + `dlsym` two-step in the README's "Fun recipes"
+// works against any of these out of the box.
+#pragma binding(libsystem::sprintf, "_sprintf")
+#pragma binding(libsystem::snprintf, "_snprintf")
+#pragma binding(libsystem::sscanf, "_sscanf")
+#pragma binding(libsystem::fputs, "_fputs")
+#pragma binding(libsystem::fgets, "_fgets")
+#pragma binding(libsystem::fopen, "_fopen")
+#pragma binding(libsystem::fclose, "_fclose")
+#pragma binding(libsystem::fread, "_fread")
+#pragma binding(libsystem::fwrite, "_fwrite")
+#pragma binding(libsystem::strlen, "_strlen")
+#pragma binding(libsystem::strcpy, "_strcpy")
+#pragma binding(libsystem::strncpy, "_strncpy")
+#pragma binding(libsystem::strcmp, "_strcmp")
+#pragma binding(libsystem::strncmp, "_strncmp")
+#pragma binding(libsystem::strchr, "_strchr")
+#pragma binding(libsystem::strstr, "_strstr")
+#pragma binding(libsystem::atoi, "_atoi")
+#pragma binding(libsystem::atol, "_atol")
+#pragma binding(libsystem::abs, "_abs")
+#pragma binding(libsystem::abort, "_abort")
+#pragma binding(libsystem::system, "_system")
+#pragma binding(libsystem::getaddrinfo, "_getaddrinfo")
+#pragma binding(libsystem::freeaddrinfo, "_freeaddrinfo")
+#pragma binding(libsystem::socket, "_socket")
+#pragma binding(libsystem::connect, "_connect")
+#pragma binding(libsystem::send, "_send")
+#pragma binding(libsystem::recv, "_recv")
+
 // Function prototypes -- supply the parser's type signatures so it
 // can type-check call sites. `char` is exactly one byte; `int` is
 // the c4 machine word (8 bytes under our runtime). These are

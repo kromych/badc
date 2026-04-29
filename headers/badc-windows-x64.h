@@ -64,6 +64,31 @@
 #pragma binding(kernel32::VirtualProtect, "VirtualProtect")
 #pragma binding(kernel32::VirtualFree, "VirtualFree")
 
+// More libc surface. Declarative only -- reach via `dlopen(NULL,
+// RTLD_NOW)` + `dlsym` (which routes through `LoadLibraryA` /
+// `GetProcAddress` on Windows). See the README's "Fun recipes".
+#pragma binding(msvcrt::sprintf, "sprintf")
+#pragma binding(msvcrt::snprintf, "_snprintf")
+#pragma binding(msvcrt::sscanf, "sscanf")
+#pragma binding(msvcrt::fputs, "fputs")
+#pragma binding(msvcrt::fgets, "fgets")
+#pragma binding(msvcrt::fopen, "fopen")
+#pragma binding(msvcrt::fclose, "fclose")
+#pragma binding(msvcrt::fread, "fread")
+#pragma binding(msvcrt::fwrite, "fwrite")
+#pragma binding(msvcrt::strlen, "strlen")
+#pragma binding(msvcrt::strcpy, "strcpy")
+#pragma binding(msvcrt::strncpy, "strncpy")
+#pragma binding(msvcrt::strcmp, "strcmp")
+#pragma binding(msvcrt::strncmp, "strncmp")
+#pragma binding(msvcrt::strchr, "strchr")
+#pragma binding(msvcrt::strstr, "strstr")
+#pragma binding(msvcrt::atoi, "atoi")
+#pragma binding(msvcrt::atol, "atol")
+#pragma binding(msvcrt::abs, "abs")
+#pragma binding(msvcrt::abort, "abort")
+#pragma binding(msvcrt::system, "system")
+
 // Function prototypes -- the parser's type signatures. `char` is
 // one byte; `int` is the c4 machine word (8 bytes). Forward
 // declarations only; bindings above point at the actual symbols.

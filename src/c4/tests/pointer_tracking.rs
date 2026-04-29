@@ -99,6 +99,6 @@ fn calling_a_forged_code_pointer_is_refused() {
 fn negative_size_argument_is_caught() {
     // memset(p, 0, -1) used to walk the address space (and accidentally
     // trip the code-segment guard). With the new size validation it
-    // surfaces a clear "negative size" error at the syscall boundary.
+    // surfaces a clear "negative size" error at the intrinsic boundary.
     expect_error_containing("negative_size_memset.c", "negative size");
 }

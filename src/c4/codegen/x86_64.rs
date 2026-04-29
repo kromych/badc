@@ -1,6 +1,6 @@
 //! x86_64 instruction encoder + bytecode -> x86_64 lowering.
 //!
-//! M3.2 covers every non-syscall Op (arithmetic, control flow,
+//! M3.2 covers every non-intrinsic Op (arithmetic, control flow,
 //! comparisons, loads/stores, locals, function calls direct and
 //! indirect). Syscall ops still error out with a "M3.4 will land
 //! libc binding" message; data-segment + function-pointer fixups
@@ -302,7 +302,7 @@ pub(super) fn emit_ret(code: &mut Vec<u8>) {
     emit_byte(code, 0xC3);
 }
 
-/// `SYSCALL`. Linux x86_64 syscall entry; nr in `rax`, args in
+/// `SYSCALL`. Linux x86_64 intrinsic entry; nr in `rax`, args in
 /// `rdi/rsi/rdx/r10/r8/r9`, return in `rax`.
 pub(super) fn emit_syscall(code: &mut Vec<u8>) {
     emit_bytes(code, &[0x0F, 0x05]);
@@ -1322,6 +1322,15 @@ fn lower_op(
                     let off = ((nargs - 1 - i) as i32) * 16;
                     emit_mov_r_mem(code, r, Reg::RSP, off);
                 }
+                // SysV variadic ABI: AL must hold the number of XMM
+                // registers used to pass float args. We never pass
+                // floats, but there's no way to know whether the
+                // dlsym'd target is variadic (sscanf, printf, ...)
+                // from a c4-side `int *fn`, so zero AL unconditionally
+                // before the call. Cheap (2 bytes), and `rax` is
+                // caller-saved so clobbering it is safe; the call
+                // overwrites it with the return value anyway.
+                emit_xor_eax_eax(code);
             }
             emit_call_r(code, Reg::R10);
             emit_mov_rr(code, Reg::R13, Reg::RAX);
@@ -1407,7 +1416,7 @@ fn lower_op(
     Ok(())
 }
 
-/// Lower a syscall op to a libc call through the GOT (System V) /
+/// Lower a intrinsic op to a libc call through the GOT (System V) /
 /// IAT (Win64). The caller pushed args onto the VM stack in 16-byte
 /// slots; we peek (don't pop) to load them into the platform's
 /// integer arg registers. The c4 emitter follows every libc call

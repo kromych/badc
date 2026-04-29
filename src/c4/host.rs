@@ -1,5 +1,5 @@
 //! Host bridge -- the trait that abstracts every system-level service the
-//! VM's syscall layer needs (file IO, env, real stdio).
+//! VM's intrinsic layer needs (file IO, env, real stdio).
 //!
 //! The split is what makes the rest of the library `no_std`-clean: the
 //! VM is generic over `H: Host`, and concrete impls (`StdHost`) carry
@@ -16,7 +16,7 @@
 //!    inherited from the C-side calling convention)
 //!
 //! fd 0 is conventionally stdin, fd 1 stdout, fd 2 stderr; the VM
-//! special-cases them in syscalls but the trait hides whether they map
+//! special-cases them in intrinsics but the trait hides whether they map
 //! to host streams, in-memory buffers, or are just refused.
 
 use alloc::string::String;

@@ -120,7 +120,7 @@ fn return_value_truncates_to_byte() {
     assert_eq!(build_and_run("int main() { return 257; }", "ret257"), 1);
 }
 
-// ---- M1.6: every non-syscall op exercised end-to-end. ----
+// ---- M1.6: every non-intrinsic op exercised end-to-end. ----
 
 #[test]
 fn add_subtract_multiply() {
@@ -212,7 +212,7 @@ fn recursion_factorial() {
     assert_eq!(build_and_run(src, "fact"), 120);
 }
 
-// ---- M1.7: libc syscalls through the GOT. The pre-M2 cases below
+// ---- M1.7: libc intrinsics through the GOT. The pre-M2 cases below
 //      avoid string literals (the data-segment fixtures further down
 //      cover that path).
 
@@ -370,6 +370,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // (which loads args into x0..x7 in case the target is native),
     // exits with atoi("123") = 123.
     ("dlopen_atoi.c", 123),
+    ("dlopen_strlen.c", 13),
 ];
 
 /// Build a fixture, sign it, run it with the given args, and return

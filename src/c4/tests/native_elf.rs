@@ -130,7 +130,7 @@ fn return_zero() {
 #[test]
 fn return_value_truncates_to_byte() {
     // Linux exit ABI returns the low 8 bits of main's return; same as
-    // macOS. 257 -> 1 confirms the syscall/libc-exit path doesn't
+    // macOS. 257 -> 1 confirms the intrinsic/libc-exit path doesn't
     // accidentally widen the value.
     assert_eq!(build_and_run("int main() { return 257; }", "elf-ret257"), 1);
 }
@@ -286,6 +286,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     // libc.so.6 are both DT_NEEDED). dlopen+dlsym+blr finds
     // libc atoi and the indirect call passes "123" in x0.
     ("dlopen_atoi.c", 123),
+    ("dlopen_strlen.c", 13),
 ];
 
 #[test]

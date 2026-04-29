@@ -185,7 +185,7 @@ fn round_up(n: u64, align: u64) -> u64 {
 // Per-arch variants live in `aarch64::emit_start_stub_elf` and
 // `x86_64::emit_start_stub`. aarch64 routes its exit through libc
 // (so glibc flushes stdio); x86_64 currently uses a raw `SYS_exit`
-// syscall (M3.4 will switch it to libc exit through the GOT).
+// intrinsic (M3.4 will switch it to libc exit through the GOT).
 // ------------------------------------------------------------------
 
 /// Stub byte length per machine. Used for layout calculations.
@@ -199,7 +199,7 @@ fn start_stub_len(machine: Machine) -> u64 {
 /// Emit the `_start` prologue for the given machine. Returns the
 /// byte offset of the libc-exit GOT call placeholder so the caller
 /// can register a `GotFixup` for it. Both arches now route exit
-/// through libc -- x86_64 used to do a raw syscall (M3.1) but
+/// through libc -- x86_64 used to do a raw intrinsic (M3.1) but
 /// switched in M3.4 so glibc flushes stdio.
 fn emit_start_stub(machine: Machine, code: &mut Vec<u8>, main_offset_in_code: u64) -> usize {
     match machine {

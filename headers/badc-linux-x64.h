@@ -1,10 +1,8 @@
 // badc target header: linux-x64
 //
-// Auto-prepended to every source compiled for this target. Holds
-// POSIX-style constants (the c4 runtime / VM honours these masks
-// itself, so the values are portable rather than imported from the
-// real libc). Stage B will extend this with `#pragma comment(dylib,
-// ...)` and function declarations to drive the import table.
+// Same shape as `headers/badc-linux-aarch64.h` -- the dynamic
+// linker / library layout is identical between the two Linux
+// targets; only the codegen instruction set differs.
 
 #define PROT_NONE 0
 #define PROT_READ 1
@@ -22,3 +20,26 @@
 #define NULL 0
 #define EXIT_SUCCESS 0
 #define EXIT_FAILURE 1
+
+#pragma dylib(libc, "libc.so.6")
+#pragma dylib(libdl, "libdl.so.2")
+
+#pragma binding(libc::open, "open")
+#pragma binding(libc::read, "read")
+#pragma binding(libc::close, "close")
+#pragma binding(libc::printf, "printf")
+#pragma binding(libc::malloc, "malloc")
+#pragma binding(libc::free, "free")
+#pragma binding(libc::memset, "memset")
+#pragma binding(libc::memcmp, "memcmp")
+#pragma binding(libc::memcpy, "memcpy")
+#pragma binding(libc::mprotect, "mprotect")
+#pragma binding(libc::exit, "exit")
+#pragma binding(libc::write, "write")
+#pragma binding(libc::getenv, "getenv")
+#pragma binding(libc::setenv, "setenv")
+
+#pragma binding(libdl::dlopen, "dlopen")
+#pragma binding(libdl::dlsym, "dlsym")
+#pragma binding(libdl::dlclose, "dlclose")
+#pragma binding(libdl::dlerror, "dlerror")

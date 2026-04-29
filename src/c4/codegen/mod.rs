@@ -282,8 +282,49 @@ pub fn emit_native_with_options(
     target: Target,
     options: NativeOptions,
 ) -> Result<Vec<u8>, C4Error> {
+    validate_bindings(program)?;
     let build = lower_for(program, target, options)?;
     write_for(&build, target)
+}
+
+/// Pre-codegen sanity check on the per-target header's
+/// `#pragma dylib(...)` / `#pragma binding(...)` block.
+///
+/// Coverage only: every libc op the codegen knows how to emit
+/// (the [`aarch64::IMPORTS`] table) must be declared in the
+/// header's bindings. A missing binding is a header omission and
+/// would otherwise surface much later as a confusing relocation
+/// failure or a "symbol not found" at load time.
+///
+/// We deliberately do **not** check that the dylib path exists on
+/// the host filesystem. Cross-compilation is a first-class case --
+/// emitting a Windows PE from a macOS host has no `msvcrt.dll`
+/// nearby, and emitting a Linux ELF from any host won't have
+/// `libc.so.6` at the same path the target loader will resolve --
+/// so requiring the file at compile time would break exactly the
+/// workflow the per-target header is for.
+fn validate_bindings(program: &Program) -> Result<(), C4Error> {
+    for imp in aarch64::IMPORTS {
+        // The lexer's `LIB_OPS` table uses the same name we expect
+        // here; the linux symbol-name field happens to match it
+        // exactly (no leading underscore), so we use it as the
+        // c4-side key.
+        let c4_name = imp.linux_symbol;
+        let bound = program
+            .dylibs
+            .iter()
+            .flat_map(|d| d.bindings.iter())
+            .any(|b| b.c4_name == c4_name);
+        if !bound {
+            return Err(C4Error::Compile(alloc::format!(
+                "no `#pragma binding(<dylib>::{c4_name}, ...)` in this target's \
+                 `headers/badc-{{target}}.h` -- the codegen needs every \
+                 libc op to be declared so it knows which dylib to \
+                 import the symbol from"
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// Lower the program for `target`, returning the per-arch `Build`

@@ -140,6 +140,7 @@ pub fn optimize(program: Program) -> Result<Program, C4Error> {
         entry_pc,
         warnings,
         data_imm_positions,
+        dylibs,
     } = program;
 
     let mut insns = decode(&text, &data_imm_positions)?;
@@ -170,6 +171,7 @@ pub fn optimize(program: Program) -> Result<Program, C4Error> {
         entry_pc,
         warnings,
         data_imm_positions,
+        dylibs,
     })
 }
 
@@ -800,6 +802,7 @@ mod tests {
             entry_pc: 0,
             warnings: Vec::new(),
             data_imm_positions: Vec::new(),
+            dylibs: Vec::new(),
         }
     }
 
@@ -1063,6 +1066,7 @@ mod tests {
             entry_pc: 0,
             warnings: Vec::new(),
             data_imm_positions: Vec::new(),
+            dylibs: Vec::new(),
         };
         let opt = optimize(p).unwrap();
         // Main returns 5; if the ImmCode operand remapped wrong, the

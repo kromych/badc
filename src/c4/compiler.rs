@@ -7,7 +7,7 @@ use super::codegen::Target;
 use super::error::C4Error;
 use super::lexer::{self, Lexer};
 use super::op::Op;
-use super::preprocessor::Preprocessor;
+use super::preprocessor::{DylibSpec, Preprocessor};
 use super::program::Program;
 use super::symbol::Symbol;
 use super::token::{Token, Ty};
@@ -140,6 +140,13 @@ pub struct Compiler {
     /// callers in tests / examples). `None` if preprocessing
     /// succeeded.
     deferred_error: Option<C4Error>,
+
+    /// Dylibs + bindings the preprocessor extracted from the
+    /// per-target header. Threaded onto `Program` so `emit_native`
+    /// can drive its import table from this list rather than the
+    /// codegen's hardcoded knowledge of which libc symbols live
+    /// where.
+    dylibs: Vec<DylibSpec>,
 }
 
 /// Per-target header text, embedded at build time. Auto-prepended
@@ -195,11 +202,13 @@ impl Compiler {
             Ok(s) => (s, None),
             Err(e) => (String::new(), Some(e)),
         };
+        let dylibs = pp.dylibs;
 
         Self {
             lex: Lexer::new(preprocessed),
             symbols,
             deferred_error,
+            dylibs,
             text: Vec::new(),
             data: Vec::new(),
             ty: 0,
@@ -506,6 +515,7 @@ impl Compiler {
             entry_pc,
             warnings: self.warnings,
             data_imm_positions: self.data_imm_positions,
+            dylibs: self.dylibs,
         })
     }
 

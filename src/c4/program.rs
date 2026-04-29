@@ -1,6 +1,8 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use super::preprocessor::DylibSpec;
+
 /// Compiled program ready for the VM.
 ///
 /// `text` holds the bytecode, `data` is the static data segment (string
@@ -25,4 +27,21 @@ pub struct Program {
     pub entry_pc: usize,
     pub warnings: Vec<String>,
     pub data_imm_positions: Vec<usize>,
+    /// Per-target dylib + binding map produced by the preprocessor
+    /// from the `#pragma comment(dylib, ...)` and
+    /// `#pragma binding(...)` directives in `headers/badc-{target}.h`.
+    /// The native codegen uses this to:
+    /// * pick the per-target real-symbol name for each c4 op
+    ///   (`printf` -> `_printf` on macOS, `_printf` on Windows
+    ///   msvcrt, `printf` on Linux),
+    /// * conditionally include only those dylibs whose bindings the
+    ///   program actually references (so a c4 source that never
+    ///   calls `mprotect` doesn't drag `kernel32.dll` into the
+    ///   import table on Windows), and
+    /// * emit a hard error when a referenced op has no binding for
+    ///   the chosen target, or when a declared dylib path doesn't
+    ///   exist on disk.
+    ///
+    /// The VM ignores this field; only `emit_native` reaches for it.
+    pub(crate) dylibs: Vec<DylibSpec>,
 }

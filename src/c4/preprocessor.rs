@@ -15,9 +15,19 @@
 //! * `#if EXPR` / `#else` / `#endif`, with `EXPR` being either
 //!   `LHS == RHS`, `LHS != RHS`, or a bare `NAME` (truthy iff
 //!   defined to a non-zero, non-empty value).
-//! * `#pragma comment(dylib, "...")` -- recorded into
-//!   [`Preprocessor::dylibs`]; consumed by Stage B of the codegen
-//!   refactor.
+//! * `#pragma dylib(name, "path")` -- introduces a logical dylib
+//!   the codegen can attach bindings to. `name` is the c4-side
+//!   handle (e.g. `libc`); `path` is the actual loader-search-name
+//!   or filesystem path (`libc.so.6`, `/usr/lib/libSystem.B.dylib`,
+//!   `msvcrt.dll`).
+//! * `#pragma binding(dylib_name::c4_name, "real_symbol")` --
+//!   declares that the c4-side identifier `c4_name`, when called
+//!   from source, should land on `real_symbol` exported by the
+//!   dylib called `dylib_name`. The earlier positional "current
+//!   dylib" form (`#pragma comment(dylib, ...)` with following
+//!   bindings inheriting it implicitly) was replaced with this
+//!   explicit cross-reference so reordering directives can't
+//!   silently rebind a function to the wrong dylib.
 //!
 //! What's not:
 //!
@@ -40,16 +50,57 @@ use alloc::vec::Vec;
 
 use super::error::C4Error;
 
+/// One declared dylib plus the bindings that target it. Created
+/// by `#pragma dylib(name, "path")`; populated by subsequent
+/// `#pragma binding(name::c4_fn, "real_symbol")` directives that
+/// reference this dylib through its `name`.
+#[derive(Debug, Clone)]
+pub(crate) struct DylibSpec {
+    /// c4-side identifier for this dylib (e.g. `libc`, `kernel32`).
+    /// Bindings reference it via their `name::c4_fn` left-hand
+    /// side, so directive ordering in the header doesn't matter --
+    /// a binding can sit anywhere relative to its dylib's
+    /// declaration.
+    pub name: String,
+    /// Path or loader-search name (e.g. `/usr/lib/libSystem.B.dylib`
+    /// on macOS, `libc.so.6` on Linux, `msvcrt.dll` on Windows).
+    /// The codegen passes this through to the IAT entry / DT_NEEDED
+    /// record verbatim.
+    ///
+    /// Currently only read by tests; Stage B/2.c will switch the
+    /// codegen to read this here instead of the per-arch `IMPORTS`
+    /// table.
+    #[allow(dead_code)]
+    pub path: String,
+    /// Bindings whose qualifier referenced `Self::name`.
+    pub bindings: Vec<Binding>,
+}
+
+/// One `#pragma binding(dylib::c4_name, "real_symbol")` declaration.
+/// Owned by the [`DylibSpec`] whose `name` matched the qualifier.
+#[derive(Debug, Clone)]
+pub(crate) struct Binding {
+    /// c4-side name the source uses (e.g. `printf`).
+    pub c4_name: String,
+    /// Symbol name exported by the dylib. Differs from `c4_name`
+    /// on macOS (leading `_`) and for Windows aliases like
+    /// `mprotect` -> `VirtualProtect`.
+    ///
+    /// Currently only read by tests; the codegen still uses the
+    /// per-arch `IMPORTS` table for symbol-name lookup. Stage B/2.c
+    /// will switch the codegen to read `real_symbol` here.
+    #[allow(dead_code)]
+    pub real_symbol: String,
+}
+
 /// Output of a successful preprocessor run: the substituted source
-/// for the lexer plus the side data the codegen will pick up later
-/// (Stage B uses [`Preprocessor::dylibs`]).
+/// for the lexer plus the side data the codegen will pick up later.
 pub(crate) struct Preprocessor {
     macros: BTreeMap<String, String>,
-    /// `#pragma comment(dylib, "...")` declarations, in the order
-    /// they appeared. Stage A records them for inspection; Stage B
-    /// will drive the IAT / GOT / PLT layout from this list plus
-    /// the function references the codegen actually sees.
-    pub dylibs: Vec<String>,
+    /// One entry per `#pragma dylib(name, "path")`, in the order
+    /// declared. Each entry collects the bindings whose
+    /// `name::c4_fn` qualifier referenced its [`DylibSpec::name`].
+    pub dylibs: Vec<DylibSpec>,
 }
 
 impl Preprocessor {
@@ -283,32 +334,118 @@ impl Preprocessor {
         }
     }
 
-    /// Recognise `comment(dylib, "...")` and append the dylib path
-    /// to the running list. Other pragmas are accepted silently --
-    /// the c4 source already uses `#pragma` markers for things the
-    /// preprocessor doesn't care about.
+    /// Recognise `dylib(...)` and `binding(...)`. Other pragmas
+    /// are accepted silently -- the c4 source already uses
+    /// `#pragma` markers for things the preprocessor doesn't care
+    /// about, and future tools may add their own.
     fn parse_pragma(&mut self, args: &str, line_no: usize) -> Result<(), C4Error> {
         let args = args.trim();
-        let Some(inner) = args
-            .strip_prefix("comment(")
+        if let Some(inner) = args
+            .strip_prefix("dylib(")
             .and_then(|s| s.strip_suffix(')'))
-        else {
-            return Ok(());
-        };
-        let inner = inner.trim();
-        let Some(rest) = inner.strip_prefix("dylib") else {
-            return Ok(());
-        };
-        let rest = rest.trim_start().strip_prefix(',').unwrap_or(rest).trim();
-        let path = rest.trim_matches('"');
-        if path.is_empty() {
-            return Err(C4Error::Compile(format!(
-                "preprocessor:{line_no}: `#pragma comment(dylib, ...)` is missing the path"
-            )));
+        {
+            return self.parse_pragma_dylib(inner.trim(), line_no);
         }
-        self.dylibs.push(path.to_string());
+        if let Some(inner) = args
+            .strip_prefix("binding(")
+            .and_then(|s| s.strip_suffix(')'))
+        {
+            return self.parse_pragma_binding(inner.trim(), line_no);
+        }
         Ok(())
     }
+
+    /// `#pragma dylib(name, "path")` -- introduce a logical dylib
+    /// the codegen can attach bindings to. `name` is an
+    /// identifier-style c4-side handle (`libc`, `kernel32`, ...);
+    /// `path` is the actual loader-search-name or filesystem path.
+    fn parse_pragma_dylib(&mut self, inner: &str, line_no: usize) -> Result<(), C4Error> {
+        let Some((name, path)) = inner.split_once(',') else {
+            return Err(C4Error::Compile(format!(
+                "preprocessor:{line_no}: `#pragma dylib(...)` expects two args \
+                 (`name, \"path\"`)"
+            )));
+        };
+        let name = name.trim();
+        let path = path.trim().trim_matches('"');
+        if name.is_empty() || path.is_empty() {
+            return Err(C4Error::Compile(format!(
+                "preprocessor:{line_no}: `#pragma dylib(...)` arg is empty"
+            )));
+        }
+        if !is_ident(name) {
+            return Err(C4Error::Compile(format!(
+                "preprocessor:{line_no}: `#pragma dylib({name}, ...)` -- name must be a \
+                 plain identifier"
+            )));
+        }
+        if self.dylibs.iter().any(|d| d.name == name) {
+            return Err(C4Error::Compile(format!(
+                "preprocessor:{line_no}: `#pragma dylib({name}, ...)` -- already declared"
+            )));
+        }
+        self.dylibs.push(DylibSpec {
+            name: name.to_string(),
+            path: path.to_string(),
+            bindings: Vec::new(),
+        });
+        Ok(())
+    }
+
+    /// `#pragma binding(dylib::c4_name, "real_symbol")` -- record
+    /// `c4_name`'s mapping to `real_symbol` inside the dylib named
+    /// `dylib`. The dylib must already have been declared by a
+    /// `#pragma dylib(...)`; the directives can otherwise appear in
+    /// any order.
+    fn parse_pragma_binding(&mut self, inner: &str, line_no: usize) -> Result<(), C4Error> {
+        let Some((qualified, real_symbol)) = inner.split_once(',') else {
+            return Err(C4Error::Compile(format!(
+                "preprocessor:{line_no}: `#pragma binding(...)` expects two args \
+                 (`dylib::c4_name, \"real_symbol\"`)"
+            )));
+        };
+        let qualified = qualified.trim();
+        let real_symbol = real_symbol.trim().trim_matches('"');
+        let Some((dylib_name, c4_name)) = qualified.split_once("::") else {
+            return Err(C4Error::Compile(format!(
+                "preprocessor:{line_no}: `#pragma binding({qualified}, ...)` -- LHS must be \
+                 `dylib_name::c4_name`"
+            )));
+        };
+        let dylib_name = dylib_name.trim();
+        let c4_name = c4_name.trim();
+        if dylib_name.is_empty() || c4_name.is_empty() || real_symbol.is_empty() {
+            return Err(C4Error::Compile(format!(
+                "preprocessor:{line_no}: `#pragma binding(...)` arg is empty"
+            )));
+        }
+        let Some(dylib) = self.dylibs.iter_mut().find(|d| d.name == dylib_name) else {
+            return Err(C4Error::Compile(format!(
+                "preprocessor:{line_no}: `#pragma binding({dylib_name}::...)` -- no `#pragma \
+                 dylib({dylib_name}, ...)` declared"
+            )));
+        };
+        dylib.bindings.push(Binding {
+            c4_name: c4_name.to_string(),
+            real_symbol: real_symbol.to_string(),
+        });
+        Ok(())
+    }
+}
+
+/// Identifier check: ASCII letter or `_` to start, alnum or `_`
+/// after. Used to reject `#pragma dylib(123foo, ...)` and similar
+/// up-front so the codegen never has to worry about quirks in the
+/// dylib `name`.
+fn is_ident(s: &str) -> bool {
+    let mut bytes = s.bytes();
+    let Some(first) = bytes.next() else {
+        return false;
+    };
+    if !(first.is_ascii_alphabetic() || first == b'_') {
+        return false;
+    }
+    bytes.all(|b| b.is_ascii_alphanumeric() || b == b'_')
 }
 
 struct CondFrame {
@@ -475,13 +612,68 @@ mod tests {
 
     #[test]
     fn pragma_records_dylib() {
-        let src = "#pragma comment(dylib, \"libfoo.so\")\n#pragma comment(dylib, \"bar.dll\")\n";
+        let src = "\
+#pragma dylib(libfoo, \"libfoo.so\")
+#pragma dylib(bar, \"bar.dll\")
+";
         let mut pp = Preprocessor::new("macos-aarch64", "0.1.0");
         pp.process(src).unwrap();
-        assert_eq!(
-            pp.dylibs,
-            vec!["libfoo.so".to_string(), "bar.dll".to_string()]
-        );
+        let entries: Vec<(&str, &str)> = pp
+            .dylibs
+            .iter()
+            .map(|d| (d.name.as_str(), d.path.as_str()))
+            .collect();
+        assert_eq!(entries, vec![("libfoo", "libfoo.so"), ("bar", "bar.dll")]);
+    }
+
+    #[test]
+    fn pragma_binding_attaches_to_named_dylib() {
+        let src = "\
+#pragma dylib(libfoo, \"libfoo.so\")
+#pragma dylib(libbar, \"libbar.so\")
+#pragma binding(libfoo::printf, \"_printf\")
+#pragma binding(libbar::exit, \"ExitProcess\")
+#pragma binding(libfoo::malloc, \"_malloc\")
+";
+        let mut pp = Preprocessor::new("macos-aarch64", "0.1.0");
+        pp.process(src).unwrap();
+        assert_eq!(pp.dylibs.len(), 2);
+        assert_eq!(pp.dylibs[0].name, "libfoo");
+        assert_eq!(pp.dylibs[0].bindings.len(), 2);
+        assert_eq!(pp.dylibs[0].bindings[0].c4_name, "printf");
+        assert_eq!(pp.dylibs[0].bindings[0].real_symbol, "_printf");
+        assert_eq!(pp.dylibs[0].bindings[1].c4_name, "malloc");
+        assert_eq!(pp.dylibs[1].name, "libbar");
+        assert_eq!(pp.dylibs[1].bindings.len(), 1);
+        assert_eq!(pp.dylibs[1].bindings[0].c4_name, "exit");
+        assert_eq!(pp.dylibs[1].bindings[0].real_symbol, "ExitProcess");
+    }
+
+    #[test]
+    fn pragma_binding_for_undeclared_dylib_errors() {
+        let mut pp = Preprocessor::new("macos-aarch64", "0.1.0");
+        let err = pp
+            .process("#pragma binding(libnothing::printf, \"_printf\")\n")
+            .unwrap_err();
+        assert!(format!("{err}").contains("no `#pragma dylib(libnothing, ...)`"));
+    }
+
+    #[test]
+    fn pragma_binding_without_qualifier_errors() {
+        let mut pp = Preprocessor::new("macos-aarch64", "0.1.0");
+        let err = pp
+            .process("#pragma dylib(libfoo, \"x\")\n#pragma binding(printf, \"p\")\n")
+            .unwrap_err();
+        assert!(format!("{err}").contains("LHS must be `dylib_name::c4_name`"));
+    }
+
+    #[test]
+    fn pragma_dylib_duplicate_errors() {
+        let mut pp = Preprocessor::new("macos-aarch64", "0.1.0");
+        let err = pp
+            .process("#pragma dylib(libfoo, \"x\")\n#pragma dylib(libfoo, \"y\")\n")
+            .unwrap_err();
+        assert!(format!("{err}").contains("already declared"));
     }
 
     #[test]

@@ -179,6 +179,18 @@ fn windows_binding_for_op(op: Op) -> (&'static str, &'static str) {
         Mset => ("memset", MSVCRT),
         Mcmp => ("memcmp", MSVCRT),
         Mcpy => ("memcpy", MSVCRT),
+        // `Op::Mpro` ends up here when the writer iterates the
+        // global IMPORTS table; the per-target Windows headers no
+        // longer bind `mprotect`, so any *use* of it from c4 source
+        // is rejected by `validate_bindings` long before the
+        // program reaches the codegen. We still need to give this
+        // arm a defined value so a program that *doesn't* use
+        // mprotect can still build (the writer puts a slot in the
+        // IAT for every IMPORTS entry, used or not). Pointing it
+        // at `VirtualProtect` is harmless because the slot is
+        // unreferenced; switching this lookup to read from
+        // `program.dylibs` (and dropping unused entries) is
+        // Stage B follow-up work.
         Mpro => ("VirtualProtect", KERNEL32),
         Exit => ("exit", MSVCRT),
         Write => ("_write", MSVCRT),

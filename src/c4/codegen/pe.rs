@@ -86,14 +86,15 @@ const FILE_ALIGNMENT: u32 = 0x200;
 
 const IMAGE_FILE_MACHINE_AMD64: u16 = 0x8664;
 const IMAGE_FILE_MACHINE_ARM64: u16 = 0xAA64;
-const IMAGE_FILE_RELOCS_STRIPPED: u16 = 0x0001;
 const IMAGE_FILE_EXECUTABLE_IMAGE: u16 = 0x0002;
 const IMAGE_FILE_LARGE_ADDRESS_AWARE: u16 = 0x0020;
 
 const PE32_PLUS_MAGIC: u16 = 0x20B;
 const IMAGE_SUBSYSTEM_WINDOWS_CUI: u16 = 3;
+const IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA: u16 = 0x0020;
 const IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE: u16 = 0x0040;
 const IMAGE_DLLCHARACTERISTICS_NX_COMPAT: u16 = 0x0100;
+const IMAGE_DLLCHARACTERISTICS_NO_SEH: u16 = 0x0400;
 
 const IMAGE_SCN_CNT_CODE: u32 = 0x0000_0020;
 const IMAGE_SCN_CNT_INITIALIZED_DATA: u32 = 0x0000_0040;
@@ -379,7 +380,6 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
     write_coff_header(&mut out, OPTIONAL64_HEADER_SIZE, machine);
     write_optional_header(
         &mut out,
-        machine,
         OptionalHeaderInputs {
             entry_rva: text_rva, // entry point is at start of .text
             base_of_code: text_rva,
@@ -475,22 +475,8 @@ fn write_coff_header(out: &mut Vec<u8>, optional_header_size: usize, machine: Ma
     out.extend_from_slice(&0u32.to_le_bytes()); // PointerToSymbolTable (deprecated)
     out.extend_from_slice(&0u32.to_le_bytes()); // NumberOfSymbols
     out.extend_from_slice(&(optional_header_size as u16).to_le_bytes()); // SizeOfOptionalHeader
-    // RELOCS_STRIPPED tells the loader "no base relocations exist; load
-    // at preferred ImageBase or fail". Our codegen emits PC-relative
-    // addressing throughout (lea/adrp+add for data, adrp+ldr for IAT,
-    // call/blr for branches), and the only absolute pointer is the
-    // mprotect thunk slot in `.idata` which holds `IMAGE_BASE +
-    // thunk_rva` -- still tied to ImageBase, so loading at preferred
-    // base keeps it valid. Without this flag, modern Windows kernels
-    // reject the image when `DYNAMIC_BASE` is set without an
-    // accompanying `.reloc` section. (DYNAMIC_BASE is still required
-    // for wine's strict non-x86 path; see the optional header
-    // characteristics below.)
     out.extend_from_slice(
-        &(IMAGE_FILE_RELOCS_STRIPPED
-            | IMAGE_FILE_EXECUTABLE_IMAGE
-            | IMAGE_FILE_LARGE_ADDRESS_AWARE)
-            .to_le_bytes(),
+        &(IMAGE_FILE_EXECUTABLE_IMAGE | IMAGE_FILE_LARGE_ADDRESS_AWARE).to_le_bytes(),
     );
 }
 
@@ -511,7 +497,7 @@ struct OptionalHeaderInputs {
     iat_size: u32,
 }
 
-fn write_optional_header(out: &mut Vec<u8>, machine: Machine, inp: OptionalHeaderInputs) {
+fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
     let start = out.len();
 
     // Standard fields (24 bytes for PE32+).
@@ -528,44 +514,48 @@ fn write_optional_header(out: &mut Vec<u8>, machine: Machine, inp: OptionalHeade
     out.extend_from_slice(&IMAGE_BASE.to_le_bytes());
     out.extend_from_slice(&SECTION_ALIGNMENT.to_le_bytes());
     out.extend_from_slice(&FILE_ALIGNMENT.to_le_bytes());
-    // OS version: 10.0 -- AArch64 Windows requires Win10+, and
-    // wine's loader checks this when deciding to accept an
-    // ARM64 PE. x86_64 is happy with anything Vista+ but bumping
-    // both kept the writer simple.
-    out.extend_from_slice(&10u16.to_le_bytes()); // MajorOperatingSystemVersion
+    // OS version 4.0, Subsystem 5.2: copied from mingw's minimal
+    // exe. These are the most permissive values that still mark the
+    // image as a 64-bit console app the modern Windows loader
+    // accepts. Bumping to 10.0 (which we tried first) caused
+    // CreateProcess to reject our images with ERROR_BAD_EXE_FORMAT
+    // on real Windows, even though wine on Linux tolerated it.
+    out.extend_from_slice(&4u16.to_le_bytes()); // MajorOperatingSystemVersion
     out.extend_from_slice(&0u16.to_le_bytes()); // Minor
     out.extend_from_slice(&0u16.to_le_bytes()); // MajorImageVersion
     out.extend_from_slice(&0u16.to_le_bytes()); // Minor
-    out.extend_from_slice(&10u16.to_le_bytes()); // MajorSubsystemVersion
-    out.extend_from_slice(&0u16.to_le_bytes()); // Minor
+    out.extend_from_slice(&5u16.to_le_bytes()); // MajorSubsystemVersion
+    out.extend_from_slice(&2u16.to_le_bytes()); // Minor
     out.extend_from_slice(&0u32.to_le_bytes()); // Win32VersionValue (reserved)
     out.extend_from_slice(&inp.size_of_image.to_le_bytes());
     out.extend_from_slice(&inp.size_of_headers.to_le_bytes());
     out.extend_from_slice(&0u32.to_le_bytes()); // CheckSum
     out.extend_from_slice(&IMAGE_SUBSYSTEM_WINDOWS_CUI.to_le_bytes());
-    // DllCharacteristics differ per arch because the wine loader's
-    // strict path on non-x86 demands `DYNAMIC_BASE`, while real
-    // Windows on x86_64 rejects an image that has `DYNAMIC_BASE`
-    // set but no accompanying `.reloc` section. We can't both
-    // satisfy wine on AArch64 and avoid `DYNAMIC_BASE` on x86_64
-    // unless we branch.
+    // DllCharacteristics: copy what mingw's minimal exe ships with,
+    // since that binary loads cleanly on every recent Windows. It
+    // sets DYNAMIC_BASE | HIGH_ENTROPY_VA | NX_COMPAT | NO_SEH.
     //
-    // x86_64: just `NX_COMPAT`. The COFF header carries
-    // `RELOCS_STRIPPED`, telling the loader "no relocations; load
-    // at preferred ImageBase".
+    // - DYNAMIC_BASE: ASLR-aware. Required by wine's non-x86 strict
+    //   path (`server/mapping.c` in wine 10).
+    // - HIGH_ENTROPY_VA: ASLR can use the full 64-bit address space.
+    //   Always set on real-world 64-bit images.
+    // - NX_COMPAT: data pages aren't executable. Required by wine's
+    //   non-x86 strict path.
+    // - NO_SEH: this image registers no Structured Exception
+    //   Handlers. Our `.pdata` carries no real unwind data (the
+    //   single coarse RUNTIME_FUNCTION is a placeholder so the
+    //   loader's Exception Directory check passes), so promising
+    //   "no SEH" is honest and lets the OS skip SEH-validation
+    //   paths that examine our minimal entries too closely.
     //
-    // AArch64: `NX_COMPAT | DYNAMIC_BASE`. wine's
-    // `server/mapping.c` rejects non-x86 PEs without these (as of
-    // wine 10). Real Windows on ARM64 should accept the
-    // combination of `RELOCS_STRIPPED` (in COFF) and `DYNAMIC_BASE`
-    // (in DllCharacteristics) -- the `RELOCS_STRIPPED` wins, the
-    // loader skips ASLR and maps at preferred base.
-    let dll_chars = match machine {
-        Machine::X86_64 => IMAGE_DLLCHARACTERISTICS_NX_COMPAT,
-        Machine::Aarch64 => {
-            IMAGE_DLLCHARACTERISTICS_NX_COMPAT | IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE
-        }
-    };
+    // No accompanying `.reloc` section is needed even with
+    // DYNAMIC_BASE -- the minimal mingw exe also ships without one
+    // and Windows tolerates it; the loader maps at preferred
+    // ImageBase if relocations are absent.
+    let dll_chars = IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE
+        | IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA
+        | IMAGE_DLLCHARACTERISTICS_NX_COMPAT
+        | IMAGE_DLLCHARACTERISTICS_NO_SEH;
     out.extend_from_slice(&dll_chars.to_le_bytes());
     out.extend_from_slice(&0x10_0000u64.to_le_bytes()); // SizeOfStackReserve = 1 MiB
     out.extend_from_slice(&0x1000u64.to_le_bytes()); // SizeOfStackCommit

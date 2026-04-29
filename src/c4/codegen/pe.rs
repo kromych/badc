@@ -86,6 +86,7 @@ const FILE_ALIGNMENT: u32 = 0x200;
 
 const IMAGE_FILE_MACHINE_AMD64: u16 = 0x8664;
 const IMAGE_FILE_MACHINE_ARM64: u16 = 0xAA64;
+const IMAGE_FILE_RELOCS_STRIPPED: u16 = 0x0001;
 const IMAGE_FILE_EXECUTABLE_IMAGE: u16 = 0x0002;
 const IMAGE_FILE_LARGE_ADDRESS_AWARE: u16 = 0x0020;
 
@@ -378,6 +379,7 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
     write_coff_header(&mut out, OPTIONAL64_HEADER_SIZE, machine);
     write_optional_header(
         &mut out,
+        machine,
         OptionalHeaderInputs {
             entry_rva: text_rva, // entry point is at start of .text
             base_of_code: text_rva,
@@ -473,8 +475,22 @@ fn write_coff_header(out: &mut Vec<u8>, optional_header_size: usize, machine: Ma
     out.extend_from_slice(&0u32.to_le_bytes()); // PointerToSymbolTable (deprecated)
     out.extend_from_slice(&0u32.to_le_bytes()); // NumberOfSymbols
     out.extend_from_slice(&(optional_header_size as u16).to_le_bytes()); // SizeOfOptionalHeader
+    // RELOCS_STRIPPED tells the loader "no base relocations exist; load
+    // at preferred ImageBase or fail". Our codegen emits PC-relative
+    // addressing throughout (lea/adrp+add for data, adrp+ldr for IAT,
+    // call/blr for branches), and the only absolute pointer is the
+    // mprotect thunk slot in `.idata` which holds `IMAGE_BASE +
+    // thunk_rva` -- still tied to ImageBase, so loading at preferred
+    // base keeps it valid. Without this flag, modern Windows kernels
+    // reject the image when `DYNAMIC_BASE` is set without an
+    // accompanying `.reloc` section. (DYNAMIC_BASE is still required
+    // for wine's strict non-x86 path; see the optional header
+    // characteristics below.)
     out.extend_from_slice(
-        &(IMAGE_FILE_EXECUTABLE_IMAGE | IMAGE_FILE_LARGE_ADDRESS_AWARE).to_le_bytes(),
+        &(IMAGE_FILE_RELOCS_STRIPPED
+            | IMAGE_FILE_EXECUTABLE_IMAGE
+            | IMAGE_FILE_LARGE_ADDRESS_AWARE)
+            .to_le_bytes(),
     );
 }
 
@@ -495,7 +511,7 @@ struct OptionalHeaderInputs {
     iat_size: u32,
 }
 
-fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
+fn write_optional_header(out: &mut Vec<u8>, machine: Machine, inp: OptionalHeaderInputs) {
     let start = out.len();
 
     // Standard fields (24 bytes for PE32+).
@@ -527,14 +543,29 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
     out.extend_from_slice(&inp.size_of_headers.to_le_bytes());
     out.extend_from_slice(&0u32.to_le_bytes()); // CheckSum
     out.extend_from_slice(&IMAGE_SUBSYSTEM_WINDOWS_CUI.to_le_bytes());
-    // Wine's PE validation rejects non-x86 64-bit PEs that don't
-    // set both NX_COMPAT and DYNAMIC_BASE. The DYNAMIC_BASE flag
-    // promises the image is relocatable; we don't actually ship
-    // a .reloc table, so loading at any address other than
-    // ImageBase would fail -- but the typical AArch64 / x86_64
-    // Windows preferred base of 0x140000000 is reachable, so the
-    // loader should land us there in practice.
-    let dll_chars = IMAGE_DLLCHARACTERISTICS_NX_COMPAT | IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE;
+    // DllCharacteristics differ per arch because the wine loader's
+    // strict path on non-x86 demands `DYNAMIC_BASE`, while real
+    // Windows on x86_64 rejects an image that has `DYNAMIC_BASE`
+    // set but no accompanying `.reloc` section. We can't both
+    // satisfy wine on AArch64 and avoid `DYNAMIC_BASE` on x86_64
+    // unless we branch.
+    //
+    // x86_64: just `NX_COMPAT`. The COFF header carries
+    // `RELOCS_STRIPPED`, telling the loader "no relocations; load
+    // at preferred ImageBase".
+    //
+    // AArch64: `NX_COMPAT | DYNAMIC_BASE`. wine's
+    // `server/mapping.c` rejects non-x86 PEs without these (as of
+    // wine 10). Real Windows on ARM64 should accept the
+    // combination of `RELOCS_STRIPPED` (in COFF) and `DYNAMIC_BASE`
+    // (in DllCharacteristics) -- the `RELOCS_STRIPPED` wins, the
+    // loader skips ASLR and maps at preferred base.
+    let dll_chars = match machine {
+        Machine::X86_64 => IMAGE_DLLCHARACTERISTICS_NX_COMPAT,
+        Machine::Aarch64 => {
+            IMAGE_DLLCHARACTERISTICS_NX_COMPAT | IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE
+        }
+    };
     out.extend_from_slice(&dll_chars.to_le_bytes());
     out.extend_from_slice(&0x10_0000u64.to_le_bytes()); // SizeOfStackReserve = 1 MiB
     out.extend_from_slice(&0x1000u64.to_le_bytes()); // SizeOfStackCommit

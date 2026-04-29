@@ -122,6 +122,104 @@ const ELF64_SYM_SIZE: u64 = 24;
 const ELF64_RELA_SIZE: u64 = 24;
 const ELF64_DYN_SIZE: u64 = 16;
 
+// ------------------------------------------------------------------
+// On-disk shapes. `#[repr(C)]` with explicit fields plus a
+// const-time `assert_eq!` on `size_of::<T>()` against the matching
+// `ELF*_SIZE` constant; written via the same memcpy helper the PE
+// writer uses. ELF is little-endian on all our targets, so a bare
+// memcpy of the in-memory struct gives the right wire format.
+// ------------------------------------------------------------------
+
+/// Elf64_Ehdr -- the file header at offset 0.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct Elf64Ehdr {
+    e_ident: [u8; EI_NIDENT],
+    e_type: u16,
+    e_machine: u16,
+    e_version: u32,
+    e_entry: u64,
+    e_phoff: u64,
+    e_shoff: u64,
+    e_flags: u32,
+    e_ehsize: u16,
+    e_phentsize: u16,
+    e_phnum: u16,
+    e_shentsize: u16,
+    e_shnum: u16,
+    e_shstrndx: u16,
+}
+
+const _: () = assert!(core::mem::size_of::<Elf64Ehdr>() == ELF_HEADER_SIZE as usize);
+
+/// Elf64_Phdr -- one program-header table entry.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct Elf64Phdr {
+    p_type: u32,
+    p_flags: u32,
+    p_offset: u64,
+    p_vaddr: u64,
+    p_paddr: u64,
+    p_filesz: u64,
+    p_memsz: u64,
+    p_align: u64,
+}
+
+const _: () = assert!(core::mem::size_of::<Elf64Phdr>() == PROGRAM_HEADER_SIZE as usize);
+
+/// Elf64_Sym -- one entry in `.dynsym`.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct Elf64Sym {
+    st_name: u32,
+    st_info: u8,
+    st_other: u8,
+    st_shndx: u16,
+    st_value: u64,
+    st_size: u64,
+}
+
+const _: () = assert!(core::mem::size_of::<Elf64Sym>() == ELF64_SYM_SIZE as usize);
+
+/// Elf64_Rela -- one entry in `.rela.dyn`. Addend-bearing form of
+/// the relocation record; we don't use the older addend-less
+/// `Elf64_Rel`.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct Elf64Rela {
+    r_offset: u64,
+    r_info: u64,
+    r_addend: i64,
+}
+
+const _: () = assert!(core::mem::size_of::<Elf64Rela>() == ELF64_RELA_SIZE as usize);
+
+/// Elf64_Dyn -- one entry in the `.dynamic` table. The tag field
+/// names what the value means (`DT_NEEDED`, `DT_HASH`, ...); the
+/// union shape from the C ABI is just two `u64`s on the wire.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct Elf64Dyn {
+    d_tag: u64,
+    d_val: u64,
+}
+
+const _: () = assert!(core::mem::size_of::<Elf64Dyn>() == ELF64_DYN_SIZE as usize);
+
+/// Append a `#[repr(C)]` struct's raw bytes to `out`. Same shape
+/// the PE writer uses; see that module for the safety argument.
+fn write_struct<T: Copy>(out: &mut Vec<u8>, value: &T) {
+    const _: () = assert!(
+        cfg!(target_endian = "little"),
+        "ELF writer assumes a little-endian host; emit bytes manually if you need to cross-build from big-endian"
+    );
+    let bytes = unsafe {
+        core::slice::from_raw_parts((value as *const T) as *const u8, core::mem::size_of::<T>())
+    };
+    out.extend_from_slice(bytes);
+}
+
 /// Dynamic linker path. Selected per machine: `aarch64` lives at
 /// `/lib/`, x86_64 at `/lib64/`. Mirrors what the host distro
 /// expects.
@@ -164,13 +262,7 @@ const NEEDED_LIBS: &[&str] = &["libc.so.6", "libdl.so.2"];
 // Tiny serialization helpers.
 // ------------------------------------------------------------------
 
-fn put_u16(out: &mut Vec<u8>, v: u16) {
-    out.extend_from_slice(&v.to_le_bytes());
-}
 fn put_u32(out: &mut Vec<u8>, v: u32) {
-    out.extend_from_slice(&v.to_le_bytes());
-}
-fn put_u64(out: &mut Vec<u8>, v: u64) {
     out.extend_from_slice(&v.to_le_bytes());
 }
 
@@ -278,22 +370,30 @@ fn build_dynsym(name_offsets: &[u32]) -> Vec<u8> {
     let mut out = Vec::with_capacity((1 + name_offsets.len()) * ELF64_SYM_SIZE as usize);
 
     // Sentinel at index 0 -- all zero. Required by ELF.
-    out.resize(ELF64_SYM_SIZE as usize, 0);
+    write_struct(
+        &mut out,
+        &Elf64Sym {
+            st_name: 0,
+            st_info: 0,
+            st_other: 0,
+            st_shndx: 0,
+            st_value: 0,
+            st_size: 0,
+        },
+    );
 
     for &name_off in name_offsets {
-        // Elf64_Sym layout:
-        //   uint32_t st_name
-        //   uint8_t  st_info       ((bind << 4) | type)
-        //   uint8_t  st_other      (visibility)
-        //   uint16_t st_shndx
-        //   uint64_t st_value
-        //   uint64_t st_size
-        put_u32(&mut out, name_off);
-        out.push((STB_GLOBAL << 4) | STT_NOTYPE);
-        out.push(0); // STV_DEFAULT
-        put_u16(&mut out, SHN_UNDEF);
-        put_u64(&mut out, 0);
-        put_u64(&mut out, 0);
+        write_struct(
+            &mut out,
+            &Elf64Sym {
+                st_name: name_off,
+                st_info: (STB_GLOBAL << 4) | STT_NOTYPE,
+                st_other: 0, // STV_DEFAULT
+                st_shndx: SHN_UNDEF,
+                st_value: 0,
+                st_size: 0,
+            },
+        );
     }
     debug_assert_eq!(
         out.len() as u64,
@@ -371,14 +471,17 @@ fn build_rela_dyn(got_vmaddr: u64, n_imports: usize, machine: Machine) -> Vec<u8
     let r_type = r_glob_dat(machine);
     let mut out = Vec::with_capacity(n_imports * ELF64_RELA_SIZE as usize);
     for i in 0..n_imports {
-        // Elf64_Rela:
-        //   uint64_t r_offset    -- where to write
-        //   uint64_t r_info      -- (sym << 32) | type
-        //   int64_t  r_addend    -- ignored for GLOB_DAT
-        let sym_idx = (i as u64) + 1; // +1 for sentinel
-        put_u64(&mut out, got_vmaddr + (i as u64) * 8);
-        put_u64(&mut out, (sym_idx << 32) | r_type);
-        put_u64(&mut out, 0);
+        // r_addend is ignored for GLOB_DAT; sym index is +1 to skip
+        // the sentinel at dynsym[0].
+        let sym_idx = (i as u64) + 1;
+        write_struct(
+            &mut out,
+            &Elf64Rela {
+                r_offset: got_vmaddr + (i as u64) * 8,
+                r_info: (sym_idx << 32) | r_type,
+                r_addend: 0,
+            },
+        );
     }
     out
 }
@@ -390,8 +493,13 @@ fn build_rela_dyn(got_vmaddr: u64, n_imports: usize, machine: Machine) -> Vec<u8
 fn build_dynamic(lib_strtab_offsets: &[u32], info: DynamicInfo) -> Vec<u8> {
     let mut out = Vec::with_capacity((NEEDED_LIBS.len() + 11) * ELF64_DYN_SIZE as usize);
     for &off in lib_strtab_offsets {
-        put_u64(&mut out, DT_NEEDED);
-        put_u64(&mut out, off as u64);
+        write_struct(
+            &mut out,
+            &Elf64Dyn {
+                d_tag: DT_NEEDED,
+                d_val: off as u64,
+            },
+        );
     }
     let entries: &[(u64, u64)] = &[
         (DT_HASH, info.hash_vmaddr),
@@ -406,9 +514,8 @@ fn build_dynamic(lib_strtab_offsets: &[u32], info: DynamicInfo) -> Vec<u8> {
         (DT_FLAGS, DF_BIND_NOW),
         (DT_NULL, 0),
     ];
-    for (tag, val) in entries {
-        put_u64(&mut out, *tag);
-        put_u64(&mut out, *val);
+    for &(d_tag, d_val) in entries {
+        write_struct(&mut out, &Elf64Dyn { d_tag, d_val });
     }
     out
 }
@@ -712,21 +819,28 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
     e_ident[5] = ELFDATA2LSB;
     e_ident[6] = EV_CURRENT;
     e_ident[7] = ELFOSABI_SYSV;
-    out.extend_from_slice(&e_ident);
-
-    put_u16(&mut out, ET_EXEC);
-    put_u16(&mut out, e_machine(machine));
-    put_u32(&mut out, EV_CURRENT as u32);
-    put_u64(&mut out, code_vmaddr); // e_entry -- start of _start stub
-    put_u64(&mut out, phoff);
-    put_u64(&mut out, 0); // e_shoff
-    put_u32(&mut out, 0); // e_flags
-    put_u16(&mut out, ELF_HEADER_SIZE as u16);
-    put_u16(&mut out, PROGRAM_HEADER_SIZE as u16);
-    put_u16(&mut out, N_PROGRAM_HEADERS as u16);
-    put_u16(&mut out, 0); // e_shentsize
-    put_u16(&mut out, 0); // e_shnum
-    put_u16(&mut out, 0); // e_shstrndx
+    write_struct(
+        &mut out,
+        &Elf64Ehdr {
+            e_ident,
+            e_type: ET_EXEC,
+            e_machine: e_machine(machine),
+            e_version: EV_CURRENT as u32,
+            e_entry: code_vmaddr, // start of `_start`
+            e_phoff: phoff,
+            e_shoff: 0,
+            e_flags: 0,
+            e_ehsize: ELF_HEADER_SIZE as u16,
+            e_phentsize: PROGRAM_HEADER_SIZE as u16,
+            e_phnum: N_PROGRAM_HEADERS as u16,
+            // No section headers in our images: the dynamic linker
+            // only looks at PT_DYNAMIC, and `objdump -h` falls back
+            // to deriving sections from the program-header view.
+            e_shentsize: 0,
+            e_shnum: 0,
+            e_shstrndx: 0,
+        },
+    );
     debug_assert_eq!(out.len() as u64, ELF_HEADER_SIZE);
 
     // PT_PHDR -- self-locate.
@@ -935,15 +1049,21 @@ fn write_phdr(
     p_memsz: u64,
     p_align: u64,
 ) {
-    put_u32(out, p_type);
-    put_u32(out, p_flags);
-    put_u64(out, p_offset);
-    put_u64(out, p_vaddr);
-    put_u64(out, p_vaddr); // p_paddr -- mirror of p_vaddr on systems
-    // without separate physical/virtual mappings.
-    put_u64(out, p_filesz);
-    put_u64(out, p_memsz);
-    put_u64(out, p_align);
+    write_struct(
+        out,
+        &Elf64Phdr {
+            p_type,
+            p_flags,
+            p_offset,
+            p_vaddr,
+            // p_paddr mirrors p_vaddr -- our targets don't have a
+            // separate physical-address space.
+            p_paddr: p_vaddr,
+            p_filesz,
+            p_memsz,
+            p_align,
+        },
+    );
 }
 
 fn exit_import_index() -> usize {

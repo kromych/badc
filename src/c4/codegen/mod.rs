@@ -66,6 +66,13 @@ pub enum Target {
     /// WINE on macOS hosts since native Windows runners aren't in
     /// the CI matrix.
     WindowsX64,
+    /// Windows on AArch64. Same PE32+ container as `WindowsX64`,
+    /// just with the COFF `Machine` field set to `IMAGE_FILE_MACHINE_ARM64`
+    /// and the entry stub / mprotect thunk emitted as aarch64
+    /// instructions. AAPCS64 calling convention; the existing
+    /// aarch64 lowering reuses verbatim (no Windows-specific arm64
+    /// ABI knobs).
+    WindowsAarch64,
 }
 
 impl Target {
@@ -83,9 +90,14 @@ impl Target {
             | Some("windows-x86-64")
             | Some("x86_64-pc-windows-gnu")
             | Some("x86_64-pc-windows-msvc") => Ok(Target::WindowsX64),
+            Some("windows-arm64")
+            | Some("windows-aarch64")
+            | Some("aarch64-pc-windows-gnullvm")
+            | Some("aarch64-pc-windows-msvc") => Ok(Target::WindowsAarch64),
             Some(other) => Err(C4Error::Compile(format!(
                 "unsupported native target: {other:?} \
-                 (try `macos-aarch64`, `linux-aarch64`, `linux-x64`, or `windows-x64`)"
+                 (try `macos-aarch64`, `linux-aarch64`, `linux-x64`, \
+                 `windows-x64`, or `windows-arm64`)"
             ))),
         }
     }
@@ -259,7 +271,9 @@ pub fn emit_native_with_options(
 /// (which inspects the lowered bytes directly).
 fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Result<Build, C4Error> {
     match target {
-        Target::MacOSAarch64 | Target::LinuxAarch64 => aarch64::lower(program, target, options),
+        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
+            aarch64::lower(program, target, options)
+        }
         Target::LinuxX64 | Target::WindowsX64 => x86_64::lower(program, target, options),
     }
 }
@@ -269,7 +283,8 @@ fn write_for(build: &Build, target: Target) -> Result<Vec<u8>, C4Error> {
         Target::MacOSAarch64 => mach_o::write(build),
         Target::LinuxAarch64 => elf::write(build, Machine::Aarch64),
         Target::LinuxX64 => elf::write(build, Machine::X86_64),
-        Target::WindowsX64 => pe::write(build),
+        Target::WindowsX64 => pe::write(build, Machine::X86_64),
+        Target::WindowsAarch64 => pe::write(build, Machine::Aarch64),
     }
 }
 
@@ -333,6 +348,13 @@ impl Target {
             Target::WindowsX64 => TargetOptions {
                 variadic_on_stack: false,
                 win64_abi: true,
+            },
+            Target::WindowsAarch64 => TargetOptions {
+                // Standard AAPCS64 (no macOS-style stack-packed
+                // variadic); the win64_abi flag is x86_64-only and
+                // doesn't apply on aarch64.
+                variadic_on_stack: false,
+                win64_abi: false,
             },
         }
     }

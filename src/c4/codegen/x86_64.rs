@@ -794,12 +794,10 @@ fn collect_branch_targets(text: &[i64]) -> Vec<bool> {
             break;
         };
         match op {
-            Op::Jmp | Op::Bz | Op::Bnz | Op::Jsr => {
-                if pc + 1 < text.len() {
-                    let target = text[pc + 1] as usize;
-                    if target < targets.len() {
-                        targets[target] = true;
-                    }
+            Op::Jmp | Op::Bz | Op::Bnz | Op::Jsr if pc + 1 < text.len() => {
+                let target = text[pc + 1] as usize;
+                if target < targets.len() {
+                    targets[target] = true;
                 }
             }
             _ => {}

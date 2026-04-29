@@ -37,6 +37,7 @@ fn push_header(out: &mut String, program: &Program, build: &Build, target: Targe
             Target::LinuxAarch64 => "linux-aarch64",
             Target::LinuxX64 => "linux-x64",
             Target::WindowsX64 => "windows-x64",
+            Target::WindowsAarch64 => "windows-arm64",
         }
     ));
     out.push_str(&format!("; code bytes:    {}\n", build.text.len()));

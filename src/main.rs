@@ -242,6 +242,15 @@ fn emit_native_binary(
                  run it on Windows or under WINE (`wine path.exe`)."
             );
         }
+        Target::WindowsAarch64 => {
+            #[cfg(not(all(target_os = "windows", target_arch = "aarch64")))]
+            eprintln!(
+                "badc: produced a Windows/AArch64 PE on a different host; \
+                 run it on a Windows-on-ARM box. WINE on macOS doesn't \
+                 ship the aarch64-windows DLL set, so local execution \
+                 isn't supported there yet."
+            );
+        }
     }
 }
 

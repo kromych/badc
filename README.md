@@ -23,8 +23,9 @@ them at parse.
 
 badc also has a native backend: `--emit-native` lowers the bytecode
 straight to machine code wrapped in a Mach-O (macOS arm64), ELF
-(Linux arm64 / Linux x86_64), or PE32+ (Windows x86_64) executable.
-The same self-host above works against any of the four targets:
+(Linux arm64 / Linux x86_64), or PE32+ (Windows x86_64 / Windows
+AArch64) executable. The same self-host above works against any
+of the five targets:
 
     badc --emit-native fixtures/c/c4.c -o c4-native       # macOS Mach-O
     ./c4-native hello.c
@@ -43,6 +44,14 @@ WINE on a Unix host:
 
     badc --emit-native --target=windows-x64 fixtures/c/c4.c -o c4.exe
     wine c4.exe hello.c
+
+The same flow targeting AArch64 Windows produces a PE that runs on
+Windows-on-ARM. It looks like there's no WINE path for AArch64 Windows
+on macOS (WINE on Apple Silicon ships only the x86_64-windows DLL set),
+so local testing is format-validation only -- runtime tests run on a
+`windows-11-arm` CI runner.
+
+    badc --emit-native --target=windows-arm64 fixtures/c/c4.c -o c4-arm64.exe
 
 ## Build and run
 
@@ -166,7 +175,7 @@ For example:
 
 `--emit-native` skips the VM and lowers the bytecode straight to
 machine code, then wraps it in whatever container the target OS
-wants. Four targets ship today:
+wants. Five targets ship today:
 
 | `--target=`              | format        | notes                                       |
 |--------------------------|---------------|---------------------------------------------|
@@ -174,8 +183,9 @@ wants. Four targets ship today:
 | `linux-aarch64`           | ELF (ET_EXEC) | links libc.so.6 + libdl.so.2               |
 | `linux-x64`               | ELF (ET_EXEC) | x86_64; links libc.so.6 + libdl.so.2       |
 | `windows-x64`             | PE32+         | x86_64; links msvcrt.dll + kernel32.dll     |
+| `windows-arm64`           | PE32+         | AArch64; same DLL set as `windows-x64`      |
 
-All four share the lowering pass, branch-fixup machinery, and
+All five share the lowering pass, branch-fixup machinery, and
 data-segment / function-pointer relocation shape; the encoder and
 image writer differ per arch / OS. The Mach-O writer hand-rolls load
 commands, the __got/__data sections, and bind opcodes; the ELF writer
@@ -371,8 +381,10 @@ The CLI binary always builds with the default `std` feature.
         mach_o.rs           Mach-O writer (macOS, ad-hoc-signed)
         elf.rs              ELF writer (Linux/aarch64 + Linux/x86_64,
                             ET_EXEC + libc + libdl)
-        pe.rs               PE32+ writer (Windows/x86_64,
-                            msvcrt + kernel32 imports via IAT)
+        pe.rs               PE32+ writer (Windows/x86_64 +
+                            Windows/AArch64; msvcrt + kernel32
+                            imports via IAT, with an in-text
+                            mprotect-to-VirtualProtect thunk)
         disasm.rs           --dump-asm textual listing
         jit.rs              in-process JIT loader (Linux + macOS arm64)
         regalloc.rs         --optimize register-pool analyzer
@@ -385,6 +397,8 @@ The CLI binary always builds with the default `std` feature.
         native_elf_x64.rs                         Linux/x86_64 ELF e2e
         native_pe_x64.rs                          Windows/x86_64 PE e2e
                                                   (via WINE on macOS)
+        native_pe_arm64.rs                        Windows/AArch64 PE e2e
+                                                  (windows-on-ARM only)
         jit.rs                                    Linux JIT e2e
     fixtures/c/             C programs the test suite loads + the
                             original c4.c

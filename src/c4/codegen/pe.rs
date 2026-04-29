@@ -72,9 +72,9 @@ use alloc::vec::Vec;
 
 use super::super::error::C4Error;
 use super::super::op::Op;
-use super::Build;
 use super::aarch64;
 use super::x86_64;
+use super::{Build, Machine};
 
 // ----------------------------------------------------------------
 // PE constants. Names mirror `winnt.h` so cross-checking is easy.
@@ -85,6 +85,7 @@ const SECTION_ALIGNMENT: u32 = 0x1000;
 const FILE_ALIGNMENT: u32 = 0x200;
 
 const IMAGE_FILE_MACHINE_AMD64: u16 = 0x8664;
+const IMAGE_FILE_MACHINE_ARM64: u16 = 0xAA64;
 const IMAGE_FILE_EXECUTABLE_IMAGE: u16 = 0x0002;
 const IMAGE_FILE_LARGE_ADDRESS_AWARE: u16 = 0x0020;
 
@@ -167,7 +168,7 @@ const STUB_IMPORT_EXIT: (&str, &str) = ("ExitProcess", KERNEL32);
 // Top-level writer.
 // ----------------------------------------------------------------
 
-pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
+pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error> {
     // 1) Combined imports list. Index N becomes IAT slot N. The
     //    standard ops occupy 0..n_program_imports; the entry stub's
     //    three additional imports come after.
@@ -192,10 +193,10 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
     let dlls = group_imports_by_dll(&imports);
 
     // 3) Build the entry stub and the mprotect thunk. We need their
-    //    sizes to lay out the rest, but disp32 patching waits until
-    //    the IAT RVAs are known.
-    let stub = build_entry_stub();
-    let thunk = build_mprotect_thunk();
+    //    sizes to lay out the rest, but immediate patching waits
+    //    until the IAT RVAs are known.
+    let stub = build_entry_stub(machine);
+    let thunk = build_mprotect_thunk(machine);
     let mpro_idx = aarch64::IMPORTS
         .iter()
         .position(|imp| imp.op == Op::Mpro)
@@ -248,38 +249,39 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
     text_bytes.extend_from_slice(&thunk.bytes);
     text_bytes.extend_from_slice(&build.text);
 
-    // Stub-internal fixup: the `call main` rel32. main starts at
-    // offset text_prologue_len within the combined .text (past
+    // Stub-internal fixup: the direct call to main. main starts
+    // at offset text_prologue_len within the combined .text (past
     // the entry stub and the mprotect thunk).
-    patch_call_rel32(
+    patch_direct_call(
+        machine,
         &mut text_bytes,
-        stub.call_main_offset as usize,
+        stub.direct_call_main_offset,
         text_prologue_len + build.entry_offset as u32,
     )?;
 
-    // Stub-emitted IAT calls. Each is a
-    // `call qword ptr [rip+disp32]` whose target is the IAT slot
-    // for the given global import index.
-    patch_rip_rel_disp32(
+    // Stub-emitted IAT calls (one for `__getmainargs`, one for
+    // `ExitProcess`).
+    patch_iat_lookup(
+        machine,
         &mut text_bytes,
-        stub.call_getmainargs_disp32_off as usize,
-        text_rva + (stub.call_getmainargs_disp32_off + 4) as u32,
+        stub.iat_getmainargs_offset,
+        text_rva,
         idata_layout.iat_rva_for_import[stub_getmainargs_idx],
     )?;
-    patch_rip_rel_disp32(
+    patch_iat_lookup(
+        machine,
         &mut text_bytes,
-        stub.call_exit_disp32_off as usize,
-        text_rva + (stub.call_exit_disp32_off + 4) as u32,
+        stub.iat_exit_offset,
+        text_rva,
         idata_layout.iat_rva_for_import[stub_exit_idx],
     )?;
 
-    // Thunk-internal fixup: the `call qword [rip+disp32]` to
-    // VirtualProtect via its IAT slot.
-    let thunk_vp_disp32_off = stub_len + thunk.call_vp_disp32_off;
-    patch_rip_rel_disp32(
+    // Thunk-internal fixup: the IAT lookup for VirtualProtect.
+    patch_iat_lookup(
+        machine,
         &mut text_bytes,
-        thunk_vp_disp32_off as usize,
-        text_rva + thunk_vp_disp32_off + 4,
+        stub_len + thunk.iat_virtualprotect_offset,
+        text_rva,
         idata_layout.iat_rva_for_import[mpro_idx],
     )?;
 
@@ -287,55 +289,38 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
     // by text_prologue_len in the combined .text. Op::Mpro is
     // re-routed through the thunk_ptr slot.
     for f in &build.got_fixups {
-        let call_off_in_combined = (f.adrp_offset as u32) + text_prologue_len;
-        // disp32 is at `call_off + 2`; "after byte" is at +6.
-        let disp32_off = call_off_in_combined + 2;
-        let after_off = call_off_in_combined + 6;
+        let instr_off = (f.adrp_offset as u32) + text_prologue_len;
         let target_rva = if f.import_index == mpro_idx {
             thunk_ptr_rva
         } else {
             idata_layout.iat_rva_for_import[f.import_index]
         };
-        patch_rip_rel_disp32(
-            &mut text_bytes,
-            disp32_off as usize,
-            text_rva + after_off,
-            target_rva,
-        )?;
+        patch_iat_lookup(machine, &mut text_bytes, instr_off, text_rva, target_rva)?;
     }
     for f in &build.data_fixups {
-        // `lea r13, [rip + disp32]` is 7 bytes; disp32 starts at +3.
-        let lea_off_in_combined = (f.adrp_offset as u32) + text_prologue_len;
-        let disp32_off = lea_off_in_combined + 3;
-        let after_off = lea_off_in_combined + (x86_64::LEA_RIP32_LEN as u32);
-        patch_rip_rel_disp32(
+        let instr_off = (f.adrp_offset as u32) + text_prologue_len;
+        patch_addr_load(
+            machine,
             &mut text_bytes,
-            disp32_off as usize,
-            text_rva + after_off,
+            instr_off,
+            text_rva,
             data_rva + f.data_offset as u32,
         )?;
     }
     for f in &build.func_fixups {
-        let lea_off_in_combined = (f.adrp_offset as u32) + text_prologue_len;
-        let disp32_off = lea_off_in_combined + 3;
-        let after_off = lea_off_in_combined + (x86_64::LEA_RIP32_LEN as u32);
-        // Function pointer literals point at offsets within
-        // build.text -- shift by text_prologue_len to land in
-        // the combined .text past entry stub + thunk.
+        let instr_off = (f.adrp_offset as u32) + text_prologue_len;
+        // Function-pointer literals point at offsets within
+        // build.text -- shift by text_prologue_len to land in the
+        // combined .text past entry stub + thunk.
         let target_rva = text_rva + text_prologue_len + f.target_native_offset as u32;
-        patch_rip_rel_disp32(
-            &mut text_bytes,
-            disp32_off as usize,
-            text_rva + after_off,
-            target_rva,
-        )?;
+        patch_addr_load(machine, &mut text_bytes, instr_off, text_rva, target_rva)?;
     }
 
     // 6) Assemble the final image.
     let mut out: Vec<u8> = Vec::with_capacity(total_file_size);
     write_dos_header_and_stub(&mut out);
     write_pe_signature(&mut out);
-    write_coff_header(&mut out, OPTIONAL64_HEADER_SIZE);
+    write_coff_header(&mut out, OPTIONAL64_HEADER_SIZE, machine);
     write_optional_header(
         &mut out,
         OptionalHeaderInputs {
@@ -417,8 +402,12 @@ fn write_pe_signature(out: &mut Vec<u8>) {
     out.extend_from_slice(b"PE\0\0");
 }
 
-fn write_coff_header(out: &mut Vec<u8>, optional_header_size: usize) {
-    out.extend_from_slice(&IMAGE_FILE_MACHINE_AMD64.to_le_bytes()); // Machine
+fn write_coff_header(out: &mut Vec<u8>, optional_header_size: usize, machine: Machine) {
+    let machine_id = match machine {
+        Machine::X86_64 => IMAGE_FILE_MACHINE_AMD64,
+        Machine::Aarch64 => IMAGE_FILE_MACHINE_ARM64,
+    };
+    out.extend_from_slice(&machine_id.to_le_bytes()); // Machine
     out.extend_from_slice(&(NUM_SECTIONS as u16).to_le_bytes()); // NumberOfSections
     out.extend_from_slice(&0u32.to_le_bytes()); // TimeDateStamp
     out.extend_from_slice(&0u32.to_le_bytes()); // PointerToSymbolTable (deprecated)
@@ -574,7 +563,13 @@ fn plan_idata(dlls: &[DllGroup], imports: &[(String, &'static str)], base_rva: u
     let import_dir_off: usize = 0;
     let import_dir_size = (n_dlls + 1) * IMAGE_IMPORT_DESCRIPTOR_SIZE;
 
-    let iat_off = import_dir_off + import_dir_size;
+    // The IAT entries are 8-byte u64s, and the aarch64 LDR
+    // immediate is scaled by 8 (so the in-page byte offset must be
+    // 8-aligned). The import-descriptor block is 4-aligned by its
+    // shape (each descriptor is 20 bytes), so a 2-DLL setup ends
+    // at offset 60 -- not 8-aligned. Pad here so the IAT starts at
+    // an 8-byte boundary regardless of how many DLLs we have.
+    let iat_off = round_up_usize(import_dir_off + import_dir_size, 8);
     // IAT layout: per-DLL block of (n_members + 1) u64 entries (the
     // final entry per DLL is a NULL terminator).
     let iat_size = dlls
@@ -701,21 +696,38 @@ fn plan_idata(dlls: &[DllGroup], imports: &[(String, &'static str)], base_rva: u
 
 // ----------------------------------------------------------------
 // Entry stub.
+//
+// Both backends emit a stub that calls `__getmainargs` to populate
+// argc/argv, then `bl main` (or `call main`), then `ExitProcess`.
+// The stub layout differs per arch in instruction selection but
+// produces the same overall flow. `EntryStub` carries arch-neutral
+// offsets back to the writer, which dispatches to the per-arch
+// patcher to fill in the final immediate fields.
 // ----------------------------------------------------------------
 
 struct EntryStub {
     bytes: Vec<u8>,
-    /// Offset of the `call qword [rip+disp32]` for `__getmainargs`.
-    /// disp32 sits at `+2`; the "after byte" used for RIP is at `+6`.
-    call_getmainargs_disp32_off: u32,
-    /// Offset of the `call rel32` to the program's `main`. The
-    /// rel32 is at `+1`; "after byte" is at `+5`.
-    call_main_offset: u32,
-    /// Offset of the `call qword [rip+disp32]` for `ExitProcess`.
-    call_exit_disp32_off: u32,
+    /// Offset within [`Self::bytes`] of the IAT-lookup sequence for
+    /// `__getmainargs`. On x86_64 this is the start of
+    /// `call qword [rip+disp32]`; on aarch64 the start of the
+    /// `adrp x16, _; ldr x16, [x16, #_]` pair (the trailing
+    /// `blr x16` is at +8 and doesn't get patched).
+    iat_getmainargs_offset: u32,
+    /// Offset of the IAT-lookup for `ExitProcess` (same shape as
+    /// `iat_getmainargs_offset`).
+    iat_exit_offset: u32,
+    /// Offset of the direct `bl main` / `call main` instruction.
+    direct_call_main_offset: u32,
 }
 
-fn build_entry_stub() -> EntryStub {
+fn build_entry_stub(machine: Machine) -> EntryStub {
+    match machine {
+        Machine::X86_64 => build_x86_64_entry_stub(),
+        Machine::Aarch64 => build_aarch64_entry_stub(),
+    }
+}
+
+fn build_x86_64_entry_stub() -> EntryStub {
     // Stack frame for the call to `__getmainargs(int* pargc,
     // char*** pargv, char*** penvp, int doWildcardExpand,
     // _startupinfo* sinfo)`. Win64 passes the first four args in
@@ -783,9 +795,92 @@ fn build_entry_stub() -> EntryStub {
 
     EntryStub {
         bytes,
-        call_getmainargs_disp32_off: call_gma_off + 2,
-        call_main_offset: call_main_off,
-        call_exit_disp32_off: call_exit_off + 2,
+        // x86_64: the IAT-lookup is the start of the `call qword`
+        // instruction itself (not the disp32 byte). The patcher
+        // computes `disp32 = target - (call + 6)` from this offset.
+        iat_getmainargs_offset: call_gma_off,
+        iat_exit_offset: call_exit_off,
+        direct_call_main_offset: call_main_off,
+    }
+}
+
+/// AArch64 entry stub. Same flow as the x86_64 one: prologue, lay
+/// out a small frame for argc/argv/envp/_startupinfo, call
+/// `__getmainargs` via IAT, hand argc/argv to `main`, then call
+/// `ExitProcess` via IAT. AAPCS64 calling convention -- args are
+/// in x0..x7, no shadow space.
+fn build_aarch64_entry_stub() -> EntryStub {
+    use super::aarch64 as a;
+    let mut bytes: Vec<u8> = Vec::with_capacity(80);
+
+    // Frame layout after `sub sp, sp, #0x40` (carved below the
+    // saved fp/lr pair):
+    //   [sp + 0x00..0x08]  argc out (low 32 bits used; we zero the
+    //                        slot before the call and load 64 bits
+    //                        afterwards so the upper bits are 0)
+    //   [sp + 0x08..0x10]  argv out (char**)
+    //   [sp + 0x10..0x18]  envp out (char***), unused after
+    //   [sp + 0x18..0x20]  _startupinfo (`int newmode`, zeroed)
+    //   [sp + 0x20..0x40]  padding (kept around to give us room
+    //                        for nested call's spill slots if the
+    //                        callee wanted them; AAPCS64 doesn't
+    //                        require shadow space, so this is just
+    //                        slack)
+
+    // stp x29, x30, [sp, #-16]!         (save fp, lr; pre-decrement)
+    a::emit(
+        &mut bytes,
+        a::enc_stp_pre(a::Reg::X29, a::Reg::X30, a::Reg::SP, -16),
+    );
+    // mov x29, sp                        (= add x29, sp, #0)
+    a::emit(&mut bytes, a::enc_add_imm(a::Reg::X29, a::Reg::SP, 0));
+    // sub sp, sp, #0x40
+    a::emit(&mut bytes, a::enc_sub_imm(a::Reg::SP, a::Reg::SP, 0x40));
+
+    // Zero argc and _startupinfo slots so the post-call ldr x0
+    // gets a clean zero-extended argc and __getmainargs sees a
+    // zeroed _startupinfo struct.
+    // str xzr, [sp, #0x00]
+    a::emit(&mut bytes, a::enc_str_imm(a::Reg(31), a::Reg::SP, 0x00));
+    // str xzr, [sp, #0x18]
+    a::emit(&mut bytes, a::enc_str_imm(a::Reg(31), a::Reg::SP, 0x18));
+
+    // Set up __getmainargs args:
+    //   x0 = &argc, x1 = &argv, x2 = &envp,
+    //   x3 = doWildcardExpansion (0), x4 = &_startupinfo
+    a::emit(&mut bytes, a::enc_add_imm(a::Reg::X0, a::Reg::SP, 0x00));
+    a::emit(&mut bytes, a::enc_add_imm(a::Reg::X1, a::Reg::SP, 0x08));
+    a::emit(&mut bytes, a::enc_add_imm(a::Reg::X2, a::Reg::SP, 0x10));
+    a::emit(&mut bytes, a::enc_movz(a::Reg(3), 0, 0));
+    a::emit(&mut bytes, a::enc_add_imm(a::Reg(4), a::Reg::SP, 0x18));
+
+    // adrp x16, IAT_PAGE; ldr x16, [x16, #IAT_OFF]; blr x16
+    let iat_gma_off = bytes.len() as u32;
+    a::emit(&mut bytes, a::enc_adrp(a::Reg::X16, 0)); // placeholder
+    a::emit(&mut bytes, a::enc_ldr_imm(a::Reg::X16, a::Reg::X16, 0)); // placeholder
+    a::emit(&mut bytes, a::enc_blr(a::Reg::X16));
+
+    // Load argc into x0 (low 32 bits = int value, high 32 = zero
+    // since we zeroed the slot first). Load argv into x1.
+    a::emit(&mut bytes, a::enc_ldr_imm(a::Reg::X0, a::Reg::SP, 0x00));
+    a::emit(&mut bytes, a::enc_ldr_imm(a::Reg::X1, a::Reg::SP, 0x08));
+
+    // bl main (rel26 placeholder).
+    let bl_main_off = bytes.len() as u32;
+    a::emit(&mut bytes, a::enc_bl(0));
+
+    // main's return value is in w0 / x0 already (AAPCS64), so it's
+    // the first arg for ExitProcess. Just call through the IAT.
+    let iat_exit_off = bytes.len() as u32;
+    a::emit(&mut bytes, a::enc_adrp(a::Reg::X16, 0));
+    a::emit(&mut bytes, a::enc_ldr_imm(a::Reg::X16, a::Reg::X16, 0));
+    a::emit(&mut bytes, a::enc_blr(a::Reg::X16));
+
+    EntryStub {
+        bytes,
+        iat_getmainargs_offset: iat_gma_off,
+        iat_exit_offset: iat_exit_off,
+        direct_call_main_offset: bl_main_off,
     }
 }
 
@@ -816,13 +911,20 @@ fn build_entry_stub() -> EntryStub {
 
 struct MprotectThunk {
     bytes: Vec<u8>,
-    /// Offset within [`Self::bytes`] of the disp32 inside the
-    /// thunk's own `call qword [rip+disp32]` for VirtualProtect.
-    /// "After byte" used as the RIP base sits at +4.
-    call_vp_disp32_off: u32,
+    /// Offset within [`Self::bytes`] of the IAT-lookup sequence
+    /// for VirtualProtect (start of `call qword` on x86_64; start
+    /// of `adrp x16, _; ldr x16, [x16, #_]` on aarch64).
+    iat_virtualprotect_offset: u32,
 }
 
-fn build_mprotect_thunk() -> MprotectThunk {
+fn build_mprotect_thunk(machine: Machine) -> MprotectThunk {
+    match machine {
+        Machine::X86_64 => build_x86_64_mprotect_thunk(),
+        Machine::Aarch64 => build_aarch64_mprotect_thunk(),
+    }
+}
+
+fn build_x86_64_mprotect_thunk() -> MprotectThunk {
     let mut bytes: Vec<u8> = Vec::with_capacity(64);
 
     // sub rsp, 0x38                            (4 bytes)
@@ -893,43 +995,197 @@ fn build_mprotect_thunk() -> MprotectThunk {
 
     MprotectThunk {
         bytes,
-        call_vp_disp32_off: call_vp_off + 2,
+        iat_virtualprotect_offset: call_vp_off,
+    }
+}
+
+/// AArch64 mprotect thunk. Same idea as the x86_64 one: take the
+/// 3-arg POSIX call (x0=addr, x1=len, x2=prot per AAPCS64),
+/// translate prot to a Windows PAGE_* via a small inline lookup,
+/// allocate a stack slot for VirtualProtect's `&oldProt` out
+/// parameter, call VirtualProtect via the IAT, then map the BOOL
+/// result to `0`/`-1`.
+///
+/// Simplification: this thunk passes `PAGE_EXECUTE_READWRITE`
+/// (0x40) regardless of the requested prot. Most c4 callers want
+/// either RWX (the JIT path) or PROT_READ (where read-only access
+/// works fine under PAGE_EXECUTE_READWRITE since it's a strict
+/// superset). A more faithful translation would consult a small
+/// prot-to-PAGE_* table; we keep things simple for the first cut
+/// since no current fixture distinguishes.
+fn build_aarch64_mprotect_thunk() -> MprotectThunk {
+    use super::aarch64 as a;
+    let mut bytes: Vec<u8> = Vec::with_capacity(64);
+
+    // Prologue: save fp/lr, set new frame, allocate a 16-byte slot
+    // for `oldProtect` (4 bytes used; size to keep sp 16-aligned).
+    a::emit(
+        &mut bytes,
+        a::enc_stp_pre(a::Reg::X29, a::Reg::X30, a::Reg::SP, -16),
+    );
+    a::emit(&mut bytes, a::enc_add_imm(a::Reg::X29, a::Reg::SP, 0));
+    a::emit(&mut bytes, a::enc_sub_imm(a::Reg::SP, a::Reg::SP, 16));
+
+    // x2 = newProtect = PAGE_EXECUTE_READWRITE (0x40). Always RWX
+    // for now; see the doc comment for why.
+    a::emit(&mut bytes, a::enc_movz(a::Reg(2), 0x40, 0));
+    // x3 = &oldProtect (= sp + 0).
+    a::emit(&mut bytes, a::enc_add_imm(a::Reg(3), a::Reg::SP, 0));
+
+    // Call VirtualProtect via IAT.
+    let iat_vp_off = bytes.len() as u32;
+    a::emit(&mut bytes, a::enc_adrp(a::Reg::X16, 0));
+    a::emit(&mut bytes, a::enc_ldr_imm(a::Reg::X16, a::Reg::X16, 0));
+    a::emit(&mut bytes, a::enc_blr(a::Reg::X16));
+
+    // BOOL -> int translation: 0 (failure) -> -1, nonzero -> 0.
+    // cmp x0, #0 (= subs xzr, x0, #0).  Hand-rolled since we don't
+    // have a `cmp imm` encoder in aarch64.rs; the ARM ARM
+    // encoding for `subs xzr, x0, #0` is 0xF100_001F.
+    a::emit(&mut bytes, 0xF100_001F);
+    // cset x0, eq    -> x0 = 1 if w0 was 0, else 0.
+    a::emit(&mut bytes, a::enc_cset(a::Reg::X0, a::Cond::Eq));
+    // sub x0, xzr, x0 (= neg x0, x0).
+    a::emit(
+        &mut bytes,
+        a::enc_sub_reg(a::Reg::X0, a::Reg(31), a::Reg::X0),
+    );
+
+    // Epilogue: restore frame, return.
+    a::emit(&mut bytes, a::enc_add_imm(a::Reg::SP, a::Reg::SP, 16));
+    a::emit(
+        &mut bytes,
+        a::enc_ldp_post(a::Reg::X29, a::Reg::X30, a::Reg::SP, 16),
+    );
+    a::emit(&mut bytes, a::enc_ret(a::Reg::X30));
+
+    MprotectThunk {
+        bytes,
+        iat_virtualprotect_offset: iat_vp_off,
     }
 }
 
 // ----------------------------------------------------------------
 // Fixup helpers.
+//
+// Three patch shapes per arch (six total). The writer threads RVAs
+// (relative to ImageBase) and offsets within the combined `.text`,
+// and these helpers do the per-arch arithmetic to land the right
+// bits in the right slots.
 // ----------------------------------------------------------------
 
-/// Patch a `call rel32` placeholder so it targets `target_rva`,
-/// given that the call's first byte is at `call_offset_in_text`
-/// inside the combined `.text` (counted from `text_rva`).
-fn patch_call_rel32(
+/// Patch an IAT-lookup sequence: `call qword [rip+disp32]` on
+/// x86_64, or `adrp x16, _; ldr x16, [x16, #_]` on aarch64. The
+/// caller passes the offset of the first instruction within the
+/// combined `.text`, the section's RVA, and the IAT slot's RVA.
+fn patch_iat_lookup(
+    machine: Machine,
     text: &mut [u8],
-    call_offset_in_text: usize,
-    target_rva_in_text: u32,
+    instr_offset_in_text: u32,
+    text_section_rva: u32,
+    target_rva: u32,
 ) -> Result<(), C4Error> {
-    // rel32 = target - (call_after_byte). The call instruction is
-    // 5 bytes (E8 + 4-byte disp); its after-byte is +5 from start.
-    let after = call_offset_in_text + 5;
-    let delta = target_rva_in_text as i64 - after as i64;
-    if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
-        return Err(C4Error::Compile(format!(
-            "PE: rel32 displacement {delta} doesn't fit in 32 bits"
-        )));
+    let instr_rva = text_section_rva + instr_offset_in_text;
+    match machine {
+        Machine::X86_64 => {
+            // `call qword [rip+disp32]`: 6 bytes. disp32 at +2;
+            // RIP at the after-byte (+6).
+            let after_rva = instr_rva + 6;
+            patch_x86_64_disp32(
+                text,
+                (instr_offset_in_text + 2) as usize,
+                after_rva,
+                target_rva,
+            )
+        }
+        Machine::Aarch64 => {
+            patch_aarch64_adrp_ldr(text, instr_offset_in_text, instr_rva, target_rva)
+        }
     }
-    let disp32 = delta as i32;
-    let off = call_offset_in_text + 1;
-    text[off..off + 4].copy_from_slice(&disp32.to_le_bytes());
-    Ok(())
 }
 
-/// Patch a RIP-relative `disp32` field at `disp32_off` in the
-/// combined `.text` so that `RIP_at_after = target_rva`. The
-/// caller computes `after_rva` (the RVA of the byte right after
-/// the disp32 field, which the CPU treats as RIP for this kind of
-/// instruction).
-fn patch_rip_rel_disp32(
+/// Patch an absolute-address materialization: `lea rd, [rip+disp32]`
+/// on x86_64 or `adrp xd, _; add xd, xd, #_` on aarch64. The
+/// codegen records these for data-segment references and
+/// function-pointer literals.
+fn patch_addr_load(
+    machine: Machine,
+    text: &mut [u8],
+    instr_offset_in_text: u32,
+    text_section_rva: u32,
+    target_rva: u32,
+) -> Result<(), C4Error> {
+    let instr_rva = text_section_rva + instr_offset_in_text;
+    match machine {
+        Machine::X86_64 => {
+            // `lea r13, [rip+disp32]`: 7 bytes. disp32 at +3, RIP
+            // at +7 (LEA_RIP32_LEN).
+            let after_rva = instr_rva + (x86_64::LEA_RIP32_LEN as u32);
+            patch_x86_64_disp32(
+                text,
+                (instr_offset_in_text + 3) as usize,
+                after_rva,
+                target_rva,
+            )
+        }
+        Machine::Aarch64 => {
+            patch_aarch64_adrp_add(text, instr_offset_in_text, instr_rva, target_rva)
+        }
+    }
+}
+
+/// Patch a direct call to a target within the same `.text`:
+/// `call rel32` on x86_64 (5 bytes) or `bl rel26` on aarch64
+/// (4 bytes). Both offsets are in the combined `.text`, so the
+/// helper doesn't need section RVAs.
+fn patch_direct_call(
+    machine: Machine,
+    text: &mut [u8],
+    call_offset_in_text: u32,
+    target_offset_in_text: u32,
+) -> Result<(), C4Error> {
+    match machine {
+        Machine::X86_64 => {
+            // rel32 = target - (call+5). The 5-byte call form ends
+            // at `call_offset + 5`; rel32 fills bytes [+1..+5].
+            let after = call_offset_in_text + 5;
+            let delta = target_offset_in_text as i64 - after as i64;
+            if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
+                return Err(C4Error::Compile(format!(
+                    "PE: rel32 displacement {delta} doesn't fit in 32 bits"
+                )));
+            }
+            let disp32 = delta as i32;
+            let off = (call_offset_in_text + 1) as usize;
+            text[off..off + 4].copy_from_slice(&disp32.to_le_bytes());
+            Ok(())
+        }
+        Machine::Aarch64 => {
+            // bl rel26: signed 26-bit offset measured in
+            // instructions, relative to the bl instruction itself.
+            let delta_bytes = target_offset_in_text as i64 - call_offset_in_text as i64;
+            if delta_bytes & 3 != 0 {
+                return Err(C4Error::Compile(format!(
+                    "PE: aarch64 bl delta {delta_bytes} not 4-byte aligned"
+                )));
+            }
+            let delta_insns = delta_bytes / 4;
+            if !(-(1i64 << 25)..(1i64 << 25)).contains(&delta_insns) {
+                return Err(C4Error::Compile(format!(
+                    "PE: aarch64 bl delta {delta_insns} insns out of 26-bit range"
+                )));
+            }
+            let word = aarch64::enc_bl(delta_insns as i32);
+            let off = call_offset_in_text as usize;
+            text[off..off + 4].copy_from_slice(&word.to_le_bytes());
+            Ok(())
+        }
+    }
+}
+
+/// Write a 32-bit signed displacement at `disp32_off` so that
+/// `target_rva = after_rva + disp32`. Used by the x86_64 patches.
+fn patch_x86_64_disp32(
     text: &mut [u8],
     disp32_off: usize,
     after_rva: u32,
@@ -946,11 +1202,87 @@ fn patch_rip_rel_disp32(
     Ok(())
 }
 
+/// Patch an aarch64 `adrp xd, _; ldr xd, [xd, #_]` pair to load
+/// the 64-bit value at `target_rva` into `xd`. The adrp's imm21
+/// is the diff between the target's page and the adrp's page,
+/// scaled by 4 KiB; the ldr's imm12 is the in-page byte offset
+/// (scaled by 8 for a 64-bit load).
+fn patch_aarch64_adrp_ldr(
+    text: &mut [u8],
+    adrp_offset_in_text: u32,
+    adrp_rva: u32,
+    target_rva: u32,
+) -> Result<(), C4Error> {
+    let adrp_page = (adrp_rva as u64) & !0xFFF;
+    let target_page = (target_rva as u64) & !0xFFF;
+    let page_diff = target_page as i64 - adrp_page as i64;
+    if page_diff & 0xFFF != 0 {
+        return Err(C4Error::Compile(format!(
+            "PE: aarch64 adrp page diff {page_diff} not 4 KiB aligned"
+        )));
+    }
+    let imm21 = (page_diff >> 12) as i32;
+    let in_page = target_rva & 0xFFF;
+    if !in_page.is_multiple_of(8) {
+        return Err(C4Error::Compile(format!(
+            "PE: aarch64 ldr offset {in_page:#x} not 8-aligned"
+        )));
+    }
+    let off = adrp_offset_in_text as usize;
+    let adrp_word = u32::from_le_bytes([text[off], text[off + 1], text[off + 2], text[off + 3]]);
+    let ldr_word = u32::from_le_bytes([text[off + 4], text[off + 5], text[off + 6], text[off + 7]]);
+    let rd = (adrp_word & 0x1F) as u8;
+    let ldr_rt = (ldr_word & 0x1F) as u8;
+    let ldr_rn = ((ldr_word >> 5) & 0x1F) as u8;
+    let new_adrp = aarch64::enc_adrp(aarch64::Reg(rd), imm21);
+    let new_ldr = aarch64::enc_ldr_imm(aarch64::Reg(ldr_rt), aarch64::Reg(ldr_rn), in_page);
+    text[off..off + 4].copy_from_slice(&new_adrp.to_le_bytes());
+    text[off + 4..off + 8].copy_from_slice(&new_ldr.to_le_bytes());
+    Ok(())
+}
+
+/// Patch an aarch64 `adrp xd, _; add xd, xd, #_` pair so the final
+/// xd holds the absolute-address-mod-image-base equivalent of
+/// `target_rva` (resolved by the loader at fixed image base since
+/// we don't ship base relocations).
+fn patch_aarch64_adrp_add(
+    text: &mut [u8],
+    adrp_offset_in_text: u32,
+    adrp_rva: u32,
+    target_rva: u32,
+) -> Result<(), C4Error> {
+    let adrp_page = (adrp_rva as u64) & !0xFFF;
+    let target_page = (target_rva as u64) & !0xFFF;
+    let page_diff = target_page as i64 - adrp_page as i64;
+    if page_diff & 0xFFF != 0 {
+        return Err(C4Error::Compile(format!(
+            "PE: aarch64 adrp page diff {page_diff} not 4 KiB aligned"
+        )));
+    }
+    let imm21 = (page_diff >> 12) as i32;
+    let in_page = target_rva & 0xFFF;
+    let off = adrp_offset_in_text as usize;
+    let adrp_word = u32::from_le_bytes([text[off], text[off + 1], text[off + 2], text[off + 3]]);
+    let add_word = u32::from_le_bytes([text[off + 4], text[off + 5], text[off + 6], text[off + 7]]);
+    let rd = (adrp_word & 0x1F) as u8;
+    let add_rd = (add_word & 0x1F) as u8;
+    let add_rn = ((add_word >> 5) & 0x1F) as u8;
+    let new_adrp = aarch64::enc_adrp(aarch64::Reg(rd), imm21);
+    let new_add = aarch64::enc_add_imm(aarch64::Reg(add_rd), aarch64::Reg(add_rn), in_page);
+    text[off..off + 4].copy_from_slice(&new_adrp.to_le_bytes());
+    text[off + 4..off + 8].copy_from_slice(&new_add.to_le_bytes());
+    Ok(())
+}
+
 // ----------------------------------------------------------------
 // Misc.
 // ----------------------------------------------------------------
 
 fn round_up(value: u32, align: u32) -> u32 {
+    (value + align - 1) & !(align - 1)
+}
+
+fn round_up_usize(value: usize, align: usize) -> usize {
     (value + align - 1) & !(align - 1)
 }
 
@@ -973,15 +1305,71 @@ mod tests {
     }
 
     #[test]
-    fn entry_stub_layout_matches_expected_size() {
-        let s = build_entry_stub();
+    fn x86_64_entry_stub_layout_matches_expected_size() {
+        let s = build_entry_stub(Machine::X86_64);
         // 4 + 2 + 4 + 5 + 5 + 5 + 5 + 5 + 3 + 6 + 5 + 5 + 5 + 3 + 6 = 68 bytes.
         assert_eq!(s.bytes.len(), 68);
-        // The stub has three patchable disp32 / rel32 fields. Their
-        // offsets fall out of the encoded byte sequence above; if
-        // any encoding above changes, recompute and update.
-        assert_eq!(s.call_getmainargs_disp32_off, 40);
-        assert_eq!(s.call_main_offset, 54);
-        assert_eq!(s.call_exit_disp32_off, 64);
+        // The stub has three patch sites: two IAT lookups (start of
+        // the `call qword [rip+disp32]` instructions) and one
+        // direct call to main.
+        assert_eq!(s.iat_getmainargs_offset, 38);
+        assert_eq!(s.direct_call_main_offset, 54);
+        assert_eq!(s.iat_exit_offset, 62);
+    }
+
+    #[test]
+    fn aarch64_entry_stub_is_one_word_per_instruction() {
+        let s = build_entry_stub(Machine::Aarch64);
+        // 19 instructions * 4 bytes = 76 bytes.
+        assert_eq!(s.bytes.len(), 76);
+        // Patch sites point at adrp instructions / the bl. Each is
+        // 4 bytes.
+        assert!(s.iat_getmainargs_offset.is_multiple_of(4));
+        assert!(s.iat_exit_offset.is_multiple_of(4));
+        assert!(s.direct_call_main_offset.is_multiple_of(4));
+        // Order in the stub: __getmainargs (mid), bl main (later),
+        // ExitProcess (last).
+        assert!(s.iat_getmainargs_offset < s.direct_call_main_offset);
+        assert!(s.direct_call_main_offset < s.iat_exit_offset);
+    }
+
+    #[test]
+    fn aarch64_mprotect_thunk_is_word_aligned() {
+        let t = build_mprotect_thunk(Machine::Aarch64);
+        assert_eq!(t.bytes.len() % 4, 0);
+        assert!(t.iat_virtualprotect_offset.is_multiple_of(4));
+    }
+
+    /// End-to-end format check: build an aarch64 Windows PE for a
+    /// trivial program and verify the on-disk byte layout claims
+    /// the right architecture. Doesn't execute the binary; the
+    /// runtime tests that need an aarch64 Windows host live in
+    /// `c4::tests::native_pe_arm64`.
+    #[test]
+    fn aarch64_pe_format_is_well_formed() {
+        use crate::Compiler;
+        let program = Compiler::new("int main() { return 42; }".to_string())
+            .compile()
+            .expect("compile");
+        let build = super::super::lower_for(
+            &program,
+            super::super::Target::WindowsAarch64,
+            super::super::NativeOptions::default(),
+        )
+        .expect("lower");
+        let bytes = write(&build, Machine::Aarch64).expect("write PE");
+
+        // DOS magic.
+        assert_eq!(&bytes[0..2], b"MZ");
+        // PE offset stored at byte 60.
+        let pe_off = u32::from_le_bytes([bytes[60], bytes[61], bytes[62], bytes[63]]) as usize;
+        assert_eq!(&bytes[pe_off..pe_off + 4], b"PE\0\0");
+        // COFF Machine field is right after the PE signature.
+        let machine_field = u16::from_le_bytes([bytes[pe_off + 4], bytes[pe_off + 5]]);
+        assert_eq!(machine_field, IMAGE_FILE_MACHINE_ARM64);
+        // Optional header magic confirms PE32+.
+        let optional_off = pe_off + 4 + COFF_HEADER_SIZE;
+        let optional_magic = u16::from_le_bytes([bytes[optional_off], bytes[optional_off + 1]]);
+        assert_eq!(optional_magic, PE32_PLUS_MAGIC);
     }
 }

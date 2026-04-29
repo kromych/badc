@@ -62,15 +62,30 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.os }}
-      - name: install wine (linux/arm64 only)
-        # The native_pe_arm64 tests pipe the produced PE binaries
-        # through wine 10 (which ships an aarch64-windows DLL set
-        # in the Ubuntu repos). Skip on every other runner -- the
-        # tests cfg-gate to linux+aarch64 / windows+aarch64.
-        if: matrix.os == 'ubuntu-24.04-arm'
+      - name: install wine (linux only)
+        # `ubuntu-24.04-arm` -> native_pe_arm64 tests via wine 10's
+        # aarch64-windows DLL set.
+        # `ubuntu-latest`    -> native_pe_x64 tests via wine's
+        # x86_64-windows DLL set, as a cross-check against the
+        # `windows-latest` runner: both should accept the same PE,
+        # so a divergence flags either a wine bug or a real format
+        # issue. Skip on every other runner -- the tests cfg-gate
+        # to their respective triples.
+        if: matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm'
         run: |
           sudo apt-get update -y
           sudo apt-get install -y wine
+      - name: prime wine prefix (linux only)
+        # First-time `wine` invocation creates `~/.wine`, which on a
+        # fresh CI runner takes ~60s and would race the parallel test
+        # processes (cargo test runs tests on threads, each shelling
+        # out to wine; without a primed prefix they all try to
+        # initialize it concurrently and time out). Run wineboot
+        # once up front so every test sees a ready prefix.
+        if: matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm'
+        run: wineboot --init
+        env:
+          WINEDEBUG: -all
       - name: cargo test (default features)
         # Each runner exercises the native-codegen path that targets
         # its own host:
@@ -87,7 +102,10 @@ jobs:
         #    aarch64-windows DLL set (installed in the step above).
         #  * ubuntu-latest       -> src/c4/tests/native_elf_x64.rs
         #    (Linux/x86_64 ELF, host kernel exec) +
-        #    src/c4/tests/jit.rs (mprotect-based JIT)
+        #    src/c4/tests/jit.rs (mprotect-based JIT) +
+        #    src/c4/tests/native_pe_x64.rs through wine's
+        #    x86_64-windows DLL set (installed in the step above)
+        #    as a cross-check against the windows-latest runner.
         #  * windows-latest      -> src/c4/tests/native_pe_x64.rs
         #    (Windows/x86_64 PE, host kernel exec). Runs the
         #    produced .exe directly; no JIT lane on Windows because

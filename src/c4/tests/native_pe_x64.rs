@@ -1,7 +1,7 @@
 //! End-to-end Windows/x86_64 PE tests.
 //!
 //! Compile a c4 program to a PE32+ binary, drop it in `tmp`, and
-//! execute it. Two host paths run the same surface:
+//! execute it. Three host paths run the same surface:
 //!
 //! * On `windows-x86_64` the binary runs natively via
 //!   `Command::new(path.exe)`.
@@ -11,13 +11,19 @@
 //!   runtime cost is non-trivial but works fine for tests. WINE
 //!   isn't preinstalled on macOS CI, so each test gracefully
 //!   skips when the binary is missing.
+//! * On `linux-x86_64` the binary also runs through WINE. The
+//!   `ubuntu-latest` CI runner uses this lane as a cross-check
+//!   against the `windows-latest` runner: both should accept the
+//!   same PE, so a divergence flags either a wine bug or a real
+//!   format issue.
 //!
-//! Other host triples compile this module out; the CI matrix
-//! covers Linux via [`super::native_elf_x64`] separately.
+//! Other host triples compile this module out; the linux-x86_64
+//! ELF backend is exercised separately by [`super::native_elf_x64`].
 
 #![cfg(any(
     target_os = "macos",
     all(target_os = "windows", target_arch = "x86_64"),
+    all(target_os = "linux", target_arch = "x86_64"),
 ))]
 
 use std::io::Write;
@@ -26,28 +32,33 @@ use std::process::Command;
 
 use crate::{Compiler, Target, emit_native};
 
-/// On Windows we run the binary directly; on macOS we go through
-/// WINE. This wrapper picks the right shape and returns `None` on
-/// macOS hosts that don't have WINE installed (so the test can
-/// skip gracefully instead of panicking).
+/// On Windows we run the binary directly; on macOS / Linux we go
+/// through WINE. Returns `None` on non-Windows hosts that don't
+/// have wine installed (so the test can skip gracefully instead
+/// of panicking).
 fn run_pe(path: &Path, args: &[&str]) -> Option<std::io::Result<std::process::Output>> {
     #[cfg(target_os = "windows")]
     {
         Some(Command::new(path).args(args).output())
     }
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
         let wine = wine_binary()?;
         Some(Command::new(&wine).arg(path).args(args).output())
     }
 }
 
-/// Path resolution for `wine` on macOS. Homebrew installs to
+/// Path resolution for `wine`. Homebrew puts it at
 /// `/opt/homebrew/bin/wine` on Apple Silicon and
-/// `/usr/local/bin/wine` on Intel; PATH is the fallback.
-#[cfg(target_os = "macos")]
+/// `/usr/local/bin/wine` on Intel macOS; the Ubuntu wine package
+/// puts it at `/usr/bin/wine`. PATH is the final fallback.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn wine_binary() -> Option<PathBuf> {
-    for candidate in ["/opt/homebrew/bin/wine", "/usr/local/bin/wine"] {
+    for candidate in [
+        "/opt/homebrew/bin/wine",
+        "/usr/local/bin/wine",
+        "/usr/bin/wine",
+    ] {
         let p = PathBuf::from(candidate);
         if p.exists() {
             return Some(p);
@@ -72,14 +83,14 @@ fn wine_binary() -> Option<PathBuf> {
 }
 
 /// True when this host can actually execute the produced PE
-/// binary. On Windows the answer is always yes; on macOS it
-/// depends on whether WINE is installed.
+/// binary. On Windows the answer is always yes; on macOS / Linux
+/// it depends on whether WINE is installed.
 fn host_can_run_pe() -> bool {
     #[cfg(target_os = "windows")]
     {
         true
     }
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
         wine_binary().is_some()
     }

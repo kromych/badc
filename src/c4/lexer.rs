@@ -430,48 +430,17 @@ pub fn predefined_symbols() -> Vec<PredefinedSymbol> {
     out
 }
 
-/// Helper for declaring sys-function signatures.
+/// Seed the symbol table with C keywords and library function
+/// bindings.
 ///
-/// Encodings:
-///   * `INT = Ty::Int as i64 = 1`
-///   * `CHAR_PTR = Ty::Char as i64 + Ty::Ptr as i64 = 2` (our void* analogue)
-///
-/// The values are inlined here so this module doesn't need to know about
-/// the wider `Ty` arithmetic the compiler uses.
-const INT_TY: i64 = 1;
-const CHAR_PTR_TY: i64 = 2;
-
-/// `(name, ret_type, param_types, is_variadic)` for each library call,
-/// used by [`init_symbols`] to populate the function signature on each
-/// `Sys` symbol so the compiler can type-check call sites.
-const LIB_SIGNATURES: &[(&str, i64, &[i64], bool)] = &[
-    // I/O
-    ("open", INT_TY, &[CHAR_PTR_TY, INT_TY], false),
-    ("close", INT_TY, &[INT_TY], false),
-    ("read", INT_TY, &[INT_TY, CHAR_PTR_TY, INT_TY], false),
-    ("write", INT_TY, &[INT_TY, CHAR_PTR_TY, INT_TY], false),
-    ("printf", INT_TY, &[CHAR_PTR_TY], true), // variadic
-    // Memory
-    ("malloc", CHAR_PTR_TY, &[INT_TY], false),
-    ("free", INT_TY, &[CHAR_PTR_TY], false),
-    ("memset", CHAR_PTR_TY, &[CHAR_PTR_TY, INT_TY, INT_TY], false),
-    ("memcmp", INT_TY, &[CHAR_PTR_TY, CHAR_PTR_TY, INT_TY], false),
-    (
-        "memcpy",
-        CHAR_PTR_TY,
-        &[CHAR_PTR_TY, CHAR_PTR_TY, INT_TY],
-        false,
-    ),
-    ("mprotect", INT_TY, &[CHAR_PTR_TY, INT_TY, INT_TY], false),
-    // Env
-    ("getenv", CHAR_PTR_TY, &[CHAR_PTR_TY], false),
-    ("setenv", INT_TY, &[CHAR_PTR_TY, CHAR_PTR_TY, INT_TY], false),
-    // Process
-    ("exit", INT_TY, &[INT_TY], false),
-];
-
-/// Seed the symbol table with C keywords, library function bindings, and
-/// integer constants like `PROT_READ`.
+/// Type signatures (return type, args, variadic flag) used to be
+/// seeded here from a hardcoded `LIB_SIGNATURES` table. They now
+/// arrive through forward-declaration prototypes in
+/// `headers/badc-{target}.h`, parsed at compile time and folded
+/// into the matching `Sys`-class symbol by the parser. The
+/// per-target header is the single source of truth for both
+/// "which dylib does this call land in" (via `#pragma binding`)
+/// and "what's the type signature" (via the prototype).
 pub(crate) fn init_symbols(symbols: &mut Vec<Symbol>) {
     for (name, tok) in KEYWORDS {
         add_keyword(symbols, name, *tok as i64);
@@ -482,20 +451,6 @@ pub(crate) fn init_symbols(symbols: &mut Vec<Symbol>) {
         symbols[idx].type_ = Ty::Int as i64;
         symbols[idx].val = *op as i64;
     }
-    // Patch return type + param signature for each lib function so the
-    // compiler's call-site checks have something to compare against.
-    for (name, ret, params, variadic) in LIB_SIGNATURES {
-        let idx = find_symbol(symbols, name).unwrap();
-        symbols[idx].type_ = *ret;
-        symbols[idx].params = params.to_vec();
-        symbols[idx].is_variadic = *variadic;
-    }
-    // Integer constants (PROT_READ, NULL, ...) used to be seeded
-    // here. They now arrive through the preprocessor's `#define`
-    // table from the per-target header, so the lexer never sees the
-    // names -- the substituted source it tokenises sees plain
-    // integer literals where the source wrote `PROT_READ`.
-    //
     // Ensure main is registered so the compiler's later lookup sees it.
     let _ = find_symbol(symbols, "main").unwrap();
 }

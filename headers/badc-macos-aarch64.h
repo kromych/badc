@@ -47,3 +47,27 @@
 #pragma binding(libsystem::dlsym, "_dlsym")
 #pragma binding(libsystem::dlclose, "_dlclose")
 #pragma binding(libsystem::dlerror, "_dlerror")
+
+// Function prototypes -- supply the parser's type signatures so it
+// can type-check call sites. `char` is exactly one byte; `int` is
+// the c4 machine word (8 bytes under our runtime). These are
+// forward declarations: the implementation is provided by the
+// dylibs bound above.
+int open(char *path, int flags);
+int read(int fd, char *buf, int n);
+int close(int fd);
+int printf(char *fmt, ...);
+char *malloc(int size);
+int free(char *ptr);
+char *memset(char *dst, int byte, int n);
+int memcmp(char *a, char *b, int n);
+char *memcpy(char *dst, char *src, int n);
+int mprotect(char *addr, int len, int prot);
+int exit(int status);
+int write(int fd, char *buf, int n);
+char *getenv(char *name);
+int setenv(char *name, char *value, int overwrite);
+char *dlopen(char *path, int flags);
+char *dlsym(char *handle, char *name);
+int dlclose(char *handle);
+char *dlerror();

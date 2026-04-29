@@ -1,6 +1,6 @@
 //! Token-stream tests that exercise `Lexer::next` in isolation.
 
-use super::{LexHarness, Token, Ty};
+use super::{LexHarness, Token};
 
 const NUM: i64 = Token::Num as i64;
 
@@ -213,10 +213,15 @@ fn line_counter_advances_with_newlines() {
 
 #[test]
 fn library_function_names_are_pre_seeded() {
-    // `init_symbols` registers C library names like `malloc` as `Token::Id`,
-    // and the symbol they resolve to carries its syscall opcode in `val`.
-    // After type-check support landed, `malloc` is also typed as
-    // returning `char*` (= Ty::Char + Ty::Ptr), our void* analogue.
+    // `init_symbols` registers C library names like `malloc` as
+    // `Token::Sys` carrying the matching syscall opcode in `val`.
+    // The type signature (return type + params + variadic) is no
+    // longer seeded here -- it now arrives via the per-target
+    // header's forward-declaration prototype (`char *malloc(int);`)
+    // which the parser folds onto the same symbol. This test only
+    // exercises the lexer in isolation, so it just checks the
+    // class/op binding and leaves the signature check to the
+    // compiler-level tests.
     let mut h = LexHarness::new("malloc");
     assert_eq!(h.next(), Token::Id as i64);
     assert_eq!(h.name(), "malloc");
@@ -225,7 +230,5 @@ fn library_function_names_are_pre_seeded() {
         .iter()
         .find(|s| s.name == "malloc")
         .expect("malloc should be pre-seeded");
-    assert_eq!(sym.type_, Ty::Char as i64 + Ty::Ptr as i64);
-    // It also has the now-recorded signature: one integer parameter.
-    assert_eq!(sym.params.len(), 1);
+    assert_eq!(sym.class, Token::Sys as i64);
 }

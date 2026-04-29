@@ -1688,7 +1688,15 @@ impl Compiler {
             while self.lex.tk != ';' as i64 && self.lex.tk != '}' as i64 {
                 let (id_idx, ty) = self.parse_declarator(bt)?;
                 self.ty = ty;
-                if self.symbols[id_idx].class != 0 {
+                // Sys-class predefined symbols (the per-target
+                // header's libc bindings) are allowed to be
+                // *re-declared* as prototypes -- the source uses the
+                // declaration to teach the parser the type signature
+                // without overriding the function's binding-driven
+                // class/val. Anything else with class != 0 is a real
+                // duplicate.
+                let was_sys = self.symbols[id_idx].class == Token::Sys as i64;
+                if self.symbols[id_idx].class != 0 && !was_sys {
                     return Err(C4Error::Compile(format!(
                         "{}: duplicate global definition",
                         self.lex.line
@@ -1697,12 +1705,50 @@ impl Compiler {
                 self.symbols[id_idx].type_ = ty;
 
                 if self.lex.tk == '(' as i64 {
-                    self.symbols[id_idx].class = Token::Fun as i64;
-                    self.symbols[id_idx].val = self.text.len() as i64;
+                    if !was_sys {
+                        self.symbols[id_idx].class = Token::Fun as i64;
+                        self.symbols[id_idx].val = self.text.len() as i64;
+                    }
                     self.next()?;
 
                     let params = self.parse_function_params()?;
 
+                    // Stash the signature on the function symbol so
+                    // call sites can type-check arguments later. For
+                    // both prototypes and bodied definitions.
+                    self.symbols[id_idx].params = params.types.clone();
+                    self.symbols[id_idx].is_variadic = params.is_variadic;
+
+                    if self.lex.tk == ';' as i64 {
+                        // Forward declaration / prototype --
+                        // `int foo(int a, ...);`. Restore the param
+                        // symbols' outer class (parse_function_params
+                        // marked them as `Loc`) so subsequent
+                        // declarations of the same names don't trip
+                        // the duplicate-global check.
+                        for sym in self.symbols.iter_mut() {
+                            if sym.class == Token::Loc as i64 {
+                                sym.class = sym.h_class;
+                                sym.type_ = sym.h_type;
+                                sym.val = sym.h_val;
+                            }
+                        }
+                        // Outer loop sees `;` and exits; `self.next()`
+                        // after the loop consumes it.
+                        if self.lex.tk == ',' as i64 {
+                            self.next()?;
+                        }
+                        continue;
+                    }
+
+                    if was_sys {
+                        return Err(C4Error::Compile(format!(
+                            "{}: cannot give a body to predefined library function `{}` \
+                             (the per-target header's `#pragma binding` provides the \
+                             implementation -- use a prototype only)",
+                            self.lex.line, self.symbols[id_idx].name
+                        )));
+                    }
                     if self.lex.tk != '{' as i64 {
                         return Err(C4Error::Compile(format!(
                             "{}: bad function definition",
@@ -1715,10 +1761,6 @@ impl Compiler {
                     for (i, &idx) in params.indices.iter().enumerate() {
                         self.symbols[idx].val = nargs - (i as i64) + 1;
                     }
-                    // Stash the signature on the function symbol so call
-                    // sites can type-check arguments later.
-                    self.symbols[id_idx].params = params.types;
-                    self.symbols[id_idx].is_variadic = params.is_variadic;
 
                     self.loc_offs = 0;
                     self.labels.clear();

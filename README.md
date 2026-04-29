@@ -1,57 +1,30 @@
 # `badc`
 
-`badc` compiles a subset of C to a bespoke stack-machine bytecode and runs it
-in-process. It also is capable of producing the native code and binaries
-under macOS and Linux.
+`badc` compiles a subset of C to a bespoke stack-machine bytecode and
+then either runs it in-process or lowers it to a real native binary
+for macOS / Linux / Windows. It started as a Rust port of Robert
+Swierczek's [c4](https://github.com/rswier/c4) -- the internal `c4`
+module name and `C4Error` type are kept as a nod to that lineage --
+and grew structs, type warnings, an optimizer, an in-process JIT, a
+rudimentary preprocessor, and per-target headers along the way.
 
-It started as a straight Rust port of Robert Swierczek's
-[c4](https://github.com/rswier/c4) -- the internal `c4` module name and
-`C4Error` type are kept as a nod to that lineage -- and grew structs,
-type warnings, an optimizer, runtime memory protection, and a no_std
-mode along the way. The binary is one file (`badc`); the library is
-no_std-friendly with `extern crate alloc`.
+The headline today is the native side. `--emit-native` wraps the
+lowered code in a Mach-O / ELF / PE32+ container that calls into
+whatever's available on the target system's dynamic libraries:
+`libSystem.B.dylib` on macOS, `libc.so.6` + `libdl.so.2` on Linux,
+`msvcrt.dll` + `kernel32.dll` on Windows. Per-target header files
+under `headers/badc-{target}.h` describe each binding declaratively
+(`#pragma dylib(...)` + `#pragma binding(...)` + a function
+prototype), and the c4 source picks them up automatically -- so
+swapping target gives a binary that's bound against a different set
+of dylibs without touching the source.
 
-Anything c4 compiles, badc compiles, too, and with the same exit code.
-The original `c4.c` ships as a fixture and self-hosts under badc:
+Anything c4 itself compiles, badc compiles too, with the same exit
+code. The original `c4.c` ships as a fixture and self-hosts under
+badc:
 
     badc fixtures/c/c4.c hello.c                   # badc -> c4 -> hello
     badc fixtures/c/c4.c fixtures/c/c4.c hello.c   # badc -> c4 -> c4 -> hello
-
-Of the 62 C programs in `fixtures/c/`, 27 run identically under both
-compilers; the rest use badc extensions and the original c4 rejects
-them at parse.
-
-badc also has a native backend: `--emit-native` lowers the bytecode
-straight to machine code wrapped in a Mach-O (macOS arm64), ELF
-(Linux arm64 / Linux x86_64), or PE32+ (Windows x86_64 / Windows
-AArch64) executable. The same self-host above works against any
-of the five targets:
-
-    badc --emit-native fixtures/c/c4.c -o c4-native       # macOS Mach-O
-    ./c4-native hello.c
-
-Cross-compile to Linux from any host and run via Docker / qemu / a
-real Linux box:
-
-    badc --emit-native --target=linux-aarch64 fixtures/c/c4.c -o c4-arm
-    docker run --platform linux/arm64 -v $PWD:/w debian:stable-slim /w/c4-arm /w/hello.c
-
-    badc --emit-native --target=linux-x64 fixtures/c/c4.c -o c4-x64
-    docker run --platform linux/amd64 -v $PWD:/w debian:stable-slim /w/c4-x64 /w/hello.c
-
-For Windows, cross-compile to a PE and run on Windows directly or via
-WINE on a Unix host:
-
-    badc --emit-native --target=windows-x64 fixtures/c/c4.c -o c4.exe
-    wine c4.exe hello.c
-
-The same flow targeting AArch64 Windows produces a PE that runs on
-Windows-on-ARM. It looks like there's no WINE path for AArch64 Windows
-on macOS (WINE on Apple Silicon ships only the x86_64-windows DLL set),
-so local testing is format-validation only -- runtime tests run on a
-`windows-11-arm` CI runner.
-
-    badc --emit-native --target=windows-arm64 fixtures/c/c4.c -o c4-arm64.exe
 
 ## Build and run
 
@@ -64,24 +37,14 @@ A quick first run:
     Hello 123
     exit(0)
 
-The first non-flag argument is the source file. Everything after that
+The first non-flag argument is the source file. Everything after it
 is forwarded to the compiled program -- `argv[0]` is the source path,
 `argv[1..]` are the rest. Flags (`--track-pointers`, `--trace`,
-`--optimize`, `--list-symbols`) can appear anywhere before or after
-the source path; badc strips them out before forwarding.
+`--optimize`, `--emit-native`, `--target`, `--jit`) can appear
+anywhere before the source path.
 
-### Shebang
-
-A `.c` file may start with a shebang. The lexer skips it the same way
-it skips `#include`. With `badc` on `PATH`:
-
-    #!/usr/bin/env badc
-    int main() {
-        printf("hi\n");
-        return 0;
-    }
-
-`chmod +x script.c` and the file is directly executable.
+A `.c` file may start with a shebang (`#!/usr/bin/env badc`) -- the
+preprocessor recognises it and strips it from the source.
 
 ## What it accepts
 
@@ -90,8 +53,9 @@ Same core as c4:
 - `int`, `char`, pointers (`*`, `**`, ...), arrays via `p[i]`
 - `if` / `else`, `while`, `return`
 - enums, function calls, function pointers via `Jsri`
-- the library calls c4 already had: `printf`, `malloc`, `free`,
-  `memset`, `memcmp`, `open`, `read`, `close`, `exit`
+- libc shapes: `printf`, `malloc`, `free`, `memset`, `memcmp`,
+  `memcpy`, `open`, `read`, `write`, `close`, `exit`, `getenv`,
+  `setenv`, `dlopen`, `dlsym`, `dlclose`, `dlerror`
 
 What badc adds on top:
 
@@ -105,71 +69,53 @@ What badc adds on top:
 - Structs through pointers: `struct Foo *p`, `p->field`,
   `sizeof(struct Foo)`. Self-referential pointer fields are fine.
   Struct-value locals and parameters are not -- pass a pointer.
-- A few more syscalls: `memcpy`, `write`, `getenv`, `setenv`,
-  `mprotect`, `dlopen`, `dlsym`, `dlclose`, `dlerror`
 - Variadic functions: declare with `int f(int x, ...);`. Arguments
   past the fixed prefix skip type-checking, which is what `printf`
   needs.
-- Lax type checking at assignments and call sites. Mismatched
-  pointer/integer combos and arity errors print a warning to stderr
-  and keep going -- they never fail compilation. A C-style cast
-  silences the warning: `p = (int *)5;`,
-  `(struct Foo *)malloc(sizeof(struct Foo))`. The cast accepts
-  `int`, `char`, any pointer depth, and `struct <Tag> *`.
+- A rudimentary preprocessor: `#define` (single-token replacement,
+  macro-to-macro chains), `#ifdef` / `#ifndef`, `#if` / `#else` /
+  `#endif` (with `==` / `!=` / `defined(NAME)` / bare-name truthiness),
+  `#pragma dylib(...)` and `#pragma binding(...)`.
+- Lax type checking: pointer/integer mismatches and arity errors print
+  a warning to stderr and keep going. A C-style cast silences the
+  warning: `p = (int *)5;`,
+  `(struct Foo *)malloc(sizeof(struct Foo))`. The cast accepts `int`,
+  `char`, any pointer depth, and `struct <Tag> *`.
 
-What it doesn't have: a preprocessor (`#`-prefixed lines and the
-shebang are silently skipped), floats, struct values, unions. `void`
-is a synonym for `char`, following c4 itself.
+What it doesn't have: floats, struct values, unions. `void` is a
+synonym for `char`, following c4 itself.
 
-### Predefined constants
+### Predefined macros and constants
 
-There's no `#define`, so badc pre-binds the POSIX-conventional
-constants you'd otherwise hardcode as magic numbers. They're visible
-to any program without `#include`:
+The preprocessor pre-defines a small standard set, plus per-target
+identification macros that follow the gcc / clang / msvc convention
+of double-underscore wrapping:
+
+    __BADC_VERSION__   "0.1.0"        crate version (string literal)
+    __BADC_TARGET__    "macos-aarch64" canonical target id
+    __aarch64__        1              \ AArch64 targets
+    __arm64__          1              /
+    __x86_64__         1              \ x86_64 targets
+    __amd64__          1              /
+    __BADC_WINDOWS__   1              Windows targets only
+
+Source can use these to gate target-specific code without conditional
+compilation at the build-system level:
+
+    #ifndef __BADC_WINDOWS__
+        // POSIX-only path
+    #endif
+
+POSIX-conventional integer constants come from each per-target
+header's `#define` block, so things like `PROT_READ` and `O_RDONLY`
+are visible to any source without `#include`:
 
     PROT_NONE PROT_READ PROT_WRITE PROT_EXEC
     O_RDONLY O_WRONLY O_RDWR
     STDIN_FILENO STDOUT_FILENO STDERR_FILENO
     NULL EXIT_SUCCESS EXIT_FAILURE
 
-`badc --list-symbols` dumps them along with the keyword and library-
-call lists. The values are badc's own, not the host libc's --
-`mprotect` honours `PROT_READ = 1` and `PROT_WRITE = 2` as a bitmask
-exactly, so you can read and reason about your own programs without
-checking what your platform happens to define.
-
-## Runtime safety
-
-The VM keeps code, stack, and data in three distinct address ranges
-and refuses to mix them. Two checks are always on; two more are
-opt-in.
-
-- **Code is not data.** Function pointers carry a `CODE_BASE` bias.
-  Loading or storing through one (`*fp`) is always rejected. So is
-  calling through a fabricated integer (`fp = 42; fp();`) -- the call
-  site refuses an address it didn't originate.
-- **mprotect is honoured.** Every load and store is checked against
-  the protection mask of its target page. `prot` uses the POSIX bits:
-  `PROT_READ = 1`, `PROT_WRITE = 2`, `PROT_NONE = 0`.
-- **`--track-pointers`**: opt in to allocation tracking. With it on,
-  `free` on an unknown or already-freed pointer errors, and any
-  access into a freed allocation (or past the end of a live one) is
-  reported with the offending allocation's id.
-- **`--trace`**: opt in to a per-instruction trace on stdout. Useful
-  for debugging the VM itself or generated bytecode; off by default
-  because it produces thousands of lines per second.
-
-For example:
-
-    $ cat use_after_free.c
-    int main() {
-        int *p = malloc(8);
-        *p = 1;
-        free(p);
-        return *p;
-    }
-    $ cargo run --quiet -- --track-pointers use_after_free.c
-    Runtime Error: use-after-free: access at 0x50 inside freed allocation #0 (start=0x50, len=8)
+`badc --list-symbols` dumps the keyword and library-call lists.
 
 ## Native compilation
 
@@ -177,37 +123,144 @@ For example:
 machine code, then wraps it in whatever container the target OS
 wants. Five targets ship today:
 
-| `--target=`              | format        | notes                                       |
-|--------------------------|---------------|---------------------------------------------|
-| `macos-aarch64` (default) | Mach-O       | ad-hoc-signed via `codesign`                |
-| `linux-aarch64`           | ELF (ET_EXEC) | links libc.so.6 + libdl.so.2               |
-| `linux-x64`               | ELF (ET_EXEC) | x86_64; links libc.so.6 + libdl.so.2       |
+| `--target=`               | format        | notes                                       |
+|---------------------------|---------------|---------------------------------------------|
+| `macos-aarch64` (default) | Mach-O        | ad-hoc-signed via `codesign`                |
+| `linux-aarch64`           | ELF (ET_EXEC) | links libc.so.6 + libdl.so.2                |
+| `linux-x64`               | ELF (ET_EXEC) | x86_64; links libc.so.6 + libdl.so.2        |
 | `windows-x64`             | PE32+         | x86_64; links msvcrt.dll + kernel32.dll     |
 | `windows-arm64`           | PE32+         | AArch64; same DLL set as `windows-x64`      |
 
-All five share the lowering pass, branch-fixup machinery, and
-data-segment / function-pointer relocation shape; the encoder and
-image writer differ per arch / OS. The Mach-O writer hand-rolls load
-commands, the __got/__data sections, and bind opcodes; the ELF writer
-hand-rolls program headers, .dynamic, .dynsym, .dynstr, DT_HASH,
-.rela.dyn, and DT_BIND_NOW eager binding -- shared between the two
-ELF targets via a `Machine::{Aarch64, X86_64}` enum that picks
-`e_machine`, the dynamic-linker path, the relocation type
-(R_AARCH64_GLOB_DAT vs R_X86_64_GLOB_DAT), and the per-arch
-`_start` stub generator.
+Cross-compile from any host:
+
+    badc --emit-native fixtures/c/c4.c -o c4-native       # macOS Mach-O
+    ./c4-native hello.c
+
+    badc --emit-native --target=linux-aarch64 fixtures/c/c4.c -o c4-arm
+    docker run --platform linux/arm64 -v $PWD:/w debian:stable-slim /w/c4-arm /w/hello.c
+
+    badc --emit-native --target=windows-x64 fixtures/c/c4.c -o c4.exe
+    wine c4.exe hello.c
+
+The same flow targeting AArch64 Windows produces a PE that runs on
+Windows-on-ARM (or on Linux/aarch64 via wine 10's aarch64-windows
+DLL set).
 
 What the native backend executes faithfully: every fixture in
 `fixtures/c/` that runs under the VM and isn't a deliberate
-safety-net check (`oob_*`, `mprotect_blocks_*`, `use_after_free`,
-`double_free`, ...) -- the VM diagnoses those at runtime, the native
-binary just hits SIGSEGV / SIGABRT or silently smashes memory, so
-they're excluded by design. 47 fixtures run identically across the
-VM and both native targets; the macOS and Linux paths are mirrored
+safety-net check. The Mach-O, ELF, and PE paths are mirrored
 test-for-test.
 
-What the native backend doesn't have: the VM's runtime safety net
-(`--track-pointers`, mprotect enforcement, code-vs-data separation
-checks). Run under the VM if you want those.
+What it doesn't have: the VM's runtime safety net
+(`--track-pointers`, code-vs-data separation checks). Run under the
+VM if you want those.
+
+### Per-target headers and bindings
+
+Every `--emit-native` build auto-prepends `headers/badc-{target}.h`
+to the source before the lexer sees it. The header tells the
+preprocessor which dylibs the target offers and which c4-side names
+resolve to which exported symbols:
+
+    #pragma dylib(libsystem, "/usr/lib/libSystem.B.dylib")
+    #pragma binding(libsystem::printf, "_printf")
+    #pragma binding(libsystem::malloc, "_malloc")
+    int printf(char *fmt, ...);
+    char *malloc(int size);
+
+The codegen drives its IAT / .got / DT_NEEDED records from these
+declarations. When the source calls `printf`, the parser uses the
+prototype to type-check the call site; the codegen looks up the
+binding to learn that the symbol the loader should resolve is
+`_printf` from `/usr/lib/libSystem.B.dylib`. Switching target swaps
+the header and the bindings change with it -- on Linux the same
+`printf` lands on plain `printf` from `libc.so.6`; on Windows it
+lands on `printf` from `msvcrt.dll`.
+
+Validation runs at codegen entry: every libc op the program
+*references* must have a `#pragma binding` for the chosen target.
+Unused bindings cost nothing -- they just describe the surface.
+
+### Reaching beyond the predefined set
+
+`dlopen` / `dlsym` / `dlclose` / `dlerror` are first-class library
+calls. Any function exported by any dylib the program can find on
+the target is reachable from c4 source -- you load the library,
+look up the symbol, and call the result as a function pointer.
+Native binaries resolve them through libc / libdl on POSIX or
+through `LoadLibraryA` / `GetProcAddress` on Windows; the source
+never has to care which.
+
+The pattern looks the same across targets:
+
+    int main() {
+        int *handle;
+        int *fn;
+        handle = dlopen(0, 2);          // RTLD_NOW; 0 = current process
+        fn = dlsym(handle, "atoi");
+        return fn("123");                // exits 123
+    }
+
+### Fun bytes-on-disk recipes
+
+A handful of tiny programs that double as smoke tests -- they each
+exercise a different bit of the surface and run identically across
+all five native targets and the VM.
+
+**dlopen + sscanf** -- the system's `sscanf` is one `dlsym` away.
+This program parses two integers from a string and returns their
+sum:
+
+    int main() {
+        int *h, *parse;
+        int a, b;
+        h = dlopen(0, 2);
+        parse = dlsym(h, "sscanf");
+        parse("42 7", "%d %d", &a, &b);
+        return a + b;                    // exits 49
+    }
+
+The same shape works for `sprintf`, `strtol`, `strchr`, `qsort`, ...
+anything libc exports. Run with `--jit` for an in-process try-out
+or `--emit-native` for a real binary.
+
+**dlopen + getaddrinfo** -- yes, networking. Reach into the host's
+resolver from c4:
+
+    int main() {
+        int *h, *resolve, *freelist;
+        int *result;
+        int rc;
+        h = dlopen(0, 2);
+        resolve = dlsym(h, "getaddrinfo");
+        freelist = dlsym(h, "freeaddrinfo");
+        rc = resolve("example.com", 0, 0, &result);
+        if (rc) { printf("resolve failed\n"); return 1; }
+        printf("ok\n");
+        freelist(result);
+        return 0;
+    }
+
+**Per-system flavour**:
+
+* macOS -- the Objective-C runtime is in libobjc.A.dylib and `dlopen`'s
+  default handle finds it. `dlsym(0, "objc_msgSend")` returns a
+  callable pointer.
+* Linux -- `clock_gettime`, `nanosleep`, `pipe2`, ...; `pthread_*`
+  via libpthread. The default `dlopen(0, 2)` searches everything
+  already mapped into the process.
+* Windows -- `dlopen(...)` resolves to `LoadLibraryA`, so
+  `dlopen("user32.dll", 2)` and then `dlsym(h, "MessageBoxA")` give
+  you a callable Win32 API entry point. `dlsym` resolves to
+  `GetProcAddress`.
+
+**Variadic printf with stack args** -- six-arg `printf` exercises the
+calling-convention split between register-args and stack-args (Win64
+spills past 4, SysV past 6):
+
+    int main() {
+        return printf("%d %d %d %d %d\n", 1, 2, 3, 4, 5);  // exits 10
+    }
 
 ### In-process JIT
 
@@ -222,111 +275,71 @@ happen in the badc process:
 The host OS / arch picks the backend automatically (there's no
 cross-arch JIT). Three hosts ship today:
 
-| host             | mapping                                   | I-cache                  |
-|------------------|-------------------------------------------|--------------------------|
-| Linux/aarch64    | mmap RW -> mprotect RX                    | manual dc cvau / ic ivau |
-| Linux/x86_64     | mmap RW -> mprotect RX                    | hardware-coherent (no-op) |
-| macOS/aarch64    | mmap RWX + `MAP_JIT`, `pthread_jit_write_protect_np` toggle | `sys_icache_invalidate` |
+| host             | mapping                                                     | I-cache                  |
+|------------------|-------------------------------------------------------------|--------------------------|
+| Linux/aarch64    | mmap RW -> mprotect RX                                      | manual dc cvau / ic ivau |
+| Linux/x86_64     | mmap RW -> mprotect RX                                      | hardware-coherent (no-op) |
+| macOS/aarch64    | mmap RWX + `MAP_JIT`, `pthread_jit_write_protect_np` toggle | `sys_icache_invalidate`  |
 
 libc binding is done at JIT time: a writable "fake GOT" region is
 allocated, `dlopen(NULL, RTLD_NOW)` + `dlsym` resolves each libc
 symbol the program imports, and the codegen's existing GOT-call
 relocations are patched against this region. macOS uses Apple's
 `MAP_JIT` + per-thread W^X toggle to satisfy the hardware-enforced
-W^X on Apple Silicon -- this works with cargo's ad-hoc-signed
-binaries; a hardened-runtime binary would need
-`com.apple.security.cs.allow-jit`.
+W^X on Apple Silicon.
 
 `--dump-asm` produces a textual listing of the lowered code grouped
-by the c4 op that produced each region. Hex bytes per op plus
-header metadata (target, sizes, entry offset, fixup counts):
-
-    badc --emit-native --target=linux-x64 --dump-asm hello.c | head
-
-Useful for following what the codegen does on a small program
-without reading the encoder source.
+by the c4 op that produced each region.
 
 ### Native optimization
 
 A couple of cheap rewrites the native lowering does on its own,
-and one heavier pass behind `--optimize`.
+plus one heavier pass behind `--optimize`.
 
-The encoder helpers `emit_mov_reg` and `emit_mov_rr` drop
-`mov xd, xd` / `mov rd, rd` instead of emitting them. The current
-lowering doesn't actually produce a self-mov, but the check costs
-nothing and protects future refactors.
-
-The bigger always-on rewrite is compare-and-branch fusion. c4's
-`Lt`, `Eq`, etc. normally materialize a 0/1 boolean (`cset` on
+The encoder helpers drop self-`mov` instructions instead of emitting
+them. The bigger always-on rewrite is compare-and-branch fusion:
+c4's `Lt`, `Eq`, etc. normally materialize a 0/1 boolean (`cset` on
 aarch64, `setcc + movzx` on x86_64) which the following `Op::Bz`
 or `Op::Bnz` then tests against zero. When the compare feeds
-directly into the branch we skip that round-trip: the compare
-emits just `cmp`, and the branch emits `b.cond` / `jcc` reading
-the flags. That saves one uop per pattern on aarch64 and three
-on x86_64. Two safety checks gate the rewrite. We refuse to fuse
-if another branch lands on the `Bz`'s PC, since that path would
-arrive without our `cmp` setting flags. We also refuse if the
-taken-target or fall-through op reads the accumulator before
-overwriting it, which would otherwise miscompile c4's
-short-circuit pattern `a && b` -- the inner `Bz` lands on a
-second `Bz` that expects to read the first compare's boolean.
+directly into the branch we skip that round-trip: the compare emits
+just `cmp`, and the branch emits `b.cond` / `jcc` reading the flags.
+That saves one uop per pattern on aarch64 and three on x86_64.
 
-`--optimize` (or `-O`) adds the per-function register allocator.
-c4 bytecode pushes the left operand of every binary operator onto
-the stack, which lowers naively to a `str` (or `sub rsp; mov`)
-per arithmetic op. The regalloc analyses each push and routes
-most of them through registers instead. Each push lands in one of
-two banks: a callee-saved bank (x20..x27 on aarch64,
-rbx/r12/r14/r15 on x86_64) for values live across a call, and a
-caller-saved bank (x9..x15 on aarch64) for short-lived values
-where no prologue/epilogue save is needed. Call arguments still
-go on the real stack so libc and user callees find them at the
-expected `bp + offset`. The prologue saves only the callee-saved
-slots a particular function actually uses. If a function's depth
-exceeds the pool capacity (15 slots total on aarch64, 4 on
-x86_64) it falls back to real-stack pushes; the c4 self-host
-stays well within both.
+`--optimize` (or `-O`) adds a per-function register allocator that
+routes pushes through a small register pool (callee-saved bank for
+values live across a call, caller-saved bank for short-lived
+values), plus the bytecode optimizer (peephole, branch threading,
+dead-code, immediate-form ops).
 
-The regalloc isn't always-on because the prologue/epilogue saves
-aren't free -- on tight functions like `fib` they can wash out
-the per-push savings. `--optimize` also enables the bytecode
-optimizer; the two passes are independent (each is correct on
-the other's input) but together produce the fastest code.
-
-Bench on macos/aarch64 (Apple M-series, `--release`, 10 iters;
-see `examples/bench.rs`):
+Bench on macos/aarch64 (Apple M-series, `--release`, 10 iters; see
+`examples/bench.rs`):
 
     workload          jit      jit-O
     fib32          18.05ms  10.65ms
     quicksort-50k  10.93ms   5.89ms
     matmul-50       1.31ms 345.12us
 
-`-O` is roughly 1.7x on fib, 1.86x on quicksort, and 3.8x on
-matmul. On linux/x86_64 the cmp+branch fusion alone (already
-firing in the `jit` column) is worth 6-10% across the same
-workloads -- it saves three uops per pattern there instead of
-one -- and stacks with the regalloc on top.
+`-O` is roughly 1.7x on fib, 1.86x on quicksort, and 3.8x on matmul.
+On Linux/x86_64 the cmp+branch fusion alone is worth 6-10% across
+the same workloads.
 
-### Runtime dynamic linking
+## Runtime safety (VM mode)
 
-`dlopen` / `dlsym` / `dlclose` / `dlerror` are first-class library
-calls just like `printf` / `malloc`. Native binaries resolve them
-through libc / libdl; in the VM they delegate to the host's `Host`
-trait, which `StdHost` implements via real `extern "C"` libc calls.
+The VM keeps code, stack, and data in three distinct address ranges
+and refuses to mix them.
 
-    int main() {
-        int *h;
-        int *atoi_fn;
-        h = dlopen(0, 2);                  // RTLD_NOW
-        atoi_fn = dlsym(h, "atoi");
-        return atoi_fn("123");             // exits 123
-    }
+- **Code is not data.** Function pointers carry a `CODE_BASE` bias.
+  Loading or storing through one is always rejected. So is calling
+  through a fabricated integer (`fp = 42; fp();`) -- the call site
+  refuses an address it didn't originate.
+- **`--track-pointers`**: opt in to allocation tracking. With it on,
+  `free` on an unknown or already-freed pointer errors, and any
+  access into a freed allocation (or past the end of a live one) is
+  reported with the offending allocation's id.
+- **`--trace`**: opt in to a per-instruction trace on stdout.
 
-Calling the dlsym'd pointer works in native mode (`Op::Jsri` loads
-args into x0..x7 in addition to the c4 stack, so the AAPCS64 callee
-finds them). VM mode rejects the indirect call -- there's no FFI
-from the VM, so the VM diagnoses "non-code address" rather than
-jumping to a real libc address.
+Native mode skips this safety net -- run under the VM if you want
+it, or under `--track-pointers` for the strictest checking.
 
 ## Optimizer
 
@@ -335,16 +348,12 @@ execute. It decodes the linear text into a typed IR, runs peephole,
 branch-threading, and dead-code passes to a fixed point, then
 re-encodes. It also fuses common 3-instruction patterns
 (`Psh; Imm N; <op>` -> `<op>I N`; `Lea N; Li/Lc` -> `LdLocI/LdLocC N`)
-into single-dispatch immediate-form ops, since arithmetic-with-constant
-and local-variable reads dominate any non-trivial program.
+into single-dispatch immediate-form ops.
 
 Typical results on the test corpus: 18-30% smaller bytecode, ~40%
-faster wall-clock on the c4 self-host. Off by default -- opt in per
-run. The optimizer is a separate module (`src/c4/optimize.rs`); the
-compiler itself stays single-pass.
-
-The same flag also enables the native register allocator described
-above, so a single `-O` covers both halves of the pipeline.
+faster wall-clock on the c4 self-host. Off by default. The same flag
+also enables the native register allocator described above, so a
+single `-O` covers both halves of the pipeline.
 
 ## no_std
 
@@ -353,88 +362,30 @@ The library compiles under `--no-default-features`:
     cargo build --no-default-features --lib
 
 In that mode the `StdHost` adapter (file IO, env vars, real
-stdin/stdout) is gone. Consumers supply their own [`Host`] impl and
+stdin/stdout) is gone. Consumers supply their own `Host` impl and
 construct the VM with `Vm::with_host(program, my_host)` instead of
-`Vm::new(program)`. Everything else -- lexer, compiler, VM dispatch,
-pointer tracking, mprotect -- runs on `extern crate alloc`.
+`Vm::new(program)`. Everything else -- lexer, compiler, preprocessor,
+VM dispatch, pointer tracking, native backends -- runs on
+`extern crate alloc`.
 
 The CLI binary always builds with the default `std` feature.
-
-## Layout
-
-    src/main.rs             CLI: argv parsing + flag wiring
-    src/lib.rs              re-exports the public surface
-    src/c4/
-      mod.rs                public types (Compiler, Program, Vm, Op, ...)
-      lexer.rs              tokenizer + symbol table + predefined constants
-      compiler.rs           recursive-descent parser, emits bytecode directly
-      optimize.rs           opt-in bytecode optimizer (passes + immediate ops)
-      op.rs                 opcode enum
-      program.rs, symbol.rs, token.rs, error.rs, host.rs
-      vm/
-        mod.rs              instruction dispatch, memory model, mprotect
-        syscalls.rs         libc-shaped syscalls (printf, malloc, ...)
-      codegen/
-        mod.rs              Target enum + Machine + Build/fixup types
-        aarch64.rs          AArch64 encoder + bytecode->aarch64 lowering
-        x86_64.rs           x86_64 encoder + bytecode->x86_64 lowering
-        mach_o.rs           Mach-O writer (macOS, ad-hoc-signed)
-        elf.rs              ELF writer (Linux/aarch64 + Linux/x86_64,
-                            ET_EXEC + libc + libdl)
-        pe.rs               PE32+ writer (Windows/x86_64 +
-                            Windows/AArch64; msvcrt + kernel32
-                            imports via IAT, with an in-text
-                            mprotect-to-VirtualProtect thunk)
-        disasm.rs           --dump-asm textual listing
-        jit.rs              in-process JIT loader (Linux + macOS arm64)
-        regalloc.rs         --optimize register-pool analyzer
-      tests/
-        lexer.rs, parser.rs, codegen.rs, vm.rs    phase tests
-        programs.rs, syscalls.rs, types.rs        end-to-end tests
-        pointer_tracking.rs, optimizer.rs         opt-in feature tests
-        native.rs                                 macOS Mach-O end-to-end
-        native_elf.rs                             Linux/aarch64 ELF e2e
-        native_elf_x64.rs                         Linux/x86_64 ELF e2e
-        native_pe_x64.rs                          Windows/x86_64 PE e2e
-                                                  (via WINE on macOS)
-        native_pe_arm64.rs                        Windows/AArch64 PE e2e
-                                                  (windows-on-ARM only)
-        jit.rs                                    Linux JIT e2e
-    fixtures/c/             C programs the test suite loads + the
-                            original c4.c
-    examples/bench.rs       wall-clock harness for VM / VM-O / JIT /
-                            JIT-N / JIT-ON pipelines
-
-The two-line summary:
-`Compiler::new(source).compile()` returns a `Program`, and
-`Vm::new(program).with_args(...).run()` runs it. `optimize(program)`
-sits between them when you want it.
 
 ## Tests
 
     cargo test
 
 Tests are split by what they exercise. `lexer`, `parser`, `codegen`,
-`vm` drive each phase directly. `programs` and `syscalls` load real C
-sources from `fixtures/c/`, compile, run, and check the exit code.
-`types` checks the warning-not-error behaviour and the cast-as-escape
-hatch. `pointer_tracking` deliberately reaches into freed memory to
-make sure the safety net catches it. `optimizer` re-runs every
-fixture under `-O` and asserts the exit code didn't change.
-`native` (macOS), `native_elf` (Linux/aarch64), and `native_elf_x64`
-(Linux/x86_64) compile each fixture through the matching native
-backend, sign / chmod-x the result, and exec it under the host
-kernel; they're cfg-gated to their respective triples and skipped on
-other CI lanes.
-
-The shared scaffold turns pointer tracking on by default for every
-test, so the suite exercises the safety checks even on programs that
-weren't written to fail.
+`vm` drive each phase directly. `programs` and `syscalls` load real
+C sources from `fixtures/c/` and check the exit code. `types` checks
+the warning-not-error behaviour. `pointer_tracking` exercises the
+opt-in safety net. `optimizer` re-runs every fixture under `-O` and
+asserts the exit code didn't change. `native` (macOS), `native_elf`
+(Linux/aarch64), `native_elf_x64` (Linux/x86_64), `native_pe_x64`
+(Windows/x86_64 -- run natively or through wine on macOS / Linux),
+and `native_pe_arm64` (Windows/AArch64) compile each fixture through
+the matching backend and exec it under the host kernel.
 
 CI runs the matrix on `ubuntu-latest`, `ubuntu-24.04-arm`,
-`macos-latest`, and `windows-latest`. `macos-latest` exercises
-Mach-O end-to-end and the `MAP_JIT` JIT loader; `ubuntu-24.04-arm`
-exercises Linux/aarch64 ELF and the mprotect JIT loader;
-`ubuntu-latest` exercises Linux/x86_64 ELF and the mprotect JIT
-loader; `windows-latest` builds the VM-only paths without native
-bits compiled in.
+`macos-latest`, `windows-latest`, and `windows-11-arm`. Each Linux
+runner additionally exercises the matching Windows PE through wine
+as a cross-check against the native Windows runners.

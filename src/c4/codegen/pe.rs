@@ -461,18 +461,139 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
 // Header writers.
 // ----------------------------------------------------------------
 
+/// On-disk shape of the DOS header + 64-byte stub. The modern PE
+/// loader only reads `e_magic` (`"MZ"`) and `e_lfanew` (the file
+/// offset of the PE signature); everything else can stay zero.
+/// The struct fields document the standard layout so a
+/// refactor that grew a real DOS stub doesn't have to rederive the
+/// offsets.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct DosHeader {
+    e_magic: [u8; 2],             // "MZ"
+    _padding_to_lfanew: [u8; 58], // bytes 2..60 left zero
+    e_lfanew: u32,                // file offset of the PE signature (== 128)
+    _stub: [u8; 64],              // 64-byte real-mode stub, all zeros
+}
+
+const _: () = assert!(core::mem::size_of::<DosHeader>() == DOS_HEADER_AND_STUB);
+
+/// COFF File Header (NT-style). Sits right after the 4-byte
+/// `"PE\0\0"` signature.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct CoffHeader {
+    machine: u16,
+    number_of_sections: u16,
+    time_date_stamp: u32,
+    pointer_to_symbol_table: u32,
+    number_of_symbols: u32,
+    size_of_optional_header: u16,
+    characteristics: u16,
+}
+
+const _: () = assert!(core::mem::size_of::<CoffHeader>() == COFF_HEADER_SIZE);
+
+/// One slot of the Optional Header's Data Directories array (16
+/// fixed slots: Export, Import, Resource, Exception, ..., IAT,
+/// ...). Both fields are RVAs / sizes.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct DataDirectoryEntry {
+    rva: u32,
+    size: u32,
+}
+
+/// PE32+ Optional Header (240 bytes). All fields are explicit so
+/// the reader can map field name to offset without consulting the
+/// PE/COFF spec.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct OptionalHeader64 {
+    magic: u16,
+    major_linker_version: u8,
+    minor_linker_version: u8,
+    size_of_code: u32,
+    size_of_initialized_data: u32,
+    size_of_uninitialized_data: u32,
+    address_of_entry_point: u32,
+    base_of_code: u32,
+    image_base: u64,
+    section_alignment: u32,
+    file_alignment: u32,
+    major_operating_system_version: u16,
+    minor_operating_system_version: u16,
+    major_image_version: u16,
+    minor_image_version: u16,
+    major_subsystem_version: u16,
+    minor_subsystem_version: u16,
+    win32_version_value: u32,
+    size_of_image: u32,
+    size_of_headers: u32,
+    checksum: u32,
+    subsystem: u16,
+    dll_characteristics: u16,
+    size_of_stack_reserve: u64,
+    size_of_stack_commit: u64,
+    size_of_heap_reserve: u64,
+    size_of_heap_commit: u64,
+    loader_flags: u32,
+    number_of_rva_and_sizes: u32,
+    data_directory: [DataDirectoryEntry; NUM_DATA_DIRS as usize],
+}
+
+const _: () = assert!(core::mem::size_of::<OptionalHeader64>() == OPTIONAL64_HEADER_SIZE);
+
+/// One section table entry (40 bytes). Repeated
+/// [`CoffHeader::number_of_sections`] times immediately after the
+/// Optional Header.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct SectionHeaderRaw {
+    name: [u8; 8],
+    virtual_size: u32,
+    virtual_address: u32,
+    size_of_raw_data: u32,
+    pointer_to_raw_data: u32,
+    pointer_to_relocations: u32,
+    pointer_to_line_numbers: u32,
+    number_of_relocations: u16,
+    number_of_line_numbers: u16,
+    characteristics: u32,
+}
+
+const _: () = assert!(core::mem::size_of::<SectionHeaderRaw>() == SECTION_HEADER_SIZE);
+
+/// Append a `#[repr(C)]` struct's raw bytes to `out`.
+///
+/// PE32+ is a little-endian byte format, and our hosts (x86_64 and
+/// AArch64) and targets are all little-endian, so a memcpy of the
+/// in-memory struct produces the right wire format. The structs in
+/// this module are explicit about field order and have const-asserted
+/// sizes that match the PE/COFF spec, so the only thing that could
+/// surprise is the host endianness -- and a const-time check guards
+/// that.
+fn write_struct<T: Copy>(out: &mut Vec<u8>, value: &T) {
+    const _: () = assert!(
+        cfg!(target_endian = "little"),
+        "PE writer assumes a little-endian host; emit bytes manually if you need to cross-build from big-endian"
+    );
+    let bytes = unsafe {
+        core::slice::from_raw_parts((value as *const T) as *const u8, core::mem::size_of::<T>())
+    };
+    out.extend_from_slice(bytes);
+}
+
 fn write_dos_header_and_stub(out: &mut Vec<u8>) {
-    let start = out.len();
-    // Minimal DOS header. Only `e_magic` and `e_lfanew` matter to
-    // the modern loader; everything else can stay zero.
-    let mut dos = [0u8; DOS_HEADER_AND_STUB];
-    dos[0] = b'M';
-    dos[1] = b'Z';
-    // e_lfanew at byte 60: file offset of the PE signature.
-    let pe_sig_off = (DOS_HEADER_AND_STUB) as u32;
-    dos[60..64].copy_from_slice(&pe_sig_off.to_le_bytes());
-    out.extend_from_slice(&dos);
-    debug_assert_eq!(out.len() - start, DOS_HEADER_AND_STUB);
+    write_struct(
+        out,
+        &DosHeader {
+            e_magic: *b"MZ",
+            _padding_to_lfanew: [0; 58],
+            e_lfanew: DOS_HEADER_AND_STUB as u32,
+            _stub: [0; 64],
+        },
+    );
 }
 
 fn write_pe_signature(out: &mut Vec<u8>) {
@@ -489,14 +610,17 @@ fn write_coff_header(
         Machine::X86_64 => IMAGE_FILE_MACHINE_AMD64,
         Machine::Aarch64 => IMAGE_FILE_MACHINE_ARM64,
     };
-    out.extend_from_slice(&machine_id.to_le_bytes()); // Machine
-    out.extend_from_slice(&(num_sections(data_section_present) as u16).to_le_bytes()); // NumberOfSections
-    out.extend_from_slice(&0u32.to_le_bytes()); // TimeDateStamp
-    out.extend_from_slice(&0u32.to_le_bytes()); // PointerToSymbolTable (deprecated)
-    out.extend_from_slice(&0u32.to_le_bytes()); // NumberOfSymbols
-    out.extend_from_slice(&(optional_header_size as u16).to_le_bytes()); // SizeOfOptionalHeader
-    out.extend_from_slice(
-        &(IMAGE_FILE_EXECUTABLE_IMAGE | IMAGE_FILE_LARGE_ADDRESS_AWARE).to_le_bytes(),
+    write_struct(
+        out,
+        &CoffHeader {
+            machine: machine_id,
+            number_of_sections: num_sections(data_section_present) as u16,
+            time_date_stamp: 0,
+            pointer_to_symbol_table: 0,
+            number_of_symbols: 0,
+            size_of_optional_header: optional_header_size as u16,
+            characteristics: IMAGE_FILE_EXECUTABLE_IMAGE | IMAGE_FILE_LARGE_ADDRESS_AWARE,
+        },
     );
 }
 
@@ -523,90 +647,84 @@ struct OptionalHeaderInputs {
 }
 
 fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
-    let start = out.len();
-
-    // Standard fields (24 bytes for PE32+).
-    out.extend_from_slice(&PE32_PLUS_MAGIC.to_le_bytes());
-    out.push(14); // MajorLinkerVersion (cosmetic)
-    out.push(0); // MinorLinkerVersion
-    out.extend_from_slice(&inp.size_of_code.to_le_bytes());
-    out.extend_from_slice(&inp.size_of_initialized_data.to_le_bytes());
-    out.extend_from_slice(&0u32.to_le_bytes()); // SizeOfUninitializedData
-    out.extend_from_slice(&inp.entry_rva.to_le_bytes());
-    out.extend_from_slice(&inp.base_of_code.to_le_bytes());
-
-    // Windows-specific fields (88 bytes).
-    out.extend_from_slice(&IMAGE_BASE.to_le_bytes());
-    out.extend_from_slice(&SECTION_ALIGNMENT.to_le_bytes());
-    out.extend_from_slice(&FILE_ALIGNMENT.to_le_bytes());
     // OS version 4.0, Subsystem 5.2: copied from mingw's minimal
     // exe. These are the most permissive values that still mark the
     // image as a 64-bit console app the modern Windows loader
     // accepts. Bumping to 10.0 (which we tried first) caused
     // CreateProcess to reject our images with ERROR_BAD_EXE_FORMAT
     // on real Windows, even though wine on Linux tolerated it.
-    out.extend_from_slice(&4u16.to_le_bytes()); // MajorOperatingSystemVersion
-    out.extend_from_slice(&0u16.to_le_bytes()); // Minor
-    out.extend_from_slice(&0u16.to_le_bytes()); // MajorImageVersion
-    out.extend_from_slice(&0u16.to_le_bytes()); // Minor
-    out.extend_from_slice(&5u16.to_le_bytes()); // MajorSubsystemVersion
-    out.extend_from_slice(&2u16.to_le_bytes()); // Minor
-    out.extend_from_slice(&0u32.to_le_bytes()); // Win32VersionValue (reserved)
-    out.extend_from_slice(&inp.size_of_image.to_le_bytes());
-    out.extend_from_slice(&inp.size_of_headers.to_le_bytes());
-    out.extend_from_slice(&0u32.to_le_bytes()); // CheckSum
-    out.extend_from_slice(&IMAGE_SUBSYSTEM_WINDOWS_CUI.to_le_bytes());
+    //
     // DllCharacteristics: copy what mingw's minimal exe ships with,
-    // since that binary loads cleanly on every recent Windows. It
-    // sets DYNAMIC_BASE | HIGH_ENTROPY_VA | NX_COMPAT | NO_SEH.
-    //
-    // - DYNAMIC_BASE: ASLR-aware. Required by wine's non-x86 strict
-    //   path (`server/mapping.c` in wine 10).
-    // - HIGH_ENTROPY_VA: ASLR can use the full 64-bit address space.
-    //   Always set on real-world 64-bit images.
-    // - NX_COMPAT: data pages aren't executable. Required by wine's
-    //   non-x86 strict path.
-    // - NO_SEH: this image registers no Structured Exception
-    //   Handlers. Our `.pdata` carries no real unwind data (the
-    //   single coarse RUNTIME_FUNCTION is a placeholder so the
-    //   loader's Exception Directory check passes), so promising
-    //   "no SEH" is honest and lets the OS skip SEH-validation
-    //   paths that examine our minimal entries too closely.
-    //
+    // since that binary loads cleanly on every recent Windows --
+    // DYNAMIC_BASE | HIGH_ENTROPY_VA | NX_COMPAT | NO_SEH.
     // No accompanying `.reloc` section is needed even with
-    // DYNAMIC_BASE -- the minimal mingw exe also ships without one
-    // and Windows tolerates it; the loader maps at preferred
-    // ImageBase if relocations are absent.
+    // DYNAMIC_BASE; the loader maps at preferred ImageBase when
+    // relocations are absent.
     let dll_chars = IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE
         | IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA
         | IMAGE_DLLCHARACTERISTICS_NX_COMPAT
         | IMAGE_DLLCHARACTERISTICS_NO_SEH;
-    out.extend_from_slice(&dll_chars.to_le_bytes());
-    out.extend_from_slice(&0x10_0000u64.to_le_bytes()); // SizeOfStackReserve = 1 MiB
-    out.extend_from_slice(&0x1000u64.to_le_bytes()); // SizeOfStackCommit
-    out.extend_from_slice(&0x10_0000u64.to_le_bytes()); // SizeOfHeapReserve
-    out.extend_from_slice(&0x1000u64.to_le_bytes()); // SizeOfHeapCommit
-    out.extend_from_slice(&0u32.to_le_bytes()); // LoaderFlags
-    out.extend_from_slice(&NUM_DATA_DIRS.to_le_bytes());
 
-    // Data directories: 16 entries of (RVA, Size). Three are
-    // populated: Import (1), Exception (3), and IAT
-    // (12). Everything else stays zeroed.
-    for i in 0..NUM_DATA_DIRS as usize {
-        let (rva, size) = match i {
-            DATA_DIRECTORY_IMPORT => (inp.import_table_rva, inp.import_table_size),
-            DATA_DIRECTORY_EXCEPTION => (inp.exception_table_rva, inp.exception_table_size),
-            DATA_DIRECTORY_BASERELOC => (inp.base_reloc_rva, inp.base_reloc_size),
-            DATA_DIRECTORY_IAT => (inp.iat_rva, inp.iat_size),
-            _ => (0u32, 0u32),
-        };
-        out.extend_from_slice(&rva.to_le_bytes());
-        out.extend_from_slice(&size.to_le_bytes());
-    }
+    let mut data_directory = [DataDirectoryEntry { rva: 0, size: 0 }; NUM_DATA_DIRS as usize];
+    data_directory[DATA_DIRECTORY_IMPORT] = DataDirectoryEntry {
+        rva: inp.import_table_rva,
+        size: inp.import_table_size,
+    };
+    data_directory[DATA_DIRECTORY_EXCEPTION] = DataDirectoryEntry {
+        rva: inp.exception_table_rva,
+        size: inp.exception_table_size,
+    };
+    data_directory[DATA_DIRECTORY_BASERELOC] = DataDirectoryEntry {
+        rva: inp.base_reloc_rva,
+        size: inp.base_reloc_size,
+    };
+    data_directory[DATA_DIRECTORY_IAT] = DataDirectoryEntry {
+        rva: inp.iat_rva,
+        size: inp.iat_size,
+    };
 
-    debug_assert_eq!(out.len() - start, OPTIONAL64_HEADER_SIZE);
+    write_struct(
+        out,
+        &OptionalHeader64 {
+            magic: PE32_PLUS_MAGIC,
+            major_linker_version: 14,
+            minor_linker_version: 0,
+            size_of_code: inp.size_of_code,
+            size_of_initialized_data: inp.size_of_initialized_data,
+            size_of_uninitialized_data: 0,
+            address_of_entry_point: inp.entry_rva,
+            base_of_code: inp.base_of_code,
+            image_base: IMAGE_BASE,
+            section_alignment: SECTION_ALIGNMENT,
+            file_alignment: FILE_ALIGNMENT,
+            major_operating_system_version: 4,
+            minor_operating_system_version: 0,
+            major_image_version: 0,
+            minor_image_version: 0,
+            major_subsystem_version: 5,
+            minor_subsystem_version: 2,
+            win32_version_value: 0,
+            size_of_image: inp.size_of_image,
+            size_of_headers: inp.size_of_headers,
+            checksum: 0,
+            subsystem: IMAGE_SUBSYSTEM_WINDOWS_CUI,
+            dll_characteristics: dll_chars,
+            size_of_stack_reserve: 0x10_0000, // 1 MiB
+            size_of_stack_commit: 0x1000,
+            size_of_heap_reserve: 0x10_0000,
+            size_of_heap_commit: 0x1000,
+            loader_flags: 0,
+            number_of_rva_and_sizes: NUM_DATA_DIRS,
+            data_directory,
+        },
+    );
 }
 
+/// Caller-side view of a section the writer is about to emit.
+/// Only the fields that vary between sections live here -- the
+/// per-section relocation / line-number counters are zero for
+/// every section we produce, so the on-disk
+/// [`SectionHeaderRaw`] fills them in unconditionally.
 struct SectionHeader {
     name: [u8; 8],
     virtual_size: u32,
@@ -618,16 +736,21 @@ struct SectionHeader {
 
 fn write_section_headers(out: &mut Vec<u8>, sections: &[SectionHeader]) {
     for sec in sections {
-        out.extend_from_slice(&sec.name);
-        out.extend_from_slice(&sec.virtual_size.to_le_bytes());
-        out.extend_from_slice(&sec.virtual_address.to_le_bytes());
-        out.extend_from_slice(&sec.size_of_raw_data.to_le_bytes());
-        out.extend_from_slice(&sec.pointer_to_raw_data.to_le_bytes());
-        out.extend_from_slice(&0u32.to_le_bytes()); // PointerToRelocations
-        out.extend_from_slice(&0u32.to_le_bytes()); // PointerToLinenumbers
-        out.extend_from_slice(&0u16.to_le_bytes()); // NumberOfRelocations
-        out.extend_from_slice(&0u16.to_le_bytes()); // NumberOfLinenumbers
-        out.extend_from_slice(&sec.characteristics.to_le_bytes());
+        write_struct(
+            out,
+            &SectionHeaderRaw {
+                name: sec.name,
+                virtual_size: sec.virtual_size,
+                virtual_address: sec.virtual_address,
+                size_of_raw_data: sec.size_of_raw_data,
+                pointer_to_raw_data: sec.pointer_to_raw_data,
+                pointer_to_relocations: 0,
+                pointer_to_line_numbers: 0,
+                number_of_relocations: 0,
+                number_of_line_numbers: 0,
+                characteristics: sec.characteristics,
+            },
+        );
     }
 }
 

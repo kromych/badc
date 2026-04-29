@@ -11,7 +11,15 @@
 #include <memory.h>
 #include <unistd.h>
 #include <fcntl.h>
+// `int` is already 8 bytes under badc's runtime, so the GCC-era
+// `#define int long long` hack is unnecessary (and breaks our
+// preprocessor, which actually respects the substitution and would
+// rewrite every `int` to a token sequence c4's parser can't handle).
+// Guard it on `BADC_VERSION` so the file still self-hosts under
+// vanilla c4 / GCC where the `#`-directive is silently skipped.
+#ifndef BADC_VERSION
 #define int long long
+#endif
 
 char *p, *lp, // current position in source code
      *data;   // data/bss pointer

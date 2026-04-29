@@ -371,34 +371,16 @@ const LIB_OPS: &[(&str, Op)] = &[
     ("dlerror", Op::Dler),
 ];
 
-/// Pre-registered integer constants -- the c4 dialect doesn't have
-/// `#define`, so things like `PROT_READ` would otherwise be magic
-/// numbers. They're seeded as `Token::Num`-class symbols so the compiler
-/// emits `Op::Imm <value>` exactly as if the user had written the
-/// literal. POSIX-conventional values; portable across platforms because
-/// our VM honours these masks itself rather than calling out to libc.
-const CONSTANTS: &[(&str, i64)] = &[
-    // mprotect prot bits -- the values our VM reads.
-    ("PROT_NONE", 0),
-    ("PROT_READ", 1),
-    ("PROT_WRITE", 2),
-    ("PROT_EXEC", 4), // accepted but our VM has no executable-data concept
-    // open() flags -- currently advisory; our VM always opens read-only.
-    ("O_RDONLY", 0),
-    ("O_WRONLY", 1),
-    ("O_RDWR", 2),
-    // standard file descriptors
-    ("STDIN_FILENO", 0),
-    ("STDOUT_FILENO", 1),
-    ("STDERR_FILENO", 2),
-    // misc
-    ("NULL", 0),
-    ("EXIT_SUCCESS", 0),
-    ("EXIT_FAILURE", 1),
-];
-
 /// Kind of a predefined identifier -- used by `--list-symbols` and any
 /// future tooling that wants to enumerate the badc prelude.
+///
+/// Constants like `PROT_READ` used to live here too, but they were
+/// moved into `headers/badc-{target}.h` and now reach the compiler
+/// through the preprocessor's `#define` table instead. The
+/// `Constant` variant is retained because it's part of the public
+/// `PredefinedKind` enum -- removing it would be a breaking API
+/// change -- but `init_symbols` no longer emits any `Constant`
+/// entries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PredefinedKind {
     Keyword,
@@ -423,7 +405,7 @@ pub struct PredefinedSymbol {
 /// aren't really keywords from the user's perspective, so we filter the
 /// Id-class entries out of the keyword listing.
 pub fn predefined_symbols() -> Vec<PredefinedSymbol> {
-    let mut out = Vec::with_capacity(KEYWORDS.len() + LIB_OPS.len() + CONSTANTS.len());
+    let mut out = Vec::with_capacity(KEYWORDS.len() + LIB_OPS.len());
     for (name, tok) in KEYWORDS {
         if *tok as i64 == Token::Id as i64 {
             continue;
@@ -441,13 +423,10 @@ pub fn predefined_symbols() -> Vec<PredefinedSymbol> {
             value: *op as i64,
         });
     }
-    for (name, val) in CONSTANTS {
-        out.push(PredefinedSymbol {
-            name,
-            kind: PredefinedKind::Constant,
-            value: *val,
-        });
-    }
+    // Integer constants (PROT_READ, NULL, ...) now reach the source
+    // through the per-target header's `#define`s. They no longer
+    // appear in this list -- callers wanting to see them should
+    // open the relevant `headers/badc-{target}.h`.
     out
 }
 
@@ -511,18 +490,12 @@ pub(crate) fn init_symbols(symbols: &mut Vec<Symbol>) {
         symbols[idx].params = params.to_vec();
         symbols[idx].is_variadic = *variadic;
     }
-    for (name, val) in CONSTANTS {
-        let hash = hash_name(name.as_bytes());
-        symbols.push(Symbol {
-            name: name.to_string(),
-            hash,
-            token: Token::Id as i64,
-            class: Token::Num as i64,
-            type_: Ty::Int as i64,
-            val: *val,
-            ..Default::default()
-        });
-    }
+    // Integer constants (PROT_READ, NULL, ...) used to be seeded
+    // here. They now arrive through the preprocessor's `#define`
+    // table from the per-target header, so the lexer never sees the
+    // names -- the substituted source it tokenises sees plain
+    // integer literals where the source wrote `PROT_READ`.
+    //
     // Ensure main is registered so the compiler's later lookup sees it.
     let _ = find_symbol(symbols, "main").unwrap();
 }

@@ -79,7 +79,11 @@ fn main() {
     let mut contents = String::new();
     std::io::Read::read_to_string(&mut file, &mut contents).expect("Could not read file");
 
-    let program = match Compiler::new(contents).compile() {
+    // Thread the user's `--target` choice into the compiler so the
+    // preprocessor pulls in `headers/badc-{target}.h` rather than the
+    // default. The bytecode is target-independent; only the
+    // auto-prepended header (and Stage B's import-binding map) varies.
+    let program = match Compiler::with_target(contents, target).compile() {
         Ok(p) => p,
         Err(e) => {
             eprintln!("{}", e);

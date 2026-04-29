@@ -76,6 +76,27 @@ pub enum Target {
 }
 
 impl Target {
+    /// Canonical short name for this target. Round-trips through
+    /// [`Target::parse`]; used as the value of the preprocessor's
+    /// `BADC_TARGET` macro and as the file-stem suffix for the
+    /// per-target header (`headers/badc-{id}.h`).
+    pub fn id_str(self) -> &'static str {
+        match self {
+            Target::MacOSAarch64 => "macos-aarch64",
+            Target::LinuxAarch64 => "linux-aarch64",
+            Target::LinuxX64 => "linux-x64",
+            Target::WindowsX64 => "windows-x64",
+            Target::WindowsAarch64 => "windows-arm64",
+        }
+    }
+
+    /// Default target -- used when callers (mostly tests) construct a
+    /// [`Compiler`] without an explicit `--target` choice. Mirrors
+    /// the `Target::parse(None)` behaviour so the two stay in sync.
+    pub fn default_target() -> Self {
+        Target::MacOSAarch64
+    }
+
     /// Parse the value passed to `--emit-native` (or use the default
     /// for the single supported target). Reserved for when the flag
     /// grows a value form like `--emit-native=linux-x64`.

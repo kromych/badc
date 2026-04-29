@@ -5,6 +5,7 @@ mod host;
 mod lexer;
 mod op;
 mod optimize;
+mod preprocessor;
 mod program;
 mod symbol;
 mod token;

@@ -34,7 +34,7 @@
 // out POSIX-only ops the Windows headers don't bind (mprotect for
 // instance, since VirtualProtect has a different shape and there
 // is no in-text translation thunk anymore).
-#define BADC_WINDOWS 1
+#define __BADC_WINDOWS__ 1
 
 #pragma dylib(msvcrt, "msvcrt.dll")
 #pragma dylib(kernel32, "kernel32.dll")
@@ -57,6 +57,12 @@
 #pragma binding(kernel32::dlsym, "GetProcAddress")
 #pragma binding(kernel32::dlclose, "FreeLibrary")
 #pragma binding(kernel32::dlerror, "GetLastError")
+// Page allocation + protection trio. Currently declarative -- they
+// describe what the dylib offers; calling them from c4 source needs
+// a generic extern-call mechanism that's still in flight.
+#pragma binding(kernel32::VirtualAlloc, "VirtualAlloc")
+#pragma binding(kernel32::VirtualProtect, "VirtualProtect")
+#pragma binding(kernel32::VirtualFree, "VirtualFree")
 
 // Function prototypes -- the parser's type signatures. `char` is
 // one byte; `int` is the c4 machine word (8 bytes). Forward

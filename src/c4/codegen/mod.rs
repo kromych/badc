@@ -78,7 +78,7 @@ pub enum Target {
 impl Target {
     /// Canonical short name for this target. Round-trips through
     /// [`Target::parse`]; used as the value of the preprocessor's
-    /// `BADC_TARGET` macro and as the file-stem suffix for the
+    /// `__BADC_TARGET__` macro and as the file-stem suffix for the
     /// per-target header (`headers/badc-{id}.h`).
     pub fn id_str(self) -> &'static str {
         match self {
@@ -294,7 +294,7 @@ pub fn emit_native_with_options(
 /// actually uses**. This makes the per-target headers honestly
 /// reflect "what's available on this target": a header that omits
 /// (say) `mprotect` is fine for Windows, where mprotect isn't a
-/// thing -- the source has to use `#if BADC_TARGET` to call
+/// thing -- the source has to use `#if __BADC_TARGET__` to call
 /// `VirtualProtect` instead. Unused absences only become errors
 /// when the program reaches for them.
 ///
@@ -364,7 +364,6 @@ fn used_libc_ops(text: &[i64]) -> alloc::collections::BTreeSet<crate::c4::Op> {
                 | Op::Mset
                 | Op::Mcmp
                 | Op::Mcpy
-                | Op::Mpro
                 | Op::Exit
                 | Op::Write
                 | Op::Genv

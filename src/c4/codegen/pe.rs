@@ -179,19 +179,6 @@ fn windows_binding_for_op(op: Op) -> (&'static str, &'static str) {
         Mset => ("memset", MSVCRT),
         Mcmp => ("memcmp", MSVCRT),
         Mcpy => ("memcpy", MSVCRT),
-        // `Op::Mpro` ends up here when the writer iterates the
-        // global IMPORTS table; the per-target Windows headers no
-        // longer bind `mprotect`, so any *use* of it from c4 source
-        // is rejected by `validate_bindings` long before the
-        // program reaches the codegen. We still need to give this
-        // arm a defined value so a program that *doesn't* use
-        // mprotect can still build (the writer puts a slot in the
-        // IAT for every IMPORTS entry, used or not). Pointing it
-        // at `VirtualProtect` is harmless because the slot is
-        // unreferenced; switching this lookup to read from
-        // `program.dylibs` (and dropping unused entries) is
-        // Stage B follow-up work.
-        Mpro => ("VirtualProtect", KERNEL32),
         Exit => ("exit", MSVCRT),
         Write => ("_write", MSVCRT),
         Genv => ("getenv", MSVCRT),
@@ -245,7 +232,7 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
 
     // 3) Build the entry stub. Stage B/2.c dropped the in-text
     //    mprotect-to-VirtualProtect thunk; cross-platform sources
-    //    have to gate POSIX-only ops on `#if BADC_TARGET` and call
+    //    have to gate POSIX-only ops on `#if __BADC_TARGET__` and call
     //    the target-native API (`VirtualProtect`, etc.) directly
     //    where they need it.
     let stub = build_entry_stub(machine);
@@ -363,7 +350,7 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
     // including `Op::Mpro` -- now go through the regular IAT slot;
     // the per-target header's `#pragma binding` decides whether
     // mprotect resolves at all (POSIX targets bind it, Windows
-    // doesn't, sources gate the call on `BADC_WINDOWS`).
+    // doesn't, sources gate the call on `__BADC_WINDOWS__`).
     for f in &build.got_fixups {
         let instr_off = (f.adrp_offset as u32) + text_prologue_len;
         let target_rva = idata_layout.iat_rva_for_import[f.import_index];

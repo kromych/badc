@@ -181,11 +181,6 @@ pub(crate) const IMPORTS: &[Import] = &[
         op: Op::Mcpy,
     },
     Import {
-        macos_symbol: "_mprotect",
-        linux_symbol: "mprotect",
-        op: Op::Mpro,
-    },
-    Import {
         macos_symbol: "_exit",
         linux_symbol: "exit",
         op: Op::Exit,
@@ -901,7 +896,7 @@ fn writes_x19_first(op: Op) -> bool {
         // call libc, then `mov x19, x0`. x19 is overwritten before
         // any subsequent c4 op observes it.
         | Open | Read | Clos | Prtf | Malc | Free
-        | Mset | Mcmp | Mcpy | Mpro | Exit | Write
+        | Mset | Mcmp | Mcpy | Exit | Write
         | Genv | Senv | Dlop | Dlsm | Dlcl | Dler
     )
 }
@@ -1443,7 +1438,6 @@ fn lower_op(
         | Op::Mset
         | Op::Mcmp
         | Op::Mcpy
-        | Op::Mpro
         | Op::Exit
         | Op::Write
         | Op::Genv

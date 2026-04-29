@@ -256,7 +256,6 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("type_warning_int_to_ptr.c", 0),
     ("type_warning_silenced_by_cast.c", 0),
     ("type_warning_arity.c", 0),
-    ("mprotect_allows_read.c", 'X' as i32),
     ("setenv_then_get.c", 'Z' as i32),
     ("dlopen_atoi.c", 123),
 ];

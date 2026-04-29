@@ -95,33 +95,10 @@ fn calling_a_forged_code_pointer_is_refused() {
     expect_error_containing("forge_code_pointer.c", "non-code address");
 }
 
-// ---- mprotect ----
-
-#[test]
-fn mprotect_read_only_refuses_writes() {
-    expect_error_containing("mprotect_blocks_write.c", "permission denied");
-}
-
-#[test]
-fn mprotect_write_only_refuses_reads() {
-    expect_error_containing("mprotect_blocks_read.c", "permission denied");
-}
-
 #[test]
 fn negative_size_argument_is_caught() {
     // memset(p, 0, -1) used to walk the address space (and accidentally
     // trip the code-segment guard). With the new size validation it
     // surfaces a clear "negative size" error at the syscall boundary.
     expect_error_containing("negative_size_memset.c", "negative size");
-}
-
-#[test]
-fn mprotect_read_only_still_allows_reads() {
-    use super::try_run_fixture;
-    // After mprotect(PROT_READ), the existing data is still readable --
-    // the program returns 'X' (88).
-    assert_eq!(
-        try_run_fixture("mprotect_allows_read.c").unwrap(),
-        'X' as i64
-    );
 }

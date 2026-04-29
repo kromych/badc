@@ -14,8 +14,8 @@ mod syscalls;
 const STACK_CAPACITY: usize = 256 * 1024;
 const STACK_BASE: usize = 0x1000_0000;
 
-/// What an access through `check_data_access` is doing -- used both for
-/// diagnostic wording and for matching `mprotect` permissions.
+/// What an access through `check_data_access` is doing -- used for
+/// diagnostic wording on out-of-bounds / use-after-free reports.
 #[derive(Clone, Copy, Debug)]
 enum AccessKind {
     Read,
@@ -29,26 +29,6 @@ impl AccessKind {
             AccessKind::Write => "write",
         }
     }
-
-    /// Bit (1=read, 2=write) the access requires from a `prot` mask. Same
-    /// numbering as POSIX `PROT_READ` / `PROT_WRITE`.
-    fn prot_bit(self) -> u8 {
-        match self {
-            AccessKind::Read => 1,
-            AccessKind::Write => 2,
-        }
-    }
-}
-
-/// A region with reduced access rights, as installed by `mprotect`. Walked
-/// linearly on every data access -- for tests this is fine; for tight
-/// hot-loop programs it would want a sorted/indexed layout.
-#[derive(Debug, Clone)]
-struct ProtectedRegion {
-    start: usize,
-    len: usize,
-    /// Bitmask: 1=read allowed, 2=write allowed. 0 means no access.
-    prot: u8,
 }
 
 /// Encode a raw text-PC as a user-visible code pointer. Used wherever a PC
@@ -114,9 +94,6 @@ pub struct Vm<H: Host> {
     /// When true, every heap-side load/store goes through
     /// [`Vm::check_data_access`] and `free` validates its argument.
     track_pointers: bool,
-    /// Regions installed by `mprotect`. Always honoured, regardless of
-    /// `track_pointers`.
-    protections: Vec<ProtectedRegion>,
 }
 
 /// `Vm::new` is only available with the `std` feature; it picks the
@@ -147,7 +124,6 @@ impl<H: Host> Vm<H> {
             allocations: Vec::new(),
             static_end: 0,
             track_pointers: false,
-            protections: Vec::new(),
         }
     }
 
@@ -230,22 +206,7 @@ impl<H: Host> Vm<H> {
         if len == 0 {
             return Ok(());
         }
-        // 2. mprotect -- independent of tracking.
-        for region in &self.protections {
-            if addr < region.start || addr >= region.start + region.len {
-                continue;
-            }
-            if region.prot & kind.prot_bit() == 0 {
-                return Err(C4Error::Runtime(format!(
-                    "permission denied: {} of {len} bytes at 0x{addr:x} in protected region [0x{:x}, 0x{:x}) (prot=0x{:x})",
-                    kind.label(),
-                    region.start,
-                    region.start + region.len,
-                    region.prot
-                )));
-            }
-        }
-        // 3. Allocation tracking -- opt-in.
+        // 2. Allocation tracking -- opt-in.
         if !self.track_pointers {
             return Ok(());
         }
@@ -729,7 +690,6 @@ impl<H: Host> Vm<H> {
                 Op::Mset => a = self.syscall_memset(sp)?,
                 Op::Mcmp => a = self.syscall_memcmp(sp)?,
                 Op::Mcpy => a = self.syscall_memcpy(sp)?,
-                Op::Mpro => a = self.syscall_mprotect(sp)?,
                 Op::Prtf => a = self.syscall_printf(sp, pc)?,
                 Op::Exit => return self.load_i64(sp),
                 Op::Write => a = self.syscall_write(sp)?,

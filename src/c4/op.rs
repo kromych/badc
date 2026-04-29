@@ -83,10 +83,6 @@ pub enum Op {
     Mcmp,
     /// Syscall: Copy memory block from src to dst.
     Mcpy,
-    /// Syscall: Change access permissions of a memory range
-    /// (`mprotect(void*, size_t, int prot)`). `prot` is a POSIX-style
-    /// bitmask: 1=read, 2=write.
-    Mpro,
     /// Syscall: Terminate program with exit code
     Exit,
     /// Syscall: Write a buffer to a file descriptor (fd 1=stdout, 2=stderr).
@@ -155,7 +151,7 @@ pub enum Op {
     LdLocC,
 }
 
-const OPS: [Op; 65] = [
+const OPS: [Op; 64] = [
     Op::Lea,
     Op::Imm,
     Op::Jmp,
@@ -196,7 +192,6 @@ const OPS: [Op; 65] = [
     Op::Mset,
     Op::Mcmp,
     Op::Mcpy,
-    Op::Mpro,
     Op::Exit,
     Op::Write,
     Op::Genv,

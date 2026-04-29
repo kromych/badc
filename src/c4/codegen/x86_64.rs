@@ -883,7 +883,7 @@ fn writes_r13_first(op: Op) -> bool {
         // libc thunks: load args from rsp offsets (r13-independent),
         // call, then `mov r13, rax`.
         | Open | Read | Clos | Prtf | Malc | Free
-        | Mset | Mcmp | Mcpy | Mpro | Exit | Write
+        | Mset | Mcmp | Mcpy | Exit | Write
         | Genv | Senv | Dlop | Dlsm | Dlcl | Dler
     )
 }
@@ -1395,7 +1395,6 @@ fn lower_op(
         | Op::Mset
         | Op::Mcmp
         | Op::Mcpy
-        | Op::Mpro
         | Op::Exit
         | Op::Write
         | Op::Genv

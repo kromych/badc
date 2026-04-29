@@ -117,7 +117,7 @@ fn build_and_run(src: &str, stem: &str, args: &[&str]) -> RunOutcome {
     // Compile with the same target the codegen will lower for, so
     // the per-target header (`headers/badc-windows-x64.h`) is the
     // one whose `#pragma dylib` / `#pragma binding` directives end
-    // up on `program.dylibs` and whose `#define BADC_WINDOWS` reaches
+    // up on `program.dylibs` and whose `#define __BADC_WINDOWS__` reaches
     // any conditional source.
     let program = match Compiler::with_target(src.to_string(), Target::WindowsX64).compile() {
         Ok(p) => p,
@@ -309,31 +309,6 @@ fn argc_argv_round_trip_through_getmainargs() {
 }
 
 #[test]
-fn mprotect_thunk_runs_through_virtualprotect() {
-    // Stage B/2.c dropped the in-text mprotect-to-VirtualProtect
-    // thunk. On Windows the per-target header no longer binds
-    // `mprotect` at all -- a meaningful test on Windows would
-    // need VirtualAlloc/VirtualProtect/VirtualFree on a
-    // page-aligned buffer, which the test source can't yet
-    // express (those bindings aren't wired up). Skip the call on
-    // Windows and just round-trip the sentinel.
-    let src = r#"
-        int main() {
-            char *p;
-            p = malloc(16);
-            p[0] = 'M';
-#ifndef BADC_WINDOWS
-            int rc;
-            rc = mprotect(p, 16, 1);   // PROT_READ
-            if (rc < 0) return 1;       // BOOL->int translation failed
-#endif
-            return p[0];                 // 'M' = 77
-        }
-    "#;
-    assert_exit(src, "mprotect-thunk", &[], 'M' as i32);
-}
-
-#[test]
 fn variadic_printf_with_six_args_uses_stack_slots() {
     // Win64 only passes the first 4 ints in registers; args 5 and
     // 6 land at [rsp+0x20] and [rsp+0x28]. This exercises that
@@ -404,7 +379,6 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("type_warning_int_to_ptr.c", 0),
     ("type_warning_silenced_by_cast.c", 0),
     ("type_warning_arity.c", 0),
-    ("mprotect_allows_read.c", 'X' as i32),
 ];
 
 #[test]

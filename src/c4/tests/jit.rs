@@ -200,7 +200,6 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("type_warning_int_to_ptr.c", 0),
     ("type_warning_silenced_by_cast.c", 0),
     ("type_warning_arity.c", 0),
-    ("mprotect_allows_read.c", 'X' as i32),
     // dlopen+dlsym+blr finds libc atoi and the indirect call passes
     // "123" in the System V argument register.
     ("dlopen_atoi.c", 123),

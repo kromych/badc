@@ -20,7 +20,7 @@ use alloc::string::ToString;
 use alloc::vec;
 
 use super::super::host::Overwrite;
-use super::{AccessKind, C4Error, Host, Op, ProtectedRegion, Vm};
+use super::{AccessKind, C4Error, Host, Op, Vm};
 
 impl<H: Host> Vm<H> {
     /// Load an `i64` size argument from the stack and validate it as a
@@ -157,22 +157,6 @@ impl<H: Host> Vm<H> {
             self.store_u8(dst_addr + i, byte)?;
         }
         Ok(dst_addr as i64)
-    }
-
-    /// `int mprotect(void *addr, size_t len, int prot)` -- record a
-    /// permission window. Subsequent loads/stores into `[addr, addr+len)`
-    /// are filtered by `check_data_access`. Always honoured, regardless
-    /// of `--track-pointers`.
-    pub(super) fn syscall_mprotect(&mut self, sp: usize) -> Result<i64, C4Error> {
-        let addr = self.load_i64(sp + 16)? as usize;
-        let len = self.read_size(sp + 8, "mprotect")?;
-        let prot = self.load_i64(sp)? as u8;
-        self.protections.push(ProtectedRegion {
-            start: addr,
-            len,
-            prot,
-        });
-        Ok(0)
     }
 
     /// `int printf(const char *fmt, ...)` -- limited subset (`%d`, `%c`,

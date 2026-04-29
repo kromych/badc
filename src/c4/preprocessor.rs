@@ -48,6 +48,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use super::codegen::Target;
 use super::error::C4Error;
 
 /// One declared dylib plus the bindings that target it. Created
@@ -104,15 +105,39 @@ pub(crate) struct Preprocessor {
 }
 
 impl Preprocessor {
-    /// Build a preprocessor with the two predefined macros set:
-    /// `BADC_VERSION` (the crate version, as a string literal) and
-    /// `BADC_TARGET` (the target's canonical id, also as a string
-    /// literal). Both expansions are quoted so source can write
-    /// `#if BADC_TARGET == "windows-x64"` directly.
-    pub fn new(target_spec: &str, crate_version: &str) -> Self {
+    /// Build a preprocessor with the standard predefines set.
+    ///
+    /// Naming follows the gcc / clang / msvc convention of double
+    /// underscores around tool-supplied macros so they don't
+    /// collide with user identifiers:
+    ///
+    /// * `__BADC_VERSION__` -- the crate version, as a string
+    ///   literal. Source can write `#if __BADC_VERSION__ == "0.1.0"`.
+    /// * `__BADC_TARGET__` -- the canonical target id (e.g.
+    ///   `"macos-aarch64"`), as a string literal. Used to gate
+    ///   target-specific code at the source level.
+    /// * CPU-architecture macros, all defined to `1` when active so
+    ///   `#if __aarch64__` works the same way it does in gcc/clang:
+    ///   * AArch64 targets get `__aarch64__` and `__arm64__` (the
+    ///     latter is the Apple/clang spelling).
+    ///   * x86_64 targets get `__x86_64__` and `__amd64__`.
+    pub fn new(target_spec: &str, target: Target, crate_version: &str) -> Self {
         let mut macros = BTreeMap::new();
-        macros.insert("BADC_VERSION".to_string(), format!("\"{crate_version}\""));
-        macros.insert("BADC_TARGET".to_string(), format!("\"{target_spec}\""));
+        macros.insert(
+            "__BADC_VERSION__".to_string(),
+            format!("\"{crate_version}\""),
+        );
+        macros.insert("__BADC_TARGET__".to_string(), format!("\"{target_spec}\""));
+        match target {
+            Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
+                macros.insert("__aarch64__".to_string(), "1".to_string());
+                macros.insert("__arm64__".to_string(), "1".to_string());
+            }
+            Target::LinuxX64 | Target::WindowsX64 => {
+                macros.insert("__x86_64__".to_string(), "1".to_string());
+                macros.insert("__amd64__".to_string(), "1".to_string());
+            }
+        }
         Self {
             macros,
             dylibs: Vec::new(),
@@ -548,13 +573,13 @@ mod tests {
     use super::*;
 
     fn process(source: &str) -> String {
-        let mut pp = Preprocessor::new("macos-aarch64", "0.1.0");
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
         pp.process(source).expect("preprocessor failed")
     }
 
     #[test]
     fn predefined_macros_expand() {
-        let out = process("char *t = BADC_TARGET;\nchar *v = BADC_VERSION;\n");
+        let out = process("char *t = __BADC_TARGET__;\nchar *v = __BADC_VERSION__;\n");
         assert!(out.contains("\"macos-aarch64\""));
         assert!(out.contains("\"0.1.0\""));
     }
@@ -589,7 +614,7 @@ mod tests {
 
     #[test]
     fn if_equality_checks_macro_value() {
-        let src = "#if BADC_TARGET == \"macos-aarch64\"\nint mac;\n#else\nint other;\n#endif\n";
+        let src = "#if __BADC_TARGET__ == \"macos-aarch64\"\nint mac;\n#else\nint other;\n#endif\n";
         let out = process(src);
         assert!(out.contains("int mac;"));
         assert!(!out.contains("int other;"));
@@ -597,14 +622,15 @@ mod tests {
 
     #[test]
     fn if_inequality_negates() {
-        let src = "#if BADC_TARGET != \"windows-x64\"\nint here;\n#endif\n";
+        let src = "#if __BADC_TARGET__ != \"windows-x64\"\nint here;\n#endif\n";
         let out = process(src);
         assert!(out.contains("int here;"));
     }
 
     #[test]
     fn nested_conditionals_respect_parent() {
-        let src = "#ifdef ABSENT\n#ifdef BADC_VERSION\nint inner;\n#endif\n#endif\nint outer;\n";
+        let src =
+            "#ifdef ABSENT\n#ifdef __BADC_VERSION__\nint inner;\n#endif\n#endif\nint outer;\n";
         let out = process(src);
         assert!(!out.contains("int inner;"));
         assert!(out.contains("int outer;"));
@@ -616,7 +642,7 @@ mod tests {
 #pragma dylib(libfoo, \"libfoo.so\")
 #pragma dylib(bar, \"bar.dll\")
 ";
-        let mut pp = Preprocessor::new("macos-aarch64", "0.1.0");
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
         pp.process(src).unwrap();
         let entries: Vec<(&str, &str)> = pp
             .dylibs
@@ -635,7 +661,7 @@ mod tests {
 #pragma binding(libbar::exit, \"ExitProcess\")
 #pragma binding(libfoo::malloc, \"_malloc\")
 ";
-        let mut pp = Preprocessor::new("macos-aarch64", "0.1.0");
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
         pp.process(src).unwrap();
         assert_eq!(pp.dylibs.len(), 2);
         assert_eq!(pp.dylibs[0].name, "libfoo");
@@ -651,7 +677,7 @@ mod tests {
 
     #[test]
     fn pragma_binding_for_undeclared_dylib_errors() {
-        let mut pp = Preprocessor::new("macos-aarch64", "0.1.0");
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
         let err = pp
             .process("#pragma binding(libnothing::printf, \"_printf\")\n")
             .unwrap_err();
@@ -660,7 +686,7 @@ mod tests {
 
     #[test]
     fn pragma_binding_without_qualifier_errors() {
-        let mut pp = Preprocessor::new("macos-aarch64", "0.1.0");
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
         let err = pp
             .process("#pragma dylib(libfoo, \"x\")\n#pragma binding(printf, \"p\")\n")
             .unwrap_err();
@@ -669,7 +695,7 @@ mod tests {
 
     #[test]
     fn pragma_dylib_duplicate_errors() {
-        let mut pp = Preprocessor::new("macos-aarch64", "0.1.0");
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
         let err = pp
             .process("#pragma dylib(libfoo, \"x\")\n#pragma dylib(libfoo, \"y\")\n")
             .unwrap_err();
@@ -678,14 +704,14 @@ mod tests {
 
     #[test]
     fn unmatched_endif_is_an_error() {
-        let mut pp = Preprocessor::new("macos-aarch64", "0.1.0");
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
         let err = pp.process("#endif\n").unwrap_err();
         assert!(format!("{err}").contains("`#endif` with no matching `#if`"));
     }
 
     #[test]
     fn unterminated_block_is_an_error() {
-        let mut pp = Preprocessor::new("macos-aarch64", "0.1.0");
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
         let err = pp.process("#ifdef FOO\nint x;\n").unwrap_err();
         assert!(format!("{err}").contains("unterminated"));
     }
@@ -709,7 +735,7 @@ mod tests {
 
     #[test]
     fn defined_form_works_in_if() {
-        let src = "#if defined(BADC_VERSION)\nint a;\n#endif\n";
+        let src = "#if defined(__BADC_VERSION__)\nint a;\n#endif\n";
         let out = process(src);
         assert!(out.contains("int a;"));
     }

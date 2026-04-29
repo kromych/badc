@@ -103,7 +103,7 @@ fn build_and_run(src: &str, stem: &str, args: &[&str]) -> RunOutcome {
     // Compile with the same target the codegen will lower for, so
     // the per-target header (`headers/badc-windows-arm64.h`) is the
     // one whose `#pragma dylib` / `#pragma binding` directives end
-    // up on `program.dylibs` and whose `#define BADC_WINDOWS` reaches
+    // up on `program.dylibs` and whose `#define __BADC_WINDOWS__` reaches
     // any conditional source. Using the default `Compiler::new` would
     // load the macOS header and silently feed the wrong bindings
     // to the codegen.
@@ -269,33 +269,6 @@ fn argc_argv_round_trip_through_getmainargs() {
     assert_exit(src, "argc", &["one", "two", "three"], 4);
 }
 
-#[test]
-fn mprotect_thunk_runs_through_virtualprotect() {
-    // Stage B/2.c dropped the in-text mprotect-to-VirtualProtect
-    // thunk. POSIX targets still bind `mprotect` (libsystem on
-    // macOS, libc on Linux), so this test exercises the call on
-    // those targets. On Windows the per-target header doesn't bind
-    // `mprotect` at all -- the source has to use VirtualProtect
-    // directly on a page-aligned VirtualAlloc'd buffer to be
-    // meaningful, which the test source can't yet do (those
-    // bindings haven't been added). Skip the call on Windows and
-    // just round-trip the sentinel byte.
-    let src = r#"
-        int main() {
-            char *p;
-            p = malloc(16);
-            p[0] = 'M';
-#ifndef BADC_WINDOWS
-            int rc;
-            rc = mprotect(p, 16, 1);
-            if (rc < 0) return 1;
-#endif
-            return p[0];
-        }
-    "#;
-    assert_exit(src, "mprotect-thunk", &[], 'M' as i32);
-}
-
 // ---------------- fixture parity ----------------
 
 fn build_and_run_fixture(name: &str) -> RunOutcome {
@@ -349,7 +322,6 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("type_warning_int_to_ptr.c", 0),
     ("type_warning_silenced_by_cast.c", 0),
     ("type_warning_arity.c", 0),
-    ("mprotect_allows_read.c", 'X' as i32),
 ];
 
 #[test]

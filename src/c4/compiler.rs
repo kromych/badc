@@ -193,7 +193,7 @@ impl Compiler {
         // `compile()` runs -- this keeps the construction API
         // infallible so the `Compiler::new(src).compile()` shape
         // every existing caller uses keeps working.
-        let mut pp = Preprocessor::new(target.id_str(), env!("CARGO_PKG_VERSION"));
+        let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
         let mut full_source = String::with_capacity(source.len() + 1024);
         full_source.push_str(target_header(target));
         full_source.push('\n');

@@ -15,9 +15,9 @@
 // `#define int long long` hack is unnecessary (and breaks our
 // preprocessor, which actually respects the substitution and would
 // rewrite every `int` to a token sequence c4's parser can't handle).
-// Guard it on `BADC_VERSION` so the file still self-hosts under
+// Guard it on `__BADC_VERSION__` so the file still self-hosts under
 // vanilla c4 / GCC where the `#`-directive is silently skipped.
-#ifndef BADC_VERSION
+#ifndef __BADC_VERSION__
 #define int long long
 #endif
 

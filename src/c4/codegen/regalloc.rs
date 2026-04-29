@@ -187,7 +187,6 @@ fn is_call_op(op: Op) -> bool {
             | Mset
             | Mcmp
             | Mcpy
-            | Mpro
             | Exit
             | Write
             | Genv

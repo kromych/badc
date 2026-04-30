@@ -125,17 +125,70 @@ impl Lexer {
                     let mut val = self.src[self.pos] as i64;
                     self.pos += 1;
                     if val == '\\' as i64 {
-                        val = self.src[self.pos] as i64;
+                        let esc = self.src[self.pos];
                         self.pos += 1;
-                        match val as u8 {
-                            b'n'  => val = '\n' as i64,
-                            b'r'  => val = '\r' as i64,
-                            b't'  => val = '\t' as i64,
-                            b'0'  => val = 0,
-                            b'\\' => val = '\\' as i64,
-                            b'\'' => val = '\'' as i64,
-                            b'"'  => val = '"' as i64,
-                            _ => {} // unknown escape -- pass through
+                        match esc {
+                            b'a'  => val = 0x07,
+                            b'b'  => val = 0x08,
+                            b't'  => val = 0x09,
+                            b'n'  => val = 0x0A,
+                            b'v'  => val = 0x0B,
+                            b'f'  => val = 0x0C,
+                            b'r'  => val = 0x0D,
+                            b'\\' => val = b'\\' as i64,
+                            b'\'' => val = b'\'' as i64,
+                            b'"'  => val = b'"' as i64,
+                            b'?'  => val = b'?' as i64,
+                            // \xHH -- hex escape, 1+ hex digits, the
+                            // C spec is greedy ("as many hex digits as
+                            // make sense") but only the low byte
+                            // matters for c4's char/string streams.
+                            b'x' => {
+                                let mut acc: i64 = 0;
+                                let mut count = 0;
+                                while self.pos < self.src.len() {
+                                    let h = self.src[self.pos];
+                                    let d = match h {
+                                        b'0'..=b'9' => (h - b'0') as i64,
+                                        b'a'..=b'f' => 10 + (h - b'a') as i64,
+                                        b'A'..=b'F' => 10 + (h - b'A') as i64,
+                                        _ => break,
+                                    };
+                                    acc = (acc << 4) | d;
+                                    self.pos += 1;
+                                    count += 1;
+                                }
+                                if count == 0 {
+                                    return Err(C4Error::Compile(format!(
+                                        "{}: \\x escape needs at least one hex digit",
+                                        self.line
+                                    )));
+                                }
+                                val = acc;
+                            }
+                            // \NNN -- octal escape, 1..3 digits.
+                            // Includes plain `\0` which is just the
+                            // 1-digit case.
+                            b'0'..=b'7' => {
+                                let mut acc: i64 = (esc - b'0') as i64;
+                                let mut count = 1;
+                                while count < 3 && self.pos < self.src.len() {
+                                    let o = self.src[self.pos];
+                                    if !(b'0'..=b'7').contains(&o) {
+                                        break;
+                                    }
+                                    acc = (acc << 3) | (o - b'0') as i64;
+                                    self.pos += 1;
+                                    count += 1;
+                                }
+                                val = acc;
+                            }
+                            _ => {
+                                // Unknown escape -- C says undefined, GCC
+                                // warns. We pass the literal char through
+                                // so legacy fixtures don't break.
+                                val = esc as i64;
+                            }
                         }
                     }
                     if c == '"' {
@@ -443,4 +496,75 @@ pub(crate) fn init_symbols(symbols: &mut Vec<Symbol>, dylibs: &[super::preproces
 
     // Ensure main is registered so the compiler's later lookup sees it.
     let _ = find_symbol(symbols, "main").unwrap();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Lex a single source-text string through `Lexer::next` and
+    /// return the bytes the lexer pushed into `data`. Used to pin
+    /// the escape-sequence behaviour of string literals.
+    fn lex_string_literal(src: &str) -> Vec<u8> {
+        let mut lex = Lexer::new(src.to_string());
+        let mut symbols: Vec<Symbol> = Vec::new();
+        let mut data: Vec<u8> = Vec::new();
+        lex.next(&mut symbols, &mut data).unwrap();
+        assert_eq!(lex.tk, '"' as i64, "expected a string token, got {}", lex.tk);
+        data
+    }
+
+    fn lex_char_literal(src: &str) -> i64 {
+        let mut lex = Lexer::new(src.to_string());
+        let mut symbols: Vec<Symbol> = Vec::new();
+        let mut data: Vec<u8> = Vec::new();
+        lex.next(&mut symbols, &mut data).unwrap();
+        assert_eq!(lex.tk, Token::Num as i64);
+        lex.ival
+    }
+
+    #[test]
+    fn simple_escapes_decode_to_their_byte() {
+        assert_eq!(lex_string_literal(r#""\n""#), vec![b'\n']);
+        assert_eq!(lex_string_literal(r#""\r""#), vec![b'\r']);
+        assert_eq!(lex_string_literal(r#""\t""#), vec![b'\t']);
+        assert_eq!(lex_string_literal(r#""\v""#), vec![0x0B]);
+        assert_eq!(lex_string_literal(r#""\f""#), vec![0x0C]);
+        assert_eq!(lex_string_literal(r#""\a""#), vec![0x07]);
+        assert_eq!(lex_string_literal(r#""\b""#), vec![0x08]);
+        assert_eq!(lex_string_literal(r#""\\""#), vec![b'\\']);
+        assert_eq!(lex_string_literal(r#""\"""#), vec![b'"']);
+        assert_eq!(lex_string_literal(r#""\?""#), vec![b'?']);
+    }
+
+    #[test]
+    fn hex_escape_takes_one_or_two_digits() {
+        assert_eq!(lex_string_literal(r#""\x41""#), vec![0x41]); // 'A'
+        assert_eq!(lex_string_literal(r#""\x1F""#), vec![0x1F]);
+        // No-trailing-digit cutoff -- `g` is not hex.
+        assert_eq!(lex_string_literal(r#""\x4g""#), vec![0x04, b'g']);
+    }
+
+    #[test]
+    fn octal_escape_takes_up_to_three_digits() {
+        assert_eq!(lex_string_literal(r#""\0""#), vec![0]);
+        assert_eq!(lex_string_literal(r#""\012""#), vec![0o12]);   // == \n
+        assert_eq!(lex_string_literal(r#""\101""#), vec![0o101]);  // 'A'
+        // Octal stops at the first non-octal digit.
+        assert_eq!(lex_string_literal(r#""\18""#), vec![0o1, b'8']);
+    }
+
+    #[test]
+    fn char_literal_uses_the_same_escape_path() {
+        assert_eq!(lex_char_literal(r#"'\n'"#), b'\n' as i64);
+        assert_eq!(lex_char_literal(r#"'\x7f'"#), 0x7F);
+        assert_eq!(lex_char_literal(r#"'\0'"#), 0);
+    }
+
+    #[test]
+    fn unknown_escape_passes_through_the_letter() {
+        // Matches GCC's implementation-defined behaviour for unknown
+        // escapes: emit the literal char.
+        assert_eq!(lex_string_literal(r#""\q""#), vec![b'q']);
+    }
 }

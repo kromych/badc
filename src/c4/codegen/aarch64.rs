@@ -932,6 +932,7 @@ pub(super) fn lower(
         // both the lowering and the writer. Default-empty here keeps
         // the per-arch lowering oblivious to the resolver.
         imports: super::ResolvedImports::default(),
+        abi: super::Abi::default(),
     })
 }
 

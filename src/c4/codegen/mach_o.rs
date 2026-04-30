@@ -1301,6 +1301,7 @@ mod tests {
                     path: "/usr/lib/libSystem.B.dylib".into(),
                 }],
             },
+            abi: super::super::Target::MacOSAarch64.abi(),
         }
     }
 

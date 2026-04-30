@@ -710,13 +710,20 @@ pub(super) const START_STUB_LEN: u64 = 23;
 /// Emit the `_start` prologue. Returns the byte offset (within the
 /// emitted code blob) of the `call qword [rip+...]` placeholder for
 /// libc `exit` -- the writer registers a GotFixup against it.
-pub(super) fn emit_start_stub(code: &mut Vec<u8>, main_offset_in_code: u64) -> usize {
+pub(super) fn emit_start_stub(code: &mut Vec<u8>, abi: Abi, main_offset_in_code: u64) -> usize {
     let stub_start = code.len();
 
-    // mov rdi, [rsp]            -- argc into 1st arg register
-    emit_mov_r_mem(code, Reg::RDI, Reg::RSP, 0);
-    // lea rsi, [rsp + 8]        -- argv into 2nd arg register
-    emit_lea_r_mem(code, Reg::RSI, Reg::RSP, 8);
+    // argc / argv go in the first two of the ABI's
+    // int-arg-passing registers. SysV picks rdi, rsi here; a
+    // hypothetical Linux x86_64 ABI variant with a different
+    // arg register would only need to flip `Target::abi`.
+    let argc_reg = Reg(abi.int_arg_regs[0]);
+    let argv_reg = Reg(abi.int_arg_regs[1]);
+    // mov <argc>, [rsp]         -- argc lives at the kernel-pushed
+    //                              stack top.
+    emit_mov_r_mem(code, argc_reg, Reg::RSP, 0);
+    // lea <argv>, [rsp + 8]     -- argv array starts one slot up.
+    emit_lea_r_mem(code, argv_reg, Reg::RSP, 8);
 
     // call main. Target byte offset (within the code blob) is
     // START_STUB_LEN + main_offset_in_code; the rel32 for `call` is
@@ -727,9 +734,9 @@ pub(super) fn emit_start_stub(code: &mut Vec<u8>, main_offset_in_code: u64) -> u
     let rel32 = (main_byte - after_call) as i32;
     emit_call_rel32(code, rel32);
 
-    // mov rdi, rax              -- pass main's return value into
-    //                              libc `exit`'s first arg.
-    emit_mov_rr(code, Reg::RDI, Reg::RAX);
+    // Move main's return value into the ABI's first int-arg
+    // register (= libc `exit`'s 1st parameter).
+    emit_mov_rr(code, argc_reg, Reg::RAX);
 
     // call qword [rip + disp32] -- placeholder, writer patches the
     // disp32 to point at the libc `exit` GOT slot.
@@ -996,6 +1003,7 @@ pub(super) fn lower(
         // Set by `lower_for` after this returns; see the matching
         // comment on the aarch64 lowering's `Build` construction.
         imports: super::ResolvedImports::default(),
+        abi: super::Abi::default(),
     })
 }
 
@@ -2001,7 +2009,7 @@ mod tests {
         //   mov rdi, rax                ; pass to libc exit
         //   call qword [rip + disp32]   ; libc exit slot
         let mut buf = Vec::new();
-        let exit_off = emit_start_stub(&mut buf, 0);
+        let exit_off = emit_start_stub(&mut buf, super::super::Target::LinuxX64.abi(), 0);
         assert_eq!(buf.len() as u64, START_STUB_LEN);
         // mov rdi, [rsp]              -> 48 8B 3C 24
         assert_eq!(&buf[0..4], &[0x48, 0x8B, 0x3C, 0x24]);

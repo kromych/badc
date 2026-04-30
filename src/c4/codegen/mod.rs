@@ -454,6 +454,12 @@ pub(crate) struct Build {
     /// writer to populate the IAT / dynsym / __got tables.
     /// `GotFixup::import_index` is an index into `imports.imports`.
     pub imports: ResolvedImports,
+    /// ABI in effect for this build. Set by `lower_for` from the
+    /// target. The wire-format writers read it for entry-stub
+    /// register choices (which int-arg register holds argc /
+    /// argv at `_start`, etc.) so the choice lives in one place
+    /// rather than being re-derived from `Machine` per writer.
+    pub abi: Abi,
 }
 
 /// Refer-by-index relocation between a code site and a `__got` slot.
@@ -594,6 +600,7 @@ fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Resul
         Target::LinuxX64 | Target::WindowsX64 => x86_64::lower(program, target, options, &imports)?,
     };
     build.imports = imports;
+    build.abi = target.abi();
     Ok(build)
 }
 
@@ -693,6 +700,18 @@ pub(crate) struct Abi {
     /// `xor eax, eax` before each variadic call. Win64 has no
     /// such requirement.
     pub variadic_zero_xmm_count: bool,
+}
+
+impl Default for Abi {
+    /// Picks `MacOSAarch64`'s row. Only the
+    /// `#[derive(Default)]` on `Build` reaches this path; real
+    /// call sites resolve through `Target::abi`. The choice of
+    /// macOS-aarch64 mirrors `Target::default_target` on the
+    /// macOS host (and is harmless on others, since
+    /// `Build::default` outputs are never used by writers).
+    fn default() -> Self {
+        Target::MacOSAarch64.abi()
+    }
 }
 
 impl Target {

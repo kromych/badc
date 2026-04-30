@@ -204,6 +204,7 @@ mod jit_impl {
             }
         };
         build.imports = imports;
+        build.abi = target.abi();
         Ok(build)
     }
 

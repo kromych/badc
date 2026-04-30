@@ -49,7 +49,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use super::super::error::C4Error;
-use super::{Build, Machine};
+use super::{Abi, Build, Machine};
 use super::{aarch64, x86_64};
 
 // ------------------------------------------------------------------
@@ -287,21 +287,33 @@ fn start_stub_len(machine: Machine) -> u64 {
 /// can register a `GotFixup` for it. Both arches now route exit
 /// through libc -- x86_64 used to do a raw intrinsic (M3.1) but
 /// switched in M3.4 so glibc flushes stdio.
-fn emit_start_stub(machine: Machine, code: &mut Vec<u8>, main_offset_in_code: u64) -> usize {
+fn emit_start_stub(
+    machine: Machine,
+    abi: Abi,
+    code: &mut Vec<u8>,
+    main_offset_in_code: u64,
+) -> usize {
     match machine {
-        Machine::Aarch64 => emit_start_stub_aarch64(code, main_offset_in_code),
-        Machine::X86_64 => x86_64::emit_start_stub(code, main_offset_in_code),
+        Machine::Aarch64 => emit_start_stub_aarch64(abi, code, main_offset_in_code),
+        Machine::X86_64 => x86_64::emit_start_stub(code, abi, main_offset_in_code),
     }
 }
 
 /// AArch64 `_start`: ldr argc; add argv; bl main; adrp/ldr/blr libc
 /// exit.
-fn emit_start_stub_aarch64(code: &mut Vec<u8>, main_offset_in_code: u64) -> usize {
+fn emit_start_stub_aarch64(abi: Abi, code: &mut Vec<u8>, main_offset_in_code: u64) -> usize {
     use aarch64::Reg;
     let stub_len = 6 * 4;
 
-    aarch64::emit(code, aarch64::enc_ldr_imm(Reg::X0, Reg::SP, 0));
-    aarch64::emit(code, aarch64::enc_add_imm(Reg::X1, Reg::SP, 8));
+    // argc / argv land in the first two of the ABI's
+    // int-arg-passing registers. AAPCS64's order is x0..x7 so
+    // these come out as x0, x1; pulling from `abi.int_arg_regs`
+    // keeps the stub honest if a future arm64 ABI variant
+    // shuffles the bank.
+    let argc_reg = Reg(abi.int_arg_regs[0]);
+    let argv_reg = Reg(abi.int_arg_regs[1]);
+    aarch64::emit(code, aarch64::enc_ldr_imm(argc_reg, Reg::SP, 0));
+    aarch64::emit(code, aarch64::enc_add_imm(argv_reg, Reg::SP, 8));
 
     let bl_pc = 8i64;
     let main_pc = stub_len as i64 + main_offset_in_code as i64;
@@ -772,7 +784,8 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
     // fixup offsets at write time). The stub may or may not register
     // a libc-exit GOT fixup depending on the machine.
     let mut code: Vec<u8> = Vec::with_capacity(stub_len as usize + build.text.len());
-    let exit_adrp_offset = emit_start_stub(machine, &mut code, build.entry_offset as u64);
+    let exit_adrp_offset =
+        emit_start_stub(machine, build.abi, &mut code, build.entry_offset as u64);
     code.extend_from_slice(&build.text);
     let code_size = code.len() as u64;
 
@@ -1109,6 +1122,7 @@ mod tests {
                     path: "libc.so.6".into(),
                 }],
             },
+            abi: super::super::Target::LinuxAarch64.abi(),
         }
     }
 

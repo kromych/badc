@@ -91,18 +91,46 @@ impl Target {
     }
 
     /// Default target -- used when callers (mostly tests) construct a
-    /// [`Compiler`] without an explicit `--target` choice. Mirrors
-    /// the `Target::parse(None)` behaviour so the two stay in sync.
+    /// [`Compiler`] without an explicit `--target` choice. Picks the
+    /// target matching the host badc is running on; the assumption is
+    /// that someone running `badc foo.c --emit-native` without naming
+    /// a target wants a binary that will run on this machine. Cross-
+    /// compilation always goes through `--target=...` (or
+    /// `Compiler::with_target`).
+    ///
+    /// On a host that isn't one of badc's supported targets, falls
+    /// back to `MacOSAarch64`. That fallback is mostly there to keep
+    /// `cargo build` happy on, say, FreeBSD; the resulting binary
+    /// will fail at exec time, but the compiler still builds.
     pub fn default_target() -> Self {
-        Target::MacOSAarch64
+        Target::host()
     }
 
-    /// Parse the value passed to `--emit-native` (or use the default
-    /// for the single supported target). Reserved for when the flag
-    /// grows a value form like `--emit-native=linux-x64`.
+    /// Target matching the host this build of badc is running on.
+    /// The match is resolved at compile time via `cfg!`, so each
+    /// build only ever returns one value.
+    pub fn host() -> Self {
+        if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+            Target::MacOSAarch64
+        } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
+            Target::LinuxAarch64
+        } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+            Target::LinuxX64
+        } else if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
+            Target::WindowsX64
+        } else if cfg!(all(target_os = "windows", target_arch = "aarch64")) {
+            Target::WindowsAarch64
+        } else {
+            Target::MacOSAarch64
+        }
+    }
+
+    /// Parse the value passed to `--target=...` (or pick the host
+    /// default when the flag is absent).
     pub fn parse(spec: Option<&str>) -> Result<Self, C4Error> {
         match spec {
-            None | Some("macos-aarch64") | Some("aarch64-apple-darwin") => Ok(Target::MacOSAarch64),
+            None => Ok(Target::host()),
+            Some("macos-aarch64") | Some("aarch64-apple-darwin") => Ok(Target::MacOSAarch64),
             Some("linux-aarch64") | Some("aarch64-unknown-linux-gnu") => Ok(Target::LinuxAarch64),
             Some("linux-x64") | Some("linux-x86-64") | Some("x86_64-unknown-linux-gnu") => {
                 Ok(Target::LinuxX64)

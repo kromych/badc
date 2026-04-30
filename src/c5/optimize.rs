@@ -28,7 +28,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use super::CODE_BASE;
-use super::error::C4Error;
+use super::error::C5Error;
 use super::op::Op;
 use super::program::Program;
 
@@ -137,7 +137,7 @@ impl Insn {
 
 /// Public entry point: take a compiled `Program` and return an
 /// optimized one. Warnings are preserved verbatim.
-pub fn optimize(program: Program) -> Result<Program, C4Error> {
+pub fn optimize(program: Program) -> Result<Program, C5Error> {
     let Program {
         text,
         data,
@@ -186,7 +186,7 @@ pub fn optimize(program: Program) -> Result<Program, C4Error> {
 /// segment offset; we promote those to `Insn::ImmData` so peephole
 /// passes leave them alone (folding a pointer with an int would be
 /// wrong) and the encoder can re-emit a fresh position list.
-fn decode(text: &[i64], data_imm_positions: &[usize]) -> Result<Vec<Insn>, C4Error> {
+fn decode(text: &[i64], data_imm_positions: &[usize]) -> Result<Vec<Insn>, C5Error> {
     let is_data_imm: alloc::collections::BTreeSet<usize> =
         data_imm_positions.iter().copied().collect();
     // Pass A: parse each instruction, recording where in the text each
@@ -198,12 +198,12 @@ fn decode(text: &[i64], data_imm_positions: &[usize]) -> Result<Vec<Insn>, C4Err
     let mut pc = 0usize;
     while pc < text.len() {
         let op = Op::from_i64(text[pc]).ok_or_else(|| {
-            C4Error::Compile(format!("optimizer: bad opcode at PC {pc}: {}", text[pc]))
+            C5Error::Compile(format!("optimizer: bad opcode at PC {pc}: {}", text[pc]))
         })?;
         pc_to_idx[pc] = insns.len();
         pc += 1;
         if op.operand_count() > 0 && pc >= text.len() {
-            return Err(C4Error::Compile(format!(
+            return Err(C5Error::Compile(format!(
                 "optimizer: truncated operand for {op:?} at end of text"
             )));
         }
@@ -262,7 +262,7 @@ fn decode(text: &[i64], data_imm_positions: &[usize]) -> Result<Vec<Insn>, C4Err
         match ins {
             Insn::Branch(_, target) => {
                 let idx = lookup_idx(&pc_to_idx, *target).ok_or_else(|| {
-                    C4Error::Compile(format!(
+                    C5Error::Compile(format!(
                         "optimizer: branch target {target} is not an instruction start"
                     ))
                 })?;
@@ -293,7 +293,7 @@ fn lookup_idx(pc_to_idx: &[usize], pc: usize) -> Option<usize> {
 /// Convert an old PC (into the original `text`) to its IR index by
 /// re-walking the IR. Only used once for `entry_pc` -- too rare to
 /// justify keeping the decode-time `pc_to_idx` table around.
-fn pc_to_index_in(insns: &[Insn], text: &[i64], target_pc: usize) -> Result<usize, C4Error> {
+fn pc_to_index_in(insns: &[Insn], text: &[i64], target_pc: usize) -> Result<usize, C5Error> {
     let mut pc = 0usize;
     for (i, ins) in insns.iter().enumerate() {
         if pc == target_pc {
@@ -305,7 +305,7 @@ fn pc_to_index_in(insns: &[Insn], text: &[i64], target_pc: usize) -> Result<usiz
         // Entry past end: empty-program edge case. Caller deals.
         return Ok(insns.len());
     }
-    Err(C4Error::Compile(format!(
+    Err(C5Error::Compile(format!(
         "optimizer: entry_pc {target_pc} is not an instruction start"
     )))
 }

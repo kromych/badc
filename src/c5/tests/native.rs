@@ -218,7 +218,7 @@ fn recursion_factorial() {
 
 #[test]
 fn exit_with_value() {
-    // exit(N) compiles to the c4 `Op::Exit` op, which our codegen
+    // exit(N) compiles to the c5 `Op::Exit` op, which our codegen
     // routes through a libc call to _exit.
     assert_eq!(
         build_and_run("int main() { exit(7); return 0; }", "exit7"),

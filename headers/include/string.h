@@ -5,7 +5,7 @@
 //   * Linux: libc.so.6.
 //   * Windows: msvcrt.dll.
 //
-// `c4_name` (the LHS of each `#pragma binding`) is always the
+// `local_name` (the LHS of each `#pragma binding`) is always the
 // portable C name; `real_symbol` (the RHS) is whatever the target
 // dylib actually exports. Source code keeps using the portable
 // spelling regardless of platform.

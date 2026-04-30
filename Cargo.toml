@@ -14,9 +14,9 @@ path = "src/main.rs"
 [features]
 default = ["std"]
 # Enables the StdHost adapter (file IO, env vars, real stdin/stdout) and
-# the std::error::Error impl on C4Error (the c4-dialect error type -- name
-# kept to acknowledge the dialect lineage). Without it, the library builds
-# under no_std + alloc and callers must supply their own Host impl.
+# the std::error::Error impl on C5Error (the c5-dialect error type).
+# Without it, the library builds under no_std + alloc and callers must
+# supply their own Host impl.
 std = []
 
 [dependencies]

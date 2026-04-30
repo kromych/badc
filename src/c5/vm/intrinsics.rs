@@ -20,7 +20,7 @@ use alloc::string::ToString;
 use alloc::vec;
 
 use super::super::host::Overwrite;
-use super::{AccessKind, C4Error, Host, Op, Vm};
+use super::{AccessKind, C5Error, Host, Op, Vm};
 
 impl<H: Host> Vm<H> {
     /// Load an `i64` size argument from the stack and validate it as a
@@ -30,10 +30,10 @@ impl<H: Host> Vm<H> {
     /// or sends `memset` looping until it walks off the heap. The
     /// `name` is included in the error so the diagnostic points at the
     /// offending intrinsic rather than the underlying read/store error.
-    pub(super) fn read_size(&self, addr: usize, name: &str) -> Result<usize, C4Error> {
+    pub(super) fn read_size(&self, addr: usize, name: &str) -> Result<usize, C5Error> {
         let n = self.load_i64(addr)?;
         if n < 0 {
-            return Err(C4Error::Runtime(format!("{name}: negative size {n}")));
+            return Err(C5Error::Runtime(format!("{name}: negative size {n}")));
         }
         Ok(n as usize)
     }
@@ -41,7 +41,7 @@ impl<H: Host> Vm<H> {
     /// `int open(const char *path, int flags)` -- opens for reading
     /// regardless of `flags` (the host trait doesn't model write modes).
     /// Returns a fresh non-negative fd, or -1 on error.
-    pub(super) fn intrinsic_open(&mut self, sp: usize) -> Result<i64, C4Error> {
+    pub(super) fn intrinsic_open(&mut self, sp: usize) -> Result<i64, C5Error> {
         let name_addr = self.load_i64(sp + 8)? as usize;
         let _flags = self.load_i64(sp)?;
         let name = self.read_cstring(name_addr)?;
@@ -50,7 +50,7 @@ impl<H: Host> Vm<H> {
 
     /// `int read(int fd, void *buf, int count)` -- reads up to `count`
     /// bytes through the host. fd 0 is conventionally stdin.
-    pub(super) fn intrinsic_read(&mut self, sp: usize) -> Result<i64, C4Error> {
+    pub(super) fn intrinsic_read(&mut self, sp: usize) -> Result<i64, C5Error> {
         let fd = self.load_i64(sp + 16)?;
         let buf_addr = self.load_i64(sp + 8)? as usize;
         let size = self.read_size(sp, "read")?;
@@ -66,7 +66,7 @@ impl<H: Host> Vm<H> {
     }
 
     /// `int close(int fd)` -- returns 0 on success, -1 if `fd` wasn't open.
-    pub(super) fn intrinsic_close(&mut self, sp: usize) -> Result<i64, C4Error> {
+    pub(super) fn intrinsic_close(&mut self, sp: usize) -> Result<i64, C5Error> {
         let fd = self.load_i64(sp)?;
         Ok(self.host.close(fd))
     }
@@ -74,7 +74,7 @@ impl<H: Host> Vm<H> {
     /// `void *malloc(size_t size)` -- bump-allocates from the data
     /// segment. Always rounds up to 8 bytes. Reserves the NULL page on
     /// the first call so the returned pointer is never 0.
-    pub(super) fn intrinsic_malloc(&mut self, sp: usize) -> Result<i64, C4Error> {
+    pub(super) fn intrinsic_malloc(&mut self, sp: usize) -> Result<i64, C5Error> {
         let size = self.read_size(sp, "malloc")?;
         let aligned_size = (size + 7) & !7;
         if self.data.is_empty() {
@@ -90,19 +90,19 @@ impl<H: Host> Vm<H> {
     /// only grows). Under `--track-pointers`, marks the allocation
     /// freed so subsequent access errors with `use-after-free`. Errors
     /// on double-free or an unknown pointer.
-    pub(super) fn intrinsic_free(&mut self, sp: usize) -> Result<i64, C4Error> {
+    pub(super) fn intrinsic_free(&mut self, sp: usize) -> Result<i64, C5Error> {
         let ptr = self.load_i64(sp)? as usize;
         if self.track_pointers {
             match self.allocations.iter_mut().find(|a| a.start == ptr) {
                 Some(alloc) if alloc.freed => {
-                    return Err(C4Error::Runtime(format!(
+                    return Err(C5Error::Runtime(format!(
                         "double free: allocation #{} at 0x{ptr:x} freed twice",
                         alloc.id
                     )));
                 }
                 Some(alloc) => alloc.freed = true,
                 None => {
-                    return Err(C4Error::Runtime(format!(
+                    return Err(C5Error::Runtime(format!(
                         "free of unknown pointer 0x{ptr:x} (not returned by malloc)"
                     )));
                 }
@@ -113,7 +113,7 @@ impl<H: Host> Vm<H> {
 
     /// `void *memset(void *dst, int val, size_t n)` -- block-checks the
     /// destination range up front, then writes byte-by-byte.
-    pub(super) fn intrinsic_memset(&mut self, sp: usize) -> Result<i64, C4Error> {
+    pub(super) fn intrinsic_memset(&mut self, sp: usize) -> Result<i64, C5Error> {
         let dst_addr = self.load_i64(sp + 16)? as usize;
         let val = self.load_i64(sp + 8)? as u8;
         let size = self.read_size(sp, "memset")?;
@@ -126,7 +126,7 @@ impl<H: Host> Vm<H> {
 
     /// `int memcmp(const void *s1, const void *s2, size_t n)` -- block-
     /// checks both reads, then compares byte-by-byte.
-    pub(super) fn intrinsic_memcmp(&mut self, sp: usize) -> Result<i64, C4Error> {
+    pub(super) fn intrinsic_memcmp(&mut self, sp: usize) -> Result<i64, C5Error> {
         let s1_addr = self.load_i64(sp + 16)? as usize;
         let s2_addr = self.load_i64(sp + 8)? as usize;
         let size = self.read_size(sp, "memcmp")?;
@@ -146,7 +146,7 @@ impl<H: Host> Vm<H> {
     /// checks src (read) and dst (write), copies front-to-back. Standard
     /// memcpy is undefined for overlapping regions; we don't diagnose
     /// overlap.
-    pub(super) fn intrinsic_memcpy(&mut self, sp: usize) -> Result<i64, C4Error> {
+    pub(super) fn intrinsic_memcpy(&mut self, sp: usize) -> Result<i64, C5Error> {
         let dst_addr = self.load_i64(sp + 16)? as usize;
         let src_addr = self.load_i64(sp + 8)? as usize;
         let size = self.read_size(sp, "memcpy")?;
@@ -163,7 +163,7 @@ impl<H: Host> Vm<H> {
     /// `%s`). Reads the arg count by peeking at the next instruction
     /// (it'll be `Op::Adj N` if main called us with N args). Always
     /// returns 0; printed bytes go to `Host::write(1, ...)` (stdout).
-    pub(super) fn intrinsic_printf(&mut self, sp: usize, pc: usize) -> Result<i64, C4Error> {
+    pub(super) fn intrinsic_printf(&mut self, sp: usize, pc: usize) -> Result<i64, C5Error> {
         // The caller emits a trailing `Op::Adj N` after every printf so
         // we can recover N (the c4 calling convention pushes args but
         // doesn't tell the callee how many). If that's missing, do
@@ -208,7 +208,7 @@ impl<H: Host> Vm<H> {
 
     /// `int write(int fd, const void *buf, size_t n)` -- copies `n`
     /// bytes from the data segment and hands them to the host.
-    pub(super) fn intrinsic_write(&mut self, sp: usize) -> Result<i64, C4Error> {
+    pub(super) fn intrinsic_write(&mut self, sp: usize) -> Result<i64, C5Error> {
         let fd = self.load_i64(sp + 16)?;
         let buf_addr = self.load_i64(sp + 8)? as usize;
         let size = self.read_size(sp, "write")?;
@@ -223,7 +223,7 @@ impl<H: Host> Vm<H> {
     /// host. On hit, the value is copied into the data segment (and
     /// recorded as an allocation so `--track-pointers` allows reads
     /// through the returned pointer); 0 on miss.
-    pub(super) fn intrinsic_getenv(&mut self, sp: usize) -> Result<i64, C4Error> {
+    pub(super) fn intrinsic_getenv(&mut self, sp: usize) -> Result<i64, C5Error> {
         let name_addr = self.load_i64(sp)? as usize;
         let name = self.read_cstring(name_addr)?;
         Ok(match self.host.getenv(&name) {
@@ -236,7 +236,7 @@ impl<H: Host> Vm<H> {
     /// the C-side `int` is converted to [`Overwrite`] at the trait
     /// boundary so host impls don't have to remember "non-zero means
     /// replace" themselves.
-    pub(super) fn intrinsic_setenv(&mut self, sp: usize) -> Result<i64, C4Error> {
+    pub(super) fn intrinsic_setenv(&mut self, sp: usize) -> Result<i64, C5Error> {
         let name_addr = self.load_i64(sp + 16)? as usize;
         let val_addr = self.load_i64(sp + 8)? as usize;
         let overwrite = if self.load_i64(sp)? != 0 {
@@ -254,7 +254,7 @@ impl<H: Host> Vm<H> {
     /// to the host's libdl bridge. A NULL filename (c4 pointer 0)
     /// is mapped to `Option::None` so [`Host::dlopen`] can produce
     /// `dlopen(NULL, ...)` (the global symbol table).
-    pub(super) fn intrinsic_dlopen(&mut self, sp: usize) -> Result<i64, C4Error> {
+    pub(super) fn intrinsic_dlopen(&mut self, sp: usize) -> Result<i64, C5Error> {
         let path_addr = self.load_i64(sp + 8)? as usize;
         let flags = self.load_i64(sp)?;
         let path = if path_addr == 0 {
@@ -271,7 +271,7 @@ impl<H: Host> Vm<H> {
     /// VM treats it as an opaque integer (calling through it via
     /// `Op::Jsri` is rejected because `decode_pc` requires a
     /// CODE_BASE-biased c4 PC, not a libc address).
-    pub(super) fn intrinsic_dlsym(&mut self, sp: usize) -> Result<i64, C4Error> {
+    pub(super) fn intrinsic_dlsym(&mut self, sp: usize) -> Result<i64, C5Error> {
         let handle = self.load_i64(sp + 8)?;
         let name_addr = self.load_i64(sp)? as usize;
         let name = self.read_cstring(name_addr)?;
@@ -279,17 +279,17 @@ impl<H: Host> Vm<H> {
     }
 
     /// `int dlclose(void *handle)` -- pass through to the host.
-    pub(super) fn intrinsic_dlclose(&mut self, sp: usize) -> Result<i64, C4Error> {
+    pub(super) fn intrinsic_dlclose(&mut self, sp: usize) -> Result<i64, C5Error> {
         let handle = self.load_i64(sp)?;
         Ok(self.host.dlclose(handle))
     }
 
     /// `char *dlerror(void)` -- the most recent loader error
-    /// message, copied into the data segment so the c4-side pointer
+    /// message, copied into the data segment so the c5-side pointer
     /// stays valid after subsequent dl-family calls (the libc
     /// version's static buffer would otherwise be clobbered). 0 if
     /// no error pending.
-    pub(super) fn intrinsic_dlerror(&mut self) -> Result<i64, C4Error> {
+    pub(super) fn intrinsic_dlerror(&mut self) -> Result<i64, C5Error> {
         Ok(match self.host.dlerror() {
             Some(msg) => self.install_cstring(msg.as_bytes()) as i64,
             None => 0,

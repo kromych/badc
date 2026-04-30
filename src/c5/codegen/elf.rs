@@ -48,7 +48,7 @@ use alloc::string::ToString;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use super::super::error::C4Error;
+use super::super::error::C5Error;
 use super::{Abi, Build, Machine};
 use super::{aarch64, x86_64};
 
@@ -558,7 +558,7 @@ fn patch_adrp_ldr(
     adrp_offset_in_code: u64,
     target_vmaddr: u64,
     label: &str,
-) -> Result<(), C4Error> {
+) -> Result<(), C5Error> {
     let adrp_file_off = (code_base_in_file + adrp_offset_in_code) as usize;
     let ldr_file_off = adrp_file_off + 4;
     let adrp_vmaddr = code_vmaddr_base + adrp_offset_in_code;
@@ -567,14 +567,14 @@ fn patch_adrp_ldr(
     let target_page = target_vmaddr & !0xFFF;
     let page_diff = target_page as i64 - adrp_page as i64;
     if page_diff & 0xFFF != 0 {
-        return Err(C4Error::Compile(format!(
+        return Err(C5Error::Compile(format!(
             "ELF: {label} page diff {page_diff} not 4 KiB aligned"
         )));
     }
     let imm21 = (page_diff >> 12) as i32;
     let in_page = (target_vmaddr & 0xFFF) as u32;
     if !in_page.is_multiple_of(8) {
-        return Err(C4Error::Compile(format!(
+        return Err(C5Error::Compile(format!(
             "ELF: {label} slot offset {in_page:#x} not 8-aligned"
         )));
     }
@@ -599,7 +599,7 @@ fn patch_addr_load(
     instr_offset_in_code: u64,
     target_vmaddr: u64,
     label: &str,
-) -> Result<(), C4Error> {
+) -> Result<(), C5Error> {
     match machine {
         Machine::Aarch64 => patch_adrp_add(
             out,
@@ -632,7 +632,7 @@ fn patch_got_call(
     instr_offset_in_code: u64,
     target_vmaddr: u64,
     label: &str,
-) -> Result<(), C4Error> {
+) -> Result<(), C5Error> {
     match machine {
         Machine::Aarch64 => patch_adrp_ldr(
             out,
@@ -664,13 +664,13 @@ fn patch_call_qword_rip32(
     instr_offset_in_code: u64,
     target_vmaddr: u64,
     label: &str,
-) -> Result<(), C4Error> {
+) -> Result<(), C5Error> {
     let call_len = x86_64::CALL_QWORD_RIP32_LEN as u64;
     let instr_vmaddr = code_vmaddr_base + instr_offset_in_code;
     let after = instr_vmaddr + call_len;
     let delta = target_vmaddr as i64 - after as i64;
     if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
-        return Err(C4Error::Compile(format!(
+        return Err(C5Error::Compile(format!(
             "ELF: {label} disp {delta} doesn't fit in 32 bits"
         )));
     }
@@ -692,13 +692,13 @@ fn patch_lea_rip32(
     instr_offset_in_code: u64,
     target_vmaddr: u64,
     label: &str,
-) -> Result<(), C4Error> {
+) -> Result<(), C5Error> {
     let lea_len = x86_64::LEA_RIP32_LEN as u64;
     let instr_vmaddr = code_vmaddr_base + instr_offset_in_code;
     let after = instr_vmaddr + lea_len;
     let delta = target_vmaddr as i64 - after as i64;
     if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
-        return Err(C4Error::Compile(format!(
+        return Err(C5Error::Compile(format!(
             "ELF: {label} disp {delta} doesn't fit in 32 bits"
         )));
     }
@@ -720,7 +720,7 @@ fn patch_adrp_add(
     adrp_offset_in_code: u64,
     target_vmaddr: u64,
     label: &str,
-) -> Result<(), C4Error> {
+) -> Result<(), C5Error> {
     let adrp_file_off = (code_base_in_file + adrp_offset_in_code) as usize;
     let add_file_off = adrp_file_off + 4;
     let adrp_vmaddr = code_vmaddr_base + adrp_offset_in_code;
@@ -729,7 +729,7 @@ fn patch_adrp_add(
     let target_page = target_vmaddr & !0xFFF;
     let page_diff = target_page as i64 - adrp_page as i64;
     if page_diff & 0xFFF != 0 {
-        return Err(C4Error::Compile(format!(
+        return Err(C5Error::Compile(format!(
             "ELF: {label} page diff {page_diff} not 4 KiB aligned"
         )));
     }
@@ -747,7 +747,7 @@ fn patch_adrp_add(
 // Top-level writer.
 // ------------------------------------------------------------------
 
-pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error> {
+pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error> {
     let n_imports = build.imports.imports.len();
     let stub_len = start_stub_len(machine);
 
@@ -993,9 +993,9 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
         .imports
         .imports
         .iter()
-        .position(|i| i.c4_name == "exit")
+        .position(|i| i.local_name == "exit")
         .ok_or_else(|| {
-            C4Error::Compile(
+            C5Error::Compile(
                 "ELF writer: _start stub needs `exit` in the import set, but the program \
                  didn't reach for it (and we don't auto-add it). \
                  Did you `#include <stdlib.h>` and call `exit(...)` somewhere?"
@@ -1111,7 +1111,7 @@ mod tests {
             imports: ResolvedImports {
                 imports: vec![ResolvedImport {
                     binding_idx: 0,
-                    c4_name: "exit".into(),
+                    local_name: "exit".into(),
                     real_symbol: "exit".into(),
                     dylib_index: 0,
                     is_variadic: false,

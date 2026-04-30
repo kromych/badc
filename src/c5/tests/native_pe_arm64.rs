@@ -1,6 +1,6 @@
 //! End-to-end Windows/AArch64 PE tests.
 //!
-//! Compile a c4 program to a PE32+ binary with `Machine =
+//! Compile a c5 program to a PE32+ binary with `Machine =
 //! IMAGE_FILE_MACHINE_ARM64`, drop it in `tmp`, and execute it.
 //! Two host paths run the same surface:
 //!

@@ -5,9 +5,11 @@ in-process under a watchful VM, or lowers it to a real native
 binary that talks to whatever's already on the target system. It
 started as a Rust port of Robert Swierczek's
 [c4](https://github.com/rswier/c4) and grew from there -- structs,
-type warnings, an optimizer, an in-process JIT, a rudimentary
-preprocessor, per-target headers. The internal `c4` module name and
-`C4Error` type are kept as a nod to the original.
+type warnings, an optimizer, an in-process JIT, a real preprocessor
+with `#include` / `#define` / `#pragma binding`, per-target headers,
+native code emission for Mach-O / ELF / PE32+. Enough divergence
+from the original to call the dialect **c5**; the source tree
+spells that out as the `c5` module and `C5Error` type.
 
 The pitch in one sentence: write something that looks like a small
 C program, point `--emit-native` at it, and you get a Mach-O / ELF
@@ -43,22 +45,25 @@ A `.c` file may start with a shebang. With `badc` on `PATH`,
 
 ## What badc speaks
 
-The c4 core: `int`, `char`, pointers, arrays, `if` / `else` /
-`while` / `return`, enums, function calls, function pointers, the
-classic libc shapes (`printf`, `malloc`, `free`, `memset`,
-`memcmp`, `memcpy`, `open` / `read` / `write` / `close`, `exit`,
-`getenv` / `setenv`, `dlopen` / `dlsym` / `dlclose` / `dlerror`).
+The c5 core (inherited from c4): `int`, `char`, pointers, arrays,
+`if` / `else` / `while` / `return`, enums, function calls, function
+pointers, the classic libc shapes (`printf`, `malloc`, `free`,
+`memset`, `memcmp`, `memcpy`, `open` / `read` / `write` / `close`,
+`exit`, `getenv` / `setenv`, `dlopen` / `dlsym` / `dlclose` /
+`dlerror`).
 
-What badc adds on top: `do` / `for` / `switch` / `break` /
+What c5 adds on top: `do` / `for` / `switch` / `break` /
 `continue` / `goto`, block-scoped locals, bare function references
 (`fp = add;` instead of `fp = &add;`), `sizeof(<expr>)`, structs
 through pointers (`struct Foo *p`, `p->field`), variadic function
-declarations, and a small preprocessor: `#define`, `#ifdef` /
-`#ifndef`, `#if` / `#else` / `#endif` (with `==` / `!=` /
-`defined(...)`), `#pragma dylib(...)` / `#pragma binding(...)`.
+declarations, full C escape sequences (`\r\t\xHH\NNN`...), and a
+real preprocessor: `#define` / `#undef` / `#ifdef` / `#ifndef` /
+`#if` / `#else` / `#endif` (with `==` / `!=` / `defined(...)`),
+`#include` searching the embedded header set, `#pragma once`,
+`#pragma dylib(...)` / `#pragma binding(...)`.
 
 What it doesn't have: floats, struct values, unions. `void` is a
-synonym for `char`, following c4 itself. Type checking is lax --
+synonym for `char`, the way c4 had it. Type checking is lax --
 mismatched pointer / integer combos and arity errors print a
 warning to stderr and keep going. A C-style cast silences the
 warning.
@@ -119,7 +124,7 @@ the VM if you want those.
 
 Every `--emit-native` build auto-prepends `headers/badc-{target}.h`
 to the source before the lexer sees it. The header tells the
-preprocessor which dylibs the target offers and which c4-side names
+preprocessor which dylibs the target offers and which local names
 resolve to which exported symbols. A snippet:
 
     #pragma dylib(libsystem, "/usr/lib/libSystem.B.dylib")
@@ -142,9 +147,9 @@ forcing you to pull in everything they name.
 ### Reaching beyond the predefined set
 
 The compiler ships a fixed set of intrinsic ops it knows how to
-lower directly (`printf`, `malloc`, the rest of the c4 list). For
-anything else -- `strlen`, `qsort`, `fopen`, `socket`, the entire
-Win32 API, libobjc -- the door is `dlopen` / `dlsym`:
+lower directly (`printf`, `malloc`, the rest of the historical c4
+list). For anything else -- `strlen`, `qsort`, `fopen`, `socket`,
+the entire Win32 API, libobjc -- the door is `dlopen` / `dlsym`:
 
     int main() {
         int *h, *fn;
@@ -156,7 +161,7 @@ Win32 API, libobjc -- the door is `dlopen` / `dlsym`:
 `dlopen(NULL, RTLD_NOW)` returns the calling process's symbol
 scope -- libc on POSIX, the loaded set on Windows. Whatever you
 look up by name with `dlsym` comes back as a callable function
-pointer, and `Op::Jsri` (the indirect-call op) puts the c4 stack
+pointer, and `Op::Jsri` (the indirect-call op) puts the c5 stack
 args into the host ABI's argument registers before jumping.
 
 The same shape works for `atoi`, `strchr`, `strstr`, `getenv`,
@@ -213,7 +218,7 @@ against this region. macOS uses Apple's `MAP_JIT` + per-thread
 W^X toggle for the hardware-enforced W^X on Apple Silicon.
 
 `--dump-asm` produces a textual listing of the lowered code grouped
-by the c4 op that produced each region.
+by the c5 op that produced each region.
 
 ### Optimizations
 

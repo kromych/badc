@@ -114,7 +114,7 @@ fn set_executable(path: &Path) {
     std::fs::set_permissions(path, perms).unwrap();
 }
 
-// ---- Smoke tests -- the same shapes as src/c4/tests/native.rs but
+// ---- Smoke tests -- the same shapes as src/c5/tests/native.rs but
 //      driving the Linux ELF writer end-to-end. ----
 
 #[test]

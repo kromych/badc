@@ -1,7 +1,7 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use super::error::C4Error;
+use super::error::C5Error;
 use super::symbol::Symbol;
 use super::token::{Token, Ty};
 
@@ -40,7 +40,7 @@ impl Lexer {
 
     /// Advance to the next token. Identifiers are interned into `symbols`; string
     /// literals are appended to `data` and `ival` is set to their start address.
-    pub fn next(&mut self, symbols: &mut Vec<Symbol>, data: &mut Vec<u8>) -> Result<(), C4Error> {
+    pub fn next(&mut self, symbols: &mut Vec<Symbol>, data: &mut Vec<u8>) -> Result<(), C5Error> {
         loop {
             if self.pos >= self.src.len() {
                 self.tk = 0;
@@ -53,10 +53,11 @@ impl Lexer {
             if c == '\n' {
                 self.line += 1;
             } else if c == '#' {
-                // Skip the rest of the line. Covers both C-style
-                // preprocessor directives (`#include`, `#define`, ...) -- c4
-                // doesn't run a preprocessor, it just ignores them -- and
-                // a leading shebang line so source files can be made
+                // Skip the rest of the line. Stray `#` lines that the
+                // preprocessor didn't consume reach here -- the
+                // historical c4 lexer treated `#` as a line-comment
+                // marker, and we keep that fallback so e.g. a leading
+                // shebang line lets source files be made
                 // executable with `#!/usr/bin/env badc`.
                 while self.pos < self.src.len() && self.src[self.pos] as char != '\n' {
                     self.pos += 1;
@@ -142,7 +143,7 @@ impl Lexer {
                             // \xHH -- hex escape, 1+ hex digits, the
                             // C spec is greedy ("as many hex digits as
                             // make sense") but only the low byte
-                            // matters for c4's char/string streams.
+                            // matters for c5's char/string streams.
                             b'x' => {
                                 let mut acc: i64 = 0;
                                 let mut count = 0;
@@ -159,7 +160,7 @@ impl Lexer {
                                     count += 1;
                                 }
                                 if count == 0 {
-                                    return Err(C4Error::Compile(format!(
+                                    return Err(C5Error::Compile(format!(
                                         "{}: \\x escape needs at least one hex digit",
                                         self.line
                                     )));
@@ -369,7 +370,7 @@ fn add_keyword(symbols: &mut Vec<Symbol>, name: &str, token: i64) {
 /// names used to be listed here so the lexer's pre-seeded set could
 /// upgrade them to `Token::Sys` later; the
 /// `#pragma binding(...)`-driven seeding now picks each binding's
-/// `c4_name` up dynamically, so the only Id-class entry left is the
+/// `local_name` up dynamically, so the only Id-class entry left is the
 /// ceremonial `main`.
 const KEYWORDS: &[(&str, Token)] = &[
     ("char", Token::Char),
@@ -465,7 +466,7 @@ pub fn predefined_symbols() -> Vec<PredefinedSymbol> {
 /// emit / run time.
 ///
 /// A name that's bound twice (two `#pragma binding`s with the same
-/// `c4_name`) gets the *first* index; later bindings are ignored
+/// `local_name`) gets the *first* index; later bindings are ignored
 /// here since the symbol table only holds one entry per name.
 /// `#include`-time deduplication via `#pragma once` makes that the
 /// expected case.
@@ -477,7 +478,7 @@ pub(crate) fn init_symbols(symbols: &mut Vec<Symbol>, dylibs: &[super::preproces
     let mut binding_idx: i64 = 0;
     for spec in dylibs {
         for binding in &spec.bindings {
-            let name = binding.c4_name.as_str();
+            let name = binding.local_name.as_str();
             if find_symbol(symbols, name).is_none() {
                 let hash = hash_name(name.as_bytes());
                 symbols.push(Symbol {

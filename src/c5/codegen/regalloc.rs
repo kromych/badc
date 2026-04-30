@@ -1,6 +1,6 @@
 //! Register-pool analyzer for the native lowering pass.
 //!
-//! The c4 bytecode is stack-shaped: every binary operator's left
+//! The c5 bytecode is stack-shaped: every binary operator's left
 //! operand is materialised by an `Op::Psh` and consumed implicitly
 //! by the operator. Lowered straight, that becomes a `str/ldr`
 //! pair around every `+`, `-`, `<`, etc., even though the c4
@@ -51,7 +51,7 @@ use alloc::format;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use super::super::error::C4Error;
+use super::super::error::C5Error;
 use super::super::op::Op;
 
 /// Which bank a [`PushKind::Pseudo`] slot lives in.
@@ -177,7 +177,7 @@ fn is_call_op(op: Op) -> bool {
 /// caller-saved bank depth; functions that would overflow either
 /// get `use_pool = false` and fall back to real-stack pushes
 /// everywhere.
-pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C4Error> {
+pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C5Error> {
     // Pass 1: classify each Psh as Pseudo vs Real by walking forward
     // and matching pops. Bank choice and slot index come from pass 2.
     //
@@ -198,7 +198,7 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C4E
     while pc < text.len() {
         let raw = text[pc];
         let op = Op::from_i64(raw)
-            .ok_or_else(|| C4Error::Compile(format!("regalloc: bad opcode at pc {pc}: {raw}")))?;
+            .ok_or_else(|| C5Error::Compile(format!("regalloc: bad opcode at pc {pc}: {raw}")))?;
         // Any call-shaped op observed while pushes are pending
         // taints them: they're live across a call. The taint sticks
         // even if subsequent pops happen before the eventual matching
@@ -211,10 +211,10 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C4E
         }
         match op {
             Op::Ent if !pending.is_empty() => {
-                // Function boundary -- c4 emits well-balanced
+                // Function boundary -- c5 emits well-balanced
                 // bodies, so a pending Psh here is a bug in the
                 // producer.
-                return Err(C4Error::Compile(format!(
+                return Err(C5Error::Compile(format!(
                     "regalloc: {n} pending Psh(es) at function entry pc {pc}",
                     n = pending.len(),
                 )));
@@ -227,7 +227,7 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C4E
                 let n = text[pc + 1] as usize;
                 for _ in 0..n {
                     let (psh_pc, _) = pending.pop().ok_or_else(|| {
-                        C4Error::Compile(format!("regalloc: Adj at pc {pc} pops past empty stack"))
+                        C5Error::Compile(format!("regalloc: Adj at pc {pc} pops past empty stack"))
                     })?;
                     push_kind[psh_pc] = Some(PushKind::Real);
                 }
@@ -251,7 +251,7 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C4E
             | Op::Si
             | Op::Sc => {
                 let (psh_pc, ac) = pending.pop().ok_or_else(|| {
-                    C4Error::Compile(format!("regalloc: pop op {op:?} at pc {pc} on empty stack"))
+                    C5Error::Compile(format!("regalloc: pop op {op:?} at pc {pc} on empty stack"))
                 })?;
                 // Bank + slot are filled in pass 2; placeholder for now.
                 push_kind[psh_pc] = Some(PushKind::Pseudo {
@@ -266,7 +266,7 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C4E
     }
 
     if !pending.is_empty() {
-        return Err(C4Error::Compile(format!(
+        return Err(C5Error::Compile(format!(
             "regalloc: {n} unconsumed Psh(es) at end of bytecode",
             n = pending.len(),
         )));
@@ -352,7 +352,7 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C4E
                         PoolBank::Caller => caller_depth,
                     };
                     if slot_index >= u8::MAX as u32 {
-                        return Err(C4Error::Compile(
+                        return Err(C5Error::Compile(
                             "regalloc: pseudo-stack depth overflowed u8".into(),
                         ));
                     }

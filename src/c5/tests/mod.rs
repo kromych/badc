@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use super::lexer::{self as lex_helpers, Lexer};
 use super::symbol::Symbol;
 use super::token::Token;
-use super::{C4Error, Compiler, Op, Program, Vm, optimize};
+use super::{C5Error, Compiler, Op, Program, Vm, optimize};
 
 mod codegen;
 mod intrinsics;
@@ -141,7 +141,7 @@ where
 /// assert on either the exit code (no error) or the diagnostic message
 /// (use-after-free / double-free / OOB). Pointer tracking is on, same as
 /// the unwrapping helpers above.
-pub fn try_run_fixture(name: &str) -> Result<i64, C4Error> {
+pub fn try_run_fixture(name: &str) -> Result<i64, C5Error> {
     let program = compile_fixture(name);
     Vm::new(program).with_pointer_tracking().run()
 }

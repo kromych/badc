@@ -2,7 +2,7 @@
 // process control.
 //
 // `exit` on Windows binds to `kernel32!ExitProcess`, which doesn't
-// run msvcrt's atexit / stream flushing. For a c4 program that's
+// run msvcrt's atexit / stream flushing. For a c5 program that's
 // what you usually want -- the alternative is `msvcrt!exit` which
 // pulls in CRT init the rest of our binary doesn't perform. If a
 // fixture starts caring about stdout being flushed on exit on

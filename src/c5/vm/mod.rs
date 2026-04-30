@@ -4,7 +4,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use super::CODE_BASE;
-use super::error::C4Error;
+use super::error::C5Error;
 use super::host::Host;
 use super::op::Op;
 use super::program::Program;
@@ -81,7 +81,7 @@ pub struct Vm<H: Host> {
     /// Arguments passed to `main(int argc, char **argv)`. Empty by default;
     /// populated via [`Vm::with_args`].
     args: Vec<String>,
-    /// Flat list of `c4_name`s in `#pragma binding(...)` declaration
+    /// Flat list of `local_name`s in `#pragma binding(...)` declaration
     /// order -- the same enumeration the parser used when assigning
     /// `Op::JsrExt` operands. Looked up at JsrExt dispatch time to
     /// pick which Rust shim to invoke.
@@ -121,7 +121,7 @@ impl<H: Host> Vm<H> {
         let binding_names = program
             .dylibs
             .iter()
-            .flat_map(|d| d.bindings.iter().map(|b| b.c4_name.clone()))
+            .flat_map(|d| d.bindings.iter().map(|b| b.local_name.clone()))
             .collect();
         Self {
             text: program.text,
@@ -151,10 +151,10 @@ impl<H: Host> Vm<H> {
     /// value isn't in `[CODE_BASE, CODE_BASE + text.len())` -- i.e. the
     /// program built a "function pointer" out of an integer that never
     /// came from the compiler or from a Jsr/Jsri push.
-    fn decode_pc(&self, v: i64) -> Result<usize, C4Error> {
+    fn decode_pc(&self, v: i64) -> Result<usize, C5Error> {
         let raw = v as usize;
         if raw < CODE_BASE || raw >= CODE_BASE + self.text.len() {
-            return Err(C4Error::Runtime(format!(
+            return Err(C5Error::Runtime(format!(
                 "jump to non-code address 0x{raw:x} -- not a function pointer or return address"
             )));
         }
@@ -206,10 +206,10 @@ impl<H: Host> Vm<H> {
     ///      refuse the access.
     ///   3. Allocation tracking -- opt-in. Heap accesses must land inside
     ///      a live allocation; static data is implicitly trusted.
-    fn check_data_access(&self, addr: usize, len: usize, kind: AccessKind) -> Result<(), C4Error> {
+    fn check_data_access(&self, addr: usize, len: usize, kind: AccessKind) -> Result<(), C5Error> {
         // 1. Code segment is not addressable as data.
         if addr >= CODE_BASE && addr < CODE_BASE + self.text.len() {
-            return Err(C4Error::Runtime(format!(
+            return Err(C5Error::Runtime(format!(
                 "{} access at code pointer 0x{addr:x} ({len} bytes) -- code is not data",
                 kind.label()
             )));
@@ -227,13 +227,13 @@ impl<H: Host> Vm<H> {
         for alloc in &self.allocations {
             if addr >= alloc.start && addr < alloc.start + alloc.len {
                 if alloc.freed {
-                    return Err(C4Error::Runtime(format!(
+                    return Err(C5Error::Runtime(format!(
                         "use-after-free: access at 0x{addr:x} inside freed allocation #{} (start=0x{:x}, len={})",
                         alloc.id, alloc.start, alloc.len
                     )));
                 }
                 if addr + len > alloc.start + alloc.len {
-                    return Err(C4Error::Runtime(format!(
+                    return Err(C5Error::Runtime(format!(
                         "out-of-bounds: {len}-byte access at 0x{addr:x} runs past allocation #{} end=0x{:x}",
                         alloc.id,
                         alloc.start + alloc.len
@@ -242,7 +242,7 @@ impl<H: Host> Vm<H> {
                 return Ok(());
             }
         }
-        Err(C4Error::Runtime(format!(
+        Err(C5Error::Runtime(format!(
             "out-of-bounds: heap access at 0x{addr:x} ({len} bytes) is not inside any live allocation"
         )))
     }
@@ -310,12 +310,12 @@ impl<H: Host> Vm<H> {
         }
     }
 
-    fn load_i64(&self, addr: usize) -> Result<i64, C4Error> {
+    fn load_i64(&self, addr: usize) -> Result<i64, C5Error> {
         if let Some(idx) = self.get_stack_idx(addr) {
             if idx < self.stack.len() {
                 Ok(self.stack[idx])
             } else {
-                Err(C4Error::Runtime(format!(
+                Err(C5Error::Runtime(format!(
                     "Stack overflow read at addr {:x}",
                     addr
                 )))
@@ -332,13 +332,13 @@ impl<H: Host> Vm<H> {
         }
     }
 
-    fn store_i64(&mut self, addr: usize, val: i64) -> Result<(), C4Error> {
+    fn store_i64(&mut self, addr: usize, val: i64) -> Result<(), C5Error> {
         if let Some(idx) = self.get_stack_idx(addr) {
             if idx < self.stack.len() {
                 self.stack[idx] = val;
                 Ok(())
             } else {
-                Err(C4Error::Runtime(format!(
+                Err(C5Error::Runtime(format!(
                     "Stack overflow write at addr {:x}",
                     addr
                 )))
@@ -354,7 +354,7 @@ impl<H: Host> Vm<H> {
         }
     }
 
-    fn load_u8(&self, addr: usize) -> Result<u8, C4Error> {
+    fn load_u8(&self, addr: usize) -> Result<u8, C5Error> {
         if let Some(idx) = self.get_stack_idx(addr) {
             if idx < self.stack.len() {
                 let word = self.stack[idx];
@@ -374,7 +374,7 @@ impl<H: Host> Vm<H> {
         }
     }
 
-    fn store_u8(&mut self, addr: usize, val: u8) -> Result<(), C4Error> {
+    fn store_u8(&mut self, addr: usize, val: u8) -> Result<(), C5Error> {
         if let Some(idx) = self.get_stack_idx(addr) {
             if idx < self.stack.len() {
                 let word = self.stack[idx];
@@ -394,7 +394,7 @@ impl<H: Host> Vm<H> {
         Ok(())
     }
 
-    fn read_cstring(&self, addr: usize) -> Result<String, C4Error> {
+    fn read_cstring(&self, addr: usize) -> Result<String, C5Error> {
         let mut s = String::new();
         let mut p = addr;
         while s.len() < 5000 {
@@ -411,9 +411,9 @@ impl<H: Host> Vm<H> {
     /// Look up the c4 name for a `JsrExt` operand. Errors if the
     /// operand is out of range -- can only happen if the bytecode
     /// got corrupted between parse and execute.
-    fn binding_name(&self, binding_idx: i64) -> Result<&str, C4Error> {
+    fn binding_name(&self, binding_idx: i64) -> Result<&str, C5Error> {
         if binding_idx < 0 {
-            return Err(C4Error::Runtime(format!(
+            return Err(C5Error::Runtime(format!(
                 "VM: negative JsrExt operand {binding_idx}"
             )));
         }
@@ -422,7 +422,7 @@ impl<H: Host> Vm<H> {
             .get(i)
             .map(|s| s.as_str())
             .ok_or_else(|| {
-                C4Error::Runtime(format!(
+                C5Error::Runtime(format!(
                     "VM: JsrExt operand {binding_idx} out of range \
                  (program has {} bindings)",
                     self.binding_names.len()
@@ -434,9 +434,9 @@ impl<H: Host> Vm<H> {
     /// (appending the bootstrap), `data` (staging argv), and the recorded
     /// `static_end`/heap state -- invoking it twice would corrupt those
     /// invariants. Build a fresh `Vm` for each run.
-    pub fn run(mut self) -> Result<i64, C4Error> {
+    pub fn run(mut self) -> Result<i64, C5Error> {
         if self.text.is_empty() {
-            return Err(C4Error::Runtime("empty program".to_string()));
+            return Err(C5Error::Runtime("empty program".to_string()));
         }
 
         let mut sp = STACK_BASE + STACK_CAPACITY * 8;
@@ -493,12 +493,12 @@ impl<H: Host> Vm<H> {
                 return self.load_i64(sp);
             }
             if pc >= self.text.len() {
-                return Err(C4Error::Runtime("PC out of bounds".to_string()));
+                return Err(C5Error::Runtime("PC out of bounds".to_string()));
             }
 
             let raw_op = self.text[pc];
             let op = Op::from_i64(raw_op).ok_or_else(|| {
-                C4Error::Runtime(format!("Invalid instruction {} at PC {}", raw_op, pc))
+                C5Error::Runtime(format!("Invalid instruction {} at PC {}", raw_op, pc))
             })?;
             pc += 1;
 
@@ -731,15 +731,15 @@ impl<H: Host> Vm<H> {
                     // External library call. The operand is the
                     // binding's flat index across all
                     // `#pragma binding(...)` the preprocessor
-                    // parsed; we look up its `c4_name` and
+                    // parsed; we look up its `local_name` and
                     // dispatch to the matching Rust shim. The c4
                     // emitter follows every call with `Op::Adj N`
                     // (omitted for 0-arg calls), which the next
                     // loop iteration drops as usual.
                     let binding_idx = self.text[pc];
                     pc += 1;
-                    let c4_name = self.binding_name(binding_idx)?;
-                    a = match c4_name {
+                    let local_name = self.binding_name(binding_idx)?;
+                    a = match local_name {
                         "open" => self.intrinsic_open(sp)?,
                         "read" => self.intrinsic_read(sp)?,
                         "close" => self.intrinsic_close(sp)?,
@@ -758,7 +758,7 @@ impl<H: Host> Vm<H> {
                         "dlclose" => self.intrinsic_dlclose(sp)?,
                         "dlerror" => self.intrinsic_dlerror()?,
                         other => {
-                            return Err(C4Error::Runtime(alloc::format!(
+                            return Err(C5Error::Runtime(alloc::format!(
                                 "VM: no shim for binding `{other}` -- the VM only knows the \
                                  standard libc surface (open/read/close/printf/...). Use \
                                  `--emit-native` if you need to call something else."

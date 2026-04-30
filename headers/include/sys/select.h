@@ -4,7 +4,7 @@
 // ws2_32.dll (alongside the rest of the socket surface); on POSIX
 // it's plain libc.
 //
-// fd_set is just a bitmap and the c4 dialect doesn't have macros
+// fd_set is just a bitmap and the c5 dialect doesn't have macros
 // for FD_ZERO / FD_SET / FD_ISSET. The portable cookie-cutter is
 // to malloc FD_SETSIZE/8 bytes (128 on Linux, larger on Windows
 // since Windows fd_set wraps an array of socket handles rather

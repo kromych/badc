@@ -215,12 +215,12 @@ fn line_counter_advances_with_newlines() {
 fn binding_names_seed_token_sys_when_dylibs_provided() {
     // `init_symbols` no longer carries a fixed list of libc names;
     // it walks the dylibs the preprocessor parsed and seeds each
-    // binding's `c4_name` as a `Token::Sys` symbol with `val` set
+    // binding's `local_name` as a `Token::Sys` symbol with `val` set
     // to the binding's flat-index. A program reaching for
     // `malloc(...)` then lowers via `Op::JsrExt 0` (or whichever
     // index `malloc` ended up at).
-    use crate::c4::lexer::{Lexer, init_symbols};
-    use crate::c4::preprocessor::{Binding, DylibSpec};
+    use crate::c5::lexer::{Lexer, init_symbols};
+    use crate::c5::preprocessor::{Binding, DylibSpec};
 
     let dylibs = vec![DylibSpec {
         name: "libc".into(),
@@ -228,7 +228,7 @@ fn binding_names_seed_token_sys_when_dylibs_provided() {
         bindings: vec![Binding {
             is_variadic: false,
             fixed_args: 1,
-            c4_name: "malloc".into(),
+            local_name: "malloc".into(),
             real_symbol: "malloc".into(),
         }],
     }];

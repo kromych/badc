@@ -41,7 +41,7 @@
 #define SLOT_READING  1
 #define SLOT_WRITING  2
 
-// Per-slot parallel int arrays. badc's c4 dialect doesn't auto-
+// Per-slot parallel int arrays. badc's c5 dialect doesn't auto-
 // stride struct array indexes by sizeof(struct), so flat int
 // arrays are the cheapest way to keep `slots[i].field` ergonomics.
 int *slot_fd;

@@ -51,17 +51,17 @@
 //! * `Op::Senv` (POSIX `setenv(name, value, overwrite)`) binds to
 //!   msvcrt's `_putenv_s(name, value)`. The 3rd arg lands in `r8`
 //!   per Win64 calling convention; `_putenv_s` ignores it. The
-//!   semantics differ when `overwrite == 0`, but most c4 callers
+//!   semantics differ when `overwrite == 0`, but most c5 callers
 //!   pass `overwrite = 1` and don't notice.
 //! * `Op::Dler` (POSIX `dlerror()`) binds to kernel32's
 //!   `GetLastError`. Both return zero when there's no pending
-//!   error; a c4 program that *prints* `dlerror()` would see
+//!   error; a c5 program that *prints* `dlerror()` would see
 //!   garbage on Windows, but the common `if (dlerror()) { ... }`
 //!   shape works.
 //! * `Op::Mpro` (POSIX `mprotect(addr, len, prot)`) is not
 //!   currently supported on Windows; the binding goes to
 //!   `VirtualProtect`, but the calling convention mismatch (Windows
-//!   takes a 4th `OldProt` out-pointer the c4 program doesn't
+//!   takes a 4th `OldProt` out-pointer the c5 program doesn't
 //!   provide) makes it unsafe to invoke. Programs that don't call
 //!   `mprotect` are unaffected.
 
@@ -70,7 +70,7 @@ use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 
-use super::super::error::C4Error;
+use super::super::error::C5Error;
 use super::aarch64;
 use super::x86_64;
 use super::{Build, Machine};
@@ -105,7 +105,7 @@ const NUM_DATA_DIRS: u32 = 16;
 
 /// Section layout: every 64-bit Windows PE always carries `.text`,
 /// `.pdata`, `.idata`, and `.reloc`. The optional `.data` only
-/// appears when the c4 program has initialized data -- string
+/// appears when the c5 program has initialized data -- string
 /// literals or globals -- because real Windows kernels reject
 /// images that list a zero-sized section.
 ///
@@ -170,7 +170,7 @@ const ARM64_PACKED_FUNCTION_MAX_BYTES: u32 = 2048 * 4;
 // block-buffers stdout).
 //
 // These ride alongside whatever the program asked for via
-// `#pragma binding(...)`. They have no c4-side name, so they live
+// `#pragma binding(...)`. They have no c5-side name, so they live
 // outside `ResolvedImports` and the lowering never references them
 // directly -- only the entry stub does.
 // ----------------------------------------------------------------
@@ -182,7 +182,7 @@ const STUB_IMPORT_EXIT: (&str, &str) = ("ExitProcess", "kernel32.dll");
 // Top-level writer.
 // ----------------------------------------------------------------
 
-pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error> {
+pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error> {
     // 1) Combined imports list. Index N becomes IAT slot N. The
     //    program's resolved imports occupy 0..n_program_imports;
     //    the entry stub's two additional imports come after, with
@@ -228,7 +228,7 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
     let stub_len = stub.bytes.len() as u32;
     let text_prologue_len = stub_len;
 
-    // The `.data` section is only present when the c4 program has
+    // The `.data` section is only present when the c5 program has
     // initialized data. See `num_sections` for why an empty
     // section can't be left in.
     let data_section_present = !build.data.is_empty();
@@ -268,7 +268,7 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
     let idata_size: u32 = idata_bytes.len() as u32;
     let idata_raw_size: u32 = round_up(idata_size, FILE_ALIGNMENT);
 
-    // The `.data` section only appears when the c4 program has at
+    // The `.data` section only appears when the c5 program has at
     // least one byte of initialized data (string literals or
     // globals). An empty section is a real-Windows-kernel reject
     // reason: CreateProcess returns ERROR_BAD_EXE_FORMAT for any
@@ -1155,7 +1155,7 @@ fn build_pdata(machine: Machine, text_rva: u32, text_size: u32, pdata_rva: u32) 
 /// We emit a single coarse entry covering the entire `.text`
 /// region, paired with a minimal `UNWIND_INFO` (version=1,
 /// flags=0, no prolog, no codes). The unwinder would treat every
-/// address as a leaf with no frame -- a lie, but the c4 program
+/// address as a leaf with no frame -- a lie, but the c5 program
 /// never raises a Windows exception, and the loader doesn't
 /// validate the unwind codes against the actual prolog. This
 /// mirrors the coarse approach the AArch64 builder uses.
@@ -1199,7 +1199,7 @@ fn build_x86_64_pdata(text_rva: u32, text_size: u32, pdata_rva: u32) -> Pdata {
 /// the first instruction) and `UnwindData`. The `UnwindData` can
 /// either point to an `.xdata` blob or carry packed unwind info
 /// inline -- packed format has `Flag != 0` in its low two bits and
-/// is sufficient for our purposes since the c4 program never
+/// is sufficient for our purposes since the c5 program never
 /// raises a Windows-style exception. We use `Flag = 1` ("packed
 /// unwind, canonical -- complete function") with all other fields
 /// zero, which claims "no saves, no frame, no chained context, no
@@ -1260,7 +1260,7 @@ fn patch_iat_lookup(
     instr_offset_in_text: u32,
     text_section_rva: u32,
     target_rva: u32,
-) -> Result<(), C4Error> {
+) -> Result<(), C5Error> {
     let instr_rva = text_section_rva + instr_offset_in_text;
     match machine {
         Machine::X86_64 => {
@@ -1290,7 +1290,7 @@ fn patch_addr_load(
     instr_offset_in_text: u32,
     text_section_rva: u32,
     target_rva: u32,
-) -> Result<(), C4Error> {
+) -> Result<(), C5Error> {
     let instr_rva = text_section_rva + instr_offset_in_text;
     match machine {
         Machine::X86_64 => {
@@ -1319,7 +1319,7 @@ fn patch_direct_call(
     text: &mut [u8],
     call_offset_in_text: u32,
     target_offset_in_text: u32,
-) -> Result<(), C4Error> {
+) -> Result<(), C5Error> {
     match machine {
         Machine::X86_64 => {
             // rel32 = target - (call+5). The 5-byte call form ends
@@ -1327,7 +1327,7 @@ fn patch_direct_call(
             let after = call_offset_in_text + 5;
             let delta = target_offset_in_text as i64 - after as i64;
             if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
-                return Err(C4Error::Compile(format!(
+                return Err(C5Error::Compile(format!(
                     "PE: rel32 displacement {delta} doesn't fit in 32 bits"
                 )));
             }
@@ -1341,13 +1341,13 @@ fn patch_direct_call(
             // instructions, relative to the bl instruction itself.
             let delta_bytes = target_offset_in_text as i64 - call_offset_in_text as i64;
             if delta_bytes & 3 != 0 {
-                return Err(C4Error::Compile(format!(
+                return Err(C5Error::Compile(format!(
                     "PE: aarch64 bl delta {delta_bytes} not 4-byte aligned"
                 )));
             }
             let delta_insns = delta_bytes / 4;
             if !(-(1i64 << 25)..(1i64 << 25)).contains(&delta_insns) {
-                return Err(C4Error::Compile(format!(
+                return Err(C5Error::Compile(format!(
                     "PE: aarch64 bl delta {delta_insns} insns out of 26-bit range"
                 )));
             }
@@ -1366,10 +1366,10 @@ fn patch_x86_64_disp32(
     disp32_off: usize,
     after_rva: u32,
     target_rva: u32,
-) -> Result<(), C4Error> {
+) -> Result<(), C5Error> {
     let delta = target_rva as i64 - after_rva as i64;
     if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
-        return Err(C4Error::Compile(format!(
+        return Err(C5Error::Compile(format!(
             "PE: disp32 {delta} doesn't fit in 32 bits"
         )));
     }
@@ -1388,19 +1388,19 @@ fn patch_aarch64_adrp_ldr(
     adrp_offset_in_text: u32,
     adrp_rva: u32,
     target_rva: u32,
-) -> Result<(), C4Error> {
+) -> Result<(), C5Error> {
     let adrp_page = (adrp_rva as u64) & !0xFFF;
     let target_page = (target_rva as u64) & !0xFFF;
     let page_diff = target_page as i64 - adrp_page as i64;
     if page_diff & 0xFFF != 0 {
-        return Err(C4Error::Compile(format!(
+        return Err(C5Error::Compile(format!(
             "PE: aarch64 adrp page diff {page_diff} not 4 KiB aligned"
         )));
     }
     let imm21 = (page_diff >> 12) as i32;
     let in_page = target_rva & 0xFFF;
     if !in_page.is_multiple_of(8) {
-        return Err(C4Error::Compile(format!(
+        return Err(C5Error::Compile(format!(
             "PE: aarch64 ldr offset {in_page:#x} not 8-aligned"
         )));
     }
@@ -1426,12 +1426,12 @@ fn patch_aarch64_adrp_add(
     adrp_offset_in_text: u32,
     adrp_rva: u32,
     target_rva: u32,
-) -> Result<(), C4Error> {
+) -> Result<(), C5Error> {
     let adrp_page = (adrp_rva as u64) & !0xFFF;
     let target_page = (target_rva as u64) & !0xFFF;
     let page_diff = target_page as i64 - adrp_page as i64;
     if page_diff & 0xFFF != 0 {
-        return Err(C4Error::Compile(format!(
+        return Err(C5Error::Compile(format!(
             "PE: aarch64 adrp page diff {page_diff} not 4 KiB aligned"
         )));
     }
@@ -1513,7 +1513,7 @@ mod tests {
     /// trivial program and verify the on-disk byte layout claims
     /// the right architecture. Doesn't execute the binary; the
     /// runtime tests that need an aarch64 Windows host live in
-    /// `c4::tests::native_pe_arm64`.
+    /// `c5::tests::native_pe_arm64`.
     #[test]
     fn aarch64_pe_format_is_well_formed() {
         use crate::Compiler;

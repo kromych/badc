@@ -1,6 +1,6 @@
 // sys/socket.h -- BSD/Berkeley sockets surface.
 //
-// Per-target gating wires the c4-side names (`socket`, `bind`, ...)
+// Per-target gating wires the c5-side names (`socket`, `bind`, ...)
 // to the matching platform symbol:
 //   * macOS: libSystem, with the leading underscore Mach-O wants.
 //   * Linux: libc.so.6.

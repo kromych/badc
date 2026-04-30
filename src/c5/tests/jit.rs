@@ -46,7 +46,7 @@ fn jit_exit_native_optimized(src: &str, args: &[&str]) -> i32 {
     jit_run_with_options(&program, &argv, opts).expect("jit_run_with_options failed")
 }
 
-// ---- Smoke tests, same shapes as src/c4/tests/native_elf.rs but
+// ---- Smoke tests, same shapes as src/c5/tests/native_elf.rs but
 //      driven through the JIT loader. ----
 
 #[test]

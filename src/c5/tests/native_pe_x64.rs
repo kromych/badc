@@ -1,6 +1,6 @@
 //! End-to-end Windows/x86_64 PE tests.
 //!
-//! Compile a c4 program to a PE32+ binary, drop it in `tmp`, and
+//! Compile a c5 program to a PE32+ binary, drop it in `tmp`, and
 //! execute it. Three host paths run the same surface:
 //!
 //! * On `windows-x86_64` the binary runs natively via

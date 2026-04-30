@@ -66,7 +66,7 @@
 use alloc::format;
 use alloc::vec::Vec;
 
-use super::super::error::C4Error;
+use super::super::error::C5Error;
 use super::Build;
 
 // ------------------------------------------------------------------
@@ -776,7 +776,7 @@ fn apply_got_fixups(
     code_vmaddr_base: u64,
     got_base_vmaddr: u64,
     fixups: &[super::GotFixup],
-) -> Result<(), C4Error> {
+) -> Result<(), C5Error> {
     for fx in fixups {
         let adrp_file_off = code_base_in_file + fx.adrp_offset;
         let ldr_file_off = adrp_file_off + 4;
@@ -789,7 +789,7 @@ fn apply_got_fixups(
         let target_page = target_vmaddr & !0xFFF;
         let page_diff = target_page as i64 - adrp_page as i64;
         if page_diff & 0xFFF != 0 {
-            return Err(C4Error::Compile(format!(
+            return Err(C5Error::Compile(format!(
                 "Mach-O: GOT page diff {page_diff} not 4 KiB aligned"
             )));
         }
@@ -800,7 +800,7 @@ fn apply_got_fixups(
         // 8-aligned.
         let in_page = (target_vmaddr & 0xFFF) as u32;
         if !in_page.is_multiple_of(8) {
-            return Err(C4Error::Compile(format!(
+            return Err(C5Error::Compile(format!(
                 "Mach-O: GOT slot offset {in_page:#x} not 8-aligned"
             )));
         }
@@ -829,7 +829,7 @@ fn patch_adrp_add(
     adrp_offset: usize,
     target_vmaddr: u64,
     label: &str,
-) -> Result<(), C4Error> {
+) -> Result<(), C5Error> {
     let adrp_file_off = code_base_in_file + adrp_offset;
     let add_file_off = adrp_file_off + 4;
     let adrp_vmaddr = code_vmaddr_base + adrp_offset as u64;
@@ -838,7 +838,7 @@ fn patch_adrp_add(
     let target_page = target_vmaddr & !0xFFF;
     let page_diff = target_page as i64 - adrp_page as i64;
     if page_diff & 0xFFF != 0 {
-        return Err(C4Error::Compile(format!(
+        return Err(C5Error::Compile(format!(
             "Mach-O: {label} page diff {page_diff} not 4 KiB aligned"
         )));
     }
@@ -861,7 +861,7 @@ fn apply_data_fixups(
     code_vmaddr_base: u64,
     data_section_vmaddr: u64,
     fixups: &[super::DataFixup],
-) -> Result<(), C4Error> {
+) -> Result<(), C5Error> {
     for fx in fixups {
         let target = data_section_vmaddr + fx.data_offset;
         patch_adrp_add(
@@ -883,7 +883,7 @@ fn apply_func_fixups(
     code_base_in_file: usize,
     code_vmaddr_base: u64,
     fixups: &[super::FuncFixup],
-) -> Result<(), C4Error> {
+) -> Result<(), C5Error> {
     for fx in fixups {
         let target = code_vmaddr_base + fx.target_native_offset as u64;
         patch_adrp_add(
@@ -976,7 +976,7 @@ fn build_strtab(symbols: &[&str]) -> (Vec<u8>, Vec<u32>) {
 // emit the whole image.
 // ------------------------------------------------------------------
 
-pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
+pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
     let code = &build.text;
 
     // ---- step 1: build __LINKEDIT contents ----
@@ -1255,7 +1255,7 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
     debug_assert_eq!(out.len() as u64, total_filesize);
 
     if out.len() > u32::MAX as usize {
-        return Err(C4Error::Compile(format!(
+        return Err(C5Error::Compile(format!(
             "Mach-O writer: image too large ({} bytes)",
             out.len()
         )));
@@ -1290,7 +1290,7 @@ mod tests {
             imports: ResolvedImports {
                 imports: vec![ResolvedImport {
                     binding_idx: 0,
-                    c4_name: "write".into(),
+                    local_name: "write".into(),
                     real_symbol: "_write".into(),
                     dylib_index: 0,
                     is_variadic: false,

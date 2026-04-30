@@ -1,13 +1,18 @@
-//! badc -- a Rust compiler / VM for the c4 dialect, plus a handful of
-//! extensions. The pipeline is straight-line: `Compiler::new(source)
-//! .compile()` returns a [`Program`], and `Vm::new(program).run()`
-//! runs it. `optimize(program)` sits between them when you want it.
+//! badc -- a Rust compiler / VM for the c5 dialect, an evolution of
+//! Robert Swierczek's c4. The pipeline is straight-line:
+//! `Compiler::new(source).compile()` returns a [`Program`], and
+//! `Vm::new(program).run()` runs it. `optimize(program)` sits between
+//! them when you want it.
 //!
-//! Started as a Rust port of Robert Swierczek's c4 -- the `c4` module
-//! name and [`C4Error`] type are kept as a nod to that lineage. The
-//! README covers the dialect, the runtime safety story, and the CLI.
-//! The binary in `src/main.rs` is little more than CLI plumbing
-//! around the types this module re-exports.
+//! Started as a Rust port of c4; over time the dialect grew structs,
+//! a real preprocessor with `#include` / `#define` / `#pragma binding`,
+//! per-target ABIs, native code emission for Mach-O / ELF / PE32+, and
+//! a register-pool optimizer -- enough divergence to warrant its own
+//! name. The `C5Error` type and `c5` module are how the new identity
+//! shows up in the source tree. The README covers the dialect, the
+//! runtime safety story, and the CLI. The binary in `src/main.rs` is
+//! little more than CLI plumbing around the types this module
+//! re-exports.
 //!
 //! ## no_std
 //!
@@ -22,14 +27,14 @@
 
 extern crate alloc;
 
-pub mod c4;
+pub mod c5;
 
 #[allow(unused_imports)]
-pub use c4::{
-    C4Error, Compiler, Host, NativeOptions, Op, Overwrite, PredefinedKind, PredefinedSymbol,
+pub use c5::{
+    C5Error, Compiler, Host, NativeOptions, Op, Overwrite, PredefinedKind, PredefinedSymbol,
     Program, Target, Trace, Vm, dump_native_listing, dump_native_listing_with_options, emit_native,
     emit_native_with_options, jit_run, jit_run_with_options, optimize, predefined_symbols,
 };
 
 #[cfg(feature = "std")]
-pub use c4::StdHost;
+pub use c5::StdHost;

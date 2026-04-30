@@ -43,14 +43,14 @@
 
 use alloc::string::{String, ToString};
 
-use super::super::error::C4Error;
+use super::super::error::C5Error;
 use super::super::program::Program;
 use super::{NativeOptions, Target};
 
 /// Compile, lower, and run `program` in-process. Returns the exit
 /// code as it would appear from a child process. `args` becomes the
 /// hosted program's argv.
-pub fn jit_run(program: &Program, args: &[String]) -> Result<i32, C4Error> {
+pub fn jit_run(program: &Program, args: &[String]) -> Result<i32, C5Error> {
     jit_run_with_options(program, args, NativeOptions::default())
 }
 
@@ -61,7 +61,7 @@ pub fn jit_run_with_options(
     program: &Program,
     args: &[String],
     options: NativeOptions,
-) -> Result<i32, C4Error> {
+) -> Result<i32, C5Error> {
     #[cfg(all(
         feature = "std",
         any(target_os = "linux", all(target_os = "macos", target_arch = "aarch64"),),
@@ -75,7 +75,7 @@ pub fn jit_run_with_options(
     )))]
     {
         let _ = (program, args, options);
-        Err(C4Error::Compile(
+        Err(C5Error::Compile(
             "JIT: requires the `std` feature on Linux (any arch) or macOS/aarch64".to_string(),
         ))
     }
@@ -84,7 +84,7 @@ pub fn jit_run_with_options(
 /// Pick the target appropriate for the current host. JIT only knows
 /// how to lower for the host arch -- there's no cross-arch JIT.
 #[allow(dead_code)]
-fn host_target() -> Result<Target, C4Error> {
+fn host_target() -> Result<Target, C5Error> {
     if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
         Ok(Target::MacOSAarch64)
     } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
@@ -92,7 +92,7 @@ fn host_target() -> Result<Target, C4Error> {
     } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
         Ok(Target::LinuxX64)
     } else {
-        Err(C4Error::Compile(
+        Err(C5Error::Compile(
             "JIT: host OS/arch unsupported (need Linux/aarch64, Linux/x86_64, or macOS/aarch64)"
                 .to_string(),
         ))
@@ -104,7 +104,7 @@ fn host_target() -> Result<Target, C4Error> {
     any(target_os = "linux", all(target_os = "macos", target_arch = "aarch64"),),
 ))]
 mod jit_impl {
-    use super::super::super::error::C4Error;
+    use super::super::super::error::C5Error;
     use super::super::super::program::Program;
     use super::super::Target;
     use super::super::{Build, NativeOptions, ResolvedImports, aarch64, x86_64};
@@ -119,7 +119,7 @@ mod jit_impl {
         program: &Program,
         args: &[String],
         options: NativeOptions,
-    ) -> Result<i32, C4Error> {
+    ) -> Result<i32, C5Error> {
         let target = host_target()?;
         let build = lower_for_jit(program, target, options)?;
 
@@ -188,7 +188,7 @@ mod jit_impl {
         program: &Program,
         target: Target,
         options: NativeOptions,
-    ) -> Result<Build, C4Error> {
+    ) -> Result<Build, C5Error> {
         // Same plumbing as `super::lower_for`: resolve once, lower
         // with that view, then stitch the imports back onto the
         // returned `Build` so the JIT loader can populate its
@@ -249,7 +249,7 @@ mod jit_impl {
     }
 
     impl JitRegion {
-        fn new(code: &[u8]) -> Result<Self, C4Error> {
+        fn new(code: &[u8]) -> Result<Self, C5Error> {
             unsafe extern "C" {
                 fn mmap(
                     addr: *mut c_void,
@@ -277,7 +277,7 @@ mod jit_impl {
 
             let ptr = unsafe { mmap(std::ptr::null_mut(), len, prot, flags, -1, 0) };
             if ptr == map_failed() {
-                return Err(C4Error::Compile(format!(
+                return Err(C5Error::Compile(format!(
                     "JIT: mmap failed: {}",
                     std::io::Error::last_os_error()
                 )));
@@ -304,7 +304,7 @@ mod jit_impl {
             })
         }
 
-        fn make_executable(&self) -> Result<(), C4Error> {
+        fn make_executable(&self) -> Result<(), C5Error> {
             #[cfg(target_os = "linux")]
             {
                 unsafe extern "C" {
@@ -313,7 +313,7 @@ mod jit_impl {
                 let r =
                     unsafe { mprotect(self.ptr as *mut c_void, self.len, PROT_READ | PROT_EXEC) };
                 if r != 0 {
-                    return Err(C4Error::Compile(format!(
+                    return Err(C5Error::Compile(format!(
                         "JIT: mprotect failed: {}",
                         std::io::Error::last_os_error()
                     )));
@@ -368,7 +368,7 @@ mod jit_impl {
     }
 
     impl DataRegion {
-        fn new(data: &[u8]) -> Result<Self, C4Error> {
+        fn new(data: &[u8]) -> Result<Self, C5Error> {
             unsafe extern "C" {
                 fn mmap(
                     addr: *mut c_void,
@@ -391,7 +391,7 @@ mod jit_impl {
                 )
             };
             if ptr == map_failed() {
-                return Err(C4Error::Compile(format!(
+                return Err(C5Error::Compile(format!(
                     "JIT: data mmap failed: {}",
                     std::io::Error::last_os_error()
                 )));
@@ -449,7 +449,7 @@ mod jit_impl {
     }
 
     impl GotRegion {
-        fn new(n_imports: usize) -> Result<Self, C4Error> {
+        fn new(n_imports: usize) -> Result<Self, C5Error> {
             unsafe extern "C" {
                 fn mmap(
                     addr: *mut c_void,
@@ -477,7 +477,7 @@ mod jit_impl {
                 )
             };
             if ptr == map_failed() {
-                return Err(C4Error::Compile(format!(
+                return Err(C5Error::Compile(format!(
                     "JIT: GOT mmap failed: {}",
                     std::io::Error::last_os_error()
                 )));
@@ -497,14 +497,14 @@ mod jit_impl {
         /// scope leave a 0 slot rather than aborting -- the call
         /// will SIGSEGV when used, which is the right "this isn't
         /// in libc" failure mode for a JIT.
-        fn bind_imports(&mut self, imports: &ResolvedImports) -> Result<(), C4Error> {
+        fn bind_imports(&mut self, imports: &ResolvedImports) -> Result<(), C5Error> {
             unsafe extern "C" {
                 fn dlopen(filename: *const c_char, flags: c_int) -> *mut c_void;
                 fn dlsym(handle: *mut c_void, name: *const c_char) -> *mut c_void;
             }
             let handle = unsafe { dlopen(std::ptr::null(), RTLD_NOW) };
             if handle.is_null() {
-                return Err(C4Error::Compile(
+                return Err(C5Error::Compile(
                     "JIT: dlopen(NULL, RTLD_NOW) returned null -- can't resolve libc symbols"
                         .to_string(),
                 ));
@@ -575,7 +575,7 @@ mod jit_impl {
         data_vmaddr: u64,
         got_vmaddr: u64,
         build: &Build,
-    ) -> Result<(), C4Error> {
+    ) -> Result<(), C5Error> {
         for fx in &build.got_fixups {
             patch_got_call(
                 target,
@@ -620,7 +620,7 @@ mod jit_impl {
         instr_offset: u64,
         target_vmaddr: u64,
         label: &str,
-    ) -> Result<(), C4Error> {
+    ) -> Result<(), C5Error> {
         match target {
             Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
                 patch_adrp_ldr(code, code_vmaddr, instr_offset, target_vmaddr, label)
@@ -640,21 +640,21 @@ mod jit_impl {
         instr_offset: u64,
         target_vmaddr: u64,
         label: &str,
-    ) -> Result<(), C4Error> {
+    ) -> Result<(), C5Error> {
         let off = instr_offset as usize;
         let adrp_vmaddr = code_vmaddr + instr_offset;
         let adrp_page = adrp_vmaddr & !0xFFF;
         let target_page = target_vmaddr & !0xFFF;
         let page_diff = target_page as i64 - adrp_page as i64;
         if page_diff & 0xFFF != 0 {
-            return Err(C4Error::Compile(format!(
+            return Err(C5Error::Compile(format!(
                 "JIT: {label} page diff {page_diff} not 4 KiB aligned"
             )));
         }
         let imm21 = (page_diff >> 12) as i32;
         let in_page = (target_vmaddr & 0xFFF) as u32;
         if !in_page.is_multiple_of(8) {
-            return Err(C4Error::Compile(format!(
+            return Err(C5Error::Compile(format!(
                 "JIT: {label} slot offset {in_page:#x} not 8-aligned"
             )));
         }
@@ -678,13 +678,13 @@ mod jit_impl {
         instr_offset: u64,
         target_vmaddr: u64,
         label: &str,
-    ) -> Result<(), C4Error> {
+    ) -> Result<(), C5Error> {
         const CALL_LEN: u64 = super::super::x86_64::CALL_QWORD_RIP32_LEN as u64;
         let instr_vmaddr = code_vmaddr + instr_offset;
         let after = instr_vmaddr + CALL_LEN;
         let delta = target_vmaddr as i64 - after as i64;
         if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
-            return Err(C4Error::Compile(format!(
+            return Err(C5Error::Compile(format!(
                 "JIT: {label} disp {delta} doesn't fit in 32 bits"
             )));
         }
@@ -705,7 +705,7 @@ mod jit_impl {
         instr_offset: u64,
         target_vmaddr: u64,
         label: &str,
-    ) -> Result<(), C4Error> {
+    ) -> Result<(), C5Error> {
         match target {
             Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
                 patch_adrp_add(code, code_vmaddr, instr_offset, target_vmaddr, label)
@@ -722,14 +722,14 @@ mod jit_impl {
         instr_offset: u64,
         target_vmaddr: u64,
         label: &str,
-    ) -> Result<(), C4Error> {
+    ) -> Result<(), C5Error> {
         let off = instr_offset as usize;
         let adrp_vmaddr = code_vmaddr + instr_offset;
         let adrp_page = adrp_vmaddr & !0xFFF;
         let target_page = target_vmaddr & !0xFFF;
         let page_diff = target_page as i64 - adrp_page as i64;
         if page_diff & 0xFFF != 0 {
-            return Err(C4Error::Compile(format!(
+            return Err(C5Error::Compile(format!(
                 "JIT: {label} page diff {page_diff} not 4 KiB aligned"
             )));
         }
@@ -753,13 +753,13 @@ mod jit_impl {
         instr_offset: u64,
         target_vmaddr: u64,
         label: &str,
-    ) -> Result<(), C4Error> {
+    ) -> Result<(), C5Error> {
         const LEA_LEN: u64 = super::super::x86_64::LEA_RIP32_LEN as u64;
         let instr_vmaddr = code_vmaddr + instr_offset;
         let after = instr_vmaddr + LEA_LEN;
         let delta = target_vmaddr as i64 - after as i64;
         if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
-            return Err(C4Error::Compile(format!(
+            return Err(C5Error::Compile(format!(
                 "JIT: {label} disp {delta} doesn't fit in 32 bits"
             )));
         }

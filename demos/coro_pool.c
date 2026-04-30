@@ -24,11 +24,11 @@
 // imbalance (worker 0 gets every task), worker 1 keeps going by
 // stealing -- which is what we report at the end.
 //
-// Constraints driven by the c4 dialect: parallel int arrays
+// Constraints driven by the c5 dialect: parallel int arrays
 // instead of structs (no struct-array indexing), top-level
 // declarations only, single-OS-thread cooperative scheduling
 // (badc has no thread primitive that can pass per-thread state
-// into a c4 callee). The "user-mode" framing is exactly that --
+// into a c5 callee). The "user-mode" framing is exactly that --
 // the pool runs on one OS thread, but the tasks share the
 // processor through cooperative yields rather than through
 // pre-emption.

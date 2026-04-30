@@ -35,7 +35,7 @@ pub struct Program {
     ///   (`printf` -> `_printf` on macOS, `_printf` on Windows
     ///   msvcrt, `printf` on Linux),
     /// * conditionally include only those dylibs whose bindings the
-    ///   program actually references (so a c4 source that never
+    ///   program actually references (so a c5 source that never
     ///   calls `mprotect` doesn't drag `kernel32.dll` into the
     ///   import table on Windows), and
     /// * emit a hard error when a referenced op has no binding for

@@ -14,9 +14,9 @@
 // shared task queue under a mutex; once the queue drains, every
 // worker exits and main() prints the per-task results.
 //
-// The c4 dialect can't read the start-function's `arg` parameter
-// (the host ABI puts it in rdi/x0/rcx, while a c4 callee fetches
-// args off the c4 stack), so workers don't carry per-thread state
+// The c5 dialect can't read the start-function's `arg` parameter
+// (the host ABI puts it in rdi/x0/rcx, while a c5 callee fetches
+// args off the c5 stack), so workers don't carry per-thread state
 // in. Everything they need lives in globals; each thread fetches
 // its next task by atomically incrementing the shared counter
 // inside the mutex.
@@ -48,7 +48,7 @@ int *g_threads;          // pthread_t[NUM_THREADS] (8 bytes each)
 // Each worker labels itself when it claims its first task. Stored
 // outside the lock since each slot is written by exactly one
 // thread (the one whose pthread_self/GetCurrentThreadId hash maps
-// here). Plain int so badc's c4 dialect doesn't need a slot type.
+// here). Plain int so badc's c5 dialect doesn't need a slot type.
 int  g_worker_seq;       // running counter -- inside lock
 
 void lock() {
@@ -78,7 +78,7 @@ int compute_fib(int n) {
 }
 
 // Worker entry. The host calling convention hands us our `arg` in
-// the platform's first integer register, which a c4 callee can't
+// the platform's first integer register, which a c5 callee can't
 // read -- so we don't try. Everything the worker needs is shared
 // global state.
 //

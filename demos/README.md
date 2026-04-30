@@ -1,7 +1,7 @@
 # badc demos
 
 End-to-end programs that exercise badc on something more substantial
-than a fixture. Build with the c4 dialect badc supports today (no
+than a fixture. Build with the c5 dialect badc supports today (no
 struct array indexing, no struct-member function calls, parallel int
 arrays for everything).
 
@@ -48,7 +48,7 @@ cargo run -- --emit-native -O -o coro demos/coro_pool.c
 ```
 
 Pure user-mode -- no syscalls beyond `printf` / `malloc`, so it
-works wherever the c4 dialect compiles.
+works wherever the c5 dialect compiles.
 
 ## threads.c
 
@@ -63,8 +63,8 @@ cargo run -- --emit-native -O -o threads demos/threads.c
 ./threads
 ```
 
-The c4 dialect can't read a thread function's `arg` parameter --
-the host ABI puts it in rdi/x0/rcx, while a c4 callee fetches its
-args off the c4 stack. Workers therefore communicate exclusively
+The c5 dialect can't read a thread function's `arg` parameter --
+the host ABI puts it in rdi/x0/rcx, while a c5 callee fetches its
+args off the c5 stack. Workers therefore communicate exclusively
 through globals and the lock. See the comments in
 `demos/threads.c` for the full constraint discussion.

@@ -1,6 +1,6 @@
 //! Rudimentary preprocessor that runs before the lexer.
 //!
-//! The c4 dialect's lexer used to silently skip lines starting with
+//! The c5 dialect's lexer used to silently skip lines starting with
 //! `#`, leaving every `#define` / `#ifdef` in the source as a
 //! no-op. That worked when the compiler hardcoded a fixed set of
 //! constants and libc bindings into the symbol table -- as soon as
@@ -16,12 +16,12 @@
 //!   `LHS == RHS`, `LHS != RHS`, or a bare `NAME` (truthy iff
 //!   defined to a non-zero, non-empty value).
 //! * `#pragma dylib(name, "path")` -- introduces a logical dylib
-//!   the codegen can attach bindings to. `name` is the c4-side
+//!   the codegen can attach bindings to. `name` is the c5-side
 //!   handle (e.g. `libc`); `path` is the actual loader-search-name
 //!   or filesystem path (`libc.so.6`, `/usr/lib/libSystem.B.dylib`,
 //!   `msvcrt.dll`).
-//! * `#pragma binding(dylib_name::c4_name, "real_symbol")` --
-//!   declares that the c4-side identifier `c4_name`, when called
+//! * `#pragma binding(dylib_name::local_name, "real_symbol")` --
+//!   declares that the c5-side identifier `local_name`, when called
 //!   from source, should land on `real_symbol` exported by the
 //!   dylib called `dylib_name`. The earlier positional "current
 //!   dylib" form (`#pragma comment(dylib, ...)` with following
@@ -60,7 +60,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use super::codegen::Target;
-use super::error::C4Error;
+use super::error::C5Error;
 use super::headers::embedded_header;
 
 /// One declared dylib plus the bindings that target it. Created
@@ -69,7 +69,7 @@ use super::headers::embedded_header;
 /// reference this dylib through its `name`.
 #[derive(Debug, Clone)]
 pub(crate) struct DylibSpec {
-    /// c4-side identifier for this dylib (e.g. `libc`, `kernel32`).
+    /// c5-side identifier for this dylib (e.g. `libc`, `kernel32`).
     /// Bindings reference it via their `name::c4_fn` left-hand
     /// side, so directive ordering in the header doesn't matter --
     /// a binding can sit anywhere relative to its dylib's
@@ -89,7 +89,7 @@ pub(crate) struct DylibSpec {
     pub bindings: Vec<Binding>,
 }
 
-/// One `#pragma binding(dylib::c4_name, "real_symbol")` declaration.
+/// One `#pragma binding(dylib::local_name, "real_symbol")` declaration.
 /// Owned by the [`DylibSpec`] whose `name` matched the qualifier.
 #[derive(Debug, Clone)]
 pub(crate) struct Binding {
@@ -107,12 +107,12 @@ pub(crate) struct Binding {
     /// standard AAPCS64; only the variadic tail spills to the
     /// stack. Set by the parser alongside `is_variadic`;
     /// meaningful only when `is_variadic == true` (otherwise
-    /// the codegen reads the c4 stack directly without the
+    /// the codegen reads the c5 stack directly without the
     /// register/stack split).
     pub fixed_args: usize,
-    /// c4-side name the source uses (e.g. `printf`).
-    pub c4_name: String,
-    /// Symbol name exported by the dylib. Differs from `c4_name`
+    /// c5-side name the source uses (e.g. `printf`).
+    pub local_name: String,
+    /// Symbol name exported by the dylib. Differs from `local_name`
     /// on macOS (leading `_`) and for Windows aliases like
     /// `mprotect` -> `VirtualProtect`.
     ///
@@ -213,7 +213,7 @@ impl Preprocessor {
     /// `#include` directive expands to (header_lines + 1) output
     /// lines, which shifts user-source line numbers downstream of
     /// the include but keeps lines *within* a file aligned.
-    pub fn process(&mut self, source: &str) -> Result<String, C4Error> {
+    pub fn process(&mut self, source: &str) -> Result<String, C5Error> {
         self.process_named(source, "<source>")
     }
 
@@ -221,7 +221,7 @@ impl Preprocessor {
     /// messages and `#pragma once` can name what they're talking
     /// about; the top-level call uses `"<source>"`, `#include`'d
     /// files use the header name (`"stdio.h"`).
-    fn process_named(&mut self, source: &str, filename: &str) -> Result<String, C4Error> {
+    fn process_named(&mut self, source: &str, filename: &str) -> Result<String, C5Error> {
         let mut out = String::with_capacity(source.len());
 
         // `cond_stack` mirrors the nesting of `#if` / `#ifdef`. Each
@@ -282,12 +282,12 @@ impl Preprocessor {
                     }
                     Directive::Else => {
                         let frame = cond_stack.last_mut().ok_or_else(|| {
-                            C4Error::Compile(format!(
+                            C5Error::Compile(format!(
                                 "preprocessor:{line_no}: `#else` with no matching `#if`"
                             ))
                         })?;
                         if frame.saw_else {
-                            return Err(C4Error::Compile(format!(
+                            return Err(C5Error::Compile(format!(
                                 "preprocessor:{line_no}: duplicate `#else` for the same `#if`"
                             )));
                         }
@@ -299,7 +299,7 @@ impl Preprocessor {
                     }
                     Directive::Endif => {
                         let frame = cond_stack.pop().ok_or_else(|| {
-                            C4Error::Compile(format!(
+                            C5Error::Compile(format!(
                                 "preprocessor:{line_no}: `#endif` with no matching `#if`"
                             ))
                         })?;
@@ -346,7 +346,7 @@ impl Preprocessor {
         }
 
         if !cond_stack.is_empty() {
-            return Err(C4Error::Compile(
+            return Err(C5Error::Compile(
                 "preprocessor: unterminated `#if` / `#ifdef` block".to_string(),
             ));
         }
@@ -416,7 +416,7 @@ impl Preprocessor {
         current
     }
 
-    fn eval_condition(&self, expr: &str, line_no: usize) -> Result<bool, C4Error> {
+    fn eval_condition(&self, expr: &str, line_no: usize) -> Result<bool, C5Error> {
         let expr = expr.trim();
         if let Some((lhs, rhs)) = expr.split_once("==") {
             let l = self.expand(lhs.trim());
@@ -438,7 +438,7 @@ impl Preprocessor {
             let v = self.expand(expr);
             Ok(!v.is_empty() && v != "0")
         } else {
-            Err(C4Error::Compile(format!(
+            Err(C5Error::Compile(format!(
                 "preprocessor:{line_no}: `#if` expression {expr:?} not understood (only `NAME`, \
                  `defined(NAME)`, `LHS == RHS`, `LHS != RHS` are supported)"
             )))
@@ -446,10 +446,10 @@ impl Preprocessor {
     }
 
     /// Recognise `dylib(...)` and `binding(...)`. Other pragmas
-    /// are accepted silently -- the c4 source already uses
+    /// are accepted silently -- the c5 source already uses
     /// `#pragma` markers for things the preprocessor doesn't care
     /// about, and future tools may add their own.
-    fn parse_pragma(&mut self, args: &str, line_no: usize) -> Result<(), C4Error> {
+    fn parse_pragma(&mut self, args: &str, line_no: usize) -> Result<(), C5Error> {
         let args = args.trim();
         if let Some(inner) = args
             .strip_prefix("dylib(")
@@ -468,11 +468,11 @@ impl Preprocessor {
 
     /// `#pragma dylib(name, "path")` -- introduce a logical dylib
     /// the codegen can attach bindings to. `name` is an
-    /// identifier-style c4-side handle (`libc`, `kernel32`, ...);
+    /// identifier-style c5-side handle (`libc`, `kernel32`, ...);
     /// `path` is the actual loader-search-name or filesystem path.
-    fn parse_pragma_dylib(&mut self, inner: &str, line_no: usize) -> Result<(), C4Error> {
+    fn parse_pragma_dylib(&mut self, inner: &str, line_no: usize) -> Result<(), C5Error> {
         let Some((name, path)) = inner.split_once(',') else {
-            return Err(C4Error::Compile(format!(
+            return Err(C5Error::Compile(format!(
                 "preprocessor:{line_no}: `#pragma dylib(...)` expects two args \
                  (`name, \"path\"`)"
             )));
@@ -480,12 +480,12 @@ impl Preprocessor {
         let name = name.trim();
         let path = path.trim().trim_matches('"');
         if name.is_empty() || path.is_empty() {
-            return Err(C4Error::Compile(format!(
+            return Err(C5Error::Compile(format!(
                 "preprocessor:{line_no}: `#pragma dylib(...)` arg is empty"
             )));
         }
         if !is_ident(name) {
-            return Err(C4Error::Compile(format!(
+            return Err(C5Error::Compile(format!(
                 "preprocessor:{line_no}: `#pragma dylib({name}, ...)` -- name must be a \
                  plain identifier"
             )));
@@ -497,7 +497,7 @@ impl Preprocessor {
             // both will hit this twice. Different paths are still
             // a hard error since they'd silently shadow each other.
             if existing.path != path {
-                return Err(C4Error::Compile(format!(
+                return Err(C5Error::Compile(format!(
                     "preprocessor:{line_no}: `#pragma dylib({name}, {path:?})` -- already declared with different path {:?}",
                     existing.path
                 )));
@@ -521,7 +521,7 @@ impl Preprocessor {
     /// `#include` returns an error; repeat inclusion of a header
     /// that previously declared `#pragma once` returns an empty
     /// string.
-    fn process_include(&mut self, name: &str, line_no: usize) -> Result<String, C4Error> {
+    fn process_include(&mut self, name: &str, line_no: usize) -> Result<String, C5Error> {
         if self.pragma_once_files.contains(name) {
             return Ok(String::new());
         }
@@ -534,7 +534,7 @@ impl Preprocessor {
         };
         if self.include_stack.iter().any(|f| f == name) {
             let chain = self.include_stack.join(" -> ");
-            return Err(C4Error::Compile(format!(
+            return Err(C5Error::Compile(format!(
                 "preprocessor:{line_no}: cyclic `#include {name}` (chain: {chain} -> {name})"
             )));
         }
@@ -544,35 +544,35 @@ impl Preprocessor {
         result
     }
 
-    /// `#pragma binding(dylib::c4_name, "real_symbol")` -- record
-    /// `c4_name`'s mapping to `real_symbol` inside the dylib named
+    /// `#pragma binding(dylib::local_name, "real_symbol")` -- record
+    /// `local_name`'s mapping to `real_symbol` inside the dylib named
     /// `dylib`. The dylib must already have been declared by a
     /// `#pragma dylib(...)`; the directives can otherwise appear in
     /// any order.
-    fn parse_pragma_binding(&mut self, inner: &str, line_no: usize) -> Result<(), C4Error> {
+    fn parse_pragma_binding(&mut self, inner: &str, line_no: usize) -> Result<(), C5Error> {
         let Some((qualified, real_symbol)) = inner.split_once(',') else {
-            return Err(C4Error::Compile(format!(
+            return Err(C5Error::Compile(format!(
                 "preprocessor:{line_no}: `#pragma binding(...)` expects two args \
-                 (`dylib::c4_name, \"real_symbol\"`)"
+                 (`dylib::local_name, \"real_symbol\"`)"
             )));
         };
         let qualified = qualified.trim();
         let real_symbol = real_symbol.trim().trim_matches('"');
-        let Some((dylib_name, c4_name)) = qualified.split_once("::") else {
-            return Err(C4Error::Compile(format!(
+        let Some((dylib_name, local_name)) = qualified.split_once("::") else {
+            return Err(C5Error::Compile(format!(
                 "preprocessor:{line_no}: `#pragma binding({qualified}, ...)` -- LHS must be \
-                 `dylib_name::c4_name`"
+                 `dylib_name::local_name`"
             )));
         };
         let dylib_name = dylib_name.trim();
-        let c4_name = c4_name.trim();
-        if dylib_name.is_empty() || c4_name.is_empty() || real_symbol.is_empty() {
-            return Err(C4Error::Compile(format!(
+        let local_name = local_name.trim();
+        if dylib_name.is_empty() || local_name.is_empty() || real_symbol.is_empty() {
+            return Err(C5Error::Compile(format!(
                 "preprocessor:{line_no}: `#pragma binding(...)` arg is empty"
             )));
         }
         let Some(dylib) = self.dylibs.iter_mut().find(|d| d.name == dylib_name) else {
-            return Err(C4Error::Compile(format!(
+            return Err(C5Error::Compile(format!(
                 "preprocessor:{line_no}: `#pragma binding({dylib_name}::...)` -- no `#pragma \
                  dylib({dylib_name}, ...)` declared"
             )));
@@ -580,7 +580,7 @@ impl Preprocessor {
         dylib.bindings.push(Binding {
             is_variadic: false,
             fixed_args: 0,
-            c4_name: c4_name.to_string(),
+            local_name: local_name.to_string(),
             real_symbol: real_symbol.to_string(),
         });
         Ok(())
@@ -851,12 +851,12 @@ mod tests {
         assert_eq!(pp.dylibs.len(), 2);
         assert_eq!(pp.dylibs[0].name, "libfoo");
         assert_eq!(pp.dylibs[0].bindings.len(), 2);
-        assert_eq!(pp.dylibs[0].bindings[0].c4_name, "printf");
+        assert_eq!(pp.dylibs[0].bindings[0].local_name, "printf");
         assert_eq!(pp.dylibs[0].bindings[0].real_symbol, "_printf");
-        assert_eq!(pp.dylibs[0].bindings[1].c4_name, "malloc");
+        assert_eq!(pp.dylibs[0].bindings[1].local_name, "malloc");
         assert_eq!(pp.dylibs[1].name, "libbar");
         assert_eq!(pp.dylibs[1].bindings.len(), 1);
-        assert_eq!(pp.dylibs[1].bindings[0].c4_name, "exit");
+        assert_eq!(pp.dylibs[1].bindings[0].local_name, "exit");
         assert_eq!(pp.dylibs[1].bindings[0].real_symbol, "ExitProcess");
     }
 
@@ -875,7 +875,7 @@ mod tests {
         let err = pp
             .process("#pragma dylib(libfoo, \"x\")\n#pragma binding(printf, \"p\")\n")
             .unwrap_err();
-        assert!(format!("{err}").contains("LHS must be `dylib_name::c4_name`"));
+        assert!(format!("{err}").contains("LHS must be `dylib_name::local_name`"));
     }
 
     #[test]

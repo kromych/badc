@@ -147,7 +147,7 @@ fn dlsym_finds_a_real_libc_symbol_in_vm_mode() {
 #[test]
 fn jsri_through_a_dlsym_pointer_is_rejected_in_vm_mode() {
     // VM mode has no FFI -- decode_pc only accepts CODE_BASE-biased
-    // c4 PCs, so jumping through a real libc address must error. The
+    // c5 PCs, so jumping through a real libc address must error. The
     // documented behaviour is "Runtime Error: jump to non-code
     // address ...".
     let src = r#"

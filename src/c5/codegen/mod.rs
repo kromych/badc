@@ -31,7 +31,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use super::error::C4Error;
+use super::error::C5Error;
 use super::op::Op;
 use super::program::Program;
 
@@ -129,7 +129,7 @@ impl Target {
 
     /// Parse the value passed to `--target=...` (or pick the host
     /// default when the flag is absent).
-    pub fn parse(spec: Option<&str>) -> Result<Self, C4Error> {
+    pub fn parse(spec: Option<&str>) -> Result<Self, C5Error> {
         match spec {
             None => Ok(Target::host()),
             Some("macos-aarch64") | Some("aarch64-apple-darwin") => Ok(Target::MacOSAarch64),
@@ -145,7 +145,7 @@ impl Target {
             | Some("windows-aarch64")
             | Some("aarch64-pc-windows-gnullvm")
             | Some("aarch64-pc-windows-msvc") => Ok(Target::WindowsAarch64),
-            Some(other) => Err(C4Error::Compile(format!(
+            Some(other) => Err(C5Error::Compile(format!(
                 "unsupported native target: {other:?} \
                  (try `macos-aarch64`, `linux-aarch64`, `linux-x64`, \
                  `windows-x64`, or `windows-arm64`)"
@@ -177,10 +177,10 @@ pub(crate) struct ResolvedImport {
     /// uses [`ResolvedImports::index_of_binding`] to translate this
     /// back into a GOT / IAT slot index when patching call sites.
     pub binding_idx: i64,
-    /// The portable c4-side name (`"printf"`). Used by the VM to
+    /// The portable c5-side name (`"printf"`). Used by the VM to
     /// dispatch to the right Rust shim, and in compile-error
     /// messages.
-    pub c4_name: String,
+    pub local_name: String,
     /// The dylib's exported symbol (`"_printf"` on macOS,
     /// `"printf"` on Linux, `"printf"` on msvcrt). Goes verbatim
     /// into the symbol table / IAT name table.
@@ -253,17 +253,17 @@ impl ResolvedImports {
     /// of a writer-side panic.
     pub fn force_include_by_name(
         &mut self,
-        c4_name: &str,
+        local_name: &str,
         program: &Program,
-    ) -> Result<(), C4Error> {
-        if self.imports.iter().any(|i| i.c4_name == c4_name) {
+    ) -> Result<(), C5Error> {
+        if self.imports.iter().any(|i| i.local_name == local_name) {
             return Ok(());
         }
         let mut found: Option<(i64, &str, &str, &str, bool, usize)> = None;
         let mut binding_idx: i64 = 0;
         'outer: for spec in &program.dylibs {
             for b in &spec.bindings {
-                if b.c4_name == c4_name {
+                if b.local_name == local_name {
                     found = Some((
                         binding_idx,
                         spec.name.as_str(),
@@ -279,9 +279,9 @@ impl ResolvedImports {
         }
         let Some((idx, dylib_name, dylib_path, real_symbol, is_variadic, fixed_args)) = found
         else {
-            return Err(C4Error::Compile(format!(
-                "no `#pragma binding(<dylib>::{c4_name}, ...)` is in scope -- the target's \
-                 `_start` stub needs `{c4_name}` and the codegen has nowhere to import it from. \
+            return Err(C5Error::Compile(format!(
+                "no `#pragma binding(<dylib>::{local_name}, ...)` is in scope -- the target's \
+                 `_start` stub needs `{local_name}` and the codegen has nowhere to import it from. \
                  Did you forget to `#include <stdlib.h>`?"
             )));
         };
@@ -297,7 +297,7 @@ impl ResolvedImports {
         };
         self.imports.push(ResolvedImport {
             binding_idx: idx,
-            c4_name: c4_name.to_string(),
+            local_name: local_name.to_string(),
             real_symbol: real_symbol.to_string(),
             dylib_index,
             is_variadic,
@@ -314,7 +314,7 @@ impl ResolvedImports {
     /// `program.dylibs` ordering, so a program that calls `printf`
     /// (in `libc`) and `LoadLibraryA` (in `kernel32`) gets two
     /// dylibs in that declaration order.
-    pub fn resolve(program: &Program) -> Result<Self, C4Error> {
+    pub fn resolve(program: &Program) -> Result<Self, C5Error> {
         // Walk bytecode, collecting used binding-flat indices in
         // first-encounter order. The order determines GOT slot
         // indices; within a single compilation it just needs to be
@@ -356,7 +356,7 @@ impl ResolvedImports {
         let mut imports: Vec<ResolvedImport> = Vec::new();
         for binding_idx in used {
             let Some((spec, b)) = lookup_binding(program, binding_idx) else {
-                return Err(C4Error::Compile(format!(
+                return Err(C5Error::Compile(format!(
                     "Op::JsrExt operand {binding_idx} is out of range for the program's \
                      `#pragma binding(...)` table"
                 )));
@@ -373,7 +373,7 @@ impl ResolvedImports {
             };
             imports.push(ResolvedImport {
                 binding_idx,
-                c4_name: b.c4_name.clone(),
+                local_name: b.local_name.clone(),
                 real_symbol: b.real_symbol.clone(),
                 dylib_index,
                 is_variadic: b.is_variadic,
@@ -387,7 +387,7 @@ impl ResolvedImports {
 
 /// Find the binding at flat-index `binding_idx` across all dylibs
 /// in declaration order. The lexer assigned this index when seeding
-/// each binding's c4_name as a `Token::Sys` symbol.
+/// each binding's local_name as a `Token::Sys` symbol.
 fn lookup_binding(
     program: &Program,
     binding_idx: i64,
@@ -510,7 +510,7 @@ pub(crate) struct FuncFixup {
 /// delegate.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct NativeOptions {
-    /// Run the per-function register allocator. The c4 bytecode
+    /// Run the per-function register allocator. The c5 bytecode
     /// pushes the left operand of every binary op onto the stack;
     /// the regalloc routes most of those pushes through registers
     /// instead (x20..x27 + x9..x15 on aarch64; rbx/r12/r14/r15 on
@@ -557,7 +557,7 @@ impl NativeOptions {
 /// This is the zero-options shorthand; pass `NativeOptions` via
 /// [`emit_native_with_options`] to enable optimization knobs like
 /// the register allocator.
-pub fn emit_native(program: &Program, target: Target) -> Result<Vec<u8>, C4Error> {
+pub fn emit_native(program: &Program, target: Target) -> Result<Vec<u8>, C5Error> {
     emit_native_with_options(program, target, NativeOptions::default())
 }
 
@@ -567,7 +567,7 @@ pub fn emit_native_with_options(
     program: &Program,
     target: Target,
     options: NativeOptions,
-) -> Result<Vec<u8>, C4Error> {
+) -> Result<Vec<u8>, C5Error> {
     let build = lower_for(program, target, options)?;
     write_for(&build, target)
 }
@@ -580,7 +580,7 @@ pub fn emit_native_with_options(
 /// Resolves the import set once up front (so the per-arch lowerings
 /// share an enumeration with the writer) and stitches it onto the
 /// returned [`Build`] before handing it back.
-fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Result<Build, C4Error> {
+fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Result<Build, C5Error> {
     let mut imports = ResolvedImports::resolve(program)?;
     // Linux ELF's `_start` always tail-calls libc `exit` so glibc
     // gets to flush stdio and run atexit before the kernel reaps us.
@@ -604,7 +604,7 @@ fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Resul
     Ok(build)
 }
 
-fn write_for(build: &Build, target: Target) -> Result<Vec<u8>, C4Error> {
+fn write_for(build: &Build, target: Target) -> Result<Vec<u8>, C5Error> {
     match target {
         Target::MacOSAarch64 => mach_o::write(build),
         Target::LinuxAarch64 => elf::write(build, Machine::Aarch64),
@@ -621,7 +621,7 @@ fn write_for(build: &Build, target: Target) -> Result<Vec<u8>, C4Error> {
 pub fn dump_native_listing(
     program: &Program,
     target: Target,
-) -> Result<alloc::string::String, C4Error> {
+) -> Result<alloc::string::String, C5Error> {
     dump_native_listing_with_options(program, target, NativeOptions::default())
 }
 
@@ -632,7 +632,7 @@ pub fn dump_native_listing_with_options(
     program: &Program,
     target: Target,
     options: NativeOptions,
-) -> Result<alloc::string::String, C4Error> {
+) -> Result<alloc::string::String, C5Error> {
     let build = lower_for(program, target, options)?;
     Ok(disasm::dump(program, &build, target))
 }

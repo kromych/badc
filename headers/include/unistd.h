@@ -3,7 +3,7 @@
 // On Windows, msvcrt exports the underscored forms (`_open`, `_read`,
 // `_close`, `_write`) since the unprefixed versions belong to MSVC's
 // "deprecated" Posix-compat layer that isn't always available. The
-// portable c4-side names stay the same; only the bound symbol differs.
+// portable c5-side names stay the same; only the bound symbol differs.
 
 #pragma once
 

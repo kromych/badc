@@ -60,7 +60,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use super::super::CODE_BASE;
-use super::super::error::C4Error;
+use super::super::error::C5Error;
 use super::super::op::Op;
 use super::super::program::Program;
 use super::regalloc::{self, PoolBank, PushKind, RegStackPlan};
@@ -520,7 +520,7 @@ pub(super) fn enc_stur(rt: Reg, rn: Reg, imm: i32) -> u32 {
     0xF800_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
-// ---- Pre-/post-indexed loads & stores. The c4 VM stack push/pop
+// ---- Pre-/post-indexed loads & stores. The c5 VM stack push/pop
 //      compiles to these because they update sp in the same instruction.
 
 /// `STR <Xt>, [<Xn|SP>, #imm]!` -- pre-indexed store with writeback.
@@ -785,7 +785,7 @@ pub(super) fn lower(
     target: Target,
     native: NativeOptions,
     imports: &super::ResolvedImports,
-) -> Result<Build, C4Error> {
+) -> Result<Build, C5Error> {
     let abi = target.abi();
 
     // Run the regalloc analyzer once if `--optimize` is on. The
@@ -832,7 +832,7 @@ pub(super) fn lower(
         bytecode_to_native[op_pc] = code.len();
         let raw = program.text[pc];
         let op = Op::from_i64(raw).ok_or_else(|| {
-            C4Error::Compile(format!("native codegen: bad opcode at PC {pc}: {raw}"))
+            C5Error::Compile(format!("native codegen: bad opcode at PC {pc}: {raw}"))
         })?;
         pc += 1;
         if matches!(op, Op::Ent) {
@@ -887,13 +887,13 @@ pub(super) fn lower(
     let mut func_fixups: Vec<FuncFixup> = Vec::with_capacity(pending_func_fixups.len());
     for (adrp_offset, target_bc_pc) in pending_func_fixups {
         if target_bc_pc > program.text.len() {
-            return Err(C4Error::Compile(format!(
+            return Err(C5Error::Compile(format!(
                 "native codegen: function pointer target {target_bc_pc} past end of bytecode"
             )));
         }
         let target = bytecode_to_native[target_bc_pc];
         if target == usize::MAX {
-            return Err(C4Error::Compile(format!(
+            return Err(C5Error::Compile(format!(
                 "native codegen: function pointer target {target_bc_pc} did not land on an instruction"
             )));
         }
@@ -907,13 +907,13 @@ pub(super) fn lower(
         .get(program.entry_pc)
         .copied()
         .ok_or_else(|| {
-            C4Error::Compile(format!(
+            C5Error::Compile(format!(
                 "native codegen: entry_pc {} is out of bytecode range",
                 program.entry_pc
             ))
         })?;
     if entry_offset == usize::MAX {
-        return Err(C4Error::Compile(format!(
+        return Err(C5Error::Compile(format!(
             "native codegen: entry_pc {} did not align with any instruction start",
             program.entry_pc
         )));
@@ -937,9 +937,9 @@ pub(super) fn lower(
 }
 
 /// Read the i64 operand following an opcode, advancing `pc` past it.
-fn read_operand(text: &[i64], pc: &mut usize, op_name: &str) -> Result<i64, C4Error> {
+fn read_operand(text: &[i64], pc: &mut usize, op_name: &str) -> Result<i64, C5Error> {
     if *pc >= text.len() {
-        return Err(C4Error::Compile(format!(
+        return Err(C5Error::Compile(format!(
             "native codegen: {op_name} missing operand at end of bytecode"
         )));
     }
@@ -956,17 +956,17 @@ fn apply_fixups(
     fixups: &[Fixup],
     bc_to_native: &[usize],
     bc_len: usize,
-) -> Result<(), C4Error> {
+) -> Result<(), C5Error> {
     for f in fixups {
         if f.target_bytecode_pc > bc_len {
-            return Err(C4Error::Compile(format!(
+            return Err(C5Error::Compile(format!(
                 "native codegen: branch target {} past end of bytecode",
                 f.target_bytecode_pc
             )));
         }
         let target = bc_to_native[f.target_bytecode_pc];
         if target == usize::MAX {
-            return Err(C4Error::Compile(format!(
+            return Err(C5Error::Compile(format!(
                 "native codegen: branch target {} did not land on an instruction",
                 f.target_bytecode_pc
             )));
@@ -976,7 +976,7 @@ fn apply_fixups(
         // All AArch64 branches measure the offset in instructions
         // (4 bytes each).
         if delta_bytes & 3 != 0 {
-            return Err(C4Error::Compile(format!(
+            return Err(C5Error::Compile(format!(
                 "native codegen: branch delta {delta_bytes} not 4-byte aligned"
             )));
         }
@@ -1012,7 +1012,7 @@ fn lower_op(
     op_pc: usize,
     branch_targets: &[bool],
     imports: &super::ResolvedImports,
-) -> Result<(), C4Error> {
+) -> Result<(), C5Error> {
     match op {
         // ---- Function frame ----
         Op::Ent => {
@@ -1070,7 +1070,7 @@ fn lower_op(
             }
         }
         Op::Lea => {
-            // c4 emits `Lea` offsets in 8-byte units (its VM uses one
+            // c5 emits `Lea` offsets in 8-byte units (its VM uses one
             // 8-byte slot per push and per local). Our native stack
             // pushes 16 bytes per arg slot for AAPCS64 alignment, so
             // for the args region (val >= 2) we use 16-byte spacing
@@ -1151,7 +1151,7 @@ fn lower_op(
         Op::Xor => binop_with_pop(code, reg_state, enc_eor_reg),
         Op::And => binop_with_pop(code, reg_state, enc_and_reg),
 
-        // ---- Comparisons. The c4 VM does `popped <cmp> a`, which
+        // ---- Comparisons. The c5 VM does `popped <cmp> a`, which
         //      maps to `cmp lhs, x19; cset x19, <cond>`. With the
         //      cmp+branch fusion peephole, when the next op is
         //      `Bz`/`Bnz` (and not a branch target), we skip the
@@ -1244,16 +1244,16 @@ fn lower_op(
             // from `bp + offset` via Op::Lea) or a native libc
             // function obtained via dlsym (reads args from x0..x7).
             // To work for both, peek at the next instruction for the
-            // arg count (c4 emits an Op::Adj after every non-zero-arg
+            // arg count (c5 emits an Op::Adj after every non-zero-arg
             // call) and load args into x0..x7 *in addition to* leaving
-            // them on the stack. c4 callees ignore the registers; libc
+            // them on the stack. c5 callees ignore the registers; libc
             // callees ignore the stack.
             let nargs = match Op::from_i64(text.get(*pc).copied().unwrap_or(0)) {
                 Some(Op::Adj) => text[*pc + 1] as usize,
                 _ => 0,
             };
             if nargs > 8 {
-                return Err(C4Error::Compile(format!(
+                return Err(C5Error::Compile(format!(
                     "native codegen: Jsri arg count {nargs} exceeds 8 (x0..x7)"
                 )));
             }
@@ -1307,8 +1307,8 @@ fn lower_op(
 }
 
 /// Lower a intrinsic op to a libc call. Args were already pushed onto
-/// our 16-byte VM stack slots by the c4 emitter; we *peek* (not pop)
-/// to load them into x0..x7. The c4 emitter follows every call with
+/// our 16-byte VM stack slots by the c5 emitter; we *peek* (not pop)
+/// to load them into x0..x7. The c5 emitter follows every call with
 /// `Op::Adj N` which the next loop iteration will lower into the SP
 /// adjustment that drops them.
 ///
@@ -1330,13 +1330,13 @@ fn emit_libc_call(
     got_fixups: &mut Vec<GotFixup>,
     abi: Abi,
     imports: &super::ResolvedImports,
-) -> Result<(), C4Error> {
+) -> Result<(), C5Error> {
     let import_index = imports.index_of_binding(binding_idx).ok_or_else(|| {
-        C4Error::Compile(format!(
+        C5Error::Compile(format!(
             "native codegen: no import slot for binding {binding_idx} -- the resolver should have placed it"
         ))
     })?;
-    let c4_name: &str = imports.imports[import_index].c4_name.as_str();
+    let local_name: &str = imports.imports[import_index].local_name.as_str();
 
     // Peek at the next instruction; if it's `Adj N`, that gives us
     // the arg count. The c4 compiler omits the `Adj` for 0-arg
@@ -1347,8 +1347,8 @@ fn emit_libc_call(
         _ => 0,
     };
     if arg_count > 8 {
-        return Err(C4Error::Compile(format!(
-            "native codegen: `{c4_name}` arg count {arg_count} out of supported range (0..=8)"
+        return Err(C5Error::Compile(format!(
+            "native codegen: `{local_name}` arg count {arg_count} out of supported range (0..=8)"
         )));
     }
 
@@ -1362,7 +1362,7 @@ fn emit_libc_call(
     // so any header-declared variadic function (printf, sscanf,
     // sprintf, fprintf, ...) gets the macOS dance, not just
     // `printf`.
-    let _ = c4_name;
+    let _ = local_name;
     let imp = &imports.imports[import_index];
     let is_variadic = imp.is_variadic && abi.variadic_on_stack;
 
@@ -1467,7 +1467,7 @@ fn pop_lhs_reg(code: &mut Vec<u8>, reg_state: &mut RegState<'_>) -> Reg {
 }
 
 /// Pop the LHS, then run a register-form encoder against (x19, lhs,
-/// x19) to produce `x19 = lhs OP x19`. The c4 VM has the popped
+/// x19) to produce `x19 = lhs OP x19`. The c5 VM has the popped
 /// value as the LHS for sub / div / shifts; for the commutative ops
 /// the operand order doesn't matter.
 fn binop_with_pop<F: Fn(Reg, Reg, Reg) -> u32>(
@@ -1524,7 +1524,7 @@ fn imm_arith<F: Fn(Reg, Reg, Reg) -> u32>(
     pc: &mut usize,
     name: &str,
     enc: F,
-) -> Result<(), C4Error> {
+) -> Result<(), C5Error> {
     let v = read_operand(text, pc, name)?;
     load_imm64(code, Reg::X16, v as u64);
     emit(code, enc(Reg::X19, Reg::X19, Reg::X16));
@@ -1543,7 +1543,7 @@ fn imm_cmp(
     cond: Cond,
     reg_state: &mut RegState<'_>,
     branch_targets: &[bool],
-) -> Result<(), C4Error> {
+) -> Result<(), C5Error> {
     let v = read_operand(text, pc, name)?;
     load_imm64(code, Reg::X16, v as u64);
     emit(code, enc_cmp_reg(Reg::X19, Reg::X16));

@@ -7,9 +7,9 @@
 // macOS keeps everything in libSystem (which is what `dlopen(NULL)`
 // opens by default).
 //
-// The c4 dialect can't read the `arg` parameter pthread_create
+// The c5 dialect can't read the `arg` parameter pthread_create
 // hands the thread function (the host ABI puts it in rdi/x0,
-// while a c4 callee reads its first param off the c4 stack). The
+// while a c5 callee reads its first param off the c5 stack). The
 // canonical workaround is shared globals + a mutex-protected
 // counter from which each thread fetches its own slot index. See
 // demos/threads.c for the pattern.

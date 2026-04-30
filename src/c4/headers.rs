@@ -8,8 +8,8 @@
 //!
 //! The set is intentionally small -- POSIX-flavoured names plus
 //! `windows.h` for the kernel32 surface. Each header internally
-//! `#ifdef`s on the target macros (`__BADC_WINDOWS__`, `__APPLE__`,
-//! `__linux__`) to pick the right `#pragma dylib(...)` and
+//! `#ifdef`s on the target macros (`__APPLE__`, `__linux__`,
+//! `_WIN32`) to pick the right `#pragma dylib(...)` and
 //! `#pragma binding(...)`. That keeps the user-visible header set
 //! cross-platform even though the underlying dylib is per-OS.
 //!
@@ -28,10 +28,19 @@
 /// as a silent no-op (matching the historical behaviour where
 /// `#include` was unrecognised entirely), so legacy fixtures with
 /// e.g. `#include <fcntl.h>` for documentation don't break.
-pub(super) fn embedded_header(_name: &str) -> Option<&'static str> {
-    // Per-purpose headers land here in the next step (string.h,
-    // stdio.h, stdlib.h, unistd.h, dlfcn.h, pthread.h, windows.h).
-    // The registry is intentionally empty for now: this commit only
-    // wires up the `#include` plumbing.
-    None
+pub(super) fn embedded_header(name: &str) -> Option<&'static str> {
+    Some(match name {
+        "string.h" => include_str!("../../headers/include/string.h"),
+        "stdio.h" => include_str!("../../headers/include/stdio.h"),
+        "stdlib.h" => include_str!("../../headers/include/stdlib.h"),
+        "unistd.h" => include_str!("../../headers/include/unistd.h"),
+        "fcntl.h" => include_str!("../../headers/include/fcntl.h"),
+        "sys/mman.h" => include_str!("../../headers/include/sys/mman.h"),
+        "dlfcn.h" => include_str!("../../headers/include/dlfcn.h"),
+        "windows.h" => include_str!("../../headers/include/windows.h"),
+        // Legacy alias: <memory.h> predates POSIX's consolidation
+        // of mem*/str* under <string.h>. Forwards to string.h.
+        "memory.h" => include_str!("../../headers/include/memory.h"),
+        _ => return None,
+    })
 }

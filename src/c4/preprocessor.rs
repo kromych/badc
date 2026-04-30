@@ -140,6 +140,15 @@ impl Preprocessor {
     ///   * AArch64 targets get `__aarch64__` and `__arm64__` (the
     ///     latter is the Apple/clang spelling).
     ///   * x86_64 targets get `__x86_64__` and `__amd64__`.
+    /// * OS macros, also defined to `1` when active, mirroring the
+    ///   gcc / clang / msvc spelling so cross-platform headers
+    ///   (`#ifdef __APPLE__`, `#ifdef __linux__`, `#ifdef _WIN32`)
+    ///   work the way users already expect:
+    ///   * macOS targets get `__APPLE__` and `__MACH__`.
+    ///   * Linux targets get `__linux__` and `__unix__`.
+    ///   * Windows targets get `_WIN32` (and `_WIN64`, since both of
+    ///     our Windows targets are 64-bit) plus the legacy
+    ///     `__BADC_WINDOWS__` we used before this commit.
     pub fn new(target_spec: &str, target: Target, crate_version: &str) -> Self {
         let mut macros = BTreeMap::new();
         macros.insert(
@@ -155,6 +164,21 @@ impl Preprocessor {
             Target::LinuxX64 | Target::WindowsX64 => {
                 macros.insert("__x86_64__".to_string(), "1".to_string());
                 macros.insert("__amd64__".to_string(), "1".to_string());
+            }
+        }
+        match target {
+            Target::MacOSAarch64 => {
+                macros.insert("__APPLE__".to_string(), "1".to_string());
+                macros.insert("__MACH__".to_string(), "1".to_string());
+            }
+            Target::LinuxAarch64 | Target::LinuxX64 => {
+                macros.insert("__linux__".to_string(), "1".to_string());
+                macros.insert("__unix__".to_string(), "1".to_string());
+            }
+            Target::WindowsX64 | Target::WindowsAarch64 => {
+                macros.insert("_WIN32".to_string(), "1".to_string());
+                macros.insert("_WIN64".to_string(), "1".to_string());
+                macros.insert("__BADC_WINDOWS__".to_string(), "1".to_string());
             }
         }
         Self {
@@ -449,10 +473,19 @@ impl Preprocessor {
                  plain identifier"
             )));
         }
-        if self.dylibs.iter().any(|d| d.name == name) {
-            return Err(C4Error::Compile(format!(
-                "preprocessor:{line_no}: `#pragma dylib({name}, ...)` -- already declared"
-            )));
+        if let Some(existing) = self.dylibs.iter().find(|d| d.name == name) {
+            // Re-declaring an identical dylib is fine -- standard
+            // headers (`<stdio.h>`, `<string.h>`) all bind to the
+            // same `libc` / `msvcrt`, so a source that includes
+            // both will hit this twice. Different paths are still
+            // a hard error since they'd silently shadow each other.
+            if existing.path != path {
+                return Err(C4Error::Compile(format!(
+                    "preprocessor:{line_no}: `#pragma dylib({name}, {path:?})` -- already declared with different path {:?}",
+                    existing.path
+                )));
+            }
+            return Ok(());
         }
         self.dylibs.push(DylibSpec {
             name: name.to_string(),

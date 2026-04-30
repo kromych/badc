@@ -36,6 +36,9 @@ pub(super) fn embedded_header(name: &str) -> Option<&'static str> {
         "unistd.h" => include_str!("../../headers/include/unistd.h"),
         "fcntl.h" => include_str!("../../headers/include/fcntl.h"),
         "sys/mman.h" => include_str!("../../headers/include/sys/mman.h"),
+        "sys/socket.h" => include_str!("../../headers/include/sys/socket.h"),
+        "sys/select.h" => include_str!("../../headers/include/sys/select.h"),
+        "pthread.h" => include_str!("../../headers/include/pthread.h"),
         "dlfcn.h" => include_str!("../../headers/include/dlfcn.h"),
         "windows.h" => include_str!("../../headers/include/windows.h"),
         // Legacy alias: <memory.h> predates POSIX's consolidation

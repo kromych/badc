@@ -661,7 +661,19 @@ fn parse_directive(rest: &str) -> Directive<'_> {
     if let Some(after) = rest.strip_prefix("define") {
         let after = after.trim_start();
         let (name, body) = split_ident(after);
-        return Directive::Define(name, body.trim());
+        // Strip `//` line comments from the macro body. Otherwise
+        // `#define X 42 // a constant` would expand to "42 // a
+        // constant", and the comment text would either swallow the
+        // rest of the substitution line (lexer treats `//` as
+        // line-comment) or land in the token stream and break
+        // parsing. C `/* ... */` comments inside macro bodies
+        // aren't supported elsewhere in this dialect, so we don't
+        // try to strip those.
+        let body = match body.find("//") {
+            Some(i) => body[..i].trim(),
+            None => body.trim(),
+        };
+        return Directive::Define(name, body);
     }
     if let Some(after) = rest.strip_prefix("undef") {
         return Directive::Undef(after.trim());
@@ -754,6 +766,19 @@ mod tests {
     fn macro_to_macro_substitution_chains() {
         let out = process("#define A B\n#define B 5\nint x = A;\n");
         assert!(out.contains("int x = 5;"));
+    }
+
+    #[test]
+    fn define_strips_trailing_line_comment() {
+        // Without the strip, the substitution would expand to
+        // `int x = 42 // a constant ;` and the lexer's `//` would
+        // swallow the trailing `;`, breaking parsing entirely.
+        let out = process("#define FOO 42 // a constant\nint x = FOO;\n");
+        assert!(
+            out.contains("int x = 42;"),
+            "expected `int x = 42;` after macro expansion, got:\n{out}"
+        );
+        assert!(!out.contains("// a constant"));
     }
 
     #[test]

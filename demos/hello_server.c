@@ -2,73 +2,48 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <dlfcn.h>
+#include <sys/socket.h>
+#include <sys/select.h>
+#include <fcntl.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 // Async "Hello, World!" HTTP server.
 //
-// Reaches POSIX sockets through dlopen/dlsym -- badc doesn't ship a
-// <sys/socket.h>, but the symbols live in libc and are visible
-// through the global handle (`dlopen(NULL, RTLD_NOW)`).
+// One select() loop multiplexes the listener and up to MAX_CLIENTS
+// in-flight client sockets. New connections are accepted into a
+// free slot and the response is fanned out as each slot becomes
+// writable. The loop never blocks on a single fd, so a slow client
+// can't stall the others.
 //
-// The "async" part is event-driven, not threaded: a single select()
-// loop multiplexes the listener and up to MAX_CLIENTS in-flight
-// client sockets. New connections are accepted into a free slot and
-// the response is fanned out as each slot becomes writable. The
-// loop never blocks on a single fd, so a slow client can't stall
-// the others.
+// Cross-platform on macOS, Linux, and Windows. Build/run:
 //
-// Linux x86_64 and Linux aarch64. The sockaddr_in layout below is
-// the Linux flavour (no leading sin_len byte). Build and run:
+//   cargo run -- --emit-native -O -o hello demos/hello_server.c
+//   ./hello                           # listens on 0.0.0.0:8080
+//   curl http://localhost:8080/       # -> Hello, World!
 //
-//   cargo run -- --emit-native --target=linux-x64 -O \
-//       -o hello demos/hello_server.c
-//   ./hello                      # listens on 0.0.0.0:8080
-//   curl http://localhost:8080/  # -> Hello, World!
-//
-// Note on the c4 dialect: badc is a c4 derivative, so the source
-// here pays for that with parallel int arrays (no struct array
-// index, no struct-member function calls), free-standing globals
-// for libc symbols, and manual byte writes into the sockaddr_in /
-// fd_set buffers (no <sys/socket.h>, no FD_SET macro).
+// The byte-level constants (AF_INET, SOL_SOCKET, ...) and the
+// libc / Winsock symbol bindings come from <sys/socket.h>; the
+// dialect-driven choices that don't fit in a header (the macOS
+// sin_len byte, the close vs closesocket spelling, the fcntl vs
+// ioctlsocket non-blocking dance) sit behind the few #ifdefs
+// below.
 
 // htons(8080): high byte 0x1F, low byte 0x90.
 #define PORT_HI       0x1F
 #define PORT_LO       0x90
-#define AF_INET       2
-#define SOCK_STREAM   1
-#define SOL_SOCKET    1
-#define SO_REUSEADDR  2
 #define BACKLOG       16
 #define MAX_CLIENTS   8
-// FD_SETSIZE/8 on Linux.
-#define FD_SET_BYTES  128
-// fcntl op for "set fd flags" + the non-blocking bit.
-#define F_SETFL       4
-#define O_NONBLOCK    04000
 
-// Per-slot state machine: free -> reading -> writing -> free.
 #define SLOT_FREE     0
 #define SLOT_READING  1
 #define SLOT_WRITING  2
 
-// libc function pointers, populated in main() via dlsym. Globals
-// because the c4 dialect doesn't allow calling a struct member as
-// a function (`p->fn(...)`) -- only direct identifier calls work.
-int *g_socket;
-int *g_setsockopt;
-int *g_bind;
-int *g_listen;
-int *g_accept;
-int *g_select;
-int *g_read;
-int *g_write;
-int *g_close;
-int *g_fcntl;
-
-// Per-slot state. Parallel int arrays keep indexing simple --
-// `slot_fd[i]` is just `*(slot_fd + i)`, while `slots[i].fd` would
-// need manual sizeof-struct stride that the c4 dialect doesn't do
-// automatically.
+// Per-slot parallel int arrays. badc's c4 dialect doesn't auto-
+// stride struct array indexes by sizeof(struct), so flat int
+// arrays are the cheapest way to keep `slots[i].field` ergonomics.
 int *slot_fd;
 int *slot_state;
 int *slot_written;
@@ -77,8 +52,6 @@ void fdset_zero(char *fds) {
     memset(fds, 0, FD_SET_BYTES);
 }
 
-// FD_SET / FD_ISSET as raw byte ops -- Linux fd_set is just a
-// little-endian bitmap of FD_SETSIZE bits.
 void fdset_set(char *fds, int fd) {
     int byte_off;
     int bit;
@@ -95,42 +68,64 @@ int fdset_isset(char *fds, int fd) {
     return (*(fds + byte_off) >> bit) & 1;
 }
 
+// Cross-platform "close this socket fd" wrapper.
+void sock_close(int fd) {
+#ifdef _WIN32
+    closesocket(fd);
+#else
+    close(fd);
+#endif
+}
+
+// Cross-platform "set this fd non-blocking".
+void sock_nonblock(int fd) {
+#ifdef _WIN32
+    int *one;
+    one = malloc(sizeof(int));
+    *one = 1;
+    ioctlsocket(fd, FIONBIO, one);
+    free(one);
+#else
+    fcntl(fd, F_SETFL, O_NONBLOCK);
+#endif
+}
+
 int build_listener() {
     int fd;
     char *addr;
     int *one;
     int rc;
 
-    fd = g_socket(AF_INET, SOCK_STREAM, 0);
+    fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) return -1;
 
-    // SO_REUSEADDR so a quick restart doesn't trip TIME_WAIT.
     one = malloc(sizeof(int));
     *one = 1;
-    g_setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, one, sizeof(int));
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (char *)one, sizeof(int));
     free(one);
 
-    // sockaddr_in (Linux, 16 bytes):
-    //   [0..1]  sin_family  = AF_INET (LE u16)
-    //   [2..3]  sin_port    = 8080    (BE u16)
-    //   [4..7]  sin_addr    = 0.0.0.0 (BE u32)
-    //   [8..15] sin_zero[8] = 0
-    addr = malloc(16);
-    memset(addr, 0, 16);
-    *(addr + 0) = AF_INET;
+    // sockaddr_in: 16 bytes, layout drift between macOS and the rest
+    // is just the leading sin_len byte (macOS only). Everything else
+    // (sin_port at offset 2, sin_addr at offset 4) lines up.
+    addr = malloc(SOCKADDR_IN_SIZE);
+    memset(addr, 0, SOCKADDR_IN_SIZE);
+#ifdef __APPLE__
+    *(addr + 0) = SOCKADDR_IN_SIZE;     // sin_len
+    *(addr + 1) = AF_INET;
+#else
+    *(addr + 0) = AF_INET;              // sin_family low byte
+#endif
     *(addr + 2) = PORT_HI;
     *(addr + 3) = PORT_LO;
 
-    rc = g_bind(fd, addr, 16);
+    rc = bind(fd, addr, SOCKADDR_IN_SIZE);
     free(addr);
-    if (rc < 0) { g_close(fd); return -1; }
+    if (rc < 0) { sock_close(fd); return -1; }
 
-    rc = g_listen(fd, BACKLOG);
-    if (rc < 0) { g_close(fd); return -1; }
+    rc = listen(fd, BACKLOG);
+    if (rc < 0) { sock_close(fd); return -1; }
 
-    // O_NONBLOCK on the listener so accept doesn't block when
-    // select returns spuriously.
-    g_fcntl(fd, F_SETFL, O_NONBLOCK);
+    sock_nonblock(fd);
     return fd;
 }
 
@@ -145,14 +140,13 @@ int find_free_slot() {
 }
 
 void close_slot(int i) {
-    g_close(slot_fd[i]);
+    sock_close(slot_fd[i]);
     slot_fd[i] = -1;
     slot_state[i] = SLOT_FREE;
     slot_written[i] = 0;
 }
 
 int main() {
-    int *handle;
     int listener;
     char *rfds;
     char *wfds;
@@ -166,19 +160,17 @@ int main() {
     int idx;
     int n;
 
-    handle = dlopen(0, 2);                 // RTLD_NOW
-    if (handle == 0) { printf("dlopen failed\n"); return 1; }
-
-    g_socket     = dlsym(handle, "socket");
-    g_setsockopt = dlsym(handle, "setsockopt");
-    g_bind       = dlsym(handle, "bind");
-    g_listen     = dlsym(handle, "listen");
-    g_accept     = dlsym(handle, "accept");
-    g_select     = dlsym(handle, "select");
-    g_read       = dlsym(handle, "read");
-    g_write      = dlsym(handle, "write");
-    g_close      = dlsym(handle, "close");
-    g_fcntl      = dlsym(handle, "fcntl");
+#ifdef _WIN32
+    char *wsadata;
+    // WSAStartup version 2.2; the WSADATA struct is ~408 bytes,
+    // 512 leaves room without us caring about the exact layout.
+    wsadata = malloc(512);
+    if (WSAStartup(0x0202, wsadata) != 0) {
+        printf("WSAStartup failed\n");
+        return 1;
+    }
+    free(wsadata);
+#endif
 
     listener = build_listener();
     if (listener < 0) { printf("listen on :8080 failed\n"); return 2; }
@@ -221,17 +213,17 @@ int main() {
             i = i + 1;
         }
 
-        rc = g_select(nfds + 1, rfds, wfds, 0, 0);
+        rc = select(nfds + 1, rfds, wfds, 0, 0);
         if (rc < 0) break;
 
         if (fdset_isset(rfds, listener)) {
-            client = g_accept(listener, 0, 0);
+            client = accept(listener, 0, 0);
             if (client >= 0) {
                 idx = find_free_slot();
                 if (idx < 0) {
-                    g_close(client);            // no room -- drop
+                    sock_close(client);            // no room -- drop
                 } else {
-                    g_fcntl(client, F_SETFL, O_NONBLOCK);
+                    sock_nonblock(client);
                     slot_fd[idx] = client;
                     slot_state[idx] = SLOT_READING;
                     slot_written[idx] = 0;
@@ -242,19 +234,20 @@ int main() {
         i = 0;
         while (i < MAX_CLIENTS) {
             if (slot_state[i] == SLOT_READING && fdset_isset(rfds, slot_fd[i])) {
-                // Drain the request line + headers; we don't
-                // parse anything, just consume up to 1KiB and
-                // flip to writing.
-                n = g_read(slot_fd[i], scratch, 1024);
+                // Drain whatever the client sent (request line +
+                // headers); we don't parse it. recv works on all
+                // three platforms; read would be POSIX-only.
+                n = recv(slot_fd[i], scratch, 1024, 0);
                 if (n <= 0) {
                     close_slot(i);
                 } else {
                     slot_state[i] = SLOT_WRITING;
                 }
             } else if (slot_state[i] == SLOT_WRITING && fdset_isset(wfds, slot_fd[i])) {
-                n = g_write(slot_fd[i],
-                            response + slot_written[i],
-                            response_len - slot_written[i]);
+                n = send(slot_fd[i],
+                         response + slot_written[i],
+                         response_len - slot_written[i],
+                         0);
                 if (n <= 0) {
                     close_slot(i);
                 } else {
@@ -266,12 +259,15 @@ int main() {
         }
     }
 
-    g_close(listener);
+    sock_close(listener);
     free(slot_fd);
     free(slot_state);
     free(slot_written);
     free(rfds);
     free(wfds);
     free(scratch);
+#ifdef _WIN32
+    WSACleanup();
+#endif
     return 0;
 }

@@ -225,6 +225,53 @@ impl ResolvedImports {
         self.imports.iter().position(|i| i.op == op)
     }
 
+    /// Add a binding the writer needs even if the bytecode walk
+    /// didn't find a call site for it. Currently used by the ELF
+    /// writers' `_start` stub, which always tail-calls `Op::Exit`
+    /// regardless of whether the user's code did.
+    ///
+    /// Resolves through `program.dylibs` the same way the bytecode
+    /// walk would, so a source that forgot `<stdlib.h>` still gets
+    /// the same "no `#pragma binding(... ::exit, ...)`" diagnostic
+    /// instead of a writer-side panic.
+    pub fn force_include(&mut self, op: Op, program: &Program) -> Result<(), C4Error> {
+        if self.index_of_op(op).is_some() {
+            return Ok(());
+        }
+        let c4_name = op_to_c4_name(op).expect("force_include called with non-libc op");
+        let mut found: Option<(&str, &str, &str)> = None;
+        for spec in &program.dylibs {
+            if let Some(b) = spec.bindings.iter().find(|b| b.c4_name == c4_name) {
+                found = Some((spec.name.as_str(), spec.path.as_str(), b.real_symbol.as_str()));
+                break;
+            }
+        }
+        let Some((dylib_name, dylib_path, real_symbol)) = found else {
+            return Err(C4Error::Compile(format!(
+                "no `#pragma binding(<dylib>::{c4_name}, ...)` is in scope -- the target's \
+                 `_start` stub needs `{c4_name}` and the codegen has nowhere to import it from. \
+                 Did you forget to `#include <stdlib.h>`?"
+            )));
+        };
+        let dylib_index = match self.dylibs.iter().position(|d| d.name == dylib_name) {
+            Some(i) => i,
+            None => {
+                self.dylibs.push(ResolvedDylib {
+                    name: dylib_name.to_string(),
+                    path: dylib_path.to_string(),
+                });
+                self.dylibs.len() - 1
+            }
+        };
+        self.imports.push(ResolvedImport {
+            op,
+            c4_name: c4_name.to_string(),
+            real_symbol: real_symbol.to_string(),
+            dylib_index,
+        });
+        Ok(())
+    }
+
     /// Walk `program.text`, collect every libc op the bytecode
     /// reaches for, look each one up in `program.dylibs`, and
     /// return the resolved set.
@@ -494,7 +541,18 @@ pub fn emit_native_with_options(
 /// share an enumeration with the writer) and stitches it onto the
 /// returned [`Build`] before handing it back.
 fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Result<Build, C4Error> {
-    let imports = ResolvedImports::resolve(program)?;
+    let mut imports = ResolvedImports::resolve(program)?;
+    // Linux ELF's `_start` always tail-calls libc `exit` so glibc
+    // gets to flush stdio and run atexit before the kernel reaps us.
+    // The bytecode walk only finds ops the *user's* code calls --
+    // a `int main() { return 42; }` has no `Op::Exit` -- so we
+    // force-include it here. Resolves through the same
+    // `program.dylibs` lookup as user-emitted ops would, so a
+    // source that omits `<stdlib.h>` still gets the friendly
+    // "no `#pragma binding(... ::exit, ...)`" error.
+    if matches!(target, Target::LinuxAarch64 | Target::LinuxX64) {
+        imports.force_include(Op::Exit, program)?;
+    }
     let mut build = match target {
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
             aarch64::lower(program, target, options, &imports)?

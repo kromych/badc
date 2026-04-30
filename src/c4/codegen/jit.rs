@@ -107,7 +107,7 @@ mod jit_impl {
     use super::super::super::error::C4Error;
     use super::super::super::program::Program;
     use super::super::Target;
-    use super::super::{Build, NativeOptions, aarch64, x86_64};
+    use super::super::{Build, NativeOptions, ResolvedImports, aarch64, x86_64};
     use super::host_target;
     use alloc::format;
     use alloc::string::{String, ToString};
@@ -133,13 +133,13 @@ mod jit_impl {
         };
         let data_vmaddr = data_region.as_ref().map(|r| r.as_ptr() as u64).unwrap_or(0);
 
-        // Allocate a "fake GOT" -- one u64 per IMPORTS entry, each
+        // Allocate a "fake GOT" -- one u64 per resolved import, each
         // holding the runtime address of the corresponding libc
         // symbol resolved via dlsym. The codegen's adrp+ldr / call
         // qword [rip+disp32] sequences will read through this region
         // exactly the way the ELF loader's relocations would.
-        let mut got_region = GotRegion::new()?;
-        got_region.bind_imports()?;
+        let mut got_region = GotRegion::new(build.imports.imports.len())?;
+        got_region.bind_imports(&build.imports)?;
         let got_vmaddr = got_region.as_ptr() as u64;
 
         // Allocate the code region. Patch fixups against the mmap'd
@@ -189,12 +189,22 @@ mod jit_impl {
         target: Target,
         options: NativeOptions,
     ) -> Result<Build, C4Error> {
-        match target {
+        // Same plumbing as `super::lower_for`: resolve once, lower
+        // with that view, then stitch the imports back onto the
+        // returned `Build` so the JIT loader can populate its
+        // fake-GOT region from the same enumeration the lowering
+        // saw.
+        let imports = ResolvedImports::resolve(program)?;
+        let mut build = match target {
             Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-                aarch64::lower(program, target, options)
+                aarch64::lower(program, target, options, &imports)?
             }
-            Target::LinuxX64 | Target::WindowsX64 => x86_64::lower(program, target, options),
-        }
+            Target::LinuxX64 | Target::WindowsX64 => {
+                x86_64::lower(program, target, options, &imports)?
+            }
+        };
+        build.imports = imports;
+        Ok(build)
     }
 
     // ----------------------------------------------------------------
@@ -429,8 +439,8 @@ mod jit_impl {
     /// gives us libc + libdl + Rust's own deps in one shot.
     const RTLD_NOW: c_int = 2;
 
-    /// Writable region holding one libc-symbol address per IMPORTS
-    /// row. RAII: `Drop` munmaps + dlcloses.
+    /// Writable region holding one libc-symbol address per resolved
+    /// import. RAII: `Drop` munmaps + dlcloses.
     struct GotRegion {
         ptr: *mut u8,
         len: usize,
@@ -438,7 +448,7 @@ mod jit_impl {
     }
 
     impl GotRegion {
-        fn new() -> Result<Self, C4Error> {
+        fn new(n_imports: usize) -> Result<Self, C4Error> {
             unsafe extern "C" {
                 fn mmap(
                     addr: *mut c_void,
@@ -449,12 +459,12 @@ mod jit_impl {
                     offset: i64,
                 ) -> *mut c_void;
             }
-            let n_imports = aarch64::IMPORTS.len();
-            // Round up to a page; the GOT itself is much smaller
-            // (~152 bytes for ~19 imports) but mmap allocates pages
-            // anyway, and a full page keeps the address-load
-            // patching's 4 KiB-alignment check trivially satisfied.
-            let len = round_up_to_page(n_imports * 8);
+            // mmap a full page even if we have only a handful of
+            // imports. Keeps the address-load patching's 4 KiB-
+            // alignment check trivially satisfied; an empty import
+            // set still gets a single page rather than zero bytes
+            // so the slot pointer is well-defined.
+            let len = round_up_to_page(n_imports.max(1) * 8);
             let ptr = unsafe {
                 mmap(
                     std::ptr::null_mut(),
@@ -478,12 +488,15 @@ mod jit_impl {
             })
         }
 
-        /// Resolve every libc symbol named in `IMPORTS` and write the
-        /// resulting address into the slot at `IMPORTS[i] * 8`. Open
-        /// a fresh `dlopen(NULL, RTLD_NOW)` handle owned by this
-        /// region; symbols missing at the global level (none, today,
-        /// on glibc/musl Linux) leave a 0 slot rather than aborting.
-        fn bind_imports(&mut self) -> Result<(), C4Error> {
+        /// Resolve every binding in `imports` and write each resulting
+        /// address into the slot at `8 * idx`. Slot order matches
+        /// the lowering's view (it embedded `idx` into the GOT
+        /// fixups), so the patcher's `import_index` indexes straight
+        /// into this region. Symbols missing from the host's loaded
+        /// scope leave a 0 slot rather than aborting -- the call
+        /// will SIGSEGV when used, which is the right "this isn't
+        /// in libc" failure mode for a JIT.
+        fn bind_imports(&mut self, imports: &ResolvedImports) -> Result<(), C4Error> {
             unsafe extern "C" {
                 fn dlopen(filename: *const c_char, flags: c_int) -> *mut c_void;
                 fn dlsym(handle: *mut c_void, name: *const c_char) -> *mut c_void;
@@ -497,8 +510,17 @@ mod jit_impl {
             }
             self.dl_handle = handle;
 
-            for (i, imp) in aarch64::IMPORTS.iter().enumerate() {
-                let cs = match CString::new(imp.linux_symbol) {
+            // Strip the leading underscore on macOS for `dlsym` --
+            // the symbol stored in the binding is the Mach-O view
+            // (`_printf`), but `dlsym` wants the C view (`printf`).
+            // On Linux/Windows the binding is already underscoreless.
+            for (i, imp) in imports.imports.iter().enumerate() {
+                let lookup_name = if cfg!(target_os = "macos") {
+                    imp.real_symbol.strip_prefix('_').unwrap_or(&imp.real_symbol)
+                } else {
+                    imp.real_symbol.as_str()
+                };
+                let cs = match CString::new(lookup_name) {
                     Ok(cs) => cs,
                     Err(_) => continue, // unreachable: symbol names are static ASCII
                 };

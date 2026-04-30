@@ -28,9 +28,11 @@
 //! see milestone tracker for the order.
 
 use alloc::format;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use super::error::C4Error;
+use super::op::Op;
 use super::program::Program;
 
 mod aarch64;
@@ -162,6 +164,170 @@ pub(crate) enum Machine {
     X86_64,
 }
 
+/// One resolved libc import: a libc op the program reaches for, plus
+/// everything the codegen and writer need to wire it up. Built once
+/// per compilation by [`ResolvedImports::resolve`] from the
+/// `#pragma binding(...)` table the preprocessor parsed out of the
+/// included headers.
+#[derive(Debug, Clone)]
+pub(crate) struct ResolvedImport {
+    /// The bytecode op that lowers to this call (e.g. [`Op::Prtf`]).
+    /// Used by the lowering pass to find the matching slot when it
+    /// emits an adrp+ldr / call-qword-rip sequence.
+    pub op: Op,
+    /// The portable c4-side name (`"printf"`). Currently only kept
+    /// for diagnostics in compile-error messages; the lowering and
+    /// writers key off `op` and `real_symbol`.
+    #[allow(dead_code)]
+    pub c4_name: String,
+    /// The dylib's exported symbol (`"_printf"` on macOS,
+    /// `"printf"` on Linux, `"printf"` on msvcrt). Goes verbatim
+    /// into the symbol table / IAT name table.
+    pub real_symbol: String,
+    /// Index into [`ResolvedImports::dylibs`] -- which dylib this
+    /// binding resolves through. Determines the LC_LOAD_DYLIB /
+    /// DT_NEEDED / IMAGE_IMPORT_DESCRIPTOR the writer emits.
+    pub dylib_index: usize,
+}
+
+/// One resolved dylib the program needs at load time. Distinct from
+/// [`super::preprocessor::DylibSpec`] in that this only contains the
+/// dylibs whose bindings the program *uses* -- declaring `<windows.h>`
+/// without calling any of its symbols won't pull in `kernel32.dll`.
+#[derive(Debug, Clone)]
+pub(crate) struct ResolvedDylib {
+    /// Header-side handle (`"libc"`, `"kernel32"`). Currently used
+    /// only for error messages.
+    #[allow(dead_code)]
+    pub name: String,
+    /// Loader-search-name or filesystem path. Goes verbatim into the
+    /// LC_LOAD_DYLIB / DT_NEEDED / IMAGE_IMPORT_DESCRIPTOR Name field.
+    pub path: String,
+}
+
+/// The full set of imports a single compilation needs, derived from
+/// the bytecode walk + the `#pragma binding` table. Each
+/// [`ResolvedImport`]'s position in `imports` is also its GOT / IAT
+/// slot index, so the lowering pass and the wire-format writer share
+/// a single enumeration without coordinating through a static table.
+#[derive(Debug, Default, Clone)]
+pub(crate) struct ResolvedImports {
+    pub imports: Vec<ResolvedImport>,
+    pub dylibs: Vec<ResolvedDylib>,
+}
+
+impl ResolvedImports {
+    /// Look up the slot index for a given op. `None` if the program
+    /// doesn't use it -- callers should treat that as a codegen bug
+    /// (lowering shouldn't emit a fixup for an op that isn't in the
+    /// resolved set).
+    pub fn index_of_op(&self, op: Op) -> Option<usize> {
+        self.imports.iter().position(|i| i.op == op)
+    }
+
+    /// Walk `program.text`, collect every libc op the bytecode
+    /// reaches for, look each one up in `program.dylibs`, and
+    /// return the resolved set.
+    ///
+    /// The dylib list is built by deduplicating against
+    /// `program.dylibs` ordering, so a program that uses `printf`
+    /// (in `libc`) and `LoadLibraryA` (in `kernel32`) gets two
+    /// dylibs in that declaration order.
+    pub fn resolve(program: &Program) -> Result<Self, C4Error> {
+        // Walk bytecode, collecting used libc ops in first-encounter
+        // order. The order determines GOT slot indices; within a
+        // single compilation it just needs to be deterministic.
+        let mut seen: alloc::collections::BTreeSet<Op> = alloc::collections::BTreeSet::new();
+        let mut used: Vec<Op> = Vec::new();
+        let mut pc = 0;
+        while pc < program.text.len() {
+            let Some(op) = Op::from_i64(program.text[pc]) else {
+                // Unknown opcode -- not our problem here; the
+                // optimizer / VM will surface it.
+                break;
+            };
+            pc += 1;
+            if matches!(
+                op,
+                Op::Lea | Op::Imm | Op::Ent | Op::Adj | Op::Jmp | Op::Jsr | Op::Bz | Op::Bnz
+            ) {
+                pc += 1;
+            }
+            if op_to_c4_name(op).is_some() && seen.insert(op) {
+                used.push(op);
+            }
+        }
+
+        // Resolve each used op through `program.dylibs`. Build the
+        // dylib list lazily: each new dylib gets appended once and
+        // its index is reused for any further bindings.
+        let mut dylibs: Vec<ResolvedDylib> = Vec::new();
+        let mut imports: Vec<ResolvedImport> = Vec::new();
+        for op in used {
+            let c4_name = op_to_c4_name(op).expect("only c4-name-bearing ops were inserted");
+            let mut found: Option<(&str, &str, &str)> = None;
+            for spec in &program.dylibs {
+                if let Some(b) = spec.bindings.iter().find(|b| b.c4_name == c4_name) {
+                    found = Some((spec.name.as_str(), spec.path.as_str(), b.real_symbol.as_str()));
+                    break;
+                }
+            }
+            let Some((dylib_name, dylib_path, real_symbol)) = found else {
+                return Err(C4Error::Compile(format!(
+                    "no `#pragma binding(<dylib>::{c4_name}, ...)` is in scope -- the program \
+                     calls `{c4_name}` and the codegen has nowhere to import it from. Did you \
+                     forget to `#include <stdio.h>` / `<string.h>` / `<stdlib.h>` / `<unistd.h>` \
+                     / `<dlfcn.h>`?"
+                )));
+            };
+            let dylib_index = match dylibs.iter().position(|d| d.name == dylib_name) {
+                Some(i) => i,
+                None => {
+                    dylibs.push(ResolvedDylib {
+                        name: dylib_name.to_string(),
+                        path: dylib_path.to_string(),
+                    });
+                    dylibs.len() - 1
+                }
+            };
+            imports.push(ResolvedImport {
+                op,
+                c4_name: c4_name.to_string(),
+                real_symbol: real_symbol.to_string(),
+                dylib_index,
+            });
+        }
+
+        Ok(ResolvedImports { imports, dylibs })
+    }
+}
+
+/// Map a bytecode op to its portable c4-side name, used as the
+/// `c4_name` lookup key against `#pragma binding`. Returns `None` for
+/// non-libc ops -- those don't go through GOT/IAT.
+fn op_to_c4_name(op: Op) -> Option<&'static str> {
+    Some(match op {
+        Op::Open => "open",
+        Op::Read => "read",
+        Op::Clos => "close",
+        Op::Prtf => "printf",
+        Op::Malc => "malloc",
+        Op::Free => "free",
+        Op::Mset => "memset",
+        Op::Mcmp => "memcmp",
+        Op::Mcpy => "memcpy",
+        Op::Exit => "exit",
+        Op::Write => "write",
+        Op::Genv => "getenv",
+        Op::Senv => "setenv",
+        Op::Dlop => "dlopen",
+        Op::Dlsm => "dlsym",
+        Op::Dlcl => "dlclose",
+        Op::Dler => "dlerror",
+        _ => return None,
+    })
+}
+
 /// Where each piece of the program-being-built ends up in the final
 /// image. The codegen and image-writer halves both populate this --
 /// the codegen knows the code bytes, the pinned data bytes, and which
@@ -202,6 +368,11 @@ pub(crate) struct Build {
     /// last entry is the total code length, so `[i+1] - [i]` gives
     /// the byte length of the op at PC `i`.
     pub bytecode_to_native: Vec<usize>,
+    /// Per-Build resolved import set. Built by lowering once it knows
+    /// which libc ops the program uses; consumed by the wire-format
+    /// writer to populate the IAT / dynsym / __got tables.
+    /// `GotFixup::import_index` is an index into `imports.imports`.
+    pub imports: ResolvedImports,
 }
 
 /// Refer-by-index relocation between a code site and a `__got` slot.
@@ -310,114 +481,28 @@ pub fn emit_native_with_options(
     target: Target,
     options: NativeOptions,
 ) -> Result<Vec<u8>, C4Error> {
-    validate_bindings(program)?;
     let build = lower_for(program, target, options)?;
     write_for(&build, target)
-}
-
-/// Pre-codegen sanity check on the per-target header's
-/// `#pragma dylib(...)` / `#pragma binding(...)` block.
-///
-/// Coverage check, narrowed to **only the libc ops the program
-/// actually uses**. This makes the per-target headers honestly
-/// reflect "what's available on this target": a header that omits
-/// (say) `mprotect` is fine for Windows, where mprotect isn't a
-/// thing -- the source has to use `#if __BADC_TARGET__` to call
-/// `VirtualProtect` instead. Unused absences only become errors
-/// when the program reaches for them.
-///
-/// We deliberately do **not** check that the dylib path exists on
-/// the host filesystem. Cross-compilation is a first-class case
-/// (emitting a Windows PE from a macOS host has no `msvcrt.dll`
-/// nearby, etc.); requiring the file at compile time would defeat
-/// the purpose of the per-target header.
-fn validate_bindings(program: &Program) -> Result<(), C4Error> {
-    let used = used_libc_ops(&program.text);
-    for imp in aarch64::IMPORTS {
-        if !used.contains(&imp.op) {
-            continue;
-        }
-        // The lexer's `LIB_OPS` table uses the same name we expect
-        // here; the linux-symbol field happens to match the c4-side
-        // name verbatim (no leading underscore), so we reuse it as
-        // the lookup key.
-        let c4_name = imp.linux_symbol;
-        let bound = program
-            .dylibs
-            .iter()
-            .flat_map(|d| d.bindings.iter())
-            .any(|b| b.c4_name == c4_name);
-        if !bound {
-            return Err(C4Error::Compile(alloc::format!(
-                "no `#pragma binding(<dylib>::{c4_name}, ...)` in this target's \
-                 `headers/badc-{{target}}.h` -- the program calls `{c4_name}` and \
-                 the codegen has nowhere to import it from"
-            )));
-        }
-    }
-    Ok(())
-}
-
-/// Walk the bytecode and collect the set of libc ops that appear.
-/// Operands are skipped using each op's known shape (a small set
-/// of ops carry a single i64 operand; everything else is bare).
-/// This mirrors what the optimizer's decoder does, but boils down
-/// to just the libc-op question we care about here.
-fn used_libc_ops(text: &[i64]) -> alloc::collections::BTreeSet<crate::c4::Op> {
-    use crate::c4::Op;
-    let mut used = alloc::collections::BTreeSet::new();
-    let mut pc = 0;
-    while pc < text.len() {
-        let Some(op) = Op::from_i64(text[pc]) else {
-            // Unknown opcode -- the optimizer would error here too.
-            // For our purposes, just stop scanning; a real compile
-            // error will surface elsewhere.
-            return used;
-        };
-        pc += 1;
-        if matches!(
-            op,
-            Op::Lea | Op::Imm | Op::Ent | Op::Adj | Op::Jmp | Op::Jsr | Op::Bz | Op::Bnz
-        ) {
-            pc += 1;
-        }
-        if matches!(
-            op,
-            Op::Open
-                | Op::Read
-                | Op::Clos
-                | Op::Prtf
-                | Op::Malc
-                | Op::Free
-                | Op::Mset
-                | Op::Mcmp
-                | Op::Mcpy
-                | Op::Exit
-                | Op::Write
-                | Op::Genv
-                | Op::Senv
-                | Op::Dlop
-                | Op::Dlsm
-                | Op::Dlcl
-                | Op::Dler
-        ) {
-            used.insert(op);
-        }
-    }
-    used
 }
 
 /// Lower the program for `target`, returning the per-arch `Build`
 /// without writing to any container. Used by both [`emit_native`]
 /// (which then runs the container writer) and the listing-dump path
 /// (which inspects the lowered bytes directly).
+///
+/// Resolves the import set once up front (so the per-arch lowerings
+/// share an enumeration with the writer) and stitches it onto the
+/// returned [`Build`] before handing it back.
 fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Result<Build, C4Error> {
-    match target {
+    let imports = ResolvedImports::resolve(program)?;
+    let mut build = match target {
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-            aarch64::lower(program, target, options)
+            aarch64::lower(program, target, options, &imports)?
         }
-        Target::LinuxX64 | Target::WindowsX64 => x86_64::lower(program, target, options),
-    }
+        Target::LinuxX64 | Target::WindowsX64 => x86_64::lower(program, target, options, &imports)?,
+    };
+    build.imports = imports;
+    Ok(build)
 }
 
 fn write_for(build: &Build, target: Target) -> Result<Vec<u8>, C4Error> {

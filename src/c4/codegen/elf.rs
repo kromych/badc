@@ -247,16 +247,9 @@ fn r_glob_dat(machine: Machine) -> u64 {
     }
 }
 
-/// Libraries the binary declares as `DT_NEEDED`. The order is
-/// cosmetic; the loader pulls in everything reachable from the set
-/// regardless of order.
-///
-/// `libdl.so.2` is included unconditionally for `dlopen` / `dlsym` /
-/// `dlclose` / `dlerror` support. On glibc 2.34+ this is a stub that
-/// re-exports from libc.so.6; on older systems it carries the actual
-/// implementation. Listing it always means the same binary runs on
-/// both.
-const NEEDED_LIBS: &[&str] = &["libc.so.6", "libdl.so.2"];
+// `DT_NEEDED` entries come from `build.imports.dylibs` -- whatever
+// the program's resolved `#pragma binding`s pull in. Empty when the
+// program calls no libc.
 
 // ------------------------------------------------------------------
 // Tiny serialization helpers.
@@ -337,23 +330,24 @@ fn emit_start_stub_aarch64(code: &mut Vec<u8>, main_offset_in_code: u64) -> usiz
 
 /// Build .dynstr -- the dynamic string table. Returns
 /// `(bytes, name_offsets, lib_offsets)` where `name_offsets[i]` is
-/// the byte offset of `IMPORTS[i].linux_symbol` inside the table and
-/// `lib_offsets[i]` is the offset of `NEEDED_LIBS[i]`.
-fn build_dynstr() -> (Vec<u8>, Vec<u32>, Vec<u32>) {
+/// the byte offset of `imports.imports[i].real_symbol` inside the
+/// table and `lib_offsets[i]` is the offset of
+/// `imports.dylibs[i].path`.
+fn build_dynstr(imports: &super::ResolvedImports) -> (Vec<u8>, Vec<u32>, Vec<u32>) {
     let mut bytes = Vec::new();
     bytes.push(0); // index 0 is conventionally the empty string
 
-    let mut name_offsets = Vec::with_capacity(aarch64::IMPORTS.len());
-    for imp in aarch64::IMPORTS {
+    let mut name_offsets = Vec::with_capacity(imports.imports.len());
+    for imp in &imports.imports {
         name_offsets.push(bytes.len() as u32);
-        bytes.extend_from_slice(imp.linux_symbol.as_bytes());
+        bytes.extend_from_slice(imp.real_symbol.as_bytes());
         bytes.push(0);
     }
 
-    let mut lib_offsets = Vec::with_capacity(NEEDED_LIBS.len());
-    for lib in NEEDED_LIBS {
+    let mut lib_offsets = Vec::with_capacity(imports.dylibs.len());
+    for d in &imports.dylibs {
         lib_offsets.push(bytes.len() as u32);
-        bytes.extend_from_slice(lib.as_bytes());
+        bytes.extend_from_slice(d.path.as_bytes());
         bytes.push(0);
     }
 
@@ -491,7 +485,8 @@ fn build_rela_dyn(got_vmaddr: u64, n_imports: usize, machine: Machine) -> Vec<u8
 /// per [`NEEDED_LIBS`] entry, then the standard pointer-and-size
 /// tags for the symbol / string / hash / rela sections.
 fn build_dynamic(lib_strtab_offsets: &[u32], info: DynamicInfo) -> Vec<u8> {
-    let mut out = Vec::with_capacity((NEEDED_LIBS.len() + 11) * ELF64_DYN_SIZE as usize);
+    let mut out =
+        Vec::with_capacity((lib_strtab_offsets.len() + 11) * ELF64_DYN_SIZE as usize);
     for &off in lib_strtab_offsets {
         write_struct(
             &mut out,
@@ -741,12 +736,12 @@ fn patch_adrp_add(
 // ------------------------------------------------------------------
 
 pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error> {
-    let n_imports = aarch64::IMPORTS.len();
+    let n_imports = build.imports.imports.len();
     let stub_len = start_stub_len(machine);
 
     // ---- Build the dynamic-linking metadata up front so we know the
     //      sizes for layout calculations. ----
-    let (dynstr, name_offsets, lib_strtab_offsets) = build_dynstr();
+    let (dynstr, name_offsets, lib_strtab_offsets) = build_dynstr(&build.imports);
     let dynsym = build_dynsym(&name_offsets);
     let hash = build_hash(&name_offsets, &dynstr);
     // .rela.dyn is built later -- it needs got_vmaddr.
@@ -787,9 +782,9 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
     // ---- Layout pass 2: rw segment (.dynamic, .got, build.data). ----
     let segment2_off = segment1_end;
     let dynamic_off = segment2_off;
-    // `build_dynamic` emits one entry per NEEDED_LIBS plus 11 fixed
-    // tags (DT_HASH, DT_STRTAB, ..., DT_NULL terminator).
-    let dynamic_size = (NEEDED_LIBS.len() as u64 + 11) * ELF64_DYN_SIZE;
+    // `build_dynamic` emits one DT_NEEDED per resolved dylib plus
+    // 11 fixed tags (DT_HASH, DT_STRTAB, ..., DT_NULL terminator).
+    let dynamic_size = (build.imports.dylibs.len() as u64 + 11) * ELF64_DYN_SIZE;
     let got_off = dynamic_off + dynamic_size;
     let got_size = (n_imports as u64) * 8;
     let data_off = got_off + got_size;
@@ -981,7 +976,17 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
     // adrp+ldr+blr through the libc-exit GOT slot; x86_64's ends
     // with `call qword [rip + disp32]` against the same slot. The
     // per-arch GOT-call patcher knows which encoding to write.
-    let exit_idx = exit_import_index();
+    let exit_idx = build
+        .imports
+        .index_of_op(super::super::op::Op::Exit)
+        .ok_or_else(|| {
+            C4Error::Compile(
+                "ELF writer: _start stub needs Op::Exit in the import set, but the program \
+                 didn't reach for it (and we don't auto-add it). \
+                 Did you `#include <stdlib.h>` and call `exit(...)` somewhere?"
+                    .to_string(),
+            )
+        })?;
     patch_got_call(
         machine,
         &mut out,
@@ -1066,20 +1071,21 @@ fn write_phdr(
     );
 }
 
-fn exit_import_index() -> usize {
-    aarch64::IMPORTS
-        .iter()
-        .position(|imp| matches!(imp.op, super::super::op::Op::Exit))
-        .expect("Op::Exit must be in IMPORTS")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     /// Smallest plausible Build that exercises the writer end to end.
     /// 8 bytes of code (movz x0, #42; ret), no fixups.
+    ///
+    /// Carries a fake `Op::Exit` import: the aarch64 `_start` stub
+    /// always calls libc's `exit` after main returns, so ELF writes
+    /// without that entry would error out before producing any bytes
+    /// for the structural assertions to inspect. This mirrors what
+    /// real programs get from `<stdlib.h>`.
     fn tiny_build() -> Build {
+        use super::super::super::op::Op;
+        use super::super::{ResolvedDylib, ResolvedImport, ResolvedImports};
         Build {
             text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],
             data: Vec::new(),
@@ -1088,6 +1094,18 @@ mod tests {
             data_fixups: Vec::new(),
             func_fixups: Vec::new(),
             bytecode_to_native: Vec::new(),
+            imports: ResolvedImports {
+                imports: vec![ResolvedImport {
+                    op: Op::Exit,
+                    c4_name: "exit".into(),
+                    real_symbol: "exit".into(),
+                    dylib_index: 0,
+                }],
+                dylibs: vec![ResolvedDylib {
+                    name: "libc".into(),
+                    path: "libc.so.6".into(),
+                }],
+            },
         }
     }
 

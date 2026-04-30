@@ -52,7 +52,7 @@ use super::super::error::C4Error;
 use super::super::op::Op;
 use super::super::program::Program;
 use super::regalloc::{self, PoolBank, PushKind, RegStackPlan};
-use super::{Build, DataFixup, FuncFixup, GotFixup, NativeOptions, Target, TargetOptions, aarch64};
+use super::{Build, DataFixup, FuncFixup, GotFixup, NativeOptions, Target, TargetOptions};
 
 /// Register-pool sizes used by the native optimizer on x86_64.
 /// Four callee-saved registers free after subtracting rbp (frame
@@ -897,6 +897,7 @@ pub(super) fn lower(
     program: &Program,
     target: Target,
     native: NativeOptions,
+    imports: &super::ResolvedImports,
 ) -> Result<Build, C4Error> {
     let options: TargetOptions = target.options();
 
@@ -973,6 +974,7 @@ pub(super) fn lower(
             &mut reg_state,
             op_pc,
             &branch_targets,
+            imports,
         )?;
     }
     bytecode_to_native[program.text.len()] = code.len();
@@ -1019,6 +1021,9 @@ pub(super) fn lower(
         data_fixups,
         func_fixups,
         bytecode_to_native,
+        // Set by `lower_for` after this returns; see the matching
+        // comment on the aarch64 lowering's `Build` construction.
+        imports: super::ResolvedImports::default(),
     })
 }
 
@@ -1076,6 +1081,7 @@ fn lower_op(
     reg_state: &mut RegState<'_>,
     op_pc: usize,
     branch_targets: &[bool],
+    imports: &super::ResolvedImports,
 ) -> Result<(), C4Error> {
     match op {
         // ---- Function frame ----
@@ -1411,7 +1417,7 @@ fn lower_op(
         | Op::Dlop
         | Op::Dlsm
         | Op::Dlcl
-        | Op::Dler => emit_libc_call(op, text, *pc, code, got_fixups, options)?,
+        | Op::Dler => emit_libc_call(op, text, *pc, code, got_fixups, options, imports)?,
     }
     Ok(())
 }
@@ -1432,6 +1438,7 @@ fn lower_op(
 ///   4). The caller reserves a 32-byte shadow space below each
 ///   call site for the callee to spill the four register args. No
 ///   AL = 0 dance for variadics.
+#[allow(clippy::too_many_arguments)]
 fn emit_libc_call(
     op: Op,
     text: &[i64],
@@ -1439,15 +1446,13 @@ fn emit_libc_call(
     code: &mut Vec<u8>,
     got_fixups: &mut Vec<GotFixup>,
     options: TargetOptions,
+    imports: &super::ResolvedImports,
 ) -> Result<(), C4Error> {
-    let import_index = aarch64::IMPORTS
-        .iter()
-        .position(|imp| imp.op == op)
-        .ok_or_else(|| {
-            C4Error::Compile(format!(
-                "native codegen (x86_64): no import index for {op:?}"
-            ))
-        })?;
+    let import_index = imports.index_of_op(op).ok_or_else(|| {
+        C4Error::Compile(format!(
+            "native codegen (x86_64): no import index for {op:?} -- the resolver should have placed it"
+        ))
+    })?;
 
     // Peek for the trailing Op::Adj N; Op::Exit and Op::Dler are
     // emitted without one (Exit doesn't return; Dler takes 0 args).
@@ -1918,10 +1923,12 @@ mod tests {
             }
         "#;
         let program = Compiler::new(src.to_string()).compile().expect("compile");
+        let imports = super::super::ResolvedImports::resolve(&program).expect("resolve");
         let build = super::lower(
             &program,
             super::Target::LinuxX64,
             super::NativeOptions::new().with_optimize(),
+            &imports,
         )
         .expect("lower");
         // Find the Lt op's PC (must exist in the bytecode).

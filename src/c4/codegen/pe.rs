@@ -71,7 +71,6 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use super::super::error::C4Error;
-use super::super::op::Op;
 use super::aarch64;
 use super::x86_64;
 use super::{Build, Machine};
@@ -160,47 +159,24 @@ const DATA_DIRECTORY_IAT: usize = 12;
 const ARM64_PACKED_FUNCTION_MAX_BYTES: u32 = 2048 * 4;
 
 // ----------------------------------------------------------------
-// Op-to-DLL binding. For each c4 op listed in `aarch64::IMPORTS`,
-// pick the matching Windows export and which DLL it lives in.
+// Stub-only imports the entry-stub always needs, on top of the
+// resolved program imports. msvcrt's `__getmainargs` is the
+// canonical way to populate argc/argv on a Windows host: it fills
+// out the int / char** out-pointers we hand it. WINE's msvcrt
+// doesn't export the alternative `__p___argc` / `__p___argv`
+// thunks, so this is the portable shape. ExitProcess routes the
+// exit through the kernel32 thunk so the CRT atexit chain runs
+// (without it, printf to a pipe loses its tail line because msvcrt
+// block-buffers stdout).
+//
+// These ride alongside whatever the program asked for via
+// `#pragma binding(...)`. They have no c4-side name, so they live
+// outside `ResolvedImports` and the lowering never references them
+// directly -- only the entry stub does.
 // ----------------------------------------------------------------
 
-const MSVCRT: &str = "msvcrt.dll";
-const KERNEL32: &str = "kernel32.dll";
-
-fn windows_binding_for_op(op: Op) -> (&'static str, &'static str) {
-    use Op::*;
-    match op {
-        Open => ("_open", MSVCRT),
-        Read => ("_read", MSVCRT),
-        Clos => ("_close", MSVCRT),
-        Prtf => ("printf", MSVCRT),
-        Malc => ("malloc", MSVCRT),
-        Free => ("free", MSVCRT),
-        Mset => ("memset", MSVCRT),
-        Mcmp => ("memcmp", MSVCRT),
-        Mcpy => ("memcpy", MSVCRT),
-        Exit => ("exit", MSVCRT),
-        Write => ("_write", MSVCRT),
-        Genv => ("getenv", MSVCRT),
-        Senv => ("_putenv_s", MSVCRT),
-        Dlop => ("LoadLibraryA", KERNEL32),
-        Dlsm => ("GetProcAddress", KERNEL32),
-        Dlcl => ("FreeLibrary", KERNEL32),
-        Dler => ("GetLastError", KERNEL32),
-        other => panic!("pe writer: op {other:?} is not a libc import"),
-    }
-}
-
-// Stub-only imports we add on top of the standard `aarch64::IMPORTS`
-// list. msvcrt's `__getmainargs` is the canonical way to populate
-// argc/argv on a Windows host: it fills out the int / char**
-// out-pointers we hand it. WINE's msvcrt doesn't export the
-// alternative `__p___argc` / `__p___argv` thunks, so this is the
-// portable shape. ExitProcess routes the exit through the kernel32
-// thunk so the CRT atexit chain runs (without it, printf to a pipe
-// loses its tail line because msvcrt block-buffers stdout).
-const STUB_IMPORT_GETMAINARGS: (&str, &str) = ("__getmainargs", MSVCRT);
-const STUB_IMPORT_EXIT: (&str, &str) = ("ExitProcess", KERNEL32);
+const STUB_IMPORT_GETMAINARGS: (&str, &str) = ("__getmainargs", "msvcrt.dll");
+const STUB_IMPORT_EXIT: (&str, &str) = ("ExitProcess", "kernel32.dll");
 
 // ----------------------------------------------------------------
 // Top-level writer.
@@ -208,21 +184,30 @@ const STUB_IMPORT_EXIT: (&str, &str) = ("ExitProcess", KERNEL32);
 
 pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error> {
     // 1) Combined imports list. Index N becomes IAT slot N. The
-    //    standard ops occupy 0..n_program_imports; the entry stub's
-    //    three additional imports come after.
-    let n_program_imports = aarch64::IMPORTS.len();
-    let mut imports: Vec<(String, &'static str)> = Vec::with_capacity(n_program_imports + 3);
-    for imp in aarch64::IMPORTS {
-        let (sym, dll) = windows_binding_for_op(imp.op);
-        imports.push((sym.to_string(), dll));
+    //    program's resolved imports occupy 0..n_program_imports;
+    //    the entry stub's two additional imports come after, with
+    //    indices the stub builder pulls back via `stub_*_idx`.
+    //
+    //    `(symbol_name, dll_name)` -- the symbol name is whatever
+    //    the dylib actually exports (`printf`, `_open`, etc.); the
+    //    dll_name is the resolved dylib path (`msvcrt.dll`,
+    //    `kernel32.dll`).
+    let n_program_imports = build.imports.imports.len();
+    let mut imports: Vec<(String, String)> = Vec::with_capacity(n_program_imports + 2);
+    for imp in &build.imports.imports {
+        let dll = build.imports.dylibs[imp.dylib_index].path.clone();
+        imports.push((imp.real_symbol.clone(), dll));
     }
     let stub_getmainargs_idx = imports.len();
     imports.push((
         STUB_IMPORT_GETMAINARGS.0.to_string(),
-        STUB_IMPORT_GETMAINARGS.1,
+        STUB_IMPORT_GETMAINARGS.1.to_string(),
     ));
     let stub_exit_idx = imports.len();
-    imports.push((STUB_IMPORT_EXIT.0.to_string(), STUB_IMPORT_EXIT.1));
+    imports.push((
+        STUB_IMPORT_EXIT.0.to_string(),
+        STUB_IMPORT_EXIT.1.to_string(),
+    ));
 
     // 2) Group imports by DLL while preserving each one's IAT index.
     //    `dlls` holds (dll_name, [import_index, ...]); the IAT is
@@ -759,21 +744,22 @@ fn write_section_headers(out: &mut Vec<u8>, sections: &[SectionHeader]) {
 // ----------------------------------------------------------------
 
 struct DllGroup {
-    dll_name: &'static str,
+    dll_name: String,
     /// Indices into the global imports list (== IAT slot indices).
     members: Vec<usize>,
 }
 
-fn group_imports_by_dll(imports: &[(String, &'static str)]) -> Vec<DllGroup> {
-    // Preserve the order DLLs first appear in. Two DLLs total
-    // (msvcrt, kernel32), but the structure scales if we add more.
+fn group_imports_by_dll(imports: &[(String, String)]) -> Vec<DllGroup> {
+    // Preserve the order DLLs first appear in. Most programs hit
+    // two DLLs (msvcrt + kernel32) but the structure scales --
+    // anything declared via `#pragma dylib` shows up here.
     let mut groups: Vec<DllGroup> = Vec::new();
     for (idx, (_, dll)) in imports.iter().enumerate() {
         if let Some(g) = groups.iter_mut().find(|g| g.dll_name == *dll) {
             g.members.push(idx);
         } else {
             groups.push(DllGroup {
-                dll_name: dll,
+                dll_name: dll.clone(),
                 members: vec![idx],
             });
         }
@@ -800,7 +786,7 @@ struct IDataLayout {
     iat_rva_for_import: Vec<u32>,
 }
 
-fn plan_idata(dlls: &[DllGroup], imports: &[(String, &'static str)], base_rva: u32) -> IDataLayout {
+fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) -> IDataLayout {
     // Fixed-size pieces: import descriptors (one per DLL plus a
     // zero-terminator) and the IATs / ILTs (each per-DLL section
     // plus a zero terminator).

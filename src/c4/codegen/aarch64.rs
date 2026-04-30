@@ -119,118 +119,6 @@ impl<'a> RegState<'a> {
     }
 }
 
-/// Libc symbol metadata. macOS prefixes everything with `_` (the classic
-/// Mach-O calling convention); Linux uses the bare C name. The codegen
-/// records GOT slot indices into [`IMPORTS`]; per-target writers read
-/// whichever name field they need.
-pub(crate) struct Import {
-    pub macos_symbol: &'static str,
-    pub linux_symbol: &'static str,
-    pub op: Op,
-}
-
-/// Libc symbols badc binaries import. **Order matters** -- the index
-/// in this slice is the GOT slot index in `__DATA` (Mach-O) or `.got`
-/// (ELF), and the codegen embeds those indices in the GOT-fixup
-/// records. Adding a row never breaks existing binaries; reordering
-/// silently miscompiles every previously-emitted call site.
-pub(crate) const IMPORTS: &[Import] = &[
-    Import {
-        macos_symbol: "_open",
-        linux_symbol: "open",
-        op: Op::Open,
-    },
-    Import {
-        macos_symbol: "_read",
-        linux_symbol: "read",
-        op: Op::Read,
-    },
-    Import {
-        macos_symbol: "_close",
-        linux_symbol: "close",
-        op: Op::Clos,
-    },
-    Import {
-        macos_symbol: "_printf",
-        linux_symbol: "printf",
-        op: Op::Prtf,
-    },
-    Import {
-        macos_symbol: "_malloc",
-        linux_symbol: "malloc",
-        op: Op::Malc,
-    },
-    Import {
-        macos_symbol: "_free",
-        linux_symbol: "free",
-        op: Op::Free,
-    },
-    Import {
-        macos_symbol: "_memset",
-        linux_symbol: "memset",
-        op: Op::Mset,
-    },
-    Import {
-        macos_symbol: "_memcmp",
-        linux_symbol: "memcmp",
-        op: Op::Mcmp,
-    },
-    Import {
-        macos_symbol: "_memcpy",
-        linux_symbol: "memcpy",
-        op: Op::Mcpy,
-    },
-    Import {
-        macos_symbol: "_exit",
-        linux_symbol: "exit",
-        op: Op::Exit,
-    },
-    Import {
-        macos_symbol: "_write",
-        linux_symbol: "write",
-        op: Op::Write,
-    },
-    Import {
-        macos_symbol: "_getenv",
-        linux_symbol: "getenv",
-        op: Op::Genv,
-    },
-    Import {
-        macos_symbol: "_setenv",
-        linux_symbol: "setenv",
-        op: Op::Senv,
-    },
-    // POSIX libdl. On Linux these live in libdl.so.2 (still shipped
-    // as a stub on glibc 2.34+ which folded the bodies back into
-    // libc); on macOS they live in libSystem alongside the rest.
-    // The codegen treats them like any other libc call -- adrp+ldr+blr
-    // through `.got`.
-    Import {
-        macos_symbol: "_dlopen",
-        linux_symbol: "dlopen",
-        op: Op::Dlop,
-    },
-    Import {
-        macos_symbol: "_dlsym",
-        linux_symbol: "dlsym",
-        op: Op::Dlsm,
-    },
-    Import {
-        macos_symbol: "_dlclose",
-        linux_symbol: "dlclose",
-        op: Op::Dlcl,
-    },
-    Import {
-        macos_symbol: "_dlerror",
-        linux_symbol: "dlerror",
-        op: Op::Dler,
-    },
-];
-
-fn import_index_for_op(op: Op) -> Option<usize> {
-    IMPORTS.iter().position(|imp| imp.op == op)
-}
-
 /// AArch64 register name. Wraps the 5-bit register field that nearly
 /// every instruction needs in some position; using a newtype prevents
 /// the "I passed `1` for a register and `1` for an immediate to the
@@ -925,6 +813,7 @@ pub(super) fn lower(
     program: &Program,
     target: Target,
     native: NativeOptions,
+    imports: &super::ResolvedImports,
 ) -> Result<Build, C4Error> {
     let options = target.options();
 
@@ -1015,6 +904,7 @@ pub(super) fn lower(
             &mut reg_state,
             op_pc,
             &branch_targets,
+            imports,
         )?;
     }
     bytecode_to_native[program.text.len()] = code.len();
@@ -1066,6 +956,11 @@ pub(super) fn lower(
         data_fixups,
         func_fixups,
         bytecode_to_native,
+        // `imports` is set by `lower_for` after this returns; the
+        // resolver runs once up there and the value is shared with
+        // both the lowering and the writer. Default-empty here keeps
+        // the per-arch lowering oblivious to the resolver.
+        imports: super::ResolvedImports::default(),
     })
 }
 
@@ -1144,6 +1039,7 @@ fn lower_op(
     reg_state: &mut RegState<'_>,
     op_pc: usize,
     branch_targets: &[bool],
+    imports: &super::ResolvedImports,
 ) -> Result<(), C4Error> {
     match op {
         // ---- Function frame ----
@@ -1445,7 +1341,7 @@ fn lower_op(
         | Op::Dlop
         | Op::Dlsm
         | Op::Dlcl
-        | Op::Dler => emit_libc_call(op, text, *pc, code, got_fixups, options)?,
+        | Op::Dler => emit_libc_call(op, text, *pc, code, got_fixups, options, imports)?,
     }
     Ok(())
 }
@@ -1473,9 +1369,13 @@ fn emit_libc_call(
     code: &mut Vec<u8>,
     got_fixups: &mut Vec<GotFixup>,
     options: TargetOptions,
+    imports: &super::ResolvedImports,
 ) -> Result<(), C4Error> {
-    let import_index = import_index_for_op(op)
-        .ok_or_else(|| C4Error::Compile(format!("native codegen: no import index for {op:?}")))?;
+    let import_index = imports.index_of_op(op).ok_or_else(|| {
+        C4Error::Compile(format!(
+            "native codegen: no import index for {op:?} -- the resolver should have placed it"
+        ))
+    })?;
 
     // Peek at the next instruction; if it's Adj N, that gives us the
     // arg count. The c4 compiler omits the Adj when the call has zero

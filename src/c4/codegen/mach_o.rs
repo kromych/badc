@@ -137,11 +137,6 @@ const N_UNDF: u8 = 0x0;
 const N_EXT: u8 = 0x01;
 const NO_SECT: u8 = 0;
 
-/// Library ordinal -> n_desc encoding for two-level bound symbols.
-/// libSystem is always our first (and currently only) imported dylib,
-/// so it gets ordinal 1.
-const LIBSYSTEM_ORDINAL: u16 = 1;
-
 /// Segment indices, in the order they appear as `LC_SEGMENT_64` load
 /// commands. Bind opcodes refer to segments by this index.
 const SEG_INDEX_DATA: u8 = 2;
@@ -909,18 +904,29 @@ fn apply_func_fixups(
 // __LINKEDIT contents: bind opcodes, nlist entries, string table.
 // ------------------------------------------------------------------
 
-/// Bind opcode stream that resolves a list of libSystem symbols into
+/// Bind opcode stream that resolves the program's imports into
 /// consecutive 8-byte slots starting at `(__DATA, +0)`. The opcode
-/// stream is a tiny dyld-side state machine: we set the dylib once,
-/// set the bind type once, then for each symbol set its name + the
-/// absolute offset (then DO_BIND).
-fn bind_opcodes_for_libsystem_imports(symbols: &[&str], segment: u8) -> Vec<u8> {
+/// stream is a tiny dyld-side state machine: we set the bind type
+/// once, then for each symbol set its dylib ordinal (when it
+/// changes), set its name, set the absolute offset, and DO_BIND.
+///
+/// `imports` is taken from the resolved `Build.imports`: position
+/// `i` is GOT slot `i` in `__DATA`. Each entry's `dylib_index`
+/// indexes into the per-image dylib list; the loader-visible
+/// ordinal is `dylib_index + 1` (Mach-O reserves ordinal 0 for
+/// "self").
+fn bind_opcodes_for_imports(imports: &super::ResolvedImports, segment: u8) -> Vec<u8> {
     let mut out = Vec::new();
-    out.push(BIND_OPCODE_SET_DYLIB_ORDINAL_IMM | (LIBSYSTEM_ORDINAL as u8 & 0x0F));
     out.push(BIND_OPCODE_SET_TYPE_IMM | BIND_TYPE_POINTER);
-    for (i, sym) in symbols.iter().enumerate() {
+    let mut current_ordinal: Option<u8> = None;
+    for (i, imp) in imports.imports.iter().enumerate() {
+        let ordinal = (imp.dylib_index + 1) as u8;
+        if current_ordinal != Some(ordinal) {
+            out.push(BIND_OPCODE_SET_DYLIB_ORDINAL_IMM | (ordinal & 0x0F));
+            current_ordinal = Some(ordinal);
+        }
         out.push(BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM); // flags = 0
-        out.extend_from_slice(sym.as_bytes());
+        out.extend_from_slice(imp.real_symbol.as_bytes());
         out.push(0); // NUL terminator
         out.push(BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB | (segment & 0x0F));
         put_uleb128(&mut out, (i * 8) as u64);
@@ -931,10 +937,10 @@ fn bind_opcodes_for_libsystem_imports(symbols: &[&str], segment: u8) -> Vec<u8> 
     out
 }
 
-/// One `nlist_64` for an undefined external symbol imported from
-/// libSystem. `n_strx` is the byte offset of the symbol's name in the
-/// string table.
-fn nlist_undef_libsystem(n_strx: u32) -> Vec<u8> {
+/// One `nlist_64` for an undefined external symbol. `n_strx` is the
+/// byte offset of the symbol's name in the string table; `ordinal`
+/// is the 1-based dylib ordinal (which library exports the symbol).
+fn nlist_undef(n_strx: u32, ordinal: u8) -> Vec<u8> {
     let mut out = Vec::with_capacity(NLIST_64_SIZE);
     write_struct(
         &mut out,
@@ -942,8 +948,8 @@ fn nlist_undef_libsystem(n_strx: u32) -> Vec<u8> {
             n_strx,
             n_type: N_EXT | N_UNDF,
             n_sect: NO_SECT,
-            n_desc: LIBSYSTEM_ORDINAL << 8, // library ordinal in the high 8 bits
-            n_value: 0,                     // undefined
+            n_desc: (ordinal as u16) << 8, // library ordinal in the high 8 bits
+            n_value: 0,                    // undefined
         },
     );
     debug_assert_eq!(out.len(), NLIST_64_SIZE);
@@ -975,34 +981,40 @@ fn build_strtab(symbols: &[&str]) -> (Vec<u8>, Vec<u32>) {
 pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
     let code = &build.text;
 
-    // ---- step 1: pick the imported symbol set ----
+    // ---- step 1: build __LINKEDIT contents ----
     //
-    // The aarch64 codegen and this writer share the symbol order via
-    // [`super::aarch64::IMPORTS`] -- index N in IMPORTS is GOT slot N
+    // The lowering already resolved program.dylibs against the used
+    // libc ops -- index N in `build.imports.imports` is GOT slot N
     // in __DATA, and the codegen's adrp+ldr placeholders refer to
-    // those slots by index. We pull just the names here.
-    let imports: Vec<&str> = super::aarch64::IMPORTS
-        .iter()
-        .map(|imp| imp.macos_symbol)
-        .collect();
-
-    // ---- step 2: build __LINKEDIT contents ----
+    // those slots by index.
     //
     // Bind opcodes go first, then the symbol table, then the string
     // table. Each subsection is 8-byte aligned so file offsets stay
     // nice. We need the sizes of all three to size __LINKEDIT, which
     // in turn sizes the LC stream.
-    let bind_ops = bind_opcodes_for_libsystem_imports(&imports, SEG_INDEX_DATA);
-    let (strtab, str_indices) = build_strtab(&imports);
-    let mut symtab = Vec::with_capacity(16 * imports.len());
-    for n_strx in &str_indices {
-        symtab.extend_from_slice(&nlist_undef_libsystem(*n_strx));
+    let bind_ops = bind_opcodes_for_imports(&build.imports, SEG_INDEX_DATA);
+    let symbol_names: Vec<&str> = build
+        .imports
+        .imports
+        .iter()
+        .map(|i| i.real_symbol.as_str())
+        .collect();
+    let (strtab, str_indices) = build_strtab(&symbol_names);
+    let mut symtab = Vec::with_capacity(NLIST_64_SIZE * build.imports.imports.len());
+    for (n_strx, imp) in str_indices.iter().zip(build.imports.imports.iter()) {
+        let ordinal = (imp.dylib_index + 1) as u8;
+        symtab.extend_from_slice(&nlist_undef(*n_strx, ordinal));
     }
 
-    // ---- step 3: size the load-command stream ----
+    // ---- step 2: size the load-command stream ----
     //
     // Most LC sizes are fixed; the variable-length LCs (DYLINKER,
     // DYLIB) are pre-built so we can read their length back.
+    //
+    // One LC_LOAD_DYLIB per resolved dylib, in declaration order;
+    // dyld assigns ordinal `i+1` to the i-th LC_LOAD_DYLIB and we
+    // use that ordinal in both the bind opcodes and the nlist
+    // n_desc fields.
 
     let mh_size = MACH_HEADER_64_SIZE as u64;
     let pagezero_size = SEGMENT_COMMAND_64_SIZE as u64;
@@ -1015,9 +1027,15 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
     let main_size = ENTRY_POINT_COMMAND_SIZE as u64;
 
     let dylinker = load_dylinker("/usr/lib/dyld");
-    let dylib_libsystem = load_dylib("/usr/lib/libSystem.B.dylib");
+    let dylib_lcs: Vec<Vec<u8>> = build
+        .imports
+        .dylibs
+        .iter()
+        .map(|d| load_dylib(&d.path))
+        .collect();
     let bv = build_version();
 
+    let dylibs_total: u64 = dylib_lcs.iter().map(|lc| lc.len() as u64).sum();
     let sizeofcmds = pagezero_size
         + text_seg_size
         + data_seg_size
@@ -1026,7 +1044,7 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
         + symtab_size
         + dysymtab_size
         + dylinker.len() as u64
-        + dylib_libsystem.len() as u64
+        + dylibs_total
         + bv.len() as u64
         + main_size;
 
@@ -1062,7 +1080,7 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
     // overflows the first.
     let data_fileoff = text_filesize;
     let data_vmaddr = TEXT_VMADDR_BASE + text_vmsize;
-    let got_size = (imports.len() * 8) as u64;
+    let got_size = (build.imports.imports.len() * 8) as u64;
     let got_section_offset_in_segment: u64 = 0;
     let data_section_offset_in_segment: u64 = round_up(got_size, 8);
     let program_data_size = build.data.len() as u64;
@@ -1129,11 +1147,11 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
     );
     let symtab_lc = symtab_command(
         symoff as u32,
-        imports.len() as u32,
+        build.imports.imports.len() as u32,
         stroff as u32,
         strtab.len() as u32,
     );
-    let dysymtab_lc = dysymtab_command(imports.len() as u32);
+    let dysymtab_lc = dysymtab_command(build.imports.imports.len() as u32);
     // LC_MAIN's entryoff is a *file* offset, but `main` may live partway
     // through the emitted code if the compiler placed helper functions
     // first. `build.entry_offset` carries that intra-code offset.
@@ -1151,6 +1169,9 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
 
     // mach_header_64. We have undefined symbols now (_write); MH_NOUNDEFS
     // is dropped accordingly.
+    // ncmds: 4 segments + dyldinfo + symtab + dysymtab + dylinker
+    //        + N dylibs + build_version + main
+    let ncmds: u32 = (10 + build.imports.dylibs.len()) as u32;
     write_struct(
         &mut out,
         &MachHeader64 {
@@ -1158,9 +1179,7 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
             cputype: CPU_TYPE_ARM64,
             cpusubtype: CPU_SUBTYPE_ARM64_ALL,
             filetype: MH_EXECUTE,
-            // ncmds: 4 segments + dyldinfo + symtab + dysymtab + dylinker
-            //        + dylib + build_version + main
-            ncmds: 11,
+            ncmds,
             sizeofcmds: sizeofcmds as u32,
             flags: MH_DYLDLINK | MH_TWOLEVEL | MH_PIE,
             reserved: 0,
@@ -1179,7 +1198,9 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
     out.extend_from_slice(&symtab_lc);
     out.extend_from_slice(&dysymtab_lc);
     out.extend_from_slice(&dylinker);
-    out.extend_from_slice(&dylib_libsystem);
+    for lc in &dylib_lcs {
+        out.extend_from_slice(lc);
+    }
     out.extend_from_slice(&bv);
     out.extend_from_slice(&main_lc);
 
@@ -1252,7 +1273,14 @@ mod tests {
     use super::*;
 
     /// Smallest Build that exercises the layout end to end.
+    ///
+    /// Carries a single fake import (`_write` from libSystem) so
+    /// the bind-opcode / symtab / dylib paths produce non-empty
+    /// output worth asserting on. Real lowering populates this
+    /// from the program's `#pragma binding`s.
     fn tiny_build() -> Build {
+        use super::super::super::op::Op;
+        use super::super::{ResolvedDylib, ResolvedImport, ResolvedImports};
         Build {
             // movz x0, #42 ; ret
             text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],
@@ -1262,6 +1290,18 @@ mod tests {
             data_fixups: Vec::new(),
             func_fixups: Vec::new(),
             bytecode_to_native: Vec::new(),
+            imports: ResolvedImports {
+                imports: vec![ResolvedImport {
+                    op: Op::Write,
+                    c4_name: "write".into(),
+                    real_symbol: "_write".into(),
+                    dylib_index: 0,
+                }],
+                dylibs: vec![ResolvedDylib {
+                    name: "libc".into(),
+                    path: "/usr/lib/libSystem.B.dylib".into(),
+                }],
+            },
         }
     }
 
@@ -1296,7 +1336,10 @@ mod tests {
     }
 
     #[test]
-    fn ncmds_grew_to_eleven() {
+    fn ncmds_baseline_is_ten_plus_dylibs() {
+        // tiny_build has 1 dylib (libSystem) -> baseline 10 LCs
+        // (4 segments + dyld_info + symtab + dysymtab + dylinker
+        // + build_version + main) plus 1 LC_LOAD_DYLIB.
         let bytes = write(&tiny_build()).unwrap();
         assert_eq!(read_u32(&bytes, 16), 11);
     }
@@ -1406,11 +1449,11 @@ mod tests {
             if cmd == LC_SYMTAB {
                 let stroff = read_u32(&bytes, p + 16) as usize;
                 assert_eq!(bytes[stroff], 0, "string table must start with NUL");
-                // The first import in our IMPORTS table is `_open` --
-                // it lands immediately after the leading NUL.
+                // tiny_build's only import is `_write`; it lands
+                // immediately after the leading NUL.
                 assert_eq!(
-                    &bytes[stroff + 1..stroff + 6],
-                    b"_open",
+                    &bytes[stroff + 1..stroff + 7],
+                    b"_write",
                     "expected first import name immediately after leading NUL"
                 );
                 return;

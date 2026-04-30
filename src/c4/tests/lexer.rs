@@ -212,23 +212,36 @@ fn line_counter_advances_with_newlines() {
 }
 
 #[test]
-fn library_function_names_are_pre_seeded() {
-    // `init_symbols` registers C library names like `malloc` as
-    // `Token::Sys` carrying the matching intrinsic opcode in `val`.
-    // The type signature (return type + params + variadic) is no
-    // longer seeded here -- it now arrives via the per-target
-    // header's forward-declaration prototype (`char *malloc(int);`)
-    // which the parser folds onto the same symbol. This test only
-    // exercises the lexer in isolation, so it just checks the
-    // class/op binding and leaves the signature check to the
-    // compiler-level tests.
-    let mut h = LexHarness::new("malloc");
-    assert_eq!(h.next(), Token::Id as i64);
-    assert_eq!(h.name(), "malloc");
-    let sym = h
-        .symbols
+fn binding_names_seed_token_sys_when_dylibs_provided() {
+    // `init_symbols` no longer carries a fixed list of libc names;
+    // it walks the dylibs the preprocessor parsed and seeds each
+    // binding's `c4_name` as a `Token::Sys` symbol with `val` set
+    // to the binding's flat-index. A program reaching for
+    // `malloc(...)` then lowers via `Op::JsrExt 0` (or whichever
+    // index `malloc` ended up at).
+    use crate::c4::lexer::{init_symbols, Lexer};
+    use crate::c4::preprocessor::{Binding, DylibSpec};
+
+    let dylibs = vec![DylibSpec {
+        name: "libc".into(),
+        path: "libc.so.6".into(),
+        bindings: vec![Binding {
+            c4_name: "malloc".into(),
+            real_symbol: "malloc".into(),
+        }],
+    }];
+    let mut symbols = Vec::new();
+    init_symbols(&mut symbols, &dylibs);
+
+    let mut lex = Lexer::new("malloc".to_string());
+    let mut data = Vec::new();
+    lex.next(&mut symbols, &mut data).expect("lex");
+    assert_eq!(lex.tk, Token::Id as i64);
+
+    let sym = symbols
         .iter()
         .find(|s| s.name == "malloc")
-        .expect("malloc should be pre-seeded");
+        .expect("malloc should be seeded from the dylibs list");
     assert_eq!(sym.class, Token::Sys as i64);
+    assert_eq!(sym.val, 0, "first binding gets flat-index 0");
 }

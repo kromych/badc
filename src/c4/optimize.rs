@@ -97,6 +97,9 @@ enum Insn {
     Ent(i64),
     /// `Adj <n>` -- drop n words from the stack post-call.
     Adj(i64),
+    /// `JsrExt <binding_idx>` -- external library call, indexed by
+    /// the program's flat `#pragma binding` table position.
+    JsrExt(i64),
     /// Branch-style op (`Jmp`/`Jsr`/`Bz`/`Bnz`); operand is the IR index
     /// of the target instruction.
     Branch(BrKind, usize),
@@ -124,6 +127,7 @@ impl Insn {
             | Insn::ImmData(_)
             | Insn::Ent(_)
             | Insn::Adj(_)
+            | Insn::JsrExt(_)
             | Insn::Branch(_, _)
             | Insn::ArithI(_, _) => 2,
             Insn::Removed => 0,
@@ -200,7 +204,15 @@ fn decode(text: &[i64], data_imm_positions: &[usize]) -> Result<Vec<Insn>, C4Err
         pc += 1;
         let needs_operand = matches!(
             op,
-            Op::Lea | Op::Imm | Op::Ent | Op::Adj | Op::Jmp | Op::Jsr | Op::Bz | Op::Bnz
+            Op::Lea
+                | Op::Imm
+                | Op::Ent
+                | Op::Adj
+                | Op::JsrExt
+                | Op::Jmp
+                | Op::Jsr
+                | Op::Bz
+                | Op::Bnz
         );
         if needs_operand && pc >= text.len() {
             return Err(C4Error::Compile(format!(
@@ -235,6 +247,11 @@ fn decode(text: &[i64], data_imm_positions: &[usize]) -> Result<Vec<Insn>, C4Err
                 let v = text[pc];
                 pc += 1;
                 Insn::Adj(v)
+            }
+            Op::JsrExt => {
+                let v = text[pc];
+                pc += 1;
+                Insn::JsrExt(v)
             }
             Op::Jmp | Op::Jsr | Op::Bz | Op::Bnz => {
                 let target = text[pc] as usize;
@@ -370,6 +387,10 @@ fn encode(insns: &[Insn], entry_idx: usize) -> (Vec<i64>, usize, Vec<usize>) {
             }
             Insn::Adj(v) => {
                 text.push(Op::Adj as i64);
+                text.push(*v);
+            }
+            Insn::JsrExt(v) => {
+                text.push(Op::JsrExt as i64);
                 text.push(*v);
             }
             Insn::Branch(kind, target) => {
@@ -749,8 +770,14 @@ fn dead_code_elimination(insns: &mut [Insn], entry_idx: usize) -> bool {
         // Determine successors. All instructions except control-flow
         // terminators fall through to next_live; terminators only
         // transfer to their explicit target(s).
+        // Terminators: only `Lev` (function return). `JsrExt` to
+        // `exit` doesn't return either, but the optimizer doesn't
+        // carry the symbol-table info to know which binding is the
+        // exit one -- DCE conservatively traces past every JsrExt,
+        // leaving any post-`exit` dead code in place. The native
+        // codegen will emit it as unreachable bytes; no harm done.
         let (fall_through, branch_target) = match ins {
-            Insn::NoArg(Op::Lev) | Insn::NoArg(Op::Exit) => (false, None),
+            Insn::NoArg(Op::Lev) => (false, None),
             Insn::Branch(kind, t) => (kind.falls_through(), Some(*t)),
             _ => (true, None),
         };

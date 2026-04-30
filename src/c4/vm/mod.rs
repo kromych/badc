@@ -81,6 +81,11 @@ pub struct Vm<H: Host> {
     /// Arguments passed to `main(int argc, char **argv)`. Empty by default;
     /// populated via [`Vm::with_args`].
     args: Vec<String>,
+    /// Flat list of `c4_name`s in `#pragma binding(...)` declaration
+    /// order -- the same enumeration the parser used when assigning
+    /// `Op::JsrExt` operands. Looked up at JsrExt dispatch time to
+    /// pick which Rust shim to invoke.
+    binding_names: Vec<String>,
 
     // ---- Pointer-tracking state ----
     /// Recorded heap allocations (malloc + getenv-returned strings). Always
@@ -113,6 +118,11 @@ impl<H: Host> Vm<H> {
     /// where there's no default; convenient in `std` for tests that
     /// want to stub IO. Trace defaults to off.
     pub fn with_host(program: Program, host: H) -> Self {
+        let binding_names = program
+            .dylibs
+            .iter()
+            .flat_map(|d| d.bindings.iter().map(|b| b.c4_name.clone()))
+            .collect();
         Self {
             text: program.text,
             data: program.data,
@@ -121,6 +131,7 @@ impl<H: Host> Vm<H> {
             host,
             trace: Trace::Off,
             args: Vec::new(),
+            binding_names,
             allocations: Vec::new(),
             static_end: 0,
             track_pointers: false,
@@ -397,6 +408,25 @@ impl<H: Host> Vm<H> {
         Ok(s)
     }
 
+    /// Look up the c4 name for a `JsrExt` operand. Errors if the
+    /// operand is out of range -- can only happen if the bytecode
+    /// got corrupted between parse and execute.
+    fn binding_name(&self, binding_idx: i64) -> Result<&str, C4Error> {
+        if binding_idx < 0 {
+            return Err(C4Error::Runtime(format!(
+                "VM: negative JsrExt operand {binding_idx}"
+            )));
+        }
+        let i = binding_idx as usize;
+        self.binding_names.get(i).map(|s| s.as_str()).ok_or_else(|| {
+            C4Error::Runtime(format!(
+                "VM: JsrExt operand {binding_idx} out of range \
+                 (program has {} bindings)",
+                self.binding_names.len()
+            ))
+        })
+    }
+
     /// Execute the program. Consumes the VM because `run` mutates `text`
     /// (appending the bootstrap), `data` (staging argv), and the recorded
     /// `static_end`/heap state -- invoking it twice would corrupt those
@@ -409,11 +439,16 @@ impl<H: Host> Vm<H> {
         let mut sp = STACK_BASE + STACK_CAPACITY * 8;
         let mut bp = sp;
 
-        // Append a Psh+Exit bootstrap so main's `Lev` returns into it
-        // and terminates with the value left in the accumulator.
+        // Append a single-`Psh` bootstrap so main's `Lev` returns
+        // into it: the Psh saves the accumulator onto the VM stack,
+        // then the loop notices `pc == halt_pc` (the slot just past
+        // Psh) and terminates with the saved value as the exit code.
+        // This used to be `Psh + Exit`, but `Op::Exit` is gone now
+        // that all libc calls go through `Op::JsrExt` -- the in-loop
+        // halt-pc check replaces it.
         let bootstrap_addr = self.text.len();
         self.text.push(Op::Psh as i64);
-        self.text.push(Op::Exit as i64);
+        let halt_pc = self.text.len();
 
         // Stage argv strings + array in the data segment, then push argc /
         // argv_addr as the two parameters of `main`. The compiler maps
@@ -447,6 +482,13 @@ impl<H: Host> Vm<H> {
 
         loop {
             _cycle += 1;
+            if pc == halt_pc {
+                // Bootstrap halt: main's `Lev` returned into the
+                // synthetic `Psh` we appended at `bootstrap_addr`,
+                // the Psh saved the accumulator on the VM stack,
+                // and now we read it back as the exit code.
+                return self.load_i64(sp);
+            }
             if pc >= self.text.len() {
                 return Err(C4Error::Runtime("PC out of bounds".to_string()));
             }
@@ -682,23 +724,45 @@ impl<H: Host> Vm<H> {
                     a = self.load_u8(addr)? as i64;
                     pc += 1;
                 }
-                Op::Open => a = self.intrinsic_open(sp)?,
-                Op::Read => a = self.intrinsic_read(sp)?,
-                Op::Clos => a = self.intrinsic_close(sp)?,
-                Op::Malc => a = self.intrinsic_malloc(sp)?,
-                Op::Free => a = self.intrinsic_free(sp)?,
-                Op::Mset => a = self.intrinsic_memset(sp)?,
-                Op::Mcmp => a = self.intrinsic_memcmp(sp)?,
-                Op::Mcpy => a = self.intrinsic_memcpy(sp)?,
-                Op::Prtf => a = self.intrinsic_printf(sp, pc)?,
-                Op::Exit => return self.load_i64(sp),
-                Op::Write => a = self.intrinsic_write(sp)?,
-                Op::Genv => a = self.intrinsic_getenv(sp)?,
-                Op::Senv => a = self.intrinsic_setenv(sp)?,
-                Op::Dlop => a = self.intrinsic_dlopen(sp)?,
-                Op::Dlsm => a = self.intrinsic_dlsym(sp)?,
-                Op::Dlcl => a = self.intrinsic_dlclose(sp)?,
-                Op::Dler => a = self.intrinsic_dlerror()?,
+                Op::JsrExt => {
+                    // External library call. The operand is the
+                    // binding's flat index across all
+                    // `#pragma binding(...)` the preprocessor
+                    // parsed; we look up its `c4_name` and
+                    // dispatch to the matching Rust shim. The c4
+                    // emitter follows every call with `Op::Adj N`
+                    // (omitted for 0-arg calls), which the next
+                    // loop iteration drops as usual.
+                    let binding_idx = self.text[pc];
+                    pc += 1;
+                    let c4_name = self.binding_name(binding_idx)?;
+                    a = match c4_name {
+                        "open" => self.intrinsic_open(sp)?,
+                        "read" => self.intrinsic_read(sp)?,
+                        "close" => self.intrinsic_close(sp)?,
+                        "malloc" => self.intrinsic_malloc(sp)?,
+                        "free" => self.intrinsic_free(sp)?,
+                        "memset" => self.intrinsic_memset(sp)?,
+                        "memcmp" => self.intrinsic_memcmp(sp)?,
+                        "memcpy" => self.intrinsic_memcpy(sp)?,
+                        "printf" => self.intrinsic_printf(sp, pc - 1)?,
+                        "exit" => return self.load_i64(sp),
+                        "write" => self.intrinsic_write(sp)?,
+                        "getenv" => self.intrinsic_getenv(sp)?,
+                        "setenv" => self.intrinsic_setenv(sp)?,
+                        "dlopen" => self.intrinsic_dlopen(sp)?,
+                        "dlsym" => self.intrinsic_dlsym(sp)?,
+                        "dlclose" => self.intrinsic_dlclose(sp)?,
+                        "dlerror" => self.intrinsic_dlerror()?,
+                        other => {
+                            return Err(C4Error::Runtime(alloc::format!(
+                                "VM: no shim for binding `{other}` -- the VM only knows the \
+                                 standard libc surface (open/read/close/printf/...). Use \
+                                 `--emit-native` if you need to call something else."
+                            )));
+                        }
+                    };
+                }
             }
         }
     }

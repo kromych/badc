@@ -33,6 +33,19 @@ pub enum Op {
     Sc,
     /// Push: Pushes the accumulator onto the stack.
     Psh,
+    /// External library call. Followed by one operand: the index
+    /// (into the program's flattened `#pragma binding(...)` table)
+    /// of the binding to call. Args are already on the VM stack
+    /// (in 16-byte slots, as for a regular `Jsri`); the trailing
+    /// `Op::Adj N` after the call gives the runtime / lowering the
+    /// arg count to drop.
+    ///
+    /// Replaces the old per-symbol `Op::Open` / `Op::Prtf` / ... set:
+    /// the lexer no longer carries a fixed table of libc names,
+    /// each header's `#pragma binding` fills the table dynamically,
+    /// and a call site lowers the same way regardless of which
+    /// dylib's symbol is on the other end.
+    JsrExt,
     /// Bitwise OR
     Or,
     /// Bitwise XOR
@@ -65,49 +78,6 @@ pub enum Op {
     Div,
     /// Modulo `%`
     Mod,
-    /// Intrinsic: Open a file
-    Open,
-    /// Intrinsic: Read from a file descriptor
-    Read,
-    /// Intrinsic: Close a file descriptor
-    Clos,
-    /// Intrinsic: Formatted print to stdout
-    Prtf,
-    /// Intrinsic: Dynamic memory allocation
-    Malc,
-    /// Intrinsic: Deallocate memory
-    Free,
-    /// Intrinsic: Set memory block to value
-    Mset,
-    /// Intrinsic: Compare memory blocks
-    Mcmp,
-    /// Intrinsic: Copy memory block from src to dst.
-    Mcpy,
-    /// Intrinsic: Terminate program with exit code
-    Exit,
-    /// Intrinsic: Write a buffer to a file descriptor (fd 1=stdout, 2=stderr).
-    Write,
-    /// Intrinsic: Read an environment variable into the data segment.
-    Genv,
-    /// Intrinsic: Set an environment variable.
-    Senv,
-    /// Intrinsic: `dlopen(path, flags)` -- load a shared library at
-    /// runtime. Returns an opaque handle (or 0 on failure). In VM
-    /// mode the handle is a real native pointer; calling through it
-    /// via `Op::Jsri` is rejected (no FFI from the VM).
-    Dlop,
-    /// Intrinsic: `dlsym(handle, name)` -- look up a symbol in a loaded
-    /// library. Returns a function pointer (or 0 on miss). Native
-    /// binaries can call the result through `Op::Jsri`; VM mode can
-    /// only inspect it.
-    Dlsm,
-    /// Intrinsic: `dlclose(handle)` -- unload a previously dlopen'd
-    /// library. Returns 0 on success, non-zero on failure.
-    Dlcl,
-    /// Intrinsic: `dlerror()` -- return the most recent dynamic-loader
-    /// error message as a C string, or 0 if none. The returned
-    /// pointer is valid until the next dlerror call (POSIX).
-    Dler,
 
     // --- Immediate-form arithmetic / comparison ---
     //
@@ -151,7 +121,7 @@ pub enum Op {
     LdLocC,
 }
 
-const OPS: [Op; 64] = [
+const OPS: [Op; 48] = [
     Op::Lea,
     Op::Imm,
     Op::Jmp,
@@ -167,6 +137,7 @@ const OPS: [Op; 64] = [
     Op::Si,
     Op::Sc,
     Op::Psh,
+    Op::JsrExt,
     Op::Or,
     Op::Xor,
     Op::And,
@@ -183,23 +154,6 @@ const OPS: [Op; 64] = [
     Op::Mul,
     Op::Div,
     Op::Mod,
-    Op::Open,
-    Op::Read,
-    Op::Clos,
-    Op::Prtf,
-    Op::Malc,
-    Op::Free,
-    Op::Mset,
-    Op::Mcmp,
-    Op::Mcpy,
-    Op::Exit,
-    Op::Write,
-    Op::Genv,
-    Op::Senv,
-    Op::Dlop,
-    Op::Dlsm,
-    Op::Dlcl,
-    Op::Dler,
     // Immediate-form ops (optimizer-emitted).
     Op::AddI,
     Op::SubI,

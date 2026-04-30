@@ -164,21 +164,22 @@ pub(crate) enum Machine {
     X86_64,
 }
 
-/// One resolved libc import: a libc op the program reaches for, plus
-/// everything the codegen and writer need to wire it up. Built once
-/// per compilation by [`ResolvedImports::resolve`] from the
-/// `#pragma binding(...)` table the preprocessor parsed out of the
-/// included headers.
+/// One resolved external import: a binding the program reaches
+/// for via `Op::JsrExt`, plus everything the codegen and writer
+/// need to wire it up. Built once per compilation by
+/// [`ResolvedImports::resolve`] from the `#pragma binding(...)`
+/// table the preprocessor parsed out of the included headers.
 #[derive(Debug, Clone)]
 pub(crate) struct ResolvedImport {
-    /// The bytecode op that lowers to this call (e.g. [`Op::Prtf`]).
-    /// Used by the lowering pass to find the matching slot when it
-    /// emits an adrp+ldr / call-qword-rip sequence.
-    pub op: Op,
-    /// The portable c4-side name (`"printf"`). Currently only kept
-    /// for diagnostics in compile-error messages; the lowering and
-    /// writers key off `op` and `real_symbol`.
-    #[allow(dead_code)]
+    /// Flat index into the program's `#pragma binding(...)` table
+    /// -- the value the parser stored in the symbol's `val` field
+    /// and emitted as the operand of `Op::JsrExt`. The lowering
+    /// uses [`ResolvedImports::index_of_binding`] to translate this
+    /// back into a GOT / IAT slot index when patching call sites.
+    pub binding_idx: i64,
+    /// The portable c4-side name (`"printf"`). Used by the VM to
+    /// dispatch to the right Rust shim, and in compile-error
+    /// messages.
     pub c4_name: String,
     /// The dylib's exported symbol (`"_printf"` on macOS,
     /// `"printf"` on Linux, `"printf"` on msvcrt). Goes verbatim
@@ -217,40 +218,50 @@ pub(crate) struct ResolvedImports {
 }
 
 impl ResolvedImports {
-    /// Look up the slot index for a given op. `None` if the program
-    /// doesn't use it -- callers should treat that as a codegen bug
-    /// (lowering shouldn't emit a fixup for an op that isn't in the
-    /// resolved set).
-    pub fn index_of_op(&self, op: Op) -> Option<usize> {
-        self.imports.iter().position(|i| i.op == op)
+    /// Look up the slot index for a given binding-flat index.
+    /// `None` if the program doesn't reach for that binding --
+    /// callers should treat that as a codegen bug (lowering
+    /// shouldn't emit a fixup for an `Op::JsrExt` operand that
+    /// isn't in the resolved set).
+    pub fn index_of_binding(&self, binding_idx: i64) -> Option<usize> {
+        self.imports.iter().position(|i| i.binding_idx == binding_idx)
     }
 
     /// Add a binding the writer needs even if the bytecode walk
     /// didn't find a call site for it. Currently used by the ELF
-    /// writers' `_start` stub, which always tail-calls `Op::Exit`
+    /// writers' `_start` stub, which always tail-calls libc `exit`
     /// regardless of whether the user's code did.
     ///
-    /// Resolves through `program.dylibs` the same way the bytecode
-    /// walk would, so a source that forgot `<stdlib.h>` still gets
-    /// the same "no `#pragma binding(... ::exit, ...)`" diagnostic
-    /// instead of a writer-side panic.
-    pub fn force_include(&mut self, op: Op, program: &Program) -> Result<(), C4Error> {
-        if self.index_of_op(op).is_some() {
+    /// Resolves by name through `program.dylibs` the same way the
+    /// bytecode walk would, so a source that forgot `<stdlib.h>`
+    /// still gets the friendly
+    /// "no `#pragma binding(... ::exit, ...)`" diagnostic instead
+    /// of a writer-side panic.
+    pub fn force_include_by_name(
+        &mut self,
+        c4_name: &str,
+        program: &Program,
+    ) -> Result<(), C4Error> {
+        if self.imports.iter().any(|i| i.c4_name == c4_name) {
             return Ok(());
         }
-        let c4_name = op_to_c4_name(op).expect("force_include called with non-libc op");
-        let mut found: Option<(&str, &str, &str)> = None;
-        for spec in &program.dylibs {
-            if let Some(b) = spec.bindings.iter().find(|b| b.c4_name == c4_name) {
-                found = Some((
-                    spec.name.as_str(),
-                    spec.path.as_str(),
-                    b.real_symbol.as_str(),
-                ));
-                break;
+        let mut found: Option<(i64, &str, &str, &str)> = None;
+        let mut binding_idx: i64 = 0;
+        'outer: for spec in &program.dylibs {
+            for b in &spec.bindings {
+                if b.c4_name == c4_name {
+                    found = Some((
+                        binding_idx,
+                        spec.name.as_str(),
+                        spec.path.as_str(),
+                        b.real_symbol.as_str(),
+                    ));
+                    break 'outer;
+                }
+                binding_idx += 1;
             }
         }
-        let Some((dylib_name, dylib_path, real_symbol)) = found else {
+        let Some((idx, dylib_name, dylib_path, real_symbol)) = found else {
             return Err(C4Error::Compile(format!(
                 "no `#pragma binding(<dylib>::{c4_name}, ...)` is in scope -- the target's \
                  `_start` stub needs `{c4_name}` and the codegen has nowhere to import it from. \
@@ -268,7 +279,7 @@ impl ResolvedImports {
             }
         };
         self.imports.push(ResolvedImport {
-            op,
+            binding_idx: idx,
             c4_name: c4_name.to_string(),
             real_symbol: real_symbol.to_string(),
             dylib_index,
@@ -276,20 +287,21 @@ impl ResolvedImports {
         Ok(())
     }
 
-    /// Walk `program.text`, collect every libc op the bytecode
-    /// reaches for, look each one up in `program.dylibs`, and
-    /// return the resolved set.
+    /// Walk `program.text`, collect every `Op::JsrExt` binding-idx
+    /// the bytecode reaches for, look each one up in
+    /// `program.dylibs`, and return the resolved set.
     ///
     /// The dylib list is built by deduplicating against
-    /// `program.dylibs` ordering, so a program that uses `printf`
+    /// `program.dylibs` ordering, so a program that calls `printf`
     /// (in `libc`) and `LoadLibraryA` (in `kernel32`) gets two
     /// dylibs in that declaration order.
     pub fn resolve(program: &Program) -> Result<Self, C4Error> {
-        // Walk bytecode, collecting used libc ops in first-encounter
-        // order. The order determines GOT slot indices; within a
-        // single compilation it just needs to be deterministic.
-        let mut seen: alloc::collections::BTreeSet<Op> = alloc::collections::BTreeSet::new();
-        let mut used: Vec<Op> = Vec::new();
+        // Walk bytecode, collecting used binding-flat indices in
+        // first-encounter order. The order determines GOT slot
+        // indices; within a single compilation it just needs to be
+        // deterministic.
+        let mut seen: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
+        let mut used: Vec<i64> = Vec::new();
         let mut pc = 0;
         while pc < program.text.len() {
             let Some(op) = Op::from_i64(program.text[pc]) else {
@@ -300,55 +312,53 @@ impl ResolvedImports {
             pc += 1;
             if matches!(
                 op,
-                Op::Lea | Op::Imm | Op::Ent | Op::Adj | Op::Jmp | Op::Jsr | Op::Bz | Op::Bnz
+                Op::Lea
+                    | Op::Imm
+                    | Op::Ent
+                    | Op::Adj
+                    | Op::Jmp
+                    | Op::Jsr
+                    | Op::Bz
+                    | Op::Bnz
+                    | Op::JsrExt
             ) {
+                if matches!(op, Op::JsrExt) {
+                    let idx = program.text[pc];
+                    if seen.insert(idx) {
+                        used.push(idx);
+                    }
+                }
                 pc += 1;
-            }
-            if op_to_c4_name(op).is_some() && seen.insert(op) {
-                used.push(op);
             }
         }
 
-        // Resolve each used op through `program.dylibs`. Build the
-        // dylib list lazily: each new dylib gets appended once and
-        // its index is reused for any further bindings.
+        // Resolve each used binding-idx through `program.dylibs`.
+        // Build the dylib list lazily: each new dylib gets
+        // appended once and its index is reused for any further
+        // bindings.
         let mut dylibs: Vec<ResolvedDylib> = Vec::new();
         let mut imports: Vec<ResolvedImport> = Vec::new();
-        for op in used {
-            let c4_name = op_to_c4_name(op).expect("only c4-name-bearing ops were inserted");
-            let mut found: Option<(&str, &str, &str)> = None;
-            for spec in &program.dylibs {
-                if let Some(b) = spec.bindings.iter().find(|b| b.c4_name == c4_name) {
-                    found = Some((
-                        spec.name.as_str(),
-                        spec.path.as_str(),
-                        b.real_symbol.as_str(),
-                    ));
-                    break;
-                }
-            }
-            let Some((dylib_name, dylib_path, real_symbol)) = found else {
+        for binding_idx in used {
+            let Some((spec, b)) = lookup_binding(program, binding_idx) else {
                 return Err(C4Error::Compile(format!(
-                    "no `#pragma binding(<dylib>::{c4_name}, ...)` is in scope -- the program \
-                     calls `{c4_name}` and the codegen has nowhere to import it from. Did you \
-                     forget to `#include <stdio.h>` / `<string.h>` / `<stdlib.h>` / `<unistd.h>` \
-                     / `<dlfcn.h>`?"
+                    "Op::JsrExt operand {binding_idx} is out of range for the program's \
+                     `#pragma binding(...)` table"
                 )));
             };
-            let dylib_index = match dylibs.iter().position(|d| d.name == dylib_name) {
+            let dylib_index = match dylibs.iter().position(|d| d.name == spec.name) {
                 Some(i) => i,
                 None => {
                     dylibs.push(ResolvedDylib {
-                        name: dylib_name.to_string(),
-                        path: dylib_path.to_string(),
+                        name: spec.name.clone(),
+                        path: spec.path.clone(),
                     });
                     dylibs.len() - 1
                 }
             };
             imports.push(ResolvedImport {
-                op,
-                c4_name: c4_name.to_string(),
-                real_symbol: real_symbol.to_string(),
+                binding_idx,
+                c4_name: b.c4_name.clone(),
+                real_symbol: b.real_symbol.clone(),
                 dylib_index,
             });
         }
@@ -357,30 +367,28 @@ impl ResolvedImports {
     }
 }
 
-/// Map a bytecode op to its portable c4-side name, used as the
-/// `c4_name` lookup key against `#pragma binding`. Returns `None` for
-/// non-libc ops -- those don't go through GOT/IAT.
-fn op_to_c4_name(op: Op) -> Option<&'static str> {
-    Some(match op {
-        Op::Open => "open",
-        Op::Read => "read",
-        Op::Clos => "close",
-        Op::Prtf => "printf",
-        Op::Malc => "malloc",
-        Op::Free => "free",
-        Op::Mset => "memset",
-        Op::Mcmp => "memcmp",
-        Op::Mcpy => "memcpy",
-        Op::Exit => "exit",
-        Op::Write => "write",
-        Op::Genv => "getenv",
-        Op::Senv => "setenv",
-        Op::Dlop => "dlopen",
-        Op::Dlsm => "dlsym",
-        Op::Dlcl => "dlclose",
-        Op::Dler => "dlerror",
-        _ => return None,
-    })
+/// Find the binding at flat-index `binding_idx` across all dylibs
+/// in declaration order. The lexer assigned this index when seeding
+/// each binding's c4_name as a `Token::Sys` symbol.
+fn lookup_binding(
+    program: &Program,
+    binding_idx: i64,
+) -> Option<(
+    &super::preprocessor::DylibSpec,
+    &super::preprocessor::Binding,
+)> {
+    if binding_idx < 0 {
+        return None;
+    }
+    let target = binding_idx as usize;
+    let mut running = 0usize;
+    for spec in &program.dylibs {
+        if running + spec.bindings.len() > target {
+            return Some((spec, &spec.bindings[target - running]));
+        }
+        running += spec.bindings.len();
+    }
+    None
 }
 
 /// Where each piece of the program-being-built ends up in the final
@@ -559,7 +567,7 @@ fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Resul
     // source that omits `<stdlib.h>` still gets the friendly
     // "no `#pragma binding(... ::exit, ...)`" error.
     if matches!(target, Target::LinuxAarch64 | Target::LinuxX64) {
-        imports.force_include(Op::Exit, program)?;
+        imports.force_include_by_name("exit", program)?;
     }
     let mut build = match target {
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {

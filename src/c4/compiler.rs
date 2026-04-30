@@ -168,16 +168,14 @@ impl Compiler {
     /// off them so the right libc / libSystem / msvcrt symbols get
     /// bound for this target.
     pub fn with_target(source: String, target: Target) -> Self {
-        let mut symbols = Vec::new();
-        lexer::init_symbols(&mut symbols);
-
-        // Run the preprocessor over the user's source verbatim. The
-        // bindings come from whichever standard headers the source
-        // `#include`s (or doesn't); a fixture that needs `printf`
-        // but skips `<stdio.h>` will fail with a clear "no
-        // `#pragma binding(... ::printf, ...)` is in scope" error
-        // out of the codegen's import resolver, not a mysterious
-        // link-time mismatch.
+        // Run the preprocessor first so we know the
+        // `#pragma binding(...)` set before seeding the symbol
+        // table. The bindings come from whichever standard headers
+        // the source `#include`s (or doesn't); a fixture that needs
+        // `printf` but skips `<stdio.h>` will fail with a clear
+        // "no `#pragma binding(... ::printf, ...)` is in scope"
+        // error out of the codegen's import resolver, not a
+        // mysterious link-time mismatch.
         //
         // Preprocessor failures (unterminated `#if`, duplicate
         // `#else`, ...) are stored on the struct and surfaced when
@@ -190,6 +188,9 @@ impl Compiler {
             Err(e) => (String::new(), Some(e)),
         };
         let dylibs = pp.dylibs;
+
+        let mut symbols = Vec::new();
+        lexer::init_symbols(&mut symbols, &dylibs);
 
         Self {
             lex: Lexer::new(preprocessed),
@@ -670,7 +671,14 @@ impl Compiler {
                 }
                 self.next()?;
                 if self.symbols[id_idx].class == Token::Sys as i64 {
-                    self.emit_op(Op::from_i64(self.symbols[id_idx].val).unwrap());
+                    // External library call. The symbol's `val` is
+                    // the binding's flat index across all
+                    // `#pragma binding(...)` directives the
+                    // preprocessor parsed; the codegen / VM use it
+                    // as the GOT slot lookup key (native) or the
+                    // dispatch-table key (VM).
+                    self.emit_op(Op::JsrExt);
+                    self.emit_val(self.symbols[id_idx].val);
                 } else if self.symbols[id_idx].class == Token::Fun as i64 {
                     self.emit_op(Op::Jsr);
                     self.emit_val(self.symbols[id_idx].val);

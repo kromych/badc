@@ -2,7 +2,6 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use super::error::C4Error;
-use super::op::Op;
 use super::symbol::Symbol;
 use super::token::{Token, Ty};
 
@@ -306,10 +305,12 @@ fn add_keyword(symbols: &mut Vec<Symbol>, name: &str, token: i64) {
     });
 }
 
-/// Reserved words that map to a non-`Id` token. Library function names
-/// (`printf`, `malloc`, ...) are listed as `Token::Id` here so they get
-/// registered first; the lib-ops table below then upgrades them to
-/// `Token::Sys`-class symbols pointing at their opcode.
+/// Reserved words that map to a non-`Id` token. Library function
+/// names used to be listed here so the lexer's pre-seeded set could
+/// upgrade them to `Token::Sys` later; the
+/// `#pragma binding(...)`-driven seeding now picks each binding's
+/// `c4_name` up dynamically, so the only Id-class entry left is the
+/// ceremonial `main`.
 const KEYWORDS: &[(&str, Token)] = &[
     ("char", Token::Char),
     ("else", Token::Else),
@@ -328,46 +329,16 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("case", Token::Case),
     ("default", Token::Default),
     ("struct", Token::Struct),
-    ("open", Token::Id),
-    ("read", Token::Id),
-    ("close", Token::Id),
-    ("printf", Token::Id),
-    ("malloc", Token::Id),
-    ("free", Token::Id),
-    ("memset", Token::Id),
-    ("memcmp", Token::Id),
-    ("memcpy", Token::Id),
-    ("exit", Token::Id),
-    ("write", Token::Id),
-    ("getenv", Token::Id),
-    ("setenv", Token::Id),
-    ("dlopen", Token::Id),
-    ("dlsym", Token::Id),
-    ("dlclose", Token::Id),
-    ("dlerror", Token::Id),
     ("void", Token::Char),
     ("main", Token::Id),
 ];
 
-const LIB_OPS: &[(&str, Op)] = &[
-    ("open", Op::Open),
-    ("read", Op::Read),
-    ("close", Op::Clos),
-    ("printf", Op::Prtf),
-    ("malloc", Op::Malc),
-    ("free", Op::Free),
-    ("memset", Op::Mset),
-    ("memcmp", Op::Mcmp),
-    ("memcpy", Op::Mcpy),
-    ("exit", Op::Exit),
-    ("write", Op::Write),
-    ("getenv", Op::Genv),
-    ("setenv", Op::Senv),
-    ("dlopen", Op::Dlop),
-    ("dlsym", Op::Dlsm),
-    ("dlclose", Op::Dlcl),
-    ("dlerror", Op::Dler),
-];
+// `LIB_OPS` used to live here -- a static (name, Op) table the
+// lexer used to upgrade pre-seeded `Token::Id`s into `Token::Sys`.
+// The set is gone now: each `#pragma binding(<dylib>::<name>, ...)`
+// the preprocessor parses out of the included headers becomes a
+// `Token::Sys` symbol with `val` set to its index in the flattened
+// binding table. See [`init_symbols`].
 
 /// Kind of a predefined identifier -- used by `--list-symbols` and any
 /// future tooling that wants to enumerate the badc prelude.
@@ -401,15 +372,15 @@ pub struct PredefinedSymbol {
     pub value: i64,
 }
 
-/// Flatten the keyword / intrinsic / constant tables into a single
-/// iterable. Used by the `--list-symbols` CLI flag.
+/// Flatten the keyword listing for the `--list-symbols` CLI flag.
 ///
-/// Lib-function names appear in `KEYWORDS` as `Token::Id` placeholders so
-/// they're interned before `LIB_OPS` upgrades their class -- but they
-/// aren't really keywords from the user's perspective, so we filter the
-/// Id-class entries out of the keyword listing.
+/// Header-bound function names (`printf`, `malloc`, ...) are no
+/// longer fixed; they enter the symbol table via
+/// `#pragma binding(...)` once per program. Listing them here
+/// would be misleading -- the set depends on which headers the
+/// source `#include`s -- so we only show real keywords.
 pub fn predefined_symbols() -> Vec<PredefinedSymbol> {
-    let mut out = Vec::with_capacity(KEYWORDS.len() + LIB_OPS.len());
+    let mut out = Vec::with_capacity(KEYWORDS.len());
     for (name, tok) in KEYWORDS {
         if *tok as i64 == Token::Id as i64 {
             continue;
@@ -420,41 +391,52 @@ pub fn predefined_symbols() -> Vec<PredefinedSymbol> {
             value: *tok as i64,
         });
     }
-    for (name, op) in LIB_OPS {
-        out.push(PredefinedSymbol {
-            name,
-            kind: PredefinedKind::Intrinsic,
-            value: *op as i64,
-        });
-    }
-    // Integer constants (PROT_READ, NULL, ...) now reach the source
-    // through the per-target header's `#define`s. They no longer
-    // appear in this list -- callers wanting to see them should
-    // open the relevant `headers/badc-{target}.h`.
     out
 }
 
-/// Seed the symbol table with C keywords and library function
-/// bindings.
+/// Seed the symbol table with C keywords plus one `Token::Sys`
+/// entry per `#pragma binding(...)` the preprocessor parsed out of
+/// the included headers.
 ///
-/// Type signatures (return type, args, variadic flag) used to be
-/// seeded here from a hardcoded `LIB_SIGNATURES` table. They now
-/// arrive through forward-declaration prototypes in
-/// `headers/badc-{target}.h`, parsed at compile time and folded
-/// into the matching `Sys`-class symbol by the parser. The
-/// per-target header is the single source of truth for both
-/// "which dylib does this call land in" (via `#pragma binding`)
-/// and "what's the type signature" (via the prototype).
-pub(crate) fn init_symbols(symbols: &mut Vec<Symbol>) {
+/// Each binding becomes a callable name with `val` set to its
+/// flat index across all `bindings` in declaration order. The
+/// parser's call site emits `Op::JsrExt val + Op::Adj N`, and the
+/// codegen / VM resolve `val` against the same flattened list at
+/// emit / run time.
+///
+/// A name that's bound twice (two `#pragma binding`s with the same
+/// `c4_name`) gets the *first* index; later bindings are ignored
+/// here since the symbol table only holds one entry per name.
+/// `#include`-time deduplication via `#pragma once` makes that the
+/// expected case.
+pub(crate) fn init_symbols(
+    symbols: &mut Vec<Symbol>,
+    dylibs: &[super::preprocessor::DylibSpec],
+) {
     for (name, tok) in KEYWORDS {
         add_keyword(symbols, name, *tok as i64);
     }
-    for (name, op) in LIB_OPS {
-        let idx = find_symbol(symbols, name).unwrap();
-        symbols[idx].class = Token::Sys as i64;
-        symbols[idx].type_ = Ty::Int as i64;
-        symbols[idx].val = *op as i64;
+
+    let mut binding_idx: i64 = 0;
+    for spec in dylibs {
+        for binding in &spec.bindings {
+            let name = binding.c4_name.as_str();
+            if find_symbol(symbols, name).is_none() {
+                let hash = hash_name(name.as_bytes());
+                symbols.push(Symbol {
+                    name: name.to_string(),
+                    hash,
+                    token: Token::Id as i64,
+                    class: Token::Sys as i64,
+                    type_: Ty::Int as i64,
+                    val: binding_idx,
+                    ..Default::default()
+                });
+            }
+            binding_idx += 1;
+        }
     }
+
     // Ensure main is registered so the compiler's later lookup sees it.
     let _ = find_symbol(symbols, "main").unwrap();
 }

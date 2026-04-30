@@ -780,12 +780,10 @@ fn writes_x19_first(op: Op) -> bool {
         // Direct call: `bl <target>; mov x19, x0`. The bl reads no
         // x19-derived state, and the trailing mov overwrites x19.
         | Jsr
-        // libc thunks: load args from stack offsets (x19-independent),
-        // call libc, then `mov x19, x0`. x19 is overwritten before
-        // any subsequent c4 op observes it.
-        | Open | Read | Clos | Prtf | Malc | Free
-        | Mset | Mcmp | Mcpy | Exit | Write
-        | Genv | Senv | Dlop | Dlsm | Dlcl | Dler
+        // External library call: load args from stack offsets
+        // (x19-independent), call libc, then `mov x19, x0`. x19
+        // is overwritten before any subsequent c4 op observes it.
+        | JsrExt
     )
 }
 
@@ -1324,24 +1322,12 @@ fn lower_op(
             emit_local_load(code, offset, /*byte=*/ true);
         }
 
-        // ---- Syscalls -- lower to a libc call through __got. ----
-        Op::Open
-        | Op::Read
-        | Op::Clos
-        | Op::Prtf
-        | Op::Malc
-        | Op::Free
-        | Op::Mset
-        | Op::Mcmp
-        | Op::Mcpy
-        | Op::Exit
-        | Op::Write
-        | Op::Genv
-        | Op::Senv
-        | Op::Dlop
-        | Op::Dlsm
-        | Op::Dlcl
-        | Op::Dler => emit_libc_call(op, text, *pc, code, got_fixups, options, imports)?,
+        // ---- External library call -- lower to a libc call
+        //      through __got. ----
+        Op::JsrExt => {
+            let binding_idx = read_operand(text, pc, "JsrExt")?;
+            emit_libc_call(binding_idx, text, *pc, code, got_fixups, options, imports)?;
+        }
     }
     Ok(())
 }
@@ -1363,7 +1349,7 @@ fn lower_op(
 ///   * call printf
 ///   * add sp, sp, #16        (free that scratch)
 fn emit_libc_call(
-    op: Op,
+    binding_idx: i64,
     text: &[i64],
     pc_after_op: usize,
     code: &mut Vec<u8>,
@@ -1371,37 +1357,35 @@ fn emit_libc_call(
     options: TargetOptions,
     imports: &super::ResolvedImports,
 ) -> Result<(), C4Error> {
-    let import_index = imports.index_of_op(op).ok_or_else(|| {
+    let import_index = imports.index_of_binding(binding_idx).ok_or_else(|| {
         C4Error::Compile(format!(
-            "native codegen: no import index for {op:?} -- the resolver should have placed it"
+            "native codegen: no import slot for binding {binding_idx} -- the resolver should have placed it"
         ))
     })?;
+    let c4_name: &str = imports.imports[import_index].c4_name.as_str();
 
-    // Peek at the next instruction; if it's Adj N, that gives us the
-    // arg count. The c4 compiler omits the Adj when the call has zero
-    // args, and also for `Op::Exit` (1 arg, never returns), so both
-    // need their own dispatch here.
+    // Peek at the next instruction; if it's `Adj N`, that gives us
+    // the arg count. The c4 compiler omits the `Adj` for 0-arg
+    // calls (like `dlerror()`), so a missing `Adj` collapses to
+    // `arg_count = 0`.
     let arg_count = match Op::from_i64(text.get(pc_after_op).copied().unwrap_or(0)) {
         Some(Op::Adj) => text[pc_after_op + 1] as usize,
-        _ if matches!(op, Op::Exit) => 1,
-        _ if matches!(op, Op::Dler) => 0,
-        _ => {
-            return Err(C4Error::Compile(format!(
-                "native codegen: {op:?} not followed by Adj"
-            )));
-        }
+        _ => 0,
     };
     if arg_count > 8 {
         return Err(C4Error::Compile(format!(
-            "native codegen: {op:?} arg count {arg_count} out of supported range (0..=8)"
+            "native codegen: `{c4_name}` arg count {arg_count} out of supported range (0..=8)"
         )));
     }
 
     // macOS arm64 has a non-standard variadic ABI that puts the
     // variadic args on the stack rather than in x0..x7. Standard
     // AAPCS64 (Linux) treats variadic args identically to fixed ones,
-    // so the register-loading path handles both.
-    let is_variadic = matches!(op, Op::Prtf) && options.variadic_on_stack;
+    // so the register-loading path handles both. The c4 lexer
+    // doesn't carry a "this binding is variadic" flag yet, so we
+    // identify variadic functions by name -- the only one that
+    // matters today on Apple Silicon is `printf`.
+    let is_variadic = c4_name == "printf" && options.variadic_on_stack;
 
     if is_variadic {
         // Format string is the first c4 arg = deepest on the stack.
@@ -1442,17 +1426,11 @@ fn emit_libc_call(
         emit_got_call(code, got_fixups, import_index);
     }
 
-    if matches!(op, Op::Exit) {
-        // exit() doesn't return; the call above will tear down the
-        // process. But the c4 compiler emits no Adj after Op::Exit,
-        // so we must pop the arg ourselves to keep SP balanced for
-        // any stale code after.
-        emit(code, enc_add_imm(Reg::SP, Reg::SP, 16));
-    } else {
-        // Move the libc return value into x19 so the caller sees it
-        // as the new accumulator.
-        emit_mov_reg(code, Reg::X19, Reg::X0);
-    }
+    // Move the libc return value into x19 so the caller sees it as
+    // the new accumulator. (For functions that don't return -- e.g.
+    // `exit` -- the call doesn't reach this point at runtime, so the
+    // mov is harmless dead code.)
+    emit_mov_reg(code, Reg::X19, Reg::X0);
     Ok(())
 }
 

@@ -159,7 +159,11 @@ pub struct LexHarness {
 impl LexHarness {
     pub fn new(src: &str) -> Self {
         let mut symbols = Vec::new();
-        lex_helpers::init_symbols(&mut symbols);
+        // Lexer tests don't reach for `#pragma binding`s, so the
+        // dynamic-binding seed is empty -- only keywords get
+        // registered. Tests that want libc names should add their
+        // own `Symbol` entries directly.
+        lex_helpers::init_symbols(&mut symbols, &[]);
         Self {
             lex: Lexer::new(src.to_string()),
             symbols,

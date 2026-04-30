@@ -880,11 +880,9 @@ fn writes_r13_first(op: Op) -> bool {
         // Direct call: `call rel32; mov r13, rax`. The call reads
         // no r13-derived state and the trailing mov overwrites r13.
         | Jsr
-        // libc thunks: load args from rsp offsets (r13-independent),
-        // call, then `mov r13, rax`.
-        | Open | Read | Clos | Prtf | Malc | Free
-        | Mset | Mcmp | Mcpy | Exit | Write
-        | Genv | Senv | Dlop | Dlsm | Dlcl | Dler
+        // External library call: load args from rsp offsets
+        // (r13-independent), call, then `mov r13, rax`.
+        | JsrExt
     )
 }
 
@@ -1401,23 +1399,10 @@ fn lower_op(
         // ---- Syscalls -- routed through the GOT. The codegen
         //      records a GotFixup at the call site; the ELF writer
         //      patches the disp32 to point at the right .got slot.
-        Op::Open
-        | Op::Read
-        | Op::Clos
-        | Op::Prtf
-        | Op::Malc
-        | Op::Free
-        | Op::Mset
-        | Op::Mcmp
-        | Op::Mcpy
-        | Op::Exit
-        | Op::Write
-        | Op::Genv
-        | Op::Senv
-        | Op::Dlop
-        | Op::Dlsm
-        | Op::Dlcl
-        | Op::Dler => emit_libc_call(op, text, *pc, code, got_fixups, options, imports)?,
+        Op::JsrExt => {
+            let binding_idx = read_operand(text, pc, "JsrExt")?;
+            emit_libc_call(binding_idx, text, *pc, code, got_fixups, options, imports)?;
+        }
     }
     Ok(())
 }
@@ -1440,7 +1425,7 @@ fn lower_op(
 ///   AL = 0 dance for variadics.
 #[allow(clippy::too_many_arguments)]
 fn emit_libc_call(
-    op: Op,
+    binding_idx: i64,
     text: &[i64],
     pc_after_op: usize,
     code: &mut Vec<u8>,
@@ -1448,23 +1433,19 @@ fn emit_libc_call(
     options: TargetOptions,
     imports: &super::ResolvedImports,
 ) -> Result<(), C4Error> {
-    let import_index = imports.index_of_op(op).ok_or_else(|| {
+    let import_index = imports.index_of_binding(binding_idx).ok_or_else(|| {
         C4Error::Compile(format!(
-            "native codegen (x86_64): no import index for {op:?} -- the resolver should have placed it"
+            "native codegen (x86_64): no import slot for binding {binding_idx} -- the resolver should have placed it"
         ))
     })?;
+    let c4_name: &str = imports.imports[import_index].c4_name.as_str();
 
-    // Peek for the trailing Op::Adj N; Op::Exit and Op::Dler are
-    // emitted without one (Exit doesn't return; Dler takes 0 args).
+    // Peek for the trailing `Adj N`. The c4 emitter omits `Adj` for
+    // 0-arg calls (e.g. `dlerror()`), so a missing `Adj` collapses
+    // to `arg_count = 0`.
     let arg_count = match Op::from_i64(text.get(pc_after_op).copied().unwrap_or(0)) {
         Some(Op::Adj) => text[pc_after_op + 1] as usize,
-        _ if matches!(op, Op::Exit) => 1,
-        _ if matches!(op, Op::Dler) => 0,
-        _ => {
-            return Err(C4Error::Compile(format!(
-                "native codegen (x86_64): {op:?} not followed by Adj"
-            )));
-        }
+        _ => 0,
     };
     // SysV passes up to 6 ints in registers; Win64 takes 4 in
     // registers and the rest above the 32-byte shadow space at
@@ -1478,7 +1459,7 @@ fn emit_libc_call(
     };
     if !options.win64_abi && arg_count > arg_regs.len() {
         return Err(C4Error::Compile(format!(
-            "native codegen (x86_64): {op:?} SysV arg count {arg_count} \
+            "native codegen (x86_64): `{c4_name}` SysV arg count {arg_count} \
              exceeds the 6-register cap"
         )));
     }
@@ -1516,7 +1497,7 @@ fn emit_libc_call(
             let src = ((arg_count - 1 - i) as i32) * 16;
             emit_mov_r_mem(code, r, Reg::RSP, src);
         }
-        if matches!(op, Op::Prtf) {
+        if c4_name == "printf" {
             // Variadic System V: AL = number of XMM regs used. c4
             // has no floats, so always 0. Plain libc calls preserve
             // rax across argument loads anyway; printf-shape calls
@@ -1540,14 +1521,11 @@ fn emit_libc_call(
         emit_add_rsp_imm32(code, shadow_size);
     }
 
-    if matches!(op, Op::Exit) {
-        // exit() doesn't return; the c4 compiler emits no Adj after.
-        // Drop the 1 pushed arg ourselves so any stale code after is
-        // SP-balanced.
-        emit_add_rsp_imm32(code, 16);
-    } else {
-        // Move the libc return value into r13 so the c4 caller sees
-        // it as the new accumulator.
+    {
+        // Move the libc return value into r13 so the c4 caller
+        // sees it as the new accumulator. (For functions that
+        // don't return -- e.g. `exit` -- the call doesn't reach
+        // this point at runtime, so the mov is harmless dead code.)
         emit_mov_rr(code, Reg::R13, Reg::RAX);
     }
     Ok(())

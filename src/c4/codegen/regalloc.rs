@@ -162,40 +162,21 @@ fn op_width(op: Op) -> usize {
     use Op::*;
     match op {
         // PC + 1 word of operand.
-        Lea | Imm | Jmp | Jsr | Bz | Bnz | Ent | Adj | AddI | SubI | MulI | AndI | OrI | XorI
-        | ShlI | ShrI | EqI | NeI | LtI | GtI | LeI | GeI | LdLocI | LdLocC => 2,
+        Lea | Imm | Jmp | Jsr | Bz | Bnz | Ent | Adj | JsrExt | AddI | SubI | MulI | AndI | OrI
+        | XorI | ShlI | ShrI | EqI | NeI | LtI | GtI | LeI | GeI | LdLocI | LdLocC => 2,
         _ => 1,
     }
 }
 
-/// True if `op` lowers to something that trampes caller-saved
-/// registers -- direct call (`Jsr`), indirect call (`Jsri`), or any
-/// of the libc intrinsic ops (which lower to a `bl` / `call` through
-/// the GOT). The analyzer uses this to decide whether a Pseudo push
-/// that's live across `op` must use the callee-saved bank.
+/// True if `op` lowers to something that tramples caller-saved
+/// registers -- direct call (`Jsr`), indirect call (`Jsri`), or
+/// external library call (`JsrExt`, lowers to `bl` / `call`
+/// through the GOT). The analyzer uses this to decide whether a
+/// Pseudo push that's live across `op` must use the callee-saved
+/// bank.
 fn is_call_op(op: Op) -> bool {
     use Op::*;
-    matches!(
-        op,
-        Jsr | Jsri
-            | Open
-            | Read
-            | Clos
-            | Prtf
-            | Malc
-            | Free
-            | Mset
-            | Mcmp
-            | Mcpy
-            | Exit
-            | Write
-            | Genv
-            | Senv
-            | Dlop
-            | Dlsm
-            | Dlcl
-            | Dler
-    )
+    matches!(op, Jsr | Jsri | JsrExt)
 }
 
 /// Run the analyzer on `text`. `pool` caps callee-saved and
@@ -608,9 +589,9 @@ mod tests {
 
     #[test]
     fn libc_op_taints_pending_pseudo() {
-        // a + printf("hi"): Psh(a), then Op::Prtf is a libc thunk
-        // (call-shaped), so a needs the callee bank.
-        // Ent 0; Imm 10; Psh; Imm "hi"; Psh; Prtf; Adj 1; Add; Lev
+        // a + printf("hi"): Psh(a), then `JsrExt printf` is a
+        // libc thunk (call-shaped), so a needs the callee bank.
+        // Ent 0; Imm 10; Psh; Imm "hi"; Psh; JsrExt 0; Adj 1; Add; Lev
         let text = build(vec![
             op(Op::Ent),
             0,
@@ -620,7 +601,8 @@ mod tests {
             op(Op::Imm),
             0xDEAD,
             op(Op::Psh),
-            op(Op::Prtf),
+            op(Op::JsrExt),
+            0,
             op(Op::Adj),
             1,
             op(Op::Add),

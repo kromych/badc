@@ -1277,7 +1277,6 @@ mod tests {
     /// output worth asserting on. Real lowering populates this
     /// from the program's `#pragma binding`s.
     fn tiny_build() -> Build {
-        use super::super::super::op::Op;
         use super::super::{ResolvedDylib, ResolvedImport, ResolvedImports};
         Build {
             // movz x0, #42 ; ret
@@ -1290,7 +1289,7 @@ mod tests {
             bytecode_to_native: Vec::new(),
             imports: ResolvedImports {
                 imports: vec![ResolvedImport {
-                    op: Op::Write,
+                    binding_idx: 0,
                     c4_name: "write".into(),
                     real_symbol: "_write".into(),
                     dylib_index: 0,

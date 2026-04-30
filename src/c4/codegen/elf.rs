@@ -978,10 +978,12 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C4Error>
     // per-arch GOT-call patcher knows which encoding to write.
     let exit_idx = build
         .imports
-        .index_of_op(super::super::op::Op::Exit)
+        .imports
+        .iter()
+        .position(|i| i.c4_name == "exit")
         .ok_or_else(|| {
             C4Error::Compile(
-                "ELF writer: _start stub needs Op::Exit in the import set, but the program \
+                "ELF writer: _start stub needs `exit` in the import set, but the program \
                  didn't reach for it (and we don't auto-add it). \
                  Did you `#include <stdlib.h>` and call `exit(...)` somewhere?"
                     .to_string(),
@@ -1084,7 +1086,6 @@ mod tests {
     /// for the structural assertions to inspect. This mirrors what
     /// real programs get from `<stdlib.h>`.
     fn tiny_build() -> Build {
-        use super::super::super::op::Op;
         use super::super::{ResolvedDylib, ResolvedImport, ResolvedImports};
         Build {
             text: vec![0x40, 0x05, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6],
@@ -1096,7 +1097,7 @@ mod tests {
             bytecode_to_native: Vec::new(),
             imports: ResolvedImports {
                 imports: vec![ResolvedImport {
-                    op: Op::Exit,
+                    binding_idx: 0,
                     c4_name: "exit".into(),
                     real_symbol: "exit".into(),
                     dylib_index: 0,

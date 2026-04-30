@@ -1293,6 +1293,8 @@ mod tests {
                     c4_name: "write".into(),
                     real_symbol: "_write".into(),
                     dylib_index: 0,
+                    is_variadic: false,
+                    fixed_args: 3,
                 }],
                 dylibs: vec![ResolvedDylib {
                     name: "libc".into(),

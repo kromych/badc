@@ -1467,14 +1467,13 @@ fn emit_libc_call(
             let src = ((arg_count - 1 - i) as i32) * 16;
             emit_mov_r_mem(code, Reg(r), Reg::RSP, src);
         }
-        if abi.variadic_zero_xmm_count && c4_name == "printf" {
+        if abi.variadic_zero_xmm_count && imports.imports[import_index].is_variadic {
             // Variadic System V: AL = number of XMM regs used.
             // c4 has no floats, so always 0. Plain libc calls
-            // preserve rax across argument loads anyway;
-            // printf-shape calls are the ones that need it.
-            // (Step 2 of the ABI plan threads `is_variadic`
-            // through from the binding's prototype so this
-            // applies to all variadics, not just `printf`.)
+            // preserve rax across argument loads anyway; only
+            // variadic call sites (`printf`, `sscanf`,
+            // `fprintf`, ...) need the xor. The variadic flag
+            // comes from the binding's prototype.
             emit_xor_eax_eax(code);
         }
     }

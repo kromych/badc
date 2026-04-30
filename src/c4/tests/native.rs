@@ -375,6 +375,12 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // (4 pointer-ish args), joins it, returns the thread's exit
     // status. macOS pthread is in libSystem so dlopen(NULL) finds it.
     ("pthread_create.c", 11),
+    // sprintf with two fixed args + four variadic. macOS arm64
+    // variadic ABI puts variadic args on the stack while fixed
+    // args ride registers; this guards against the lowering
+    // regressing back to the printf-shape (one fixed arg)
+    // assumption.
+    ("variadic_sprintf.c", 0),
 ];
 
 /// Build a fixture, sign it, run it with the given args, and return

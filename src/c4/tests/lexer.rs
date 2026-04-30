@@ -226,6 +226,8 @@ fn binding_names_seed_token_sys_when_dylibs_provided() {
         name: "libc".into(),
         path: "libc.so.6".into(),
         bindings: vec![Binding {
+            is_variadic: false,
+            fixed_args: 1,
             c4_name: "malloc".into(),
             real_symbol: "malloc".into(),
         }],

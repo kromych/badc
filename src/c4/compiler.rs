@@ -1714,6 +1714,27 @@ impl Compiler {
                     self.symbols[id_idx].params = params.types.clone();
                     self.symbols[id_idx].is_variadic = params.is_variadic;
 
+                    // For Sys symbols (header-bound libc functions),
+                    // also fold the variadic flag onto the matching
+                    // `#pragma binding`. The native lowering reads it
+                    // when it picks the variadic ABI dance (macOS
+                    // arm64 stack-packing, SysV xor eax,eax) instead
+                    // of asking the symbol table at codegen time --
+                    // which has long since gone out of scope.
+                    if was_sys {
+                        let name = self.symbols[id_idx].name.clone();
+                        let fixed = params.types.len();
+                        let variadic = params.is_variadic;
+                        for spec in self.dylibs.iter_mut() {
+                            for binding in spec.bindings.iter_mut() {
+                                if binding.c4_name == name {
+                                    binding.is_variadic = variadic;
+                                    binding.fixed_args = fixed;
+                                }
+                            }
+                        }
+                    }
+
                     if self.lex.tk == ';' as i64 {
                         // Forward declaration / prototype --
                         // `int foo(int a, ...);`. Restore the param

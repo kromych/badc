@@ -93,6 +93,23 @@ pub(crate) struct DylibSpec {
 /// Owned by the [`DylibSpec`] whose `name` matched the qualifier.
 #[derive(Debug, Clone)]
 pub(crate) struct Binding {
+    /// `true` if the function's prototype ended with `, ...)` --
+    /// e.g. `int printf(char *fmt, ...);`. The lowering reads
+    /// this to decide whether the call site needs the
+    /// platform's variadic-ABI dance (macOS arm64
+    /// stack-packing, SysV `xor eax, eax`). Set by the parser
+    /// when it folds a Sys symbol's prototype onto the binding;
+    /// the preprocessor doesn't know about prototypes so it
+    /// leaves this `false`.
+    pub is_variadic: bool,
+    /// Number of fixed (non-variadic) parameters from the
+    /// prototype. macOS arm64 passes those in registers per
+    /// standard AAPCS64; only the variadic tail spills to the
+    /// stack. Set by the parser alongside `is_variadic`;
+    /// meaningful only when `is_variadic == true` (otherwise
+    /// the codegen reads the c4 stack directly without the
+    /// register/stack split).
+    pub fixed_args: usize,
     /// c4-side name the source uses (e.g. `printf`).
     pub c4_name: String,
     /// Symbol name exported by the dylib. Differs from `c4_name`
@@ -561,6 +578,8 @@ impl Preprocessor {
             )));
         };
         dylib.bindings.push(Binding {
+            is_variadic: false,
+            fixed_args: 0,
             c4_name: c4_name.to_string(),
             real_symbol: real_symbol.to_string(),
         });

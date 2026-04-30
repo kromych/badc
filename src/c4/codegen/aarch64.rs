@@ -1353,35 +1353,40 @@ fn emit_libc_call(
 
     // macOS arm64 has a non-standard variadic ABI that puts the
     // variadic args on the stack rather than in x0..x7. Standard
-    // AAPCS64 (Linux) treats variadic args identically to fixed ones,
-    // so the register-loading path handles both. The c4 lexer
-    // doesn't carry a "this binding is variadic" flag yet, so we
-    // identify variadic functions by name -- the only one that
-    // matters today on Apple Silicon is `printf`.
-    let is_variadic = c4_name == "printf" && abi.variadic_on_stack;
+    // AAPCS64 (Linux) treats variadic args identically to fixed
+    // ones, so the register-loading path handles both. Whether
+    // the binding is variadic comes from its prototype's
+    // `, ...)` -- the parser folds that flag onto the binding
+    // when it parses `int printf(char *, ...);` in `<stdio.h>`,
+    // so any header-declared variadic function (printf, sscanf,
+    // sprintf, fprintf, ...) gets the macOS dance, not just
+    // `printf`.
+    let _ = c4_name;
+    let imp = &imports.imports[import_index];
+    let is_variadic = imp.is_variadic && abi.variadic_on_stack;
 
     if is_variadic {
-        // Format string is the first c4 arg = deepest on the stack.
-        // c4 pushes left-to-right, so the deepest slot is at
-        // sp + (arg_count-1)*16.
-        let format_off = ((arg_count - 1) as u32) * 16;
-        emit(code, enc_ldr_imm(Reg::X0, Reg::SP, format_off));
-
-        let n_var = arg_count - 1;
+        // macOS arm64 variadic ABI: the first `fixed_args`
+        // arguments go in `int_arg_regs` per AAPCS64; the
+        // variadic tail spills to a fresh stack region with
+        // 8-byte spacing.
+        let fixed = imp.fixed_args.min(arg_count).min(abi.int_arg_regs.len());
+        for i in 0..fixed {
+            let off = ((arg_count - 1 - i) as u32) * 16;
+            emit(code, enc_ldr_imm(Reg(abi.int_arg_regs[i]), Reg::SP, off));
+        }
+        let n_var = arg_count - fixed;
         if n_var > 0 {
-            // Pack the variadic args into a fresh stack region. macOS
-            // arm64 wants 8-byte spacing for variadic args; we still
-            // need to keep SP 16-byte aligned overall.
+            // Pack variadic args into a fresh stack region.
+            // 8-byte slots; round up to 16 to keep SP aligned.
             let scratch_bytes = ((n_var * 8 + 15) & !15) as u32;
             emit(code, enc_sub_imm(Reg::SP, Reg::SP, scratch_bytes));
             for i in 0..n_var {
-                // arg index from the c4 viewpoint: 1, 2, ..., n_var.
-                // Stack offset of c4-arg-K (post sub): scratch_bytes
-                // + (arg_count - 1 - K) * 16.
-                let c4_arg_index = i + 1;
-                let src = scratch_bytes + ((arg_count - 1 - c4_arg_index) as u32) * 16;
+                // Variadic arg `i` was c4-arg-(fixed+i); its
+                // pre-sub slot is `(arg_count - 1 - (fixed+i)) * 16`,
+                // shifted up by scratch_bytes after the sub.
+                let src = scratch_bytes + ((arg_count - 1 - (fixed + i)) as u32) * 16;
                 emit(code, enc_ldr_imm(Reg::X16, Reg::SP, src));
-                // Variadic packed slot: i*8 from new SP.
                 emit(code, enc_str_imm(Reg::X16, Reg::SP, (i * 8) as u32));
             }
             emit_got_call(code, got_fixups, import_index);
@@ -1394,7 +1399,7 @@ fn emit_libc_call(
         // c4-arg-K is at sp + (arg_count - 1 - K) * 16.
         for i in 0..arg_count {
             let off = ((arg_count - 1 - i) as u32) * 16;
-            emit(code, enc_ldr_imm(Reg(i as u8), Reg::SP, off));
+            emit(code, enc_ldr_imm(Reg(abi.int_arg_regs[i]), Reg::SP, off));
         }
         emit_got_call(code, got_fixups, import_index);
     }

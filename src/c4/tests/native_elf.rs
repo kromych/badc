@@ -291,6 +291,10 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     // libc and keeps libpthread.so.0 as a stub the loader pulls in
     // anyway, so dlopen(NULL) finds pthread_create in our scope.
     ("pthread_create.c", 11),
+    // sprintf 2-fixed + 4-variadic; cross-checks the ABI's
+    // variadic packing on Linux AAPCS64 (where it stays in
+    // registers, unlike macOS).
+    ("variadic_sprintf.c", 0),
 ];
 
 #[test]

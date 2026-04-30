@@ -189,6 +189,18 @@ pub(crate) struct ResolvedImport {
     /// binding resolves through. Determines the LC_LOAD_DYLIB /
     /// DT_NEEDED / IMAGE_IMPORT_DESCRIPTOR the writer emits.
     pub dylib_index: usize,
+    /// `true` if the binding's prototype ended with `, ...)`. The
+    /// lowering reads this to decide whether the call site needs
+    /// the platform's variadic ABI (macOS arm64 stack-packing,
+    /// SysV `xor eax, eax`). Default `false` for bindings whose
+    /// prototype the parser hasn't seen.
+    pub is_variadic: bool,
+    /// Number of fixed (non-variadic) parameters from the
+    /// prototype -- the count *before* the trailing `...`.
+    /// macOS arm64's variadic ABI passes these in `int_arg_regs`
+    /// per AAPCS64; only the variadic tail spills to the stack.
+    /// Meaningful only when `is_variadic == true`.
+    pub fixed_args: usize,
 }
 
 /// One resolved dylib the program needs at load time. Distinct from
@@ -247,7 +259,7 @@ impl ResolvedImports {
         if self.imports.iter().any(|i| i.c4_name == c4_name) {
             return Ok(());
         }
-        let mut found: Option<(i64, &str, &str, &str)> = None;
+        let mut found: Option<(i64, &str, &str, &str, bool, usize)> = None;
         let mut binding_idx: i64 = 0;
         'outer: for spec in &program.dylibs {
             for b in &spec.bindings {
@@ -257,13 +269,16 @@ impl ResolvedImports {
                         spec.name.as_str(),
                         spec.path.as_str(),
                         b.real_symbol.as_str(),
+                        b.is_variadic,
+                        b.fixed_args,
                     ));
                     break 'outer;
                 }
                 binding_idx += 1;
             }
         }
-        let Some((idx, dylib_name, dylib_path, real_symbol)) = found else {
+        let Some((idx, dylib_name, dylib_path, real_symbol, is_variadic, fixed_args)) = found
+        else {
             return Err(C4Error::Compile(format!(
                 "no `#pragma binding(<dylib>::{c4_name}, ...)` is in scope -- the target's \
                  `_start` stub needs `{c4_name}` and the codegen has nowhere to import it from. \
@@ -285,6 +300,8 @@ impl ResolvedImports {
             c4_name: c4_name.to_string(),
             real_symbol: real_symbol.to_string(),
             dylib_index,
+            is_variadic,
+            fixed_args,
         });
         Ok(())
     }
@@ -359,6 +376,8 @@ impl ResolvedImports {
                 c4_name: b.c4_name.clone(),
                 real_symbol: b.real_symbol.clone(),
                 dylib_index,
+                is_variadic: b.is_variadic,
+                fixed_args: b.fixed_args,
             });
         }
 

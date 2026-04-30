@@ -263,6 +263,11 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     // libc and keeps libpthread.so.0 as a stub the loader pulls in
     // anyway, so dlopen(NULL) finds pthread_create in our scope.
     ("pthread_create.c", 11),
+    // sprintf 2-fixed + 4-variadic; SysV passes variadic in
+    // registers but the call still needs `xor eax, eax` so AL
+    // signals "no XMM regs used" -- the ABI plan's
+    // variadic_zero_xmm_count flag drives that.
+    ("variadic_sprintf.c", 0),
 ];
 
 #[test]

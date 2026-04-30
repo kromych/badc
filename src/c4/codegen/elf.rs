@@ -1101,6 +1101,8 @@ mod tests {
                     c4_name: "exit".into(),
                     real_symbol: "exit".into(),
                     dylib_index: 0,
+                    is_variadic: false,
+                    fixed_args: 1,
                 }],
                 dylibs: vec![ResolvedDylib {
                     name: "libc".into(),

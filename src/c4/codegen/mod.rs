@@ -242,7 +242,11 @@ impl ResolvedImports {
         let mut found: Option<(&str, &str, &str)> = None;
         for spec in &program.dylibs {
             if let Some(b) = spec.bindings.iter().find(|b| b.c4_name == c4_name) {
-                found = Some((spec.name.as_str(), spec.path.as_str(), b.real_symbol.as_str()));
+                found = Some((
+                    spec.name.as_str(),
+                    spec.path.as_str(),
+                    b.real_symbol.as_str(),
+                ));
                 break;
             }
         }
@@ -315,7 +319,11 @@ impl ResolvedImports {
             let mut found: Option<(&str, &str, &str)> = None;
             for spec in &program.dylibs {
                 if let Some(b) = spec.bindings.iter().find(|b| b.c4_name == c4_name) {
-                    found = Some((spec.name.as_str(), spec.path.as_str(), b.real_symbol.as_str()));
+                    found = Some((
+                        spec.name.as_str(),
+                        spec.path.as_str(),
+                        b.real_symbol.as_str(),
+                    ));
                     break;
                 }
             }

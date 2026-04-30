@@ -305,8 +305,7 @@ struct BuildVersionCommand {
 }
 
 const BUILD_VERSION_COMMAND_SIZE: usize = 24;
-const _: () =
-    assert!(core::mem::size_of::<BuildVersionCommand>() == BUILD_VERSION_COMMAND_SIZE);
+const _: () = assert!(core::mem::size_of::<BuildVersionCommand>() == BUILD_VERSION_COMMAND_SIZE);
 
 /// `dylinker_command` header (without the trailing NUL-padded path).
 /// `cmdsize` is the total command size including the path bytes.
@@ -319,8 +318,7 @@ struct DylinkerCommandHead {
 }
 
 const DYLINKER_COMMAND_HEAD_SIZE: usize = 12;
-const _: () =
-    assert!(core::mem::size_of::<DylinkerCommandHead>() == DYLINKER_COMMAND_HEAD_SIZE);
+const _: () = assert!(core::mem::size_of::<DylinkerCommandHead>() == DYLINKER_COMMAND_HEAD_SIZE);
 
 /// `dylib_command` header (without the trailing NUL-padded name).
 #[repr(C)]

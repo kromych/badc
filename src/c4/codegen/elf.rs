@@ -485,8 +485,7 @@ fn build_rela_dyn(got_vmaddr: u64, n_imports: usize, machine: Machine) -> Vec<u8
 /// per [`NEEDED_LIBS`] entry, then the standard pointer-and-size
 /// tags for the symbol / string / hash / rela sections.
 fn build_dynamic(lib_strtab_offsets: &[u32], info: DynamicInfo) -> Vec<u8> {
-    let mut out =
-        Vec::with_capacity((lib_strtab_offsets.len() + 11) * ELF64_DYN_SIZE as usize);
+    let mut out = Vec::with_capacity((lib_strtab_offsets.len() + 11) * ELF64_DYN_SIZE as usize);
     for &off in lib_strtab_offsets {
         write_struct(
             &mut out,

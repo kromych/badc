@@ -516,7 +516,9 @@ mod jit_impl {
             // On Linux/Windows the binding is already underscoreless.
             for (i, imp) in imports.imports.iter().enumerate() {
                 let lookup_name = if cfg!(target_os = "macos") {
-                    imp.real_symbol.strip_prefix('_').unwrap_or(&imp.real_symbol)
+                    imp.real_symbol
+                        .strip_prefix('_')
+                        .unwrap_or(&imp.real_symbol)
                 } else {
                     imp.real_symbol.as_str()
                 };

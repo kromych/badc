@@ -107,12 +107,11 @@ fn build_and_run(src: &str, stem: &str, args: &[&str]) -> RunOutcome {
     // any conditional source. Using the default `Compiler::new` would
     // load the macOS header and silently feed the wrong bindings
     // to the codegen.
-    let program = match Compiler::with_target(super::with_prelude(src), Target::WindowsAarch64)
-        .compile()
-    {
-        Ok(p) => p,
-        Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
-    };
+    let program =
+        match Compiler::with_target(super::with_prelude(src), Target::WindowsAarch64).compile() {
+            Ok(p) => p,
+            Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
+        };
     let bytes = match emit_native(&program, Target::WindowsAarch64) {
         Ok(b) => b,
         Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),

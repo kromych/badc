@@ -121,9 +121,9 @@ fn build_and_run(src: &str, stem: &str, args: &[&str]) -> RunOutcome {
     // any conditional source.
     let program =
         match Compiler::with_target(super::with_prelude(src), Target::WindowsX64).compile() {
-        Ok(p) => p,
-        Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
-    };
+            Ok(p) => p,
+            Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
+        };
     let bytes = match emit_native(&program, Target::WindowsX64) {
         Ok(b) => b,
         Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),

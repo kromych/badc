@@ -147,27 +147,244 @@ const LIBSYSTEM_ORDINAL: u16 = 1;
 const SEG_INDEX_DATA: u8 = 2;
 
 // ------------------------------------------------------------------
-// Tiny serialization helpers. Mach-O is little-endian on every cpu we
-// target; everything funnels through to_le_bytes so a future
-// big-endian export would only touch this section.
+// On-disk shapes. `#[repr(C)]` with explicit fields, const-asserted
+// sizes against `<mach-o/loader.h>` / `<mach-o/nlist.h>`, written via
+// the same memcpy helper the PE writer uses. Mach-O is little-endian
+// on every CPU we target, so the in-memory layout *is* the wire
+// format. The variable-length load commands (`LC_LOAD_DYLINKER`,
+// `LC_LOAD_DYLIB`) carry a fixed-size header followed by a NUL-
+// terminated, 8-byte-padded path -- only the header is a struct.
 // ------------------------------------------------------------------
 
-fn put_u32(out: &mut Vec<u8>, v: u32) {
-    out.extend_from_slice(&v.to_le_bytes());
-}
-fn put_u64(out: &mut Vec<u8>, v: u64) {
-    out.extend_from_slice(&v.to_le_bytes());
+/// `mach_header_64` -- the file header at offset 0.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct MachHeader64 {
+    magic: u32,
+    cputype: u32,
+    cpusubtype: u32,
+    filetype: u32,
+    ncmds: u32,
+    sizeofcmds: u32,
+    flags: u32,
+    reserved: u32,
 }
 
-/// Write a 16-byte fixed-length name, NUL-padded. Used for segname /
-/// sectname fields where the on-disk struct holds `char[16]`.
-fn put_name16(out: &mut Vec<u8>, name: &str) {
+const MACH_HEADER_64_SIZE: usize = 32;
+const _: () = assert!(core::mem::size_of::<MachHeader64>() == MACH_HEADER_64_SIZE);
+
+/// `segment_command_64` -- one `LC_SEGMENT_64` load command. Followed
+/// by `nsects` `Section64` entries, all counted in `cmdsize`.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct SegmentCommand64 {
+    cmd: u32,
+    cmdsize: u32,
+    segname: [u8; 16],
+    vmaddr: u64,
+    vmsize: u64,
+    fileoff: u64,
+    filesize: u64,
+    maxprot: u32,
+    initprot: u32,
+    nsects: u32,
+    flags: u32,
+}
+
+const SEGMENT_COMMAND_64_SIZE: usize = 72;
+const _: () = assert!(core::mem::size_of::<SegmentCommand64>() == SEGMENT_COMMAND_64_SIZE);
+
+/// `section_64` -- one section header inside a `SegmentCommand64`.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct Section64 {
+    sectname: [u8; 16],
+    segname: [u8; 16],
+    addr: u64,
+    size: u64,
+    offset: u32,
+    align: u32,
+    reloff: u32,
+    nreloc: u32,
+    flags: u32,
+    reserved1: u32,
+    reserved2: u32,
+    reserved3: u32,
+}
+
+const SECTION_64_SIZE: usize = 80;
+const _: () = assert!(core::mem::size_of::<Section64>() == SECTION_64_SIZE);
+
+/// `dyld_info_command` -- pointers into __LINKEDIT for dyld's
+/// rebase / bind / weak-bind / lazy-bind / export streams.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct DyldInfoCommand {
+    cmd: u32,
+    cmdsize: u32,
+    rebase_off: u32,
+    rebase_size: u32,
+    bind_off: u32,
+    bind_size: u32,
+    weak_bind_off: u32,
+    weak_bind_size: u32,
+    lazy_bind_off: u32,
+    lazy_bind_size: u32,
+    export_off: u32,
+    export_size: u32,
+}
+
+const DYLD_INFO_COMMAND_SIZE: usize = 48;
+const _: () = assert!(core::mem::size_of::<DyldInfoCommand>() == DYLD_INFO_COMMAND_SIZE);
+
+/// `symtab_command` -- classic symbol-table + string-table pointers.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct SymtabCommand {
+    cmd: u32,
+    cmdsize: u32,
+    symoff: u32,
+    nsyms: u32,
+    stroff: u32,
+    strsize: u32,
+}
+
+const SYMTAB_COMMAND_SIZE: usize = 24;
+const _: () = assert!(core::mem::size_of::<SymtabCommand>() == SYMTAB_COMMAND_SIZE);
+
+/// `dysymtab_command` -- partitions the symbol table into local /
+/// external-defined / undefined ranges and points at the indirect
+/// symbol table. We currently only fill in the undefined-range count.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct DysymtabCommand {
+    cmd: u32,
+    cmdsize: u32,
+    ilocalsym: u32,
+    nlocalsym: u32,
+    iextdefsym: u32,
+    nextdefsym: u32,
+    iundefsym: u32,
+    nundefsym: u32,
+    tocoff: u32,
+    ntoc: u32,
+    modtaboff: u32,
+    nmodtab: u32,
+    extrefsymoff: u32,
+    nextrefsyms: u32,
+    indirectsymoff: u32,
+    nindirectsyms: u32,
+    extreloff: u32,
+    nextrel: u32,
+    locreloff: u32,
+    nlocrel: u32,
+}
+
+const DYSYMTAB_COMMAND_SIZE: usize = 80;
+const _: () = assert!(core::mem::size_of::<DysymtabCommand>() == DYSYMTAB_COMMAND_SIZE);
+
+/// `entry_point_command` (`LC_MAIN`) -- file offset of the entry
+/// point plus a stack-size hint.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct EntryPointCommand {
+    cmd: u32,
+    cmdsize: u32,
+    entryoff: u64,
+    stacksize: u64,
+}
+
+const ENTRY_POINT_COMMAND_SIZE: usize = 24;
+const _: () = assert!(core::mem::size_of::<EntryPointCommand>() == ENTRY_POINT_COMMAND_SIZE);
+
+/// `build_version_command` (with `ntools = 0`) -- platform / minOS / SDK.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct BuildVersionCommand {
+    cmd: u32,
+    cmdsize: u32,
+    platform: u32,
+    minos: u32,
+    sdk: u32,
+    ntools: u32,
+}
+
+const BUILD_VERSION_COMMAND_SIZE: usize = 24;
+const _: () =
+    assert!(core::mem::size_of::<BuildVersionCommand>() == BUILD_VERSION_COMMAND_SIZE);
+
+/// `dylinker_command` header (without the trailing NUL-padded path).
+/// `cmdsize` is the total command size including the path bytes.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct DylinkerCommandHead {
+    cmd: u32,
+    cmdsize: u32,
+    name_offset: u32,
+}
+
+const DYLINKER_COMMAND_HEAD_SIZE: usize = 12;
+const _: () =
+    assert!(core::mem::size_of::<DylinkerCommandHead>() == DYLINKER_COMMAND_HEAD_SIZE);
+
+/// `dylib_command` header (without the trailing NUL-padded name).
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct DylibCommandHead {
+    cmd: u32,
+    cmdsize: u32,
+    name_offset: u32,
+    timestamp: u32,
+    current_version: u32,
+    compatibility_version: u32,
+}
+
+const DYLIB_COMMAND_HEAD_SIZE: usize = 24;
+const _: () = assert!(core::mem::size_of::<DylibCommandHead>() == DYLIB_COMMAND_HEAD_SIZE);
+
+/// `nlist_64` -- one symbol-table entry.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct Nlist64 {
+    n_strx: u32,
+    n_type: u8,
+    n_sect: u8,
+    n_desc: u16,
+    n_value: u64,
+}
+
+const NLIST_64_SIZE: usize = 16;
+const _: () = assert!(core::mem::size_of::<Nlist64>() == NLIST_64_SIZE);
+
+/// Append a `#[repr(C)]` struct's raw bytes to `out`.
+///
+/// Mach-O is little-endian on every CPU we target, so a memcpy of the
+/// in-memory struct produces the right wire format. The structs above
+/// have explicit field order and const-asserted sizes; the only
+/// remaining surprise would be host endianness, and a const-time
+/// check rules that out.
+fn write_struct<T: Copy>(out: &mut Vec<u8>, value: &T) {
+    const _: () = assert!(
+        cfg!(target_endian = "little"),
+        "Mach-O writer assumes a little-endian host; emit bytes manually if you ever need a big-endian build host"
+    );
+    let bytes = unsafe {
+        core::slice::from_raw_parts((value as *const T) as *const u8, core::mem::size_of::<T>())
+    };
+    out.extend_from_slice(bytes);
+}
+
+/// Pack a name into the 16-byte `segname` / `sectname` field, NUL-
+/// padded. `<mach-o/loader.h>` only requires NUL-termination when the
+/// name is shorter than 16 bytes, so a name that exactly fills the
+/// buffer is legal but we don't emit any.
+fn pack_name16(name: &str) -> [u8; 16] {
     debug_assert!(name.len() <= 16, "segment/section name too long: {name:?}");
     let mut buf = [0u8; 16];
     for (i, b) in name.as_bytes().iter().take(16).enumerate() {
         buf[i] = *b;
     }
-    out.extend_from_slice(&buf);
+    buf
 }
 
 /// LEB128 unsigned encoding -- 7-bit groups, low to high, MSB set on
@@ -214,19 +431,24 @@ fn segment_no_sections(
     maxprot: u32,
     initprot: u32,
 ) -> Vec<u8> {
-    let mut out = Vec::with_capacity(72);
-    put_u32(&mut out, LC_SEGMENT_64);
-    put_u32(&mut out, 72); // cmdsize -- no sections
-    put_name16(&mut out, name);
-    put_u64(&mut out, vmaddr);
-    put_u64(&mut out, vmsize);
-    put_u64(&mut out, fileoff);
-    put_u64(&mut out, filesize);
-    put_u32(&mut out, maxprot);
-    put_u32(&mut out, initprot);
-    put_u32(&mut out, 0); // nsects
-    put_u32(&mut out, 0); // flags
-    debug_assert_eq!(out.len(), 72);
+    let mut out = Vec::with_capacity(SEGMENT_COMMAND_64_SIZE);
+    write_struct(
+        &mut out,
+        &SegmentCommand64 {
+            cmd: LC_SEGMENT_64,
+            cmdsize: SEGMENT_COMMAND_64_SIZE as u32,
+            segname: pack_name16(name),
+            vmaddr,
+            vmsize,
+            fileoff,
+            filesize,
+            maxprot,
+            initprot,
+            nsects: 0,
+            flags: 0,
+        },
+    );
+    debug_assert_eq!(out.len(), SEGMENT_COMMAND_64_SIZE);
     out
 }
 
@@ -242,34 +464,43 @@ fn segment_text(
     text_size: u64,
     text_offset: u32,
 ) -> Vec<u8> {
-    let mut out = Vec::with_capacity(72 + 80);
-    put_u32(&mut out, LC_SEGMENT_64);
-    put_u32(&mut out, 72 + 80);
-    put_name16(&mut out, "__TEXT");
-    put_u64(&mut out, vmaddr);
-    put_u64(&mut out, vmsize);
-    put_u64(&mut out, fileoff);
-    put_u64(&mut out, filesize);
-    put_u32(&mut out, VM_PROT_READ | VM_PROT_EXECUTE); // maxprot
-    put_u32(&mut out, VM_PROT_READ | VM_PROT_EXECUTE); // initprot
-    put_u32(&mut out, 1); // nsects
-    put_u32(&mut out, 0); // flags
-
-    // section_64 (80 bytes) -- one __text section.
-    put_name16(&mut out, "__text");
-    put_name16(&mut out, "__TEXT");
-    put_u64(&mut out, text_addr);
-    put_u64(&mut out, text_size);
-    put_u32(&mut out, text_offset);
-    put_u32(&mut out, 2); // align (log2 -- 4 bytes for arm64 instructions)
-    put_u32(&mut out, 0); // reloff
-    put_u32(&mut out, 0); // nreloc
-    // S_REGULAR (0) | S_ATTR_PURE_INSTRUCTIONS | S_ATTR_SOME_INSTRUCTIONS
-    put_u32(&mut out, 0x8000_0400);
-    put_u32(&mut out, 0); // reserved1
-    put_u32(&mut out, 0); // reserved2
-    put_u32(&mut out, 0); // reserved3
-    debug_assert_eq!(out.len(), 72 + 80);
+    const TOTAL: usize = SEGMENT_COMMAND_64_SIZE + SECTION_64_SIZE;
+    let mut out = Vec::with_capacity(TOTAL);
+    write_struct(
+        &mut out,
+        &SegmentCommand64 {
+            cmd: LC_SEGMENT_64,
+            cmdsize: TOTAL as u32,
+            segname: pack_name16("__TEXT"),
+            vmaddr,
+            vmsize,
+            fileoff,
+            filesize,
+            maxprot: VM_PROT_READ | VM_PROT_EXECUTE,
+            initprot: VM_PROT_READ | VM_PROT_EXECUTE,
+            nsects: 1,
+            flags: 0,
+        },
+    );
+    write_struct(
+        &mut out,
+        &Section64 {
+            sectname: pack_name16("__text"),
+            segname: pack_name16("__TEXT"),
+            addr: text_addr,
+            size: text_size,
+            offset: text_offset,
+            align: 2, // log2 -- 4-byte arm64 instruction alignment
+            reloff: 0,
+            nreloc: 0,
+            // S_REGULAR (0) | S_ATTR_PURE_INSTRUCTIONS | S_ATTR_SOME_INSTRUCTIONS
+            flags: 0x8000_0400,
+            reserved1: 0,
+            reserved2: 0,
+            reserved3: 0,
+        },
+    );
+    debug_assert_eq!(out.len(), TOTAL);
     out
 }
 
@@ -292,112 +523,153 @@ fn segment_data(
     data_size: u64,
     data_offset: u32,
 ) -> Vec<u8> {
-    let mut out = Vec::with_capacity(72 + 80 + 80);
-    put_u32(&mut out, LC_SEGMENT_64);
-    put_u32(&mut out, 72 + 80 + 80);
-    put_name16(&mut out, "__DATA");
-    put_u64(&mut out, vmaddr);
-    put_u64(&mut out, vmsize);
-    put_u64(&mut out, fileoff);
-    put_u64(&mut out, filesize);
-    put_u32(&mut out, VM_PROT_READ | VM_PROT_WRITE); // maxprot
-    put_u32(&mut out, VM_PROT_READ | VM_PROT_WRITE); // initprot
-    put_u32(&mut out, 2); // nsects
-    put_u32(&mut out, 0); // flags
-
+    const TOTAL: usize = SEGMENT_COMMAND_64_SIZE + 2 * SECTION_64_SIZE;
+    let mut out = Vec::with_capacity(TOTAL);
+    write_struct(
+        &mut out,
+        &SegmentCommand64 {
+            cmd: LC_SEGMENT_64,
+            cmdsize: TOTAL as u32,
+            segname: pack_name16("__DATA"),
+            vmaddr,
+            vmsize,
+            fileoff,
+            filesize,
+            maxprot: VM_PROT_READ | VM_PROT_WRITE,
+            initprot: VM_PROT_READ | VM_PROT_WRITE,
+            nsects: 2,
+            flags: 0,
+        },
+    );
     // __got section. We fill it via bind opcodes, not the indirect
     // symbol table, so the section type stays S_REGULAR (0).
     // Conventionally __got is named that way and otool treats it
     // specially even without any flag bits.
-    put_name16(&mut out, "__got");
-    put_name16(&mut out, "__DATA");
-    put_u64(&mut out, got_addr);
-    put_u64(&mut out, got_size);
-    put_u32(&mut out, got_offset);
-    put_u32(&mut out, 3); // align (log2 -- 8 bytes for u64 pointers)
-    put_u32(&mut out, 0); // reloff
-    put_u32(&mut out, 0); // nreloc
-    put_u32(&mut out, 0); // flags = S_REGULAR
-    put_u32(&mut out, 0); // reserved1 (no indirect entries)
-    put_u32(&mut out, 0); // reserved2
-    put_u32(&mut out, 0); // reserved3
-
+    write_struct(
+        &mut out,
+        &Section64 {
+            sectname: pack_name16("__got"),
+            segname: pack_name16("__DATA"),
+            addr: got_addr,
+            size: got_size,
+            offset: got_offset,
+            align: 3, // log2 -- 8 bytes for u64 pointers
+            reloff: 0,
+            nreloc: 0,
+            flags: 0, // S_REGULAR
+            reserved1: 0,
+            reserved2: 0,
+            reserved3: 0,
+        },
+    );
     // __data section. Holds the program's static data segment --
     // string literals + zero-initialised globals. Copied into the
     // file at write time; dyld maps it RW alongside __got.
-    put_name16(&mut out, "__data");
-    put_name16(&mut out, "__DATA");
-    put_u64(&mut out, data_addr);
-    put_u64(&mut out, data_size);
-    put_u32(&mut out, data_offset);
-    put_u32(&mut out, 3); // align (log2 -- 8 bytes is enough for any c4 access)
-    put_u32(&mut out, 0); // reloff
-    put_u32(&mut out, 0); // nreloc
-    put_u32(&mut out, 0); // flags = S_REGULAR
-    put_u32(&mut out, 0); // reserved1
-    put_u32(&mut out, 0); // reserved2
-    put_u32(&mut out, 0); // reserved3
-    debug_assert_eq!(out.len(), 72 + 80 + 80);
+    write_struct(
+        &mut out,
+        &Section64 {
+            sectname: pack_name16("__data"),
+            segname: pack_name16("__DATA"),
+            addr: data_addr,
+            size: data_size,
+            offset: data_offset,
+            align: 3, // log2 -- 8 bytes is enough for any c4 access
+            reloff: 0,
+            nreloc: 0,
+            flags: 0, // S_REGULAR
+            reserved1: 0,
+            reserved2: 0,
+            reserved3: 0,
+        },
+    );
+    debug_assert_eq!(out.len(), TOTAL);
     out
+}
+
+/// Compute the cmdsize for a variable-length load command whose body
+/// is a fixed `head_size` followed by a NUL-terminated path padded to
+/// 8 bytes.
+fn variable_lc_cmdsize(head_size: usize, path: &str) -> u32 {
+    let unpadded = head_size + path.len() + 1;
+    let padded = unpadded.next_multiple_of(8);
+    padded as u32
 }
 
 /// `LC_LOAD_DYLINKER` -- tells dyld it is the dynamic linker.
 fn load_dylinker(path: &str) -> Vec<u8> {
-    let mut out = Vec::new();
-    put_u32(&mut out, LC_LOAD_DYLINKER);
-    let cmdsize_offset = out.len();
-    put_u32(&mut out, 0); // placeholder for cmdsize
-    put_u32(&mut out, 12); // name offset (right after this field)
+    let cmdsize = variable_lc_cmdsize(DYLINKER_COMMAND_HEAD_SIZE, path);
+    let mut out = Vec::with_capacity(cmdsize as usize);
+    write_struct(
+        &mut out,
+        &DylinkerCommandHead {
+            cmd: LC_LOAD_DYLINKER,
+            cmdsize,
+            name_offset: DYLINKER_COMMAND_HEAD_SIZE as u32,
+        },
+    );
     out.extend_from_slice(path.as_bytes());
     out.push(0); // NUL terminator
     pad_to(&mut out, 8);
-    let cmdsize = out.len() as u32;
-    out[cmdsize_offset..cmdsize_offset + 4].copy_from_slice(&cmdsize.to_le_bytes());
+    debug_assert_eq!(out.len() as u32, cmdsize);
     out
 }
 
 /// `LC_LOAD_DYLIB` -- declare a dependency on a shared library that
 /// dyld must load before our entry point runs.
 fn load_dylib(path: &str) -> Vec<u8> {
-    let mut out = Vec::new();
-    put_u32(&mut out, LC_LOAD_DYLIB);
-    let cmdsize_offset = out.len();
-    put_u32(&mut out, 0); // placeholder
-    put_u32(&mut out, 24); // name offset
-    put_u32(&mut out, 0); // timestamp -- ignored
-    put_u32(&mut out, 0x0001_0000); // current_version (1.0.0)
-    put_u32(&mut out, 0x0001_0000); // compatibility_version (1.0.0)
+    let cmdsize = variable_lc_cmdsize(DYLIB_COMMAND_HEAD_SIZE, path);
+    let mut out = Vec::with_capacity(cmdsize as usize);
+    write_struct(
+        &mut out,
+        &DylibCommandHead {
+            cmd: LC_LOAD_DYLIB,
+            cmdsize,
+            name_offset: DYLIB_COMMAND_HEAD_SIZE as u32,
+            timestamp: 0,
+            current_version: 0x0001_0000,       // 1.0.0
+            compatibility_version: 0x0001_0000, // 1.0.0
+        },
+    );
     out.extend_from_slice(path.as_bytes());
     out.push(0); // NUL
     pad_to(&mut out, 8);
-    let cmdsize = out.len() as u32;
-    out[cmdsize_offset..cmdsize_offset + 4].copy_from_slice(&cmdsize.to_le_bytes());
+    debug_assert_eq!(out.len() as u32, cmdsize);
     out
 }
 
 /// `LC_BUILD_VERSION` -- platform + min OS + SDK. Modern dyld grumbles
 /// without it.
 fn build_version() -> Vec<u8> {
-    let mut out = Vec::with_capacity(24);
-    put_u32(&mut out, LC_BUILD_VERSION);
-    put_u32(&mut out, 24); // cmdsize -- no tools entries
-    put_u32(&mut out, PLATFORM_MACOS);
-    put_u32(&mut out, MIN_MACOS);
-    put_u32(&mut out, SDK_MACOS);
-    put_u32(&mut out, 0); // ntools
-    debug_assert_eq!(out.len(), 24);
+    let mut out = Vec::with_capacity(BUILD_VERSION_COMMAND_SIZE);
+    write_struct(
+        &mut out,
+        &BuildVersionCommand {
+            cmd: LC_BUILD_VERSION,
+            cmdsize: BUILD_VERSION_COMMAND_SIZE as u32,
+            platform: PLATFORM_MACOS,
+            minos: MIN_MACOS,
+            sdk: SDK_MACOS,
+            ntools: 0,
+        },
+    );
+    debug_assert_eq!(out.len(), BUILD_VERSION_COMMAND_SIZE);
     out
 }
 
 /// `LC_MAIN` -- file offset of the entry point, plus a stack-size
 /// hint (zero = use the kernel default).
 fn main_command(entry_file_offset: u64) -> Vec<u8> {
-    let mut out = Vec::with_capacity(24);
-    put_u32(&mut out, LC_MAIN);
-    put_u32(&mut out, 24); // cmdsize
-    put_u64(&mut out, entry_file_offset);
-    put_u64(&mut out, 0); // stacksize (default)
-    debug_assert_eq!(out.len(), 24);
+    let mut out = Vec::with_capacity(ENTRY_POINT_COMMAND_SIZE);
+    write_struct(
+        &mut out,
+        &EntryPointCommand {
+            cmd: LC_MAIN,
+            cmdsize: ENTRY_POINT_COMMAND_SIZE as u32,
+            entryoff: entry_file_offset,
+            stacksize: 0, // kernel default
+        },
+    );
+    debug_assert_eq!(out.len(), ENTRY_POINT_COMMAND_SIZE);
     out
 }
 
@@ -417,20 +689,25 @@ fn dyld_info_only(
     export_off: u32,
     export_size: u32,
 ) -> Vec<u8> {
-    let mut out = Vec::with_capacity(48);
-    put_u32(&mut out, LC_DYLD_INFO_ONLY);
-    put_u32(&mut out, 48);
-    put_u32(&mut out, rebase_off);
-    put_u32(&mut out, rebase_size);
-    put_u32(&mut out, bind_off);
-    put_u32(&mut out, bind_size);
-    put_u32(&mut out, weak_bind_off);
-    put_u32(&mut out, weak_bind_size);
-    put_u32(&mut out, lazy_bind_off);
-    put_u32(&mut out, lazy_bind_size);
-    put_u32(&mut out, export_off);
-    put_u32(&mut out, export_size);
-    debug_assert_eq!(out.len(), 48);
+    let mut out = Vec::with_capacity(DYLD_INFO_COMMAND_SIZE);
+    write_struct(
+        &mut out,
+        &DyldInfoCommand {
+            cmd: LC_DYLD_INFO_ONLY,
+            cmdsize: DYLD_INFO_COMMAND_SIZE as u32,
+            rebase_off,
+            rebase_size,
+            bind_off,
+            bind_size,
+            weak_bind_off,
+            weak_bind_size,
+            lazy_bind_off,
+            lazy_bind_size,
+            export_off,
+            export_size,
+        },
+    );
+    debug_assert_eq!(out.len(), DYLD_INFO_COMMAND_SIZE);
     out
 }
 
@@ -439,14 +716,19 @@ fn dyld_info_only(
 /// for dyld to bind without this, but `otool`, `nm`, debuggers, and
 /// `codesign` all expect it.
 fn symtab_command(symoff: u32, nsyms: u32, stroff: u32, strsize: u32) -> Vec<u8> {
-    let mut out = Vec::with_capacity(24);
-    put_u32(&mut out, LC_SYMTAB);
-    put_u32(&mut out, 24);
-    put_u32(&mut out, symoff);
-    put_u32(&mut out, nsyms);
-    put_u32(&mut out, stroff);
-    put_u32(&mut out, strsize);
-    debug_assert_eq!(out.len(), 24);
+    let mut out = Vec::with_capacity(SYMTAB_COMMAND_SIZE);
+    write_struct(
+        &mut out,
+        &SymtabCommand {
+            cmd: LC_SYMTAB,
+            cmdsize: SYMTAB_COMMAND_SIZE as u32,
+            symoff,
+            nsyms,
+            stroff,
+            strsize,
+        },
+    );
+    debug_assert_eq!(out.len(), SYMTAB_COMMAND_SIZE);
     out
 }
 
@@ -455,22 +737,33 @@ fn symtab_command(symoff: u32, nsyms: u32, stroff: u32, strsize: u32) -> Vec<u8>
 /// We only have undefined imports right now so the only non-zero
 /// counts are `nundefsym` and `iundefsym`.
 fn dysymtab_command(nundefsym: u32) -> Vec<u8> {
-    let mut out = Vec::with_capacity(80);
-    put_u32(&mut out, LC_DYSYMTAB);
-    put_u32(&mut out, 80);
-    // ilocalsym, nlocalsym, iextdefsym, nextdefsym
-    for _ in 0..4 {
-        put_u32(&mut out, 0);
-    }
-    put_u32(&mut out, 0); // iundefsym -- undefined start at index 0
-    put_u32(&mut out, nundefsym);
-    // tocoff, ntoc, modtaboff, nmodtab, extrefsymoff, nextrefsyms,
-    // indirectsymoff, nindirectsyms, extreloff, nextrel,
-    // locreloff, nlocrel
-    for _ in 0..12 {
-        put_u32(&mut out, 0);
-    }
-    debug_assert_eq!(out.len(), 80);
+    let mut out = Vec::with_capacity(DYSYMTAB_COMMAND_SIZE);
+    write_struct(
+        &mut out,
+        &DysymtabCommand {
+            cmd: LC_DYSYMTAB,
+            cmdsize: DYSYMTAB_COMMAND_SIZE as u32,
+            ilocalsym: 0,
+            nlocalsym: 0,
+            iextdefsym: 0,
+            nextdefsym: 0,
+            iundefsym: 0, // undefined start at index 0
+            nundefsym,
+            tocoff: 0,
+            ntoc: 0,
+            modtaboff: 0,
+            nmodtab: 0,
+            extrefsymoff: 0,
+            nextrefsyms: 0,
+            indirectsymoff: 0,
+            nindirectsyms: 0,
+            extreloff: 0,
+            nextrel: 0,
+            locreloff: 0,
+            nlocrel: 0,
+        },
+    );
+    debug_assert_eq!(out.len(), DYSYMTAB_COMMAND_SIZE);
     out
 }
 
@@ -642,15 +935,18 @@ fn bind_opcodes_for_libsystem_imports(symbols: &[&str], segment: u8) -> Vec<u8> 
 /// libSystem. `n_strx` is the byte offset of the symbol's name in the
 /// string table.
 fn nlist_undef_libsystem(n_strx: u32) -> Vec<u8> {
-    let mut out = Vec::with_capacity(16);
-    put_u32(&mut out, n_strx);
-    out.push(N_EXT | N_UNDF);
-    out.push(NO_SECT);
-    // n_desc: library ordinal in the high 8 bits.
-    let desc: u16 = LIBSYSTEM_ORDINAL << 8;
-    out.extend_from_slice(&desc.to_le_bytes());
-    put_u64(&mut out, 0); // n_value (undefined)
-    debug_assert_eq!(out.len(), 16);
+    let mut out = Vec::with_capacity(NLIST_64_SIZE);
+    write_struct(
+        &mut out,
+        &Nlist64 {
+            n_strx,
+            n_type: N_EXT | N_UNDF,
+            n_sect: NO_SECT,
+            n_desc: LIBSYSTEM_ORDINAL << 8, // library ordinal in the high 8 bits
+            n_value: 0,                     // undefined
+        },
+    );
+    debug_assert_eq!(out.len(), NLIST_64_SIZE);
     out
 }
 
@@ -708,15 +1004,15 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
     // Most LC sizes are fixed; the variable-length LCs (DYLINKER,
     // DYLIB) are pre-built so we can read their length back.
 
-    let mh_size = 32u64;
-    let pagezero_size = 72u64;
-    let text_seg_size = 72u64 + 80;
-    let data_seg_size = 72u64 + 80 + 80;
-    let linkedit_seg_size = 72u64;
-    let dyld_info_size = 48u64;
-    let symtab_size = 24u64;
-    let dysymtab_size = 80u64;
-    let main_size = 24u64;
+    let mh_size = MACH_HEADER_64_SIZE as u64;
+    let pagezero_size = SEGMENT_COMMAND_64_SIZE as u64;
+    let text_seg_size = (SEGMENT_COMMAND_64_SIZE + SECTION_64_SIZE) as u64;
+    let data_seg_size = (SEGMENT_COMMAND_64_SIZE + 2 * SECTION_64_SIZE) as u64;
+    let linkedit_seg_size = SEGMENT_COMMAND_64_SIZE as u64;
+    let dyld_info_size = DYLD_INFO_COMMAND_SIZE as u64;
+    let symtab_size = SYMTAB_COMMAND_SIZE as u64;
+    let dysymtab_size = DYSYMTAB_COMMAND_SIZE as u64;
+    let main_size = ENTRY_POINT_COMMAND_SIZE as u64;
 
     let dylinker = load_dylinker("/usr/lib/dyld");
     let dylib_libsystem = load_dylib("/usr/lib/libSystem.B.dylib");
@@ -855,14 +1151,21 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C4Error> {
 
     // mach_header_64. We have undefined symbols now (_write); MH_NOUNDEFS
     // is dropped accordingly.
-    put_u32(&mut out, MH_MAGIC_64);
-    put_u32(&mut out, CPU_TYPE_ARM64);
-    put_u32(&mut out, CPU_SUBTYPE_ARM64_ALL);
-    put_u32(&mut out, MH_EXECUTE);
-    put_u32(&mut out, 11); // ncmds (4 segments + dyldinfo + symtab + dysymtab + dylinker + dylib + bv + main)
-    put_u32(&mut out, sizeofcmds as u32);
-    put_u32(&mut out, MH_DYLDLINK | MH_TWOLEVEL | MH_PIE);
-    put_u32(&mut out, 0); // reserved
+    write_struct(
+        &mut out,
+        &MachHeader64 {
+            magic: MH_MAGIC_64,
+            cputype: CPU_TYPE_ARM64,
+            cpusubtype: CPU_SUBTYPE_ARM64_ALL,
+            filetype: MH_EXECUTE,
+            // ncmds: 4 segments + dyldinfo + symtab + dysymtab + dylinker
+            //        + dylib + build_version + main
+            ncmds: 11,
+            sizeofcmds: sizeofcmds as u32,
+            flags: MH_DYLDLINK | MH_TWOLEVEL | MH_PIE,
+            reserved: 0,
+        },
+    );
     debug_assert_eq!(out.len() as u64, mh_size);
 
     // Load commands, ordered by Apple's convention: segments first,

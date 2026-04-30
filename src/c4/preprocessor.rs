@@ -34,8 +34,19 @@
 //! * Function-like macros (`#define MAX(a, b) ...`).
 //! * Multi-line `#define` continuations.
 //! * Token pasting / stringification.
-//! * `#include` -- we auto-prepend the per-target header instead.
 //! * Boolean operators (`&&`, `||`, `!`) inside `#if`.
+//!
+//! Also supported:
+//!
+//! * `#include <name.h>` / `#include "name.h"` -- pulls a header out
+//!   of the embedded-header registry (see [`super::headers`]). Both
+//!   forms hit the same registry today; a future filesystem search
+//!   path could split them. Cyclic `#include` is rejected; repeat
+//!   inclusion is silently no-op iff the included file declared
+//!   `#pragma once`.
+//! * `#pragma once` -- once seen inside a header, further `#include`
+//!   of the same header is dropped on the floor. The usual idiom
+//!   for guarding against double-inclusion of standard headers.
 //!
 //! The pass is line-based: every line of the input either becomes
 //! a (macro-substituted) line of the output or a blank line if it
@@ -43,13 +54,14 @@
 //! one-for-one so error messages from the lexer keep meaningful
 //! line numbers.
 
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use super::codegen::Target;
 use super::error::C4Error;
+use super::headers::embedded_header;
 
 /// One declared dylib plus the bindings that target it. Created
 /// by `#pragma dylib(name, "path")`; populated by subsequent
@@ -102,6 +114,13 @@ pub(crate) struct Preprocessor {
     /// declared. Each entry collects the bindings whose
     /// `name::c4_fn` qualifier referenced its [`DylibSpec::name`].
     pub dylibs: Vec<DylibSpec>,
+    /// Headers that opted in to single-inclusion via `#pragma once`.
+    /// A subsequent `#include` of a name in this set is dropped.
+    pragma_once_files: BTreeSet<String>,
+    /// Names of headers currently being expanded, used to break
+    /// cycles. Pushed on `#include`, popped when we finish processing
+    /// the header.
+    include_stack: Vec<String>,
 }
 
 impl Preprocessor {
@@ -141,14 +160,27 @@ impl Preprocessor {
         Self {
             macros,
             dylibs: Vec::new(),
+            pragma_once_files: BTreeSet::new(),
+            include_stack: Vec::new(),
         }
     }
 
     /// Run the preprocessor over `source` and return the substituted
-    /// text suitable for the lexer. Each input line maps to exactly
-    /// one output line so lexer-level error reports still point at
-    /// the right place in the original buffer.
+    /// text suitable for the lexer. Within a single source file each
+    /// input line maps to exactly one output line so lexer-level
+    /// error reports stay grounded in the original buffer; an
+    /// `#include` directive expands to (header_lines + 1) output
+    /// lines, which shifts user-source line numbers downstream of
+    /// the include but keeps lines *within* a file aligned.
     pub fn process(&mut self, source: &str) -> Result<String, C4Error> {
+        self.process_named(source, "<source>")
+    }
+
+    /// Recursive entry point. `filename` labels the buffer so error
+    /// messages and `#pragma once` can name what they're talking
+    /// about; the top-level call uses `"<source>"`, `#include`'d
+    /// files use the header name (`"stdio.h"`).
+    fn process_named(&mut self, source: &str, filename: &str) -> Result<String, C4Error> {
         let mut out = String::with_capacity(source.len());
 
         // `cond_stack` mirrors the nesting of `#if` / `#ifdef`. Each
@@ -234,15 +266,28 @@ impl Preprocessor {
                     }
                     Directive::Pragma(args) => {
                         if active {
-                            self.parse_pragma(args, line_no)?;
+                            match parse_pragma_directive(args) {
+                                PragmaDirective::Once => {
+                                    self.pragma_once_files.insert(filename.to_string());
+                                }
+                                PragmaDirective::Other => {
+                                    self.parse_pragma(args, line_no)?;
+                                }
+                            }
+                        }
+                    }
+                    Directive::Include(name) => {
+                        if active {
+                            let included = self.process_include(name, line_no)?;
+                            out.push_str(&included);
                         }
                     }
                     Directive::Other => {
-                        // Unknown directive (e.g. `#include`) -- mirror
-                        // the historical lexer behaviour and skip it.
-                        // We don't error out so existing sources that
-                        // sprinkle `#include <stdio.h>` for documentation
-                        // keep compiling.
+                        // Unknown directive -- mirror the historical
+                        // lexer behaviour and skip silently. Anything
+                        // a user is likely to misspell (`#defin` etc.)
+                        // would be caught by the lexer downstream as
+                        // a stray identifier.
                     }
                     Directive::Shebang => {
                         // First-line `#!/usr/bin/env badc` shebangs --
@@ -417,6 +462,38 @@ impl Preprocessor {
         Ok(())
     }
 
+    /// `#include <name>` / `#include "name"` -- splice the named
+    /// header's processed contents into the output.
+    ///
+    /// The header is looked up in [`super::headers::embedded_header`].
+    /// Unknown names silently no-op so legacy sources sprinkled with
+    /// `#include <fcntl.h>` for documentation don't break. Cyclic
+    /// `#include` returns an error; repeat inclusion of a header
+    /// that previously declared `#pragma once` returns an empty
+    /// string.
+    fn process_include(&mut self, name: &str, line_no: usize) -> Result<String, C4Error> {
+        if self.pragma_once_files.contains(name) {
+            return Ok(String::new());
+        }
+        let Some(content) = embedded_header(name) else {
+            // Unknown header: drop it on the floor and let any
+            // missing-symbol error fall out of the lexer / codegen
+            // downstream. Matches the historical pre-`#include`
+            // behaviour.
+            return Ok(String::new());
+        };
+        if self.include_stack.iter().any(|f| f == name) {
+            let chain = self.include_stack.join(" -> ");
+            return Err(C4Error::Compile(format!(
+                "preprocessor:{line_no}: cyclic `#include {name}` (chain: {chain} -> {name})"
+            )));
+        }
+        self.include_stack.push(name.to_string());
+        let result = self.process_named(content, name);
+        self.include_stack.pop();
+        result
+    }
+
     /// `#pragma binding(dylib::c4_name, "real_symbol")` -- record
     /// `c4_name`'s mapping to `real_symbol` inside the dylib named
     /// `dylib`. The dylib must already have been declared by a
@@ -506,8 +583,26 @@ enum Directive<'a> {
     Else,
     Endif,
     Pragma(&'a str),
+    Include(&'a str),
     Shebang,
     Other,
+}
+
+/// Sub-classification of `#pragma` payloads. `dylib(...)` /
+/// `binding(...)` go to [`Preprocessor::parse_pragma`] and live in
+/// the dylib registry; `once` is structural (it tags the *current*
+/// header) and lives on the preprocessor itself.
+enum PragmaDirective {
+    Once,
+    Other,
+}
+
+fn parse_pragma_directive(args: &str) -> PragmaDirective {
+    if args.trim() == "once" {
+        PragmaDirective::Once
+    } else {
+        PragmaDirective::Other
+    }
 }
 
 fn parse_directive(rest: &str) -> Directive<'_> {
@@ -550,6 +645,19 @@ fn parse_directive(rest: &str) -> Directive<'_> {
     }
     if let Some(after) = rest.strip_prefix("pragma") {
         return Directive::Pragma(after.trim());
+    }
+    if let Some(after) = rest.strip_prefix("include") {
+        let trimmed = after.trim();
+        // Strip the `<...>` or `"..."` wrapping. Anything else falls
+        // through to `Directive::Other` and is silently dropped, the
+        // same as malformed `#define` lines.
+        if let Some(name) = trimmed
+            .strip_prefix('<')
+            .and_then(|s| s.strip_suffix('>'))
+            .or_else(|| trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"')))
+        {
+            return Directive::Include(name.trim());
+        }
     }
     if rest.starts_with('!') {
         return Directive::Shebang;
@@ -738,5 +846,23 @@ mod tests {
         let src = "#if defined(__BADC_VERSION__)\nint a;\n#endif\n";
         let out = process(src);
         assert!(out.contains("int a;"));
+    }
+
+    #[test]
+    fn unknown_include_is_silently_dropped() {
+        // Headers not in the embedded registry should no-op so legacy
+        // sources sprinkled with `#include <fcntl.h>` keep building
+        // until a real header takes that slot.
+        let out = process("#include <not-a-real-header.h>\nint main() { return 0; }\n");
+        assert!(out.contains("int main()"));
+    }
+
+    #[test]
+    fn quoted_include_form_is_recognised() {
+        // `"foo.h"` and `<foo.h>` go through the same registry today.
+        // The quoted form is still parsed -- we'd just look it up the
+        // same way -- so an unknown name no-ops cleanly.
+        let out = process("#include \"not-a-real-header.h\"\nint main() {}\n");
+        assert!(out.contains("int main()"));
     }
 }

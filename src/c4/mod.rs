@@ -1,6 +1,7 @@
 mod codegen;
 mod compiler;
 mod error;
+mod headers;
 mod host;
 mod lexer;
 mod op;

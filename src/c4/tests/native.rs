@@ -371,6 +371,10 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // exits with atoi("123") = 123.
     ("dlopen_atoi.c", 123),
     ("dlopen_strlen.c", 13),
+    // Multi-arg dlsym call path: spawns a thread via pthread_create
+    // (4 pointer-ish args), joins it, returns the thread's exit
+    // status. macOS pthread is in libSystem so dlopen(NULL) finds it.
+    ("pthread_create.c", 11),
 ];
 
 /// Build a fixture, sign it, run it with the given args, and return

@@ -204,6 +204,9 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     // "123" in the System V argument register.
     ("dlopen_atoi.c", 123),
     ("dlopen_strlen.c", 13),
+    // Multi-arg dlsym call path: pthread_create + pthread_join.
+    // POSIX-only fixture; the JIT is gated to POSIX hosts already.
+    ("pthread_create.c", 11),
 ];
 
 #[test]

@@ -287,6 +287,10 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     // libc atoi and the indirect call passes "123" in x0.
     ("dlopen_atoi.c", 123),
     ("dlopen_strlen.c", 13),
+    // Multi-arg dlsym call path. glibc 2.34+ folded pthread into
+    // libc and keeps libpthread.so.0 as a stub the loader pulls in
+    // anyway, so dlopen(NULL) finds pthread_create in our scope.
+    ("pthread_create.c", 11),
 ];
 
 #[test]

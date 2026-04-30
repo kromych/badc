@@ -259,6 +259,10 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("setenv_then_get.c", 'Z' as i32),
     ("dlopen_atoi.c", 123),
     ("dlopen_strlen.c", 13),
+    // Multi-arg dlsym call path. glibc 2.34+ folded pthread into
+    // libc and keeps libpthread.so.0 as a stub the loader pulls in
+    // anyway, so dlopen(NULL) finds pthread_create in our scope.
+    ("pthread_create.c", 11),
 ];
 
 #[test]

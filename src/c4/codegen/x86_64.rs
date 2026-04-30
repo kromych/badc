@@ -55,30 +55,32 @@ use super::regalloc::{self, PoolBank, PushKind, RegStackPlan};
 use super::{Abi, Build, DataFixup, FuncFixup, GotFixup, NativeOptions, Target};
 
 /// Register-pool sizes used by the native optimizer on x86_64.
-/// Four callee-saved registers free after subtracting rbp (frame
-/// pointer) and r13 (VM accumulator) from System V's callee-saved
-/// set: rbx, r12, r14, r15. The caller-saved bank is disabled on
-/// x86_64 because the only candidates (r10, r11) are already
-/// claimed by the lowering as scratch (popped operands, indirect
-/// call targets, divisor stash) -- making them pool slots would
-/// conflict.
+/// Four callee-saved registers (rbx, r12, r14, r15) plus one
+/// caller-saved (r11). The other System V callee-saved registers
+/// are spoken for: rbp = frame pointer, r13 = VM accumulator. r10
+/// stays out of the pool because the lowering uses it as a
+/// general-purpose scratch (popped real-stack operand, indirect
+/// call target, divisor stash, comparison setcc target,
+/// argv/argc rotation in main's prologue/epilogue, libc-thunk
+/// stack-arg courier). r11 is never used as scratch, so it's free
+/// for caller-bank slots whose lifetimes never cross a call op
+/// (analyzer guarantee) -- no prologue save needed.
 pub(super) const POOL_SIZES: regalloc::PoolSizes = regalloc::PoolSizes {
     callee: 4,
-    caller: 0,
+    caller: 1,
 };
 
-/// Map a regalloc slot index to its pool register. Bank is always
-/// [`PoolBank::Callee`] on x86_64 (the analyzer never assigns
-/// caller bank when its size is 0). RBX is at index 3, R12/R14/R15
-/// are at 12/14/15 -- not contiguous, so an array is the simplest
-/// mapping.
+/// Map a regalloc slot index to its pool register. The callee bank
+/// (rbx, r12, r14, r15) is non-contiguous so an array is simplest.
+/// The caller bank has a single slot mapped to r11.
 fn pool_reg(slot: u8, bank: PoolBank) -> Reg {
-    debug_assert!(
-        matches!(bank, PoolBank::Callee),
-        "x86_64 has no caller bank; got {bank:?}"
-    );
-    const POOL: [Reg; POOL_SIZES.callee as usize] = [Reg::RBX, Reg::R12, Reg::R14, Reg::R15];
-    POOL[slot as usize]
+    const CALLEE_POOL: [Reg; POOL_SIZES.callee as usize] =
+        [Reg::RBX, Reg::R12, Reg::R14, Reg::R15];
+    const CALLER_POOL: [Reg; POOL_SIZES.caller as usize] = [Reg::R11];
+    match bank {
+        PoolBank::Callee => CALLEE_POOL[slot as usize],
+        PoolBank::Caller => CALLER_POOL[slot as usize],
+    }
 }
 
 /// Per-function lowering state, mirror of the aarch64 `RegState`.
@@ -1146,12 +1148,12 @@ fn lower_op(
         }
         Op::Psh => {
             // With the native optimizer on AND a Pseudo classification,
-            // emit `mov rN, r13` into the assigned pool slot.
+            // emit `mov rN, r13` into the assigned pool slot. The
+            // bank picks between the callee-saved pool (rbx/r12/
+            // r14/r15) and the single caller-saved slot (r11).
             // Otherwise claim a 16-byte slot on the real stack so
             // rsp stays 16-byte aligned across any libc call we make
-            // later. On x86_64 the analyzer never assigns the caller
-            // bank (POOL_SIZES.caller == 0), so `bank` is always
-            // Callee here.
+            // later.
             let slot_and_bank = reg_state
                 .use_pool
                 .then(|| {

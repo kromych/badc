@@ -94,9 +94,9 @@ pub(crate) struct PoolSizes {
     pub callee: u8,
     /// Maximum simultaneous caller-saved bank slots. `0` disables
     /// the caller bank entirely (every Pseudo push then routes
-    /// through the callee bank); used by x86_64 today since its
-    /// caller-saved registers (r10, r11) are already claimed by
-    /// the lowering as scratch.
+    /// through the callee bank). aarch64 offers 7 (x9..x15) and
+    /// x86_64 offers 1 (r11); the other caller-saved x86_64
+    /// candidate, r10, is reserved as scratch by the lowering.
     pub caller: u8,
 }
 

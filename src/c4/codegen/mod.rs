@@ -300,6 +300,17 @@ impl ResolvedImports {
         // first-encounter order. The order determines GOT slot
         // indices; within a single compilation it just needs to be
         // deterministic.
+        //
+        // The walker has to skip every operand-bearing op's operand
+        // word so the next iteration lands on a real opcode rather
+        // than a stray operand value. The optimizer's
+        // immediate-arith ops (`AddI`, `LdLocI`, ...) carry one
+        // operand each; missing them in the skip set used to make
+        // the walk drift onto operand bytes after the first
+        // optimized site, decoding garbage and stopping early --
+        // any `Op::JsrExt` past that point would then be invisible
+        // and the codegen would fail with "no import slot for
+        // binding N".
         let mut seen: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
         let mut used: Vec<i64> = Vec::new();
         let mut pc = 0;
@@ -310,7 +321,7 @@ impl ResolvedImports {
                 break;
             };
             pc += 1;
-            if matches!(
+            let has_operand = matches!(
                 op,
                 Op::Lea
                     | Op::Imm
@@ -321,7 +332,24 @@ impl ResolvedImports {
                     | Op::Bz
                     | Op::Bnz
                     | Op::JsrExt
-            ) {
+                    | Op::AddI
+                    | Op::SubI
+                    | Op::MulI
+                    | Op::AndI
+                    | Op::OrI
+                    | Op::XorI
+                    | Op::ShlI
+                    | Op::ShrI
+                    | Op::EqI
+                    | Op::NeI
+                    | Op::LtI
+                    | Op::GtI
+                    | Op::LeI
+                    | Op::GeI
+                    | Op::LdLocI
+                    | Op::LdLocC
+            );
+            if has_operand {
                 if matches!(op, Op::JsrExt) {
                     let idx = program.text[pc];
                     if seen.insert(idx) {

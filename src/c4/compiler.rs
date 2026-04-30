@@ -703,7 +703,22 @@ impl Compiler {
                     self.emit_op(Op::Adj);
                     self.emit_val(nargs);
                 }
-                self.ty = self.symbols[id_idx].type_;
+                // For direct calls (Jsr/JsrExt) the symbol's `type_`
+                // is the declared return type. For indirect calls
+                // through a variable (Jsri), `type_` is the *variable*
+                // type (e.g. `int *` for a function pointer), not the
+                // return type -- using it as the result type spuriously
+                // taints downstream assignments with "pointer assigned
+                // to integer" warnings. The c4 dialect has no way to
+                // declare the return type of a function pointer, so
+                // default to `int` for the result.
+                self.ty = if self.symbols[id_idx].class == Token::Loc as i64
+                    || self.symbols[id_idx].class == Token::Glo as i64
+                {
+                    Ty::Int as i64
+                } else {
+                    self.symbols[id_idx].type_
+                };
             } else if self.symbols[id_idx].class == Token::Num as i64 {
                 self.emit_op(Op::Imm);
                 self.emit_val(self.symbols[id_idx].val);
@@ -999,12 +1014,18 @@ impl Compiler {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::MulOp as i64)?;
-                if t > Ty::Ptr as i64 && t == self.ty {
+                if t >= Ty::Ptr as i64 && t == self.ty {
+                    // ptr - ptr -> element count (Int). For deeper
+                    // pointers (int*, int**, ...) the element size is
+                    // 8 bytes so divide; for char* the byte count is
+                    // the element count, no division.
                     self.emit_op(Op::Sub);
-                    self.emit_op(Op::Psh);
-                    self.emit_op(Op::Imm);
-                    self.emit_val(8);
-                    self.emit_op(Op::Div);
+                    if t > Ty::Ptr as i64 {
+                        self.emit_op(Op::Psh);
+                        self.emit_op(Op::Imm);
+                        self.emit_val(8);
+                        self.emit_op(Op::Div);
+                    }
                     self.ty = Ty::Int as i64;
                 } else if t > Ty::Ptr as i64 {
                     self.emit_op(Op::Psh);

@@ -16,7 +16,7 @@ struct Packet {
 
 int main() {
     struct Packet *p;
-    p = malloc(sizeof(struct Packet));
+    p = (struct Packet *)malloc(sizeof(struct Packet));
     p->code    = 1;
     p->payload = 2;
     p->label   = "x";

@@ -1,8 +1,12 @@
 #include <stdlib.h>
 
+// Tree nodes are packed as int[3]: [value, left, right]. The left/
+// right cells hold pointer-shaped values, so we cast on the way in
+// and out to keep badc's type-checker quiet about mixing `int` and
+// `int *` -- the c4 dialect has no int** so flat-array nodes are
+// the natural shape, but the cells still want the right typing.
 int* insert(int *root, int val) {
     if (root == 0) {
-        // [0]=val, [1]=left, [2]=right
         root = malloc(sizeof(int) + 2 * sizeof(int *));
         root[0] = val;
         root[1] = 0;
@@ -10,9 +14,9 @@ int* insert(int *root, int val) {
         return root;
     }
     if (val < root[0]) {
-        root[1] = insert(root[1], val);
+        root[1] = (int)insert((int *)root[1], val);
     } else {
-        root[2] = insert(root[2], val);
+        root[2] = (int)insert((int *)root[2], val);
     }
     return root;
 }
@@ -20,8 +24,8 @@ int* insert(int *root, int val) {
 int search(int *root, int val) {
     if (root == 0) return 0;
     if (root[0] == val) return 1;
-    if (val < root[0]) return search(root[1], val);
-    return search(root[2], val);
+    if (val < root[0]) return search((int *)root[1], val);
+    return search((int *)root[2], val);
 }
 
 int main() {

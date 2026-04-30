@@ -44,6 +44,7 @@
 //! writer (the codegen is platform-agnostic; only the writer differs).
 
 use alloc::format;
+use alloc::string::ToString;
 use alloc::vec;
 use alloc::vec::Vec;
 

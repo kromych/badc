@@ -409,10 +409,7 @@ pub fn predefined_symbols() -> Vec<PredefinedSymbol> {
 /// here since the symbol table only holds one entry per name.
 /// `#include`-time deduplication via `#pragma once` makes that the
 /// expected case.
-pub(crate) fn init_symbols(
-    symbols: &mut Vec<Symbol>,
-    dylibs: &[super::preprocessor::DylibSpec],
-) {
+pub(crate) fn init_symbols(symbols: &mut Vec<Symbol>, dylibs: &[super::preprocessor::DylibSpec]) {
     for (name, tok) in KEYWORDS {
         add_keyword(symbols, name, *tok as i64);
     }

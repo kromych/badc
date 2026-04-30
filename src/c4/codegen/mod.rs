@@ -224,7 +224,9 @@ impl ResolvedImports {
     /// shouldn't emit a fixup for an `Op::JsrExt` operand that
     /// isn't in the resolved set).
     pub fn index_of_binding(&self, binding_idx: i64) -> Option<usize> {
-        self.imports.iter().position(|i| i.binding_idx == binding_idx)
+        self.imports
+            .iter()
+            .position(|i| i.binding_idx == binding_idx)
     }
 
     /// Add a binding the writer needs even if the bytecode walk
@@ -320,44 +322,13 @@ impl ResolvedImports {
                 // optimizer / VM will surface it.
                 break;
             };
-            pc += 1;
-            let has_operand = matches!(
-                op,
-                Op::Lea
-                    | Op::Imm
-                    | Op::Ent
-                    | Op::Adj
-                    | Op::Jmp
-                    | Op::Jsr
-                    | Op::Bz
-                    | Op::Bnz
-                    | Op::JsrExt
-                    | Op::AddI
-                    | Op::SubI
-                    | Op::MulI
-                    | Op::AndI
-                    | Op::OrI
-                    | Op::XorI
-                    | Op::ShlI
-                    | Op::ShrI
-                    | Op::EqI
-                    | Op::NeI
-                    | Op::LtI
-                    | Op::GtI
-                    | Op::LeI
-                    | Op::GeI
-                    | Op::LdLocI
-                    | Op::LdLocC
-            );
-            if has_operand {
-                if matches!(op, Op::JsrExt) {
-                    let idx = program.text[pc];
-                    if seen.insert(idx) {
-                        used.push(idx);
-                    }
+            if matches!(op, Op::JsrExt) {
+                let idx = program.text[pc + 1];
+                if seen.insert(idx) {
+                    used.push(idx);
                 }
-                pc += 1;
             }
+            pc += op.word_size();
         }
 
         // Resolve each used binding-idx through `program.dylibs`.

@@ -202,19 +202,7 @@ fn decode(text: &[i64], data_imm_positions: &[usize]) -> Result<Vec<Insn>, C4Err
         })?;
         pc_to_idx[pc] = insns.len();
         pc += 1;
-        let needs_operand = matches!(
-            op,
-            Op::Lea
-                | Op::Imm
-                | Op::Ent
-                | Op::Adj
-                | Op::JsrExt
-                | Op::Jmp
-                | Op::Jsr
-                | Op::Bz
-                | Op::Bnz
-        );
-        if needs_operand && pc >= text.len() {
+        if op.operand_count() > 0 && pc >= text.len() {
             return Err(C4Error::Compile(format!(
                 "optimizer: truncated operand for {op:?} at end of text"
             )));

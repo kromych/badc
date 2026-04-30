@@ -418,13 +418,16 @@ impl<H: Host> Vm<H> {
             )));
         }
         let i = binding_idx as usize;
-        self.binding_names.get(i).map(|s| s.as_str()).ok_or_else(|| {
-            C4Error::Runtime(format!(
-                "VM: JsrExt operand {binding_idx} out of range \
+        self.binding_names
+            .get(i)
+            .map(|s| s.as_str())
+            .ok_or_else(|| {
+                C4Error::Runtime(format!(
+                    "VM: JsrExt operand {binding_idx} out of range \
                  (program has {} bindings)",
-                self.binding_names.len()
-            ))
-        })
+                    self.binding_names.len()
+                ))
+            })
     }
 
     /// Execute the program. Consumes the VM because `run` mutates `text`

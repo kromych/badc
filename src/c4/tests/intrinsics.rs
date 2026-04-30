@@ -110,7 +110,9 @@ fn dlopen_returns_a_non_zero_handle_in_vm_mode() {
             return 0;
         }
     "#;
-    let p = crate::Compiler::new(super::with_prelude(src)).compile().unwrap();
+    let p = crate::Compiler::new(super::with_prelude(src))
+        .compile()
+        .unwrap();
     let result = crate::Vm::new(p).run().unwrap();
     assert_eq!(result, 0);
 }
@@ -134,7 +136,9 @@ fn dlsym_finds_a_real_libc_symbol_in_vm_mode() {
             return 0;
         }
     "#;
-    let p = crate::Compiler::new(super::with_prelude(src)).compile().unwrap();
+    let p = crate::Compiler::new(super::with_prelude(src))
+        .compile()
+        .unwrap();
     let result = crate::Vm::new(p).run().unwrap();
     assert_eq!(result, 0);
 }
@@ -155,7 +159,9 @@ fn jsri_through_a_dlsym_pointer_is_rejected_in_vm_mode() {
             return fn("123");
         }
     "#;
-    let p = crate::Compiler::new(super::with_prelude(src)).compile().unwrap();
+    let p = crate::Compiler::new(super::with_prelude(src))
+        .compile()
+        .unwrap();
     let err = crate::Vm::new(p).run().unwrap_err();
     let msg = format!("{err}");
     assert!(

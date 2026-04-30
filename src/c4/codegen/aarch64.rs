@@ -686,35 +686,7 @@ fn collect_branch_targets(text: &[i64]) -> Vec<bool> {
             }
             _ => {}
         }
-        // Same op_width logic as the regalloc analyzer.
-        pc += match op {
-            Op::Lea
-            | Op::Imm
-            | Op::Jmp
-            | Op::Jsr
-            | Op::Bz
-            | Op::Bnz
-            | Op::Ent
-            | Op::Adj
-            | Op::JsrExt
-            | Op::AddI
-            | Op::SubI
-            | Op::MulI
-            | Op::AndI
-            | Op::OrI
-            | Op::XorI
-            | Op::ShlI
-            | Op::ShrI
-            | Op::EqI
-            | Op::NeI
-            | Op::LtI
-            | Op::GtI
-            | Op::LeI
-            | Op::GeI
-            | Op::LdLocI
-            | Op::LdLocC => 2,
-            _ => 1,
-        };
+        pc += op.word_size();
     }
     targets
 }

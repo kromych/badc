@@ -219,7 +219,7 @@ fn binding_names_seed_token_sys_when_dylibs_provided() {
     // to the binding's flat-index. A program reaching for
     // `malloc(...)` then lowers via `Op::JsrExt 0` (or whichever
     // index `malloc` ended up at).
-    use crate::c4::lexer::{init_symbols, Lexer};
+    use crate::c4::lexer::{Lexer, init_symbols};
     use crate::c4::preprocessor::{Binding, DylibSpec};
 
     let dylibs = vec![DylibSpec {

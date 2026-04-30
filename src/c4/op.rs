@@ -186,4 +186,31 @@ impl Op {
             None
         }
     }
+
+    /// Number of operand i64 words that follow this op in the
+    /// bytecode. Single source of truth -- every bytecode walker
+    /// (the optimizer's decode pass, the regalloc analyzer, the
+    /// codegen lowering, the import resolver, the disassembler)
+    /// reads its operand-skip count from here. Adding a new
+    /// operand-bearing op only requires an entry in this match.
+    pub fn operand_count(self) -> usize {
+        use Op::*;
+        match self {
+            // Single-operand ops: control flow, frame setup, libc
+            // dispatch, and the optimizer's immediate-form
+            // arithmetic / comparison ops.
+            Lea | Imm | Jmp | Jsr | Bz | Bnz | Ent | Adj | JsrExt | AddI | SubI | MulI | AndI
+            | OrI | XorI | ShlI | ShrI | EqI | NeI | LtI | GtI | LeI | GeI | LdLocI | LdLocC => 1,
+            // Everything else -- arithmetic, loads/stores, push,
+            // indirect-jump, return, etc. -- is encoded in a
+            // single word with no operand.
+            _ => 0,
+        }
+    }
+
+    /// Total i64 words this op occupies in the bytecode (op + its
+    /// operand). `1 + operand_count()`.
+    pub fn word_size(self) -> usize {
+        1 + self.operand_count()
+    }
 }

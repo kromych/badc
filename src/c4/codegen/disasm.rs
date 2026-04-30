@@ -76,13 +76,13 @@ fn push_bytecode_listing(out: &mut String, program: &Program, build: &Build) {
             // The optimizer / DCE shouldn't leave dangling indices in
             // the live bytecode, but if one slipped through, skip it
             // rather than misalign the rest of the listing.
-            bc_pc += 1 + op_operand_count(op);
+            bc_pc += op.word_size();
             continue;
         }
         // Find the *next* live entry to bound the byte range.
-        let native_end = next_native_offset(build, bc_pc + 1 + op_operand_count(op));
+        let native_end = next_native_offset(build, bc_pc + op.word_size());
 
-        let operand_str = if op_operand_count(op) > 0 {
+        let operand_str = if op.operand_count() > 0 {
             format!(" {}", program.text[bc_pc + 1])
         } else {
             String::new()
@@ -90,7 +90,7 @@ fn push_bytecode_listing(out: &mut String, program: &Program, build: &Build) {
         out.push_str(&format!("[bc={:>4}] {:?}{}\n", bc_pc, op, operand_str));
         push_hex_bytes(out, &build.text[native_start..native_end], native_start);
 
-        bc_pc += 1 + op_operand_count(op);
+        bc_pc += op.word_size();
     }
 }
 
@@ -107,18 +107,6 @@ fn next_native_offset(build: &Build, from: usize) -> usize {
         }
     }
     build.text.len()
-}
-
-/// Number of operand `i64` words that follow an op in `Program::text`.
-/// Mirrors the `needs_operand` set in the optimizer's decode pass.
-fn op_operand_count(op: Op) -> usize {
-    match op {
-        Op::Lea | Op::Imm | Op::Ent | Op::Adj | Op::Jmp | Op::Jsr | Op::Bz | Op::Bnz => 1,
-        Op::AddI | Op::SubI | Op::MulI | Op::AndI | Op::OrI | Op::XorI | Op::ShlI | Op::ShrI => 1,
-        Op::EqI | Op::NeI | Op::LtI | Op::GtI | Op::LeI | Op::GeI => 1,
-        Op::LdLocI | Op::LdLocC => 1,
-        _ => 0,
-    }
 }
 
 /// Push the bytes at `slice` as hex, prefixed by `start`-relative

@@ -159,13 +159,7 @@ impl RegStackPlan {
 /// instruction stream; the lowering just peeks at the *next* op
 /// for an Adj N to figure out arg count.
 fn op_width(op: Op) -> usize {
-    use Op::*;
-    match op {
-        // PC + 1 word of operand.
-        Lea | Imm | Jmp | Jsr | Bz | Bnz | Ent | Adj | JsrExt | AddI | SubI | MulI | AndI | OrI
-        | XorI | ShlI | ShrI | EqI | NeI | LtI | GtI | LeI | GeI | LdLocI | LdLocC => 2,
-        _ => 1,
-    }
+    op.word_size()
 }
 
 /// True if `op` lowers to something that tramples caller-saved

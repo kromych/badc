@@ -64,7 +64,7 @@ use super::super::error::C4Error;
 use super::super::op::Op;
 use super::super::program::Program;
 use super::regalloc::{self, PoolBank, PushKind, RegStackPlan};
-use super::{Build, DataFixup, FuncFixup, GotFixup, NativeOptions, Target, TargetOptions};
+use super::{Abi, Build, DataFixup, FuncFixup, GotFixup, NativeOptions, Target};
 
 /// Per-function lowering state for the register-pool optimization.
 /// [`NativeOptions::optimize`] populates `plan` with a
@@ -786,7 +786,7 @@ pub(super) fn lower(
     native: NativeOptions,
     imports: &super::ResolvedImports,
 ) -> Result<Build, C4Error> {
-    let options = target.options();
+    let abi = target.abi();
 
     // Run the regalloc analyzer once if `--optimize` is on. The
     // plan is consulted at each Op::Ent / Op::Psh / pop op so we
@@ -871,7 +871,7 @@ pub(super) fn lower(
             &mut pending_func_fixups,
             data_imm_positions,
             in_main,
-            options,
+            abi,
             &mut reg_state,
             op_pc,
             &branch_targets,
@@ -1006,7 +1006,7 @@ fn lower_op(
     pending_func_fixups: &mut Vec<(usize, usize)>,
     data_imm_positions: &[usize],
     in_main: bool,
-    options: TargetOptions,
+    abi: Abi,
     reg_state: &mut RegState<'_>,
     op_pc: usize,
     branch_targets: &[bool],
@@ -1299,7 +1299,7 @@ fn lower_op(
         //      through __got. ----
         Op::JsrExt => {
             let binding_idx = read_operand(text, pc, "JsrExt")?;
-            emit_libc_call(binding_idx, text, *pc, code, got_fixups, options, imports)?;
+            emit_libc_call(binding_idx, text, *pc, code, got_fixups, abi, imports)?;
         }
     }
     Ok(())
@@ -1327,7 +1327,7 @@ fn emit_libc_call(
     pc_after_op: usize,
     code: &mut Vec<u8>,
     got_fixups: &mut Vec<GotFixup>,
-    options: TargetOptions,
+    abi: Abi,
     imports: &super::ResolvedImports,
 ) -> Result<(), C4Error> {
     let import_index = imports.index_of_binding(binding_idx).ok_or_else(|| {
@@ -1358,7 +1358,7 @@ fn emit_libc_call(
     // doesn't carry a "this binding is variadic" flag yet, so we
     // identify variadic functions by name -- the only one that
     // matters today on Apple Silicon is `printf`.
-    let is_variadic = c4_name == "printf" && options.variadic_on_stack;
+    let is_variadic = c4_name == "printf" && abi.variadic_on_stack;
 
     if is_variadic {
         // Format string is the first c4 arg = deepest on the stack.

@@ -612,49 +612,128 @@ pub fn dump_native_listing_with_options(
 }
 
 /// Per-target ABI knobs that affect lowering, not just the final
-/// container. Each native backend reads only the fields it needs;
-/// adding a target normally just means adding a row to `options()`.
+/// Architecture flavour the lowering pass picks. Mirrors
+/// [`Machine`] but lives next to [`Abi`] so the per-target table
+/// can carry it directly without an extra cross-reference.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Arch {
+    Aarch64,
+    X86_64,
+}
+
+/// Per-target ABI description. Replaces the old free-form
+/// `TargetOptions { variadic_on_stack, win64_abi }` with an
+/// explicit catalogue of every choice the lowering pass has to
+/// make: which registers carry integer arguments, how much
+/// shadow space the caller reserves, whether variadic calls go
+/// through the macOS-flavoured stack-packing path, and whether
+/// the System V `xor eax, eax` (zero XMM count) pre-call dance
+/// is required.
+///
+/// Each native backend reads only the fields it needs; adding a
+/// target is one new row in [`Target::abi`]. Register lists are
+/// raw `u8` codes (the same encoding `aarch64::Reg` /
+/// `x86_64::Reg` use) so a single `Abi` struct can describe
+/// both arches without a big sum type at the use site -- the
+/// per-arch lowering wraps the bytes in its own `Reg`.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct TargetOptions {
-    /// macOS arm64 packs variadic args into stack scratch slots
-    /// (8-byte spaced) regardless of how many would fit in
-    /// x0..x7. Standard AAPCS64 (Linux) uses the same registers as
-    /// non-variadic calls. `true` selects the macOS dance.
+pub(crate) struct Abi {
+    /// Arch the lowering should produce instructions for. The
+    /// `lower_for` dispatch already keys on this, but having it
+    /// inside `Abi` lets ABI-aware helpers (entry stubs, fixup
+    /// patchers) carry one struct around rather than two. Read
+    /// in step 3 of the ABI plan when the entry-stub builder
+    /// lands.
+    #[allow(dead_code)]
+    pub arch: Arch,
+    /// Integer arg-passing registers, in declaration order. The
+    /// lowering walks c4-stack arg slots into these in order;
+    /// any args past the slice spill to the native stack at
+    /// `[rsp + shadow_space + (i - regs.len()) * 8]`.
+    ///
+    /// AAPCS64 (Linux/macOS/Windows on aarch64): x0..x7.
+    /// SysV x86_64: rdi, rsi, rdx, rcx, r8, r9.
+    /// Win64 x86_64: rcx, rdx, r8, r9.
+    pub int_arg_regs: &'static [u8],
+    /// Bytes of caller-reserved "shadow space" at the start of
+    /// the outgoing-args area. Win64 reserves 32 (4 register
+    /// args' worth) so the callee may spill them to known
+    /// offsets; SysV / AAPCS64 reserve none.
+    pub shadow_space: u32,
+    /// Variadic calls follow a non-register-only ABI on macOS
+    /// arm64: variadic args spill to the native stack with
+    /// 8-byte spacing rather than going through `int_arg_regs`.
+    /// The lowering pre-allocates a scratch region before the
+    /// call and packs args there. Linux AAPCS64 and SysV both
+    /// pass variadic args identically to fixed args, so this
+    /// flag is unset for them.
     pub variadic_on_stack: bool,
-    /// Use the Windows x64 calling convention rather than System V:
-    /// integer args go in `rcx`, `rdx`, `r8`, `r9` (only four
-    /// register slots, not six), the caller reserves a 32-byte
-    /// shadow space below each call site, and the entry point comes
-    /// in 16-aligned with the OS-pushed return address on top of
-    /// the stack instead of a Linux-style argc-on-stack vector.
-    pub win64_abi: bool,
+    /// SysV x86_64 requires `%al` to hold the count of XMM
+    /// regs used at every variadic call site; c4 has no
+    /// floats so the count is always 0, which means a single
+    /// `xor eax, eax` before each variadic call. Win64 has no
+    /// such requirement.
+    pub variadic_zero_xmm_count: bool,
 }
 
 impl Target {
-    pub(crate) fn options(self) -> TargetOptions {
+    /// ABI description for this target. Used by both the
+    /// lowering pass and the entry-stub builders. Kept as a
+    /// match against `Target` so adding a target is one row
+    /// here.
+    pub(crate) fn abi(self) -> Abi {
+        // Register-number constants for the per-arch register
+        // banks. These match `aarch64::Reg::X0`..`X7` and
+        // `x86_64::Reg::RAX`..`R15`; spelled out as raw bytes
+        // so this table compiles without depending on either
+        // per-arch module.
+        const X86_RAX: u8 = 0;
+        const X86_RCX: u8 = 1;
+        const X86_RDX: u8 = 2;
+        const X86_RSI: u8 = 6;
+        const X86_RDI: u8 = 7;
+        const X86_R8: u8 = 8;
+        const X86_R9: u8 = 9;
+        let _ = X86_RAX; // intentional: kept for symmetry / future use
+        const AARCH64_INT_ARGS: &[u8] = &[0, 1, 2, 3, 4, 5, 6, 7];
+        const SYSV_INT_ARGS: &[u8] = &[X86_RDI, X86_RSI, X86_RDX, X86_RCX, X86_R8, X86_R9];
+        const WIN64_INT_ARGS: &[u8] = &[X86_RCX, X86_RDX, X86_R8, X86_R9];
+
         match self {
-            Target::MacOSAarch64 => TargetOptions {
+            Target::MacOSAarch64 => Abi {
+                arch: Arch::Aarch64,
+                int_arg_regs: AARCH64_INT_ARGS,
+                shadow_space: 0,
                 variadic_on_stack: true,
-                win64_abi: false,
+                variadic_zero_xmm_count: false,
             },
-            Target::LinuxAarch64 => TargetOptions {
+            Target::LinuxAarch64 => Abi {
+                arch: Arch::Aarch64,
+                int_arg_regs: AARCH64_INT_ARGS,
+                shadow_space: 0,
                 variadic_on_stack: false,
-                win64_abi: false,
+                variadic_zero_xmm_count: false,
             },
-            Target::LinuxX64 => TargetOptions {
+            Target::LinuxX64 => Abi {
+                arch: Arch::X86_64,
+                int_arg_regs: SYSV_INT_ARGS,
+                shadow_space: 0,
                 variadic_on_stack: false,
-                win64_abi: false,
+                variadic_zero_xmm_count: true,
             },
-            Target::WindowsX64 => TargetOptions {
+            Target::WindowsX64 => Abi {
+                arch: Arch::X86_64,
+                int_arg_regs: WIN64_INT_ARGS,
+                shadow_space: 32,
                 variadic_on_stack: false,
-                win64_abi: true,
+                variadic_zero_xmm_count: false,
             },
-            Target::WindowsAarch64 => TargetOptions {
-                // Standard AAPCS64 (no macOS-style stack-packed
-                // variadic); the win64_abi flag is x86_64-only and
-                // doesn't apply on aarch64.
+            Target::WindowsAarch64 => Abi {
+                arch: Arch::Aarch64,
+                int_arg_regs: AARCH64_INT_ARGS,
+                shadow_space: 0,
                 variadic_on_stack: false,
-                win64_abi: false,
+                variadic_zero_xmm_count: false,
             },
         }
     }

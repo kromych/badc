@@ -127,8 +127,15 @@ impl Lexer {
                     if val == '\\' as i64 {
                         val = self.src[self.pos] as i64;
                         self.pos += 1;
-                        if val == 'n' as i64 {
-                            val = '\n' as i64;
+                        match val as u8 {
+                            b'n'  => val = '\n' as i64,
+                            b'r'  => val = '\r' as i64,
+                            b't'  => val = '\t' as i64,
+                            b'0'  => val = 0,
+                            b'\\' => val = '\\' as i64,
+                            b'\'' => val = '\'' as i64,
+                            b'"'  => val = '"' as i64,
+                            _ => {} // unknown escape -- pass through
                         }
                     }
                     if c == '"' {

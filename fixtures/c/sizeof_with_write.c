@@ -1,3 +1,6 @@
+#include <stdlib.h>
+#include <unistd.h>
+
 // Exercises sizeof in three positions at once:
 //   - as the malloc argument (allocation size)
 //   - as the write count argument (buffer length)

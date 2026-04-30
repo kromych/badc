@@ -1,3 +1,6 @@
+#include <stdlib.h>
+#include <unistd.h>
+
 int main() {
     int *p;
     p = malloc(8);

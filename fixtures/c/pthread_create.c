@@ -1,3 +1,7 @@
+#include <string.h>
+#include <unistd.h>
+#include <dlfcn.h>
+
 // pthread_create + pthread_join reached through dlopen/dlsym.
 //
 // macOS: pthread lives in `libSystem`, which is what `dlopen(NULL,

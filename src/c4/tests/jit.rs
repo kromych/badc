@@ -27,7 +27,7 @@ use crate::{Compiler, NativeOptions, jit_run, jit_run_with_options};
 /// Panics on compile or JIT-load failure -- the call sites here
 /// expect both phases to succeed.
 fn jit_exit(src: &str, args: &[&str]) -> i32 {
-    let program = Compiler::new(src.to_string())
+    let program = Compiler::new(super::with_prelude(src))
         .compile()
         .expect("compile failed");
     let argv: Vec<String> = args.iter().map(|s| s.to_string()).collect();
@@ -38,7 +38,7 @@ fn jit_exit(src: &str, args: &[&str]) -> i32 {
 /// `--optimize` / `-O` triggers from the CLI). Used to guard parity
 /// between the default and optimized lowerings.
 fn jit_exit_native_optimized(src: &str, args: &[&str]) -> i32 {
-    let program = Compiler::new(src.to_string())
+    let program = Compiler::new(super::with_prelude(src))
         .compile()
         .expect("compile failed");
     let argv: Vec<String> = args.iter().map(|s| s.to_string()).collect();

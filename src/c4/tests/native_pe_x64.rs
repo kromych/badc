@@ -119,7 +119,8 @@ fn build_and_run(src: &str, stem: &str, args: &[&str]) -> RunOutcome {
     // one whose `#pragma dylib` / `#pragma binding` directives end
     // up on `program.dylibs` and whose `#define __BADC_WINDOWS__` reaches
     // any conditional source.
-    let program = match Compiler::with_target(src.to_string(), Target::WindowsX64).compile() {
+    let program =
+        match Compiler::with_target(super::with_prelude(src), Target::WindowsX64).compile() {
         Ok(p) => p,
         Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
     };

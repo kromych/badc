@@ -1,3 +1,8 @@
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <dlfcn.h>
+
 // Runtime dynamic linking smoke test: open the global symbol table,
 // look up libc atoi, call it with "123", and exit with the parsed
 // value as the process exit code. Verifies that:

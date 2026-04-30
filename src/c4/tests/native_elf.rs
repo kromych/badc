@@ -39,7 +39,7 @@ fn build_and_run(src: &str, stem: &str) -> i32 {
 }
 
 fn build_and_run_outcome(src: &str, stem: &str) -> RunOutcome {
-    let program = match Compiler::new(src.to_string()).compile() {
+    let program = match Compiler::new(super::with_prelude(src)).compile() {
         Ok(p) => p,
         Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
     };

@@ -1,3 +1,9 @@
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+
 int main() {
     // Each pair of these is the same integer; the names just resolve
     // through the predefined symbol table.

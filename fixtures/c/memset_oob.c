@@ -1,3 +1,6 @@
+#include <stdlib.h>
+#include <string.h>
+
 int main() {
     char *p;
     p = malloc(8);

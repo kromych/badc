@@ -1,3 +1,5 @@
+#include <stdlib.h>
+
 int main() {
     char *v;
     setenv("C4RS_TEST_SETENV", "Z", 1);

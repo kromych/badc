@@ -1,3 +1,6 @@
+#include <stdlib.h>
+#include <unistd.h>
+
 int main() {
     char *msg;
     msg = malloc(4);

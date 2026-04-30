@@ -1,3 +1,5 @@
+#include <stdlib.h>
+
 void free_tree(int *root) {
     if (root == 0) return;
 

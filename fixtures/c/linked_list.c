@@ -1,3 +1,5 @@
+#include <stdlib.h>
+
 int main() {
     int *head; int *temp; int *node;
     int sum; int i;

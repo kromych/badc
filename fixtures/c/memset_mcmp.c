@@ -1,3 +1,6 @@
+#include <stdlib.h>
+#include <string.h>
+
 int main() {
     char *s; s = malloc(5);
     memset(s, 65, 4); // 'AAAA'

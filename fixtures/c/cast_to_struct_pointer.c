@@ -1,3 +1,5 @@
+#include <stdlib.h>
+
 // Cast `malloc`'s `char*` result to `struct Node*` -- the cast form must
 // accept the `struct <Tag> *` type expression, not just `int`/`char [*]`.
 struct Node {

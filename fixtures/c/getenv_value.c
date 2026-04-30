@@ -1,3 +1,5 @@
+#include <stdlib.h>
+
 int main() {
     char *v;
     v = getenv("C4RS_TEST_GETENV");

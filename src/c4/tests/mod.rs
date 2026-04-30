@@ -50,9 +50,35 @@ pub fn load_fixture(name: &str) -> String {
         .unwrap_or_else(|e| panic!("failed to load fixture {}: {}", path.display(), e))
 }
 
+/// Standard-library prelude prepended to every inline-source test.
+/// Replaces the auto-prepend the compiler used to do via the
+/// per-target umbrella header. Keeping it in the test helper means
+/// each test body stays focused on the behaviour under test instead
+/// of repeating five `#include` lines per snippet. Idempotent:
+/// fixtures that already pull headers in via their own
+/// `#include` lines just re-enter `#pragma once` and emit nothing.
+pub const TEST_PRELUDE: &str = "\
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <dlfcn.h>
+";
+
+/// Concatenate [`TEST_PRELUDE`] with `src` so inline test snippets
+/// don't have to spell every header out themselves.
+pub fn with_prelude(src: &str) -> String {
+    let mut out = String::with_capacity(TEST_PRELUDE.len() + src.len());
+    out.push_str(TEST_PRELUDE);
+    out.push_str(src);
+    out
+}
+
 /// Compile inline source.
 pub fn compile_str(src: &str) -> Program {
-    Compiler::new(src.to_string()).compile().unwrap()
+    Compiler::new(with_prelude(src)).compile().unwrap()
 }
 
 /// Compile a fixture.

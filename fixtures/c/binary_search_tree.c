@@ -1,3 +1,5 @@
+#include <stdlib.h>
+
 int* insert(int *root, int val) {
     if (root == 0) {
         // [0]=val, [1]=left, [2]=right

@@ -1,3 +1,8 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <dlfcn.h>
+
 // Reach the system's `strlen` via the `dlopen(NULL, RTLD_NOW)` +
 // `dlsym` two-step. Picked over `sscanf` for the README's
 // "Fun recipes" because variadic `dlsym` targets need

@@ -149,56 +149,43 @@ pub struct Compiler {
     dylibs: Vec<DylibSpec>,
 }
 
-/// Per-target header text, embedded at build time. Auto-prepended
-/// to every source the compiler sees so the preprocessor can drop
-/// constants like `PROT_READ` into the macro table before the
-/// lexer tokenises the user's source.
-fn target_header(target: Target) -> &'static str {
-    match target {
-        Target::MacOSAarch64 => include_str!("../../headers/badc-macos-aarch64.h"),
-        Target::LinuxAarch64 => include_str!("../../headers/badc-linux-aarch64.h"),
-        Target::LinuxX64 => include_str!("../../headers/badc-linux-x64.h"),
-        Target::WindowsX64 => include_str!("../../headers/badc-windows-x64.h"),
-        Target::WindowsAarch64 => include_str!("../../headers/badc-windows-arm64.h"),
-    }
-}
-
 impl Compiler {
-    /// Construct a compiler for the default target (macOS/AArch64).
+    /// Construct a compiler for the default target (the host).
     /// Equivalent to `Compiler::with_target(source,
     /// Target::default_target())`. Most tests reach for this; the
     /// CLI uses the explicit-target form so `--target=` flows
-    /// through to header selection.
+    /// through to the codegen.
     pub fn new(source: String) -> Self {
         Self::with_target(source, Target::default_target())
     }
 
-    /// Construct a compiler for a specific native target. Auto-loads
-    /// the matching `headers/badc-{target}.h`, runs the rudimentary
-    /// preprocessor over `header || source`, and feeds the
-    /// substituted text to the lexer. The target choice only
-    /// affects which header gets prepended -- the bytecode produced
-    /// is target-independent; the codegen later picks the actual
-    /// machine code.
+    /// Construct a compiler for a specific native target. Runs the
+    /// preprocessor (with the target predefines: `__APPLE__` /
+    /// `__linux__` / `_WIN32`, plus arch macros) over `source`, then
+    /// feeds the substituted text to the lexer. The target choice
+    /// drives the predefines -- `#include`d headers (`<stdio.h>`,
+    /// `<string.h>`, ...) gate their `#pragma binding(...)` blocks
+    /// off them so the right libc / libSystem / msvcrt symbols get
+    /// bound for this target.
     pub fn with_target(source: String, target: Target) -> Self {
         let mut symbols = Vec::new();
         lexer::init_symbols(&mut symbols);
 
-        // Run the preprocessor over the per-target header concatenated
-        // with the user's source. The header brings in all the POSIX
-        // constants (PROT_READ, O_RDONLY, ...) as `#define`s; the
-        // user's source then sees them as plain integer literals.
+        // Run the preprocessor over the user's source verbatim. The
+        // bindings come from whichever standard headers the source
+        // `#include`s (or doesn't); a fixture that needs `printf`
+        // but skips `<stdio.h>` will fail with a clear "no
+        // `#pragma binding(... ::printf, ...)` is in scope" error
+        // out of the codegen's import resolver, not a mysterious
+        // link-time mismatch.
+        //
         // Preprocessor failures (unterminated `#if`, duplicate
         // `#else`, ...) are stored on the struct and surfaced when
         // `compile()` runs -- this keeps the construction API
         // infallible so the `Compiler::new(src).compile()` shape
         // every existing caller uses keeps working.
         let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
-        let mut full_source = String::with_capacity(source.len() + 1024);
-        full_source.push_str(target_header(target));
-        full_source.push('\n');
-        full_source.push_str(&source);
-        let (preprocessed, deferred_error) = match pp.process(&full_source) {
+        let (preprocessed, deferred_error) = match pp.process(&source) {
             Ok(s) => (s, None),
             Err(e) => (String::new(), Some(e)),
         };

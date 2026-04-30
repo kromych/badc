@@ -696,6 +696,7 @@ fn collect_branch_targets(text: &[i64]) -> Vec<bool> {
             | Op::Bnz
             | Op::Ent
             | Op::Adj
+            | Op::JsrExt
             | Op::AddI
             | Op::SubI
             | Op::MulI

@@ -7,14 +7,16 @@
 //! * On `windows-aarch64` the binary runs natively via
 //!   `Command::new(path.exe)`.
 //! * On `linux-aarch64` the binary runs through WINE 10's
-//!   `aarch64-windows` DLL set (`wine path.exe`). WINE on Apple
-//!   Silicon ships only the `x86_64-windows` and `i386-windows`
-//!   DLL sets, not `aarch64-windows`, so macOS hosts only get the
-//!   format-validation check in [`super::super::codegen::pe::tests`].
+//!   `aarch64-windows` DLL set, *but only when `BADC_RUN_WINE=1`
+//!   is set in the environment*. The default `cargo test` skips
+//!   the wine lane; CI sets `BADC_RUN_WINE=1` on the wine-installed
+//!   `ubuntu-24.04-arm` job so the cross-check still runs.
 //!
 //! On the GitHub Actions matrix the `windows-11-arm` runner runs
-//! the suite natively; the `ubuntu-24.04-arm` runner runs it via
-//! wine (when the apt-installed wine is available).
+//! the suite natively. WINE on Apple Silicon ships only the
+//! `x86_64-windows` and `i386-windows` DLL sets, not
+//! `aarch64-windows`, so macOS hosts only get the format-
+//! validation check in [`super::super::codegen::pe::tests`].
 
 #![cfg(any(
     all(target_os = "windows", target_arch = "aarch64"),
@@ -28,8 +30,10 @@ use std::process::Command;
 use crate::{Compiler, Target, emit_native};
 
 /// On Windows we run the binary directly; on Linux we go through
-/// WINE. Returns `None` on Linux hosts that don't have wine
-/// installed (so the test can skip gracefully instead of panicking).
+/// WINE if the environment opts in via `BADC_RUN_WINE`. Returns
+/// `None` when wine execution isn't enabled (so the test skips
+/// gracefully instead of panicking) or when the binary isn't on
+/// disk.
 fn run_pe(path: &Path, args: &[&str]) -> Option<std::io::Result<std::process::Output>> {
     #[cfg(target_os = "windows")]
     {
@@ -37,9 +41,21 @@ fn run_pe(path: &Path, args: &[&str]) -> Option<std::io::Result<std::process::Ou
     }
     #[cfg(target_os = "linux")]
     {
+        if !wine_enabled() {
+            return None;
+        }
         let wine = wine_binary()?;
         Some(Command::new(&wine).arg(path).args(args).output())
     }
+}
+
+/// True iff the user explicitly opted in to running PE binaries
+/// through WINE for this `cargo test` invocation. Off by default
+/// so a casual `cargo test` on a wine-installed Linux box doesn't
+/// silently shell out to wine for half the suite.
+#[cfg(target_os = "linux")]
+fn wine_enabled() -> bool {
+    matches!(std::env::var("BADC_RUN_WINE"), Ok(v) if !v.is_empty() && v != "0")
 }
 
 /// `which wine` on Linux. The Ubuntu wine 10 package puts it at
@@ -70,7 +86,8 @@ fn wine_binary() -> Option<PathBuf> {
 
 /// True when this host can actually execute the produced PE
 /// binary. On Windows the answer is always yes; on Linux it
-/// depends on whether WINE is installed.
+/// depends on whether `BADC_RUN_WINE` is set *and* WINE is
+/// installed.
 fn host_can_run_pe() -> bool {
     #[cfg(target_os = "windows")]
     {
@@ -78,7 +95,7 @@ fn host_can_run_pe() -> bool {
     }
     #[cfg(target_os = "linux")]
     {
-        wine_binary().is_some()
+        wine_enabled() && wine_binary().is_some()
     }
 }
 

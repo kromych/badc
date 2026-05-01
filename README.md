@@ -331,6 +331,10 @@ backend and exec it under the host kernel. `jit` covers the
 in-process path the same way.
 
 CI runs the matrix on `ubuntu-latest`, `ubuntu-24.04-arm`,
-`macos-latest`, `windows-latest`, and `windows-11-arm`. The Linux
-runners additionally exercise the matching Windows PE through wine
-as a cross-check against the native Windows runners.
+`macos-latest`, `windows-latest`, and `windows-11-arm`. The two
+Linux runners additionally exercise the matching Windows PE
+through wine as a cross-check against the native Windows runners
+-- they set `BADC_RUN_WINE=1` to opt in to that lane. A bare
+`cargo test` on a developer machine skips the wine lane (so it
+doesn't shell out to wine for every PE fixture even on a wine-
+installed laptop); set `BADC_RUN_WINE=1` locally to run it.

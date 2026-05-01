@@ -109,6 +109,13 @@ jobs:
           # WINEDLLOVERRIDES.
           DISPLAY: ""
       - name: cargo test (default features)
+        # `BADC_RUN_WINE` opts in to the macOS / Linux -> wine -> PE
+        # test lane; without it the PE-via-WINE tests skip (so a
+        # routine `cargo test` on a developer machine doesn't shell
+        # out to wine). We set it on the two ubuntu runners that
+        # also installed wine in the steps above.
+        env:
+          BADC_RUN_WINE: ${{ (matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm') && '1' || '' }}
         # Each runner exercises the native-codegen path that targets
         # its own host:
         #  * macos-latest        -> src/c4/tests/native.rs (Mach-O,

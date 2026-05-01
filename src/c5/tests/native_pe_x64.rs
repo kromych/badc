@@ -5,17 +5,14 @@
 //!
 //! * On `windows-x86_64` the binary runs natively via
 //!   `Command::new(path.exe)`.
-//! * On `macos` the binary runs through WINE
-//!   (`/opt/homebrew/bin/wine path.exe`). WINE on Apple Silicon
-//!   uses Rosetta to translate the x86_64 instructions, so the
-//!   runtime cost is non-trivial but works fine for tests. WINE
-//!   isn't preinstalled on macOS CI, so each test gracefully
-//!   skips when the binary is missing.
-//! * On `linux-x86_64` the binary also runs through WINE. The
-//!   `ubuntu-latest` CI runner uses this lane as a cross-check
-//!   against the `windows-latest` runner: both should accept the
-//!   same PE, so a divergence flags either a wine bug or a real
-//!   format issue.
+//! * On `macos` and `linux-x86_64` the binary runs through WINE,
+//!   *but only when `BADC_RUN_WINE=1` is set in the environment*.
+//!   The default `cargo test` skips the wine lane so a routine
+//!   developer-laptop run doesn't shell out to wine for every PE
+//!   fixture. CI sets `BADC_RUN_WINE=1` on the wine-installed
+//!   `ubuntu-latest` job (the `linux-x86_64` -> wine -> PE lane is
+//!   a cross-check against the native `windows-latest` runner --
+//!   both should accept the same PE).
 //!
 //! Other host triples compile this module out; the linux-x86_64
 //! ELF backend is exercised separately by [`super::native_elf_x64`].
@@ -33,9 +30,10 @@ use std::process::Command;
 use crate::{Compiler, Target, emit_native};
 
 /// On Windows we run the binary directly; on macOS / Linux we go
-/// through WINE. Returns `None` on non-Windows hosts that don't
-/// have wine installed (so the test can skip gracefully instead
-/// of panicking).
+/// through WINE if the environment opts in via `BADC_RUN_WINE`.
+/// Returns `None` when wine execution isn't enabled (so the test
+/// skips gracefully instead of panicking) or when the binary
+/// isn't on disk.
 fn run_pe(path: &Path, args: &[&str]) -> Option<std::io::Result<std::process::Output>> {
     #[cfg(target_os = "windows")]
     {
@@ -43,9 +41,21 @@ fn run_pe(path: &Path, args: &[&str]) -> Option<std::io::Result<std::process::Ou
     }
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
+        if !wine_enabled() {
+            return None;
+        }
         let wine = wine_binary()?;
         Some(Command::new(&wine).arg(path).args(args).output())
     }
+}
+
+/// True iff the user explicitly opted in to running PE binaries
+/// through WINE for this `cargo test` invocation. Off by default
+/// so a casual `cargo test` on a wine-installed laptop doesn't
+/// silently shell out to wine for half the suite.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn wine_enabled() -> bool {
+    matches!(std::env::var("BADC_RUN_WINE"), Ok(v) if !v.is_empty() && v != "0")
 }
 
 /// Path resolution for `wine`. Homebrew puts it at
@@ -84,7 +94,8 @@ fn wine_binary() -> Option<PathBuf> {
 
 /// True when this host can actually execute the produced PE
 /// binary. On Windows the answer is always yes; on macOS / Linux
-/// it depends on whether WINE is installed.
+/// it depends on whether `BADC_RUN_WINE` is set *and* WINE is
+/// installed.
 fn host_can_run_pe() -> bool {
     #[cfg(target_os = "windows")]
     {
@@ -92,7 +103,7 @@ fn host_can_run_pe() -> bool {
     }
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
-        wine_binary().is_some()
+        wine_enabled() && wine_binary().is_some()
     }
 }
 

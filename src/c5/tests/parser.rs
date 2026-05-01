@@ -104,15 +104,14 @@ fn bad_lvalue_in_assignment() {
 }
 
 #[test]
-fn struct_to_struct_assignment_not_yet_implemented() {
-    // Struct-value locals work now, and `s.field = ...` works,
-    // but a whole-struct copy (`a = b`) needs the memcpy-style
-    // lowering that ships with the M6 ABI work. Until then,
-    // assign field-by-field.
+fn struct_to_struct_assignment_type_mismatch_rejected() {
+    // Struct copy works for matching types, but the LHS and RHS
+    // must agree -- you can't assign a `Bar` value to a `Foo`
+    // local even if the field layouts happen to match.
     expect_compile_error(
-        "struct Foo { int x; int y; };\
-         int main() { struct Foo a; struct Foo b; a = b; return 0; }",
-        "struct-to-struct assignment is not yet implemented",
+        "struct Foo { int x; }; struct Bar { int x; }; \
+         int main() { struct Foo a; struct Bar b; a = b; return 0; }",
+        "struct types differ on either side of `=`",
     );
 }
 

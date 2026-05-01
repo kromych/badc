@@ -1114,39 +1114,56 @@ impl Compiler {
                 self.next()?;
                 let last = *self.text.last().unwrap();
                 if last == Op::Lc as i64 || last == Op::Li as i64 {
+                    // Scalar / pointer assignment: rewrite the
+                    // trailing load into a push so the address is
+                    // preserved on the stack while the RHS evaluates.
                     *self.text.last_mut().unwrap() = Op::Psh as i64;
+                    let line = self.lex.line;
+                    self.expr(Token::Assign as i64)?;
+                    let rhs_is_zero = self.last_emit_is_zero();
+                    if let Some(reason) = Self::type_warning(t, self.ty, rhs_is_zero) {
+                        self.warn(format!(
+                            "{line}: warning: {reason} in assignment \
+                             (lhs={t}, rhs={})",
+                            self.ty
+                        ));
+                    }
+                    self.ty = t;
+                    self.emit_op(store_op_for(self.ty));
                 } else if is_struct_ty(t) && struct_ptr_depth(t) == 0 {
-                    // The LHS is a struct value -- the parser left
-                    // its *address* in `a` instead of a loaded scalar
-                    // there's no trailing Li/Lc to rewrite into Psh.
-                    // Struct-to-struct copy needs a memcpy-style
-                    // lowering that the M6 ABI work introduces; for
-                    // now reject with a pointer to the workaround.
-                    return Err(C5Error::Compile(format!(
-                        "{}: struct-to-struct assignment is not yet \
-                         implemented (assign each field individually, \
-                         or use memcpy)",
-                        self.lex.line
-                    )));
+                    // Struct-to-struct copy. The LHS already left
+                    // its address in `a`; push it so the RHS can
+                    // produce the source address into `a`. Then
+                    // emit Op::Mcpy with the byte size; the runtime
+                    // (VM and both codegens) takes top-of-stack as
+                    // dst, accumulator as src, and copies `size`
+                    // bytes. Returns dst in `a` to mirror libc
+                    // memcpy.
+                    self.emit_op(Op::Psh);
+                    self.expr(Token::Assign as i64)?;
+                    if !is_struct_ty(self.ty) || struct_ptr_depth(self.ty) != 0 {
+                        return Err(C5Error::Compile(format!(
+                            "{}: cannot assign non-struct value to a struct",
+                            self.lex.line
+                        )));
+                    }
+                    if t != self.ty {
+                        return Err(C5Error::Compile(format!(
+                            "{}: struct types differ on either side of `=` \
+                             (lhs={t}, rhs={})",
+                            self.lex.line, self.ty
+                        )));
+                    }
+                    let size = self.size_of_type(t);
+                    self.emit_op(Op::Mcpy);
+                    self.emit_val(size as i64);
+                    self.ty = t;
                 } else {
                     return Err(C5Error::Compile(format!(
                         "{}: bad lvalue in assignment",
                         self.lex.line
                     )));
                 }
-                let line = self.lex.line;
-                self.expr(Token::Assign as i64)?;
-                // RHS just compiled; self.ty is the RHS type, t is the
-                // declared LHS type. Compare before we overwrite ty.
-                let rhs_is_zero = self.last_emit_is_zero();
-                if let Some(reason) = Self::type_warning(t, self.ty, rhs_is_zero) {
-                    self.warn(format!(
-                        "{line}: warning: {reason} in assignment (lhs={t}, rhs={})",
-                        self.ty
-                    ));
-                }
-                self.ty = t;
-                self.emit_op(store_op_for(self.ty));
             } else if self.lex.tk == Token::Cond as i64 {
                 self.next()?;
                 self.emit_op(Op::Bz);

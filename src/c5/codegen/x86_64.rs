@@ -1717,6 +1717,31 @@ fn lower_op(
             emit_cvtsi2sd(code, Reg::XMM0, Reg::R13);
             emit_movq_r_xmm(code, Reg::R13, Reg::XMM0);
         }
+        Op::Mcpy => {
+            // src = r13, dst = pop. Copy `size` bytes inline (size
+            // is a compile-time constant), then r13 = dst.
+            // Unrolled 8-byte mov sequences + byte tail. Note:
+            // `pop_lhs_reg` may return r10 (real-stack pop) or any
+            // of the pool regs (rbx / r11 / r12 / r14 / r15), so
+            // the per-iteration temp uses rax -- which is never in
+            // the pool and isn't tracked across c5-IR boundaries
+            // -- to avoid clobbering `dst`.
+            let size = read_operand(text, pc, "Mcpy")? as i64;
+            let dst = pop_lhs_reg(code, reg_state);
+            let words = size / 8;
+            for w in 0..words {
+                let off = (w * 8) as i32;
+                emit_mov_r_mem(code, Reg::RAX, Reg::R13, off);
+                emit_mov_mem_r(code, dst, off, Reg::RAX);
+            }
+            let tail_start = words * 8;
+            for i in 0..(size - tail_start) {
+                let off = (tail_start + i) as i32;
+                emit_movzx_r_mem8(code, Reg::RAX, Reg::R13, off);
+                emit_mov_mem8_r(code, dst, off, Reg::RAX);
+            }
+            emit_mov_rr(code, Reg::R13, dst);
+        }
     }
     Ok(())
 }

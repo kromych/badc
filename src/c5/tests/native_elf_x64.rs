@@ -279,6 +279,9 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("float_arithmetic.c", 0),
     // Struct-value locals + `.` field access.
     ("struct_value_basics.c", 0),
+    // Whole-struct copy via Op::Mcpy. The x86_64 codegen unrolls
+    // it into mov / mov word pairs.
+    ("struct_value_copy.c", 0),
 ];
 
 #[test]

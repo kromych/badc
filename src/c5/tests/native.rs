@@ -395,6 +395,9 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("float_arithmetic.c", 0),
     // Struct-value locals + `.` field access on macOS arm64.
     ("struct_value_basics.c", 0),
+    // Whole-struct copy via Op::Mcpy on macOS arm64. The aarch64
+    // codegen unrolls the copy into ldur/stur word pairs.
+    ("struct_value_copy.c", 0),
 ];
 
 /// Build a fixture, sign it, run it with the given args, and return

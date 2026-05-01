@@ -262,7 +262,10 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C5E
             | Op::Flt
             | Op::Fgt
             | Op::Fle
-            | Op::Fge => {
+            | Op::Fge
+            // Op::Mcpy consumes the dst push the same way every
+            // other binary op consumes its LHS push.
+            | Op::Mcpy => {
                 let (psh_pc, ac) = pending.pop().ok_or_else(|| {
                     C5Error::Compile(format!("regalloc: pop op {op:?} at pc {pc} on empty stack"))
                 })?;
@@ -423,7 +426,8 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C5E
             | Op::Flt
             | Op::Fgt
             | Op::Fle
-            | Op::Fge => {
+            | Op::Fge
+            | Op::Mcpy => {
                 if let Some(bank) = pseudo_trail.pop() {
                     match bank {
                         PoolBank::Callee => callee_depth -= 1,

@@ -351,6 +351,8 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("float_arithmetic.c", 0),
     // Struct-value locals + `.` field access.
     ("struct_value_basics.c", 0),
+    // Whole-struct copy via Op::Mcpy.
+    ("struct_value_copy.c", 0),
 ];
 
 #[test]

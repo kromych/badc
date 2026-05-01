@@ -160,9 +160,19 @@ pub enum Op {
     /// by `(float)i` / `(double)i` and by integer-side operands of
     /// a mixed FP expression.
     Fcvtif,
+
+    /// Memory copy. Operand: size in bytes (compile-time constant).
+    /// Stack top: destination address. Accumulator: source address
+    /// (the parser leaves it there because the RHS struct-value
+    /// expression terminates with the address in `a`). Copies the
+    /// given byte count from src to dst, then sets `a` to dst so
+    /// the op behaves as `memcpy(dst, src, n)` does (returns dst).
+    /// Used to lower whole-struct assignment without forcing the
+    /// program to `#include <string.h>` and bind libc memcpy.
+    Mcpy,
 }
 
-const OPS: [Op; 61] = [
+const OPS: [Op; 62] = [
     Op::Lea,
     Op::Imm,
     Op::Jmp,
@@ -226,6 +236,7 @@ const OPS: [Op; 61] = [
     Op::Fge,
     Op::Fcvtfi,
     Op::Fcvtif,
+    Op::Mcpy,
 ];
 
 impl Op {
@@ -255,7 +266,8 @@ impl Op {
             // dispatch, and the optimizer's immediate-form
             // arithmetic / comparison ops.
             Lea | Imm | Jmp | Jsr | Bz | Bnz | Ent | Adj | JsrExt | AddI | SubI | MulI | AndI
-            | OrI | XorI | ShlI | ShrI | EqI | NeI | LtI | GtI | LeI | GeI | LdLocI | LdLocC => 1,
+            | OrI | XorI | ShlI | ShrI | EqI | NeI | LtI | GtI | LeI | GeI | LdLocI | LdLocC
+            | Mcpy => 1,
             // Everything else -- arithmetic, loads/stores, push,
             // indirect-jump, return, etc. -- is encoded in a
             // single word with no operand.

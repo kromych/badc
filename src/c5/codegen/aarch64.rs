@@ -1490,6 +1490,36 @@ fn lower_op(
             emit(code, enc_scvtf_d_x(0, Reg::X19));
             emit(code, enc_fmov_d_to_x(Reg::X19, 0));
         }
+        Op::Mcpy => {
+            // src = x19, dst = pop. Copy `size` bytes (size is a
+            // compile-time constant), then x19 = dst (memcpy
+            // returns dst). Compile-time unrolled into 8-byte
+            // word copies + a tail of byte copies for any sub-8
+            // remainder. Struct fields land on 8-byte alignment so
+            // the byte tail is nominal, but lowering it inline
+            // means the IR doesn't need a separate "small-mcpy"
+            // op. Note: `pop_lhs_reg` may hand back x16 from the
+            // real-stack path, so the per-iteration temp uses x17
+            // (the other AAPCS64-reserved scratch) to avoid
+            // overwriting `dst`.
+            let size = read_operand(text, pc, "Mcpy")? as i64;
+            let dst = pop_lhs_reg(code, reg_state);
+            // Copy whole 8-byte words first.
+            let words = size / 8;
+            for w in 0..words {
+                let off = (w * 8) as i32;
+                emit(code, enc_ldur(Reg::X17, Reg::X19, off));
+                emit(code, enc_stur(Reg::X17, dst, off));
+            }
+            // Byte tail.
+            let tail_start = words * 8;
+            for i in 0..(size - tail_start) {
+                let off = (tail_start + i) as u32;
+                emit(code, enc_ldrb_imm(Reg::X17, Reg::X19, off));
+                emit(code, enc_strb_imm(Reg::X17, dst, off));
+            }
+            emit_mov_reg(code, Reg::X19, dst);
+        }
     }
     Ok(())
 }

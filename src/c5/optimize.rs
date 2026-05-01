@@ -106,6 +106,11 @@ enum Insn {
     /// Immediate-arithmetic fusion of `Psh; Imm N; <op>`. The fused op
     /// must be one of [`is_immediate_arith_op`].
     ArithI(Op, i64),
+    /// `Mcpy <size>` -- struct-copy primitive carrying a compile-time
+    /// byte size. The optimizer never folds or rewrites it; the
+    /// variant exists only so the decode pass can consume the
+    /// operand and the encode pass can emit it back unchanged.
+    Mcpy(i64),
     /// Tombstone left in place by a pass that removed an instruction.
     /// The encoder skips these; targets continue to refer to indices,
     /// so leaving holes keeps everything stable across passes.
@@ -129,7 +134,8 @@ impl Insn {
             | Insn::Adj(_)
             | Insn::JsrExt(_)
             | Insn::Branch(_, _)
-            | Insn::ArithI(_, _) => 2,
+            | Insn::ArithI(_, _)
+            | Insn::Mcpy(_) => 2,
             Insn::Removed => 0,
         }
     }
@@ -246,6 +252,20 @@ fn decode(text: &[i64], data_imm_positions: &[usize]) -> Result<Vec<Insn>, C5Err
                 pc += 1;
                 Insn::Branch(BrKind::from_op(op).unwrap(), target)
             }
+            Op::Mcpy => {
+                // Op::Mcpy carries a compile-time byte size as its
+                // operand. Treat it like Adj/JsrExt -- there's no
+                // dedicated Insn variant because the optimizer
+                // doesn't fold or rewrite it, but it still has to
+                // advance `pc` past the operand.
+                let v = text[pc];
+                pc += 1;
+                Insn::Mcpy(v)
+            }
+            // Optimizer-emitted immediate-form ops carry an operand
+            // identical in shape to a regular op's operand. The
+            // generic AddI/SubI/etc. arms below pull the operand
+            // out before falling through to a NoArg-style insn.
             _ => Insn::NoArg(op),
         };
         insns.push(insn);
@@ -388,6 +408,10 @@ fn encode(insns: &[Insn], entry_idx: usize) -> (Vec<i64>, usize, Vec<usize>) {
             }
             Insn::ArithI(op, v) => {
                 text.push(*op as i64);
+                text.push(*v);
+            }
+            Insn::Mcpy(v) => {
+                text.push(Op::Mcpy as i64);
                 text.push(*v);
             }
             Insn::Removed => {}

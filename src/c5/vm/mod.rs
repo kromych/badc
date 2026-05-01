@@ -809,6 +809,25 @@ impl<H: Host> Vm<H> {
                     let i = a;
                     a = (i as f64).to_bits() as i64;
                 }
+                Op::Mcpy => {
+                    let size = self.text[pc] as usize;
+                    pc += 1;
+                    let src = a as usize;
+                    let dst = self.load_i64(sp)? as usize;
+                    sp += 8;
+                    // Same access checks as the libc memcpy
+                    // intrinsic; the IR-level Mcpy is the path
+                    // struct-copy assignment takes, so any
+                    // misaligned pointer that would corrupt the
+                    // VM's tracked-pointer model is caught here.
+                    self.check_data_access(src, size, AccessKind::Read)?;
+                    self.check_data_access(dst, size, AccessKind::Write)?;
+                    for i in 0..size {
+                        let byte = self.load_u8(src + i)?;
+                        self.store_u8(dst + i, byte)?;
+                    }
+                    a = dst as i64;
+                }
                 Op::JsrExt => {
                     // External library call. The operand is the
                     // binding's flat index across all

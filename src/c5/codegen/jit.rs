@@ -84,7 +84,8 @@ pub fn jit_run_with_options(
         let _ = (program, args, options);
         Err(C5Error::Compile(
             "JIT: requires the `std` feature on Linux (any arch), \
-             macOS/aarch64, or Windows (x86_64 / aarch64)".to_string(),
+             macOS/aarch64, or Windows (x86_64 / aarch64)"
+                .to_string(),
         ))
     }
 }
@@ -1101,10 +1102,7 @@ mod jit_impl {
     // before we branch into them.
     // ----------------------------------------------------------------
 
-    #[cfg(all(
-        target_arch = "x86_64",
-        any(target_os = "linux", target_os = "macos"),
-    ))]
+    #[cfg(all(target_arch = "x86_64", any(target_os = "linux", target_os = "macos"),))]
     fn flush_icache(_ptr: *const u8, _len: usize) {}
 
     /// macOS arm64: defer to Apple's published API. `sys_icache_invalidate`

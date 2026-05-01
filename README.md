@@ -210,19 +210,24 @@ parse, lower, exec all happen in the badc process:
 
     badc --jit fixtures/c/c4.c hello.c       # JIT'd c4 self-hosts hello.c
 
-Three hosts ship today:
+Five hosts ship today:
 
-| host          | mapping                                                     |
-|---------------|-------------------------------------------------------------|
-| Linux/aarch64 | mmap RW -> mprotect RX, manual `dc cvau` / `ic ivau`        |
-| Linux/x86_64  | mmap RW -> mprotect RX, hardware-coherent I-cache (no-op)   |
-| macOS/aarch64 | mmap RWX + `MAP_JIT`, `pthread_jit_write_protect_np` toggle |
+| host           | mapping                                                              |
+|----------------|----------------------------------------------------------------------|
+| Linux/aarch64  | mmap RW -> mprotect RX, manual `dc cvau` / `ic ivau`                 |
+| Linux/x86_64   | mmap RW -> mprotect RX, hardware-coherent I-cache (no-op)            |
+| macOS/aarch64  | mmap RWX + `MAP_JIT`, `pthread_jit_write_protect_np` toggle          |
+| Windows/x86_64 | VirtualAlloc RW -> VirtualProtect RX, FlushInstructionCache (no-op)  |
+| Windows/aarch64| VirtualAlloc RW -> VirtualProtect RX, FlushInstructionCache          |
 
-libc is bound at JIT time: a writable "fake GOT" gets
-`dlopen(NULL, RTLD_NOW)` + `dlsym` for each intrinsic the program
-imports, and the codegen's existing GOT relocations are patched
-against this region. macOS uses Apple's `MAP_JIT` + per-thread
-W^X toggle for the hardware-enforced W^X on Apple Silicon.
+libc is bound at JIT time: a writable "fake GOT" gets one entry
+per resolved import, and the codegen's existing GOT relocations
+are patched against this region. POSIX uses `dlopen(NULL,
+RTLD_NOW)` + `dlsym` to find each symbol in the loaded process;
+Windows uses `LoadLibraryA` per declared dylib (kernel32, msvcrt,
+ws2_32, ...) + `GetProcAddress`. macOS uses Apple's `MAP_JIT` +
+per-thread W^X toggle for the hardware-enforced W^X on Apple
+Silicon.
 
 `--dump-asm` produces a textual listing of the lowered code grouped
 by the c5 op that produced each region.

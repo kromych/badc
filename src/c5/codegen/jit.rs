@@ -17,6 +17,12 @@
 //!   then toggle the per-thread W^X bit via `pthread_jit_write_protect_np`
 //!   to enable writes during patching, again to enable execution
 //!   before the call. `sys_icache_invalidate` flushes the I-cache.
+//! * **Windows/x86_64 + Windows/aarch64** -- VirtualAlloc with
+//!   PAGE_READWRITE, VirtualProtect to PAGE_EXECUTE_READ once
+//!   patches are in. FlushInstructionCache for I-cache (no-op on
+//!   x86, real on aarch64). Symbol resolution goes through
+//!   LoadLibraryA + GetProcAddress per declared dylib (kernel32,
+//!   msvcrt, ws2_32, ...).
 //!
 //! ## Milestones in this file
 //!
@@ -64,19 +70,28 @@ pub fn jit_run_with_options(
 ) -> Result<i32, C5Error> {
     #[cfg(all(
         feature = "std",
-        any(target_os = "linux", all(target_os = "macos", target_arch = "aarch64"),),
+        any(
+            target_os = "linux",
+            all(target_os = "macos", target_arch = "aarch64"),
+            target_os = "windows",
+        ),
     ))]
     {
         jit_impl::jit_run(program, args, options)
     }
     #[cfg(not(all(
         feature = "std",
-        any(target_os = "linux", all(target_os = "macos", target_arch = "aarch64"),),
+        any(
+            target_os = "linux",
+            all(target_os = "macos", target_arch = "aarch64"),
+            target_os = "windows",
+        ),
     )))]
     {
         let _ = (program, args, options);
         Err(C5Error::Compile(
-            "JIT: requires the `std` feature on Linux (any arch) or macOS/aarch64".to_string(),
+            "JIT: requires the `std` feature on Linux (any arch), \
+             macOS/aarch64, or Windows (x86_64 / aarch64)".to_string(),
         ))
     }
 }
@@ -91,9 +106,14 @@ fn host_target() -> Result<Target, C5Error> {
         Ok(Target::LinuxAarch64)
     } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
         Ok(Target::LinuxX64)
+    } else if cfg!(all(target_os = "windows", target_arch = "aarch64")) {
+        Ok(Target::WindowsAarch64)
+    } else if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
+        Ok(Target::WindowsX64)
     } else {
         Err(C5Error::Compile(
-            "JIT: host OS/arch unsupported (need Linux/aarch64, Linux/x86_64, or macOS/aarch64)"
+            "JIT: host OS/arch unsupported (need Linux/aarch64, Linux/x86_64, \
+             macOS/aarch64, Windows/aarch64, or Windows/x86_64)"
                 .to_string(),
         ))
     }
@@ -101,7 +121,11 @@ fn host_target() -> Result<Target, C5Error> {
 
 #[cfg(all(
     feature = "std",
-    any(target_os = "linux", all(target_os = "macos", target_arch = "aarch64"),),
+    any(
+        target_os = "linux",
+        all(target_os = "macos", target_arch = "aarch64"),
+        target_os = "windows",
+    ),
 ))]
 mod jit_impl {
     use super::super::super::error::C5Error;
@@ -110,7 +134,11 @@ mod jit_impl {
     use super::super::{Build, NativeOptions, ResolvedImports, aarch64, x86_64};
     use super::host_target;
     use alloc::format;
-    use alloc::string::{String, ToString};
+    use alloc::string::String;
+    // Only the POSIX bind_imports path uses `to_string` (for the
+    // dlopen-NULL error); Windows reaches for `format!` instead.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    use alloc::string::ToString;
     use alloc::vec::Vec;
     use std::ffi::CString;
     use std::os::raw::{c_char, c_int, c_void};
@@ -209,15 +237,20 @@ mod jit_impl {
     }
 
     // ----------------------------------------------------------------
-    // Memory allocation. We use raw mmap / mprotect / munmap because
+    // Memory allocation. We use raw mmap / mprotect / munmap on POSIX
+    // and VirtualAlloc / VirtualProtect / VirtualFree on Windows --
     // pulling in `libc` or `region` as Cargo deps would change the
-    // crate's no-deps story for one feature; the intrinsic surface here
-    // is small and stable on Linux + Darwin.
+    // crate's no-deps story for one feature, and the intrinsic surface
+    // here is small and stable across the supported hosts.
     // ----------------------------------------------------------------
 
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     const PROT_READ: c_int = 1;
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     const PROT_WRITE: c_int = 2;
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     const PROT_EXEC: c_int = 4;
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     const MAP_PRIVATE: c_int = 0x02;
 
     // Linux's MAP_ANONYMOUS = 0x20; Darwin's MAP_ANON = 0x1000. The
@@ -236,7 +269,20 @@ mod jit_impl {
     #[cfg(target_os = "macos")]
     const MAP_JIT: c_int = 0x800;
 
+    // Windows VirtualAlloc / VirtualProtect constants.
+    #[cfg(target_os = "windows")]
+    const MEM_COMMIT: u32 = 0x1000;
+    #[cfg(target_os = "windows")]
+    const MEM_RESERVE: u32 = 0x2000;
+    #[cfg(target_os = "windows")]
+    const MEM_RELEASE: u32 = 0x8000;
+    #[cfg(target_os = "windows")]
+    const PAGE_READWRITE: u32 = 0x04;
+    #[cfg(target_os = "windows")]
+    const PAGE_EXECUTE_READ: u32 = 0x20;
+
     /// `(void *) -1` -- the sentinel mmap returns on failure.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn map_failed() -> *mut c_void {
         usize::MAX as *mut c_void
     }
@@ -249,6 +295,7 @@ mod jit_impl {
     }
 
     impl JitRegion {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         fn new(code: &[u8]) -> Result<Self, C5Error> {
             unsafe extern "C" {
                 fn mmap(
@@ -304,6 +351,35 @@ mod jit_impl {
             })
         }
 
+        /// Windows allocates RW first, copies the code in, then
+        /// flips to PAGE_EXECUTE_READ via `make_executable`. No
+        /// W^X-toggle dance; VirtualProtect is a one-shot.
+        #[cfg(target_os = "windows")]
+        fn new(code: &[u8]) -> Result<Self, C5Error> {
+            let len = round_up_to_page(code.len());
+            let ptr = unsafe {
+                VirtualAlloc(
+                    std::ptr::null_mut(),
+                    len,
+                    MEM_COMMIT | MEM_RESERVE,
+                    PAGE_READWRITE,
+                )
+            };
+            if ptr.is_null() {
+                return Err(C5Error::Compile(format!(
+                    "JIT: VirtualAlloc failed: {}",
+                    std::io::Error::last_os_error()
+                )));
+            }
+            unsafe {
+                std::ptr::copy_nonoverlapping(code.as_ptr(), ptr as *mut u8, code.len());
+            }
+            Ok(JitRegion {
+                ptr: ptr as *mut u8,
+                len,
+            })
+        }
+
         fn make_executable(&self) -> Result<(), C5Error> {
             #[cfg(target_os = "linux")]
             {
@@ -328,6 +404,24 @@ mod jit_impl {
                 // enforces per-access.
                 jit_write_protect(true);
             }
+            #[cfg(target_os = "windows")]
+            {
+                let mut old: u32 = 0;
+                let r = unsafe {
+                    VirtualProtect(
+                        self.ptr as *mut c_void,
+                        self.len,
+                        PAGE_EXECUTE_READ,
+                        &mut old as *mut u32,
+                    )
+                };
+                if r == 0 {
+                    return Err(C5Error::Compile(format!(
+                        "JIT: VirtualProtect failed: {}",
+                        std::io::Error::last_os_error()
+                    )));
+                }
+            }
             Ok(())
         }
 
@@ -342,6 +436,57 @@ mod jit_impl {
         fn len(&self) -> usize {
             self.len
         }
+    }
+
+    // Windows kernel32 surface used by the JIT. Declared once at
+    // module scope so VirtualAlloc / VirtualProtect / VirtualFree /
+    // FlushInstructionCache / GetSystemInfo / LoadLibraryA /
+    // GetProcAddress are visible to every helper. The names match
+    // the Win32 API verbatim; the loader resolves them through the
+    // process's already-loaded kernel32.dll.
+    #[cfg(target_os = "windows")]
+    unsafe extern "system" {
+        fn VirtualAlloc(
+            addr: *mut c_void,
+            size: usize,
+            allocation_type: u32,
+            protect: u32,
+        ) -> *mut c_void;
+        fn VirtualProtect(
+            addr: *mut c_void,
+            size: usize,
+            new_protect: u32,
+            old_protect: *mut u32,
+        ) -> c_int;
+        fn VirtualFree(addr: *mut c_void, size: usize, free_type: u32) -> c_int;
+        fn FlushInstructionCache(process: *mut c_void, addr: *const c_void, size: usize) -> c_int;
+        fn GetCurrentProcess() -> *mut c_void;
+        fn GetSystemInfo(info: *mut SystemInfo);
+        fn LoadLibraryA(name: *const c_char) -> *mut c_void;
+        fn GetModuleHandleA(name: *const c_char) -> *mut c_void;
+        fn FreeLibrary(handle: *mut c_void) -> c_int;
+        fn GetProcAddress(handle: *mut c_void, name: *const c_char) -> *mut c_void;
+    }
+
+    /// SYSTEM_INFO. We only need `dwPageSize`, but Win32 fills the
+    /// entire struct so its size has to match. The first union field
+    /// is a DWORD on x64 (the OEM-id / processor-architecture tuple);
+    /// we don't read past dwPageSize so we treat the leading bytes as
+    /// a placeholder.
+    #[cfg(target_os = "windows")]
+    #[repr(C)]
+    struct SystemInfo {
+        // dwOemId / wProcessorArchitecture / wReserved -- 4 bytes.
+        _oem_id: u32,
+        page_size: u32,
+        _minimum_application_address: *mut c_void,
+        _maximum_application_address: *mut c_void,
+        _active_processor_mask: usize,
+        _number_of_processors: u32,
+        _processor_type: u32,
+        _allocation_granularity: u32,
+        _processor_level: u16,
+        _processor_revision: u16,
     }
 
     /// Per-thread Apple Silicon W^X toggle. `enable_writes = true`
@@ -364,10 +509,14 @@ mod jit_impl {
     /// loads patched by [`apply_jit_fixups`].
     struct DataRegion {
         ptr: *mut u8,
+        // Read by `munmap` on POSIX; Windows `VirtualFree(MEM_RELEASE)`
+        // requires size = 0, so the field is dead on that target.
+        #[cfg_attr(target_os = "windows", allow(dead_code))]
         len: usize,
     }
 
     impl DataRegion {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         fn new(data: &[u8]) -> Result<Self, C5Error> {
             unsafe extern "C" {
                 fn mmap(
@@ -405,6 +554,32 @@ mod jit_impl {
             })
         }
 
+        #[cfg(target_os = "windows")]
+        fn new(data: &[u8]) -> Result<Self, C5Error> {
+            let len = round_up_to_page(data.len());
+            let ptr = unsafe {
+                VirtualAlloc(
+                    std::ptr::null_mut(),
+                    len,
+                    MEM_COMMIT | MEM_RESERVE,
+                    PAGE_READWRITE,
+                )
+            };
+            if ptr.is_null() {
+                return Err(C5Error::Compile(format!(
+                    "JIT: data VirtualAlloc failed: {}",
+                    std::io::Error::last_os_error()
+                )));
+            }
+            unsafe {
+                std::ptr::copy_nonoverlapping(data.as_ptr(), ptr as *mut u8, data.len());
+            }
+            Ok(DataRegion {
+                ptr: ptr as *mut u8,
+                len,
+            })
+        }
+
         fn as_ptr(&self) -> *const u8 {
             self.ptr
         }
@@ -412,11 +587,16 @@ mod jit_impl {
 
     impl Drop for DataRegion {
         fn drop(&mut self) {
-            unsafe extern "C" {
-                fn munmap(addr: *mut c_void, len: usize) -> c_int;
-            }
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
             unsafe {
+                unsafe extern "C" {
+                    fn munmap(addr: *mut c_void, len: usize) -> c_int;
+                }
                 munmap(self.ptr as *mut c_void, self.len);
+            }
+            #[cfg(target_os = "windows")]
+            unsafe {
+                VirtualFree(self.ptr as *mut c_void, 0, MEM_RELEASE);
             }
         }
     }
@@ -438,17 +618,27 @@ mod jit_impl {
     /// load time; with `path = NULL` the returned handle searches
     /// every library already loaded into the process, which is what
     /// gives us libc + libdl + Rust's own deps in one shot.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     const RTLD_NOW: c_int = 2;
 
     /// Writable region holding one libc-symbol address per resolved
-    /// import. RAII: `Drop` munmaps + dlcloses.
+    /// import. RAII: `Drop` releases the backing pages and the loader
+    /// handles (one dlclose on POSIX, one FreeLibrary per LoadLibraryA
+    /// on Windows).
     struct GotRegion {
         ptr: *mut u8,
+        // POSIX munmap takes the length back; Windows VirtualFree
+        // with MEM_RELEASE requires size = 0.
+        #[cfg_attr(target_os = "windows", allow(dead_code))]
         len: usize,
-        dl_handle: *mut c_void,
+        /// Library handles to release on drop. POSIX uses one
+        /// `dlopen(NULL)` handle (so this is at most one entry);
+        /// Windows uses one per declared dylib.
+        lib_handles: Vec<*mut c_void>,
     }
 
     impl GotRegion {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         fn new(n_imports: usize) -> Result<Self, C5Error> {
             unsafe extern "C" {
                 fn mmap(
@@ -485,7 +675,31 @@ mod jit_impl {
             Ok(GotRegion {
                 ptr: ptr as *mut u8,
                 len,
-                dl_handle: std::ptr::null_mut(),
+                lib_handles: Vec::new(),
+            })
+        }
+
+        #[cfg(target_os = "windows")]
+        fn new(n_imports: usize) -> Result<Self, C5Error> {
+            let len = round_up_to_page(n_imports.max(1) * 8);
+            let ptr = unsafe {
+                VirtualAlloc(
+                    std::ptr::null_mut(),
+                    len,
+                    MEM_COMMIT | MEM_RESERVE,
+                    PAGE_READWRITE,
+                )
+            };
+            if ptr.is_null() {
+                return Err(C5Error::Compile(format!(
+                    "JIT: GOT VirtualAlloc failed: {}",
+                    std::io::Error::last_os_error()
+                )));
+            }
+            Ok(GotRegion {
+                ptr: ptr as *mut u8,
+                len,
+                lib_handles: Vec::new(),
             })
         }
 
@@ -497,6 +711,7 @@ mod jit_impl {
         /// scope leave a 0 slot rather than aborting -- the call
         /// will SIGSEGV when used, which is the right "this isn't
         /// in libc" failure mode for a JIT.
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         fn bind_imports(&mut self, imports: &ResolvedImports) -> Result<(), C5Error> {
             unsafe extern "C" {
                 fn dlopen(filename: *const c_char, flags: c_int) -> *mut c_void;
@@ -509,12 +724,12 @@ mod jit_impl {
                         .to_string(),
                 ));
             }
-            self.dl_handle = handle;
+            self.lib_handles.push(handle);
 
             // Strip the leading underscore on macOS for `dlsym` --
             // the symbol stored in the binding is the Mach-O view
             // (`_printf`), but `dlsym` wants the C view (`printf`).
-            // On Linux/Windows the binding is already underscoreless.
+            // On Linux the binding is already underscoreless.
             for (i, imp) in imports.imports.iter().enumerate() {
                 let lookup_name = if cfg!(target_os = "macos") {
                     imp.real_symbol
@@ -537,6 +752,64 @@ mod jit_impl {
             Ok(())
         }
 
+        /// Windows: there's no `dlopen(NULL)` equivalent that gives
+        /// you every library loaded into the process, so we walk
+        /// each declared dylib (`kernel32`, `msvcrt`, `ws2_32`, ...)
+        /// and `LoadLibraryA` it. Already-loaded DLLs (kernel32) get
+        /// their refcount bumped; the rest are mapped in. Each
+        /// import then resolves through `GetProcAddress` against its
+        /// dylib's handle.
+        #[cfg(target_os = "windows")]
+        fn bind_imports(&mut self, imports: &ResolvedImports) -> Result<(), C5Error> {
+            // Load each dylib once and stash the handle keyed by
+            // dylib_index so we don't pay per-import overhead.
+            let mut handles: Vec<*mut c_void> = Vec::with_capacity(imports.dylibs.len());
+            for dylib in &imports.dylibs {
+                let cs = CString::new(dylib.path.as_str()).map_err(|_| {
+                    C5Error::Compile(format!(
+                        "JIT: dylib path `{}` contained an interior NUL",
+                        dylib.path
+                    ))
+                })?;
+                // GetModuleHandleA first -- doesn't increment the
+                // refcount on already-loaded modules (kernel32, the
+                // process itself). LoadLibraryA as a fallback to
+                // bring in modules that weren't pre-loaded.
+                let mut h = unsafe { GetModuleHandleA(cs.as_ptr()) };
+                let mut owned = false;
+                if h.is_null() {
+                    h = unsafe { LoadLibraryA(cs.as_ptr()) };
+                    if h.is_null() {
+                        return Err(C5Error::Compile(format!(
+                            "JIT: LoadLibraryA(\"{}\") failed: {}",
+                            dylib.path,
+                            std::io::Error::last_os_error()
+                        )));
+                    }
+                    owned = true;
+                }
+                handles.push(h);
+                if owned {
+                    // Track the handle so Drop releases it.
+                    self.lib_handles.push(h);
+                }
+            }
+            for (i, imp) in imports.imports.iter().enumerate() {
+                let cs = match CString::new(imp.real_symbol.as_str()) {
+                    Ok(cs) => cs,
+                    Err(_) => continue, // unreachable: symbol names are static ASCII
+                };
+                let h = handles[imp.dylib_index];
+                let addr = unsafe { GetProcAddress(h, cs.as_ptr()) } as u64;
+                let slot_off = i * 8;
+                unsafe {
+                    let dst = self.ptr.add(slot_off) as *mut u64;
+                    std::ptr::write_unaligned(dst, addr);
+                }
+            }
+            Ok(())
+        }
+
         fn as_ptr(&self) -> *const u8 {
             self.ptr
         }
@@ -544,17 +817,27 @@ mod jit_impl {
 
     impl Drop for GotRegion {
         fn drop(&mut self) {
-            unsafe extern "C" {
-                fn munmap(addr: *mut c_void, len: usize) -> c_int;
-                fn dlclose(handle: *mut c_void) -> c_int;
-            }
-            if !self.dl_handle.is_null() {
-                unsafe {
-                    dlclose(self.dl_handle);
-                }
-            }
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
             unsafe {
+                unsafe extern "C" {
+                    fn munmap(addr: *mut c_void, len: usize) -> c_int;
+                    fn dlclose(handle: *mut c_void) -> c_int;
+                }
+                for &h in &self.lib_handles {
+                    if !h.is_null() {
+                        dlclose(h);
+                    }
+                }
                 munmap(self.ptr as *mut c_void, self.len);
+            }
+            #[cfg(target_os = "windows")]
+            unsafe {
+                for &h in &self.lib_handles {
+                    if !h.is_null() {
+                        FreeLibrary(h);
+                    }
+                }
+                VirtualFree(self.ptr as *mut c_void, 0, MEM_RELEASE);
             }
         }
     }
@@ -771,30 +1054,50 @@ mod jit_impl {
 
     impl Drop for JitRegion {
         fn drop(&mut self) {
-            unsafe extern "C" {
-                fn munmap(addr: *mut c_void, len: usize) -> c_int;
-            }
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
             unsafe {
+                unsafe extern "C" {
+                    fn munmap(addr: *mut c_void, len: usize) -> c_int;
+                }
                 munmap(self.ptr as *mut c_void, self.len);
+            }
+            #[cfg(target_os = "windows")]
+            unsafe {
+                VirtualFree(self.ptr as *mut c_void, 0, MEM_RELEASE);
             }
         }
     }
 
-    /// Round `n` up to a multiple of the host page size. mprotect
-    /// requires page-aligned inputs; mmap returns a page-aligned
-    /// pointer regardless of the requested length, but rounding the
-    /// length here keeps the two consistent.
+    /// Round `n` up to a multiple of the host page size. mprotect /
+    /// VirtualProtect both require page-aligned inputs; mmap /
+    /// VirtualAlloc return a page-aligned pointer regardless of the
+    /// requested length, but rounding the length here keeps the two
+    /// consistent.
     fn round_up_to_page(n: usize) -> usize {
         let p = page_size();
         (n + p - 1) & !(p - 1)
     }
 
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn page_size() -> usize {
         unsafe extern "C" {
             fn getpagesize() -> c_int;
         }
         let p = unsafe { getpagesize() };
         if p > 0 { p as usize } else { 4096 }
+    }
+
+    /// Windows reports the page size through GetSystemInfo (almost
+    /// always 4096 on x86_64 / aarch64, but spec says "ask").
+    #[cfg(target_os = "windows")]
+    fn page_size() -> usize {
+        let mut info: SystemInfo = unsafe { core::mem::zeroed() };
+        unsafe { GetSystemInfo(&mut info as *mut SystemInfo) };
+        if info.page_size > 0 {
+            info.page_size as usize
+        } else {
+            4096
+        }
     }
 
     // ----------------------------------------------------------------
@@ -805,7 +1108,10 @@ mod jit_impl {
     // before we branch into them.
     // ----------------------------------------------------------------
 
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(all(
+        target_arch = "x86_64",
+        any(target_os = "linux", target_os = "macos"),
+    ))]
     fn flush_icache(_ptr: *const u8, _len: usize) {}
 
     /// macOS arm64: defer to Apple's published API. `sys_icache_invalidate`
@@ -818,6 +1124,18 @@ mod jit_impl {
             fn sys_icache_invalidate(start: *mut c_void, len: usize);
         }
         unsafe { sys_icache_invalidate(ptr as *mut c_void, len) };
+    }
+
+    /// Windows: kernel32's `FlushInstructionCache` covers both
+    /// architectures. It's a no-op on x86_64 (the I-cache is
+    /// coherent with stores, but Microsoft's compiler-generated JIT
+    /// support code calls it anyway, so we mirror that) and the
+    /// "supported way" on aarch64.
+    #[cfg(target_os = "windows")]
+    fn flush_icache(ptr: *const u8, len: usize) {
+        unsafe {
+            FlushInstructionCache(GetCurrentProcess(), ptr as *const c_void, len);
+        }
     }
 
     /// Linux aarch64: roll the dance by hand. ARM ARM allows D-cache

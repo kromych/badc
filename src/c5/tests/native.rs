@@ -398,6 +398,12 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // Whole-struct copy via Op::Mcpy on macOS arm64. The aarch64
     // codegen unrolls the copy into ldur/stur word pairs.
     ("struct_value_copy.c", 0),
+    // Struct-by-value parameter / return. Both ride the existing
+    // c5 calling convention (caller pushes addresses, callee
+    // copies on entry; struct returns get a hidden out-pointer
+    // at val=2).
+    ("struct_by_value_param.c", 0),
+    ("struct_by_value_return.c", 0),
 ];
 
 /// Build a fixture, sign it, run it with the given args, and return

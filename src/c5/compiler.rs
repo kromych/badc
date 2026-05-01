@@ -242,6 +242,15 @@ pub struct Compiler {
     /// for the all-integer case, which is most calls.
     call_fp_arg_masks: Vec<(usize, u32)>,
 
+    /// Return type of the function whose body is currently being
+    /// parsed (0 outside any function). Used by the `return s`
+    /// path to emit a struct-copy through the hidden out-pointer
+    /// when the function's declared return type is a struct
+    /// value -- the caller pre-allocates a result temp and passes
+    /// its address at param val=2; struct-returning callees treat
+    /// declared params as starting at val=3.
+    current_func_return_ty: i64,
+
     /// Preprocessor failure (e.g. unterminated `#if`) deferred from
     /// `with_target` until `compile` runs, so the construction API
     /// stays infallible (matches all the `Compiler::new(src).compile()`
@@ -321,6 +330,7 @@ impl Compiler {
             data_imm_positions: Vec::new(),
             tls_data: Vec::new(),
             call_fp_arg_masks: Vec::new(),
+            current_func_return_ty: 0,
         }
     }
 
@@ -787,7 +797,32 @@ impl Compiler {
                 let expected_params = self.symbols[id_idx].params.clone();
                 let is_variadic = self.symbols[id_idx].is_variadic;
                 let fn_name_for_warn = self.symbols[id_idx].name.clone();
+                // Struct-returning callees use a hidden out-pointer
+                // arg at val=2: the caller pre-allocates a temp for
+                // the result and passes its address as arg 0; the
+                // callee's `return s` writes to *(out_pointer)
+                // before Lev. The result expression's value (in
+                // `a`) becomes the temp's address so an enclosing
+                // `lhs = call(...)` Mcpy reads from there.
+                let callee_ret_ty = self.symbols[id_idx].type_;
+                let callee_returns_struct = self.symbols[id_idx].class == Token::Fun as i64
+                    && is_struct_ty(callee_ret_ty)
+                    && struct_ptr_depth(callee_ret_ty) == 0;
                 let mut nargs = 0;
+                // For struct returns, allocate a result temp now
+                // so its address can be pushed before the
+                // declared-arg pushes.
+                let saved_loc_offs_for_result = self.loc_offs;
+                let result_temp_off: i64 = if callee_returns_struct {
+                    let slots = self.slots_of_type(callee_ret_ty);
+                    self.loc_offs += slots;
+                    if self.loc_offs > self.max_loc_offs {
+                        self.max_loc_offs = self.loc_offs;
+                    }
+                    -self.loc_offs
+                } else {
+                    0
+                };
                 // c5 uses cdecl-style arg passing: args are pushed
                 // right-to-left so the i'th declared param sits at
                 // `[bp + 16*(i+1)]`. The parser still has to evaluate
@@ -857,9 +892,28 @@ impl Compiler {
                     self.emit_op(Op::Li);
                     self.emit_op(Op::Psh);
                 }
-                // Release the staging slots; they'll be reused by the
-                // next call in this function.
-                self.loc_offs = saved_loc_offs;
+                // For struct-returning callees, push the hidden
+                // out-pointer (address of the result temp) so it
+                // lands at val=2 -- ahead of the first declared
+                // arg in the c5 stack walk. The callee's `return
+                // s` writes through it; on return we set `a` to
+                // the temp's address so the enclosing assignment
+                // can Mcpy from it.
+                if callee_returns_struct {
+                    self.emit_op(Op::Lea);
+                    self.emit_val(result_temp_off);
+                    self.emit_op(Op::Psh);
+                }
+                // Release the staging slots; they'll be reused by
+                // the next call in this function. The result-temp
+                // slot stays alive (loc_offs not reset to it) until
+                // the enclosing expression consumes it.
+                let target_loc_offs = if callee_returns_struct {
+                    saved_loc_offs_for_result + self.slots_of_type(callee_ret_ty)
+                } else {
+                    saved_loc_offs
+                };
+                self.loc_offs = target_loc_offs;
                 // Arity underflow check (after the loop, when nargs is
                 // final). Only fires for non-variadic functions with a
                 // recorded signature.
@@ -923,9 +977,24 @@ impl Compiler {
                         self.lex.line,
                     )));
                 }
-                if nargs > 0 {
+                let total_pushed = if callee_returns_struct {
+                    nargs + 1
+                } else {
+                    nargs
+                };
+                if total_pushed > 0 {
                     self.emit_op(Op::Adj);
-                    self.emit_val(nargs);
+                    self.emit_val(total_pushed);
+                }
+                // For struct-returning callees, the result lives
+                // in the caller-allocated temp. After the call,
+                // load the temp's address into `a` so the
+                // expression's value (matching M5 struct-rvalue
+                // semantics: address-as-value) flows into the
+                // enclosing assignment / `.field` access.
+                if callee_returns_struct {
+                    self.emit_op(Op::Lea);
+                    self.emit_val(result_temp_off);
                 }
                 // For direct calls (Jsr/JsrExt) the symbol's `type_`
                 // is the declared return type. For indirect calls
@@ -1953,8 +2022,37 @@ impl Compiler {
             self.consume(b';', "semicolon expected after continue")?;
         } else if self.lex.tk == Token::Return as i64 {
             self.next()?;
+            let ret_ty = self.current_func_return_ty;
+            let returns_struct = is_struct_ty(ret_ty) && struct_ptr_depth(ret_ty) == 0;
             if self.lex.tk != ';' as i64 {
-                self.expr(Token::Assign as i64)?;
+                if returns_struct {
+                    // Push the hidden out-pointer (loaded from
+                    // val=2 -- the slot the caller pushed before
+                    // the declared args) and emit Mcpy to copy
+                    // the source struct's bytes into the caller's
+                    // result temp. Then Lev. The accumulator
+                    // value Lev returns is overwritten by the
+                    // call site's `Lea result_temp` after the
+                    // call so the assignment has a stable
+                    // address to copy from.
+                    self.emit_op(Op::Lea);
+                    self.emit_val(2);
+                    self.emit_op(Op::Li);
+                    self.emit_op(Op::Psh);
+                    self.expr(Token::Assign as i64)?;
+                    if !is_struct_ty(self.ty) || struct_ptr_depth(self.ty) != 0 {
+                        return Err(C5Error::Compile(format!(
+                            "{}: returning a non-struct value from a \
+                             struct-returning function",
+                            self.lex.line
+                        )));
+                    }
+                    let size = self.size_of_type(ret_ty);
+                    self.emit_op(Op::Mcpy);
+                    self.emit_val(size as i64);
+                } else {
+                    self.expr(Token::Assign as i64)?;
+                }
             }
             self.emit_op(Op::Lev);
             self.consume(b';', "semicolon expected")?;
@@ -2230,14 +2328,31 @@ impl Compiler {
                     }
                     self.next()?;
 
+                    // Track this function's declared return type
+                    // so the `return s` lowering knows whether to
+                    // emit a struct-copy through the hidden
+                    // out-pointer.
+                    let return_ty = self.symbols[id_idx].type_;
+                    self.current_func_return_ty = return_ty;
+                    let returns_struct =
+                        is_struct_ty(return_ty) && struct_ptr_depth(return_ty) == 0;
+
                     // c5 callers push args right-to-left (cdecl-style), so
                     // the i'th declared param ends up at `[bp + 16*(i+1)]`,
                     // i.e. val = i + 2: the first declared param is at the
                     // shallowest c5 stack slot, the last is deepest.
                     // Variadic args follow after the last declared, at
                     // val = N+2, N+3, ... -- which is what stdarg.h walks.
+                    //
+                    // Functions returning a struct value get a hidden
+                    // out-pointer at val=2 (the caller pre-allocates a
+                    // result temp and pushes its address as the first
+                    // arg); declared params start at val=3 in that
+                    // case. Variadic + struct-return aren't useful
+                    // together so we don't bother optimising for it.
+                    let param_base = if returns_struct { 3 } else { 2 };
                     for (i, &idx) in params.indices.iter().enumerate() {
-                        self.symbols[idx].val = (i as i64) + 2;
+                        self.symbols[idx].val = (i as i64) + param_base;
                     }
 
                     self.loc_offs = 0;
@@ -2284,6 +2399,49 @@ impl Compiler {
                     let ent_pc = self.text.len();
                     self.emit_op(Op::Ent);
                     self.emit_val(0); // patched below
+
+                    // Struct-value parameters: the caller pushed
+                    // the struct's *address* into the param slot
+                    // (matching the M5 "address is the value" rule
+                    // for struct rvalues). Without a copy the
+                    // function body's `p.field = v` would land in
+                    // the caller's storage, which isn't C
+                    // by-value. Memcpy each struct param into a
+                    // freshly allocated local and re-point the
+                    // param's symbol so subsequent accesses inside
+                    // the function go to the local copy. The
+                    // sequence reuses Op::Mcpy from M6 so neither
+                    // codegen needs new shapes for parameter
+                    // passing.
+                    for &idx in params.indices.iter() {
+                        let pty = self.symbols[idx].type_;
+                        if !is_struct_ty(pty) || struct_ptr_depth(pty) != 0 {
+                            continue;
+                        }
+                        let slots = self.slots_of_type(pty);
+                        let size = self.size_of_type(pty);
+                        let param_val = self.symbols[idx].val;
+                        self.loc_offs += slots;
+                        let local_val = -self.loc_offs;
+                        if self.loc_offs > self.max_loc_offs {
+                            self.max_loc_offs = self.loc_offs;
+                        }
+                        // dst = &local
+                        self.emit_op(Op::Lea);
+                        self.emit_val(local_val);
+                        self.emit_op(Op::Psh);
+                        // src = *param_slot (the passed address;
+                        // val from the param-base-aware
+                        // numbering above)
+                        self.emit_op(Op::Lea);
+                        self.emit_val(param_val);
+                        self.emit_op(Op::Li);
+                        // Mcpy size
+                        self.emit_op(Op::Mcpy);
+                        self.emit_val(size as i64);
+                        // The symbol now points at the local copy.
+                        self.symbols[idx].val = local_val;
+                    }
 
                     while self.lex.tk != '}' as i64 {
                         self.stmt()?;

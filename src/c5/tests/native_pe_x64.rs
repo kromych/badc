@@ -406,6 +406,9 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("struct_value_basics.c", 0),
     // Whole-struct copy via Op::Mcpy.
     ("struct_value_copy.c", 0),
+    // Struct-by-value parameter / return on Win64.
+    ("struct_by_value_param.c", 0),
+    ("struct_by_value_return.c", 0),
 ];
 
 #[test]

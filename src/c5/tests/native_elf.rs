@@ -306,6 +306,9 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("struct_value_basics.c", 0),
     // Whole-struct copy via Op::Mcpy.
     ("struct_value_copy.c", 0),
+    // Struct-by-value parameter / return.
+    ("struct_by_value_param.c", 0),
+    ("struct_by_value_return.c", 0),
     // `_Thread_local` round-trip in the main thread; exercises
     // PT_TLS + .tbss layout and the variant-1 (TPIDR_EL0 +
     // TCB_HEAD + offset) lowering. The loader copies p_filesz=0

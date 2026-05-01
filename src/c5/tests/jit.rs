@@ -228,6 +228,12 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     // for `a = b` where both are struct values; the VM and both
     // codegens unroll the byte-level copy at compile time.
     ("struct_value_copy.c", 0),
+    // Struct passed by value: callee's prologue copies the
+    // struct out of the caller's slot into a local so callee
+    // mutations don't leak.
+    ("struct_by_value_param.c", 0),
+    // Struct returned by value via the hidden out-pointer ABI.
+    ("struct_by_value_return.c", 0),
     // `thread_local_*.c` aren't here -- the JIT path's host is
     // macOS arm64 in this repo, where TLS lowering isn't
     // implemented yet (Mach-O __thread_data + dyld

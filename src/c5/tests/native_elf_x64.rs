@@ -282,6 +282,9 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     // Whole-struct copy via Op::Mcpy. The x86_64 codegen unrolls
     // it into mov / mov word pairs.
     ("struct_value_copy.c", 0),
+    // Struct-by-value parameter / return.
+    ("struct_by_value_param.c", 0),
+    ("struct_by_value_return.c", 0),
     // `_Thread_local` round-trip via the variant-2 (FS_BASE -
     // (tls_total - offset)) sequence on x86_64. Requires PT_TLS
     // + .tbss to exist in the ELF.

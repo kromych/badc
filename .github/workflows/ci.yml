@@ -82,8 +82,9 @@ jobs:
         if: matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm'
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y wine
-      - name: prime wine prefix (linux only)
+        # sudo apt-get install -y wine
+        #
+        # - name: prime wine prefix (linux only)
         # First-time `wine` invocation creates `~/.wine`, which on a
         # fresh CI runner takes ~60s and would race the parallel test
         # processes (cargo test runs tests on threads, each shelling
@@ -99,15 +100,16 @@ jobs:
         # priming, `wineserver -k` shuts down the background server
         # so the per-test `wine` invocations spawn a fresh, healthy
         # one rather than reusing whatever state is left in memory.
-        if: matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm'
-        run: |
-          timeout 90 wineboot --init || true
-          wineserver -k || true
-        env:
-          # No display server on the CI runner; force wine to skip
-          # any X11 init paths that might still be reachable past
-          # WINEDLLOVERRIDES.
-          DISPLAY: ""
+        #
+        # if: matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm'
+        # run: |
+        #  timeout 90 wineboot --init || true
+        #  wineserver -k || true
+        # env:
+        #  # No display server on the CI runner; force wine to skip
+        #  # any X11 init paths that might still be reachable past
+        #  # WINEDLLOVERRIDES.
+        #  DISPLAY: ""
       - name: cargo test (default features)
         # `BADC_RUN_WINE` maybe be used in the macOS / Linux -> wine -> PE
         # test lane; without it the PE-via-WINE tests skip (so a

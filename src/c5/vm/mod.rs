@@ -453,13 +453,15 @@ impl<H: Host> Vm<H> {
         self.text.push(Op::Psh as i64);
         let halt_pc = self.text.len();
 
-        // Stage argv strings + array in the data segment, then push argc /
-        // argv_addr as the two parameters of `main`. The compiler maps
-        //   int main(int argc, char **argv)
-        // to read argc from bp+24 and argv from bp+16, so argc must be the
-        // FIRST push (it sits deeper on the stack). When `args` is empty
-        // these slots are both zero, and a `main()` defined without
-        // parameters simply ignores them.
+        // Stage argv strings + array in the data segment, then push
+        // argv / argc as the two parameters of `main`. The compiler
+        // maps `int main(int argc, char **argv)` to read argc at
+        // `bp+16` (val=2, first declared) and argv at `bp+24`
+        // (val=3, second declared). c5's cdecl push order means the
+        // first declared param is the LAST push -- so argv goes
+        // first (lands deeper) and argc goes second (lands on top).
+        // When `args` is empty these slots are both zero, and a
+        // `main()` defined without parameters simply ignores them.
         let argv_addr = self.install_argv();
         let argc = self.args.len() as i64;
 
@@ -470,9 +472,9 @@ impl<H: Host> Vm<H> {
         self.static_end = self.data.len();
 
         sp -= 8;
-        self.store_i64(sp, argc)?;
-        sp -= 8;
         self.store_i64(sp, argv_addr)?;
+        sp -= 8;
+        self.store_i64(sp, argc)?;
         sp -= 8;
         // Bootstrap return address is encoded so main's Lev decodes it via
         // the same path as any other function-return: this is the only

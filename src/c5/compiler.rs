@@ -101,8 +101,14 @@ pub struct Compiler {
     /// to decide between byte and word loads/stores and for pointer scaling.
     ty: i64,
     /// Number of local-variable slots currently reserved in the active stack
-    /// frame; patched into `Op::Ent` at the end of the function.
+    /// frame. User-declared locals push it up monotonically; call-arg staging
+    /// (parse_function_args) bumps it temporarily for each in-flight call's
+    /// reverse-push temp slots and then restores it.
     loc_offs: i64,
+    /// Per-function high-water mark of `loc_offs` -- patched into `Op::Ent`
+    /// at the end of the function so the prologue reserves enough stack for
+    /// every nested-call temp the function ever needs.
+    max_loc_offs: i64,
 
     // --- Patch lists ---
     loop_breaks: Vec<Vec<usize>>,
@@ -201,6 +207,7 @@ impl Compiler {
             data: Vec::new(),
             ty: 0,
             loc_offs: 0,
+            max_loc_offs: 0,
             loop_breaks: Vec::new(),
             loop_continues: Vec::new(),
             labels: Vec::new(),
@@ -619,14 +626,34 @@ impl Compiler {
                 let is_variadic = self.symbols[id_idx].is_variadic;
                 let fn_name_for_warn = self.symbols[id_idx].name.clone();
                 let mut nargs = 0;
+                // c5 uses cdecl-style arg passing: args are pushed
+                // right-to-left so the i'th declared param sits at
+                // `[bp + 16*(i+1)]`. The parser still has to evaluate
+                // args left-to-right (so observable side effects
+                // happen in source order), so each arg gets parked in
+                // a transient temp local and we re-emit the pushes in
+                // reverse once they're all evaluated.
+                let saved_loc_offs = self.loc_offs;
+                let mut temp_offsets: Vec<i64> = Vec::new();
                 while self.lex.tk != ')' as i64 {
                     let arg_line = self.lex.line;
+                    // Allocate a temp slot for this arg.
+                    self.loc_offs += 1;
+                    if self.loc_offs > self.max_loc_offs {
+                        self.max_loc_offs = self.loc_offs;
+                    }
+                    let temp_off = -self.loc_offs;
+                    temp_offsets.push(temp_off);
+
+                    // Emit the `*temp = expr;` shape that c5's
+                    // assignment path already supports: address
+                    // first, push, then RHS, then Si.
+                    self.emit_op(Op::Lea);
+                    self.emit_val(temp_off);
+                    self.emit_op(Op::Psh);
                     self.expr(Token::Assign as i64)?;
-                    // Type-check this arg against the declared param,
-                    // unless it's a vararg position (i.e. nargs is past
-                    // the fixed param count of a variadic function) or
-                    // the function has no recorded signature (legacy or
-                    // non-Sys/Fun symbol).
+
+                    // Type-check before the Si overwrites self.ty.
                     if (nargs as usize) < expected_params.len() {
                         let want = expected_params[nargs as usize];
                         let zero = self.last_emit_is_zero();
@@ -639,8 +666,6 @@ impl Compiler {
                             ));
                         }
                     } else if !expected_params.is_empty() && !is_variadic {
-                        // Has a signature, isn't variadic, but we got
-                        // more args than declared. Worth a warning.
                         self.warn(format!(
                             "{arg_line}: warning: too many arguments to `{}` (expected {}, got at least {})",
                             fn_name_for_warn,
@@ -648,12 +673,24 @@ impl Compiler {
                             nargs + 1,
                         ));
                     }
-                    self.emit_op(Op::Psh);
+
+                    self.emit_op(Op::Si);
                     nargs += 1;
                     if self.lex.tk == ',' as i64 {
                         self.next()?;
                     }
                 }
+                // Push from temp slots right-to-left so the first
+                // declared param ends up on top of the c5 stack.
+                for &temp_off in temp_offsets.iter().rev() {
+                    self.emit_op(Op::Lea);
+                    self.emit_val(temp_off);
+                    self.emit_op(Op::Li);
+                    self.emit_op(Op::Psh);
+                }
+                // Release the staging slots; they'll be reused by the
+                // next call in this function.
+                self.loc_offs = saved_loc_offs;
                 // Arity underflow check (after the loop, when nargs is
                 // final). Only fires for non-variadic functions with a
                 // recorded signature.
@@ -771,6 +808,16 @@ impl Compiler {
                 self.ty = t;
             } else {
                 self.expr(Token::Assign as i64)?;
+                // Comma operator within parens: `(a, b, c)` evaluates
+                // each subexpression for its side effects and yields
+                // the last. Outside parens, comma stays a separator
+                // (function args, declarators) -- this branch only
+                // fires inside `(...)` because expr(Assign) doesn't
+                // consume `,`.
+                while self.lex.tk == ',' as i64 {
+                    self.next()?;
+                    self.expr(Token::Assign as i64)?;
+                }
                 if self.lex.tk == ')' as i64 {
                     self.next()?;
                 } else {
@@ -1794,12 +1841,18 @@ impl Compiler {
                     }
                     self.next()?;
 
-                    let nargs = params.indices.len() as i64;
+                    // c5 callers push args right-to-left (cdecl-style), so
+                    // the i'th declared param ends up at `[bp + 16*(i+1)]`,
+                    // i.e. val = i + 2: the first declared param is at the
+                    // shallowest c5 stack slot, the last is deepest.
+                    // Variadic args follow after the last declared, at
+                    // val = N+2, N+3, ... -- which is what stdarg.h walks.
                     for (i, &idx) in params.indices.iter().enumerate() {
-                        self.symbols[idx].val = nargs - (i as i64) + 1;
+                        self.symbols[idx].val = (i as i64) + 2;
                     }
 
                     self.loc_offs = 0;
+                    self.max_loc_offs = 0;
                     self.labels.clear();
                     self.unresolved_gotos.clear();
 
@@ -1843,7 +1896,7 @@ impl Compiler {
                     }
                     self.emit_op(Op::Lev);
 
-                    self.text[ent_pc + 1] = self.loc_offs;
+                    self.text[ent_pc + 1] = self.max_loc_offs.max(self.loc_offs);
 
                     for (name, pc) in &self.unresolved_gotos {
                         match self.labels.iter().find(|(n, _)| n == name) {

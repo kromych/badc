@@ -870,17 +870,21 @@ pub(super) fn emit_arg_thunk(
 
     if n_params > 0 {
         emit_sub_rsp_imm32(code, (16 * n_params) as u32);
-        // Reg args. C arg `i` lands at thunk's `[rbp - 16*(i+1)]`,
-        // which becomes F-real's `[rbp + 16*(N-i)]` after F's prologue.
+        // C arg `i` is the i'th source-order parameter. With c5's
+        // cdecl push order, the i'th declared param has val = i + 2,
+        // so F-real reads it at `[rbp + 16*(i+1)]`. After F's
+        // `push rbp + mov rbp, rsp`, that's `thunk_rbp - 16*(N-i)`.
+        // Reg args (i = 0 .. n_reg).
         for i in 0..n_reg {
-            let disp = -((16 * (i + 1)) as i32);
+            let disp = -((16 * (n_params - i)) as i32);
             emit_mov_mem_r(code, Reg::RBP, disp, Reg(abi.int_arg_regs[i]));
         }
-        // Stack args. RAX is caller-saved and not reserved at the
-        // thunk-entry point, so it works as a courier here.
+        // Stack args (i = n_reg .. N) -- read from the host stack.
+        // RAX is caller-saved and not reserved at the thunk-entry
+        // point, so it works as a courier here.
         for i in 0..n_stack {
             let host_off = host_stack_base + (i as i32) * 8;
-            let disp = -((16 * (n_reg + i + 1)) as i32);
+            let disp = -((16 * (n_stack - i)) as i32);
             emit_mov_r_mem(code, Reg::RAX, Reg::RBP, host_off);
             emit_mov_mem_r(code, Reg::RBP, disp, Reg::RAX);
         }
@@ -1457,17 +1461,17 @@ fn lower_op(
             if scratch > 0 {
                 emit_sub_rsp_imm32(code, scratch);
             }
-            // Reg args. After the sub, the c5 stack args start at
-            // [rsp + scratch + (nargs-1-i)*16].
+            // Reg args. With cdecl push order, c5-arg-i sits at
+            // [rsp + scratch + i*16]: first declared is on top.
             for (i, &r) in abi.int_arg_regs.iter().take(n_reg).enumerate() {
-                let src = (scratch as i32) + ((nargs - 1 - i) as i32) * 16;
+                let src = (scratch as i32) + (i as i32) * 16;
                 emit_mov_r_mem(code, Reg(r), Reg::RSP, src);
             }
             // Stack args -- copy from c5 stack down to the host's
             // outgoing-args region. r11 is caller-saved and not
             // claimed elsewhere on this code path; safe courier.
             for i in 0..n_stack {
-                let src = (scratch as i32) + ((nargs - 1 - (n_reg + i)) as i32) * 16;
+                let src = (scratch as i32) + ((n_reg + i) as i32) * 16;
                 let dst = (abi.shadow_space + (i as u32) * 8) as i32;
                 emit_mov_r_mem(code, Reg::R11, Reg::RSP, src);
                 emit_mov_mem_r(code, Reg::RSP, dst, Reg::R11);
@@ -1611,20 +1615,20 @@ fn emit_libc_call(
     if scratch > 0 {
         emit_sub_rsp_imm32(code, scratch);
     }
-    // Reg args. After the optional sub, the c5 stack args start at
-    // [rsp + scratch + (arg_count-1-i)*16].
+    // Reg args. With cdecl push order, c5-arg-i sits at
+    // [rsp + scratch + i*16] (first declared is on top).
     for (i, &r) in arg_regs
         .iter()
         .take(arg_count.min(arg_regs.len()))
         .enumerate()
     {
-        let src = scratch + ((arg_count - 1 - i) as u32) * 16;
+        let src = scratch + (i as u32) * 16;
         emit_mov_r_mem(code, Reg(r), Reg::RSP, src as i32);
     }
     // Stack args. Use r10 as a scratch courier; r10 is caller-saved
     // and free at call sites.
     for i in arg_regs.len()..arg_count {
-        let src = scratch + ((arg_count - 1 - i) as u32) * 16;
+        let src = scratch + (i as u32) * 16;
         let dst = abi.shadow_space + ((i - arg_regs.len()) as u32) * 8;
         emit_mov_r_mem(code, Reg::R10, Reg::RSP, src as i32);
         emit_mov_mem_r(code, Reg::RSP, dst as i32, Reg::R10);
@@ -1841,11 +1845,12 @@ fn emit_prologue(
     if is_main {
         // The entry stub passed argc / argv via the platform's first
         // two integer arg registers: System V uses rdi/rsi, Win64
-        // uses rcx/rdx. The c4 calling convention then expects
-        // them at `rbp + 16` (argv, top arg, val=2) and `rbp + 32`
-        // (argc, deeper arg, val=3). We pop the ret addr into a
-        // temp, push argc then argv as 16-byte slots, then re-push
-        // the ret addr so the rest of the prologue lines up.
+        // uses rcx/rdx. c5's cdecl push order maps `int main(int
+        // argc, char **argv)` to argc at `rbp + 16` (val=2, first
+        // declared, on top) and argv at `rbp + 24` (val=3, second
+        // declared, deeper). We pop the ret addr into a temp, push
+        // argv first (deeper) then argc (top), then re-push the ret
+        // addr so the rest of the prologue lines up.
         let (argc_reg, argv_reg) = if abi.shadow_space != 0 {
             (Reg::RCX, Reg::RDX)
         } else {
@@ -1853,9 +1858,9 @@ fn emit_prologue(
         };
         emit_pop_r(code, Reg::R10); // r10 = ret addr
         emit_sub_rsp_imm32(code, 16);
-        emit_mov_mem_r(code, Reg::RSP, 0, argc_reg);
+        emit_mov_mem_r(code, Reg::RSP, 0, argv_reg); // argv deeper
         emit_sub_rsp_imm32(code, 16);
-        emit_mov_mem_r(code, Reg::RSP, 0, argv_reg);
+        emit_mov_mem_r(code, Reg::RSP, 0, argc_reg); // argc on top
         emit_push_r(code, Reg::R10); // restore ret addr above the slots
     }
     emit_push_r(code, Reg::RBP);

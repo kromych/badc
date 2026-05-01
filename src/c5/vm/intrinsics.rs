@@ -42,8 +42,9 @@ impl<H: Host> Vm<H> {
     /// regardless of `flags` (the host trait doesn't model write modes).
     /// Returns a fresh non-negative fd, or -1 on error.
     pub(super) fn intrinsic_open(&mut self, sp: usize) -> Result<i64, C5Error> {
-        let name_addr = self.load_i64(sp + 8)? as usize;
-        let _flags = self.load_i64(sp)?;
+        // c5 cdecl push order: arg 0 is at sp+0, arg 1 at sp+8, ...
+        let name_addr = self.load_i64(sp)? as usize;
+        let _flags = self.load_i64(sp + 8)?;
         let name = self.read_cstring(name_addr)?;
         Ok(self.host.open(&name))
     }
@@ -51,9 +52,9 @@ impl<H: Host> Vm<H> {
     /// `int read(int fd, void *buf, int count)` -- reads up to `count`
     /// bytes through the host. fd 0 is conventionally stdin.
     pub(super) fn intrinsic_read(&mut self, sp: usize) -> Result<i64, C5Error> {
-        let fd = self.load_i64(sp + 16)?;
+        let fd = self.load_i64(sp)?;
         let buf_addr = self.load_i64(sp + 8)? as usize;
-        let size = self.read_size(sp, "read")?;
+        let size = self.read_size(sp + 16, "read")?;
         let mut buf = vec![0u8; size];
         let n = self.host.read(fd, &mut buf);
         if n < 0 {
@@ -114,9 +115,9 @@ impl<H: Host> Vm<H> {
     /// `void *memset(void *dst, int val, size_t n)` -- block-checks the
     /// destination range up front, then writes byte-by-byte.
     pub(super) fn intrinsic_memset(&mut self, sp: usize) -> Result<i64, C5Error> {
-        let dst_addr = self.load_i64(sp + 16)? as usize;
+        let dst_addr = self.load_i64(sp)? as usize;
         let val = self.load_i64(sp + 8)? as u8;
-        let size = self.read_size(sp, "memset")?;
+        let size = self.read_size(sp + 16, "memset")?;
         self.check_data_access(dst_addr, size, AccessKind::Write)?;
         for i in 0..size {
             self.store_u8(dst_addr + i, val)?;
@@ -127,9 +128,9 @@ impl<H: Host> Vm<H> {
     /// `int memcmp(const void *s1, const void *s2, size_t n)` -- block-
     /// checks both reads, then compares byte-by-byte.
     pub(super) fn intrinsic_memcmp(&mut self, sp: usize) -> Result<i64, C5Error> {
-        let s1_addr = self.load_i64(sp + 16)? as usize;
+        let s1_addr = self.load_i64(sp)? as usize;
         let s2_addr = self.load_i64(sp + 8)? as usize;
-        let size = self.read_size(sp, "memcmp")?;
+        let size = self.read_size(sp + 16, "memcmp")?;
         self.check_data_access(s1_addr, size, AccessKind::Read)?;
         self.check_data_access(s2_addr, size, AccessKind::Read)?;
         for i in 0..size {
@@ -147,9 +148,9 @@ impl<H: Host> Vm<H> {
     /// memcpy is undefined for overlapping regions; we don't diagnose
     /// overlap.
     pub(super) fn intrinsic_memcpy(&mut self, sp: usize) -> Result<i64, C5Error> {
-        let dst_addr = self.load_i64(sp + 16)? as usize;
+        let dst_addr = self.load_i64(sp)? as usize;
         let src_addr = self.load_i64(sp + 8)? as usize;
-        let size = self.read_size(sp, "memcpy")?;
+        let size = self.read_size(sp + 16, "memcpy")?;
         self.check_data_access(src_addr, size, AccessKind::Read)?;
         self.check_data_access(dst_addr, size, AccessKind::Write)?;
         for i in 0..size {
@@ -165,14 +166,15 @@ impl<H: Host> Vm<H> {
     /// returns 0; printed bytes go to `Host::write(1, ...)` (stdout).
     pub(super) fn intrinsic_printf(&mut self, sp: usize, pc: usize) -> Result<i64, C5Error> {
         // The caller emits a trailing `Op::Adj N` after every printf so
-        // we can recover N (the c4 calling convention pushes args but
-        // doesn't tell the callee how many). If that's missing, do
-        // nothing -- silently a no-op rather than reading garbage.
+        // we can recover N (c5's cdecl push order means arg 0 is at
+        // sp+0 and the variadic tail sits above that). If that's
+        // missing, do nothing -- silently a no-op rather than reading
+        // garbage.
         if pc >= self.text.len() || self.text[pc] != Op::Adj as i64 {
             return Ok(0);
         }
         let nargs = self.text[pc + 1] as usize;
-        let fmt_addr = self.load_i64(sp + (nargs - 1) * 8)? as usize;
+        let fmt_addr = self.load_i64(sp)? as usize;
         let s = self.read_cstring(fmt_addr)?;
 
         let mut arg_idx = 1;
@@ -184,7 +186,7 @@ impl<H: Host> Vm<H> {
                     continue;
                 };
                 if arg_idx < nargs {
-                    let offset = (nargs - 1 - arg_idx) * 8;
+                    let offset = arg_idx * 8;
                     let val = self.load_i64(sp + offset)?;
                     arg_idx += 1;
                     match nc {
@@ -209,9 +211,9 @@ impl<H: Host> Vm<H> {
     /// `int write(int fd, const void *buf, size_t n)` -- copies `n`
     /// bytes from the data segment and hands them to the host.
     pub(super) fn intrinsic_write(&mut self, sp: usize) -> Result<i64, C5Error> {
-        let fd = self.load_i64(sp + 16)?;
+        let fd = self.load_i64(sp)?;
         let buf_addr = self.load_i64(sp + 8)? as usize;
-        let size = self.read_size(sp, "write")?;
+        let size = self.read_size(sp + 16, "write")?;
         let mut buf = vec![0u8; size];
         for (i, byte) in buf.iter_mut().enumerate() {
             *byte = self.load_u8(buf_addr + i)?;
@@ -237,9 +239,9 @@ impl<H: Host> Vm<H> {
     /// boundary so host impls don't have to remember "non-zero means
     /// replace" themselves.
     pub(super) fn intrinsic_setenv(&mut self, sp: usize) -> Result<i64, C5Error> {
-        let name_addr = self.load_i64(sp + 16)? as usize;
+        let name_addr = self.load_i64(sp)? as usize;
         let val_addr = self.load_i64(sp + 8)? as usize;
-        let overwrite = if self.load_i64(sp)? != 0 {
+        let overwrite = if self.load_i64(sp + 16)? != 0 {
             Overwrite::Force
         } else {
             Overwrite::Skip
@@ -255,8 +257,8 @@ impl<H: Host> Vm<H> {
     /// is mapped to `Option::None` so [`Host::dlopen`] can produce
     /// `dlopen(NULL, ...)` (the global symbol table).
     pub(super) fn intrinsic_dlopen(&mut self, sp: usize) -> Result<i64, C5Error> {
-        let path_addr = self.load_i64(sp + 8)? as usize;
-        let flags = self.load_i64(sp)?;
+        let path_addr = self.load_i64(sp)? as usize;
+        let flags = self.load_i64(sp + 8)?;
         let path = if path_addr == 0 {
             None
         } else {
@@ -272,8 +274,8 @@ impl<H: Host> Vm<H> {
     /// `Op::Jsri` is rejected because `decode_pc` requires a
     /// CODE_BASE-biased c4 PC, not a libc address).
     pub(super) fn intrinsic_dlsym(&mut self, sp: usize) -> Result<i64, C5Error> {
-        let handle = self.load_i64(sp + 8)?;
-        let name_addr = self.load_i64(sp)? as usize;
+        let handle = self.load_i64(sp)?;
+        let name_addr = self.load_i64(sp + 8)? as usize;
         let name = self.read_cstring(name_addr)?;
         Ok(self.host.dlsym(handle, &name))
     }

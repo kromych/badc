@@ -33,6 +33,7 @@ pub(super) fn embedded_header(name: &str) -> Option<&'static str> {
         "string.h" => include_str!("../../headers/include/string.h"),
         "stdio.h" => include_str!("../../headers/include/stdio.h"),
         "stdlib.h" => include_str!("../../headers/include/stdlib.h"),
+        "stdarg.h" => include_str!("../../headers/include/stdarg.h"),
         "unistd.h" => include_str!("../../headers/include/unistd.h"),
         "fcntl.h" => include_str!("../../headers/include/fcntl.h"),
         "sys/mman.h" => include_str!("../../headers/include/sys/mman.h"),

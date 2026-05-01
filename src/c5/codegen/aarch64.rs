@@ -1296,16 +1296,16 @@ fn lower_op(
             if scratch > 0 {
                 emit(code, enc_sub_imm(Reg::SP, Reg::SP, scratch));
             }
-            // Reg args. After the optional sub, the c5 stack args
-            // start at [sp + scratch + (nargs-1-i)*16].
+            // Reg args. With cdecl push order, c5-arg-i sits at
+            // [sp + scratch + i*16] (first declared on top).
             for i in 0..n_reg {
-                let off = scratch + ((nargs - 1 - i) as u32) * 16;
+                let off = scratch + (i as u32) * 16;
                 emit(code, enc_ldr_imm(Reg(i as u8), Reg::SP, off));
             }
             // Stack args -- copy from the c5 stack down to the
             // host's outgoing-args region. x16 is AAPCS64 scratch.
             for i in 0..n_stack {
-                let src = scratch + ((nargs - 1 - (n_reg + i)) as u32) * 16;
+                let src = scratch + ((n_reg + i) as u32) * 16;
                 let dst = (i as u32) * 8;
                 emit(code, enc_ldr_imm(Reg::X16, Reg::SP, src));
                 emit(code, enc_str_imm(Reg::X16, Reg::SP, dst));
@@ -1421,8 +1421,9 @@ fn emit_libc_call(
         // variadic tail spills to a fresh stack region with
         // 8-byte spacing.
         let fixed = imp.fixed_args.min(arg_count).min(abi.int_arg_regs.len());
+        // With cdecl push order, c5-arg-i sits at sp + i*16.
         for i in 0..fixed {
-            let off = ((arg_count - 1 - i) as u32) * 16;
+            let off = (i as u32) * 16;
             emit(code, enc_ldr_imm(Reg(abi.int_arg_regs[i]), Reg::SP, off));
         }
         let n_var = arg_count - fixed;
@@ -1432,10 +1433,10 @@ fn emit_libc_call(
             let scratch_bytes = ((n_var * 8 + 15) & !15) as u32;
             emit(code, enc_sub_imm(Reg::SP, Reg::SP, scratch_bytes));
             for i in 0..n_var {
-                // Variadic arg `i` was c4-arg-(fixed+i); its
-                // pre-sub slot is `(arg_count - 1 - (fixed+i)) * 16`,
-                // shifted up by scratch_bytes after the sub.
-                let src = scratch_bytes + ((arg_count - 1 - (fixed + i)) as u32) * 16;
+                // Variadic arg `i` is c5-arg-(fixed+i); its pre-sub
+                // slot is `(fixed + i) * 16`, shifted up by
+                // scratch_bytes after the sub.
+                let src = scratch_bytes + ((fixed + i) as u32) * 16;
                 emit(code, enc_ldr_imm(Reg::X16, Reg::SP, src));
                 emit(code, enc_str_imm(Reg::X16, Reg::SP, (i * 8) as u32));
             }
@@ -1445,11 +1446,11 @@ fn emit_libc_call(
             emit_got_call(code, got_fixups, import_index);
         }
     } else {
-        // Non-variadic: each c5 arg goes into the matching xN.
-        // c5-arg-K is at sp + (arg_count - 1 - K) * 16. Args past
-        // x7 spill onto the host stack at sp+0, sp+8, ... per
-        // AAPCS64; allocate scratch + copy them with x16 as a
-        // courier, the same shape Op::Jsri uses.
+        // Non-variadic: each c5 arg goes into the matching xN. With
+        // cdecl push order, c5-arg-K is at sp + K*16 (first decl on
+        // top). Args past x7 spill onto the host stack at sp+0,
+        // sp+8, ... per AAPCS64; allocate scratch + copy them with
+        // x16 as a courier, the same shape Op::Jsri uses.
         let n_reg = arg_count.min(abi.int_arg_regs.len());
         let n_stack = arg_count - n_reg;
         let scratch = ((n_stack as u32) * 8 + 15) & !15;
@@ -1457,11 +1458,11 @@ fn emit_libc_call(
             emit(code, enc_sub_imm(Reg::SP, Reg::SP, scratch));
         }
         for i in 0..n_reg {
-            let off = scratch + ((arg_count - 1 - i) as u32) * 16;
+            let off = scratch + (i as u32) * 16;
             emit(code, enc_ldr_imm(Reg(abi.int_arg_regs[i]), Reg::SP, off));
         }
         for i in 0..n_stack {
-            let src = scratch + ((arg_count - 1 - (n_reg + i)) as u32) * 16;
+            let src = scratch + ((n_reg + i) as u32) * 16;
             let dst = (i as u32) * 8;
             emit(code, enc_ldr_imm(Reg::X16, Reg::SP, src));
             emit(code, enc_str_imm(Reg::X16, Reg::SP, dst));
@@ -1698,15 +1699,16 @@ pub(super) fn emit_arg_thunk(
     if n_params > 0 {
         // sub sp, sp, #16*N      ; reserve c5 arg slots
         emit(code, enc_sub_imm(Reg::SP, Reg::SP, (16 * n_params) as u32));
-        // C arg `i` is the i'th source-order parameter. The c5 parser
-        // hands the i'th declared param val = (N + 1) - i, so arg 0
-        // should land at thunk's [x29 - 16] (shallowest), arg N-1 at
-        // [x29 - 16*N] (deepest). 9-bit signed range is -256..256;
-        // N is capped further down by stur's reach.
+        // C arg `i` is the i'th source-order parameter. With c5's
+        // cdecl push order, the i'th declared param has val = i + 2,
+        // so F-real reads it at `[fp + 16*(i+1)]`, which after F's
+        // `stp x29,x30,[sp,#-16]!` + `mov x29, sp` is
+        // `thunk_x29 - 16*(N - i)`. 9-bit signed stur range is
+        // -256..256; N is capped further down by reach.
         //
         // Reg args first (i = 0 .. n_reg).
         for i in 0..n_reg {
-            let disp = -((16 * (i + 1)) as i32);
+            let disp = -((16 * (n_params - i)) as i32);
             emit(
                 code,
                 enc_stur(Reg(abi.int_arg_regs[i]), Reg::X29, disp),
@@ -1718,7 +1720,7 @@ pub(super) fn emit_arg_thunk(
         // AAPCS64 scratch -- safe courier here.
         for i in 0..n_stack {
             let host_off = 16 + (i as u32) * 8;
-            let disp = -((16 * (n_reg + i + 1)) as i32);
+            let disp = -((16 * (n_stack - i)) as i32);
             emit(code, enc_ldr_imm(Reg::X16, Reg::X29, host_off));
             emit(code, enc_stur(Reg::X16, Reg::X29, disp));
         }
@@ -1791,19 +1793,18 @@ fn emit_local_load(code: &mut Vec<u8>, offset: i64, byte: bool) {
 /// SP 16-byte aligned, which the AAPCS requires at every call site.
 ///
 /// For the program's entry function (`is_main = true`) we additionally
-/// push x0 (argc) then x1 (argv) into their own 16-byte slots, the same
+/// push x1 (argv) then x0 (argc) into their own 16-byte slots, the same
 /// shape user-function args use. After the prologue's stp(x29,x30) the
 /// layout is:
-///   bp + 16: argv  (top arg, c4 val=2)
-///   bp + 32: argc  (deeper arg, c4 val=3)
-/// matching [`lea_offset_bytes`].
+///   bp + 16: argc  (top arg, c5 val=2 -- first declared)
+///   bp + 24: argv  (next slot, c5 val=3 -- second declared)
+/// matching [`lea_offset_bytes`] under c5's cdecl push order.
 fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool, callee_pool_depth: u8) {
     if is_main {
-        // Push argc first (deeper), then argv (shallower). 16-byte
-        // slots so the layout matches the c4 calling convention as
-        // [`Op::Psh`] uses it for user-function args.
-        emit(code, enc_str_pre(Reg::X0, Reg::SP, -16));
+        // Push argv first (deeper), then argc (shallower). 16-byte
+        // slots so the layout matches c5's cdecl push convention.
         emit(code, enc_str_pre(Reg::X1, Reg::SP, -16));
+        emit(code, enc_str_pre(Reg::X0, Reg::SP, -16));
     }
     // Save fp/lr; set up the new frame; reserve local storage; save
     // x19 below the locals; save the callee-saved pool registers

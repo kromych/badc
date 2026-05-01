@@ -123,10 +123,19 @@ pub(crate) struct Binding {
     pub real_symbol: String,
 }
 
+/// One function-like macro entry: parameter list + body. Object-like
+/// macros are stored separately in `macros` as plain strings.
+#[derive(Debug, Clone)]
+struct FnMacro {
+    params: Vec<String>,
+    body: String,
+}
+
 /// Output of a successful preprocessor run: the substituted source
 /// for the lexer plus the side data the codegen will pick up later.
 pub(crate) struct Preprocessor {
     macros: BTreeMap<String, String>,
+    fn_macros: BTreeMap<String, FnMacro>,
     /// One entry per `#pragma dylib(name, "path")`, in the order
     /// declared. Each entry collects the bindings whose
     /// `name::c4_fn` qualifier referenced its [`DylibSpec::name`].
@@ -200,6 +209,7 @@ impl Preprocessor {
         }
         Self {
             macros,
+            fn_macros: BTreeMap::new(),
             dylibs: Vec::new(),
             pragma_once_files: BTreeSet::new(),
             include_stack: Vec::new(),
@@ -243,11 +253,25 @@ impl Preprocessor {
                     Directive::Define(name, body) => {
                         if active {
                             self.macros.insert(name.to_string(), body.to_string());
+                            self.fn_macros.remove(name);
+                        }
+                    }
+                    Directive::DefineFn(name, params, body) => {
+                        if active {
+                            self.fn_macros.insert(
+                                name.to_string(),
+                                FnMacro {
+                                    params: params.iter().map(|s| s.to_string()).collect(),
+                                    body: body.to_string(),
+                                },
+                            );
+                            self.macros.remove(name);
                         }
                     }
                     Directive::Undef(name) => {
                         if active {
                             self.macros.remove(name);
+                            self.fn_macros.remove(name);
                         }
                     }
                     Directive::Ifdef(name) => {
@@ -373,7 +397,37 @@ impl Preprocessor {
                     i += 1;
                 }
                 let ident = &line[start..i];
-                out.push_str(&self.expand(ident));
+                // Function-like macro: only expands when the next
+                // non-whitespace character is `(`. The C standard
+                // allows whitespace between the name and the open
+                // paren at *use* sites; we follow that.
+                if let Some(macro_def) = self.fn_macros.get(ident) {
+                    let mut j = i;
+                    while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t') {
+                        j += 1;
+                    }
+                    if j < bytes.len() && bytes[j] == b'(' {
+                        if let Some((args, after)) = parse_macro_args(&line[j..]) {
+                            let expanded = expand_fn_macro(macro_def, &args);
+                            // Re-substitute so nested macro names
+                            // inside the expansion get a chance too.
+                            let recursed = self.substitute(&expanded);
+                            out.push_str(&recursed);
+                            i = j + after;
+                            continue;
+                        }
+                    }
+                }
+                // Object-like expansion. Re-run substitute on the
+                // result so a body that mentions a function-like
+                // macro (e.g. `#define TWICE INC(INC(0))`) gets the
+                // INC(...) calls expanded too.
+                let expanded = self.expand(ident);
+                if expanded == ident {
+                    out.push_str(&expanded);
+                } else {
+                    out.push_str(&self.substitute(&expanded));
+                }
             } else if c == b'"' {
                 // Copy string literals verbatim so identifier-looking
                 // bytes inside them aren't substituted.
@@ -627,7 +681,13 @@ impl CondFrame {
 }
 
 enum Directive<'a> {
+    /// Object-like macro: `#define NAME body`.
     Define(&'a str, &'a str),
+    /// Function-like macro: `#define NAME(p1, p2, ...) body`. The
+    /// parens must be flush against the name -- a space (`#define
+    /// NAME (...)`) parses as object-like with `(...)` as the body,
+    /// matching the C standard.
+    DefineFn(&'a str, Vec<&'a str>, &'a str),
     Undef(&'a str),
     Ifdef(&'a str),
     Ifndef(&'a str),
@@ -660,7 +720,7 @@ fn parse_pragma_directive(args: &str) -> PragmaDirective {
 fn parse_directive(rest: &str) -> Directive<'_> {
     if let Some(after) = rest.strip_prefix("define") {
         let after = after.trim_start();
-        let (name, body) = split_ident(after);
+        let (name, rest_after_name) = split_ident(after);
         // Strip `//` line comments from the macro body. Otherwise
         // `#define X 42 // a constant` would expand to "42 // a
         // constant", and the comment text would either swallow the
@@ -669,11 +729,30 @@ fn parse_directive(rest: &str) -> Directive<'_> {
         // parsing. C `/* ... */` comments inside macro bodies
         // aren't supported elsewhere in this dialect, so we don't
         // try to strip those.
-        let body = match body.find("//") {
-            Some(i) => body[..i].trim(),
-            None => body.trim(),
+        let stripped = match rest_after_name.find("//") {
+            Some(i) => &rest_after_name[..i],
+            None => rest_after_name,
         };
-        return Directive::Define(name, body);
+        // Function-like form: name immediately followed by `(`. The
+        // C standard requires no whitespace between the name and the
+        // open paren -- a space turns it into an object-like macro
+        // whose body starts with `(`.
+        if let Some(after_paren) = stripped.strip_prefix('(') {
+            if let Some(close) = after_paren.find(')') {
+                let params_str = &after_paren[..close];
+                let body = after_paren[close + 1..].trim();
+                let params: Vec<&str> = if params_str.trim().is_empty() {
+                    Vec::new()
+                } else {
+                    params_str.split(',').map(|p| p.trim()).collect()
+                };
+                return Directive::DefineFn(name, params, body);
+            }
+            // Unclosed paren -- fall through to object-like with the
+            // whole tail as the body, matching how the lexer would
+            // see a syntactically broken `#define`.
+        }
+        return Directive::Define(name, stripped.trim());
     }
     if let Some(after) = rest.strip_prefix("undef") {
         return Directive::Undef(after.trim());
@@ -740,6 +819,124 @@ fn split_ident(s: &str) -> (&str, &str) {
     (&s[..end], &s[end..])
 }
 
+/// Parse a comma-separated argument list of a function-like macro
+/// invocation. `s` must start at the `(` character. Returns the args
+/// (string slices, trimmed) and the byte offset of the position
+/// *after* the matching `)` -- relative to `s`. Nested parentheses
+/// (e.g. `MACRO(f(x), g(y))`) and string/char literals are tracked so
+/// commas inside them don't split. Returns `None` if `s` doesn't open
+/// with `(` or the parens are unbalanced.
+fn parse_macro_args(s: &str) -> Option<(Vec<String>, usize)> {
+    let bytes = s.as_bytes();
+    if bytes.is_empty() || bytes[0] != b'(' {
+        return None;
+    }
+    let mut args: Vec<String> = Vec::new();
+    let mut current = String::new();
+    let mut depth = 1usize;
+    let mut i = 1;
+    while i < bytes.len() {
+        let c = bytes[i];
+        match c {
+            b'(' => {
+                depth += 1;
+                current.push('(');
+                i += 1;
+            }
+            b')' => {
+                depth -= 1;
+                if depth == 0 {
+                    if !current.is_empty() || !args.is_empty() {
+                        args.push(current.trim().to_string());
+                    }
+                    return Some((args, i + 1));
+                }
+                current.push(')');
+                i += 1;
+            }
+            b',' if depth == 1 => {
+                args.push(current.trim().to_string());
+                current.clear();
+                i += 1;
+            }
+            b'"' | b'\'' => {
+                // Copy the whole literal (including escapes) so commas
+                // / parens inside don't perturb the depth counter.
+                let quote = c;
+                current.push(c as char);
+                i += 1;
+                while i < bytes.len() && bytes[i] != quote {
+                    if bytes[i] == b'\\' && i + 1 < bytes.len() {
+                        current.push(bytes[i] as char);
+                        current.push(bytes[i + 1] as char);
+                        i += 2;
+                    } else {
+                        current.push(bytes[i] as char);
+                        i += 1;
+                    }
+                }
+                if i < bytes.len() {
+                    current.push(quote as char);
+                    i += 1;
+                }
+            }
+            _ => {
+                current.push(c as char);
+                i += 1;
+            }
+        }
+    }
+    None
+}
+
+/// Substitute `params` for `args` in a function-like macro body.
+/// Whole-word match -- a parameter named `T` replaces only the
+/// identifier `T`, never `T` inside another word like `Tx`.
+fn expand_fn_macro(def: &FnMacro, args: &[String]) -> String {
+    let bytes = def.body.as_bytes();
+    let mut out = String::with_capacity(def.body.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = bytes[i];
+        if c.is_ascii_alphabetic() || c == b'_' {
+            let start = i;
+            i += 1;
+            while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+                i += 1;
+            }
+            let word = &def.body[start..i];
+            match def.params.iter().position(|p| p == word) {
+                Some(idx) if idx < args.len() => out.push_str(&args[idx]),
+                _ => out.push_str(word),
+            }
+        } else if c == b'"' || c == b'\'' {
+            // Pass literals through unchanged so identifier-like
+            // bytes inside don't get substituted.
+            let quote = c;
+            out.push(c as char);
+            i += 1;
+            while i < bytes.len() && bytes[i] != quote {
+                if bytes[i] == b'\\' && i + 1 < bytes.len() {
+                    out.push(bytes[i] as char);
+                    out.push(bytes[i + 1] as char);
+                    i += 2;
+                } else {
+                    out.push(bytes[i] as char);
+                    i += 1;
+                }
+            }
+            if i < bytes.len() {
+                out.push(quote as char);
+                i += 1;
+            }
+        } else {
+            out.push(c as char);
+            i += 1;
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -766,6 +963,49 @@ mod tests {
     fn macro_to_macro_substitution_chains() {
         let out = process("#define A B\n#define B 5\nint x = A;\n");
         assert!(out.contains("int x = 5;"));
+    }
+
+    #[test]
+    fn function_like_macro_substitutes_params() {
+        let out = process("#define ADD(a, b) ((a) + (b))\nint x = ADD(1, 2);\n");
+        assert!(
+            out.contains("int x = ((1) + (2));"),
+            "fn-like macro should substitute both params:\n{out}"
+        );
+    }
+
+    #[test]
+    fn function_like_macro_preserves_nested_call_args() {
+        // Args with nested parens / calls shouldn't be split by the
+        // top-level comma scanner.
+        let out = process("#define WRAP(x) f(x)\nint y = WRAP(g(1, 2));\n");
+        assert!(
+            out.contains("int y = f(g(1, 2));"),
+            "nested-paren args should round-trip:\n{out}"
+        );
+    }
+
+    #[test]
+    fn function_like_macro_only_fires_when_followed_by_paren() {
+        // `va_end` style: calling with parens expands; the bare name
+        // (no parens) stays a plain identifier.
+        let out = process("#define NOOP(x)\nNOOP(arg);\nint NOOP;\n");
+        assert!(out.contains(";\nint NOOP;"));
+    }
+
+    #[test]
+    fn fn_like_macro_recurses_through_other_macros() {
+        // An object-like macro whose body contains a function-like
+        // macro call should re-expand: TWICE -> INC(INC(0)) -> the
+        // INC names disappear and a `+ 1` appears twice. The exact
+        // paren shape depends on what each INC step adds, so the
+        // test pins the structural facts rather than the literal
+        // spelling.
+        let out = process(
+            "#define INC(n) ((n) + 1)\n#define TWICE INC(INC(0))\nint x = TWICE;\n",
+        );
+        assert!(!out.contains("INC"), "INC should be fully expanded:\n{out}");
+        assert_eq!(out.matches("+ 1").count(), 2, "two increments expected:\n{out}");
     }
 
     #[test]

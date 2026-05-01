@@ -56,11 +56,18 @@ What c5 adds on top: `do` / `for` / `switch` / `break` /
 `continue` / `goto`, block-scoped locals, bare function references
 (`fp = add;` instead of `fp = &add;`), `sizeof(<expr>)`, structs
 through pointers (`struct Foo *p`, `p->field`), variadic function
-declarations, full C escape sequences (`\r\t\xHH\NNN`...), and a
-real preprocessor: `#define` / `#undef` / `#ifdef` / `#ifndef` /
-`#if` / `#else` / `#endif` (with `==` / `!=` / `defined(...)`),
-`#include` searching the embedded header set, `#pragma once`,
-`#pragma dylib(...)` / `#pragma binding(...)`.
+declarations and definitions (with a working `<stdarg.h>` --
+`va_list` / `va_start` / `va_arg` / `va_end`), full C escape
+sequences (`\r\t\xHH\NNN`...), the comma operator inside parens
+(`(a, b)` evaluates `a` for side effects and yields `b`), cdecl-
+order argument passing so a c5 function's first declared parameter
+sits at `[bp + 16]` (and the `<stdarg.h>` walker can step through
+the variadic tail with simple pointer arithmetic), and a real
+preprocessor: `#define` / `#undef` / `#ifdef` / `#ifndef` / `#if`
+/ `#else` / `#endif` (with `==` / `!=` / `defined(...)`),
+function-like macros (`#define ADD(a, b) ((a) + (b))`), `#include`
+searching the embedded header set, `#pragma once`, `#pragma
+dylib(...)` / `#pragma binding(...)`.
 
 What it doesn't have: floats, struct values, unions. `void` is a
 synonym for `char`, the way c4 had it. Type checking is lax --

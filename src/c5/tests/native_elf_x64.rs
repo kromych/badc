@@ -268,6 +268,8 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     // signals "no XMM regs used" -- the ABI plan's
     // variadic_zero_xmm_count flag drives that.
     ("variadic_sprintf.c", 0),
+    // c5-side vprintf walking the c5 va_list (no libc va_list).
+    ("c5_vprintf.c", 0),
 ];
 
 #[test]

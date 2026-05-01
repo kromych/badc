@@ -210,6 +210,11 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     // sprintf 2-fixed + 4-variadic; the JIT shares the lowering
     // with the AOT backends so this guards both at once.
     ("variadic_sprintf.c", 0),
+    // c5-side vprintf walking the c5 va_list -- exercises a
+    // user-defined `my_printf` clone forwarding to <c5io.h>.
+    // No libc vprintf bridge involved; the format pipeline runs
+    // entirely in c5.
+    ("c5_vprintf.c", 0),
 ];
 
 #[test]

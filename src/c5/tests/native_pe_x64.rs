@@ -391,6 +391,11 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("type_warning_int_to_ptr.c", 0),
     ("type_warning_silenced_by_cast.c", 0),
     ("type_warning_arity.c", 0),
+    // c5-side vprintf -- the variadic walk happens in c5 source,
+    // so the call into msvcrt is just `_write`. No libc va_list
+    // bridge involved, which is why this fixture is in even when
+    // the libc-shape `variadic_sprintf` is not.
+    ("c5_vprintf.c", 0),
 ];
 
 #[test]

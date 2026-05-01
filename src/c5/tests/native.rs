@@ -381,6 +381,11 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // regressing back to the printf-shape (one fixed arg)
     // assumption.
     ("variadic_sprintf.c", 0),
+    // c5-side vprintf walking the c5 va_list. macOS arm64 was
+    // the worst-affected platform for the libc-bridged variant
+    // (AAPCS64 variadic spills); this fixture sidesteps the
+    // bridge and stays inside c5 stack semantics throughout.
+    ("c5_vprintf.c", 0),
 ];
 
 /// Build a fixture, sign it, run it with the given args, and return

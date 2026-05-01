@@ -79,6 +79,7 @@ impl Lexer {
                 self.tk = symbols[self.curr_id_idx].token;
                 return Ok(());
             } else if c.is_ascii_digit() {
+                let int_start = self.pos - 1;
                 let mut val = (c as u8 - b'0') as i64;
                 if val == 0
                     && self.pos < self.src.len()
@@ -98,16 +99,81 @@ impl Lexer {
                         }
                         self.pos += 1;
                     }
-                } else {
-                    while self.pos < self.src.len() {
-                        let nc = self.src[self.pos] as char;
-                        if !nc.is_ascii_digit() {
-                            break;
+                    self.ival = val;
+                    self.tk = Token::Num as i64;
+                    return Ok(());
+                }
+
+                while self.pos < self.src.len() {
+                    let nc = self.src[self.pos] as char;
+                    if !nc.is_ascii_digit() {
+                        break;
+                    }
+                    val = val * 10 + (nc as u8 - b'0') as i64;
+                    self.pos += 1;
+                }
+
+                // Float literal: integer body followed by a `.`,
+                // `e`/`E` exponent, or an `f`/`F` suffix turns the
+                // whole `[int_start..self.pos]` slice into an `f64`.
+                // We don't accept a `.` mid-decimal as a separator
+                // for anything else (no `1.foo` field access in c5),
+                // so the test is unambiguous.
+                let next_is_dot = self.pos < self.src.len() && self.src[self.pos] == b'.';
+                let next_is_exp = self.pos < self.src.len()
+                    && (self.src[self.pos] == b'e' || self.src[self.pos] == b'E');
+                let next_is_fsuffix = self.pos < self.src.len()
+                    && (self.src[self.pos] == b'f' || self.src[self.pos] == b'F');
+                if next_is_dot || next_is_exp || next_is_fsuffix {
+                    if next_is_dot {
+                        self.pos += 1;
+                        while self.pos < self.src.len()
+                            && (self.src[self.pos] as char).is_ascii_digit()
+                        {
+                            self.pos += 1;
                         }
-                        val = val * 10 + (nc as u8 - b'0') as i64;
+                    }
+                    if self.pos < self.src.len()
+                        && (self.src[self.pos] == b'e' || self.src[self.pos] == b'E')
+                    {
+                        self.pos += 1;
+                        if self.pos < self.src.len()
+                            && (self.src[self.pos] == b'+' || self.src[self.pos] == b'-')
+                        {
+                            self.pos += 1;
+                        }
+                        while self.pos < self.src.len()
+                            && (self.src[self.pos] as char).is_ascii_digit()
+                        {
+                            self.pos += 1;
+                        }
+                    }
+                    let body_end = self.pos;
+                    if self.pos < self.src.len()
+                        && (self.src[self.pos] == b'f' || self.src[self.pos] == b'F')
+                    {
+                        // Consume the `f`/`F` suffix; both `1.0` and
+                        // `1.0f` are stored as `f64` internally.
                         self.pos += 1;
                     }
+                    let lit = core::str::from_utf8(&self.src[int_start..body_end])
+                        .map_err(|e| {
+                            C5Error::Compile(format!(
+                                "{}: float literal not valid utf-8: {e}",
+                                self.line
+                            ))
+                        })?;
+                    let f: f64 = lit.parse().map_err(|e| {
+                        C5Error::Compile(format!(
+                            "{}: malformed float literal `{lit}`: {e}",
+                            self.line
+                        ))
+                    })?;
+                    self.ival = f.to_bits() as i64;
+                    self.tk = Token::FloatNum as i64;
+                    return Ok(());
                 }
+
                 self.ival = val;
                 self.tk = Token::Num as i64;
                 return Ok(());
@@ -391,6 +457,8 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("case", Token::Case),
     ("default", Token::Default),
     ("struct", Token::Struct),
+    ("float", Token::Float),
+    ("double", Token::Double),
     ("void", Token::Char),
     ("main", Token::Id),
 ];

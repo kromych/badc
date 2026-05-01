@@ -215,6 +215,10 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     // No libc vprintf bridge involved; the format pipeline runs
     // entirely in c5.
     ("c5_vprintf.c", 0),
+    // Float / double scalars parse, sizeof reports 8, pointer
+    // arithmetic and indexed loads/stores work. Real FP arithmetic
+    // is gated until the SSE / NEON lowering arrives.
+    ("float_pointer_basics.c", 0),
 ];
 
 #[test]

@@ -386,6 +386,10 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // (AAPCS64 variadic spills); this fixture sidesteps the
     // bridge and stays inside c5 stack semantics throughout.
     ("c5_vprintf.c", 0),
+    // Float / double frontend-only deliverable: declarations,
+    // pointer arithmetic, indexed loads/stores, sizeof. FP
+    // arithmetic is a future SSE/NEON milestone.
+    ("float_pointer_basics.c", 0),
 ];
 
 /// Build a fixture, sign it, run it with the given args, and return

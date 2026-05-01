@@ -298,6 +298,9 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     // c5-side vprintf walking the c5 va_list. Stays inside the
     // c5 stack convention; no libc va_list bridge involved.
     ("c5_vprintf.c", 0),
+    // Float / double frontend (decls, pointer arith, sizeof);
+    // FP arithmetic itself is a future milestone.
+    ("float_pointer_basics.c", 0),
 ];
 
 #[test]

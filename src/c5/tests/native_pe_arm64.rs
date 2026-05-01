@@ -344,6 +344,8 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     // and the only Win32 call is `_write`, so this fixture stays
     // in even when the libc-shape variadic-sprintf path doesn't.
     ("c5_vprintf.c", 0),
+    // Float / double frontend deliverable.
+    ("float_pointer_basics.c", 0),
 ];
 
 #[test]

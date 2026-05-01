@@ -121,3 +121,40 @@ fn unknown_struct_name_is_rejected() {
         "unknown struct Missing",
     );
 }
+
+#[test]
+fn float_scalar_arithmetic_not_yet_implemented() {
+    // Frontend accepts `float x;` declarations and `1.5` literals,
+    // but binary arithmetic on a float scalar is gated behind the
+    // not-yet-shipped float codegen.
+    expect_compile_error(
+        "int main() { float x; x = 1.0; x = x + 1.0; return 0; }",
+        "floating-point arithmetic not yet implemented",
+    );
+}
+
+#[test]
+fn double_scalar_arithmetic_not_yet_implemented() {
+    expect_compile_error(
+        "int main() { double y; y = 2.5; y = y * 3.0; return 0; }",
+        "floating-point arithmetic not yet implemented",
+    );
+}
+
+#[test]
+fn float_modulo_rejected() {
+    // `%` on floats is not legal C either; we surface our own error
+    // so the message points at the operand rather than at the op.
+    expect_compile_error(
+        "int main() { float x; x = 1.0; x = x % 2; return 0; }",
+        "`%` is not defined on floating-point operands",
+    );
+}
+
+#[test]
+fn float_increment_not_yet_implemented() {
+    expect_compile_error(
+        "int main() { float x; x = 1.0; x++; return 0; }",
+        "floating-point ++/-- not yet implemented",
+    );
+}

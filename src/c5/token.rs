@@ -90,9 +90,36 @@ pub(crate) enum Token {
     Arrow,
     /// `...` -- variadic-function marker in parameter lists.
     Ellipsis,
+    /// `float` keyword -- 32-bit IEEE float type.
+    Float,
+    /// `double` keyword -- 64-bit IEEE double type.
+    Double,
+    /// Floating-point numeric literal (`1.5`, `1e10`, `.5`, `1.0f`).
+    /// The lexer stores the parsed `f64` bit pattern in `ival`; the
+    /// parser plucks it back out via `f64::from_bits(ival as u64)`.
+    FloatNum,
 }
 
 /// Primitive Types
+///
+/// The integer-family encoding is:
+///   `char` = 0, `int` = 1; pointers add `Ty::Ptr` (= 2) per `*`
+///   level, so `int*` = 3, `char**` = 4, `int**` = 5, etc. Pointer
+///   levels share the low band `[0, 100)`.
+///
+/// Floating types live in their own non-overlapping bands so that
+/// the existing `>= Ty::Ptr` arithmetic in the integer family stays
+/// correct -- the per-band base + 2-per-`*` scheme is reused inside
+/// each band:
+///   `float`   = 100, `float*`   = 102, `float**`   = 104, ...
+///   `double`  = 200, `double*`  = 202, `double**`  = 204, ...
+///
+/// Struct types still start at `STRUCT_BASE` (1000) and follow the
+/// 1000-stride scheme in `compiler.rs`. Float bands sit between the
+/// integer-family and the struct-family ranges so neither bumps
+/// into them, and the helper predicates in `compiler.rs`
+/// (`is_float_ty`, `is_double_ty`, `is_pointer_ty`) classify a `ty`
+/// without callers needing to know the encoding.
 #[repr(i64)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Ty {
@@ -102,4 +129,8 @@ pub(crate) enum Ty {
     Int = 1,
     /// Pointer type (values > 1 represent pointer depth)
     Ptr = 2,
+    /// 32-bit IEEE float (scalar). `float*` = 102, etc.
+    Float = 100,
+    /// 64-bit IEEE double (scalar). `double*` = 202, etc.
+    Double = 200,
 }

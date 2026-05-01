@@ -24,6 +24,13 @@ use super::token::{Token, Ty};
 const STRUCT_BASE: i64 = 1000;
 const STRUCT_STRIDE: i64 = 1000;
 
+/// Floating-type encoding bands. See `token.rs::Ty` for the layout
+/// rationale. Each band reuses the integer family's "+= Ty::Ptr per
+/// `*`" scheme inside its own range, so `float**` = 104 and
+/// `double*` = 202; the upper edge of each band sits well below the
+/// next type group.
+const FP_BAND_SIZE: i64 = 100;
+
 fn is_struct_ty(ty: i64) -> bool {
     ty >= STRUCT_BASE
 }
@@ -38,6 +45,69 @@ fn struct_ptr_depth(ty: i64) -> i64 {
 
 fn struct_ty_for(id: usize) -> i64 {
     STRUCT_BASE + (id as i64) * STRUCT_STRIDE
+}
+
+fn is_float_ty(ty: i64) -> bool {
+    let base = Ty::Float as i64;
+    (base..base + FP_BAND_SIZE).contains(&ty)
+}
+
+fn is_double_ty(ty: i64) -> bool {
+    let base = Ty::Double as i64;
+    (base..base + FP_BAND_SIZE).contains(&ty)
+}
+
+/// `ty` is a value of any floating-point type (or pointer to one).
+fn is_floating_ty(ty: i64) -> bool {
+    is_float_ty(ty) || is_double_ty(ty)
+}
+
+/// `ty` is a *scalar* float/double -- not a pointer to one.
+fn is_floating_scalar(ty: i64) -> bool {
+    ty == Ty::Float as i64 || ty == Ty::Double as i64
+}
+
+fn fp_ptr_depth(ty: i64) -> i64 {
+    if is_float_ty(ty) {
+        (ty - Ty::Float as i64) / Ty::Ptr as i64
+    } else if is_double_ty(ty) {
+        (ty - Ty::Double as i64) / Ty::Ptr as i64
+    } else {
+        0
+    }
+}
+
+/// True if `ty` represents a pointer (any base type, any depth).
+/// Used everywhere the integer-family `>= Ty::Ptr` test was the
+/// quick proxy for "is a pointer"; the bands for floats and structs
+/// have their own depth predicates that this helper unifies.
+fn is_pointer_ty(ty: i64) -> bool {
+    if is_struct_ty(ty) {
+        struct_ptr_depth(ty) > 0
+    } else if is_floating_ty(ty) {
+        fp_ptr_depth(ty) > 0
+    } else {
+        ty >= Ty::Ptr as i64
+    }
+}
+
+/// Element size in bytes of a pointee for the given pointer type.
+/// `char*` deferences a single byte; everything else is 8-byte.
+/// Floats are stored in 8-byte slots regardless (the ABI lowering
+/// will narrow `float` to 32 bits at the FP-register boundary).
+fn pointee_size(ty: i64) -> i64 {
+    // char* (= Ty::Ptr alone, base char=0) is the only special case;
+    // every other pointer points to an 8-byte slot in c5.
+    if ty == Ty::Ptr as i64 { 1 } else { 8 }
+}
+
+/// True for any pointer whose element size is 8 -- i.e., everything
+/// except `char*`. Pointer arithmetic on these scales the offset by
+/// 8 before adding to the base. Replaces the previous `t > Ty::Ptr`
+/// quick test, which treated the float-band scalar values (`100`,
+/// `200`) as if they were deep pointers.
+fn is_ptr_scaling_by_8(ty: i64) -> bool {
+    is_pointer_ty(ty) && pointee_size(ty) > 1
 }
 
 /// Pick the right load op for the given `ty`. `char`-typed lvalues take
@@ -257,8 +327,8 @@ impl Compiler {
         }
         let decl_is_struct = is_struct_ty(declared);
         let act_is_struct = is_struct_ty(actual);
-        let decl_is_ptr = decl_is_struct || declared >= Ty::Ptr as i64;
-        let act_is_ptr = act_is_struct || actual >= Ty::Ptr as i64;
+        let decl_is_ptr = is_pointer_ty(declared);
+        let act_is_ptr = is_pointer_ty(actual);
 
         // Struct types must match exactly (when one side is a struct).
         if decl_is_struct || act_is_struct {
@@ -362,6 +432,12 @@ impl Compiler {
         } else if self.lex.tk == Token::Char as i64 {
             self.next()?;
             Ok(Ty::Char as i64)
+        } else if self.lex.tk == Token::Float as i64 {
+            self.next()?;
+            Ok(Ty::Float as i64)
+        } else if self.lex.tk == Token::Double as i64 {
+            self.next()?;
+            Ok(Ty::Double as i64)
         } else if self.lex.tk == Token::Struct as i64 {
             self.next()?;
             if self.lex.tk != Token::Id as i64 {
@@ -407,13 +483,19 @@ impl Compiler {
 
         let mut offset = 0usize;
         while self.lex.tk != '}' as i64 {
-            // Field type prefix: int, char, or struct Name.
+            // Field type prefix: int, char, float, double, or struct Name.
             let field_base = if self.lex.tk == Token::Int as i64 {
                 self.next()?;
                 Ty::Int as i64
             } else if self.lex.tk == Token::Char as i64 {
                 self.next()?;
                 Ty::Char as i64
+            } else if self.lex.tk == Token::Float as i64 {
+                self.next()?;
+                Ty::Float as i64
+            } else if self.lex.tk == Token::Double as i64 {
+                self.next()?;
+                Ty::Double as i64
             } else if self.lex.tk == Token::Struct as i64 {
                 self.next()?;
                 if self.lex.tk != Token::Id as i64 {
@@ -557,6 +639,18 @@ impl Compiler {
             self.emit_val(self.lex.ival);
             self.next()?;
             self.ty = Ty::Int as i64;
+        } else if self.lex.tk == Token::FloatNum as i64 {
+            // The lexer parsed `1.5` etc. into f64 and stored
+            // `f64::to_bits()` cast to i64 in `ival`. The byte
+            // pattern flows through Op::Imm unmodified -- a future
+            // float codegen reads it back with `f64::from_bits`.
+            // Until then, the `is_floating_scalar` self-ty marks
+            // the value so it can't accidentally feed into integer
+            // arithmetic (the binary-op handlers gate on this).
+            self.emit_op(Op::Imm);
+            self.emit_val(self.lex.ival);
+            self.next()?;
+            self.ty = Ty::Double as i64;
         } else if self.lex.tk == '"' as i64 {
             self.emit_data_imm(self.lex.ival);
             self.next()?;
@@ -580,6 +674,8 @@ impl Compiler {
             }
             if self.lex.tk == Token::Int as i64
                 || self.lex.tk == Token::Char as i64
+                || self.lex.tk == Token::Float as i64
+                || self.lex.tk == Token::Double as i64
                 || self.lex.tk == Token::Struct as i64
             {
                 // sizeof(<type>): an explicit type name, optionally with
@@ -795,10 +891,13 @@ impl Compiler {
             self.next()?;
             if self.lex.tk == Token::Int as i64
                 || self.lex.tk == Token::Char as i64
+                || self.lex.tk == Token::Float as i64
+                || self.lex.tk == Token::Double as i64
                 || self.lex.tk == Token::Struct as i64
             {
-                // C-style cast: `(<type>)expr`. Accepts int, char, or
-                // struct base, with any number of `*` markers.
+                // C-style cast: `(<type>)expr`. Accepts int, char,
+                // float, double, or struct base, with any number of
+                // `*` markers.
                 t = self.parse_decl_base_type()?;
                 while self.lex.tk == Token::MulOp as i64 {
                     self.next()?;
@@ -905,9 +1004,15 @@ impl Compiler {
                     self.lex.line
                 )));
             }
+            if is_floating_scalar(self.ty) {
+                return Err(C5Error::Compile(format!(
+                    "{}: floating-point ++/-- not yet implemented",
+                    self.lex.line
+                )));
+            }
             self.emit_op(Op::Psh);
             self.emit_op(Op::Imm);
-            self.emit_val(if self.ty > Ty::Ptr as i64 { 8 } else { 1 });
+            self.emit_val(if is_ptr_scaling_by_8(self.ty) { 8 } else { 1 });
             self.emit_op(if t == Token::Inc as i64 {
                 Op::Add
             } else {
@@ -1052,9 +1157,21 @@ impl Compiler {
                 self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::AddOp as i64 {
                 self.next()?;
+                if is_floating_scalar(t) {
+                    return Err(C5Error::Compile(format!(
+                        "{}: floating-point arithmetic not yet implemented",
+                        self.lex.line
+                    )));
+                }
                 self.emit_op(Op::Psh);
                 self.expr(Token::MulOp as i64)?;
-                if t > Ty::Ptr as i64 {
+                if is_floating_scalar(self.ty) {
+                    return Err(C5Error::Compile(format!(
+                        "{}: floating-point arithmetic not yet implemented",
+                        self.lex.line
+                    )));
+                }
+                if is_ptr_scaling_by_8(t) {
                     self.emit_op(Op::Psh);
                     self.emit_op(Op::Imm);
                     self.emit_val(8);
@@ -1064,22 +1181,34 @@ impl Compiler {
                 self.ty = t;
             } else if self.lex.tk == Token::SubOp as i64 {
                 self.next()?;
+                if is_floating_scalar(t) {
+                    return Err(C5Error::Compile(format!(
+                        "{}: floating-point arithmetic not yet implemented",
+                        self.lex.line
+                    )));
+                }
                 self.emit_op(Op::Psh);
                 self.expr(Token::MulOp as i64)?;
-                if t >= Ty::Ptr as i64 && t == self.ty {
+                if is_floating_scalar(self.ty) {
+                    return Err(C5Error::Compile(format!(
+                        "{}: floating-point arithmetic not yet implemented",
+                        self.lex.line
+                    )));
+                }
+                if is_pointer_ty(t) && t == self.ty {
                     // ptr - ptr -> element count (Int). For deeper
                     // pointers (int*, int**, ...) the element size is
                     // 8 bytes so divide; for char* the byte count is
                     // the element count, no division.
                     self.emit_op(Op::Sub);
-                    if t > Ty::Ptr as i64 {
+                    if is_ptr_scaling_by_8(t) {
                         self.emit_op(Op::Psh);
                         self.emit_op(Op::Imm);
                         self.emit_val(8);
                         self.emit_op(Op::Div);
                     }
                     self.ty = Ty::Int as i64;
-                } else if t > Ty::Ptr as i64 {
+                } else if is_ptr_scaling_by_8(t) {
                     self.emit_op(Op::Psh);
                     self.emit_op(Op::Imm);
                     self.emit_val(8);
@@ -1092,20 +1221,56 @@ impl Compiler {
                 }
             } else if self.lex.tk == Token::MulOp as i64 {
                 self.next()?;
+                if is_floating_scalar(t) {
+                    return Err(C5Error::Compile(format!(
+                        "{}: floating-point arithmetic not yet implemented",
+                        self.lex.line
+                    )));
+                }
                 self.emit_op(Op::Psh);
                 self.expr(Token::Inc as i64)?;
+                if is_floating_scalar(self.ty) {
+                    return Err(C5Error::Compile(format!(
+                        "{}: floating-point arithmetic not yet implemented",
+                        self.lex.line
+                    )));
+                }
                 self.emit_op(Op::Mul);
                 self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::DivOp as i64 {
                 self.next()?;
+                if is_floating_scalar(t) {
+                    return Err(C5Error::Compile(format!(
+                        "{}: floating-point arithmetic not yet implemented",
+                        self.lex.line
+                    )));
+                }
                 self.emit_op(Op::Psh);
                 self.expr(Token::Inc as i64)?;
+                if is_floating_scalar(self.ty) {
+                    return Err(C5Error::Compile(format!(
+                        "{}: floating-point arithmetic not yet implemented",
+                        self.lex.line
+                    )));
+                }
                 self.emit_op(Op::Div);
                 self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::ModOp as i64 {
                 self.next()?;
+                if is_floating_scalar(t) {
+                    return Err(C5Error::Compile(format!(
+                        "{}: `%` is not defined on floating-point operands",
+                        self.lex.line
+                    )));
+                }
                 self.emit_op(Op::Psh);
                 self.expr(Token::Inc as i64)?;
+                if is_floating_scalar(self.ty) {
+                    return Err(C5Error::Compile(format!(
+                        "{}: `%` is not defined on floating-point operands",
+                        self.lex.line
+                    )));
+                }
                 self.emit_op(Op::Mod);
                 self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::Inc as i64 || self.lex.tk == Token::Dec as i64 {
@@ -1122,9 +1287,15 @@ impl Compiler {
                         self.lex.line
                     )));
                 }
+                if is_floating_scalar(self.ty) {
+                    return Err(C5Error::Compile(format!(
+                        "{}: floating-point ++/-- not yet implemented",
+                        self.lex.line
+                    )));
+                }
                 self.emit_op(Op::Psh);
                 self.emit_op(Op::Imm);
-                self.emit_val(if self.ty > Ty::Ptr as i64 { 8 } else { 1 });
+                self.emit_val(if is_ptr_scaling_by_8(self.ty) { 8 } else { 1 });
                 self.emit_op(if self.lex.tk == Token::Inc as i64 {
                     Op::Add
                 } else {
@@ -1133,7 +1304,7 @@ impl Compiler {
                 self.emit_op(store_op_for(self.ty));
                 self.emit_op(Op::Psh);
                 self.emit_op(Op::Imm);
-                self.emit_val(if self.ty > Ty::Ptr as i64 { 8 } else { 1 });
+                self.emit_val(if is_ptr_scaling_by_8(self.ty) { 8 } else { 1 });
                 self.emit_op(if self.lex.tk == Token::Inc as i64 {
                     Op::Sub
                 } else {
@@ -1152,16 +1323,17 @@ impl Compiler {
                         self.lex.line
                     )));
                 }
-                if t > Ty::Ptr as i64 {
-                    self.emit_op(Op::Psh);
-                    self.emit_op(Op::Imm);
-                    self.emit_val(8);
-                    self.emit_op(Op::Mul);
-                } else if t < Ty::Ptr as i64 {
+                if !is_pointer_ty(t) {
                     return Err(C5Error::Compile(format!(
                         "{}: pointer type expected",
                         self.lex.line
                     )));
+                }
+                if is_ptr_scaling_by_8(t) {
+                    self.emit_op(Op::Psh);
+                    self.emit_op(Op::Imm);
+                    self.emit_val(8);
+                    self.emit_op(Op::Mul);
                 }
                 self.emit_op(Op::Add);
                 self.ty = t - Ty::Ptr as i64;
@@ -1371,6 +1543,8 @@ impl Compiler {
         // Block-scoped local variables (declared at the top of the block).
         while self.lex.tk == Token::Int as i64
             || self.lex.tk == Token::Char as i64
+            || self.lex.tk == Token::Float as i64
+            || self.lex.tk == Token::Double as i64
             || self.lex.tk == Token::Struct as i64
         {
             let lbt = self.parse_decl_base_type()?;
@@ -1678,6 +1852,8 @@ impl Compiler {
             }
             let base = if self.lex.tk == Token::Int as i64
                 || self.lex.tk == Token::Char as i64
+                || self.lex.tk == Token::Float as i64
+                || self.lex.tk == Token::Double as i64
                 || self.lex.tk == Token::Struct as i64
             {
                 self.parse_decl_base_type()?
@@ -1724,6 +1900,12 @@ impl Compiler {
             } else if self.lex.tk == Token::Char as i64 {
                 self.next()?;
                 bt = Ty::Char as i64;
+            } else if self.lex.tk == Token::Float as i64 {
+                self.next()?;
+                bt = Ty::Float as i64;
+            } else if self.lex.tk == Token::Double as i64 {
+                self.next()?;
+                bt = Ty::Double as i64;
             } else if self.lex.tk == Token::Enum as i64 {
                 self.parse_enum_decl()?;
             } else if self.lex.tk == Token::Struct as i64 {
@@ -1863,6 +2045,8 @@ impl Compiler {
 
                     while self.lex.tk == Token::Int as i64
                         || self.lex.tk == Token::Char as i64
+                        || self.lex.tk == Token::Float as i64
+                        || self.lex.tk == Token::Double as i64
                         || self.lex.tk == Token::Struct as i64
                     {
                         let lbt = self.parse_decl_base_type()?;

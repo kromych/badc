@@ -95,6 +95,15 @@ pub(crate) enum Token {
     /// than a struct pointer, so the lowering skips the implicit
     /// load of the pointer slot.
     Dot,
+    /// `_Thread_local` storage-class specifier (C11). Marks the
+    /// following global as having per-thread storage. Recognised
+    /// at the parser surface; the codegen still emits a clean
+    /// "not yet implemented" error -- ELF .tdata/.tbss + PE TLS
+    /// directory + Mach-O __thread_* sections are a future
+    /// milestone (the codegen lowering needs `mrs x0, tpidr_el0`
+    /// on aarch64 and `mov rax, %fs:0` on x86_64 plus the
+    /// per-target dyld initializer).
+    ThreadLocal,
     /// `float` keyword -- 32-bit IEEE float type.
     Float,
     /// `double` keyword -- 64-bit IEEE double type.

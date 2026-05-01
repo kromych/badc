@@ -2031,6 +2031,16 @@ impl Compiler {
         self.next()?;
         while self.lex.tk != 0 {
             let mut bt = Ty::Int as i64;
+            // `_Thread_local <type> name;` -- C11 storage class for
+            // per-thread globals. The keyword may appear before the
+            // type prefix; we record the flag and forward to the
+            // normal type-and-declarator path.
+            let thread_local = if self.lex.tk == Token::ThreadLocal as i64 {
+                self.next()?;
+                true
+            } else {
+                false
+            };
             if self.lex.tk == Token::Int as i64 {
                 self.next()?;
                 bt = Ty::Int as i64;
@@ -2249,6 +2259,24 @@ impl Compiler {
                 } else {
                     self.symbols[id_idx].class = Token::Glo as i64;
                     self.symbols[id_idx].val = self.data.len() as i64;
+                    self.symbols[id_idx].is_thread_local = thread_local;
+                    if thread_local {
+                        // Frontend-only: the keyword parses, the
+                        // symbol carries the flag, and the type
+                        // checker is happy. Codegen for ELF
+                        // .tdata/.tbss + GOT slot, PE TLS
+                        // directory + _tls_index, and Mach-O
+                        // __thread_data is the next milestone --
+                        // fail loudly here so a `_Thread_local
+                        // int x;` program can't accidentally land
+                        // as a regular global instead.
+                        return Err(C5Error::Compile(format!(
+                            "{}: `_Thread_local` is parsed but the codegen \
+                             lowering (ELF .tdata/.tbss + PE TLS directory \
+                             + Mach-O __thread_data) is not yet implemented",
+                            self.lex.line
+                        )));
+                    }
                     for _ in 0..8 {
                         self.data.push(0);
                     }

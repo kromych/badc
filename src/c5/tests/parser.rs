@@ -104,6 +104,21 @@ fn bad_lvalue_in_assignment() {
 }
 
 #[test]
+fn thread_local_keyword_recognized_codegen_pending() {
+    // `_Thread_local` lexes as Token::ThreadLocal, the parser
+    // accepts it as a global storage-class prefix, and the symbol
+    // carries the flag. Codegen for the per-target TLS sequences
+    // is the next milestone, so use of a `_Thread_local` global
+    // emits a clean diagnostic rather than silently lowering as a
+    // regular global.
+    expect_compile_error(
+        "_Thread_local int counter;\n\
+         int main() { return 0; }",
+        "`_Thread_local` is parsed but the codegen lowering",
+    );
+}
+
+#[test]
 fn struct_to_struct_assignment_type_mismatch_rejected() {
     // Struct copy works for matching types, but the LHS and RHS
     // must agree -- you can't assign a `Bar` value to a `Foo`

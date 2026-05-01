@@ -20,4 +20,15 @@ pub(crate) struct Symbol {
     /// True if the function accepts trailing varargs (e.g. `printf`).
     /// Type-checking only verifies the fixed parameters.
     pub is_variadic: bool,
+
+    /// Set on a `Token::Glo` symbol declared with the
+    /// `_Thread_local` storage class (C11). The frontend parses
+    /// the keyword and propagates the flag here; the codegen
+    /// lowering still rejects access at compile time -- the per-
+    /// target TLS sequences (ELF .tdata/.tbss + GOT slot,
+    /// PE TLS directory + _tls_index, Mach-O __thread_data) are
+    /// the next milestone. Frontend-only today so the syntax
+    /// parses and the type checker doesn't choke; M8 swaps the
+    /// reject for real lowering.
+    pub is_thread_local: bool,
 }

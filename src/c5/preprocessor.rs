@@ -1001,11 +1001,13 @@ mod tests {
         // paren shape depends on what each INC step adds, so the
         // test pins the structural facts rather than the literal
         // spelling.
-        let out = process(
-            "#define INC(n) ((n) + 1)\n#define TWICE INC(INC(0))\nint x = TWICE;\n",
-        );
+        let out = process("#define INC(n) ((n) + 1)\n#define TWICE INC(INC(0))\nint x = TWICE;\n");
         assert!(!out.contains("INC"), "INC should be fully expanded:\n{out}");
-        assert_eq!(out.matches("+ 1").count(), 2, "two increments expected:\n{out}");
+        assert_eq!(
+            out.matches("+ 1").count(),
+            2,
+            "two increments expected:\n{out}"
+        );
     }
 
     #[test]

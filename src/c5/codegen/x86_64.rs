@@ -74,8 +74,7 @@ pub(super) const POOL_SIZES: regalloc::PoolSizes = regalloc::PoolSizes {
 /// (rbx, r12, r14, r15) is non-contiguous so an array is simplest.
 /// The caller bank has a single slot mapped to r11.
 fn pool_reg(slot: u8, bank: PoolBank) -> Reg {
-    const CALLEE_POOL: [Reg; POOL_SIZES.callee as usize] =
-        [Reg::RBX, Reg::R12, Reg::R14, Reg::R15];
+    const CALLEE_POOL: [Reg; POOL_SIZES.callee as usize] = [Reg::RBX, Reg::R12, Reg::R14, Reg::R15];
     const CALLER_POOL: [Reg; POOL_SIZES.caller as usize] = [Reg::R11];
     match bank {
         PoolBank::Callee => CALLEE_POOL[slot as usize],
@@ -1089,8 +1088,7 @@ pub(super) fn lower(
     // arg regs.
     let mut thunk_for_func: alloc::collections::BTreeMap<usize, usize> =
         alloc::collections::BTreeMap::new();
-    let mut addr_taken: alloc::collections::BTreeSet<usize> =
-        alloc::collections::BTreeSet::new();
+    let mut addr_taken: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
     for (_, target_bc_pc) in &pending_func_fixups {
         addr_taken.insert(*target_bc_pc);
     }
@@ -1225,13 +1223,7 @@ fn lower_op(
         // ---- Function frame ----
         Op::Ent => {
             let locals = read_operand(text, pc, "Ent")?;
-            emit_prologue(
-                code,
-                locals,
-                in_main,
-                abi,
-                reg_state.current_callee_depth,
-            );
+            emit_prologue(code, locals, in_main, abi, reg_state.current_callee_depth);
         }
         Op::Lev => emit_epilogue(code, in_main, reg_state.current_callee_depth),
         Op::Adj => {
@@ -1835,13 +1827,7 @@ fn read_operand(text: &[i64], pc: &mut usize, op_name: &str) -> Result<i64, C5Er
 /// push argc / argv as 16-byte slots in caller-style, then re-push
 /// the ret addr; the resulting layout matches what
 /// [`lea_offset_bytes`] expects.
-fn emit_prologue(
-    code: &mut Vec<u8>,
-    locals: i64,
-    is_main: bool,
-    abi: Abi,
-    pool_depth: u8,
-) {
+fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool, abi: Abi, pool_depth: u8) {
     if is_main {
         // The entry stub passed argc / argv via the platform's first
         // two integer arg registers: System V uses rdi/rsi, Win64

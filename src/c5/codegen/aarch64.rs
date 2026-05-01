@@ -892,8 +892,7 @@ pub(super) fn lower(
     // can land on the c5 entry directly.
     let mut thunk_for_func: alloc::collections::BTreeMap<usize, usize> =
         alloc::collections::BTreeMap::new();
-    let mut addr_taken: alloc::collections::BTreeSet<usize> =
-        alloc::collections::BTreeSet::new();
+    let mut addr_taken: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
     for (_, target_bc_pc) in &pending_func_fixups {
         addr_taken.insert(*target_bc_pc);
     }
@@ -1709,10 +1708,7 @@ pub(super) fn emit_arg_thunk(
         // Reg args first (i = 0 .. n_reg).
         for i in 0..n_reg {
             let disp = -((16 * (n_params - i)) as i32);
-            emit(
-                code,
-                enc_stur(Reg(abi.int_arg_regs[i]), Reg::X29, disp),
-            );
+            emit(code, enc_stur(Reg(abi.int_arg_regs[i]), Reg::X29, disp));
         }
         // Stack args (i = n_reg .. N). AAPCS64 puts host stack args
         // at the call-site sp; after the thunk's stp pre-indexed,

@@ -1,3 +1,4 @@
+use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
@@ -129,17 +130,17 @@ impl Lexer {
                         let esc = self.src[self.pos];
                         self.pos += 1;
                         match esc {
-                            b'a'  => val = 0x07,
-                            b'b'  => val = 0x08,
-                            b't'  => val = 0x09,
-                            b'n'  => val = 0x0A,
-                            b'v'  => val = 0x0B,
-                            b'f'  => val = 0x0C,
-                            b'r'  => val = 0x0D,
+                            b'a' => val = 0x07,
+                            b'b' => val = 0x08,
+                            b't' => val = 0x09,
+                            b'n' => val = 0x0A,
+                            b'v' => val = 0x0B,
+                            b'f' => val = 0x0C,
+                            b'r' => val = 0x0D,
                             b'\\' => val = b'\\' as i64,
                             b'\'' => val = b'\'' as i64,
-                            b'"'  => val = b'"' as i64,
-                            b'?'  => val = b'?' as i64,
+                            b'"' => val = b'"' as i64,
+                            b'?' => val = b'?' as i64,
                             // \xHH -- hex escape, 1+ hex digits, the
                             // C spec is greedy ("as many hex digits as
                             // make sense") but only the low byte
@@ -511,7 +512,11 @@ mod tests {
         let mut symbols: Vec<Symbol> = Vec::new();
         let mut data: Vec<u8> = Vec::new();
         lex.next(&mut symbols, &mut data).unwrap();
-        assert_eq!(lex.tk, '"' as i64, "expected a string token, got {}", lex.tk);
+        assert_eq!(
+            lex.tk, '"' as i64,
+            "expected a string token, got {}",
+            lex.tk
+        );
         data
     }
 
@@ -549,8 +554,8 @@ mod tests {
     #[test]
     fn octal_escape_takes_up_to_three_digits() {
         assert_eq!(lex_string_literal(r#""\0""#), vec![0]);
-        assert_eq!(lex_string_literal(r#""\012""#), vec![0o12]);   // == \n
-        assert_eq!(lex_string_literal(r#""\101""#), vec![0o101]);  // 'A'
+        assert_eq!(lex_string_literal(r#""\012""#), vec![0o12]); // == \n
+        assert_eq!(lex_string_literal(r#""\101""#), vec![0o101]); // 'A'
         // Octal stops at the first non-octal digit.
         assert_eq!(lex_string_literal(r#""\18""#), vec![0o1, b'8']);
     }

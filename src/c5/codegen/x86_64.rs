@@ -834,23 +834,26 @@ pub(super) fn param_count_for_func(text: &[i64], ent_pc: usize) -> usize {
 /// at `target_offset` with `n_params` declared parameters. The
 /// platform call site (pthread_create's start_routine, CreateThread's
 /// lpStartAddress, qsort's compar, ...) hands us args in the ABI's
-/// integer arg registers; the c5 callee reads them off the c5 stack
-/// at `[rbp + 16]`, `[rbp + 32]`, ... per `lea_offset_bytes`. This
-/// thunk bridges the two:
+/// integer arg registers (and on the host's stack past that); the c5
+/// callee reads them off the c5 stack at `[rbp + 16]`, `[rbp + 32]`,
+/// ... per `lea_offset_bytes`. This thunk bridges the two:
 ///
 ///   push rbp; mov rbp, rsp                ; standard frame
 ///   sub rsp, 16 * N                       ; reserve N c5 arg slots
-///   mov [rbp - 16*N],     <arg_reg[0]>    ; arg 0 -> [F's rbp + 16]
-///   mov [rbp - 16*(N-1)], <arg_reg[1]>    ; arg 1 -> [F's rbp + 32]
-///   ...
+///   ; reg args (i = 0 .. n_reg)
+///   mov [rbp - 16*(i+1)], <arg_reg[i]>
+///   ; stack args (i = n_reg .. N) -- copied from the host's stack
+///   mov rax, [rbp + host_stack_off(i)]
+///   mov [rbp - 16*(i+1)], rax
 ///   call F_real                           ; pushes ret addr; F reads
 ///                                         ;   args off the new stack
 ///   mov rsp, rbp; pop rbp; ret            ; tear down + return to host
 ///
-/// Caps `n_params` at the platform's int-arg register count -- if a
-/// function has more params than the ABI passes in regs, the rest
-/// would be on the host's stack with arch-dependent placement, and
-/// this thunk doesn't try to reach for them.
+/// Stack-arg layout in the host's frame at thunk entry:
+///   * SysV  -- arg n_reg+i sits at [rbp + 16 + i*8]
+///                (16 = saved rbp + ret addr)
+///   * Win64 -- arg n_reg+i sits at [rbp + 16 + 32 + i*8]
+///                (16 + 32-byte shadow space)
 pub(super) fn emit_arg_thunk(
     code: &mut Vec<u8>,
     n_params: usize,
@@ -858,23 +861,28 @@ pub(super) fn emit_arg_thunk(
     abi: Abi,
 ) -> usize {
     let thunk_offset = code.len();
-    let n = n_params.min(abi.int_arg_regs.len());
+    let n_reg = n_params.min(abi.int_arg_regs.len());
+    let n_stack = n_params - n_reg;
+    let host_stack_base = 16 + abi.shadow_space as i32;
 
     emit_push_r(code, Reg::RBP);
     emit_mov_rr(code, Reg::RBP, Reg::RSP);
 
-    if n > 0 {
-        emit_sub_rsp_imm32(code, (16 * n) as u32);
-        // C arg `i` (in arg_reg[i]) is the i'th source-order parameter.
-        // The c5 parser hands the i'th declared param val = (n + 1) - i,
-        // so arg 0 reads from `[rbp + 16 * n]`, arg 1 from `[rbp + 16 *
-        // (n - 1)]`, ..., arg n-1 from `[rbp + 16]`. After the F-real
-        // prologue's push rbp + mov rbp,rsp those addresses are exactly
-        // `thunk_rbp - 16` for arg 0 (shallowest), `thunk_rbp - 32` for
-        // arg 1, ..., `thunk_rbp - 16*n` for arg n-1 (deepest).
-        for i in 0..n {
+    if n_params > 0 {
+        emit_sub_rsp_imm32(code, (16 * n_params) as u32);
+        // Reg args. C arg `i` lands at thunk's `[rbp - 16*(i+1)]`,
+        // which becomes F-real's `[rbp + 16*(N-i)]` after F's prologue.
+        for i in 0..n_reg {
             let disp = -((16 * (i + 1)) as i32);
             emit_mov_mem_r(code, Reg::RBP, disp, Reg(abi.int_arg_regs[i]));
+        }
+        // Stack args. RAX is caller-saved and not reserved at the
+        // thunk-entry point, so it works as a courier here.
+        for i in 0..n_stack {
+            let host_off = host_stack_base + (i as i32) * 8;
+            let disp = -((16 * (n_reg + i + 1)) as i32);
+            emit_mov_r_mem(code, Reg::RAX, Reg::RBP, host_off);
+            emit_mov_mem_r(code, Reg::RBP, disp, Reg::RAX);
         }
     }
 
@@ -1430,24 +1438,39 @@ fn lower_op(
             // codegen reaches through a per-function arg-shuffling
             // thunk that re-spills the regs onto the c5 stack at
             // `[rbp + 16]`, `[rbp + 32]`, ... (see emit_arg_thunk and
-            // the post-walk thunk-emission step in `lower`). Win64
-            // additionally needs the standard 32-byte shadow space
-            // below rsp at the call.
+            // the post-walk thunk-emission step in `lower`).
+            //
+            // Args past the platform's reg cap spill onto the host
+            // stack: SysV puts them at `[rsp+0]`, `[rsp+8]`, ...
+            // contiguously; Win64 leaves a 32-byte shadow space
+            // first and writes them at `[rsp+32]`, `[rsp+40]`, ...
+            // Whichever flavour, total scratch is rounded up to 16
+            // so `rsp` stays 16-aligned at the call.
             let nargs = match Op::from_i64(text.get(*pc).copied().unwrap_or(0)) {
                 Some(Op::Adj) => text[*pc + 1] as usize,
                 _ => 0,
             };
-            if nargs > abi.int_arg_regs.len() {
-                return Err(C5Error::Compile(format!(
-                    "native codegen (x86_64): Jsri arg count {nargs} \
-                     exceeds the {}-register cap",
-                    abi.int_arg_regs.len()
-                )));
-            }
+            let n_reg = nargs.min(abi.int_arg_regs.len());
+            let n_stack = nargs - n_reg;
+            let scratch = (abi.shadow_space + (n_stack as u32) * 8 + 15) & !15;
             emit_mov_rr(code, Reg::R10, Reg::R13);
-            for (i, &r) in abi.int_arg_regs.iter().take(nargs).enumerate() {
-                let off = ((nargs - 1 - i) as i32) * 16;
-                emit_mov_r_mem(code, Reg(r), Reg::RSP, off);
+            if scratch > 0 {
+                emit_sub_rsp_imm32(code, scratch);
+            }
+            // Reg args. After the sub, the c5 stack args start at
+            // [rsp + scratch + (nargs-1-i)*16].
+            for (i, &r) in abi.int_arg_regs.iter().take(n_reg).enumerate() {
+                let src = (scratch as i32) + ((nargs - 1 - i) as i32) * 16;
+                emit_mov_r_mem(code, Reg(r), Reg::RSP, src);
+            }
+            // Stack args -- copy from c5 stack down to the host's
+            // outgoing-args region. r11 is caller-saved and not
+            // claimed elsewhere on this code path; safe courier.
+            for i in 0..n_stack {
+                let src = (scratch as i32) + ((nargs - 1 - (n_reg + i)) as i32) * 16;
+                let dst = (abi.shadow_space + (i as u32) * 8) as i32;
+                emit_mov_r_mem(code, Reg::R11, Reg::RSP, src);
+                emit_mov_mem_r(code, Reg::RSP, dst, Reg::R11);
             }
             if abi.shadow_space == 0 {
                 // SysV variadic ABI: AL must hold the number of XMM
@@ -1459,14 +1482,10 @@ fn lower_op(
                 // caller-saved so clobbering it is safe; the call
                 // overwrites it with the return value anyway.
                 emit_xor_eax_eax(code);
-                emit_call_r(code, Reg::R10);
-            } else {
-                // Win64: allocate 32-byte shadow space, call, free it.
-                // shadow_space is always a multiple of 16 so rsp stays
-                // 16-aligned across the call.
-                emit_sub_rsp_imm32(code, abi.shadow_space);
-                emit_call_r(code, Reg::R10);
-                emit_add_rsp_imm32(code, abi.shadow_space);
+            }
+            emit_call_r(code, Reg::R10);
+            if scratch > 0 {
+                emit_add_rsp_imm32(code, scratch);
             }
             emit_mov_rr(code, Reg::R13, Reg::RAX);
         }
@@ -1579,61 +1598,47 @@ fn emit_libc_call(
         _ => 0,
     };
     // Integer args go through `abi.int_arg_regs` (SysV: 6 regs;
-    // Win64: 4 regs). Args past that count spill to the stack
-    // above `abi.shadow_space`.
+    // Win64: 4 regs). Args past that count spill to the host stack:
+    // SysV places them at [rsp+0], [rsp+8], ... contiguously; Win64
+    // places them at [rsp+shadow_space], [rsp+shadow_space+8], ...
+    // (above the 32-byte shadow space). Either way, total scratch
+    // is rounded up to 16 so rsp stays 16-aligned at the call.
     let arg_regs = abi.int_arg_regs;
-    if abi.shadow_space == 0 && arg_count > arg_regs.len() {
-        return Err(C5Error::Compile(format!(
-            "native codegen (x86_64): `{local_name}` SysV arg count {arg_count} \
-             exceeds the {}-register cap",
-            arg_regs.len()
-        )));
-    }
+    let extras = arg_count.saturating_sub(arg_regs.len()) as u32;
+    let scratch = (abi.shadow_space + extras * 8 + 15) & !15;
+    let _ = local_name;
 
-    if abi.shadow_space != 0 {
-        // Shadow-space dance: caller reserves `abi.shadow_space`
-        // bytes at the start of the outgoing-args region (Win64
-        // = 32) for the callee to spill the register-passed args
-        // into. Stack args follow above that, 8 bytes apart.
-        // Total scratch is rounded up to 16 to keep rsp aligned
-        // at the call.
-        let extras = arg_count.saturating_sub(arg_regs.len()) as u32;
-        let scratch = (abi.shadow_space + extras * 8 + 15) & !15;
+    if scratch > 0 {
         emit_sub_rsp_imm32(code, scratch);
-        // Args 1..=N (N = arg_regs.len()) land in registers;
-        // arg K (0-indexed) was at rsp + (arg_count-1-K)*16
-        // before the sub, so shift by scratch now.
-        for (i, &r) in arg_regs
-            .iter()
-            .take(arg_count.min(arg_regs.len()))
-            .enumerate()
-        {
-            let src = scratch + ((arg_count - 1 - i) as u32) * 16;
-            emit_mov_r_mem(code, Reg(r), Reg::RSP, src as i32);
-        }
-        // Args N+1+ go on the new stack at [rsp+shadow_space],
-        // [rsp+shadow_space+8], ... Use r10 as a scratch courier.
-        for i in arg_regs.len()..arg_count {
-            let src = scratch + ((arg_count - 1 - i) as u32) * 16;
-            let dst = abi.shadow_space + ((i - arg_regs.len()) as u32) * 8;
-            emit_mov_r_mem(code, Reg::R10, Reg::RSP, src as i32);
-            emit_mov_mem_r(code, Reg::RSP, dst as i32, Reg::R10);
-        }
-    } else {
-        // SysV: just load args from the existing 16-byte slots.
-        for (i, &r) in arg_regs.iter().take(arg_count).enumerate() {
-            let src = ((arg_count - 1 - i) as i32) * 16;
-            emit_mov_r_mem(code, Reg(r), Reg::RSP, src);
-        }
-        if abi.variadic_zero_xmm_count && imports.imports[import_index].is_variadic {
-            // Variadic System V: AL = number of XMM regs used.
-            // c4 has no floats, so always 0. Plain libc calls
-            // preserve rax across argument loads anyway; only
-            // variadic call sites (`printf`, `sscanf`,
-            // `fprintf`, ...) need the xor. The variadic flag
-            // comes from the binding's prototype.
-            emit_xor_eax_eax(code);
-        }
+    }
+    // Reg args. After the optional sub, the c5 stack args start at
+    // [rsp + scratch + (arg_count-1-i)*16].
+    for (i, &r) in arg_regs
+        .iter()
+        .take(arg_count.min(arg_regs.len()))
+        .enumerate()
+    {
+        let src = scratch + ((arg_count - 1 - i) as u32) * 16;
+        emit_mov_r_mem(code, Reg(r), Reg::RSP, src as i32);
+    }
+    // Stack args. Use r10 as a scratch courier; r10 is caller-saved
+    // and free at call sites.
+    for i in arg_regs.len()..arg_count {
+        let src = scratch + ((arg_count - 1 - i) as u32) * 16;
+        let dst = abi.shadow_space + ((i - arg_regs.len()) as u32) * 8;
+        emit_mov_r_mem(code, Reg::R10, Reg::RSP, src as i32);
+        emit_mov_mem_r(code, Reg::RSP, dst as i32, Reg::R10);
+    }
+    if abi.shadow_space == 0
+        && abi.variadic_zero_xmm_count
+        && imports.imports[import_index].is_variadic
+    {
+        // Variadic System V: AL = number of XMM regs used.
+        // c5 has no floats, so always 0. Plain libc calls preserve
+        // rax across argument loads anyway; only variadic call
+        // sites (`printf`, `sscanf`, `fprintf`, ...) need the xor.
+        // The variadic flag comes from the binding's prototype.
+        emit_xor_eax_eax(code);
     }
 
     // call qword [rip + disp32] -- placeholder, writer patches
@@ -1645,9 +1650,7 @@ fn emit_libc_call(
     });
     emit_call_qword_rip32(code, 0);
 
-    if abi.shadow_space != 0 {
-        let extras = arg_count.saturating_sub(arg_regs.len()) as u32;
-        let scratch = (abi.shadow_space + extras * 8 + 15) & !15;
+    if scratch > 0 {
         emit_add_rsp_imm32(code, scratch);
     }
 

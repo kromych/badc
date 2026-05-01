@@ -1279,31 +1279,46 @@ fn lower_op(
         Op::Jsri => {
             // Indirect call: target address in x19, args already
             // pushed onto the VM stack in 16-byte slots by preceding
-            // Op::Psh's. The callee may be a c4 function (reads args
-            // from `bp + offset` via Op::Lea) or a native libc
-            // function obtained via dlsym (reads args from x0..x7).
-            // To work for both, peek at the next instruction for the
-            // arg count (c5 emits an Op::Adj after every non-zero-arg
-            // call) and load args into x0..x7 *in addition to* leaving
-            // them on the stack. c5 callees ignore the registers; libc
-            // callees ignore the stack.
+            // Op::Psh's. The callee may be a libc target (reads from
+            // x0..x7 + the host stack past x7) or a c5 target (reads
+            // from `bp + offset` after the per-function arg-shuffle
+            // thunk re-spills the regs). Either way: load the first
+            // 8 c5-stack args into x0..x7, copy the rest contiguously
+            // onto the host stack (AAPCS64 puts args 9+ at sp+0,
+            // sp+8, ... at the call site), call, clean up.
             let nargs = match Op::from_i64(text.get(*pc).copied().unwrap_or(0)) {
                 Some(Op::Adj) => text[*pc + 1] as usize,
                 _ => 0,
             };
-            if nargs > 8 {
-                return Err(C5Error::Compile(format!(
-                    "native codegen: Jsri arg count {nargs} exceeds 8 (x0..x7)"
-                )));
+            let n_reg = nargs.min(8);
+            let n_stack = nargs - n_reg;
+            let scratch = ((n_stack as u32) * 8 + 15) & !15;
+            if scratch > 0 {
+                emit(code, enc_sub_imm(Reg::SP, Reg::SP, scratch));
             }
-            for i in 0..nargs {
-                let off = ((nargs - 1 - i) as u32) * 16;
+            // Reg args. After the optional sub, the c5 stack args
+            // start at [sp + scratch + (nargs-1-i)*16].
+            for i in 0..n_reg {
+                let off = scratch + ((nargs - 1 - i) as u32) * 16;
                 emit(code, enc_ldr_imm(Reg(i as u8), Reg::SP, off));
+            }
+            // Stack args -- copy from the c5 stack down to the
+            // host's outgoing-args region. x16 is AAPCS64 scratch.
+            for i in 0..n_stack {
+                let src = scratch + ((nargs - 1 - (n_reg + i)) as u32) * 16;
+                let dst = (i as u32) * 8;
+                emit(code, enc_ldr_imm(Reg::X16, Reg::SP, src));
+                emit(code, enc_str_imm(Reg::X16, Reg::SP, dst));
             }
             // Move the function pointer into x16 so the callee's
             // prologue/epilogue can't trample our accumulator slot.
+            // (Doing this AFTER the stack-arg copy is OK because the
+            // copy clobbered x16 last; we now reload it.)
             emit_mov_reg(code, Reg::X16, Reg::X19);
             emit(code, enc_blr(Reg::X16));
+            if scratch > 0 {
+                emit(code, enc_add_imm(Reg::SP, Reg::SP, scratch));
+            }
             emit_mov_reg(code, Reg::X19, Reg::X0);
         }
 
@@ -1378,18 +1393,13 @@ fn emit_libc_call(
     let local_name: &str = imports.imports[import_index].local_name.as_str();
 
     // Peek at the next instruction; if it's `Adj N`, that gives us
-    // the arg count. The c4 compiler omits the `Adj` for 0-arg
+    // the arg count. The c5 compiler omits the `Adj` for 0-arg
     // calls (like `dlerror()`), so a missing `Adj` collapses to
     // `arg_count = 0`.
     let arg_count = match Op::from_i64(text.get(pc_after_op).copied().unwrap_or(0)) {
         Some(Op::Adj) => text[pc_after_op + 1] as usize,
         _ => 0,
     };
-    if arg_count > 8 {
-        return Err(C5Error::Compile(format!(
-            "native codegen: `{local_name}` arg count {arg_count} out of supported range (0..=8)"
-        )));
-    }
 
     // macOS arm64 has a non-standard variadic ABI that puts the
     // variadic args on the stack rather than in x0..x7. Standard
@@ -1435,13 +1445,31 @@ fn emit_libc_call(
             emit_got_call(code, got_fixups, import_index);
         }
     } else {
-        // Non-variadic: each c4 arg goes into the matching xN.
-        // c4-arg-K is at sp + (arg_count - 1 - K) * 16.
-        for i in 0..arg_count {
-            let off = ((arg_count - 1 - i) as u32) * 16;
+        // Non-variadic: each c5 arg goes into the matching xN.
+        // c5-arg-K is at sp + (arg_count - 1 - K) * 16. Args past
+        // x7 spill onto the host stack at sp+0, sp+8, ... per
+        // AAPCS64; allocate scratch + copy them with x16 as a
+        // courier, the same shape Op::Jsri uses.
+        let n_reg = arg_count.min(abi.int_arg_regs.len());
+        let n_stack = arg_count - n_reg;
+        let scratch = ((n_stack as u32) * 8 + 15) & !15;
+        if scratch > 0 {
+            emit(code, enc_sub_imm(Reg::SP, Reg::SP, scratch));
+        }
+        for i in 0..n_reg {
+            let off = scratch + ((arg_count - 1 - i) as u32) * 16;
             emit(code, enc_ldr_imm(Reg(abi.int_arg_regs[i]), Reg::SP, off));
         }
+        for i in 0..n_stack {
+            let src = scratch + ((arg_count - 1 - (n_reg + i)) as u32) * 16;
+            let dst = (i as u32) * 8;
+            emit(code, enc_ldr_imm(Reg::X16, Reg::SP, src));
+            emit(code, enc_str_imm(Reg::X16, Reg::SP, dst));
+        }
         emit_got_call(code, got_fixups, import_index);
+        if scratch > 0 {
+            emit(code, enc_add_imm(Reg::SP, Reg::SP, scratch));
+        }
     }
 
     // Move the libc return value into x19 so the caller sees it as
@@ -1660,27 +1688,39 @@ pub(super) fn emit_arg_thunk(
     abi: super::Abi,
 ) -> usize {
     let thunk_offset = code.len();
-    let n = n_params.min(abi.int_arg_regs.len());
-
     // stp x29, x30, [sp, #-16]!  ; save host fp + lr
     emit(code, enc_stp_pre(Reg::X29, Reg::X30, Reg::SP, -16));
     // mov x29, sp                ; new frame
     emit(code, enc_add_imm(Reg::X29, Reg::SP, 0));
 
-    if n > 0 {
+    let n_reg = n_params.min(abi.int_arg_regs.len());
+    let n_stack = n_params - n_reg;
+    if n_params > 0 {
         // sub sp, sp, #16*N      ; reserve c5 arg slots
-        emit(code, enc_sub_imm(Reg::SP, Reg::SP, (16 * n) as u32));
-        // C arg `i` (in x_i) is the i'th source-order parameter. The c5
-        // parser hands the i'th declared param val = (n + 1) - i, so
-        // arg 0 should land at thunk's [x29 - 16] (shallowest), arg n-1
-        // at [x29 - 16*n] (deepest). 9-bit signed range is -256..256;
-        // n caps at 8 so the worst offset is -128, well inside stur.
-        for i in 0..n {
+        emit(code, enc_sub_imm(Reg::SP, Reg::SP, (16 * n_params) as u32));
+        // C arg `i` is the i'th source-order parameter. The c5 parser
+        // hands the i'th declared param val = (N + 1) - i, so arg 0
+        // should land at thunk's [x29 - 16] (shallowest), arg N-1 at
+        // [x29 - 16*N] (deepest). 9-bit signed range is -256..256;
+        // N is capped further down by stur's reach.
+        //
+        // Reg args first (i = 0 .. n_reg).
+        for i in 0..n_reg {
             let disp = -((16 * (i + 1)) as i32);
             emit(
                 code,
                 enc_stur(Reg(abi.int_arg_regs[i]), Reg::X29, disp),
             );
+        }
+        // Stack args (i = n_reg .. N). AAPCS64 puts host stack args
+        // at the call-site sp; after the thunk's stp pre-indexed,
+        // those addresses are [x29 + 16], [x29 + 24], ... x16 is
+        // AAPCS64 scratch -- safe courier here.
+        for i in 0..n_stack {
+            let host_off = 16 + (i as u32) * 8;
+            let disp = -((16 * (n_reg + i + 1)) as i32);
+            emit(code, enc_ldr_imm(Reg::X16, Reg::X29, host_off));
+            emit(code, enc_stur(Reg::X16, Reg::X29, disp));
         }
     }
 

@@ -776,7 +776,7 @@ struct Fixup {
     kind: BranchKind,
 }
 
-/// Translate a c4 `Op::Lea` offset (in 8-byte VM-slot units) into
+/// Translate a c5 `Op::Lea` offset (in 8-byte VM-slot units) into
 /// the matching native byte offset from rbp. Same convention as the
 /// aarch64 backend: locals (val < 2) keep `* 8`; args (val >= 2)
 /// switch to `* 16` because Op::Psh writes 16-byte slots so SP stays
@@ -787,6 +787,110 @@ fn lea_offset_bytes(offset: i64) -> i64 {
     } else {
         offset * 8
     }
+}
+
+/// Walk a function body starting at `ent_pc` and return the number of
+/// parameter slots it actually reads. The c5 parser hands params
+/// `Op::Lea` operands `2..=N+1` (matching `lea_offset_bytes`'s arg
+/// branch); locals get `<= -1`. The optimizer's local-load fusion
+/// rewrites `Lea N; Li` / `Lea N; Lc` into `LdLocI N` / `LdLocC N`,
+/// so we have to scan all three opcodes; otherwise the optimized
+/// bytecode would look like the function never reads its params.
+/// The maximum positive operand inside the body is `N + 1`, which
+/// gives us `N`.
+///
+/// Underestimates (rather than over-) by design: a declared param
+/// the function never references contributes no `Lea`/`LdLoc*` op
+/// and looks like one fewer param. That's the safe side -- the
+/// host-arg thunks built on top of this only spill the regs the
+/// function actually reads, so an unused declared param never reads
+/// garbage.
+pub(super) fn param_count_for_func(text: &[i64], ent_pc: usize) -> usize {
+    if ent_pc >= text.len() || Op::from_i64(text[ent_pc]) != Some(Op::Ent) {
+        return 0;
+    }
+    let mut max_param_offset: Option<i64> = None;
+    let mut pc = ent_pc + Op::Ent.word_size();
+    while pc < text.len() {
+        let op = match Op::from_i64(text[pc]) {
+            Some(o) => o,
+            None => break,
+        };
+        if matches!(op, Op::Ent) {
+            break;
+        }
+        if matches!(op, Op::Lea | Op::LdLocI | Op::LdLocC) {
+            let off = text[pc + 1];
+            if off >= 2 {
+                max_param_offset = Some(max_param_offset.map_or(off, |m| m.max(off)));
+            }
+        }
+        pc += op.word_size();
+    }
+    max_param_offset.map_or(0, |off| (off - 1) as usize)
+}
+
+/// Emit a host-ABI -> c5-ABI argument-shuffling thunk for a function
+/// at `target_offset` with `n_params` declared parameters. The
+/// platform call site (pthread_create's start_routine, CreateThread's
+/// lpStartAddress, qsort's compar, ...) hands us args in the ABI's
+/// integer arg registers; the c5 callee reads them off the c5 stack
+/// at `[rbp + 16]`, `[rbp + 32]`, ... per `lea_offset_bytes`. This
+/// thunk bridges the two:
+///
+///   push rbp; mov rbp, rsp                ; standard frame
+///   sub rsp, 16 * N                       ; reserve N c5 arg slots
+///   mov [rbp - 16*N],     <arg_reg[0]>    ; arg 0 -> [F's rbp + 16]
+///   mov [rbp - 16*(N-1)], <arg_reg[1]>    ; arg 1 -> [F's rbp + 32]
+///   ...
+///   call F_real                           ; pushes ret addr; F reads
+///                                         ;   args off the new stack
+///   mov rsp, rbp; pop rbp; ret            ; tear down + return to host
+///
+/// Caps `n_params` at the platform's int-arg register count -- if a
+/// function has more params than the ABI passes in regs, the rest
+/// would be on the host's stack with arch-dependent placement, and
+/// this thunk doesn't try to reach for them.
+pub(super) fn emit_arg_thunk(
+    code: &mut Vec<u8>,
+    n_params: usize,
+    target_offset: usize,
+    abi: Abi,
+) -> usize {
+    let thunk_offset = code.len();
+    let n = n_params.min(abi.int_arg_regs.len());
+
+    emit_push_r(code, Reg::RBP);
+    emit_mov_rr(code, Reg::RBP, Reg::RSP);
+
+    if n > 0 {
+        emit_sub_rsp_imm32(code, (16 * n) as u32);
+        // C arg `i` (in arg_reg[i]) is the i'th source-order parameter.
+        // The c5 parser hands the i'th declared param val = (n + 1) - i,
+        // so arg 0 reads from `[rbp + 16 * n]`, arg 1 from `[rbp + 16 *
+        // (n - 1)]`, ..., arg n-1 from `[rbp + 16]`. After the F-real
+        // prologue's push rbp + mov rbp,rsp those addresses are exactly
+        // `thunk_rbp - 16` for arg 0 (shallowest), `thunk_rbp - 32` for
+        // arg 1, ..., `thunk_rbp - 16*n` for arg n-1 (deepest).
+        for i in 0..n {
+            let disp = -((16 * (i + 1)) as i32);
+            emit_mov_mem_r(code, Reg::RBP, disp, Reg(abi.int_arg_regs[i]));
+        }
+    }
+
+    // call F_real (5-byte rel32)
+    let after_call = code.len() + 5;
+    let rel32 = (target_offset as i64) - (after_call as i64);
+    debug_assert!(
+        i32::try_from(rel32).is_ok(),
+        "arg thunk: call rel32 out of range"
+    );
+    emit_call_rel32(code, rel32 as i32);
+
+    emit_mov_rr(code, Reg::RSP, Reg::RBP);
+    emit_pop_r(code, Reg::RBP);
+    emit_ret(code);
+    thunk_offset
 }
 
 /// Mark every bytecode PC that is the target of some `Jmp` / `Bz`
@@ -962,8 +1066,42 @@ pub(super) fn lower(
 
     apply_fixups(&mut code, &fixups, &bytecode_to_native, program.text.len())?;
 
+    // Emit per-function arg-shuffling thunks for any function whose
+    // address is taken (`fp = worker_main`). The thunk lets pthread /
+    // CreateThread / qsort / signal handlers etc. hand args in
+    // host-ABI registers and have the c5 callee see them at
+    // `[rbp + 16]`, `[rbp + 32]`, ... where lea_offset_bytes expects.
+    //
+    // Functions with zero params don't need a thunk -- the host call
+    // can land on the c5 entry directly; the function won't read the
+    // arg regs.
+    let mut thunk_for_func: alloc::collections::BTreeMap<usize, usize> =
+        alloc::collections::BTreeMap::new();
+    let mut addr_taken: alloc::collections::BTreeSet<usize> =
+        alloc::collections::BTreeSet::new();
+    for (_, target_bc_pc) in &pending_func_fixups {
+        addr_taken.insert(*target_bc_pc);
+    }
+    for &func_pc in &addr_taken {
+        let n_params = param_count_for_func(&program.text, func_pc);
+        if n_params == 0 {
+            continue;
+        }
+        if func_pc >= bytecode_to_native.len() {
+            continue;
+        }
+        let target = bytecode_to_native[func_pc];
+        if target == usize::MAX {
+            continue;
+        }
+        let thunk_offset = emit_arg_thunk(&mut code, n_params, target, abi);
+        thunk_for_func.insert(func_pc, thunk_offset);
+    }
+
     // Resolve pending function-pointer fixups now that the bc-to-
-    // native map is complete.
+    // native map is complete. Prefer a thunk address if we emitted
+    // one for the target function; otherwise the literal points at
+    // the function's own native entry.
     let mut func_fixups: Vec<FuncFixup> = Vec::with_capacity(pending_func_fixups.len());
     for (instr_offset, target_bc_pc) in pending_func_fixups {
         if target_bc_pc > program.text.len() {
@@ -971,12 +1109,18 @@ pub(super) fn lower(
                 "native codegen (x86_64): function pointer target {target_bc_pc} past end of bytecode"
             )));
         }
-        let target = bytecode_to_native[target_bc_pc];
-        if target == usize::MAX {
-            return Err(C5Error::Compile(format!(
-                "native codegen (x86_64): function pointer target {target_bc_pc} did not land on an instruction"
-            )));
-        }
+        let target = match thunk_for_func.get(&target_bc_pc).copied() {
+            Some(t) => t,
+            None => {
+                let t = bytecode_to_native[target_bc_pc];
+                if t == usize::MAX {
+                    return Err(C5Error::Compile(format!(
+                        "native codegen (x86_64): function pointer target {target_bc_pc} did not land on an instruction"
+                    )));
+                }
+                t
+            }
+        };
         func_fixups.push(FuncFixup {
             adrp_offset: instr_offset,
             target_native_offset: target,
@@ -1278,37 +1422,34 @@ fn lower_op(
             // Indirect call: target in r13, args already pushed onto
             // the VM stack in 16-byte slots.
             //
-            // The two flavours of Jsri target -- a c4 function
-            // (reads args via `Lea N; Li` from `[rbp + offset]`)
-            // or a libc / dlsym'd target (reads args from the
-            // host ABI's integer registers) -- want incompatible
-            // calling conventions on Win64. The c4 case needs the
-            // args to sit immediately above the saved rbp; Win64
-            // libc needs a 32-byte shadow space wedged between the
-            // call and the args, plus the first four args in
-            // rcx/rdx/r8/r9. We can't satisfy both, and the c4
-            // self-host (the workload that actually uses Jsri)
-            // wants the c4 layout, so on Win64 we go with that:
-            // just `mov r10, r13; call r10; mov r13, rax`. The
-            // SysV path keeps the existing both-paths shape since
-            // there's no shadow space to break the c4 layout.
+            // Both ABI flavours load the c5-stack args into the
+            // platform's first N int-arg registers before the call --
+            // SysV uses rdi/rsi/rdx/rcx/r8/r9, Win64 uses rcx/rdx/r8/r9.
+            // That covers libc / dlsym'd targets, which read from those
+            // regs directly, *and* c5-internal targets, which the
+            // codegen reaches through a per-function arg-shuffling
+            // thunk that re-spills the regs onto the c5 stack at
+            // `[rbp + 16]`, `[rbp + 32]`, ... (see emit_arg_thunk and
+            // the post-walk thunk-emission step in `lower`). Win64
+            // additionally needs the standard 32-byte shadow space
+            // below rsp at the call.
             let nargs = match Op::from_i64(text.get(*pc).copied().unwrap_or(0)) {
                 Some(Op::Adj) => text[*pc + 1] as usize,
                 _ => 0,
             };
+            if nargs > abi.int_arg_regs.len() {
+                return Err(C5Error::Compile(format!(
+                    "native codegen (x86_64): Jsri arg count {nargs} \
+                     exceeds the {}-register cap",
+                    abi.int_arg_regs.len()
+                )));
+            }
             emit_mov_rr(code, Reg::R10, Reg::R13);
+            for (i, &r) in abi.int_arg_regs.iter().take(nargs).enumerate() {
+                let off = ((nargs - 1 - i) as i32) * 16;
+                emit_mov_r_mem(code, Reg(r), Reg::RSP, off);
+            }
             if abi.shadow_space == 0 {
-                if nargs > abi.int_arg_regs.len() {
-                    return Err(C5Error::Compile(format!(
-                        "native codegen (x86_64): Jsri SysV arg count {nargs} \
-                         exceeds the {}-register cap",
-                        abi.int_arg_regs.len()
-                    )));
-                }
-                for (i, &r) in abi.int_arg_regs.iter().take(nargs).enumerate() {
-                    let off = ((nargs - 1 - i) as i32) * 16;
-                    emit_mov_r_mem(code, Reg(r), Reg::RSP, off);
-                }
                 // SysV variadic ABI: AL must hold the number of XMM
                 // registers used to pass float args. We never pass
                 // floats, but there's no way to know whether the
@@ -1318,8 +1459,15 @@ fn lower_op(
                 // caller-saved so clobbering it is safe; the call
                 // overwrites it with the return value anyway.
                 emit_xor_eax_eax(code);
+                emit_call_r(code, Reg::R10);
+            } else {
+                // Win64: allocate 32-byte shadow space, call, free it.
+                // shadow_space is always a multiple of 16 so rsp stays
+                // 16-aligned across the call.
+                emit_sub_rsp_imm32(code, abi.shadow_space);
+                emit_call_r(code, Reg::R10);
+                emit_add_rsp_imm32(code, abi.shadow_space);
             }
-            emit_call_r(code, Reg::R10);
             emit_mov_rr(code, Reg::R13, Reg::RAX);
         }
 

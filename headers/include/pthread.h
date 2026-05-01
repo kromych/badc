@@ -7,12 +7,13 @@
 // macOS keeps everything in libSystem (which is what `dlopen(NULL)`
 // opens by default).
 //
-// The c5 dialect can't read the `arg` parameter pthread_create
-// hands the thread function (the host ABI puts it in rdi/x0,
-// while a c5 callee reads its first param off the c5 stack). The
-// canonical workaround is shared globals + a mutex-protected
-// counter from which each thread fetches its own slot index. See
-// demos/threads.c for the pattern.
+// The thread function's `arg` parameter flows through normally:
+// when a c5 function's address is taken, the codegen emits a
+// per-function shuffling thunk that copies the host's first
+// int-arg register (rdi / x0) into the c5 stack slot the callee
+// reads from. So the standard `void *(*)(void *)` start_routine
+// shape works as you'd expect; just declare the parameter and
+// read it.
 //
 // Windows doesn't have pthreads natively. <windows.h> has the
 // CreateThread / WaitForSingleObject equivalents -- portable code

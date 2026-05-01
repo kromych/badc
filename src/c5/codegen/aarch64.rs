@@ -882,8 +882,41 @@ pub(super) fn lower(
 
     apply_fixups(&mut code, &fixups, &bytecode_to_native, program.text.len())?;
 
+    // Emit per-function arg-shuffling thunks for any function whose
+    // address is taken (`fp = worker_main`). The thunk lets pthread /
+    // CreateThread / qsort / signal handlers etc. hand args in
+    // host-ABI registers and have the c5 callee see them at
+    // `[fp + 16]`, `[fp + 32]`, ... where lea_offset_bytes expects.
+    //
+    // Functions with zero params don't need a thunk -- the host call
+    // can land on the c5 entry directly.
+    let mut thunk_for_func: alloc::collections::BTreeMap<usize, usize> =
+        alloc::collections::BTreeMap::new();
+    let mut addr_taken: alloc::collections::BTreeSet<usize> =
+        alloc::collections::BTreeSet::new();
+    for (_, target_bc_pc) in &pending_func_fixups {
+        addr_taken.insert(*target_bc_pc);
+    }
+    for &func_pc in &addr_taken {
+        let n_params = param_count_for_func(&program.text, func_pc);
+        if n_params == 0 {
+            continue;
+        }
+        if func_pc >= bytecode_to_native.len() {
+            continue;
+        }
+        let target = bytecode_to_native[func_pc];
+        if target == usize::MAX {
+            continue;
+        }
+        let thunk_offset = emit_arg_thunk(&mut code, n_params, target, abi);
+        thunk_for_func.insert(func_pc, thunk_offset);
+    }
+
     // Resolve pending function-pointer fixups now that the bytecode-to-
-    // native map is complete.
+    // native map is complete. Prefer a thunk address if we emitted one
+    // for the target function; otherwise the literal points at the
+    // function's own native entry.
     let mut func_fixups: Vec<FuncFixup> = Vec::with_capacity(pending_func_fixups.len());
     for (adrp_offset, target_bc_pc) in pending_func_fixups {
         if target_bc_pc > program.text.len() {
@@ -891,12 +924,18 @@ pub(super) fn lower(
                 "native codegen: function pointer target {target_bc_pc} past end of bytecode"
             )));
         }
-        let target = bytecode_to_native[target_bc_pc];
-        if target == usize::MAX {
-            return Err(C5Error::Compile(format!(
-                "native codegen: function pointer target {target_bc_pc} did not land on an instruction"
-            )));
-        }
+        let target = match thunk_for_func.get(&target_bc_pc).copied() {
+            Some(t) => t,
+            None => {
+                let t = bytecode_to_native[target_bc_pc];
+                if t == usize::MAX {
+                    return Err(C5Error::Compile(format!(
+                        "native codegen: function pointer target {target_bc_pc} did not land on an instruction"
+                    )));
+                }
+                t
+            }
+        };
         func_fixups.push(FuncFixup {
             adrp_offset,
             target_native_offset: target,
@@ -1572,6 +1611,95 @@ fn lea_offset_bytes(offset: i64) -> i64 {
     } else {
         offset * 8
     }
+}
+
+/// Walk a function body starting at `ent_pc` and return the number of
+/// parameter slots it actually reads. The c5 parser hands params
+/// `Op::Lea` operands `2..=N+1`; locals get `<= -1`. The optimizer's
+/// local-load fusion rewrites `Lea N; Li` / `Lea N; Lc` into
+/// `LdLocI N` / `LdLocC N`, so we scan all three opcodes; otherwise
+/// the optimized bytecode would look like the function never reads
+/// its params. Mirror of x86_64::param_count_for_func; kept per-arch
+/// so neither backend needs to import the other.
+pub(super) fn param_count_for_func(text: &[i64], ent_pc: usize) -> usize {
+    if ent_pc >= text.len() || Op::from_i64(text[ent_pc]) != Some(Op::Ent) {
+        return 0;
+    }
+    let mut max_param_offset: Option<i64> = None;
+    let mut pc = ent_pc + Op::Ent.word_size();
+    while pc < text.len() {
+        let op = match Op::from_i64(text[pc]) {
+            Some(o) => o,
+            None => break,
+        };
+        if matches!(op, Op::Ent) {
+            break;
+        }
+        if matches!(op, Op::Lea | Op::LdLocI | Op::LdLocC) {
+            let off = text[pc + 1];
+            if off >= 2 {
+                max_param_offset = Some(max_param_offset.map_or(off, |m| m.max(off)));
+            }
+        }
+        pc += op.word_size();
+    }
+    max_param_offset.map_or(0, |off| (off - 1) as usize)
+}
+
+/// Emit a host-ABI -> c5-ABI argument-shuffling thunk for a function
+/// at `target_offset`. AAPCS64 puts the first 8 integer args in
+/// x0..x7; the c5 callee reads them off the c5 stack at
+/// `[fp + 16]`, `[fp + 32]`, ... per `lea_offset_bytes`. The thunk
+/// shape mirrors the x86_64 emit_arg_thunk: standard frame, reserve
+/// N c5 arg slots below fp, store the regs into them, branch-and-
+/// link to the real function, tear down the frame, return.
+pub(super) fn emit_arg_thunk(
+    code: &mut Vec<u8>,
+    n_params: usize,
+    target_offset: usize,
+    abi: super::Abi,
+) -> usize {
+    let thunk_offset = code.len();
+    let n = n_params.min(abi.int_arg_regs.len());
+
+    // stp x29, x30, [sp, #-16]!  ; save host fp + lr
+    emit(code, enc_stp_pre(Reg::X29, Reg::X30, Reg::SP, -16));
+    // mov x29, sp                ; new frame
+    emit(code, enc_add_imm(Reg::X29, Reg::SP, 0));
+
+    if n > 0 {
+        // sub sp, sp, #16*N      ; reserve c5 arg slots
+        emit(code, enc_sub_imm(Reg::SP, Reg::SP, (16 * n) as u32));
+        // C arg `i` (in x_i) is the i'th source-order parameter. The c5
+        // parser hands the i'th declared param val = (n + 1) - i, so
+        // arg 0 should land at thunk's [x29 - 16] (shallowest), arg n-1
+        // at [x29 - 16*n] (deepest). 9-bit signed range is -256..256;
+        // n caps at 8 so the worst offset is -128, well inside stur.
+        for i in 0..n {
+            let disp = -((16 * (i + 1)) as i32);
+            emit(
+                code,
+                enc_stur(Reg(abi.int_arg_regs[i]), Reg::X29, disp),
+            );
+        }
+    }
+
+    // bl F_real -- imm26 is the byte offset / 4. enc_bl asserts on
+    // overflow, which is the right behaviour: thunks are colocated
+    // with the function body so the offset is small in practice.
+    let bl_addr = code.len() as i64;
+    let rel_bytes = (target_offset as i64) - bl_addr;
+    debug_assert!(rel_bytes % 4 == 0, "arg thunk: bl target misaligned");
+    let imm26 = (rel_bytes / 4) as i32;
+    emit(code, enc_bl(imm26));
+
+    // mov sp, x29 (= add sp, x29, #0)
+    emit(code, enc_add_imm(Reg::SP, Reg::X29, 0));
+    // ldp x29, x30, [sp], #16
+    emit(code, enc_ldp_post(Reg::X29, Reg::X30, Reg::SP, 16));
+    // ret
+    emit(code, enc_ret(Reg::X30));
+    thunk_offset
 }
 
 /// Fused `Lea N; Li/Lc` -- load the local at the matching native

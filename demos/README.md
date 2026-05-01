@@ -63,8 +63,10 @@ cargo run -- --emit-native -O -o threads demos/threads.c
 ./threads
 ```
 
-The c5 dialect can't read a thread function's `arg` parameter --
-the host ABI puts it in rdi/x0/rcx, while a c5 callee fetches its
-args off the c5 stack. Workers therefore communicate exclusively
-through globals and the lock. See the comments in
-`demos/threads.c` for the full constraint discussion.
+`arg` flows in through the codegen's host-ABI shuffling thunk:
+when a c5 function's address is taken (here, `worker_main` passed
+to `pthread_create` / `CreateThread`), the codegen emits a small
+wrapper that copies the host's first int-arg register (rdi / x0 /
+rcx) into the c5 stack slot the callee reads from. Each worker's
+logical id rides through that channel; everything bigger (the
+task queue, the result table) still goes through globals.

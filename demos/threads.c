@@ -14,12 +14,13 @@
 // shared task queue under a mutex; once the queue drains, every
 // worker exits and main() prints the per-task results.
 //
-// The c5 dialect can't read the start-function's `arg` parameter
-// (the host ABI puts it in rdi/x0/rcx, while a c5 callee fetches
-// args off the c5 stack), so workers don't carry per-thread state
-// in. Everything they need lives in globals; each thread fetches
-// its next task by atomically incrementing the shared counter
-// inside the mutex.
+// `arg` flows into the worker: the codegen emits a per-function
+// arg-shuffling thunk whenever a c5 function's address is taken,
+// so when pthread_create / CreateThread invokes worker_main with
+// the host ABI's first int register set, the thunk re-spills it
+// onto the c5 stack at the slot the c5 callee reads from. We use
+// that channel to hand each worker its logical id; everything
+// else (the task queue, the result table) stays in globals.
 //
 // Cross-platform: POSIX pthreads on macOS / Linux, Win32
 // CreateThread + CRITICAL_SECTION on Windows. Build/run:
@@ -34,7 +35,7 @@
 // Shared state -- read/written under g_lock.
 int   g_next_task;       // next unclaimed task index
 int  *g_results;         // results[NUM_TASKS]
-int  *g_picked_by;       // which worker_no claimed each task
+int  *g_picked_by;       // which worker_id claimed each task
 char *g_lock;            // pthread_mutex_t* or CRITICAL_SECTION*
 
 // Per-platform thread handles.
@@ -44,12 +45,6 @@ int *g_thread_ids;
 #else
 int *g_threads;          // pthread_t[NUM_THREADS] (8 bytes each)
 #endif
-
-// Each worker labels itself when it claims its first task. Stored
-// outside the lock since each slot is written by exactly one
-// thread (the one whose pthread_self/GetCurrentThreadId hash maps
-// here). Plain int so badc's c5 dialect doesn't need a slot type.
-int  g_worker_seq;       // running counter -- inside lock
 
 void lock() {
 #ifdef _WIN32
@@ -77,23 +72,22 @@ int compute_fib(int n) {
     return compute_fib(n - 1) + compute_fib(n - 2);
 }
 
-// Worker entry. The host calling convention hands us our `arg` in
-// the platform's first integer register, which a c5 callee can't
-// read -- so we don't try. Everything the worker needs is shared
-// global state.
+// Worker entry. The arg-shuffling thunk that the codegen emits
+// in front of every address-taken function copies the host's
+// first int-arg register (rdi / x0 / rcx) into the c5 stack slot
+// that this `arg` parameter reads from. We pass the worker's
+// logical id (cast to int * because that's what pthread_create's
+// `void *arg` is typed as in the c5 prototype).
 //
-// Returns 0 (well-defined for both pthread `void *(*)()` and
-// Win32 `DWORD (WINAPI *)()` -- c4's epilogue zero-fills rax so
-// either ABI sees a clean return value).
-int worker_main() {
+// Returns 0 -- well-defined for both pthread `void *(*)()` and
+// Win32 `DWORD (WINAPI *)()`, since either ABI takes the return
+// value out of rax.
+int worker_main(int *arg) {
     int my_id;
     int task;
     int answer;
 
-    lock();
-    my_id = g_worker_seq;
-    g_worker_seq = my_id + 1;
-    unlock();
+    my_id = (int)arg;
 
     while (1) {
         lock();
@@ -134,16 +128,18 @@ int main() {
     memset((char *)g_results, 0, sizeof(int) * NUM_TASKS);
     memset((char *)g_picked_by, 0, sizeof(int) * NUM_TASKS);
     g_next_task   = 0;
-    g_worker_seq  = 0;
 
     printf("threads demo: %d workers / %d tasks\n", NUM_THREADS, NUM_TASKS);
 
+    // Pass each worker its logical id (1-based; 0 is reserved for
+    // "no worker has touched this slot yet" in g_picked_by).
     i = 0;
     while (i < NUM_THREADS) {
 #ifdef _WIN32
-        g_handles[i] = CreateThread(0, 0, worker_main, 0, 0, g_thread_ids + i);
+        g_handles[i] = CreateThread(0, 0, worker_main, (char *)(i + 1),
+                                    0, g_thread_ids + i);
 #else
-        pthread_create(g_threads + i, 0, worker_main, 0);
+        pthread_create(g_threads + i, 0, worker_main, (char *)(i + 1));
 #endif
         i = i + 1;
     }

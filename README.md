@@ -1,7 +1,7 @@
 # `badc`
 
 `badc` (other name ideas were `betsy` and `badseed`) is a rather
-small compiler of a pretty large chunk of C language. It produces
+small compiler of a pretty large chunk of the C language. It produces
 real native binaries (macOs Mach-O, Linux ELF, or Windows PE32+),
 on any of five targets, from any host - macOS (ARM64), Linux (ARM64,
 x86_64), Windows (ARM64,x86_64).
@@ -18,16 +18,16 @@ enough divergence from the original to call the dialect **c5**. Due to
 that facetious naming the source tree spells that out as the `c5` module
 and `C5Error` type.
 
-The original `c4.c` ships as a fixture and self-hosts:
+The original `c4.c` compiler ships as a test fixture and self-hosts:
 
     badc fixtures/c/c4.c -o c4         # compile c4 to a native binary
     ./c4 hello.c                       # which then runs hello.c
 
-or you can really crank the fun up with
+or you can really crank the fun up with something like
 
-    badc --jit fixtures/c/c4.c fixtures/c/c4.c fixtures/c/c4.c
+    badc --jit fixtures/c/c4.c fixtures/c/c4.c fixtures/c/c4.c fixtures/c/c4.c
 
-to run it triple-nested :)
+to run it quadro-nested :)
 
 ## Build and run
 
@@ -36,7 +36,12 @@ to run it triple-nested :)
 
 A first run:
 
-    $ cargo run --quiet -- hello.c
+    $ cargo run --quiet -- --jit hello.c # runs native code in-process
+    Hello 123
+
+or
+
+    $ cargo run --quiet -- hello.c     # Produces native binary
     $ ./hello                          # produced by the previous line
     Hello 123
 
@@ -83,9 +88,8 @@ Five targets, cross-compile from any host to any of them:
     badc --target=windows-x64 fixtures/c/c4.c -o c4.exe
     wine c4.exe hello.c
 
-The Windows-on-ARM target produces a PE that runs on a real
-ARM-Windows box or under wine 10's aarch64-windows DLL set on
-Linux/aarch64.
+The Windows targets produce a PE that runs on a real Windows (x86_64, ARM64) box
+or under WINE on Linux (x86_64, ARM64).
 
 What the native backend executes faithfully: every fixture in
 `fixtures/c/` that runs under the VM and isn't a deliberate
@@ -93,6 +97,10 @@ safety-net check. The Mach-O, ELF, and PE paths are mirrored
 test-for-test. What native mode doesn't have: the VM's runtime
 safety net (`--track-pointers`, code-vs-data separation checks).
 Use `--interp` if you want those.
+
+### What is supported from the C language
+
+TDB
 
 ### Per-target headers and bindings
 
@@ -330,8 +338,8 @@ in-process path the same way.
 CI runs the matrix on `ubuntu-latest`, `ubuntu-24.04-arm`,
 `macos-latest`, `windows-latest`, and `windows-11-arm`. The two
 Linux runners additionally exercise the matching Windows PE
-through wine as a cross-check against the native Windows runners
--- they set `BADC_RUN_WINE=1` to opt in to that lane. A bare
-`cargo test` on a developer machine skips the wine lane (so it
+through WINE as a cross-check against the native Windows runners
+-- they need to set `BADC_RUN_WINE=1` to opt in to that lane.
+A bare `cargo test` on a developer machine skips the WINE lane (so it
 doesn't shell out to wine for every PE fixture even on a wine-
 installed laptop); set `BADC_RUN_WINE=1` locally to run it.

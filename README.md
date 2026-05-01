@@ -1,38 +1,33 @@
 # `badc`
 
 `badc` (other name ideas were `betsy` and `badseed`) is a rather
-small C compiler that produces real native binaries -- Mach-O, ELF,
-or PE32+ -- by default, on any of five targets, from any host.
+small compiler of a pretty large chunk of C language. It produces
+real native binaries (macOs Mach-O, Linux ELF, or Windows PE32+),
+on any of five targets, from any host - macOS (ARM64), Linux (ARM64,
+x86_64), Windows (ARM64,x86_64).
 
-Each binary calls into the matching system's libc/Win32
-DLLs and runs unmodified. There's also an in-process JIT (`--jit`)
-that does the same lowering and executes the result without
-touching disk, and a watchful bytecode interpreter (`--interp`)
-for when you want runtime safety nets like pointer tracking and
-mprotect-style enforcement.
+It can also run the code JiT-ted in-process so no binary is written
+to the disk. That option might be useful for using `badc` to run the
+C code as a script. Finally, there's an option to run the IR (intermediate
+representation) with tracking pointer access and bounds to catch
+memory issues.
 
-It started as a Rust port of Robert Swierczek's
-[c4](https://github.com/rswier/c4) and grew from there -- structs,
-type warnings, an optimizer, a real preprocessor with `#include`
-/ `#define` / `#pragma binding` / function-like macros, per-target
-headers, native code emission for Mach-O / ELF / PE32+, an
-in-process JIT, `<stdarg.h>`, the comma operator, full C escape
-sequences. Enough divergence from the original to call the dialect
-**c5**; the source tree spells that out as the `c5` module and
-`C5Error` type.
+It started out as a Rust port of Robert Swierczek's
+[c4](https://github.com/rswier/c4) and grew from there. There has been
+enough divergence from the original to call the dialect **c5**. Due to
+that facetious naming the source tree spells that out as the `c5` module
+and `C5Error` type.
 
-The pitch in one sentence: write something that looks like a small
-C program, point `badc` at it, and you get a Mach-O / ELF / PE32+
-binary that calls into `libSystem` / `libc` + `libdl` / `msvcrt` +
-`kernel32` and runs unmodified on the matching host. Cross-target
-from anywhere to anywhere -- a macOS host happily emits an AArch64
-Windows PE.
-
-Anything c4 itself compiles, badc compiles too, with the same exit
-code. The original `c4.c` ships as a fixture and self-hosts:
+The original `c4.c` ships as a fixture and self-hosts:
 
     badc fixtures/c/c4.c -o c4         # compile c4 to a native binary
     ./c4 hello.c                       # which then runs hello.c
+
+or you can really crank the fun up with
+
+    badc --jit fixtures/c/c4.c fixtures/c/c4.c fixtures/c/c4.c
+
+to run it triple-nested :)
 
 ## Build and run
 

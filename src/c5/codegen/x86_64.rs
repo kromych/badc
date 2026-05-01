@@ -850,9 +850,9 @@ pub(super) fn param_count_for_func(text: &[i64], ent_pc: usize) -> usize {
 ///
 /// Stack-arg layout in the host's frame at thunk entry:
 ///   * SysV  -- arg n_reg+i sits at [rbp + 16 + i*8]
-///                (16 = saved rbp + ret addr)
+///     (16 = saved rbp + ret addr)
 ///   * Win64 -- arg n_reg+i sits at [rbp + 16 + 32 + i*8]
-///                (16 + 32-byte shadow space)
+///     (16 + 32-byte shadow space)
 pub(super) fn emit_arg_thunk(
     code: &mut Vec<u8>,
     n_params: usize,

@@ -406,16 +406,17 @@ impl Preprocessor {
                     while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t') {
                         j += 1;
                     }
-                    if j < bytes.len() && bytes[j] == b'(' {
-                        if let Some((args, after)) = parse_macro_args(&line[j..]) {
-                            let expanded = expand_fn_macro(macro_def, &args);
-                            // Re-substitute so nested macro names
-                            // inside the expansion get a chance too.
-                            let recursed = self.substitute(&expanded);
-                            out.push_str(&recursed);
-                            i = j + after;
-                            continue;
-                        }
+                    if j < bytes.len()
+                        && bytes[j] == b'('
+                        && let Some((args, after)) = parse_macro_args(&line[j..])
+                    {
+                        let expanded = expand_fn_macro(macro_def, &args);
+                        // Re-substitute so nested macro names inside
+                        // the expansion get a chance too.
+                        let recursed = self.substitute(&expanded);
+                        out.push_str(&recursed);
+                        i = j + after;
+                        continue;
                     }
                 }
                 // Object-like expansion. Re-run substitute on the
@@ -736,21 +737,21 @@ fn parse_directive(rest: &str) -> Directive<'_> {
         // Function-like form: name immediately followed by `(`. The
         // C standard requires no whitespace between the name and the
         // open paren -- a space turns it into an object-like macro
-        // whose body starts with `(`.
-        if let Some(after_paren) = stripped.strip_prefix('(') {
-            if let Some(close) = after_paren.find(')') {
-                let params_str = &after_paren[..close];
-                let body = after_paren[close + 1..].trim();
-                let params: Vec<&str> = if params_str.trim().is_empty() {
-                    Vec::new()
-                } else {
-                    params_str.split(',').map(|p| p.trim()).collect()
-                };
-                return Directive::DefineFn(name, params, body);
-            }
-            // Unclosed paren -- fall through to object-like with the
-            // whole tail as the body, matching how the lexer would
-            // see a syntactically broken `#define`.
+        // whose body starts with `(`. An unclosed paren falls through
+        // to the object-like branch with the whole tail as the body,
+        // matching how the lexer would see a syntactically broken
+        // `#define`.
+        if let Some(after_paren) = stripped.strip_prefix('(')
+            && let Some(close) = after_paren.find(')')
+        {
+            let params_str = &after_paren[..close];
+            let body = after_paren[close + 1..].trim();
+            let params: Vec<&str> = if params_str.trim().is_empty() {
+                Vec::new()
+            } else {
+                params_str.split(',').map(|p| p.trim()).collect()
+            };
+            return Directive::DefineFn(name, params, body);
         }
         return Directive::Define(name, stripped.trim());
     }

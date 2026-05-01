@@ -50,9 +50,11 @@
 //! miscompiles short-circuits; with it we caught the bug while
 //! bringing up the c4 self-host.
 
-// Encoder catalogue: a few entries are still ahead of where the
-// lowering pass uses them (full op coverage lands in M1.6). Anything
-// referenced from `lower` doesn't trip the allow.
+// Encoder catalogue: a few entries (e.g. unused arithmetic forms,
+// MSR/MRS variants we'd reach for if we ever grow scheduling) sit
+// here for completeness and aren't called by the lowering pass.
+// Suppress the dead-code lint for the whole module so adding the
+// next encoder doesn't need a per-item attribute.
 #![allow(dead_code)]
 
 use alloc::format;
@@ -126,7 +128,10 @@ impl<'a> RegState<'a> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct Reg(pub u8);
 
-#[allow(dead_code)] // Several land starting M1.5.
+// Some Reg constants here aren't reached by every lowering path
+// but are kept for completeness so the assembler-style API stays
+// uniform.
+#[allow(dead_code)]
 impl Reg {
     pub const X0: Reg = Reg(0);
     pub const X1: Reg = Reg(1);
@@ -176,8 +181,8 @@ fn pool_reg(slot: u8, bank: regalloc::PoolBank) -> Reg {
 // ---------------------------------------------------------------
 // Encoders. Each `enc_*` returns the 32-bit instruction word; the
 // caller funnels it through `emit` to land in the code buffer in
-// the right byte order. They're unit-tested standalone here; the
-// lowering pass that consumes them lands in M1.4.
+// the right byte order. They're unit-tested standalone; `lower`
+// composes them into the per-op sequences.
 // ---------------------------------------------------------------
 
 /// `MOVZ <Xd>, #imm16, LSL #(hw*16)` -- load a zero-extended 16-bit
@@ -2023,9 +2028,9 @@ mod tests {
         assert_eq!(enc_sub_imm(Reg::SP, Reg::SP, 32), 0xD100_83FF);
     }
 
-    // ---- M1.5 encoders. Each `clang -c -arch arm64` byte string was
-    //      pasted from `otool -t -X` on the assembler's output; if you
-    //      change one, run the same trip and update.
+    // Encoder spot checks. Each expected byte string was pasted from
+    // `otool -t -X` on `clang -c -arch arm64` output; if you change
+    // an encoder, run the same trip and update.
 
     fn r(n: u8) -> Reg {
         Reg(n)

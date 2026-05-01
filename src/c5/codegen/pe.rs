@@ -116,12 +116,11 @@ const NUM_DATA_DIRS: u32 = 16;
 /// one, but the spec requires it and stricter hosts can reject a
 /// missing entry, so we emit it on both arches.
 ///
-/// We no longer emit `.reloc`: Stage B/2.c dropped the in-text
-/// mprotect thunk and the absolute thunk-pointer slot it required,
-/// so the image has no absolute pointers left for ASLR to patch.
-/// `DYNAMIC_BASE` stays set in DllCharacteristics for wine
-/// compatibility; in practice the image just maps at preferred
-/// `IMAGE_BASE` (mingw's minimal exe ships the same way).
+/// We don't emit `.reloc`: the image has no absolute pointers left
+/// for ASLR to patch (every cross-section reference is RIP-relative
+/// or PC-relative). `DYNAMIC_BASE` stays set in DllCharacteristics
+/// for wine compatibility; in practice the image just maps at the
+/// preferred `IMAGE_BASE` (mingw's minimal exe ships the same way).
 fn num_sections(data_section_present: bool) -> usize {
     if data_section_present { 4 } else { 3 }
 }
@@ -215,11 +214,10 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
     //    recover the global IAT slot of each import.
     let dlls = group_imports_by_dll(&imports);
 
-    // 3) Build the entry stub. Stage B/2.c dropped the in-text
-    //    mprotect-to-VirtualProtect thunk; cross-platform sources
-    //    have to gate POSIX-only ops on `#if __BADC_TARGET__` and call
-    //    the target-native API (`VirtualProtect`, etc.) directly
-    //    where they need it.
+    // 3) Build the entry stub. POSIX-only intrinsics (mprotect, ...)
+    //    aren't auto-translated to the Windows equivalent; cross-
+    //    platform sources gate those on `#if __BADC_TARGET__` and
+    //    call the target-native API (`VirtualProtect`, etc.) directly.
     let stub = build_entry_stub(machine);
 
     // 4) Compute layout. Combined .text is `entry stub |

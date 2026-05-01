@@ -80,9 +80,8 @@ pub(crate) struct DylibSpec {
     /// The codegen passes this through to the IAT entry / DT_NEEDED
     /// record verbatim.
     ///
-    /// Currently only read by tests; Stage B/2.c will switch the
-    /// codegen to read this here instead of the per-arch `IMPORTS`
-    /// table.
+    /// Read by tests; the codegen reaches the same path through the
+    /// `ResolvedDylib` view it builds during import resolution.
     #[allow(dead_code)]
     pub path: String,
     /// Bindings whose qualifier referenced `Self::name`.
@@ -116,9 +115,8 @@ pub(crate) struct Binding {
     /// on macOS (leading `_`) and for Windows aliases like
     /// `mprotect` -> `VirtualProtect`.
     ///
-    /// Currently only read by tests; the codegen still uses the
-    /// per-arch `IMPORTS` table for symbol-name lookup. Stage B/2.c
-    /// will switch the codegen to read `real_symbol` here.
+    /// Read by tests; the codegen consumes the same string through
+    /// the `ResolvedImport` view it builds during import resolution.
     #[allow(dead_code)]
     pub real_symbol: String,
 }

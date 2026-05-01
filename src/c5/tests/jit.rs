@@ -113,9 +113,9 @@ fn recursion_factorial() {
 
 #[test]
 fn printf_through_libc_got() {
-    // J4 regression: printf's libc address is dlsym'd at JIT time
-    // and patched into the GOT region; the codegen's adrp+ldr+blr
-    // (aarch64) / call qword [rip+disp32] (x86_64) reads through it.
+    // printf's libc address is dlsym'd at JIT time and patched into
+    // the fake GOT region; the codegen's adrp+ldr+blr (aarch64) or
+    // call qword [rip+disp32] (x86_64) reads through it.
     let src = r#"int main() { printf("%d\n", 42); return 0; }"#;
     assert_eq!(jit_exit(src, &["jit-printf"]), 0);
 }

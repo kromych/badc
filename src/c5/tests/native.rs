@@ -34,8 +34,8 @@ impl RunOutcome {
     }
 }
 
-/// Convenience wrapper for the M1.4-M1.7 tests that expect a clean
-/// exit. Panics on anything other than a normal exit.
+/// Convenience wrapper for tests that expect a normal `exit(N)`
+/// result. Panics on anything else (signal, build error, ...).
 fn build_and_run(src: &str, stem: &str) -> i32 {
     match build_and_run_outcome(src, stem) {
         RunOutcome::Exit(c) => c,
@@ -120,7 +120,7 @@ fn return_value_truncates_to_byte() {
     assert_eq!(build_and_run("int main() { return 257; }", "ret257"), 1);
 }
 
-// ---- M1.6: every non-intrinsic op exercised end-to-end. ----
+// ---- Every non-intrinsic op exercised end-to-end. ----
 
 #[test]
 fn add_subtract_multiply() {
@@ -212,9 +212,9 @@ fn recursion_factorial() {
     assert_eq!(build_and_run(src, "fact"), 120);
 }
 
-// ---- M1.7: libc intrinsics through the GOT. The pre-M2 cases below
-//      avoid string literals (the data-segment fixtures further down
-//      cover that path).
+// ---- libc intrinsics through the GOT. The cases here avoid string
+//      literals; the data-segment fixtures further down cover that
+//      path.
 
 #[test]
 fn exit_with_value() {
@@ -268,11 +268,11 @@ fn argc_threads_through_main() {
     assert_eq!(build_and_run(src, "argc"), 1);
 }
 
-// ---- M1.8 / M2: fixture parity. Compile each named fixture through
-//      the native pipeline and confirm the exit code matches what the
-//      VM would have produced. Post-M2 the suite includes fixtures
-//      that rely on the data segment (string literals, globals) and
-//      function pointers.
+// ---- Fixture parity. Compile each named fixture through the native
+//      pipeline and confirm the exit code matches what the VM would
+//      have produced. The suite spans the data segment (string
+//      literals, globals), function pointers, libc calls, and
+//      multi-arg variadic shapes.
 
 fn build_and_run_fixture(name: &str) -> RunOutcome {
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -305,10 +305,9 @@ fn build_and_run_fixture(name: &str) -> RunOutcome {
 /// design. `struct_value_rejected.c` is also excluded because it's a
 /// compile-error fixture (the build itself fails, which is the test).
 ///
-/// Data-segment lowering and function-pointer translation, the two
-/// known gaps in the M1 codegen, both close in M2 -- string literals
-/// flow through __DATA via `DataFixup` and function pointers resolve
-/// to native offsets via `FuncFixup`.
+/// String literals flow through __DATA via `DataFixup` and function
+/// pointers resolve to native offsets via `FuncFixup`, so fixtures
+/// that exercise those paths run end-to-end.
 const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("arithmetic.c", 60),
     ("goto.c", 5),
@@ -333,8 +332,8 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("memory_ops.c", 0),
     ("linked_list.c", 10),
     ("double_pointers.c", 0),
-    // M2: data segment + function-pointer translation. Both gaps now
-    // close through the `data_imm_positions` side channel + ADRP+ADD
+    // Data segment + function-pointer translation. Both flow through
+    // the `data_imm_positions` side channel + ADRP+ADD / RIP-relative
     // fixups. The fixtures below stress one or both.
     ("printf.c", 0),
     ("shebang.c", 7),
@@ -346,16 +345,17 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("binary_search_tree.c", 0),
     ("bst_free.c", 0),
     ("cast_to_struct_pointer.c", 42),
-    // Picked up for free now that argc/argv layout matches user
-    // calls, multi-arg Lea works, and __data is mapped.
+    // argc/argv plumbing -- the _start stub spills the platform's
+    // first two arg registers into the c5 stack slots `int main(int
+    // argc, char **argv)` expects.
     ("argc.c", 1),
     ("argv_first_char.c", 0),
     ("sizeof_basic.c", 0),
     ("sizeof_expr.c", 0),
     ("write_stdout.c", 0),
-    // M2 follow-up: trivial fixtures that exit with the same code
-    // under both backends. The type-warning fixtures emit warnings
-    // at compile time but run to a clean exit. `mprotect_allows_read`
+    // Trivial fixtures that exit with the same code under both
+    // backends. The type-warning fixtures emit warnings at compile
+    // time but still run to a clean exit. `mprotect_allows_read`
     // exercises the success path (the VM-aborting "blocks_*" cases
     // intentionally diverge from native and live in the excluded set).
     ("ir_translation_simple.c", 42),

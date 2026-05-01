@@ -24,28 +24,21 @@
 //!   LoadLibraryA + GetProcAddress per declared dylib (kernel32,
 //!   msvcrt, ws2_32, ...).
 //!
-//! ## Milestones in this file
+//! ## How libc is reached
 //!
-//! * **J2**: mmap + mprotect + transmute. Supports programs with no
-//!   relocations -- arithmetic, control flow, recursion, multi-arg
-//!   user calls.
-//! * **J3**: data + function-pointer relocations against the runtime
-//!   mmap addresses.
-//! * **J4**: libc binding via dlsym at JIT time. Allocates a writable
-//!   "fake GOT" region (one `u64` slot per [`aarch64::IMPORTS`]
-//!   entry), `dlopen(NULL)` + `dlsym(...)` to resolve each symbol,
-//!   writes the resulting address into its slot, and patches the
-//!   codegen's `got_fixups` against this region using the same
-//!   instruction-encoding logic the ELF writer uses. There is no
-//!   `_start` libc-exit fixup -- Rust catches `main`'s return value
-//!   directly via the `extern "C"` transmute call.
-//! * **J6** (current): macOS/aarch64 host. Lowers with
-//!   [`Target::MacOSAarch64`] (so variadic printf packs args on the
-//!   stack the way the platform ABI requires) and uses Apple's
-//!   `MAP_JIT` + `pthread_jit_write_protect_np` toggle to satisfy
-//!   the hardware-enforced W^X. Works with cargo's ad-hoc-signed
-//!   binaries; a hardened-runtime binary would need
-//!   `com.apple.security.cs.allow-jit`.
+//! A writable "fake GOT" region holds one `u64` slot per resolved
+//! import. POSIX populates it with `dlopen(NULL, RTLD_NOW)` +
+//! `dlsym` for each symbol; Windows walks each declared dylib with
+//! `GetModuleHandleA` / `LoadLibraryA` + `GetProcAddress`. The
+//! codegen's existing GOT relocations get patched against this
+//! region using the same instruction-encoding logic the AOT writers
+//! use. There's no `_start` libc-exit fixup -- Rust catches `main`'s
+//! return value directly via the `extern "C"` transmute call.
+//!
+//! macOS/aarch64 needs the `MAP_JIT` + `pthread_jit_write_protect_np`
+//! toggle to satisfy the hardware-enforced W^X on Apple Silicon.
+//! Works with cargo's ad-hoc-signed binaries; a hardened-runtime
+//! binary would need `com.apple.security.cs.allow-jit`.
 
 use alloc::string::{String, ToString};
 

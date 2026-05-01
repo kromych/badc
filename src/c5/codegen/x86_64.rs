@@ -1,10 +1,9 @@
 //! x86_64 instruction encoder + bytecode -> x86_64 lowering.
 //!
-//! M3.2 covers every non-intrinsic Op (arithmetic, control flow,
+//! Covers every non-intrinsic Op (arithmetic, control flow,
 //! comparisons, loads/stores, locals, function calls direct and
-//! indirect). Syscall ops still error out with a "M3.4 will land
-//! libc binding" message; data-segment + function-pointer fixups
-//! are M3.3.
+//! indirect), libc binding through the GOT, and data-segment +
+//! function-pointer fixups.
 //!
 //! ## Register convention
 //!

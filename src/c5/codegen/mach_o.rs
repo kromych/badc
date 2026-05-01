@@ -1266,7 +1266,8 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
 #[cfg(test)]
 mod tests {
     //! Verify the structural invariants of the emitted Mach-O. The
-    //! end-to-end "does it run" check happens after M1.4 lands codesign.
+    //! end-to-end "does it run" check lives in `tests/native.rs`,
+    //! which builds the binary and execs it.
 
     use super::*;
 

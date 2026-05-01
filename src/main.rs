@@ -81,8 +81,8 @@ fn main() {
 
     // Thread the user's `--target` choice into the compiler so the
     // preprocessor pulls in `headers/badc-{target}.h` rather than the
-    // default. The bytecode is target-independent; only the
-    // auto-prepended header (and Stage B's import-binding map) varies.
+    // default. The bytecode itself is target-independent; only the
+    // auto-prepended header and the resolved import map vary.
     let program = match Compiler::with_target(contents, target).compile() {
         Ok(p) => p,
         Err(e) => {

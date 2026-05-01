@@ -42,9 +42,9 @@
 //! only has to assign a slot index within the chosen bank. See
 //! `aarch64.rs` / `x86_64.rs` for the consumers.
 
-// Most of this module's surface is used by the per-arch lowering
-// passes once N4/N5 land. Keep the dead-code lint quiet while we
-// build out the analyzer first.
+// A handful of analyzer fields aren't reached by the current
+// lowering passes (debug helpers, fields kept for potential future
+// passes); the per-arch backends consume the rest.
 #![allow(dead_code)]
 
 use alloc::format;
@@ -452,9 +452,10 @@ mod tests {
         caller: 7,
     };
 
-    /// Pool sizes with the caller bank turned off -- mirrors the
-    /// pre-N6 behaviour where all Pseudo pushes went to the
-    /// callee-saved bank.
+    /// Pool sizes with the caller bank turned off so all Pseudo
+    /// pushes route through the callee-saved bank. Used by tests
+    /// that want to exercise the overflow-to-callee path even on
+    /// the architectures whose default pool has caller slots.
     const CALLEE_ONLY: PoolSizes = PoolSizes {
         callee: 8,
         caller: 0,

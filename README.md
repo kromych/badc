@@ -98,9 +98,25 @@ test-for-test. What native mode doesn't have: the VM's runtime
 safety net (`--track-pointers`, code-vs-data separation checks).
 Use `--interp` if you want those.
 
-### What is supported from the C language
+### What is supported
 
-TDB
+#### From the C language side
+
+** TBD **
+
+#### From the pre-processor side
+
+The preprocessor pre-defines a small standard set, double-underscore
+wrapped in the gcc / clang / msvc convention so they don't collide
+with user identifiers:
+
+    __BADC_VERSION__   "0.1.0"           crate version
+    __BADC_TARGET__    "macos-aarch64"   canonical target id
+    __aarch64__ / __arm64__              AArch64 targets
+    __x86_64__ / __amd64__               x86_64 targets
+    __BADC_WINDOWS__                     Windows targets only
+
+** TBD **
 
 ### Per-target headers and bindings
 
@@ -232,54 +248,6 @@ Bench on macos/aarch64 (Apple M-series, `--release`, 10 iters; see
 Roughly 1.7x on fib, 1.86x on quicksort, 3.8x on matmul. On
 linux/x86_64 the cmp+branch fusion alone is worth 6-10% across
 the same workloads.
-
-## What badc speaks
-
-The c5 core (inherited from c4): `int`, `char`, pointers, arrays,
-`if` / `else` / `while` / `return`, enums, function calls, function
-pointers, the classic libc shapes (`printf`, `malloc`, `free`,
-`memset`, `memcmp`, `memcpy`, `open` / `read` / `write` / `close`,
-`exit`, `getenv` / `setenv`, `dlopen` / `dlsym` / `dlclose` /
-`dlerror`).
-
-What c5 adds on top: `do` / `for` / `switch` / `break` /
-`continue` / `goto`, block-scoped locals, bare function references
-(`fp = add;` instead of `fp = &add;`), `sizeof(<expr>)`, structs
-through pointers (`struct Foo *p`, `p->field`), variadic function
-declarations and definitions (with a working `<stdarg.h>` --
-`va_list` / `va_start` / `va_arg` / `va_end`), full C escape
-sequences (`\r\t\xHH\NNN`...), the comma operator inside parens
-(`(a, b)` evaluates `a` for side effects and yields `b`), cdecl-
-order argument passing so a c5 function's first declared parameter
-sits at `[bp + 16]` (and the `<stdarg.h>` walker can step through
-the variadic tail with simple pointer arithmetic), and a real
-preprocessor: `#define` / `#undef` / `#ifdef` / `#ifndef` / `#if`
-/ `#else` / `#endif` (with `==` / `!=` / `defined(...)`),
-function-like macros (`#define ADD(a, b) ((a) + (b))`), `#include`
-searching the embedded header set, `#pragma once`, `#pragma
-dylib(...)` / `#pragma binding(...)`.
-
-What it doesn't have: floats, struct values, unions. `void` is a
-synonym for `char`, the way c4 had it. Type checking is lax --
-mismatched pointer / integer combos and arity errors print a
-warning to stderr and keep going. A C-style cast silences the
-warning.
-
-The preprocessor pre-defines a small standard set, double-underscore
-wrapped in the gcc / clang / msvc convention so they don't collide
-with user identifiers:
-
-    __BADC_VERSION__   "0.1.0"           crate version
-    __BADC_TARGET__    "macos-aarch64"   canonical target id
-    __aarch64__ / __arm64__              AArch64 targets
-    __x86_64__ / __amd64__               x86_64 targets
-    __BADC_WINDOWS__                     Windows targets only
-
-POSIX-conventional integer constants (`PROT_READ`, `O_RDONLY`,
-`STDIN_FILENO`, `NULL`, ...) come from each per-target header's
-`#define` block, so they're visible to any source without an
-`#include`. `badc --list-symbols` dumps the keyword and intrinsic
-lists.
 
 ## `--interp`: the safety-net VM
 

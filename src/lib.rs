@@ -1,18 +1,27 @@
-//! badc -- a Rust compiler / VM for the c5 dialect, an evolution of
-//! Robert Swierczek's c4. The pipeline is straight-line:
-//! `Compiler::new(source).compile()` returns a [`Program`], and
-//! `Vm::new(program).run()` runs it. `optimize(program)` sits between
-//! them when you want it.
+//! badc -- a Rust compiler for the c5 dialect, an evolution of
+//! Robert Swierczek's c4. The default pipeline parses, compiles,
+//! and lowers to a Mach-O / ELF / PE32+ binary you can run on the
+//! matching target. Cross-compile from anywhere to anywhere; an
+//! in-process JIT and a `Vm`-based interpreter sit alongside for
+//! programmatic use.
+//!
+//! `Compiler::new(source).compile()` returns a [`Program`].
+//! [`emit_native`] / [`emit_native_with_options`] lower it to bytes
+//! you can write to disk; [`jit_run`] / [`jit_run_with_options`]
+//! load and execute it in-process; [`Vm::new(program).run`]
+//! interprets the bytecode under a watchful pointer-tracking
+//! runtime. [`optimize`] sits between compile and any of those
+//! when you want it.
 //!
 //! Started as a Rust port of c4; over time the dialect grew structs,
 //! a real preprocessor with `#include` / `#define` / `#pragma binding`,
-//! per-target ABIs, native code emission for Mach-O / ELF / PE32+, and
-//! a register-pool optimizer -- enough divergence to warrant its own
-//! name. The `C5Error` type and `c5` module are how the new identity
-//! shows up in the source tree. The README covers the dialect, the
-//! runtime safety story, and the CLI. The binary in `src/main.rs` is
-//! little more than CLI plumbing around the types this module
-//! re-exports.
+//! per-target ABIs, native code emission for Mach-O / ELF / PE32+,
+//! the in-process JIT, and a register-pool optimizer -- enough
+//! divergence to warrant its own name. The `C5Error` type and `c5`
+//! module are how the new identity shows up in the source tree. The
+//! README covers the dialect, the runtime safety story, and the
+//! CLI. The binary in `src/main.rs` is little more than CLI
+//! plumbing around the types this module re-exports.
 //!
 //! ## no_std
 //!

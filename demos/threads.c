@@ -25,7 +25,7 @@
 // Cross-platform: POSIX pthreads on macOS / Linux, Win32
 // CreateThread + CRITICAL_SECTION on Windows. Build/run:
 //
-//   cargo run -- --emit-native -O -o threads demos/threads.c
+//   cargo run -- -O -o threads demos/threads.c
 //   ./threads
 
 #define NUM_THREADS   4

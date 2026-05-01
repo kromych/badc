@@ -750,7 +750,12 @@ impl<H: Host> Vm<H> {
                         "memset" => self.intrinsic_memset(sp)?,
                         "memcmp" => self.intrinsic_memcmp(sp)?,
                         "memcpy" => self.intrinsic_memcpy(sp)?,
-                        "printf" => self.intrinsic_printf(sp, pc - 1)?,
+                        // After both `pc += 1`s above, `pc` points
+                        // at the byte just past the JsrExt operand.
+                        // `intrinsic_printf` peeks there for the
+                        // trailing `Op::Adj N` so it knows how many
+                        // args the caller pushed.
+                        "printf" => self.intrinsic_printf(sp, pc)?,
                         "exit" => return self.load_i64(sp),
                         "write" => self.intrinsic_write(sp)?,
                         "getenv" => self.intrinsic_getenv(sp)?,
@@ -762,8 +767,8 @@ impl<H: Host> Vm<H> {
                         other => {
                             return Err(C5Error::Runtime(alloc::format!(
                                 "VM: no shim for binding `{other}` -- the VM only knows the \
-                                 standard libc surface (open/read/close/printf/...). Use \
-                                 `--emit-native` if you need to call something else."
+                                 standard libc surface (open/read/close/printf/...). Drop \
+                                 `--interp` (or use `--jit`) to reach the rest of libc."
                             )));
                         }
                     };

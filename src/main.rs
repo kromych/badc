@@ -5,8 +5,9 @@ use badc::{
     emit_native_with_options, jit_run_with_options, optimize, predefined_symbols,
 };
 
-const USAGE: &str = "usage: badc [--track-pointers] [--trace] [--list-symbols] [--optimize|-O] \
-                     [--emit-native [--target=<spec>] [-o <out>]] [--dump-asm] [--jit] \
+const USAGE: &str = "usage: badc [--optimize|-O] [--target=<spec>] [-o <out>] \
+                     [--interp [--track-pointers] [--trace]] \
+                     [--jit] [--dump-asm] [--list-symbols] \
                      <file> [args...]";
 
 /// Where the AOT codesign tool lives on every macOS install. Hardcoded
@@ -17,14 +18,11 @@ const CODESIGN: &str = "/usr/bin/codesign";
 fn main() {
     let raw: Vec<String> = std::env::args().collect();
 
-    // Strip flags off `raw` and stash a normalised positional list in
-    // `args`. The two-arg form (`-o <path>`) needs a peeking iterator,
-    // which is why this isn't a simple `.filter()` like before.
+    let mut interp = false;
     let mut track_pointers = false;
     let mut trace = false;
     let mut list_symbols = false;
     let mut optimize_flag = false;
-    let mut emit_native_flag = false;
     let mut output_path: Option<PathBuf> = None;
     let mut target_spec: Option<String> = None;
     let mut dump_asm = false;
@@ -35,11 +33,11 @@ fn main() {
     let mut args: Vec<String> = vec![prog0];
     while let Some(arg) = iter.next() {
         match arg.as_str() {
+            "--interp" => interp = true,
             "--track-pointers" => track_pointers = true,
             "--trace" => trace = true,
             "--list-symbols" => list_symbols = true,
             "--optimize" | "-O" => optimize_flag = true,
-            "--emit-native" => emit_native_flag = true,
             "--dump-asm" => dump_asm = true,
             "--jit" => jit = true,
             "-o" => match iter.next() {
@@ -71,6 +69,16 @@ fn main() {
 
     if args.len() < 2 {
         eprintln!("{USAGE}");
+        std::process::exit(1);
+    }
+
+    // VM-only flags only make sense in interpreter mode.
+    if (track_pointers || trace) && !interp {
+        eprintln!("badc: --track-pointers / --trace require --interp");
+        std::process::exit(1);
+    }
+    if interp && jit {
+        eprintln!("badc: --interp and --jit are mutually exclusive");
         std::process::exit(1);
     }
 
@@ -146,44 +154,52 @@ fn main() {
         }
     }
 
-    if emit_native_flag {
-        let out = output_path.unwrap_or_else(|| default_output_path(path));
-        emit_native_binary(&program, &out, target, native_opts);
+    if interp {
+        if output_path.is_some() {
+            eprintln!("badc: -o is only meaningful for native compilation");
+            std::process::exit(1);
+        }
+        // Pass everything from argv[1] onward to the C program -- argv[0]
+        // of the hosted program is the source file name, argv[1..] are
+        // its own args.
+        let c_args: Vec<String> = args[1..].to_vec();
+        let mut vm = Vm::new(program).with_args(c_args);
+        if track_pointers {
+            vm = vm.with_pointer_tracking();
+        }
+        if trace {
+            vm = vm.with_trace();
+        }
+        match vm.run() {
+            Ok(res) => println!("exit({})", res),
+            Err(e) => {
+                eprintln!("{}", e);
+                std::process::exit(1);
+            }
+        }
         return;
     }
 
-    if output_path.is_some() {
-        eprintln!("badc: -o is only meaningful with --emit-native");
-        std::process::exit(1);
-    }
-
-    // Pass everything from argv[1] onward to the C program -- argv[0] of the
-    // hosted program is the source file name, argv[1..] are its own args.
-    let c_args: Vec<String> = args[1..].to_vec();
-
-    let mut vm = Vm::new(program).with_args(c_args);
-    if track_pointers {
-        vm = vm.with_pointer_tracking();
-    }
-    if trace {
-        vm = vm.with_trace();
-    }
-
-    match vm.run() {
-        Ok(res) => println!("exit({})", res),
-        Err(e) => {
-            eprintln!("{}", e);
-            std::process::exit(1);
-        }
-    }
+    // Default: lower to a native binary, write it, mark it executable,
+    // and (on macOS hosts emitting Mach-O) ad-hoc codesign so dyld
+    // accepts it. Use `--interp` to opt into the bytecode VM instead;
+    // `--jit` for the in-process equivalent of native execution.
+    let out = output_path.unwrap_or_else(|| default_output_path(path, target));
+    emit_native_binary(&program, &out, target, native_opts);
 }
 
-/// Default `-o` value when the user passes `--emit-native` without one:
-/// drop the extension off the source path. `foo/bar.c` -> `foo/bar`,
-/// `script` -> `script.bin` (don't overwrite the source itself when
-/// there's no extension to strip).
-fn default_output_path(source: &str) -> PathBuf {
+/// Default `-o` value for native compilation: drop the extension off
+/// the source path; for Windows targets, append `.exe` so the result
+/// is loader-recognisable. `foo/bar.c` -> `foo/bar` (POSIX targets) or
+/// `foo/bar.exe` (Windows targets); `script` -> `script.bin` so we
+/// don't overwrite the source itself when there's no extension to
+/// strip.
+fn default_output_path(source: &str, target: Target) -> PathBuf {
     let p = PathBuf::from(source);
+    let is_windows = matches!(target, Target::WindowsX64 | Target::WindowsAarch64);
+    if is_windows {
+        return p.with_extension("exe");
+    }
     match p.extension() {
         Some(_) => p.with_extension(""),
         None => p.with_extension("bin"),

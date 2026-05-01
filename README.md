@@ -1,101 +1,73 @@
 # `badc`
 
-`badc` is a tiny C compiler that does two things: runs your code
-in-process under a watchful VM, or lowers it to a real native
-binary that talks to whatever's already on the target system. It
-started as a Rust port of Robert Swierczek's
-[c4](https://github.com/rswier/c4) and grew from there -- structs,
-type warnings, an optimizer, an in-process JIT, a real preprocessor
-with `#include` / `#define` / `#pragma binding`, per-target headers,
-native code emission for Mach-O / ELF / PE32+. Enough divergence
-from the original to call the dialect **c5**; the source tree
-spells that out as the `c5` module and `C5Error` type.
+`badc` is a tiny C compiler that produces real native binaries —
+Mach-O, ELF, or PE32+ — by default, on any of five targets, from
+any host. Each binary calls into the matching system's libc/Win32
+DLLs and runs unmodified. There's also an in-process JIT (`--jit`)
+that does the same lowering and executes the result without
+touching disk, and a watchful bytecode interpreter (`--interp`)
+for when you want runtime safety nets like pointer tracking and
+mprotect-style enforcement.
+
+It started as a Rust port of Robert Swierczek's
+[c4](https://github.com/rswier/c4) and grew from there — structs,
+type warnings, an optimizer, a real preprocessor with `#include`
+/ `#define` / `#pragma binding` / function-like macros, per-target
+headers, native code emission for Mach-O / ELF / PE32+, an
+in-process JIT, `<stdarg.h>`, the comma operator, full C escape
+sequences. Enough divergence from the original to call the dialect
+**c5**; the source tree spells that out as the `c5` module and
+`C5Error` type.
 
 The pitch in one sentence: write something that looks like a small
-C program, point `--emit-native` at it, and you get a Mach-O / ELF
-/ PE32+ that calls into `libSystem` / `libc` + `libdl` / `msvcrt`
-+ `kernel32` and runs unmodified on the matching host. Cross-target
-from anywhere to anywhere -- a macOS host happily emits an AArch64
+C program, point `badc` at it, and you get a Mach-O / ELF / PE32+
+binary that calls into `libSystem` / `libc` + `libdl` / `msvcrt` +
+`kernel32` and runs unmodified on the matching host. Cross-target
+from anywhere to anywhere — a macOS host happily emits an AArch64
 Windows PE.
 
 Anything c4 itself compiles, badc compiles too, with the same exit
 code. The original `c4.c` ships as a fixture and self-hosts:
 
-    badc fixtures/c/c4.c hello.c                   # badc -> c4 -> hello
-    badc fixtures/c/c4.c fixtures/c/c4.c hello.c   # badc -> c4 -> c4 -> hello
+    badc fixtures/c/c4.c -o c4         # compile c4 to a native binary
+    ./c4 hello.c                       # which then runs hello.c
 
 ## Build and run
 
     cargo build --release
-    ./target/release/badc path/to/file.c [program args...]
+    ./target/release/badc path/to/file.c [-o <out>]
 
 A first run:
 
     $ cargo run --quiet -- hello.c
+    $ ./hello                          # produced by the previous line
     Hello 123
-    exit(0)
 
-The first non-flag argument is the source file. Everything after
-is forwarded to the compiled program. Flags (`--track-pointers`,
-`--trace`, `--optimize`, `--emit-native`, `--target`, `--jit`) can
-appear anywhere before the source.
+The first non-flag argument is the source file. By default `badc`
+lowers it to a native binary at the obvious path next to the
+source (`hello.c` → `hello` on POSIX targets, `hello.exe` on
+Windows targets); pass `-o <path>` to choose a different one.
+
+The three execution modes:
+
+| flag       | what it does                                                       |
+|------------|--------------------------------------------------------------------|
+| (default)  | Lower to a native Mach-O / ELF / PE32+ at `-o <path>` and exit.    |
+| `--jit`    | Lower in-process, mmap the result, call `main` directly.           |
+| `--interp` | Run the bytecode under a watchful VM (pointer tracking, traces).   |
+
+Flags (`--target=<spec>`, `--optimize` / `-O`, `--dump-asm`,
+`--list-symbols`, plus the VM-only `--track-pointers` / `--trace`)
+can appear anywhere before the source.
 
 A `.c` file may start with a shebang. With `badc` on `PATH`,
-`chmod +x script.c` makes the file directly executable.
-
-## What badc speaks
-
-The c5 core (inherited from c4): `int`, `char`, pointers, arrays,
-`if` / `else` / `while` / `return`, enums, function calls, function
-pointers, the classic libc shapes (`printf`, `malloc`, `free`,
-`memset`, `memcmp`, `memcpy`, `open` / `read` / `write` / `close`,
-`exit`, `getenv` / `setenv`, `dlopen` / `dlsym` / `dlclose` /
-`dlerror`).
-
-What c5 adds on top: `do` / `for` / `switch` / `break` /
-`continue` / `goto`, block-scoped locals, bare function references
-(`fp = add;` instead of `fp = &add;`), `sizeof(<expr>)`, structs
-through pointers (`struct Foo *p`, `p->field`), variadic function
-declarations and definitions (with a working `<stdarg.h>` --
-`va_list` / `va_start` / `va_arg` / `va_end`), full C escape
-sequences (`\r\t\xHH\NNN`...), the comma operator inside parens
-(`(a, b)` evaluates `a` for side effects and yields `b`), cdecl-
-order argument passing so a c5 function's first declared parameter
-sits at `[bp + 16]` (and the `<stdarg.h>` walker can step through
-the variadic tail with simple pointer arithmetic), and a real
-preprocessor: `#define` / `#undef` / `#ifdef` / `#ifndef` / `#if`
-/ `#else` / `#endif` (with `==` / `!=` / `defined(...)`),
-function-like macros (`#define ADD(a, b) ((a) + (b))`), `#include`
-searching the embedded header set, `#pragma once`, `#pragma
-dylib(...)` / `#pragma binding(...)`.
-
-What it doesn't have: floats, struct values, unions. `void` is a
-synonym for `char`, the way c4 had it. Type checking is lax --
-mismatched pointer / integer combos and arity errors print a
-warning to stderr and keep going. A C-style cast silences the
-warning.
-
-The preprocessor pre-defines a small standard set, double-underscore
-wrapped in the gcc / clang / msvc convention so they don't collide
-with user identifiers:
-
-    __BADC_VERSION__   "0.1.0"           crate version
-    __BADC_TARGET__    "macos-aarch64"   canonical target id
-    __aarch64__ / __arm64__              AArch64 targets
-    __x86_64__ / __amd64__               x86_64 targets
-    __BADC_WINDOWS__                     Windows targets only
-
-POSIX-conventional integer constants (`PROT_READ`, `O_RDONLY`,
-`STDIN_FILENO`, `NULL`, ...) come from each per-target header's
-`#define` block, so they're visible to any source without an
-`#include`. `badc --list-symbols` dumps the keyword and intrinsic
-lists.
+`chmod +x script.c` makes the file directly executable -- in
+which case the shebang line picks the mode (`#!/usr/bin/env badc
+--interp` for the VM, the bare form for native compilation).
 
 ## Native compilation
 
-`--emit-native` skips the VM and lowers the bytecode straight to
-machine code, then wraps it in whatever container the target OS
-wants. Five targets:
+Five targets, cross-compile from any host to any of them:
 
 | `--target=`               | format        | dylibs                              |
 |---------------------------|---------------|-------------------------------------|
@@ -105,15 +77,13 @@ wants. Five targets:
 | `windows-x64`             | PE32+         | `msvcrt.dll`, `kernel32.dll`        |
 | `windows-arm64`           | PE32+         | same                                |
 
-Cross-compile from any host to any of the five:
-
-    badc --emit-native fixtures/c/c4.c -o c4-native       # macOS
+    badc fixtures/c/c4.c -o c4-native              # macOS host -> Mach-O
     ./c4-native hello.c
 
-    badc --emit-native --target=linux-aarch64 fixtures/c/c4.c -o c4-arm
+    badc --target=linux-aarch64 fixtures/c/c4.c -o c4-arm
     docker run --platform linux/arm64 -v $PWD:/w debian:stable-slim /w/c4-arm /w/hello.c
 
-    badc --emit-native --target=windows-x64 fixtures/c/c4.c -o c4.exe
+    badc --target=windows-x64 fixtures/c/c4.c -o c4.exe
     wine c4.exe hello.c
 
 The Windows-on-ARM target produces a PE that runs on a real
@@ -123,16 +93,16 @@ Linux/aarch64.
 What the native backend executes faithfully: every fixture in
 `fixtures/c/` that runs under the VM and isn't a deliberate
 safety-net check. The Mach-O, ELF, and PE paths are mirrored
-test-for-test. What it doesn't have: the VM's runtime safety net
-(`--track-pointers`, code-vs-data separation checks). Run under
-the VM if you want those.
+test-for-test. What native mode doesn't have: the VM's runtime
+safety net (`--track-pointers`, code-vs-data separation checks).
+Use `--interp` if you want those.
 
 ### Per-target headers and bindings
 
-Every `--emit-native` build auto-prepends `headers/badc-{target}.h`
-to the source before the lexer sees it. The header tells the
-preprocessor which dylibs the target offers and which local names
-resolve to which exported symbols. A snippet:
+Every native build auto-prepends `headers/badc-{target}.h` to the
+source before the lexer sees it. The header tells the preprocessor
+which dylibs the target offers and which local names resolve to
+which exported symbols. A snippet:
 
     #pragma dylib(libsystem, "/usr/lib/libSystem.B.dylib")
     #pragma binding(libsystem::printf, "_printf")
@@ -160,7 +130,7 @@ the entire Win32 API, libobjc -- the door is `dlopen` / `dlsym`:
 
     int main() {
         int *h, *fn;
-        h = dlopen(0, 2);                 // RTLD_NOW
+        h = dlopen(0, 2);                  // RTLD_NOW
         fn = dlsym(h, "strlen");
         return fn("hello, world!");        // exits 13
     }
@@ -179,15 +149,6 @@ Windows reaches `strlen` in `msvcrt.dll` via
 `LoadLibraryA` / `GetProcAddress` (`dlopen` and `dlsym` map to
 those on Windows).
 
-One caveat to flag honestly: variadic targets (`printf`, `sscanf`,
-`fprintf`) need stack-arg layout that's per-target -- macOS AAPCS64
-spills variadic args to the native stack, Linux/AArch64 keeps them
-in registers, SysV x86_64 needs `AL = 0` for the XMM count.
-`Op::Jsri` zeroes `AL` on SysV unconditionally, but doesn't yet
-know whether the dlsym'd target is variadic, so the AAPCS64-macOS
-case still mishandles spilled args. Non-variadic targets work
-everywhere; variadic is a follow-up.
-
 For a flavour of what's reachable from each system:
 
 * **macOS** -- `dlsym(h, "objc_msgSend")` gives you the Objective-C
@@ -201,12 +162,13 @@ For a flavour of what's reachable from each system:
   `dlopen("user32.dll", 0)` plus `dlsym(h, "MessageBoxA")` gives
   you a callable Win32 API entry point.
 
-### In-process JIT
+### In-process JIT (`--jit`)
 
-`--jit` lowers with the same encoder + relocations the AOT path
-uses, mmaps the result executable, and calls `main` directly via a
-transmuted function pointer. No subprocess, no on-disk binary --
-parse, lower, exec all happen in the badc process:
+Same encoder + relocations as the AOT path. badc mmaps the result
+executable, resolves libc through a runtime-built fake GOT, and
+calls `main` directly via a transmuted function pointer. No
+subprocess, no on-disk binary -- parse, lower, exec all happen
+inside the badc process:
 
     badc --jit fixtures/c/c4.c hello.c       # JIT'd c4 self-hosts hello.c
 
@@ -266,13 +228,68 @@ Roughly 1.7x on fib, 1.86x on quicksort, 3.8x on matmul. On
 linux/x86_64 the cmp+branch fusion alone is worth 6-10% across
 the same workloads.
 
-## Runtime safety (VM mode)
+## What badc speaks
+
+The c5 core (inherited from c4): `int`, `char`, pointers, arrays,
+`if` / `else` / `while` / `return`, enums, function calls, function
+pointers, the classic libc shapes (`printf`, `malloc`, `free`,
+`memset`, `memcmp`, `memcpy`, `open` / `read` / `write` / `close`,
+`exit`, `getenv` / `setenv`, `dlopen` / `dlsym` / `dlclose` /
+`dlerror`).
+
+What c5 adds on top: `do` / `for` / `switch` / `break` /
+`continue` / `goto`, block-scoped locals, bare function references
+(`fp = add;` instead of `fp = &add;`), `sizeof(<expr>)`, structs
+through pointers (`struct Foo *p`, `p->field`), variadic function
+declarations and definitions (with a working `<stdarg.h>` --
+`va_list` / `va_start` / `va_arg` / `va_end`), full C escape
+sequences (`\r\t\xHH\NNN`...), the comma operator inside parens
+(`(a, b)` evaluates `a` for side effects and yields `b`), cdecl-
+order argument passing so a c5 function's first declared parameter
+sits at `[bp + 16]` (and the `<stdarg.h>` walker can step through
+the variadic tail with simple pointer arithmetic), and a real
+preprocessor: `#define` / `#undef` / `#ifdef` / `#ifndef` / `#if`
+/ `#else` / `#endif` (with `==` / `!=` / `defined(...)`),
+function-like macros (`#define ADD(a, b) ((a) + (b))`), `#include`
+searching the embedded header set, `#pragma once`, `#pragma
+dylib(...)` / `#pragma binding(...)`.
+
+What it doesn't have: floats, struct values, unions. `void` is a
+synonym for `char`, the way c4 had it. Type checking is lax --
+mismatched pointer / integer combos and arity errors print a
+warning to stderr and keep going. A C-style cast silences the
+warning.
+
+The preprocessor pre-defines a small standard set, double-underscore
+wrapped in the gcc / clang / msvc convention so they don't collide
+with user identifiers:
+
+    __BADC_VERSION__   "0.1.0"           crate version
+    __BADC_TARGET__    "macos-aarch64"   canonical target id
+    __aarch64__ / __arm64__              AArch64 targets
+    __x86_64__ / __amd64__               x86_64 targets
+    __BADC_WINDOWS__                     Windows targets only
+
+POSIX-conventional integer constants (`PROT_READ`, `O_RDONLY`,
+`STDIN_FILENO`, `NULL`, ...) come from each per-target header's
+`#define` block, so they're visible to any source without an
+`#include`. `badc --list-symbols` dumps the keyword and intrinsic
+lists.
+
+## `--interp`: the safety-net VM
+
+`--interp` runs the program through the bytecode interpreter
+instead of compiling to native:
+
+    $ cargo run --quiet -- --interp hello.c
+    Hello 123
+    exit(0)
 
 The VM keeps code, stack, and data in three distinct address ranges
-and refuses to mix them. Function pointers carry a `CODE_BASE` bias;
-loading or storing through one is rejected, and so is calling
-through a fabricated integer (`fp = 42; fp();`) -- the call site
-refuses an address it didn't originate.
+and refuses to mix them. Function pointers carry a `CODE_BASE`
+bias; loading or storing through one is rejected, and so is
+calling through a fabricated integer (`fp = 42; fp();`) -- the
+call site refuses an address it didn't originate.
 
 `--track-pointers` opts in to allocation tracking. With it on,
 `free` on an unknown or already-freed pointer errors, and any
@@ -280,8 +297,9 @@ access into a freed allocation (or past the end of a live one) is
 reported with the offending allocation's id. `--trace` opts in to
 a per-instruction trace on stdout (off by default -- it's noisy).
 
-Native mode skips this safety net by design. Run under the VM if
-you want it.
+Native and JIT modes skip this safety net by design. Use
+`--interp` if you want the watchful version, especially while
+debugging memory-shape issues.
 
 ## no_std
 
@@ -303,13 +321,14 @@ The CLI binary always builds with the default `std` feature.
 
 Tests are split by what they exercise. `lexer`, `parser`, `codegen`,
 `vm` drive each phase directly. `programs` and `intrinsics` load
-real C sources from `fixtures/c/` and check the exit code. `types`
-checks the warning-not-error behaviour. `pointer_tracking`
-exercises the opt-in safety net. `optimizer` re-runs every fixture
-under `-O` and asserts the exit code didn't change. `native`,
-`native_elf`, `native_elf_x64`, `native_pe_x64`, and
-`native_pe_arm64` compile each fixture through the matching
-backend and exec it under the host kernel.
+real C sources from `fixtures/c/` and check the exit code under
+the VM. `types` checks the warning-not-error behaviour.
+`pointer_tracking` exercises the opt-in safety net. `optimizer`
+re-runs every fixture under `-O` and asserts the exit code didn't
+change. `native`, `native_elf`, `native_elf_x64`, `native_pe_x64`,
+and `native_pe_arm64` compile each fixture through the matching
+backend and exec it under the host kernel. `jit` covers the
+in-process path the same way.
 
 CI runs the matrix on `ubuntu-latest`, `ubuntu-24.04-arm`,
 `macos-latest`, `windows-latest`, and `windows-11-arm`. The Linux

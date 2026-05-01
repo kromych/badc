@@ -1,31 +1,33 @@
 //! Native code generation. Takes a compiled (and optionally optimized)
 //! [`Program`] and writes a platform-native executable that runs
-//! without involving the VM.
+//! without involving the VM. The default for the badc CLI; see also
+//! [`jit::jit_run`] for the in-process variant.
 //!
 //! The story is intentionally simple: lower the existing stack-machine
-//! bytecode straight to native instructions (no SSA, no register
-//! allocation worth the name -- the VM "accumulator" lives in a
-//! callee-saved register, the VM "stack" rides on the native stack),
-//! then wrap the bytes in whatever executable container the OS wants.
+//! bytecode straight to native instructions, then wrap the bytes in
+//! whatever executable container the OS wants. Lowering is one pass
+//! per arch; an opt-in register-pool analyzer ([`regalloc`]) routes
+//! short-lived push/pop pairs through real registers when `-O` is on.
 //!
 //! ## Pipeline
 //!
-//! [`Program`] -> per-arch [`Codegen`] -> raw machine code -> per-OS
+//! [`Program`] -> per-arch lowering -> raw machine code -> per-OS
 //! image writer -> bytes on disk -> (Apple Silicon only) shell to
 //! `codesign --sign -`.
 //!
 //! ## What we trade away
 //!
-//! Native binaries skip the VM's safety net. There's no `--track-pointers`
-//! equivalent, no `mprotect` enforcement, no code-vs-data separation
-//! check on every load and store. If you want those, run under the VM
-//! instead. `--emit-native` is the "I want a real binary" mode; the
-//! VM is the "I want my hand held" mode.
+//! Native binaries skip the VM's safety net. There's no
+//! `--track-pointers` equivalent, no `mprotect` enforcement, no
+//! code-vs-data separation check on every load and store. The
+//! `--interp` mode runs the same bytecode under the VM if you want
+//! the watchful version.
 //!
 //! ## Supported targets
 //!
-//! Phase 1: macOS aarch64 only. Other targets land later --
-//! see milestone tracker for the order.
+//! macOS aarch64, Linux aarch64 + x86_64, Windows aarch64 + x86_64.
+//! Cross-compile from any host to any of those by passing
+//! `--target=<spec>`. See [`Target`] for the per-target details.
 
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -48,7 +50,7 @@ pub use jit::{jit_run, jit_run_with_options};
 
 /// Which native binary to produce. Adding a target is a structural
 /// change (new variant, new match arm in [`emit_native`]) rather than
-/// a silent string parse, and gives `--emit-native` somewhere to grow.
+/// a silent string parse, and gives `--target=...` somewhere to grow.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Target {
     /// macOS on Apple Silicon. Mach-O / arm64e-not-required, links
@@ -94,11 +96,10 @@ impl Target {
 
     /// Default target -- used when callers (mostly tests) construct a
     /// [`Compiler`] without an explicit `--target` choice. Picks the
-    /// target matching the host badc is running on; the assumption is
-    /// that someone running `badc foo.c --emit-native` without naming
-    /// a target wants a binary that will run on this machine. Cross-
-    /// compilation always goes through `--target=...` (or
-    /// `Compiler::with_target`).
+    /// target matching the host badc is running on; someone running
+    /// `badc foo.c` without naming a target gets a binary that runs
+    /// on this machine. Cross-compilation always goes through
+    /// `--target=...` (or `Compiler::with_target`).
     ///
     /// On a host that isn't one of badc's supported targets, falls
     /// back to `MacOSAarch64`. That fallback is mostly there to keep

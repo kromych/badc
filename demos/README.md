@@ -18,7 +18,7 @@ port 8080. Multiplexes up to 8 concurrent connections in a single
 event loop -- no threads, no fork.
 
 ```sh
-cargo run -- --emit-native -O -o hello demos/hello_server.c
+cargo run -- -O -o hello demos/hello_server.c
 ./hello                           # listens on 0.0.0.0:8080
 curl http://localhost:8080/       # -> Hello, World!
 ```
@@ -43,7 +43,7 @@ to make any progress. The output reports who finished what and
 how many steals each worker performed.
 
 ```sh
-cargo run -- --emit-native -O -o coro demos/coro_pool.c
+cargo run -- -O -o coro demos/coro_pool.c
 ./coro
 ```
 
@@ -59,7 +59,7 @@ recursive `fib(n)` so the work is heavy enough that all four
 workers see action. Output reports which worker picked each task.
 
 ```sh
-cargo run -- --emit-native -O -o threads demos/threads.c
+cargo run -- -O -o threads demos/threads.c
 ./threads
 ```
 

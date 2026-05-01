@@ -20,7 +20,7 @@
 //
 // Cross-platform on macOS, Linux, and Windows. Build/run:
 //
-//   cargo run -- --emit-native -O -o hello demos/hello_server.c
+//   cargo run -- -O -o hello demos/hello_server.c
 //   ./hello                           # listens on 0.0.0.0:8080
 //   curl http://localhost:8080/       # -> Hello, World!
 //

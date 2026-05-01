@@ -1,7 +1,7 @@
 # `badc`
 
-`badc` is a tiny C compiler that produces real native binaries —
-Mach-O, ELF, or PE32+ — by default, on any of five targets, from
+`badc` is a tiny C compiler that produces real native binaries --
+Mach-O, ELF, or PE32+ -- by default, on any of five targets, from
 any host. Each binary calls into the matching system's libc/Win32
 DLLs and runs unmodified. There's also an in-process JIT (`--jit`)
 that does the same lowering and executes the result without
@@ -10,7 +10,7 @@ for when you want runtime safety nets like pointer tracking and
 mprotect-style enforcement.
 
 It started as a Rust port of Robert Swierczek's
-[c4](https://github.com/rswier/c4) and grew from there — structs,
+[c4](https://github.com/rswier/c4) and grew from there -- structs,
 type warnings, an optimizer, a real preprocessor with `#include`
 / `#define` / `#pragma binding` / function-like macros, per-target
 headers, native code emission for Mach-O / ELF / PE32+, an
@@ -23,7 +23,7 @@ The pitch in one sentence: write something that looks like a small
 C program, point `badc` at it, and you get a Mach-O / ELF / PE32+
 binary that calls into `libSystem` / `libc` + `libdl` / `msvcrt` +
 `kernel32` and runs unmodified on the matching host. Cross-target
-from anywhere to anywhere — a macOS host happily emits an AArch64
+from anywhere to anywhere -- a macOS host happily emits an AArch64
 Windows PE.
 
 Anything c4 itself compiles, badc compiles too, with the same exit
@@ -45,7 +45,7 @@ A first run:
 
 The first non-flag argument is the source file. By default `badc`
 lowers it to a native binary at the obvious path next to the
-source (`hello.c` → `hello` on POSIX targets, `hello.exe` on
+source (`hello.c` -> `hello` on POSIX targets, `hello.exe` on
 Windows targets); pass `-o <path>` to choose a different one.
 
 The three execution modes:

@@ -731,9 +731,14 @@ impl Compiler {
                     self.emit_op(Op::Li);
                     self.emit_op(Op::Jsri);
                 } else {
+                    let name = self.symbols[id_idx].name.clone();
+                    let suggestion = match super::headers::header_declaring(&name) {
+                        Some(h) => format!(" -- try `#include <{h}>`"),
+                        None => String::new(),
+                    };
                     return Err(C5Error::Compile(format!(
-                        "{}: bad function call",
-                        self.lex.line
+                        "{}: unknown function `{name}`{suggestion}",
+                        self.lex.line,
                     )));
                 }
                 if nargs > 0 {

@@ -1303,6 +1303,8 @@ mod tests {
                 }],
             },
             abi: super::super::Target::MacOSAarch64.abi(),
+            tls_data: Vec::new(),
+            tls_init_size: 0,
         }
     }
 

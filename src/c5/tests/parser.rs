@@ -104,17 +104,30 @@ fn bad_lvalue_in_assignment() {
 }
 
 #[test]
-fn thread_local_keyword_recognized_codegen_pending() {
+fn thread_local_compiles_to_op_tlslea() {
     // `_Thread_local` lexes as Token::ThreadLocal, the parser
-    // accepts it as a global storage-class prefix, and the symbol
-    // carries the flag. Codegen for the per-target TLS sequences
-    // is the next milestone, so use of a `_Thread_local` global
-    // emits a clean diagnostic rather than silently lowering as a
-    // regular global.
-    expect_compile_error(
-        "_Thread_local int counter;\n\
-         int main() { return 0; }",
-        "`_Thread_local` is parsed but the codegen lowering",
+    // accepts it as a global storage-class prefix, the symbol
+    // carries the flag, and reads/writes lower to Op::TlsLea
+    // operands rather than the regular data-segment Op::Imm.
+    use super::super::op::Op;
+    let src = "_Thread_local int counter;\n\
+               int main() { counter = 42; return counter; }";
+    let p = super::Compiler::new(src.to_string())
+        .compile()
+        .expect("compile failed");
+    assert!(
+        p.text.contains(&(Op::TlsLea as i64)),
+        "expected at least one Op::TlsLea in the bytecode"
+    );
+    assert_eq!(p.tls_data.len(), 8, "single 8-byte TLS slot");
+    // Lowering on a non-Linux target rejects with a clear error.
+    let plan = super::super::codegen::Target::MacOSAarch64;
+    let res =
+        super::super::emit_native_with_options(&p, plan, super::super::NativeOptions::default());
+    let err = res.expect_err("expected an error from the macOS arm64 lowering");
+    assert!(
+        err.to_string().contains("only implemented for"),
+        "expected non-Linux TLS rejection, got: {err}"
     );
 }
 

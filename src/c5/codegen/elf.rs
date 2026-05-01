@@ -73,6 +73,7 @@ const PT_LOAD: u32 = 1;
 const PT_DYNAMIC: u32 = 2;
 const PT_INTERP: u32 = 3;
 const PT_PHDR: u32 = 6;
+const PT_TLS: u32 = 7;
 const PT_GNU_STACK: u32 = 0x6474_E551;
 
 const PF_X: u32 = 1;
@@ -117,7 +118,10 @@ const TEXT_VMADDR_BASE: u64 = 0x40_0000;
 
 const ELF_HEADER_SIZE: u64 = 64;
 const PROGRAM_HEADER_SIZE: u64 = 56;
-const N_PROGRAM_HEADERS: u64 = 6;
+/// Without TLS in the program. Programs that declare a
+/// `_Thread_local` global add one more PT_TLS header (so a total of
+/// 7).
+const N_BASE_PROGRAM_HEADERS: u64 = 6;
 
 const ELF64_SYM_SIZE: u64 = 24;
 const ELF64_RELA_SIZE: u64 = 24;
@@ -767,8 +771,20 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
     }
 
     // ---- Layout pass 1: compute file offsets in r-x segment. ----
+    //
+    // PT_TLS is added when the program has any `_Thread_local`
+    // globals; the loader (`ld-linux-aarch64.so.1` /
+    // `ld-linux-x86-64.so.2`) uses it to size per-thread TLS at
+    // thread creation. `.tdata` (initialised TLS image) is the
+    // first `tls_init_size` bytes of `build.tls_data`; `.tbss`
+    // (zero-fill TLS) covers the remainder. We emit `.tdata` into
+    // file storage immediately after `.data`; `.tbss` is
+    // zero-filled (no file storage) and accounted for via PT_TLS's
+    // `p_memsz - p_filesz` only.
+    let has_tls = !build.tls_data.is_empty();
+    let n_program_headers = N_BASE_PROGRAM_HEADERS + if has_tls { 1 } else { 0 };
     let phoff = ELF_HEADER_SIZE;
-    let phsize = N_PROGRAM_HEADERS * PROGRAM_HEADER_SIZE;
+    let phsize = n_program_headers * PROGRAM_HEADER_SIZE;
 
     let interp_off = phoff + phsize;
     let dynsym_off = interp_off + interp.len() as u64;
@@ -790,7 +806,8 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
     let segment1_filesize = code_off + code_size;
     let segment1_end = round_up(segment1_filesize, PAGE_SIZE);
 
-    // ---- Layout pass 2: rw segment (.dynamic, .got, build.data). ----
+    // ---- Layout pass 2: rw segment (.dynamic, .got, build.data,
+    //      .tdata, .tbss). ----
     let segment2_off = segment1_end;
     let dynamic_off = segment2_off;
     // `build_dynamic` emits one DT_NEEDED per resolved dylib plus
@@ -800,7 +817,13 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
     let got_size = (n_imports as u64) * 8;
     let data_off = got_off + got_size;
     let data_size = build.data.len() as u64;
-    let segment2_filesize = data_off + data_size - segment2_off;
+    let tdata_off = data_off + data_size;
+    let tdata_size = build.tls_init_size as u64;
+    let tbss_size = build.tls_data.len() as u64 - tdata_size;
+    let segment2_filesize = tdata_off + tdata_size - segment2_off;
+    // The PT_LOAD's p_memsz must cover `.tbss` even though it has
+    // no file backing -- the loader zero-fills the difference.
+    let segment2_memsize = segment2_filesize + tbss_size;
     let segment2_end = round_up(segment2_off + segment2_filesize, PAGE_SIZE);
 
     // ---- VM addresses (ET_EXEC, no slide). ----
@@ -813,6 +836,7 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
     let dynamic_vmaddr = TEXT_VMADDR_BASE + dynamic_off;
     let got_vmaddr = TEXT_VMADDR_BASE + got_off;
     let data_vmaddr = TEXT_VMADDR_BASE + data_off;
+    let tdata_vmaddr = TEXT_VMADDR_BASE + tdata_off;
 
     // ---- Build the bytes. ----
     let total_filesize = segment2_end;
@@ -838,7 +862,7 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
             e_flags: 0,
             e_ehsize: ELF_HEADER_SIZE as u16,
             e_phentsize: PROGRAM_HEADER_SIZE as u16,
-            e_phnum: N_PROGRAM_HEADERS as u16,
+            e_phnum: n_program_headers as u16,
             // No section headers in our images: the dynamic linker
             // only looks at PT_DYNAMIC, and `objdump -h` falls back
             // to deriving sections from the program-header view.
@@ -886,7 +910,7 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
         PAGE_SIZE,
     );
 
-    // PT_LOAD rw -- .dynamic, .got, .data.
+    // PT_LOAD rw -- .dynamic, .got, .data, .tdata, [.tbss memsz].
     write_phdr(
         &mut out,
         PT_LOAD,
@@ -894,7 +918,7 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
         segment2_off,
         TEXT_VMADDR_BASE + segment2_off,
         segment2_filesize,
-        segment2_filesize,
+        segment2_memsize,
         PAGE_SIZE,
     );
 
@@ -909,6 +933,24 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
         dynamic_size,
         8,
     );
+
+    // PT_TLS -- describes the per-thread TLS image. Only emitted
+    // when the program declares any `_Thread_local` global; the
+    // dynamic linker uses this to allocate per-thread TLS at
+    // pthread_create time, copying `p_filesz` bytes from `.tdata`
+    // and zero-filling the remainder up to `p_memsz` (.tbss).
+    if has_tls {
+        write_phdr(
+            &mut out,
+            PT_TLS,
+            PF_R,
+            tdata_off,
+            tdata_vmaddr,
+            tdata_size,
+            tdata_size + tbss_size,
+            8,
+        );
+    }
 
     // PT_GNU_STACK rw- (no x).
     write_phdr(&mut out, PT_GNU_STACK, PF_R | PF_W, 0, 0, 0, 0, 16);
@@ -973,6 +1015,14 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
 
     // build.data -- the program's static data segment.
     out.extend_from_slice(&build.data);
+
+    // .tdata -- initialised TLS image. The first `tls_init_size`
+    // bytes of `build.tls_data`. The loader copies these into each
+    // thread's TLS region at thread creation. .tbss has no file
+    // backing -- it lives only in PT_TLS's `p_memsz - p_filesz`
+    // and gets zero-filled by the loader, so we emit nothing for
+    // it here.
+    out.extend_from_slice(&build.tls_data[..build.tls_init_size]);
 
     // Pad to end of segment 2 (page-aligned).
     while (out.len() as u64) < segment2_end {
@@ -1121,6 +1171,8 @@ mod tests {
                 }],
             },
             abi: super::super::Target::LinuxAarch64.abi(),
+            tls_data: Vec::new(),
+            tls_init_size: 0,
         }
     }
 

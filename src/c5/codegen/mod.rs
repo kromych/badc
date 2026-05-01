@@ -461,6 +461,17 @@ pub(crate) struct Build {
     /// argv at `_start`, etc.) so the choice lives in one place
     /// rather than being re-derived from `Machine` per writer.
     pub abi: Abi,
+    /// Thread-local data segment, byte-for-byte copy of
+    /// `Program::tls_data`. The writer routes the first
+    /// `tls_init_size` bytes to `.tdata` (initialised TLS image)
+    /// and the remainder to `.tbss` (zero-fill TLS bss). The
+    /// per-target codegen lowering for `Op::TlsLea` reads
+    /// `tls_data.len()` to compute variant-2 (x86_64) negative
+    /// offsets at emit time.
+    pub tls_data: Vec<u8>,
+    /// Number of `tls_data` bytes that are statically initialised.
+    /// `tls_data.len() - tls_init_size` bytes are zero-fill.
+    pub tls_init_size: usize,
 }
 
 /// Refer-by-index relocation between a code site and a `__got` slot.
@@ -488,6 +499,14 @@ pub(crate) struct DataFixup {
     /// Offset into `Build::data`.
     pub data_offset: u64,
 }
+
+// TLS relocations don't need a writer-time fixup type: the
+// per-target TLS offset (variant-1 TCB_HEAD + offset on aarch64,
+// variant-2 -(tls_size - offset) on x86_64) only depends on the
+// total TLS block size, which is known when the codegen lowers
+// `Op::TlsLea`. The codegen materialises the final immediate
+// inline; the writer just needs `Build::tls_data` /
+// `Build::tls_init_size` to lay out `.tdata` / `.tbss`.
 
 /// Relocation for a function-pointer literal (`Op::Imm <CODE_BASE+pc>`).
 /// Same `adrp + add` shape as [`DataFixup`], but the target is another

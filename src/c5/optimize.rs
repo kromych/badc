@@ -111,6 +111,11 @@ enum Insn {
     /// variant exists only so the decode pass can consume the
     /// operand and the encode pass can emit it back unchanged.
     Mcpy(i64),
+    /// `TlsLea <tls_offset>` -- thread-local-storage address load.
+    /// Same passthrough role as `Mcpy`: the optimizer doesn't
+    /// touch the operand; the variant exists so the decode/encode
+    /// pair stays in sync with the bytecode.
+    TlsLea(i64),
     /// Tombstone left in place by a pass that removed an instruction.
     /// The encoder skips these; targets continue to refer to indices,
     /// so leaving holes keeps everything stable across passes.
@@ -135,7 +140,8 @@ impl Insn {
             | Insn::JsrExt(_)
             | Insn::Branch(_, _)
             | Insn::ArithI(_, _)
-            | Insn::Mcpy(_) => 2,
+            | Insn::Mcpy(_)
+            | Insn::TlsLea(_) => 2,
             Insn::Removed => 0,
         }
     }
@@ -150,6 +156,8 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         entry_pc,
         warnings,
         data_imm_positions,
+        tls_data,
+        tls_init_size,
         dylibs,
     } = program;
 
@@ -181,6 +189,8 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         entry_pc,
         warnings,
         data_imm_positions,
+        tls_data,
+        tls_init_size,
         dylibs,
     })
 }
@@ -261,6 +271,17 @@ fn decode(text: &[i64], data_imm_positions: &[usize]) -> Result<Vec<Insn>, C5Err
                 let v = text[pc];
                 pc += 1;
                 Insn::Mcpy(v)
+            }
+            Op::TlsLea => {
+                // Op::TlsLea: byte offset within `tls_data` of the
+                // _Thread_local global being addressed. The
+                // optimizer carries it through unchanged; the
+                // codegen lowers it to the per-target TLS
+                // sequence (variant-1 mrs+add on aarch64,
+                // variant-2 mov fs:0 + sub on x86_64).
+                let v = text[pc];
+                pc += 1;
+                Insn::TlsLea(v)
             }
             // Optimizer-emitted immediate-form ops carry an operand
             // identical in shape to a regular op's operand. The
@@ -412,6 +433,10 @@ fn encode(insns: &[Insn], entry_idx: usize) -> (Vec<i64>, usize, Vec<usize>) {
             }
             Insn::Mcpy(v) => {
                 text.push(Op::Mcpy as i64);
+                text.push(*v);
+            }
+            Insn::TlsLea(v) => {
+                text.push(Op::TlsLea as i64);
                 text.push(*v);
             }
             Insn::Removed => {}
@@ -841,6 +866,8 @@ mod tests {
             entry_pc: 0,
             warnings: Vec::new(),
             data_imm_positions: Vec::new(),
+            tls_data: Vec::new(),
+            tls_init_size: 0,
             dylibs: Vec::new(),
         }
     }
@@ -1105,6 +1132,8 @@ mod tests {
             entry_pc: 0,
             warnings: Vec::new(),
             data_imm_positions: Vec::new(),
+            tls_data: Vec::new(),
+            tls_init_size: 0,
             dylibs: Vec::new(),
         };
         let opt = optimize(p).unwrap();

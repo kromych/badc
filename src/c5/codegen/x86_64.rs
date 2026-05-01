@@ -1200,6 +1200,8 @@ pub(super) fn lower(
             op_pc,
             &branch_targets,
             imports,
+            target,
+            program.tls_data.len(),
         )?;
     }
     bytecode_to_native[program.text.len()] = code.len();
@@ -1289,6 +1291,8 @@ pub(super) fn lower(
         // comment on the aarch64 lowering's `Build` construction.
         imports: super::ResolvedImports::default(),
         abi: super::Abi::default(),
+        tls_data: program.tls_data.clone(),
+        tls_init_size: program.tls_init_size,
     })
 }
 
@@ -1347,6 +1351,8 @@ fn lower_op(
     op_pc: usize,
     branch_targets: &[bool],
     imports: &super::ResolvedImports,
+    target: super::Target,
+    tls_total_size: usize,
 ) -> Result<(), C5Error> {
     match op {
         // ---- Function frame ----
@@ -1716,6 +1722,41 @@ fn lower_op(
             // r13 <- (xmm0 = (f64)r13).to_bits()
             emit_cvtsi2sd(code, Reg::XMM0, Reg::R13);
             emit_movq_r_xmm(code, Reg::R13, Reg::XMM0);
+        }
+        Op::TlsLea => {
+            // `_Thread_local` global access. Linux/x86_64 uses
+            // variant-2 TLS layout: `var_addr = FS_BASE - tls_total
+            // + offset`, with FS_BASE pointing at the TCB and the
+            // TLS image laid out before it. The `:tpoff:` value
+            // glibc loaders compute equals `-(tls_total - offset)`
+            // for static-exec.
+            //
+            // Sequence:
+            //     mov  r13, qword ptr fs:[0]      ; r13 = FS_BASE
+            //     sub  r13, (tls_total - offset)  ; r13 = var_addr
+            //
+            // The displacement is a positive 32-bit immediate; the
+            // 64-bit subtraction yields the variable's address.
+            let offset = read_operand(text, pc, "TlsLea")?;
+            if !matches!(target, Target::LinuxX64) {
+                return Err(C5Error::Compile(format!(
+                    "{:?}: `_Thread_local` codegen is only implemented for \
+                     Linux/x86_64; Windows/x86_64 (TLS directory + \
+                     `_tls_index`) is future work",
+                    target
+                )));
+            }
+            let tpoff = (tls_total_size as i64) - offset;
+            if !(0..=i32::MAX as i64).contains(&tpoff) {
+                return Err(C5Error::Compile(format!(
+                    "_Thread_local tpoff {tpoff} doesn't fit i32"
+                )));
+            }
+            // mov r13, qword ptr fs:[0]: 64 4C 8B 2C 25 00 00 00 00
+            emit_bytes(code, &[0x64, 0x4C, 0x8B, 0x2C, 0x25, 0, 0, 0, 0]);
+            // sub r13, imm32: 49 81 ED imm32_le
+            emit_bytes(code, &[0x49, 0x81, 0xED]);
+            emit_i32(code, tpoff as i32);
         }
         Op::Mcpy => {
             // src = r13, dst = pop. Copy `size` bytes inline (size

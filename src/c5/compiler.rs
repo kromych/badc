@@ -224,6 +224,18 @@ pub struct Compiler {
     /// in `Program` for the native codegen to consume.
     data_imm_positions: Vec<usize>,
 
+    /// Thread-local data segment. Same shape as `data` but the
+    /// codegen lowers accesses with the per-target TLS sequence
+    /// (TPIDR_EL0 + offset on aarch64, fs:0 + offset on x86_64,
+    /// the .tls$ callback chain on Win64). Each `_Thread_local`
+    /// global gets `slots_of_type(ty) * 8` bytes here, with
+    /// `Symbol::val` holding the byte offset within `tls_data`.
+    /// Today we don't parse TLS initialisers, so the segment is
+    /// always zero-filled and goes entirely into .tbss; the layout
+    /// leaves room for a future "initialised TLS image -> .tdata"
+    /// path.
+    tls_data: Vec<u8>,
+
     /// Preprocessor failure (e.g. unterminated `#if`) deferred from
     /// `with_target` until `compile` runs, so the construction API
     /// stays infallible (matches all the `Compiler::new(src).compile()`
@@ -301,6 +313,7 @@ impl Compiler {
             structs: Vec::new(),
             warnings: Vec::new(),
             data_imm_positions: Vec::new(),
+            tls_data: Vec::new(),
         }
     }
 
@@ -635,6 +648,8 @@ impl Compiler {
             entry_pc,
             warnings: self.warnings,
             data_imm_positions: self.data_imm_positions,
+            tls_data: self.tls_data,
+            tls_init_size: 0,
             dylibs: self.dylibs,
         })
     }
@@ -918,6 +933,16 @@ impl Compiler {
             } else {
                 if self.symbols[id_idx].class == Token::Loc as i64 {
                     self.emit_op(Op::Lea);
+                    self.emit_val(self.symbols[id_idx].val);
+                } else if self.symbols[id_idx].class == Token::Glo as i64
+                    && self.symbols[id_idx].is_thread_local
+                {
+                    // `_Thread_local` global: emit Op::TlsLea so
+                    // the codegen lowers via the per-target TLS
+                    // sequence (TPIDR_EL0 + offset on aarch64,
+                    // fs:0 + offset on x86_64). The operand is the
+                    // byte offset within the program's TLS block.
+                    self.emit_op(Op::TlsLea);
                     self.emit_val(self.symbols[id_idx].val);
                 } else if self.symbols[id_idx].class == Token::Glo as i64 {
                     self.emit_data_imm(self.symbols[id_idx].val);
@@ -2260,27 +2285,28 @@ impl Compiler {
                     }
                 } else {
                     self.symbols[id_idx].class = Token::Glo as i64;
-                    self.symbols[id_idx].val = self.data.len() as i64;
                     self.symbols[id_idx].is_thread_local = thread_local;
                     if thread_local {
-                        // Frontend-only: the keyword parses, the
-                        // symbol carries the flag, and the type
-                        // checker is happy. Codegen for ELF
-                        // .tdata/.tbss + GOT slot, PE TLS
-                        // directory + _tls_index, and Mach-O
-                        // __thread_data is the next milestone --
-                        // fail loudly here so a `_Thread_local
-                        // int x;` program can't accidentally land
-                        // as a regular global instead.
-                        return Err(C5Error::Compile(format!(
-                            "{}: `_Thread_local` is parsed but the codegen \
-                             lowering (ELF .tdata/.tbss + PE TLS directory \
-                             + Mach-O __thread_data) is not yet implemented",
-                            self.lex.line
-                        )));
-                    }
-                    for _ in 0..8 {
-                        self.data.push(0);
+                        // Allocate the variable in the TLS block.
+                        // `val` holds the byte offset within
+                        // `tls_data`; the codegen translates it
+                        // to a TPIDR_EL0 / fs:0 offset at lowering
+                        // time. Each variable gets
+                        // `slots_of_type(ty) * 8` bytes (the c5
+                        // VM stores everything in 8-byte slots).
+                        // No initialiser syntax yet, so the bytes
+                        // are zero -- the writer routes them to
+                        // .tbss accordingly.
+                        let slots = self.slots_of_type(ty);
+                        self.symbols[id_idx].val = self.tls_data.len() as i64;
+                        for _ in 0..(slots * 8) {
+                            self.tls_data.push(0);
+                        }
+                    } else {
+                        self.symbols[id_idx].val = self.data.len() as i64;
+                        for _ in 0..8 {
+                            self.data.push(0);
+                        }
                     }
                 }
                 if self.lex.tk == ',' as i64 {

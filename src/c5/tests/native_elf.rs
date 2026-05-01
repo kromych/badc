@@ -306,6 +306,16 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("struct_value_basics.c", 0),
     // Whole-struct copy via Op::Mcpy.
     ("struct_value_copy.c", 0),
+    // `_Thread_local` round-trip in the main thread; exercises
+    // PT_TLS + .tbss layout and the variant-1 (TPIDR_EL0 +
+    // TCB_HEAD + offset) lowering. The loader copies p_filesz=0
+    // bytes and zero-fills the rest; the test reads/writes the
+    // resulting per-thread region.
+    ("thread_local_basic.c", 0),
+    // Per-thread isolation: spawn a pthread, mutate TLS in the
+    // child, join, verify main's view is untouched. Fails in any
+    // accidental "TLS lowered as a regular global" regression.
+    ("thread_local_per_thread.c", 0),
 ];
 
 #[test]

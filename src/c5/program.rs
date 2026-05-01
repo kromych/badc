@@ -27,6 +27,21 @@ pub struct Program {
     pub entry_pc: usize,
     pub warnings: Vec<String>,
     pub data_imm_positions: Vec<usize>,
+    /// Initialised + zero-init thread-local data. Layout matches
+    /// the way `data` does for ordinary globals: a flat byte array
+    /// indexed by `Op::TlsLea`'s operand. The image writers copy
+    /// this into `.tdata` (initialised slice = `tls_data[..tls_init_size]`)
+    /// and `.tbss` (zero-fill remainder = `tls_data[tls_init_size..]`).
+    /// Today everything starts zero (no `_Thread_local int x = 5;`
+    /// initialiser syntax), so `tls_init_size == 0` and the whole
+    /// block lives in .tbss; the layout is structured for future
+    /// expansion.
+    pub tls_data: Vec<u8>,
+    /// Number of bytes of `tls_data` that are statically initialised
+    /// (i.e., emitted into `.tdata`). The remainder
+    /// (`tls_data.len() - tls_init_size` bytes) is zero-init and
+    /// goes into `.tbss`. Invariant: `tls_init_size <= tls_data.len()`.
+    pub tls_init_size: usize,
     /// Per-target dylib + binding map produced by the preprocessor
     /// from the `#pragma comment(dylib, ...)` and
     /// `#pragma binding(...)` directives in `headers/badc-{target}.h`.

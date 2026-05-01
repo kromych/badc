@@ -99,6 +99,15 @@ pub struct Vm<H: Host> {
     /// When true, every heap-side load/store goes through
     /// [`Vm::check_data_access`] and `free` validates its argument.
     track_pointers: bool,
+
+    /// Base address (within `data`) of the thread-local block.
+    /// `Op::TlsLea N` resolves to `tls_base + N`. The VM is single
+    /// threaded, so the per-thread isolation native targets get
+    /// from TPIDR_EL0 / fs:0 isn't reproduced here -- TLS just
+    /// behaves like a regular global. Tests that care about
+    /// per-thread semantics need to drive the native lowering via
+    /// `--jit` / native binary.
+    tls_base: usize,
 }
 
 /// `Vm::new` is only available with the `std` feature; it picks the
@@ -123,9 +132,16 @@ impl<H: Host> Vm<H> {
             .iter()
             .flat_map(|d| d.bindings.iter().map(|b| b.local_name.clone()))
             .collect();
+        // Concatenate the TLS block onto the data segment so
+        // Op::TlsLea N can resolve to `tls_base + N` and ride the
+        // existing data-side access checks. The starting offset is
+        // captured before the TLS bytes are appended.
+        let mut data = program.data;
+        let tls_base = data.len();
+        data.extend_from_slice(&program.tls_data);
         Self {
             text: program.text,
-            data: program.data,
+            data,
             entry_pc: program.entry_pc,
             stack: vec![0; STACK_CAPACITY],
             host,
@@ -135,6 +151,7 @@ impl<H: Host> Vm<H> {
             allocations: Vec::new(),
             static_end: 0,
             track_pointers: false,
+            tls_base,
         }
     }
 
@@ -808,6 +825,15 @@ impl<H: Host> Vm<H> {
                 Op::Fcvtif => {
                     let i = a;
                     a = (i as f64).to_bits() as i64;
+                }
+                Op::TlsLea => {
+                    // Single-threaded VM: TLS is just a region
+                    // appended to `data`. Resolve the operand to
+                    // `tls_base + offset` and treat downstream
+                    // loads/stores like any other data access.
+                    let offset = self.text[pc];
+                    pc += 1;
+                    a = (self.tls_base as i64) + offset;
                 }
                 Op::Mcpy => {
                     let size = self.text[pc] as usize;

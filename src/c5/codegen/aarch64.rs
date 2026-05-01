@@ -437,6 +437,17 @@ pub(super) fn enc_scvtf_d_x(dd: u8, xn: Reg) -> u32 {
     0x9E62_0000 | ((xn.0 as u32) << 5) | (dd as u32)
 }
 
+/// `MRS <Xt>, TPIDR_EL0` -- read the per-thread pointer system
+/// register. Linux glibc populates `TPIDR_EL0` at thread setup
+/// with the address of `struct pthread`, and the TLS image (our
+/// `.tdata` / `.tbss`) follows immediately after the TCB header.
+/// `var_addr = TPIDR_EL0 + TLS_TCB_HEAD (16) + offset_in_block`.
+pub(super) fn enc_mrs_tpidr_el0(rt: Reg) -> u32 {
+    // 1101_0101_0011_0011_1101_0000_0100_0000 + Rt
+    // (op0=11, op1=011, CRn=1101, CRm=0000, op2=010)
+    0xD53B_D040 | (rt.0 as u32)
+}
+
 // ---- Comparisons + condition-set. ----
 
 /// `CMP <Xn>, <Xm>` = `SUBS XZR, <Xn>, <Xm>` -- compare two registers,
@@ -977,6 +988,7 @@ pub(super) fn lower(
             op_pc,
             &branch_targets,
             imports,
+            target,
         )?;
     }
     bytecode_to_native[program.text.len()] = code.len();
@@ -1072,6 +1084,8 @@ pub(super) fn lower(
         // the per-arch lowering oblivious to the resolver.
         imports: super::ResolvedImports::default(),
         abi: super::Abi::default(),
+        tls_data: program.tls_data.clone(),
+        tls_init_size: program.tls_init_size,
     })
 }
 
@@ -1151,6 +1165,7 @@ fn lower_op(
     op_pc: usize,
     branch_targets: &[bool],
     imports: &super::ResolvedImports,
+    target: super::Target,
 ) -> Result<(), C5Error> {
     match op {
         // ---- Function frame ----
@@ -1489,6 +1504,37 @@ fn lower_op(
             // x19 <- (d0 = (f64)x19).to_bits()
             emit(code, enc_scvtf_d_x(0, Reg::X19));
             emit(code, enc_fmov_d_to_x(Reg::X19, 0));
+        }
+        Op::TlsLea => {
+            // `_Thread_local` global access. Linux/aarch64 uses
+            // variant-1 layout: `var_addr = TPIDR_EL0 + 16 + offset`
+            // where 16 is the TLS_TCB_SIZE constant glibc reserves
+            // ahead of the TLS image. The encoding stays inside
+            // `add (immediate)`'s 12-bit field for variables under
+            // 4080 bytes from the start of `.tdata`; programs with
+            // larger TLS would need a movz/movk sequence the
+            // current lowering doesn't emit (good first crash to
+            // chase if anyone trips it).
+            let offset = read_operand(text, pc, "TlsLea")?;
+            if !matches!(target, Target::LinuxAarch64) {
+                return Err(C5Error::Compile(format!(
+                    "{:?}: `_Thread_local` codegen is only implemented for \
+                     Linux/aarch64; macOS arm64 (__thread_data + \
+                     __tlv_bootstrap) and Windows/AArch64 (TLS directory) \
+                     are future work",
+                    target
+                )));
+            }
+            let imm = (offset + 16) as u32;
+            if imm >= 4096 {
+                return Err(C5Error::Compile(format!(
+                    "_Thread_local offset {imm} doesn't fit in `add` imm12; \
+                     extend the lowering to emit movz/movk if you need \
+                     larger TLS blocks"
+                )));
+            }
+            emit(code, enc_mrs_tpidr_el0(Reg::X19));
+            emit(code, enc_add_imm(Reg::X19, Reg::X19, imm));
         }
         Op::Mcpy => {
             // src = x19, dst = pop. Copy `size` bytes (size is a

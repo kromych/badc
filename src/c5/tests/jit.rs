@@ -228,6 +228,12 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     // for `a = b` where both are struct values; the VM and both
     // codegens unroll the byte-level copy at compile time.
     ("struct_value_copy.c", 0),
+    // `thread_local_*.c` aren't here -- the JIT path's host is
+    // macOS arm64 in this repo, where TLS lowering isn't
+    // implemented yet (Mach-O __thread_data + dyld
+    // __tlv_bootstrap is future work). The native_elf and
+    // native_elf_x64 runners validate the Linux paths once the
+    // built ELF lands on the orb VMs.
 ];
 
 #[test]

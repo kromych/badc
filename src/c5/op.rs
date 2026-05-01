@@ -170,9 +170,27 @@ pub enum Op {
     /// Used to lower whole-struct assignment without forcing the
     /// program to `#include <string.h>` and bind libc memcpy.
     Mcpy,
+
+    /// Thread-Local Storage address load. Operand: byte offset
+    /// within the TLS block of the variable being addressed. The
+    /// codegen materialises the TLS-base + offset address into
+    /// `a` using the platform's local-exec sequence:
+    ///   * Linux/aarch64: `mrs x19, tpidr_el0; add x19, x19, imm`
+    ///     (variant-1 layout: TLS sits AFTER the TCB head, so the
+    ///     emitted offset is `TCB_HEAD + var_offset`).
+    ///   * Linux/x86_64: `mov r13, qword ptr fs:[0]; sub r13, imm`
+    ///     (variant-2 layout: TLS sits BEFORE the FS base, so the
+    ///     emitted offset is `tls_total_size - var_offset`).
+    ///   * macOS arm64 / Win64: not yet supported -- compile-time
+    ///     reject in the writer's TLS-fixup application path.
+    ///
+    /// The VM allocates a per-Program TLS region and treats the
+    /// op as a plain `Op::Imm tls_base + offset` (no real per-
+    /// thread isolation; the VM is single-threaded).
+    TlsLea,
 }
 
-const OPS: [Op; 62] = [
+const OPS: [Op; 63] = [
     Op::Lea,
     Op::Imm,
     Op::Jmp,
@@ -237,6 +255,7 @@ const OPS: [Op; 62] = [
     Op::Fcvtfi,
     Op::Fcvtif,
     Op::Mcpy,
+    Op::TlsLea,
 ];
 
 impl Op {
@@ -267,7 +286,7 @@ impl Op {
             // arithmetic / comparison ops.
             Lea | Imm | Jmp | Jsr | Bz | Bnz | Ent | Adj | JsrExt | AddI | SubI | MulI | AndI
             | OrI | XorI | ShlI | ShrI | EqI | NeI | LtI | GtI | LeI | GeI | LdLocI | LdLocC
-            | Mcpy => 1,
+            | Mcpy | TlsLea => 1,
             // Everything else -- arithmetic, loads/stores, push,
             // indirect-jump, return, etc. -- is encoded in a
             // single word with no operand.

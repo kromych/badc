@@ -110,6 +110,20 @@ fn is_ptr_scaling_by_8(ty: i64) -> bool {
     is_pointer_ty(ty) && pointee_size(ty) > 1
 }
 
+/// Result type for a binary FP operation. Both operands are
+/// floating-point scalars; if either is `double`, the result is
+/// `double`, otherwise `float`. Mirrors the C standard's "usual
+/// arithmetic conversions" for FP operands. Internally both flow
+/// through f64 ops anyway -- the type is purely for downstream
+/// type-warning bookkeeping.
+fn fp_result_ty(lhs: i64, rhs: i64) -> i64 {
+    if lhs == Ty::Double as i64 || rhs == Ty::Double as i64 {
+        Ty::Double as i64
+    } else {
+        Ty::Float as i64
+    }
+}
+
 /// Pick the right load op for the given `ty`. `char`-typed lvalues take
 /// `Op::Lc` (one-byte load); anything else (`int`, pointers, struct
 /// pointers) goes through `Op::Li` (eight-byte load).
@@ -352,6 +366,24 @@ impl Compiler {
             // Both numeric (char vs int) -- c convention, silent.
             (false, false) => None,
         }
+    }
+
+    /// Reject mixed int/float operands for an arithmetic or
+    /// comparison op. The IR has no in-place int-to-float
+    /// conversion when the int operand is already on the stack,
+    /// and the cleanest user-facing rule is to require an explicit
+    /// `(double)x` cast to lift the int side. Once both sides are
+    /// FP, the call sites pick the right `Op::Fxxx` and let the
+    /// codegen do the f64 work.
+    fn require_both_float(&self, lhs: i64, op: &str) -> Result<(), C5Error> {
+        if !is_floating_scalar(lhs) || !is_floating_scalar(self.ty) {
+            return Err(C5Error::Compile(format!(
+                "{}: `{op}` requires both operands to be the same kind \
+                 (float or int) -- add an explicit cast to lift one side",
+                self.lex.line
+            )));
+        }
+        Ok(())
     }
 
     /// True when the most recently emitted instruction is `Imm 0` --
@@ -909,6 +941,17 @@ impl Compiler {
                     return Err(C5Error::Compile(format!("{}: bad cast", self.lex.line)));
                 }
                 self.expr(Token::Inc as i64)?;
+                // FP-vs-int casts emit conversion ops so the bit
+                // pattern in r13 is consistent with the new type.
+                // Same-class casts (int<->ptr, float<->double) are
+                // bit-pattern-compatible and need no conversion.
+                let target_is_fp = is_floating_scalar(t);
+                let source_is_fp = is_floating_scalar(self.ty);
+                if target_is_fp && !source_is_fp {
+                    self.emit_op(Op::Fcvtif);
+                } else if !target_is_fp && source_is_fp {
+                    self.emit_op(Op::Fcvtfi);
+                }
                 self.ty = t;
             } else {
                 self.expr(Token::Assign as i64)?;
@@ -976,17 +1019,28 @@ impl Compiler {
             self.ty = Ty::Int as i64;
         } else if self.lex.tk == Token::SubOp as i64 {
             self.next()?;
-            self.emit_op(Op::Imm);
+            // Constant-fold `-<int-literal>` into `Imm -N`. Float
+            // literals don't qualify -- we want Op::Fneg to apply
+            // to the parsed f64 bit pattern, not a sign flip on the
+            // integer-shaped operand.
             if self.lex.tk == Token::Num as i64 {
+                self.emit_op(Op::Imm);
                 self.emit_val(-self.lex.ival);
                 self.next()?;
+                self.ty = Ty::Int as i64;
             } else {
-                self.emit_val(-1);
-                self.emit_op(Op::Psh);
                 self.expr(Token::Inc as i64)?;
-                self.emit_op(Op::Mul);
+                if is_floating_scalar(self.ty) {
+                    self.emit_op(Op::Fneg);
+                    // self.ty already matches the operand's FP type
+                } else {
+                    self.emit_op(Op::Psh);
+                    self.emit_op(Op::Imm);
+                    self.emit_val(-1);
+                    self.emit_op(Op::Mul);
+                    self.ty = Ty::Int as i64;
+                }
             }
-            self.ty = Ty::Int as i64;
         } else if self.lex.tk == Token::Inc as i64 || self.lex.tk == Token::Dec as i64 {
             t = self.lex.tk;
             self.next()?;
@@ -1111,37 +1165,67 @@ impl Compiler {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::LtOp as i64)?;
-                self.emit_op(Op::Eq);
+                if is_floating_scalar(t) || is_floating_scalar(self.ty) {
+                    self.require_both_float(t, "==")?;
+                    self.emit_op(Op::Feq);
+                } else {
+                    self.emit_op(Op::Eq);
+                }
                 self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::NeOp as i64 {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::LtOp as i64)?;
-                self.emit_op(Op::Ne);
+                if is_floating_scalar(t) || is_floating_scalar(self.ty) {
+                    self.require_both_float(t, "!=")?;
+                    self.emit_op(Op::Fne);
+                } else {
+                    self.emit_op(Op::Ne);
+                }
                 self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::LtOp as i64 {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::ShlOp as i64)?;
-                self.emit_op(Op::Lt);
+                if is_floating_scalar(t) || is_floating_scalar(self.ty) {
+                    self.require_both_float(t, "<")?;
+                    self.emit_op(Op::Flt);
+                } else {
+                    self.emit_op(Op::Lt);
+                }
                 self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::GtOp as i64 {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::ShlOp as i64)?;
-                self.emit_op(Op::Gt);
+                if is_floating_scalar(t) || is_floating_scalar(self.ty) {
+                    self.require_both_float(t, ">")?;
+                    self.emit_op(Op::Fgt);
+                } else {
+                    self.emit_op(Op::Gt);
+                }
                 self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::LeOp as i64 {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::ShlOp as i64)?;
-                self.emit_op(Op::Le);
+                if is_floating_scalar(t) || is_floating_scalar(self.ty) {
+                    self.require_both_float(t, "<=")?;
+                    self.emit_op(Op::Fle);
+                } else {
+                    self.emit_op(Op::Le);
+                }
                 self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::GeOp as i64 {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::ShlOp as i64)?;
-                self.emit_op(Op::Ge);
+                if is_floating_scalar(t) || is_floating_scalar(self.ty) {
+                    self.require_both_float(t, ">=")?;
+                    self.emit_op(Op::Fge);
+                } else {
+                    self.emit_op(Op::Ge);
+                }
                 self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::ShlOp as i64 {
                 self.next()?;
@@ -1157,45 +1241,31 @@ impl Compiler {
                 self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::AddOp as i64 {
                 self.next()?;
-                if is_floating_scalar(t) {
-                    return Err(C5Error::Compile(format!(
-                        "{}: floating-point arithmetic not yet implemented",
-                        self.lex.line
-                    )));
-                }
                 self.emit_op(Op::Psh);
                 self.expr(Token::MulOp as i64)?;
-                if is_floating_scalar(self.ty) {
-                    return Err(C5Error::Compile(format!(
-                        "{}: floating-point arithmetic not yet implemented",
-                        self.lex.line
-                    )));
+                if is_floating_scalar(t) || is_floating_scalar(self.ty) {
+                    self.require_both_float(t, "+")?;
+                    self.emit_op(Op::Fadd);
+                    self.ty = fp_result_ty(t, self.ty);
+                } else {
+                    if is_ptr_scaling_by_8(t) {
+                        self.emit_op(Op::Psh);
+                        self.emit_op(Op::Imm);
+                        self.emit_val(8);
+                        self.emit_op(Op::Mul);
+                    }
+                    self.emit_op(Op::Add);
+                    self.ty = t;
                 }
-                if is_ptr_scaling_by_8(t) {
-                    self.emit_op(Op::Psh);
-                    self.emit_op(Op::Imm);
-                    self.emit_val(8);
-                    self.emit_op(Op::Mul);
-                }
-                self.emit_op(Op::Add);
-                self.ty = t;
             } else if self.lex.tk == Token::SubOp as i64 {
                 self.next()?;
-                if is_floating_scalar(t) {
-                    return Err(C5Error::Compile(format!(
-                        "{}: floating-point arithmetic not yet implemented",
-                        self.lex.line
-                    )));
-                }
                 self.emit_op(Op::Psh);
                 self.expr(Token::MulOp as i64)?;
-                if is_floating_scalar(self.ty) {
-                    return Err(C5Error::Compile(format!(
-                        "{}: floating-point arithmetic not yet implemented",
-                        self.lex.line
-                    )));
-                }
-                if is_pointer_ty(t) && t == self.ty {
+                if is_floating_scalar(t) || is_floating_scalar(self.ty) {
+                    self.require_both_float(t, "-")?;
+                    self.emit_op(Op::Fsub);
+                    self.ty = fp_result_ty(t, self.ty);
+                } else if is_pointer_ty(t) && t == self.ty {
                     // ptr - ptr -> element count (Int). For deeper
                     // pointers (int*, int**, ...) the element size is
                     // 8 bytes so divide; for char* the byte count is
@@ -1221,40 +1291,28 @@ impl Compiler {
                 }
             } else if self.lex.tk == Token::MulOp as i64 {
                 self.next()?;
-                if is_floating_scalar(t) {
-                    return Err(C5Error::Compile(format!(
-                        "{}: floating-point arithmetic not yet implemented",
-                        self.lex.line
-                    )));
-                }
                 self.emit_op(Op::Psh);
                 self.expr(Token::Inc as i64)?;
-                if is_floating_scalar(self.ty) {
-                    return Err(C5Error::Compile(format!(
-                        "{}: floating-point arithmetic not yet implemented",
-                        self.lex.line
-                    )));
+                if is_floating_scalar(t) || is_floating_scalar(self.ty) {
+                    self.require_both_float(t, "*")?;
+                    self.emit_op(Op::Fmul);
+                    self.ty = fp_result_ty(t, self.ty);
+                } else {
+                    self.emit_op(Op::Mul);
+                    self.ty = Ty::Int as i64;
                 }
-                self.emit_op(Op::Mul);
-                self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::DivOp as i64 {
                 self.next()?;
-                if is_floating_scalar(t) {
-                    return Err(C5Error::Compile(format!(
-                        "{}: floating-point arithmetic not yet implemented",
-                        self.lex.line
-                    )));
-                }
                 self.emit_op(Op::Psh);
                 self.expr(Token::Inc as i64)?;
-                if is_floating_scalar(self.ty) {
-                    return Err(C5Error::Compile(format!(
-                        "{}: floating-point arithmetic not yet implemented",
-                        self.lex.line
-                    )));
+                if is_floating_scalar(t) || is_floating_scalar(self.ty) {
+                    self.require_both_float(t, "/")?;
+                    self.emit_op(Op::Fdiv);
+                    self.ty = fp_result_ty(t, self.ty);
+                } else {
+                    self.emit_op(Op::Div);
+                    self.ty = Ty::Int as i64;
                 }
-                self.emit_op(Op::Div);
-                self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::ModOp as i64 {
                 self.next()?;
                 if is_floating_scalar(t) {

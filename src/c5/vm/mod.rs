@@ -729,6 +729,86 @@ impl<H: Host> Vm<H> {
                     a = self.load_u8(addr)? as i64;
                     pc += 1;
                 }
+                // Floating-point ops. Both operands enter as f64
+                // bit patterns in i64 form; we reinterpret with
+                // `f64::from_bits` for the math, then send the
+                // `to_bits()` form back through the integer-shaped
+                // accumulator on the way out.
+                Op::Fadd => {
+                    let top = f64::from_bits(self.load_i64(sp)? as u64);
+                    let acc = f64::from_bits(a as u64);
+                    a = (top + acc).to_bits() as i64;
+                    sp += 8;
+                }
+                Op::Fsub => {
+                    let top = f64::from_bits(self.load_i64(sp)? as u64);
+                    let acc = f64::from_bits(a as u64);
+                    a = (top - acc).to_bits() as i64;
+                    sp += 8;
+                }
+                Op::Fmul => {
+                    let top = f64::from_bits(self.load_i64(sp)? as u64);
+                    let acc = f64::from_bits(a as u64);
+                    a = (top * acc).to_bits() as i64;
+                    sp += 8;
+                }
+                Op::Fdiv => {
+                    let top = f64::from_bits(self.load_i64(sp)? as u64);
+                    let acc = f64::from_bits(a as u64);
+                    a = (top / acc).to_bits() as i64;
+                    sp += 8;
+                }
+                Op::Fneg => {
+                    let acc = f64::from_bits(a as u64);
+                    a = (-acc).to_bits() as i64;
+                }
+                Op::Feq => {
+                    let top = f64::from_bits(self.load_i64(sp)? as u64);
+                    let acc = f64::from_bits(a as u64);
+                    a = if top == acc { 1 } else { 0 };
+                    sp += 8;
+                }
+                Op::Fne => {
+                    let top = f64::from_bits(self.load_i64(sp)? as u64);
+                    let acc = f64::from_bits(a as u64);
+                    a = if top != acc { 1 } else { 0 };
+                    sp += 8;
+                }
+                Op::Flt => {
+                    let top = f64::from_bits(self.load_i64(sp)? as u64);
+                    let acc = f64::from_bits(a as u64);
+                    a = if top < acc { 1 } else { 0 };
+                    sp += 8;
+                }
+                Op::Fgt => {
+                    let top = f64::from_bits(self.load_i64(sp)? as u64);
+                    let acc = f64::from_bits(a as u64);
+                    a = if top > acc { 1 } else { 0 };
+                    sp += 8;
+                }
+                Op::Fle => {
+                    let top = f64::from_bits(self.load_i64(sp)? as u64);
+                    let acc = f64::from_bits(a as u64);
+                    a = if top <= acc { 1 } else { 0 };
+                    sp += 8;
+                }
+                Op::Fge => {
+                    let top = f64::from_bits(self.load_i64(sp)? as u64);
+                    let acc = f64::from_bits(a as u64);
+                    a = if top >= acc { 1 } else { 0 };
+                    sp += 8;
+                }
+                Op::Fcvtfi => {
+                    // Truncating cast, matching the C `(int)f` rule:
+                    // discard the fractional part; out-of-range
+                    // values saturate (Rust's `as i64` semantics).
+                    let f = f64::from_bits(a as u64);
+                    a = f as i64;
+                }
+                Op::Fcvtif => {
+                    let i = a;
+                    a = (i as f64).to_bits() as i64;
+                }
                 Op::JsrExt => {
                     // External library call. The operand is the
                     // binding's flat index across all

@@ -346,6 +346,9 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("c5_vprintf.c", 0),
     // Float / double frontend deliverable.
     ("float_pointer_basics.c", 0),
+    // Full FP arithmetic on Windows/AArch64 -- same NEON lowering
+    // as the ELF arm64 / macOS arm64 paths.
+    ("float_arithmetic.c", 0),
 ];
 
 #[test]

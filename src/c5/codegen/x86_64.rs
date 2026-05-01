@@ -150,6 +150,14 @@ impl Reg {
     pub const R13: Reg = Reg(13);
     pub const R14: Reg = Reg(14);
     pub const R15: Reg = Reg(15);
+    // XMM register names. The newtype `Reg` is reused for them
+    // because every encoder we hit uses the same 4-bit reg field;
+    // a separate `Xmm(u8)` would only duplicate `lo`/`high`. The
+    // SSE2 emitters above assert their args by intent (their
+    // opcodes are unique), so the GPR/XMM mix-up class of bug is
+    // mostly caught by reading the call sites.
+    pub const XMM0: Reg = Reg(0);
+    pub const XMM1: Reg = Reg(1);
 
     /// Low 3 bits -- the field encoded in ModR/M / SIB.
     pub fn lo(self) -> u8 {
@@ -437,6 +445,114 @@ pub(super) fn emit_idiv_r(code: &mut Vec<u8>, divisor: Reg) {
     emit_byte(code, modrm(0b11, 7, divisor.lo()));
 }
 
+// ---- SSE2 floating-point. ----
+//
+// XMM registers share the 0..15 register-id field with GPRs; the
+// `Reg` newtype is reused for them as a dedicated `Xmm` newtype
+// would balloon the encoder API for negligible safety gain.
+//
+// The c5 stack carries an FP value as the raw `f64::to_bits()`
+// pattern in a GPR slot; the lowering pulls it into XMM only for
+// the math itself (`movq xmm, gpr` / `movq gpr, xmm`).
+
+/// `MOVQ xmm, r64` -- move 64 bits from a GPR into the low quad of
+/// an XMM register. Encoding: `66 REX.W 0F 6E /r`.
+pub(super) fn emit_movq_xmm_r(code: &mut Vec<u8>, xmm: Reg, src: Reg) {
+    emit_byte(code, 0x66);
+    emit_byte(code, rex(true, xmm.high(), false, src.high()));
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x6E);
+    emit_byte(code, modrm(0b11, xmm.lo(), src.lo()));
+}
+
+/// `MOVQ r64, xmm` -- move 64 bits from an XMM low quad to a GPR.
+/// Encoding: `66 REX.W 0F 7E /r` (note `/r` field carries the
+/// XMM source, the `r/m` carries the destination GPR).
+pub(super) fn emit_movq_r_xmm(code: &mut Vec<u8>, dst: Reg, xmm: Reg) {
+    emit_byte(code, 0x66);
+    emit_byte(code, rex(true, xmm.high(), false, dst.high()));
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x7E);
+    emit_byte(code, modrm(0b11, xmm.lo(), dst.lo()));
+}
+
+/// Internal: emit a `F2 0F <op> /r` SSE2 SD instruction with two
+/// XMM operands, encoded as `dst <op>= src`.
+fn emit_sse2_sd(code: &mut Vec<u8>, opcode: u8, dst: Reg, src: Reg) {
+    emit_byte(code, 0xF2);
+    if dst.high() || src.high() {
+        emit_byte(code, rex(false, dst.high(), false, src.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, opcode);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
+/// `ADDSD xmm, xmm`.
+pub(super) fn emit_addsd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_sse2_sd(code, 0x58, dst, src);
+}
+
+/// `SUBSD xmm, xmm` -- `dst = dst - src`.
+pub(super) fn emit_subsd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_sse2_sd(code, 0x5C, dst, src);
+}
+
+/// `MULSD xmm, xmm`.
+pub(super) fn emit_mulsd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_sse2_sd(code, 0x59, dst, src);
+}
+
+/// `DIVSD xmm, xmm` -- `dst = dst / src`.
+pub(super) fn emit_divsd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_sse2_sd(code, 0x5E, dst, src);
+}
+
+/// `XORPD xmm, xmm` -- bitwise XOR of two doubles. With identical
+/// operands it zeroes the register, used as a building block for
+/// `FNEG` (we XOR with the sign-bit mask in another XMM).
+pub(super) fn emit_xorpd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_byte(code, 0x66);
+    if dst.high() || src.high() {
+        emit_byte(code, rex(false, dst.high(), false, src.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x57);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
+/// `UCOMISD xmm, xmm` -- ordered scalar double-precision compare,
+/// sets EFLAGS. Encoding: `66 0F 2E /r`.
+pub(super) fn emit_ucomisd(code: &mut Vec<u8>, lhs: Reg, rhs: Reg) {
+    emit_byte(code, 0x66);
+    if lhs.high() || rhs.high() {
+        emit_byte(code, rex(false, lhs.high(), false, rhs.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x2E);
+    emit_byte(code, modrm(0b11, lhs.lo(), rhs.lo()));
+}
+
+/// `CVTSI2SD xmm, r64` -- signed 64-bit int to double, with REX.W.
+/// Encoding: `F2 REX.W 0F 2A /r`.
+pub(super) fn emit_cvtsi2sd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_byte(code, 0xF2);
+    emit_byte(code, rex(true, dst.high(), false, src.high()));
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x2A);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
+/// `CVTTSD2SI r64, xmm` -- truncating double-to-signed-int.
+/// Encoding: `F2 REX.W 0F 2C /r`.
+pub(super) fn emit_cvttsd2si(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_byte(code, 0xF2);
+    emit_byte(code, rex(true, dst.high(), false, src.high()));
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x2C);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
 /// `CQO` (`CDQE` for 32-bit; we want the 64-bit form) -- sign-extend
 /// rax into rdx:rax. Encoding: `REX.W + 99`.
 pub(super) fn emit_cqo(code: &mut Vec<u8>) {
@@ -540,6 +656,16 @@ pub(super) enum Cc {
     Le = 0xE,
     /// Greater than or equal (signed).
     Ge = 0xD,
+    /// Below (CF=1) -- used by FP comparisons after `UCOMISD`,
+    /// where the "less" result lives under the carry flag rather
+    /// than the signed less-than encoding.
+    B = 0x2,
+    /// Below or equal (CF=1 || ZF=1) -- FP `<=`.
+    Be = 0x6,
+    /// Above (CF=0 && ZF=0) -- FP `>`.
+    A = 0x7,
+    /// Above or equal (CF=0) -- FP `>=`.
+    Ae = 0x3,
 }
 
 impl Cc {
@@ -556,6 +682,10 @@ impl Cc {
             Cc::Ge => Cc::L,
             Cc::G => Cc::Le,
             Cc::Le => Cc::G,
+            Cc::B => Cc::Ae,
+            Cc::Ae => Cc::B,
+            Cc::A => Cc::Be,
+            Cc::Be => Cc::A,
         }
     }
 }
@@ -1548,6 +1678,45 @@ fn lower_op(
             let binding_idx = read_operand(text, pc, "JsrExt")?;
             emit_libc_call(binding_idx, text, *pc, code, got_fixups, abi, imports)?;
         }
+
+        // ---- Floating-point ----
+        //
+        // Pop top into a GPR, stage both operands into xmm0/xmm1
+        // via `MOVQ`, run the SSE2 op into xmm0, and copy the
+        // result back to r13. xmm0/xmm1 are caller-saved per SysV
+        // and Win64 -- no preservation needed across c5-internal
+        // ops, and the callee-saved r13 (acc) keeps its value
+        // across the FP register dance.
+        Op::Fadd => emit_fp_binop(code, reg_state, emit_addsd, /*commutative=*/ true),
+        Op::Fsub => emit_fp_binop(code, reg_state, emit_subsd, /*commutative=*/ false),
+        Op::Fmul => emit_fp_binop(code, reg_state, emit_mulsd, /*commutative=*/ true),
+        Op::Fdiv => emit_fp_binop(code, reg_state, emit_divsd, /*commutative=*/ false),
+        Op::Fneg => {
+            // xmm0 = acc; xmm1 = sign-bit mask (1<<63); xmm0 ^= xmm1.
+            // Build the sign mask in r10 (no SSE constants in our
+            // image), move to xmm1, XOR.
+            emit_movq_xmm_r(code, Reg::XMM0, Reg::R13);
+            emit_mov_r_imm64(code, Reg::R10, i64::MIN);
+            emit_movq_xmm_r(code, Reg::XMM1, Reg::R10);
+            emit_xorpd(code, Reg::XMM0, Reg::XMM1);
+            emit_movq_r_xmm(code, Reg::R13, Reg::XMM0);
+        }
+        Op::Feq => emit_fp_cmp(code, reg_state, Cc::E),
+        Op::Fne => emit_fp_cmp(code, reg_state, Cc::Ne),
+        Op::Flt => emit_fp_cmp(code, reg_state, Cc::B),
+        Op::Fgt => emit_fp_cmp(code, reg_state, Cc::A),
+        Op::Fle => emit_fp_cmp(code, reg_state, Cc::Be),
+        Op::Fge => emit_fp_cmp(code, reg_state, Cc::Ae),
+        Op::Fcvtfi => {
+            // r13 <- (i64)(xmm0 = f64::from_bits(r13))
+            emit_movq_xmm_r(code, Reg::XMM0, Reg::R13);
+            emit_cvttsd2si(code, Reg::R13, Reg::XMM0);
+        }
+        Op::Fcvtif => {
+            // r13 <- (xmm0 = (f64)r13).to_bits()
+            emit_cvtsi2sd(code, Reg::XMM0, Reg::R13);
+            emit_movq_r_xmm(code, Reg::R13, Reg::XMM0);
+        }
     }
     Ok(())
 }
@@ -1707,6 +1876,44 @@ fn cmp_with_pop(code: &mut Vec<u8>, reg_state: &mut RegState<'_>, cc: Cc) {
     emit_cmp_rr(code, lhs, Reg::R13);
     // Set into r10b and movzx into r13. We can't `xor r13, r13`
     // first because xor sets the flags the setcc would read.
+    emit_setcc_r8(code, cc, Reg::R10);
+    emit_movzx_r_r8(code, Reg::R13, Reg::R10);
+}
+
+/// FP binary op lowering. Pop the c5 stack top into a GPR, load
+/// both operands into xmm0/xmm1, and run the encoded SSE2 op.
+/// `commutative` selects whether to compute `xmm0 op= xmm1`
+/// (commutative add/mul) or `xmm0 = top op acc` with the operand
+/// order baked into `xmm0 ← top, xmm1 ← acc, xmm0 op= xmm1`
+/// (sub/div). Either way the result lands in xmm0 and ships back
+/// to r13.
+fn emit_fp_binop<F: Fn(&mut Vec<u8>, Reg, Reg)>(
+    code: &mut Vec<u8>,
+    reg_state: &mut RegState<'_>,
+    op_xmm: F,
+    _commutative: bool,
+) {
+    let lhs = pop_lhs_reg(code, reg_state);
+    // xmm0 = top, xmm1 = acc.
+    emit_movq_xmm_r(code, Reg::XMM0, lhs);
+    emit_movq_xmm_r(code, Reg::XMM1, Reg::R13);
+    // For both commutative and non-commutative ops the same
+    // ordering works because we want `top <op> acc` and we put
+    // `top` in xmm0, `acc` in xmm1, so `xmm0 op= xmm1` produces
+    // exactly that.
+    op_xmm(code, Reg::XMM0, Reg::XMM1);
+    emit_movq_r_xmm(code, Reg::R13, Reg::XMM0);
+}
+
+/// FP comparison: pop top, ucomisd top against acc, set r13 to the
+/// 0/1 boolean by `cc`. Uses the unsigned-style cc codes (B/A/Be/Ae)
+/// because UCOMISD writes its result into CF/ZF rather than the
+/// signed SF/OF pair that integer SUBS targets.
+fn emit_fp_cmp(code: &mut Vec<u8>, reg_state: &mut RegState<'_>, cc: Cc) {
+    let lhs = pop_lhs_reg(code, reg_state);
+    emit_movq_xmm_r(code, Reg::XMM0, lhs);
+    emit_movq_xmm_r(code, Reg::XMM1, Reg::R13);
+    emit_ucomisd(code, Reg::XMM0, Reg::XMM1);
     emit_setcc_r8(code, cc, Reg::R10);
     emit_movzx_r_r8(code, Reg::R13, Reg::R10);
 }

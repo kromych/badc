@@ -272,6 +272,11 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("c5_vprintf.c", 0),
     // Float / double frontend deliverable.
     ("float_pointer_basics.c", 0),
+    // Full FP arithmetic + comparisons + casts on Linux x86_64
+    // (SysV). The x86_64 codegen lowers Fadd/.../Fcvtfi via SSE2
+    // (movq xmm/gpr; addsd/subsd/mulsd/divsd; ucomisd; cvtsi2sd;
+    // cvttsd2si).
+    ("float_arithmetic.c", 0),
 ];
 
 #[test]

@@ -123,25 +123,6 @@ fn unknown_struct_name_is_rejected() {
 }
 
 #[test]
-fn float_scalar_arithmetic_not_yet_implemented() {
-    // Frontend accepts `float x;` declarations and `1.5` literals,
-    // but binary arithmetic on a float scalar is gated behind the
-    // not-yet-shipped float codegen.
-    expect_compile_error(
-        "int main() { float x; x = 1.0; x = x + 1.0; return 0; }",
-        "floating-point arithmetic not yet implemented",
-    );
-}
-
-#[test]
-fn double_scalar_arithmetic_not_yet_implemented() {
-    expect_compile_error(
-        "int main() { double y; y = 2.5; y = y * 3.0; return 0; }",
-        "floating-point arithmetic not yet implemented",
-    );
-}
-
-#[test]
 fn float_modulo_rejected() {
     // `%` on floats is not legal C either; we surface our own error
     // so the message points at the operand rather than at the op.
@@ -153,8 +134,24 @@ fn float_modulo_rejected() {
 
 #[test]
 fn float_increment_not_yet_implemented() {
+    // `f++` on a float would need to lower to `f = f + 1.0`, but the
+    // current `++/--` lowering hard-codes integer arithmetic via
+    // `Op::Imm 1; Op::Add` patches over the lvalue load. The float
+    // path is still ahead of us.
     expect_compile_error(
         "int main() { float x; x = 1.0; x++; return 0; }",
         "floating-point ++/-- not yet implemented",
+    );
+}
+
+#[test]
+fn float_int_mixed_addition_requires_cast() {
+    // The IR has no in-place int-to-float promotion when the int
+    // operand is already on the stack, so c5 requires an explicit
+    // cast to lift the int side. `(double)i + 1.0` works; bare
+    // `i + 1.0` doesn't.
+    expect_compile_error(
+        "int main() { int i; double y; i = 1; y = i + 1.0; return 0; }",
+        "requires both operands to be the same kind",
     );
 }

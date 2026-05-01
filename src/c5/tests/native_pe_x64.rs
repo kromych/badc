@@ -398,6 +398,10 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("c5_vprintf.c", 0),
     // Float / double frontend deliverable.
     ("float_pointer_basics.c", 0),
+    // Full FP arithmetic on Win64 -- same SSE2 lowering as the
+    // ELF x64 path; the only thing that varies is the call site
+    // ABI, which this fixture doesn't exercise (no FP libc calls).
+    ("float_arithmetic.c", 0),
 ];
 
 #[test]

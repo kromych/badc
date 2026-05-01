@@ -386,10 +386,14 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // (AAPCS64 variadic spills); this fixture sidesteps the
     // bridge and stays inside c5 stack semantics throughout.
     ("c5_vprintf.c", 0),
-    // Float / double frontend-only deliverable: declarations,
-    // pointer arithmetic, indexed loads/stores, sizeof. FP
-    // arithmetic is a future SSE/NEON milestone.
+    // Float / double basics -- declarations, pointer arithmetic,
+    // sizeof.
     ("float_pointer_basics.c", 0),
+    // Full FP arithmetic + comparisons + casts on macOS arm64.
+    // The aarch64 codegen lowers Fadd/.../Fcvtfi to FMOV +
+    // FADD/FSUB/FMUL/FDIV/FCMP/FCVTZS/SCVTF; this fixture is the
+    // host-platform smoke test for that pipeline.
+    ("float_arithmetic.c", 0),
 ];
 
 /// Build a fixture, sign it, run it with the given args, and return

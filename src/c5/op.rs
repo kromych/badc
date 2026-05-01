@@ -119,9 +119,50 @@ pub enum Op {
     LdLocI,
     /// `a = *(u8*)(bp + N*8)` -- fused `Lea N; Lc`.
     LdLocC,
+
+    // --- Floating-point arithmetic and comparison ---
+    //
+    // Both `float` and `double` flow through the same f64 ops; the
+    // c5 stack stores every FP value in a single 8-byte slot (the
+    // 32-bit narrowing the C standard prescribes for `float` only
+    // matters at FP-register ABI boundaries, which c5-internal
+    // arithmetic never crosses). The accumulator and stack top
+    // carry the `f64::to_bits()` representation so reads and writes
+    // share the integer Li/Si paths; only the arithmetic dispatches
+    // care about the bit-pattern interpretation.
+    /// `a = (top + acc)` as f64. Pops top.
+    Fadd,
+    /// `a = (top - acc)` as f64. Pops top.
+    Fsub,
+    /// `a = (top * acc)` as f64. Pops top.
+    Fmul,
+    /// `a = (top / acc)` as f64. Pops top.
+    Fdiv,
+    /// `a = -acc` as f64.
+    Fneg,
+    /// `a = (top == acc) ? 1 : 0` as i64.
+    Feq,
+    /// `a = (top != acc) ? 1 : 0` as i64.
+    Fne,
+    /// `a = (top <  acc) ? 1 : 0` as i64.
+    Flt,
+    /// `a = (top >  acc) ? 1 : 0` as i64.
+    Fgt,
+    /// `a = (top <= acc) ? 1 : 0` as i64.
+    Fle,
+    /// `a = (top >= acc) ? 1 : 0` as i64.
+    Fge,
+    /// `a = (i64)(f64::from_bits(acc))` -- truncating float-to-int
+    /// cast. Used by `(int)f` and by promotions before integer ops
+    /// that take a float operand.
+    Fcvtfi,
+    /// `a = ((i64)acc as f64).to_bits()` -- int-to-float cast. Used
+    /// by `(float)i` / `(double)i` and by integer-side operands of
+    /// a mixed FP expression.
+    Fcvtif,
 }
 
-const OPS: [Op; 48] = [
+const OPS: [Op; 61] = [
     Op::Lea,
     Op::Imm,
     Op::Jmp,
@@ -171,6 +212,20 @@ const OPS: [Op; 48] = [
     Op::GeI,
     Op::LdLocI,
     Op::LdLocC,
+    // Floating-point arithmetic / comparison / casts.
+    Op::Fadd,
+    Op::Fsub,
+    Op::Fmul,
+    Op::Fdiv,
+    Op::Fneg,
+    Op::Feq,
+    Op::Fne,
+    Op::Flt,
+    Op::Fgt,
+    Op::Fle,
+    Op::Fge,
+    Op::Fcvtfi,
+    Op::Fcvtif,
 ];
 
 impl Op {

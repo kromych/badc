@@ -249,7 +249,20 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C5E
             | Op::Div
             | Op::Mod
             | Op::Si
-            | Op::Sc => {
+            | Op::Sc
+            // Floating-point binary ops and comparisons consume one
+            // pseudo push the same way their integer counterparts do
+            // -- the FP value travels through the same c5 stack slot.
+            | Op::Fadd
+            | Op::Fsub
+            | Op::Fmul
+            | Op::Fdiv
+            | Op::Feq
+            | Op::Fne
+            | Op::Flt
+            | Op::Fgt
+            | Op::Fle
+            | Op::Fge => {
                 let (psh_pc, ac) = pending.pop().ok_or_else(|| {
                     C5Error::Compile(format!("regalloc: pop op {op:?} at pc {pc} on empty stack"))
                 })?;
@@ -400,7 +413,17 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C5E
             | Op::Div
             | Op::Mod
             | Op::Si
-            | Op::Sc => {
+            | Op::Sc
+            | Op::Fadd
+            | Op::Fsub
+            | Op::Fmul
+            | Op::Fdiv
+            | Op::Feq
+            | Op::Fne
+            | Op::Flt
+            | Op::Fgt
+            | Op::Fle
+            | Op::Fge => {
                 if let Some(bank) = pseudo_trail.pop() {
                     match bank {
                         PoolBank::Callee => callee_depth -= 1,

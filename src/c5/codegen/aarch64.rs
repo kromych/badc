@@ -356,6 +356,87 @@ pub(super) fn enc_asrv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     0x9AC0_2800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+// ---- Floating-point (double-precision). ----
+//
+// All FP arithmetic happens in d-regs; the c5 stack passes the raw
+// `f64::to_bits()` payload through GPR slots, and the lowering moves
+// it into d-regs only for the math itself. d0..d3 are AAPCS64
+// caller-saved scratch -- no callee-saved bookkeeping required.
+//
+// FP `dXX` register field is the same 5-bit slot as the integer side;
+// they share encoding space because each instruction word names the
+// register file via its opcode bits.
+
+/// `FMOV <Dd>, <Xn>` -- copy the 64 low bits of `Xn` into `Dd`. Used
+/// to stage a c5-stack slot (raw `f64::to_bits()`) into an FP register
+/// before arithmetic.
+pub(super) fn enc_fmov_x_to_d(dd: u8, xn: Reg) -> u32 {
+    debug_assert!(dd < 32);
+    0x9E67_0000 | ((xn.0 as u32) << 5) | (dd as u32)
+}
+
+/// `FMOV <Xd>, <Dn>` -- copy the 64 low bits of `Dn` back into `Xd`.
+pub(super) fn enc_fmov_d_to_x(rd: Reg, dn: u8) -> u32 {
+    debug_assert!(dn < 32);
+    0x9E66_0000 | ((dn as u32) << 5) | (rd.0 as u32)
+}
+
+/// `FADD <Dd>, <Dn>, <Dm>` -- double-precision add. `Dd = Dn + Dm`.
+pub(super) fn enc_fadd_d(dd: u8, dn: u8, dm: u8) -> u32 {
+    debug_assert!(dd < 32 && dn < 32 && dm < 32);
+    0x1E60_2800 | ((dm as u32) << 16) | ((dn as u32) << 5) | (dd as u32)
+}
+
+/// `FSUB <Dd>, <Dn>, <Dm>`. `Dd = Dn - Dm`.
+pub(super) fn enc_fsub_d(dd: u8, dn: u8, dm: u8) -> u32 {
+    debug_assert!(dd < 32 && dn < 32 && dm < 32);
+    0x1E60_3800 | ((dm as u32) << 16) | ((dn as u32) << 5) | (dd as u32)
+}
+
+/// `FMUL <Dd>, <Dn>, <Dm>`. `Dd = Dn * Dm`.
+pub(super) fn enc_fmul_d(dd: u8, dn: u8, dm: u8) -> u32 {
+    debug_assert!(dd < 32 && dn < 32 && dm < 32);
+    0x1E60_0800 | ((dm as u32) << 16) | ((dn as u32) << 5) | (dd as u32)
+}
+
+/// `FDIV <Dd>, <Dn>, <Dm>`. `Dd = Dn / Dm`.
+pub(super) fn enc_fdiv_d(dd: u8, dn: u8, dm: u8) -> u32 {
+    debug_assert!(dd < 32 && dn < 32 && dm < 32);
+    0x1E60_1800 | ((dm as u32) << 16) | ((dn as u32) << 5) | (dd as u32)
+}
+
+/// `FNEG <Dd>, <Dn>`. `Dd = -Dn`.
+pub(super) fn enc_fneg_d(dd: u8, dn: u8) -> u32 {
+    debug_assert!(dd < 32 && dn < 32);
+    0x1E61_4000 | ((dn as u32) << 5) | (dd as u32)
+}
+
+/// `FCMP <Dn>, <Dm>` -- set NZCV per the IEEE comparison of `Dn`
+/// and `Dm`. Used in the comparison lowering before `CSET`. Note:
+/// for unordered (NaN) operands the result is the IEEE "unordered"
+/// state; the C-level comparisons we lower (`<`, `>=`, etc.) match
+/// the ordered cases and accept NaN-edge divergence (NaN compares
+/// equal under EQ here, where C says `NaN == NaN` is false).
+pub(super) fn enc_fcmp_d(dn: u8, dm: u8) -> u32 {
+    debug_assert!(dn < 32 && dm < 32);
+    0x1E60_2000 | ((dm as u32) << 16) | ((dn as u32) << 5)
+}
+
+/// `FCVTZS <Xd>, <Dn>` -- truncating signed FP-to-int. Matches the
+/// C `(int)f` semantics: discard the fractional part; out-of-range
+/// values saturate.
+pub(super) fn enc_fcvtzs_x_d(rd: Reg, dn: u8) -> u32 {
+    debug_assert!(dn < 32);
+    0x9E78_0000 | ((dn as u32) << 5) | (rd.0 as u32)
+}
+
+/// `SCVTF <Dd>, <Xn>` -- signed int-to-FP. Emits the round-to-
+/// nearest-ties-to-even mantissa.
+pub(super) fn enc_scvtf_d_x(dd: u8, xn: Reg) -> u32 {
+    debug_assert!(dd < 32);
+    0x9E62_0000 | ((xn.0 as u32) << 5) | (dd as u32)
+}
+
 // ---- Comparisons + condition-set. ----
 
 /// `CMP <Xn>, <Xm>` = `SUBS XZR, <Xn>, <Xm>` -- compare two registers,
@@ -365,11 +446,19 @@ pub(super) fn enc_cmp_reg(rn: Reg, rm: Reg) -> u32 {
 }
 
 /// AArch64 condition codes -- the 4-bit field that follows comparisons
-/// and conditional moves. Names match the ARM ARM.
+/// and conditional moves. Names match the ARM ARM. The Mi/Ls
+/// variants are the FP-comparison flavour: after `FCMP`, the
+/// `<`/`<=` results live under the unsigned/sign-bit codes
+/// (mi/ls) rather than the signed-arithmetic lt/le, because
+/// FCMP's flag layout differs from SUBS's.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Cond {
     Eq = 0,
     Ne = 1,
+    /// FP "less than" -- N==1, set by FCMP when Dn < Dm (ordered).
+    Mi = 0x4,
+    /// FP "less than or equal" -- C==0 || Z==1, after FCMP.
+    Ls = 0x9,
     Lt = 0xB,
     Gt = 0xC,
     Le = 0xD,
@@ -397,6 +486,13 @@ impl Cond {
             Cond::Ge => Cond::Lt,
             Cond::Gt => Cond::Le,
             Cond::Le => Cond::Gt,
+            // Mi <-> Pl, Ls <-> Hi -- but the cmp+branch fusion
+            // peephole only fires for integer comparisons today;
+            // FP comparisons go through the cset-only path. Map
+            // them to the closest integer flip for safety so an
+            // accidental fuse path doesn't miscompile.
+            Cond::Mi => Cond::Ge,
+            Cond::Ls => Cond::Gt,
         }
     }
 }
@@ -1360,8 +1456,68 @@ fn lower_op(
             let binding_idx = read_operand(text, pc, "JsrExt")?;
             emit_libc_call(binding_idx, text, *pc, code, got_fixups, abi, imports)?;
         }
+
+        // ---- Floating-point arithmetic ----
+        //
+        // Pop top into a GPR, stage both operands into d0/d1, run
+        // the FP op into d0, copy back to x19. The arithmetic
+        // ordering matches the c5 stack convention: `top <op> acc`.
+        // d0/d1/d2 are AAPCS64 caller-saved scratch -- safe to
+        // clobber between c5-level ops.
+        Op::Fadd => emit_fp_binop(code, reg_state, enc_fadd_d),
+        Op::Fsub => emit_fp_binop(code, reg_state, enc_fsub_d),
+        Op::Fmul => emit_fp_binop(code, reg_state, enc_fmul_d),
+        Op::Fdiv => emit_fp_binop(code, reg_state, enc_fdiv_d),
+        Op::Fneg => {
+            // Unary -- no pop. Stage acc into d0, negate, copy back.
+            emit(code, enc_fmov_x_to_d(0, Reg::X19));
+            emit(code, enc_fneg_d(0, 0));
+            emit(code, enc_fmov_d_to_x(Reg::X19, 0));
+        }
+        Op::Feq => emit_fp_cmp(code, reg_state, Cond::Eq),
+        Op::Fne => emit_fp_cmp(code, reg_state, Cond::Ne),
+        Op::Flt => emit_fp_cmp(code, reg_state, Cond::Mi),
+        Op::Fgt => emit_fp_cmp(code, reg_state, Cond::Gt),
+        Op::Fle => emit_fp_cmp(code, reg_state, Cond::Ls),
+        Op::Fge => emit_fp_cmp(code, reg_state, Cond::Ge),
+        Op::Fcvtfi => {
+            // x19 <- (i64)(d0 = f64::from_bits(x19))
+            emit(code, enc_fmov_x_to_d(0, Reg::X19));
+            emit(code, enc_fcvtzs_x_d(Reg::X19, 0));
+        }
+        Op::Fcvtif => {
+            // x19 <- (d0 = (f64)x19).to_bits()
+            emit(code, enc_scvtf_d_x(0, Reg::X19));
+            emit(code, enc_fmov_d_to_x(Reg::X19, 0));
+        }
     }
     Ok(())
+}
+
+/// Two-operand FP arithmetic lowering: pop top into a GPR, stage
+/// both operands into d0/d1, run `enc_op(0, 0, 1)` (so the result
+/// is `top <op> acc`), and copy d0 back to x19.
+fn emit_fp_binop(
+    code: &mut Vec<u8>,
+    reg_state: &mut RegState<'_>,
+    enc_op: impl Fn(u8, u8, u8) -> u32,
+) {
+    let lhs = pop_lhs_reg(code, reg_state);
+    emit(code, enc_fmov_x_to_d(0, lhs)); // d0 = top
+    emit(code, enc_fmov_x_to_d(1, Reg::X19)); // d1 = acc
+    emit(code, enc_op(0, 0, 1)); // d0 = d0 <op> d1
+    emit(code, enc_fmov_d_to_x(Reg::X19, 0));
+}
+
+/// FP comparison: `x19 = (top <cond> acc) ? 1 : 0`. d0/d1 hold
+/// `top` and `acc` respectively; FCMP sets NZCV; CSET reads the
+/// requested condition into x19.
+fn emit_fp_cmp(code: &mut Vec<u8>, reg_state: &mut RegState<'_>, cond: Cond) {
+    let lhs = pop_lhs_reg(code, reg_state);
+    emit(code, enc_fmov_x_to_d(0, lhs));
+    emit(code, enc_fmov_x_to_d(1, Reg::X19));
+    emit(code, enc_fcmp_d(0, 1));
+    emit(code, enc_cset(Reg::X19, cond));
 }
 
 /// Lower a intrinsic op to a libc call. Args were already pushed onto

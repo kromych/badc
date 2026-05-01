@@ -316,6 +316,12 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     // child, join, verify main's view is untouched. Fails in any
     // accidental "TLS lowered as a regular global" regression.
     ("thread_local_per_thread.c", 0),
+    // Variadic FP packer: `printf("%f\n", 1.5)` -- on Linux
+    // AAPCS64, FP variadic args ride d0..d7 the same as fixed
+    // FP args. The all-int packer would land 1.5's bit pattern
+    // in x1 and the formatter would print 0.0; the FP-aware
+    // packer routes it to d0 and the test passes.
+    ("printf_float.c", 0),
 ];
 
 #[test]

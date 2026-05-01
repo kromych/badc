@@ -235,6 +235,12 @@ pub struct Compiler {
     /// leaves room for a future "initialised TLS image -> .tdata"
     /// path.
     tls_data: Vec<u8>,
+    /// Per-libc-call FP-argument bitmaps. Filled when emitting an
+    /// `Op::JsrExt` whose argument list contains at least one
+    /// floating-point operand; the codegen reads it back to route
+    /// those args through the platform's FP-arg registers. Empty
+    /// for the all-integer case, which is most calls.
+    call_fp_arg_masks: Vec<(usize, u32)>,
 
     /// Preprocessor failure (e.g. unterminated `#if`) deferred from
     /// `with_target` until `compile` runs, so the construction API
@@ -314,6 +320,7 @@ impl Compiler {
             warnings: Vec::new(),
             data_imm_positions: Vec::new(),
             tls_data: Vec::new(),
+            call_fp_arg_masks: Vec::new(),
         }
     }
 
@@ -650,6 +657,7 @@ impl Compiler {
             data_imm_positions: self.data_imm_positions,
             tls_data: self.tls_data,
             tls_init_size: 0,
+            call_fp_arg_masks: self.call_fp_arg_masks,
             dylibs: self.dylibs,
         })
     }
@@ -789,6 +797,12 @@ impl Compiler {
                 // reverse once they're all evaluated.
                 let saved_loc_offs = self.loc_offs;
                 let mut temp_offsets: Vec<i64> = Vec::new();
+                // Per-arg FP flag, captured at evaluation time. Used
+                // below when the call is `Token::Sys` to build a bit
+                // mask the codegen reads for variadic FP packing
+                // (`printf("%f", x)` etc.). Order matches
+                // `temp_offsets`: index 0 = first declared arg.
+                let mut arg_is_fp: Vec<bool> = Vec::new();
                 while self.lex.tk != ')' as i64 {
                     let arg_line = self.lex.line;
                     // Allocate a temp slot for this arg.
@@ -828,6 +842,7 @@ impl Compiler {
                         ));
                     }
 
+                    arg_is_fp.push(is_floating_scalar(self.ty));
                     self.emit_op(Op::Si);
                     nargs += 1;
                     if self.lex.tk == ',' as i64 {
@@ -868,8 +883,21 @@ impl Compiler {
                     // preprocessor parsed; the codegen / VM use it
                     // as the GOT slot lookup key (native) or the
                     // dispatch-table key (VM).
+                    let jsrext_pc = self.text.len();
                     self.emit_op(Op::JsrExt);
                     self.emit_val(self.symbols[id_idx].val);
+                    // Capture per-arg FP-ness for the codegen. Only
+                    // needed when at least one arg is FP; an
+                    // all-integer call rides the existing path.
+                    let mut mask: u32 = 0;
+                    for (i, &is_fp) in arg_is_fp.iter().enumerate() {
+                        if is_fp && i < 32 {
+                            mask |= 1u32 << i;
+                        }
+                    }
+                    if mask != 0 {
+                        self.call_fp_arg_masks.push((jsrext_pc, mask));
+                    }
                 } else if self.symbols[id_idx].class == Token::Fun as i64 {
                     self.emit_op(Op::Jsr);
                     self.emit_val(self.symbols[id_idx].val);

@@ -27,6 +27,16 @@ pub struct Program {
     pub entry_pc: usize,
     pub warnings: Vec<String>,
     pub data_imm_positions: Vec<usize>,
+    /// For each `Op::JsrExt` whose call has any floating-point
+    /// argument, record the call's bytecode PC and a bitmap of
+    /// which arg positions are FP scalars (low bit = arg 0). The
+    /// codegen reads this so it can route FP args through the
+    /// platform's FP-arg registers (XMM0..7 on SysV / Win64,
+    /// V0..V7 on AAPCS64) instead of the integer-arg path which
+    /// currently funnels everything as raw 8-byte words. Calls
+    /// with no FP args don't appear here -- absence is "all
+    /// integer", which keeps the per-call lookup cheap.
+    pub call_fp_arg_masks: Vec<(usize, u32)>,
     /// Initialised + zero-init thread-local data. Layout matches
     /// the way `data` does for ordinary globals: a flat byte array
     /// indexed by `Op::TlsLea`'s operand. The image writers copy

@@ -158,6 +158,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         data_imm_positions,
         tls_data,
         tls_init_size,
+        call_fp_arg_masks,
         dylibs,
     } = program;
 
@@ -191,6 +192,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         data_imm_positions,
         tls_data,
         tls_init_size,
+        call_fp_arg_masks,
         dylibs,
     })
 }
@@ -868,6 +870,7 @@ mod tests {
             data_imm_positions: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,
+            call_fp_arg_masks: Vec::new(),
             dylibs: Vec::new(),
         }
     }
@@ -1134,6 +1137,7 @@ mod tests {
             data_imm_positions: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,
+            call_fp_arg_masks: Vec::new(),
             dylibs: Vec::new(),
         };
         let opt = optimize(p).unwrap();

@@ -288,6 +288,11 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_basic.c", 0),
     // Per-thread isolation via pthread_create.
     ("thread_local_per_thread.c", 0),
+    // Variadic FP packer: `printf("%f\n", 1.5)`. SysV pulls FP
+    // variadic args through xmm0..xmm7 with AL = XMM count; the
+    // pre-packer code routed everything as 8-byte words via the
+    // integer arg regs and the formatter printed 0.0.
+    ("printf_float.c", 0),
 ];
 
 #[test]

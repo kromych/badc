@@ -476,6 +476,32 @@ pub(super) fn emit_movq_r_xmm(code: &mut Vec<u8>, dst: Reg, xmm: Reg) {
     emit_byte(code, modrm(0b11, xmm.lo(), dst.lo()));
 }
 
+/// `MOVQ xmm, [base+disp32]` -- load 8 bytes from memory into the
+/// low quad of an XMM register. Encoding: `F3 0F 7E /r` with a SIB
+/// byte for `[base+disp]`. Used by the variadic-FP packer to feed
+/// arg slots straight from the c5 stack into the FP-arg registers
+/// without a GPR roundtrip.
+pub(super) fn emit_movq_xmm_r_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: i32) {
+    emit_byte(code, 0xF3);
+    if xmm.high() || base.high() {
+        emit_byte(code, rex(false, xmm.high(), false, base.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x7E);
+    // mod=10 (disp32), reg=xmm.lo, rm=100 (SIB follows for sp/r12).
+    emit_byte(code, modrm(0b10, xmm.lo(), 0b100));
+    emit_byte(code, sib(0, 0b100, base.lo()));
+    emit_i32(code, disp);
+}
+
+/// `MOV AL, imm8` -- set the low byte of rax to a constant. Used
+/// to seed the SysV variadic-ABI XMM-register count in AL just
+/// before a `printf`-style call.
+pub(super) fn emit_mov_al_imm8(code: &mut Vec<u8>, imm: u8) {
+    emit_byte(code, 0xB0);
+    emit_byte(code, imm);
+}
+
 /// Internal: emit a `F2 0F <op> /r` SSE2 SD instruction with two
 /// XMM operands, encoded as `dst <op>= src`.
 fn emit_sse2_sd(code: &mut Vec<u8>, opcode: u8, dst: Reg, src: Reg) {
@@ -1202,6 +1228,7 @@ pub(super) fn lower(
             imports,
             target,
             program.tls_data.len(),
+            &program.call_fp_arg_masks,
         )?;
     }
     bytecode_to_native[program.text.len()] = code.len();
@@ -1353,6 +1380,7 @@ fn lower_op(
     imports: &super::ResolvedImports,
     target: super::Target,
     tls_total_size: usize,
+    fp_arg_masks: &[(usize, u32)],
 ) -> Result<(), C5Error> {
     match op {
         // ---- Function frame ----
@@ -1681,8 +1709,21 @@ fn lower_op(
         //      records a GotFixup at the call site; the ELF writer
         //      patches the disp32 to point at the right .got slot.
         Op::JsrExt => {
+            let jsrext_pc = *pc - 1;
             let binding_idx = read_operand(text, pc, "JsrExt")?;
-            emit_libc_call(binding_idx, text, *pc, code, got_fixups, abi, imports)?;
+            // Look up the per-call FP-arg bitmap. Absent entries
+            // mean "all integer", which is the historical path.
+            let fp_mask = fp_arg_mask_at(jsrext_pc, fp_arg_masks);
+            emit_libc_call(
+                binding_idx,
+                text,
+                *pc,
+                code,
+                got_fixups,
+                abi,
+                imports,
+                fp_mask,
+            )?;
         }
 
         // ---- Floating-point ----
@@ -1812,6 +1853,7 @@ fn emit_libc_call(
     got_fixups: &mut Vec<GotFixup>,
     abi: Abi,
     imports: &super::ResolvedImports,
+    fp_arg_mask: u32,
 ) -> Result<(), C5Error> {
     let import_index = imports.index_of_binding(binding_idx).ok_or_else(|| {
         C5Error::Compile(format!(
@@ -1827,48 +1869,95 @@ fn emit_libc_call(
         Some(Op::Adj) => text[pc_after_op + 1] as usize,
         _ => 0,
     };
-    // Integer args go through `abi.int_arg_regs` (SysV: 6 regs;
-    // Win64: 4 regs). Args past that count spill to the host stack:
-    // SysV places them at [rsp+0], [rsp+8], ... contiguously; Win64
-    // places them at [rsp+shadow_space], [rsp+shadow_space+8], ...
-    // (above the 32-byte shadow space). Either way, total scratch
-    // is rounded up to 16 so rsp stays 16-aligned at the call.
+    // ABI arg routing. c5-arg-i sits at [rsp + scratch + i*16];
+    // the per-arg FP flag in `fp_arg_mask` (low bit = arg 0)
+    // selects between the integer and FP arg-register sequences.
+    //
+    // SysV: 6 int regs (rdi/rsi/rdx/rcx/r8/r9), 8 XMM regs
+    //       (xmm0..xmm7), independent counters. Stack overflow
+    //       at [rsp], [rsp+8], ... in argument order.
+    // Win64: 4 int regs (rcx/rdx/r8/r9), 4 XMM regs (xmm0..xmm3).
+    //       The position-i register depends only on the arg index,
+    //       not its type (e.g. xmm1 is used iff position 1 is FP);
+    //       AND for variadics the bit pattern is also written to
+    //       the matching int reg per the Win64 rule. Stack overflow
+    //       starts at [rsp+shadow_space].
     let arg_regs = abi.int_arg_regs;
-    let extras = arg_count.saturating_sub(arg_regs.len()) as u32;
+    let int_max = arg_regs.len();
+    let xmm_max = if abi.shadow_space == 0 { 8 } else { 4 };
+    let extras = arg_count.saturating_sub(int_max) as u32;
     let scratch = (abi.shadow_space + extras * 8 + 15) & !15;
     let _ = local_name;
 
     if scratch > 0 {
         emit_sub_rsp_imm32(code, scratch);
     }
-    // Reg args. With cdecl push order, c5-arg-i sits at
-    // [rsp + scratch + i*16] (first declared is on top).
-    for (i, &r) in arg_regs
-        .iter()
-        .take(arg_count.min(arg_regs.len()))
-        .enumerate()
-    {
+
+    let is_fp = |i: usize| -> bool { (fp_arg_mask & (1u32 << i)) != 0 };
+    let win64 = abi.shadow_space != 0;
+
+    // Walk args in order. SysV uses independent int/xmm counters;
+    // Win64 uses a single position counter (arg N goes to slot N
+    // for both reg files).
+    let mut int_idx = 0usize;
+    let mut xmm_idx = 0usize;
+    let mut xmm_used = 0u8;
+    for i in 0..arg_count {
         let src = scratch + (i as u32) * 16;
-        emit_mov_r_mem(code, Reg(r), Reg::RSP, src as i32);
+        if win64 {
+            // Win64: arg i lands in [int_arg_regs[i], xmm[i]] for
+            // i < 4, then on stack. Variadic FP is duplicated in
+            // both files.
+            if i < int_max {
+                emit_mov_r_mem(code, Reg(arg_regs[i]), Reg::RSP, src as i32);
+            }
+            if is_fp(i) && i < xmm_max {
+                emit_movq_xmm_r(code, Reg(i as u8), Reg(arg_regs[i]));
+                xmm_used += 1;
+            }
+            if i >= int_max {
+                let dst = abi.shadow_space + ((i - int_max) as u32) * 8;
+                emit_mov_r_mem(code, Reg::R10, Reg::RSP, src as i32);
+                emit_mov_mem_r(code, Reg::RSP, dst as i32, Reg::R10);
+            }
+        } else if is_fp(i) {
+            if xmm_idx < xmm_max {
+                // SysV: floats ride XMM regs, separate counter.
+                emit_movq_xmm_r_mem(code, Reg(xmm_idx as u8), Reg::RSP, src as i32);
+                xmm_idx += 1;
+                xmm_used += 1;
+            } else {
+                // Spill to host stack at the next free 8-byte slot.
+                let dst = (xmm_idx + int_idx).saturating_sub(xmm_max + int_max);
+                let dst = (dst as u32) * 8;
+                emit_mov_r_mem(code, Reg::R10, Reg::RSP, src as i32);
+                emit_mov_mem_r(code, Reg::RSP, dst as i32, Reg::R10);
+            }
+        } else if int_idx < int_max {
+            emit_mov_r_mem(code, Reg(arg_regs[int_idx]), Reg::RSP, src as i32);
+            int_idx += 1;
+        } else {
+            let dst = (xmm_idx + int_idx).saturating_sub(xmm_max + int_max);
+            let dst = (dst as u32) * 8;
+            emit_mov_r_mem(code, Reg::R10, Reg::RSP, src as i32);
+            emit_mov_mem_r(code, Reg::RSP, dst as i32, Reg::R10);
+            int_idx += 1;
+        }
     }
-    // Stack args. Use r10 as a scratch courier; r10 is caller-saved
-    // and free at call sites.
-    for i in arg_regs.len()..arg_count {
-        let src = scratch + (i as u32) * 16;
-        let dst = abi.shadow_space + ((i - arg_regs.len()) as u32) * 8;
-        emit_mov_r_mem(code, Reg::R10, Reg::RSP, src as i32);
-        emit_mov_mem_r(code, Reg::RSP, dst as i32, Reg::R10);
-    }
-    if abi.shadow_space == 0
-        && abi.variadic_zero_xmm_count
-        && imports.imports[import_index].is_variadic
-    {
-        // Variadic System V: AL = number of XMM regs used.
-        // c5 has no floats, so always 0. Plain libc calls preserve
-        // rax across argument loads anyway; only variadic call
-        // sites (`printf`, `sscanf`, `fprintf`, ...) need the xor.
-        // The variadic flag comes from the binding's prototype.
-        emit_xor_eax_eax(code);
+    if abi.shadow_space == 0 && abi.variadic_zero_xmm_count {
+        if imports.imports[import_index].is_variadic {
+            // Variadic System V: AL = number of XMM regs used.
+            // For an all-integer call this is 0 (the original
+            // `xor eax, eax`); calls with FP args set AL to the
+            // count routed through xmm0..xmm7.
+            emit_mov_al_imm8(code, xmm_used);
+        } else {
+            // Non-variadic SysV: AL is don't-care, but zeroing rax
+            // before the call costs ~2 bytes and matches the
+            // historical sequence -- preserves disassembly diff
+            // discipline against the pre-FP-packer baseline.
+            emit_xor_eax_eax(code);
+        }
     }
 
     // call qword [rip + disp32] -- placeholder, writer patches
@@ -1892,6 +1981,16 @@ fn emit_libc_call(
         emit_mov_rr(code, Reg::R13, Reg::RAX);
     }
     Ok(())
+}
+
+/// Lookup the per-call FP-arg bitmap by JsrExt PC. Linear scan --
+/// the table only contains entries for calls with at least one FP
+/// argument, which in practice is rare.
+fn fp_arg_mask_at(call_pc: usize, masks: &[(usize, u32)]) -> u32 {
+    masks
+        .iter()
+        .find_map(|(pc, m)| if *pc == call_pc { Some(*m) } else { None })
+        .unwrap_or(0)
 }
 
 /// Pop the top of the VM stack into `dst`. Mirrors the aarch64

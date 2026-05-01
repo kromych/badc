@@ -12,6 +12,7 @@ fn run(text: Vec<i64>) -> i64 {
         data_imm_positions: vec![],
         tls_data: vec![],
         tls_init_size: 0,
+        call_fp_arg_masks: vec![],
         dylibs: vec![],
     };
     Vm::new(program).run().unwrap()
@@ -105,6 +106,7 @@ fn invalid_opcode_is_a_runtime_error() {
         data_imm_positions: vec![],
         tls_data: vec![],
         tls_init_size: 0,
+        call_fp_arg_masks: vec![],
         dylibs: vec![],
     };
     let err = Vm::new(program).run().unwrap_err();
@@ -124,6 +126,7 @@ fn empty_program_errors_cleanly() {
         data_imm_positions: vec![],
         tls_data: vec![],
         tls_init_size: 0,
+        call_fp_arg_masks: vec![],
         dylibs: vec![],
     };
     let err = Vm::new(program).run().unwrap_err();

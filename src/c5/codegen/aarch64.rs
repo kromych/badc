@@ -448,6 +448,17 @@ pub(super) fn enc_mrs_tpidr_el0(rt: Reg) -> u32 {
     0xD53B_D040 | (rt.0 as u32)
 }
 
+/// `LDR <Dt>, [<Xn|SP>, #imm]` -- 64-bit unsigned-offset FP/SIMD
+/// load. The offset is byte-addressed but encoded as `imm/8`; the
+/// caller passes raw bytes (must be multiple of 8 in 0..32760).
+/// Used by the variadic-FP packer to pull a c5-stack slot
+/// straight into a `dN` register before a libc call.
+pub(super) fn enc_ldr_d_imm(dt: u8, rn: Reg, imm: u32) -> u32 {
+    debug_assert!(dt < 32);
+    debug_assert!(imm.is_multiple_of(8) && imm < 32760);
+    0xFD40_0000 | ((imm / 8) << 10) | ((rn.0 as u32) << 5) | (dt as u32)
+}
+
 // ---- Comparisons + condition-set. ----
 
 /// `CMP <Xn>, <Xm>` = `SUBS XZR, <Xn>, <Xm>` -- compare two registers,
@@ -989,6 +1000,7 @@ pub(super) fn lower(
             &branch_targets,
             imports,
             target,
+            &program.call_fp_arg_masks,
         )?;
     }
     bytecode_to_native[program.text.len()] = code.len();
@@ -1166,6 +1178,7 @@ fn lower_op(
     branch_targets: &[bool],
     imports: &super::ResolvedImports,
     target: super::Target,
+    fp_arg_masks: &[(usize, u32)],
 ) -> Result<(), C5Error> {
     match op {
         // ---- Function frame ----
@@ -1468,8 +1481,19 @@ fn lower_op(
         // ---- External library call -- lower to a libc call
         //      through __got. ----
         Op::JsrExt => {
+            let jsrext_pc = *pc - 1;
             let binding_idx = read_operand(text, pc, "JsrExt")?;
-            emit_libc_call(binding_idx, text, *pc, code, got_fixups, abi, imports)?;
+            let fp_mask = fp_arg_mask_at(jsrext_pc, fp_arg_masks);
+            emit_libc_call(
+                binding_idx,
+                text,
+                *pc,
+                code,
+                got_fixups,
+                abi,
+                imports,
+                fp_mask,
+            )?;
         }
 
         // ---- Floating-point arithmetic ----
@@ -1612,6 +1636,7 @@ fn emit_fp_cmp(code: &mut Vec<u8>, reg_state: &mut RegState<'_>, cond: Cond) {
 ///   * str b, [sp, #8]
 ///   * call printf
 ///   * add sp, sp, #16        (free that scratch)
+#[allow(clippy::too_many_arguments)]
 fn emit_libc_call(
     binding_idx: i64,
     text: &[i64],
@@ -1620,6 +1645,7 @@ fn emit_libc_call(
     got_fixups: &mut Vec<GotFixup>,
     abi: Abi,
     imports: &super::ResolvedImports,
+    fp_arg_mask: u32,
 ) -> Result<(), C5Error> {
     let import_index = imports.index_of_binding(binding_idx).ok_or_else(|| {
         C5Error::Compile(format!(
@@ -1682,26 +1708,58 @@ fn emit_libc_call(
             emit_got_call(code, got_fixups, import_index);
         }
     } else {
-        // Non-variadic: each c5 arg goes into the matching xN. With
-        // cdecl push order, c5-arg-K is at sp + K*16 (first decl on
-        // top). Args past x7 spill onto the host stack at sp+0,
-        // sp+8, ... per AAPCS64; allocate scratch + copy them with
-        // x16 as a courier, the same shape Op::Jsri uses.
-        let n_reg = arg_count.min(abi.int_arg_regs.len());
-        let n_stack = arg_count - n_reg;
-        let scratch = ((n_stack as u32) * 8 + 15) & !15;
+        // Non-variadic AAPCS64 (Linux/aarch64 takes this path for
+        // both fixed and variadic calls). c5-arg-K is at sp + K*16
+        // (cdecl push order, first decl on top). Walk args with
+        // independent int / FP counters: ints go to x0..x7, FP
+        // scalars to d0..d7, overflow spills to host stack at
+        // sp+0, sp+8, ...
+        //
+        // The FP-arg bitmap (`fp_arg_mask`, low bit = arg 0) marks
+        // FP-vs-int per position; a missing bit defaults to int.
+        // Standard AAPCS64 puts variadic FP args in d-regs the
+        // same way fixed FP args ride them; the macOS-on-stack
+        // path branched away above.
+        let mut int_idx = 0usize;
+        let mut fp_idx = 0usize;
+        let mut stack_used: usize = 0;
+        for i in 0..arg_count {
+            let is_fp = (fp_arg_mask & (1u32 << i)) != 0;
+            if is_fp {
+                if fp_idx >= 8 {
+                    stack_used += 1;
+                } else {
+                    fp_idx += 1;
+                }
+            } else if int_idx >= abi.int_arg_regs.len() {
+                stack_used += 1;
+            } else {
+                int_idx += 1;
+            }
+        }
+        let scratch = ((stack_used as u32) * 8 + 15) & !15;
         if scratch > 0 {
             emit(code, enc_sub_imm(Reg::SP, Reg::SP, scratch));
         }
-        for i in 0..n_reg {
-            let off = scratch + (i as u32) * 16;
-            emit(code, enc_ldr_imm(Reg(abi.int_arg_regs[i]), Reg::SP, off));
-        }
-        for i in 0..n_stack {
-            let src = scratch + ((n_reg + i) as u32) * 16;
-            let dst = (i as u32) * 8;
-            emit(code, enc_ldr_imm(Reg::X16, Reg::SP, src));
-            emit(code, enc_str_imm(Reg::X16, Reg::SP, dst));
+        let mut int_idx = 0usize;
+        let mut fp_idx = 0usize;
+        let mut stack_idx = 0usize;
+        for i in 0..arg_count {
+            let src = scratch + (i as u32) * 16;
+            let is_fp = (fp_arg_mask & (1u32 << i)) != 0;
+            if is_fp && fp_idx < 8 {
+                emit(code, enc_ldr_d_imm(fp_idx as u8, Reg::SP, src));
+                fp_idx += 1;
+            } else if !is_fp && int_idx < abi.int_arg_regs.len() {
+                let r = Reg(abi.int_arg_regs[int_idx]);
+                emit(code, enc_ldr_imm(r, Reg::SP, src));
+                int_idx += 1;
+            } else {
+                let dst = (stack_idx as u32) * 8;
+                emit(code, enc_ldr_imm(Reg::X16, Reg::SP, src));
+                emit(code, enc_str_imm(Reg::X16, Reg::SP, dst));
+                stack_idx += 1;
+            }
         }
         emit_got_call(code, got_fixups, import_index);
         if scratch > 0 {
@@ -1715,6 +1773,16 @@ fn emit_libc_call(
     // mov is harmless dead code.)
     emit_mov_reg(code, Reg::X19, Reg::X0);
     Ok(())
+}
+
+/// Lookup the per-call FP-arg bitmap by JsrExt PC. Linear scan;
+/// the table only carries entries for calls with at least one FP
+/// arg, which in practice is rare.
+fn fp_arg_mask_at(call_pc: usize, masks: &[(usize, u32)]) -> u32 {
+    masks
+        .iter()
+        .find_map(|(pc, m)| if *pc == call_pc { Some(*m) } else { None })
+        .unwrap_or(0)
 }
 
 /// Emit a placeholder `adrp x19, 0; add x19, x19, #0` pair that

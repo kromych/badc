@@ -1,8 +1,10 @@
 # `badc`
 
-`badc` is a tiny C compiler that produces real native binaries --
-Mach-O, ELF, or PE32+ -- by default, on any of five targets, from
-any host. Each binary calls into the matching system's libc/Win32
+`badc` (other name ideas were `betsy` and `badseed`) is a rather
+small C compiler that produces real native binaries -- Mach-O, ELF,
+or PE32+ -- by default, on any of five targets, from any host.
+
+Each binary calls into the matching system's libc/Win32
 DLLs and runs unmodified. There's also an in-process JIT (`--jit`)
 that does the same lowering and executes the result without
 touching disk, and a watchful bytecode interpreter (`--interp`)

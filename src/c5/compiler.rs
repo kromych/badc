@@ -1454,9 +1454,7 @@ impl Compiler {
                 self.emit_op(Op::Add);
                 self.ty = t - Ty::Ptr as i64;
                 self.emit_op(load_op_for(self.ty));
-            } else if self.lex.tk == Token::Arrow as i64
-                || self.lex.tk == Token::Dot as i64
-            {
+            } else if self.lex.tk == Token::Arrow as i64 || self.lex.tk == Token::Dot as i64 {
                 // p->field / s.field. Both shapes resolve a struct
                 // field offset and load the field. The difference is
                 // upstream: `->` runs on a struct pointer (which the
@@ -1471,7 +1469,11 @@ impl Compiler {
                     is_struct_ty(t) && struct_ptr_depth(t) == 1
                 };
                 if !valid {
-                    let want = if is_dot { "struct value" } else { "single-level struct pointer" };
+                    let want = if is_dot {
+                        "struct value"
+                    } else {
+                        "single-level struct pointer"
+                    };
                     let op = if is_dot { "." } else { "->" };
                     return Err(C5Error::Compile(format!(
                         "{}: {op} requires a {want}",

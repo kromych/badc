@@ -1502,7 +1502,7 @@ fn lower_op(
             // real-stack path, so the per-iteration temp uses x17
             // (the other AAPCS64-reserved scratch) to avoid
             // overwriting `dst`.
-            let size = read_operand(text, pc, "Mcpy")? as i64;
+            let size = read_operand(text, pc, "Mcpy")?;
             let dst = pop_lhs_reg(code, reg_state);
             // Copy whole 8-byte words first.
             let words = size / 8;

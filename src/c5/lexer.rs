@@ -156,8 +156,8 @@ impl Lexer {
                         // `1.0f` are stored as `f64` internally.
                         self.pos += 1;
                     }
-                    let lit = core::str::from_utf8(&self.src[int_start..body_end])
-                        .map_err(|e| {
+                    let lit =
+                        core::str::from_utf8(&self.src[int_start..body_end]).map_err(|e| {
                             C5Error::Compile(format!(
                                 "{}: float literal not valid utf-8: {e}",
                                 self.line

@@ -1726,7 +1726,7 @@ fn lower_op(
             // the per-iteration temp uses rax -- which is never in
             // the pool and isn't tracked across c5-IR boundaries
             // -- to avoid clobbering `dst`.
-            let size = read_operand(text, pc, "Mcpy")? as i64;
+            let size = read_operand(text, pc, "Mcpy")?;
             let dst = pop_lhs_reg(code, reg_state);
             let words = size / 8;
             for w in 0..words {

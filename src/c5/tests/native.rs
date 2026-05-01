@@ -302,8 +302,7 @@ fn build_and_run_fixture(name: &str) -> RunOutcome {
 /// guards that exit -1 on a violation; the native binary either hits
 /// the OS's protections (SIGSEGV / SIGABRT) or silently smashes
 /// memory and exits 0, so the two backends genuinely diverge by
-/// design. `struct_value_rejected.c` is also excluded because it's a
-/// compile-error fixture (the build itself fails, which is the test).
+/// design.
 ///
 /// String literals flow through __DATA via `DataFixup` and function
 /// pointers resolve to native offsets via `FuncFixup`, so fixtures
@@ -394,6 +393,8 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // FADD/FSUB/FMUL/FDIV/FCMP/FCVTZS/SCVTF; this fixture is the
     // host-platform smoke test for that pipeline.
     ("float_arithmetic.c", 0),
+    // Struct-value locals + `.` field access on macOS arm64.
+    ("struct_value_basics.c", 0),
 ];
 
 /// Build a fixture, sign it, run it with the given args, and return

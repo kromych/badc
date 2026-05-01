@@ -90,6 +90,11 @@ pub(crate) enum Token {
     Arrow,
     /// `...` -- variadic-function marker in parameter lists.
     Ellipsis,
+    /// `.` operator (struct value field access). Mirror of
+    /// `Token::Arrow` but the LHS is the struct's address rather
+    /// than a struct pointer, so the lowering skips the implicit
+    /// load of the pointer slot.
+    Dot,
     /// `float` keyword -- 32-bit IEEE float type.
     Float,
     /// `double` keyword -- 64-bit IEEE double type.

@@ -222,6 +222,10 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     // unary negation. Routes through Fadd/.../Fcvtfi opcodes the
     // VM and both codegens implement.
     ("float_arithmetic.c", 0),
+    // Struct-value locals + `.` field access. Whole-struct copies
+    // and by-value parameter passing are still gated behind the
+    // M6 ABI work.
+    ("struct_value_basics.c", 0),
 ];
 
 #[test]

@@ -402,6 +402,8 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     // ELF x64 path; the only thing that varies is the call site
     // ABI, which this fixture doesn't exercise (no FP libc calls).
     ("float_arithmetic.c", 0),
+    // Struct-value locals + `.` field access.
+    ("struct_value_basics.c", 0),
 ];
 
 #[test]

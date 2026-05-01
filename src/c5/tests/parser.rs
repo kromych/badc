@@ -104,13 +104,15 @@ fn bad_lvalue_in_assignment() {
 }
 
 #[test]
-fn struct_value_declaration_rejected() {
-    // badc allows struct pointers but not by-value struct locals -- the
-    // value form needs variable-sized stack slots which the simple
-    // `Op::Ent N` model doesn't accommodate.
+fn struct_to_struct_assignment_not_yet_implemented() {
+    // Struct-value locals work now, and `s.field = ...` works,
+    // but a whole-struct copy (`a = b`) needs the memcpy-style
+    // lowering that ships with the M6 ABI work. Until then,
+    // assign field-by-field.
     expect_compile_error(
-        "struct Foo { int x; }; int main() { struct Foo bad; return 0; }",
-        "struct-value declarations are not supported",
+        "struct Foo { int x; int y; };\
+         int main() { struct Foo a; struct Foo b; a = b; return 0; }",
+        "struct-to-struct assignment is not yet implemented",
     );
 }
 

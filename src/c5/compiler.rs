@@ -418,6 +418,23 @@ impl Compiler {
         }
     }
 
+    /// Number of c5 stack slots required to hold a value of `ty`.
+    /// Each c5 slot is 8 bytes; struct values may span several. The
+    /// existing scalar / pointer paths always return 1, so existing
+    /// `loc_offs += 1` patterns map to `loc_offs += slots_of(ty)`
+    /// without changing emit semantics.
+    fn slots_of_type(&self, ty: i64) -> i64 {
+        if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+            // Struct fields are 8-byte aligned (see parse_struct_body),
+            // so the size is already a multiple of 8 -- the +7 round
+            // is defensive in case a future change adds sub-8-byte
+            // packing.
+            ((self.structs[struct_id_of(ty)].size as i64) + 7) / 8
+        } else {
+            1
+        }
+    }
+
     /// Parse the base type of a declaration: `int`, `char`, or
     /// `struct Name`. Caller has already verified the current token is
     /// one of those -- used by the three local/parameter declaration
@@ -443,12 +460,6 @@ impl Compiler {
         if self.lex.tk != Token::Id as i64 {
             return Err(C5Error::Compile(format!(
                 "{}: identifier expected in declaration",
-                self.lex.line
-            )));
-        }
-        if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
-            return Err(C5Error::Compile(format!(
-                "{}: struct-value declarations are not supported (use a pointer)",
                 self.lex.line
             )));
         }
@@ -917,7 +928,15 @@ impl Compiler {
                     )));
                 }
                 self.ty = self.symbols[id_idx].type_;
-                self.emit_op(load_op_for(self.ty));
+                // Struct values aren't 8-byte loadable -- the
+                // expression's value is the struct's *address*. The
+                // `.field` operator expects the address in `a` and
+                // adds the field offset. Pointers to structs and
+                // every scalar type still go through the normal
+                // load_op_for path.
+                if !(is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0) {
+                    self.emit_op(load_op_for(self.ty));
+                }
             }
         } else if self.lex.tk == '(' as i64 {
             self.next()?;
@@ -989,8 +1008,17 @@ impl Compiler {
         } else if self.lex.tk == Token::AndOp as i64 {
             self.next()?;
             self.expr(Token::Inc as i64)?;
-            let last = self.text.pop().unwrap();
-            if last != Op::Lc as i64 && last != Op::Li as i64 {
+            let last = *self.text.last().unwrap();
+            if last == Op::Lc as i64 || last == Op::Li as i64 {
+                // Scalar / pointer lvalue: drop the trailing load
+                // so what's left is the address-producing op.
+                self.text.pop();
+            } else if is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0 {
+                // Struct value -- the parser already left the
+                // address in `a` (no Li was emitted). `&s` just
+                // raises the type by one pointer level; no IR
+                // change needed.
+            } else {
                 return Err(C5Error::Compile(format!(
                     "{}: bad address-of",
                     self.lex.line
@@ -1087,6 +1115,19 @@ impl Compiler {
                 let last = *self.text.last().unwrap();
                 if last == Op::Lc as i64 || last == Op::Li as i64 {
                     *self.text.last_mut().unwrap() = Op::Psh as i64;
+                } else if is_struct_ty(t) && struct_ptr_depth(t) == 0 {
+                    // The LHS is a struct value -- the parser left
+                    // its *address* in `a` instead of a loaded scalar
+                    // there's no trailing Li/Lc to rewrite into Psh.
+                    // Struct-to-struct copy needs a memcpy-style
+                    // lowering that the M6 ABI work introduces; for
+                    // now reject with a pointer to the workaround.
+                    return Err(C5Error::Compile(format!(
+                        "{}: struct-to-struct assignment is not yet \
+                         implemented (assign each field individually, \
+                         or use memcpy)",
+                        self.lex.line
+                    )));
                 } else {
                     return Err(C5Error::Compile(format!(
                         "{}: bad lvalue in assignment",
@@ -1396,21 +1437,35 @@ impl Compiler {
                 self.emit_op(Op::Add);
                 self.ty = t - Ty::Ptr as i64;
                 self.emit_op(load_op_for(self.ty));
-            } else if self.lex.tk == Token::Arrow as i64 {
-                // p->field. Preceding subexpression already evaluated as
-                // an rvalue, so the loaded pointer is in `a`. Look the
-                // field up in the struct's table, add the byte offset,
-                // then load the field with the right size.
-                if !is_struct_ty(t) || struct_ptr_depth(t) != 1 {
+            } else if self.lex.tk == Token::Arrow as i64
+                || self.lex.tk == Token::Dot as i64
+            {
+                // p->field / s.field. Both shapes resolve a struct
+                // field offset and load the field. The difference is
+                // upstream: `->` runs on a struct pointer (which the
+                // preceding subexpression loaded into `a` via Op::Li),
+                // while `.` runs on a struct value, where the parser
+                // suppressed the load and `a` already holds the
+                // struct's address.
+                let is_dot = self.lex.tk == Token::Dot as i64;
+                let valid = if is_dot {
+                    is_struct_ty(t) && struct_ptr_depth(t) == 0
+                } else {
+                    is_struct_ty(t) && struct_ptr_depth(t) == 1
+                };
+                if !valid {
+                    let want = if is_dot { "struct value" } else { "single-level struct pointer" };
+                    let op = if is_dot { "." } else { "->" };
                     return Err(C5Error::Compile(format!(
-                        "{}: -> requires a single-level struct pointer",
+                        "{}: {op} requires a {want}",
                         self.lex.line
                     )));
                 }
                 self.next()?;
                 if self.lex.tk != Token::Id as i64 {
+                    let op = if is_dot { "." } else { "->" };
                     return Err(C5Error::Compile(format!(
-                        "{}: field name expected after ->",
+                        "{}: field name expected after {op}",
                         self.lex.line
                     )));
                 }
@@ -1439,8 +1494,12 @@ impl Compiler {
                 self.ty = field.ty;
                 // Trailing Lc/Li loads the field. The assignment handler
                 // (in the same loop) converts a trailing Li/Lc to Psh, so
-                // `p->x = value` works the same way as `*ptr = value`.
-                self.emit_op(load_op_for(self.ty));
+                // `p->x = value` and `s.x = value` work the same way as
+                // `*ptr = value`. Struct-typed fields get no load -- the
+                // address propagates so `s.inner.field` chains.
+                if !(is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0) {
+                    self.emit_op(load_op_for(self.ty));
+                }
             } else {
                 return Err(C5Error::Compile(format!(
                     "{}: compiler error tk={}",
@@ -1619,8 +1678,11 @@ impl Compiler {
 
                 self.symbols[loc_idx].class = Token::Loc as i64;
                 self.symbols[loc_idx].type_ = ty;
-                self.loc_offs += 1;
+                self.loc_offs += self.slots_of_type(ty);
                 self.symbols[loc_idx].val = -self.loc_offs;
+                if self.loc_offs > self.max_loc_offs {
+                    self.max_loc_offs = self.loc_offs;
+                }
 
                 if self.lex.tk == ',' as i64 {
                     self.next()?;
@@ -2124,8 +2186,11 @@ impl Compiler {
                             self.symbols[loc_idx].type_ = ty;
                             self.symbols[loc_idx].h_val = self.symbols[loc_idx].val;
 
-                            self.loc_offs += 1;
+                            self.loc_offs += self.slots_of_type(ty);
                             self.symbols[loc_idx].val = -self.loc_offs;
+                            if self.loc_offs > self.max_loc_offs {
+                                self.max_loc_offs = self.loc_offs;
+                            }
 
                             if self.lex.tk == ',' as i64 {
                                 self.next()?;

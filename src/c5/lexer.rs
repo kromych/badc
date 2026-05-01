@@ -368,10 +368,10 @@ impl Lexer {
                     '[' => self.tk = Token::Brak as i64,
                     '?' => self.tk = Token::Cond as i64,
                     '.' => {
-                        // Three consecutive dots -> variadic ellipsis. A
-                        // single dot isn't a token anywhere in the c4
-                        // dialect, so treat anything else as junk and
-                        // skip it (same fall-through as the catch-all).
+                        // Three consecutive dots -> variadic ellipsis;
+                        // a single dot is the struct-value field access
+                        // operator. Float literals starting with `.`
+                        // (e.g. `.5`) aren't supported -- write `0.5`.
                         if self.pos + 1 < self.src.len()
                             && self.src[self.pos] == b'.'
                             && self.src[self.pos + 1] == b'.'
@@ -379,7 +379,7 @@ impl Lexer {
                             self.pos += 2;
                             self.tk = Token::Ellipsis as i64;
                         } else {
-                            continue;
+                            self.tk = Token::Dot as i64;
                         }
                     }
                     _ => {

@@ -572,3 +572,86 @@ fn fixture_parity() {
         failures.join("\n  ")
     );
 }
+
+/// End-to-end Mach-O dylib smoke test: compile a c5 source
+/// that exports `answer()` returning 42 via `#pragma export`,
+/// build it as a `.dylib` (MH_DYLIB + LC_ID_DYLIB + symbol-
+/// table N_EXT|N_SECT entry), ad-hoc-sign it, then `dlopen`
+/// + `dlsym` + call into it from the test process.
+///
+/// Verifies the entire shared-library pipeline -- including
+/// that the Mach-O symbol-table entry's `n_value` is the
+/// function's runtime VA, not its bytecode-PC offset.
+#[test]
+fn dylib_export_dlopen_call_returns_42() {
+    use crate::{NativeOptions, emit_native_with_options};
+    use std::ffi::CString;
+    use std::os::raw::{c_int, c_void};
+
+    let src = "
+        int answer() { return 42; }
+        #pragma export(answer)
+        int main() { return 0; }
+    ";
+    let program = Compiler::with_target(super::with_prelude(src), Target::MacOSAarch64)
+        .compile()
+        .expect("compile");
+    let bytes = emit_native_with_options(
+        &program,
+        Target::MacOSAarch64,
+        NativeOptions::new().with_shared_library(),
+    )
+    .expect("emit_native dylib");
+
+    let path = std::env::temp_dir().join("badc-dylib-export-test.dylib");
+    std::fs::write(&path, &bytes).unwrap();
+    // dyld refuses to load an unsigned dylib on Apple Silicon.
+    let status = Command::new("/usr/bin/codesign")
+        .args(["--sign", "-", "--force"])
+        .arg(&path)
+        .status()
+        .expect("codesign not available");
+    assert!(status.success(), "codesign failed: {status:?}");
+
+    unsafe extern "C" {
+        fn dlopen(filename: *const std::os::raw::c_char, flag: c_int) -> *mut c_void;
+        fn dlsym(handle: *mut c_void, name: *const std::os::raw::c_char) -> *mut c_void;
+        fn dlclose(handle: *mut c_void) -> c_int;
+        fn dlerror() -> *const std::os::raw::c_char;
+    }
+    const RTLD_NOW: c_int = 2;
+
+    let path_c = CString::new(path.to_str().unwrap()).unwrap();
+    let answer_c = CString::new("answer").unwrap();
+    let exit_code: c_int;
+    unsafe {
+        let handle = dlopen(path_c.as_ptr(), RTLD_NOW);
+        if handle.is_null() {
+            let err = dlerror();
+            let msg = if err.is_null() {
+                "(no message)".to_string()
+            } else {
+                std::ffi::CStr::from_ptr(err).to_string_lossy().into_owned()
+            };
+            let _ = std::fs::remove_file(&path);
+            panic!("dlopen failed: {msg}");
+        }
+        let sym = dlsym(handle, answer_c.as_ptr());
+        if sym.is_null() {
+            let err = dlerror();
+            let msg = if err.is_null() {
+                "(no message)".to_string()
+            } else {
+                std::ffi::CStr::from_ptr(err).to_string_lossy().into_owned()
+            };
+            dlclose(handle);
+            let _ = std::fs::remove_file(&path);
+            panic!("dlsym(answer) failed: {msg}");
+        }
+        let answer: extern "C" fn() -> c_int = std::mem::transmute(sym);
+        exit_code = answer();
+        dlclose(handle);
+    }
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(exit_code, 42, "dylib export returned wrong value");
+}

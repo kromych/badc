@@ -500,6 +500,18 @@ pub(crate) struct Build {
     /// `Build` so the per-format writer doesn't have to plumb
     /// the program through alongside the build.
     pub data_relocs: Vec<crate::c5::program::DataReloc>,
+    /// `#pragma export(<name>)`-declared functions. Mirror of
+    /// [`Program::exports`]. Empty for executable output;
+    /// populated for shared-library output, when the
+    /// per-format writer turns each entry into a real export
+    /// record.
+    pub exports: Vec<crate::c5::program::ExportedFunction>,
+    /// Whether this build should produce an executable or a
+    /// shared library (dylib / .so / DLL). Set from
+    /// [`NativeOptions::output_kind`]. The writer dispatches
+    /// on this to pick filetype, entry-point machinery, and
+    /// export-table layout.
+    pub output_kind: OutputKind,
 }
 
 /// One macOS arm64 Thread-Local Variable. A 24-byte `__thread_vars`
@@ -652,17 +664,57 @@ pub struct NativeOptions {
     /// described in the per-backend module docs -- run regardless
     /// of this flag, since neither has a tradeoff worth gating.
     pub optimize: bool,
+    /// Pick the kind of binary the writer should produce.
+    /// Default is [`OutputKind::Executable`] -- a normal
+    /// runnable program. [`OutputKind::SharedLibrary`] swaps
+    /// the writer to dylib / .so / DLL output, drops the
+    /// entry-point machinery, and promotes
+    /// `Program::exports` to externally visible symbols.
+    pub output_kind: OutputKind,
+}
+
+/// Distinguishes "produce an executable" from "produce a
+/// shared library" at the writer entry. Per format:
+///
+/// * **Mach-O**: `MH_EXECUTE` + `LC_MAIN` vs `MH_DYLIB` +
+///   `LC_ID_DYLIB` + symbol-table N_EXT entries.
+/// * **ELF**: `ET_EXEC` + `_start` stub vs `ET_DYN` +
+///   `STB_GLOBAL` `STT_FUNC` exports in `.dynsym`.
+/// * **PE**: regular console image vs `IMAGE_FILE_DLL`
+///   characteristic + `IMAGE_DATA_DIRECTORY[0]` Export
+///   Directory + DllMain stub.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum OutputKind {
+    #[default]
+    Executable,
+    /// Shared library: the writer emits a dylib (Mach-O), an
+    /// `.so` (ELF), or a DLL (PE), exposing each
+    /// [`Program::exports`] entry as an externally resolvable
+    /// symbol. The program need not have a `main` function;
+    /// every `#pragma export(<name>)` becomes a callable
+    /// entry point.
+    SharedLibrary,
 }
 
 impl NativeOptions {
     /// Convenience builder. `NativeOptions::new().with_optimize()`.
     pub const fn new() -> Self {
-        Self { optimize: false }
+        Self {
+            optimize: false,
+            output_kind: OutputKind::Executable,
+        }
     }
 
     /// Set [`Self::optimize`] = true and return self.
     pub const fn with_optimize(mut self) -> Self {
         self.optimize = true;
+        self
+    }
+
+    /// Set [`Self::output_kind`] = [`OutputKind::SharedLibrary`]
+    /// and return self.
+    pub const fn with_shared_library(mut self) -> Self {
+        self.output_kind = OutputKind::SharedLibrary;
         self
     }
 }
@@ -738,6 +790,8 @@ fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Resul
     build.imports = imports;
     build.abi = target.abi();
     build.data_relocs = program.data_relocs.clone();
+    build.exports = program.exports.clone();
+    build.output_kind = options.output_kind;
     append_build_info(&mut build);
     Ok(build)
 }

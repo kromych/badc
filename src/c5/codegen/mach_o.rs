@@ -80,6 +80,12 @@ const CPU_TYPE_ARM64: u32 = 0x0100_000C; // CPU_ARCH_ABI64 | CPU_TYPE_ARM
 const CPU_SUBTYPE_ARM64_ALL: u32 = 0;
 
 const MH_EXECUTE: u32 = 0x2;
+/// `MH_DYLIB` filetype -- shared library (`.dylib`). Picked
+/// when `OutputKind::SharedLibrary` is in effect; the writer
+/// drops `LC_MAIN`, emits an `LC_ID_DYLIB` describing this
+/// image's install name, and promotes each
+/// `Program::exports` entry to an externally visible symbol.
+const MH_DYLIB: u32 = 0x6;
 
 const MH_DYLDLINK: u32 = 0x4;
 const MH_TWOLEVEL: u32 = 0x80;
@@ -99,6 +105,12 @@ const LC_SYMTAB: u32 = 0x2;
 const LC_DYSYMTAB: u32 = 0xB;
 const LC_LOAD_DYLINKER: u32 = 0xE;
 const LC_LOAD_DYLIB: u32 = 0xC;
+/// `LC_ID_DYLIB` -- this image's own install name. Same wire
+/// shape as `LC_LOAD_DYLIB` (a `dylib_command` header
+/// followed by the path bytes); dyld reads this to resolve
+/// the dylib's filename when another image references it via
+/// `LC_LOAD_DYLIB`. Required for `MH_DYLIB`.
+const LC_ID_DYLIB: u32 = 0xD;
 const LC_DYLD_INFO_ONLY: u32 = 0x22 | LC_REQ_DYLD;
 const LC_MAIN: u32 = 0x28 | LC_REQ_DYLD;
 const LC_BUILD_VERSION: u32 = 0x32;
@@ -162,8 +174,19 @@ const BIND_TYPE_POINTER: u8 = 1;
 
 /// nlist_64 type bits.
 const N_UNDF: u8 = 0x0;
+/// `N_SECT` (in `n_type` field): symbol is defined in
+/// section number `n_sect` of this image. Used for the
+/// shared-library export entries -- each `#pragma export`
+/// function shows up in the symbol table as
+/// `N_EXT | N_SECT` with `n_sect` pointing at `__text`.
+const N_SECT: u8 = 0xE;
 const N_EXT: u8 = 0x01;
 const NO_SECT: u8 = 0;
+/// 1-based index of `__TEXT,__text` within the per-image
+/// section table. Mach-O numbers sections globally across
+/// all segments in declaration order; `__text` is the first
+/// section we emit (`__TEXT`'s sole section), hence index 1.
+const SECT_INDEX_TEXT: u8 = 1;
 
 /// Segment indices, in the order they appear as `LC_SEGMENT_64` load
 /// commands. Bind opcodes refer to segments by this index.
@@ -816,12 +839,23 @@ fn load_dylinker(path: &str) -> Vec<u8> {
 /// `LC_LOAD_DYLIB` -- declare a dependency on a shared library that
 /// dyld must load before our entry point runs.
 fn load_dylib(path: &str) -> Vec<u8> {
+    dylib_command(LC_LOAD_DYLIB, path)
+}
+
+/// `LC_ID_DYLIB` -- this image's install name. Same wire
+/// shape as `LC_LOAD_DYLIB`; differs only in the `cmd`
+/// field. Used in shared-library output (MH_DYLIB).
+fn id_dylib(path: &str) -> Vec<u8> {
+    dylib_command(LC_ID_DYLIB, path)
+}
+
+fn dylib_command(cmd: u32, path: &str) -> Vec<u8> {
     let cmdsize = variable_lc_cmdsize(DYLIB_COMMAND_HEAD_SIZE, path);
     let mut out = Vec::with_capacity(cmdsize as usize);
     write_struct(
         &mut out,
         &DylibCommandHead {
-            cmd: LC_LOAD_DYLIB,
+            cmd,
             cmdsize,
             name_offset: DYLIB_COMMAND_HEAD_SIZE as u32,
             timestamp: 0,
@@ -931,11 +965,15 @@ fn symtab_command(symoff: u32, nsyms: u32, stroff: u32, strsize: u32) -> Vec<u8>
     out
 }
 
-/// `LC_DYSYMTAB` -- partition the symbol table into local / external-
-/// defined / undefined ranges and point at the indirect symbol table.
-/// We only have undefined imports right now so the only non-zero
-/// counts are `nundefsym` and `iundefsym`.
-fn dysymtab_command(nundefsym: u32) -> Vec<u8> {
+/// `LC_DYSYMTAB` -- partition the symbol table into local /
+/// external-defined / undefined ranges and point at the
+/// indirect symbol table. We split the table as
+/// `[exports..imports]`: the first `nextdefsym` entries are
+/// `N_EXT | N_SECT` exports (one per `Program::exports`
+/// entry, only present in shared-library output); the
+/// remaining `nundefsym` are `N_EXT | N_UNDF` imports (one
+/// per resolved libc binding).
+fn dysymtab_command(nextdefsym: u32, nundefsym: u32) -> Vec<u8> {
     let mut out = Vec::with_capacity(DYSYMTAB_COMMAND_SIZE);
     write_struct(
         &mut out,
@@ -945,8 +983,8 @@ fn dysymtab_command(nundefsym: u32) -> Vec<u8> {
             ilocalsym: 0,
             nlocalsym: 0,
             iextdefsym: 0,
-            nextdefsym: 0,
-            iundefsym: 0, // undefined start at index 0
+            nextdefsym,
+            iundefsym: nextdefsym,
             nundefsym,
             tocoff: 0,
             ntoc: 0,
@@ -1301,6 +1339,28 @@ fn nlist_undef(n_strx: u32, ordinal: u8) -> Vec<u8> {
     out
 }
 
+/// One `nlist_64` for a symbol defined in this image (an
+/// exported function). `n_value` is the runtime VA of the
+/// symbol; `n_sect` is the 1-based section index it lives
+/// in. The shared-library writer emits one of these per
+/// `Program::exports` entry, with `N_EXT | N_SECT` so dyld /
+/// `dlsym` will surface the symbol to other images.
+fn nlist_defined(n_strx: u32, n_value: u64, n_sect: u8) -> Vec<u8> {
+    let mut out = Vec::with_capacity(NLIST_64_SIZE);
+    write_struct(
+        &mut out,
+        &Nlist64 {
+            n_strx,
+            n_type: N_EXT | N_SECT,
+            n_sect,
+            n_desc: 0,
+            n_value,
+        },
+    );
+    debug_assert_eq!(out.len(), NLIST_64_SIZE);
+    out
+}
+
 /// Build the Mach-O string table (Mach-O strings are NUL-separated
 /// and start with a single leading NUL so that `n_strx == 0` can mean
 /// "no name"). Returns `(strtab_bytes, [n_strx_for_each_input])`.
@@ -1372,6 +1432,7 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
     let dysymtab_size = DYSYMTAB_COMMAND_SIZE as u64;
     let main_size = ENTRY_POINT_COMMAND_SIZE as u64;
 
+    let is_dylib = build.output_kind == super::OutputKind::SharedLibrary;
     let dylinker = load_dylinker("/usr/lib/dyld");
     let dylib_lcs: Vec<Vec<u8>> = build
         .imports
@@ -1380,8 +1441,24 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
         .map(|d| load_dylib(&d.path))
         .collect();
     let bv = build_version();
+    // Shared libraries replace `LC_MAIN` (24 bytes) with
+    // `LC_ID_DYLIB` (carries this image's install name --
+    // hard-coded to `@rpath/c5-output.dylib`; programs that
+    // dlopen this image by absolute path don't depend on the
+    // install name's contents). Same shape as
+    // `LC_LOAD_DYLIB`.
+    let id_dylib_lc = if is_dylib {
+        Some(id_dylib("@rpath/c5-output.dylib"))
+    } else {
+        None
+    };
 
     let dylibs_total: u64 = dylib_lcs.iter().map(|lc| lc.len() as u64).sum();
+    let entry_lc_size = if is_dylib {
+        id_dylib_lc.as_ref().map(|lc| lc.len() as u64).unwrap_or(0)
+    } else {
+        main_size
+    };
     let sizeofcmds = pagezero_size
         + text_seg_size
         + data_seg_size
@@ -1392,7 +1469,7 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
         + dylinker.len() as u64
         + dylibs_total
         + bv.len() as u64
-        + main_size;
+        + entry_lc_size;
 
     // ---- step 4: figure out file/vmaddr layout ----
     //
@@ -1513,23 +1590,60 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
 
     // ---- symbol + string tables ----
     //
-    // Regular imports come first; the bootstrap symbol (only
-    // present when TLV is in use) goes last so the string table
-    // ordering matches.
-    let mut symbol_names: Vec<&str> = build
-        .imports
-        .imports
+    // Layout: [exports][imports][tlv-bootstrap?]. dyld scans
+    // by name through the string table, so order is mostly
+    // cosmetic, but we keep extdef contiguous (LC_DYSYMTAB
+    // tells dyld how many of each kind there are).
+    //
+    // Mach-O conventionally prefixes C exports with a leading
+    // underscore (`int answer()` is `_answer` on disk). The
+    // user's `#pragma export(name)` takes the c5-side name;
+    // we add the underscore here so dlsym lookups by the
+    // same C-side name resolve correctly.
+    let export_disk_names: Vec<String> = build
+        .exports
         .iter()
-        .map(|i| i.real_symbol.as_str())
+        .map(|e| format!("_{}", e.name))
         .collect();
+    let mut symbol_names: Vec<&str> = export_disk_names.iter().map(|s| s.as_str()).collect();
+    let n_exports = symbol_names.len();
+    for imp in &build.imports.imports {
+        symbol_names.push(imp.real_symbol.as_str());
+    }
     if tls_present {
         symbol_names.push(TLV_BOOTSTRAP_SYMBOL);
     }
     let (strtab, str_indices) = build_strtab(&symbol_names);
     let mut symtab = Vec::with_capacity(NLIST_64_SIZE * symbol_names.len());
-    for (n_strx, imp) in str_indices.iter().zip(build.imports.imports.iter()) {
+    // Defined exports (N_EXT | N_SECT) -- first in the table
+    // so the LC_DYSYMTAB extdef range is `[0, n_exports)`.
+    // Each one's `n_value` is the runtime VA of the function:
+    // the code segment's vmaddr base plus the function's
+    // native-byte offset within `build.text`.
+    let code_vmaddr_base = TEXT_VMADDR_BASE + entry_file_offset;
+    for (i, exp) in build.exports.iter().enumerate() {
+        let n_strx = str_indices[i];
+        let native_off = build
+            .bytecode_to_native
+            .get(exp.bytecode_pc)
+            .copied()
+            .unwrap_or(usize::MAX);
+        if native_off == usize::MAX {
+            return Err(C5Error::Compile(format!(
+                "Mach-O: exported function `{}` (bc PC {}) doesn't \
+                 align with any native instruction",
+                exp.name, exp.bytecode_pc
+            )));
+        }
+        let n_value = code_vmaddr_base + native_off as u64;
+        symtab.extend_from_slice(&nlist_defined(n_strx, n_value, SECT_INDEX_TEXT));
+    }
+    // Imports (N_EXT | N_UNDF) -- the existing path, just
+    // shifted by the export offset in `str_indices`.
+    for (j, imp) in build.imports.imports.iter().enumerate() {
+        let n_strx = str_indices[n_exports + j];
         let ordinal = (imp.dylib_index + 1) as u8;
-        symtab.extend_from_slice(&nlist_undef(*n_strx, ordinal));
+        symtab.extend_from_slice(&nlist_undef(n_strx, ordinal));
     }
     if tls_present {
         // `__tlv_bootstrap` comes from libSystem.B.dylib (which is
@@ -1545,6 +1659,7 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
         let bootstrap_strx = str_indices[symbol_names.len() - 1];
         symtab.extend_from_slice(&nlist_undef(bootstrap_strx, bootstrap_dylib_ordinal));
     }
+    let n_undef = symbol_names.len() - n_exports;
 
     // __LINKEDIT: rebase opcodes, then bind opcodes, then
     // symtab, then strtab. Rebase comes first because dyld
@@ -1635,16 +1750,22 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
         stroff as u32,
         strtab.len() as u32,
     );
-    let dysymtab_lc = dysymtab_command(nsyms_total);
-    // LC_MAIN's entryoff is a *file* offset, but `main` may live partway
-    // through the emitted code if the compiler placed helper functions
-    // first. `build.entry_offset` carries that intra-code offset.
-    let main_lc = main_command(entry_file_offset + build.entry_offset as u64);
+    let dysymtab_lc = dysymtab_command(n_exports as u32, n_undef as u32);
+    // For executables: LC_MAIN with the entry-point file
+    // offset. For dylibs: no entry; LC_ID_DYLIB takes its
+    // place (already constructed above).
+    let main_lc = if is_dylib {
+        Vec::new()
+    } else {
+        main_command(entry_file_offset + build.entry_offset as u64)
+    };
 
     debug_assert_eq!(text_segment.len() as u64, text_seg_size);
     debug_assert_eq!(data_segment.len() as u64, data_seg_size);
     debug_assert_eq!(linkedit.len() as u64, linkedit_seg_size);
-    debug_assert_eq!(main_lc.len() as u64, main_size);
+    if !is_dylib {
+        debug_assert_eq!(main_lc.len() as u64, main_size);
+    }
 
     // ---- step 6: emit ----
 
@@ -1660,13 +1781,14 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
     if tls_present {
         header_flags |= MH_HAS_TLV_DESCRIPTORS;
     }
+    let filetype = if is_dylib { MH_DYLIB } else { MH_EXECUTE };
     write_struct(
         &mut out,
         &MachHeader64 {
             magic: MH_MAGIC_64,
             cputype: CPU_TYPE_ARM64,
             cpusubtype: CPU_SUBTYPE_ARM64_ALL,
-            filetype: MH_EXECUTE,
+            filetype,
             ncmds,
             sizeofcmds: sizeofcmds as u32,
             flags: header_flags,
@@ -1677,7 +1799,7 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
 
     // Load commands, ordered by Apple's convention: segments first,
     // then dyld_info family, then symbol tables, then dylinker /
-    // dylib / build_version / main.
+    // dylib / build_version / main (or LC_ID_DYLIB for shared libs).
     out.extend_from_slice(&pagezero);
     out.extend_from_slice(&text_segment);
     out.extend_from_slice(&data_segment);
@@ -1690,7 +1812,11 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
         out.extend_from_slice(lc);
     }
     out.extend_from_slice(&bv);
-    out.extend_from_slice(&main_lc);
+    if let Some(lc) = &id_dylib_lc {
+        out.extend_from_slice(lc);
+    } else {
+        out.extend_from_slice(&main_lc);
+    }
 
     debug_assert_eq!(out.len() as u64, header_plus_lcs);
 
@@ -1862,6 +1988,8 @@ mod tests {
             tls_init_size: 0,
             tls_index_fixups: Vec::new(),
             data_relocs: Vec::new(),
+            exports: Vec::new(),
+            output_kind: super::super::OutputKind::Executable,
             macho_tlv_fixups: Vec::new(),
             macho_tlv_descriptors: Vec::new(),
         }

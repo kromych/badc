@@ -1191,6 +1191,8 @@ mod tests {
             tls_init_size: 0,
             tls_index_fixups: Vec::new(),
             data_relocs: Vec::new(),
+            exports: Vec::new(),
+            output_kind: super::super::OutputKind::Executable,
             macho_tlv_fixups: Vec::new(),
             macho_tlv_descriptors: Vec::new(),
         }

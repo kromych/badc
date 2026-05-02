@@ -1328,6 +1328,8 @@ pub(super) fn lower(
         tls_init_size: program.tls_init_size,
         tls_index_fixups,
         data_relocs: Vec::new(),
+        exports: Vec::new(),
+        output_kind: super::OutputKind::Executable,
         // Mach-O TLV is arm64-only on Apple Silicon; x86_64 macOS
         // is not in our target list.
         macho_tlv_fixups: Vec::new(),

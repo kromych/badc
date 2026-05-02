@@ -697,12 +697,21 @@ impl Compiler {
             return Err(e);
         }
         self.run_compile()?;
-        let main_idx = lexer::find_symbol(&self.symbols, "main")
-            .ok_or_else(|| C5Error::Compile("main() not defined".to_string()))?;
-        if self.symbols[main_idx].class != Token::Fun as i64 {
-            return Err(C5Error::Compile("main() not defined".to_string()));
-        }
-        let entry_pc = self.symbols[main_idx].val as usize;
+        // `main` is optional today: shared-library output
+        // (`OutputKind::SharedLibrary`) doesn't need an entry
+        // point, and the executable-output writer surfaces a
+        // clear error if `entry_pc` doesn't land on real code.
+        // When neither `main` nor any `#pragma export(...)` is
+        // present we still refuse, since the result would be
+        // an image with no callable entries at all.
+        let main_idx = lexer::find_symbol(&self.symbols, "main");
+        let entry_pc = match main_idx {
+            Some(idx) if self.symbols[idx].class == Token::Fun as i64 => {
+                self.symbols[idx].val as usize
+            }
+            _ if !self.pending_exports.is_empty() => 0,
+            _ => return Err(C5Error::Compile("main() not defined".to_string())),
+        };
         // Resolve `#pragma export(<name>)` directives against
         // the now-finalised symbol table. Each name must
         // resolve to a `Token::Fun` (a function defined in

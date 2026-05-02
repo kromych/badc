@@ -86,6 +86,14 @@ const FILE_ALIGNMENT: u32 = 0x200;
 const IMAGE_FILE_MACHINE_AMD64: u16 = 0x8664;
 const IMAGE_FILE_MACHINE_ARM64: u16 = 0xAA64;
 const IMAGE_FILE_EXECUTABLE_IMAGE: u16 = 0x0002;
+/// `IMAGE_FILE_DLL` -- the COFF characteristic that tells
+/// Windows the image is a dynamic-link library, not an
+/// executable. Set when `OutputKind::SharedLibrary` is in
+/// effect; combined with the `Export Directory` data
+/// directory entry, this is enough for `LoadLibraryA` /
+/// `GetProcAddress` to resolve `#pragma export(<name>)`
+/// symbols.
+const IMAGE_FILE_DLL: u16 = 0x2000;
 const IMAGE_FILE_LARGE_ADDRESS_AWARE: u16 = 0x0020;
 
 const PE32_PLUS_MAGIC: u16 = 0x20B;
@@ -148,12 +156,19 @@ const NUM_DATA_DIRS: u32 = 16;
 /// without touching any absolute pointer in the file. The
 /// only absolute pointers we ever emit live inside the TLS
 /// directory, which is why `.reloc` follows TLS presence.
-fn num_sections(data_section_present: bool, reloc_section_present: bool) -> usize {
+fn num_sections(
+    data_section_present: bool,
+    reloc_section_present: bool,
+    edata_section_present: bool,
+) -> usize {
     let mut n = 3; // .text, .pdata, .idata
     if data_section_present {
         n += 1;
     }
     if reloc_section_present {
+        n += 1;
+    }
+    if edata_section_present {
         n += 1;
     }
     n
@@ -168,18 +183,32 @@ const SECTION_HEADER_SIZE: usize = 40;
 /// Raw on-disk size of the PE headers (DOS + PE sig + COFF +
 /// Optional + section table), rounded up to FILE_ALIGNMENT.
 /// 3 sections fit in 0x200; 4 sections need 0x400.
-fn headers_raw_size(data_section_present: bool, reloc_section_present: bool) -> usize {
+fn headers_raw_size(
+    data_section_present: bool,
+    reloc_section_present: bool,
+    edata_section_present: bool,
+) -> usize {
     let unaligned = DOS_HEADER_AND_STUB
         + PE_SIG_SIZE
         + COFF_HEADER_SIZE
         + OPTIONAL64_HEADER_SIZE
-        + SECTION_HEADER_SIZE * num_sections(data_section_present, reloc_section_present);
+        + SECTION_HEADER_SIZE
+            * num_sections(
+                data_section_present,
+                reloc_section_present,
+                edata_section_present,
+            );
     (unaligned + FILE_ALIGNMENT as usize - 1) & !(FILE_ALIGNMENT as usize - 1)
 }
 
 const IMAGE_IMPORT_DESCRIPTOR_SIZE: usize = 20;
 const IAT_ENTRY_SIZE: usize = 8;
 
+/// Export Directory (data directory entry 0) -- the
+/// `IMAGE_EXPORT_DIRECTORY` describing each `#pragma export`
+/// function. `LoadLibraryA` / `GetProcAddress` walks this to
+/// resolve external names.
+const DATA_DIRECTORY_EXPORT: usize = 0;
 const DATA_DIRECTORY_IMPORT: usize = 1;
 const DATA_DIRECTORY_EXCEPTION: usize = 3;
 const DATA_DIRECTORY_BASERELOC: usize = 5;
@@ -226,6 +255,7 @@ const STUB_IMPORT_EXIT: (&str, &str) = ("ExitProcess", "kernel32.dll");
 // ----------------------------------------------------------------
 
 pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error> {
+    let is_dll = build.output_kind == super::OutputKind::SharedLibrary;
     // 1) Combined imports list. Index N becomes IAT slot N. The
     //    program's resolved imports occupy 0..n_program_imports;
     //    the entry stub's two additional imports come after, with
@@ -285,7 +315,12 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
     // present) plus one entry per `int *p = &x;`-style data
     // reloc.
     let reloc_section_present = !build.tls_data.is_empty() || !build.data_relocs.is_empty();
-    let headers_size = headers_raw_size(data_section_present, reloc_section_present) as u32;
+    let edata_section_present = is_dll && !build.exports.is_empty();
+    let headers_size = headers_raw_size(
+        data_section_present,
+        reloc_section_present,
+        edata_section_present,
+    ) as u32;
 
     let text_rva: u32 = SECTION_ALIGNMENT;
     let text_file_off: u32 = headers_size;
@@ -384,14 +419,67 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
         0
     };
 
-    let total_file_size = if reloc_section_present {
+    // `.edata` holds the IMAGE_EXPORT_DIRECTORY plus the
+    // arrays it references -- function RVAs, name RVAs,
+    // ordinals, plus the DLL name and each export name.
+    // Only present in shared-library output with at least one
+    // `#pragma export` symbol. (`edata_section_present` was
+    // already computed above so the headers-size pass knew
+    // about it.)
+    let edata_rva: u32 = if edata_section_present {
+        round_up(
+            if reloc_section_present {
+                reloc_rva + reloc_size
+            } else if data_section_present {
+                data_rva + data_size
+            } else {
+                idata_rva + idata_size
+            },
+            SECTION_ALIGNMENT,
+        )
+    } else {
+        0
+    };
+    let edata_file_off: u32 = if edata_section_present {
+        if reloc_section_present {
+            reloc_file_off + reloc_raw_size
+        } else if data_section_present {
+            data_file_off + data_raw_size
+        } else {
+            idata_file_off + idata_raw_size
+        }
+    } else {
+        0
+    };
+    let edata_bytes: Vec<u8> = if edata_section_present {
+        build_export_directory(
+            edata_rva,
+            text_rva + text_prologue_len,
+            &build.exports,
+            &build.bytecode_to_native,
+        )?
+    } else {
+        Vec::new()
+    };
+    let edata_size: u32 = edata_bytes.len() as u32;
+    let edata_raw_size: u32 = if edata_section_present {
+        round_up(edata_size, FILE_ALIGNMENT)
+    } else {
+        0
+    };
+
+    let total_file_size = if edata_section_present {
+        (edata_file_off + edata_raw_size) as usize
+    } else if reloc_section_present {
         (reloc_file_off + reloc_raw_size) as usize
     } else if data_section_present {
         (data_file_off + data_raw_size) as usize
     } else {
         (idata_file_off + idata_raw_size) as usize
     };
-    let image_size = if reloc_section_present {
+    let image_size = if edata_section_present {
+        round_up(edata_rva + edata_size, SECTION_ALIGNMENT)
+    } else if reloc_section_present {
         round_up(reloc_rva + reloc_size, SECTION_ALIGNMENT)
     } else if data_section_present {
         round_up(data_rva + data_size, SECTION_ALIGNMENT)
@@ -486,6 +574,8 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
         machine,
         data_section_present,
         reloc_section_present,
+        edata_section_present,
+        is_dll,
     );
     let tls_present = !build.tls_data.is_empty();
     let (tls_table_rva, tls_table_size) = if tls_present {
@@ -515,10 +605,15 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
             iat_size: idata_layout.iat_size,
             tls_table_rva,
             tls_table_size,
+            export_table_rva: edata_rva,
+            export_table_size: edata_size,
         },
     );
-    let mut sections: Vec<SectionHeader> =
-        Vec::with_capacity(num_sections(data_section_present, reloc_section_present));
+    let mut sections: Vec<SectionHeader> = Vec::with_capacity(num_sections(
+        data_section_present,
+        reloc_section_present,
+        edata_section_present,
+    ));
     sections.push(SectionHeader {
         name: *b".text\0\0\0",
         virtual_size: text_size,
@@ -565,6 +660,16 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
             characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA
                 | IMAGE_SCN_MEM_READ
                 | IMAGE_SCN_MEM_DISCARDABLE,
+        });
+    }
+    if edata_section_present {
+        sections.push(SectionHeader {
+            name: *b".edata\0\0",
+            virtual_size: edata_size,
+            virtual_address: edata_rva,
+            size_of_raw_data: edata_raw_size,
+            pointer_to_raw_data: edata_file_off,
+            characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ,
         });
     }
     write_section_headers(&mut out, &sections);
@@ -662,6 +767,10 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
         pad_to(&mut out, reloc_file_off as usize);
         out.extend_from_slice(&reloc_bytes);
     }
+    if edata_section_present {
+        pad_to(&mut out, edata_file_off as usize);
+        out.extend_from_slice(&edata_bytes);
+    }
     pad_to(&mut out, total_file_size);
     debug_assert_eq!(out.len(), total_file_size, "file size mismatch");
     Ok(out)
@@ -690,6 +799,107 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
 /// `SizeOfBlock` must be 4-byte aligned, so blocks with an
 /// odd entry count get one trailing `IMAGE_REL_BASED_ABSOLUTE`
 /// pad entry.
+/// Build the `.edata` section bytes for a DLL with
+/// exports. The section opens with `IMAGE_EXPORT_DIRECTORY`
+/// (40 bytes) and is followed by:
+///
+/// * `AddressOfFunctions`: u32 RVA per export (function
+///   start in `.text`).
+/// * `AddressOfNames`: u32 RVA per export (entry in the
+///   trailing string blob).
+/// * `AddressOfNameOrdinals`: u16 ordinal per export
+///   (0-based index into AddressOfFunctions).
+/// * DLL name string + each export's name string,
+///   NUL-terminated.
+///
+/// All RVAs in the directory are image-relative; the
+/// `text_prologue_rva` is `text_rva + stub_len`, the byte
+/// where `build.text` starts. Each export's runtime RVA is
+/// `text_prologue_rva + bytecode_to_native[bytecode_pc]`.
+fn build_export_directory(
+    edata_rva: u32,
+    text_prologue_rva: u32,
+    exports: &[crate::c5::program::ExportedFunction],
+    bytecode_to_native: &[usize],
+) -> Result<Vec<u8>, C5Error> {
+    const EXPORT_DIRECTORY_SIZE: usize = 40;
+    let n = exports.len() as u32;
+    // Layout offsets within the section.
+    let funcs_off: u32 = EXPORT_DIRECTORY_SIZE as u32;
+    let names_off: u32 = funcs_off + 4 * n;
+    let ordinals_off: u32 = names_off + 4 * n;
+    let strings_off: u32 = ordinals_off + 2 * n;
+
+    // Reserve the directory header; we'll fill in the field
+    // values after we know the string offsets.
+    let mut out: Vec<u8> = alloc::vec![0u8; EXPORT_DIRECTORY_SIZE];
+
+    // AddressOfFunctions -- RVA of each function.
+    for exp in exports {
+        let native_off = bytecode_to_native
+            .get(exp.bytecode_pc)
+            .copied()
+            .unwrap_or(usize::MAX);
+        if native_off == usize::MAX {
+            return Err(C5Error::Compile(format!(
+                "PE: exported function `{}` (bc PC {}) doesn't \
+                 align with any native instruction",
+                exp.name, exp.bytecode_pc
+            )));
+        }
+        let rva = text_prologue_rva + native_off as u32;
+        out.extend_from_slice(&rva.to_le_bytes());
+    }
+    // AddressOfNames -- RVA of each export's name string.
+    let strings_rva = edata_rva + strings_off;
+    let dll_name = "c5-output.dll";
+    let mut cur = strings_rva + dll_name.len() as u32 + 1;
+    for exp in exports {
+        out.extend_from_slice(&cur.to_le_bytes());
+        cur += exp.name.len() as u32 + 1;
+    }
+    // AddressOfNameOrdinals -- u16 ordinal per export.
+    for i in 0..n {
+        out.extend_from_slice(&(i as u16).to_le_bytes());
+    }
+    // String blob: DLL name first (referenced by the
+    // directory's `Name` field), then each export name.
+    let dll_name_rva = edata_rva + strings_off;
+    out.extend_from_slice(dll_name.as_bytes());
+    out.push(0);
+    for exp in exports {
+        out.extend_from_slice(exp.name.as_bytes());
+        out.push(0);
+    }
+
+    // Patch the directory header with the now-known offsets.
+    // Layout:
+    //   Characteristics      : u32  (0)
+    //   TimeDateStamp        : u32  (0)
+    //   MajorVersion         : u16  (0)
+    //   MinorVersion         : u16  (0)
+    //   Name                 : u32  RVA of dll name
+    //   Base                 : u32  ordinal base, 1
+    //   NumberOfFunctions    : u32  n
+    //   NumberOfNames        : u32  n
+    //   AddressOfFunctions   : u32
+    //   AddressOfNames       : u32
+    //   AddressOfNameOrdinals: u32
+    out[0..4].copy_from_slice(&0u32.to_le_bytes());
+    out[4..8].copy_from_slice(&0u32.to_le_bytes());
+    out[8..10].copy_from_slice(&0u16.to_le_bytes());
+    out[10..12].copy_from_slice(&0u16.to_le_bytes());
+    out[12..16].copy_from_slice(&dll_name_rva.to_le_bytes());
+    out[16..20].copy_from_slice(&1u32.to_le_bytes());
+    out[20..24].copy_from_slice(&n.to_le_bytes());
+    out[24..28].copy_from_slice(&n.to_le_bytes());
+    out[28..32].copy_from_slice(&(edata_rva + funcs_off).to_le_bytes());
+    out[32..36].copy_from_slice(&(edata_rva + names_off).to_le_bytes());
+    out[36..40].copy_from_slice(&(edata_rva + ordinals_off).to_le_bytes());
+
+    Ok(out)
+}
+
 fn build_reloc_section(
     data_rva: u32,
     tls_layout: &TlsLayout,
@@ -1015,27 +1225,38 @@ fn write_pe_signature(out: &mut Vec<u8>) {
     out.extend_from_slice(b"PE\0\0");
 }
 
+#[allow(clippy::too_many_arguments)]
 fn write_coff_header(
     out: &mut Vec<u8>,
     optional_header_size: usize,
     machine: Machine,
     data_section_present: bool,
     reloc_section_present: bool,
+    edata_section_present: bool,
+    is_dll: bool,
 ) {
     let machine_id = match machine {
         Machine::X86_64 => IMAGE_FILE_MACHINE_AMD64,
         Machine::Aarch64 => IMAGE_FILE_MACHINE_ARM64,
     };
+    let mut characteristics = IMAGE_FILE_EXECUTABLE_IMAGE | IMAGE_FILE_LARGE_ADDRESS_AWARE;
+    if is_dll {
+        characteristics |= IMAGE_FILE_DLL;
+    }
     write_struct(
         out,
         &CoffHeader {
             machine: machine_id,
-            number_of_sections: num_sections(data_section_present, reloc_section_present) as u16,
+            number_of_sections: num_sections(
+                data_section_present,
+                reloc_section_present,
+                edata_section_present,
+            ) as u16,
             time_date_stamp: 0,
             pointer_to_symbol_table: 0,
             number_of_symbols: 0,
             size_of_optional_header: optional_header_size as u16,
-            characteristics: IMAGE_FILE_EXECUTABLE_IMAGE | IMAGE_FILE_LARGE_ADDRESS_AWARE,
+            characteristics,
         },
     );
 }
@@ -1066,6 +1287,13 @@ struct OptionalHeaderInputs {
     /// globals.
     tls_table_rva: u32,
     tls_table_size: u32,
+    /// Export Directory (data directory entry 0). RVA / size
+    /// of `.edata` -- the `IMAGE_EXPORT_DIRECTORY` plus its
+    /// trailing function-RVA / name-RVA / ordinal arrays
+    /// and string blob. Both zero for executables and for
+    /// DLLs that don't declare any `#pragma export`.
+    export_table_rva: u32,
+    export_table_size: u32,
 }
 
 fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
@@ -1095,6 +1323,10 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
     data_directory[DATA_DIRECTORY_IMPORT] = DataDirectoryEntry {
         rva: inp.import_table_rva,
         size: inp.import_table_size,
+    };
+    data_directory[DATA_DIRECTORY_EXPORT] = DataDirectoryEntry {
+        rva: inp.export_table_rva,
+        size: inp.export_table_size,
     };
     data_directory[DATA_DIRECTORY_EXCEPTION] = DataDirectoryEntry {
         rva: inp.exception_table_rva,
@@ -2295,6 +2527,127 @@ mod tests {
         let (rva, size) = read_data_directory(&bytes, DATA_DIRECTORY_BASERELOC);
         assert_eq!(rva, 0, "TLS-free image must not advertise .reloc RVA");
         assert_eq!(size, 0, "TLS-free image must not advertise .reloc size");
+    }
+
+    /// Read COFF Characteristics from the binary.
+    fn read_coff_characteristics(bytes: &[u8]) -> u16 {
+        let pe_off = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
+        u16::from_le_bytes(bytes[pe_off + 22..pe_off + 24].try_into().unwrap())
+    }
+
+    /// Shared-library output (`OutputKind::SharedLibrary`)
+    /// flips the `IMAGE_FILE_DLL` characteristic and adds an
+    /// `IMAGE_EXPORT_DIRECTORY` for each `#pragma export`
+    /// symbol. Verify both: the characteristic bit, the
+    /// non-empty data-directory entry, and a well-formed
+    /// directory header (NumberOfFunctions / NumberOfNames
+    /// match the source's export count).
+    #[test]
+    fn dll_output_emits_export_directory_and_dll_flag() {
+        use crate::Compiler;
+        let src = "
+            int answer() { return 42; }
+            #pragma export(answer)
+            int main() { return 0; }
+        ";
+        for (machine, target) in [
+            (Machine::X86_64, super::super::Target::WindowsX64),
+            (Machine::Aarch64, super::super::Target::WindowsAarch64),
+        ] {
+            let program =
+                Compiler::with_target(super::super::super::tests::with_prelude(src), target)
+                    .compile()
+                    .expect("compile");
+            let build = super::super::lower_for(
+                &program,
+                target,
+                super::super::NativeOptions::new().with_shared_library(),
+            )
+            .expect("lower");
+            let bytes = write(&build, machine).expect("write PE");
+
+            let chars = read_coff_characteristics(&bytes);
+            assert_ne!(
+                chars & IMAGE_FILE_DLL,
+                0,
+                "{machine:?}: IMAGE_FILE_DLL must be set for shared-library output"
+            );
+
+            let (export_rva, export_size) = read_data_directory(&bytes, DATA_DIRECTORY_EXPORT);
+            assert_ne!(export_rva, 0, "{machine:?}: missing Export Directory");
+            assert!(
+                export_size >= 40,
+                "{machine:?}: Export Directory must be at least 40 bytes (the IMAGE_EXPORT_DIRECTORY header)"
+            );
+
+            // Resolve `.edata` to a file offset and read the
+            // header's NumberOfFunctions / NumberOfNames.
+            let pe_off = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
+            let coff_off = pe_off + 4;
+            let n_sections =
+                u16::from_le_bytes([bytes[coff_off + 2], bytes[coff_off + 3]]) as usize;
+            let optional_off = coff_off + COFF_HEADER_SIZE;
+            let optional_size =
+                u16::from_le_bytes([bytes[coff_off + 16], bytes[coff_off + 17]]) as usize;
+            let sections_off = optional_off + optional_size;
+            let mut edata_file_off: Option<usize> = None;
+            for i in 0..n_sections {
+                let h = sections_off + i * SECTION_HEADER_SIZE;
+                let v_addr = u32::from_le_bytes(bytes[h + 12..h + 16].try_into().unwrap());
+                let v_size = u32::from_le_bytes(bytes[h + 8..h + 12].try_into().unwrap());
+                let p_off = u32::from_le_bytes(bytes[h + 20..h + 24].try_into().unwrap());
+                if export_rva >= v_addr && export_rva < v_addr + v_size {
+                    edata_file_off = Some((p_off + (export_rva - v_addr)) as usize);
+                    break;
+                }
+            }
+            let edata_file_off = edata_file_off.expect(".edata must lie inside a section");
+            let n_funcs = u32::from_le_bytes(
+                bytes[edata_file_off + 20..edata_file_off + 24]
+                    .try_into()
+                    .unwrap(),
+            );
+            let n_names = u32::from_le_bytes(
+                bytes[edata_file_off + 24..edata_file_off + 28]
+                    .try_into()
+                    .unwrap(),
+            );
+            assert_eq!(
+                n_funcs, 1,
+                "{machine:?}: NumberOfFunctions must equal the export count"
+            );
+            assert_eq!(
+                n_names, 1,
+                "{machine:?}: NumberOfNames must equal the export count"
+            );
+        }
+    }
+
+    /// Executables keep `IMAGE_FILE_DLL` cleared and have no
+    /// Export Directory. Mirrors the TLS / DYNAMIC_BASE
+    /// guards.
+    #[test]
+    fn executable_output_keeps_dll_flag_clear() {
+        use crate::Compiler;
+        let program = Compiler::new("int main() { return 0; }".to_string())
+            .compile()
+            .expect("compile");
+        let build = super::super::lower_for(
+            &program,
+            super::super::Target::WindowsX64,
+            super::super::NativeOptions::default(),
+        )
+        .expect("lower");
+        let bytes = write(&build, Machine::X86_64).expect("write PE");
+        let chars = read_coff_characteristics(&bytes);
+        assert_eq!(
+            chars & IMAGE_FILE_DLL,
+            0,
+            "executables must not advertise IMAGE_FILE_DLL"
+        );
+        let (rva, size) = read_data_directory(&bytes, DATA_DIRECTORY_EXPORT);
+        assert_eq!(rva, 0, "executables must not advertise an Export Directory");
+        assert_eq!(size, 0);
     }
 
     /// End-to-end format check: build an aarch64 Windows PE for a

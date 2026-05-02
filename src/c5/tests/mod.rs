@@ -153,20 +153,23 @@ pub fn try_run_fixture(name: &str) -> Result<i64, C5Error> {
 pub struct LexHarness {
     lex: Lexer,
     pub symbols: Vec<Symbol>,
+    pub symbol_index: lex_helpers::SymbolIndex,
     pub data: Vec<u8>,
 }
 
 impl LexHarness {
     pub fn new(src: &str) -> Self {
         let mut symbols = Vec::new();
+        let mut symbol_index = lex_helpers::SymbolIndex::new();
         // Lexer tests don't reach for `#pragma binding`s, so the
         // dynamic-binding seed is empty -- only keywords get
         // registered. Tests that want libc names should add their
         // own `Symbol` entries directly.
-        lex_helpers::init_symbols(&mut symbols, &[]);
+        lex_helpers::init_symbols(&mut symbols, &mut symbol_index, &[]);
         Self {
             lex: Lexer::new(src.to_string()),
             symbols,
+            symbol_index,
             data: Vec::new(),
         }
     }
@@ -174,7 +177,7 @@ impl LexHarness {
     /// Advance one token and return `tk`.
     pub fn next(&mut self) -> i64 {
         self.lex
-            .next(&mut self.symbols, &mut self.data)
+            .next(&mut self.symbols, &mut self.symbol_index, &mut self.data)
             .expect("lexer error");
         self.lex.tk
     }

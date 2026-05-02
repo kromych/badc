@@ -4,7 +4,6 @@ use alloc::vec::Vec;
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Symbol {
     pub name: String,
-    pub hash: i64,
     pub token: i64,
     pub class: i64,
     pub type_: i64,

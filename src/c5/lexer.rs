@@ -1,5 +1,6 @@
 use alloc::format;
 use alloc::string::{String, ToString};
+use alloc::vec;
 use alloc::vec::Vec;
 
 use super::error::C5Error;
@@ -15,6 +16,104 @@ pub(crate) struct Lexer {
     pub tk: i64,
     pub ival: i64,
     pub curr_id_idx: usize,
+}
+
+/// Side index for `Vec<Symbol>` so identifier lookup stops being O(N).
+///
+/// The original c4-style code did a linear scan over every symbol on
+/// every identifier the lexer hit; with a few thousand globals that
+/// turned the frontend into an O(N^2) hot spot (~88% of compile time
+/// on the stress fixture). This replaces the scan with a small chained
+/// hash table that lives alongside `symbols` instead of replacing it,
+/// so the rest of the compiler keeps using `&self.symbols[idx]` the
+/// way it always has.
+///
+/// Layout:
+///    * `buckets[hash & mask]` -- head of the chain, `u32::MAX` when empty.
+///    * `next[i]` -- previous symbol that landed in the same bucket (or `u32::MAX` to terminate).
+///    * `hashes[i]` -- copy of `symbols[i].hash`. Keeps the chain walk in a tight 12-bytes-per-entry
+///      stride so the big `Symbol` struct only gets touched on a hash hit.
+///
+/// Newer entries always land at the head of their bucket, so a chain
+/// walk visits the most-recent declaration first -- same behaviour the
+/// old `.rev()` scan had, which is what shadowing relies on.
+pub(crate) struct SymbolIndex {
+    buckets: Vec<u32>,
+    next: Vec<u32>,
+    hashes: Vec<i64>,
+    mask: u32,
+}
+
+impl SymbolIndex {
+    pub fn new() -> Self {
+        // 64 buckets is enough for the keyword seed plus a typical
+        // small program; we double from there as needed.
+        let cap = 64usize;
+        Self {
+            buckets: vec![u32::MAX; cap],
+            next: Vec::new(),
+            hashes: Vec::new(),
+            mask: (cap - 1) as u32,
+        }
+    }
+
+    /// Find the most recent live symbol whose `(hash, name)` matches.
+    /// `token != 0` filters out any defensively-zeroed entries the way
+    /// the old linear scan did; in practice no caller zeroes `token`
+    /// today, but the check is cheap and keeps behaviour identical.
+    pub fn lookup(&self, symbols: &[Symbol], hash: i64, name: &[u8]) -> Option<usize> {
+        let mut cur = self.buckets[(hash as u32 & self.mask) as usize];
+        while cur != u32::MAX {
+            let i = cur as usize;
+            if self.hashes[i] == hash {
+                let s = &symbols[i];
+                if s.token != 0 && s.name.as_bytes() == name {
+                    return Some(i);
+                }
+            }
+            cur = self.next[i];
+        }
+        None
+    }
+
+    /// Record that `symbols.len() - 1` was just pushed with the given
+    /// hash. Must be called immediately after every `symbols.push(...)`
+    /// so the index stays in sync.
+    pub fn record(&mut self, hash: i64) {
+        let idx = self.hashes.len() as u32;
+        // Grow when load factor crosses ~0.75. Doubling keeps the
+        // amortised cost flat and the buckets array tiny.
+        if (idx as usize + 1) * 4 > self.buckets.len() * 3 {
+            self.grow();
+        }
+        let bucket = (hash as u32 & self.mask) as usize;
+        let head = self.buckets[bucket];
+        self.next.push(head);
+        self.hashes.push(hash);
+        self.buckets[bucket] = idx;
+    }
+
+    fn grow(&mut self) {
+        let new_cap = self.buckets.len() * 2;
+        let new_mask = (new_cap - 1) as u32;
+        let mut new_buckets = vec![u32::MAX; new_cap];
+        // Re-thread oldest-to-newest so the newest entry ends up at
+        // the head of its new bucket -- preserves the LIFO property
+        // shadowing relies on.
+        for i in 0..self.hashes.len() {
+            let bucket = (self.hashes[i] as u32 & new_mask) as usize;
+            self.next[i] = new_buckets[bucket];
+            new_buckets[bucket] = i as u32;
+        }
+        self.buckets = new_buckets;
+        self.mask = new_mask;
+    }
+}
+
+impl Default for SymbolIndex {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Lexer {
@@ -39,9 +138,15 @@ impl Lexer {
         p < self.src.len() && self.src[p] == b
     }
 
-    /// Advance to the next token. Identifiers are interned into `symbols`; string
-    /// literals are appended to `data` and `ival` is set to their start address.
-    pub fn next(&mut self, symbols: &mut Vec<Symbol>, data: &mut Vec<u8>) -> Result<(), C5Error> {
+    /// Advance to the next token. Identifiers are interned into `symbols`
+    /// (with `index` kept in sync); string literals are appended to `data`
+    /// and `ival` is set to their start address.
+    pub fn next(
+        &mut self,
+        symbols: &mut Vec<Symbol>,
+        index: &mut SymbolIndex,
+        data: &mut Vec<u8>,
+    ) -> Result<(), C5Error> {
         loop {
             if self.pos >= self.src.len() {
                 self.tk = 0;
@@ -74,8 +179,8 @@ impl Lexer {
                     hash = hash.wrapping_mul(147).wrapping_add(nc as i64);
                     self.pos += 1;
                 }
-                let name_vec = self.src[start..self.pos].to_vec();
-                self.curr_id_idx = resolve_symbol(symbols, &name_vec, hash);
+                let name_slice = &self.src[start..self.pos];
+                self.curr_id_idx = resolve_symbol(symbols, index, name_slice, hash);
                 self.tk = symbols[self.curr_id_idx].token;
                 return Ok(());
             } else if c.is_ascii_digit() {
@@ -404,33 +509,37 @@ pub(crate) fn hash_name(name: &[u8]) -> i64 {
     h
 }
 
-pub(crate) fn find_symbol(symbols: &[Symbol], name: &str) -> Option<usize> {
-    symbols.iter().position(|s| s.name == name)
+pub(crate) fn find_symbol(symbols: &[Symbol], index: &SymbolIndex, name: &str) -> Option<usize> {
+    let bytes = name.as_bytes();
+    index.lookup(symbols, hash_name(bytes), bytes)
 }
 
-pub(crate) fn resolve_symbol(symbols: &mut Vec<Symbol>, name: &[u8], hash: i64) -> usize {
-    for (i, s) in symbols.iter().enumerate().rev() {
-        if s.hash == hash && s.token != 0 && s.name.as_bytes() == name {
-            return i;
-        }
+pub(crate) fn resolve_symbol(
+    symbols: &mut Vec<Symbol>,
+    index: &mut SymbolIndex,
+    name: &[u8],
+    hash: i64,
+) -> usize {
+    if let Some(i) = index.lookup(symbols, hash, name) {
+        return i;
     }
     symbols.push(Symbol {
         name: String::from_utf8_lossy(name).to_string(),
-        hash,
         token: Token::Id as i64,
         ..Default::default()
     });
+    index.record(hash);
     symbols.len() - 1
 }
 
-fn add_keyword(symbols: &mut Vec<Symbol>, name: &str, token: i64) {
+fn add_keyword(symbols: &mut Vec<Symbol>, index: &mut SymbolIndex, name: &str, token: i64) {
     let hash = hash_name(name.as_bytes());
     symbols.push(Symbol {
         name: name.to_string(),
-        hash,
         token,
         ..Default::default()
     });
+    index.record(hash);
 }
 
 /// Reserved words that map to a non-`Id` token. Library function
@@ -542,33 +651,37 @@ pub fn predefined_symbols() -> Vec<PredefinedSymbol> {
 /// here since the symbol table only holds one entry per name.
 /// `#include`-time deduplication via `#pragma once` makes that the
 /// expected case.
-pub(crate) fn init_symbols(symbols: &mut Vec<Symbol>, dylibs: &[super::preprocessor::DylibSpec]) {
+pub(crate) fn init_symbols(
+    symbols: &mut Vec<Symbol>,
+    index: &mut SymbolIndex,
+    dylibs: &[super::preprocessor::DylibSpec],
+) {
     for (name, tok) in KEYWORDS {
-        add_keyword(symbols, name, *tok as i64);
+        add_keyword(symbols, index, name, *tok as i64);
     }
 
     let mut binding_idx: i64 = 0;
     for spec in dylibs {
         for binding in &spec.bindings {
             let name = binding.local_name.as_str();
-            if find_symbol(symbols, name).is_none() {
+            if find_symbol(symbols, index, name).is_none() {
                 let hash = hash_name(name.as_bytes());
                 symbols.push(Symbol {
                     name: name.to_string(),
-                    hash,
                     token: Token::Id as i64,
                     class: Token::Sys as i64,
                     type_: Ty::Int as i64,
                     val: binding_idx,
                     ..Default::default()
                 });
+                index.record(hash);
             }
             binding_idx += 1;
         }
     }
 
-    // Ensure main is registered so the compiler's later lookup sees it.
-    let _ = find_symbol(symbols, "main").unwrap();
+    // Make sure `main` is registered so the compiler's later lookup sees it.
+    let _ = find_symbol(symbols, index, "main").unwrap();
 }
 
 #[cfg(test)]
@@ -581,8 +694,9 @@ mod tests {
     fn lex_string_literal(src: &str) -> Vec<u8> {
         let mut lex = Lexer::new(src.to_string());
         let mut symbols: Vec<Symbol> = Vec::new();
+        let mut index = SymbolIndex::new();
         let mut data: Vec<u8> = Vec::new();
-        lex.next(&mut symbols, &mut data).unwrap();
+        lex.next(&mut symbols, &mut index, &mut data).unwrap();
         assert_eq!(
             lex.tk, '"' as i64,
             "expected a string token, got {}",
@@ -594,8 +708,9 @@ mod tests {
     fn lex_char_literal(src: &str) -> i64 {
         let mut lex = Lexer::new(src.to_string());
         let mut symbols: Vec<Symbol> = Vec::new();
+        let mut index = SymbolIndex::new();
         let mut data: Vec<u8> = Vec::new();
-        lex.next(&mut symbols, &mut data).unwrap();
+        lex.next(&mut symbols, &mut index, &mut data).unwrap();
         assert_eq!(lex.tk, Token::Num as i64);
         lex.ival
     }

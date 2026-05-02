@@ -177,6 +177,10 @@ struct ParsedParams {
 pub struct Compiler {
     lex: Lexer,
     symbols: Vec<Symbol>,
+    /// Side hash index over `symbols`, kept in lockstep with it so
+    /// `find_symbol` / `resolve_symbol` are O(1) amortised instead of
+    /// scanning the whole vector on every identifier.
+    symbol_index: lexer::SymbolIndex,
 
     // --- Codegen state ---
     text: Vec<i64>,
@@ -333,7 +337,8 @@ impl Compiler {
         let pending_exports = pp.exports;
 
         let mut symbols = Vec::new();
-        lexer::init_symbols(&mut symbols, &dylibs);
+        let mut symbol_index = lexer::SymbolIndex::new();
+        lexer::init_symbols(&mut symbols, &mut symbol_index, &dylibs);
 
         // Reserve the first 8 bytes of `.data` so no symbol's
         // offset is zero. The c5 dialect models pointers as
@@ -353,6 +358,7 @@ impl Compiler {
         Self {
             lex: Lexer::new(preprocessed),
             symbols,
+            symbol_index,
             deferred_error,
             dylibs,
             text: Vec::new(),
@@ -705,8 +711,8 @@ impl Compiler {
         // a user-defined `DllMain` is present we still refuse,
         // since the result would be an image with no callable
         // entries at all.
-        let main_idx = lexer::find_symbol(&self.symbols, "main");
-        let dllmain_idx = lexer::find_symbol(&self.symbols, "DllMain");
+        let main_idx = lexer::find_symbol(&self.symbols, &self.symbol_index, "main");
+        let dllmain_idx = lexer::find_symbol(&self.symbols, &self.symbol_index, "DllMain");
         let has_user_dllmain =
             dllmain_idx.is_some_and(|idx| self.symbols[idx].class == Token::Fun as i64);
         let entry_pc = match main_idx {
@@ -725,7 +731,7 @@ impl Compiler {
         // expected.
         let mut exports = Vec::with_capacity(self.pending_exports.len());
         for name in core::mem::take(&mut self.pending_exports) {
-            let Some(idx) = lexer::find_symbol(&self.symbols, &name) else {
+            let Some(idx) = lexer::find_symbol(&self.symbols, &self.symbol_index, &name) else {
                 return Err(C5Error::Compile(format!(
                     "`#pragma export({name})` -- no such symbol; the name must \
                      refer to a function defined in this source"
@@ -773,7 +779,8 @@ impl Compiler {
     // ---- Lexer plumbing ----
 
     fn next(&mut self) -> Result<(), C5Error> {
-        self.lex.next(&mut self.symbols, &mut self.data)
+        self.lex
+            .next(&mut self.symbols, &mut self.symbol_index, &mut self.data)
     }
 
     // ---- Code emission ----

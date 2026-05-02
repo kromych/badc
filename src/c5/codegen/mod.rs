@@ -730,7 +730,32 @@ fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Resul
     };
     build.imports = imports;
     build.abi = target.abi();
+    append_build_info(&mut build);
     Ok(build)
+}
+
+/// Append the [`crate::BUILD_INFO`] marker to the tail of
+/// `Build::text`. The bytes never get executed -- the entry
+/// point is at `build.entry_offset` and every function ends
+/// with a return -- so this is purely a `strings(1)`-friendly
+/// fingerprint that says which badc revision emitted the
+/// binary.
+///
+/// The marker is NUL-terminated and prefixed by a 4-byte
+/// alignment pad so the start of the string sits on a 4-byte
+/// boundary regardless of the per-arch instruction stream's
+/// trailing alignment. Disassemblers walking past the last
+/// real instruction will see noise; that's fine because the
+/// runtime never branches into this region.
+fn append_build_info(build: &mut Build) {
+    // 4-byte align the start so the marker is easy to spot in a
+    // hex dump (and so per-arch instruction-alignment invariants
+    // aren't violated for any later additions).
+    while !build.text.len().is_multiple_of(4) {
+        build.text.push(0);
+    }
+    build.text.extend_from_slice(crate::BUILD_INFO.as_bytes());
+    build.text.push(0);
 }
 
 fn write_for(build: &Build, target: Target) -> Result<Vec<u8>, C5Error> {

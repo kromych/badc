@@ -36,6 +36,28 @@
 
 extern crate alloc;
 
+/// Compiler identification string baked into every emitted
+/// binary. `build.rs` captures the git commit / branch / remote
+/// at compile time and exposes them via `cargo:rustc-env`. The
+/// codegen appends these bytes to `Build::text` so a `strings`
+/// scan of the produced Mach-O / ELF / PE binary tells you
+/// exactly which badc build emitted it.
+///
+/// Format: `PRODUCED BY BADC vX.Y.Z, commit ..., branch ..., remote ...`
+/// Wrapped between two literal `**` markers so the prose can
+/// pop out of binary noise even with a noisy `strings` output.
+pub const BUILD_INFO: &str = concat!(
+    "**PRODUCED BY BADC v",
+    env!("CARGO_PKG_VERSION"),
+    ", commit ",
+    env!("BADC_GIT_COMMIT"),
+    ", branch ",
+    env!("BADC_GIT_BRANCH"),
+    ", remote ",
+    env!("BADC_GIT_REMOTE"),
+    "**",
+);
+
 pub mod c5;
 
 #[allow(unused_imports)]

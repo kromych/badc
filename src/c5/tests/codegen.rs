@@ -70,3 +70,31 @@ fn entry_pc_points_at_main() {
     let program = compile_fixture("ir_translation_simple.c");
     assert_eq!(program.entry_pc, 0);
 }
+
+/// Every emitted binary -- regardless of target -- carries the
+/// `BUILD_INFO` marker at the tail of the code section so a
+/// `strings` scan reveals the badc revision that produced it.
+/// The marker is appended in `codegen::lower_for` after the
+/// per-arch `lower()` returns; nothing references those bytes,
+/// so they're invisible at runtime but easy to find on disk.
+#[test]
+fn build_info_marker_appears_in_every_target() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    let program = super::compile_str("int main() { return 0; }");
+    let needle = b"PRODUCED BY BADC";
+    for target in [
+        Target::MacOSAarch64,
+        Target::LinuxAarch64,
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let bytes = emit_native_with_options(&program, target, NativeOptions::default())
+            .unwrap_or_else(|e| panic!("emit_native({target:?}): {e}"));
+        let found = bytes.windows(needle.len()).any(|w| w == needle);
+        assert!(
+            found,
+            "{target:?}: expected `PRODUCED BY BADC` marker in emitted binary"
+        );
+    }
+}

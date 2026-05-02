@@ -764,7 +764,15 @@ fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Resul
     // `program.dylibs` lookup as user-emitted ops would, so a
     // source that omits `<stdlib.h>` still gets the friendly
     // "no `#pragma binding(... ::exit, ...)`" error.
-    if matches!(target, Target::LinuxAarch64 | Target::LinuxX64) {
+    // Linux ELF executables tail-call libc `exit` from
+    // `_start`; force-including the binding lets the writer
+    // emit the call even if user code never names it.
+    // Shared libraries skip this -- they have no `_start`,
+    // and pulling in an unused libc reference would surface
+    // a "no `#pragma binding(libc::exit, ...)`" error on
+    // sources that legitimately don't include `<stdlib.h>`.
+    let is_shared = options.output_kind == OutputKind::SharedLibrary;
+    if !is_shared && matches!(target, Target::LinuxAarch64 | Target::LinuxX64) {
         imports.force_include_by_name("exit", program)?;
     }
     // macOS arm64 with `_Thread_local` globals needs libSystem

@@ -65,6 +65,11 @@ const EV_CURRENT: u8 = 1;
 const ELFOSABI_SYSV: u8 = 0;
 
 const ET_EXEC: u16 = 2;
+/// `ET_DYN` -- shared object / position-independent
+/// executable. Used when `OutputKind::SharedLibrary` is in
+/// effect; the loader (`dlopen`) maps the image at any
+/// address and adds the runtime base to every absolute VA.
+const ET_DYN: u16 = 3;
 
 const EM_AARCH64: u16 = 183;
 const EM_X86_64: u16 = 62;
@@ -99,6 +104,12 @@ const DF_BIND_NOW: u64 = 0x8;
 // nlist / Elf64_Sym fields.
 const STB_GLOBAL: u8 = 1;
 const STT_NOTYPE: u8 = 0;
+/// `STT_FUNC` symbol type -- `st_info` low nibble for an
+/// exported function. Used in shared-library output to mark
+/// each `#pragma export(...)` entry as a callable code
+/// symbol; dlsym surfaces only `STT_FUNC` and `STT_NOTYPE`
+/// non-undef entries.
+const STT_FUNC: u8 = 2;
 const SHN_UNDEF: u16 = 0;
 
 // Relocation types we emit.
@@ -344,11 +355,15 @@ fn emit_start_stub_aarch64(abi: Abi, code: &mut Vec<u8>, main_offset_in_code: u6
 // ------------------------------------------------------------------
 
 /// Build .dynstr -- the dynamic string table. Returns
-/// `(bytes, name_offsets, lib_offsets)` where `name_offsets[i]` is
-/// the byte offset of `imports.imports[i].real_symbol` inside the
-/// table and `lib_offsets[i]` is the offset of
-/// `imports.dylibs[i].path`.
-fn build_dynstr(imports: &super::ResolvedImports) -> (Vec<u8>, Vec<u32>, Vec<u32>) {
+/// `(bytes, import_name_offsets, lib_offsets, export_name_offsets)`
+/// where each offsets vec lists the byte offset within the
+/// table for the corresponding name. Exports come from
+/// `Build::exports`; their names are exposed externally so
+/// `dlsym` can find them.
+fn build_dynstr(
+    imports: &super::ResolvedImports,
+    exports: &[crate::c5::program::ExportedFunction],
+) -> (Vec<u8>, Vec<u32>, Vec<u32>, Vec<u32>) {
     let mut bytes = Vec::new();
     bytes.push(0); // index 0 is conventionally the empty string
 
@@ -366,17 +381,41 @@ fn build_dynstr(imports: &super::ResolvedImports) -> (Vec<u8>, Vec<u32>, Vec<u32
         bytes.push(0);
     }
 
+    let mut export_offsets = Vec::with_capacity(exports.len());
+    for e in exports {
+        export_offsets.push(bytes.len() as u32);
+        bytes.extend_from_slice(e.name.as_bytes());
+        bytes.push(0);
+    }
+
     // Pad to 8 so the next section starts aligned.
     while !bytes.len().is_multiple_of(8) {
         bytes.push(0);
     }
 
-    (bytes, name_offsets, lib_offsets)
+    (bytes, name_offsets, lib_offsets, export_offsets)
 }
 
-/// Build .dynsym -- one Elf64_Sym per import plus a leading sentinel.
-fn build_dynsym(name_offsets: &[u32]) -> Vec<u8> {
-    let mut out = Vec::with_capacity((1 + name_offsets.len()) * ELF64_SYM_SIZE as usize);
+/// Build .dynsym. Layout:
+///
+/// * Index 0: zero sentinel (required by ELF).
+/// * `[1, 1+n_imports)`: undefined imports (`STB_GLOBAL |
+///   STT_NOTYPE`, `st_shndx = SHN_UNDEF`). Loader resolves
+///   these via `.rela.dyn`.
+/// * `[1+n_imports, 1+n_imports+n_exports)`: defined exports
+///   (`STB_GLOBAL | STT_FUNC`, `st_shndx = 1` -- a placeholder
+///   non-zero index since we don't emit section headers, but
+///   `dlsym` only checks `SHN_UNDEF` to gate a name as
+///   resolvable). `st_value` is the runtime VA of the
+///   function.
+fn build_dynsym(
+    import_name_offsets: &[u32],
+    export_name_offsets: &[u32],
+    export_addrs: &[u64],
+) -> Vec<u8> {
+    debug_assert_eq!(export_name_offsets.len(), export_addrs.len());
+    let n_total = 1 + import_name_offsets.len() + export_name_offsets.len();
+    let mut out = Vec::with_capacity(n_total * ELF64_SYM_SIZE as usize);
 
     // Sentinel at index 0 -- all zero. Required by ELF.
     write_struct(
@@ -391,7 +430,7 @@ fn build_dynsym(name_offsets: &[u32]) -> Vec<u8> {
         },
     );
 
-    for &name_off in name_offsets {
+    for &name_off in import_name_offsets {
         write_struct(
             &mut out,
             &Elf64Sym {
@@ -404,10 +443,25 @@ fn build_dynsym(name_offsets: &[u32]) -> Vec<u8> {
             },
         );
     }
-    debug_assert_eq!(
-        out.len() as u64,
-        (1 + name_offsets.len() as u64) * ELF64_SYM_SIZE
-    );
+
+    for (&name_off, &addr) in export_name_offsets.iter().zip(export_addrs.iter()) {
+        write_struct(
+            &mut out,
+            &Elf64Sym {
+                st_name: name_off,
+                st_info: (STB_GLOBAL << 4) | STT_FUNC,
+                st_other: 0,
+                // Non-zero placeholder section index -- we
+                // don't emit section headers, but dlsym
+                // treats `SHN_UNDEF` as "to be resolved" and
+                // anything non-zero as defined.
+                st_shndx: 1,
+                st_value: addr,
+                st_size: 0,
+            },
+        );
+    }
+    debug_assert_eq!(out.len() as u64, n_total as u64 * ELF64_SYM_SIZE);
     out
 }
 
@@ -750,13 +804,42 @@ fn patch_adrp_add(
 // ------------------------------------------------------------------
 
 pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error> {
+    let is_shared = build.output_kind == super::OutputKind::SharedLibrary;
     let n_imports = build.imports.imports.len();
-    let stub_len = start_stub_len(machine);
+    // Shared libraries don't have a `_start` stub -- dyld
+    // never jumps into them, callers reach exports via
+    // `dlsym`. Executables keep the existing stub that
+    // tail-calls libc `exit`.
+    let stub_len = if is_shared {
+        0
+    } else {
+        start_stub_len(machine)
+    };
+    let exports = if is_shared {
+        &build.exports[..]
+    } else {
+        &[][..]
+    };
 
     // ---- Build the dynamic-linking metadata up front so we know the
     //      sizes for layout calculations. ----
-    let (dynstr, name_offsets, lib_strtab_offsets) = build_dynstr(&build.imports);
-    let dynsym = build_dynsym(&name_offsets);
+    //
+    // Shared-library output adds one `.dynsym` entry per
+    // `Build::exports` -- defined symbols (`STB_GLOBAL |
+    // STT_FUNC`) with `st_value` set to the function's
+    // runtime VA. For executables `exports` is empty and the
+    // tables look exactly like before.
+    let (dynstr, name_offsets, lib_strtab_offsets, export_name_offsets) =
+        build_dynstr(&build.imports, exports);
+    // Compute each export's runtime VA. We fill in the real
+    // values after layout is fixed and `code_vmaddr` is
+    // known; here we just reserve the slot.
+    let export_addrs_placeholder: Vec<u64> = vec![0; exports.len()];
+    let dynsym = build_dynsym(
+        &name_offsets,
+        &export_name_offsets,
+        &export_addrs_placeholder,
+    );
     let hash = build_hash(&name_offsets, &dynstr);
     // .rela.dyn is built later -- it needs got_vmaddr.
 
@@ -795,11 +878,16 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
     let code_off = round_up(rela_off + rela_size, 16);
 
     // Build the code blob: _start stub + build.text (with shifted
-    // fixup offsets at write time). The stub may or may not register
-    // a libc-exit GOT fixup depending on the machine.
+    // fixup offsets at write time). For shared-library output
+    // we skip the stub entirely; dyld won't run it (no entry
+    // point), and emitting one would force a libc-exit
+    // import that isn't otherwise needed.
     let mut code: Vec<u8> = Vec::with_capacity(stub_len as usize + build.text.len());
-    let exit_adrp_offset =
-        emit_start_stub(machine, build.abi, &mut code, build.entry_offset as u64);
+    let exit_adrp_offset = if is_shared {
+        usize::MAX
+    } else {
+        emit_start_stub(machine, build.abi, &mut code, build.entry_offset as u64)
+    };
     code.extend_from_slice(&build.text);
     let code_size = code.len() as u64;
 
@@ -853,10 +941,15 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
         &mut out,
         &Elf64Ehdr {
             e_ident,
-            e_type: ET_EXEC,
+            e_type: if is_shared { ET_DYN } else { ET_EXEC },
             e_machine: e_machine(machine),
             e_version: EV_CURRENT as u32,
-            e_entry: code_vmaddr, // start of `_start`
+            // For executables: start of `_start`. For shared
+            // libraries: zero -- the loader doesn't transfer
+            // control to a dlopen'd image, and an explicit
+            // `_init` constructor isn't needed for the cases
+            // c5 currently produces.
+            e_entry: if is_shared { 0 } else { code_vmaddr },
             e_phoff: phoff,
             e_shoff: 0,
             e_flags: 0,
@@ -961,8 +1054,31 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
     out.extend_from_slice(&interp);
     debug_assert_eq!(out.len() as u64, dynsym_off);
 
-    // .dynsym
-    out.extend_from_slice(&dynsym);
+    // .dynsym -- rebuild now that we know `code_vmaddr` so
+    // each export's `st_value` is its runtime VA. The
+    // placeholder we built up front (with `st_value = 0`)
+    // had the right byte count for layout; the real values
+    // go in here.
+    let export_addrs: Vec<u64> = exports
+        .iter()
+        .map(|exp| {
+            let native_off = build
+                .bytecode_to_native
+                .get(exp.bytecode_pc)
+                .copied()
+                .unwrap_or(usize::MAX);
+            if native_off == usize::MAX {
+                return 0;
+            }
+            // Code blob layout is `[stub_len bytes of _start][build.text]`;
+            // shared-library output has stub_len=0 so the
+            // shift is a no-op there.
+            code_vmaddr + (stub_len + native_off as u64)
+        })
+        .collect();
+    let final_dynsym = build_dynsym(&name_offsets, &export_name_offsets, &export_addrs);
+    debug_assert_eq!(final_dynsym.len(), dynsym.len());
+    out.extend_from_slice(&final_dynsym);
     debug_assert_eq!(out.len() as u64, dynstr_off);
 
     // .dynstr
@@ -1049,32 +1165,34 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
     // ---- Patch fixups. ----
     // The code blob layout is [_start stub][build.text]. The codegen's
     // adrp_offset is relative to build.text, so we shift by stub len.
-    // The exit-call from _start: aarch64's `_start` ends with an
-    // adrp+ldr+blr through the libc-exit GOT slot; x86_64's ends
-    // with `call qword [rip + disp32]` against the same slot. The
-    // per-arch GOT-call patcher knows which encoding to write.
-    let exit_idx = build
-        .imports
-        .imports
-        .iter()
-        .position(|i| i.local_name == "exit")
-        .ok_or_else(|| {
-            C5Error::Compile(
-                "ELF writer: _start stub needs `exit` in the import set, but the program \
-                 didn't reach for it (and we don't auto-add it). \
-                 Did you `#include <stdlib.h>` and call `exit(...)` somewhere?"
-                    .to_string(),
-            )
-        })?;
-    patch_got_call(
-        machine,
-        &mut out,
-        code_file_offset,
-        code_vmaddr,
-        exit_adrp_offset as u64,
-        got_vmaddr + (exit_idx as u64) * 8,
-        "_start exit fixup",
-    )?;
+    // Shared libraries have no `_start` and skip this patch
+    // entirely; the stub-len shift below collapses to zero
+    // and the libc-exit GOT lookup never gets emitted in
+    // the first place.
+    if !is_shared {
+        let exit_idx = build
+            .imports
+            .imports
+            .iter()
+            .position(|i| i.local_name == "exit")
+            .ok_or_else(|| {
+                C5Error::Compile(
+                    "ELF writer: _start stub needs `exit` in the import set, but the program \
+                     didn't reach for it (and we don't auto-add it). \
+                     Did you `#include <stdlib.h>` and call `exit(...)` somewhere?"
+                        .to_string(),
+                )
+            })?;
+        patch_got_call(
+            machine,
+            &mut out,
+            code_file_offset,
+            code_vmaddr,
+            exit_adrp_offset as u64,
+            got_vmaddr + (exit_idx as u64) * 8,
+            "_start exit fixup",
+        )?;
+    }
 
     // GOT fixups for libc calls inside build.text. Same per-arch
     // dispatch as the _start exit call.
@@ -1546,5 +1664,107 @@ mod tests {
             "PT_TLS p_memsz must equal .tdata + .tbss size"
         );
         assert_eq!(p_memsz, 8, "single int TLS var => 8 bytes per thread");
+    }
+
+    /// Shared-library output (`OutputKind::SharedLibrary`)
+    /// flips `e_type` to `ET_DYN` and adds the
+    /// `#pragma export(<name>)` symbols to `.dynsym` as
+    /// `STB_GLOBAL | STT_FUNC` defined entries. This test
+    /// covers the structural side: e_type is right, the
+    /// export string lives in `.dynstr`, and the `.dynsym`
+    /// entry has `st_value` set to a non-zero VA pointing
+    /// inside the code segment. End-to-end runtime tests
+    /// (dlopen / dlsym / call) live on the Linux orb VMs in
+    /// CI -- macOS hosts can't load Linux ELFs directly.
+    #[test]
+    fn shared_library_output_emits_et_dyn_with_exports() {
+        use crate::Compiler;
+        let src = "
+            int answer() { return 42; }
+            #pragma export(answer)
+            int main() { return 0; }
+        ";
+        for (machine, target) in [
+            (Machine::Aarch64, super::super::Target::LinuxAarch64),
+            (Machine::X86_64, super::super::Target::LinuxX64),
+        ] {
+            let program =
+                Compiler::with_target(super::super::super::tests::with_prelude(src), target)
+                    .compile()
+                    .expect("compile");
+            let build = super::super::lower_for(
+                &program,
+                target,
+                super::super::NativeOptions::new().with_shared_library(),
+            )
+            .expect("lower");
+            let bytes = write(&build, machine).expect("write ELF");
+
+            // e_type = ET_DYN.
+            let e_type = u16::from_le_bytes(bytes[16..18].try_into().unwrap());
+            assert_eq!(e_type, ET_DYN, "{machine:?}: expected ET_DYN");
+
+            // .dynstr contains "answer".
+            let phoff = read_u64(&bytes, 32);
+            let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
+            let mut dynsym_vmaddr = 0u64;
+            let mut dynstr_vmaddr = 0u64;
+            let mut load_min = u64::MAX;
+            for i in 0..phnum {
+                let off = (phoff + i * PROGRAM_HEADER_SIZE) as usize;
+                if read_u32(&bytes, off) == PT_LOAD {
+                    load_min = load_min.min(read_u64(&bytes, off + 16));
+                }
+                if read_u32(&bytes, off) == PT_DYNAMIC {
+                    let dyn_off = read_u64(&bytes, off + 8);
+                    let dyn_sz = read_u64(&bytes, off + 32);
+                    let mut p = dyn_off as usize;
+                    while (p as u64) < dyn_off + dyn_sz {
+                        let tag = read_u64(&bytes, p);
+                        let val = read_u64(&bytes, p + 8);
+                        if tag == DT_SYMTAB {
+                            dynsym_vmaddr = val;
+                        }
+                        if tag == DT_STRTAB {
+                            dynstr_vmaddr = val;
+                        }
+                        p += ELF64_DYN_SIZE as usize;
+                    }
+                }
+            }
+            assert!(dynsym_vmaddr > 0 && dynstr_vmaddr > 0);
+            // Translate vmaddr to file offset via the rw
+            // PT_LOAD's vmaddr base. .dynsym + .dynstr both
+            // live inside the rx PT_LOAD which is mapped at
+            // TEXT_VMADDR_BASE.
+            let dynstr_file_off = (dynstr_vmaddr - load_min) as usize;
+            let dynstr_slice = &bytes[dynstr_file_off..];
+            let mut found_export = false;
+            for off in 0..dynstr_slice.len().saturating_sub(7) {
+                if &dynstr_slice[off..off + 7] == b"answer\0" {
+                    found_export = true;
+                    break;
+                }
+            }
+            assert!(found_export, "{machine:?}: `answer` missing from .dynstr");
+
+            // .dynsym last entry is the export -- check
+            // st_info encodes STB_GLOBAL | STT_FUNC and
+            // st_value is non-zero.
+            let dynsym_file_off = (dynsym_vmaddr - load_min) as usize;
+            let last_sym_off =
+                dynsym_file_off + (1 + build.imports.imports.len()) * ELF64_SYM_SIZE as usize;
+            let st_info = bytes[last_sym_off + 4];
+            let st_value = read_u64(&bytes, last_sym_off + 8);
+            assert_eq!(
+                st_info,
+                (STB_GLOBAL << 4) | STT_FUNC,
+                "{machine:?}: export symbol must be STB_GLOBAL | STT_FUNC"
+            );
+            assert!(
+                st_value > 0,
+                "{machine:?}: export st_value must be the function VA"
+            );
+        }
     }
 }

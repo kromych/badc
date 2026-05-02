@@ -252,6 +252,14 @@ pub struct Compiler {
     /// either an absolute write (ELF / ET_EXEC), a Mach-O
     /// rebase opcode, or a PE `.reloc` entry.
     data_relocs: Vec<crate::c5::program::DataReloc>,
+    /// Names from `#pragma export(<name>)` directives, in
+    /// declaration order. Validated at the end of
+    /// [`Self::run_compile`] -- each must resolve to a
+    /// `Token::Fun` symbol -- and copied onto
+    /// `Program::exports` together with the function's
+    /// bytecode PC. Empty for executables that don't reach
+    /// for the directive.
+    pending_exports: Vec<String>,
     /// Per-libc-call FP-argument bitmaps. Filled when emitting an
     /// `Op::JsrExt` whose argument list contains at least one
     /// floating-point operand; the codegen reads it back to route
@@ -322,6 +330,7 @@ impl Compiler {
             Err(e) => (String::new(), Some(e)),
         };
         let dylibs = pp.dylibs;
+        let pending_exports = pp.exports;
 
         let mut symbols = Vec::new();
         lexer::init_symbols(&mut symbols, &dylibs);
@@ -363,6 +372,7 @@ impl Compiler {
             tls_data: Vec::new(),
             tls_init_size: 0,
             data_relocs: Vec::new(),
+            pending_exports,
             call_fp_arg_masks: Vec::new(),
             current_func_return_ty: 0,
         }
@@ -693,6 +703,34 @@ impl Compiler {
             return Err(C5Error::Compile("main() not defined".to_string()));
         }
         let entry_pc = self.symbols[main_idx].val as usize;
+        // Resolve `#pragma export(<name>)` directives against
+        // the now-finalised symbol table. Each name must
+        // resolve to a `Token::Fun` (a function defined in
+        // this translation unit); anything else gets a clear
+        // diagnostic so a misspelled export doesn't silently
+        // produce a shared object missing the symbol the user
+        // expected.
+        let mut exports = Vec::with_capacity(self.pending_exports.len());
+        for name in core::mem::take(&mut self.pending_exports) {
+            let Some(idx) = lexer::find_symbol(&self.symbols, &name) else {
+                return Err(C5Error::Compile(format!(
+                    "`#pragma export({name})` -- no such symbol; the name must \
+                     refer to a function defined in this source"
+                )));
+            };
+            if self.symbols[idx].class != Token::Fun as i64 {
+                return Err(C5Error::Compile(format!(
+                    "`#pragma export({name})` -- expected a function, but `{name}` \
+                     is class {} (only locally-defined functions are exportable today; \
+                     globals would need data-export support that isn't wired up yet)",
+                    self.symbols[idx].class
+                )));
+            }
+            exports.push(crate::c5::program::ExportedFunction {
+                name,
+                bytecode_pc: self.symbols[idx].val as usize,
+            });
+        }
         Ok(Program {
             text: self.text,
             data: self.data,
@@ -702,6 +740,7 @@ impl Compiler {
             tls_data: self.tls_data,
             tls_init_size: self.tls_init_size,
             call_fp_arg_masks: self.call_fp_arg_masks,
+            exports,
             data_relocs: self.data_relocs,
             dylibs: self.dylibs,
         })

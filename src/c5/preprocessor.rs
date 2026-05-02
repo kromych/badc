@@ -138,6 +138,16 @@ pub(crate) struct Preprocessor {
     /// declared. Each entry collects the bindings whose
     /// `name::c4_fn` qualifier referenced its [`DylibSpec::name`].
     pub dylibs: Vec<DylibSpec>,
+    /// One entry per `#pragma export(<name>)` directive, in
+    /// declaration order. The compiler validates each name
+    /// resolves to a function defined in this translation
+    /// unit and threads the list onto `Program::exports`; the
+    /// shared-object writers (Mach-O dylib, ELF .so, PE DLL)
+    /// promote those symbols to externally visible entries
+    /// in the symbol / export tables. Names not produced by
+    /// `#pragma export(...)` keep file-scope-static linkage
+    /// (the c5 default).
+    pub exports: Vec<String>,
     /// Headers that opted in to single-inclusion via `#pragma once`.
     /// A subsequent `#include` of a name in this set is dropped.
     pragma_once_files: BTreeSet<String>,
@@ -209,6 +219,7 @@ impl Preprocessor {
             macros,
             fn_macros: BTreeMap::new(),
             dylibs: Vec::new(),
+            exports: Vec::new(),
             pragma_once_files: BTreeSet::new(),
             include_stack: Vec::new(),
         }
@@ -515,6 +526,37 @@ impl Preprocessor {
             .and_then(|s| s.strip_suffix(')'))
         {
             return self.parse_pragma_binding(inner.trim(), line_no);
+        }
+        if let Some(inner) = args
+            .strip_prefix("export(")
+            .and_then(|s| s.strip_suffix(')'))
+        {
+            return self.parse_pragma_export(inner.trim(), line_no);
+        }
+        Ok(())
+    }
+
+    /// `#pragma export(<name>)` -- mark a function defined in
+    /// this translation unit as externally visible. The
+    /// compiler validates the name resolves to a `Token::Fun`
+    /// symbol after the parse pass, and the shared-object
+    /// writers (`Target::*` plus the upcoming `OutputKind::SharedLibrary`
+    /// shape) promote it to a real export entry.
+    ///
+    /// Plain identifiers only -- no quoted-name aliasing today
+    /// (we'd need a syntax like `export(local_name, "real_name")`
+    /// to follow the `#pragma binding(...)` shape, but the
+    /// inverse direction; not needed for the initial cut).
+    fn parse_pragma_export(&mut self, inner: &str, line_no: usize) -> Result<(), C5Error> {
+        let name = inner.trim();
+        if !is_ident(name) {
+            return Err(C5Error::Compile(format!(
+                "preprocessor:{line_no}: `#pragma export({name})` -- name must be a \
+                 plain identifier"
+            )));
+        }
+        if !self.exports.iter().any(|e| e == name) {
+            self.exports.push(name.to_string());
         }
         Ok(())
     }

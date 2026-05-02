@@ -160,6 +160,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         tls_init_size,
         call_fp_arg_masks,
         data_relocs,
+        exports,
         dylibs,
     } = program;
 
@@ -195,6 +196,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         tls_init_size,
         call_fp_arg_masks,
         data_relocs,
+        exports,
         dylibs,
     })
 }
@@ -874,6 +876,7 @@ mod tests {
             tls_init_size: 0,
             call_fp_arg_masks: Vec::new(),
             data_relocs: Vec::new(),
+            exports: Vec::new(),
             dylibs: Vec::new(),
         }
     }
@@ -1142,6 +1145,7 @@ mod tests {
             tls_init_size: 0,
             call_fp_arg_masks: Vec::new(),
             data_relocs: Vec::new(),
+            exports: Vec::new(),
             dylibs: Vec::new(),
         };
         let opt = optimize(p).unwrap();

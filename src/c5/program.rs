@@ -3,6 +3,26 @@ use alloc::vec::Vec;
 
 use super::preprocessor::DylibSpec;
 
+/// One `#pragma export(<name>)` resolved against the
+/// compiled program: the externally visible name plus the
+/// function's bytecode PC (i.e., the byte offset within
+/// `Program::text` of the function's first instruction).
+/// Shared-object writers map this to a per-format export
+/// entry whose runtime address is `text_vmaddr + bytecode_pc`.
+#[derive(Debug, Clone)]
+pub struct ExportedFunction {
+    /// External name as written in `#pragma export(...)`.
+    /// Per-format writers may decorate it with a leading
+    /// underscore (Mach-O `_foo`) at emit time; the c5-side
+    /// name stays as the user wrote it.
+    pub name: String,
+    /// Bytecode PC of the function's first instruction. The
+    /// writer translates this to a code-segment offset via
+    /// `Build::bytecode_to_native`, then to a runtime address
+    /// by adding the code segment's vmaddr base.
+    pub bytecode_pc: usize,
+}
+
 /// A pointer-to-global initializer that needs run-time
 /// relocation. `data_offset` is the byte offset within
 /// [`Program::data`] where the absolute address of the target
@@ -88,6 +108,20 @@ pub struct Program {
     ///   `IMAGE_REL_BASED_DIR64` entry. Initial bytes hold the
     ///   preferred VA; the loader adds the slide delta.
     pub data_relocs: Vec<DataReloc>,
+    /// Functions the program asked to expose externally via
+    /// `#pragma export(<name>)`. Each entry pairs the source
+    /// name with the function's bytecode PC -- the
+    /// shared-object writers (Mach-O dylib, ELF .so, PE DLL)
+    /// promote each entry to a real export-table record so
+    /// callers in another image can resolve the symbol via
+    /// `dlsym` / `GetProcAddress`.
+    ///
+    /// Empty for executable output (the user-supplied
+    /// program never reached for `#pragma export`, or the
+    /// build asked for an executable rather than a shared
+    /// library). The VM and JIT ignore this field; only the
+    /// shared-object writer paths consume it.
+    pub exports: Vec<ExportedFunction>,
     /// Per-target dylib + binding map produced by the preprocessor
     /// from the `#pragma comment(dylib, ...)` and
     /// `#pragma binding(...)` directives in `headers/badc-{target}.h`.

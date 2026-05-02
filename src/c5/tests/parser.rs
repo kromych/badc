@@ -200,6 +200,67 @@ fn extern_and_static_on_locals_and_params_compile() {
 }
 
 #[test]
+fn pragma_export_records_function_on_program() {
+    // `#pragma export(<name>)` is the c5 directive that
+    // marks a function as externally callable from another
+    // image (dlsym / GetProcAddress). The preprocessor
+    // recognises it, the compiler validates the name
+    // resolves to a function defined here, and the result
+    // lands on `Program::exports` for the per-format
+    // shared-object writers to consume.
+    let src = "
+        int answer() { return 42; }
+        int helper() { return 1; }
+        #pragma export(answer)
+        int main() { return 0; }
+    ";
+    let p = super::Compiler::new(super::with_prelude(src))
+        .compile()
+        .expect("compile");
+    assert_eq!(p.exports.len(), 1, "expected one export");
+    assert_eq!(p.exports[0].name, "answer");
+    assert!(
+        p.exports[0].bytecode_pc < p.text.len(),
+        "exported PC must be inside the bytecode"
+    );
+}
+
+#[test]
+fn pragma_export_with_unknown_name_is_refused() {
+    let src = "
+        int main() { return 0; }
+        #pragma export(missing)
+    ";
+    let res = super::Compiler::new(super::with_prelude(src)).compile();
+    let err = res.expect_err("expected unknown-export to fail");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("no such symbol") || msg.contains("missing"),
+        "expected unknown-symbol diagnostic, got: {msg}"
+    );
+}
+
+#[test]
+fn pragma_export_with_global_data_is_refused() {
+    // Today `#pragma export(...)` only handles functions.
+    // Pointing it at a global variable surfaces a clear "not
+    // a function" diagnostic so a future "data export"
+    // milestone has somewhere to land.
+    let src = "
+        int counter;
+        #pragma export(counter)
+        int main() { return 0; }
+    ";
+    let res = super::Compiler::new(super::with_prelude(src)).compile();
+    let err = res.expect_err("expected data-export to fail");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("expected a function"),
+        "expected non-function diagnostic, got: {msg}"
+    );
+}
+
+#[test]
 fn libc_call_with_struct_arg_is_refused() {
     // The c5-internal struct ABI uses caller-pushes-address +
     // callee-copies-on-entry. Real platform ABIs (SysV/Win64/AAPCS64)

@@ -409,6 +409,13 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     // Struct-by-value parameter / return on Win64.
     ("struct_by_value_param.c", 0),
     ("struct_by_value_return.c", 0),
+    // _Thread_local on Win64 -- TLS directory + _tls_index slot
+    // wired into .data; the loader writes _tls_index at module
+    // init and the codegen pulls per-thread storage out of
+    // gs:[0x58]. Per-thread isolation isn't tested here (we'd
+    // need Win32 CreateThread bindings for that), but the basic
+    // round-trip on the main thread is.
+    ("thread_local_basic.c", 0),
 ];
 
 #[test]

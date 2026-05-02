@@ -472,6 +472,37 @@ pub(crate) struct Build {
     /// Number of `tls_data` bytes that are statically initialised.
     /// `tls_data.len() - tls_init_size` bytes are zero-fill.
     pub tls_init_size: usize,
+    /// Win64 TLS-index fixups -- one entry per `Op::TlsLea` site
+    /// on a Win64 target. The writer reserves a 4-byte
+    /// `_tls_index` slot in `.data`, builds the
+    /// `IMAGE_TLS_DIRECTORY`, and patches each fixup with the
+    /// displacement to the slot. Empty for non-Win64 targets and
+    /// for Win64 programs with no `_Thread_local` globals.
+    pub tls_index_fixups: Vec<TlsIndexFixup>,
+    /// macOS arm64 Thread-Local Variable fixups -- one entry per
+    /// `Op::TlsLea` site on macOS. Each records an
+    /// `adrp + add` pair to be patched with the address of the
+    /// per-variable `__thread_vars` descriptor.
+    pub macho_tlv_fixups: Vec<MachoTlvFixup>,
+    /// macOS arm64 TLV descriptors. One entry per distinct TLS
+    /// variable referenced by the program; each descriptor's
+    /// `offset_in_block` is the byte offset within
+    /// `Build::tls_data` (matching what `Op::TlsLea` records).
+    /// The writer emits a 24-byte descriptor per entry into the
+    /// `__DATA,__thread_vars` section: `[ __tlv_bootstrap | 0 |
+    /// offset_in_block ]`. Empty unless the target is macOS arm64
+    /// and the program declares `_Thread_local` globals.
+    pub macho_tlv_descriptors: Vec<MachoTlvDescriptor>,
+}
+
+/// One macOS arm64 Thread-Local Variable. A 24-byte `__thread_vars`
+/// descriptor is emitted per entry; the codegen's
+/// [`MachoTlvFixup`]s reference these by index.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct MachoTlvDescriptor {
+    /// Byte offset within `Build::tls_data` where this variable
+    /// starts. Mirrors `Op::TlsLea`'s operand.
+    pub offset_in_block: u64,
 }
 
 /// Refer-by-index relocation between a code site and a `__got` slot.
@@ -500,13 +531,77 @@ pub(crate) struct DataFixup {
     pub data_offset: u64,
 }
 
-// TLS relocations don't need a writer-time fixup type: the
-// per-target TLS offset (variant-1 TCB_HEAD + offset on aarch64,
-// variant-2 -(tls_size - offset) on x86_64) only depends on the
-// total TLS block size, which is known when the codegen lowers
-// `Op::TlsLea`. The codegen materialises the final immediate
-// inline; the writer just needs `Build::tls_data` /
+// TLS relocations don't need a writer-time fixup type for Linux:
+// the per-target TLS offset (variant-1 TCB_HEAD + offset on
+// aarch64, variant-2 -(tls_size - offset) on x86_64) only depends
+// on the total TLS block size, which is known when the codegen
+// lowers `Op::TlsLea`. The codegen materialises the final
+// immediate inline; the writer just needs `Build::tls_data` /
 // `Build::tls_init_size` to lay out `.tdata` / `.tbss`.
+//
+// Win64 is different: TLS access goes through `_tls_index`, a
+// DWORD whose runtime value the loader writes when it processes
+// the TLS directory. The codegen reads that value at every TLS
+// access (so the same compiled image works regardless of which
+// slot the loader picked). The address of `_tls_index` isn't
+// known until the writer lays out the data segments, so each
+// `Op::TlsLea` records a [`TlsIndexFixup`] for the writer to
+// patch.
+
+/// Relocation for a Win64 TLS access. Records a code site whose
+/// instruction needs to be patched with the displacement to the
+/// `_tls_index` DWORD slot. The PE writer reserves the slot in
+/// `.data` and patches all such fixups once it knows the layout.
+///
+/// On x86_64 the fixup points at the start of the
+/// `mov ecx, [rip+disp32]` instruction; the writer rewrites the
+/// disp32 field. On aarch64 the fixup points at an `adrp + ldr`
+/// pair (same encoding shape as [`DataFixup`]) that loads the
+/// 32-bit `_tls_index` value.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TlsIndexFixup {
+    /// Byte offset within `Build::text` of the instruction (or
+    /// instruction pair) needing patching. See the per-arch
+    /// docs above for the exact encoding shape.
+    pub instr_offset: usize,
+}
+
+/// Relocation for a Win64 TLS access whose final per-variable
+/// offset is too large to fit the inline `add` immediate. The
+/// codegen records the offset; the writer patches a
+/// movz/movk-style sequence. None of our current fixtures trip
+/// this -- the `add x19, x16, #imm12` form covers TLS blocks
+/// up to 4080 bytes -- but the type is here so larger TLS
+/// programs surface a real error rather than silent
+/// truncation.
+#[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
+pub(crate) struct TlsOffsetFixup {
+    pub instr_offset: usize,
+    pub var_offset: u64,
+}
+
+/// Relocation for a macOS arm64 Thread-Local Variable access.
+/// The codegen emits an `adrp + add` pair that materialises the
+/// address of the variable's `__thread_vars` descriptor (a
+/// 24-byte triple of pointers); the Mach-O writer patches both
+/// halves with the descriptor's vmaddr once the
+/// `__DATA,__thread_vars` section is laid out.
+///
+/// The descriptor is shared across every access to the same TLS
+/// variable -- the walker dedups TlsLea offsets up front so each
+/// variable gets a single descriptor with a stable
+/// `descriptor_index` ordering.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct MachoTlvFixup {
+    /// Byte offset within `Build::text` of the adrp instruction
+    /// that opens the descriptor-address materialisation. The
+    /// matching `add` lives at `adrp_offset + 4`.
+    pub adrp_offset: usize,
+    /// Index into [`Build::macho_tlv_descriptors`]. The writer
+    /// resolves this to the descriptor's vmaddr at patch time.
+    pub descriptor_index: usize,
+}
 
 /// Relocation for a function-pointer literal (`Op::Imm <CODE_BASE+pc>`).
 /// Same `adrp + add` shape as [`DataFixup`], but the target is another
@@ -611,6 +706,20 @@ fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Resul
     // source that omits `<stdlib.h>` still gets the friendly
     // "no `#pragma binding(... ::exit, ...)`" error.
     if matches!(target, Target::LinuxAarch64 | Target::LinuxX64) {
+        imports.force_include_by_name("exit", program)?;
+    }
+    // macOS arm64 with `_Thread_local` globals needs libSystem
+    // loaded so dyld can bind `__tlv_bootstrap` for the TLV
+    // descriptors. The bind opcode the writer emits names
+    // libSystem by ordinal (the position of the libSystem
+    // LC_LOAD_DYLIB in the load-command stream); when the
+    // program doesn't call any libc function the resolver
+    // wouldn't otherwise pull libSystem in, so we force one
+    // libSystem-resident symbol -- `exit`, which the prelude
+    // always declares -- to keep the dylib in scope. The
+    // forced binding is harmless for programs that never call
+    // exit themselves.
+    if matches!(target, Target::MacOSAarch64) && !program.tls_data.is_empty() {
         imports.force_include_by_name("exit", program)?;
     }
     let mut build = match target {

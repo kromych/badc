@@ -84,6 +84,14 @@ const MH_EXECUTE: u32 = 0x2;
 const MH_DYLDLINK: u32 = 0x4;
 const MH_TWOLEVEL: u32 = 0x80;
 const MH_PIE: u32 = 0x0020_0000;
+/// `MH_HAS_TLV_DESCRIPTORS` -- tells dyld the image carries
+/// `__DATA,__thread_vars` descriptors that need their slot-0
+/// thunk getters replaced with the real `tlv_get_addr`. Without
+/// this flag dyld skips that pass and the descriptors stay
+/// pointing at `_tlv_bootstrap_error`, which aborts on first
+/// call. Set only when the program declares any
+/// `_Thread_local` global.
+const MH_HAS_TLV_DESCRIPTORS: u32 = 0x0080_0000;
 
 const LC_REQ_DYLD: u32 = 0x8000_0000;
 const LC_SEGMENT_64: u32 = 0x19;
@@ -140,6 +148,29 @@ const NO_SECT: u8 = 0;
 /// Segment indices, in the order they appear as `LC_SEGMENT_64` load
 /// commands. Bind opcodes refer to segments by this index.
 const SEG_INDEX_DATA: u8 = 2;
+
+/// Mach-O section type bits used by the TLV layout. See
+/// `<mach-o/loader.h>` for the full set; we only need
+/// `__thread_bss` (zero-fill, the only flavour the c5 frontend
+/// generates today since `_Thread_local` initialisers aren't
+/// supported) and `__thread_vars` (descriptors). The matching
+/// `__thread_data` (S_THREAD_LOCAL_REGULAR = 0x11) would be
+/// emitted alongside if we ever support TLS initialisers.
+#[allow(dead_code)]
+const S_THREAD_LOCAL_REGULAR: u32 = 0x11; // __thread_data (init data)
+const S_THREAD_LOCAL_ZEROFILL: u32 = 0x12; // __thread_bss (zero-fill)
+const S_THREAD_LOCAL_VARIABLES: u32 = 0x13; // __thread_vars (descriptors)
+
+/// Each TLV descriptor in `__thread_vars` is three pointer-sized
+/// words: thunk getter (bound to `__tlv_bootstrap`), key (set by
+/// dyld), and per-thread offset.
+const TLV_DESCRIPTOR_SIZE: u64 = 24;
+
+/// Symbol name dyld looks up to bootstrap each Thread-Local
+/// Variable on first access. Lives in `libSystem.B.dylib`
+/// (re-exported from `libdyld.dylib`); we bind it via the
+/// regular bind-opcode stream just like any other libc import.
+const TLV_BOOTSTRAP_SYMBOL: &str = "__tlv_bootstrap";
 
 // ------------------------------------------------------------------
 // On-disk shapes. `#[repr(C)]` with explicit fields, const-asserted
@@ -488,6 +519,137 @@ fn segment_text(
             nreloc: 0,
             // S_REGULAR (0) | S_ATTR_PURE_INSTRUCTIONS | S_ATTR_SOME_INSTRUCTIONS
             flags: 0x8000_0400,
+            reserved1: 0,
+            reserved2: 0,
+            reserved3: 0,
+        },
+    );
+    debug_assert_eq!(out.len(), TOTAL);
+    out
+}
+
+/// `LC_SEGMENT_64` for `__DATA` containing the
+/// thread-local-variable scaffolding (`__thread_vars` +
+/// `__thread_bss`) on top of the existing `__got` and `__data`.
+/// Used when the program declares `_Thread_local` globals on a
+/// macOS arm64 target. Layout (4 sections):
+///
+/// ```text
+///   __DATA,__got           filled by dyld via bind opcodes
+///   __DATA,__data          program's static data segment
+///   __DATA,__thread_vars   24-byte descriptor per TLS variable
+///   __DATA,__thread_bss    zero-fill TLS image (per-thread)
+/// ```
+///
+/// 72 + 4 * 80 = 392 bytes total.
+#[allow(clippy::too_many_arguments)]
+fn segment_data_with_tlv(
+    vmaddr: u64,
+    vmsize: u64,
+    fileoff: u64,
+    filesize: u64,
+    got_addr: u64,
+    got_size: u64,
+    got_offset: u32,
+    data_addr: u64,
+    data_size: u64,
+    data_offset: u32,
+    thread_vars_addr: u64,
+    thread_vars_size: u64,
+    thread_vars_offset: u32,
+    thread_bss_addr: u64,
+    thread_bss_size: u64,
+) -> Vec<u8> {
+    const TOTAL: usize = SEGMENT_COMMAND_64_SIZE + 4 * SECTION_64_SIZE;
+    let mut out = Vec::with_capacity(TOTAL);
+    write_struct(
+        &mut out,
+        &SegmentCommand64 {
+            cmd: LC_SEGMENT_64,
+            cmdsize: TOTAL as u32,
+            segname: pack_name16("__DATA"),
+            vmaddr,
+            vmsize,
+            fileoff,
+            filesize,
+            maxprot: VM_PROT_READ | VM_PROT_WRITE,
+            initprot: VM_PROT_READ | VM_PROT_WRITE,
+            nsects: 4,
+            flags: 0,
+        },
+    );
+    // __got
+    write_struct(
+        &mut out,
+        &Section64 {
+            sectname: pack_name16("__got"),
+            segname: pack_name16("__DATA"),
+            addr: got_addr,
+            size: got_size,
+            offset: got_offset,
+            align: 3,
+            reloff: 0,
+            nreloc: 0,
+            flags: 0,
+            reserved1: 0,
+            reserved2: 0,
+            reserved3: 0,
+        },
+    );
+    // __data
+    write_struct(
+        &mut out,
+        &Section64 {
+            sectname: pack_name16("__data"),
+            segname: pack_name16("__DATA"),
+            addr: data_addr,
+            size: data_size,
+            offset: data_offset,
+            align: 3,
+            reloff: 0,
+            nreloc: 0,
+            flags: 0,
+            reserved1: 0,
+            reserved2: 0,
+            reserved3: 0,
+        },
+    );
+    // __thread_vars -- 24-byte descriptor per TLS variable.
+    // Section type S_THREAD_LOCAL_VARIABLES (0x13) tells dyld
+    // these are descriptor records.
+    write_struct(
+        &mut out,
+        &Section64 {
+            sectname: pack_name16("__thread_vars"),
+            segname: pack_name16("__DATA"),
+            addr: thread_vars_addr,
+            size: thread_vars_size,
+            offset: thread_vars_offset,
+            align: 3,
+            reloff: 0,
+            nreloc: 0,
+            flags: S_THREAD_LOCAL_VARIABLES,
+            reserved1: 0,
+            reserved2: 0,
+            reserved3: 0,
+        },
+    );
+    // __thread_bss -- per-thread zero-fill storage. Section
+    // type S_THREAD_LOCAL_ZEROFILL (0x12) tells dyld to allocate
+    // this many bytes per thread. No file backing -- the
+    // section's `offset` is 0 and the `size` is what matters.
+    write_struct(
+        &mut out,
+        &Section64 {
+            sectname: pack_name16("__thread_bss"),
+            segname: pack_name16("__DATA"),
+            addr: thread_bss_addr,
+            size: thread_bss_size,
+            offset: 0,
+            align: 3,
+            reloff: 0,
+            nreloc: 0,
+            flags: S_THREAD_LOCAL_ZEROFILL,
             reserved1: 0,
             reserved2: 0,
             reserved3: 0,
@@ -876,6 +1038,60 @@ fn apply_data_fixups(
     Ok(())
 }
 
+/// Patch each macOS arm64 TLV access site. Each fixup's
+/// `descriptor_index` selects a descriptor inside `__thread_vars`
+/// (24 bytes per entry); the codegen left an `adrp + add x0, x0,
+/// #_` pair to materialize the descriptor's vmaddr into x0
+/// before the indirect call to slot 0.
+fn apply_macho_tlv_fixups(
+    out: &mut [u8],
+    code_base_in_file: usize,
+    code_vmaddr_base: u64,
+    thread_vars_vmaddr: u64,
+    fixups: &[super::MachoTlvFixup],
+) -> Result<(), C5Error> {
+    for fx in fixups {
+        let descriptor_vmaddr =
+            thread_vars_vmaddr + (fx.descriptor_index as u64) * TLV_DESCRIPTOR_SIZE;
+        // Reuse the existing `patch_adrp_add` helper; the codegen
+        // emitted the adrp/add with rd = x0, but the helper writes
+        // x19. We can't rely on x19 here -- we need x0. Patch the
+        // word directly.
+        let adrp_file_off = code_base_in_file + fx.adrp_offset;
+        let add_file_off = adrp_file_off + 4;
+        let adrp_vmaddr = code_vmaddr_base + fx.adrp_offset as u64;
+
+        let adrp_page = adrp_vmaddr & !0xFFF;
+        let target_page = descriptor_vmaddr & !0xFFF;
+        let page_diff = target_page as i64 - adrp_page as i64;
+        if page_diff & 0xFFF != 0 {
+            return Err(C5Error::Compile(format!(
+                "Mach-O: TLV adrp page diff {page_diff} not 4 KiB aligned"
+            )));
+        }
+        let imm21 = (page_diff >> 12) as i32;
+        let in_page = (descriptor_vmaddr & 0xFFF) as u32;
+
+        // Preserve rd from the original adrp (codegen emitted rd=x0)
+        // by reading the existing word; rd shouldn't change here, but
+        // mirrors `patch_adrp_add`'s shape so future per-fixup rd
+        // changes are easy.
+        let adrp_word = u32::from_le_bytes([
+            out[adrp_file_off],
+            out[adrp_file_off + 1],
+            out[adrp_file_off + 2],
+            out[adrp_file_off + 3],
+        ]);
+        let rd = (adrp_word & 0x1F) as u8;
+        let new_adrp = super::aarch64::enc_adrp(super::aarch64::Reg(rd), imm21);
+        let new_add =
+            super::aarch64::enc_add_imm(super::aarch64::Reg(rd), super::aarch64::Reg(rd), in_page);
+        out[adrp_file_off..adrp_file_off + 4].copy_from_slice(&new_adrp.to_le_bytes());
+        out[add_file_off..add_file_off + 4].copy_from_slice(&new_add.to_le_bytes());
+    }
+    Ok(())
+}
+
 /// Patch each function-pointer literal site. The target is the
 /// vmaddr of the called function's first instruction.
 fn apply_func_fixups(
@@ -902,18 +1118,32 @@ fn apply_func_fixups(
 // __LINKEDIT contents: bind opcodes, nlist entries, string table.
 // ------------------------------------------------------------------
 
-/// Bind opcode stream that resolves the program's imports into
-/// consecutive 8-byte slots starting at `(__DATA, +0)`. The opcode
-/// stream is a tiny dyld-side state machine: we set the bind type
-/// once, then for each symbol set its dylib ordinal (when it
-/// changes), set its name, set the absolute offset, and DO_BIND.
+/// Layout context for the TLV bind ops. The thread_vars
+/// descriptors live at `(__DATA, segment_offset + 24*i)`; their
+/// slot 0 (the thunk getter pointer) is what dyld binds to
+/// `__tlv_bootstrap`.
+struct TlvBindContext {
+    /// Byte offset of the start of `__thread_vars` within the
+    /// `__DATA` segment.
+    segment_offset: u64,
+    /// Number of TLV descriptors that need binding.
+    tlv_count: usize,
+}
+
+/// Bind opcode stream that resolves the program's imports plus,
+/// when TLV is in use, every TLV descriptor's slot 0 (the thunk
+/// getter pointer, bound to `__tlv_bootstrap`).
 ///
-/// `imports` is taken from the resolved `Build.imports`: position
-/// `i` is GOT slot `i` in `__DATA`. Each entry's `dylib_index`
-/// indexes into the per-image dylib list; the loader-visible
-/// ordinal is `dylib_index + 1` (Mach-O reserves ordinal 0 for
-/// "self").
-fn bind_opcodes_for_imports(imports: &super::ResolvedImports, segment: u8) -> Vec<u8> {
+/// Each regular import lands at GOT slot `i` (offset `i*8` into
+/// __DATA). Each TLV descriptor's slot 0 lands at offset
+/// `tlv_ctx.segment_offset + i*24` into __DATA (slots 1 and 2
+/// of each descriptor are not bound; dyld fills slot 1 and we
+/// fill slot 2 statically).
+fn build_bind_opcodes(
+    imports: &super::ResolvedImports,
+    segment: u8,
+    tlv_ctx: Option<TlvBindContext>,
+) -> Vec<u8> {
     let mut out = Vec::new();
     out.push(BIND_OPCODE_SET_TYPE_IMM | BIND_TYPE_POINTER);
     let mut current_ordinal: Option<u8> = None;
@@ -929,6 +1159,35 @@ fn bind_opcodes_for_imports(imports: &super::ResolvedImports, segment: u8) -> Ve
         out.push(BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB | (segment & 0x0F));
         put_uleb128(&mut out, (i * 8) as u64);
         out.push(BIND_OPCODE_DO_BIND);
+    }
+    if let Some(ctx) = tlv_ctx {
+        // `__tlv_bootstrap` always lives in libSystem; its
+        // dylib ordinal is the position of libSystem in the
+        // per-image dylib list, +1. We reuse the first dylib
+        // (libSystem is always present on macOS targets) for
+        // simplicity; if the order ever changes, the
+        // matching nlist entry's ordinal is computed the same
+        // way.
+        let bootstrap_ordinal = imports
+            .dylibs
+            .iter()
+            .position(|d| d.path.contains("libSystem"))
+            .map(|i| (i + 1) as u8)
+            .unwrap_or(1);
+        if current_ordinal != Some(bootstrap_ordinal) {
+            out.push(BIND_OPCODE_SET_DYLIB_ORDINAL_IMM | (bootstrap_ordinal & 0x0F));
+        }
+        out.push(BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM); // flags = 0
+        out.extend_from_slice(TLV_BOOTSTRAP_SYMBOL.as_bytes());
+        out.push(0);
+        for i in 0..ctx.tlv_count {
+            out.push(BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB | (segment & 0x0F));
+            put_uleb128(
+                &mut out,
+                ctx.segment_offset + (i as u64) * TLV_DESCRIPTOR_SIZE,
+            );
+            out.push(BIND_OPCODE_DO_BIND);
+        }
     }
     out.push(BIND_OPCODE_DONE);
     pad_to(&mut out, 8);
@@ -978,6 +1237,8 @@ fn build_strtab(symbols: &[&str]) -> (Vec<u8>, Vec<u32>) {
 
 pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
     let code = &build.text;
+    let tls_present = !build.macho_tlv_descriptors.is_empty();
+    let n_tlv = build.macho_tlv_descriptors.len();
 
     // ---- step 1: build __LINKEDIT contents ----
     //
@@ -986,23 +1247,17 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
     // in __DATA, and the codegen's adrp+ldr placeholders refer to
     // those slots by index.
     //
+    // When the program declares `_Thread_local` globals on macOS,
+    // each TLV descriptor's slot 0 also needs to be bound -- to
+    // `__tlv_bootstrap` from libSystem. We fold those into the
+    // bind opcode stream here. The bootstrap symbol gets one
+    // entry in the symbol table regardless of the descriptor
+    // count (dyld looks up symbols by name, not by index).
+    //
     // Bind opcodes go first, then the symbol table, then the string
     // table. Each subsection is 8-byte aligned so file offsets stay
     // nice. We need the sizes of all three to size __LINKEDIT, which
     // in turn sizes the LC stream.
-    let bind_ops = bind_opcodes_for_imports(&build.imports, SEG_INDEX_DATA);
-    let symbol_names: Vec<&str> = build
-        .imports
-        .imports
-        .iter()
-        .map(|i| i.real_symbol.as_str())
-        .collect();
-    let (strtab, str_indices) = build_strtab(&symbol_names);
-    let mut symtab = Vec::with_capacity(NLIST_64_SIZE * build.imports.imports.len());
-    for (n_strx, imp) in str_indices.iter().zip(build.imports.imports.iter()) {
-        let ordinal = (imp.dylib_index + 1) as u8;
-        symtab.extend_from_slice(&nlist_undef(*n_strx, ordinal));
-    }
 
     // ---- step 2: size the load-command stream ----
     //
@@ -1017,7 +1272,12 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
     let mh_size = MACH_HEADER_64_SIZE as u64;
     let pagezero_size = SEGMENT_COMMAND_64_SIZE as u64;
     let text_seg_size = (SEGMENT_COMMAND_64_SIZE + SECTION_64_SIZE) as u64;
-    let data_seg_size = (SEGMENT_COMMAND_64_SIZE + 2 * SECTION_64_SIZE) as u64;
+    // __DATA carries 2 sections normally (__got, __data) and 4
+    // when the program has `_Thread_local` globals (+__thread_vars,
+    // __thread_bss).
+    let data_seg_section_count: u64 = if tls_present { 4 } else { 2 };
+    let data_seg_size: u64 =
+        SEGMENT_COMMAND_64_SIZE as u64 + data_seg_section_count * SECTION_64_SIZE as u64;
     let linkedit_seg_size = SEGMENT_COMMAND_64_SIZE as u64;
     let dyld_info_size = DYLD_INFO_COMMAND_SIZE as u64;
     let symtab_size = SYMTAB_COMMAND_SIZE as u64;
@@ -1069,24 +1329,103 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
     let text_filesize = round_up(entry_file_offset + code_size, PAGE_SIZE);
     let text_vmsize = text_filesize;
 
-    // __DATA holds two sections back to back: __got (filled in by
-    // dyld via the bind opcode stream) followed by __data (the
-    // program's static data segment, which we copy into the file).
-    // Both are 8-byte aligned; we pick __data's offset as the
-    // 8-byte ceiling of __got's end. __DATA is page-aligned and
-    // sized to fit both, paying for an extra page only if __data
-    // overflows the first.
+    // __DATA layout:
+    //   __got           pointer per import; dyld fills via bind opcodes
+    //   __data          program's static data segment
+    //   __thread_vars   24-byte TLV descriptors (one per `_Thread_local`)
+    //   __thread_bss    per-thread zero-fill storage (no file backing)
+    // The first three contribute to the file image. Both __thread_bss
+    // and the trailing zero-pad to a page boundary do not.
     let data_fileoff = text_filesize;
     let data_vmaddr = TEXT_VMADDR_BASE + text_vmsize;
     let got_size = (build.imports.imports.len() * 8) as u64;
     let got_section_offset_in_segment: u64 = 0;
     let data_section_offset_in_segment: u64 = round_up(got_size, 8);
     let program_data_size = build.data.len() as u64;
-    let data_segment_used = data_section_offset_in_segment + program_data_size;
-    let data_filesize = round_up(data_segment_used.max(PAGE_SIZE), PAGE_SIZE);
-    let data_vmsize = data_filesize;
+    let post_data_offset_in_segment: u64 =
+        round_up(data_section_offset_in_segment + program_data_size, 8);
+    let thread_vars_size: u64 = (n_tlv as u64) * TLV_DESCRIPTOR_SIZE;
+    let thread_vars_offset_in_segment: u64 = if tls_present {
+        post_data_offset_in_segment
+    } else {
+        0
+    };
+    let thread_bss_size: u64 = build.tls_data.len() as u64;
+    let thread_bss_offset_in_segment: u64 = if tls_present {
+        thread_vars_offset_in_segment + thread_vars_size
+    } else {
+        0
+    };
+    // file image needs to cover: got + data + thread_vars (NOT
+    // thread_bss -- it's zero-fill only); vm image must additionally
+    // cover thread_bss.
+    let data_segment_file_used: u64 = if tls_present {
+        thread_vars_offset_in_segment + thread_vars_size
+    } else {
+        data_section_offset_in_segment + program_data_size
+    };
+    let data_segment_vm_used: u64 = if tls_present {
+        thread_bss_offset_in_segment + thread_bss_size
+    } else {
+        data_segment_file_used
+    };
+    let data_filesize = round_up(data_segment_file_used.max(PAGE_SIZE), PAGE_SIZE);
+    let data_vmsize = round_up(data_segment_vm_used.max(PAGE_SIZE), PAGE_SIZE);
     let data_section_vmaddr = data_vmaddr + data_section_offset_in_segment;
     let data_section_fileoff = data_fileoff + data_section_offset_in_segment;
+    let thread_vars_vmaddr = data_vmaddr + thread_vars_offset_in_segment;
+    let thread_vars_fileoff = data_fileoff + thread_vars_offset_in_segment;
+    let thread_bss_vmaddr = data_vmaddr + thread_bss_offset_in_segment;
+
+    // ---- bind opcodes (now that we know whether TLV bindings are
+    //      needed and where __thread_vars lives) ----
+    let bind_ops = build_bind_opcodes(
+        &build.imports,
+        SEG_INDEX_DATA,
+        if tls_present {
+            Some(TlvBindContext {
+                segment_offset: thread_vars_offset_in_segment,
+                tlv_count: n_tlv,
+            })
+        } else {
+            None
+        },
+    );
+
+    // ---- symbol + string tables ----
+    //
+    // Regular imports come first; the bootstrap symbol (only
+    // present when TLV is in use) goes last so the string table
+    // ordering matches.
+    let mut symbol_names: Vec<&str> = build
+        .imports
+        .imports
+        .iter()
+        .map(|i| i.real_symbol.as_str())
+        .collect();
+    if tls_present {
+        symbol_names.push(TLV_BOOTSTRAP_SYMBOL);
+    }
+    let (strtab, str_indices) = build_strtab(&symbol_names);
+    let mut symtab = Vec::with_capacity(NLIST_64_SIZE * symbol_names.len());
+    for (n_strx, imp) in str_indices.iter().zip(build.imports.imports.iter()) {
+        let ordinal = (imp.dylib_index + 1) as u8;
+        symtab.extend_from_slice(&nlist_undef(*n_strx, ordinal));
+    }
+    if tls_present {
+        // `__tlv_bootstrap` comes from libSystem.B.dylib (which is
+        // already in the dylib list because every macOS Mach-O
+        // we emit links libSystem). Find its ordinal.
+        let bootstrap_dylib_ordinal = build
+            .imports
+            .dylibs
+            .iter()
+            .position(|d| d.path.contains("libSystem"))
+            .map(|i| (i + 1) as u8)
+            .unwrap_or(1);
+        let bootstrap_strx = str_indices[symbol_names.len() - 1];
+        symtab.extend_from_slice(&nlist_undef(bootstrap_strx, bootstrap_dylib_ordinal));
+    }
 
     // __LINKEDIT: bind opcodes, then symtab, then strtab.
     let linkedit_fileoff = data_fileoff + data_filesize;
@@ -1110,18 +1449,38 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
         code_size,
         entry_file_offset as u32,
     );
-    let data_segment = segment_data(
-        data_vmaddr,
-        data_vmsize,
-        data_fileoff,
-        data_filesize,
-        data_vmaddr + got_section_offset_in_segment,
-        got_size,
-        (data_fileoff + got_section_offset_in_segment) as u32,
-        data_section_vmaddr,
-        program_data_size,
-        data_section_fileoff as u32,
-    );
+    let data_segment = if tls_present {
+        segment_data_with_tlv(
+            data_vmaddr,
+            data_vmsize,
+            data_fileoff,
+            data_filesize,
+            data_vmaddr + got_section_offset_in_segment,
+            got_size,
+            (data_fileoff + got_section_offset_in_segment) as u32,
+            data_section_vmaddr,
+            program_data_size,
+            data_section_fileoff as u32,
+            thread_vars_vmaddr,
+            thread_vars_size,
+            thread_vars_fileoff as u32,
+            thread_bss_vmaddr,
+            thread_bss_size,
+        )
+    } else {
+        segment_data(
+            data_vmaddr,
+            data_vmsize,
+            data_fileoff,
+            data_filesize,
+            data_vmaddr + got_section_offset_in_segment,
+            got_size,
+            (data_fileoff + got_section_offset_in_segment) as u32,
+            data_section_vmaddr,
+            program_data_size,
+            data_section_fileoff as u32,
+        )
+    };
     let linkedit = segment_no_sections(
         "__LINKEDIT",
         linkedit_vmaddr,
@@ -1143,13 +1502,14 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
         0,
         0,
     );
+    let nsyms_total = symbol_names.len() as u32;
     let symtab_lc = symtab_command(
         symoff as u32,
-        build.imports.imports.len() as u32,
+        nsyms_total,
         stroff as u32,
         strtab.len() as u32,
     );
-    let dysymtab_lc = dysymtab_command(build.imports.imports.len() as u32);
+    let dysymtab_lc = dysymtab_command(nsyms_total);
     // LC_MAIN's entryoff is a *file* offset, but `main` may live partway
     // through the emitted code if the compiler placed helper functions
     // first. `build.entry_offset` carries that intra-code offset.
@@ -1170,6 +1530,10 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
     // ncmds: 4 segments + dyldinfo + symtab + dysymtab + dylinker
     //        + N dylibs + build_version + main
     let ncmds: u32 = (10 + build.imports.dylibs.len()) as u32;
+    let mut header_flags = MH_DYLDLINK | MH_TWOLEVEL | MH_PIE;
+    if tls_present {
+        header_flags |= MH_HAS_TLV_DESCRIPTORS;
+    }
     write_struct(
         &mut out,
         &MachHeader64 {
@@ -1179,7 +1543,7 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
             filetype: MH_EXECUTE,
             ncmds,
             sizeofcmds: sizeofcmds as u32,
-            flags: MH_DYLDLINK | MH_TWOLEVEL | MH_PIE,
+            flags: header_flags,
             reserved: 0,
         },
     );
@@ -1235,6 +1599,19 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
         code_vmaddr_base,
         &build.func_fixups,
     )?;
+    // Patch TLV adrp+add fixups now that we know the
+    // __thread_vars vmaddr layout. Each fixup's
+    // `descriptor_index` selects a 24-byte descriptor inside
+    // __thread_vars; the codegen left an `adrp + add x0, x0, #_`
+    // pair to materialize that descriptor's address into x0
+    // before the indirect call.
+    apply_macho_tlv_fixups(
+        &mut out,
+        code_file_offset,
+        code_vmaddr_base,
+        thread_vars_vmaddr,
+        &build.macho_tlv_fixups,
+    )?;
     while (out.len() as u64) < text_filesize {
         out.push(0);
     }
@@ -1245,6 +1622,25 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
     // of __DATA) at load time using the bind opcodes from __LINKEDIT.
     out.resize(data_section_fileoff as usize, 0);
     out.extend_from_slice(&build.data);
+    if tls_present {
+        // __thread_vars: one 24-byte descriptor per TLS variable.
+        // Slot 0 (thunk getter) stays zero -- dyld writes
+        // `__tlv_bootstrap`'s address there at load time via the
+        // bind opcodes we emitted. Slot 1 (key) stays zero --
+        // dyld populates it. Slot 2 holds the variable's offset
+        // within the per-thread storage block (this is what the
+        // bootstrap-replaced fast getter eventually adds to its
+        // pthread-keyed base pointer).
+        out.resize(thread_vars_fileoff as usize, 0);
+        for desc in &build.macho_tlv_descriptors {
+            // [0..8]: thunk function pointer -- dyld fills via bind.
+            out.extend_from_slice(&0u64.to_le_bytes());
+            // [8..16]: key -- dyld fills.
+            out.extend_from_slice(&0u64.to_le_bytes());
+            // [16..24]: per-thread offset.
+            out.extend_from_slice(&desc.offset_in_block.to_le_bytes());
+        }
+    }
     out.resize((data_fileoff + data_filesize) as usize, 0);
 
     // __LINKEDIT contents.
@@ -1305,6 +1701,9 @@ mod tests {
             abi: super::super::Target::MacOSAarch64.abi(),
             tls_data: Vec::new(),
             tls_init_size: 0,
+            tls_index_fixups: Vec::new(),
+            macho_tlv_fixups: Vec::new(),
+            macho_tlv_descriptors: Vec::new(),
         }
     }
 
@@ -1529,6 +1928,140 @@ mod tests {
         assert!(
             stdout.contains("libSystem"),
             "dyld_info -imports didn't show libSystem as the source dylib.\nSTDOUT:\n{stdout}"
+        );
+    }
+
+    /// Structural check for the TLV path. Compiles a program
+    /// declaring a single `_Thread_local` global, writes the
+    /// Mach-O, and verifies:
+    ///   * `MH_HAS_TLV_DESCRIPTORS` is set in the mach header
+    ///     flags (otherwise dyld doesn't replace descriptor
+    ///     slot 0 with the real getter, and `__tlv_bootstrap`
+    ///     resolves to the abort-on-call error stub),
+    ///   * `__DATA` carries 4 sections including
+    ///     `__thread_vars` (S_THREAD_LOCAL_VARIABLES = 0x13)
+    ///     and `__thread_bss` (S_THREAD_LOCAL_ZEROFILL = 0x12),
+    ///   * the bind opcode stream contains the
+    ///     `__tlv_bootstrap` symbol name.
+    ///
+    /// End-to-end execution is covered by
+    /// `c5::tests::native::fixture_parity`'s
+    /// `thread_local_basic.c` entry; this test runs even on
+    /// machines that can't `codesign` (e.g., a CI runner with
+    /// macOS but a stripped-down keychain).
+    #[test]
+    fn thread_local_marks_tlv_header_and_sections() {
+        use crate::Compiler;
+        let src = "_Thread_local int counter; int main() { counter = 1; return counter; }";
+        let program = Compiler::with_target(
+            super::super::super::tests::with_prelude(src),
+            super::super::Target::MacOSAarch64,
+        )
+        .compile()
+        .expect("compile");
+        let build = super::super::lower_for(
+            &program,
+            super::super::Target::MacOSAarch64,
+            super::super::NativeOptions::default(),
+        )
+        .expect("lower");
+        let bytes = write(&build).expect("write Mach-O");
+
+        // mach_header_64.flags carries MH_HAS_TLV_DESCRIPTORS.
+        let flags = read_u32(&bytes, 24);
+        assert_ne!(
+            flags & MH_HAS_TLV_DESCRIPTORS,
+            0,
+            "expected MH_HAS_TLV_DESCRIPTORS in mach header flags, got {flags:#x}"
+        );
+
+        // Walk the LCs and find __DATA segment; confirm it has
+        // 4 sections including __thread_vars and __thread_bss
+        // with the right type bits.
+        let sizeofcmds = read_u32(&bytes, 20) as usize;
+        let mut p = 32usize;
+        let lc_end = 32 + sizeofcmds;
+        let mut saw_thread_vars = false;
+        let mut saw_thread_bss = false;
+        while p < lc_end {
+            let cmd = read_u32(&bytes, p);
+            let cmdsize = read_u32(&bytes, p + 4) as usize;
+            if cmd == LC_SEGMENT_64 {
+                // segname at p + 8 (16 bytes).
+                let segname = &bytes[p + 8..p + 24];
+                if segname.starts_with(b"__DATA\0") {
+                    let nsects = read_u32(&bytes, p + 64) as usize;
+                    assert_eq!(nsects, 4, "__DATA must have 4 sections when TLV present");
+                    let mut sect_p = p + 72;
+                    for _ in 0..nsects {
+                        let sect_name = &bytes[sect_p..sect_p + 16];
+                        // section flags at offset 64 within Section64.
+                        let sect_flags = read_u32(&bytes, sect_p + 64);
+                        let sect_type = sect_flags & 0xFF;
+                        if sect_name.starts_with(b"__thread_vars\0") {
+                            assert_eq!(sect_type, 0x13);
+                            saw_thread_vars = true;
+                        } else if sect_name.starts_with(b"__thread_bss\0") {
+                            assert_eq!(sect_type, 0x12);
+                            saw_thread_bss = true;
+                        }
+                        sect_p += SECTION_64_SIZE;
+                    }
+                }
+            }
+            p += cmdsize;
+        }
+        assert!(saw_thread_vars, "missing __DATA,__thread_vars");
+        assert!(saw_thread_bss, "missing __DATA,__thread_bss");
+
+        // Bind stream names `__tlv_bootstrap` so dyld knows
+        // which TLV initialiser to replace each descriptor's
+        // slot 0 with.
+        let mut p = 32usize;
+        while p < lc_end {
+            let cmd = read_u32(&bytes, p);
+            let cmdsize = read_u32(&bytes, p + 4) as usize;
+            if cmd == LC_DYLD_INFO_ONLY {
+                let bind_off = read_u32(&bytes, p + 16) as usize;
+                let bind_size = read_u32(&bytes, p + 20) as usize;
+                let stream = &bytes[bind_off..bind_off + bind_size];
+                assert!(
+                    stream.windows(15).any(|w| w == b"__tlv_bootstrap"),
+                    "expected `__tlv_bootstrap` in bind stream"
+                );
+                break;
+            }
+            p += cmdsize;
+        }
+    }
+
+    /// Same `_Thread_local` source compiles cleanly *without*
+    /// the TLV mach-header flag when there's no TLS. Sanity
+    /// check that we don't accidentally set the flag for
+    /// non-TLS programs (which would mislead dyld into
+    /// scanning a non-existent `__thread_vars`).
+    #[test]
+    fn no_tls_means_no_tlv_header_flag() {
+        use crate::Compiler;
+        let src = "int main() { return 0; }";
+        let program = Compiler::with_target(
+            super::super::super::tests::with_prelude(src),
+            super::super::Target::MacOSAarch64,
+        )
+        .compile()
+        .expect("compile");
+        let build = super::super::lower_for(
+            &program,
+            super::super::Target::MacOSAarch64,
+            super::super::NativeOptions::default(),
+        )
+        .expect("lower");
+        let bytes = write(&build).expect("write Mach-O");
+        let flags = read_u32(&bytes, 24);
+        assert_eq!(
+            flags & MH_HAS_TLV_DESCRIPTORS,
+            0,
+            "MH_HAS_TLV_DESCRIPTORS set without TLS, got flags {flags:#x}"
         );
     }
 

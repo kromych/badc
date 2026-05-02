@@ -356,6 +356,11 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     // Struct-by-value parameter / return on Windows/AArch64.
     ("struct_by_value_param.c", 0),
     ("struct_by_value_return.c", 0),
+    // _Thread_local on Windows/AArch64 -- same TLS directory +
+    // _tls_index plumbing as the x64 PE; the lowering pulls
+    // tls_array out of `[x18 + 0x58]` (TEB->ThreadLocalStoragePointer)
+    // instead of gs:[0x58].
+    ("thread_local_basic.c", 0),
 ];
 
 #[test]

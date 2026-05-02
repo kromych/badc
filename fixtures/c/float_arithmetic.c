@@ -47,7 +47,7 @@ int main() {
     a = a + 0.5;           // 7.5
     i = (int)a;            // truncates to 7
     if (i != 7) return 15;
-    i = (int)(a + 0.5);    // 8.0 → 8
+    i = (int)(a + 0.5);    // 8.0 -> 8
     if (i != 8) return 16;
 
     // Negative truncation: (int)-1.7 == -1 (truncating, C semantics).

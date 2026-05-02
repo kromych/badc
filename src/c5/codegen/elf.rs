@@ -1173,6 +1173,9 @@ mod tests {
             abi: super::super::Target::LinuxAarch64.abi(),
             tls_data: Vec::new(),
             tls_init_size: 0,
+            tls_index_fixups: Vec::new(),
+            macho_tlv_fixups: Vec::new(),
+            macho_tlv_descriptors: Vec::new(),
         }
     }
 
@@ -1361,5 +1364,154 @@ mod tests {
                 "rela {i} r_offset {r_offset:#x} not inside rw PT_LOAD [{rw_lo:#x}, {rw_hi:#x})"
             );
         }
+    }
+
+    /// Walk the program-header table for the first phdr matching
+    /// `p_type`. Returns `None` if no such phdr exists. Used by
+    /// the TLS structural tests to assert presence / absence of
+    /// `PT_TLS`.
+    fn find_phdr(bytes: &[u8], p_type: u32) -> Option<usize> {
+        let phoff = read_u64(bytes, 32);
+        let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
+        for i in 0..phnum {
+            let off = (phoff + i * PROGRAM_HEADER_SIZE) as usize;
+            if read_u32(bytes, off) == p_type {
+                return Some(off);
+            }
+        }
+        None
+    }
+
+    /// `_Thread_local`-free programs must NOT carry a `PT_TLS`
+    /// program header. The dynamic loader uses `PT_TLS` to size
+    /// per-thread storage at thread creation; emitting one for a
+    /// program with no TLS image would make glibc allocate empty
+    /// per-thread regions on every clone, masking the bug behind
+    /// a small but nonzero overhead.
+    #[test]
+    fn no_thread_local_means_no_pt_tls() {
+        for machine in [Machine::Aarch64, Machine::X86_64] {
+            let bytes = write(&tiny_build(), machine).unwrap();
+            assert!(
+                find_phdr(&bytes, PT_TLS).is_none(),
+                "{machine:?}: unexpected PT_TLS phdr in TLS-free image"
+            );
+        }
+    }
+
+    /// Compile a `_Thread_local`-using program for Linux/aarch64,
+    /// confirm a `PT_TLS` phdr is emitted, and check its
+    /// `p_filesz` / `p_memsz` match `tls_init_size` / total TLS
+    /// size. Mirrors the structural check in
+    /// `c5::codegen::pe::tests::thread_local_emits_well_formed_tls_directory_x64`.
+    #[test]
+    fn thread_local_emits_well_formed_pt_tls_aarch64() {
+        use crate::Compiler;
+        // Two distinct TLS variables: 16 bytes of .tbss total,
+        // 0 bytes of .tdata (no initialiser syntax yet).
+        let src = "_Thread_local int counter; _Thread_local int marker; \
+             int main() { counter = 1; marker = 2; return counter + marker; }";
+        let program = Compiler::with_target(
+            super::super::super::tests::with_prelude(src),
+            super::super::Target::LinuxAarch64,
+        )
+        .compile()
+        .expect("compile");
+        let build = super::super::lower_for(
+            &program,
+            super::super::Target::LinuxAarch64,
+            super::super::NativeOptions::default(),
+        )
+        .expect("lower");
+        let bytes = write(&build, Machine::Aarch64).expect("write ELF");
+
+        let phdr_off = find_phdr(&bytes, PT_TLS).expect("expected PT_TLS phdr");
+        let p_flags = read_u32(&bytes, phdr_off + 4);
+        let p_offset = read_u64(&bytes, phdr_off + 8);
+        let p_filesz = read_u64(&bytes, phdr_off + 32);
+        let p_memsz = read_u64(&bytes, phdr_off + 40);
+        let p_align = read_u64(&bytes, phdr_off + 48);
+
+        // PT_TLS is read-only metadata as far as the loader is
+        // concerned; PF_R is the canonical setting, matching what
+        // ld.so emits for static-exec TLS.
+        assert_eq!(p_flags, PF_R, "PT_TLS flags should be PF_R");
+        // `p_filesz` covers .tdata only; `p_memsz` covers .tdata
+        // plus .tbss. With no initialiser syntax in c5, the c5
+        // frontend produces tls_init_size = 0, so p_filesz is 0
+        // and p_memsz equals the full TLS block size.
+        assert_eq!(
+            p_filesz, build.tls_init_size as u64,
+            "PT_TLS p_filesz must equal .tdata size"
+        );
+        assert_eq!(
+            p_memsz,
+            build.tls_data.len() as u64,
+            "PT_TLS p_memsz must equal .tdata + .tbss size"
+        );
+        assert_eq!(p_memsz, 16, "two int TLS vars => 16 bytes per thread");
+        // Alignment 8 matches glibc's TLS image alignment for
+        // word-sized variables.
+        assert_eq!(p_align, 8);
+        // The TLS image must lie inside an rw PT_LOAD so the
+        // loader can read .tdata as the per-thread initial image.
+        let phoff = read_u64(&bytes, 32);
+        let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
+        let mut covered = false;
+        for i in 0..phnum {
+            let off = (phoff + i * PROGRAM_HEADER_SIZE) as usize;
+            if read_u32(&bytes, off) != PT_LOAD {
+                continue;
+            }
+            let p_off = read_u64(&bytes, off + 8);
+            let p_fsz = read_u64(&bytes, off + 32);
+            if p_offset >= p_off && p_offset + p_filesz <= p_off + p_fsz {
+                covered = true;
+                break;
+            }
+        }
+        assert!(
+            covered || p_filesz == 0,
+            "PT_TLS image not covered by any PT_LOAD"
+        );
+    }
+
+    /// x86_64 mirror of the aarch64 PT_TLS structural test. The
+    /// per-arch lowering encodes the TLS access differently
+    /// (variant-2 `mov r13, fs:[0]; sub r13, tpoff` vs aarch64's
+    /// variant-1 `mrs ... tpidr_el0`), but the writer side --
+    /// PT_TLS phdr + .tdata layout -- is shared.
+    #[test]
+    fn thread_local_emits_well_formed_pt_tls_x86_64() {
+        use crate::Compiler;
+        let src = "_Thread_local int counter; \
+             int main() { counter = 7; return counter; }";
+        let program = Compiler::with_target(
+            super::super::super::tests::with_prelude(src),
+            super::super::Target::LinuxX64,
+        )
+        .compile()
+        .expect("compile");
+        let build = super::super::lower_for(
+            &program,
+            super::super::Target::LinuxX64,
+            super::super::NativeOptions::default(),
+        )
+        .expect("lower");
+        let bytes = write(&build, Machine::X86_64).expect("write ELF");
+
+        let phdr_off = find_phdr(&bytes, PT_TLS).expect("expected PT_TLS phdr");
+        let p_filesz = read_u64(&bytes, phdr_off + 32);
+        let p_memsz = read_u64(&bytes, phdr_off + 40);
+        assert_eq!(
+            p_filesz, build.tls_init_size as u64,
+            "PT_TLS p_filesz must equal .tdata size"
+        );
+        assert_eq!(
+            p_memsz,
+            build.tls_data.len() as u64,
+            "PT_TLS p_memsz must equal .tdata + .tbss size"
+        );
+        assert_eq!(p_memsz, 8, "single int TLS var => 8 bytes per thread");
     }
 }

@@ -393,6 +393,27 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // FADD/FSUB/FMUL/FDIV/FCMP/FCVTZS/SCVTF; this fixture is the
     // host-platform smoke test for that pipeline.
     ("float_arithmetic.c", 0),
+    // Variadic FP packer on macOS arm64. The Apple AAPCS64
+    // quirk: variadic args spill to the stack regardless of
+    // type, so `printf("%f\n", 1.5)` lands the double's bit
+    // pattern in a stack slot rather than v0. Routes through
+    // the macOS-specific variadic-on-stack path in
+    // emit_libc_call.
+    ("printf_float.c", 0),
+    // _Thread_local round-trip on macOS arm64. Routes through
+    // the Apple TLV (Thread-Local Variables) ABI:
+    // __DATA,__thread_vars descriptors + __DATA,__thread_bss
+    // storage, with the loader binding `__tlv_bootstrap` from
+    // libSystem to descriptor slot 0. The codegen emits an
+    // `adrp+add` that materialises the descriptor's address,
+    // then `ldr x16, [x0]; blr x16` to call into the getter.
+    ("thread_local_basic.c", 0),
+    // Per-thread isolation -- spawns a pthread, has the child
+    // mutate a TLS variable, joins, and verifies the main
+    // thread's view is untouched. Apple's TLV implementation
+    // ties the storage to a pthread key, so each thread sees
+    // its own copy.
+    ("thread_local_per_thread.c", 0),
     // Struct-value locals + `.` field access on macOS arm64.
     ("struct_value_basics.c", 0),
     // Whole-struct copy via Op::Mcpy on macOS arm64. The aarch64

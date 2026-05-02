@@ -1174,6 +1174,11 @@ pub(super) fn lower(
     // Function-pointer Imms get their target resolved post-walk
     // against `bytecode_to_native`, mirroring aarch64::lower.
     let mut pending_func_fixups: Vec<(usize, usize)> = Vec::new();
+    // Win64 TLS-index fixups -- one entry per `Op::TlsLea` site
+    // when targeting Windows. The PE writer reserves the
+    // `_tls_index` DWORD slot and patches each fixup with the
+    // displacement to it.
+    let mut tls_index_fixups: Vec<super::TlsIndexFixup> = Vec::new();
     let data_imm_positions: &[usize] = &program.data_imm_positions;
 
     let mut in_main = false;
@@ -1219,6 +1224,7 @@ pub(super) fn lower(
             &mut data_fixups,
             &mut got_fixups,
             &mut pending_func_fixups,
+            &mut tls_index_fixups,
             data_imm_positions,
             in_main,
             abi,
@@ -1320,6 +1326,11 @@ pub(super) fn lower(
         abi: super::Abi::default(),
         tls_data: program.tls_data.clone(),
         tls_init_size: program.tls_init_size,
+        tls_index_fixups,
+        // Mach-O TLV is arm64-only on Apple Silicon; x86_64 macOS
+        // is not in our target list.
+        macho_tlv_fixups: Vec::new(),
+        macho_tlv_descriptors: Vec::new(),
     })
 }
 
@@ -1371,6 +1382,7 @@ fn lower_op(
     data_fixups: &mut Vec<DataFixup>,
     got_fixups: &mut Vec<GotFixup>,
     pending_func_fixups: &mut Vec<(usize, usize)>,
+    tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     data_imm_positions: &[usize],
     in_main: bool,
     abi: Abi,
@@ -1765,39 +1777,85 @@ fn lower_op(
             emit_movq_r_xmm(code, Reg::R13, Reg::XMM0);
         }
         Op::TlsLea => {
-            // `_Thread_local` global access. Linux/x86_64 uses
-            // variant-2 TLS layout: `var_addr = FS_BASE - tls_total
-            // + offset`, with FS_BASE pointing at the TCB and the
-            // TLS image laid out before it. The `:tpoff:` value
-            // glibc loaders compute equals `-(tls_total - offset)`
-            // for static-exec.
+            // `_Thread_local` global access. Two lowerings live
+            // here:
             //
-            // Sequence:
-            //     mov  r13, qword ptr fs:[0]      ; r13 = FS_BASE
-            //     sub  r13, (tls_total - offset)  ; r13 = var_addr
+            // * Linux/x86_64 -- variant-2 TLS layout:
+            //   `var_addr = FS_BASE - tls_total + offset`, with
+            //   FS_BASE pointing at the TCB and the TLS image
+            //   laid out before it. The `:tpoff:` value glibc
+            //   loaders compute equals `-(tls_total - offset)`
+            //   for static-exec.
+            //   Sequence:
+            //       mov  r13, qword ptr fs:[0]      ; r13 = FS_BASE
+            //       sub  r13, (tls_total - offset)  ; r13 = var_addr
             //
-            // The displacement is a positive 32-bit immediate; the
-            // 64-bit subtraction yields the variable's address.
+            // * Windows/x86_64 -- TLS directory + `_tls_index`:
+            //   the loader fills in `_tls_index` (a DWORD) and
+            //   stores per-thread TLS pointers in
+            //   `TEB->ThreadLocalStoragePointer` at `gs:[0x58]`.
+            //   Per access:
+            //       mov  rax, gs:[0x58]               ; tls_array
+            //       mov  ecx, [rip + _tls_index]      ; (writer-patched)
+            //       mov  rax, [rax + rcx*8]           ; tls_array[index]
+            //       lea  r13, [rax + offset]          ; final address
+            //   The middle instruction's disp32 is patched by
+            //   the PE writer once the `_tls_index` slot's RVA
+            //   is known.
             let offset = read_operand(text, pc, "TlsLea")?;
-            if !matches!(target, Target::LinuxX64) {
-                return Err(C5Error::Compile(format!(
-                    "{:?}: `_Thread_local` codegen is only implemented for \
-                     Linux/x86_64; Windows/x86_64 (TLS directory + \
-                     `_tls_index`) is future work",
-                    target
-                )));
+            match target {
+                Target::LinuxX64 => {
+                    let tpoff = (tls_total_size as i64) - offset;
+                    if !(0..=i32::MAX as i64).contains(&tpoff) {
+                        return Err(C5Error::Compile(format!(
+                            "_Thread_local tpoff {tpoff} doesn't fit i32"
+                        )));
+                    }
+                    // mov r13, qword ptr fs:[0]: 64 4C 8B 2C 25 00 00 00 00
+                    emit_bytes(code, &[0x64, 0x4C, 0x8B, 0x2C, 0x25, 0, 0, 0, 0]);
+                    // sub r13, imm32: 49 81 ED imm32_le
+                    emit_bytes(code, &[0x49, 0x81, 0xED]);
+                    emit_i32(code, tpoff as i32);
+                }
+                Target::WindowsX64 => {
+                    if !(i32::MIN as i64..=i32::MAX as i64).contains(&offset) {
+                        return Err(C5Error::Compile(format!(
+                            "_Thread_local offset {offset} doesn't fit i32"
+                        )));
+                    }
+                    // mov rax, gs:[0x58]: 65 48 8B 04 25 58 00 00 00
+                    emit_bytes(code, &[0x65, 0x48, 0x8B, 0x04, 0x25, 0x58, 0, 0, 0]);
+                    // mov ecx, dword [rip + disp32] -- 32-bit load,
+                    // RIP-relative. ecx is reg=001, rm=101 (RIP).
+                    // No REX since rcx is a low register, no W
+                    // prefix (32-bit operand).
+                    let mov_ecx_offset = code.len();
+                    emit_bytes(code, &[0x8B, 0x0D, 0, 0, 0, 0]);
+                    tls_index_fixups.push(super::TlsIndexFixup {
+                        instr_offset: mov_ecx_offset,
+                    });
+                    // mov rax, qword [rax + rcx*8]:
+                    //   REX.W + 8B /r with SIB (scale=8, index=rcx, base=rax)
+                    //   ModR/M = mod=00 reg=000 rm=100 (use SIB)
+                    //   SIB    = scale=11 index=001 base=000
+                    emit_bytes(code, &[0x48, 0x8B, 0x04, 0xC8]);
+                    // lea r13, [rax + offset]:
+                    //   REX.W=1, REX.R=1 -> 0x4C
+                    //   opcode 0x8D (LEA)
+                    //   ModR/M: mod=10 (disp32), reg=r13.lo()=5, rm=000 (rax)
+                    emit_byte(code, 0x4C);
+                    emit_byte(code, 0x8D);
+                    emit_byte(code, 0x80 | (Reg::R13.lo() << 3));
+                    emit_i32(code, offset as i32);
+                }
+                _ => {
+                    return Err(C5Error::Compile(format!(
+                        "{:?}: `_Thread_local` codegen on x86_64 is only \
+                         implemented for Linux and Windows targets",
+                        target
+                    )));
+                }
             }
-            let tpoff = (tls_total_size as i64) - offset;
-            if !(0..=i32::MAX as i64).contains(&tpoff) {
-                return Err(C5Error::Compile(format!(
-                    "_Thread_local tpoff {tpoff} doesn't fit i32"
-                )));
-            }
-            // mov r13, qword ptr fs:[0]: 64 4C 8B 2C 25 00 00 00 00
-            emit_bytes(code, &[0x64, 0x4C, 0x8B, 0x2C, 0x25, 0, 0, 0, 0]);
-            // sub r13, imm32: 49 81 ED imm32_le
-            emit_bytes(code, &[0x49, 0x81, 0xED]);
-            emit_i32(code, tpoff as i32);
         }
         Op::Mcpy => {
             // src = r13, dst = pop. Copy `size` bytes inline (size
@@ -2049,7 +2107,7 @@ fn cmp_with_pop(code: &mut Vec<u8>, reg_state: &mut RegState<'_>, cc: Cc) {
 /// both operands into xmm0/xmm1, and run the encoded SSE2 op.
 /// `commutative` selects whether to compute `xmm0 op= xmm1`
 /// (commutative add/mul) or `xmm0 = top op acc` with the operand
-/// order baked into `xmm0 ← top, xmm1 ← acc, xmm0 op= xmm1`
+/// order baked into `xmm0 = top, xmm1 = acc, xmm0 op= xmm1`
 /// (sub/div). Either way the result lands in xmm0 and ships back
 /// to r13.
 fn emit_fp_binop<F: Fn(&mut Vec<u8>, Reg, Reg)>(

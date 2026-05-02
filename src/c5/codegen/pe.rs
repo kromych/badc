@@ -149,7 +149,17 @@ const IAT_ENTRY_SIZE: usize = 8;
 const DATA_DIRECTORY_IMPORT: usize = 1;
 const DATA_DIRECTORY_EXCEPTION: usize = 3;
 const DATA_DIRECTORY_BASERELOC: usize = 5;
+/// TLS Directory (entry 9) -- the loader walks this to allocate
+/// per-thread TLS at thread creation, copy `.tdata`, zero-fill
+/// `.tbss`, and write the chosen index back into the
+/// `_tls_index` slot. The directory itself is a 40-byte
+/// `IMAGE_TLS_DIRECTORY64` we put inside `.data`.
+const DATA_DIRECTORY_TLS: usize = 9;
 const DATA_DIRECTORY_IAT: usize = 12;
+
+/// Size of `IMAGE_TLS_DIRECTORY64` in bytes (PE32+ form).
+/// Layout: 4 u64 VAs + 2 u32 fields = 32 + 8 = 40 bytes.
+const IMAGE_TLS_DIRECTORY64_SIZE: u32 = 40;
 
 /// AArch64 RUNTIME_FUNCTION packed-unwind format limit: the
 /// FunctionLength field is 11 bits (units = 4-byte instructions),
@@ -226,10 +236,12 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
     let stub_len = stub.bytes.len() as u32;
     let text_prologue_len = stub_len;
 
-    // The `.data` section is only present when the c5 program has
-    // initialized data. See `num_sections` for why an empty
-    // section can't be left in.
-    let data_section_present = !build.data.is_empty();
+    // The `.data` section is present when the c5 program has
+    // initialized data OR any `_Thread_local` globals (the TLS
+    // directory + `_tls_index` slot live at the tail of `.data`).
+    // See `num_sections` for why an empty section can't be left
+    // in.
+    let data_section_present = !build.data.is_empty() || !build.tls_data.is_empty();
     let headers_size = headers_raw_size(data_section_present) as u32;
 
     let text_rva: u32 = SECTION_ALIGNMENT;
@@ -268,14 +280,24 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
 
     // The `.data` section only appears when the c5 program has at
     // least one byte of initialized data (string literals or
-    // globals). An empty section is a real-Windows-kernel reject
-    // reason: CreateProcess returns ERROR_BAD_EXE_FORMAT for any
-    // image that lists a zero-sized section. wine is more
-    // tolerant, which is how this slipped past the local test
-    // lanes for so long. (`data_section_present` is computed once
-    // up-front for the header-size math; this is the data layout
-    // it gates.)
-    let data_size: u32 = build.data.len() as u32;
+    // globals) OR any `_Thread_local` storage. An empty section
+    // is a real-Windows-kernel reject reason: CreateProcess
+    // returns ERROR_BAD_EXE_FORMAT for any image that lists a
+    // zero-sized section. wine is more tolerant, which is how
+    // this slipped past the local test lanes for so long.
+    //
+    // TLS layout (when `build.tls_data` is non-empty) appends
+    // three blobs after `build.data` inside the same `.data`
+    // section: (1) a 4-byte `_tls_index` slot the loader fills
+    // in at module-init time, (2) the 40-byte
+    // IMAGE_TLS_DIRECTORY64, and (3) the initialised TLS image
+    // (the first `build.tls_init_size` bytes of
+    // `build.tls_data`). The zero-fill TLS bytes
+    // (`build.tls_data.len() - build.tls_init_size`) live only
+    // in `IMAGE_TLS_DIRECTORY64.SizeOfZeroFill`; the loader
+    // zero-fills them per-thread.
+    let tls_layout = compute_tls_layout(build);
+    let data_size: u32 = build.data.len() as u32 + tls_layout.tls_blob_size;
     let data_rva: u32 = round_up(idata_rva + idata_size, SECTION_ALIGNMENT);
     let data_file_off: u32 = idata_file_off + idata_raw_size;
     let data_raw_size: u32 = if data_section_present {
@@ -358,6 +380,20 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
         patch_addr_load(machine, &mut text_bytes, instr_off, text_rva, target_rva)?;
     }
 
+    // TLS-index fixups. Every `Op::TlsLea` recorded a code site
+    // that needs the address of the `_tls_index` DWORD slot the
+    // loader fills in. The slot lives at the tail of `.data` (see
+    // `tls_layout` and the data emission below). Each per-arch
+    // patcher rewrites the disp/imm fields with the offset to the
+    // slot.
+    if !build.tls_index_fixups.is_empty() {
+        let tls_index_rva = data_rva + tls_layout.tls_index_offset_in_data;
+        for f in &build.tls_index_fixups {
+            let instr_off = (f.instr_offset as u32) + text_prologue_len;
+            patch_tls_index_lookup(machine, &mut text_bytes, instr_off, text_rva, tls_index_rva)?;
+        }
+    }
+
     // 6) Assemble the final image.
     let mut out: Vec<u8> = Vec::with_capacity(total_file_size);
     write_dos_header_and_stub(&mut out);
@@ -368,6 +404,14 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
         machine,
         data_section_present,
     );
+    let (tls_table_rva, tls_table_size) = if !build.tls_data.is_empty() {
+        (
+            data_rva + tls_layout.directory_offset_in_data,
+            IMAGE_TLS_DIRECTORY64_SIZE,
+        )
+    } else {
+        (0, 0)
+    };
     write_optional_header(
         &mut out,
         OptionalHeaderInputs {
@@ -385,6 +429,8 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
             base_reloc_size: 0,
             iat_rva: idata_layout.iat_rva_base,
             iat_size: idata_layout.iat_size,
+            tls_table_rva,
+            tls_table_size,
         },
     );
     let mut sections: Vec<SectionHeader> = Vec::with_capacity(num_sections(data_section_present));
@@ -434,10 +480,180 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
     pad_to(&mut out, (idata_file_off + idata_raw_size) as usize);
     if data_section_present {
         out.extend_from_slice(&build.data);
+        if !build.tls_data.is_empty() {
+            // Pad to where the `_tls_index` slot starts (4-byte
+            // alignment).
+            pad_to(
+                &mut out,
+                (data_file_off + tls_layout.tls_index_offset_in_data) as usize,
+            );
+            // `_tls_index` -- 4-byte slot, zero-initialised; the
+            // Windows loader writes the chosen slot index here at
+            // module-init time.
+            out.extend_from_slice(&[0u8; 4]);
+            // Pad to where IMAGE_TLS_DIRECTORY64 starts (8-byte
+            // alignment).
+            pad_to(
+                &mut out,
+                (data_file_off + tls_layout.directory_offset_in_data) as usize,
+            );
+            // IMAGE_TLS_DIRECTORY64. Layout:
+            //   StartAddressOfRawData : u64  -- VA of init data start
+            //   EndAddressOfRawData   : u64  -- VA of init data end
+            //   AddressOfIndex        : u64  -- VA of `_tls_index`
+            //   AddressOfCallBacks    : u64  -- VA of callback array (NULL)
+            //   SizeOfZeroFill        : u32  -- bytes after End to zero
+            //   Characteristics       : u32  -- 0
+            // VAs are absolute addresses (ImageBase + RVA). We
+            // ship no .reloc, so the loader maps at preferred
+            // ImageBase and these VAs match the runtime addresses.
+            let tls_init_start_va =
+                IMAGE_BASE + (data_rva + tls_layout.tls_init_offset_in_data) as u64;
+            let tls_init_end_va = tls_init_start_va + build.tls_init_size as u64;
+            let tls_index_va = IMAGE_BASE + (data_rva + tls_layout.tls_index_offset_in_data) as u64;
+            let zero_fill: u32 = (build.tls_data.len() - build.tls_init_size) as u32;
+            out.extend_from_slice(&tls_init_start_va.to_le_bytes());
+            out.extend_from_slice(&tls_init_end_va.to_le_bytes());
+            out.extend_from_slice(&tls_index_va.to_le_bytes());
+            out.extend_from_slice(&0u64.to_le_bytes()); // AddressOfCallBacks
+            out.extend_from_slice(&zero_fill.to_le_bytes());
+            out.extend_from_slice(&0u32.to_le_bytes()); // Characteristics
+            // TLS init data (.tdata) -- the loader copies this
+            // into each thread's per-thread TLS region. The
+            // matching .tbss bytes don't ride the file; they're
+            // produced by SizeOfZeroFill.
+            out.extend_from_slice(&build.tls_data[..build.tls_init_size]);
+        }
     }
     pad_to(&mut out, total_file_size);
     debug_assert_eq!(out.len(), total_file_size, "file size mismatch");
     Ok(out)
+}
+
+/// Per-`.data` offsets for the trio of TLS support structures
+/// (the `_tls_index` slot, the `IMAGE_TLS_DIRECTORY64`, and the
+/// initialised TLS image). Computed once up-front so the layout
+/// pass and the writer agree on byte offsets without
+/// recomputing.
+///
+/// All offsets are *within* the `.data` section, after
+/// `build.data` (the user-side initialised data). When
+/// `build.tls_data` is empty, every field is zero and
+/// `tls_blob_size` is zero.
+struct TlsLayout {
+    /// Total bytes appended to `.data` for TLS support
+    /// (excluding the zero-fill, which the loader handles).
+    /// Adds to `data_size` to size the `.data` section.
+    tls_blob_size: u32,
+    /// Byte offset within `.data` of the 4-byte `_tls_index`
+    /// slot. The loader writes the chosen slot index here at
+    /// module-init time.
+    tls_index_offset_in_data: u32,
+    /// Byte offset within `.data` of the 40-byte
+    /// `IMAGE_TLS_DIRECTORY64`. The Optional Header's
+    /// DataDirectory[9] (TLS) points at it.
+    directory_offset_in_data: u32,
+    /// Byte offset within `.data` of the initialised TLS image
+    /// (`.tdata`). `IMAGE_TLS_DIRECTORY64.StartAddressOfRawData`
+    /// points at it.
+    tls_init_offset_in_data: u32,
+}
+
+fn compute_tls_layout(build: &Build) -> TlsLayout {
+    if build.tls_data.is_empty() {
+        return TlsLayout {
+            tls_blob_size: 0,
+            tls_index_offset_in_data: 0,
+            directory_offset_in_data: 0,
+            tls_init_offset_in_data: 0,
+        };
+    }
+    let user_data_end = build.data.len() as u32;
+    // 4-byte align the _tls_index slot (DWORD).
+    let tls_index_offset = round_up(user_data_end, 4);
+    // 8-byte align IMAGE_TLS_DIRECTORY64 (it carries u64s).
+    let directory_offset = round_up(tls_index_offset + 4, 8);
+    let tls_init_offset = directory_offset + IMAGE_TLS_DIRECTORY64_SIZE;
+    let total = tls_init_offset + build.tls_init_size as u32;
+    TlsLayout {
+        tls_blob_size: total - user_data_end,
+        tls_index_offset_in_data: tls_index_offset,
+        directory_offset_in_data: directory_offset,
+        tls_init_offset_in_data: tls_init_offset,
+    }
+}
+
+/// Patch the TLS-index lookup at `instr_offset`. The encoding
+/// shape varies by architecture:
+///
+/// * x86_64: a 6-byte `mov ecx, [rip+disp32]`. The disp32 sits
+///   at +2 within the instruction; RIP is at +6.
+/// * aarch64: an `adrp x17, _; ldr w17, [x17, #_]` pair (the
+///   same encoding `patch_aarch64_adrp_ldr` understands, with a
+///   `ldr w` instead of `ldr x` -- the in-page byte offset must
+///   be 4-aligned for the 32-bit form).
+fn patch_tls_index_lookup(
+    machine: Machine,
+    text: &mut [u8],
+    instr_offset_in_text: u32,
+    text_section_rva: u32,
+    target_rva: u32,
+) -> Result<(), C5Error> {
+    let instr_rva = text_section_rva + instr_offset_in_text;
+    match machine {
+        Machine::X86_64 => {
+            // `mov ecx, [rip+disp32]` is 6 bytes; disp32 at +2,
+            // RIP at +6.
+            let after_rva = instr_rva + 6;
+            patch_x86_64_disp32(
+                text,
+                (instr_offset_in_text + 2) as usize,
+                after_rva,
+                target_rva,
+            )
+        }
+        Machine::Aarch64 => {
+            patch_aarch64_adrp_ldr32(text, instr_offset_in_text, instr_rva, target_rva)
+        }
+    }
+}
+
+/// AArch64 `adrp xd, _; ldr wd, [xd, #_]` patcher -- mirrors
+/// [`patch_aarch64_adrp_ldr`] but for the 32-bit (`ldr w`) load
+/// form used by the TLS-index lookup. The in-page offset must be
+/// 4-aligned (the 32-bit form's imm12 is scaled by 4).
+fn patch_aarch64_adrp_ldr32(
+    text: &mut [u8],
+    adrp_offset_in_text: u32,
+    adrp_rva: u32,
+    target_rva: u32,
+) -> Result<(), C5Error> {
+    let adrp_page = (adrp_rva as u64) & !0xFFF;
+    let target_page = (target_rva as u64) & !0xFFF;
+    let page_diff = target_page as i64 - adrp_page as i64;
+    if page_diff & 0xFFF != 0 {
+        return Err(C5Error::Compile(format!(
+            "PE: aarch64 TLS-index adrp page diff {page_diff} not 4 KiB aligned"
+        )));
+    }
+    let imm21 = (page_diff >> 12) as i32;
+    let in_page = target_rva & 0xFFF;
+    if !in_page.is_multiple_of(4) {
+        return Err(C5Error::Compile(format!(
+            "PE: aarch64 TLS-index ldr offset {in_page:#x} not 4-aligned"
+        )));
+    }
+    let off = adrp_offset_in_text as usize;
+    let adrp_word = u32::from_le_bytes([text[off], text[off + 1], text[off + 2], text[off + 3]]);
+    let ldr_word = u32::from_le_bytes([text[off + 4], text[off + 5], text[off + 6], text[off + 7]]);
+    let rd = (adrp_word & 0x1F) as u8;
+    let ldr_rt = (ldr_word & 0x1F) as u8;
+    let ldr_rn = ((ldr_word >> 5) & 0x1F) as u8;
+    let new_adrp = aarch64::enc_adrp(aarch64::Reg(rd), imm21);
+    let new_ldr = aarch64::enc_ldr32_imm(aarch64::Reg(ldr_rt), aarch64::Reg(ldr_rn), in_page);
+    text[off..off + 4].copy_from_slice(&new_adrp.to_le_bytes());
+    text[off + 4..off + 8].copy_from_slice(&new_ldr.to_le_bytes());
+    Ok(())
 }
 
 // ----------------------------------------------------------------
@@ -627,6 +843,12 @@ struct OptionalHeaderInputs {
     base_reloc_size: u32,
     iat_rva: u32,
     iat_size: u32,
+    /// TLS Directory (data directory entry 9). RVA and size of
+    /// `IMAGE_TLS_DIRECTORY64` (which lives inside `.data`).
+    /// Both zero when the program has no `_Thread_local`
+    /// globals.
+    tls_table_rva: u32,
+    tls_table_size: u32,
 }
 
 fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
@@ -660,6 +882,10 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
     data_directory[DATA_DIRECTORY_BASERELOC] = DataDirectoryEntry {
         rva: inp.base_reloc_rva,
         size: inp.base_reloc_size,
+    };
+    data_directory[DATA_DIRECTORY_TLS] = DataDirectoryEntry {
+        rva: inp.tls_table_rva,
+        size: inp.tls_table_size,
     };
     data_directory[DATA_DIRECTORY_IAT] = DataDirectoryEntry {
         rva: inp.iat_rva,
@@ -1505,6 +1731,162 @@ mod tests {
         // ExitProcess (last).
         assert!(s.iat_getmainargs_offset < s.direct_call_main_offset);
         assert!(s.direct_call_main_offset < s.iat_exit_offset);
+    }
+
+    /// Offset within the Optional Header at which DataDirectory[i]
+    /// begins. The fixed-size prefix of OptionalHeader64 ends with
+    /// `number_of_rva_and_sizes` (4 bytes); the array starts
+    /// immediately after.
+    fn data_directory_offset(optional_off: usize, idx: usize) -> usize {
+        // NumberOfRvaAndSizes is at offset 108 from the start of
+        // OptionalHeader64 in PE32+ (see <winnt.h>); the
+        // DataDirectory array starts at offset 112.
+        optional_off + 112 + idx * core::mem::size_of::<DataDirectoryEntry>()
+    }
+
+    /// Walk the Optional Header and read DataDirectory[idx]'s
+    /// (rva, size) tuple.
+    fn read_data_directory(bytes: &[u8], idx: usize) -> (u32, u32) {
+        let pe_off = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
+        let optional_off = pe_off + 4 + COFF_HEADER_SIZE;
+        let entry_off = data_directory_offset(optional_off, idx);
+        let rva = u32::from_le_bytes(bytes[entry_off..entry_off + 4].try_into().unwrap());
+        let size = u32::from_le_bytes(bytes[entry_off + 4..entry_off + 8].try_into().unwrap());
+        (rva, size)
+    }
+
+    /// PE without `_Thread_local`: TLS directory entry must be
+    /// zero so the loader knows there's nothing to allocate
+    /// per-thread.
+    #[test]
+    fn no_tls_means_zero_tls_data_directory() {
+        use crate::Compiler;
+        let program = Compiler::new("int main() { return 0; }".to_string())
+            .compile()
+            .expect("compile");
+        let build = super::super::lower_for(
+            &program,
+            super::super::Target::WindowsX64,
+            super::super::NativeOptions::default(),
+        )
+        .expect("lower");
+        let bytes = write(&build, Machine::X86_64).expect("write PE");
+        let (rva, size) = read_data_directory(&bytes, DATA_DIRECTORY_TLS);
+        assert_eq!(rva, 0, "TLS RVA must be 0 when no TLS present");
+        assert_eq!(size, 0, "TLS size must be 0 when no TLS present");
+    }
+
+    /// PE with `_Thread_local`: TLS directory entry must point
+    /// at a non-empty IMAGE_TLS_DIRECTORY64 of size 40, and the
+    /// directory's contents must reference plausible RVAs (well
+    /// past the header, inside the .data section).
+    #[test]
+    fn thread_local_emits_well_formed_tls_directory_x64() {
+        use crate::Compiler;
+        let src = "_Thread_local int counter; int main() { counter = 42; return counter; }";
+        let program = Compiler::new(super::super::super::tests::with_prelude(src))
+            .compile()
+            .expect("compile");
+        let build = super::super::lower_for(
+            &program,
+            super::super::Target::WindowsX64,
+            super::super::NativeOptions::default(),
+        )
+        .expect("lower");
+        let bytes = write(&build, Machine::X86_64).expect("write PE");
+        let (tls_rva, tls_size) = read_data_directory(&bytes, DATA_DIRECTORY_TLS);
+        assert_ne!(tls_rva, 0, "expected non-zero TLS directory RVA");
+        assert_eq!(
+            tls_size, IMAGE_TLS_DIRECTORY64_SIZE,
+            "TLS directory size must equal IMAGE_TLS_DIRECTORY64 size"
+        );
+
+        // Find the section that contains the TLS directory and
+        // resolve `tls_rva` to a file offset to inspect the
+        // bytes.
+        let pe_off = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
+        let coff_off = pe_off + 4;
+        let n_sections = u16::from_le_bytes([bytes[coff_off + 2], bytes[coff_off + 3]]) as usize;
+        let optional_off = coff_off + COFF_HEADER_SIZE;
+        let optional_size =
+            u16::from_le_bytes([bytes[coff_off + 16], bytes[coff_off + 17]]) as usize;
+        let sections_off = optional_off + optional_size;
+        let mut tls_file_off: Option<usize> = None;
+        for i in 0..n_sections {
+            let h = sections_off + i * SECTION_HEADER_SIZE;
+            let v_addr = u32::from_le_bytes(bytes[h + 12..h + 16].try_into().unwrap());
+            let v_size = u32::from_le_bytes(bytes[h + 8..h + 12].try_into().unwrap());
+            let p_off = u32::from_le_bytes(bytes[h + 20..h + 24].try_into().unwrap());
+            if tls_rva >= v_addr && tls_rva < v_addr + v_size {
+                tls_file_off = Some((p_off + (tls_rva - v_addr)) as usize);
+                break;
+            }
+        }
+        let tls_file_off = tls_file_off.expect("TLS directory must lie inside a section");
+
+        // Read the four VAs + two u32s. They must be monotonic
+        // (Start <= End), Start/End within the image's address
+        // range (>= ImageBase), and SizeOfZeroFill non-negative.
+        let start_va =
+            u64::from_le_bytes(bytes[tls_file_off..tls_file_off + 8].try_into().unwrap());
+        let end_va = u64::from_le_bytes(
+            bytes[tls_file_off + 8..tls_file_off + 16]
+                .try_into()
+                .unwrap(),
+        );
+        let index_va = u64::from_le_bytes(
+            bytes[tls_file_off + 16..tls_file_off + 24]
+                .try_into()
+                .unwrap(),
+        );
+        let cb_va = u64::from_le_bytes(
+            bytes[tls_file_off + 24..tls_file_off + 32]
+                .try_into()
+                .unwrap(),
+        );
+        let zero_fill = u32::from_le_bytes(
+            bytes[tls_file_off + 32..tls_file_off + 36]
+                .try_into()
+                .unwrap(),
+        );
+        let characteristics = u32::from_le_bytes(
+            bytes[tls_file_off + 36..tls_file_off + 40]
+                .try_into()
+                .unwrap(),
+        );
+        assert!(start_va >= IMAGE_BASE, "Start VA below ImageBase");
+        assert!(end_va >= start_va, "End VA before Start VA");
+        assert!(index_va >= IMAGE_BASE, "AddressOfIndex below ImageBase");
+        assert_eq!(cb_va, 0, "AddressOfCallBacks should be NULL");
+        assert_eq!(characteristics, 0, "Characteristics must be 0");
+        // The single `_Thread_local int counter` is 8 bytes
+        // (c5 globals are word-sized) of zero-fill.
+        assert_eq!(end_va - start_va, 0, "expected init-data range to be empty");
+        assert_eq!(zero_fill, 8, "expected 8 bytes of zero-fill");
+    }
+
+    /// AArch64 mirror of the x64 TLS-directory check. The
+    /// per-arch lowering and the writer share the same TLS
+    /// scaffolding, but the patcher walks an `adrp + ldr` pair
+    /// instead of a `mov ecx, [rip+disp32]`, so it's worth
+    /// confirming the directory is built the same way.
+    #[test]
+    fn thread_local_emits_well_formed_tls_directory_arm64() {
+        use crate::Compiler;
+        let src = "_Thread_local int counter; int main() { counter = 42; return counter; }";
+        let program = Compiler::new(super::super::super::tests::with_prelude(src))
+            .compile()
+            .expect("compile");
+        let build = super::super::lower_for(
+            &program,
+            super::super::Target::WindowsAarch64,
+            super::super::NativeOptions::default(),
+        )
+        .expect("lower");
+        let bytes = write(&build, Machine::Aarch64).expect("write PE");
+        let (tls_rva, tls_size) = read_data_directory(&bytes, DATA_DIRECTORY_TLS);
+        assert_ne!(tls_rva, 0, "expected non-zero TLS directory RVA");
+        assert_eq!(tls_size, IMAGE_TLS_DIRECTORY64_SIZE);
     }
 
     /// End-to-end format check: build an aarch64 Windows PE for a

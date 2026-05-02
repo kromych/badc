@@ -112,7 +112,7 @@ fn thread_local_compiles_to_op_tlslea() {
     use super::super::op::Op;
     let src = "_Thread_local int counter;\n\
                int main() { counter = 42; return counter; }";
-    let p = super::Compiler::new(src.to_string())
+    let p = super::Compiler::new(super::with_prelude(src))
         .compile()
         .expect("compile failed");
     assert!(
@@ -120,15 +120,20 @@ fn thread_local_compiles_to_op_tlslea() {
         "expected at least one Op::TlsLea in the bytecode"
     );
     assert_eq!(p.tls_data.len(), 8, "single 8-byte TLS slot");
-    // Lowering on a non-Linux target rejects with a clear error.
-    let plan = super::super::codegen::Target::MacOSAarch64;
-    let res =
-        super::super::emit_native_with_options(&p, plan, super::super::NativeOptions::default());
-    let err = res.expect_err("expected an error from the macOS arm64 lowering");
-    assert!(
-        err.to_string().contains("only implemented for"),
-        "expected non-Linux TLS rejection, got: {err}"
-    );
+    // Every supported target now lowers `_Thread_local`. Linux
+    // and Windows have full code paths; macOS arm64 routes
+    // through the Mach-O `__thread_vars` + `__tlv_bootstrap`
+    // pipeline.
+    for target in [
+        super::super::codegen::Target::LinuxAarch64,
+        super::super::codegen::Target::LinuxX64,
+        super::super::codegen::Target::WindowsX64,
+        super::super::codegen::Target::WindowsAarch64,
+        super::super::codegen::Target::MacOSAarch64,
+    ] {
+        super::super::emit_native_with_options(&p, target, super::super::NativeOptions::default())
+            .unwrap_or_else(|e| panic!("`{target:?}` rejected `_Thread_local`: {e}"));
+    }
 }
 
 #[test]
@@ -148,6 +153,66 @@ fn unknown_struct_name_is_rejected() {
     expect_compile_error(
         "int main() { struct Missing *p; return 0; }",
         "unknown struct Missing",
+    );
+}
+
+#[test]
+fn libc_call_with_struct_arg_is_refused() {
+    // The c5-internal struct ABI uses caller-pushes-address +
+    // callee-copies-on-entry. Real platform ABIs (SysV/Win64/AAPCS64)
+    // pack the bytes into argument registers instead. We don't
+    // implement the platform path yet, so calling a Token::Sys
+    // function with a struct-by-value argument is refused at
+    // compile time rather than emitting a silently-wrong call.
+    let mut src = super::with_prelude(
+        "struct P { int x; int y; };\n\
+         int main() {\n\
+             struct P p;\n\
+             p.x = 1; p.y = 2;\n\
+             write(1, p, sizeof(p));\n\
+             return 0;\n\
+         }",
+    );
+    // `write` is a Token::Sys binding declared in unistd.h; its
+    // 2nd arg is a `void*`, not a struct, so the c5 grammar
+    // here passes the struct by value, which trips our refusal.
+    src.push('\0');
+    let res = Compiler::new(src).compile();
+    let err = res.expect_err("expected struct-by-value-to-libc to fail");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("struct passed by value")
+            || msg.contains("struct-arg convention isn't implemented"),
+        "expected platform-ABI struct refusal, got: {msg}"
+    );
+}
+
+#[test]
+fn libc_call_returning_struct_is_refused() {
+    // Symmetric to the arg case: a Token::Sys binding declared
+    // to return a struct by value (e.g. `div_t div(int, int)`)
+    // would need the platform ABI's two-register split on
+    // SysV / AAPCS64 or hidden-out-pointer on Win64. Until
+    // that lands, we refuse the call.
+    //
+    // The prelude doesn't declare any struct-returning libc
+    // function today, so we synthesize one via a local
+    // `#pragma binding` to a non-existent symbol; the parser
+    // type-checks the call before the loader would notice the
+    // binding is bogus.
+    let src = "\
+        #pragma dylib(libc, \"libc.so.6\")\n\
+        #pragma binding(libc::make_pair, \"make_pair\")\n\
+        struct Pair { int a; int b; };\n\
+        struct Pair make_pair();\n\
+        int main() { struct Pair p; p = make_pair(); return p.a; }\n";
+    let res = Compiler::new(src.to_string()).compile();
+    let err = res.expect_err("expected struct-return-from-libc to fail");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("returns a struct by value")
+            || msg.contains("struct-return convention isn't implemented"),
+        "expected platform-ABI struct-return refusal, got: {msg}"
     );
 }
 

@@ -808,6 +808,28 @@ impl Compiler {
                 let callee_returns_struct = self.symbols[id_idx].class == Token::Fun as i64
                     && is_struct_ty(callee_ret_ty)
                     && struct_ptr_depth(callee_ret_ty) == 0;
+                // Token::Sys (libc) calls returning a struct by
+                // value would need real platform-ABI register
+                // packing -- SysV's two-register split for
+                // 8 < size <= 16, Win64's hidden out-pointer for
+                // size > 8, AAPCS64's HFA / two-GPR split, and so
+                // on. The c5-internal "address-as-value, hidden
+                // out-pointer at val=2" convention only works for
+                // c5-to-c5 calls. Refuse the call up front rather
+                // than emit a silently-broken sequence; the gap
+                // is documented in the M9 commit.
+                if self.symbols[id_idx].class == Token::Sys as i64
+                    && is_struct_ty(callee_ret_ty)
+                    && struct_ptr_depth(callee_ret_ty) == 0
+                {
+                    return Err(C5Error::Compile(format!(
+                        "{}: `{}` returns a struct by value, but the \
+                         platform-ABI struct-return convention isn't \
+                         implemented for Token::Sys calls. Use a \
+                         pointer-returning variant or pass an out-buffer.",
+                        self.lex.line, fn_name_for_warn
+                    )));
+                }
                 let mut nargs = 0;
                 // For struct returns, allocate a result temp now
                 // so its address can be pushed before the
@@ -878,6 +900,31 @@ impl Compiler {
                     }
 
                     arg_is_fp.push(is_floating_scalar(self.ty));
+                    // Refuse passing a struct by value to a
+                    // Token::Sys callee. The c5-internal "push
+                    // the address" convention works for c5-to-c5
+                    // calls (the callee copies into a fresh local
+                    // on entry); platform ABIs for libc instead
+                    // expect the bytes packed into argument
+                    // registers (SysV/AAPCS64: 1-2 GPRs for
+                    // structs <= 16 bytes; Win64: a single GPR
+                    // for <= 8 bytes, hidden pointer otherwise).
+                    // Implementing those splits is future work;
+                    // for now flag the mismatch loudly.
+                    if self.symbols[id_idx].class == Token::Sys as i64
+                        && is_struct_ty(self.ty)
+                        && struct_ptr_depth(self.ty) == 0
+                    {
+                        return Err(C5Error::Compile(format!(
+                            "{}: argument {} of `{}` is a struct passed by value, \
+                             but the platform-ABI struct-arg convention isn't \
+                             implemented for Token::Sys calls. Pass `&s` (a \
+                             pointer to the struct) instead.",
+                            arg_line,
+                            nargs + 1,
+                            fn_name_for_warn
+                        )));
+                    }
                     self.emit_op(Op::Si);
                     nargs += 1;
                     if self.lex.tk == ',' as i64 {

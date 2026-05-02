@@ -139,6 +139,12 @@ impl Reg {
     pub const X8: Reg = Reg(8); // Linux/aarch64 intrinsic number register
     pub const X16: Reg = Reg(16); // IP0 -- temp scratch
     pub const X17: Reg = Reg(17); // IP1 -- second temp
+    /// AAPCS64 reserves x18 as the "platform register". On
+    /// Windows/aarch64 it always holds the TEB pointer; the
+    /// PE TLS lowering pulls `TEB->ThreadLocalStoragePointer`
+    /// out of `[x18 + 0x58]`. Linux and macOS leave x18 free
+    /// and we don't otherwise touch it.
+    pub const X18: Reg = Reg(18);
     pub const X19: Reg = Reg(19); // VM accumulator (callee-saved)
     /// Base of the callee-saved pseudo-stack pool used by the
     /// native optimizer. Slot N (in [`PoolBank::Callee`]) maps to
@@ -605,6 +611,31 @@ pub(super) fn enc_str_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
     0xF900_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
+/// `LDR <Wt>, [<Xn|SP>, #imm]` -- 32-bit load (zero-extended into
+/// `Xt`), immediate offset scaled by 4. Used by the Win64 TLS
+/// lowering to read the 4-byte `_tls_index` slot.
+pub(super) fn enc_ldr32_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    debug_assert!(imm.is_multiple_of(4), "ldr32 imm: {imm} not 4-byte aligned");
+    let scaled = imm / 4;
+    debug_assert!(scaled < 4096, "ldr32 imm: {imm} > 16380");
+    0xB940_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LDR <Xt>, [<Xn|SP>, <Xm>, LSL #3]` -- 64-bit load, base-plus-
+/// register-shifted-by-3. Used by the Win64 TLS lowering to fetch
+/// `tls_array[_tls_index]` (each entry is 8 bytes, hence LSL #3).
+/// Encoded via the "load/store register, register" form with
+/// option = 011 (LSL/UXTX) and S = 1 (scale by access size).
+pub(super) fn enc_ldr_reg_lsl3(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+    // Base opcode: 11_111_000_011 Rm 011 S 10 Rn Rt
+    // option=011 (LSL/UXTX) for 64-bit Xm; S=1 means shift by
+    // log2(access_size)=3 (since access_size=8). Verified against
+    // clang's encoding of `ldr x16, [x16, x17, lsl #3]` (0xF8717A10):
+    // 0xF8607800 is the fixed-bits mask, and OR-in of Rm=17, Rn=16,
+    // Rt=16 produces the canonical hex.
+    0xF860_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
 /// `LDRB <Wt>, [<Xn|SP>, #imm]` -- byte load, zero-extended into a
 /// 32-bit register (which on AArch64 means the high 32 bits of the
 /// 64-bit register are also cleared). c4 promotes char to int on
@@ -936,6 +967,17 @@ pub(super) fn lower(
     // `bytecode_to_native`, so we record (adrp_offset, target_bytecode_pc)
     // here and rewrite into `Build::func_fixups` once the map is final.
     let mut pending_func_fixups: Vec<(usize, usize)> = Vec::new();
+    // Win64 TLS-index fixups -- one entry per `Op::TlsLea` site
+    // when targeting Windows. The PE writer reserves the
+    // `_tls_index` DWORD slot and patches each fixup with the
+    // displacement to it.
+    let mut tls_index_fixups: Vec<super::TlsIndexFixup> = Vec::new();
+    // macOS arm64 TLV: each unique TLS variable's offset gets a
+    // descriptor index; the writer emits a 24-byte
+    // `__thread_vars` descriptor per index. Each `Op::TlsLea`
+    // site records an `adrp + add` pair via `macho_tlv_fixups`.
+    let mut macho_tlv_fixups: Vec<super::MachoTlvFixup> = Vec::new();
+    let mut macho_tlv_descriptors: Vec<super::MachoTlvDescriptor> = Vec::new();
 
     // Compiler's data-Imm side channel as a sorted slice (binary search
     // is fine -- this list grows linearly with the number of distinct
@@ -992,6 +1034,9 @@ pub(super) fn lower(
             &mut got_fixups,
             &mut data_fixups,
             &mut pending_func_fixups,
+            &mut tls_index_fixups,
+            &mut macho_tlv_fixups,
+            &mut macho_tlv_descriptors,
             data_imm_positions,
             in_main,
             abi,
@@ -1098,6 +1143,9 @@ pub(super) fn lower(
         abi: super::Abi::default(),
         tls_data: program.tls_data.clone(),
         tls_init_size: program.tls_init_size,
+        tls_index_fixups,
+        macho_tlv_fixups,
+        macho_tlv_descriptors,
     })
 }
 
@@ -1170,6 +1218,9 @@ fn lower_op(
     got_fixups: &mut Vec<GotFixup>,
     data_fixups: &mut Vec<DataFixup>,
     pending_func_fixups: &mut Vec<(usize, usize)>,
+    tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
+    macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
+    macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
     data_imm_positions: &[usize],
     in_main: bool,
     abi: Abi,
@@ -1530,35 +1581,119 @@ fn lower_op(
             emit(code, enc_fmov_d_to_x(Reg::X19, 0));
         }
         Op::TlsLea => {
-            // `_Thread_local` global access. Linux/aarch64 uses
-            // variant-1 layout: `var_addr = TPIDR_EL0 + 16 + offset`
-            // where 16 is the TLS_TCB_SIZE constant glibc reserves
-            // ahead of the TLS image. The encoding stays inside
-            // `add (immediate)`'s 12-bit field for variables under
-            // 4080 bytes from the start of `.tdata`; programs with
-            // larger TLS would need a movz/movk sequence the
-            // current lowering doesn't emit (good first crash to
-            // chase if anyone trips it).
+            // `_Thread_local` global access. Two lowerings live
+            // here:
+            //
+            // * Linux/aarch64 -- variant-1 layout:
+            //   `var_addr = TPIDR_EL0 + 16 + offset` where 16 is
+            //   the TLS_TCB_SIZE constant glibc reserves ahead of
+            //   the TLS image. Encoding stays inside `add
+            //   (immediate)`'s 12-bit field for variables under
+            //   4080 bytes from the start of `.tdata`.
+            //
+            // * Windows/aarch64 -- TLS directory + `_tls_index`:
+            //   the loader fills in `_tls_index` (a DWORD) with
+            //   the slot it picked, and stores per-thread TLS
+            //   pointers in `TEB->ThreadLocalStoragePointer` at
+            //   `[x18 + 0x58]`. Per access:
+            //       ldr  x16, [x18, #0x58]           ; tls_array
+            //       adrp x17, _tls_index_page        ; (writer-patched)
+            //       ldr  w17, [x17, #_tls_index_off] ; (writer-patched)
+            //       ldr  x16, [x16, x17, lsl #3]     ; tls_array[index]
+            //       add  x19, x16, #offset           ; final address
+            //   Same `add (immediate)` 12-bit limit on the
+            //   per-variable offset.
             let offset = read_operand(text, pc, "TlsLea")?;
-            if !matches!(target, Target::LinuxAarch64) {
-                return Err(C5Error::Compile(format!(
-                    "{:?}: `_Thread_local` codegen is only implemented for \
-                     Linux/aarch64; macOS arm64 (__thread_data + \
-                     __tlv_bootstrap) and Windows/AArch64 (TLS directory) \
-                     are future work",
-                    target
-                )));
+            match target {
+                Target::LinuxAarch64 => {
+                    let imm = (offset + 16) as u32;
+                    if imm >= 4096 {
+                        return Err(C5Error::Compile(format!(
+                            "_Thread_local offset {imm} doesn't fit in \
+                             `add` imm12; extend the lowering to emit \
+                             movz/movk if you need larger TLS blocks"
+                        )));
+                    }
+                    emit(code, enc_mrs_tpidr_el0(Reg::X19));
+                    emit(code, enc_add_imm(Reg::X19, Reg::X19, imm));
+                }
+                Target::WindowsAarch64 => {
+                    if offset >= 4096 {
+                        return Err(C5Error::Compile(format!(
+                            "_Thread_local offset {offset} doesn't fit in \
+                             `add` imm12; extend the lowering to emit \
+                             movz/movk if you need larger TLS blocks"
+                        )));
+                    }
+                    // ldr x16, [x18, #0x58]
+                    emit(code, enc_ldr_imm(Reg::X16, Reg::X18, 0x58));
+                    // adrp x17, _tls_index ; ldr w17, [x17, #_tls_index_off]
+                    // The pair is patched by the PE writer once the
+                    // _tls_index slot's RVA is known.
+                    let pair_off = code.len();
+                    tls_index_fixups.push(super::TlsIndexFixup {
+                        instr_offset: pair_off,
+                    });
+                    emit(code, enc_adrp(Reg::X17, 0));
+                    emit(code, enc_ldr32_imm(Reg::X17, Reg::X17, 0));
+                    // ldr x16, [x16, x17, lsl #3]
+                    emit(code, enc_ldr_reg_lsl3(Reg::X16, Reg::X16, Reg::X17));
+                    // add x19, x16, #offset
+                    emit(code, enc_add_imm(Reg::X19, Reg::X16, offset as u32));
+                }
+                Target::MacOSAarch64 => {
+                    // Apple TLV (Thread-Local Variables): each
+                    // `_Thread_local` global gets a 24-byte
+                    // `__thread_vars` descriptor in `__DATA`.
+                    // Slot 0 of the descriptor is a function
+                    // pointer to a getter routine -- bound to
+                    // `__tlv_bootstrap` from libSystem at load
+                    // time, replaced with a fast getter on first
+                    // access. The getter takes the descriptor
+                    // address in x0 and returns the variable's
+                    // per-thread address in x0.
+                    //
+                    // Sequence:
+                    //     adrp x0, descriptor_page    (writer-patched)
+                    //     add  x0, x0, #descriptor_off (writer-patched)
+                    //     ldr  x16, [x0]              ; thunk getter
+                    //     blr  x16                    ; x0 = &var
+                    //     mov  x19, x0                ; copy to acc
+                    let descriptor_index = match macho_tlv_descriptors
+                        .iter()
+                        .position(|d| d.offset_in_block == offset as u64)
+                    {
+                        Some(i) => i,
+                        None => {
+                            macho_tlv_descriptors.push(super::MachoTlvDescriptor {
+                                offset_in_block: offset as u64,
+                            });
+                            macho_tlv_descriptors.len() - 1
+                        }
+                    };
+                    let adrp_off = code.len();
+                    macho_tlv_fixups.push(super::MachoTlvFixup {
+                        adrp_offset: adrp_off,
+                        descriptor_index,
+                    });
+                    // adrp x0, _ ; add x0, x0, #_ -- placeholder.
+                    emit(code, enc_adrp(Reg::X0, 0));
+                    emit(code, enc_add_imm(Reg::X0, Reg::X0, 0));
+                    // ldr x16, [x0]
+                    emit(code, enc_ldr_imm(Reg::X16, Reg::X0, 0));
+                    // blr x16
+                    emit(code, enc_blr(Reg::X16));
+                    // mov x19, x0
+                    emit_mov_reg(code, Reg::X19, Reg::X0);
+                }
+                _ => {
+                    return Err(C5Error::Compile(format!(
+                        "{:?}: `_Thread_local` codegen is only implemented for \
+                         Linux/aarch64, Windows/aarch64, and macOS/aarch64",
+                        target
+                    )));
+                }
             }
-            let imm = (offset + 16) as u32;
-            if imm >= 4096 {
-                return Err(C5Error::Compile(format!(
-                    "_Thread_local offset {imm} doesn't fit in `add` imm12; \
-                     extend the lowering to emit movz/movk if you need \
-                     larger TLS blocks"
-                )));
-            }
-            emit(code, enc_mrs_tpidr_el0(Reg::X19));
-            emit(code, enc_add_imm(Reg::X19, Reg::X19, imm));
         }
         Op::Mcpy => {
             // src = x19, dst = pop. Copy `size` bytes (size is a
@@ -1679,19 +1814,57 @@ fn emit_libc_call(
 
     if is_variadic {
         // macOS arm64 variadic ABI: the first `fixed_args`
-        // arguments go in `int_arg_regs` per AAPCS64; the
-        // variadic tail spills to a fresh stack region with
-        // 8-byte spacing.
-        let fixed = imp.fixed_args.min(arg_count).min(abi.int_arg_regs.len());
+        // arguments follow standard AAPCS64 (ints to x0..x7,
+        // FP scalars to d0..d7); the variadic tail ALL spills
+        // to a fresh stack region with 8-byte spacing -- no FP
+        // registers are used for variadic args on Apple
+        // platforms (the AAPCS64 quirk), and we transfer the
+        // raw bit pattern, which is what va_arg(double) reads
+        // back off the stack.
+        let fixed = imp.fixed_args.min(arg_count);
         // With cdecl push order, c5-arg-i sits at sp + i*16.
+        // Walk fixed args with independent int / FP counters,
+        // matching the non-variadic AAPCS64 path so that any FP
+        // value among the fixed args lands in d0..d7 instead of
+        // x0..x7.
+        let mut int_idx = 0usize;
+        let mut fp_idx = 0usize;
         for i in 0..fixed {
             let off = (i as u32) * 16;
-            emit(code, enc_ldr_imm(Reg(abi.int_arg_regs[i]), Reg::SP, off));
+            let is_fp = (fp_arg_mask & (1u32 << i)) != 0;
+            if is_fp && fp_idx < 8 {
+                emit(code, enc_ldr_d_imm(fp_idx as u8, Reg::SP, off));
+                fp_idx += 1;
+            } else if !is_fp && int_idx < abi.int_arg_regs.len() {
+                let r = Reg(abi.int_arg_regs[int_idx]);
+                emit(code, enc_ldr_imm(r, Reg::SP, off));
+                int_idx += 1;
+            } else {
+                // Out of registers in the fixed prefix. macOS
+                // arm64 spills any overflow onto the same stack
+                // region as the variadic tail; fall through to
+                // the variadic packer by re-classing this arg
+                // as "variadic" for placement purposes. Today's
+                // bindings (printf, sprintf, ...) don't fill the
+                // 8-reg int bank with fixed args, so this is a
+                // future-proofing branch -- diagnostic-only.
+                return Err(C5Error::Compile(format!(
+                    "macOS arm64 variadic call: fixed arg {i} \
+                     exceeds register banks (int_idx={int_idx}, \
+                     fp_idx={fp_idx}); stack-overflow for fixed \
+                     args isn't wired up yet"
+                )));
+            }
         }
         let n_var = arg_count - fixed;
         if n_var > 0 {
             // Pack variadic args into a fresh stack region.
             // 8-byte slots; round up to 16 to keep SP aligned.
+            // FP variadic args ride the same int-style transfer
+            // because the c5 IR already stores doubles as their
+            // bit pattern in a GPR slot, and macOS va_arg(double)
+            // reads 8 raw bytes off the stack -- bit-for-bit
+            // identical to the integer transfer.
             let scratch_bytes = ((n_var * 8 + 15) & !15) as u32;
             emit(code, enc_sub_imm(Reg::SP, Reg::SP, scratch_bytes));
             for i in 0..n_var {
@@ -2326,6 +2499,42 @@ mod tests {
     fn sub_sp_sp_32() {
         // sub sp, sp, #32  ->  0xD10083FF  (covers the 12-bit shift)
         assert_eq!(enc_sub_imm(Reg::SP, Reg::SP, 32), 0xD100_83FF);
+    }
+
+    /// `LDR Xt, [Xn, Xm, LSL #3]` -- Win64 TLS lookup uses this to
+    /// fetch `tls_array[_tls_index]`. Verified against clang.
+    #[test]
+    fn ldr_x16_x16_x17_lsl3() {
+        // ldr x16, [x16, x17, lsl #3]  ->  0xF8717A10
+        assert_eq!(enc_ldr_reg_lsl3(Reg::X16, Reg::X16, Reg::X17), 0xF871_7A10);
+    }
+
+    /// `LDR Wt, [Xn, #imm]` -- 32-bit unsigned-offset load. The
+    /// Win64 TLS lookup uses this to read the 4-byte `_tls_index`
+    /// slot. Verified against clang.
+    #[test]
+    fn ldr_w17_x17_4() {
+        // ldr w17, [x17, #4]  ->  0xB9400631
+        assert_eq!(enc_ldr32_imm(Reg::X17, Reg::X17, 4), 0xB940_0631);
+    }
+
+    /// `LDR Xt, [X18, #0x58]` -- the Win64 TLS lookup pulls
+    /// `TEB->ThreadLocalStoragePointer` out of `[x18 + 0x58]`,
+    /// and the encoder needs to handle x18 as a base. Verified
+    /// against clang.
+    #[test]
+    fn ldr_x16_x18_0x58() {
+        // ldr x16, [x18, #0x58]  ->  0xF9402E50
+        assert_eq!(enc_ldr_imm(Reg::X16, Reg::X18, 0x58), 0xF940_2E50);
+    }
+
+    /// `MRS Xt, TPIDR_EL0` -- Linux/aarch64 TLS lookup reads the
+    /// per-thread pointer system register here. Verified against
+    /// clang.
+    #[test]
+    fn mrs_x19_tpidr_el0() {
+        // mrs x19, tpidr_el0  ->  0xD53BD053
+        assert_eq!(enc_mrs_tpidr_el0(Reg::X19), 0xD53B_D053);
     }
 
     // Encoder spot checks. Each expected byte string was pasted from

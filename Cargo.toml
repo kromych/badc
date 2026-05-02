@@ -20,3 +20,10 @@ default = ["std"]
 std = []
 
 [dependencies]
+# `hashbrown` is the no_std-friendly hash table the preprocessor uses
+# for the macro tables. We keep it on `default-features = false` so
+# it doesn't drag in `ahash`'s rng init or the `serde` feature -- we
+# just want the map. The default `foldhash` hasher is fine for our
+# purely internal keys (macro names) and avoids the small extra cost
+# of the `aHashMap` initialisation.
+hashbrown = { version = "0.17", default-features = false, features = ["default-hasher"] }

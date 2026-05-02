@@ -172,18 +172,33 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
     // a change; we loop until none of them did. Bound the loop with a
     // hard cap to defend against an oscillation bug -- the normal case
     // converges in 2-3 passes.
+    //
+    // The branch-target set is shared across the four peephole passes
+    // that need it (used to be rebuilt 4x per iteration -- showed up
+    // as a real chunk of `-O` time on big inputs). None of our passes
+    // ever *adds* a new branch target; they only delete branches or
+    // retarget existing ones. So a snapshot taken at the top of the
+    // iteration may go stale (a target that's been deleted still
+    // appears live), but never the other way round -- which means a
+    // stale entry only ever causes us to skip a fold that's safe, and
+    // the next iteration picks it up.
+    let mut targets = collect_branch_targets(&insns);
     for _ in 0..16 {
         let mut changed = false;
-        changed |= peephole_constant_fold(&mut insns);
-        changed |= peephole_branch_on_constant(&mut insns);
+        changed |= peephole_constant_fold(&mut insns, &targets);
+        changed |= peephole_branch_on_constant(&mut insns, &targets);
         changed |= peephole_jump_to_next(&mut insns);
-        changed |= peephole_immediate_arith(&mut insns);
-        changed |= peephole_local_load(&mut insns);
+        changed |= peephole_immediate_arith(&mut insns, &targets);
+        changed |= peephole_local_load(&mut insns, &targets);
         changed |= branch_threading(&mut insns);
         changed |= dead_code_elimination(&mut insns, entry_idx);
         if !changed {
             break;
         }
+        // Something changed: refresh the target set for the next
+        // iteration. Cheap (one O(N) sweep) compared to the four
+        // rebuilds we used to do per iteration.
+        targets = collect_branch_targets(&insns);
     }
 
     let (text, entry_pc, data_imm_positions) = encode(&insns, entry_idx);
@@ -484,8 +499,7 @@ fn collect_branch_targets(insns: &[Insn]) -> Vec<bool> {
 /// instructions become `Removed`; the fourth carries the folded value.
 /// Skip the fold if any of the intermediate instructions is itself a
 /// branch target -- somebody might land mid-sequence.
-fn peephole_constant_fold(insns: &mut [Insn]) -> bool {
-    let targets = collect_branch_targets(insns);
+fn peephole_constant_fold(insns: &mut [Insn], targets: &[bool]) -> bool {
     let mut changed = false;
     let n = insns.len();
     let mut i = 0;
@@ -586,8 +600,7 @@ fn fold_arith(op: Op, a: i64, b: i64) -> Option<i64> {
 
 /// `Imm K; Bz/Bnz T` collapses to either an unconditional jump or a
 /// fall-through (in which case both insns vanish).
-fn peephole_branch_on_constant(insns: &mut [Insn]) -> bool {
-    let targets = collect_branch_targets(insns);
+fn peephole_branch_on_constant(insns: &mut [Insn], targets: &[bool]) -> bool {
     let mut changed = false;
     let n = insns.len();
     let mut i = 0;
@@ -656,8 +669,7 @@ fn peephole_jump_to_next(insns: &mut [Insn]) -> bool {
 /// `Psh; Imm N; <arith|cmp>` -> fused `<op>I N`. Saves one VM dispatch
 /// per arithmetic-with-constant. Hugely common (`i + 1`, `p + sizeof(int)`,
 /// `n < limit`, etc.).
-fn peephole_immediate_arith(insns: &mut [Insn]) -> bool {
-    let targets = collect_branch_targets(insns);
+fn peephole_immediate_arith(insns: &mut [Insn], targets: &[bool]) -> bool {
     let mut changed = false;
     let n = insns.len();
     let mut i = 0;
@@ -717,8 +729,7 @@ fn immediate_form(op: Op) -> Option<Op> {
 
 /// `Lea N; Li/Lc` -> `LdLocI N` / `LdLocC N`. Local reads dominate
 /// non-trivial programs; this halves their dispatch overhead.
-fn peephole_local_load(insns: &mut [Insn]) -> bool {
-    let targets = collect_branch_targets(insns);
+fn peephole_local_load(insns: &mut [Insn], targets: &[bool]) -> bool {
     let mut changed = false;
     let n = insns.len();
     let mut i = 0;

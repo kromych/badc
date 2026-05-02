@@ -54,10 +54,12 @@
 //! one-for-one so error messages from the lexer keep meaningful
 //! line numbers.
 
-use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::collections::BTreeSet;
 use alloc::format;
 use alloc::string::{String, ToString};
+
 use alloc::vec::Vec;
+use hashbrown::HashMap;
 
 use super::codegen::Target;
 use super::error::C5Error;
@@ -132,8 +134,12 @@ struct FnMacro {
 /// Output of a successful preprocessor run: the substituted source
 /// for the lexer plus the side data the codegen will pick up later.
 pub(crate) struct Preprocessor {
-    macros: BTreeMap<String, String>,
-    fn_macros: BTreeMap<String, FnMacro>,
+    // Hash maps rather than BTreeMaps because the preprocessor probes
+    // `macros` once per source identifier -- a tree walk's log-N
+    // string-prefix compares were the leftover frontend hot spot
+    // after the symbol-table fix went in.
+    macros: HashMap<String, String>,
+    fn_macros: HashMap<String, FnMacro>,
     /// One entry per `#pragma dylib(name, "path")`, in the order
     /// declared. Each entry collects the bindings whose
     /// `name::c4_fn` qualifier referenced its [`DylibSpec::name`].
@@ -184,7 +190,7 @@ impl Preprocessor {
     ///     our Windows targets are 64-bit) plus the legacy
     ///     `__BADC_WINDOWS__` we used before this commit.
     pub fn new(target_spec: &str, target: Target, crate_version: &str) -> Self {
-        let mut macros = BTreeMap::new();
+        let mut macros: HashMap<String, String> = HashMap::new();
         macros.insert(
             "__BADC_VERSION__".to_string(),
             format!("\"{crate_version}\""),
@@ -217,7 +223,7 @@ impl Preprocessor {
         }
         Self {
             macros,
-            fn_macros: BTreeMap::new(),
+            fn_macros: HashMap::new(),
             dylibs: Vec::new(),
             exports: Vec::new(),
             pragma_once_files: BTreeSet::new(),
@@ -431,12 +437,12 @@ impl Preprocessor {
                 // Object-like expansion. Re-run substitute on the
                 // result so a body that mentions a function-like
                 // macro (e.g. `#define TWICE INC(INC(0))`) gets the
-                // INC(...) calls expanded too.
-                let expanded = self.expand(ident);
-                if expanded == ident {
-                    out.push_str(&expanded);
-                } else {
-                    out.push_str(&self.substitute(&expanded));
+                // INC(...) calls expanded too. Hot path is the
+                // not-a-macro case -- the early `None` saves an
+                // allocation per source identifier.
+                match self.expand(ident) {
+                    None => out.push_str(ident),
+                    Some(expanded) => out.push_str(&self.substitute(&expanded)),
                 }
             } else if c == b'"' {
                 // Copy string literals verbatim so identifier-looking
@@ -466,29 +472,42 @@ impl Preprocessor {
     }
 
     /// Iteratively expand a single identifier through the macro
-    /// table. If `name` isn't a macro, returns it unchanged.
-    fn expand(&self, name: &str) -> String {
-        let mut current = name.to_string();
-        // Cap expansion depth to defeat pathological chains; 32 is
-        // plenty for the macro-to-macro substitution the user asked for.
+    /// table. Returns `None` if `name` isn't a macro at all -- this is
+    /// the fast path for the common case (the source has way more
+    /// non-macro identifiers than macro hits) and lets callers skip
+    /// allocating a String just to compare it back against the input.
+    fn expand(&self, name: &str) -> Option<String> {
+        let first = self.macros.get(name)?;
+        // We've got at least one substitution. Follow the
+        // `#define A B` -> `#define B 5` chain up to a fixed depth so
+        // a `#define A A` self-loop doesn't spin forever.
+        let mut current = first.clone();
         for _ in 0..32 {
             match self.macros.get(&current) {
                 Some(next) if next != &current => current = next.clone(),
                 _ => break,
             }
         }
-        current
+        Some(current)
+    }
+
+    /// `expand` but with the original name returned (allocated as a
+    /// String) when nothing matched. Used by the `#if` evaluator,
+    /// which runs rarely and prefers the simpler "always have a
+    /// String" shape.
+    fn expand_or_self(&self, name: &str) -> String {
+        self.expand(name).unwrap_or_else(|| name.to_string())
     }
 
     fn eval_condition(&self, expr: &str, line_no: usize) -> Result<bool, C5Error> {
         let expr = expr.trim();
         if let Some((lhs, rhs)) = expr.split_once("==") {
-            let l = self.expand(lhs.trim());
-            let r = self.expand(rhs.trim());
+            let l = self.expand_or_self(lhs.trim());
+            let r = self.expand_or_self(rhs.trim());
             Ok(l == r)
         } else if let Some((lhs, rhs)) = expr.split_once("!=") {
-            let l = self.expand(lhs.trim());
-            let r = self.expand(rhs.trim());
+            let l = self.expand_or_self(lhs.trim());
+            let r = self.expand_or_self(rhs.trim());
             Ok(l != r)
         } else if let Some(name) = expr
             .strip_prefix("defined(")
@@ -499,7 +518,7 @@ impl Preprocessor {
             // Bare identifier: truthy iff defined and the expansion
             // is a non-zero, non-empty value. Anything else lands in
             // the error path below so the source author notices.
-            let v = self.expand(expr);
+            let v = self.expand_or_self(expr);
             Ok(!v.is_empty() && v != "0")
         } else {
             Err(C5Error::Compile(format!(

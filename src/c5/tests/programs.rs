@@ -162,6 +162,43 @@ fn struct_self_referential_linked_list() {
 }
 
 #[test]
+fn global_initializer_int() {
+    // `int answer = 42;` smoke test -- the c5 frontend writes
+    // the initializer's bytes into `.data` at the symbol's
+    // offset. Returns answer + sentinel = 141.
+    assert_eq!(run_fixture("global_initializer_int.c"), 141);
+}
+
+#[test]
+fn global_initializer_pointer() {
+    // `int *p = &target;` exercises the address-of-global
+    // relocation channel. The VM ignores the relocation entries
+    // (it stores the target's data offset directly), so this
+    // test catches frontend bugs; native parity tests catch
+    // per-format relocation bugs.
+    assert_eq!(run_fixture("global_initializer_pointer.c"), 0);
+}
+
+#[test]
+fn static_linked_list() {
+    // Static linked list: 3 nodes in `.data`, head pointer
+    // initialized to `&node_a`. Walks the list via the
+    // statically-relocated head pointer; the node `next`
+    // pointers are wired up at runtime since c5 doesn't yet
+    // have struct-field-initializer syntax.
+    assert_eq!(run_fixture("static_linked_list.c"), 0);
+}
+
+#[test]
+fn thread_local_initializer() {
+    // `_Thread_local int counter = 7;` -- the VM doesn't
+    // distinguish .tdata from .tbss (single-threaded), so
+    // tls_data bytes are read directly. Returns 0 on
+    // success.
+    assert_eq!(run_fixture("thread_local_initializer.c"), 0);
+}
+
+#[test]
 fn struct_sizeof_reports_aggregate_size() {
     // sizeof(struct Three) == 24, etc. Returns 0 on success.
     assert_eq!(run_fixture("struct_sizeof.c"), 0);

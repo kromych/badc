@@ -493,6 +493,13 @@ pub(crate) struct Build {
     /// offset_in_block ]`. Empty unless the target is macOS arm64
     /// and the program declares `_Thread_local` globals.
     pub macho_tlv_descriptors: Vec<MachoTlvDescriptor>,
+    /// Address-of-global initializers (`int *p = &x;`). Each
+    /// entry pairs a 8-byte slot in `data` with the data-
+    /// segment offset of the variable being pointed at. Mirror
+    /// of [`Program::data_relocs`]; `lower_for` clones it onto
+    /// `Build` so the per-format writer doesn't have to plumb
+    /// the program through alongside the build.
+    pub data_relocs: Vec<crate::c5::program::DataReloc>,
 }
 
 /// One macOS arm64 Thread-Local Variable. A 24-byte `__thread_vars`
@@ -730,6 +737,7 @@ fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Resul
     };
     build.imports = imports;
     build.abi = target.abi();
+    build.data_relocs = program.data_relocs.clone();
     append_build_info(&mut build);
     Ok(build)
 }

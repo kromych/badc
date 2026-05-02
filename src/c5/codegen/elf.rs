@@ -1013,8 +1013,24 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
     // via .rela.dyn / R_AARCH64_GLOB_DAT before _start runs.
     out.extend(vec![0u8; got_size as usize]);
 
-    // build.data -- the program's static data segment.
-    out.extend_from_slice(&build.data);
+    // build.data -- the program's static data segment, with
+    // pointer-to-global initializers resolved to absolute VAs.
+    // ET_EXEC means the loader maps at the link-time vmaddr
+    // (no slide), so the bytes can hold the final VA verbatim
+    // -- no `.rela.dyn` relocations needed.
+    let mut data_with_relocs = build.data.clone();
+    for r in &build.data_relocs {
+        let absolute = data_vmaddr + r.target_offset;
+        let off = r.data_offset as usize;
+        if off + 8 > data_with_relocs.len() {
+            return Err(C5Error::Compile(format!(
+                "ELF: data reloc offset {off:#x} past end of .data ({})",
+                data_with_relocs.len()
+            )));
+        }
+        data_with_relocs[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
+    }
+    out.extend_from_slice(&data_with_relocs);
 
     // .tdata -- initialised TLS image. The first `tls_init_size`
     // bytes of `build.tls_data`. The loader copies these into each
@@ -1174,6 +1190,7 @@ mod tests {
             tls_data: Vec::new(),
             tls_init_size: 0,
             tls_index_fixups: Vec::new(),
+            data_relocs: Vec::new(),
             macho_tlv_fixups: Vec::new(),
             macho_tlv_descriptors: Vec::new(),
         }

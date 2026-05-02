@@ -279,7 +279,12 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
     // the ASLR-aware loader uses `.reloc` to fix them up after
     // sliding the image.
     let data_section_present = !build.data.is_empty() || !build.tls_data.is_empty();
-    let reloc_section_present = !build.tls_data.is_empty();
+    // `.reloc` is needed when the image carries any absolute
+    // pointer the loader has to fix up after sliding -- today
+    // that's the three TLS-directory VAs (when TLS is
+    // present) plus one entry per `int *p = &x;`-style data
+    // reloc.
+    let reloc_section_present = !build.tls_data.is_empty() || !build.data_relocs.is_empty();
     let headers_size = headers_raw_size(data_section_present, reloc_section_present) as u32;
 
     let text_rva: u32 = SECTION_ALIGNMENT;
@@ -363,7 +368,12 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
         0
     };
     let reloc_bytes: Vec<u8> = if reloc_section_present {
-        build_tls_reloc_block(data_rva, &tls_layout)
+        build_reloc_section(
+            data_rva,
+            &tls_layout,
+            !build.tls_data.is_empty(),
+            &build.data_relocs,
+        )
     } else {
         Vec::new()
     };
@@ -566,7 +576,24 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
     out.extend_from_slice(&idata_bytes);
     pad_to(&mut out, (idata_file_off + idata_raw_size) as usize);
     if data_section_present {
-        out.extend_from_slice(&build.data);
+        // Apply pointer-to-global initializers in `.data`:
+        // each `int *p = &x;` slot holds the preferred VA
+        // (ImageBase + data_rva + target_offset). The
+        // `.reloc` block lists each slot so the loader adds
+        // the slide delta after mapping.
+        let mut data_with_relocs = build.data.clone();
+        for r in &build.data_relocs {
+            let preferred_va = IMAGE_BASE + (data_rva + r.target_offset as u32) as u64;
+            let off = r.data_offset as usize;
+            if off + 8 > data_with_relocs.len() {
+                return Err(C5Error::Compile(format!(
+                    "PE: data reloc offset {off:#x} past end of .data ({})",
+                    data_with_relocs.len()
+                )));
+            }
+            data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
+        }
+        out.extend_from_slice(&data_with_relocs);
         if !build.tls_data.is_empty() {
             // Pad to where the `_tls_index` slot starts (4-byte
             // alignment).
@@ -640,13 +667,17 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
     Ok(out)
 }
 
-/// Build the `.reloc` section bytes for a TLS-using image.
-/// Emits a single `IMAGE_BASE_RELOCATION` block covering the
-/// three absolute VAs in `IMAGE_TLS_DIRECTORY64`
-/// (`StartAddressOfRawData`, `EndAddressOfRawData`,
-/// `AddressOfIndex`). All three sit within 24 bytes of each
-/// other inside the directory, so they always share the same
-/// 4 KiB page and fit in one block.
+/// Build the `.reloc` section bytes. Emits one
+/// `IMAGE_BASE_RELOCATION` block per 4 KiB page that contains
+/// any absolute pointer the loader needs to fix up after a
+/// slide. Sources of absolute pointers we care about today:
+///
+/// * The three VAs in `IMAGE_TLS_DIRECTORY64`
+///   (`StartAddressOfRawData`, `EndAddressOfRawData`,
+///   `AddressOfIndex`) -- emitted only when TLS is present.
+/// * Each `int *p = &x;`-style entry in `Build::data_relocs`
+///   -- the data slot's bytes hold the preferred VA of the
+///   target global, and the loader patches in the slide.
 ///
 /// Block layout:
 ///
@@ -656,34 +687,56 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
 ///   u16 entry[N]        -- high 4 bits: type, low 12 bits: offset within page
 /// ```
 ///
-/// We emit four entries -- three `IMAGE_REL_BASED_DIR64` plus
-/// one `IMAGE_REL_BASED_ABSOLUTE` (no-op) -- so `SizeOfBlock`
-/// rounds to a 4-byte multiple (8 + 4*2 = 16 bytes).
-fn build_tls_reloc_block(data_rva: u32, tls_layout: &TlsLayout) -> Vec<u8> {
-    let dir_rva = data_rva + tls_layout.directory_offset_in_data;
-    // Sanity: the directory's three pointer fields must share a
-    // page. The directory is 40 bytes, far smaller than 4 KiB,
-    // and we 8-byte-align its start, so this should always hold
-    // on any reasonable layout. If a future change ever makes
-    // the directory cross a page boundary, the writer would
-    // need to emit two blocks instead of one.
-    debug_assert_eq!(dir_rva & !0xFFF, (dir_rva + 16) & !0xFFF);
-    let page_rva = dir_rva & !0xFFF;
-    let off0 = ((dir_rva) & 0xFFF) as u16;
-    let off1 = ((dir_rva + 8) & 0xFFF) as u16;
-    let off2 = ((dir_rva + 16) & 0xFFF) as u16;
-    let entries: [u16; 4] = [
-        IMAGE_REL_BASED_DIR64 | off0, // StartAddressOfRawData
-        IMAGE_REL_BASED_DIR64 | off1, // EndAddressOfRawData
-        IMAGE_REL_BASED_DIR64 | off2, // AddressOfIndex
-        IMAGE_REL_BASED_ABSOLUTE,     // 4-byte alignment pad (no-op)
-    ];
-    let size_of_block: u32 = 8 + (entries.len() as u32) * 2; // 16
-    let mut out = Vec::with_capacity(size_of_block as usize);
-    out.extend_from_slice(&page_rva.to_le_bytes());
-    out.extend_from_slice(&size_of_block.to_le_bytes());
-    for entry in &entries {
-        out.extend_from_slice(&entry.to_le_bytes());
+/// `SizeOfBlock` must be 4-byte aligned, so blocks with an
+/// odd entry count get one trailing `IMAGE_REL_BASED_ABSOLUTE`
+/// pad entry.
+fn build_reloc_section(
+    data_rva: u32,
+    tls_layout: &TlsLayout,
+    tls_present: bool,
+    data_relocs: &[crate::c5::program::DataReloc],
+) -> Vec<u8> {
+    // Bucket every relocation target by the 4 KiB page it
+    // lives in. Per-page entries within a bucket get one
+    // shared `IMAGE_BASE_RELOCATION` header.
+    use alloc::collections::BTreeMap;
+    let mut by_page: BTreeMap<u32, Vec<u32>> = BTreeMap::new(); // page_rva -> [in-page offsets]
+    if tls_present {
+        let dir_rva = data_rva + tls_layout.directory_offset_in_data;
+        // Sanity: the directory's three pointer fields must
+        // share a page. The directory is 40 bytes, far smaller
+        // than 4 KiB, so this holds on any reasonable layout.
+        debug_assert_eq!(dir_rva & !0xFFF, (dir_rva + 16) & !0xFFF);
+        let page = dir_rva & !0xFFF;
+        let bucket = by_page.entry(page).or_default();
+        bucket.push(dir_rva & 0xFFF); // StartAddressOfRawData
+        bucket.push((dir_rva + 8) & 0xFFF); // EndAddressOfRawData
+        bucket.push((dir_rva + 16) & 0xFFF); // AddressOfIndex
+    }
+    for r in data_relocs {
+        let target_rva = data_rva + r.data_offset as u32;
+        let page = target_rva & !0xFFF;
+        by_page.entry(page).or_default().push(target_rva & 0xFFF);
+    }
+
+    let mut out = Vec::new();
+    for (page_rva, mut offsets) in by_page {
+        offsets.sort_unstable();
+        // Each entry is u16; SizeOfBlock must be 4-byte
+        // aligned. Pad with a no-op ABSOLUTE entry when the
+        // entry count is odd.
+        let needs_pad = !offsets.len().is_multiple_of(2);
+        let total_entries = offsets.len() + if needs_pad { 1 } else { 0 };
+        let size_of_block = 8 + total_entries as u32 * 2;
+        out.extend_from_slice(&page_rva.to_le_bytes());
+        out.extend_from_slice(&size_of_block.to_le_bytes());
+        for off in offsets {
+            let entry = IMAGE_REL_BASED_DIR64 | off as u16;
+            out.extend_from_slice(&entry.to_le_bytes());
+        }
+        if needs_pad {
+            out.extend_from_slice(&IMAGE_REL_BASED_ABSOLUTE.to_le_bytes());
+        }
     }
     out
 }

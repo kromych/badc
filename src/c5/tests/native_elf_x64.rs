@@ -231,6 +231,9 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("memcpy_basic.c", 'A' as i32),
     ("struct_basic.c", 25),
     ("struct_linked_list.c", 10),
+    ("global_initializer_int.c", 141),
+    ("global_initializer_pointer.c", 0),
+    ("static_linked_list.c", 0),
     ("struct_sizeof.c", 0),
     ("memory_ops.c", 0),
     ("linked_list.c", 10),
@@ -289,6 +292,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     // (tls_total - offset)) sequence on x86_64. Requires PT_TLS
     // + .tbss to exist in the ELF.
     ("thread_local_basic.c", 0),
+    ("thread_local_initializer.c", 0),
     // Per-thread isolation via pthread_create.
     ("thread_local_per_thread.c", 0),
     // Variadic FP packer: `printf("%f\n", 1.5)`. SysV pulls FP

@@ -138,6 +138,26 @@ const BIND_OPCODE_SET_TYPE_IMM: u8 = 0x50;
 const BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB: u8 = 0x70;
 const BIND_OPCODE_DO_BIND: u8 = 0x90;
 
+// ---- Rebase opcode stream. Used for in-image absolute
+//      pointers (e.g., `int *p = &x;` initializers): the
+//      file holds the preferred VA, dyld walks the rebase
+//      stream and adds the slide delta to each named slot
+//      after mapping the image. Same shape as the bind
+//      stream -- top nibble = opcode, bottom nibble = imm. ----
+
+const REBASE_OPCODE_DONE: u8 = 0x00;
+const REBASE_OPCODE_SET_TYPE_IMM: u8 = 0x10;
+const REBASE_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB: u8 = 0x20;
+/// `REBASE_OPCODE_DO_REBASE_IMM_TIMES` -- rebase N entries
+/// where N is encoded in the low 4 bits of the opcode byte.
+/// We use this for the per-DataReloc emission (one entry at
+/// a time -- imm=1) rather than the ULEB form, since a
+/// 4-bit count is always enough for a single bump and the
+/// shorter encoding shaves a byte per reloc.
+const REBASE_OPCODE_DO_REBASE_IMM_TIMES: u8 = 0x50;
+
+const REBASE_TYPE_POINTER: u8 = 1;
+
 const BIND_TYPE_POINTER: u8 = 1;
 
 /// nlist_64 type bits.
@@ -557,8 +577,10 @@ fn segment_data_with_tlv(
     thread_vars_addr: u64,
     thread_vars_size: u64,
     thread_vars_offset: u32,
-    thread_bss_addr: u64,
-    thread_bss_size: u64,
+    thread_storage_addr: u64,
+    thread_storage_size: u64,
+    thread_storage_offset: u32,
+    thread_storage_initialised: bool,
 ) -> Vec<u8> {
     const TOTAL: usize = SEGMENT_COMMAND_64_SIZE + 4 * SECTION_64_SIZE;
     let mut out = Vec::with_capacity(TOTAL);
@@ -634,22 +656,44 @@ fn segment_data_with_tlv(
             reserved3: 0,
         },
     );
-    // __thread_bss -- per-thread zero-fill storage. Section
-    // type S_THREAD_LOCAL_ZEROFILL (0x12) tells dyld to allocate
-    // this many bytes per thread. No file backing -- the
-    // section's `offset` is 0 and the `size` is what matters.
+    // Per-thread storage area. Two flavours: when *any* TLS
+    // variable has a static initializer, we emit
+    // `__thread_data` (S_THREAD_LOCAL_REGULAR = 0x11) -- a
+    // file-backed init template the loader copies into each
+    // thread's per-thread block. Otherwise we emit
+    // `__thread_bss` (S_THREAD_LOCAL_ZEROFILL = 0x12) -- no
+    // file backing, the loader just zero-fills the per-thread
+    // bytes.
+    //
+    // We don't try to split the byte range into "init prefix"
+    // and "zero-fill suffix" sections; the c5 frontend lays
+    // out TLS vars in declaration order and any uninit byte
+    // inside the init prefix is already zero (the parser
+    // pushes zero bytes per slot before optionally
+    // overwriting), so emitting the full block as
+    // `__thread_data` produces byte-for-byte the same
+    // per-thread result as the split layout.
+    let (storage_name, storage_flags, storage_file_offset) = if thread_storage_initialised {
+        (
+            *b"__thread_data\0\0\0",
+            S_THREAD_LOCAL_REGULAR,
+            thread_storage_offset,
+        )
+    } else {
+        (*b"__thread_bss\0\0\0\0", S_THREAD_LOCAL_ZEROFILL, 0)
+    };
     write_struct(
         &mut out,
         &Section64 {
-            sectname: pack_name16("__thread_bss"),
+            sectname: storage_name,
             segname: pack_name16("__DATA"),
-            addr: thread_bss_addr,
-            size: thread_bss_size,
-            offset: 0,
+            addr: thread_storage_addr,
+            size: thread_storage_size,
+            offset: storage_file_offset,
             align: 3,
             reloff: 0,
             nreloc: 0,
-            flags: S_THREAD_LOCAL_ZEROFILL,
+            flags: storage_flags,
             reserved1: 0,
             reserved2: 0,
             reserved3: 0,
@@ -1139,6 +1183,50 @@ struct TlvBindContext {
 /// `tlv_ctx.segment_offset + i*24` into __DATA (slots 1 and 2
 /// of each descriptor are not bound; dyld fills slot 1 and we
 /// fill slot 2 statically).
+/// Build the rebase opcode stream for in-image absolute
+/// pointers. Each `data_relocs` entry corresponds to one
+/// 8-byte slot inside `__DATA,__data` whose initial bytes
+/// hold a preferred-load-address VA; dyld walks this stream
+/// after mapping the image and adds the slide delta to each
+/// listed slot.
+///
+/// `data_section_offset_in_segment` is the byte offset of
+/// `__data` inside the `__DATA` segment. Each reloc's
+/// `data_offset` is the byte offset within `build.data`, so
+/// the segment-relative offset we feed to dyld is
+/// `data_section_offset_in_segment + data_offset`.
+fn build_rebase_opcodes(
+    data_relocs: &[crate::c5::program::DataReloc],
+    segment: u8,
+    data_section_offset_in_segment: u64,
+) -> Vec<u8> {
+    if data_relocs.is_empty() {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    out.push(REBASE_OPCODE_SET_TYPE_IMM | REBASE_TYPE_POINTER);
+    // Sort relocs by data_offset so we can walk them with a
+    // single SET_SEGMENT + DO_REBASE_ULEB_TIMES burst when
+    // contiguous, falling back to one explicit
+    // SET_SEGMENT_AND_OFFSET_ULEB + DO_REBASE per entry
+    // otherwise. Today's compiler emits at most a handful
+    // of relocs so we use the simple per-entry form;
+    // contiguous-burst is a future optimization.
+    let mut sorted: Vec<_> = data_relocs.to_vec();
+    sorted.sort_by_key(|r| r.data_offset);
+    for r in &sorted {
+        let seg_off = data_section_offset_in_segment + r.data_offset;
+        out.push(REBASE_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB | (segment & 0x0F));
+        put_uleb128(&mut out, seg_off);
+        // `REBASE_OPCODE_DO_REBASE_IMM_TIMES | 1` -- one entry,
+        // count packed into the low 4 bits of the opcode byte.
+        out.push(REBASE_OPCODE_DO_REBASE_IMM_TIMES | 1);
+    }
+    out.push(REBASE_OPCODE_DONE);
+    pad_to(&mut out, 8);
+    out
+}
+
 fn build_bind_opcodes(
     imports: &super::ResolvedImports,
     segment: u8,
@@ -1350,22 +1438,37 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
     } else {
         0
     };
-    let thread_bss_size: u64 = build.tls_data.len() as u64;
-    let thread_bss_offset_in_segment: u64 = if tls_present {
+    let thread_storage_size: u64 = build.tls_data.len() as u64;
+    let thread_storage_offset_in_segment: u64 = if tls_present {
         thread_vars_offset_in_segment + thread_vars_size
     } else {
         0
     };
-    // file image needs to cover: got + data + thread_vars (NOT
-    // thread_bss -- it's zero-fill only); vm image must additionally
-    // cover thread_bss.
+    // The "per-thread storage" section is either:
+    //   * `__thread_data` (file-backed, init template) when
+    //     any TLS variable has a `_Thread_local int x = 5;`
+    //     style initializer -- the loader copies these bytes
+    //     into each thread's region. Bytes for uninit
+    //     variables are zero from the parser, so emitting
+    //     the whole tls_data as init template is byte-equivalent.
+    //   * `__thread_bss` (no file backing) when there are
+    //     no TLS initializers -- the loader zero-fills the
+    //     per-thread region.
+    let thread_storage_initialised = build.tls_init_size > 0;
+    // File image needs got + data + thread_vars (always) and
+    // thread_data when initialised (file-backed). vm image
+    // covers everything plus thread_bss zero-fill.
     let data_segment_file_used: u64 = if tls_present {
-        thread_vars_offset_in_segment + thread_vars_size
+        if thread_storage_initialised {
+            thread_storage_offset_in_segment + thread_storage_size
+        } else {
+            thread_vars_offset_in_segment + thread_vars_size
+        }
     } else {
         data_section_offset_in_segment + program_data_size
     };
     let data_segment_vm_used: u64 = if tls_present {
-        thread_bss_offset_in_segment + thread_bss_size
+        thread_storage_offset_in_segment + thread_storage_size
     } else {
         data_segment_file_used
     };
@@ -1375,10 +1478,21 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
     let data_section_fileoff = data_fileoff + data_section_offset_in_segment;
     let thread_vars_vmaddr = data_vmaddr + thread_vars_offset_in_segment;
     let thread_vars_fileoff = data_fileoff + thread_vars_offset_in_segment;
-    let thread_bss_vmaddr = data_vmaddr + thread_bss_offset_in_segment;
+    let thread_storage_vmaddr = data_vmaddr + thread_storage_offset_in_segment;
+    let thread_storage_fileoff = data_fileoff + thread_storage_offset_in_segment;
 
-    // ---- bind opcodes (now that we know whether TLV bindings are
-    //      needed and where __thread_vars lives) ----
+    // ---- bind + rebase opcode streams ----
+    //
+    // Bind: every imported symbol (libc + the optional
+    // `__tlv_bootstrap` for TLV) gets one entry, and dyld
+    // resolves them at module-init time.
+    //
+    // Rebase: every `int *p = &x;`-style absolute pointer in
+    // the file gets one entry. The data bytes hold the
+    // preferred VA (image-base + RVA); dyld walks the rebase
+    // stream after sliding the image and adds the slide
+    // delta, so the runtime values are correct under ASLR
+    // (`MH_PIE` is set, so dyld always slides).
     let bind_ops = build_bind_opcodes(
         &build.imports,
         SEG_INDEX_DATA,
@@ -1390,6 +1504,11 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
         } else {
             None
         },
+    );
+    let rebase_ops = build_rebase_opcodes(
+        &build.data_relocs,
+        SEG_INDEX_DATA,
+        data_section_offset_in_segment,
     );
 
     // ---- symbol + string tables ----
@@ -1427,12 +1546,17 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
         symtab.extend_from_slice(&nlist_undef(bootstrap_strx, bootstrap_dylib_ordinal));
     }
 
-    // __LINKEDIT: bind opcodes, then symtab, then strtab.
+    // __LINKEDIT: rebase opcodes, then bind opcodes, then
+    // symtab, then strtab. Rebase comes first because dyld
+    // walks them in that order and the LC_DYLD_INFO_ONLY
+    // command's `rebase_off`/`bind_off` fields can name them
+    // independently.
     let linkedit_fileoff = data_fileoff + data_filesize;
-    let bind_off = linkedit_fileoff;
+    let rebase_off = linkedit_fileoff;
+    let bind_off = rebase_off + rebase_ops.len() as u64;
     let symoff = bind_off + bind_ops.len() as u64;
     let stroff = symoff + symtab.len() as u64;
-    let linkedit_payload = bind_ops.len() + symtab.len() + strtab.len();
+    let linkedit_payload = rebase_ops.len() + bind_ops.len() + symtab.len() + strtab.len();
     let linkedit_filesize = linkedit_payload as u64;
     let linkedit_vmaddr = data_vmaddr + data_vmsize;
     let linkedit_vmsize = round_up(linkedit_filesize.max(PAGE_SIZE), PAGE_SIZE);
@@ -1464,8 +1588,10 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
             thread_vars_vmaddr,
             thread_vars_size,
             thread_vars_fileoff as u32,
-            thread_bss_vmaddr,
-            thread_bss_size,
+            thread_storage_vmaddr,
+            thread_storage_size,
+            thread_storage_fileoff as u32,
+            thread_storage_initialised,
         )
     } else {
         segment_data(
@@ -1491,8 +1617,8 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
         VM_PROT_READ,
     );
     let dyld_info = dyld_info_only(
-        0,
-        0,
+        rebase_off as u32,
+        rebase_ops.len() as u32,
         bind_off as u32,
         bind_ops.len() as u32,
         0,
@@ -1617,11 +1743,27 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
     }
 
     // __DATA: zero-pad up to where __data starts, then copy the
-    // program's static data segment, then zero-pad to the next page.
-    // dyld writes the GOT entries (which live in __got at the front
-    // of __DATA) at load time using the bind opcodes from __LINKEDIT.
+    // program's static data segment with pointer-to-global
+    // initializers materialized as preferred-VA bytes. dyld
+    // walks the rebase opcode stream after sliding the image
+    // and adds the slide delta to each named slot, so the
+    // runtime values land at the right address under ASLR.
+    // The GOT entries (in __got, ahead of __data) come from
+    // the bind opcode stream; we leave those zero here.
     out.resize(data_section_fileoff as usize, 0);
-    out.extend_from_slice(&build.data);
+    let mut data_with_relocs = build.data.clone();
+    for r in &build.data_relocs {
+        let preferred_va = data_section_vmaddr + r.target_offset;
+        let off = r.data_offset as usize;
+        if off + 8 > data_with_relocs.len() {
+            return Err(C5Error::Compile(format!(
+                "Mach-O: data reloc offset {off:#x} past end of __data ({})",
+                data_with_relocs.len()
+            )));
+        }
+        data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
+    }
+    out.extend_from_slice(&data_with_relocs);
     if tls_present {
         // __thread_vars: one 24-byte descriptor per TLS variable.
         // Slot 0 (thunk getter) stays zero -- dyld writes
@@ -1640,10 +1782,27 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
             // [16..24]: per-thread offset.
             out.extend_from_slice(&desc.offset_in_block.to_le_bytes());
         }
+        // When at least one TLS variable has a static
+        // initializer, the per-thread storage section is
+        // `__thread_data` (file-backed) rather than
+        // `__thread_bss` (zero-fill). Emit the full tls_data
+        // bytes as the init template; dyld copies them into
+        // each thread's region at thread creation. Bytes for
+        // uninitialised TLS variables are already zero (the
+        // parser zero-fills before optionally overwriting),
+        // so the per-thread effect matches the split
+        // .tdata/.tbss layout.
+        if thread_storage_initialised {
+            out.resize(thread_storage_fileoff as usize, 0);
+            out.extend_from_slice(&build.tls_data);
+        }
     }
     out.resize((data_fileoff + data_filesize) as usize, 0);
 
-    // __LINKEDIT contents.
+    // __LINKEDIT contents. Order matches what
+    // LC_DYLD_INFO_ONLY's offsets name: rebase_off first, then
+    // bind_off, then symtab, then strtab.
+    out.extend_from_slice(&rebase_ops);
     out.extend_from_slice(&bind_ops);
     out.extend_from_slice(&symtab);
     out.extend_from_slice(&strtab);
@@ -1702,6 +1861,7 @@ mod tests {
             tls_data: Vec::new(),
             tls_init_size: 0,
             tls_index_fixups: Vec::new(),
+            data_relocs: Vec::new(),
             macho_tlv_fixups: Vec::new(),
             macho_tlv_descriptors: Vec::new(),
         }

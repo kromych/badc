@@ -235,6 +235,23 @@ pub struct Compiler {
     /// leaves room for a future "initialised TLS image -> .tdata"
     /// path.
     tls_data: Vec<u8>,
+    /// Number of bytes at the start of [`Self::tls_data`] that
+    /// are statically initialised by an explicit
+    /// `_Thread_local int x = 5;` initializer. The remainder
+    /// (`tls_data.len() - tls_init_size`) is zero-fill. Today
+    /// only TLS initializer variants supported by the parser
+    /// land here; uninitialised TLS keeps the field at 0 and
+    /// the bytes are zeros.
+    tls_init_size: usize,
+    /// Address-of-global initializers seen at file scope:
+    /// `int *p = &x;`. Each entry says "the 8 bytes at
+    /// `data_offset` in the data segment must contain the
+    /// runtime address of `target_offset` in the same
+    /// segment." Threaded through to `Program::data_relocs`;
+    /// the per-format writer materializes the relocation as
+    /// either an absolute write (ELF / ET_EXEC), a Mach-O
+    /// rebase opcode, or a PE `.reloc` entry.
+    data_relocs: Vec<crate::c5::program::DataReloc>,
     /// Per-libc-call FP-argument bitmaps. Filled when emitting an
     /// `Op::JsrExt` whose argument list contains at least one
     /// floating-point operand; the codegen reads it back to route
@@ -309,13 +326,28 @@ impl Compiler {
         let mut symbols = Vec::new();
         lexer::init_symbols(&mut symbols, &dylibs);
 
+        // Reserve the first 8 bytes of `.data` so no symbol's
+        // offset is zero. The c5 dialect models pointers as
+        // raw data offsets (no per-segment base in the VM, and
+        // `data_vmaddr` is the base on native targets), so a
+        // global at offset 0 would be indistinguishable from
+        // the integer literal `0` -- which c5 uses for NULL.
+        // Reserving the first 8 bytes pushes every actual
+        // global / string literal to offset >= 8, preserving
+        // the `pointer != 0 <=> non-NULL` invariant that
+        // `int *p = &x; if (p == 0) ...` style code expects.
+        // Native binaries are unaffected (the bytes are just
+        // an unused prefix in `.data`); the VM's address space
+        // gains 8 bytes of reserved padding at offset 0.
+        let data: Vec<u8> = alloc::vec![0u8; 8];
+
         Self {
             lex: Lexer::new(preprocessed),
             symbols,
             deferred_error,
             dylibs,
             text: Vec::new(),
-            data: Vec::new(),
+            data,
             ty: 0,
             loc_offs: 0,
             max_loc_offs: 0,
@@ -329,6 +361,8 @@ impl Compiler {
             warnings: Vec::new(),
             data_imm_positions: Vec::new(),
             tls_data: Vec::new(),
+            tls_init_size: 0,
+            data_relocs: Vec::new(),
             call_fp_arg_masks: Vec::new(),
             current_func_return_ty: 0,
         }
@@ -666,8 +700,9 @@ impl Compiler {
             warnings: self.warnings,
             data_imm_positions: self.data_imm_positions,
             tls_data: self.tls_data,
-            tls_init_size: 0,
+            tls_init_size: self.tls_init_size,
             call_fp_arg_masks: self.call_fp_arg_masks,
+            data_relocs: self.data_relocs,
             dylibs: self.dylibs,
         })
     }
@@ -2569,7 +2604,7 @@ impl Compiler {
                 } else {
                     self.symbols[id_idx].class = Token::Glo as i64;
                     self.symbols[id_idx].is_thread_local = thread_local;
-                    if thread_local {
+                    let var_offset = if thread_local {
                         // Allocate the variable in the TLS block.
                         // `val` holds the byte offset within
                         // `tls_data`; the codegen translates it
@@ -2577,19 +2612,49 @@ impl Compiler {
                         // time. Each variable gets
                         // `slots_of_type(ty) * 8` bytes (the c5
                         // VM stores everything in 8-byte slots).
-                        // No initialiser syntax yet, so the bytes
-                        // are zero -- the writer routes them to
-                        // .tbss accordingly.
                         let slots = self.slots_of_type(ty);
-                        self.symbols[id_idx].val = self.tls_data.len() as i64;
+                        let off = self.tls_data.len() as i64;
+                        self.symbols[id_idx].val = off;
                         for _ in 0..(slots * 8) {
                             self.tls_data.push(0);
                         }
+                        off
                     } else {
-                        self.symbols[id_idx].val = self.data.len() as i64;
-                        for _ in 0..8 {
+                        // Same `slots_of_type * 8` accounting for
+                        // the regular data segment, so structs at
+                        // file scope get their full storage. The
+                        // c5 dialect didn't have struct globals
+                        // before; the previous "always 8 bytes"
+                        // allocation was a latent bug that nothing
+                        // exercised. See `static_linked_list.c`
+                        // for the regression coverage.
+                        let slots = self.slots_of_type(ty);
+                        let off = self.data.len() as i64;
+                        self.symbols[id_idx].val = off;
+                        for _ in 0..(slots * 8) {
                             self.data.push(0);
                         }
+                        off
+                    };
+
+                    // Optional initializer: `int x = 5;`,
+                    // `int *p = 0;`, `int *p = &y;`. Restricted
+                    // grammar -- this is a constant-expression
+                    // path, not the full expression parser, so
+                    // the right-hand side is one of:
+                    //   * an integer constant (`Token::Num`,
+                    //     possibly negated),
+                    //   * `Token::Sub` followed by `Token::Num`,
+                    //   * `&<global-name>` for pointer init,
+                    //   * `Token::Num == 0` for NULL pointer
+                    //     init (any pointer LHS).
+                    // String literals and casts are future
+                    // work; the user's stated motivation
+                    // (static linked lists) needs only
+                    // address-of-global plus integer constants.
+                    if self.lex.tk == Token::Assign as i64 {
+                        self.next()?;
+                        self.parse_global_initializer(ty, var_offset, thread_local)?;
                     }
                 }
                 if self.lex.tk == ',' as i64 {
@@ -2597,6 +2662,136 @@ impl Compiler {
                 }
             }
             self.next()?;
+        }
+        Ok(())
+    }
+
+    /// Parse a global / TLS initializer's right-hand side and
+    /// stash the bytes into [`Self::data`] / [`Self::tls_data`]
+    /// at `var_offset`. The grammar is intentionally narrow --
+    /// integer constants (with optional unary `-`) and
+    /// `&<global-name>`. Anything else surfaces a clear "bad
+    /// global initializer" diagnostic so the parser stays
+    /// honest about what it accepts.
+    fn parse_global_initializer(
+        &mut self,
+        var_ty: i64,
+        var_offset: i64,
+        is_thread_local: bool,
+    ) -> Result<(), C5Error> {
+        let line = self.lex.line;
+        // `&<global>` -- address-of-global pointer init.
+        if self.lex.tk == Token::AndOp as i64 {
+            if is_thread_local {
+                return Err(C5Error::Compile(format!(
+                    "{line}: address-of-global initializer for `_Thread_local` \
+                     not yet supported (the rebase / .reloc ordering against \
+                     the TLS template needs design work; integer / NULL \
+                     initializers are fine)"
+                )));
+            }
+            self.next()?;
+            if self.lex.tk != Token::Id as i64 {
+                return Err(C5Error::Compile(format!(
+                    "{line}: identifier expected after `&` in initializer"
+                )));
+            }
+            let target_idx = self.lex.curr_id_idx;
+            let target_class = self.symbols[target_idx].class;
+            if target_class != Token::Glo as i64 {
+                return Err(C5Error::Compile(format!(
+                    "{line}: `&{}` in a global initializer requires a \
+                     non-thread_local global; the right-hand side is \
+                     class={target_class}",
+                    self.symbols[target_idx].name
+                )));
+            }
+            if self.symbols[target_idx].is_thread_local {
+                return Err(C5Error::Compile(format!(
+                    "{line}: `&{}` -- can't take the address of a \
+                     `_Thread_local` global in a static initializer; the \
+                     per-thread address isn't fixed at link time",
+                    self.symbols[target_idx].name
+                )));
+            }
+            let target_offset = self.symbols[target_idx].val;
+            self.next()?;
+            // Write the target's data-segment offset into the
+            // slot. The VM reads this directly because its
+            // pointers are small data offsets (no image-base
+            // arithmetic). The native writers overwrite this
+            // with the target's absolute VA at write time --
+            // ELF (ET_EXEC) writes a fully-resolved VA; Mach-O
+            // and PE write the preferred VA and emit a
+            // dynamic relocation (rebase opcode / .reloc DIR64
+            // entry) so the loader can patch in the slide
+            // delta.
+            let bytes = (target_offset as u64).to_le_bytes();
+            self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
+            self.data_relocs.push(crate::c5::program::DataReloc {
+                data_offset: var_offset as u64,
+                target_offset: target_offset as u64,
+            });
+            return Ok(());
+        }
+
+        // Integer literal, optionally negated. Anything else
+        // is rejected.
+        let mut sign: i64 = 1;
+        if self.lex.tk == Token::SubOp as i64 {
+            sign = -1;
+            self.next()?;
+        } else if self.lex.tk == Token::AddOp as i64 {
+            // Unary `+` is a no-op; tolerate it for symmetry
+            // with the negation case.
+            self.next()?;
+        }
+        if self.lex.tk != Token::Num as i64 {
+            return Err(C5Error::Compile(format!(
+                "{line}: bad global initializer (expected integer constant \
+                 or `&<global>`, got tk={})",
+                self.lex.tk
+            )));
+        }
+        let value = sign.wrapping_mul(self.lex.ival);
+        self.next()?;
+
+        let bytes = value.to_le_bytes();
+        let segment = if is_thread_local {
+            &mut self.tls_data
+        } else {
+            &mut self.data
+        };
+        let off = var_offset as usize;
+        // Both segments preallocated 8 zero bytes for this
+        // variable; we overwrite the slot with the
+        // initializer's bytes.
+        debug_assert!(off + 8 <= segment.len());
+        segment[off..off + 8].copy_from_slice(&bytes);
+
+        if is_thread_local {
+            // Move the .tdata/.tbss boundary so this slot is
+            // part of the loader's initial template. Once any
+            // TLS init lands, every TLS byte before it (and
+            // the trailing zero-init bytes too, eventually)
+            // gets routed through the template path; that's
+            // fine because the bytes are still byte-for-byte
+            // correct. Per-format writers handle the layout.
+            let end = off + 8;
+            if end > self.tls_init_size {
+                self.tls_init_size = end;
+            }
+        }
+
+        // Type-check: warn (don't error) if the constant
+        // doesn't match the declared type. For now we only
+        // care about pointer-vs-int mismatches the way the
+        // assignment path does.
+        let init_ty = if value == 0 { 0 } else { Ty::Int as i64 };
+        if let Some(reason) = Self::type_warning(var_ty, init_ty, value == 0) {
+            self.warn(format!(
+                "{line}: warning: {reason} in global initializer (var={var_ty}, value={init_ty})"
+            ));
         }
         Ok(())
     }

@@ -148,12 +148,34 @@ mod jit_impl {
         // Allocate a writable data region, copy `build.data` in. The
         // page is RW (no exec permission); programs that try to
         // execute through it would fault, which is what we want.
-        let data_region = if !build.data.is_empty() {
+        let mut data_region = if !build.data.is_empty() {
             Some(DataRegion::new(&build.data)?)
         } else {
             None
         };
         let data_vmaddr = data_region.as_ref().map(|r| r.as_ptr() as u64).unwrap_or(0);
+
+        // Apply pointer-to-global initializers (`int *p = &x;`)
+        // against the runtime data_vmaddr. The Build's
+        // `data_relocs` lists each 8-byte slot whose contents
+        // should be the runtime address of another data-segment
+        // global. The lowering wrote `target_offset` (or the
+        // preferred VA) into those slots; the JIT resolves
+        // them in place against the mmap'd page's address.
+        if let Some(region) = &mut data_region {
+            let bytes = region.as_mut_slice(build.data.len());
+            for r in &build.data_relocs {
+                let absolute = data_vmaddr + r.target_offset;
+                let off = r.data_offset as usize;
+                if off + 8 > bytes.len() {
+                    return Err(C5Error::Compile(format!(
+                        "JIT: data reloc offset {off:#x} past end of data region ({})",
+                        bytes.len()
+                    )));
+                }
+                bytes[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
+            }
+        }
 
         // Allocate a "fake GOT" -- one u64 per resolved import, each
         // holding the runtime address of the corresponding libc
@@ -227,6 +249,7 @@ mod jit_impl {
         };
         build.imports = imports;
         build.abi = target.abi();
+        build.data_relocs = program.data_relocs.clone();
         Ok(build)
     }
 
@@ -576,6 +599,19 @@ mod jit_impl {
 
         fn as_ptr(&self) -> *const u8 {
             self.ptr
+        }
+
+        /// Mutable view into the JIT data region. Used by the
+        /// JIT runner to apply pointer-to-global initializers
+        /// against the mmap'd page's runtime address (the file
+        /// image holds the preferred / writer-time bytes; the
+        /// JIT resolves them in place after mapping).
+        fn as_mut_slice(&mut self, len: usize) -> &mut [u8] {
+            // SAFETY: the region is freshly mmap'd RW, and the
+            // exclusive `&mut self` borrow guarantees the only
+            // outstanding reference to the bytes is the one we
+            // hand back.
+            unsafe { core::slice::from_raw_parts_mut(self.ptr, len) }
         }
     }
 

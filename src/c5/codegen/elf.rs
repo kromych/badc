@@ -1390,8 +1390,22 @@ mod tests {
     /// a small but nonzero overhead.
     #[test]
     fn no_thread_local_means_no_pt_tls() {
-        for machine in [Machine::Aarch64, Machine::X86_64] {
-            let bytes = write(&tiny_build(), machine).unwrap();
+        // The x86_64 `_start` stub picks argc/argv registers
+        // out of `abi.int_arg_regs`, and its hard-coded
+        // `START_STUB_LEN = 23` assumes the SysV ABI's RDI/RSI.
+        // `tiny_build()`'s default `abi` is `LinuxAarch64`'s,
+        // whose `int_arg_regs[0]` is byte 0 -- which collides
+        // with RAX in x86_64 land and turns the post-call
+        // `mov argc_reg, rax` into a self-mov the elision pass
+        // drops, shortening the stub by 3 bytes. Build with the
+        // matching target so each path sees its own ABI.
+        for (machine, target) in [
+            (Machine::Aarch64, super::super::Target::LinuxAarch64),
+            (Machine::X86_64, super::super::Target::LinuxX64),
+        ] {
+            let mut b = tiny_build();
+            b.abi = target.abi();
+            let bytes = write(&b, machine).unwrap();
             assert!(
                 find_phdr(&bytes, PT_TLS).is_none(),
                 "{machine:?}: unexpected PT_TLS phdr in TLS-free image"

@@ -64,6 +64,7 @@
 //!   even on an otherwise valid Mach-O.
 
 use alloc::format;
+use alloc::string::String;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;

@@ -97,32 +97,66 @@ const IMAGE_DLLCHARACTERISTICS_NO_SEH: u16 = 0x0400;
 
 const IMAGE_SCN_CNT_CODE: u32 = 0x0000_0020;
 const IMAGE_SCN_CNT_INITIALIZED_DATA: u32 = 0x0000_0040;
+/// `IMAGE_SCN_MEM_DISCARDABLE` -- the loader may unmap the
+/// section after consuming its contents. Used for `.reloc`,
+/// which the loader walks once at load time and never reads
+/// again.
+const IMAGE_SCN_MEM_DISCARDABLE: u32 = 0x0200_0000;
 const IMAGE_SCN_MEM_EXECUTE: u32 = 0x2000_0000;
 const IMAGE_SCN_MEM_READ: u32 = 0x4000_0000;
 const IMAGE_SCN_MEM_WRITE: u32 = 0x8000_0000;
 
+/// `IMAGE_REL_BASED_DIR64` -- 64-bit absolute address relocation
+/// type, encoded in the high 4 bits of each `.reloc` u16 entry.
+/// The loader subtracts `ImageBase`, adds the actual load
+/// address, and writes the result back. Used for the three
+/// absolute VAs in `IMAGE_TLS_DIRECTORY64`
+/// (`StartAddressOfRawData`, `EndAddressOfRawData`,
+/// `AddressOfIndex`) so DYNAMIC_BASE / HIGH_ENTROPY_VA can stay
+/// on for TLS-using images.
+const IMAGE_REL_BASED_DIR64: u16 = 10 << 12;
+/// `IMAGE_REL_BASED_ABSOLUTE` (type = 0). A no-op entry whose
+/// only purpose is to pad each `.reloc` block to a 4-byte
+/// boundary, since `SizeOfBlock` must be a multiple of 4.
+const IMAGE_REL_BASED_ABSOLUTE: u16 = 0;
+
 const NUM_DATA_DIRS: u32 = 16;
 
-/// Section layout: every 64-bit Windows PE always carries `.text`,
-/// `.pdata`, `.idata`, and `.reloc`. The optional `.data` only
+/// Section layout: every 64-bit Windows PE always carries
+/// `.text`, `.pdata`, and `.idata`. The optional `.data` only
 /// appears when the c5 program has initialized data -- string
-/// literals or globals -- because real Windows kernels reject
-/// images that list a zero-sized section.
+/// literals, globals, or `_Thread_local` storage -- because
+/// real Windows kernels reject images that list a zero-sized
+/// section. The optional `.reloc` only appears when the
+/// program declares any `_Thread_local` global; that's the
+/// only path that puts absolute VAs into the image (the three
+/// pointer fields of `IMAGE_TLS_DIRECTORY64`), which the
+/// ASLR-aware loader needs to fix up after sliding.
 ///
-/// `.pdata` is the Exception Directory, mandatory under the 64-bit
-/// Windows ABI: the loader looks up `RUNTIME_FUNCTION` entries
-/// there to handle stack unwinding, and wine refuses to load
-/// AArch64 PEs that omit it. x86_64 doesn't fail to load without
-/// one, but the spec requires it and stricter hosts can reject a
-/// missing entry, so we emit it on both arches.
+/// `.pdata` is the Exception Directory, mandatory under the
+/// 64-bit Windows ABI: the loader looks up `RUNTIME_FUNCTION`
+/// entries there to handle stack unwinding, and wine refuses
+/// to load AArch64 PEs that omit it. x86_64 doesn't fail to
+/// load without one, but the spec requires it and stricter
+/// hosts can reject a missing entry, so we emit it on both
+/// arches.
 ///
-/// We don't emit `.reloc`: the image has no absolute pointers left
-/// for ASLR to patch (every cross-section reference is RIP-relative
-/// or PC-relative). `DYNAMIC_BASE` stays set in DllCharacteristics
-/// for wine compatibility; in practice the image just maps at the
-/// preferred `IMAGE_BASE` (mingw's minimal exe ships the same way).
-fn num_sections(data_section_present: bool) -> usize {
-    if data_section_present { 4 } else { 3 }
+/// `.reloc` is omitted for TLS-free images because every
+/// cross-section reference the codegen emits is RIP-relative
+/// (x86_64) or PC-relative (aarch64 ADRP+ADD), so the
+/// DYNAMIC_BASE-flagged image can be slid to any address
+/// without touching any absolute pointer in the file. The
+/// only absolute pointers we ever emit live inside the TLS
+/// directory, which is why `.reloc` follows TLS presence.
+fn num_sections(data_section_present: bool, reloc_section_present: bool) -> usize {
+    let mut n = 3; // .text, .pdata, .idata
+    if data_section_present {
+        n += 1;
+    }
+    if reloc_section_present {
+        n += 1;
+    }
+    n
 }
 
 const DOS_HEADER_AND_STUB: usize = 128; // 64 byte DOS header + 64 byte stub
@@ -134,12 +168,12 @@ const SECTION_HEADER_SIZE: usize = 40;
 /// Raw on-disk size of the PE headers (DOS + PE sig + COFF +
 /// Optional + section table), rounded up to FILE_ALIGNMENT.
 /// 3 sections fit in 0x200; 4 sections need 0x400.
-fn headers_raw_size(data_section_present: bool) -> usize {
+fn headers_raw_size(data_section_present: bool, reloc_section_present: bool) -> usize {
     let unaligned = DOS_HEADER_AND_STUB
         + PE_SIG_SIZE
         + COFF_HEADER_SIZE
         + OPTIONAL64_HEADER_SIZE
-        + SECTION_HEADER_SIZE * num_sections(data_section_present);
+        + SECTION_HEADER_SIZE * num_sections(data_section_present, reloc_section_present);
     (unaligned + FILE_ALIGNMENT as usize - 1) & !(FILE_ALIGNMENT as usize - 1)
 }
 
@@ -239,10 +273,14 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
     // The `.data` section is present when the c5 program has
     // initialized data OR any `_Thread_local` globals (the TLS
     // directory + `_tls_index` slot live at the tail of `.data`).
-    // See `num_sections` for why an empty section can't be left
-    // in.
+    // The `.reloc` section is present when the program declares
+    // any `_Thread_local` global -- those are the only absolute
+    // VAs the writer emits (inside `IMAGE_TLS_DIRECTORY64`), and
+    // the ASLR-aware loader uses `.reloc` to fix them up after
+    // sliding the image.
     let data_section_present = !build.data.is_empty() || !build.tls_data.is_empty();
-    let headers_size = headers_raw_size(data_section_present) as u32;
+    let reloc_section_present = !build.tls_data.is_empty();
+    let headers_size = headers_raw_size(data_section_present, reloc_section_present) as u32;
 
     let text_rva: u32 = SECTION_ALIGNMENT;
     let text_file_off: u32 = headers_size;
@@ -306,12 +344,46 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
         0
     };
 
-    let total_file_size = if data_section_present {
+    // `.reloc` carries one IMAGE_BASE_RELOCATION block with
+    // three IMAGE_REL_BASED_DIR64 entries -- one per absolute
+    // VA in the TLS directory. The block is fixed-size (16
+    // bytes: 8-byte header + 4 entries * 2 bytes, last entry a
+    // zero-pad ABSOLUTE so the block ends on a 4-byte boundary
+    // as required by `SizeOfBlock`). The bytes are computed
+    // here so we can size the file image; the actual on-disk
+    // emission happens after `.data`.
+    let reloc_rva: u32 = if reloc_section_present {
+        round_up(data_rva + data_size, SECTION_ALIGNMENT)
+    } else {
+        0
+    };
+    let reloc_file_off: u32 = if reloc_section_present {
+        data_file_off + data_raw_size
+    } else {
+        0
+    };
+    let reloc_bytes: Vec<u8> = if reloc_section_present {
+        build_tls_reloc_block(data_rva, &tls_layout)
+    } else {
+        Vec::new()
+    };
+    let reloc_size: u32 = reloc_bytes.len() as u32;
+    let reloc_raw_size: u32 = if reloc_section_present {
+        round_up(reloc_size, FILE_ALIGNMENT)
+    } else {
+        0
+    };
+
+    let total_file_size = if reloc_section_present {
+        (reloc_file_off + reloc_raw_size) as usize
+    } else if data_section_present {
         (data_file_off + data_raw_size) as usize
     } else {
         (idata_file_off + idata_raw_size) as usize
     };
-    let image_size = if data_section_present {
+    let image_size = if reloc_section_present {
+        round_up(reloc_rva + reloc_size, SECTION_ALIGNMENT)
+    } else if data_section_present {
         round_up(data_rva + data_size, SECTION_ALIGNMENT)
     } else {
         round_up(idata_rva + idata_size, SECTION_ALIGNMENT)
@@ -403,8 +475,10 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
         OPTIONAL64_HEADER_SIZE,
         machine,
         data_section_present,
+        reloc_section_present,
     );
-    let (tls_table_rva, tls_table_size) = if !build.tls_data.is_empty() {
+    let tls_present = !build.tls_data.is_empty();
+    let (tls_table_rva, tls_table_size) = if tls_present {
         (
             data_rva + tls_layout.directory_offset_in_data,
             IMAGE_TLS_DIRECTORY64_SIZE,
@@ -418,22 +492,23 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
             entry_rva: text_rva, // entry point is at start of .text
             base_of_code: text_rva,
             size_of_code: text_size,
-            size_of_initialized_data: idata_size + data_size,
+            size_of_initialized_data: idata_size + data_size + reloc_size,
             size_of_image: image_size,
             size_of_headers: headers_size,
             import_table_rva: idata_layout.import_directory_rva,
             import_table_size: idata_layout.import_directory_size,
             exception_table_rva: pdata_rva,
             exception_table_size: pdata_directory_size,
-            base_reloc_rva: 0,
-            base_reloc_size: 0,
+            base_reloc_rva: reloc_rva,
+            base_reloc_size: reloc_size,
             iat_rva: idata_layout.iat_rva_base,
             iat_size: idata_layout.iat_size,
             tls_table_rva,
             tls_table_size,
         },
     );
-    let mut sections: Vec<SectionHeader> = Vec::with_capacity(num_sections(data_section_present));
+    let mut sections: Vec<SectionHeader> =
+        Vec::with_capacity(num_sections(data_section_present, reloc_section_present));
     sections.push(SectionHeader {
         name: *b".text\0\0\0",
         virtual_size: text_size,
@@ -468,6 +543,18 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
             characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA
                 | IMAGE_SCN_MEM_READ
                 | IMAGE_SCN_MEM_WRITE,
+        });
+    }
+    if reloc_section_present {
+        sections.push(SectionHeader {
+            name: *b".reloc\0\0",
+            virtual_size: reloc_size,
+            virtual_address: reloc_rva,
+            size_of_raw_data: reloc_raw_size,
+            pointer_to_raw_data: reloc_file_off,
+            characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA
+                | IMAGE_SCN_MEM_READ
+                | IMAGE_SCN_MEM_DISCARDABLE,
         });
     }
     write_section_headers(&mut out, &sections);
@@ -525,9 +612,61 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
             out.extend_from_slice(&build.tls_data[..build.tls_init_size]);
         }
     }
+    if reloc_section_present {
+        pad_to(&mut out, reloc_file_off as usize);
+        out.extend_from_slice(&reloc_bytes);
+    }
     pad_to(&mut out, total_file_size);
     debug_assert_eq!(out.len(), total_file_size, "file size mismatch");
     Ok(out)
+}
+
+/// Build the `.reloc` section bytes for a TLS-using image.
+/// Emits a single `IMAGE_BASE_RELOCATION` block covering the
+/// three absolute VAs in `IMAGE_TLS_DIRECTORY64`
+/// (`StartAddressOfRawData`, `EndAddressOfRawData`,
+/// `AddressOfIndex`). All three sit within 24 bytes of each
+/// other inside the directory, so they always share the same
+/// 4 KiB page and fit in one block.
+///
+/// Block layout:
+///
+/// ```text
+///   u32 VirtualAddress  -- page RVA (the 4 KiB-aligned RVA covering the entries)
+///   u32 SizeOfBlock     -- total block bytes (header + entries), multiple of 4
+///   u16 entry[N]        -- high 4 bits: type, low 12 bits: offset within page
+/// ```
+///
+/// We emit four entries -- three `IMAGE_REL_BASED_DIR64` plus
+/// one `IMAGE_REL_BASED_ABSOLUTE` (no-op) -- so `SizeOfBlock`
+/// rounds to a 4-byte multiple (8 + 4*2 = 16 bytes).
+fn build_tls_reloc_block(data_rva: u32, tls_layout: &TlsLayout) -> Vec<u8> {
+    let dir_rva = data_rva + tls_layout.directory_offset_in_data;
+    // Sanity: the directory's three pointer fields must share a
+    // page. The directory is 40 bytes, far smaller than 4 KiB,
+    // and we 8-byte-align its start, so this should always hold
+    // on any reasonable layout. If a future change ever makes
+    // the directory cross a page boundary, the writer would
+    // need to emit two blocks instead of one.
+    debug_assert_eq!(dir_rva & !0xFFF, (dir_rva + 16) & !0xFFF);
+    let page_rva = dir_rva & !0xFFF;
+    let off0 = ((dir_rva) & 0xFFF) as u16;
+    let off1 = ((dir_rva + 8) & 0xFFF) as u16;
+    let off2 = ((dir_rva + 16) & 0xFFF) as u16;
+    let entries: [u16; 4] = [
+        IMAGE_REL_BASED_DIR64 | off0, // StartAddressOfRawData
+        IMAGE_REL_BASED_DIR64 | off1, // EndAddressOfRawData
+        IMAGE_REL_BASED_DIR64 | off2, // AddressOfIndex
+        IMAGE_REL_BASED_ABSOLUTE,     // 4-byte alignment pad (no-op)
+    ];
+    let size_of_block: u32 = 8 + (entries.len() as u32) * 2; // 16
+    let mut out = Vec::with_capacity(size_of_block as usize);
+    out.extend_from_slice(&page_rva.to_le_bytes());
+    out.extend_from_slice(&size_of_block.to_le_bytes());
+    for entry in &entries {
+        out.extend_from_slice(&entry.to_le_bytes());
+    }
+    out
 }
 
 /// Per-`.data` offsets for the trio of TLS support structures
@@ -804,6 +943,7 @@ fn write_coff_header(
     optional_header_size: usize,
     machine: Machine,
     data_section_present: bool,
+    reloc_section_present: bool,
 ) {
     let machine_id = match machine {
         Machine::X86_64 => IMAGE_FILE_MACHINE_AMD64,
@@ -813,7 +953,7 @@ fn write_coff_header(
         out,
         &CoffHeader {
             machine: machine_id,
-            number_of_sections: num_sections(data_section_present) as u16,
+            number_of_sections: num_sections(data_section_present, reloc_section_present) as u16,
             time_date_stamp: 0,
             pointer_to_symbol_table: 0,
             number_of_symbols: 0,
@@ -859,12 +999,16 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
     // CreateProcess to reject our images with ERROR_BAD_EXE_FORMAT
     // on real Windows, even though wine on Linux tolerated it.
     //
-    // DllCharacteristics: copy what mingw's minimal exe ships with,
-    // since that binary loads cleanly on every recent Windows --
-    // DYNAMIC_BASE | HIGH_ENTROPY_VA | NX_COMPAT | NO_SEH.
-    // No accompanying `.reloc` section is needed even with
-    // DYNAMIC_BASE; the loader maps at preferred ImageBase when
-    // relocations are absent.
+    // DllCharacteristics: copy what mingw's minimal exe ships
+    // with -- DYNAMIC_BASE | HIGH_ENTROPY_VA | NX_COMPAT |
+    // NO_SEH. ASLR stays on for every image we emit:
+    // TLS-free images have no absolute pointers to fix up, so
+    // the loader can slide them freely without consulting a
+    // `.reloc` section; TLS-using images carry an actual
+    // `.reloc` block targeting the three absolute VAs in
+    // `IMAGE_TLS_DIRECTORY64` (StartAddressOfRawData,
+    // EndAddressOfRawData, AddressOfIndex) so the slide-aware
+    // loader fixes them up before walking the directory.
     let dll_chars = IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE
         | IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA
         | IMAGE_DLLCHARACTERISTICS_NX_COMPAT
@@ -1887,6 +2031,181 @@ mod tests {
         let (tls_rva, tls_size) = read_data_directory(&bytes, DATA_DIRECTORY_TLS);
         assert_ne!(tls_rva, 0, "expected non-zero TLS directory RVA");
         assert_eq!(tls_size, IMAGE_TLS_DIRECTORY64_SIZE);
+    }
+
+    /// Read OptionalHeader.DllCharacteristics. Sits at fixed
+    /// offset 70 within the PE32+ Optional Header.
+    fn read_dll_characteristics(bytes: &[u8]) -> u16 {
+        let pe_off = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
+        let optional_off = pe_off + 4 + COFF_HEADER_SIZE;
+        u16::from_le_bytes(
+            bytes[optional_off + 70..optional_off + 72]
+                .try_into()
+                .unwrap(),
+        )
+    }
+
+    /// `DYNAMIC_BASE` / `HIGH_ENTROPY_VA` stay on for every
+    /// image we emit, including TLS-using ones. TLS-free
+    /// images have no absolute pointers in the file (every
+    /// cross-section reference is RIP-relative or PC-relative)
+    /// so the loader can slide them freely without consulting
+    /// any relocation table. TLS-using images carry a real
+    /// `.reloc` section listing the three absolute VAs in
+    /// `IMAGE_TLS_DIRECTORY64`, so the loader fixes those up
+    /// after the slide too. The previous "drop DYNAMIC_BASE
+    /// for TLS images" workaround is gone -- this regression
+    /// test guards against re-introducing it.
+    #[test]
+    fn dll_characteristics_keep_aslr_flags_with_and_without_tls() {
+        use crate::Compiler;
+        for src in [
+            "int main() { return 0; }",
+            "_Thread_local int counter; int main() { counter = 1; return counter; }",
+        ] {
+            for target in [
+                super::super::Target::WindowsX64,
+                super::super::Target::WindowsAarch64,
+            ] {
+                let program = Compiler::new(super::super::super::tests::with_prelude(src))
+                    .compile()
+                    .expect("compile");
+                let build = super::super::lower_for(
+                    &program,
+                    target,
+                    super::super::NativeOptions::default(),
+                )
+                .expect("lower");
+                let machine = match target {
+                    super::super::Target::WindowsX64 => Machine::X86_64,
+                    super::super::Target::WindowsAarch64 => Machine::Aarch64,
+                    _ => unreachable!(),
+                };
+                let bytes = write(&build, machine).expect("write PE");
+                let dll_chars = read_dll_characteristics(&bytes);
+                assert_ne!(
+                    dll_chars & IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE,
+                    0,
+                    "{target:?}: DYNAMIC_BASE must always be set"
+                );
+                assert_ne!(
+                    dll_chars & IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA,
+                    0,
+                    "{target:?}: HIGH_ENTROPY_VA must always be set"
+                );
+                assert_ne!(
+                    dll_chars & IMAGE_DLLCHARACTERISTICS_NX_COMPAT,
+                    0,
+                    "{target:?}: NX_COMPAT must always be set"
+                );
+            }
+        }
+    }
+
+    /// TLS-using images must carry a `.reloc` section
+    /// covering the three absolute VAs inside the TLS
+    /// directory; otherwise the ASLR-aware loader would write
+    /// the chosen `_tls_index` to a stale address and the
+    /// process would crash with STATUS_ACCESS_VIOLATION on
+    /// real Windows. Confirms `DataDirectory[5]` (Base
+    /// Relocation) is non-empty and the `.reloc` block has
+    /// the expected three `IMAGE_REL_BASED_DIR64` entries.
+    #[test]
+    fn thread_local_emits_reloc_section() {
+        use crate::Compiler;
+        let src = "_Thread_local int counter; int main() { counter = 1; return counter; }";
+        for target in [
+            super::super::Target::WindowsX64,
+            super::super::Target::WindowsAarch64,
+        ] {
+            let program = Compiler::new(super::super::super::tests::with_prelude(src))
+                .compile()
+                .expect("compile");
+            let build =
+                super::super::lower_for(&program, target, super::super::NativeOptions::default())
+                    .expect("lower");
+            let machine = match target {
+                super::super::Target::WindowsX64 => Machine::X86_64,
+                super::super::Target::WindowsAarch64 => Machine::Aarch64,
+                _ => unreachable!(),
+            };
+            let bytes = write(&build, machine).expect("write PE");
+
+            // DataDirectory[5] (BaseRelocation) must point at a
+            // non-empty block.
+            let (reloc_rva, reloc_dir_size) = read_data_directory(&bytes, DATA_DIRECTORY_BASERELOC);
+            assert_ne!(reloc_rva, 0, "{target:?}: missing .reloc directory");
+            assert_eq!(
+                reloc_dir_size, 16,
+                "{target:?}: expected 16-byte .reloc block"
+            );
+
+            // Resolve the .reloc bytes inside the file image.
+            let pe_off = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
+            let coff_off = pe_off + 4;
+            let n_sections =
+                u16::from_le_bytes([bytes[coff_off + 2], bytes[coff_off + 3]]) as usize;
+            let optional_off = coff_off + COFF_HEADER_SIZE;
+            let optional_size =
+                u16::from_le_bytes([bytes[coff_off + 16], bytes[coff_off + 17]]) as usize;
+            let sections_off = optional_off + optional_size;
+            let mut reloc_file_off: Option<usize> = None;
+            for i in 0..n_sections {
+                let h = sections_off + i * SECTION_HEADER_SIZE;
+                let v_addr = u32::from_le_bytes(bytes[h + 12..h + 16].try_into().unwrap());
+                let v_size = u32::from_le_bytes(bytes[h + 8..h + 12].try_into().unwrap());
+                let p_off = u32::from_le_bytes(bytes[h + 20..h + 24].try_into().unwrap());
+                if reloc_rva >= v_addr && reloc_rva < v_addr + v_size {
+                    reloc_file_off = Some((p_off + (reloc_rva - v_addr)) as usize);
+                    break;
+                }
+            }
+            let reloc_file_off = reloc_file_off.expect(".reloc must lie inside a section");
+
+            // Header: VirtualAddress (page RVA), SizeOfBlock = 16.
+            let size_of_block = u32::from_le_bytes(
+                bytes[reloc_file_off + 4..reloc_file_off + 8]
+                    .try_into()
+                    .unwrap(),
+            );
+            assert_eq!(size_of_block, 16, "{target:?}: SizeOfBlock should be 16");
+            // Three IMAGE_REL_BASED_DIR64 entries (type=10) at
+            // u16 positions 4..16. The fourth slot is a no-op
+            // ABSOLUTE pad.
+            for slot in 0..3 {
+                let off = reloc_file_off + 8 + slot * 2;
+                let entry = u16::from_le_bytes([bytes[off], bytes[off + 1]]);
+                let entry_type = (entry >> 12) & 0xF;
+                assert_eq!(
+                    entry_type, 10,
+                    "{target:?}: entry {slot} must be IMAGE_REL_BASED_DIR64"
+                );
+            }
+            let pad_off = reloc_file_off + 8 + 3 * 2;
+            let pad = u16::from_le_bytes([bytes[pad_off], bytes[pad_off + 1]]);
+            assert_eq!(pad, 0, "{target:?}: trailing pad entry must be ABSOLUTE");
+        }
+    }
+
+    /// TLS-free images must NOT carry a `.reloc` section --
+    /// they have no absolute pointers, so a `.reloc` would be
+    /// dead weight.
+    #[test]
+    fn no_tls_means_no_reloc_section() {
+        use crate::Compiler;
+        let program = Compiler::new("int main() { return 0; }".to_string())
+            .compile()
+            .expect("compile");
+        let build = super::super::lower_for(
+            &program,
+            super::super::Target::WindowsX64,
+            super::super::NativeOptions::default(),
+        )
+        .expect("lower");
+        let bytes = write(&build, Machine::X86_64).expect("write PE");
+        let (rva, size) = read_data_directory(&bytes, DATA_DIRECTORY_BASERELOC);
+        assert_eq!(rva, 0, "TLS-free image must not advertise .reloc RVA");
+        assert_eq!(size, 0, "TLS-free image must not advertise .reloc size");
     }
 
     /// End-to-end format check: build an aarch64 Windows PE for a

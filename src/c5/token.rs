@@ -104,6 +104,27 @@ pub(crate) enum Token {
     /// on aarch64 and `mov rax, %fs:0` on x86_64 plus the
     /// per-target dyld initializer).
     ThreadLocal,
+    /// `extern` keyword. Accepted as a no-op storage-class
+    /// prefix in declarations (global, function, parameter,
+    /// local). c5 doesn't have separate translation units yet
+    /// -- there's nothing to "declare without defining" --
+    /// but mainstream C headers and code routinely use the
+    /// keyword, so consuming it lets unmodified C compile
+    /// cleanly. The byte semantics are identical to the
+    /// no-prefix form: `extern int x;` allocates a global the
+    /// same way `int x;` does.
+    Extern,
+    /// `static` keyword. Like [`Self::Extern`], accepted as a
+    /// no-op prefix in declarations. C's `static` at file
+    /// scope means "internal linkage", which c5 already gives
+    /// every symbol (we don't expose any externally), so
+    /// the keyword is a documentation hint rather than a
+    /// behavior change. `static` on a local would mean
+    /// "function-scope storage-duration = static" but c5
+    /// only supports automatic locals; the keyword is still
+    /// consumed and the local stays automatic, matching the
+    /// extern handling.
+    Static,
     /// `float` keyword -- 32-bit IEEE float type.
     Float,
     /// `double` keyword -- 64-bit IEEE double type.

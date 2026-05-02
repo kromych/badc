@@ -460,6 +460,8 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("float", Token::Float),
     ("double", Token::Double),
     ("_Thread_local", Token::ThreadLocal),
+    ("extern", Token::Extern),
+    ("static", Token::Static),
     ("void", Token::Char),
     ("main", Token::Id),
 ];

@@ -157,6 +157,49 @@ fn unknown_struct_name_is_rejected() {
 }
 
 #[test]
+fn extern_and_static_keywords_are_no_op_at_global_scope() {
+    use super::run_str;
+    // `extern` and `static` may appear before the type prefix
+    // (with or without `_Thread_local`); both are accepted and
+    // ignored. The semantics of the resulting decl are
+    // identical to the no-prefix form -- the global lives in
+    // .data with zero init -- so the program runs the same
+    // way it would without the keywords.
+    let src = "
+        extern int a;
+        static int b;
+        static extern int c;
+        int main() {
+            a = 1; b = 2; c = 3;
+            return a + b + c;
+        }
+    ";
+    assert_eq!(run_str(&super::with_prelude(src)), 6);
+}
+
+#[test]
+fn extern_and_static_on_functions_compile() {
+    let src = "
+        static int helper(int n) { return n + 1; }
+        extern int main() { return helper(41); }
+    ";
+    assert_eq!(super::run_str(&super::with_prelude(src)), 42);
+}
+
+#[test]
+fn extern_and_static_on_locals_and_params_compile() {
+    let src = "
+        int f(static int n) {
+            static int x;
+            x = n;
+            return x;
+        }
+        int main() { return f(42); }
+    ";
+    assert_eq!(super::run_str(&super::with_prelude(src)), 42);
+}
+
+#[test]
 fn libc_call_with_struct_arg_is_refused() {
     // The c5-internal struct ABI uses caller-pushes-address +
     // callee-copies-on-entry. Real platform ABIs (SysV/Win64/AAPCS64)

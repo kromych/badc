@@ -1851,7 +1851,26 @@ impl Compiler {
             || self.lex.tk == Token::Float as i64
             || self.lex.tk == Token::Double as i64
             || self.lex.tk == Token::Struct as i64
+            // `extern` / `static` are accepted as no-op
+            // storage-class prefixes on local declarations,
+            // matching the file-scope handling. C lets you
+            // write `static int counter = 0;` inside a
+            // function for "function-scope persistent
+            // storage", but c5 only has automatic locals --
+            // we consume the keyword and the local stays
+            // automatic. Surface code that relies on the
+            // persistence semantics will misbehave at
+            // runtime; it's still useful to compile cleanly
+            // so unmodified C from the wild lexes.
+            || self.lex.tk == Token::Extern as i64
+            || self.lex.tk == Token::Static as i64
         {
+            // Consume any leading extern / static prefixes on
+            // the local decl. Order doesn't matter; both are
+            // no-ops.
+            while self.lex.tk == Token::Extern as i64 || self.lex.tk == Token::Static as i64 {
+                self.next()?;
+            }
             let lbt = self.parse_decl_base_type()?;
             while self.lex.tk != ';' as i64 {
                 let (loc_idx, ty) = self.parse_declarator(lbt)?;
@@ -2187,6 +2206,14 @@ impl Compiler {
                 is_variadic = true;
                 break;
             }
+            // Consume any extern/static prefixes on parameter
+            // decls. C lets you write `void f(static int n)`
+            // (it's diagnosed in some compilers but legal in
+            // others) and `register` would belong here too if
+            // we ever supported it. No semantic effect.
+            while self.lex.tk == Token::Extern as i64 || self.lex.tk == Token::Static as i64 {
+                self.next()?;
+            }
             let base = if self.lex.tk == Token::Int as i64
                 || self.lex.tk == Token::Char as i64
                 || self.lex.tk == Token::Float as i64
@@ -2231,16 +2258,27 @@ impl Compiler {
         self.next()?;
         while self.lex.tk != 0 {
             let mut bt = Ty::Int as i64;
-            // `_Thread_local <type> name;` -- C11 storage class for
-            // per-thread globals. The keyword may appear before the
-            // type prefix; we record the flag and forward to the
-            // normal type-and-declarator path.
-            let thread_local = if self.lex.tk == Token::ThreadLocal as i64 {
-                self.next()?;
-                true
-            } else {
-                false
-            };
+            // Storage-class prefixes -- can appear in any order
+            // and any combination before the type. C lets you
+            // mix `static extern` (silly but legal in some
+            // compilers) and `_Thread_local extern` (legal),
+            // so we accept any ordering. `extern` and `static`
+            // are no-ops in c5 (every symbol already has
+            // internal linkage and there's no separate
+            // translation-unit story); `_Thread_local` flips
+            // the per-thread storage flag.
+            let mut thread_local = false;
+            loop {
+                if self.lex.tk == Token::ThreadLocal as i64 {
+                    thread_local = true;
+                    self.next()?;
+                } else if self.lex.tk == Token::Extern as i64 || self.lex.tk == Token::Static as i64
+                {
+                    self.next()?;
+                } else {
+                    break;
+                }
+            }
             if self.lex.tk == Token::Int as i64 {
                 self.next()?;
                 bt = Ty::Int as i64;
@@ -2412,7 +2450,19 @@ impl Compiler {
                         || self.lex.tk == Token::Float as i64
                         || self.lex.tk == Token::Double as i64
                         || self.lex.tk == Token::Struct as i64
+                        || self.lex.tk == Token::Extern as i64
+                        || self.lex.tk == Token::Static as i64
                     {
+                        // Consume any extern/static prefixes
+                        // before the type token; both are
+                        // no-op storage classes in c5. See
+                        // the comment in `parse_block_stmt`
+                        // for the rationale.
+                        while self.lex.tk == Token::Extern as i64
+                            || self.lex.tk == Token::Static as i64
+                        {
+                            self.next()?;
+                        }
                         let lbt = self.parse_decl_base_type()?;
                         while self.lex.tk != ';' as i64 {
                             let (loc_idx, ty) = self.parse_declarator(lbt)?;

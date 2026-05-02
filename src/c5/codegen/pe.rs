@@ -591,25 +591,44 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
             //   AddressOfCallBacks    : u64  -- VA of callback array (NULL)
             //   SizeOfZeroFill        : u32  -- bytes after End to zero
             //   Characteristics       : u32  -- 0
-            // VAs are absolute addresses (ImageBase + RVA). We
-            // ship no .reloc, so the loader maps at preferred
-            // ImageBase and these VAs match the runtime addresses.
+            // VAs are absolute addresses (ImageBase + RVA); the
+            // `.reloc` block we emit fixes them up after any
+            // ASLR slide.
+            //
+            // We deliberately emit the entire `tls_data` as
+            // template bytes (init data) rather than splitting
+            // it into a `tls_init_size`-byte template plus a
+            // `(tls_data.len() - tls_init_size)`-byte
+            // SizeOfZeroFill tail. Reason: at least one
+            // Windows ARM64 loader path skips processing a TLS
+            // directory whose template is empty
+            // (Start == End), leaving `_tls_index` at zero. A
+            // subsequent `tls_array[0] + offset` then lands
+            // inside another module's per-thread storage and
+            // reads non-zero data, which trips
+            // `thread_local_basic.c`'s "counter != 0" check.
+            // The c5 frontend never produces non-zero TLS init
+            // bytes today (no `_Thread_local int x = 5;`
+            // syntax), so emitting the whole block as zero
+            // template bytes is byte-for-byte identical to the
+            // SizeOfZeroFill scheme but sidesteps the loader
+            // edge case.
             let tls_init_start_va =
                 IMAGE_BASE + (data_rva + tls_layout.tls_init_offset_in_data) as u64;
-            let tls_init_end_va = tls_init_start_va + build.tls_init_size as u64;
+            let tls_init_end_va = tls_init_start_va + build.tls_data.len() as u64;
             let tls_index_va = IMAGE_BASE + (data_rva + tls_layout.tls_index_offset_in_data) as u64;
-            let zero_fill: u32 = (build.tls_data.len() - build.tls_init_size) as u32;
+            let zero_fill: u32 = 0;
             out.extend_from_slice(&tls_init_start_va.to_le_bytes());
             out.extend_from_slice(&tls_init_end_va.to_le_bytes());
             out.extend_from_slice(&tls_index_va.to_le_bytes());
             out.extend_from_slice(&0u64.to_le_bytes()); // AddressOfCallBacks
             out.extend_from_slice(&zero_fill.to_le_bytes());
             out.extend_from_slice(&0u32.to_le_bytes()); // Characteristics
-            // TLS init data (.tdata) -- the loader copies this
-            // into each thread's per-thread TLS region. The
-            // matching .tbss bytes don't ride the file; they're
-            // produced by SizeOfZeroFill.
-            out.extend_from_slice(&build.tls_data[..build.tls_init_size]);
+            // TLS template -- copied verbatim into each
+            // thread's per-thread region by the loader. The c5
+            // frontend zero-initialises every TLS variable
+            // today, so this is effectively N bytes of zeros.
+            out.extend_from_slice(&build.tls_data);
         }
     }
     if reloc_section_present {
@@ -713,7 +732,12 @@ fn compute_tls_layout(build: &Build) -> TlsLayout {
     // 8-byte align IMAGE_TLS_DIRECTORY64 (it carries u64s).
     let directory_offset = round_up(tls_index_offset + 4, 8);
     let tls_init_offset = directory_offset + IMAGE_TLS_DIRECTORY64_SIZE;
-    let total = tls_init_offset + build.tls_init_size as u32;
+    // We emit the entire `tls_data` as the template (see the
+    // long comment in `write` next to the
+    // IMAGE_TLS_DIRECTORY64 emission), so the .data tail
+    // contributed by TLS is `tls_data.len()` bytes regardless
+    // of `tls_init_size`.
+    let total = tls_init_offset + build.tls_data.len() as u32;
     TlsLayout {
         tls_blob_size: total - user_data_end,
         tls_index_offset_in_data: tls_index_offset,
@@ -2004,9 +2028,21 @@ mod tests {
         assert_eq!(cb_va, 0, "AddressOfCallBacks should be NULL");
         assert_eq!(characteristics, 0, "Characteristics must be 0");
         // The single `_Thread_local int counter` is 8 bytes
-        // (c5 globals are word-sized) of zero-fill.
-        assert_eq!(end_va - start_va, 0, "expected init-data range to be empty");
-        assert_eq!(zero_fill, 8, "expected 8 bytes of zero-fill");
+        // (c5 globals are word-sized). We emit the whole TLS
+        // block as init template (zeros) rather than as
+        // SizeOfZeroFill, so a Windows ARM64 loader path that
+        // skips empty-template directories still processes us.
+        // See the long comment next to the
+        // IMAGE_TLS_DIRECTORY64 emission in `write`.
+        assert_eq!(
+            end_va - start_va,
+            8,
+            "expected 8 bytes of init template (one TLS int slot)"
+        );
+        assert_eq!(
+            zero_fill, 0,
+            "expected SizeOfZeroFill = 0 (whole-data template)"
+        );
     }
 
     /// AArch64 mirror of the x64 TLS-directory check. The

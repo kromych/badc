@@ -1,5 +1,5 @@
 //! Capture git provenance at compile time so every emitted
-//! binary can carry a `BADC_BUILD: …` marker identifying the
+//! binary can carry a `BADC_BUILD: ...` marker identifying the
 //! compiler that produced it. The values flow through
 //! `cargo:rustc-env` -> `env!("BADC_GIT_*")` -> the `BUILD_INFO`
 //! const in `src/lib.rs`.

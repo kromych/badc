@@ -512,6 +512,15 @@ pub(crate) struct Build {
     /// on this to pick filetype, entry-point machinery, and
     /// export-table layout.
     pub output_kind: OutputKind,
+    /// Bytecode PC of a user-defined `DllMain`. Mirror of
+    /// [`Program::dllmain_pc`]; only the PE writer reads it,
+    /// and only for [`OutputKind::SharedLibrary`] output.
+    /// `None` (no user DllMain) -> writer emits the
+    /// boilerplate `mov eax, 1; ret` stub. `Some(pc)` -> writer
+    /// suppresses the stub and points
+    /// `IMAGE_OPTIONAL_HEADER64::AddressOfEntryPoint` at the
+    /// user's body via `bytecode_to_native[pc]`.
+    pub dllmain_pc: Option<usize>,
 }
 
 /// One macOS arm64 Thread-Local Variable. A 24-byte `__thread_vars`
@@ -800,6 +809,7 @@ fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Resul
     build.data_relocs = program.data_relocs.clone();
     build.exports = program.exports.clone();
     build.output_kind = options.output_kind;
+    build.dllmain_pc = program.dllmain_pc;
     append_build_info(&mut build);
     Ok(build)
 }

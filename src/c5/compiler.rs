@@ -701,15 +701,19 @@ impl Compiler {
         // (`OutputKind::SharedLibrary`) doesn't need an entry
         // point, and the executable-output writer surfaces a
         // clear error if `entry_pc` doesn't land on real code.
-        // When neither `main` nor any `#pragma export(...)` is
-        // present we still refuse, since the result would be
-        // an image with no callable entries at all.
+        // When neither `main`, any `#pragma export(...)`, nor
+        // a user-defined `DllMain` is present we still refuse,
+        // since the result would be an image with no callable
+        // entries at all.
         let main_idx = lexer::find_symbol(&self.symbols, "main");
+        let dllmain_idx = lexer::find_symbol(&self.symbols, "DllMain");
+        let has_user_dllmain =
+            dllmain_idx.is_some_and(|idx| self.symbols[idx].class == Token::Fun as i64);
         let entry_pc = match main_idx {
             Some(idx) if self.symbols[idx].class == Token::Fun as i64 => {
                 self.symbols[idx].val as usize
             }
-            _ if !self.pending_exports.is_empty() => 0,
+            _ if !self.pending_exports.is_empty() || has_user_dllmain => 0,
             _ => return Err(C5Error::Compile("main() not defined".to_string())),
         };
         // Resolve `#pragma export(<name>)` directives against
@@ -740,6 +744,16 @@ impl Compiler {
                 bytecode_pc: self.symbols[idx].val as usize,
             });
         }
+        // A user-defined `DllMain` (any source-level function with
+        // that exact name) overrides the boilerplate
+        // `mov eax, 1; ret` DllMain stub the PE shared-library
+        // writer otherwise emits. We record the bytecode PC here
+        // unconditionally -- the VM / JIT / non-PE writers ignore
+        // it, and the PE writer only consults it for `--shared`
+        // builds. No signature validation: c5 trusts user `main`
+        // the same way and DllMain is just a different ABI.
+        let dllmain_pc =
+            dllmain_idx.and_then(|idx| has_user_dllmain.then(|| self.symbols[idx].val as usize));
         Ok(Program {
             text: self.text,
             data: self.data,
@@ -752,6 +766,7 @@ impl Compiler {
             exports,
             data_relocs: self.data_relocs,
             dylibs: self.dylibs,
+            dllmain_pc,
         })
     }
 

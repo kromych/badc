@@ -1147,6 +1147,7 @@ pub(super) fn lower(
         data_relocs: Vec::new(),
         exports: Vec::new(),
         output_kind: super::OutputKind::Executable,
+        dllmain_pc: None,
         macho_tlv_fixups,
         macho_tlv_descriptors,
     })

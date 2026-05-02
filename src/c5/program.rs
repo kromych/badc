@@ -139,4 +139,15 @@ pub struct Program {
     ///
     /// The VM ignores this field; only `emit_native` reaches for it.
     pub(crate) dylibs: Vec<DylibSpec>,
+    /// Bytecode PC of a user-defined `DllMain` function, if the
+    /// source declared one. Used by the PE writer for
+    /// `--shared` output: when present, `AddressOfEntryPoint`
+    /// targets the user's body and the boilerplate
+    /// `mov eax, 1; ret` stub is suppressed; when `None`, the
+    /// writer falls back to the stub. The signature isn't
+    /// validated -- the user is trusted to honor the Win64
+    /// `BOOL DllMain(HINSTANCE, DWORD, LPVOID)` shape, same as
+    /// `main` is trusted today. The Mach-O / ELF / VM / JIT
+    /// paths ignore this field.
+    pub dllmain_pc: Option<usize>,
 }

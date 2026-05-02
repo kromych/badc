@@ -162,6 +162,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         data_relocs,
         exports,
         dylibs,
+        dllmain_pc,
     } = program;
 
     let mut insns = decode(&text, &data_imm_positions)?;
@@ -198,6 +199,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         data_relocs,
         exports,
         dylibs,
+        dllmain_pc,
     })
 }
 
@@ -878,6 +880,7 @@ mod tests {
             data_relocs: Vec::new(),
             exports: Vec::new(),
             dylibs: Vec::new(),
+            dllmain_pc: None,
         }
     }
 
@@ -1147,6 +1150,7 @@ mod tests {
             data_relocs: Vec::new(),
             exports: Vec::new(),
             dylibs: Vec::new(),
+            dllmain_pc: None,
         };
         let opt = optimize(p).unwrap();
         // Main returns 5; if the ImmCode operand remapped wrong, the

@@ -16,6 +16,7 @@ fn run(text: Vec<i64>) -> i64 {
         data_relocs: vec![],
         exports: vec![],
         dylibs: vec![],
+        dllmain_pc: None,
     };
     Vm::new(program).run().unwrap()
 }
@@ -112,6 +113,7 @@ fn invalid_opcode_is_a_runtime_error() {
         data_relocs: vec![],
         exports: vec![],
         dylibs: vec![],
+        dllmain_pc: None,
     };
     let err = Vm::new(program).run().unwrap_err();
     assert!(
@@ -134,6 +136,7 @@ fn empty_program_errors_cleanly() {
         data_relocs: vec![],
         exports: vec![],
         dylibs: vec![],
+        dllmain_pc: None,
     };
     let err = Vm::new(program).run().unwrap_err();
     assert!(

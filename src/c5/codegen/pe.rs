@@ -305,7 +305,26 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
     //    aren't auto-translated to the Windows equivalent; cross-
     //    platform sources gate those on `#if __BADC_TARGET__` and
     //    call the target-native API (`VirtualProtect`, etc.) directly.
-    let stub = build_entry_stub(machine, is_dll);
+    //
+    //    For `--shared` output with a user-defined `DllMain` we
+    //    skip the stub entirely: `AddressOfEntryPoint` will point
+    //    at the user's body inside `build.text`, and emitting the
+    //    boilerplate `mov eax, 1; ret` ahead of it would just
+    //    shift every fixup by 6-8 bytes for code the loader never
+    //    branches to. The `is_dll` branch above already pruned
+    //    the stub-only msvcrt / kernel32 imports, so suppressing
+    //    the stub bytes here is purely about the code prologue.
+    let user_dllmain = is_dll && build.dllmain_pc.is_some();
+    let stub = if user_dllmain {
+        EntryStub {
+            bytes: Vec::new(),
+            iat_getmainargs_offset: None,
+            iat_exit_offset: None,
+            direct_call_main_offset: None,
+        }
+    } else {
+        build_entry_stub(machine, is_dll)
+    };
 
     // 4) Compute layout. Combined .text is `entry stub |
     //    build.text`; the program's `Op::Mpro` calls go through
@@ -607,10 +626,33 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
     } else {
         (0, 0)
     };
+    // Entry point: the boilerplate stub sits at the start of
+    // `.text` (covers both executables and the default DLL
+    // case), so `text_rva` is right unless the user provided
+    // their own `DllMain` -- in which case we resolve its
+    // bytecode PC to the matching native offset and target the
+    // user's body directly. `bytecode_to_native[pc]` is a byte
+    // offset within `build.text`; `text_prologue_len` is 0 in
+    // the user-DllMain branch above, so adding it is a no-op
+    // there but keeps the formula symmetric with the other
+    // text-relative computations in this writer.
+    let entry_rva = match build.dllmain_pc {
+        Some(pc) if is_dll => {
+            let off = build.bytecode_to_native.get(pc).copied().ok_or_else(|| {
+                C5Error::Compile(format!(
+                    "PE writer: user-defined DllMain at bytecode PC {pc} \
+                         has no entry in bytecode_to_native -- the lowering \
+                         dropped the function?"
+                ))
+            })?;
+            text_rva + text_prologue_len + off as u32
+        }
+        _ => text_rva,
+    };
     write_optional_header(
         &mut out,
         OptionalHeaderInputs {
-            entry_rva: text_rva, // entry point is at start of .text
+            entry_rva,
             base_of_code: text_rva,
             size_of_code: text_size,
             size_of_initialized_data: idata_size + data_size + reloc_size,
@@ -2754,6 +2796,99 @@ mod tests {
         assert_eq!(first, 0xD280_0020, "expected `movz x0, #1`");
         // `enc_ret(x30)` => 0xD65F03C0.
         assert_eq!(second, 0xD65F_03C0, "expected `ret` against x30");
+    }
+
+    /// `AddressOfEntryPoint` lives at Optional Header offset
+    /// 16; `BaseOfCode` at offset 20. PE32+ keeps both as
+    /// 4-byte unsigned RVAs.
+    fn read_entry_point_and_base_of_code(bytes: &[u8]) -> (u32, u32) {
+        let pe_off = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
+        let optional_off = pe_off + 4 + COFF_HEADER_SIZE;
+        let entry = u32::from_le_bytes(
+            bytes[optional_off + 16..optional_off + 20]
+                .try_into()
+                .unwrap(),
+        );
+        let base = u32::from_le_bytes(
+            bytes[optional_off + 20..optional_off + 24]
+                .try_into()
+                .unwrap(),
+        );
+        (entry, base)
+    }
+
+    /// Default `--shared` build (no user `DllMain`):
+    /// `AddressOfEntryPoint` must equal `BaseOfCode` because
+    /// the boilerplate `mov eax, 1; ret` stub sits at the
+    /// start of `.text` and is what the loader calls on
+    /// `DLL_PROCESS_ATTACH`.
+    #[test]
+    fn dll_without_user_dllmain_uses_stub_at_base_of_code() {
+        use crate::Compiler;
+        let src = "
+            int answer() { return 42; }
+            #pragma export(answer)
+        ";
+        let program = Compiler::new(src.to_string()).compile().expect("compile");
+        let build = super::super::lower_for(
+            &program,
+            super::super::Target::WindowsX64,
+            super::super::NativeOptions::new().with_shared_library(),
+        )
+        .expect("lower");
+        let bytes = write(&build, Machine::X86_64).expect("write PE");
+        let (entry, base) = read_entry_point_and_base_of_code(&bytes);
+        assert_eq!(
+            entry, base,
+            "without a user DllMain the stub sits at the start of .text \
+             and AddressOfEntryPoint == BaseOfCode"
+        );
+    }
+
+    /// User-defined `DllMain` overrides the stub: the writer
+    /// must point `AddressOfEntryPoint` at the user's body
+    /// inside `build.text` rather than at the start of
+    /// `.text`. With the stub suppressed, `build.text` lands
+    /// at offset 0 of `.text`, so the expected entry is
+    /// `BaseOfCode + bytecode_to_native[dllmain_pc]`. A
+    /// secondary `dummy` function before `DllMain` guarantees
+    /// `bytecode_to_native[dllmain_pc] > 0` so the assertion
+    /// is genuinely distinguishing the user-DllMain branch
+    /// from the no-user-DllMain branch.
+    #[test]
+    fn dll_with_user_dllmain_skips_stub() {
+        use crate::Compiler;
+        let src = "
+            int dummy(int x) { return x; }
+            int DllMain(int hinst, int reason, int reserved) {
+                return dummy(1);
+            }
+        ";
+        let program = Compiler::new(src.to_string()).compile().expect("compile");
+        let dllmain_pc = program
+            .dllmain_pc
+            .expect("compiler must record dllmain_pc when source defines DllMain");
+        let build = super::super::lower_for(
+            &program,
+            super::super::Target::WindowsX64,
+            super::super::NativeOptions::new().with_shared_library(),
+        )
+        .expect("lower");
+        let dllmain_native_off = build.bytecode_to_native[dllmain_pc] as u32;
+        assert!(
+            dllmain_native_off > 0,
+            "with `dummy` defined before DllMain, the lowering \
+             should leave DllMain past offset 0 in build.text \
+             (got {dllmain_native_off:#x})"
+        );
+        let bytes = write(&build, Machine::X86_64).expect("write PE");
+        let (entry, base) = read_entry_point_and_base_of_code(&bytes);
+        assert_eq!(
+            entry,
+            base + dllmain_native_off,
+            "AddressOfEntryPoint must target the user's DllMain at \
+             BaseOfCode + bytecode_to_native[dllmain_pc]"
+        );
     }
 
     /// Executables keep `IMAGE_FILE_DLL` cleared and have no

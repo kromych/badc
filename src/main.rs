@@ -5,41 +5,123 @@ use badc::{
     emit_native_with_options, jit_run_with_options, optimize, predefined_symbols,
 };
 
-const USAGE: &str = "usage: badc [--optimize|-O] [--target=<spec>] [-o <out>] \
-                     [--interp [--track-pointers] [--trace]] \
-                     [--jit] [--dump-asm] [--list-symbols] \
-                     <file> [args...]";
+const USAGE: &str = "\
+usage: badc [options] <source.c> [program-args...]
+
+Output mode -- pick at most one (defaults to \"compile to native binary\"):
+  --interp                 Run under the bytecode VM (with optional safety net).
+  --jit                    Lower in-process and call main() directly.
+  --shared                 Produce a shared library (Mach-O .dylib /
+                           ELF .so / PE .dll) exposing every #pragma
+                           export(name) function.
+  --dump-asm               Print the lowered native listing and exit.
+                           No source is executed.
+  --list-symbols           Print pre-defined keywords / library calls /
+                           constants and exit. Takes no source.
+
+Compile knobs:
+  -O, --optimize           Enable the bytecode optimizer + native
+                           regalloc.
+  --target=<spec>          Pick the binary format (one of
+                           macos-aarch64, linux-aarch64, linux-x64,
+                           windows-x64, windows-arm64). Defaults to
+                           the host. Ignored under --interp / --jit;
+                           the JIT can only target the host arch.
+  -o <path>                Output path. Default depends on output
+                           mode and target (.exe / .dylib / .so /
+                           .dll suffixes added as appropriate).
+
+VM-only knobs (require --interp):
+  --track-pointers         Allocation tracking + use-after-free guard.
+  --trace                  Per-instruction stdout trace (noisy).
+
+Mutually exclusive: --interp / --jit / --shared / --dump-asm /
+--list-symbols all pick the output mode; you can only pick one.
+--track-pointers and --trace require --interp. -o makes no sense
+under --interp / --list-symbols.";
 
 /// Where the AOT codesign tool lives on every macOS install. Hardcoded
 /// so we don't accidentally pick up a homebrew shim that signs differently.
 #[cfg(target_os = "macos")]
 const CODESIGN: &str = "/usr/bin/codesign";
 
+/// Top-level mode picked from the argv flag set. Mutual
+/// exclusion is enforced once during arg parsing so the rest
+/// of `main` can match on a single `Mode`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    /// Default -- lower to a native executable on disk.
+    NativeExecutable,
+    /// `--shared` -- lower to a native shared library on
+    /// disk. Same writer pipeline as `NativeExecutable` plus
+    /// `OutputKind::SharedLibrary`.
+    SharedLibrary,
+    /// `--interp` -- run under the bytecode VM.
+    Interp,
+    /// `--jit` -- lower in-process and call main directly.
+    Jit,
+    /// `--dump-asm` -- print the native listing and exit.
+    DumpAsm,
+    /// `--list-symbols` -- print the pre-defined symbol table
+    /// and exit. Takes no source file.
+    ListSymbols,
+}
+
+impl Mode {
+    fn flag_name(self) -> &'static str {
+        match self {
+            Mode::NativeExecutable => "(default)",
+            Mode::SharedLibrary => "--shared",
+            Mode::Interp => "--interp",
+            Mode::Jit => "--jit",
+            Mode::DumpAsm => "--dump-asm",
+            Mode::ListSymbols => "--list-symbols",
+        }
+    }
+}
+
 fn main() {
     let raw: Vec<String> = std::env::args().collect();
 
-    let mut interp = false;
+    // Mode selection: at most one of the mode-picking flags
+    // may appear. We track the *first* seen so an error
+    // message can name both flags.
+    let mut mode: Option<(Mode, &'static str)> = None;
     let mut track_pointers = false;
     let mut trace = false;
-    let mut list_symbols = false;
     let mut optimize_flag = false;
     let mut output_path: Option<PathBuf> = None;
     let mut target_spec: Option<String> = None;
-    let mut dump_asm = false;
-    let mut jit = false;
 
     let mut iter = raw.into_iter();
     let prog0 = iter.next().unwrap_or_default();
     let mut args: Vec<String> = vec![prog0];
     while let Some(arg) = iter.next() {
+        let claim = |slot: &mut Option<(Mode, &'static str)>, picked: Mode| {
+            let flag = picked.flag_name();
+            if let Some((existing, existing_flag)) = *slot {
+                eprintln!(
+                    "badc: {flag} can't be combined with {existing_flag} -- both pick an \
+                     output mode (Mode::{:?} vs Mode::{:?}). See --help.",
+                    picked, existing
+                );
+                std::process::exit(1);
+            }
+            *slot = Some((picked, flag));
+        };
         match arg.as_str() {
-            "--interp" => interp = true,
+            "--interp" => claim(&mut mode, Mode::Interp),
             "--track-pointers" => track_pointers = true,
             "--trace" => trace = true,
-            "--list-symbols" => list_symbols = true,
+            "--list-symbols" => claim(&mut mode, Mode::ListSymbols),
             "--optimize" | "-O" => optimize_flag = true,
-            "--dump-asm" => dump_asm = true,
-            "--jit" => jit = true,
+            "--dump-asm" => claim(&mut mode, Mode::DumpAsm),
+            "--jit" => claim(&mut mode, Mode::Jit),
+            "--shared" => claim(&mut mode, Mode::SharedLibrary),
+            "-h" | "--help" => {
+                println!("{USAGE}");
+                return;
+            }
             "-o" => match iter.next() {
                 Some(p) => output_path = Some(PathBuf::from(p)),
                 None => {
@@ -54,6 +136,8 @@ fn main() {
         }
     }
 
+    let mode = mode.map(|(m, _)| m).unwrap_or(Mode::NativeExecutable);
+
     let target = match Target::parse(target_spec.as_deref()) {
         Ok(t) => t,
         Err(e) => {
@@ -62,23 +146,33 @@ fn main() {
         }
     };
 
-    if list_symbols {
+    // VM-only flags.
+    if (track_pointers || trace) && mode != Mode::Interp {
+        eprintln!(
+            "badc: --track-pointers / --trace require --interp \
+             (current mode is {})",
+            mode.flag_name()
+        );
+        std::process::exit(1);
+    }
+
+    // -o makes no sense for modes that don't write to disk.
+    if output_path.is_some() && matches!(mode, Mode::Interp | Mode::ListSymbols | Mode::Jit) {
+        eprintln!(
+            "badc: -o is only meaningful for native compilation \
+             (current mode is {})",
+            mode.flag_name()
+        );
+        std::process::exit(1);
+    }
+
+    if mode == Mode::ListSymbols {
         print_predefined_symbols();
         return;
     }
 
     if args.len() < 2 {
         eprintln!("{USAGE}");
-        std::process::exit(1);
-    }
-
-    // VM-only flags only make sense in interpreter mode.
-    if (track_pointers || trace) && !interp {
-        eprintln!("badc: --track-pointers / --trace require --interp");
-        std::process::exit(1);
-    }
-    if interp && jit {
-        eprintln!("badc: --interp and --jit are mutually exclusive");
         std::process::exit(1);
     }
 
@@ -123,80 +217,92 @@ fn main() {
     // independent -- the native pass is correct on either pre- or
     // post-bytecode-optimizer input -- but turning them on together
     // produces the fastest emitted code.
-    let native_opts = if optimize_flag {
+    let mut native_opts = if optimize_flag {
         NativeOptions::new().with_optimize()
     } else {
         NativeOptions::new()
     };
+    if mode == Mode::SharedLibrary {
+        native_opts = native_opts.with_shared_library();
+    }
 
-    if dump_asm {
-        match dump_native_listing_with_options(&program, target, native_opts) {
+    match mode {
+        Mode::DumpAsm => match dump_native_listing_with_options(&program, target, native_opts) {
             Ok(s) => print!("{s}"),
             Err(e) => {
                 eprintln!("{e}");
                 std::process::exit(1);
             }
-        }
-        return;
-    }
-
-    if jit {
-        // The JIT loader picks the host arch on its own; --target is
-        // ignored (the JIT can't cross-compile, and the lowering it
-        // does is determined by the host).
-        let c_args: Vec<String> = args[1..].to_vec();
-        match jit_run_with_options(&program, &c_args, native_opts) {
-            Ok(code) => std::process::exit(code),
-            Err(e) => {
-                eprintln!("{e}");
-                std::process::exit(1);
+        },
+        Mode::Jit => {
+            // The JIT loader picks the host arch on its own; --target is
+            // ignored (the JIT can't cross-compile, and the lowering it
+            // does is determined by the host).
+            let c_args: Vec<String> = args[1..].to_vec();
+            match jit_run_with_options(&program, &c_args, native_opts) {
+                Ok(code) => std::process::exit(code),
+                Err(e) => {
+                    eprintln!("{e}");
+                    std::process::exit(1);
+                }
             }
         }
-    }
-
-    if interp {
-        if output_path.is_some() {
-            eprintln!("badc: -o is only meaningful for native compilation");
-            std::process::exit(1);
-        }
-        // Pass everything from argv[1] onward to the C program -- argv[0]
-        // of the hosted program is the source file name, argv[1..] are
-        // its own args.
-        let c_args: Vec<String> = args[1..].to_vec();
-        let mut vm = Vm::new(program).with_args(c_args);
-        if track_pointers {
-            vm = vm.with_pointer_tracking();
-        }
-        if trace {
-            vm = vm.with_trace();
-        }
-        match vm.run() {
-            Ok(res) => println!("exit({})", res),
-            Err(e) => {
-                eprintln!("{}", e);
-                std::process::exit(1);
+        Mode::Interp => {
+            // Pass everything from argv[1] onward to the C program -- argv[0]
+            // of the hosted program is the source file name, argv[1..] are
+            // its own args.
+            let c_args: Vec<String> = args[1..].to_vec();
+            let mut vm = Vm::new(program).with_args(c_args);
+            if track_pointers {
+                vm = vm.with_pointer_tracking();
+            }
+            if trace {
+                vm = vm.with_trace();
+            }
+            match vm.run() {
+                Ok(res) => println!("exit({})", res),
+                Err(e) => {
+                    eprintln!("{}", e);
+                    std::process::exit(1);
+                }
             }
         }
-        return;
+        Mode::NativeExecutable | Mode::SharedLibrary => {
+            // Default: lower to a native binary, write it,
+            // mark it executable, and (on macOS hosts emitting
+            // Mach-O) ad-hoc codesign so dyld accepts it.
+            let out = output_path.unwrap_or_else(|| default_output_path(path, target, mode));
+            emit_native_binary(&program, &out, target, native_opts, mode);
+        }
+        Mode::ListSymbols => unreachable!("handled above"),
     }
-
-    // Default: lower to a native binary, write it, mark it executable,
-    // and (on macOS hosts emitting Mach-O) ad-hoc codesign so dyld
-    // accepts it. Use `--interp` to opt into the bytecode VM instead;
-    // `--jit` for the in-process equivalent of native execution.
-    let out = output_path.unwrap_or_else(|| default_output_path(path, target));
-    emit_native_binary(&program, &out, target, native_opts);
 }
 
-/// Default `-o` value for native compilation: drop the extension off
-/// the source path; for Windows targets, append `.exe` so the result
-/// is loader-recognisable. `foo/bar.c` -> `foo/bar` (POSIX targets) or
-/// `foo/bar.exe` (Windows targets); `script` -> `script.bin` so we
-/// don't overwrite the source itself when there's no extension to
-/// strip.
-fn default_output_path(source: &str, target: Target) -> PathBuf {
+/// Default `-o` value for native compilation. Picks an
+/// extension matching the (target, mode) pair so the produced
+/// file is loader-recognisable on the destination OS:
+///
+/// | mode     | target            | extension |
+/// |----------|-------------------|-----------|
+/// | exe      | windows-*         | `.exe`    |
+/// | exe      | macos / linux     | (drop ext) / `.bin` |
+/// | shared   | macos-aarch64     | `.dylib`  |
+/// | shared   | linux-*           | `.so`     |
+/// | shared   | windows-*         | `.dll`    |
+fn default_output_path(source: &str, target: Target, mode: Mode) -> PathBuf {
     let p = PathBuf::from(source);
     let is_windows = matches!(target, Target::WindowsX64 | Target::WindowsAarch64);
+    let is_macos = matches!(target, Target::MacOSAarch64);
+    if mode == Mode::SharedLibrary {
+        let ext = if is_windows {
+            "dll"
+        } else if is_macos {
+            "dylib"
+        } else {
+            "so"
+        };
+        return p.with_extension(ext);
+    }
     if is_windows {
         return p.with_extension("exe");
     }
@@ -216,6 +322,7 @@ fn emit_native_binary(
     out: &std::path::Path,
     target: Target,
     options: NativeOptions,
+    mode: Mode,
 ) {
     let bytes = match emit_native_with_options(program, target, options) {
         Ok(b) => b,
@@ -228,7 +335,9 @@ fn emit_native_binary(
         eprintln!("badc: failed to write {}: {e}", out.display());
         std::process::exit(1);
     }
-    set_executable(out);
+    if mode == Mode::NativeExecutable {
+        set_executable(out);
+    }
     match target {
         Target::MacOSAarch64 => {
             #[cfg(target_os = "macos")]

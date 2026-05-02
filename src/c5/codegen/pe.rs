@@ -271,16 +271,29 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
         let dll = build.imports.dylibs[imp.dylib_index].path.clone();
         imports.push((imp.real_symbol.clone(), dll));
     }
-    let stub_getmainargs_idx = imports.len();
-    imports.push((
-        STUB_IMPORT_GETMAINARGS.0.to_string(),
-        STUB_IMPORT_GETMAINARGS.1.to_string(),
-    ));
-    let stub_exit_idx = imports.len();
-    imports.push((
-        STUB_IMPORT_EXIT.0.to_string(),
-        STUB_IMPORT_EXIT.1.to_string(),
-    ));
+    // The executable entry stub calls msvcrt's `__getmainargs`
+    // and kernel32's `ExitProcess`; pull those imports in
+    // unconditionally for executable output. DLLs use a
+    // self-contained `mov eax, 1; ret` DllMain that doesn't
+    // touch either, so we skip both -- otherwise the
+    // image would link in unused IAT slots and (worse) drag
+    // msvcrt.dll into the import table just to satisfy the
+    // stub's bind opcodes.
+    let (stub_getmainargs_idx, stub_exit_idx) = if is_dll {
+        (usize::MAX, usize::MAX)
+    } else {
+        let g = imports.len();
+        imports.push((
+            STUB_IMPORT_GETMAINARGS.0.to_string(),
+            STUB_IMPORT_GETMAINARGS.1.to_string(),
+        ));
+        let e = imports.len();
+        imports.push((
+            STUB_IMPORT_EXIT.0.to_string(),
+            STUB_IMPORT_EXIT.1.to_string(),
+        ));
+        (g, e)
+    };
 
     // 2) Group imports by DLL while preserving each one's IAT index.
     //    `dlls` holds (dll_name, [import_index, ...]); the IAT is
@@ -292,7 +305,7 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
     //    aren't auto-translated to the Windows equivalent; cross-
     //    platform sources gate those on `#if __BADC_TARGET__` and
     //    call the target-native API (`VirtualProtect`, etc.) directly.
-    let stub = build_entry_stub(machine);
+    let stub = build_entry_stub(machine, is_dll);
 
     // 4) Compute layout. Combined .text is `entry stub |
     //    build.text`; the program's `Op::Mpro` calls go through
@@ -493,32 +506,40 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
     text_bytes.extend_from_slice(&stub.bytes);
     text_bytes.extend_from_slice(&build.text);
 
-    // Stub-internal fixup: the direct call to main. main starts
-    // at offset text_prologue_len within the combined .text (past
-    // the entry stub).
-    patch_direct_call(
-        machine,
-        &mut text_bytes,
-        stub.direct_call_main_offset,
-        text_prologue_len + build.entry_offset as u32,
-    )?;
+    // Stub-internal fixup: the direct call to main. Only
+    // present in executable output; the DLL stub
+    // (`mov eax, 1; ret`) has no call-main step.
+    if let Some(call_off) = stub.direct_call_main_offset {
+        patch_direct_call(
+            machine,
+            &mut text_bytes,
+            call_off,
+            text_prologue_len + build.entry_offset as u32,
+        )?;
+    }
 
-    // Stub-emitted IAT calls (one for `__getmainargs`, one for
-    // `ExitProcess`).
-    patch_iat_lookup(
-        machine,
-        &mut text_bytes,
-        stub.iat_getmainargs_offset,
-        text_rva,
-        idata_layout.iat_rva_for_import[stub_getmainargs_idx],
-    )?;
-    patch_iat_lookup(
-        machine,
-        &mut text_bytes,
-        stub.iat_exit_offset,
-        text_rva,
-        idata_layout.iat_rva_for_import[stub_exit_idx],
-    )?;
+    // Stub-emitted IAT calls (one for `__getmainargs`, one
+    // for `ExitProcess`). Both `None` for DLL output, where
+    // the stub returns `TRUE` immediately and never reaches
+    // for msvcrt.
+    if let Some(off) = stub.iat_getmainargs_offset {
+        patch_iat_lookup(
+            machine,
+            &mut text_bytes,
+            off,
+            text_rva,
+            idata_layout.iat_rva_for_import[stub_getmainargs_idx],
+        )?;
+    }
+    if let Some(off) = stub.iat_exit_offset {
+        patch_iat_lookup(
+            machine,
+            &mut text_bytes,
+            off,
+            text_rva,
+            idata_layout.iat_rva_for_import[stub_exit_idx],
+        )?;
+    }
 
     // Program-side fixups land inside build.text, which is offset
     // by text_prologue_len in the combined .text. All libc ops --
@@ -799,18 +820,47 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
 /// `SizeOfBlock` must be 4-byte aligned, so blocks with an
 /// odd entry count get one trailing `IMAGE_REL_BASED_ABSOLUTE`
 /// pad entry.
-/// Build the `.edata` section bytes for a DLL with
-/// exports. The section opens with `IMAGE_EXPORT_DIRECTORY`
-/// (40 bytes) and is followed by:
 ///
-/// * `AddressOfFunctions`: u32 RVA per export (function
-///   start in `.text`).
-/// * `AddressOfNames`: u32 RVA per export (entry in the
-///   trailing string blob).
-/// * `AddressOfNameOrdinals`: u16 ordinal per export
-///   (0-based index into AddressOfFunctions).
-/// * DLL name string + each export's name string,
-///   NUL-terminated.
+/// (`build_reloc_section` follows.)
+///
+/// On-disk shape of `IMAGE_EXPORT_DIRECTORY`. Same field
+/// order, sizes, and meaning as `winnt.h`'s definition --
+/// the writer fills one of these in and `write_struct`s it
+/// to the section's head, then appends the
+/// AddressOfFunctions / AddressOfNames / AddressOfNameOrdinals
+/// arrays plus the trailing string blob.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct ImageExportDirectory {
+    characteristics: u32,
+    time_date_stamp: u32,
+    major_version: u16,
+    minor_version: u16,
+    /// RVA of a NUL-terminated DLL name.
+    name_rva: u32,
+    /// Lowest valid ordinal. Conventionally 1; `dlsym`-style
+    /// lookups never reach for ordinals so the value matters
+    /// little, but tooling cross-checks it.
+    ordinal_base: u32,
+    number_of_functions: u32,
+    number_of_names: u32,
+    /// RVA of an array of `u32` function RVAs.
+    address_of_functions: u32,
+    /// RVA of an array of `u32` name-string RVAs.
+    address_of_names: u32,
+    /// RVA of an array of `u16` ordinals (zero-based indices
+    /// into the function table).
+    address_of_name_ordinals: u32,
+}
+
+const IMAGE_EXPORT_DIRECTORY_SIZE: usize = 40;
+const _: () = assert!(core::mem::size_of::<ImageExportDirectory>() == IMAGE_EXPORT_DIRECTORY_SIZE);
+
+/// Build the `.edata` section bytes for a DLL with exports.
+/// Layout: `IMAGE_EXPORT_DIRECTORY` followed by
+/// AddressOfFunctions / AddressOfNames /
+/// AddressOfNameOrdinals arrays, then the DLL-name and
+/// per-export-name strings (NUL-terminated).
 ///
 /// All RVAs in the directory are image-relative; the
 /// `text_prologue_rva` is `text_rva + stub_len`, the byte
@@ -822,17 +872,40 @@ fn build_export_directory(
     exports: &[crate::c5::program::ExportedFunction],
     bytecode_to_native: &[usize],
 ) -> Result<Vec<u8>, C5Error> {
-    const EXPORT_DIRECTORY_SIZE: usize = 40;
     let n = exports.len() as u32;
     // Layout offsets within the section.
-    let funcs_off: u32 = EXPORT_DIRECTORY_SIZE as u32;
-    let names_off: u32 = funcs_off + 4 * n;
-    let ordinals_off: u32 = names_off + 4 * n;
-    let strings_off: u32 = ordinals_off + 2 * n;
+    let header_size = IMAGE_EXPORT_DIRECTORY_SIZE as u32;
+    let funcs_off = header_size;
+    let names_off = funcs_off + 4 * n;
+    let ordinals_off = names_off + 4 * n;
+    let strings_off = ordinals_off + 2 * n;
 
-    // Reserve the directory header; we'll fill in the field
-    // values after we know the string offsets.
-    let mut out: Vec<u8> = alloc::vec![0u8; EXPORT_DIRECTORY_SIZE];
+    // The DLL-name string heads the string blob; per-export
+    // names follow, each NUL-terminated. We compute their
+    // RVAs as we go so the AddressOfNames entries match.
+    let dll_name = "c5-output.dll";
+    let strings_rva = edata_rva + strings_off;
+    let dll_name_rva = strings_rva;
+
+    let mut out = Vec::with_capacity(strings_off as usize + dll_name.len() + 1);
+
+    // Header (filled out, not patched after).
+    write_struct(
+        &mut out,
+        &ImageExportDirectory {
+            characteristics: 0,
+            time_date_stamp: 0,
+            major_version: 0,
+            minor_version: 0,
+            name_rva: dll_name_rva,
+            ordinal_base: 1,
+            number_of_functions: n,
+            number_of_names: n,
+            address_of_functions: edata_rva + funcs_off,
+            address_of_names: edata_rva + names_off,
+            address_of_name_ordinals: edata_rva + ordinals_off,
+        },
+    );
 
     // AddressOfFunctions -- RVA of each function.
     for exp in exports {
@@ -850,52 +923,26 @@ fn build_export_directory(
         let rva = text_prologue_rva + native_off as u32;
         out.extend_from_slice(&rva.to_le_bytes());
     }
+
     // AddressOfNames -- RVA of each export's name string.
-    let strings_rva = edata_rva + strings_off;
-    let dll_name = "c5-output.dll";
     let mut cur = strings_rva + dll_name.len() as u32 + 1;
     for exp in exports {
         out.extend_from_slice(&cur.to_le_bytes());
         cur += exp.name.len() as u32 + 1;
     }
+
     // AddressOfNameOrdinals -- u16 ordinal per export.
     for i in 0..n {
         out.extend_from_slice(&(i as u16).to_le_bytes());
     }
-    // String blob: DLL name first (referenced by the
-    // directory's `Name` field), then each export name.
-    let dll_name_rva = edata_rva + strings_off;
+
+    // String blob: DLL name first, then each export name.
     out.extend_from_slice(dll_name.as_bytes());
     out.push(0);
     for exp in exports {
         out.extend_from_slice(exp.name.as_bytes());
         out.push(0);
     }
-
-    // Patch the directory header with the now-known offsets.
-    // Layout:
-    //   Characteristics      : u32  (0)
-    //   TimeDateStamp        : u32  (0)
-    //   MajorVersion         : u16  (0)
-    //   MinorVersion         : u16  (0)
-    //   Name                 : u32  RVA of dll name
-    //   Base                 : u32  ordinal base, 1
-    //   NumberOfFunctions    : u32  n
-    //   NumberOfNames        : u32  n
-    //   AddressOfFunctions   : u32
-    //   AddressOfNames       : u32
-    //   AddressOfNameOrdinals: u32
-    out[0..4].copy_from_slice(&0u32.to_le_bytes());
-    out[4..8].copy_from_slice(&0u32.to_le_bytes());
-    out[8..10].copy_from_slice(&0u16.to_le_bytes());
-    out[10..12].copy_from_slice(&0u16.to_le_bytes());
-    out[12..16].copy_from_slice(&dll_name_rva.to_le_bytes());
-    out[16..20].copy_from_slice(&1u32.to_le_bytes());
-    out[20..24].copy_from_slice(&n.to_le_bytes());
-    out[24..28].copy_from_slice(&n.to_le_bytes());
-    out[28..32].copy_from_slice(&(edata_rva + funcs_off).to_le_bytes());
-    out[32..36].copy_from_slice(&(edata_rva + names_off).to_le_bytes());
-    out[36..40].copy_from_slice(&(edata_rva + ordinals_off).to_le_bytes());
 
     Ok(out)
 }
@@ -1617,23 +1664,60 @@ fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) ->
 
 struct EntryStub {
     bytes: Vec<u8>,
-    /// Offset within [`Self::bytes`] of the IAT-lookup sequence for
-    /// `__getmainargs`. On x86_64 this is the start of
-    /// `call qword [rip+disp32]`; on aarch64 the start of the
-    /// `adrp x16, _; ldr x16, [x16, #_]` pair (the trailing
-    /// `blr x16` is at +8 and doesn't get patched).
-    iat_getmainargs_offset: u32,
-    /// Offset of the IAT-lookup for `ExitProcess` (same shape as
-    /// `iat_getmainargs_offset`).
-    iat_exit_offset: u32,
-    /// Offset of the direct `bl main` / `call main` instruction.
-    direct_call_main_offset: u32,
+    /// Offset within [`Self::bytes`] of the IAT-lookup
+    /// sequence for `__getmainargs`. `None` for DLL output
+    /// (the DllMain stub doesn't call out to msvcrt).
+    iat_getmainargs_offset: Option<u32>,
+    /// Offset of the IAT-lookup for `ExitProcess`. `None`
+    /// for DLL output.
+    iat_exit_offset: Option<u32>,
+    /// Offset of the direct `bl main` / `call main`
+    /// instruction. `None` for DLL output -- DllMain is
+    /// invoked directly by the loader, not from the stub.
+    direct_call_main_offset: Option<u32>,
 }
 
-fn build_entry_stub(machine: Machine) -> EntryStub {
+fn build_entry_stub(machine: Machine, is_dll: bool) -> EntryStub {
+    if is_dll {
+        return build_dllmain_stub(machine);
+    }
     match machine {
         Machine::X86_64 => build_x86_64_entry_stub(),
         Machine::Aarch64 => build_aarch64_entry_stub(),
+    }
+}
+
+/// Minimal `DllMain` for shared-library output. The Windows
+/// loader calls this on `DLL_PROCESS_ATTACH`,
+/// `DLL_THREAD_ATTACH`, etc. with the standard
+/// `(HINSTANCE, DWORD reason, LPVOID reserved)` signature
+/// and expects a `BOOL` return; we return `TRUE` (1) to
+/// signal "module is happy to load", which is all the
+/// runtime semantics c5 has to offer today (no global
+/// constructors, no thread-attach hooks).
+///
+/// * x86_64 (Win64 ABI): `mov eax, 1; ret` -- 6 bytes.
+/// * aarch64 (Windows AAPCS64): `mov w0, #1; ret` -- 8 bytes.
+fn build_dllmain_stub(machine: Machine) -> EntryStub {
+    let bytes = match machine {
+        // mov eax, 1 (B8 01 00 00 00); ret (C3).
+        Machine::X86_64 => vec![0xB8, 0x01, 0x00, 0x00, 0x00, 0xC3],
+        // mov w0, #1 (52800020) ; ret (D65F03C0). Both are
+        // 4-byte little-endian instruction words.
+        Machine::Aarch64 => {
+            let mov = aarch64::enc_movz(aarch64::Reg::X0, 1, 0);
+            let ret_word = aarch64::enc_ret(aarch64::Reg::X30);
+            let mut b = Vec::with_capacity(8);
+            b.extend_from_slice(&mov.to_le_bytes());
+            b.extend_from_slice(&ret_word.to_le_bytes());
+            b
+        }
+    };
+    EntryStub {
+        bytes,
+        iat_getmainargs_offset: None,
+        iat_exit_offset: None,
+        direct_call_main_offset: None,
     }
 }
 
@@ -1708,9 +1792,9 @@ fn build_x86_64_entry_stub() -> EntryStub {
         // x86_64: the IAT-lookup is the start of the `call qword`
         // instruction itself (not the disp32 byte). The patcher
         // computes `disp32 = target - (call + 6)` from this offset.
-        iat_getmainargs_offset: call_gma_off,
-        iat_exit_offset: call_exit_off,
-        direct_call_main_offset: call_main_off,
+        iat_getmainargs_offset: Some(call_gma_off),
+        iat_exit_offset: Some(call_exit_off),
+        direct_call_main_offset: Some(call_main_off),
     }
 }
 
@@ -1788,9 +1872,9 @@ fn build_aarch64_entry_stub() -> EntryStub {
 
     EntryStub {
         bytes,
-        iat_getmainargs_offset: iat_gma_off,
-        iat_exit_offset: iat_exit_off,
-        direct_call_main_offset: bl_main_off,
+        iat_getmainargs_offset: Some(iat_gma_off),
+        iat_exit_offset: Some(iat_exit_off),
+        direct_call_main_offset: Some(bl_main_off),
     }
 }
 
@@ -2159,31 +2243,34 @@ mod tests {
 
     #[test]
     fn x86_64_entry_stub_layout_matches_expected_size() {
-        let s = build_entry_stub(Machine::X86_64);
+        let s = build_entry_stub(Machine::X86_64, false);
         // 4 + 2 + 4 + 5 + 5 + 5 + 5 + 5 + 3 + 6 + 5 + 5 + 5 + 3 + 6 = 68 bytes.
         assert_eq!(s.bytes.len(), 68);
         // The stub has three patch sites: two IAT lookups (start of
         // the `call qword [rip+disp32]` instructions) and one
         // direct call to main.
-        assert_eq!(s.iat_getmainargs_offset, 38);
-        assert_eq!(s.direct_call_main_offset, 54);
-        assert_eq!(s.iat_exit_offset, 62);
+        assert_eq!(s.iat_getmainargs_offset, Some(38));
+        assert_eq!(s.direct_call_main_offset, Some(54));
+        assert_eq!(s.iat_exit_offset, Some(62));
     }
 
     #[test]
     fn aarch64_entry_stub_is_one_word_per_instruction() {
-        let s = build_entry_stub(Machine::Aarch64);
+        let s = build_entry_stub(Machine::Aarch64, false);
         // 19 instructions * 4 bytes = 76 bytes.
         assert_eq!(s.bytes.len(), 76);
         // Patch sites point at adrp instructions / the bl. Each is
         // 4 bytes.
-        assert!(s.iat_getmainargs_offset.is_multiple_of(4));
-        assert!(s.iat_exit_offset.is_multiple_of(4));
-        assert!(s.direct_call_main_offset.is_multiple_of(4));
-        // Order in the stub: __getmainargs (mid), bl main (later),
-        // ExitProcess (last).
-        assert!(s.iat_getmainargs_offset < s.direct_call_main_offset);
-        assert!(s.direct_call_main_offset < s.iat_exit_offset);
+        let gma = s.iat_getmainargs_offset.unwrap();
+        let exit = s.iat_exit_offset.unwrap();
+        let main = s.direct_call_main_offset.unwrap();
+        assert!(gma.is_multiple_of(4));
+        assert!(exit.is_multiple_of(4));
+        assert!(main.is_multiple_of(4));
+        // Order in the stub: __getmainargs (mid), bl main
+        // (later), ExitProcess (last).
+        assert!(gma < main);
+        assert!(main < exit);
     }
 
     /// Offset within the Optional Header at which DataDirectory[i]
@@ -2621,6 +2708,52 @@ mod tests {
                 "{machine:?}: NumberOfNames must equal the export count"
             );
         }
+    }
+
+    /// DllMain stubs returning TRUE: x86_64 is
+    /// `mov eax, 1; ret` (`B8 01 00 00 00 C3`); aarch64 is
+    /// `mov w0, #1; ret` (4-byte `enc_movz` + 4-byte
+    /// `enc_ret(x30)`). Without this stub the loader's
+    /// `DLL_PROCESS_ATTACH` callback would jump into
+    /// arbitrary `build.text` bytes; verify each architecture
+    /// produces the right shape.
+    #[test]
+    fn dllmain_stub_returns_true() {
+        let s_x64 = build_entry_stub(Machine::X86_64, true);
+        assert_eq!(
+            s_x64.bytes,
+            vec![0xB8, 0x01, 0x00, 0x00, 0x00, 0xC3],
+            "x64 DllMain must be `mov eax, 1; ret`"
+        );
+        assert!(s_x64.iat_getmainargs_offset.is_none());
+        assert!(s_x64.iat_exit_offset.is_none());
+        assert!(s_x64.direct_call_main_offset.is_none());
+
+        let s_arm = build_entry_stub(Machine::Aarch64, true);
+        // 2 instructions x 4 bytes.
+        assert_eq!(s_arm.bytes.len(), 8);
+        // First word: movz w0, #1 => 0x52800020 (movz is the
+        // 32-bit form because Rd is x0 / w0 with sf=0; we
+        // emit the 64-bit movz with imm=1, low lane, which
+        // also clears the upper lanes -- semantically the
+        // same single bit).
+        let first = u32::from_le_bytes([
+            s_arm.bytes[0],
+            s_arm.bytes[1],
+            s_arm.bytes[2],
+            s_arm.bytes[3],
+        ]);
+        let second = u32::from_le_bytes([
+            s_arm.bytes[4],
+            s_arm.bytes[5],
+            s_arm.bytes[6],
+            s_arm.bytes[7],
+        ]);
+        // `enc_movz(x0, 1, 0)` lower bits: rd=0, imm16=1,
+        // hw=0 => 0xD2800020.
+        assert_eq!(first, 0xD280_0020, "expected `movz x0, #1`");
+        // `enc_ret(x30)` => 0xD65F03C0.
+        assert_eq!(second, 0xD65F_03C0, "expected `ret` against x30");
     }
 
     /// Executables keep `IMAGE_FILE_DLL` cleared and have no

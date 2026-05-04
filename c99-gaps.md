@@ -1,6 +1,6 @@
 # Gaps to C99
 
-Snapshot updated after M21 (predefined macros + #error) lands. The c5
+Snapshot updated after M22 (`#`, `##`, `__VA_ARGS__`) lands. The c5
 dialect is a deliberately small subset of C with extras for
 the compiler's own use; this document catalogues the C99
 features that aren't supported, organized by spec section,
@@ -334,9 +334,15 @@ to have).
 - `#line` -- **missing**. Severity: 5 (mostly for
   generated code).
 - Variadic macros (`#define foo(...)`,
-  `__VA_ARGS__`) -- **missing**. Severity: 3.
-- `#`, `##` operators (stringification, token
-  concatenation) -- **missing**. Severity: 3.
+  `__VA_ARGS__`) -- **supported** (M22). Both the
+  `(args...)` -only form and the `(fixed, ...)` form work;
+  `__VA_ARGS__` substitutes the comma-joined trailing args.
+  GCC's named-rest extension (`#define foo(args...)`) is
+  not supported -- the parameter must be the literal `...`.
+- `#`, `##` operators -- **supported** (M22). `#param`
+  yields a string literal of the argument's text with
+  `\` and `"` escaped; `a ## b` token-pastes by trimming
+  whitespace around the operator.
 - `__FILE__`, `__LINE__`, `__DATE__`, `__TIME__`,
   `__STDC__` -- **supported** (M21). See §6.4 for details.
 

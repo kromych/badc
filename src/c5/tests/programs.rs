@@ -239,6 +239,14 @@ fn integer_literal_suffixes_are_consumed() {
 }
 
 #[test]
+fn macro_operators_work() {
+    // # (stringify), ## (token paste), __VA_ARGS__ in variadic
+    // macros. The fixture exercises each operator and checks the
+    // resulting program runs to completion.
+    assert_eq!(run_fixture("macro_operators.c"), 0);
+}
+
+#[test]
 fn predefined_macros_resolve() {
     // __FILE__, __LINE__, __STDC__, __DATE__, __TIME__ -- the standard
     // C99 predefines. __LINE__ and __FILE__ expand dynamically per

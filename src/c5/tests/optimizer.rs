@@ -45,6 +45,7 @@ const FIXTURES: &[(&str, i64)] = &[
     ("c99_qualifiers.c", 0),
     ("integer_suffixes.c", 0),
     ("predefined_macros.c", 0),
+    ("macro_operators.c", 0),
     ("quicksort.c", 0),
     ("linked_list.c", 10),
     ("binary_search_tree.c", 0),

@@ -31,9 +31,7 @@
 //!
 //! What's not:
 //!
-//! * Function-like macros (`#define MAX(a, b) ...`).
 //! * Multi-line `#define` continuations.
-//! * Token pasting / stringification.
 //! * Boolean operators (`&&`, `||`, `!`) inside `#if`.
 //!
 //! Also supported:
@@ -127,8 +125,14 @@ pub(crate) struct Binding {
 /// macros are stored separately in `macros` as plain strings.
 #[derive(Debug, Clone)]
 struct FnMacro {
+    /// Named parameters in source order, *not* including the `...` of
+    /// a variadic macro -- variadics are flagged by `is_variadic` and
+    /// the trailing arguments accessed through `__VA_ARGS__`.
     params: Vec<String>,
     body: String,
+    /// `true` for `#define foo(a, ...)` -- any extra arguments are
+    /// joined with `, ` and substituted for `__VA_ARGS__` in the body.
+    is_variadic: bool,
 }
 
 /// Output of a successful preprocessor run: the substituted source
@@ -288,13 +292,23 @@ impl Preprocessor {
                             self.fn_macros.remove(name);
                         }
                     }
-                    Directive::DefineFn(name, params, body) => {
+                    Directive::DefineFn(name, mut params, body) => {
                         if active {
+                            // C99 variadic macro: a trailing `...` in the
+                            // parameter list opts in to `__VA_ARGS__`.
+                            // GCC's named-rest extension (`#define
+                            // foo(args...)`) is not supported -- the
+                            // parameter must be the literal `...`.
+                            let is_variadic = params.last().is_some_and(|p| *p == "...");
+                            if is_variadic {
+                                params.pop();
+                            }
                             self.fn_macros.insert(
                                 name.to_string(),
                                 FnMacro {
                                     params: params.iter().map(|s| s.to_string()).collect(),
                                     body: body.to_string(),
+                                    is_variadic,
                                 },
                             );
                             self.macros.remove(name);
@@ -1013,22 +1027,99 @@ fn parse_macro_args(s: &str) -> Option<(Vec<String>, usize)> {
 /// Substitute `params` for `args` in a function-like macro body.
 /// Whole-word match -- a parameter named `T` replaces only the
 /// identifier `T`, never `T` inside another word like `Tx`.
+///
+/// Also handles the C99 macro operators:
+///   - `#param` stringifies the literal argument text into a string
+///     literal (with `\` and `"` escaped).
+///   - `a ## b` token-pastes the two surrounding tokens after
+///     substitution, dropping any whitespace around the `##`.
+///   - `__VA_ARGS__` substitutes the variadic-tail args joined with
+///     `, ` for variadic macros (`#define foo(...)` /
+///     `#define foo(a, ...)`).
 fn expand_fn_macro(def: &FnMacro, args: &[String]) -> String {
+    // Pre-compute the comma-joined string for __VA_ARGS__. Empty when
+    // the macro isn't variadic or no trailing args were supplied.
+    let va_args_str: String = if def.is_variadic {
+        let var_start = def.params.len();
+        if args.len() > var_start {
+            args[var_start..].join(", ")
+        } else {
+            String::new()
+        }
+    } else {
+        String::new()
+    };
+
     let bytes = def.body.as_bytes();
     let mut out = String::with_capacity(def.body.len());
     let mut i = 0;
     while i < bytes.len() {
         let c = bytes[i];
-        if c.is_ascii_alphabetic() || c == b'_' {
+        if c == b'#' && i + 1 < bytes.len() && bytes[i + 1] == b'#' {
+            // Token-paste: drop the `##` and any whitespace bracketing
+            // it. The C standard says `a ## b` joins the *tokens*
+            // before / after the operator; for c5's textual
+            // preprocessor that means trim trailing whitespace from
+            // what we've already emitted, then skip the operator and
+            // any leading whitespace before the next token.
+            while out.ends_with(' ') || out.ends_with('\t') {
+                out.pop();
+            }
+            i += 2;
+            while i < bytes.len() && (bytes[i] == b' ' || bytes[i] == b'\t') {
+                i += 1;
+            }
+        } else if c == b'#' {
+            // Stringification: `#param` -> `"<arg>"`. The C standard
+            // says the operand must be a parameter; we follow that
+            // and pass a stray `#` through unchanged.
+            let mut j = i + 1;
+            while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t') {
+                j += 1;
+            }
+            if j < bytes.len() && (bytes[j].is_ascii_alphabetic() || bytes[j] == b'_') {
+                let start = j;
+                while j < bytes.len() && (bytes[j].is_ascii_alphanumeric() || bytes[j] == b'_') {
+                    j += 1;
+                }
+                let name = &def.body[start..j];
+                let arg_text: Option<&str> = if name == "__VA_ARGS__" && def.is_variadic {
+                    Some(va_args_str.as_str())
+                } else if let Some(idx) = def.params.iter().position(|p| p == name) {
+                    args.get(idx).map(|s| s.as_str())
+                } else {
+                    None
+                };
+                if let Some(arg) = arg_text {
+                    out.push('"');
+                    for byte in arg.bytes() {
+                        match byte {
+                            b'"' => out.push_str("\\\""),
+                            b'\\' => out.push_str("\\\\"),
+                            _ => out.push(byte as char),
+                        }
+                    }
+                    out.push('"');
+                    i = j;
+                    continue;
+                }
+            }
+            out.push('#');
+            i += 1;
+        } else if c.is_ascii_alphabetic() || c == b'_' {
             let start = i;
             i += 1;
             while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
                 i += 1;
             }
             let word = &def.body[start..i];
-            match def.params.iter().position(|p| p == word) {
-                Some(idx) if idx < args.len() => out.push_str(&args[idx]),
-                _ => out.push_str(word),
+            if word == "__VA_ARGS__" && def.is_variadic {
+                out.push_str(&va_args_str);
+            } else {
+                match def.params.iter().position(|p| p == word) {
+                    Some(idx) if idx < args.len() => out.push_str(&args[idx]),
+                    _ => out.push_str(word),
+                }
             }
         } else if c == b'"' || c == b'\'' {
             // Pass literals through unchanged so identifier-like
@@ -1112,6 +1203,58 @@ mod tests {
         // (no parens) stays a plain identifier.
         let out = process("#define NOOP(x)\nNOOP(arg);\nint NOOP;\n");
         assert!(out.contains(";\nint NOOP;"));
+    }
+
+    #[test]
+    fn stringify_operator_quotes_argument() {
+        let out = process("#define STR(x) #x\nchar *s = STR(hello world);\n");
+        assert!(
+            out.contains("\"hello world\""),
+            "stringification should produce a string literal:\n{out}"
+        );
+    }
+
+    #[test]
+    fn stringify_escapes_quote_and_backslash() {
+        // The arg is the string-literal token `"hi"` (a balanced-quoted
+        // pair) -- macro_args parses it as one arg whose text is
+        // literally `"hi"`. Stringification must wrap that in another
+        // pair of quotes and escape the inner ones, yielding
+        // `"\"hi\""`.
+        let out = process("#define STR(x) #x\nchar *s = STR(\"hi\");\n");
+        assert!(
+            out.contains("\"\\\"hi\\\"\""),
+            "stringification must escape `\"`:\n{out}"
+        );
+    }
+
+    #[test]
+    fn token_paste_joins_tokens() {
+        let out = process("#define PASTE(a, b) a ## b\nint PASTE(x, y) = 0;\n");
+        assert!(
+            out.contains("int xy = 0;"),
+            "## should produce the joined identifier:\n{out}"
+        );
+    }
+
+    #[test]
+    fn variadic_macro_expands_va_args() {
+        let out = process("#define CALL(...) f(__VA_ARGS__)\nCALL(1, 2, 3);\n");
+        assert!(
+            out.contains("f(1, 2, 3);"),
+            "__VA_ARGS__ should join the variadic args with `, `:\n{out}"
+        );
+    }
+
+    #[test]
+    fn variadic_macro_with_fixed_param() {
+        let out = process(
+            "#define LOG(level, ...) printf(level, __VA_ARGS__)\nLOG(\"x\", 1, 2);\n",
+        );
+        assert!(
+            out.contains("printf(\"x\", 1, 2);"),
+            "fixed param + __VA_ARGS__ should both substitute:\n{out}"
+        );
     }
 
     #[test]

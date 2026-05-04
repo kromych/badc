@@ -346,7 +346,9 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
     // that's the three TLS-directory VAs (when TLS is
     // present) plus one entry per `int *p = &x;`-style data
     // reloc.
-    let reloc_section_present = !build.tls_data.is_empty() || !build.data_relocs.is_empty();
+    let reloc_section_present = !build.tls_data.is_empty()
+        || !build.data_relocs.is_empty()
+        || !build.code_relocs.is_empty();
     let edata_section_present = is_dll && !build.exports.is_empty();
     let headers_size = headers_raw_size(
         data_section_present,
@@ -440,6 +442,7 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
             &tls_layout,
             !build.tls_data.is_empty(),
             &build.data_relocs,
+            &build.code_relocs,
         )
     } else {
         Vec::new()
@@ -761,6 +764,36 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
             }
             data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
         }
+        // Function-pointer initializers: pre-fill the slot with the
+        // preferred VA (ImageBase + text_prologue_rva + native code
+        // offset). text_prologue_rva accounts for the entry stub
+        // sitting at the start of the .text section -- build.text
+        // begins after it. The `.reloc` block below lists the slot
+        // so the Windows loader adds the slide delta when ASLR
+        // moves the image.
+        for r in &build.code_relocs {
+            let bc_pc = r.target_bc_pc as usize;
+            let native_off = build
+                .bytecode_to_native
+                .get(bc_pc)
+                .copied()
+                .unwrap_or(usize::MAX);
+            if native_off == usize::MAX {
+                return Err(C5Error::Compile(format!(
+                    "PE: code reloc references missing bytecode pc {bc_pc}"
+                )));
+            }
+            let preferred_va =
+                IMAGE_BASE + (text_rva + text_prologue_len + native_off as u32) as u64;
+            let off = r.data_offset as usize;
+            if off + 8 > data_with_relocs.len() {
+                return Err(C5Error::Compile(format!(
+                    "PE: code reloc offset {off:#x} past end of .data ({})",
+                    data_with_relocs.len()
+                )));
+            }
+            data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
+        }
         out.extend_from_slice(&data_with_relocs);
         if !build.tls_data.is_empty() {
             // Pad to where the `_tls_index` slot starts (4-byte
@@ -994,6 +1027,7 @@ fn build_reloc_section(
     tls_layout: &TlsLayout,
     tls_present: bool,
     data_relocs: &[crate::c5::program::DataReloc],
+    code_relocs: &[crate::c5::program::CodeReloc],
 ) -> Vec<u8> {
     // Bucket every relocation target by the 4 KiB page it
     // lives in. Per-page entries within a bucket get one
@@ -1013,6 +1047,15 @@ fn build_reloc_section(
         bucket.push((dir_rva + 16) & 0xFFF); // AddressOfIndex
     }
     for r in data_relocs {
+        let target_rva = data_rva + r.data_offset as u32;
+        let page = target_rva & !0xFFF;
+        by_page.entry(page).or_default().push(target_rva & 0xFFF);
+    }
+    // Code relocations live in the data segment too -- the slot
+    // sits at `data_rva + r.data_offset`, the loader just adds
+    // the slide. The kind of pointer (data vs code) doesn't
+    // matter to PE's `.reloc`, so we use the same DIR64 entry.
+    for r in code_relocs {
         let target_rva = data_rva + r.data_offset as u32;
         let page = target_rva & !0xFFF;
         by_page.entry(page).or_default().push(target_rva & 0xFFF);

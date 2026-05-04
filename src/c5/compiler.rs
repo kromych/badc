@@ -179,6 +179,30 @@ struct StructDef {
     is_union: bool,
 }
 
+/// Relocation kind for one initializer-element value. Tracks
+/// whether the bytes need to be patched at link / load time so
+/// the per-format writer can emit the right rebase entry.
+#[derive(Debug, Clone, Copy)]
+enum InitElemReloc {
+    /// Plain integer constant; bytes are final.
+    None,
+    /// Value is a data-segment offset; needs a DataReloc.
+    Data,
+    /// Value is a function bytecode PC; needs a CodeReloc.
+    Code,
+}
+
+/// One entry of a struct initializer, post-resolution: the
+/// field's byte offset, the field's storage size, the i64-shaped
+/// value to write, and how (if at all) the value must be relocated.
+#[derive(Debug, Clone)]
+struct StructInitElem {
+    field_offset: usize,
+    field_size: usize,
+    value: i64,
+    reloc: InitElemReloc,
+}
+
 #[derive(Debug, Clone)]
 struct StructField {
     name: String,
@@ -288,6 +312,15 @@ pub struct Compiler {
     /// either an absolute write (ELF / ET_EXEC), a Mach-O
     /// rebase opcode, or a PE `.reloc` entry.
     data_relocs: Vec<crate::c5::program::DataReloc>,
+    /// Function-pointer relocations for static initializers like
+    /// `static const VTable v = { .xClose = my_close };`. Each
+    /// entry is the byte offset in `data` of an 8-byte slot plus
+    /// the bytecode PC of the function to point at; the per-format
+    /// writers patch the slot to the real code address at write or
+    /// load time. The VM reads the slot directly because c5
+    /// function pointers carry the small `CODE_BASE + bc_pc` bias
+    /// and `Op::Jsri` recognises that range.
+    code_relocs: Vec<crate::c5::program::CodeReloc>,
     /// Names from `#pragma export(<name>)` directives, in
     /// declaration order. Validated at the end of
     /// [`Self::run_compile`] -- each must resolve to a
@@ -410,6 +443,7 @@ impl Compiler {
             tls_data: Vec::new(),
             tls_init_size: 0,
             data_relocs: Vec::new(),
+            code_relocs: Vec::new(),
             pending_exports,
             call_fp_arg_masks: Vec::new(),
             current_func_return_ty: 0,
@@ -1163,6 +1197,7 @@ impl Compiler {
             call_fp_arg_masks: self.call_fp_arg_masks,
             exports,
             data_relocs: self.data_relocs,
+            code_relocs: self.code_relocs,
             dylibs: self.dylibs,
             dllmain_pc,
         })
@@ -2467,6 +2502,186 @@ impl Compiler {
         (start_addr, elements.len() * elem_size)
     }
 
+    /// Parse one constant-expression initializer value, returning
+    /// the bytes-as-i64 + a relocation kind. Accepted shapes:
+    ///   * integer literal (with optional unary `-`)
+    ///   * string literal -> data offset, needs `Data` reloc
+    ///   * `&id` -> data offset of a global, needs `Data` reloc
+    ///   * bare identifier -> if it's a function, code PC, needs
+    ///     `Code` reloc; if it's a `Token::Num`-class symbol
+    ///     (enum value, `#define`d constant), use its `val`
+    ///   * `0` is special -- a NULL pointer / zero scalar, no reloc.
+    fn parse_constant_init_value(&mut self) -> Result<(i64, InitElemReloc), C5Error> {
+        if self.lex.tk == '"' as i64 {
+            let addr = self.lex.ival;
+            self.next()?;
+            while self.lex.tk == '"' as i64 {
+                self.next()?;
+            }
+            self.data.push(0);
+            return Ok((addr, InitElemReloc::Data));
+        }
+        if self.lex.tk == Token::AndOp as i64 {
+            // `&global` -- address-of-global pointer init.
+            self.next()?;
+            if self.lex.tk != Token::Id as i64 {
+                return Err(C5Error::Compile(format!(
+                    "{}: identifier expected after `&` in initializer",
+                    self.lex.line
+                )));
+            }
+            let target_idx = self.lex.curr_id_idx;
+            let class = self.symbols[target_idx].class;
+            if class != Token::Glo as i64 {
+                return Err(C5Error::Compile(format!(
+                    "{}: `&{}` -- only addresses of globals are accepted in static initializers",
+                    self.lex.line, self.symbols[target_idx].name
+                )));
+            }
+            let off = self.symbols[target_idx].val;
+            self.next()?;
+            return Ok((off, InitElemReloc::Data));
+        }
+        if self.lex.tk == Token::Id as i64 {
+            let idx = self.lex.curr_id_idx;
+            let class = self.symbols[idx].class;
+            if class == Token::Fun as i64 {
+                let bc_pc = self.symbols[idx].val;
+                self.next()?;
+                return Ok((bc_pc, InitElemReloc::Code));
+            }
+            if class == Token::Num as i64 {
+                let v = self.symbols[idx].val;
+                self.next()?;
+                return Ok((v, InitElemReloc::None));
+            }
+            // Sys-class names (libc bindings) aren't usable as
+            // initializer values today -- their addresses come from
+            // the loader at runtime.
+            return Err(C5Error::Compile(format!(
+                "{}: identifier `{}` is not a constant-expression value",
+                self.lex.line, self.symbols[idx].name
+            )));
+        }
+        // Fall back to integer literal (with optional unary `-`).
+        let v = self.parse_constant_int()?;
+        Ok((v, InitElemReloc::None))
+    }
+
+    /// Collect a `{ ... }` struct initializer. Each entry can be
+    /// designated (`.field = value`) or positional. Entries are
+    /// returned in source order with their resolved field offset
+    /// + size. Designators advance the running positional index
+    /// to "the field after the named one".
+    fn collect_struct_initializer(
+        &mut self,
+        struct_id: usize,
+    ) -> Result<alloc::vec::Vec<StructInitElem>, C5Error> {
+        if self.lex.tk != '{' as i64 {
+            return Err(C5Error::Compile(format!(
+                "{}: struct initializer must start with `{{`",
+                self.lex.line
+            )));
+        }
+        self.next()?;
+        let mut elements = alloc::vec::Vec::new();
+        let mut pos: usize = 0;
+        while self.lex.tk != '}' as i64 {
+            // Designator?
+            let field_idx = if self.lex.tk == Token::Dot as i64 {
+                self.next()?;
+                if self.lex.tk != Token::Id as i64 {
+                    return Err(C5Error::Compile(format!(
+                        "{}: field name expected after `.`",
+                        self.lex.line
+                    )));
+                }
+                let field_name = self.symbols[self.lex.curr_id_idx].name.clone();
+                self.next()?;
+                if self.lex.tk != Token::Assign as i64 {
+                    return Err(C5Error::Compile(format!(
+                        "{}: `=` expected after `.{field_name}` designator",
+                        self.lex.line
+                    )));
+                }
+                self.next()?;
+                let pos_in_struct = self.structs[struct_id]
+                    .fields
+                    .iter()
+                    .position(|f| f.name == field_name)
+                    .ok_or_else(|| {
+                        C5Error::Compile(format!(
+                            "{}: struct {} has no field {}",
+                            self.lex.line, self.structs[struct_id].name, field_name
+                        ))
+                    })?;
+                pos_in_struct
+            } else {
+                pos
+            };
+            if field_idx >= self.structs[struct_id].fields.len() {
+                return Err(C5Error::Compile(format!(
+                    "{}: too many initializers for struct {}",
+                    self.lex.line, self.structs[struct_id].name
+                )));
+            }
+            let field = self.structs[struct_id].fields[field_idx].clone();
+            let (value, reloc) = self.parse_constant_init_value()?;
+            elements.push(StructInitElem {
+                field_offset: field.offset,
+                field_size: self.size_of_type(field.ty),
+                value,
+                reloc,
+            });
+            pos = field_idx + 1;
+            if self.lex.tk == ',' as i64 {
+                self.next()?;
+            }
+        }
+        self.next()?; // consume `}`
+        Ok(elements)
+    }
+
+    /// Write a struct initializer's elements into the data segment
+    /// at `var_offset`, recording any DataReloc / CodeReloc needed
+    /// for pointer / function-pointer values. `var_offset` points
+    /// at the first byte of the struct in the data segment.
+    fn write_struct_init_into_data(
+        &mut self,
+        var_offset: i64,
+        elements: &[StructInitElem],
+    ) {
+        for elem in elements {
+            let here = var_offset as usize + elem.field_offset;
+            let v = elem.value;
+            // Always write the bytes (little-endian, full field
+            // size). For char fields write a single byte; everything
+            // else writes 8.
+            if elem.field_size == 1 {
+                self.data[here] = v as u8;
+            } else {
+                for i in 0..elem.field_size {
+                    self.data[here + i] = ((v >> (i * 8)) & 0xFF) as u8;
+                }
+            }
+            match elem.reloc {
+                InitElemReloc::None => {}
+                InitElemReloc::Data => {
+                    self.data_relocs.push(crate::c5::program::DataReloc {
+                        data_offset: here as u64,
+                        target_offset: v as u64,
+                    });
+                }
+                InitElemReloc::Code => {
+                    self.code_relocs.push(crate::c5::program::CodeReloc {
+                        data_offset: here as u64,
+                        target_bc_pc: v as u64,
+                    });
+                }
+            }
+        }
+    }
+
     /// Write packed initializer bytes into `self.data` at
     /// `var_offset` -- the address of a freshly allocated global
     /// array. Element values are little-endian; `elem_size`
@@ -3461,7 +3676,11 @@ impl Compiler {
                         // known-size arrays, a string literal or a
                         // brace list populates the leading bytes;
                         // the rest stays zero (the allocation
-                        // pre-zeroed self.data).
+                        // pre-zeroed self.data). For struct-value
+                        // globals, a `{ ... }` brace list with
+                        // designators or positional entries
+                        // populates per-field; unspecified fields
+                        // stay zero.
                         if self.lex.tk == Token::Assign as i64 {
                             self.next()?;
                             if array_size > 0 {
@@ -3484,6 +3703,18 @@ impl Compiler {
                                 self.write_array_init_into_data(
                                     var_offset, ty, &elements,
                                 );
+                            } else if is_struct_ty(ty)
+                                && struct_ptr_depth(ty) == 0
+                            {
+                                if thread_local {
+                                    return Err(C5Error::Compile(format!(
+                                        "{}: struct `_Thread_local` initialisers are not supported",
+                                        self.lex.line
+                                    )));
+                                }
+                                let sid = struct_id_of(ty);
+                                let elems = self.collect_struct_initializer(sid)?;
+                                self.write_struct_init_into_data(var_offset, &elems);
                             } else {
                                 self.parse_global_initializer(
                                     ty,

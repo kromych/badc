@@ -500,6 +500,13 @@ pub(crate) struct Build {
     /// `Build` so the per-format writer doesn't have to plumb
     /// the program through alongside the build.
     pub data_relocs: Vec<crate::c5::program::DataReloc>,
+    /// Function-pointer initializers in the data segment. Mirror
+    /// of [`Program::code_relocs`]. Each entry pairs a data-segment
+    /// slot with the bytecode PC of a function; the per-format
+    /// writer translates the PC to the native code offset via
+    /// `bytecode_to_native` and patches the slot to the runtime
+    /// code address.
+    pub code_relocs: Vec<crate::c5::program::CodeReloc>,
     /// `#pragma export(<name>)`-declared functions. Mirror of
     /// [`Program::exports`]. Empty for executable output;
     /// populated for shared-library output, when the
@@ -807,6 +814,7 @@ fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Resul
     build.imports = imports;
     build.abi = target.abi();
     build.data_relocs = program.data_relocs.clone();
+    build.code_relocs = program.code_relocs.clone();
     build.exports = program.exports.clone();
     build.output_kind = options.output_kind;
     build.dllmain_pc = program.dllmain_pc;

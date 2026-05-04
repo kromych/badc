@@ -239,6 +239,15 @@ fn integer_literal_suffixes_are_consumed() {
 }
 
 #[test]
+fn struct_initializers() {
+    // M28b -- struct initializers (designated + positional + mixed),
+    // including function-pointer fields that need a CodeReloc so
+    // the per-format writers patch the slot to the runtime code
+    // address. Plain-data struct globals also covered.
+    assert_eq!(run_fixture("struct_initializers.c"), 0);
+}
+
+#[test]
 fn array_initializers() {
     // M28a -- string-literal and brace-list array initializers,
     // size-inferred and explicit-size shapes, at both file scope

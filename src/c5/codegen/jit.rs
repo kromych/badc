@@ -176,6 +176,11 @@ mod jit_impl {
                 bytes[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
             }
         }
+        // Function-pointer initializers (`static const VTable v = {
+        // .xClose = my_close };`). Patched after the data slots are
+        // flipped to data_vmaddr but before the code region's
+        // address is known -- so we defer this loop and run it
+        // again once code_vmaddr is computed.
 
         // Allocate a "fake GOT" -- one u64 per resolved import, each
         // holding the runtime address of the corresponding libc
@@ -192,6 +197,38 @@ mod jit_impl {
         // for the lifetime of the run.
         let region = JitRegion::new(&build.text)?;
         let code_vmaddr = region.as_ptr() as u64;
+        // Now that the code region's runtime address is known,
+        // patch every CodeReloc slot in the data region to point
+        // at the function's actual code byte offset. Mirrors the
+        // per-format writers' code-reloc handling but uses the
+        // mmap'd region pointer directly.
+        if !build.code_relocs.is_empty() {
+            if let Some(region) = &mut data_region {
+                let bytes = region.as_mut_slice(build.data.len());
+                for r in &build.code_relocs {
+                    let bc_pc = r.target_bc_pc as usize;
+                    let native_off = build
+                        .bytecode_to_native
+                        .get(bc_pc)
+                        .copied()
+                        .unwrap_or(usize::MAX);
+                    if native_off == usize::MAX {
+                        return Err(C5Error::Compile(format!(
+                            "JIT: code reloc references missing bytecode pc {bc_pc}"
+                        )));
+                    }
+                    let absolute = code_vmaddr + native_off as u64;
+                    let off = r.data_offset as usize;
+                    if off + 8 > bytes.len() {
+                        return Err(C5Error::Compile(format!(
+                            "JIT: code reloc offset {off:#x} past end of data region ({})",
+                            bytes.len()
+                        )));
+                    }
+                    bytes[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
+                }
+            }
+        }
         apply_jit_fixups(
             target,
             unsafe { core::slice::from_raw_parts_mut(region.as_mut_ptr(), build.text.len()) },
@@ -250,6 +287,7 @@ mod jit_impl {
         build.imports = imports;
         build.abi = target.abi();
         build.data_relocs = program.data_relocs.clone();
+        build.code_relocs = program.code_relocs.clone();
         Ok(build)
     }
 

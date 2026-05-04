@@ -1146,6 +1146,34 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
         }
         data_with_relocs[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
     }
+    // Function-pointer initializers in the data segment: translate
+    // each bytecode PC to a native code-segment offset (skipping
+    // the prologue stub at the start of the code blob), add the
+    // text vmaddr, and write the absolute code address. ET_EXEC
+    // means no slide so the bytes hold the final VA -- no
+    // .rela.dyn entries needed.
+    for r in &build.code_relocs {
+        let bc_pc = r.target_bc_pc as usize;
+        let native_off = build
+            .bytecode_to_native
+            .get(bc_pc)
+            .copied()
+            .unwrap_or(usize::MAX);
+        if native_off == usize::MAX {
+            return Err(C5Error::Compile(format!(
+                "ELF: code reloc references missing bytecode pc {bc_pc}"
+            )));
+        }
+        let absolute = code_vmaddr + stub_len + native_off as u64;
+        let off = r.data_offset as usize;
+        if off + 8 > data_with_relocs.len() {
+            return Err(C5Error::Compile(format!(
+                "ELF: code reloc offset {off:#x} past end of .data ({})",
+                data_with_relocs.len()
+            )));
+        }
+        data_with_relocs[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
+    }
     out.extend_from_slice(&data_with_relocs);
 
     // .tdata -- initialised TLS image. The first `tls_init_size`
@@ -1309,6 +1337,7 @@ mod tests {
             tls_init_size: 0,
             tls_index_fixups: Vec::new(),
             data_relocs: Vec::new(),
+            code_relocs: Vec::new(),
             exports: Vec::new(),
             output_kind: super::super::OutputKind::Executable,
             dllmain_pc: None,

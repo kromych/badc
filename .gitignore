@@ -5,3 +5,4 @@
 *.so
 *.obj
 *.o
+.DS_Store

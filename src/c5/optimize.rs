@@ -160,6 +160,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         tls_init_size,
         call_fp_arg_masks,
         data_relocs,
+        code_relocs,
         exports,
         dylibs,
         dllmain_pc,
@@ -167,6 +168,15 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
 
     let mut insns = decode(&text, &data_imm_positions)?;
     let entry_idx = pc_to_index_in(&insns, &text, entry_pc)?;
+    // Snapshot the insn index of every CodeReloc target *before*
+    // the peephole passes mutate the insn vector. Each target_bc_pc
+    // points at a function's first instruction; the corresponding
+    // index stays valid through DCE / peephole because function
+    // entries aren't removed.
+    let code_reloc_indices: Vec<usize> = code_relocs
+        .iter()
+        .map(|r| pc_to_index_in(&insns, &text, r.target_bc_pc as usize))
+        .collect::<Result<Vec<_>, _>>()?;
 
     // Run rewrites to a fixed point. Each pass returns true if it made
     // a change; we loop until none of them did. Bound the loop with a
@@ -201,7 +211,17 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         targets = collect_branch_targets(&insns);
     }
 
-    let (text, entry_pc, data_imm_positions) = encode(&insns, entry_idx);
+    let (text, entry_pc, data_imm_positions, new_pc) = encode(&insns, entry_idx);
+
+    let remapped_code_relocs: Vec<_> = code_relocs
+        .iter()
+        .zip(&code_reloc_indices)
+        .map(|(r, &idx)| crate::c5::program::CodeReloc {
+            data_offset: r.data_offset,
+            target_bc_pc: new_pc[idx] as u64,
+        })
+        .collect();
+
     Ok(Program {
         text,
         data,
@@ -212,6 +232,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         tls_init_size,
         call_fp_arg_masks,
         data_relocs,
+        code_relocs: remapped_code_relocs,
         exports,
         dylibs,
         dllmain_pc,
@@ -375,11 +396,14 @@ fn pc_to_index_in(insns: &[Insn], text: &[i64], target_pc: usize) -> Result<usiz
 }
 
 /// Re-encode the IR to a flat bytecode vector. Returns
-/// `(text, entry_pc, data_imm_positions)` -- the third element is the
-/// fresh side channel of operand positions for `Op::Imm` words that
-/// hold a data-segment offset, so the native codegen can locate them
-/// in the rewritten bytecode.
-fn encode(insns: &[Insn], entry_idx: usize) -> (Vec<i64>, usize, Vec<usize>) {
+/// `(text, entry_pc, data_imm_positions, new_pc)`. `new_pc` is the
+/// per-insn-index remap table so callers (e.g., the code-reloc
+/// remapping in `optimize`) can translate any pre-optimisation
+/// bytecode PC through the original `insns` index.
+fn encode(
+    insns: &[Insn],
+    entry_idx: usize,
+) -> (Vec<i64>, usize, Vec<usize>, Vec<usize>) {
     // Pass A: assign post-DCE PCs, skipping Removed slots.
     let mut new_pc: Vec<usize> = vec![usize::MAX; insns.len() + 1];
     let mut pc = 0usize;
@@ -466,7 +490,7 @@ fn encode(insns: &[Insn], entry_idx: usize) -> (Vec<i64>, usize, Vec<usize>) {
         }
     }
 
-    (text, resolve_target(entry_idx), data_imm_positions)
+    (text, resolve_target(entry_idx), data_imm_positions, new_pc)
 }
 
 // --- Helpers shared across passes ---------------------------------
@@ -889,6 +913,7 @@ mod tests {
             tls_init_size: 0,
             call_fp_arg_masks: Vec::new(),
             data_relocs: Vec::new(),
+            code_relocs: Vec::new(),
             exports: Vec::new(),
             dylibs: Vec::new(),
             dllmain_pc: None,
@@ -1159,6 +1184,7 @@ mod tests {
             tls_init_size: 0,
             call_fp_arg_masks: Vec::new(),
             data_relocs: Vec::new(),
+            code_relocs: Vec::new(),
             exports: Vec::new(),
             dylibs: Vec::new(),
             dllmain_pc: None,

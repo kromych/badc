@@ -137,6 +137,17 @@ impl<H: Host> Vm<H> {
         // existing data-side access checks. The starting offset is
         // captured before the TLS bytes are appended.
         let mut data = program.data;
+        // Apply CodeReloc entries: function-pointer initializers in
+        // the data segment store `CODE_BASE + bc_pc` so Op::Jsri
+        // recognises the slot's value as a code address. The
+        // compiler can't bake this in directly because the VM's
+        // CODE_BASE constant lives in this crate; we patch each
+        // slot here at VM construction time.
+        for r in &program.code_relocs {
+            let off = r.data_offset as usize;
+            let runtime = (super::CODE_BASE as u64).wrapping_add(r.target_bc_pc);
+            data[off..off + 8].copy_from_slice(&runtime.to_le_bytes());
+        }
         let tls_base = data.len();
         data.extend_from_slice(&program.tls_data);
         Self {

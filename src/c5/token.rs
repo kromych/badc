@@ -161,6 +161,13 @@ pub(crate) enum Token {
     /// no-op; a single token slot just keeps the parser path
     /// uniform.
     Typedef,
+    /// `union` keyword. Parsed and stored in the same struct
+    /// table as `struct`; the only difference is layout (all
+    /// members at offset 0; total size = max(member sizes)).
+    /// Member access uses the same field-resolution path as a
+    /// struct since each field already records its offset and
+    /// the union's just gives them all offset 0.
+    Union,
     /// `float` keyword -- 32-bit IEEE float type.
     Float,
     /// `double` keyword -- 64-bit IEEE double type.

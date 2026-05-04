@@ -139,6 +139,7 @@ fn is_type_start_token(tk: i64) -> bool {
         || tk == Token::Float as i64
         || tk == Token::Double as i64
         || tk == Token::Struct as i64
+        || tk == Token::Union as i64
         || tk == Token::Extern as i64
         || tk == Token::Static as i64
         || is_decl_modifier(tk)
@@ -167,9 +168,15 @@ fn store_op_for(ty: i64) -> Op {
 #[derive(Debug, Clone)]
 struct StructDef {
     name: String,
-    /// Total size in bytes -- sum of field sizes, padded to 8.
+    /// Total size in bytes -- sum of field sizes, padded to 8 for
+    /// a struct, or `max(field size)` rounded up to 8 for a union.
     size: usize,
     fields: Vec<StructField>,
+    /// `true` for `union` definitions. The only effect on layout
+    /// is that every field sits at offset 0 and the aggregate
+    /// size is `max(field size)` instead of the sum. Member
+    /// access otherwise reuses the struct path verbatim.
+    is_union: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -553,6 +560,7 @@ impl Compiler {
             name: name.to_string(),
             size: 0,
             fields: Vec::new(),
+            is_union: false,
         });
         self.structs.len() - 1
     }
@@ -835,22 +843,28 @@ impl Compiler {
         } else if self.lex.tk == Token::Double as i64 {
             self.next()?;
             Ty::Double as i64
-        } else if self.lex.tk == Token::Struct as i64 {
+        } else if self.lex.tk == Token::Struct as i64
+            || self.lex.tk == Token::Union as i64
+        {
+            // Struct and union share the same tag table and the same
+            // "find or forward-declare" rule. The aggregate's
+            // is_union flag is set when the body lands; until then
+            // an opaque tag works for both shapes through pointers
+            // and typedefs.
+            let kind = if self.lex.tk == Token::Union as i64 {
+                "union"
+            } else {
+                "struct"
+            };
             self.next()?;
             if self.lex.tk != Token::Id as i64 {
                 return Err(C5Error::Compile(format!(
-                    "{}: struct name expected",
+                    "{}: {kind} name expected",
                     self.lex.line
                 )));
             }
             let name = self.symbols[self.lex.curr_id_idx].name.clone();
             self.next()?;
-            // Forward-declare on first mention so `struct Foo *p;`,
-            // `typedef struct Foo Foo;`, and similar shapes work
-            // without requiring the body to come first. The struct
-            // stays opaque (size 0, no fields) until a real
-            // definition lands; field access on an opaque struct
-            // value still errors at the access site.
             let id = self.find_or_forward_declare_struct(&name);
             struct_ty_for(id)
         } else if self.is_lex_typedef_name() {
@@ -889,17 +903,31 @@ impl Compiler {
     ///
     /// On entry `tk` is `{`; on exit `tk` is the token AFTER the closing
     /// `}` (typically `;`).
-    fn parse_struct_body(&mut self, name: &str) -> Result<usize, C5Error> {
+    /// Layout pass shared by `struct` and `union` definitions. The
+    /// only difference is that union members all sit at offset 0
+    /// and the aggregate's size is `max(field size)` rather than
+    /// the sum. Member access otherwise reuses the struct field
+    /// path.
+    fn parse_aggregate_body(
+        &mut self,
+        name: &str,
+        is_union: bool,
+    ) -> Result<usize, C5Error> {
         // Pre-register or recycle a forward declaration so
-        // self-referential pointer fields can find this struct
+        // self-referential pointer fields can find this aggregate
         // mid-definition. If the tag already exists with a populated
         // body, this is a duplicate definition and we error.
         let struct_id = match self.find_struct_id(name) {
-            Some(id) if self.structs[id].fields.is_empty() => id,
+            Some(id) if self.structs[id].fields.is_empty() => {
+                self.structs[id].is_union = is_union;
+                id
+            }
             Some(_) => {
                 return Err(C5Error::Compile(format!(
-                    "{}: struct `{}` already defined",
-                    self.lex.line, name
+                    "{}: {} `{}` already defined",
+                    self.lex.line,
+                    if is_union { "union" } else { "struct" },
+                    name
                 )));
             }
             None => {
@@ -907,6 +935,7 @@ impl Compiler {
                     name: name.to_string(),
                     size: 0,
                     fields: Vec::new(),
+                    is_union,
                 });
                 self.structs.len() - 1
             }
@@ -940,11 +969,13 @@ impl Compiler {
             } else if self.lex.tk == Token::Double as i64 {
                 self.next()?;
                 Ty::Double as i64
-            } else if self.lex.tk == Token::Struct as i64 {
+            } else if self.lex.tk == Token::Struct as i64
+                || self.lex.tk == Token::Union as i64
+            {
                 self.next()?;
                 if self.lex.tk != Token::Id as i64 {
                     return Err(C5Error::Compile(format!(
-                        "{}: struct name expected in field type",
+                        "{}: aggregate name expected in field type",
                         self.lex.line
                     )));
                 }
@@ -978,33 +1009,60 @@ impl Compiler {
             loop {
                 let (id_idx, field_ty, field_array_size) =
                     self.parse_declarator(field_base)?;
-                if is_struct_ty(field_ty) && struct_ptr_depth(field_ty) == 0
+                // Aggregate-value fields (struct or union nested by
+                // value, no array) are accepted: their bytes live
+                // inline in the parent and field access reaches them
+                // via offset arithmetic. Whole-field assignment
+                // (`t.u = other;`) still requires a struct-rvalue at
+                // the RHS and the existing Mcpy machinery, which the
+                // assignment path emits when both sides are
+                // aggregates -- nothing extra needed here. An
+                // aggregate field whose definition is opaque (size 0)
+                // is the one shape we still refuse, since storage
+                // can't be allocated until the body lands.
+                let is_aggregate_value =
+                    is_struct_ty(field_ty) && struct_ptr_depth(field_ty) == 0;
+                if is_aggregate_value
                     && field_array_size == 0
+                    && self.structs[struct_id_of(field_ty)].fields.is_empty()
                 {
                     return Err(C5Error::Compile(format!(
-                        "{}: struct-value fields are not supported (use a pointer)",
+                        "{}: aggregate-value field of incomplete type",
                         self.lex.line
                     )));
                 }
                 let field_name = self.symbols[id_idx].name.clone();
 
-                // 8-byte align every field. Even `char` fields take a full
-                // slot -- wasteful but keeps offset arithmetic obvious.
-                offset = (offset + 7) & !7;
+                // Layout: struct fields advance the cursor, all
+                // 8-byte aligned. Union fields all live at offset 0;
+                // we just track the per-field storage to update the
+                // running max at end-of-loop.
                 let elem_size = self.size_of_type(field_ty);
                 let field_storage = if field_array_size > 0 {
                     elem_size * field_array_size as usize
                 } else {
                     elem_size
                 };
+                let aligned_size = (field_storage + 7) & !7;
+                let field_offset = if is_union {
+                    0
+                } else {
+                    offset = (offset + 7) & !7;
+                    let off = offset;
+                    offset += aligned_size;
+                    off
+                };
+                if is_union {
+                    if aligned_size > offset {
+                        offset = aligned_size;
+                    }
+                }
                 self.structs[struct_id].fields.push(StructField {
                     name: field_name,
-                    offset,
+                    offset: field_offset,
                     ty: field_ty,
                     array_size: field_array_size,
                 });
-                // Round up so the next field stays 8-byte aligned.
-                offset += (field_storage + 7) & !7;
 
                 if self.lex.tk == ',' as i64 {
                     self.next()?;
@@ -2867,16 +2925,21 @@ impl Compiler {
                 bt = Ty::Double as i64;
             } else if self.lex.tk == Token::Enum as i64 {
                 self.parse_enum_decl()?;
-            } else if self.lex.tk == Token::Struct as i64 {
-                // Three shapes today:
-                //   struct Foo { ... };           -- definition only
-                //   struct Foo;                   -- forward declaration
-                //   struct Foo *p;                -- type use, declarators follow
-                //   typedef struct Foo {...} Foo; -- definition + typedef alias
-                self.next()?; // consume `struct`
+            } else if self.lex.tk == Token::Struct as i64
+                || self.lex.tk == Token::Union as i64
+            {
+                // Aggregate (struct or union) declaration. Three
+                // shapes:
+                //   <kw> Name { ... };           -- definition only
+                //   <kw> Name;                   -- forward declaration
+                //   <kw> Name *p;                -- type use, declarators follow
+                //   typedef <kw> Name {...} Name; -- definition + typedef alias
+                let is_union = self.lex.tk == Token::Union as i64;
+                let kind = if is_union { "union" } else { "struct" };
+                self.next()?;
                 if self.lex.tk != Token::Id as i64 {
                     return Err(C5Error::Compile(format!(
-                        "{}: struct name expected",
+                        "{}: {kind} name expected",
                         self.lex.line
                     )));
                 }
@@ -2884,20 +2947,9 @@ impl Compiler {
                 self.next()?;
 
                 if self.lex.tk == '{' as i64 {
-                    let id = self.parse_struct_body(&name)?;
-                    // `bt` is set so the declarator loop below can run
-                    // for shapes like `struct Foo {...} a, *b;` or
-                    // `typedef struct Foo {...} Foo;`. With no trailing
-                    // declarators the loop exits immediately on the
-                    // following `;`, which is the original
-                    // definition-only behaviour.
+                    let id = self.parse_aggregate_body(&name, is_union)?;
                     bt = struct_ty_for(id);
                 } else {
-                    // Tag-only mention: forward-declare on first sighting,
-                    // re-use the existing slot if already known. This
-                    // covers `struct Foo;` (pure forward decl, no
-                    // declarators -- the loop sees `;` and exits) and
-                    // `struct Foo *p;` (type use feeding declarators).
                     let id = self.find_or_forward_declare_struct(&name);
                     bt = struct_ty_for(id);
                 }

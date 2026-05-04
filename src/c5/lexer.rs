@@ -622,6 +622,9 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("auto", Token::FuncSpec),
     // typedef -- drives the parser's type-alias registration.
     ("typedef", Token::Typedef),
+    // union -- like struct, but all members share offset 0 and
+    // the size is max(member). Same identifier namespace.
+    ("union", Token::Union),
     ("main", Token::Id),
 ];
 

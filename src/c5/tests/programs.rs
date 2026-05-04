@@ -239,6 +239,15 @@ fn integer_literal_suffixes_are_consumed() {
 }
 
 #[test]
+fn unions_basic() {
+    // M26 -- unions: layout shares storage among members; field
+    // access uses the same path as struct fields with all offsets
+    // = 0 and total size = max(member size). Tagged-union shape
+    // (struct tag + nested union) also exercised.
+    assert_eq!(run_fixture("unions_basic.c"), 0);
+}
+
+#[test]
 fn function_pointer_typedefs_and_fields() {
     // M23b -- `typedef RET (*Name)(args);`, function-pointer struct
     // fields, and function-pointer parameters all parse and run.

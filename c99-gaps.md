@@ -1,6 +1,6 @@
 # Gaps to C99
 
-Snapshot updated after M25 (arrays) and M23b (function-pointer typedefs) land. The c5
+Snapshot updated after M26 (unions) lands. The c5
 dialect is a deliberately small subset of C with extras for
 the compiler's own use; this document catalogues the C99
 features that aren't supported, organized by spec section,
@@ -106,9 +106,15 @@ to have).
   (`s.cb(args)`) still requires copying the field to a
   local first -- the c5 expression chain only enters the
   call branch on a bare identifier today.
-- **Missing**: `union`, `_Complex`, `_Imaginary`. Severity:
-  - `union` -- 2.
-  - `_Complex` / `_Imaginary` -- 5.
+- `union` -- **partial** (M26). Lexer recognises the
+  keyword; parser shares the struct tag table and the
+  field-access path. Layout: every member at offset 0,
+  total size = max(member size). Forward declarations,
+  pointer-to-union, typedef-of-union, and union as a
+  struct field all work. Bitfields inside a union are
+  still missing (those fall under §6.7.2.1). Severity:
+  resolved for the common tagged-union pattern.
+- **Missing**: `_Complex`, `_Imaginary`. Severity 5.
 
 ### Identifiers
 - ASCII identifiers up to a generous internal limit --
@@ -186,7 +192,8 @@ to have).
 
 ### Struct/union member access
 - `.` and `->` for structs -- supported (M5/M6).
-- Unions -- **missing**. Severity: 2.
+- Unions -- **supported** (M26). See §6.4 keywords for
+  layout details. Bitfields inside a union still missing.
 - Bitfields -- **missing**. Severity: 3.
 
 ## §6.6 Constant expressions
@@ -474,7 +481,8 @@ roughly tie for "next priority":
 5. `signed` / `unsigned` / `short` / `long`. Today every
    integer is 64-bit; programs expecting 32-bit overflow
    semantics will misbehave silently.
-6. `union`. Tagged-union idioms aren't expressible.
+6. ~~`union`~~ -- landed in M26. Tagged-union idioms
+   work; bitfields inside a union are still missing.
 7. `#error`, `#`, `##`, `__VA_ARGS__`. Macros with
    arity-checking diagnostics, format-string stringification,
    and variadic delegations rely on these.

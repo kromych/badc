@@ -274,7 +274,17 @@ impl Preprocessor {
         // lines for each continuation consumed, so error messages
         // (and `__LINE__`) stay grounded in the original source.
         let unfolded = unfold_line_continuations(source);
-        let source = unfolded.as_str();
+        // c99 §5.1.1.2 phase 3: remove comments. Done before macro
+        // substitution so a `#define X 0 /* note */` body doesn't
+        // emit a stray `*/` into a surrounding source comment when
+        // X is referenced from inside that comment. SQLite is the
+        // canonical example: it has many such inline-commented
+        // numeric `#define`s and references them from doc-comment
+        // blocks. Without this pass the macro expansion's `*/`
+        // closes the surrounding `/* ... */` early and the lexer
+        // sees comment tail text as code.
+        let stripped = strip_c_comments(&unfolded);
+        let source = stripped.as_str();
         let mut out = String::with_capacity(source.len());
 
         // `cond_stack` mirrors the nesting of `#if` / `#ifdef`. Each
@@ -961,6 +971,72 @@ fn strip_comments(s: &str) -> String {
             break;
         }
         out.push(bytes[i] as char);
+        i += 1;
+    }
+    out
+}
+
+/// Phase-3 comment removal: strip `/* ... */` block comments and
+/// `// ...` line comments from the entire source. Each comment is
+/// replaced by a single space so token boundaries are preserved
+/// (`a/**/b` becomes `a b`, not `ab`). Newlines inside block
+/// comments stay as `\n` so line numbers and `__LINE__` are
+/// faithful to the original source. Quoted strings and char
+/// literals are passed through unchanged so `"//"` doesn't get
+/// misread as a line comment.
+fn strip_c_comments(source: &str) -> String {
+    let mut out = String::with_capacity(source.len());
+    let bytes = source.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = bytes[i];
+        if c == b'/' && bytes.get(i + 1) == Some(&b'*') {
+            // Block comment.
+            i += 2;
+            while i + 1 < bytes.len() {
+                if bytes[i] == b'*' && bytes[i + 1] == b'/' {
+                    i += 2;
+                    break;
+                }
+                if bytes[i] == b'\n' {
+                    out.push('\n');
+                }
+                i += 1;
+            }
+            out.push(' ');
+            continue;
+        }
+        if c == b'/' && bytes.get(i + 1) == Some(&b'/') {
+            // Line comment -- skip to next newline (don't consume it).
+            i += 2;
+            while i < bytes.len() && bytes[i] != b'\n' {
+                i += 1;
+            }
+            out.push(' ');
+            continue;
+        }
+        if c == b'"' || c == b'\'' {
+            // Pass-through quoted literal so `"//"` etc. survive.
+            let quote = c;
+            out.push(c as char);
+            i += 1;
+            while i < bytes.len() && bytes[i] != quote {
+                if bytes[i] == b'\\' && i + 1 < bytes.len() {
+                    out.push(bytes[i] as char);
+                    out.push(bytes[i + 1] as char);
+                    i += 2;
+                } else {
+                    out.push(bytes[i] as char);
+                    i += 1;
+                }
+            }
+            if i < bytes.len() {
+                out.push(quote as char);
+                i += 1;
+            }
+            continue;
+        }
+        out.push(c as char);
         i += 1;
     }
     out

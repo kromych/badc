@@ -409,6 +409,15 @@ impl Compiler {
             Ok(s) => (s, None),
             Err(e) => (String::new(), Some(e)),
         };
+        // Debug knob: when BADC_DUMP_PP is set, write the post-
+        // preprocessor source to /tmp/badc-pp.c so a developer
+        // chasing a parser failure can inspect the exact token
+        // stream the lexer is about to see. Uses std::env so it
+        // only fires under the std feature; no_std builds skip it.
+        #[cfg(feature = "std")]
+        if std::env::var("BADC_DUMP_PP").is_ok() {
+            let _ = std::fs::write("/tmp/badc-pp.c", &preprocessed);
+        }
         let dylibs = pp.dylibs;
         let pending_exports = pp.exports;
 
@@ -704,61 +713,63 @@ impl Compiler {
             }
         }
 
-        // Function-pointer declarator: `RET (*Name)(args)`. The shape
-        // is detected by peeking past the open paren -- if the next
-        // non-whitespace byte is `*`, we're in the function-pointer
-        // branch. Outer `*`s before the parens (`int *(*Name)(...)`)
-        // are absorbed by the leading-* loop above; that's a slight
-        // semantic loss for the function pointer's *return* type
-        // (c5 stores all function pointers as a generic pointer
-        // anyway), but the c5-side type-check just needs to know
-        // Name is a pointer of some kind. The trailing parameter
-        // list is parsed and discarded -- c5 doesn't yet record
-        // function-pointer signatures.
-        if self.lex.tk == '(' as i64 && self.lex.peek_after_whitespace(b'*') {
-            self.next()?; // consume `(`
-            let mut inner_ptr = 0i64;
-            while self.lex.tk == Token::MulOp as i64 {
-                self.next()?;
-                inner_ptr += 1;
-                while self.lex.tk == Token::TypeQual as i64 {
-                    self.next()?;
-                }
-            }
-            if self.lex.tk != Token::Id as i64 {
-                return Err(C5Error::Compile(format!(
-                    "{}: identifier expected in function-pointer declarator",
-                    self.lex.line
-                )));
-            }
-            let idx = self.lex.curr_id_idx;
-            self.next()?;
+        // Function-pointer declarator: `RET (*Name)(args)`, possibly
+        // nested as `RET (*(*Name)(args1))(args2)`, or abstract as
+        // `RET (*)(args)` (an unnamed parameter type, e.g.
+        // `int sqlite3_busy_handler(sqlite3*, int(*)(void*,int))`).
+        // Detected by peeking past the open paren: `*` opens the
+        // pointer-cum-declarator, `(` starts a nested parens group.
+        if self.lex.tk == '(' as i64
+            && (self.lex.peek_after_whitespace(b'*')
+                || self.lex.peek_after_whitespace(b'('))
+        {
+            self.next()?; // consume the outer `(`
+            let (idx, mut inner_ty, _) = self.parse_declarator(ty)?;
             if self.lex.tk != ')' as i64 {
                 return Err(C5Error::Compile(format!(
-                    "{}: close paren expected in function-pointer declarator",
+                    "{}: close paren expected in nested declarator",
                     self.lex.line
                 )));
             }
             self.next()?;
-            if self.lex.tk != '(' as i64 {
-                return Err(C5Error::Compile(format!(
-                    "{}: parameter list expected after function-pointer declarator",
-                    self.lex.line
-                )));
+            // Trailing decorations on the parenthesised group.
+            // Multiple are legal: `(*pp)[N](args)` etc.
+            loop {
+                if self.lex.tk == '(' as i64 {
+                    self.next()?;
+                    self.skip_balanced_parens_after_open()?;
+                } else if self.lex.tk == Token::Brak as i64 {
+                    self.next()?;
+                    if self.lex.tk == ']' as i64 {
+                        self.next()?;
+                    } else {
+                        let _ = self.parse_constant_int()?;
+                        if self.lex.tk == ']' as i64 {
+                            self.next()?;
+                        }
+                    }
+                    inner_ty += Ty::Ptr as i64;
+                } else {
+                    break;
+                }
             }
-            // Skip the parameter type list -- balanced-paren skip so
-            // nested types like `int (*cb)(int (*)(int), int)` parse
-            // without c5 having to model the inner signature.
-            self.next()?;
-            self.skip_balanced_parens_after_open()?;
-            ty += inner_ptr * Ty::Ptr as i64;
-            return Ok((idx, ty, 0));
+            return Ok((idx, inner_ty, 0));
+        }
+
+        // Abstract declarator: type-only, no identifier. Most
+        // commonly seen as the unnamed-fp shape `(*)(args)` whose
+        // inner-recursion lands here, and as an unnamed parameter
+        // closing-out (`,` / `)`). Return `usize::MAX` so callers
+        // recognise "no symbol to bind"; only `parse_function_params`
+        // is in a context that should accept this.
+        if self.lex.tk == ')' as i64 || self.lex.tk == ',' as i64 {
+            return Ok((usize::MAX, ty, 0));
         }
 
         if self.lex.tk != Token::Id as i64 {
             return Err(C5Error::Compile(format!(
-                "{}: identifier expected in declaration",
-                self.lex.line
+                "{}: identifier expected in declaration (tk={})",
+                self.lex.line, self.lex.tk
             )));
         }
         let idx = self.lex.curr_id_idx;
@@ -1112,6 +1123,7 @@ impl Compiler {
             } else if self.lex.tk == Token::Struct as i64
                 || self.lex.tk == Token::Union as i64
             {
+                let nested_is_union = self.lex.tk == Token::Union as i64;
                 self.next()?;
                 if self.lex.tk != Token::Id as i64 {
                     return Err(C5Error::Compile(format!(
@@ -1121,7 +1133,17 @@ impl Compiler {
                 }
                 let inner_name = self.symbols[self.lex.curr_id_idx].name.clone();
                 self.next()?;
-                let inner_id = self.find_or_forward_declare_struct(&inner_name);
+                // Inline aggregate definition as a field type:
+                // `struct Foo { ... } *p, x;`. Define the inner
+                // aggregate in place before falling through to
+                // declarator parsing. SQLite uses this in
+                // sqlite3_index_info for nested constraint /
+                // orderby tables.
+                let inner_id = if self.lex.tk == '{' as i64 {
+                    self.parse_aggregate_body(&inner_name, nested_is_union)?
+                } else {
+                    self.find_or_forward_declare_struct(&inner_name)
+                };
                 struct_ty_for(inner_id)
             } else if self.is_lex_typedef_name() {
                 let aliased = self.symbols[self.lex.curr_id_idx].type_;
@@ -3579,17 +3601,75 @@ impl Compiler {
             } else {
                 Ty::Int as i64
             };
-            // Function-parameter declarators discard any array
-            // dimension: per C, `int xs[N]` and `int xs[]` in a
-            // parameter both decay to `int *xs`. parse_declarator
-            // returns `array_size = -1` for the empty-bracket form
-            // and a positive count for `[N]`; either way we add
-            // one pointer level and clear the size.
-            let (param_idx, mut ty, array_size) = self.parse_declarator(base)?;
-            if array_size != 0 {
+            // Consume the parameter declarator. C allows three
+            // shapes here:
+            //   * Named:  `int foo`        -- regular declarator.
+            //   * Unnamed (prototype): `int` or `int *` -- no
+            //     identifier between the type and the next `,` /
+            //     `)`. Common in headers; the body, if any,
+            //     can't refer to the parameter.
+            //   * Function-pointer:  `int (*cb)(int)` -- routed
+            //     through `parse_declarator`'s fp-decl path.
+            // Detect unnamed by counting `*` markers and then
+            // peeking for `,` or `)`.
+            let mut ty = base;
+            while self.lex.tk == Token::MulOp as i64 {
+                self.next()?;
                 ty += Ty::Ptr as i64;
+                while self.lex.tk == Token::TypeQual as i64 {
+                    self.next()?;
+                }
             }
-            self.ty = ty;
+            // Optional `[N]` / `[]` after an unnamed parameter
+            // type ('int []' / 'char [16]'). Per C the array
+            // dimension decays to a pointer; we just bump the
+            // pointer level once and discard the size.
+            if self.lex.tk == ',' as i64
+                || self.lex.tk == ')' as i64
+                || self.lex.tk == Token::Brak as i64
+            {
+                if self.lex.tk == Token::Brak as i64 {
+                    self.next()?;
+                    if self.lex.tk == ']' as i64 {
+                        self.next()?;
+                    } else {
+                        // Eat the constant int + `]`.
+                        let _ = self.parse_constant_int()?;
+                        if self.lex.tk == ']' as i64 {
+                            self.next()?;
+                        }
+                    }
+                    ty += Ty::Ptr as i64;
+                }
+                self.ty = ty;
+                types.push(ty);
+                if self.lex.tk == ',' as i64 {
+                    self.next()?;
+                }
+                continue;
+            }
+
+            // Function-pointer parameter or named scalar/struct
+            // parameter -- delegate to parse_declarator, which
+            // handles `(*name)(args)` plus any [N] suffix. The
+            // outer `ty` already absorbed the leading `*`s, so
+            // pass it as the base. parse_declarator returns
+            // `usize::MAX` for abstract declarators (the unnamed
+            // function-pointer shape `int(*)(args)` shows up in
+            // sqlite-style prototypes); we record the type but
+            // don't bind any symbol.
+            let (param_idx, mut full_ty, array_size) = self.parse_declarator(ty)?;
+            if array_size != 0 {
+                full_ty += Ty::Ptr as i64;
+            }
+            self.ty = full_ty;
+            if param_idx == usize::MAX {
+                types.push(full_ty);
+                if self.lex.tk == ',' as i64 {
+                    self.next()?;
+                }
+                continue;
+            }
             if self.symbols[param_idx].class == Token::Loc as i64 {
                 return Err(C5Error::Compile(format!(
                     "{}: duplicate parameter definition",
@@ -3600,12 +3680,12 @@ impl Compiler {
             self.symbols[param_idx].h_class = self.symbols[param_idx].class;
             self.symbols[param_idx].class = Token::Loc as i64;
             self.symbols[param_idx].h_type = self.symbols[param_idx].type_;
-            self.symbols[param_idx].type_ = ty;
+            self.symbols[param_idx].type_ = full_ty;
             self.symbols[param_idx].h_val = self.symbols[param_idx].val;
             self.symbols[param_idx].array_size = 0;
 
             args.push(param_idx);
-            types.push(ty);
+            types.push(full_ty);
 
             if self.lex.tk == ',' as i64 {
                 self.next()?;

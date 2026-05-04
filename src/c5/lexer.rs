@@ -572,6 +572,25 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("extern", Token::Extern),
     ("static", Token::Static),
     ("void", Token::Char),
+    // Type qualifiers -- consumed everywhere a type qualifier
+    // may appear; no semantic effect.
+    ("const", Token::TypeQual),
+    ("volatile", Token::TypeQual),
+    ("restrict", Token::TypeQual),
+    ("__restrict", Token::TypeQual),
+    ("__restrict__", Token::TypeQual),
+    // Integer-type modifiers -- collapse into c5's single 64-bit int.
+    ("signed", Token::IntMod),
+    ("unsigned", Token::IntMod),
+    ("short", Token::IntMod),
+    ("long", Token::IntMod),
+    ("_Bool", Token::IntMod),
+    // Function specifiers -- accepted, no effect.
+    ("inline", Token::FuncSpec),
+    ("__inline", Token::FuncSpec),
+    ("__inline__", Token::FuncSpec),
+    ("register", Token::FuncSpec),
+    ("auto", Token::FuncSpec),
     ("main", Token::Id),
 ];
 

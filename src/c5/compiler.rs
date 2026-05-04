@@ -124,6 +124,35 @@ fn fp_result_ty(lhs: i64, rhs: i64) -> i64 {
     }
 }
 
+/// True for any token that may be freely consumed at a declaration
+/// prefix as a no-op: type qualifiers (`const`/`volatile`/`restrict`),
+/// integer-type modifiers (`signed`/`unsigned`/`short`/`long`/`_Bool`),
+/// and function specifiers (`inline`/`register`/`auto`). c5 has no
+/// const-correctness, no narrower integers, and no inline expansion,
+/// so all three classes are recognised solely so unmodified C code
+/// tokenizes -- they have no semantic effect.
+fn is_decl_modifier(tk: i64) -> bool {
+    tk == Token::TypeQual as i64
+        || tk == Token::IntMod as i64
+        || tk == Token::FuncSpec as i64
+}
+
+/// True for any token that may start a c5 declaration -- a base-type
+/// keyword, a struct prefix, a storage-class prefix, or any of the
+/// no-op modifiers above. Used by the parser to decide whether the
+/// next statement at block/file scope is a declaration or an
+/// expression / control-flow statement.
+fn is_type_start_token(tk: i64) -> bool {
+    tk == Token::Int as i64
+        || tk == Token::Char as i64
+        || tk == Token::Float as i64
+        || tk == Token::Double as i64
+        || tk == Token::Struct as i64
+        || tk == Token::Extern as i64
+        || tk == Token::Static as i64
+        || is_decl_modifier(tk)
+}
+
 /// Pick the right load op for the given `ty`. `char`-typed lvalues take
 /// `Op::Lc` (one-byte load); anything else (`int`, pointers, struct
 /// pointers) goes through `Op::Li` (eight-byte load).
@@ -536,6 +565,11 @@ impl Compiler {
         while self.lex.tk == Token::MulOp as i64 {
             self.next()?;
             ty += Ty::Ptr as i64;
+            // Pointer-level qualifiers: `int *const p`, `int *volatile p`,
+            // `char *restrict s`. Consumed; no semantic effect.
+            while self.lex.tk == Token::TypeQual as i64 {
+                self.next()?;
+            }
         }
         if self.lex.tk != Token::Id as i64 {
             return Err(C5Error::Compile(format!(
@@ -549,18 +583,30 @@ impl Compiler {
     }
 
     fn parse_decl_base_type(&mut self) -> Result<i64, C5Error> {
-        if self.lex.tk == Token::Int as i64 {
+        // Leading qualifiers / modifiers / specifiers -- all no-ops in c5.
+        // We track whether we saw an int modifier so a bare `unsigned x;`
+        // (no `int` keyword following) still produces an `int` type, the
+        // C implicit-int rule for these collapsed-to-int modifiers.
+        let mut saw_int_mod = false;
+        while is_decl_modifier(self.lex.tk) {
+            if self.lex.tk == Token::IntMod as i64 {
+                saw_int_mod = true;
+            }
             self.next()?;
-            Ok(Ty::Int as i64)
+        }
+
+        let bt = if self.lex.tk == Token::Int as i64 {
+            self.next()?;
+            Ty::Int as i64
         } else if self.lex.tk == Token::Char as i64 {
             self.next()?;
-            Ok(Ty::Char as i64)
+            Ty::Char as i64
         } else if self.lex.tk == Token::Float as i64 {
             self.next()?;
-            Ok(Ty::Float as i64)
+            Ty::Float as i64
         } else if self.lex.tk == Token::Double as i64 {
             self.next()?;
-            Ok(Ty::Double as i64)
+            Ty::Double as i64
         } else if self.lex.tk == Token::Struct as i64 {
             self.next()?;
             if self.lex.tk != Token::Id as i64 {
@@ -574,13 +620,26 @@ impl Compiler {
             let id = self.find_struct_id(&name).ok_or_else(|| {
                 C5Error::Compile(format!("{}: unknown struct {}", self.lex.line, name))
             })?;
-            Ok(struct_ty_for(id))
+            struct_ty_for(id)
+        } else if saw_int_mod {
+            // Bare `unsigned x;` / `long x;` / `_Bool x;` -- the C
+            // implicit-int rule applies for int-modifier-only decls.
+            Ty::Int as i64
         } else {
-            Err(C5Error::Compile(format!(
+            return Err(C5Error::Compile(format!(
                 "{}: type expected",
                 self.lex.line
-            )))
+            )));
+        };
+
+        // Trailing qualifiers / modifiers: `int const`, `int long`,
+        // `unsigned int long long`, etc. all collapse to the base type
+        // already chosen.
+        while is_decl_modifier(self.lex.tk) {
+            self.next()?;
         }
+
+        Ok(bt)
     }
 
     /// Parse a `struct Name { ... }` definition. The struct is registered
@@ -607,6 +666,17 @@ impl Compiler {
         let mut offset = 0usize;
         while self.lex.tk != '}' as i64 {
             // Field type prefix: int, char, float, double, or struct Name.
+            // Leading qualifiers / int modifiers / function specifiers
+            // (`const`, `unsigned`, ...) are no-ops; track if any int
+            // modifier appeared so a bare `unsigned x;` field still
+            // produces an `int` field.
+            let mut saw_int_mod = false;
+            while is_decl_modifier(self.lex.tk) {
+                if self.lex.tk == Token::IntMod as i64 {
+                    saw_int_mod = true;
+                }
+                self.next()?;
+            }
             let field_base = if self.lex.tk == Token::Int as i64 {
                 self.next()?;
                 Ty::Int as i64
@@ -633,12 +703,19 @@ impl Compiler {
                     C5Error::Compile(format!("{}: unknown struct {}", self.lex.line, inner_name))
                 })?;
                 struct_ty_for(inner_id)
+            } else if saw_int_mod {
+                Ty::Int as i64
             } else {
                 return Err(C5Error::Compile(format!(
                     "{}: type expected in struct field",
                     self.lex.line
                 )));
             };
+
+            // Trailing modifiers: `int long`, `unsigned long long`, etc.
+            while is_decl_modifier(self.lex.tk) {
+                self.next()?;
+            }
 
             // One or more comma-separated declarators sharing the prefix.
             loop {
@@ -853,20 +930,19 @@ impl Compiler {
                     self.lex.line
                 )));
             }
-            if self.lex.tk == Token::Int as i64
-                || self.lex.tk == Token::Char as i64
-                || self.lex.tk == Token::Float as i64
-                || self.lex.tk == Token::Double as i64
-                || self.lex.tk == Token::Struct as i64
-            {
+            if is_type_start_token(self.lex.tk) {
                 // sizeof(<type>): an explicit type name, optionally with
-                // pointer markers (`int **`, `struct Foo *`, ...). No
+                // pointer markers (`int **`, `struct Foo *`, ...) and
+                // pointer-level qualifiers (`const char *const`). No
                 // bytecode is emitted for the operand at all in this
                 // branch.
                 self.ty = self.parse_decl_base_type()?;
                 while self.lex.tk == Token::MulOp as i64 {
                     self.next()?;
                     self.ty += Ty::Ptr as i64;
+                    while self.lex.tk == Token::TypeQual as i64 {
+                        self.next()?;
+                    }
                 }
             } else {
                 // sizeof(<expr>): parse the expression to learn its type,
@@ -1214,19 +1290,17 @@ impl Compiler {
             }
         } else if self.lex.tk == '(' as i64 {
             self.next()?;
-            if self.lex.tk == Token::Int as i64
-                || self.lex.tk == Token::Char as i64
-                || self.lex.tk == Token::Float as i64
-                || self.lex.tk == Token::Double as i64
-                || self.lex.tk == Token::Struct as i64
-            {
+            if is_type_start_token(self.lex.tk) {
                 // C-style cast: `(<type>)expr`. Accepts int, char,
                 // float, double, or struct base, with any number of
-                // `*` markers.
+                // `*` markers and pointer-level qualifiers.
                 t = self.parse_decl_base_type()?;
                 while self.lex.tk == Token::MulOp as i64 {
                     self.next()?;
                     t += Ty::Ptr as i64;
+                    while self.lex.tk == Token::TypeQual as i64 {
+                        self.next()?;
+                    }
                 }
                 if self.lex.tk == ')' as i64 {
                     self.next()?;
@@ -1951,28 +2025,17 @@ impl Compiler {
         let mut block_symbols = Vec::new();
 
         // Block-scoped local variables (declared at the top of the block).
-        while self.lex.tk == Token::Int as i64
-            || self.lex.tk == Token::Char as i64
-            || self.lex.tk == Token::Float as i64
-            || self.lex.tk == Token::Double as i64
-            || self.lex.tk == Token::Struct as i64
-            // `extern` / `static` are accepted as no-op
-            // storage-class prefixes on local declarations,
-            // matching the file-scope handling. C lets you
-            // write `static int counter = 0;` inside a
-            // function for "function-scope persistent
-            // storage", but c5 only has automatic locals --
-            // we consume the keyword and the local stays
-            // automatic. Surface code that relies on the
-            // persistence semantics will misbehave at
-            // runtime; it's still useful to compile cleanly
-            // so unmodified C from the wild lexes.
-            || self.lex.tk == Token::Extern as i64
-            || self.lex.tk == Token::Static as i64
-        {
-            // Consume any leading extern / static prefixes on
-            // the local decl. Order doesn't matter; both are
-            // no-ops.
+        // `extern` / `static` are accepted as no-op storage-class prefixes
+        // on local declarations, matching the file-scope handling. C lets
+        // you write `static int counter = 0;` inside a function for
+        // "function-scope persistent storage", but c5 only has automatic
+        // locals -- we consume the keyword and the local stays automatic.
+        // Surface code that relies on the persistence semantics will
+        // misbehave at runtime; it's still useful to compile cleanly so
+        // unmodified C from the wild lexes. Type qualifiers, int
+        // modifiers, and function specifiers (`const`, `unsigned`,
+        // `inline`, etc.) are similarly consumed.
+        while is_type_start_token(self.lex.tk) {
             while self.lex.tk == Token::Extern as i64 || self.lex.tk == Token::Static as i64 {
                 self.next()?;
             }
@@ -2314,17 +2377,12 @@ impl Compiler {
             // Consume any extern/static prefixes on parameter
             // decls. C lets you write `void f(static int n)`
             // (it's diagnosed in some compilers but legal in
-            // others) and `register` would belong here too if
-            // we ever supported it. No semantic effect.
+            // others) and `register` belongs here too. No
+            // semantic effect.
             while self.lex.tk == Token::Extern as i64 || self.lex.tk == Token::Static as i64 {
                 self.next()?;
             }
-            let base = if self.lex.tk == Token::Int as i64
-                || self.lex.tk == Token::Char as i64
-                || self.lex.tk == Token::Float as i64
-                || self.lex.tk == Token::Double as i64
-                || self.lex.tk == Token::Struct as i64
-            {
+            let base = if is_type_start_token(self.lex.tk) {
                 self.parse_decl_base_type()?
             } else {
                 Ty::Int as i64
@@ -2377,7 +2435,9 @@ impl Compiler {
                 if self.lex.tk == Token::ThreadLocal as i64 {
                     thread_local = true;
                     self.next()?;
-                } else if self.lex.tk == Token::Extern as i64 || self.lex.tk == Token::Static as i64
+                } else if self.lex.tk == Token::Extern as i64
+                    || self.lex.tk == Token::Static as i64
+                    || is_decl_modifier(self.lex.tk)
                 {
                     self.next()?;
                 } else {
@@ -2550,19 +2610,15 @@ impl Compiler {
                     self.labels.clear();
                     self.unresolved_gotos.clear();
 
-                    while self.lex.tk == Token::Int as i64
-                        || self.lex.tk == Token::Char as i64
-                        || self.lex.tk == Token::Float as i64
-                        || self.lex.tk == Token::Double as i64
-                        || self.lex.tk == Token::Struct as i64
-                        || self.lex.tk == Token::Extern as i64
-                        || self.lex.tk == Token::Static as i64
-                    {
+                    while is_type_start_token(self.lex.tk) {
                         // Consume any extern/static prefixes
                         // before the type token; both are
                         // no-op storage classes in c5. See
                         // the comment in `parse_block_stmt`
-                        // for the rationale.
+                        // for the rationale. Type qualifiers,
+                        // int modifiers and function specifiers
+                        // (`const`, `unsigned`, `inline`, ...)
+                        // are absorbed by `parse_decl_base_type`.
                         while self.lex.tk == Token::Extern as i64
                             || self.lex.tk == Token::Static as i64
                         {

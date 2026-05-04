@@ -221,6 +221,15 @@ fn predefined_constants_are_visible() {
 }
 
 #[test]
+fn c99_qualifiers_parse_as_no_ops() {
+    // const, volatile, restrict, signed, unsigned, short, long, _Bool,
+    // register, auto, inline -- recognised by the lexer and consumed at
+    // every declaration position the parser visits. Returns 0 if every
+    // shape parsed and ran.
+    assert_eq!(run_fixture("c99_qualifiers.c"), 0);
+}
+
+#[test]
 fn original_c4_compiles_and_runs_hello() {
     // The canonical self-hosting test: Robert Swierczek's original c4.c
     // runs under badc, compiles hello.c, and runs the resulting program

@@ -125,6 +125,32 @@ pub(crate) enum Token {
     /// consumed and the local stays automatic, matching the
     /// extern handling.
     Static,
+    /// Type qualifier (`const`, `volatile`, `restrict`). All
+    /// three collapse to one token because c5 has no
+    /// const-correctness checking and treats memory accesses
+    /// as already non-cacheable; the keywords are consumed
+    /// wherever a type qualifier may appear (base-type prefix,
+    /// after `*` in a declarator, after `*` in a parameter)
+    /// and have no semantic effect. Recognizing them at the
+    /// lexer level lets unmodified C headers tokenize.
+    TypeQual,
+    /// Integer-type modifier (`signed`, `unsigned`, `short`,
+    /// `long`, `_Bool`). c5 has a single 64-bit integer
+    /// representation, so all of these collapse onto plain
+    /// `int`. The token is consumed before, around, or
+    /// instead of the base-type token; if a declaration is
+    /// `unsigned x;` (no `int`), the parser still emits an
+    /// `int` declaration. `long long int` and `int long`
+    /// equally parse to `int`. Severity-aware programs that
+    /// rely on 32-bit overflow semantics will diverge -- see
+    /// c99-gaps.md M31 for the eventual real-width plan.
+    IntMod,
+    /// Function specifier (`inline`, `register`, `auto`).
+    /// Consumed as a no-op anywhere a storage class may
+    /// appear. `auto` is the C default, `register` is a
+    /// historical hint, `inline` is something a real
+    /// optimizer would honour -- c5 ignores all three.
+    FuncSpec,
     /// `float` keyword -- 32-bit IEEE float type.
     Float,
     /// `double` keyword -- 64-bit IEEE double type.

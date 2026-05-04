@@ -227,6 +227,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("variable_shadowing.c", 10),
     ("pointer_arithmetic.c", 3),
     ("predefined_constants.c", 0),
+    ("c99_qualifiers.c", 0),
     ("memset_mcmp.c", 42),
     ("memcpy_basic.c", 'A' as i32),
     ("struct_basic.c", 25),

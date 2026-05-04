@@ -239,6 +239,15 @@ fn integer_literal_suffixes_are_consumed() {
 }
 
 #[test]
+fn bitfields_basic() {
+    // M27 -- bitfields pack into shared 8-byte storage units;
+    // reads use Li/Shr/And; writes use load-clear-shift-or-store.
+    // Pins both single-bit flags and wider bitfields, plus
+    // mutation that must not disturb adjacent bits.
+    assert_eq!(run_fixture("bitfields.c"), 0);
+}
+
+#[test]
 fn enum_tag_types() {
     // M30 -- `enum Foo { ... };` registers a tag whose constants
     // resolve to integers; `enum Foo` then works as a type spec

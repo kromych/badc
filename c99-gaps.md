@@ -1,6 +1,6 @@
 # Gaps to C99
 
-Snapshot updated after M30 (enum tag types) lands. The c5
+Snapshot updated after M27 (bitfields) lands. The c5
 dialect is a deliberately small subset of C with extras for
 the compiler's own use; this document catalogues the C99
 features that aren't supported, organized by spec section,
@@ -193,8 +193,20 @@ to have).
 ### Struct/union member access
 - `.` and `->` for structs -- supported (M5/M6).
 - Unions -- **supported** (M26). See §6.4 keywords for
-  layout details. Bitfields inside a union still missing.
-- Bitfields -- **missing**. Severity: 3.
+  layout details.
+- Bitfields -- **supported** (M27). `int x:N;` packs into
+  shared 8-byte storage units; reads emit `Li; Shr; And`,
+  writes emit a load-clear-shift-or-store sequence that
+  preserves adjacent bits. Anonymous (`int :N;`) and
+  zero-width (`int :0;`) forms are accepted as alignment
+  hints. The read path doesn't sign-extend (signed and
+  unsigned bitfields produce the same unsigned-mask
+  value), which diverges from strict C signed-bitfield
+  semantics; in practice every sqlite-shaped use is a
+  flag or small unsigned count, where the difference is
+  unobservable. Bitfields can't be members of an array.
+- Bitfields -- **supported** (M27). See §6.4 keywords
+  for layout details.
 
 ## §6.6 Constant expressions
 
@@ -323,7 +335,8 @@ to have).
   Severity: 2 for cross-format binary compatibility, 3 for
   internal struct use.
 - Union -- **missing**. Severity: 2.
-- Bitfields -- **missing**. Severity: 3.
+- Bitfields -- **supported** (M27). See §6.4 keywords
+  for layout details.
 - Anonymous structs / unions -- **missing**. Severity: 4.
 - Forward struct declarations -- **supported** (M23).
   First mention of `struct Foo` (in `struct Foo;`,

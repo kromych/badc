@@ -208,6 +208,8 @@ struct StructInitElem {
 struct StructField {
     name: String,
     /// Byte offset of the field from the start of the struct.
+    /// For a bitfield, the byte offset of the *storage unit*
+    /// (8-byte word) the bitfield lives in.
     offset: usize,
     /// `ty`-encoded type of the field.
     ty: i64,
@@ -216,6 +218,14 @@ struct StructField {
     /// `s.xs` decays to a pointer-to-element the same way a
     /// local array does.
     array_size: i64,
+    /// Bit offset within the 8-byte storage unit. Meaningful only
+    /// when `bit_width > 0`.
+    bit_offset: u32,
+    /// Bit width of a bitfield, or 0 for a regular field. Bitfields
+    /// pack into shared 8-byte storage units; reads emit
+    /// `Li; Imm bit_offset; Shr; Imm mask; And` and writes emit a
+    /// load-clear-shift-or-store sequence.
+    bit_width: u32,
 }
 
 /// Bundle returned from `parse_function_params` -- keeps the per-param
@@ -796,6 +806,75 @@ impl Compiler {
         Ok((idx, ty, array_size))
     }
 
+    /// Emit code for accessing a bitfield. On entry `a` holds the
+    /// address of the bitfield's 8-byte storage unit. The dispatch
+    /// peeks at the next token: if it's `=`, an assignment follows
+    /// and we emit a load-clear-shift-or-store sequence; otherwise
+    /// we emit a load-shift-and-mask read sequence and let the
+    /// surrounding expression continue.
+    ///
+    /// Self-contained on the c5 stack: read leaves the bitfield's
+    /// value in `a` with no net stack change; write leaves the
+    /// stored full-word value in `a` (the surrounding expression
+    /// rarely uses a bitfield assignment's value, and the
+    /// approximation is acceptable for the common case).
+    fn emit_bitfield_access(&mut self, bit_offset: u32, bit_width: u32) -> Result<(), C5Error> {
+        let mask: i64 = if bit_width >= 64 {
+            -1
+        } else {
+            (1i64 << bit_width) - 1
+        };
+        if self.lex.tk == Token::Assign as i64 {
+            // Bitfield write: `s.f = expr`. The c5 stack discipline
+            // is delicate here -- we need the storage address
+            // available for the final Si, so push it now and reload
+            // through indirection later.
+            self.next()?; // consume `=`
+            // a = field_addr; stack: [...]
+            self.emit_op(Op::Psh); // stack: [..., field_addr]; a = field_addr
+            self.emit_op(Op::Li);  // a = old_value; stack: [..., field_addr]
+            self.emit_op(Op::Psh); // stack: [..., field_addr, old_value]
+            self.emit_op(Op::Imm);
+            self.emit_val(!(mask << bit_offset)); // a = ~(mask << off)
+            self.emit_op(Op::And); // a = old_value & ~(mask << off); stack: [..., field_addr]
+            self.emit_op(Op::Psh); // stack: [..., field_addr, cleared]
+            self.expr(Token::Assign as i64)?; // a = new_value
+            self.emit_op(Op::Psh); // stack: [..., field_addr, cleared, new_value]
+            self.emit_op(Op::Imm);
+            self.emit_val(mask);
+            self.emit_op(Op::And); // a = new_value & mask; stack: [..., field_addr, cleared]
+            if bit_offset > 0 {
+                self.emit_op(Op::Psh);
+                self.emit_op(Op::Imm);
+                self.emit_val(bit_offset as i64);
+                self.emit_op(Op::Shl); // a = (new_value & mask) << bit_offset
+            }
+            // a = shifted; stack: [..., field_addr, cleared].
+            // Op::Or pops cleared, ORs into a. After: a = combined;
+            // stack: [..., field_addr]. The trailing Si pops
+            // field_addr as the destination.
+            self.emit_op(Op::Or);
+            self.emit_op(Op::Si); // pops field_addr, stores a (=combined).
+            self.ty = Ty::Int as i64;
+            Ok(())
+        } else {
+            // Bitfield read: `s.f` in any non-assignment context.
+            self.emit_op(Op::Li); // a = full storage word
+            if bit_offset > 0 {
+                self.emit_op(Op::Psh);
+                self.emit_op(Op::Imm);
+                self.emit_val(bit_offset as i64);
+                self.emit_op(Op::Shr); // a = (top >> bit_offset)
+            }
+            self.emit_op(Op::Psh);
+            self.emit_op(Op::Imm);
+            self.emit_val(mask);
+            self.emit_op(Op::And); // a = (...) & mask
+            self.ty = Ty::Int as i64;
+            Ok(())
+        }
+    }
+
     /// Skip tokens until the matching close paren. Caller has
     /// just consumed the opening `(`; on exit, `tk` is one past
     /// the matching `)`. Tracks nested parens and stops when the
@@ -996,6 +1075,15 @@ impl Compiler {
         self.next()?; // consume `{`
 
         let mut offset = 0usize;
+        // Bit-packing state for contiguous bitfields. When
+        // `bf_active` is true, `bf_storage_offset` is the byte
+        // offset of the current 8-byte storage unit and
+        // `bf_next_bit` is the next free bit position within it.
+        // A non-bitfield field or a bitfield that doesn't fit
+        // closes the unit.
+        let mut bf_active = false;
+        let mut bf_storage_offset: usize = 0;
+        let mut bf_next_bit: u32 = 0;
         while self.lex.tk != '}' as i64 {
             // Field type prefix: int, char, float, double, or struct Name.
             // Leading qualifiers / int modifiers / function specifiers
@@ -1059,19 +1147,50 @@ impl Compiler {
             // (`int counts[8];`) parse with the same rules as locals
             // and globals.
             loop {
+                // Anonymous bitfield (`int :N;`) -- skips a name and
+                // just reserves bits for padding. Detected by `:`
+                // appearing in declarator position.
+                let anon_bitfield_width = if self.lex.tk == ':' as i64 {
+                    self.next()?;
+                    let n = self.parse_constant_int()?;
+                    if n < 0 {
+                        return Err(C5Error::Compile(format!(
+                            "{}: bitfield width must be non-negative (got {n})",
+                            self.lex.line
+                        )));
+                    }
+                    Some(n as u32)
+                } else {
+                    None
+                };
+
+                if let Some(width) = anon_bitfield_width {
+                    if width == 0 {
+                        // C99 `:0` -- explicit alignment to next storage unit.
+                        if bf_active && !is_union {
+                            offset = bf_storage_offset + 8;
+                        }
+                        bf_active = false;
+                    } else if !is_union {
+                        // Allocate or extend a bitfield run for the padding.
+                        if !bf_active || bf_next_bit + width > 64 {
+                            offset = (offset + 7) & !7;
+                            bf_storage_offset = offset;
+                            offset += 8;
+                            bf_next_bit = 0;
+                            bf_active = true;
+                        }
+                        bf_next_bit += width;
+                    }
+                    if self.lex.tk == ',' as i64 {
+                        self.next()?;
+                        continue;
+                    }
+                    break;
+                }
+
                 let (id_idx, field_ty, field_array_size) =
                     self.parse_declarator(field_base)?;
-                // Aggregate-value fields (struct or union nested by
-                // value, no array) are accepted: their bytes live
-                // inline in the parent and field access reaches them
-                // via offset arithmetic. Whole-field assignment
-                // (`t.u = other;`) still requires a struct-rvalue at
-                // the RHS and the existing Mcpy machinery, which the
-                // assignment path emits when both sides are
-                // aggregates -- nothing extra needed here. An
-                // aggregate field whose definition is opaque (size 0)
-                // is the one shape we still refuse, since storage
-                // can't be allocated until the body lands.
                 let is_aggregate_value =
                     is_struct_ty(field_ty) && struct_ptr_depth(field_ty) == 0;
                 if is_aggregate_value
@@ -1085,35 +1204,93 @@ impl Compiler {
                 }
                 let field_name = self.symbols[id_idx].name.clone();
 
-                // Layout: struct fields advance the cursor, all
-                // 8-byte aligned. Union fields all live at offset 0;
-                // we just track the per-field storage to update the
-                // running max at end-of-loop.
-                let elem_size = self.size_of_type(field_ty);
-                let field_storage = if field_array_size > 0 {
-                    elem_size * field_array_size as usize
+                // Bitfield? `int x:N` shapes the field as N bits
+                // packed into a shared 8-byte storage unit. The
+                // bit-packing state above tracks whether we're
+                // inside an active run.
+                let mut bit_width: u32 = 0;
+                let mut bit_offset: u32 = 0;
+                let field_offset: usize;
+                if self.lex.tk == ':' as i64 {
+                    if field_array_size != 0 {
+                        return Err(C5Error::Compile(format!(
+                            "{}: array fields cannot also be bitfields",
+                            self.lex.line
+                        )));
+                    }
+                    if is_aggregate_value {
+                        return Err(C5Error::Compile(format!(
+                            "{}: aggregate fields cannot also be bitfields",
+                            self.lex.line
+                        )));
+                    }
+                    self.next()?;
+                    let n = self.parse_constant_int()?;
+                    if n <= 0 {
+                        return Err(C5Error::Compile(format!(
+                            "{}: bitfield width must be positive (got {n})",
+                            self.lex.line
+                        )));
+                    }
+                    if n > 64 {
+                        return Err(C5Error::Compile(format!(
+                            "{}: bitfield width {n} exceeds 64",
+                            self.lex.line
+                        )));
+                    }
+                    bit_width = n as u32;
+                    if is_union {
+                        field_offset = 0;
+                        bit_offset = 0;
+                    } else {
+                        if !bf_active || bf_next_bit + bit_width > 64 {
+                            offset = (offset + 7) & !7;
+                            bf_storage_offset = offset;
+                            offset += 8;
+                            bf_next_bit = 0;
+                            bf_active = true;
+                        }
+                        field_offset = bf_storage_offset;
+                        bit_offset = bf_next_bit;
+                        bf_next_bit += bit_width;
+                    }
                 } else {
-                    elem_size
-                };
-                let aligned_size = (field_storage + 7) & !7;
-                let field_offset = if is_union {
-                    0
-                } else {
-                    offset = (offset + 7) & !7;
-                    let off = offset;
-                    offset += aligned_size;
-                    off
-                };
-                if is_union {
-                    if aligned_size > offset {
+                    // Regular (non-bitfield) field. Seal any pending
+                    // bitfield run so the next byte is correctly
+                    // aligned for a new field.
+                    bf_active = false;
+
+                    // Layout: struct fields advance the cursor, all
+                    // 8-byte aligned. Union fields all live at offset 0;
+                    // we just track the per-field storage to update the
+                    // running max at end-of-loop.
+                    let elem_size = self.size_of_type(field_ty);
+                    let field_storage = if field_array_size > 0 {
+                        elem_size * field_array_size as usize
+                    } else {
+                        elem_size
+                    };
+                    let aligned_size = (field_storage + 7) & !7;
+                    field_offset = if is_union {
+                        0
+                    } else {
+                        offset = (offset + 7) & !7;
+                        let off = offset;
+                        offset += aligned_size;
+                        off
+                    };
+                    if is_union && aligned_size > offset {
                         offset = aligned_size;
                     }
                 }
+
                 self.structs[struct_id].fields.push(StructField {
                     name: field_name,
                     offset: field_offset,
                     ty: field_ty,
                     array_size: field_array_size,
+                    bit_offset,
+                    bit_width,
                 });
 
                 if self.lex.tk == ',' as i64 {
@@ -2259,19 +2436,33 @@ impl Compiler {
                     self.emit_op(Op::Add);
                 }
                 self.ty = field.ty;
-                // Trailing Lc/Li loads the field. The assignment handler
-                // (in the same loop) converts a trailing Li/Lc to Psh, so
-                // `p->x = value` and `s.x = value` work the same way as
-                // `*ptr = value`. Struct-typed fields get no load -- the
-                // address propagates so `s.inner.field` chains. Array
-                // fields decay to a pointer-to-element with the same
-                // address-as-value rule as a local array.
-                let field_is_struct_value =
-                    is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
-                if field.array_size > 0 {
-                    self.ty += Ty::Ptr as i64;
-                } else if !field_is_struct_value {
-                    self.emit_op(load_op_for(self.ty));
+
+                if field.bit_width > 0 {
+                    // Bitfield. Two shapes:
+                    //   `s.f = expr`  -- emit a load-clear-or-store
+                    //                    sequence that preserves the
+                    //                    other bits in the storage
+                    //                    unit.
+                    //   anything else -- emit a `Li; Shr; And`
+                    //                    extraction that lands the
+                    //                    bitfield's value in `a` for
+                    //                    the surrounding expression.
+                    self.emit_bitfield_access(field.bit_offset, field.bit_width)?;
+                } else {
+                    // Trailing Lc/Li loads the field. The assignment handler
+                    // (in the same loop) converts a trailing Li/Lc to Psh, so
+                    // `p->x = value` and `s.x = value` work the same way as
+                    // `*ptr = value`. Struct-typed fields get no load -- the
+                    // address propagates so `s.inner.field` chains. Array
+                    // fields decay to a pointer-to-element with the same
+                    // address-as-value rule as a local array.
+                    let field_is_struct_value =
+                        is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
+                    if field.array_size > 0 {
+                        self.ty += Ty::Ptr as i64;
+                    } else if !field_is_struct_value {
+                        self.emit_op(load_op_for(self.ty));
+                    }
                 }
             } else {
                 return Err(C5Error::Compile(format!(

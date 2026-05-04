@@ -91,23 +91,14 @@ fn is_pointer_ty(ty: i64) -> bool {
     }
 }
 
-/// Element size in bytes of a pointee for the given pointer type.
-/// `char*` deferences a single byte; everything else is 8-byte.
-/// Floats are stored in 8-byte slots regardless (the ABI lowering
-/// will narrow `float` to 32 bits at the FP-register boundary).
-fn pointee_size(ty: i64) -> i64 {
-    // char* (= Ty::Ptr alone, base char=0) is the only special case;
-    // every other pointer points to an 8-byte slot in c5.
+/// Element size in bytes of a pointee for the given pointer type
+/// (without struct-table awareness). Used for non-struct pointer
+/// types where size is fixed: `char*` derefs a single byte;
+/// everything else (`int*`, `float*`, deeper pointers) is 8-byte.
+/// Pointer-to-struct goes through [`Compiler::pointee_size`]
+/// instead so the scale picks up the struct's real size.
+fn pointee_size_no_struct(ty: i64) -> i64 {
     if ty == Ty::Ptr as i64 { 1 } else { 8 }
-}
-
-/// True for any pointer whose element size is 8 -- i.e., everything
-/// except `char*`. Pointer arithmetic on these scales the offset by
-/// 8 before adding to the base. Replaces the previous `t > Ty::Ptr`
-/// quick test, which treated the float-band scalar values (`100`,
-/// `200`) as if they were deep pointers.
-fn is_ptr_scaling_by_8(ty: i64) -> bool {
-    is_pointer_ty(ty) && pointee_size(ty) > 1
 }
 
 /// Result type for a binary FP operation. Both operands are
@@ -188,6 +179,11 @@ struct StructField {
     offset: usize,
     /// `ty`-encoded type of the field.
     ty: i64,
+    /// Array dimension if the field was declared as `T xs[N]`;
+    /// 0 when the field is a scalar / pointer / struct value.
+    /// `s.xs` decays to a pointer-to-element the same way a
+    /// local array does.
+    array_size: i64,
 }
 
 /// Bundle returned from `parse_function_params` -- keeps the per-param
@@ -504,6 +500,39 @@ impl Compiler {
         n >= 2 && self.text[n - 1] == 0 && self.text[n - 2] == Op::Imm as i64
     }
 
+    /// Element size in bytes for a pointer type. Pointer-to-struct
+    /// looks up the struct's real size; everything else falls back
+    /// to the static [`pointee_size_no_struct`] (1 for `char*`, 8
+    /// for any other pointer level).
+    fn pointee_size(&self, ptr_ty: i64) -> i64 {
+        if is_struct_ty(ptr_ty) && struct_ptr_depth(ptr_ty) == 1 {
+            // Single-level pointer-to-struct: the pointee is the
+            // struct value, whose size lives in the struct table.
+            self.structs[struct_id_of(ptr_ty)].size as i64
+        } else {
+            pointee_size_no_struct(ptr_ty)
+        }
+    }
+
+    /// True if pointer arithmetic on `ptr_ty` scales the offset by
+    /// the pointee's byte size. False only for `char*` (one byte
+    /// per element, no scaling). Replaces the old fixed-8 check
+    /// which got struct-pointer scaling wrong.
+    fn is_ptr_scaling_nontrivial(&self, ptr_ty: i64) -> bool {
+        is_pointer_ty(ptr_ty) && self.pointee_size(ptr_ty) > 1
+    }
+
+    /// Step size used by `++` / `--` on a value of `ty`: the
+    /// pointee size for a pointer (so `p++` advances by exactly
+    /// `sizeof(*p)`), or `1` for any non-pointer scalar.
+    fn pointee_step(&self, ty: i64) -> i64 {
+        if is_pointer_ty(ty) {
+            self.pointee_size(ty)
+        } else {
+            1
+        }
+    }
+
     /// Linear lookup of a struct by its tag name. Returns the id used in
     /// `struct_ty_for(id)` and as an index into `self.structs`.
     fn find_struct_id(&self, name: &str) -> Option<usize> {
@@ -597,7 +626,20 @@ impl Compiler {
     /// locals, block-scoped locals -- so the four near-identical loops it
     /// replaced share one definition of "what counts as a valid name" and
     /// "we don't allow struct values".
-    fn parse_declarator(&mut self, base: i64) -> Result<(usize, i64), C5Error> {
+    /// Parse a single declarator: zero-or-more `*` (pointer levels)
+    /// + identifier + optional `[N]` array suffix. Returns the symbol
+    /// index, the (possibly decayed) base type, and the array
+    /// dimension. `array_size = 0` means the declarator is not an
+    /// array; otherwise `type_` holds the element type and
+    /// `array_size` is N.
+    ///
+    /// `int xs[]` -- empty-bracket form -- is treated as `int *xs`
+    /// (added pointer level, `array_size = 0`) per C's parameter-
+    /// position decay rule. Callers in object-decl position can
+    /// still detect "the user wrote brackets" by remembering whether
+    /// the decay happened, but for c5 today the equivalence is
+    /// sufficient.
+    fn parse_declarator(&mut self, base: i64) -> Result<(usize, i64, i64), C5Error> {
         let mut ty = base;
         while self.lex.tk == Token::MulOp as i64 {
             self.next()?;
@@ -616,7 +658,78 @@ impl Compiler {
         }
         let idx = self.lex.curr_id_idx;
         self.next()?;
-        Ok((idx, ty))
+
+        let mut array_size: i64 = 0;
+        if self.lex.tk == Token::Brak as i64 {
+            self.next()?;
+            if self.lex.tk == ']' as i64 {
+                // `int xs[]` -- decay to pointer. The unspecified
+                // size is fine in parameter positions and (with a
+                // brace initializer) at file scope; c5 doesn't
+                // support the latter yet, so we just treat the
+                // declarator as `int *xs` everywhere.
+                self.next()?;
+                ty += Ty::Ptr as i64;
+            } else {
+                // `int xs[N]` -- N must fold to a positive integer
+                // constant. The constant-expression evaluator
+                // accepts integer literals (with optional unary
+                // minus) and identifiers bound to compile-time
+                // integer constants (Token::Num via enum or via
+                // `#define`s the preprocessor folded into the
+                // source token stream).
+                let n = self.parse_constant_int()?;
+                if n <= 0 {
+                    return Err(C5Error::Compile(format!(
+                        "{}: array dimension must be positive (got {n})",
+                        self.lex.line
+                    )));
+                }
+                if self.lex.tk != ']' as i64 {
+                    return Err(C5Error::Compile(format!(
+                        "{}: close bracket expected in array declarator",
+                        self.lex.line
+                    )));
+                }
+                self.next()?;
+                array_size = n;
+            }
+        }
+
+        Ok((idx, ty, array_size))
+    }
+
+    /// Parse a constant integer expression at parse time. The
+    /// grammar is narrow on purpose -- this is reached from
+    /// `int xs[N]` and similar dimension slots where the value
+    /// has to be known *during* declarator parsing. Accepts:
+    ///   * `Token::Num` with optional leading unary `-`,
+    ///   * `Token::Id` resolving to a `Token::Num`-class symbol
+    ///     (enum values fall in this bucket).
+    fn parse_constant_int(&mut self) -> Result<i64, C5Error> {
+        let neg = if self.lex.tk == Token::SubOp as i64 {
+            self.next()?;
+            true
+        } else {
+            false
+        };
+        let v = if self.lex.tk == Token::Num as i64 {
+            let v = self.lex.ival;
+            self.next()?;
+            v
+        } else if self.lex.tk == Token::Id as i64
+            && self.symbols[self.lex.curr_id_idx].class == Token::Num as i64
+        {
+            let v = self.symbols[self.lex.curr_id_idx].val;
+            self.next()?;
+            v
+        } else {
+            return Err(C5Error::Compile(format!(
+                "{}: constant integer expected",
+                self.lex.line
+            )));
+        };
+        Ok(if neg { -v } else { v })
     }
 
     fn parse_decl_base_type(&mut self) -> Result<i64, C5Error> {
@@ -802,16 +915,54 @@ impl Compiler {
                 let field_name = self.symbols[self.lex.curr_id_idx].name.clone();
                 self.next()?;
 
+                // Optional array dimension: `int xs[N];`. The field
+                // takes `N * size_of(elem)` bytes; in expression
+                // position `s.xs` decays to a pointer.
+                let mut field_array_size: i64 = 0;
+                if self.lex.tk == Token::Brak as i64 {
+                    self.next()?;
+                    if self.lex.tk == ']' as i64 {
+                        // `int xs[]` in struct position is a flexible
+                        // array member -- C99 special-case. We don't
+                        // support it; treat as size 0 (degenerate)
+                        // and let the field carry zero storage.
+                        self.next()?;
+                    } else {
+                        let n = self.parse_constant_int()?;
+                        if n <= 0 {
+                            return Err(C5Error::Compile(format!(
+                                "{}: array dimension must be positive (got {n})",
+                                self.lex.line
+                            )));
+                        }
+                        if self.lex.tk != ']' as i64 {
+                            return Err(C5Error::Compile(format!(
+                                "{}: close bracket expected in array field",
+                                self.lex.line
+                            )));
+                        }
+                        self.next()?;
+                        field_array_size = n;
+                    }
+                }
+
                 // 8-byte align every field. Even `char` fields take a full
                 // slot -- wasteful but keeps offset arithmetic obvious.
                 offset = (offset + 7) & !7;
-                let field_size = self.size_of_type(field_ty);
+                let elem_size = self.size_of_type(field_ty);
+                let field_storage = if field_array_size > 0 {
+                    elem_size * field_array_size as usize
+                } else {
+                    elem_size
+                };
                 self.structs[struct_id].fields.push(StructField {
                     name: field_name,
                     offset,
                     ty: field_ty,
+                    array_size: field_array_size,
                 });
-                offset += field_size;
+                // Round up so the next field stays 8-byte aligned.
+                offset += (field_storage + 7) & !7;
 
                 if self.lex.tk == ',' as i64 {
                     self.next()?;
@@ -992,12 +1143,17 @@ impl Compiler {
                     self.lex.line
                 )));
             }
-            if self.lex_is_type_start() {
-                // sizeof(<type>): an explicit type name, optionally with
-                // pointer markers (`int **`, `struct Foo *`, ...) and
-                // pointer-level qualifiers (`const char *const`). No
-                // bytecode is emitted for the operand at all in this
-                // branch.
+            // sizeof(...) -- compile-time. Three shapes:
+            //   * sizeof(<type>): explicit type name, no bytecode.
+            //   * sizeof(<array-id>): the array's full byte count,
+            //     not the pointer-decayed result of evaluating the
+            //     name. Without this lookahead `sizeof(arr)` would
+            //     report 8 (pointer size) instead of N*elem_size.
+            //   * sizeof(<expr>): parse the expression to learn the
+            //     type, then drop whatever bytecode it emitted.
+            //     sizeof is compile-time -- the operand is never
+            //     evaluated.
+            let total_bytes: i64 = if self.lex_is_type_start() {
                 self.ty = self.parse_decl_base_type()?;
                 while self.lex.tk == Token::MulOp as i64 {
                     self.next()?;
@@ -1006,16 +1162,22 @@ impl Compiler {
                         self.next()?;
                     }
                 }
+                self.size_of_type(self.ty) as i64
+            } else if self.lex.tk == Token::Id as i64
+                && self.lex.peek_after_whitespace(b')')
+                && self.symbols[self.lex.curr_id_idx].array_size > 0
+            {
+                let arr_size = self.symbols[self.lex.curr_id_idx].array_size;
+                let elem_ty = self.symbols[self.lex.curr_id_idx].type_;
+                self.next()?;
+                self.ty = elem_ty + Ty::Ptr as i64;
+                arr_size * self.size_of_type(elem_ty) as i64
             } else {
-                // sizeof(<expr>): parse the expression to learn its type,
-                // then drop whatever bytecode it emitted. sizeof is
-                // compile-time -- the operand is never actually evaluated,
-                // so e.g. `sizeof(*p)` doesn't dereference p, and
-                // `sizeof(f())` doesn't call f.
                 let saved_text_len = self.text.len();
                 self.expr(Token::Assign as i64)?;
                 self.text.truncate(saved_text_len);
-            }
+                self.size_of_type(self.ty) as i64
+            };
             if self.lex.tk == ')' as i64 {
                 self.next()?;
             } else {
@@ -1025,7 +1187,7 @@ impl Compiler {
                 )));
             }
             self.emit_op(Op::Imm);
-            self.emit_val(self.size_of_type(self.ty) as i64);
+            self.emit_val(total_bytes);
             self.ty = Ty::Int as i64;
         } else if self.lex.tk == Token::Id as i64 {
             let id_idx = self.lex.curr_id_idx;
@@ -1340,13 +1502,22 @@ impl Compiler {
                     )));
                 }
                 self.ty = self.symbols[id_idx].type_;
-                // Struct values aren't 8-byte loadable -- the
-                // expression's value is the struct's *address*. The
-                // `.field` operator expects the address in `a` and
-                // adds the field offset. Pointers to structs and
-                // every scalar type still go through the normal
-                // load_op_for path.
-                if !(is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0) {
+                let is_struct_value =
+                    is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
+                let is_array_var = self.symbols[id_idx].array_size > 0;
+                // Array variables decay to a pointer to the first
+                // element: the symbol's address IS its value, no
+                // load. Bump the type by one pointer level so
+                // downstream pointer arithmetic / indexing scales
+                // correctly. Struct values follow the same
+                // "address-as-value" rule but keep their type
+                // because the `.field` operator needs the struct's
+                // value type to look up offsets.
+                if is_array_var {
+                    self.ty += Ty::Ptr as i64;
+                } else if !is_struct_value {
+                    // Pointers to structs and every scalar type go
+                    // through the normal load_op_for path.
                     self.emit_op(load_op_for(self.ty));
                 }
             }
@@ -1504,7 +1675,7 @@ impl Compiler {
             }
             self.emit_op(Op::Psh);
             self.emit_op(Op::Imm);
-            self.emit_val(if is_ptr_scaling_by_8(self.ty) { 8 } else { 1 });
+            self.emit_val(self.pointee_step(self.ty));
             self.emit_op(if t == Token::Inc as i64 {
                 Op::Add
             } else {
@@ -1716,10 +1887,11 @@ impl Compiler {
                     self.emit_op(Op::Fadd);
                     self.ty = fp_result_ty(t, self.ty);
                 } else {
-                    if is_ptr_scaling_by_8(t) {
+                    if self.is_ptr_scaling_nontrivial(t) {
+                        let scale = self.pointee_size(t);
                         self.emit_op(Op::Psh);
                         self.emit_op(Op::Imm);
-                        self.emit_val(8);
+                        self.emit_val(scale);
                         self.emit_op(Op::Mul);
                     }
                     self.emit_op(Op::Add);
@@ -1734,22 +1906,24 @@ impl Compiler {
                     self.emit_op(Op::Fsub);
                     self.ty = fp_result_ty(t, self.ty);
                 } else if is_pointer_ty(t) && t == self.ty {
-                    // ptr - ptr -> element count (Int). For deeper
-                    // pointers (int*, int**, ...) the element size is
-                    // 8 bytes so divide; for char* the byte count is
-                    // the element count, no division.
+                    // ptr - ptr -> element count (Int). Divide by
+                    // the pointee size to convert raw byte distance
+                    // into element distance (skipped for `char*`,
+                    // where byte and element counts coincide).
                     self.emit_op(Op::Sub);
-                    if is_ptr_scaling_by_8(t) {
+                    if self.is_ptr_scaling_nontrivial(t) {
+                        let scale = self.pointee_size(t);
                         self.emit_op(Op::Psh);
                         self.emit_op(Op::Imm);
-                        self.emit_val(8);
+                        self.emit_val(scale);
                         self.emit_op(Op::Div);
                     }
                     self.ty = Ty::Int as i64;
-                } else if is_ptr_scaling_by_8(t) {
+                } else if self.is_ptr_scaling_nontrivial(t) {
+                    let scale = self.pointee_size(t);
                     self.emit_op(Op::Psh);
                     self.emit_op(Op::Imm);
-                    self.emit_val(8);
+                    self.emit_val(scale);
                     self.emit_op(Op::Mul);
                     self.emit_op(Op::Sub);
                     self.ty = t;
@@ -1821,7 +1995,7 @@ impl Compiler {
                 }
                 self.emit_op(Op::Psh);
                 self.emit_op(Op::Imm);
-                self.emit_val(if is_ptr_scaling_by_8(self.ty) { 8 } else { 1 });
+                self.emit_val(self.pointee_step(self.ty));
                 self.emit_op(if self.lex.tk == Token::Inc as i64 {
                     Op::Add
                 } else {
@@ -1830,7 +2004,7 @@ impl Compiler {
                 self.emit_op(store_op_for(self.ty));
                 self.emit_op(Op::Psh);
                 self.emit_op(Op::Imm);
-                self.emit_val(if is_ptr_scaling_by_8(self.ty) { 8 } else { 1 });
+                self.emit_val(self.pointee_step(self.ty));
                 self.emit_op(if self.lex.tk == Token::Inc as i64 {
                     Op::Sub
                 } else {
@@ -1855,15 +2029,26 @@ impl Compiler {
                         self.lex.line
                     )));
                 }
-                if is_ptr_scaling_by_8(t) {
+                if self.is_ptr_scaling_nontrivial(t) {
+                    let scale = self.pointee_size(t);
                     self.emit_op(Op::Psh);
                     self.emit_op(Op::Imm);
-                    self.emit_val(8);
+                    self.emit_val(scale);
                     self.emit_op(Op::Mul);
                 }
                 self.emit_op(Op::Add);
                 self.ty = t - Ty::Ptr as i64;
-                self.emit_op(load_op_for(self.ty));
+                // `xs[i]` where `xs` is a `struct Foo *` yields a
+                // struct value -- the address-as-value rule. Skip
+                // the load so the `.field` operator can apply the
+                // field offset to the just-computed element
+                // address. Scalar / pointer / nested-pointer
+                // element types still take the regular load.
+                let elem_is_struct_value =
+                    is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
+                if !elem_is_struct_value {
+                    self.emit_op(load_op_for(self.ty));
+                }
             } else if self.lex.tk == Token::Arrow as i64 || self.lex.tk == Token::Dot as i64 {
                 // p->field / s.field. Both shapes resolve a struct
                 // field offset and load the field. The difference is
@@ -1925,8 +2110,14 @@ impl Compiler {
                 // (in the same loop) converts a trailing Li/Lc to Psh, so
                 // `p->x = value` and `s.x = value` work the same way as
                 // `*ptr = value`. Struct-typed fields get no load -- the
-                // address propagates so `s.inner.field` chains.
-                if !(is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0) {
+                // address propagates so `s.inner.field` chains. Array
+                // fields decay to a pointer-to-element with the same
+                // address-as-value rule as a local array.
+                let field_is_struct_value =
+                    is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
+                if field.array_size > 0 {
+                    self.ty += Ty::Ptr as i64;
+                } else if !field_is_struct_value {
                     self.emit_op(load_op_for(self.ty));
                 }
             } else {
@@ -2112,7 +2303,7 @@ impl Compiler {
         }
         let lbt = self.parse_decl_base_type()?;
         while self.lex.tk != ';' as i64 {
-            let (loc_idx, ty) = self.parse_declarator(lbt)?;
+            let (loc_idx, ty, array_size) = self.parse_declarator(lbt)?;
             self.ty = ty;
             if self.symbols[loc_idx].class == Token::Loc as i64 {
                 return Err(C5Error::Compile(format!(
@@ -2126,8 +2317,9 @@ impl Compiler {
             self.symbols[loc_idx].h_type = self.symbols[loc_idx].type_;
             self.symbols[loc_idx].type_ = ty;
             self.symbols[loc_idx].h_val = self.symbols[loc_idx].val;
+            self.symbols[loc_idx].array_size = array_size;
 
-            self.loc_offs += self.slots_of_type(ty);
+            self.loc_offs += self.local_storage_slots(ty, array_size);
             self.symbols[loc_idx].val = -self.loc_offs;
             if self.loc_offs > self.max_loc_offs {
                 self.max_loc_offs = self.loc_offs;
@@ -2145,6 +2337,20 @@ impl Compiler {
         }
         self.next()?;
         Ok(())
+    }
+
+    /// Number of 8-byte stack slots a local declaration consumes,
+    /// honouring an array dimension if present. For non-arrays this
+    /// is just `slots_of_type(ty)`; for an array of N Ts the
+    /// allocation is rounded up to 8-byte alignment so subsequent
+    /// stack frame entries stay aligned.
+    fn local_storage_slots(&self, ty: i64, array_size: i64) -> i64 {
+        if array_size > 0 {
+            let bytes = (self.size_of_type(ty) as i64) * array_size;
+            (bytes + 7) / 8
+        } else {
+            self.slots_of_type(ty)
+        }
     }
 
     /// Parse a single block-scope declaration line:
@@ -2168,7 +2374,7 @@ impl Compiler {
         }
         let lbt = self.parse_decl_base_type()?;
         while self.lex.tk != ';' as i64 {
-            let (loc_idx, ty) = self.parse_declarator(lbt)?;
+            let (loc_idx, ty, array_size) = self.parse_declarator(lbt)?;
             self.ty = ty;
 
             block_symbols.push((
@@ -2180,7 +2386,8 @@ impl Compiler {
 
             self.symbols[loc_idx].class = Token::Loc as i64;
             self.symbols[loc_idx].type_ = ty;
-            self.loc_offs += self.slots_of_type(ty);
+            self.symbols[loc_idx].array_size = array_size;
+            self.loc_offs += self.local_storage_slots(ty, array_size);
             self.symbols[loc_idx].val = -self.loc_offs;
             if self.loc_offs > self.max_loc_offs {
                 self.max_loc_offs = self.loc_offs;
@@ -2533,7 +2740,16 @@ impl Compiler {
             } else {
                 Ty::Int as i64
             };
-            let (param_idx, ty) = self.parse_declarator(base)?;
+            // Function-parameter declarators discard any array
+            // dimension: per C, `int xs[N]` and `int xs[]` in a
+            // parameter both decay to `int *xs`. parse_declarator
+            // already added a pointer level for the empty-bracket
+            // form; for `[N]` we drop the size and add the pointer
+            // level here so it lines up.
+            let (param_idx, mut ty, array_size) = self.parse_declarator(base)?;
+            if array_size > 0 {
+                ty += Ty::Ptr as i64;
+            }
             self.ty = ty;
             if self.symbols[param_idx].class == Token::Loc as i64 {
                 return Err(C5Error::Compile(format!(
@@ -2547,6 +2763,7 @@ impl Compiler {
             self.symbols[param_idx].h_type = self.symbols[param_idx].type_;
             self.symbols[param_idx].type_ = ty;
             self.symbols[param_idx].h_val = self.symbols[param_idx].val;
+            self.symbols[param_idx].array_size = 0;
 
             args.push(param_idx);
             types.push(ty);
@@ -2650,8 +2867,9 @@ impl Compiler {
             }
 
             while self.lex.tk != ';' as i64 && self.lex.tk != '}' as i64 {
-                let (id_idx, ty) = self.parse_declarator(bt)?;
+                let (id_idx, ty, array_size) = self.parse_declarator(bt)?;
                 self.ty = ty;
+                self.symbols[id_idx].array_size = array_size;
 
                 // typedef branch: register a type alias and skip the
                 // function / global storage path entirely. Re-declaring
@@ -2898,27 +3116,38 @@ impl Compiler {
                         // to a TPIDR_EL0 / fs:0 offset at lowering
                         // time. Each variable gets
                         // `slots_of_type(ty) * 8` bytes (the c5
-                        // VM stores everything in 8-byte slots).
-                        let slots = self.slots_of_type(ty);
+                        // VM stores everything in 8-byte slots);
+                        // array TLS globals get the full
+                        // `array_size * elem_size` rounded up to 8.
+                        let bytes = if array_size > 0 {
+                            let total = (self.size_of_type(ty) as i64) * array_size;
+                            ((total + 7) / 8) * 8
+                        } else {
+                            self.slots_of_type(ty) * 8
+                        };
                         let off = self.tls_data.len() as i64;
                         self.symbols[id_idx].val = off;
-                        for _ in 0..(slots * 8) {
+                        for _ in 0..bytes {
                             self.tls_data.push(0);
                         }
                         off
                     } else {
                         // Same `slots_of_type * 8` accounting for
                         // the regular data segment, so structs at
-                        // file scope get their full storage. The
-                        // c5 dialect didn't have struct globals
-                        // before; the previous "always 8 bytes"
-                        // allocation was a latent bug that nothing
-                        // exercised. See `static_linked_list.c`
-                        // for the regression coverage.
-                        let slots = self.slots_of_type(ty);
+                        // file scope get their full storage. Array
+                        // globals (`int xs[N];`) take N * elem_size
+                        // bytes, rounded up to 8-byte alignment so
+                        // adjacent globals stay aligned for the
+                        // codegen's data-segment access patterns.
+                        let bytes = if array_size > 0 {
+                            let total = (self.size_of_type(ty) as i64) * array_size;
+                            ((total + 7) / 8) * 8
+                        } else {
+                            self.slots_of_type(ty) * 8
+                        };
                         let off = self.data.len() as i64;
                         self.symbols[id_idx].val = off;
-                        for _ in 0..(slots * 8) {
+                        for _ in 0..bytes {
                             self.data.push(0);
                         }
                         off

@@ -1,6 +1,6 @@
 # Gaps to C99
 
-Snapshot updated after M24 (local initializers + C99 block-scope decls) lands. The c5
+Snapshot updated after M25 (arrays as language types) lands. The c5
 dialect is a deliberately small subset of C with extras for
 the compiler's own use; this document catalogues the C99
 features that aren't supported, organized by spec section,
@@ -187,8 +187,13 @@ to have).
 - Integer constants -- supported.
 - Address constants (e.g., `&global` in initializers) --
   supported (M13).
-- Constant expressions in array sizes -- **missing** (no
-  arrays as language type, see §6.7.5.2).
+- Constant expressions in array sizes -- **partial**
+  (M25). Today only integer literals (with optional
+  unary `-`) and identifiers bound to compile-time
+  integer constants (enum values, `#define`d numeric
+  macros) are accepted. General arithmetic
+  (`int xs[N + 1]`) needs a constant-expression
+  evaluator. Severity: 3.
 - Constant expressions in static initializers (general
   arithmetic, casts) -- **partial**: integer constants
   (with optional unary `-`) and `&global` are accepted;
@@ -248,7 +253,8 @@ to have).
 - Aggregate initializers for structs (`{ .field = ... }`,
   positional) -- **missing**. Severity: 2.
 - String-literal initializers for char arrays --
-  **missing** (no array type). Severity: 2.
+  **missing**. Now that arrays exist (M25),
+  `char buf[16] = "hi";` is M28 territory. Severity: 2.
 
 ### typedef
 - **partial** (M23). See §6.4 keywords for what landed
@@ -289,8 +295,18 @@ to have).
 - Function declarators with K&R-style identifier list --
   **missing**. Severity: 5.
 - Array declarators (`int a[10]`, `int a[]`) --
-  **missing**. Use `int *p = malloc(N * sizeof *p)`
-  instead. Severity: 1 (huge -- many idioms unavailable).
+  **partial** (M25). Stack arrays, global arrays, struct
+  fields that are arrays, and `int xs[]` in parameter
+  position (decays to `int *xs`) all parse and run.
+  Indexing scales by the real element size, so `struct
+  Foo arr[N]; arr[i].field` lands at the correct address
+  even for structs larger than 8 bytes. `sizeof(arr)`
+  returns `N * sizeof(elem)` via a sizeof-time lookahead
+  on bare-identifier operands. Multi-dim arrays
+  (`int xs[N][M]`), brace initializers (`int xs[] = {1, 2,
+  3};`), and string-literal init for char arrays
+  (`char buf[16] = "hi";`) are deferred to follow-ups
+  (multi-dim and aggregate init in M28).
 - VLAs (`int a[n]`) -- **missing** (C99 specific).
   Severity: 4.
 
@@ -419,9 +435,12 @@ to have).
 These are the ones I'd implement first if the goal is "can
 this codebase compile":
 
-1. **Arrays as language types** (`int a[10]`, indexing
-   into stack arrays, array-to-pointer decay). Without
-   these, almost every C tutorial example breaks.
+1. ~~Arrays as language types~~ -- landed in M25.
+   `int a[10]`, indexing, array-to-pointer decay,
+   struct-array fields, `sizeof(arr)`, and pointer
+   arithmetic with correct per-element scaling for
+   struct pointers all work. Multi-dim and aggregate
+   initializers are still missing.
 2. **Multiple translation units** (separate compilation
    of multiple `.c` files plus a linking step). Without
    these, you can build small programs but not anything

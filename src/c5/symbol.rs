@@ -30,4 +30,16 @@ pub(crate) struct Symbol {
     /// parses and the type checker doesn't choke; M8 swaps the
     /// reject for real lowering.
     pub is_thread_local: bool,
+
+    /// For an array-typed local or global, the declared element
+    /// count from `int xs[N]`. Zero means "not an array" (the
+    /// symbol is a scalar, struct value, or pointer). The
+    /// element type is in `type_`; the total byte storage is
+    /// `array_size * size_of_type(type_)`. In expression
+    /// position the symbol decays to a pointer-to-element --
+    /// the load step is suppressed and `type_` is bumped by
+    /// `Ty::Ptr`. Multi-dim arrays would extend this with a
+    /// vector of dimensions; today only the single-dimension
+    /// case lands.
+    pub array_size: i64,
 }

@@ -239,6 +239,15 @@ fn integer_literal_suffixes_are_consumed() {
 }
 
 #[test]
+fn arrays_as_language_types() {
+    // M25 -- stack and global arrays, indexing with correct
+    // per-element scaling (including struct arrays), array fields
+    // inside a struct, sizeof(arr) returning N*elem_size, and
+    // array-to-pointer decay through a pointer-typed parameter.
+    assert_eq!(run_fixture("arrays_basic.c"), 0);
+}
+
+#[test]
 fn local_init_and_block_scope_decls_work() {
     // M24 -- local variable initializers and C99 block-scope
     // declarations interleaved with statements, including

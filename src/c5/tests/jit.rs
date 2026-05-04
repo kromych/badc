@@ -173,6 +173,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("predefined_constants.c", 0),
     ("c99_qualifiers.c", 0),
     ("integer_suffixes.c", 0),
+    ("predefined_macros.c", 0),
     ("memset_mcmp.c", 42),
     ("memcpy_basic.c", 'A' as i32),
     ("struct_basic.c", 25),

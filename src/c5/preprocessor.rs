@@ -196,6 +196,23 @@ impl Preprocessor {
             format!("\"{crate_version}\""),
         );
         macros.insert("__BADC_TARGET__".to_string(), format!("\"{target_spec}\""));
+        // Standard predefines (C99 §6.10.8). c5 honours all of these
+        // except `__STDC_HOSTED__` (we don't expose a freestanding /
+        // hosted distinction) and `__STDC_VERSION__` (the dialect is
+        // a c4-shaped subset, not an implementation of any specific
+        // C standard year). `__DATE__` and `__TIME__` are seeded at
+        // badc build time -- C99 says they reflect "the date and
+        // time of translation", and the closest analogue for an
+        // embedded library is the build time of badc itself.
+        macros.insert("__STDC__".to_string(), "1".to_string());
+        macros.insert(
+            "__DATE__".to_string(),
+            format!("\"{}\"", env!("BADC_BUILD_DATE")),
+        );
+        macros.insert(
+            "__TIME__".to_string(),
+            format!("\"{}\"", env!("BADC_BUILD_TIME")),
+        );
         match target {
             Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
                 macros.insert("__aarch64__".to_string(), "1".to_string());
@@ -362,6 +379,21 @@ impl Preprocessor {
                             out.push_str(&included);
                         }
                     }
+                    Directive::Error(message) => {
+                        // C99 §6.10.5: `#error` produces a compile-time
+                        // diagnostic. The text after the directive name,
+                        // up to the newline, is the diagnostic message;
+                        // we surface it verbatim through the standard
+                        // C5Error path so the same downstream tooling
+                        // that reports lexer / parser failures handles
+                        // it.
+                        if active {
+                            return Err(C5Error::Compile(format!(
+                                "{filename}:{line_no}: #error {}",
+                                message.trim()
+                            )));
+                        }
+                    }
                     Directive::Other => {
                         // Unknown directive -- mirror the historical
                         // lexer behaviour and skip silently. Anything
@@ -379,7 +411,7 @@ impl Preprocessor {
             }
 
             if active {
-                out.push_str(&self.substitute(line));
+                out.push_str(&self.substitute(line, filename, line_no));
             }
             out.push('\n');
         }
@@ -399,7 +431,11 @@ impl Preprocessor {
     /// continue). Replacement is iterative with a per-call visited
     /// set so `#define A B` `#define B 5` chains expand fully but
     /// `#define A A` doesn't loop forever.
-    fn substitute(&self, line: &str) -> String {
+    ///
+    /// `filename` and `line_no` feed the special predefined macros
+    /// `__FILE__` and `__LINE__`, which can't live in the static
+    /// `macros` table because their expansion changes on every line.
+    fn substitute(&self, line: &str, filename: &str, line_no: usize) -> String {
         let bytes = line.as_bytes();
         let mut out = String::with_capacity(line.len());
         let mut i = 0;
@@ -412,6 +448,19 @@ impl Preprocessor {
                     i += 1;
                 }
                 let ident = &line[start..i];
+                // C99 §6.10.8 dynamic predefines -- their expansion
+                // depends on the current line / file, so they sit
+                // outside the static macro table.
+                if ident == "__LINE__" {
+                    out.push_str(&format!("{line_no}"));
+                    continue;
+                }
+                if ident == "__FILE__" {
+                    out.push('"');
+                    out.push_str(filename);
+                    out.push('"');
+                    continue;
+                }
                 // Function-like macro: only expands when the next
                 // non-whitespace character is `(`. The C standard
                 // allows whitespace between the name and the open
@@ -428,7 +477,7 @@ impl Preprocessor {
                         let expanded = expand_fn_macro(macro_def, &args);
                         // Re-substitute so nested macro names inside
                         // the expansion get a chance too.
-                        let recursed = self.substitute(&expanded);
+                        let recursed = self.substitute(&expanded, filename, line_no);
                         out.push_str(&recursed);
                         i = j + after;
                         continue;
@@ -442,7 +491,7 @@ impl Preprocessor {
                 // allocation per source identifier.
                 match self.expand(ident) {
                     None => out.push_str(ident),
-                    Some(expanded) => out.push_str(&self.substitute(&expanded)),
+                    Some(expanded) => out.push_str(&self.substitute(&expanded, filename, line_no)),
                 }
             } else if c == b'"' {
                 // Copy string literals verbatim so identifier-looking
@@ -756,6 +805,9 @@ enum Directive<'a> {
     Endif,
     Pragma(&'a str),
     Include(&'a str),
+    /// `#error <message>` -- C99 §6.10.5. The diagnostic message is
+    /// the literal text after `#error` up to the newline.
+    Error(&'a str),
     Shebang,
     Other,
 }
@@ -848,6 +900,15 @@ fn parse_directive(rest: &str) -> Directive<'_> {
     }
     if let Some(after) = rest.strip_prefix("pragma") {
         return Directive::Pragma(after.trim());
+    }
+    if let Some(after) = rest.strip_prefix("error") {
+        // Accept `#error` with no message and `#error <text>`. C99
+        // doesn't actually require any message text -- the
+        // diagnostic is the directive itself -- but most users
+        // expect to be able to write `#error "must be x86"`.
+        if after.is_empty() || after.starts_with(char::is_whitespace) {
+            return Directive::Error(after.trim_start());
+        }
     }
     if let Some(after) = rest.strip_prefix("include") {
         let trimmed = after.trim();

@@ -239,6 +239,48 @@ fn integer_literal_suffixes_are_consumed() {
 }
 
 #[test]
+fn predefined_macros_resolve() {
+    // __FILE__, __LINE__, __STDC__, __DATE__, __TIME__ -- the standard
+    // C99 predefines. __LINE__ and __FILE__ expand dynamically per
+    // line; the rest are seeded once.
+    assert_eq!(run_fixture("predefined_macros.c"), 0);
+}
+
+#[test]
+fn error_directive_aborts_compilation() {
+    // `#error` produces a compile-time diagnostic with the message
+    // text. Compilation must fail and the message must surface in the
+    // diagnostic.
+    use crate::c5::Compiler;
+    let src = "#error must abort here\nint main() { return 0; }\n";
+    let err = Compiler::new(src.to_string())
+        .compile()
+        .expect_err("#error should abort compilation");
+    let msg = format!("{err:?}");
+    assert!(
+        msg.contains("must abort here"),
+        "expected the #error message in the diagnostic, got {msg:?}"
+    );
+}
+
+#[test]
+fn error_directive_in_inactive_branch_is_ignored() {
+    // `#error` inside a `#if 0` block must not abort -- the C standard
+    // requires the directive to fire only when the branch is active.
+    use crate::c5::Compiler;
+    let src = "\
+#define USE 1
+#if USE == 0
+#error wrong branch
+#endif
+int main() { return 0; }
+";
+    Compiler::new(src.to_string())
+        .compile()
+        .expect("#error in inactive branch must not fire");
+}
+
+#[test]
 fn original_c4_compiles_and_runs_hello() {
     // The canonical self-hosting test: Robert Swierczek's original c4.c
     // runs under badc, compiles hello.c, and runs the resulting program

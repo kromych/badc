@@ -1,6 +1,6 @@
 # Gaps to C99
 
-Snapshot updated after M20 (integer literal suffixes) lands. The c5
+Snapshot updated after M21 (predefined macros + #error) lands. The c5
 dialect is a deliberately small subset of C with extras for
 the compiler's own use; this document catalogues the C99
 features that aren't supported, organized by spec section,
@@ -116,6 +116,17 @@ to have).
   4.
 - Concatenation of adjacent string literals -- supported.
 - `__func__` -- **missing**. Severity: 4.
+- `__FILE__`, `__LINE__`, `__DATE__`, `__TIME__`, `__STDC__`
+  -- **supported** (M21). `__FILE__` and `__LINE__` are
+  evaluated per line during preprocessor substitution.
+  `__DATE__` and `__TIME__` are seeded once at badc build
+  time (since the library is no_std-friendly and can't
+  reach the system clock at preprocess time); their
+  expansion follows the C99 formats `"Mmm dd yyyy"` and
+  `"hh:mm:ss"`. `__STDC__` is the constant `1`.
+  `__STDC_VERSION__` and `__STDC_HOSTED__` are still
+  missing; the dialect doesn't claim conformance to a
+  specific C standard year.
 
 ### Punctuators
 - Standard set -- supported (`+ - * / % = == != < > <= >= ! & | ^ << >> && || , ; : { } ( ) [ ] -> . ... ?`).
@@ -306,7 +317,11 @@ to have).
 - `#if`, `#ifdef`, `#ifndef`, `#elif`, `#else`,
   `#endif` -- supported.
 - `defined(...)` operator -- supported.
-- `#error` -- **missing**. Severity: 4.
+- `#error` -- **supported** (M21). The directive raises a
+  `C5Error::Compile` carrying the directive's message text
+  along with the `<filename>:<line>` position. Inactive
+  branches (`#if 0` / `#ifdef MISSING`) skip the directive,
+  matching the C standard.
 - `#pragma`-defined directives:
   - `#pragma once` -- supported.
   - `#pragma dylib(name, "path")` -- c5 extension
@@ -323,7 +338,7 @@ to have).
 - `#`, `##` operators (stringification, token
   concatenation) -- **missing**. Severity: 3.
 - `__FILE__`, `__LINE__`, `__DATE__`, `__TIME__`,
-  `__STDC__` -- **missing**. Severity: 3.
+  `__STDC__` -- **supported** (M21). See §6.4 for details.
 
 ## §7 Library
 

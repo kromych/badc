@@ -178,6 +178,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("typedef_basic.c", 0),
     ("local_init_and_block_scope.c", 0),
     ("arrays_basic.c", 0),
+    ("function_pointer_typedefs.c", 0),
     ("memset_mcmp.c", 42),
     ("memcpy_basic.c", 'A' as i32),
     ("struct_basic.c", 25),

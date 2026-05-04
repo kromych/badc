@@ -1,6 +1,6 @@
 # Gaps to C99
 
-Snapshot updated after M25 (arrays as language types) lands. The c5
+Snapshot updated after M25 (arrays) and M23b (function-pointer typedefs) land. The c5
 dialect is a deliberately small subset of C with extras for
 the compiler's own use; this document catalogues the C99
 features that aren't supported, organized by spec section,
@@ -88,17 +88,24 @@ to have).
   Programs relying on 32-bit overflow or const-checks
   diverge silently -- see the §6.7 type-specifier and §J
   notes for what that means in practice.
-- `typedef` -- **partial** (M23). The lexer accepts the
-  keyword and the parser registers a typedef name as a
-  type alias for any underlying type. Supported shapes:
+- `typedef` -- **supported** (M23 + M23b). The lexer
+  accepts the keyword and the parser registers a typedef
+  name as a type alias for any underlying type. Shapes:
   primitive aliases (`typedef int u32;`), pointer aliases
   (`typedef char *str;`), forward struct + alias (`typedef
   struct Foo Foo;`), single-declaration struct + alias
-  (`typedef struct Foo {...} Foo;`), and typedef-name use
-  in every type position (parameter, return, struct field,
-  cast, sizeof). Function-pointer typedefs (`typedef int
-  (*fn)(int)`) require the `(*name)(...)` declarator
-  shape, deferred to a follow-up (call it M23b).
+  (`typedef struct Foo {...} Foo;`), function-pointer
+  aliases (`typedef int (*Compare)(int, int);`), and
+  typedef-name use in every type position (parameter,
+  return, struct field, cast, sizeof). The
+  `(*Name)(args)` declarator shape also works in
+  parameter and struct-field positions; the trailing
+  parameter list is parsed and discarded since c5
+  doesn't yet record function-pointer signatures.
+  Calling through an FP-typed struct field directly
+  (`s.cb(args)`) still requires copying the field to a
+  local first -- the c5 expression chain only enters the
+  call branch on a bare identifier today.
 - **Missing**: `union`, `_Complex`, `_Imaginary`. Severity:
   - `union` -- 2.
   - `_Complex` / `_Imaginary` -- 5.
@@ -257,8 +264,9 @@ to have).
   `char buf[16] = "hi";` is M28 territory. Severity: 2.
 
 ### typedef
-- **partial** (M23). See §6.4 keywords for what landed
-  and the function-pointer-typedef gap that didn't.
+- **supported** (M23 + M23b). Function-pointer typedefs
+  and the `(*Name)(args)` declarator shape are in.
+  See §6.4 keywords for the full list.
 
 ### Tags / declarators
 - struct tags -- supported.
@@ -314,7 +322,11 @@ to have).
 
 - `<type-spec> <abstract-decl>` shape (`int *`,
   `struct Foo *`) -- supported in casts and `sizeof(...)`.
-- Function-type abstract declarators -- **missing**.
+- Function-type abstract declarators -- **partial**
+  (M23b). The `int (*)(int, int)` form parses inside
+  declarators (typedef target, parameter type, struct
+  field). Standalone abstract declarators in `sizeof`
+  / casts (`(int(*)(int))ptr`) aren't yet supported.
 
 ## §6.8 Statements and blocks
 

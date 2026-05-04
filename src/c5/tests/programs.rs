@@ -239,6 +239,16 @@ fn integer_literal_suffixes_are_consumed() {
 }
 
 #[test]
+fn function_pointer_typedefs_and_fields() {
+    // M23b -- `typedef RET (*Name)(args);`, function-pointer struct
+    // fields, and function-pointer parameters all parse and run.
+    // Calling through an FP-typed struct field directly (`s.cb(args)`)
+    // is still missing -- the workaround in the fixture is to copy
+    // the field into a local before calling.
+    assert_eq!(run_fixture("function_pointer_typedefs.c"), 0);
+}
+
+#[test]
 fn arrays_as_language_types() {
     // M25 -- stack and global arrays, indexing with correct
     // per-element scaling (including struct arrays), array fields

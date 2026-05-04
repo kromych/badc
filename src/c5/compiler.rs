@@ -650,6 +650,58 @@ impl Compiler {
                 self.next()?;
             }
         }
+
+        // Function-pointer declarator: `RET (*Name)(args)`. The shape
+        // is detected by peeking past the open paren -- if the next
+        // non-whitespace byte is `*`, we're in the function-pointer
+        // branch. Outer `*`s before the parens (`int *(*Name)(...)`)
+        // are absorbed by the leading-* loop above; that's a slight
+        // semantic loss for the function pointer's *return* type
+        // (c5 stores all function pointers as a generic pointer
+        // anyway), but the c5-side type-check just needs to know
+        // Name is a pointer of some kind. The trailing parameter
+        // list is parsed and discarded -- c5 doesn't yet record
+        // function-pointer signatures.
+        if self.lex.tk == '(' as i64 && self.lex.peek_after_whitespace(b'*') {
+            self.next()?; // consume `(`
+            let mut inner_ptr = 0i64;
+            while self.lex.tk == Token::MulOp as i64 {
+                self.next()?;
+                inner_ptr += 1;
+                while self.lex.tk == Token::TypeQual as i64 {
+                    self.next()?;
+                }
+            }
+            if self.lex.tk != Token::Id as i64 {
+                return Err(C5Error::Compile(format!(
+                    "{}: identifier expected in function-pointer declarator",
+                    self.lex.line
+                )));
+            }
+            let idx = self.lex.curr_id_idx;
+            self.next()?;
+            if self.lex.tk != ')' as i64 {
+                return Err(C5Error::Compile(format!(
+                    "{}: close paren expected in function-pointer declarator",
+                    self.lex.line
+                )));
+            }
+            self.next()?;
+            if self.lex.tk != '(' as i64 {
+                return Err(C5Error::Compile(format!(
+                    "{}: parameter list expected after function-pointer declarator",
+                    self.lex.line
+                )));
+            }
+            // Skip the parameter type list -- balanced-paren skip so
+            // nested types like `int (*cb)(int (*)(int), int)` parse
+            // without c5 having to model the inner signature.
+            self.next()?;
+            self.skip_balanced_parens_after_open()?;
+            ty += inner_ptr * Ty::Ptr as i64;
+            return Ok((idx, ty, 0));
+        }
+
         if self.lex.tk != Token::Id as i64 {
             return Err(C5Error::Compile(format!(
                 "{}: identifier expected in declaration",
@@ -697,6 +749,32 @@ impl Compiler {
         }
 
         Ok((idx, ty, array_size))
+    }
+
+    /// Skip tokens until the matching close paren. Caller has
+    /// just consumed the opening `(`; on exit, `tk` is one past
+    /// the matching `)`. Tracks nested parens and stops when the
+    /// outermost `)` is reached. Used by the function-pointer
+    /// declarator path to discard parameter type lists c5 doesn't
+    /// yet record.
+    fn skip_balanced_parens_after_open(&mut self) -> Result<(), C5Error> {
+        let mut depth: i64 = 1;
+        while depth > 0 && self.lex.tk != 0 {
+            if self.lex.tk == '(' as i64 {
+                depth += 1;
+            } else if self.lex.tk == ')' as i64 {
+                depth -= 1;
+                if depth == 0 {
+                    self.next()?;
+                    return Ok(());
+                }
+            }
+            self.next()?;
+        }
+        Err(C5Error::Compile(format!(
+            "{}: unmatched parentheses",
+            self.lex.line
+        )))
     }
 
     /// Parse a constant integer expression at parse time. The
@@ -893,58 +971,22 @@ impl Compiler {
             }
 
             // One or more comma-separated declarators sharing the prefix.
+            // Routed through `parse_declarator` so function-pointer
+            // fields (`int (*xCompare)(int, int);`) and array fields
+            // (`int counts[8];`) parse with the same rules as locals
+            // and globals.
             loop {
-                let mut field_ty = field_base;
-                while self.lex.tk == Token::MulOp as i64 {
-                    self.next()?;
-                    field_ty += Ty::Ptr as i64;
-                }
-                if self.lex.tk != Token::Id as i64 {
-                    return Err(C5Error::Compile(format!(
-                        "{}: field name expected",
-                        self.lex.line
-                    )));
-                }
-                if is_struct_ty(field_ty) && struct_ptr_depth(field_ty) == 0 {
+                let (id_idx, field_ty, field_array_size) =
+                    self.parse_declarator(field_base)?;
+                if is_struct_ty(field_ty) && struct_ptr_depth(field_ty) == 0
+                    && field_array_size == 0
+                {
                     return Err(C5Error::Compile(format!(
                         "{}: struct-value fields are not supported (use a pointer)",
                         self.lex.line
                     )));
                 }
-
-                let field_name = self.symbols[self.lex.curr_id_idx].name.clone();
-                self.next()?;
-
-                // Optional array dimension: `int xs[N];`. The field
-                // takes `N * size_of(elem)` bytes; in expression
-                // position `s.xs` decays to a pointer.
-                let mut field_array_size: i64 = 0;
-                if self.lex.tk == Token::Brak as i64 {
-                    self.next()?;
-                    if self.lex.tk == ']' as i64 {
-                        // `int xs[]` in struct position is a flexible
-                        // array member -- C99 special-case. We don't
-                        // support it; treat as size 0 (degenerate)
-                        // and let the field carry zero storage.
-                        self.next()?;
-                    } else {
-                        let n = self.parse_constant_int()?;
-                        if n <= 0 {
-                            return Err(C5Error::Compile(format!(
-                                "{}: array dimension must be positive (got {n})",
-                                self.lex.line
-                            )));
-                        }
-                        if self.lex.tk != ']' as i64 {
-                            return Err(C5Error::Compile(format!(
-                                "{}: close bracket expected in array field",
-                                self.lex.line
-                            )));
-                        }
-                        self.next()?;
-                        field_array_size = n;
-                    }
-                }
+                let field_name = self.symbols[id_idx].name.clone();
 
                 // 8-byte align every field. Even `char` fields take a full
                 // slot -- wasteful but keeps offset arithmetic obvious.

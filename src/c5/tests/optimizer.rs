@@ -43,6 +43,7 @@ const FIXTURES: &[(&str, i64)] = &[
     ("adjacent_strings.c", 'f' as i64),
     ("predefined_constants.c", 0),
     ("c99_qualifiers.c", 0),
+    ("integer_suffixes.c", 0),
     ("quicksort.c", 0),
     ("linked_list.c", 10),
     ("binary_search_tree.c", 0),

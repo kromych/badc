@@ -230,6 +230,15 @@ fn c99_qualifiers_parse_as_no_ops() {
 }
 
 #[test]
+fn integer_literal_suffixes_are_consumed() {
+    // u/U/l/L/ll/LL/ULL etc. on decimal and hex integer literals --
+    // accepted by the lexer and the value preserved verbatim (c5 has a
+    // single 64-bit int representation; the suffix is informational).
+    // Returns 0 if every literal lands at the expected value.
+    assert_eq!(run_fixture("integer_suffixes.c"), 0);
+}
+
+#[test]
 fn original_c4_compiles_and_runs_hello() {
     // The canonical self-hosting test: Robert Swierczek's original c4.c
     // runs under badc, compiles hello.c, and runs the resulting program

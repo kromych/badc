@@ -1,6 +1,6 @@
 # Gaps to C99
 
-Snapshot updated after M19 (lexer keyword absorption) lands. The c5
+Snapshot updated after M20 (integer literal suffixes) lands. The c5
 dialect is a deliberately small subset of C with extras for
 the compiler's own use; this document catalogues the C99
 features that aren't supported, organized by spec section,
@@ -104,7 +104,9 @@ to have).
 - Integer literals: decimal, hex (`0x...`), octal (`0...`),
   char (`'A'`) -- supported.
 - Integer suffix: `u`, `U`, `l`, `L`, `ll`, `LL`, `ULL`,
-  ... -- **missing** (the lexer rejects). Severity: 3.
+  any combination -- **supported** (M20). The suffix is
+  consumed by the lexer; the value is preserved as a 64-bit
+  integer. Severity: resolved.
 - Floating literals: decimal (`1.5`), exponent (`1e10`),
   fractional (`.5`), `f`/`F` suffix -- supported.
 - Hex floats (`0x1p10`) -- **missing**. Severity: 5.

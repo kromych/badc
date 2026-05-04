@@ -204,6 +204,17 @@ impl Lexer {
                         }
                         self.pos += 1;
                     }
+                    // Hex literals can carry the standard integer suffix
+                    // letters (u/U/l/L plus ll/LL combinations such as
+                    // 0xFFFFULL). c5 has a single 64-bit integer
+                    // representation so the suffix is purely
+                    // informational; we consume any sequence of suffix
+                    // letters and store the value unchanged.
+                    while self.pos < self.src.len()
+                        && matches!(self.src[self.pos], b'u' | b'U' | b'l' | b'L')
+                    {
+                        self.pos += 1;
+                    }
                     self.ival = val;
                     self.tk = Token::Num as i64;
                     return Ok(());
@@ -216,6 +227,24 @@ impl Lexer {
                     }
                     val = val * 10 + (nc as u8 - b'0') as i64;
                     self.pos += 1;
+                }
+
+                // Decimal integer suffix: u/U/l/L in any combination
+                // (1u, 1L, 1ULL, 1lu, ...). When any suffix letter is
+                // present, the literal is unambiguously an integer --
+                // no float-suffix `f`/`F` can follow because the
+                // standard doesn't allow it on integer literals.
+                if self.pos < self.src.len()
+                    && matches!(self.src[self.pos], b'u' | b'U' | b'l' | b'L')
+                {
+                    while self.pos < self.src.len()
+                        && matches!(self.src[self.pos], b'u' | b'U' | b'l' | b'L')
+                    {
+                        self.pos += 1;
+                    }
+                    self.ival = val;
+                    self.tk = Token::Num as i64;
+                    return Ok(());
                 }
 
                 // Float literal: integer body followed by a `.`,

@@ -239,6 +239,16 @@ fn integer_literal_suffixes_are_consumed() {
 }
 
 #[test]
+fn static_locals() {
+    // M29 -- `static T name [= init];` inside a function gets a
+    // persistent slot in the data segment instead of the stack
+    // frame. Counters, cached state, etc. survive across calls.
+    // Two functions with the same-named static each have an
+    // independent slot.
+    assert_eq!(run_fixture("static_locals.c"), 0);
+}
+
+#[test]
 fn bitfields_basic() {
     // M27 -- bitfields pack into shared 8-byte storage units;
     // reads use Li/Shr/And; writes use load-clear-shift-or-store.

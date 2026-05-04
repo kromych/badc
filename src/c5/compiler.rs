@@ -2967,7 +2967,11 @@ impl Compiler {
     /// body's `{ ... }` -- inner block-stmts have their own
     /// per-block save vector via [`parse_block_local_decl`].
     fn parse_function_body_local_decl(&mut self) -> Result<(), C5Error> {
+        let mut is_static = false;
         while self.lex.tk == Token::Extern as i64 || self.lex.tk == Token::Static as i64 {
+            if self.lex.tk == Token::Static as i64 {
+                is_static = true;
+            }
             self.next()?;
         }
         let lbt = self.parse_decl_base_type()?;
@@ -2982,18 +2986,95 @@ impl Compiler {
             }
 
             self.symbols[loc_idx].h_class = self.symbols[loc_idx].class;
-            self.symbols[loc_idx].class = Token::Loc as i64;
             self.symbols[loc_idx].h_type = self.symbols[loc_idx].type_;
-            self.symbols[loc_idx].type_ = ty;
             self.symbols[loc_idx].h_val = self.symbols[loc_idx].val;
 
-            self.allocate_local_with_init(loc_idx, ty, array_size)?;
+            if is_static {
+                self.symbols[loc_idx].class = Token::Glo as i64;
+                self.symbols[loc_idx].type_ = ty;
+                self.allocate_static_local(loc_idx, ty, array_size)?;
+            } else {
+                self.symbols[loc_idx].class = Token::Loc as i64;
+                self.symbols[loc_idx].type_ = ty;
+                self.allocate_local_with_init(loc_idx, ty, array_size)?;
+            }
 
             if self.lex.tk == ',' as i64 {
                 self.next()?;
             }
         }
         self.next()?;
+        Ok(())
+    }
+
+    /// Promote a `static T name [ = init];` local to a Glo-class
+    /// global with persistent storage in the data segment. The
+    /// symbol's binding lives only inside the current function's
+    /// scope (the function-body cleanup pass restores `h_class`
+    /// etc.); the storage itself stays allocated for the program
+    /// lifetime, so subsequent calls re-enter the same slot.
+    ///
+    /// The initializer follows file-scope rules -- integer
+    /// constants, string literals, &globals, or a brace list for
+    /// arrays. Function-pointer init values aren't yet supported
+    /// for static locals (the file-scope path handles them, but
+    /// the routing through `parse_global_initializer` here only
+    /// covers scalars; sqlite's static locals are mostly scalar
+    /// flags so this is acceptable).
+    fn allocate_static_local(
+        &mut self,
+        loc_idx: usize,
+        ty: i64,
+        array_size: i64,
+    ) -> Result<(), C5Error> {
+        // Storage. Mirrors run_compile's file-scope allocator.
+        let bytes = if array_size > 0 {
+            let total = (self.size_of_type(ty) as i64) * array_size;
+            ((total + 7) / 8) * 8
+        } else if array_size == -1 {
+            // Deferred-size array: handled below after parsing init.
+            0
+        } else {
+            self.slots_of_type(ty) * 8
+        };
+        self.symbols[loc_idx].array_size = array_size.max(0);
+        if array_size != -1 {
+            let off = self.data.len() as i64;
+            self.symbols[loc_idx].val = off;
+            for _ in 0..bytes {
+                self.data.push(0);
+            }
+        }
+
+        if self.lex.tk == Token::Assign as i64 {
+            self.next()?;
+            if array_size == -1 {
+                let elements = self.collect_array_initializer(ty)?;
+                let final_size = elements.len() as i64;
+                self.symbols[loc_idx].array_size = final_size;
+                let total_bytes = (self.size_of_type(ty) as i64) * final_size;
+                let aligned = ((total_bytes + 7) / 8) * 8;
+                let off = self.data.len() as i64;
+                self.symbols[loc_idx].val = off;
+                for _ in 0..aligned {
+                    self.data.push(0);
+                }
+                self.write_array_init_into_data(off, ty, &elements);
+            } else if array_size > 0 {
+                let elements = self.collect_array_initializer(ty)?;
+                let var_offset = self.symbols[loc_idx].val;
+                self.write_array_init_into_data(var_offset, ty, &elements);
+            } else if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+                let sid = struct_id_of(ty);
+                let elems = self.collect_struct_initializer(sid)?;
+                let var_offset = self.symbols[loc_idx].val;
+                self.write_struct_init_into_data(var_offset, &elems);
+            } else {
+                let var_offset = self.symbols[loc_idx].val;
+                self.parse_global_initializer(ty, var_offset, false)?;
+            }
+        }
+
         Ok(())
     }
 
@@ -3094,11 +3175,15 @@ impl Compiler {
         &mut self,
         block_symbols: &mut Vec<(usize, i64, i64, i64)>,
     ) -> Result<(), C5Error> {
-        // Storage-class prefixes (`extern` / `static`) are no-ops at
-        // function scope today; they're consumed so unmodified C
-        // headers parse, with the documented divergence on function-
-        // scope `static` storage duration.
+        // Storage-class prefixes. `extern` is a no-op (c5 has no
+        // separate translation units); `static` at function scope
+        // promotes the declarator to a Glo symbol with persistent
+        // data-segment storage.
+        let mut is_static = false;
         while self.lex.tk == Token::Extern as i64 || self.lex.tk == Token::Static as i64 {
+            if self.lex.tk == Token::Static as i64 {
+                is_static = true;
+            }
             self.next()?;
         }
         let lbt = self.parse_decl_base_type()?;
@@ -3113,10 +3198,15 @@ impl Compiler {
                 self.symbols[loc_idx].val,
             ));
 
-            self.symbols[loc_idx].class = Token::Loc as i64;
-            self.symbols[loc_idx].type_ = ty;
-
-            self.allocate_local_with_init(loc_idx, ty, array_size)?;
+            if is_static {
+                self.symbols[loc_idx].class = Token::Glo as i64;
+                self.symbols[loc_idx].type_ = ty;
+                self.allocate_static_local(loc_idx, ty, array_size)?;
+            } else {
+                self.symbols[loc_idx].class = Token::Loc as i64;
+                self.symbols[loc_idx].type_ = ty;
+                self.allocate_local_with_init(loc_idx, ty, array_size)?;
+            }
 
             if self.lex.tk == ',' as i64 {
                 self.next()?;
@@ -3452,6 +3542,16 @@ impl Compiler {
         let mut args = Vec::new();
         let mut types = Vec::new();
         let mut is_variadic = false;
+        // `(void)` -- C's "no parameters" sigil. The lexer maps
+        // `void` to `Token::Char`, so detect the shape via lookahead:
+        // a `Char`/`void` token immediately followed by `)` and not
+        // by an identifier (which would make this a real parameter).
+        if self.lex.tk == Token::Char as i64
+            && self.lex.peek_after_whitespace(b')')
+        {
+            self.next()?; // consume `void`
+            // tk is now `)`; the outer loop sees it and exits.
+        }
         while self.lex.tk != ')' as i64 {
             // `...` ends the typed-parameter list and marks the function
             // variadic. Anything after is a syntax error.

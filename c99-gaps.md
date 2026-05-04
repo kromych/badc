@@ -1,6 +1,6 @@
 # Gaps to C99
 
-Snapshot updated after M27 (bitfields) lands. The c5
+Snapshot updated after M29 (static locals) lands. The c5
 dialect is a deliberately small subset of C with extras for
 the compiler's own use; this document catalogues the C99
 features that aren't supported, organized by spec section,
@@ -26,13 +26,12 @@ to have).
 
 ### Linkage and storage classes
 - `extern` and `static` (file scope and function scope) --
-  **partial**. Recognized as no-op storage-class prefixes
-  (M12) so unmodified headers compile, but they have no
-  semantic effect: every c5 symbol already has internal
-  linkage, and `static` locals retain automatic storage
-  duration. Programs relying on persistent function-scope
-  static variables behave incorrectly (the local resets
-  every call). Severity: 2.
+  **supported**. `extern` is a no-op (every c5 symbol
+  already has internal linkage; there are no separate
+  translation units). File-scope `static` is also a no-op
+  for the same reason. Function-scope `static` (M29)
+  promotes the declarator to a Glo-class symbol with
+  persistent storage in the data segment.
 - `register`, `auto` -- **missing**. `auto` is the default;
   `register` is ignored by most modern compilers anyway.
   Severity: 5.
@@ -53,8 +52,13 @@ to have).
 - "Allocated" duration via `malloc` / `free` -- supported
   via libc bindings (M0).
 - Static-storage block-scope (`static int counter;` in a
-  function) -- **diverges**: silently treated as automatic.
-  Severity: 2.
+  function) -- **supported** (M29). The declaration is
+  promoted to a Glo-class symbol with a persistent slot
+  in the data segment. Multiple calls to the same
+  function re-enter the same slot; two functions with
+  the same-named static each get an independent slot
+  (the symbol's binding is overwritten on the second
+  declaration).
 
 ## §6.3 Conversions
 
@@ -540,8 +544,9 @@ roughly tie for "next priority":
    relocation. Function-scope struct/designated init is
    still missing.
 10. ~~Local variable initializers~~ -- landed in M24.
-11. `static` locals with persistent storage duration.
-    Today they silently become automatic locals.
+11. ~~`static` locals with persistent storage duration~~
+    -- landed in M29. Promoted to Glo-class slots in the
+    data segment.
 12. Real platform ABI for libc `struct`-by-value (`div`,
     `gmtime`, ...). The c5-internal struct ABI works for
     c5-to-c5 calls; cross-ABI calls today error at compile

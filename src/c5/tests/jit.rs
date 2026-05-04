@@ -184,6 +184,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("struct_initializers.c", 0),
     ("enum_tag_types.c", 0),
     ("bitfields.c", 0),
+    ("static_locals.c", 0),
     ("memset_mcmp.c", 42),
     ("memcpy_basic.c", 'A' as i32),
     ("struct_basic.c", 25),

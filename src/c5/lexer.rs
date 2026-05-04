@@ -317,6 +317,21 @@ impl Lexer {
                     while self.pos < self.src.len() && self.src[self.pos] as char != '\n' {
                         self.pos += 1;
                     }
+                } else if self.pos < self.src.len() && self.src[self.pos] as char == '*' {
+                    // C-style `/* ... */` block comment. Track newlines
+                    // so `self.line` stays accurate -- error messages
+                    // and `__LINE__` upstream depend on it.
+                    self.pos += 1;
+                    while self.pos + 1 < self.src.len() {
+                        if self.src[self.pos] == b'*' && self.src[self.pos + 1] == b'/' {
+                            self.pos += 2;
+                            break;
+                        }
+                        if self.src[self.pos] == b'\n' {
+                            self.line += 1;
+                        }
+                        self.pos += 1;
+                    }
                 } else {
                     self.tk = Token::DivOp as i64;
                     return Ok(());

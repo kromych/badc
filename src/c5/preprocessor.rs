@@ -268,6 +268,13 @@ impl Preprocessor {
     /// about; the top-level call uses `"<source>"`, `#include`'d
     /// files use the header name (`"stdio.h"`).
     fn process_named(&mut self, source: &str, filename: &str) -> Result<String, C5Error> {
+        // c99 §5.1.1.2 phase 2: every `\\\n` joins lines. We do this
+        // up-front so the line-by-line preprocessor never sees a
+        // continuation. Line counts are preserved by emitting blank
+        // lines for each continuation consumed, so error messages
+        // (and `__LINE__`) stay grounded in the original source.
+        let unfolded = unfold_line_continuations(source);
+        let source = unfolded.as_str();
         let mut out = String::with_capacity(source.len());
 
         // `cond_stack` mirrors the nesting of `#if` / `#ifdef`. Each
@@ -367,6 +374,39 @@ impl Preprocessor {
                         frame.any_branch_taken |= taken;
                         active = taken;
                     }
+                    Directive::Elif(expr) => {
+                        // The directive eval needs a `&Self`, but
+                        // `cond_stack.last_mut()` borrows `self` for
+                        // the frame -- evaluate the expression first
+                        // and only then mutate the frame.
+                        let parent_active = cond_stack
+                            .last()
+                            .map(|f| f.parent_active)
+                            .ok_or_else(|| {
+                                C5Error::Compile(format!(
+                                    "preprocessor:{line_no}: `#elif` with no matching `#if`"
+                                ))
+                            })?;
+                        let any_taken_so_far = cond_stack
+                            .last()
+                            .map(|f| f.any_branch_taken)
+                            .unwrap_or(false);
+                        let eligible = parent_active && !any_taken_so_far;
+                        let cond = if eligible {
+                            self.eval_condition(expr, line_no)?
+                        } else {
+                            false
+                        };
+                        let frame = cond_stack.last_mut().unwrap();
+                        if frame.saw_else {
+                            return Err(C5Error::Compile(format!(
+                                "preprocessor:{line_no}: `#elif` after `#else` for the same `#if`"
+                            )));
+                        }
+                        frame.this_branch_taken = cond;
+                        frame.any_branch_taken |= cond;
+                        active = cond;
+                    }
                     Directive::Endif => {
                         let frame = cond_stack.pop().ok_or_else(|| {
                             C5Error::Compile(format!(
@@ -450,6 +490,21 @@ impl Preprocessor {
     /// `__FILE__` and `__LINE__`, which can't live in the static
     /// `macros` table because their expansion changes on every line.
     fn substitute(&self, line: &str, filename: &str, line_no: usize) -> String {
+        self.substitute_with_blocklist(line, filename, line_no, &[])
+    }
+
+    /// Like [`substitute`], but `blocklist` enumerates macro names
+    /// currently being expanded -- the C99 "blue paint" rule says a
+    /// macro doesn't re-expand inside its own replacement list.
+    /// SQLite-style self-shadowing (`static T name; #define name
+    /// GLOBAL(T, name)`) blows the stack without this guard.
+    fn substitute_with_blocklist(
+        &self,
+        line: &str,
+        filename: &str,
+        line_no: usize,
+        blocklist: &[&str],
+    ) -> String {
         let bytes = line.as_bytes();
         let mut out = String::with_capacity(line.len());
         let mut i = 0;
@@ -475,6 +530,12 @@ impl Preprocessor {
                     out.push('"');
                     continue;
                 }
+                // C99 "blue paint": don't re-expand a name that's
+                // already being expanded on the current chain.
+                if blocklist.contains(&ident) {
+                    out.push_str(ident);
+                    continue;
+                }
                 // Function-like macro: only expands when the next
                 // non-whitespace character is `(`. The C standard
                 // allows whitespace between the name and the open
@@ -488,10 +549,33 @@ impl Preprocessor {
                         && bytes[j] == b'('
                         && let Some((args, after)) = parse_macro_args(&line[j..])
                     {
-                        let expanded = expand_fn_macro(macro_def, &args);
+                        // C99 argument substitution rule: each arg is
+                        // macro-expanded *before* being substituted
+                        // into the body (parameters that participate
+                        // in `#` or `##` are exempt, but expand_fn_macro
+                        // handles those cases by reading the parameter's
+                        // unexpanded text directly). Pre-expand here
+                        // with `ident` not yet on the blocklist -- the
+                        // outer macro's blue paint only kicks in for
+                        // the rescan of the substituted body.
+                        let expanded_args: Vec<String> = args
+                            .iter()
+                            .map(|a| {
+                                self.substitute_with_blocklist(
+                                    a, filename, line_no, blocklist,
+                                )
+                            })
+                            .collect();
+                        let expanded = expand_fn_macro(macro_def, &expanded_args);
                         // Re-substitute so nested macro names inside
-                        // the expansion get a chance too.
-                        let recursed = self.substitute(&expanded, filename, line_no);
+                        // the expansion get a chance too -- but mark
+                        // `ident` as being expanded so it doesn't
+                        // trigger another round.
+                        let mut nested: Vec<&str> = blocklist.to_vec();
+                        nested.push(ident);
+                        let recursed = self.substitute_with_blocklist(
+                            &expanded, filename, line_no, &nested,
+                        );
                         out.push_str(&recursed);
                         i = j + after;
                         continue;
@@ -505,7 +589,13 @@ impl Preprocessor {
                 // allocation per source identifier.
                 match self.expand(ident) {
                     None => out.push_str(ident),
-                    Some(expanded) => out.push_str(&self.substitute(&expanded, filename, line_no)),
+                    Some(expanded) => {
+                        let mut nested: Vec<&str> = blocklist.to_vec();
+                        nested.push(ident);
+                        out.push_str(&self.substitute_with_blocklist(
+                            &expanded, filename, line_no, &nested,
+                        ));
+                    }
                 }
             } else if c == b'"' {
                 // Copy string literals verbatim so identifier-looking
@@ -562,33 +652,118 @@ impl Preprocessor {
         self.expand(name).unwrap_or_else(|| name.to_string())
     }
 
-    fn eval_condition(&self, expr: &str, line_no: usize) -> Result<bool, C5Error> {
-        let expr = expr.trim();
-        if let Some((lhs, rhs)) = expr.split_once("==") {
-            let l = self.expand_or_self(lhs.trim());
-            let r = self.expand_or_self(rhs.trim());
-            Ok(l == r)
-        } else if let Some((lhs, rhs)) = expr.split_once("!=") {
-            let l = self.expand_or_self(lhs.trim());
-            let r = self.expand_or_self(rhs.trim());
-            Ok(l != r)
-        } else if let Some(name) = expr
-            .strip_prefix("defined(")
-            .and_then(|s| s.strip_suffix(')'))
-        {
-            Ok(self.macros.contains_key(name.trim()))
-        } else if !expr.is_empty() && expr.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-            // Bare identifier: truthy iff defined and the expansion
-            // is a non-zero, non-empty value. Anything else lands in
-            // the error path below so the source author notices.
-            let v = self.expand_or_self(expr);
-            Ok(!v.is_empty() && v != "0")
-        } else {
-            Err(C5Error::Compile(format!(
-                "preprocessor:{line_no}: `#if` expression {expr:?} not understood (only `NAME`, \
-                 `defined(NAME)`, `LHS == RHS`, `LHS != RHS` are supported)"
-            )))
+    /// Pre-pass for `#if` evaluation: protect every `defined(NAME)`
+    /// (and `defined NAME`) by replacing it with `1` or `0` *before*
+    /// macro substitution. Otherwise `substitute` would expand the
+    /// argument and lose the original name. Returns a fully
+    /// macro-substituted string suitable for the `#if` expression
+    /// parser.
+    fn expand_for_if(&self, expr: &str) -> String {
+        let mut out = String::with_capacity(expr.len());
+        let bytes = expr.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            // Skip whitespace.
+            if (bytes[i] as char).is_ascii_whitespace() {
+                out.push(bytes[i] as char);
+                i += 1;
+                continue;
+            }
+            // Strip `/* ... */` block comments and `// ...` line
+            // comments. SQLite peppers them on `#if` lines.
+            if bytes[i] == b'/' && bytes.get(i + 1) == Some(&b'*') {
+                i += 2;
+                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                    i += 1;
+                }
+                i = (i + 2).min(bytes.len());
+                out.push(' ');
+                continue;
+            }
+            if bytes[i] == b'/' && bytes.get(i + 1) == Some(&b'/') {
+                i = bytes.len();
+                continue;
+            }
+            // Match `defined` keyword (must be a complete word).
+            if bytes[i..].starts_with(b"defined") {
+                let after = i + b"defined".len();
+                let prev_is_word =
+                    i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
+                let next_is_word = bytes
+                    .get(after)
+                    .is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'_');
+                if !prev_is_word && !next_is_word {
+                    let mut j = after;
+                    while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
+                        j += 1;
+                    }
+                    let with_paren = bytes.get(j) == Some(&b'(');
+                    if with_paren {
+                        j += 1;
+                        while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
+                            j += 1;
+                        }
+                    }
+                    let name_start = j;
+                    while j < bytes.len() && (bytes[j].is_ascii_alphanumeric() || bytes[j] == b'_')
+                    {
+                        j += 1;
+                    }
+                    let name = &expr[name_start..j];
+                    if with_paren {
+                        while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
+                            j += 1;
+                        }
+                        if bytes.get(j) == Some(&b')') {
+                            j += 1;
+                        }
+                    }
+                    if !name.is_empty() {
+                        let v = self.macros.contains_key(name)
+                            || self.fn_macros.contains_key(name);
+                        out.push_str(if v { "1" } else { "0" });
+                        i = j;
+                        continue;
+                    }
+                }
+            }
+            out.push(bytes[i] as char);
+            i += 1;
         }
+        // Now expand all remaining identifiers (object + function-
+        // like) via the standard substitute pass. Then strip block
+        // and line comments from the result -- macro bodies can
+        // carry inline `/* ... */` comments that survive expansion
+        // and would otherwise confuse the expression tokenizer.
+        let substituted = self.substitute(&out, "<#if>", 0);
+        strip_comments(&substituted)
+    }
+
+    fn eval_condition(&self, expr: &str, line_no: usize) -> Result<bool, C5Error> {
+        // Full c99 `#if` expression evaluator: integer constants,
+        // identifiers (treated as 0 if undefined), `defined(X)`,
+        // unary `!`, comparisons, and boolean operators with
+        // standard precedence. Strings (`"..."`) round-trip as
+        // their canonical form so `__BADC_TARGET__ == "macos"`
+        // still works as before.
+        //
+        // Pre-substitute the expression through the macro table so
+        // function-like macros (`__has_attribute(x)`) and chained
+        // object-like macros (`SQLITE_VERSION_NUMBER`) expand before
+        // the parser sees them. `defined(X)` is protected by a
+        // pre-pass that converts it to a literal 0/1 since
+        // substitute would otherwise expand X away.
+        let prepared = self.expand_for_if(expr);
+        let mut p = IfExprParser::new(&prepared, self);
+        let v = p.parse_or()?;
+        p.skip_ws();
+        if !p.at_end() {
+            return Err(C5Error::Compile(alloc::format!(
+                "preprocessor:{line_no}: trailing junk in `#if` expression: {:?}",
+                p.tail()
+            )));
+        }
+        Ok(v.truthy())
     }
 
     /// Recognise `dylib(...)` and `binding(...)`. Other pragmas
@@ -764,6 +939,60 @@ impl Preprocessor {
     }
 }
 
+/// Strip C-style `/* ... */` block comments and `// ...` line
+/// comments from a single-line buffer. Used on the post-macro-
+/// expansion `#if` expression where inlined comments would
+/// otherwise confuse the expression tokenizer.
+fn strip_comments(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'/' && bytes.get(i + 1) == Some(&b'*') {
+            i += 2;
+            while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                i += 1;
+            }
+            i = (i + 2).min(bytes.len());
+            out.push(' ');
+            continue;
+        }
+        if bytes[i] == b'/' && bytes.get(i + 1) == Some(&b'/') {
+            break;
+        }
+        out.push(bytes[i] as char);
+        i += 1;
+    }
+    out
+}
+
+/// Phase-2 line-continuation collapse: every line ending in `\\`
+/// joins with the next, preserving total line count by emitting
+/// blank padding lines. The c99 spec runs this before all other
+/// preprocessing passes.
+fn unfold_line_continuations(source: &str) -> String {
+    let mut out = String::with_capacity(source.len());
+    let mut iter = source.lines().peekable();
+    while let Some(line) = iter.next() {
+        let mut joined = line.to_string();
+        let mut padding = 0;
+        while joined.ends_with('\\') {
+            joined.pop();
+            padding += 1;
+            match iter.next() {
+                Some(next) => joined.push_str(next),
+                None => break,
+            }
+        }
+        out.push_str(&joined);
+        out.push('\n');
+        for _ in 0..padding {
+            out.push('\n');
+        }
+    }
+    out
+}
+
 /// Identifier check: ASCII letter or `_` to start, alnum or `_`
 /// after. Used to reject `#pragma dylib(123foo, ...)` and similar
 /// up-front so the codegen never has to worry about quirks in the
@@ -816,6 +1045,9 @@ enum Directive<'a> {
     Ifndef(&'a str),
     If(&'a str),
     Else,
+    /// `#elif <expr>` -- like `#else` followed by a re-evaluated
+    /// `#if <expr>`, but only takes if no preceding branch did.
+    Elif(&'a str),
     Endif,
     Pragma(&'a str),
     Include(&'a str),
@@ -888,6 +1120,17 @@ fn parse_directive(rest: &str) -> Directive<'_> {
     }
     if let Some(after) = rest.strip_prefix("ifndef") {
         return Directive::Ifndef(after.trim());
+    }
+    if let Some(after) = rest.strip_prefix("elif") {
+        // `#elif EXPR` -- treated as `#else` followed by a re-evaluated
+        // `#if EXPR`, but only if no preceding branch was taken.
+        if after
+            .chars()
+            .next()
+            .is_none_or(|c| !c.is_ascii_alphanumeric() && c != '_')
+        {
+            return Directive::Elif(after);
+        }
     }
     if let Some(after) = rest.strip_prefix("if") {
         // Discriminate `#if` from `#ifdef`/`#ifndef` -- the latter
@@ -1036,6 +1279,520 @@ fn parse_macro_args(s: &str) -> Option<(Vec<String>, usize)> {
 ///   - `__VA_ARGS__` substitutes the variadic-tail args joined with
 ///     `, ` for variadic macros (`#define foo(...)` /
 ///     `#define foo(a, ...)`).
+/// Value produced by the `#if`-expression evaluator.
+///
+/// `Int` is the c99 integer-constant case (`#if X >= 5`); `Str` is
+/// the c5 extension where macros can hold quoted strings (`#if
+/// __BADC_TARGET__ == "macos-aarch64"`). The two interop only via
+/// equality / inequality -- mixing them in arithmetic is rejected.
+#[derive(Debug, Clone)]
+enum IfValue {
+    Int(i64),
+    Str(String),
+}
+
+impl IfValue {
+    fn truthy(&self) -> bool {
+        match self {
+            IfValue::Int(n) => *n != 0,
+            IfValue::Str(s) => !s.is_empty(),
+        }
+    }
+    fn as_int(&self) -> i64 {
+        match self {
+            IfValue::Int(n) => *n,
+            IfValue::Str(s) => {
+                // String coerced to int: 0 unless the bytes happen
+                // to parse as a number. Real c programs rarely
+                // mix; this is purely defensive.
+                s.parse().unwrap_or(0)
+            }
+        }
+    }
+}
+
+/// Tiny recursive-descent parser for `#if` expressions. Mirrors the
+/// c99 precedence (top to bottom):
+///
+///   `||` | `&&` | `|` | `^` | `&` | `== !=` | `< <= > >=` |
+///   `<< >>` | `+ -` | `* / %` | unary `! - + ~` | primary
+///
+/// Primaries are integer literals (decimal / hex / octal with the
+/// usual c99 suffixes), `defined(NAME)` / `defined NAME`, identifiers
+/// (resolved through the macro table -- undefined names evaluate to
+/// 0), parenthesised sub-expressions, and string literals (preserved
+/// for the c5-extension `==`/`!=` shape).
+struct IfExprParser<'a> {
+    src: &'a str,
+    pos: usize,
+    pp: &'a Preprocessor,
+}
+
+impl<'a> IfExprParser<'a> {
+    fn new(src: &'a str, pp: &'a Preprocessor) -> Self {
+        Self { src, pos: 0, pp }
+    }
+    fn at_end(&self) -> bool {
+        self.pos >= self.src.len()
+    }
+    fn tail(&self) -> &str {
+        &self.src[self.pos..]
+    }
+    fn peek_byte(&self) -> Option<u8> {
+        self.src.as_bytes().get(self.pos).copied()
+    }
+    fn skip_ws(&mut self) {
+        while let Some(b) = self.peek_byte() {
+            if b.is_ascii_whitespace() {
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+    }
+    fn eat(&mut self, s: &str) -> bool {
+        self.skip_ws();
+        if self.src[self.pos..].starts_with(s) {
+            self.pos += s.len();
+            true
+        } else {
+            false
+        }
+    }
+    fn eat_byte(&mut self, b: u8) -> bool {
+        self.skip_ws();
+        if self.peek_byte() == Some(b) {
+            self.pos += 1;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn parse_or(&mut self) -> Result<IfValue, C5Error> {
+        let mut left = self.parse_and()?;
+        loop {
+            self.skip_ws();
+            if self.eat("||") {
+                let right = self.parse_and()?;
+                left = IfValue::Int((left.truthy() || right.truthy()) as i64);
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+
+    fn parse_and(&mut self) -> Result<IfValue, C5Error> {
+        let mut left = self.parse_bitor()?;
+        loop {
+            self.skip_ws();
+            if self.eat("&&") {
+                let right = self.parse_bitor()?;
+                left = IfValue::Int((left.truthy() && right.truthy()) as i64);
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+
+    fn parse_bitor(&mut self) -> Result<IfValue, C5Error> {
+        let mut left = self.parse_bitxor()?;
+        loop {
+            self.skip_ws();
+            // Single `|`, but only if not followed by another `|`
+            // (which would be `||`, the OR operator we already handled).
+            if self.peek_byte() == Some(b'|') && self.src.as_bytes().get(self.pos + 1) != Some(&b'|') {
+                self.pos += 1;
+                let right = self.parse_bitxor()?;
+                left = IfValue::Int(left.as_int() | right.as_int());
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+
+    fn parse_bitxor(&mut self) -> Result<IfValue, C5Error> {
+        let mut left = self.parse_bitand()?;
+        loop {
+            self.skip_ws();
+            if self.eat_byte(b'^') {
+                let right = self.parse_bitand()?;
+                left = IfValue::Int(left.as_int() ^ right.as_int());
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+
+    fn parse_bitand(&mut self) -> Result<IfValue, C5Error> {
+        let mut left = self.parse_eq()?;
+        loop {
+            self.skip_ws();
+            if self.peek_byte() == Some(b'&') && self.src.as_bytes().get(self.pos + 1) != Some(&b'&') {
+                self.pos += 1;
+                let right = self.parse_eq()?;
+                left = IfValue::Int(left.as_int() & right.as_int());
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+
+    fn parse_eq(&mut self) -> Result<IfValue, C5Error> {
+        let mut left = self.parse_rel()?;
+        loop {
+            self.skip_ws();
+            if self.eat("==") {
+                let right = self.parse_rel()?;
+                left = IfValue::Int(if_value_eq(&left, &right) as i64);
+            } else if self.eat("!=") {
+                let right = self.parse_rel()?;
+                left = IfValue::Int(!if_value_eq(&left, &right) as i64);
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+
+    fn parse_rel(&mut self) -> Result<IfValue, C5Error> {
+        let mut left = self.parse_shift()?;
+        loop {
+            self.skip_ws();
+            if self.eat("<=") {
+                let right = self.parse_shift()?;
+                left = IfValue::Int((left.as_int() <= right.as_int()) as i64);
+            } else if self.eat(">=") {
+                let right = self.parse_shift()?;
+                left = IfValue::Int((left.as_int() >= right.as_int()) as i64);
+            } else if self.peek_byte() == Some(b'<')
+                && self.src.as_bytes().get(self.pos + 1) != Some(&b'<')
+            {
+                self.pos += 1;
+                let right = self.parse_shift()?;
+                left = IfValue::Int((left.as_int() < right.as_int()) as i64);
+            } else if self.peek_byte() == Some(b'>')
+                && self.src.as_bytes().get(self.pos + 1) != Some(&b'>')
+            {
+                self.pos += 1;
+                let right = self.parse_shift()?;
+                left = IfValue::Int((left.as_int() > right.as_int()) as i64);
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+
+    fn parse_shift(&mut self) -> Result<IfValue, C5Error> {
+        let mut left = self.parse_addsub()?;
+        loop {
+            self.skip_ws();
+            if self.eat("<<") {
+                let right = self.parse_addsub()?;
+                left = IfValue::Int(left.as_int() << right.as_int());
+            } else if self.eat(">>") {
+                let right = self.parse_addsub()?;
+                left = IfValue::Int(left.as_int() >> right.as_int());
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+
+    fn parse_addsub(&mut self) -> Result<IfValue, C5Error> {
+        let mut left = self.parse_muldiv()?;
+        loop {
+            self.skip_ws();
+            if self.eat_byte(b'+') {
+                let right = self.parse_muldiv()?;
+                left = IfValue::Int(left.as_int().wrapping_add(right.as_int()));
+            } else if self.eat_byte(b'-') {
+                let right = self.parse_muldiv()?;
+                left = IfValue::Int(left.as_int().wrapping_sub(right.as_int()));
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+
+    fn parse_muldiv(&mut self) -> Result<IfValue, C5Error> {
+        let mut left = self.parse_unary()?;
+        loop {
+            self.skip_ws();
+            if self.eat_byte(b'*') {
+                let right = self.parse_unary()?;
+                left = IfValue::Int(left.as_int().wrapping_mul(right.as_int()));
+            } else if self.eat_byte(b'/') {
+                let right = self.parse_unary()?;
+                let r = right.as_int();
+                left = IfValue::Int(if r == 0 { 0 } else { left.as_int() / r });
+            } else if self.eat_byte(b'%') {
+                let right = self.parse_unary()?;
+                let r = right.as_int();
+                left = IfValue::Int(if r == 0 { 0 } else { left.as_int() % r });
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+
+    fn parse_unary(&mut self) -> Result<IfValue, C5Error> {
+        self.skip_ws();
+        if self.eat_byte(b'!') {
+            let v = self.parse_unary()?;
+            return Ok(IfValue::Int((!v.truthy()) as i64));
+        }
+        if self.eat_byte(b'~') {
+            let v = self.parse_unary()?;
+            return Ok(IfValue::Int(!v.as_int()));
+        }
+        if self.eat_byte(b'-') {
+            let v = self.parse_unary()?;
+            return Ok(IfValue::Int(-v.as_int()));
+        }
+        if self.eat_byte(b'+') {
+            return self.parse_unary();
+        }
+        self.parse_primary()
+    }
+
+    fn parse_primary(&mut self) -> Result<IfValue, C5Error> {
+        self.skip_ws();
+        if self.eat_byte(b'(') {
+            let v = self.parse_or()?;
+            self.skip_ws();
+            if !self.eat_byte(b')') {
+                return Err(C5Error::Compile(alloc::format!(
+                    "preprocessor: missing `)` in `#if` expression",
+                )));
+            }
+            return Ok(v);
+        }
+        if self.eat_byte(b'"') {
+            // String literal -- read to closing `"`. No escape
+            // handling beyond plain bytes; the c5 use cases compare
+            // simple paths.
+            let start = self.pos;
+            while let Some(b) = self.peek_byte() {
+                if b == b'"' {
+                    let s = self.src[start..self.pos].to_string();
+                    self.pos += 1;
+                    return Ok(IfValue::Str(format!("\"{s}\"")));
+                }
+                self.pos += 1;
+            }
+            return Err(C5Error::Compile(
+                "preprocessor: unterminated string in `#if` expression".to_string(),
+            ));
+        }
+        if self.eat_byte(b'\'') {
+            // Character literal -- a single byte, optionally escaped.
+            // Multi-char (`'AB'`) is implementation-defined; we use
+            // the last byte, which matches gcc's choice.
+            let bytes = self.src.as_bytes();
+            let mut acc: i64 = 0;
+            while let Some(b) = self.peek_byte() {
+                if b == b'\'' {
+                    self.pos += 1;
+                    return Ok(IfValue::Int(acc));
+                }
+                if b == b'\\' && self.pos + 1 < bytes.len() {
+                    self.pos += 2;
+                    let esc = bytes[self.pos - 1];
+                    let ch = match esc {
+                        b'n' => 0x0A,
+                        b't' => 0x09,
+                        b'r' => 0x0D,
+                        b'0' => 0x00,
+                        b'\\' => b'\\',
+                        b'\'' => b'\'',
+                        b'"' => b'"',
+                        b'a' => 0x07,
+                        b'b' => 0x08,
+                        b'f' => 0x0C,
+                        b'v' => 0x0B,
+                        other => other,
+                    };
+                    acc = (acc << 8) | (ch as i64);
+                } else {
+                    acc = (acc << 8) | (b as i64);
+                    self.pos += 1;
+                }
+            }
+            return Err(C5Error::Compile(
+                "preprocessor: unterminated char literal in `#if`".to_string(),
+            ));
+        }
+        // Integer literal? Decimal, hex (0x...), or octal (0...).
+        if let Some(b) = self.peek_byte() {
+            if b.is_ascii_digit() {
+                return self.parse_int_literal();
+            }
+            if b.is_ascii_alphabetic() || b == b'_' {
+                return self.parse_ident_or_defined();
+            }
+        }
+        Err(C5Error::Compile(alloc::format!(
+            "preprocessor: unexpected `{}` in `#if` expression",
+            self.tail().chars().next().unwrap_or(' ')
+        )))
+    }
+
+    fn parse_int_literal(&mut self) -> Result<IfValue, C5Error> {
+        let bytes = self.src.as_bytes();
+        let start = self.pos;
+        let mut radix: u32 = 10;
+        if bytes.get(self.pos) == Some(&b'0') {
+            if bytes.get(self.pos + 1) == Some(&b'x') || bytes.get(self.pos + 1) == Some(&b'X') {
+                self.pos += 2;
+                radix = 16;
+            } else if bytes
+                .get(self.pos + 1)
+                .is_some_and(|b| (*b as char).is_ascii_digit())
+            {
+                self.pos += 1;
+                radix = 8;
+            } else {
+                self.pos += 1;
+            }
+        }
+        let body_start = self.pos;
+        while let Some(b) = self.peek_byte() {
+            let is_digit = match radix {
+                16 => b.is_ascii_hexdigit(),
+                _ => b.is_ascii_digit(),
+            };
+            if !is_digit {
+                break;
+            }
+            self.pos += 1;
+        }
+        // Eat any integer suffix (uUlL combinations) without
+        // touching the value.
+        while let Some(b) = self.peek_byte() {
+            if matches!(b, b'u' | b'U' | b'l' | b'L') {
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+        let body = self.src[start..self.pos].trim_end_matches(|c: char| {
+            matches!(c, 'u' | 'U' | 'l' | 'L')
+        });
+        let v = if radix == 10 {
+            body.parse::<i64>()
+        } else {
+            // Strip the "0x" / leading "0" prefix.
+            let stripped = if radix == 16 {
+                body.trim_start_matches("0x").trim_start_matches("0X")
+            } else {
+                body.trim_start_matches('0')
+            };
+            if stripped.is_empty() {
+                Ok(0i64)
+            } else {
+                i64::from_str_radix(stripped, radix)
+            }
+        };
+        let _ = body_start;
+        match v {
+            Ok(n) => Ok(IfValue::Int(n)),
+            Err(_) => Err(C5Error::Compile(alloc::format!(
+                "preprocessor: malformed integer literal {body:?} in `#if`",
+            ))),
+        }
+    }
+
+    fn parse_ident_or_defined(&mut self) -> Result<IfValue, C5Error> {
+        let start = self.pos;
+        while let Some(b) = self.peek_byte() {
+            if b.is_ascii_alphanumeric() || b == b'_' {
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+        let name = &self.src[start..self.pos];
+        if name == "defined" {
+            // `defined NAME` or `defined(NAME)` -- both are valid.
+            self.skip_ws();
+            let with_paren = self.eat_byte(b'(');
+            self.skip_ws();
+            let id_start = self.pos;
+            while let Some(b) = self.peek_byte() {
+                if b.is_ascii_alphanumeric() || b == b'_' {
+                    self.pos += 1;
+                } else {
+                    break;
+                }
+            }
+            if id_start == self.pos {
+                return Err(C5Error::Compile(
+                    "preprocessor: identifier expected after `defined`".to_string(),
+                ));
+            }
+            let id = self.src[id_start..self.pos].to_string();
+            if with_paren {
+                self.skip_ws();
+                if !self.eat_byte(b')') {
+                    return Err(C5Error::Compile(
+                        "preprocessor: missing `)` after `defined(NAME`".to_string(),
+                    ));
+                }
+            }
+            return Ok(IfValue::Int(
+                self.pp.macros.contains_key(&id) as i64,
+            ));
+        }
+        // Identifier -- look up in the macro table. Function-like
+        // macros are skipped (they need an argument list which the
+        // preprocessor evaluator doesn't simulate). Undefined names
+        // are 0 per c99 §6.10.1p4.
+        if let Some(value) = self.pp.macros.get(name) {
+            // Strip a leading/trailing quote pair to detect strings.
+            if value.starts_with('"') && value.ends_with('"') {
+                return Ok(IfValue::Str(value.clone()));
+            }
+            // Numeric? Try parsing.
+            if let Ok(n) = value.parse::<i64>() {
+                return Ok(IfValue::Int(n));
+            }
+            // The macro might itself be a name; recursively expand
+            // (bounded) and try once more. The bare-identifier case
+            // in c99 evaluates an undefined macro to 0; a defined
+            // macro whose body isn't a number falls through to a
+            // string-shaped value.
+            let expanded = self.pp.expand_or_self(name);
+            if let Ok(n) = expanded.parse::<i64>() {
+                return Ok(IfValue::Int(n));
+            }
+            return Ok(IfValue::Str(expanded));
+        }
+        Ok(IfValue::Int(0))
+    }
+}
+
+fn if_value_eq(a: &IfValue, b: &IfValue) -> bool {
+    match (a, b) {
+        (IfValue::Int(x), IfValue::Int(y)) => x == y,
+        (IfValue::Str(x), IfValue::Str(y)) => x == y,
+        (IfValue::Int(x), IfValue::Str(y)) | (IfValue::Str(y), IfValue::Int(x)) => {
+            // Mixed: prefer int interpretation if the string parses,
+            // else compare numerically with 0.
+            y.trim_matches('"').parse::<i64>().ok() == Some(*x)
+        }
+    }
+}
+
 fn expand_fn_macro(def: &FnMacro, args: &[String]) -> String {
     // Pre-compute the comma-joined string for __VA_ARGS__. Empty when
     // the macro isn't variadic or no trailing args were supplied.

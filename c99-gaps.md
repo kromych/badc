@@ -1,6 +1,6 @@
 # Gaps to C99
 
-Snapshot updated after M28b (struct + designated initializers) lands. The c5
+Snapshot updated after M30 (enum tag types) lands. The c5
 dialect is a deliberately small subset of C with extras for
 the compiler's own use; this document catalogues the C99
 features that aren't supported, organized by spec section,
@@ -300,9 +300,17 @@ to have).
 
 ### Tags / declarators
 - struct tags -- supported.
-- union, enum tags -- partial (enum is parsed as a list of
-  `int` constants; full enum tag types aren't a thing in
-  c5).
+- union -- supported (M26).
+- enum tags -- **supported** (M30). `enum Foo { A, B, C };`
+  registers each constant as a `Token::Num` with its
+  enumerated value; `enum Foo` is then a valid type spec
+  (resolves to `int`, since c5 has a single 64-bit integer
+  representation) in parameter / return / local /
+  array-dimension positions. Negative initializers
+  (`enum { N = -1 }`) work via the constant-expression
+  path. The tag itself isn't yet bound for cross-tag
+  forward declarations -- a feature few real codebases
+  use, deferred.
 
 ## §6.7.2.1 Structure / union specifiers
 

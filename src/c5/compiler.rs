@@ -140,6 +140,7 @@ fn is_type_start_token(tk: i64) -> bool {
         || tk == Token::Double as i64
         || tk == Token::Struct as i64
         || tk == Token::Union as i64
+        || tk == Token::Enum as i64
         || tk == Token::Extern as i64
         || tk == Token::Static as i64
         || is_decl_modifier(tk)
@@ -879,6 +880,21 @@ impl Compiler {
         } else if self.lex.tk == Token::Double as i64 {
             self.next()?;
             Ty::Double as i64
+        } else if self.lex.tk == Token::Enum as i64 {
+            // `enum [Tag] [{ ... }]` -- in c5 every enum collapses
+            // to plain `int`. Consume any tag name and any optional
+            // body; return Int as the underlying type.
+            self.next()?;
+            if self.lex.tk == Token::Id as i64 {
+                self.next()?;
+            }
+            if self.lex.tk == '{' as i64 {
+                // Re-parse the body via the same constants-loop the
+                // file-scope path uses. Save and restore the line
+                // since parse_enum_decl_body emits no other state.
+                self.parse_enum_body()?;
+            }
+            Ty::Int as i64
         } else if self.lex.tk == Token::Struct as i64
             || self.lex.tk == Token::Union as i64
         {
@@ -3178,42 +3194,62 @@ impl Compiler {
 
     fn parse_enum_decl(&mut self) -> Result<(), C5Error> {
         self.next()?;
-        if self.lex.tk != '{' as i64 {
+        // Optional tag name. c5 enums collapse to int regardless,
+        // so the tag is consumed without registration today (it's
+        // remembered implicitly through the matched constants).
+        if self.lex.tk == Token::Id as i64 {
             self.next()?;
         }
         if self.lex.tk == '{' as i64 {
+            self.parse_enum_body()?;
+        }
+        Ok(())
+    }
+
+    /// Parse `{ A, B = 5, C, ... }` -- the constants list of an
+    /// `enum`. On entry tk is `{`; on exit the closing `}` has
+    /// been consumed. Each constant is registered as a
+    /// `Token::Num`-class symbol with `val` set to its enumerated
+    /// value, so subsequent uses (including in array dimensions
+    /// via `parse_constant_int`) resolve correctly.
+    fn parse_enum_body(&mut self) -> Result<(), C5Error> {
+        self.next()?; // consume `{`
+        let mut i: i64 = 0;
+        while self.lex.tk != '}' as i64 {
+            if self.lex.tk != Token::Id as i64 {
+                return Err(C5Error::Compile(format!(
+                    "{}: bad enum identifier",
+                    self.lex.line
+                )));
+            }
+            let idx = self.lex.curr_id_idx;
             self.next()?;
-            let mut i = 0;
-            while self.lex.tk != '}' as i64 {
-                if self.lex.tk != Token::Id as i64 {
+            if self.lex.tk == Token::Assign as i64 {
+                self.next()?;
+                let neg = if self.lex.tk == Token::SubOp as i64 {
+                    self.next()?;
+                    true
+                } else {
+                    false
+                };
+                if self.lex.tk != Token::Num as i64 {
                     return Err(C5Error::Compile(format!(
-                        "{}: bad enum identifier",
+                        "{}: bad enum initializer",
                         self.lex.line
                     )));
                 }
-                let idx = self.lex.curr_id_idx;
+                i = if neg { -self.lex.ival } else { self.lex.ival };
                 self.next()?;
-                if self.lex.tk == Token::Assign as i64 {
-                    self.next()?;
-                    if self.lex.tk != Token::Num as i64 {
-                        return Err(C5Error::Compile(format!(
-                            "{}: bad enum initializer",
-                            self.lex.line
-                        )));
-                    }
-                    i = self.lex.ival;
-                    self.next()?;
-                }
-                self.symbols[idx].class = Token::Num as i64;
-                self.symbols[idx].type_ = Ty::Int as i64;
-                self.symbols[idx].val = i;
-                i += 1;
-                if self.lex.tk == ',' as i64 {
-                    self.next()?;
-                }
             }
-            self.next()?;
+            self.symbols[idx].class = Token::Num as i64;
+            self.symbols[idx].type_ = Ty::Int as i64;
+            self.symbols[idx].val = i;
+            i += 1;
+            if self.lex.tk == ',' as i64 {
+                self.next()?;
+            }
         }
+        self.next()?; // consume `}`
         Ok(())
     }
 

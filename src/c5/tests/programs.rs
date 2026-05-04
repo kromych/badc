@@ -239,6 +239,15 @@ fn integer_literal_suffixes_are_consumed() {
 }
 
 #[test]
+fn enum_tag_types() {
+    // M30 -- `enum Foo { ... };` registers a tag whose constants
+    // resolve to integers; `enum Foo` then works as a type spec
+    // (equivalent to int in c5) in parameter / return / local /
+    // array-dimension positions.
+    assert_eq!(run_fixture("enum_tag_types.c"), 0);
+}
+
+#[test]
 fn struct_initializers() {
     // M28b -- struct initializers (designated + positional + mixed),
     // including function-pointer fields that need a CodeReloc so

@@ -53,6 +53,7 @@ const FIXTURES: &[(&str, i64)] = &[
     ("unions_basic.c", 0),
     ("array_initializers.c", 0),
     ("struct_initializers.c", 0),
+    ("enum_tag_types.c", 0),
     ("quicksort.c", 0),
     ("linked_list.c", 10),
     ("binary_search_tree.c", 0),

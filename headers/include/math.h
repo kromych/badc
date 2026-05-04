@@ -1,0 +1,89 @@
+// math.h -- the libm subset c5 programs reach for.
+//
+// Every function takes and returns `double` -- the c5 dialect has
+// no `float` / `double` distinction at the prototype level, but the
+// FP-register ABI lowering does narrow on call boundaries when
+// needed. Math results land in the FP return register on every
+// target we ship to.
+
+#pragma once
+
+#ifdef __APPLE__
+#pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
+// macOS routes math through libSystem (which re-exports libm
+// symbols). No separate libm needed.
+#pragma binding(libc::sqrt,  "_sqrt")
+#pragma binding(libc::log,   "_log")
+#pragma binding(libc::log10, "_log10")
+#pragma binding(libc::log2,  "_log2")
+#pragma binding(libc::exp,   "_exp")
+#pragma binding(libc::pow,   "_pow")
+#pragma binding(libc::floor, "_floor")
+#pragma binding(libc::ceil,  "_ceil")
+#pragma binding(libc::round, "_round")
+#pragma binding(libc::fabs,  "_fabs")
+#pragma binding(libc::fmod,  "_fmod")
+#pragma binding(libc::sin,   "_sin")
+#pragma binding(libc::cos,   "_cos")
+#pragma binding(libc::tan,   "_tan")
+#pragma binding(libc::atan,  "_atan")
+#pragma binding(libc::atan2, "_atan2")
+#endif
+
+#ifdef __linux__
+// Linux keeps math in a separate libm.so.6.
+#pragma dylib(libm, "libm.so.6")
+#pragma binding(libm::sqrt,  "sqrt")
+#pragma binding(libm::log,   "log")
+#pragma binding(libm::log10, "log10")
+#pragma binding(libm::log2,  "log2")
+#pragma binding(libm::exp,   "exp")
+#pragma binding(libm::pow,   "pow")
+#pragma binding(libm::floor, "floor")
+#pragma binding(libm::ceil,  "ceil")
+#pragma binding(libm::round, "round")
+#pragma binding(libm::fabs,  "fabs")
+#pragma binding(libm::fmod,  "fmod")
+#pragma binding(libm::sin,   "sin")
+#pragma binding(libm::cos,   "cos")
+#pragma binding(libm::tan,   "tan")
+#pragma binding(libm::atan,  "atan")
+#pragma binding(libm::atan2, "atan2")
+#endif
+
+#ifdef _WIN32
+#pragma dylib(msvcrt, "msvcrt.dll")
+#pragma binding(msvcrt::sqrt,  "sqrt")
+#pragma binding(msvcrt::log,   "log")
+#pragma binding(msvcrt::log10, "log10")
+#pragma binding(msvcrt::log2,  "log2")
+#pragma binding(msvcrt::exp,   "exp")
+#pragma binding(msvcrt::pow,   "pow")
+#pragma binding(msvcrt::floor, "floor")
+#pragma binding(msvcrt::ceil,  "ceil")
+#pragma binding(msvcrt::round, "round")
+#pragma binding(msvcrt::fabs,  "fabs")
+#pragma binding(msvcrt::fmod,  "fmod")
+#pragma binding(msvcrt::sin,   "sin")
+#pragma binding(msvcrt::cos,   "cos")
+#pragma binding(msvcrt::tan,   "tan")
+#pragma binding(msvcrt::atan,  "atan")
+#pragma binding(msvcrt::atan2, "atan2")
+#endif
+
+double sqrt(double x);
+double log(double x);
+double log10(double x);
+double log2(double x);
+double exp(double x);
+double pow(double base, double exp);
+double floor(double x);
+double ceil(double x);
+double round(double x);
+double fabs(double x);
+double fmod(double x, double y);
+double sin(double x);
+double cos(double x);
+double tan(double x);
+double atan(double x);
+double atan2(double y, double x);

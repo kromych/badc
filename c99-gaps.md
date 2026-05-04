@@ -1,6 +1,6 @@
 # Gaps to C99
 
-Snapshot updated after M29 (static locals) lands. The c5
+Snapshot updated after M32 (libc surface bring-up) lands. The c5
 dialect is a deliberately small subset of C with extras for
 the compiler's own use; this document catalogues the C99
 features that aren't supported, organized by spec section,
@@ -460,26 +460,49 @@ to have).
   `<dlfcn.h>`, `<pthread.h>`, `<sys/mman.h>`) -- bundled
   in `headers/include/`, with `#pragma binding` declarations
   routing each c5-side name to the per-target loader symbol.
-- Function repertoire -- only what the bundled headers
-  declare. This is a tiny subset of C99's runtime library:
-  - I/O: `printf`, `fopen` / `fread` / `fwrite` / `fclose`,
-    `read` / `write` / `open` / `close`. **Missing**:
-    `scanf`, `sscanf`, `fprintf`, `vprintf`, `puts`,
-    `gets` (deprecated anyway), `setvbuf`, `fflush`,
-    `fseek` / `ftell`, `feof` / `ferror`, `fgetc` /
-    `fputc` and most other stdio.
-  - String: `memcpy`, `memset`, `memcmp`. **Missing**:
-    `strlen`, `strcpy` / `strncpy`, `strcat` / `strncat`,
-    `strcmp` / `strncmp`, `strchr` / `strrchr`,
-    `strstr`, `strtok`, `sprintf`, `snprintf`,
-    `strerror`. (Reachable via `dlsym`, see below.)
-  - Memory: `malloc`, `free`. **Missing**: `calloc`,
-    `realloc`, `aligned_alloc`.
-  - Math: `<math.h>` not bundled. `<stdlib.h>::abs` etc.
-    aren't bound either. Severity: 2.
-  - `<errno.h>`, `<setjmp.h>`, `<signal.h>`, `<time.h>`,
-    `<locale.h>`, `<assert.h>`, `<ctype.h>` -- no
-    bundled headers.
+- Function repertoire -- expanded substantially in M32.
+  The bundled headers now cover most of the c99 runtime
+  surface a typical C program reaches for. Per-target
+  bindings exist for macOS (libSystem), Linux (libc.so.6
+  + libm.so.6 for math), and Windows (msvcrt.dll +
+  kernel32.dll).
+  - **stdio.h**: printf, fprintf, sprintf, snprintf,
+    sscanf, vfprintf, vsprintf, vsnprintf, fopen, fclose,
+    fread, fwrite, fputs, fgets, fputc, fgetc, putchar,
+    getchar, puts, perror, fseek, ftell, rewind, fflush,
+    feof, ferror, clearerr, setvbuf, remove, rename.
+  - **string.h**: memset, memcmp, memcpy, memmove, memchr,
+    strlen, strcpy, strncpy, strcmp, strncmp, strchr,
+    strrchr, strstr, strcat, strncat, strerror, strdup.
+  - **stdlib.h**: malloc, calloc, realloc, free, atoi,
+    atol, atof, strtol, strtoll, strtod, abs, abort, exit,
+    system, getenv, setenv, qsort, bsearch, rand, srand.
+  - **ctype.h** (new): isspace, isdigit, isalpha, isalnum,
+    isxdigit, isprint, ispunct, iscntrl, islower, isupper,
+    tolower, toupper.
+  - **math.h** (new): sqrt, log, log10, log2, exp, pow,
+    floor, ceil, round, fabs, fmod, sin, cos, tan, atan,
+    atan2.
+  - **errno.h** (new): errno macro that resolves to a
+    dereference of the per-target errno_location()
+    (`__errno_location` on Linux, `___error` on macOS,
+    `_errno` on Windows).
+  - **assert.h** (new): assert(expr) macro that prints +
+    aborts on failure.
+  - **time.h** (new): time, clock, clock_gettime,
+    gettimeofday, difftime, mktime.
+
+  Two known caveats:
+  * Variadic FP arguments on AArch64 macOS still spill
+    differently from Linux/x86_64; programs that pass
+    more than a couple of FP variadic args may see
+    garbage.
+  * Libc functions returning `int` (e.g. strcmp) leave
+    only the low 32 bits defined per ABI; c5 reads the
+    full 64-bit return register and not every libc
+    sign-extends. Sign-sensitive checks (`strcmp(...) <
+    0`) need an explicit `(int)(rc & 0xFFFFFFFF)` mask
+    until M31 lands real integer widths.
 - `dlopen`/`dlsym` escape hatch -- supported. Anything in
   the running process's address space (including
   unbundled libc functions like `strlen`) is reachable

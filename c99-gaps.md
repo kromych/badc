@@ -1,6 +1,6 @@
 # Gaps to C99
 
-Snapshot updated after M26 (unions) lands. The c5
+Snapshot updated after M28a (array initializers) lands. The c5
 dialect is a deliberately small subset of C with extras for
 the compiler's own use; this document catalogues the C99
 features that aren't supported, organized by spec section,
@@ -264,11 +264,24 @@ to have).
   init (`int a = 1, b, c = 3;`) and pointer / struct
   initializers all work. Aggregate / brace-enclosed
   initializers (`{ .x = 1 }`) are M28.
+- Aggregate initializers for arrays -- **partial**
+  (M28a). String-literal init for char arrays (`char buf[]
+  = "hello"`, `char buf[16] = "hi"`) and brace-list init
+  for arrays of integers and pointers (`int xs[] = {1, 2,
+  3}`, `char *names[] = {"foo", "bar"}`) work at both file
+  scope and function scope. Empty-bracket form
+  (`int xs[] = ...`) infers the dimension from the
+  initializer. Trailing zeros: file-scope arrays are
+  zero-initialised by allocation; function-scope arrays
+  initialise only the explicit positions, the rest stays
+  in whatever state the stack frame held.
 - Aggregate initializers for structs (`{ .field = ... }`,
   positional) -- **missing**. Severity: 2.
 - String-literal initializers for char arrays --
-  **missing**. Now that arrays exist (M25),
-  `char buf[16] = "hi";` is M28 territory. Severity: 2.
+  **supported** (M28a). `char buf[] = "hi"` (size
+  inferred) and `char buf[N] = "..."` (explicit size
+  with trailing zeros) work at both file and function
+  scope.
 
 ### typedef
 - **supported** (M23 + M23b). Function-pointer typedefs
@@ -489,7 +502,10 @@ roughly tie for "next priority":
 8. ~~C99 block-scope decls~~ -- landed in M24. Decls
    may appear anywhere a statement may. for-init decls
    (`for (int i = 0; ...)`) still missing.
-9. Aggregate initializers (`struct Foo f = { .x = 1 };`).
+9. Aggregate initializers -- **partial** (M28a). Array
+   brace-list and string-literal init landed; struct
+   brace and designated initialisers
+   (`struct Foo f = { .x = 1 };`) still missing.
 10. ~~Local variable initializers~~ -- landed in M24.
 11. `static` locals with persistent storage duration.
     Today they silently become automatic locals.

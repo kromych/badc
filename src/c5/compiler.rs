@@ -723,13 +723,15 @@ impl Compiler {
         if self.lex.tk == Token::Brak as i64 {
             self.next()?;
             if self.lex.tk == ']' as i64 {
-                // `int xs[]` -- decay to pointer. The unspecified
-                // size is fine in parameter positions and (with a
-                // brace initializer) at file scope; c5 doesn't
-                // support the latter yet, so we just treat the
-                // declarator as `int *xs` everywhere.
+                // `int xs[]` -- empty brackets. The dimension is
+                // deferred: in parameter position the caller decays
+                // to a pointer; at file or block scope with an
+                // initializer the size comes from the initializer
+                // (`int xs[] = {1, 2, 3};` -> 3). We signal this
+                // shape with `array_size = -1` and let the caller
+                // decide how to interpret it.
                 self.next()?;
-                ty += Ty::Ptr as i64;
+                array_size = -1;
             } else {
                 // `int xs[N]` -- N must fold to a positive integer
                 // constant. The constant-expression evaluator
@@ -2370,6 +2372,151 @@ impl Compiler {
         Ok(())
     }
 
+    /// Collect an array initializer into a flat list of per-element
+    /// values together with a "needs data relocation" flag. Two
+    /// shapes are accepted:
+    ///   * `"string"` -- valid only for `char[]`-shaped targets;
+    ///     each byte (including the trailing NUL) is one element,
+    ///     none needing relocation.
+    ///   * `{ v1, v2, ... }` -- brace list of integer constants or
+    ///     string-literal addresses. String literals produce a
+    ///     data-segment offset and a `needs_reloc = true` flag so
+    ///     the native writers can emit the right rebase entry;
+    ///     integer constants are left as-is.
+    fn collect_array_initializer(
+        &mut self,
+        elem_ty: i64,
+    ) -> Result<alloc::vec::Vec<(i64, bool)>, C5Error> {
+        if self.lex.tk == '"' as i64 && elem_ty == Ty::Char as i64 {
+            let start_addr = self.lex.ival as usize;
+            self.next()?;
+            while self.lex.tk == '"' as i64 {
+                self.next()?;
+            }
+            self.data.push(0);
+            let elems: alloc::vec::Vec<(i64, bool)> = self.data[start_addr..]
+                .iter()
+                .map(|&b| (b as i64, false))
+                .collect();
+            return Ok(elems);
+        }
+        if self.lex.tk != '{' as i64 {
+            return Err(C5Error::Compile(format!(
+                "{}: array initializer must be a string literal or `{{ ... }}`",
+                self.lex.line
+            )));
+        }
+        self.next()?;
+        let mut elements = alloc::vec::Vec::new();
+        while self.lex.tk != '}' as i64 {
+            if self.lex.tk == '"' as i64 {
+                // String-pointer element: the literal lands in
+                // self.data; the element's value is the start
+                // offset and the native writers need a data
+                // relocation to patch it to the runtime address.
+                let addr = self.lex.ival;
+                self.next()?;
+                while self.lex.tk == '"' as i64 {
+                    self.next()?;
+                }
+                self.data.push(0);
+                elements.push((addr, true));
+            } else {
+                elements.push((self.parse_constant_int()?, false));
+            }
+            if self.lex.tk == ',' as i64 {
+                self.next()?;
+            }
+        }
+        self.next()?; // consume `}`
+        Ok(elements)
+    }
+
+    /// Pack array initializer elements into the data segment so a
+    /// later Mcpy or direct write can lay them out at the target
+    /// location. Returns `(start_addr, total_bytes)`. Element
+    /// values are little-endian (c5 only runs on LE hosts). For
+    /// each pointer-into-data element (flagged `needs_reloc`), a
+    /// `DataReloc` entry is recorded so the per-format writers can
+    /// patch the runtime address at link time.
+    fn pack_initializer_into_data(
+        &mut self,
+        elem_ty: i64,
+        elements: &[(i64, bool)],
+    ) -> (usize, usize) {
+        let elem_size = self.size_of_type(elem_ty);
+        let start_addr = self.data.len();
+        if elem_size == 1 {
+            for &(v, _) in elements {
+                self.data.push(v as u8);
+            }
+        } else {
+            for (idx, &(v, needs_reloc)) in elements.iter().enumerate() {
+                let here = start_addr + idx * elem_size;
+                for i in 0..elem_size {
+                    self.data.push(((v >> (i * 8)) & 0xFF) as u8);
+                }
+                if needs_reloc {
+                    self.data_relocs.push(crate::c5::program::DataReloc {
+                        data_offset: here as u64,
+                        target_offset: v as u64,
+                    });
+                }
+            }
+        }
+        (start_addr, elements.len() * elem_size)
+    }
+
+    /// Write packed initializer bytes into `self.data` at
+    /// `var_offset` -- the address of a freshly allocated global
+    /// array. Element values are little-endian; `elem_size`
+    /// determines whether each value writes one byte (char arrays)
+    /// or `elem_size` bytes (int / pointer arrays). Pointer-into-
+    /// data elements record a DataReloc so the native writers
+    /// patch the runtime address.
+    fn write_array_init_into_data(
+        &mut self,
+        var_offset: i64,
+        elem_ty: i64,
+        elements: &[(i64, bool)],
+    ) {
+        let elem_size = self.size_of_type(elem_ty);
+        let mut byte_off = var_offset as usize;
+        for &(v, needs_reloc) in elements {
+            if elem_size == 1 {
+                self.data[byte_off] = v as u8;
+                byte_off += 1;
+            } else {
+                for i in 0..elem_size {
+                    self.data[byte_off + i] = ((v >> (i * 8)) & 0xFF) as u8;
+                }
+                if needs_reloc {
+                    self.data_relocs.push(crate::c5::program::DataReloc {
+                        data_offset: byte_off as u64,
+                        target_offset: v as u64,
+                    });
+                }
+                byte_off += elem_size;
+            }
+        }
+    }
+
+    /// Emit a Mcpy that copies `total_bytes` from `src_data_addr`
+    /// (a position in self.data) to the local at `local_val`. The
+    /// usual Lea/Psh/data_imm/Mcpy shape so the runtime VM and the
+    /// native codegen don't need new ops.
+    fn emit_local_array_init(&mut self, local_val: i64, src_data_addr: usize, total_bytes: usize) {
+        if total_bytes == 0 {
+            return;
+        }
+        self.emit_op(Op::Lea);
+        self.emit_val(local_val);
+        self.emit_op(Op::Psh);
+        self.emit_data_imm(src_data_addr as i64);
+        self.emit_op(Op::Mcpy);
+        self.emit_val(total_bytes as i64);
+    }
+
     /// Emit the store sequence for a local-variable initializer:
     ///   Lea local_val ; Psh ; <init expr> ; Si | Sc | Mcpy
     /// On entry `tk` is positioned just past the `=`; on exit it
@@ -2417,25 +2564,85 @@ impl Compiler {
             self.symbols[loc_idx].h_type = self.symbols[loc_idx].type_;
             self.symbols[loc_idx].type_ = ty;
             self.symbols[loc_idx].h_val = self.symbols[loc_idx].val;
-            self.symbols[loc_idx].array_size = array_size;
 
-            self.loc_offs += self.local_storage_slots(ty, array_size);
-            self.symbols[loc_idx].val = -self.loc_offs;
-            if self.loc_offs > self.max_loc_offs {
-                self.max_loc_offs = self.loc_offs;
-            }
-
-            if self.lex.tk == Token::Assign as i64 {
-                self.next()?;
-                let local_val = self.symbols[loc_idx].val;
-                self.emit_local_init_store(local_val, ty)?;
-            }
+            self.allocate_local_with_init(loc_idx, ty, array_size)?;
 
             if self.lex.tk == ',' as i64 {
                 self.next()?;
             }
         }
         self.next()?;
+        Ok(())
+    }
+
+    /// Reserve frame storage for a local declarator and emit any
+    /// initializer that follows. Three shapes:
+    ///   * non-array: `slots_of_type(ty)` slots; optional scalar /
+    ///     pointer / struct initializer via `emit_local_init_store`.
+    ///   * known-size array (`int xs[5] = {...};` /
+    ///     `char buf[16] = "...";`): allocate `array_size *
+    ///     elem_size` bytes; the optional initializer populates the
+    ///     leading positions, the rest is left in whatever state
+    ///     the stack frame had on entry (c5 doesn't yet zero-init
+    ///     local arrays beyond what the initializer covers).
+    ///   * deferred-size array (`int xs[] = {...};`): the
+    ///     initializer determines the dimension first, then storage
+    ///     is reserved.
+    fn allocate_local_with_init(
+        &mut self,
+        loc_idx: usize,
+        ty: i64,
+        declared_array_size: i64,
+    ) -> Result<(), C5Error> {
+        if declared_array_size == -1 {
+            if self.lex.tk != Token::Assign as i64 {
+                return Err(C5Error::Compile(format!(
+                    "{}: array `{}` declared with empty brackets needs an initializer",
+                    self.lex.line, self.symbols[loc_idx].name
+                )));
+            }
+            self.next()?;
+            let elements = self.collect_array_initializer(ty)?;
+            let final_size = elements.len() as i64;
+            self.symbols[loc_idx].array_size = final_size;
+            self.loc_offs += self.local_storage_slots(ty, final_size);
+            self.symbols[loc_idx].val = -self.loc_offs;
+            if self.loc_offs > self.max_loc_offs {
+                self.max_loc_offs = self.loc_offs;
+            }
+            let local_val = self.symbols[loc_idx].val;
+            let (start_addr, total_bytes) = self.pack_initializer_into_data(ty, &elements);
+            self.emit_local_array_init(local_val, start_addr, total_bytes);
+            return Ok(());
+        }
+
+        self.symbols[loc_idx].array_size = declared_array_size;
+        self.loc_offs += self.local_storage_slots(ty, declared_array_size);
+        self.symbols[loc_idx].val = -self.loc_offs;
+        if self.loc_offs > self.max_loc_offs {
+            self.max_loc_offs = self.loc_offs;
+        }
+
+        if self.lex.tk == Token::Assign as i64 {
+            self.next()?;
+            let local_val = self.symbols[loc_idx].val;
+            if declared_array_size > 0 {
+                let elements = self.collect_array_initializer(ty)?;
+                let init_count = elements.len();
+                let max = declared_array_size as usize;
+                if init_count > max {
+                    return Err(C5Error::Compile(format!(
+                        "{}: too many initializers for array `{}` ({} > {})",
+                        self.lex.line, self.symbols[loc_idx].name, init_count, max
+                    )));
+                }
+                let (start_addr, total_bytes) =
+                    self.pack_initializer_into_data(ty, &elements);
+                self.emit_local_array_init(local_val, start_addr, total_bytes);
+            } else {
+                self.emit_local_init_store(local_val, ty)?;
+            }
+        }
         Ok(())
     }
 
@@ -2486,18 +2693,8 @@ impl Compiler {
 
             self.symbols[loc_idx].class = Token::Loc as i64;
             self.symbols[loc_idx].type_ = ty;
-            self.symbols[loc_idx].array_size = array_size;
-            self.loc_offs += self.local_storage_slots(ty, array_size);
-            self.symbols[loc_idx].val = -self.loc_offs;
-            if self.loc_offs > self.max_loc_offs {
-                self.max_loc_offs = self.loc_offs;
-            }
 
-            if self.lex.tk == Token::Assign as i64 {
-                self.next()?;
-                let local_val = self.symbols[loc_idx].val;
-                self.emit_local_init_store(local_val, ty)?;
-            }
+            self.allocate_local_with_init(loc_idx, ty, array_size)?;
 
             if self.lex.tk == ',' as i64 {
                 self.next()?;
@@ -2843,11 +3040,11 @@ impl Compiler {
             // Function-parameter declarators discard any array
             // dimension: per C, `int xs[N]` and `int xs[]` in a
             // parameter both decay to `int *xs`. parse_declarator
-            // already added a pointer level for the empty-bracket
-            // form; for `[N]` we drop the size and add the pointer
-            // level here so it lines up.
+            // returns `array_size = -1` for the empty-bracket form
+            // and a positive count for `[N]`; either way we add
+            // one pointer level and clear the size.
             let (param_idx, mut ty, array_size) = self.parse_declarator(base)?;
-            if array_size > 0 {
+            if array_size != 0 {
                 ty += Ty::Ptr as i64;
             }
             self.ty = ty;
@@ -3203,68 +3400,98 @@ impl Compiler {
                 } else {
                     self.symbols[id_idx].class = Token::Glo as i64;
                     self.symbols[id_idx].is_thread_local = thread_local;
-                    let var_offset = if thread_local {
-                        // Allocate the variable in the TLS block.
-                        // `val` holds the byte offset within
-                        // `tls_data`; the codegen translates it
-                        // to a TPIDR_EL0 / fs:0 offset at lowering
-                        // time. Each variable gets
-                        // `slots_of_type(ty) * 8` bytes (the c5
-                        // VM stores everything in 8-byte slots);
-                        // array TLS globals get the full
-                        // `array_size * elem_size` rounded up to 8.
-                        let bytes = if array_size > 0 {
-                            let total = (self.size_of_type(ty) as i64) * array_size;
-                            ((total + 7) / 8) * 8
-                        } else {
-                            self.slots_of_type(ty) * 8
-                        };
-                        let off = self.tls_data.len() as i64;
-                        self.symbols[id_idx].val = off;
-                        for _ in 0..bytes {
-                            self.tls_data.push(0);
+                    // Deferred-size array global: the dimension
+                    // comes from the initializer and storage is
+                    // reserved after parsing it. Disallow on TLS
+                    // globals -- the per-target rebase ordering
+                    // needs design work.
+                    if array_size == -1 {
+                        if self.lex.tk != Token::Assign as i64 {
+                            return Err(C5Error::Compile(format!(
+                                "{}: array `{}` declared with empty brackets needs an initializer",
+                                self.lex.line, self.symbols[id_idx].name
+                            )));
                         }
-                        off
-                    } else {
-                        // Same `slots_of_type * 8` accounting for
-                        // the regular data segment, so structs at
-                        // file scope get their full storage. Array
-                        // globals (`int xs[N];`) take N * elem_size
-                        // bytes, rounded up to 8-byte alignment so
-                        // adjacent globals stay aligned for the
-                        // codegen's data-segment access patterns.
-                        let bytes = if array_size > 0 {
-                            let total = (self.size_of_type(ty) as i64) * array_size;
-                            ((total + 7) / 8) * 8
-                        } else {
-                            self.slots_of_type(ty) * 8
-                        };
+                        if thread_local {
+                            return Err(C5Error::Compile(format!(
+                                "{}: deferred-size `_Thread_local` arrays are not supported",
+                                self.lex.line
+                            )));
+                        }
+                        self.next()?;
+                        let elements = self.collect_array_initializer(ty)?;
+                        let final_size = elements.len() as i64;
+                        self.symbols[id_idx].array_size = final_size;
+                        let total_bytes =
+                            (self.size_of_type(ty) as i64) * final_size;
+                        let aligned = ((total_bytes + 7) / 8) * 8;
                         let off = self.data.len() as i64;
                         self.symbols[id_idx].val = off;
-                        for _ in 0..bytes {
+                        for _ in 0..aligned {
                             self.data.push(0);
                         }
-                        off
-                    };
+                        self.write_array_init_into_data(off, ty, &elements);
+                    } else {
+                        let bytes = if array_size > 0 {
+                            let total = (self.size_of_type(ty) as i64) * array_size;
+                            ((total + 7) / 8) * 8
+                        } else {
+                            self.slots_of_type(ty) * 8
+                        };
+                        let var_offset = if thread_local {
+                            let off = self.tls_data.len() as i64;
+                            self.symbols[id_idx].val = off;
+                            for _ in 0..bytes {
+                                self.tls_data.push(0);
+                            }
+                            off
+                        } else {
+                            let off = self.data.len() as i64;
+                            self.symbols[id_idx].val = off;
+                            for _ in 0..bytes {
+                                self.data.push(0);
+                            }
+                            off
+                        };
 
-                    // Optional initializer: `int x = 5;`,
-                    // `int *p = 0;`, `int *p = &y;`. Restricted
-                    // grammar -- this is a constant-expression
-                    // path, not the full expression parser, so
-                    // the right-hand side is one of:
-                    //   * an integer constant (`Token::Num`,
-                    //     possibly negated),
-                    //   * `Token::Sub` followed by `Token::Num`,
-                    //   * `&<global-name>` for pointer init,
-                    //   * `Token::Num == 0` for NULL pointer
-                    //     init (any pointer LHS).
-                    // String literals and casts are future
-                    // work; the user's stated motivation
-                    // (static linked lists) needs only
-                    // address-of-global plus integer constants.
-                    if self.lex.tk == Token::Assign as i64 {
-                        self.next()?;
-                        self.parse_global_initializer(ty, var_offset, thread_local)?;
+                        // Optional initializer. For non-arrays, the
+                        // restricted constant-expression path
+                        // (parse_global_initializer) handles
+                        // integer / NULL / address-of-global. For
+                        // known-size arrays, a string literal or a
+                        // brace list populates the leading bytes;
+                        // the rest stays zero (the allocation
+                        // pre-zeroed self.data).
+                        if self.lex.tk == Token::Assign as i64 {
+                            self.next()?;
+                            if array_size > 0 {
+                                if thread_local {
+                                    return Err(C5Error::Compile(format!(
+                                        "{}: array `_Thread_local` initialisers are not supported",
+                                        self.lex.line
+                                    )));
+                                }
+                                let elements = self.collect_array_initializer(ty)?;
+                                if elements.len() > array_size as usize {
+                                    return Err(C5Error::Compile(format!(
+                                        "{}: too many initializers for array `{}` ({} > {})",
+                                        self.lex.line,
+                                        self.symbols[id_idx].name,
+                                        elements.len(),
+                                        array_size
+                                    )));
+                                }
+                                self.write_array_init_into_data(
+                                    var_offset, ty, &elements,
+                                );
+                            } else {
+                                self.parse_global_initializer(
+                                    ty,
+                                    var_offset,
+                                    thread_local,
+                                )?;
+                            }
+                        }
                     }
                 }
                 if self.lex.tk == ',' as i64 {

@@ -239,6 +239,14 @@ fn integer_literal_suffixes_are_consumed() {
 }
 
 #[test]
+fn array_initializers() {
+    // M28a -- string-literal and brace-list array initializers,
+    // size-inferred and explicit-size shapes, at both file scope
+    // and function scope.
+    assert_eq!(run_fixture("array_initializers.c"), 0);
+}
+
+#[test]
 fn unions_basic() {
     // M26 -- unions: layout shares storage among members; field
     // access uses the same path as struct fields with all offsets

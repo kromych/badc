@@ -1,6 +1,6 @@
 # Gaps to C99
 
-Snapshot updated after M23 (typedef + forward struct) lands. The c5
+Snapshot updated after M24 (local initializers + C99 block-scope decls) lands. The c5
 dialect is a deliberately small subset of C with extras for
 the compiler's own use; this document catalogues the C99
 features that aren't supported, organized by spec section,
@@ -239,8 +239,12 @@ to have).
 - Scalar initializer for globals -- supported (M13).
 - Pointer-to-global initializer -- supported (M13).
 - Local variable initializers (`int x = 5;` inside a
-  function) -- **missing**. The grammar requires `int x; x = 5;`.
-  Severity: 2.
+  function) -- **supported** (M24). The parser emits a
+  `Lea local; Psh; <expr>; Si | Sc | Mcpy` sequence after
+  setting up the local. Multiple declarators with mixed
+  init (`int a = 1, b, c = 3;`) and pointer / struct
+  initializers all work. Aggregate / brace-enclosed
+  initializers (`{ .x = 1 }`) are M28.
 - Aggregate initializers for structs (`{ .field = ... }`,
   positional) -- **missing**. Severity: 2.
 - String-literal initializers for char arrays --
@@ -300,13 +304,19 @@ to have).
 
 - Compound statements with locals at the top -- supported.
 - Local declarations interleaved with statements (C99
-  block-scope) -- **missing**: c5 requires all decls at
-  the top of the block. Severity: 2.
+  block-scope) -- **supported** (M24). Both the function
+  body's outer `{ ... }` and any nested block-stmt now
+  alternate between decl and stmt parsing. Decls inside a
+  nested block shadow outer bindings and restore on
+  block exit.
 - `if`, `else`, `while`, `do-while`, `for`, `switch`,
   `case`, `default`, `break`, `continue`, `goto`,
   `return` -- supported.
 - `for ( int i = 0; ... )` (C99 for-init declaration) --
-  **missing** (no local-init syntax). Severity: 2.
+  **missing**. The for-init slot still expects an
+  expression. Workaround: declare the variable in the
+  enclosing block, then `for (i = 0; ...)`. Severity: 4
+  (sqlite is pre-C99 and doesn't use this shape).
 - `restrict`-qualified locals -- **missing**.
 
 ## §6.9 External definitions
@@ -437,11 +447,11 @@ roughly tie for "next priority":
 7. `#error`, `#`, `##`, `__VA_ARGS__`. Macros with
    arity-checking diagnostics, format-string stringification,
    and variadic delegations rely on these.
-8. C99 block-scope decls (`for (int i = 0;...)`,
-   `if (...) { int x = ...; }`).
+8. ~~C99 block-scope decls~~ -- landed in M24. Decls
+   may appear anywhere a statement may. for-init decls
+   (`for (int i = 0; ...)`) still missing.
 9. Aggregate initializers (`struct Foo f = { .x = 1 };`).
-10. Local variable initializers (`int x = 5;` in a
-    function). Workaround: `int x; x = 5;`.
+10. ~~Local variable initializers~~ -- landed in M24.
 11. `static` locals with persistent storage duration.
     Today they silently become automatic locals.
 12. Real platform ABI for libc `struct`-by-value (`div`,

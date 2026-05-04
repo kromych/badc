@@ -241,6 +241,18 @@ impl<H: Host> Vm<H> {
         if addr < self.static_end {
             return Ok(());
         }
+        // Stack frame addresses are implicitly trusted -- frames
+        // come and go on Ent/Lev and aren't tracked individually
+        // by the allocation tracker. `load_u8` / `store_u8`
+        // already special-case stack addresses in their primary
+        // path; the bulk-access checks (Mcpy, intrinsic memcpy /
+        // memcmp / memset) need the same exemption to avoid
+        // rejecting legitimate stack-to-stack copies emitted for
+        // struct-by-value parameter passing, struct-value
+        // assignment, and `struct Foo p = q;` initializers.
+        if (STACK_BASE..STACK_BASE + STACK_CAPACITY * 8).contains(&addr) {
+            return Ok(());
+        }
         for alloc in &self.allocations {
             if addr >= alloc.start && addr < alloc.start + alloc.len {
                 if alloc.freed {

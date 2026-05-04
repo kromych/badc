@@ -239,6 +239,14 @@ fn integer_literal_suffixes_are_consumed() {
 }
 
 #[test]
+fn local_init_and_block_scope_decls_work() {
+    // M24 -- local variable initializers and C99 block-scope
+    // declarations interleaved with statements, including
+    // shadowing in nested blocks.
+    assert_eq!(run_fixture("local_init_and_block_scope.c"), 0);
+}
+
+#[test]
 fn typedef_basics_work() {
     // typedef of primitives, pointers, forward struct + alias,
     // single-declaration struct + alias, typedef-name in

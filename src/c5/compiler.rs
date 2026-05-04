@@ -2079,57 +2079,141 @@ impl Compiler {
         Ok(())
     }
 
-    /// `{ <decls> <stmts> }`. C4-style block scoping: any local
-    /// declarations must come first; the names they bind shadow outer
-    /// symbols for the duration of the block and are restored on exit.
+    /// Emit the store sequence for a local-variable initializer:
+    ///   Lea local_val ; Psh ; <init expr> ; Si | Sc | Mcpy
+    /// On entry `tk` is positioned just past the `=`; on exit it
+    /// is at the comma or semicolon following the initializer.
+    fn emit_local_init_store(&mut self, local_val: i64, ty: i64) -> Result<(), C5Error> {
+        self.emit_op(Op::Lea);
+        self.emit_val(local_val);
+        self.emit_op(Op::Psh);
+        self.expr(Token::Assign as i64)?;
+        if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+            self.emit_op(Op::Mcpy);
+            self.emit_val(self.size_of_type(ty) as i64);
+        } else if ty == Ty::Char as i64 {
+            self.emit_op(Op::Sc);
+        } else {
+            self.emit_op(Op::Si);
+        }
+        Ok(())
+    }
+
+    /// Parse one local declaration line at function-body scope, the
+    /// way the original c4 frontend did it: shadowed bindings get
+    /// saved into the symbol's `h_*` fields and a single sweep at
+    /// the end of the function restores them. Used by `run_compile`
+    /// for declarations that appear directly inside the function
+    /// body's `{ ... }` -- inner block-stmts have their own
+    /// per-block save vector via [`parse_block_local_decl`].
+    fn parse_function_body_local_decl(&mut self) -> Result<(), C5Error> {
+        while self.lex.tk == Token::Extern as i64 || self.lex.tk == Token::Static as i64 {
+            self.next()?;
+        }
+        let lbt = self.parse_decl_base_type()?;
+        while self.lex.tk != ';' as i64 {
+            let (loc_idx, ty) = self.parse_declarator(lbt)?;
+            self.ty = ty;
+            if self.symbols[loc_idx].class == Token::Loc as i64 {
+                return Err(C5Error::Compile(format!(
+                    "{}: duplicate local definition",
+                    self.lex.line
+                )));
+            }
+
+            self.symbols[loc_idx].h_class = self.symbols[loc_idx].class;
+            self.symbols[loc_idx].class = Token::Loc as i64;
+            self.symbols[loc_idx].h_type = self.symbols[loc_idx].type_;
+            self.symbols[loc_idx].type_ = ty;
+            self.symbols[loc_idx].h_val = self.symbols[loc_idx].val;
+
+            self.loc_offs += self.slots_of_type(ty);
+            self.symbols[loc_idx].val = -self.loc_offs;
+            if self.loc_offs > self.max_loc_offs {
+                self.max_loc_offs = self.loc_offs;
+            }
+
+            if self.lex.tk == Token::Assign as i64 {
+                self.next()?;
+                let local_val = self.symbols[loc_idx].val;
+                self.emit_local_init_store(local_val, ty)?;
+            }
+
+            if self.lex.tk == ',' as i64 {
+                self.next()?;
+            }
+        }
+        self.next()?;
+        Ok(())
+    }
+
+    /// Parse a single block-scope declaration line:
+    ///   `int x = 1, *p = q, c;`
+    /// Each declarator is recorded in `block_symbols` so the enclosing
+    /// `parse_block_stmt` can restore shadowed bindings on exit. An
+    /// optional `= initializer` after each declarator emits the
+    /// matching store sequence via [`emit_local_init_store`].
+    /// On entry the next token is a type-start (caller-checked); on
+    /// exit the trailing `;` has been consumed.
+    fn parse_block_local_decl(
+        &mut self,
+        block_symbols: &mut Vec<(usize, i64, i64, i64)>,
+    ) -> Result<(), C5Error> {
+        // Storage-class prefixes (`extern` / `static`) are no-ops at
+        // function scope today; they're consumed so unmodified C
+        // headers parse, with the documented divergence on function-
+        // scope `static` storage duration.
+        while self.lex.tk == Token::Extern as i64 || self.lex.tk == Token::Static as i64 {
+            self.next()?;
+        }
+        let lbt = self.parse_decl_base_type()?;
+        while self.lex.tk != ';' as i64 {
+            let (loc_idx, ty) = self.parse_declarator(lbt)?;
+            self.ty = ty;
+
+            block_symbols.push((
+                loc_idx,
+                self.symbols[loc_idx].class,
+                self.symbols[loc_idx].type_,
+                self.symbols[loc_idx].val,
+            ));
+
+            self.symbols[loc_idx].class = Token::Loc as i64;
+            self.symbols[loc_idx].type_ = ty;
+            self.loc_offs += self.slots_of_type(ty);
+            self.symbols[loc_idx].val = -self.loc_offs;
+            if self.loc_offs > self.max_loc_offs {
+                self.max_loc_offs = self.loc_offs;
+            }
+
+            if self.lex.tk == Token::Assign as i64 {
+                self.next()?;
+                let local_val = self.symbols[loc_idx].val;
+                self.emit_local_init_store(local_val, ty)?;
+            }
+
+            if self.lex.tk == ',' as i64 {
+                self.next()?;
+            }
+        }
+        self.next()?;
+        Ok(())
+    }
+
+    /// `{ ... }`. C99 block-scope: declarations may appear anywhere a
+    /// statement may. Each declaration's bindings shadow outer
+    /// symbols for the duration of the block and are restored on
+    /// exit.
     fn parse_block_stmt(&mut self) -> Result<(), C5Error> {
         self.next()?;
         let mut block_symbols = Vec::new();
 
-        // Block-scoped local variables (declared at the top of the block).
-        // `extern` / `static` are accepted as no-op storage-class prefixes
-        // on local declarations, matching the file-scope handling. C lets
-        // you write `static int counter = 0;` inside a function for
-        // "function-scope persistent storage", but c5 only has automatic
-        // locals -- we consume the keyword and the local stays automatic.
-        // Surface code that relies on the persistence semantics will
-        // misbehave at runtime; it's still useful to compile cleanly so
-        // unmodified C from the wild lexes. Type qualifiers, int
-        // modifiers, and function specifiers (`const`, `unsigned`,
-        // `inline`, etc.) are similarly consumed.
-        while self.lex_is_type_start() {
-            while self.lex.tk == Token::Extern as i64 || self.lex.tk == Token::Static as i64 {
-                self.next()?;
-            }
-            let lbt = self.parse_decl_base_type()?;
-            while self.lex.tk != ';' as i64 {
-                let (loc_idx, ty) = self.parse_declarator(lbt)?;
-                self.ty = ty;
-
-                block_symbols.push((
-                    loc_idx,
-                    self.symbols[loc_idx].class,
-                    self.symbols[loc_idx].type_,
-                    self.symbols[loc_idx].val,
-                ));
-
-                self.symbols[loc_idx].class = Token::Loc as i64;
-                self.symbols[loc_idx].type_ = ty;
-                self.loc_offs += self.slots_of_type(ty);
-                self.symbols[loc_idx].val = -self.loc_offs;
-                if self.loc_offs > self.max_loc_offs {
-                    self.max_loc_offs = self.loc_offs;
-                }
-
-                if self.lex.tk == ',' as i64 {
-                    self.next()?;
-                }
-            }
-            self.next()?;
-        }
-
         while self.lex.tk != '}' as i64 {
-            self.stmt()?;
+            if self.lex_is_type_start() {
+                self.parse_block_local_decl(&mut block_symbols)?;
+            } else {
+                self.stmt()?;
+            }
         }
         self.next()?;
 
@@ -2722,50 +2806,6 @@ impl Compiler {
                     self.labels.clear();
                     self.unresolved_gotos.clear();
 
-                    while self.lex_is_type_start() {
-                        // Consume any extern/static prefixes
-                        // before the type token; both are
-                        // no-op storage classes in c5. See
-                        // the comment in `parse_block_stmt`
-                        // for the rationale. Type qualifiers,
-                        // int modifiers and function specifiers
-                        // (`const`, `unsigned`, `inline`, ...)
-                        // are absorbed by `parse_decl_base_type`.
-                        while self.lex.tk == Token::Extern as i64
-                            || self.lex.tk == Token::Static as i64
-                        {
-                            self.next()?;
-                        }
-                        let lbt = self.parse_decl_base_type()?;
-                        while self.lex.tk != ';' as i64 {
-                            let (loc_idx, ty) = self.parse_declarator(lbt)?;
-                            self.ty = ty;
-                            if self.symbols[loc_idx].class == Token::Loc as i64 {
-                                return Err(C5Error::Compile(format!(
-                                    "{}: duplicate local definition",
-                                    self.lex.line
-                                )));
-                            }
-
-                            self.symbols[loc_idx].h_class = self.symbols[loc_idx].class;
-                            self.symbols[loc_idx].class = Token::Loc as i64;
-                            self.symbols[loc_idx].h_type = self.symbols[loc_idx].type_;
-                            self.symbols[loc_idx].type_ = ty;
-                            self.symbols[loc_idx].h_val = self.symbols[loc_idx].val;
-
-                            self.loc_offs += self.slots_of_type(ty);
-                            self.symbols[loc_idx].val = -self.loc_offs;
-                            if self.loc_offs > self.max_loc_offs {
-                                self.max_loc_offs = self.loc_offs;
-                            }
-
-                            if self.lex.tk == ',' as i64 {
-                                self.next()?;
-                            }
-                        }
-                        self.next()?;
-                    }
-
                     let ent_pc = self.text.len();
                     self.emit_op(Op::Ent);
                     self.emit_val(0); // patched below
@@ -2813,8 +2853,17 @@ impl Compiler {
                         self.symbols[idx].val = local_val;
                     }
 
+                    // C99 block-scope: declarations may appear
+                    // anywhere a statement may. Each iteration
+                    // either parses a local decl (with optional
+                    // initializer) into the function's symbol
+                    // frame, or parses a statement.
                     while self.lex.tk != '}' as i64 {
-                        self.stmt()?;
+                        if self.lex_is_type_start() {
+                            self.parse_function_body_local_decl()?;
+                        } else {
+                            self.stmt()?;
+                        }
                     }
                     self.emit_op(Op::Lev);
 

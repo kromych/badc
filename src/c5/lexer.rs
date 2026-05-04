@@ -620,6 +620,8 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("__inline__", Token::FuncSpec),
     ("register", Token::FuncSpec),
     ("auto", Token::FuncSpec),
+    // typedef -- drives the parser's type-alias registration.
+    ("typedef", Token::Typedef),
     ("main", Token::Id),
 ];
 

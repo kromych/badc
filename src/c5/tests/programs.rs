@@ -239,6 +239,14 @@ fn integer_literal_suffixes_are_consumed() {
 }
 
 #[test]
+fn typedef_basics_work() {
+    // typedef of primitives, pointers, forward struct + alias,
+    // single-declaration struct + alias, typedef-name in
+    // parameters / return / struct fields / casts / sizeof.
+    assert_eq!(run_fixture("typedef_basic.c"), 0);
+}
+
+#[test]
 fn macro_operators_work() {
     // # (stringify), ## (token paste), __VA_ARGS__ in variadic
     // macros. The fixture exercises each operator and checks the

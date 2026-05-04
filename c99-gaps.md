@@ -1,6 +1,6 @@
 # Gaps to C99
 
-Snapshot updated after M22 (`#`, `##`, `__VA_ARGS__`) lands. The c5
+Snapshot updated after M23 (typedef + forward struct) lands. The c5
 dialect is a deliberately small subset of C with extras for
 the compiler's own use; this document catalogues the C99
 features that aren't supported, organized by spec section,
@@ -88,10 +88,19 @@ to have).
   Programs relying on 32-bit overflow or const-checks
   diverge silently -- see the §6.7 type-specifier and §J
   notes for what that means in practice.
-- **Missing**: `union`, `typedef`, `_Complex`,
-  `_Imaginary`. Severity:
+- `typedef` -- **partial** (M23). The lexer accepts the
+  keyword and the parser registers a typedef name as a
+  type alias for any underlying type. Supported shapes:
+  primitive aliases (`typedef int u32;`), pointer aliases
+  (`typedef char *str;`), forward struct + alias (`typedef
+  struct Foo Foo;`), single-declaration struct + alias
+  (`typedef struct Foo {...} Foo;`), and typedef-name use
+  in every type position (parameter, return, struct field,
+  cast, sizeof). Function-pointer typedefs (`typedef int
+  (*fn)(int)`) require the `(*name)(...)` declarator
+  shape, deferred to a follow-up (call it M23b).
+- **Missing**: `union`, `_Complex`, `_Imaginary`. Severity:
   - `union` -- 2.
-  - `typedef` -- 2.
   - `_Complex` / `_Imaginary` -- 5.
 
 ### Identifiers
@@ -238,7 +247,8 @@ to have).
   **missing** (no array type). Severity: 2.
 
 ### typedef
-- **missing**. Severity: 2.
+- **partial** (M23). See §6.4 keywords for what landed
+  and the function-pointer-typedef gap that didn't.
 
 ### Tags / declarators
 - struct tags -- supported.
@@ -259,9 +269,13 @@ to have).
 - Union -- **missing**. Severity: 2.
 - Bitfields -- **missing**. Severity: 3.
 - Anonymous structs / unions -- **missing**. Severity: 4.
-- Forward struct declarations -- **partial** (works
-  through pointer types; not all positions accept opaque
-  types).
+- Forward struct declarations -- **supported** (M23).
+  First mention of `struct Foo` (in `struct Foo;`,
+  `struct Foo *p;`, `typedef struct Foo Foo;`, or any
+  field type) auto-registers an opaque struct entry; a
+  later `struct Foo { ... }` body fills it in. Field
+  access on an opaque struct value still errors at the
+  access site (the struct has no fields to look up).
 
 ## §6.7.5 Declarators
 
@@ -413,8 +427,9 @@ roughly tie for "next priority":
    tokens. Today the lexer doesn't recognise them as
    keywords at all, so headers like `string.h` from the
    real glibc would fail to tokenise.
-4. `typedef`. Workaround: spell types out, but most
-   real headers are typedef-heavy.
+4. ~~`typedef`~~ -- landed in M23. Real headers tokenise
+   and parse; primitive / pointer / struct typedefs work.
+   Function-pointer typedefs are still missing.
 5. `signed` / `unsigned` / `short` / `long`. Today every
    integer is 64-bit; programs expecting 32-bit overflow
    semantics will misbehave silently.

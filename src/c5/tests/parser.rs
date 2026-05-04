@@ -149,11 +149,31 @@ fn struct_to_struct_assignment_type_mismatch_rejected() {
 }
 
 #[test]
-fn unknown_struct_name_is_rejected() {
-    expect_compile_error(
-        "int main() { struct Missing *p; return 0; }",
-        "unknown struct Missing",
-    );
+fn forward_declared_struct_pointer_compiles() {
+    // M23: a `struct Foo *p` mention before any body is now a
+    // forward declaration -- the struct stays opaque (size 0,
+    // no fields) but pointer types and typedefs can refer to it.
+    // This is the C standard's behaviour and a hard requirement
+    // for sqlite-style `typedef struct sqlite3 sqlite3;`-before-body.
+    use super::run_str;
+    let exit = run_str("int main() { struct Forward *p; p = 0; return 7; }");
+    assert_eq!(exit, 7);
+}
+
+#[test]
+fn field_access_on_opaque_struct_is_rejected() {
+    // The pointer mention above auto-forward-declares; touching
+    // a field on the opaque value is still an error -- the
+    // struct has no fields to look up. We don't pin the exact
+    // wording, just that compilation fails.
+    match Compiler::new(
+        "int main() { struct Forward *p; p = 0; return p->x; }".to_string(),
+    )
+    .compile()
+    {
+        Err(_) => {}
+        Ok(_) => panic!("expected compile error on field access through opaque struct"),
+    }
 }
 
 #[test]

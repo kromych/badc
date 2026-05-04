@@ -510,6 +510,43 @@ impl Compiler {
         self.structs.iter().position(|s| s.name == name)
     }
 
+    /// Find an existing struct tag by name or register a fresh
+    /// forward declaration (size 0, no fields) and return that.
+    /// Used by every type-position that mentions `struct Foo`
+    /// before the struct's body has been seen -- sqlite-style
+    /// `typedef struct Foo Foo;` and `struct Foo *p;` patterns
+    /// rely on this.
+    fn find_or_forward_declare_struct(&mut self, name: &str) -> usize {
+        if let Some(id) = self.find_struct_id(name) {
+            return id;
+        }
+        self.structs.push(StructDef {
+            name: name.to_string(),
+            size: 0,
+            fields: Vec::new(),
+        });
+        self.structs.len() - 1
+    }
+
+    /// True when the current lexer position starts a type. The free
+    /// function `is_type_start_token` covers the keyword tokens
+    /// (`int`, `char`, `const`, ...); this method extends it by
+    /// recognising any identifier whose symbol carries
+    /// `class == Token::Typedef` -- sqlite's `typedef struct X X;
+    /// X *p;` shape would otherwise misparse as `Int p;`.
+    fn lex_is_type_start(&self) -> bool {
+        is_type_start_token(self.lex.tk) || self.is_lex_typedef_name()
+    }
+
+    /// True when the current lexer token is an identifier bound to a
+    /// typedef. A separate predicate so callers that want only the
+    /// typedef case (e.g. `parse_decl_base_type`) can check without
+    /// also matching keyword type-starts.
+    fn is_lex_typedef_name(&self) -> bool {
+        self.lex.tk == Token::Id as i64
+            && self.symbols[self.lex.curr_id_idx].class == Token::Typedef as i64
+    }
+
     /// Size in bytes of a value of the given `ty`. Pointers are always 8;
     /// `char` is 1; `int` (and any other primitive that isn't a `char`) is
     /// 8; struct values use the size recorded in the struct table.
@@ -617,10 +654,20 @@ impl Compiler {
             }
             let name = self.symbols[self.lex.curr_id_idx].name.clone();
             self.next()?;
-            let id = self.find_struct_id(&name).ok_or_else(|| {
-                C5Error::Compile(format!("{}: unknown struct {}", self.lex.line, name))
-            })?;
+            // Forward-declare on first mention so `struct Foo *p;`,
+            // `typedef struct Foo Foo;`, and similar shapes work
+            // without requiring the body to come first. The struct
+            // stays opaque (size 0, no fields) until a real
+            // definition lands; field access on an opaque struct
+            // value still errors at the access site.
+            let id = self.find_or_forward_declare_struct(&name);
             struct_ty_for(id)
+        } else if self.is_lex_typedef_name() {
+            // Typedef-name as base type. Resolve to the aliased
+            // type and consume the identifier.
+            let aliased = self.symbols[self.lex.curr_id_idx].type_;
+            self.next()?;
+            aliased
         } else if saw_int_mod {
             // Bare `unsigned x;` / `long x;` / `_Bool x;` -- the C
             // implicit-int rule applies for int-modifier-only decls.
@@ -652,14 +699,27 @@ impl Compiler {
     /// On entry `tk` is `{`; on exit `tk` is the token AFTER the closing
     /// `}` (typically `;`).
     fn parse_struct_body(&mut self, name: &str) -> Result<usize, C5Error> {
-        // Pre-register so self-referential pointer fields can find this
-        // struct mid-definition.
-        let struct_id = self.structs.len();
-        self.structs.push(StructDef {
-            name: name.to_string(),
-            size: 0,
-            fields: Vec::new(),
-        });
+        // Pre-register or recycle a forward declaration so
+        // self-referential pointer fields can find this struct
+        // mid-definition. If the tag already exists with a populated
+        // body, this is a duplicate definition and we error.
+        let struct_id = match self.find_struct_id(name) {
+            Some(id) if self.structs[id].fields.is_empty() => id,
+            Some(_) => {
+                return Err(C5Error::Compile(format!(
+                    "{}: struct `{}` already defined",
+                    self.lex.line, name
+                )));
+            }
+            None => {
+                self.structs.push(StructDef {
+                    name: name.to_string(),
+                    size: 0,
+                    fields: Vec::new(),
+                });
+                self.structs.len() - 1
+            }
+        };
 
         self.next()?; // consume `{`
 
@@ -699,10 +759,12 @@ impl Compiler {
                 }
                 let inner_name = self.symbols[self.lex.curr_id_idx].name.clone();
                 self.next()?;
-                let inner_id = self.find_struct_id(&inner_name).ok_or_else(|| {
-                    C5Error::Compile(format!("{}: unknown struct {}", self.lex.line, inner_name))
-                })?;
+                let inner_id = self.find_or_forward_declare_struct(&inner_name);
                 struct_ty_for(inner_id)
+            } else if self.is_lex_typedef_name() {
+                let aliased = self.symbols[self.lex.curr_id_idx].type_;
+                self.next()?;
+                aliased
             } else if saw_int_mod {
                 Ty::Int as i64
             } else {
@@ -930,7 +992,7 @@ impl Compiler {
                     self.lex.line
                 )));
             }
-            if is_type_start_token(self.lex.tk) {
+            if self.lex_is_type_start() {
                 // sizeof(<type>): an explicit type name, optionally with
                 // pointer markers (`int **`, `struct Foo *`, ...) and
                 // pointer-level qualifiers (`const char *const`). No
@@ -1290,7 +1352,7 @@ impl Compiler {
             }
         } else if self.lex.tk == '(' as i64 {
             self.next()?;
-            if is_type_start_token(self.lex.tk) {
+            if self.lex_is_type_start() {
                 // C-style cast: `(<type>)expr`. Accepts int, char,
                 // float, double, or struct base, with any number of
                 // `*` markers and pointer-level qualifiers.
@@ -2035,7 +2097,7 @@ impl Compiler {
         // unmodified C from the wild lexes. Type qualifiers, int
         // modifiers, and function specifiers (`const`, `unsigned`,
         // `inline`, etc.) are similarly consumed.
-        while is_type_start_token(self.lex.tk) {
+        while self.lex_is_type_start() {
             while self.lex.tk == Token::Extern as i64 || self.lex.tk == Token::Static as i64 {
                 self.next()?;
             }
@@ -2382,7 +2444,7 @@ impl Compiler {
             while self.lex.tk == Token::Extern as i64 || self.lex.tk == Token::Static as i64 {
                 self.next()?;
             }
-            let base = if is_type_start_token(self.lex.tk) {
+            let base = if self.lex_is_type_start() {
                 self.parse_decl_base_type()?
             } else {
                 Ty::Int as i64
@@ -2431,9 +2493,13 @@ impl Compiler {
             // translation-unit story); `_Thread_local` flips
             // the per-thread storage flag.
             let mut thread_local = false;
+            let mut is_typedef = false;
             loop {
                 if self.lex.tk == Token::ThreadLocal as i64 {
                     thread_local = true;
+                    self.next()?;
+                } else if self.lex.tk == Token::Typedef as i64 {
+                    is_typedef = true;
                     self.next()?;
                 } else if self.lex.tk == Token::Extern as i64
                     || self.lex.tk == Token::Static as i64
@@ -2459,9 +2525,11 @@ impl Compiler {
             } else if self.lex.tk == Token::Enum as i64 {
                 self.parse_enum_decl()?;
             } else if self.lex.tk == Token::Struct as i64 {
-                // Two shapes:
-                //   struct Foo { ... };       -- definition only
-                //   struct Foo *p;            -- type use, declarators follow
+                // Three shapes today:
+                //   struct Foo { ... };           -- definition only
+                //   struct Foo;                   -- forward declaration
+                //   struct Foo *p;                -- type use, declarators follow
+                //   typedef struct Foo {...} Foo; -- definition + typedef alias
                 self.next()?; // consume `struct`
                 if self.lex.tk != Token::Id as i64 {
                     return Err(C5Error::Compile(format!(
@@ -2473,21 +2541,65 @@ impl Compiler {
                 self.next()?;
 
                 if self.lex.tk == '{' as i64 {
-                    self.parse_struct_body(&name)?;
-                    // tk is now whatever follows `}` (typically `;`); the
-                    // declarator inner loop sees `;` immediately and the
-                    // outer `next()` below consumes it.
+                    let id = self.parse_struct_body(&name)?;
+                    // `bt` is set so the declarator loop below can run
+                    // for shapes like `struct Foo {...} a, *b;` or
+                    // `typedef struct Foo {...} Foo;`. With no trailing
+                    // declarators the loop exits immediately on the
+                    // following `;`, which is the original
+                    // definition-only behaviour.
+                    bt = struct_ty_for(id);
                 } else {
-                    let id = self.find_struct_id(&name).ok_or_else(|| {
-                        C5Error::Compile(format!("{}: unknown struct {}", self.lex.line, name))
-                    })?;
+                    // Tag-only mention: forward-declare on first sighting,
+                    // re-use the existing slot if already known. This
+                    // covers `struct Foo;` (pure forward decl, no
+                    // declarators -- the loop sees `;` and exits) and
+                    // `struct Foo *p;` (type use feeding declarators).
+                    let id = self.find_or_forward_declare_struct(&name);
                     bt = struct_ty_for(id);
                 }
+            } else if self.is_lex_typedef_name() {
+                // Typedef-name as base type at file scope: `Foo bar;`
+                // where `Foo` was bound by a prior `typedef`.
+                bt = self.symbols[self.lex.curr_id_idx].type_;
+                self.next()?;
             }
 
             while self.lex.tk != ';' as i64 && self.lex.tk != '}' as i64 {
                 let (id_idx, ty) = self.parse_declarator(bt)?;
                 self.ty = ty;
+
+                // typedef branch: register a type alias and skip the
+                // function / global storage path entirely. Re-declaring
+                // an existing typedef with the same underlying type is
+                // tolerated -- sqlite's amalgamation re-emits identical
+                // typedefs through several `#include` paths -- but a
+                // clashing redefinition or a clash with a non-typedef
+                // symbol is rejected.
+                if is_typedef {
+                    let prior_class = self.symbols[id_idx].class;
+                    let prior_type = self.symbols[id_idx].type_;
+                    if prior_class != 0 && prior_class != Token::Typedef as i64 {
+                        return Err(C5Error::Compile(format!(
+                            "{}: typedef name `{}` clashes with prior non-typedef declaration",
+                            self.lex.line, self.symbols[id_idx].name
+                        )));
+                    }
+                    if prior_class == Token::Typedef as i64 && prior_type != ty {
+                        return Err(C5Error::Compile(format!(
+                            "{}: typedef `{}` redefined with a different type",
+                            self.lex.line, self.symbols[id_idx].name
+                        )));
+                    }
+                    self.symbols[id_idx].class = Token::Typedef as i64;
+                    self.symbols[id_idx].type_ = ty;
+                    self.symbols[id_idx].val = 0;
+                    if self.lex.tk == ',' as i64 {
+                        self.next()?;
+                    }
+                    continue;
+                }
+
                 // Sys-class predefined symbols (the per-target
                 // header's libc bindings) are allowed to be
                 // *re-declared* as prototypes -- the source uses the
@@ -2610,7 +2722,7 @@ impl Compiler {
                     self.labels.clear();
                     self.unresolved_gotos.clear();
 
-                    while is_type_start_token(self.lex.tk) {
+                    while self.lex_is_type_start() {
                         // Consume any extern/static prefixes
                         // before the type token; both are
                         // no-op storage classes in c5. See

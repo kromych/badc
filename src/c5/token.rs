@@ -151,6 +151,16 @@ pub(crate) enum Token {
     /// historical hint, `inline` is something a real
     /// optimizer would honour -- c5 ignores all three.
     FuncSpec,
+    /// `typedef` keyword. Drives the typedef parser: when seen
+    /// at the start of a declaration, the declarator's name is
+    /// registered as a *type alias* whose underlying type is
+    /// the parsed declaration's type. The alias is consumed at
+    /// every type-start position by checking the symbol's
+    /// class for `Token::Typedef`. Unlike `extern`/`static`,
+    /// `typedef` has real semantic effect -- it's not a
+    /// no-op; a single token slot just keeps the parser path
+    /// uniform.
+    Typedef,
     /// `float` keyword -- 32-bit IEEE float type.
     Float,
     /// `double` keyword -- 64-bit IEEE double type.

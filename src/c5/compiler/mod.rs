@@ -537,8 +537,7 @@ impl Compiler {
         self.emit_op(Op::Fcvtif);
         self.emit_op(Op::Psh);
         // Reload RHS into `a`.
-        self.emit_op(Op::Lea);
-        self.emit_val(rhs_temp);
+        self.emit_lea(rhs_temp);
         self.emit_op(Op::Li);
         self.ty = rhs_ty;
         Ok(())
@@ -1310,6 +1309,24 @@ impl Compiler {
         self.emit_val(val);
     }
 
+    /// Emit `Op::Lea <slot_off>` -- load the effective address of
+    /// a stack slot (param positive, local negative) into the
+    /// accumulator. Convenience wrapper for the very common
+    /// `emit_op(Lea); emit_val(off);` pair.
+    fn emit_lea(&mut self, slot_off: i64) {
+        self.emit_op(Op::Lea);
+        self.emit_val(slot_off);
+    }
+
+    /// Emit `Op::Jmp <target_pc>` -- direct branch to a known
+    /// bytecode PC. The placeholder shape (Jmp + 0 operand whose
+    /// PC is captured for a later patch) doesn't fit this helper
+    /// and stays inline at its handful of sites.
+    fn emit_jmp(&mut self, target_pc: i64) {
+        self.emit_op(Op::Jmp);
+        self.emit_val(target_pc);
+    }
+
     /// Emit `Op::Imm <data_offset>` and record the operand's bytecode
     /// position in [`Compiler::data_imm_positions`]. Use this anywhere
     /// the immediate is the address of a string literal or a global --
@@ -1625,8 +1642,7 @@ impl Compiler {
                     // Emit the `*temp = expr;` shape that c5's
                     // assignment path already supports: address
                     // first, push, then RHS, then Si.
-                    self.emit_op(Op::Lea);
-                    self.emit_val(temp_off);
+                    self.emit_lea(temp_off);
                     self.emit_op(Op::Psh);
                     self.expr(Token::Assign as i64)?;
 
@@ -1686,8 +1702,7 @@ impl Compiler {
                 // Push from temp slots right-to-left so the first
                 // declared param ends up on top of the c5 stack.
                 for &temp_off in temp_offsets.iter().rev() {
-                    self.emit_op(Op::Lea);
-                    self.emit_val(temp_off);
+                    self.emit_lea(temp_off);
                     self.emit_op(Op::Li);
                     self.emit_op(Op::Psh);
                 }
@@ -1699,8 +1714,7 @@ impl Compiler {
                 // the temp's address so the enclosing assignment
                 // can Mcpy from it.
                 if callee_returns_struct {
-                    self.emit_op(Op::Lea);
-                    self.emit_val(result_temp_off);
+                    self.emit_lea(result_temp_off);
                     self.emit_op(Op::Psh);
                 }
                 // Release the staging slots; they'll be reused by
@@ -1773,8 +1787,7 @@ impl Compiler {
                     || self.symbols[id_idx].class == Token::Glo as i64
                 {
                     if self.symbols[id_idx].class == Token::Loc as i64 {
-                        self.emit_op(Op::Lea);
-                        self.emit_val(self.symbols[id_idx].val);
+                        self.emit_lea(self.symbols[id_idx].val);
                     } else {
                         self.emit_data_imm(self.symbols[id_idx].val);
                     }
@@ -1807,8 +1820,7 @@ impl Compiler {
                 // semantics: address-as-value) flows into the
                 // enclosing assignment / `.field` access.
                 if callee_returns_struct {
-                    self.emit_op(Op::Lea);
-                    self.emit_val(result_temp_off);
+                    self.emit_lea(result_temp_off);
                 }
                 // For direct calls (Jsr/JsrExt) the symbol's `type_`
                 // is the declared return type. For indirect calls
@@ -1865,8 +1877,7 @@ impl Compiler {
                 self.ty = Ty::Int as i64 + Ty::Ptr as i64;
             } else {
                 if self.symbols[id_idx].class == Token::Loc as i64 {
-                    self.emit_op(Op::Lea);
-                    self.emit_val(self.symbols[id_idx].val);
+                    self.emit_lea(self.symbols[id_idx].val);
                 } else if self.symbols[id_idx].class == Token::Glo as i64
                     && self.symbols[id_idx].is_thread_local
                 {
@@ -2189,8 +2200,7 @@ impl Compiler {
                     }
                     let temp_off = -self.loc_offs;
                     temp_offsets.push(temp_off);
-                    self.emit_op(Op::Lea);
-                    self.emit_val(temp_off);
+                    self.emit_lea(temp_off);
                     self.emit_op(Op::Psh);
                     self.expr(Token::Assign as i64)?;
                     self.emit_op(Op::Si);
@@ -2201,13 +2211,11 @@ impl Compiler {
                 }
                 self.next()?; // consume `)`
                 for &temp_off in temp_offsets.iter().rev() {
-                    self.emit_op(Op::Lea);
-                    self.emit_val(temp_off);
+                    self.emit_lea(temp_off);
                     self.emit_op(Op::Li);
                     self.emit_op(Op::Psh);
                 }
-                self.emit_op(Op::Lea);
-                self.emit_val(fp_temp);
+                self.emit_lea(fp_temp);
                 self.emit_op(Op::Li);
                 self.emit_op(Op::Jsri);
                 if nargs > 0 {
@@ -2813,8 +2821,7 @@ impl Compiler {
                 self.expr(Token::Assign as i64)?;
             }
         }
-        self.emit_op(Op::Jmp);
-        self.emit_val(cond_pc as i64);
+        self.emit_jmp(cond_pc as i64);
 
         self.consume(b')', "close paren expected")?;
 
@@ -2824,8 +2831,7 @@ impl Compiler {
         self.stmt()?;
 
         self.patch_loop_continues(step_pc);
-        self.emit_op(Op::Jmp);
-        self.emit_val(step_pc as i64);
+        self.emit_jmp(step_pc as i64);
 
         self.text[end_jmp_pc] = self.text.len() as i64;
         let end_pc = self.text.len();
@@ -2845,8 +2851,7 @@ impl Compiler {
 
         self.loc_offs += 1;
         let switch_val_offset = -self.loc_offs;
-        self.emit_op(Op::Lea);
-        self.emit_val(switch_val_offset);
+        self.emit_lea(switch_val_offset);
         self.emit_op(Op::Psh);
 
         self.expr(Token::Assign as i64)?;
@@ -2876,8 +2881,7 @@ impl Compiler {
         let default_pc = self.switch_defaults.pop().unwrap();
 
         for (val, pc) in cases {
-            self.emit_op(Op::Lea);
-            self.emit_val(switch_val_offset);
+            self.emit_lea(switch_val_offset);
             self.emit_op(Op::Li);
             self.emit_op(Op::Psh);
             self.emit_imm(val);
@@ -2887,13 +2891,11 @@ impl Compiler {
         }
 
         if let Some(dpc) = default_pc {
-            self.emit_op(Op::Jmp);
-            self.emit_val(dpc as i64);
+            self.emit_jmp(dpc as i64);
         } else {
             // No default: fall through to the end (patched below
             // alongside explicit `break`s).
-            self.emit_op(Op::Jmp);
-            self.emit_val(0);
+            self.emit_jmp(0);
             self.record_break_jmp(self.text.len() - 1);
         }
 
@@ -3383,8 +3385,7 @@ impl Compiler {
             self.stmt()?;
             self.patch_loop_continues(cond_pc);
 
-            self.emit_op(Op::Jmp);
-            self.emit_val(cond_pc as i64);
+            self.emit_jmp(cond_pc as i64);
 
             self.text[bz_pc] = self.text.len() as i64;
             let end_pc = self.text.len();
@@ -3512,8 +3513,7 @@ impl Compiler {
                     // call site's `Lea result_temp` after the
                     // call so the assignment has a stable
                     // address to copy from.
-                    self.emit_op(Op::Lea);
-                    self.emit_val(2);
+                    self.emit_lea(2);
                     self.emit_op(Op::Li);
                     self.emit_op(Op::Psh);
                     self.expr(Token::Assign as i64)?;
@@ -4110,14 +4110,12 @@ impl Compiler {
                             self.max_loc_offs = self.loc_offs;
                         }
                         // dst = &local
-                        self.emit_op(Op::Lea);
-                        self.emit_val(local_val);
+                        self.emit_lea(local_val);
                         self.emit_op(Op::Psh);
                         // src = *param_slot (the passed address;
                         // val from the param-base-aware
                         // numbering above)
-                        self.emit_op(Op::Lea);
-                        self.emit_val(param_val);
+                        self.emit_lea(param_val);
                         self.emit_op(Op::Li);
                         // Mcpy size
                         self.emit_op(Op::Mcpy);

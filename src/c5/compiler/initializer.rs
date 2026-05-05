@@ -504,8 +504,7 @@ impl Compiler {
         if total_bytes == 0 {
             return;
         }
-        self.emit_op(Op::Lea);
-        self.emit_val(local_val);
+        self.emit_lea(local_val);
         self.emit_op(Op::Psh);
         self.emit_data_imm(src_data_addr as i64);
         self.emit_op(Op::Mcpy);
@@ -521,8 +520,7 @@ impl Compiler {
         local_val: i64,
         ty: i64,
     ) -> Result<(), C5Error> {
-        self.emit_op(Op::Lea);
-        self.emit_val(local_val);
+        self.emit_lea(local_val);
         self.emit_op(Op::Psh);
         self.expr(Token::Assign as i64)?;
         if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {

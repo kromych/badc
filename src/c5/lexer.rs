@@ -138,6 +138,20 @@ impl Lexer {
         p < self.src.len() && self.src[p] == b
     }
 
+    /// True if the next non-whitespace byte is the start of an
+    /// identifier (alpha or `_`). Used by the parse_declarator
+    /// nested-paren disambiguator to recognise the redundant-
+    /// paren shape `(name[N])` -- the inner declarator is a
+    /// regular identifier rather than `*name` or `(*...)`.
+    pub fn peek_after_whitespace_starts_ident(&self) -> bool {
+        let mut p = self.pos;
+        while p < self.src.len() && self.src[p].is_ascii_whitespace() {
+            p += 1;
+        }
+        p < self.src.len()
+            && (self.src[p].is_ascii_alphabetic() || self.src[p] == b'_')
+    }
+
     /// Advance to the next token. Identifiers are interned into `symbols`
     /// (with `index` kept in sync); string literals are appended to `data`
     /// and `ival` is set to their start address.

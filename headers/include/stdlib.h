@@ -40,6 +40,15 @@
 #pragma binding(libc::bsearch, "_bsearch")
 #pragma binding(libc::rand,    "_rand")
 #pragma binding(libc::srand,   "_srand")
+#pragma binding(libc::atexit,  "_atexit")
+#pragma binding(libc::strtoul, "_strtoul")
+#pragma binding(libc::mkstemp, "_mkstemp")
+#pragma binding(libc::mkdtemp, "_mkdtemp")
+#pragma binding(libc::mktemp,  "_mktemp")
+#pragma binding(libc::div,     "_div")
+#pragma binding(libc::ldiv,    "_ldiv")
+#pragma binding(libc::random,  "_random")
+#pragma binding(libc::srandom, "_srandom")
 #endif
 
 #ifdef __linux__
@@ -64,6 +73,15 @@
 #pragma binding(libc::bsearch, "bsearch")
 #pragma binding(libc::rand,    "rand")
 #pragma binding(libc::srand,   "srand")
+#pragma binding(libc::atexit,  "atexit")
+#pragma binding(libc::strtoul, "strtoul")
+#pragma binding(libc::mkstemp, "mkstemp")
+#pragma binding(libc::mkdtemp, "mkdtemp")
+#pragma binding(libc::mktemp,  "mktemp")
+#pragma binding(libc::div,     "div")
+#pragma binding(libc::ldiv,    "ldiv")
+#pragma binding(libc::random,  "random")
+#pragma binding(libc::srandom, "srandom")
 #endif
 
 #ifdef _WIN32
@@ -114,3 +132,10 @@ int qsort(char *base, int n, int size, int *cmp);
 char *bsearch(char *key, char *base, int n, int size, int *cmp);
 int rand();
 int srand(int seed);
+int atexit(int *handler);
+int strtoul(char *s, char **endp, int base);
+int mkstemp(char *templ);
+char *mkdtemp(char *templ);
+char *mktemp(char *templ);
+int random();
+int srandom(int seed);

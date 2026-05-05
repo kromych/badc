@@ -19,6 +19,14 @@
 #define SEEK_CUR 1
 #define SEEK_END 2
 
+// setvbuf modes -- non-buffered, line-buffered, fully-buffered.
+// macOS / Linux / Win32 all happen to use the same numeric
+// values for these (2/1/0 respectively), so a single set works
+// regardless of target.
+#define _IONBF 2
+#define _IOLBF 1
+#define _IOFBF 0
+
 #ifndef FILENAME_MAX
 #define FILENAME_MAX 4096
 #endif
@@ -37,6 +45,27 @@
 #ifndef PATH_MAX
 #define PATH_MAX     4096
 #endif
+
+// Opaque-buffer typedef for libc's `FILE`. Different libcs use
+// wildly different layouts; programs only ever pass `FILE *`
+// through bound libc routines, so the buffer just needs to
+// reserve enough storage.
+struct __c5_FILE { char __opaque[256]; };
+typedef struct __c5_FILE FILE;
+
+// Standard streams. These are real libc globals; on every
+// platform the loader lays them down in libc's data section
+// (or returns a function-pointer indirection for them).
+// `&stdout` / `&stderr` would give us a pointer to a c5-side
+// shadow that's *not* the libc pointer. The cleanest fix is a
+// per-platform GOT trampoline (M*); until that lands the
+// Sys-class binding emits 0 with a warning at the use site
+// and the runtime needs to use `fdopen(...)` instead. The
+// declarations below let portable code typecheck in the
+// meantime.
+extern FILE *stdin;
+extern FILE *stdout;
+extern FILE *stderr;
 
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")

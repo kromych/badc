@@ -231,24 +231,6 @@ impl Preprocessor {
             Target::MacOSAarch64 => {
                 macros.insert("__APPLE__".to_string(), "1".to_string());
                 macros.insert("__MACH__".to_string(), "1".to_string());
-                // sqlite3 amalgamation has a `defined(__APPLE__) &&
-                // !defined(SQLITE_WITHOUT_ZONEMALLOC)` block that
-                // pulls in `<malloc/malloc.h>` and the
-                // `malloc_zone_malloc` family. c5 doesn't yet bind
-                // those Mach symbols, so opt out of the zone path
-                // by default; users who want it can `#undef
-                // SQLITE_WITHOUT_ZONEMALLOC` before including the
-                // amalgamation.
-                macros.insert("SQLITE_WITHOUT_ZONEMALLOC".to_string(), "1".to_string());
-                // Apple-specific locking-style (`fsctl(F_FULLFSYNC)`,
-                // `_IOWR`, AFP / proxy file locking) lives in the
-                // sqlite amalgamation behind
-                // `SQLITE_ENABLE_LOCKING_STYLE`. The macros it
-                // expands rely on `<sys/disk.h>` shapes c5 doesn't
-                // model. Default to off; if a downstream user
-                // really wants it they can `#undef` and bring the
-                // bindings themselves.
-                macros.insert("SQLITE_ENABLE_LOCKING_STYLE".to_string(), "0".to_string());
             }
             Target::LinuxAarch64 | Target::LinuxX64 => {
                 macros.insert("__linux__".to_string(), "1".to_string());
@@ -268,6 +250,27 @@ impl Preprocessor {
             pragma_once_files: BTreeSet::new(),
             include_stack: Vec::new(),
         }
+    }
+
+    /// Predefine an object-like macro from the build driver --
+    /// the CLI's `-D NAME` / `-D NAME=VALUE` plumbs through here.
+    /// The empty body resolves to `1`, matching cpp's convention.
+    /// Late definitions in source still win, so a `-D X=0`
+    /// followed by `#define X 1` in source ends up with `X = 1`.
+    pub fn define(&mut self, name: &str, body: &str) {
+        let body = if body.is_empty() { "1" } else { body };
+        self.macros.insert(name.to_string(), body.to_string());
+    }
+
+    /// Drop a predefine -- the CLI's `-U NAME` plumbs here. Removes
+    /// from both the object-like and function-like tables so a
+    /// header that conditionally re-defines the same name on a
+    /// different shape gets a clean slate. Object-like and fn-like
+    /// macros never coexist in `cpp` (a `#define X` shadows a prior
+    /// `#define X(a)` and vice versa); this mirrors that.
+    pub fn undef(&mut self, name: &str) {
+        self.macros.remove(name);
+        self.fn_macros.remove(name);
     }
 
     /// Run the preprocessor over `source` and return the substituted

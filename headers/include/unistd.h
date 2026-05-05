@@ -60,6 +60,11 @@
 #pragma binding(libc::getenv,    "_getenv")
 #pragma binding(libc::setenv,    "_setenv")
 #pragma binding(libc::unsetenv,  "_unsetenv")
+#pragma binding(libc::realpath,  "_realpath")
+#pragma binding(libc::fchdir,    "_fchdir")
+#pragma binding(libc::getopt,    "_getopt")
+#pragma binding(libc::sync,      "_sync")
+#pragma binding(libc::confstr,   "_confstr")
 #endif
 
 #ifdef __linux__
@@ -111,6 +116,11 @@
 #pragma binding(libc::getenv,    "getenv")
 #pragma binding(libc::setenv,    "setenv")
 #pragma binding(libc::unsetenv,  "unsetenv")
+#pragma binding(libc::realpath,  "realpath")
+#pragma binding(libc::fchdir,    "fchdir")
+#pragma binding(libc::getopt,    "getopt")
+#pragma binding(libc::sync,      "sync")
+#pragma binding(libc::confstr,   "confstr")
 #endif
 
 #ifdef _WIN32
@@ -173,11 +183,42 @@ int nanosleep(char *req, char *rem);
 char *getenv(char *name);
 int setenv(char *name, char *value, int overwrite);
 int unsetenv(char *name);
+char *realpath(char *path, char *resolved);
+int fchdir(int fd);
+int getopt(int argc, char **argv, char *opts);
+int sync();
+int confstr(int name, char *buf, int len);
 
 #define LOCK_SH 1
 #define LOCK_EX 2
 #define LOCK_UN 8
 #define LOCK_NB 4
+
+// getrusage(2) selectors and the per-process resource shape.
+#define RUSAGE_SELF      0
+#define RUSAGE_CHILDREN -1
+#define RUSAGE_THREAD    1
+
+struct __c5_timeval { int tv_sec; int tv_usec; };
+struct rusage {
+    struct __c5_timeval ru_utime;
+    struct __c5_timeval ru_stime;
+    int ru_maxrss;
+    int ru_ixrss;
+    int ru_idrss;
+    int ru_isrss;
+    int ru_minflt;
+    int ru_majflt;
+    int ru_nswap;
+    int ru_inblock;
+    int ru_oublock;
+    int ru_msgsnd;
+    int ru_msgrcv;
+    int ru_nsignals;
+    int ru_nvcsw;
+    int ru_nivcsw;
+    char __pad[64];
+};
 
 // sysconf(3) selectors. Names match POSIX; the underlying value
 // is platform-specific but the bound libc reads it directly.

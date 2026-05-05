@@ -399,6 +399,21 @@ impl Compiler {
     /// off them so the right libc / libSystem / msvcrt symbols get
     /// bound for this target.
     pub fn with_target(source: String, target: Target) -> Self {
+        Self::with_options(source, target, &[], &[])
+    }
+
+    /// Construct a compiler with explicit `-D` / `-U` predefines
+    /// from the CLI driver. Each `defines` entry is a
+    /// `(name, body)` pair installed before the source runs through
+    /// the preprocessor; `undefines` lists names to remove from
+    /// the predefines table. Source-level `#define` / `#undef`
+    /// still win the last-writer fight in the normal way.
+    pub fn with_options(
+        source: String,
+        target: Target,
+        defines: &[(String, String)],
+        undefines: &[String],
+    ) -> Self {
         // Run the preprocessor first so we know the
         // `#pragma binding(...)` set before seeding the symbol
         // table. The bindings come from whichever standard headers
@@ -414,6 +429,12 @@ impl Compiler {
         // infallible so the `Compiler::new(src).compile()` shape
         // every existing caller uses keeps working.
         let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
+        for (name, body) in defines {
+            pp.define(name, body);
+        }
+        for name in undefines {
+            pp.undef(name);
+        }
         let (preprocessed, deferred_error) = match pp.process(&source) {
             Ok(s) => (s, None),
             Err(e) => (String::new(), Some(e)),
@@ -765,7 +786,8 @@ impl Compiler {
         // pointer-cum-declarator, `(` starts a nested parens group.
         if self.lex.tk == '(' as i64
             && (self.lex.peek_after_whitespace(b'*')
-                || self.lex.peek_after_whitespace(b'('))
+                || self.lex.peek_after_whitespace(b'(')
+                || self.lex.peek_after_whitespace_starts_ident())
         {
             self.next()?; // consume the outer `(`
             let (idx, mut inner_ty, inner_array_size) =
@@ -2019,25 +2041,18 @@ impl Compiler {
             self.ty = Ty::Ptr as i64;
         } else if self.lex.tk == Token::Sizeof as i64 {
             self.next()?;
-            if self.lex.tk == '(' as i64 {
+            // C99 §6.5.3.4: sizeof has two forms.
+            //   sizeof(<type>) -- parens required, parses a type name.
+            //   sizeof <unary-expr> -- parens optional, parses an expr.
+            // We disambiguate by peeking past `(` for a type-start
+            // token; everything else falls through to the
+            // unary-expression path. Either form is compile-time;
+            // emitted bytecode for the operand is discarded.
+            let had_paren = self.lex.tk == '(' as i64;
+            if had_paren {
                 self.next()?;
-            } else {
-                return Err(C5Error::Compile(format!(
-                    "{}: open paren expected in sizeof",
-                    self.lex.line
-                )));
             }
-            // sizeof(...) -- compile-time. Three shapes:
-            //   * sizeof(<type>): explicit type name, no bytecode.
-            //   * sizeof(<array-id>): the array's full byte count,
-            //     not the pointer-decayed result of evaluating the
-            //     name. Without this lookahead `sizeof(arr)` would
-            //     report 8 (pointer size) instead of N*elem_size.
-            //   * sizeof(<expr>): parse the expression to learn the
-            //     type, then drop whatever bytecode it emitted.
-            //     sizeof is compile-time -- the operand is never
-            //     evaluated.
-            let total_bytes: i64 = if self.lex_is_type_start() {
+            let total_bytes: i64 = if had_paren && self.lex_is_type_start() {
                 self.ty = self.parse_decl_base_type()?;
                 while self.lex.tk == Token::MulOp as i64 {
                     self.next()?;
@@ -2047,7 +2062,8 @@ impl Compiler {
                     }
                 }
                 self.size_of_type(self.ty) as i64
-            } else if self.lex.tk == Token::Id as i64
+            } else if had_paren
+                && self.lex.tk == Token::Id as i64
                 && self.lex.peek_after_whitespace(b')')
                 && self.symbols[self.lex.curr_id_idx].array_size > 0
             {
@@ -2056,19 +2072,36 @@ impl Compiler {
                 self.next()?;
                 self.ty = elem_ty + Ty::Ptr as i64;
                 arr_size * self.size_of_type(elem_ty) as i64
+            } else if !had_paren
+                && self.lex.tk == Token::Id as i64
+                && self.symbols[self.lex.curr_id_idx].array_size > 0
+            {
+                // `sizeof xs` (no parens) on a 1D array variable.
+                let arr_size = self.symbols[self.lex.curr_id_idx].array_size;
+                let elem_ty = self.symbols[self.lex.curr_id_idx].type_;
+                self.next()?;
+                self.ty = elem_ty + Ty::Ptr as i64;
+                arr_size * self.size_of_type(elem_ty) as i64
             } else {
                 let saved_text_len = self.text.len();
-                self.expr(Token::Assign as i64)?;
+                let lev = if had_paren {
+                    Token::Assign as i64
+                } else {
+                    Token::Inc as i64
+                };
+                self.expr(lev)?;
                 self.text.truncate(saved_text_len);
                 self.size_of_type(self.ty) as i64
             };
-            if self.lex.tk == ')' as i64 {
-                self.next()?;
-            } else {
-                return Err(C5Error::Compile(format!(
-                    "{}: close paren expected in sizeof",
-                    self.lex.line
-                )));
+            if had_paren {
+                if self.lex.tk == ')' as i64 {
+                    self.next()?;
+                } else {
+                    return Err(C5Error::Compile(format!(
+                        "{}: close paren expected in sizeof",
+                        self.lex.line
+                    )));
+                }
             }
             self.emit_op(Op::Imm);
             self.emit_val(total_bytes);
@@ -4592,20 +4625,11 @@ impl Compiler {
             self.next()?;
             if self.lex.tk == Token::Assign as i64 {
                 self.next()?;
-                let neg = if self.lex.tk == Token::SubOp as i64 {
-                    self.next()?;
-                    true
-                } else {
-                    false
-                };
-                if self.lex.tk != Token::Num as i64 {
-                    return Err(C5Error::Compile(format!(
-                        "{}: bad enum initializer",
-                        self.lex.line
-                    )));
-                }
-                i = if neg { -self.lex.ival } else { self.lex.ival };
-                self.next()?;
+                // Constant expression -- handles literals, unary
+                // signs, parens, casts, shifts (`1 << 8`), and
+                // identifiers bound to prior `Token::Num` enum
+                // entries / `#define`d constants.
+                i = self.parse_const_expr_or()?;
             }
             self.symbols[idx].class = Token::Num as i64;
             self.symbols[idx].type_ = Ty::Int as i64;
@@ -5408,7 +5432,7 @@ impl Compiler {
             return Ok(());
         }
         // String literal in a `char *p` global initializer.
-        if self.lex.tk == '"' as i64 && var_ty > Ty::Ptr as i64 {
+        if self.lex.tk == '"' as i64 && is_pointer_ty(var_ty) {
             if is_thread_local {
                 return Err(C5Error::Compile(format!(
                     "{line}: string-literal initializer for `_Thread_local` not supported"

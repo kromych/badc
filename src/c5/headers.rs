@@ -42,6 +42,7 @@ pub(super) fn embedded_header(name: &str) -> Option<&'static str> {
 pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("stddef.h", include_str!("../../headers/include/stddef.h")),
     ("stdint.h", include_str!("../../headers/include/stdint.h")),
+    ("limits.h", include_str!("../../headers/include/limits.h")),
     ("string.h", include_str!("../../headers/include/string.h")),
     ("stdio.h", include_str!("../../headers/include/stdio.h")),
     ("stdlib.h", include_str!("../../headers/include/stdlib.h")),
@@ -52,6 +53,8 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("assert.h", include_str!("../../headers/include/assert.h")),
     ("time.h", include_str!("../../headers/include/time.h")),
     ("c5io.h", include_str!("../../headers/include/c5io.h")),
+    ("dirent.h", include_str!("../../headers/include/dirent.h")),
+    ("pwd.h", include_str!("../../headers/include/pwd.h")),
     ("unistd.h", include_str!("../../headers/include/unistd.h")),
     ("fcntl.h", include_str!("../../headers/include/fcntl.h")),
     (

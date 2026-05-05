@@ -30,6 +30,11 @@ Compile knobs:
   -o <path>                Output path. Default depends on output
                            mode and target (.exe / .dylib / .so /
                            .dll suffixes added as appropriate).
+  -D NAME[=VALUE]          Predefine an object-like macro (`-D X`
+                           is equivalent to `-D X=1`). Source-level
+                           `#define` / `#undef` still apply on top.
+  -U NAME                  Drop a predefine before the source
+                           runs, including any default predefine.
 
 VM-only knobs (require --interp):
   --track-pointers         Allocation tracking + use-after-free guard.
@@ -92,6 +97,8 @@ fn main() {
     let mut optimize_flag = false;
     let mut output_path: Option<PathBuf> = None;
     let mut target_spec: Option<String> = None;
+    let mut defines: Vec<(String, String)> = Vec::new();
+    let mut undefines: Vec<String> = Vec::new();
 
     let mut iter = raw.into_iter();
     let prog0 = iter.next().unwrap_or_default();
@@ -129,6 +136,33 @@ fn main() {
                     std::process::exit(1);
                 }
             },
+            "-D" => match iter.next() {
+                Some(s) => match s.split_once('=') {
+                    Some((name, body)) => defines.push((name.to_string(), body.to_string())),
+                    None => defines.push((s, String::from("1"))),
+                },
+                None => {
+                    eprintln!("badc: -D requires NAME[=VALUE]");
+                    std::process::exit(1);
+                }
+            },
+            s if s.starts_with("-D") && s.len() > 2 => {
+                let body = &s[2..];
+                match body.split_once('=') {
+                    Some((name, body)) => defines.push((name.to_string(), body.to_string())),
+                    None => defines.push((body.to_string(), String::from("1"))),
+                }
+            }
+            "-U" => match iter.next() {
+                Some(s) => undefines.push(s),
+                None => {
+                    eprintln!("badc: -U requires a NAME");
+                    std::process::exit(1);
+                }
+            },
+            s if s.starts_with("-U") && s.len() > 2 => {
+                undefines.push(s[2..].to_string());
+            }
             s if s.starts_with("--target=") => {
                 target_spec = Some(s["--target=".len()..].to_string());
             }
@@ -181,11 +215,11 @@ fn main() {
     let mut contents = String::new();
     std::io::Read::read_to_string(&mut file, &mut contents).expect("Could not read file");
 
-    // Thread the user's `--target` choice into the compiler so the
-    // preprocessor pulls in `headers/badc-{target}.h` rather than the
-    // default. The bytecode itself is target-independent; only the
-    // auto-prepended header and the resolved import map vary.
-    let program = match Compiler::with_target(contents, target).compile() {
+    // Thread the user's `--target` choice plus any `-D` / `-U`
+    // predefines into the compiler. The bytecode itself is target-
+    // independent; only the resolved binding map and the
+    // preprocessor predefines vary.
+    let program = match Compiler::with_options(contents, target, &defines, &undefines).compile() {
         Ok(p) => p,
         Err(e) => {
             eprintln!("{}", e);

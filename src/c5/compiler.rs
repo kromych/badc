@@ -383,6 +383,16 @@ pub struct Compiler {
     /// stride. Zero means "use the regular stride."
     pending_index_stride: i64,
 
+    /// Set whenever the most recent `expr()` step ended with an
+    /// array-decay-to-pointer (a bare array variable, or a
+    /// struct field whose declared shape is `T xs[N]`). Carries
+    /// the array's element count so `sizeof(<expr>)` can return
+    /// `array_size * sizeof(elem)` instead of the decayed
+    /// pointer's `sizeof(T*) = 8`. Cleared at the top of every
+    /// `expr()` call so a previous decay doesn't leak into an
+    /// unrelated sizeof.
+    last_array_decay_size: i64,
+
     /// Per-bytecode-PC source line, parallel to `text`. Updated
     /// on every emit_op / emit_val / emit_data_imm so each
     /// emitted word carries the line number of the C statement
@@ -542,6 +552,7 @@ impl Compiler {
             current_function_name: String::new(),
             fn_call_fixups: Vec::new(),
             code_reloc_sym_idx: Vec::new(),
+            last_array_decay_size: 0,
         }
     }
 
@@ -1321,12 +1332,25 @@ impl Compiler {
                 let saved_text_len = self.text.len();
                 let saved_ty = self.ty;
                 let saved_data_imm_positions = self.data_imm_positions.len();
+                self.last_array_decay_size = 0;
                 self.expr(Token::Assign as i64)?;
                 let expr_ty = self.ty;
+                let array_count = self.last_array_decay_size;
                 self.text.truncate(saved_text_len);
                 self.data_imm_positions.truncate(saved_data_imm_positions);
                 self.ty = saved_ty;
-                self.size_of_type(expr_ty) as i64
+                self.last_array_decay_size = 0;
+                if array_count > 0 {
+                    // Recover the array's real size: the expr
+                    // ended in an array-decay-to-pointer (bare
+                    // array variable or `s.field` for a
+                    // `T field[N]`), so `expr_ty` is `T*` but
+                    // `sizeof(<expr>)` should be `N * sizeof(T)`.
+                    let elem_ty = expr_ty - Ty::Ptr as i64;
+                    array_count * self.size_of_type(elem_ty) as i64
+                } else {
+                    self.size_of_type(expr_ty) as i64
+                }
             };
             if had_paren && self.lex.tk == ')' as i64 {
                 self.next()?;
@@ -2209,10 +2233,19 @@ impl Compiler {
                 } else {
                     Token::Inc as i64
                 };
+                self.last_array_decay_size = 0;
                 self.expr(lev)?;
+                let array_count = self.last_array_decay_size;
+                let expr_ty = self.ty;
                 self.text.truncate(saved_text_len);
                 self.data_imm_positions.truncate(saved_data_imm_positions);
-                self.size_of_type(self.ty) as i64
+                self.last_array_decay_size = 0;
+                if array_count > 0 {
+                    let elem_ty = expr_ty - Ty::Ptr as i64;
+                    array_count * self.size_of_type(elem_ty) as i64
+                } else {
+                    self.size_of_type(expr_ty) as i64
+                }
             };
             if had_paren {
                 if self.lex.tk == ')' as i64 {
@@ -2586,6 +2619,11 @@ impl Compiler {
                 // value type to look up offsets.
                 if is_array_var {
                     self.ty += Ty::Ptr as i64;
+                    // Stash the array's element count so a
+                    // surrounding `sizeof(<arr>)` can compute
+                    // `count * sizeof(elem)` instead of the
+                    // decayed pointer's `sizeof(T*) = 8`.
+                    self.last_array_decay_size = self.symbols[id_idx].array_size;
                     // 2D-array decay: stash the row stride so the
                     // next `[i]` postfix scales by the inner
                     // dimension instead of the element size. The
@@ -2842,6 +2880,12 @@ impl Compiler {
 
         while self.lex.tk >= lev || self.lex.tk == '(' as i64 {
             t = self.ty;
+            // The array-decay flag tracks the *trailing* decay so
+            // `sizeof(arr)` recovers the real array size. Once
+            // any further postfix / binop runs, the value is
+            // consumed -- clear the flag so the decay doesn't
+            // leak into a sizeof of an unrelated subexpression.
+            self.last_array_decay_size = 0;
             if self.lex.tk == '(' as i64 {
                 // Postfix indirect call: the expression so far put a
                 // function-pointer value in `a`. Examples:
@@ -3448,6 +3492,12 @@ impl Compiler {
                         is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
                     if field.array_size > 0 {
                         self.ty += Ty::Ptr as i64;
+                        // Stash the array's element count so an
+                        // enclosing sizeof can recover the real
+                        // size; otherwise `sizeof(s.field)` for a
+                        // `T field[N]` returns 8 (decayed pointer)
+                        // instead of `N * sizeof(T)`.
+                        self.last_array_decay_size = field.array_size;
                     } else if !field_is_struct_value {
                         self.emit_op(load_op_for(self.ty));
                     }

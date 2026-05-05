@@ -1180,6 +1180,7 @@ pub(super) fn lower(
     // displacement to it.
     let mut tls_index_fixups: Vec<super::TlsIndexFixup> = Vec::new();
     let data_imm_positions: &[usize] = &program.data_imm_positions;
+    let code_imm_positions: &[usize] = &program.code_imm_positions;
 
     let mut in_main = false;
     let mut pc = 0usize;
@@ -1226,6 +1227,7 @@ pub(super) fn lower(
             &mut pending_func_fixups,
             &mut tls_index_fixups,
             data_imm_positions,
+            code_imm_positions,
             in_main,
             abi,
             &mut reg_state,
@@ -1389,6 +1391,7 @@ fn lower_op(
     pending_func_fixups: &mut Vec<(usize, usize)>,
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     data_imm_positions: &[usize],
+    code_imm_positions: &[usize],
     in_main: bool,
     abi: Abi,
     reg_state: &mut RegState<'_>,
@@ -1439,9 +1442,21 @@ fn lower_op(
                     data_offset: v as u64,
                 });
                 emit_lea_r_rip32(code, Reg::R13, 0);
-            } else if (v as usize) >= CODE_BASE && ((v as usize) - CODE_BASE) < text.len() {
-                // Function-pointer literal. Resolve the target
-                // bytecode PC to a native offset post-walk.
+            } else if code_imm_positions.binary_search(&operand_pc).is_ok() {
+                // Function-pointer literal. Compiler tagged this
+                // operand_pc explicitly -- see aarch64 for why we
+                // can't safely infer from the value alone.
+                let target_bc_pc = (v as usize) - CODE_BASE;
+                let instr_offset = code.len();
+                pending_func_fixups.push((instr_offset, target_bc_pc));
+                emit_lea_r_rip32(code, Reg::R13, 0);
+            } else if code_imm_positions.is_empty()
+                && (v as usize) >= CODE_BASE
+                && ((v as usize) - CODE_BASE) < text.len()
+            {
+                // Fallback heuristic for the optimized (-O) path
+                // which doesn't carry per-Imm provenance through
+                // its peephole passes.
                 let target_bc_pc = (v as usize) - CODE_BASE;
                 let instr_offset = code.len();
                 pending_func_fixups.push((instr_offset, target_bc_pc));

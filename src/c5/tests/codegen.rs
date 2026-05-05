@@ -1,10 +1,15 @@
 //! Codegen tests: compile a fixture and inspect `program.text` byte-for-byte.
+//!
+//! These tests assert exact instruction sequences, so they bypass the
+//! standard `TEST_PRELUDE`. `<stdio.h>` carries a lazy-stream resolver
+//! helper (see `headers/include/stdio.h`) -- pulling it in would prepend
+//! that helper's bytecode to every program and shift every PC offset.
 
-use super::{Op, compile_fixture};
+use super::{Op, compile_fixture_bare};
 
 #[test]
 fn simple_return() {
-    let program = compile_fixture("ir_translation_simple.c");
+    let program = compile_fixture_bare("ir_translation_simple.c");
     let expected = vec![
         Op::Ent as i64,
         0,
@@ -18,7 +23,7 @@ fn simple_return() {
 
 #[test]
 fn if_else() {
-    let program = compile_fixture("ir_translation_if.c");
+    let program = compile_fixture_bare("ir_translation_if.c");
     let bz_target = 11;
     let jmp_target = 14;
     let expected = vec![
@@ -43,7 +48,7 @@ fn if_else() {
 
 #[test]
 fn while_loop() {
-    let program = compile_fixture("ir_translation_while.c");
+    let program = compile_fixture_bare("ir_translation_while.c");
     let bz_target = 11;
     let jmp_target = 2;
     let expected = vec![
@@ -67,7 +72,7 @@ fn while_loop() {
 fn entry_pc_points_at_main() {
     // `main` is the first (and only) function in this fixture, so its
     // bytecode starts at PC 0.
-    let program = compile_fixture("ir_translation_simple.c");
+    let program = compile_fixture_bare("ir_translation_simple.c");
     assert_eq!(program.entry_pc, 0);
 }
 

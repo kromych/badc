@@ -983,6 +983,7 @@ pub(super) fn lower(
     // is fine -- this list grows linearly with the number of distinct
     // string-literal / global references in the program).
     let data_imm_positions: &[usize] = &program.data_imm_positions;
+    let code_imm_positions: &[usize] = &program.code_imm_positions;
 
     // Track which function we're currently inside so the prologue
     // and epilogue agree on whether to push/pop the argc/argv pair.
@@ -1038,6 +1039,7 @@ pub(super) fn lower(
             &mut macho_tlv_fixups,
             &mut macho_tlv_descriptors,
             data_imm_positions,
+            code_imm_positions,
             in_main,
             abi,
             &mut reg_state,
@@ -1227,6 +1229,7 @@ fn lower_op(
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
     data_imm_positions: &[usize],
+    code_imm_positions: &[usize],
     in_main: bool,
     abi: Abi,
     reg_state: &mut RegState<'_>,
@@ -1281,9 +1284,27 @@ fn lower_op(
                     data_offset: v as u64,
                 });
                 emit_adrp_add_placeholder(code);
-            } else if (v as usize) >= CODE_BASE && ((v as usize) - CODE_BASE) < text.len() {
-                // Function-pointer literal. Resolve after the walk so
-                // we can map the bytecode PC to a native offset.
+            } else if code_imm_positions.binary_search(&operand_pc).is_ok() {
+                // Function-pointer literal. The compiler tagged this
+                // operand_pc explicitly so we don't have to infer
+                // from the value's range -- a user constant in
+                // [CODE_BASE, CODE_BASE + text.len()) would otherwise
+                // be misclassified as a func ptr (e.g. 0x20000000
+                // == CODE_BASE).
+                let target_bc_pc = (v as usize) - CODE_BASE;
+                let adrp_offset = code.len();
+                pending_func_fixups.push((adrp_offset, target_bc_pc));
+                emit_adrp_add_placeholder(code);
+            } else if code_imm_positions.is_empty()
+                && (v as usize) >= CODE_BASE
+                && ((v as usize) - CODE_BASE) < text.len()
+            {
+                // Fallback heuristic for the optimized (-O) path,
+                // which doesn't carry per-Imm provenance through
+                // its peephole passes. This is the original c5
+                // disambiguation rule and is correct for any
+                // program whose constants stay below CODE_BASE
+                // (= 0x20000000).
                 let target_bc_pc = (v as usize) - CODE_BASE;
                 let adrp_offset = code.len();
                 pending_func_fixups.push((adrp_offset, target_bc_pc));

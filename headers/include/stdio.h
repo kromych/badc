@@ -53,20 +53,21 @@
 struct __c5_FILE { char __opaque[256]; };
 typedef struct __c5_FILE FILE;
 
-// Standard streams. These are real libc globals; on every
-// platform the loader lays them down in libc's data section
-// (or returns a function-pointer indirection for them).
-// `&stdout` / `&stderr` would give us a pointer to a c5-side
-// shadow that's *not* the libc pointer. The cleanest fix is a
-// per-platform GOT trampoline (M*); until that lands the
-// Sys-class binding emits 0 with a warning at the use site
-// and the runtime needs to use `fdopen(...)` instead. The
-// declarations below let portable code typecheck in the
-// meantime.
-extern FILE *stdin;
-extern FILE *stdout;
-extern FILE *stderr;
-
+// Standard streams. These are real libc globals exported by the
+// platform's C runtime. c5 has no GOT-style data-symbol
+// trampoline, so reading `extern FILE *stdout;` directly would
+// give us an uninitialised c5-side shadow. Instead we resolve
+// each stream lazily via `dlsym` on first use -- the helper
+// below caches the result so repeated reads stay cheap. The
+// macros wrap the lookup so user code can keep writing
+// `printf` / `fprintf(stderr, ...)` / `setvbuf(stdout, ...)`
+// without any extra ceremony.
+//
+// `&stdout` / `&stderr` won't typecheck through this path; the
+// few standard-library users that need an addressable lvalue
+// (none seen in sqlite3.c, shell.c, or the test fixtures) will
+// have to fall back to `fdopen(...)`.
+//
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::printf,    "_printf")
@@ -99,6 +100,7 @@ extern FILE *stderr;
 #pragma binding(libc::setvbuf,   "_setvbuf")
 #pragma binding(libc::remove,    "_remove")
 #pragma binding(libc::rename,    "_rename")
+#pragma binding(libc::dlsym,     "_dlsym")
 #endif
 
 #ifdef __linux__
@@ -133,6 +135,8 @@ extern FILE *stderr;
 #pragma binding(libc::setvbuf,   "setvbuf")
 #pragma binding(libc::remove,    "remove")
 #pragma binding(libc::rename,    "rename")
+#pragma dylib(libdl_for_stdio, "libdl.so.2")
+#pragma binding(libdl_for_stdio::dlsym, "dlsym")
 #endif
 
 #ifdef _WIN32
@@ -204,3 +208,60 @@ int clearerr(int *stream);
 int setvbuf(int *stream, char *buf, int mode, int size);
 int remove(char *path);
 int rename(char *old_path, char *new_path);
+char *dlsym(char *handle, char *name);
+
+// Lazy resolver for `stdin` / `stdout` / `stderr`. Index
+// 0 = stdin, 1 = stdout, 2 = stderr.
+//
+// macOS exports `___stdinp` / `___stdoutp` / `___stderrp` --
+// each is a `FILE *` (one indirection through the libc data
+// section). dlsym hands back the address of those slots, so we
+// dereference once to get the FILE* the caller actually wants.
+// Note: dlsym strips one leading underscore, so pass the
+// standard C name with two underscores -- not three even
+// though `nm /usr/lib/libSystem.B.dylib` shows `___stdoutp`.
+// macOS's RTLD_DEFAULT is `(void*)-2`, not `NULL` -- pass that
+// in as the handle so dyld uses its fast cross-image search
+// instead of the NULL-handle slow path that misses libc.
+//
+// Linux's symbols are spelled `stdin` / `stdout` / `stderr`
+// without underscores; same shape otherwise.  RTLD_DEFAULT is
+// the conventional NULL there.
+//
+// Windows msvcrt has `__iob_func()` returning an array of FILE
+// structs -- left as a TODO for the Windows port.
+//
+// `&stdout` / `&stderr` won't typecheck through the macros
+// below; the few standard-library users that need an
+// addressable lvalue (none seen in sqlite3.c, shell.c, or the
+// test fixtures) will have to fall back to `fdopen(...)`.
+// Lazy resolver. char* return (rather than FILE*) keeps c5's
+// type system from tangling on a struct-pointer return value
+// inside a header. The macros below cast to `FILE *` at the
+// call site; users' code reads `stdout` as `FILE *` exactly
+// as on every other platform.
+static char *__c5_lazy_stream(int idx) {
+    static char *__c5_stream_cache[3];
+    if (__c5_stream_cache[idx]) return __c5_stream_cache[idx];
+#ifdef __APPLE__
+    char *names[3];
+    names[0] = "__stdinp";
+    names[1] = "__stdoutp";
+    names[2] = "__stderrp";
+    char **slot = (char **)dlsym((char *)-2, names[idx]);
+    if (slot) __c5_stream_cache[idx] = *slot;
+#endif
+#ifdef __linux__
+    char *names[3];
+    names[0] = "stdin";
+    names[1] = "stdout";
+    names[2] = "stderr";
+    char **slot = (char **)dlsym((char *)0, names[idx]);
+    if (slot) __c5_stream_cache[idx] = *slot;
+#endif
+    return __c5_stream_cache[idx];
+}
+
+#define stdin   ((FILE *)__c5_lazy_stream(0))
+#define stdout  ((FILE *)__c5_lazy_stream(1))
+#define stderr  ((FILE *)__c5_lazy_stream(2))

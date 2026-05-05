@@ -156,6 +156,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         entry_pc,
         warnings,
         data_imm_positions,
+        code_imm_positions: _,
         tls_data,
         tls_init_size,
         call_fp_arg_masks,
@@ -236,6 +237,15 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         entry_pc,
         warnings,
         data_imm_positions,
+        // The optimizer doesn't track per-Imm provenance through
+        // its peephole passes (it would need to remap operand
+        // PCs across every transformation). Leave this empty;
+        // -O code uses the value-range heuristic in codegen,
+        // which works correctly for any program whose constants
+        // don't fall in [CODE_BASE, CODE_BASE + text.len()).
+        // The non-O path uses the precise list from the
+        // compiler.
+        code_imm_positions: Vec::new(),
         tls_data,
         tls_init_size,
         call_fp_arg_masks,
@@ -919,6 +929,7 @@ mod tests {
             entry_pc: 0,
             warnings: Vec::new(),
             data_imm_positions: Vec::new(),
+            code_imm_positions: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,
             call_fp_arg_masks: Vec::new(),
@@ -1192,6 +1203,7 @@ mod tests {
             entry_pc: 0,
             warnings: Vec::new(),
             data_imm_positions: Vec::new(),
+            code_imm_positions: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,
             call_fp_arg_masks: Vec::new(),

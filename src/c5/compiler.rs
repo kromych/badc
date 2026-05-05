@@ -125,6 +125,7 @@ fn fp_result_ty(lhs: i64, rhs: i64) -> i64 {
 fn is_decl_modifier(tk: i64) -> bool {
     tk == Token::TypeQual as i64
         || tk == Token::IntMod as i64
+        || tk == Token::Signed as i64
         || tk == Token::FuncSpec as i64
 }
 
@@ -287,6 +288,14 @@ pub struct Compiler {
     /// just an integer literal. The VM doesn't care; this rides along
     /// in `Program` for the native codegen to consume.
     data_imm_positions: Vec<usize>,
+    /// Mirror of [`Self::data_imm_positions`] for function-
+    /// pointer literals. Each entry is the bc index of an
+    /// `Op::Imm` operand whose value is (CODE_BASE + bc_pc).
+    /// Recorded explicitly so the codegen can disambiguate
+    /// without a value-range heuristic that would misclassify
+    /// any user integer constant in the [CODE_BASE, CODE_BASE +
+    /// text.len()) range.
+    code_imm_positions: Vec<usize>,
 
     /// Thread-local data segment. Same shape as `data` but the
     /// codegen lowers accesses with the per-target TLS sequence
@@ -538,6 +547,7 @@ impl Compiler {
             structs: Vec::new(),
             warnings: Vec::new(),
             data_imm_positions: Vec::new(),
+            code_imm_positions: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,
             data_relocs: Vec::new(),
@@ -1564,9 +1574,16 @@ impl Compiler {
         // We track whether we saw an int modifier so a bare `unsigned x;`
         // (no `int` keyword following) still produces an `int` type, the
         // C implicit-int rule for these collapsed-to-int modifiers.
+        // `signed` is remembered separately so a `signed char` base
+        // gets promoted to int (the values are negative and need to
+        // load sign-extended, which a char-typed slot can't do).
         let mut saw_int_mod = false;
+        let mut saw_signed = false;
         while is_decl_modifier(self.lex.tk) {
             if self.lex.tk == Token::IntMod as i64 {
+                saw_int_mod = true;
+            } else if self.lex.tk == Token::Signed as i64 {
+                saw_signed = true;
                 saw_int_mod = true;
             }
             self.next()?;
@@ -1577,7 +1594,14 @@ impl Compiler {
             Ty::Int as i64
         } else if self.lex.tk == Token::Char as i64 {
             self.next()?;
-            Ty::Char as i64
+            // `signed char` -> int. A bare `char` (or `unsigned char`)
+            // stays a 1-byte slot; `signed char` would otherwise lose
+            // the negative half of its range when loaded.
+            if saw_signed {
+                Ty::Int as i64
+            } else {
+                Ty::Char as i64
+            }
         } else if self.lex.tk == Token::Float as i64 {
             self.next()?;
             Ty::Float as i64
@@ -1723,8 +1747,12 @@ impl Compiler {
             // modifier appeared so a bare `unsigned x;` field still
             // produces an `int` field.
             let mut saw_int_mod = false;
+            let mut saw_signed = false;
             while is_decl_modifier(self.lex.tk) {
                 if self.lex.tk == Token::IntMod as i64 {
+                    saw_int_mod = true;
+                } else if self.lex.tk == Token::Signed as i64 {
+                    saw_signed = true;
                     saw_int_mod = true;
                 }
                 self.next()?;
@@ -1734,7 +1762,14 @@ impl Compiler {
                 Ty::Int as i64
             } else if self.lex.tk == Token::Char as i64 {
                 self.next()?;
-                Ty::Char as i64
+                // Mirror parse_decl_base_type: `signed char` field
+                // gets promoted to int so negative byte values load
+                // sign-extended. Plain / unsigned char stays 1 byte.
+                if saw_signed {
+                    Ty::Int as i64
+                } else {
+                    Ty::Char as i64
+                }
             } else if self.lex.tk == Token::Float as i64 {
                 self.next()?;
                 Ty::Float as i64
@@ -2095,6 +2130,7 @@ impl Compiler {
             entry_pc,
             warnings: self.warnings,
             data_imm_positions: self.data_imm_positions,
+            code_imm_positions: self.code_imm_positions,
             tls_data: self.tls_data,
             tls_init_size: self.tls_init_size,
             call_fp_arg_masks: self.call_fp_arg_masks,
@@ -2142,6 +2178,18 @@ impl Compiler {
         self.emit_op(Op::Imm);
         self.data_imm_positions.push(self.text.len());
         self.emit_val(data_offset);
+    }
+
+    /// Pad `self.data` with zero bytes so the next allocation lands on
+    /// an 8-byte boundary. c5 treats every non-char type as i64-aligned
+    /// (short / int / pointers / structs all 8-byte), so a global array
+    /// of i64s placed after a char array (or any odd-length blob) would
+    /// otherwise start unaligned and `ldr x19, [x19]` would fault on
+    /// macOS arm64.
+    fn align_data_to_8(&mut self) {
+        while self.data.len() % 8 != 0 {
+            self.data.push(0);
+        }
     }
 
     // ---- Recursive descent ----
@@ -2562,6 +2610,12 @@ impl Compiler {
                 self.emit_op(Op::Imm);
                 let operand_pc = self.text.len();
                 self.fn_call_fixups.push((operand_pc, id_idx));
+                // Record the operand_pc so the native codegen knows
+                // this Imm carries (CODE_BASE + bc_pc) -- otherwise
+                // a user constant that happens to land in the
+                // [CODE_BASE, CODE_BASE + text.len()) range would be
+                // misclassified as a function-pointer literal.
+                self.code_imm_positions.push(operand_pc);
                 self.emit_val(CODE_BASE as i64 + self.symbols[id_idx].val);
                 // Type as `int*` rather than `char*`: matches the
                 // conventional `int *fp = some_function;` idiom and
@@ -2954,24 +3008,8 @@ impl Compiler {
             } else if self.lex.tk == Token::Assign as i64 {
                 self.next()?;
                 let last = *self.text.last().unwrap();
-                if last == Op::Lc as i64 || last == Op::Li as i64 {
-                    // Scalar / pointer assignment: rewrite the
-                    // trailing load into a push so the address is
-                    // preserved on the stack while the RHS evaluates.
-                    *self.text.last_mut().unwrap() = Op::Psh as i64;
-                    let line = self.lex.line;
-                    self.expr(Token::Assign as i64)?;
-                    let rhs_is_zero = self.last_emit_is_zero();
-                    if let Some(reason) = Self::type_warning(t, self.ty, rhs_is_zero) {
-                        self.warn(format!(
-                            "{line}: warning: {reason} in assignment \
-                             (lhs={t}, rhs={})",
-                            self.ty
-                        ));
-                    }
-                    self.ty = t;
-                    self.emit_op(store_op_for(self.ty));
-                } else if is_struct_ty(t) && struct_ptr_depth(t) == 0 {
+                let lhs_is_struct_value = is_struct_ty(t) && struct_ptr_depth(t) == 0;
+                if lhs_is_struct_value {
                     // Struct-to-struct copy. The LHS already left
                     // its address in `a`; push it so the RHS can
                     // produce the source address into `a`. Then
@@ -2980,6 +3018,15 @@ impl Compiler {
                     // dst, accumulator as src, and copies `size`
                     // bytes. Returns dst in `a` to mirror libc
                     // memcpy.
+                    //
+                    // This branch must run *before* the scalar Li/Lc
+                    // rewrite below: for `*pItem = struct_rvalue`
+                    // where pItem is a struct pointer, the deref
+                    // elides the trailing struct-value load but
+                    // leaves the pointer-load Li in place, so
+                    // `last == Op::Li` would otherwise misroute us
+                    // into the scalar path and rewrite the wrong Li
+                    // into a Psh.
                     self.emit_op(Op::Psh);
                     self.expr(Token::Assign as i64)?;
                     if !is_struct_ty(self.ty) || struct_ptr_depth(self.ty) != 0 {
@@ -2999,6 +3046,23 @@ impl Compiler {
                     self.emit_op(Op::Mcpy);
                     self.emit_val(size as i64);
                     self.ty = t;
+                } else if last == Op::Lc as i64 || last == Op::Li as i64 {
+                    // Scalar / pointer assignment: rewrite the
+                    // trailing load into a push so the address is
+                    // preserved on the stack while the RHS evaluates.
+                    *self.text.last_mut().unwrap() = Op::Psh as i64;
+                    let line = self.lex.line;
+                    self.expr(Token::Assign as i64)?;
+                    let rhs_is_zero = self.last_emit_is_zero();
+                    if let Some(reason) = Self::type_warning(t, self.ty, rhs_is_zero) {
+                        self.warn(format!(
+                            "{line}: warning: {reason} in assignment \
+                             (lhs={t}, rhs={})",
+                            self.ty
+                        ));
+                    }
+                    self.ty = t;
+                    self.emit_op(store_op_for(self.ty));
                 } else {
                     return Err(C5Error::Compile(format!(
                         "{}: bad lvalue in assignment",
@@ -4235,6 +4299,9 @@ impl Compiler {
         };
         self.symbols[loc_idx].array_size = array_size.max(0);
         if array_size != -1 {
+            if self.size_of_type(ty) > 1 {
+                self.align_data_to_8();
+            }
             let off = self.data.len() as i64;
             self.symbols[loc_idx].val = off;
             for _ in 0..bytes {
@@ -4261,6 +4328,7 @@ impl Compiler {
                     }
                     let count = self.lex.count_top_level_groups_in_array() as i64;
                     self.next()?;
+                    self.align_data_to_8();
                     let off = self.data.len() as i64;
                     self.symbols[loc_idx].val = off;
                     for _ in 0..(count * elem_size as i64) {
@@ -4295,6 +4363,9 @@ impl Compiler {
                 self.symbols[loc_idx].array_size = final_size;
                 let total_bytes = (self.size_of_type(ty) as i64) * final_size;
                 let aligned = ((total_bytes + 7) / 8) * 8;
+                if self.size_of_type(ty) > 1 {
+                    self.align_data_to_8();
+                }
                 let off = self.data.len() as i64;
                 self.symbols[loc_idx].val = off;
                 for _ in 0..aligned {
@@ -5042,12 +5113,16 @@ impl Compiler {
             // the per-thread storage flag.
             let mut thread_local = false;
             let mut is_typedef = false;
+            let mut saw_signed = false;
             loop {
                 if self.lex.tk == Token::ThreadLocal as i64 {
                     thread_local = true;
                     self.next()?;
                 } else if self.lex.tk == Token::Typedef as i64 {
                     is_typedef = true;
+                    self.next()?;
+                } else if self.lex.tk == Token::Signed as i64 {
+                    saw_signed = true;
                     self.next()?;
                 } else if self.lex.tk == Token::Extern as i64
                     || self.lex.tk == Token::Static as i64
@@ -5063,7 +5138,10 @@ impl Compiler {
                 bt = Ty::Int as i64;
             } else if self.lex.tk == Token::Char as i64 {
                 self.next()?;
-                bt = Ty::Char as i64;
+                // `signed char` -> int (see parse_decl_base_type for
+                // the same promotion). Plain / unsigned char stays
+                // a 1-byte slot.
+                bt = if saw_signed { Ty::Int as i64 } else { Ty::Char as i64 };
             } else if self.lex.tk == Token::Float as i64 {
                 self.next()?;
                 bt = Ty::Float as i64;
@@ -5454,6 +5532,7 @@ impl Compiler {
                             }
                             let count = self.lex.count_top_level_groups_in_array() as i64;
                             self.next()?;
+                            self.align_data_to_8();
                             let off = self.data.len() as i64;
                             self.symbols[id_idx].val = off;
                             for _ in 0..(count * elem_size as i64) {
@@ -5505,6 +5584,9 @@ impl Compiler {
                         // declaration would have had no `[]` either
                         // (deferred size cannot be a re-decl), so
                         // always allocate fresh storage here.
+                        if self.size_of_type(ty) > 1 {
+                            self.align_data_to_8();
+                        }
                         let off = self.data.len() as i64;
                         self.symbols[id_idx].val = off;
                         for _ in 0..aligned {
@@ -5536,6 +5618,9 @@ impl Compiler {
                             }
                             off
                         } else {
+                            if self.size_of_type(ty) > 1 {
+                                self.align_data_to_8();
+                            }
                             let off = self.data.len() as i64;
                             self.symbols[id_idx].val = off;
                             for _ in 0..bytes {

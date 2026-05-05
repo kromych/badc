@@ -143,17 +143,28 @@ pub(crate) enum Token {
     /// and have no semantic effect. Recognizing them at the
     /// lexer level lets unmodified C headers tokenize.
     TypeQual,
-    /// Integer-type modifier (`signed`, `unsigned`, `short`,
-    /// `long`, `_Bool`). c5 has a single 64-bit integer
-    /// representation, so all of these collapse onto plain
-    /// `int`. The token is consumed before, around, or
-    /// instead of the base-type token; if a declaration is
-    /// `unsigned x;` (no `int`), the parser still emits an
-    /// `int` declaration. `long long int` and `int long`
-    /// equally parse to `int`. Severity-aware programs that
-    /// rely on 32-bit overflow semantics will diverge -- see
-    /// c99-gaps.md M31 for the eventual real-width plan.
+    /// Integer-type modifier (`unsigned`, `short`, `long`,
+    /// `_Bool`). c5 has a single 64-bit integer representation,
+    /// so most of these collapse onto plain `int`. The token is
+    /// consumed before, around, or instead of the base-type
+    /// token; if a declaration is `unsigned x;` (no `int`), the
+    /// parser still emits an `int` declaration. `long long int`
+    /// and `int long` equally parse to `int`. Severity-aware
+    /// programs that rely on 32-bit overflow semantics will
+    /// diverge -- see c99-gaps.md M31 for the eventual real-
+    /// width plan.
     IntMod,
+    /// `signed` modifier -- separated from the rest of [`IntMod`]
+    /// because c5 needs to know specifically when `signed` was
+    /// applied to a `char` base. A bare `char` collapses to a
+    /// 1-byte unsigned slot, but `signed char` is a real signed
+    /// 8-bit type the C standard guarantees holds -128..127, and
+    /// LEMON-generated tables in sqlite use it for negative rule
+    /// sizes. We promote `signed char` to `int` so the values
+    /// load sign-extended; otherwise yyRuleInfoNRhs[i] = -1 reads
+    /// as 255 and the parser stack indexing goes off into wild
+    /// memory.
+    Signed,
     /// Function specifier (`inline`, `register`, `auto`).
     /// Consumed as a no-op anywhere a storage class may
     /// appear. `auto` is the C default, `register` is a

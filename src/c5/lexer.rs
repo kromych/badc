@@ -773,8 +773,10 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("restrict", Token::TypeQual),
     ("__restrict", Token::TypeQual),
     ("__restrict__", Token::TypeQual),
-    // Integer-type modifiers -- collapse into c5's single 64-bit int.
-    ("signed", Token::IntMod),
+    // Integer-type modifiers. `signed` is split off because it
+    // changes the meaning of a `char` base (signed-char arrays
+    // hold negative values that must load sign-extended).
+    ("signed", Token::Signed),
     ("unsigned", Token::IntMod),
     ("short", Token::IntMod),
     ("long", Token::IntMod),

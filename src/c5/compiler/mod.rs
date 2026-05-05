@@ -1365,6 +1365,59 @@ impl Compiler {
         }
     }
 
+    /// Open a fresh `break` + `continue` scope for a `while` /
+    /// `for` / `do-while` body. Both stacks are pushed; the caller
+    /// finishes with [`patch_loop_continues`] (to land continues
+    /// at the loop's step / cond-check PC) and [`patch_loop_breaks`]
+    /// (to land breaks just past the loop), in that order.
+    fn enter_loop(&mut self) {
+        self.loop_breaks.push(Vec::new());
+        self.loop_continues.push(Vec::new());
+    }
+
+    /// Open a `break`-only scope for a `switch` body. C disallows
+    /// `continue` inside a switch, so only `loop_breaks` gets a
+    /// new stack frame; the caller finishes with
+    /// [`patch_loop_breaks`] alone.
+    fn enter_switch(&mut self) {
+        self.loop_breaks.push(Vec::new());
+    }
+
+    /// Patch every `Jmp` operand recorded by the innermost loop's
+    /// `continue` statements to land at `target_pc`, then drop the
+    /// scope. Must be called before [`patch_loop_breaks`] so the
+    /// stack discipline stays balanced.
+    fn patch_loop_continues(&mut self, target_pc: usize) {
+        for pc in self.loop_continues.pop().unwrap() {
+            self.text[pc] = target_pc as i64;
+        }
+    }
+
+    /// Patch every `Jmp` operand recorded by the innermost loop's
+    /// or switch's `break` statements to land at `target_pc`, then
+    /// drop the scope.
+    fn patch_loop_breaks(&mut self, target_pc: usize) {
+        for pc in self.loop_breaks.pop().unwrap() {
+            self.text[pc] = target_pc as i64;
+        }
+    }
+
+    /// Record the operand-PC of a `Jmp` emitted for an explicit
+    /// `break` statement; the enclosing loop / switch's exit
+    /// patcher backfills the target. Caller has already verified
+    /// the loop_breaks stack is non-empty.
+    fn record_break_jmp(&mut self, jmp_operand_pc: usize) {
+        self.loop_breaks.last_mut().unwrap().push(jmp_operand_pc);
+    }
+
+    /// Record the operand-PC of a `Jmp` emitted for an explicit
+    /// `continue` statement; the enclosing loop's continue
+    /// patcher backfills the target. Caller has already verified
+    /// the loop_continues stack is non-empty.
+    fn record_continue_jmp(&mut self, jmp_operand_pc: usize) {
+        self.loop_continues.last_mut().unwrap().push(jmp_operand_pc);
+    }
+
     // ---- Recursive descent ----
 
     fn expr(&mut self, lev: i64) -> Result<(), C5Error> {
@@ -2782,21 +2835,16 @@ impl Compiler {
 
         // Body -- patched to start at the current PC.
         self.text[body_jmp_pc] = self.text.len() as i64;
-        self.loop_breaks.push(Vec::new());
-        self.loop_continues.push(Vec::new());
+        self.enter_loop();
         self.stmt()?;
 
-        for pc in self.loop_continues.pop().unwrap() {
-            self.text[pc] = step_pc as i64;
-        }
+        self.patch_loop_continues(step_pc);
         self.emit_op(Op::Jmp);
         self.emit_val(step_pc as i64);
 
         self.text[end_jmp_pc] = self.text.len() as i64;
         let end_pc = self.text.len();
-        for pc in self.loop_breaks.pop().unwrap() {
-            self.text[pc] = end_pc as i64;
-        }
+        self.patch_loop_breaks(end_pc);
         Ok(())
     }
 
@@ -2828,7 +2876,7 @@ impl Compiler {
 
         self.switch_cases.push(Vec::new());
         self.switch_defaults.push(None);
-        self.loop_breaks.push(Vec::new());
+        self.enter_switch();
 
         self.stmt()?;
 
@@ -2858,21 +2906,16 @@ impl Compiler {
             self.emit_op(Op::Jmp);
             self.emit_val(dpc as i64);
         } else {
-            // No default: fall through to the end (patched below alongside
-            // explicit `break`s).
+            // No default: fall through to the end (patched below
+            // alongside explicit `break`s).
             self.emit_op(Op::Jmp);
             self.emit_val(0);
-            self.loop_breaks
-                .last_mut()
-                .unwrap()
-                .push(self.text.len() - 1);
+            self.record_break_jmp(self.text.len() - 1);
         }
 
         self.text[end_switch_patch] = self.text.len() as i64;
         let end_pc = self.text.len();
-        for pc in self.loop_breaks.pop().unwrap() {
-            self.text[pc] = end_pc as i64;
-        }
+        self.patch_loop_breaks(end_pc);
         Ok(())
     }
 
@@ -3352,30 +3395,21 @@ impl Compiler {
             let bz_pc = self.text.len();
             self.emit_val(0);
 
-            self.loop_breaks.push(Vec::new());
-            self.loop_continues.push(Vec::new());
-
+            self.enter_loop();
             self.stmt()?;
-
-            for pc in self.loop_continues.pop().unwrap() {
-                self.text[pc] = cond_pc as i64;
-            }
+            self.patch_loop_continues(cond_pc);
 
             self.emit_op(Op::Jmp);
             self.emit_val(cond_pc as i64);
 
             self.text[bz_pc] = self.text.len() as i64;
             let end_pc = self.text.len();
-            for pc in self.loop_breaks.pop().unwrap() {
-                self.text[pc] = end_pc as i64;
-            }
+            self.patch_loop_breaks(end_pc);
         } else if self.lex.tk == Token::Do as i64 {
             self.next()?;
             let start_pc = self.text.len();
 
-            self.loop_breaks.push(Vec::new());
-            self.loop_continues.push(Vec::new());
-
+            self.enter_loop();
             self.stmt()?;
 
             if self.lex.tk == Token::While as i64 {
@@ -3388,9 +3422,7 @@ impl Compiler {
             }
 
             let cond_pc = self.text.len();
-            for pc in self.loop_continues.pop().unwrap() {
-                self.text[pc] = cond_pc as i64;
-            }
+            self.patch_loop_continues(cond_pc);
 
             self.consume(b'(', "open paren expected")?;
             self.expr(Token::Assign as i64)?;
@@ -3402,9 +3434,7 @@ impl Compiler {
             self.consume(b';', "semicolon expected after do-while")?;
 
             let end_pc = self.text.len();
-            for pc in self.loop_breaks.pop().unwrap() {
-                self.text[pc] = end_pc as i64;
-            }
+            self.patch_loop_breaks(end_pc);
         } else if self.lex.tk == Token::For as i64 {
             self.parse_for_stmt()?;
         } else if self.lex.tk == Token::Switch as i64 {
@@ -3468,7 +3498,7 @@ impl Compiler {
             self.emit_op(Op::Jmp);
             let pc = self.text.len();
             self.emit_val(0);
-            self.loop_breaks.last_mut().unwrap().push(pc);
+            self.record_break_jmp(pc);
             self.consume(b';', "semicolon expected after break")?;
         } else if self.lex.tk == Token::Continue as i64 {
             self.next()?;
@@ -3481,7 +3511,7 @@ impl Compiler {
             self.emit_op(Op::Jmp);
             let pc = self.text.len();
             self.emit_val(0);
-            self.loop_continues.last_mut().unwrap().push(pc);
+            self.record_continue_jmp(pc);
             self.consume(b';', "semicolon expected after continue")?;
         } else if self.lex.tk == Token::Return as i64 {
             self.next()?;

@@ -57,6 +57,25 @@ fn is_double_ty(ty: i64) -> bool {
     (base..base + FP_BAND_SIZE).contains(&ty)
 }
 
+/// `ty` is a `long` (or pointer to one). Long lives in its own
+/// 100-wide band starting at `Ty::Long`; the same +2-per-`*`
+/// scheme as the integer family applies inside the band, so
+/// `long*` = 302, `long**` = 304, etc.
+fn is_long_ty(ty: i64) -> bool {
+    let base = Ty::Long as i64;
+    (base..base + FP_BAND_SIZE).contains(&ty)
+}
+
+/// Pointer depth within the long band. Returns 0 for a scalar
+/// `long`, 1 for `long*`, 2 for `long**`, etc.
+fn long_ptr_depth(ty: i64) -> i64 {
+    if is_long_ty(ty) {
+        (ty - Ty::Long as i64) / Ty::Ptr as i64
+    } else {
+        0
+    }
+}
+
 /// `ty` is a value of any floating-point type (or pointer to one).
 fn is_floating_ty(ty: i64) -> bool {
     is_float_ty(ty) || is_double_ty(ty)
@@ -79,26 +98,41 @@ fn fp_ptr_depth(ty: i64) -> i64 {
 
 /// True if `ty` represents a pointer (any base type, any depth).
 /// Used everywhere the integer-family `>= Ty::Ptr` test was the
-/// quick proxy for "is a pointer"; the bands for floats and structs
-/// have their own depth predicates that this helper unifies.
+/// quick proxy for "is a pointer"; the bands for floats, longs,
+/// and structs have their own depth predicates that this helper
+/// unifies.
 fn is_pointer_ty(ty: i64) -> bool {
     if is_struct_ty(ty) {
         struct_ptr_depth(ty) > 0
     } else if is_floating_ty(ty) {
         fp_ptr_depth(ty) > 0
+    } else if is_long_ty(ty) {
+        long_ptr_depth(ty) > 0
     } else {
         ty >= Ty::Ptr as i64
     }
 }
 
 /// Element size in bytes of a pointee for the given pointer type
-/// (without struct-table awareness). Used for non-struct pointer
-/// types where size is fixed: `char*` derefs a single byte;
-/// everything else (`int*`, `float*`, deeper pointers) is 8-byte.
+/// (without struct-table awareness).
+///   * `char*` -> 1 byte (the original c4 case)
+///   * one-level `int*` -> 4 bytes (M31: `int` is 32-bit)
+///   * one-level `long*` -> 8 bytes
+///   * deeper pointers (`int**`, `long**`, etc.) -> 8 bytes
+///     (because the pointee is itself a pointer)
+///   * `float*` / `double*` -> 8 (c5 keeps FP at 8 bytes; the
+///     IEEE 754 single-precision narrowing is future work)
 /// Pointer-to-struct goes through [`Compiler::pointee_size`]
 /// instead so the scale picks up the struct's real size.
 fn pointee_size_no_struct(ty: i64) -> i64 {
-    if ty == Ty::Ptr as i64 { 1 } else { 8 }
+    if ty == Ty::Ptr as i64 {
+        1
+    } else if ty == (Ty::Int as i64) + (Ty::Ptr as i64) {
+        // Bare `int*` -- pointee is a 4-byte int.
+        4
+    } else {
+        8
+    }
 }
 
 /// Result type for a binary FP operation. Both operands are
@@ -118,14 +152,17 @@ fn fp_result_ty(lhs: i64, rhs: i64) -> i64 {
 /// True for any token that may be freely consumed at a declaration
 /// prefix as a no-op: type qualifiers (`const`/`volatile`/`restrict`),
 /// integer-type modifiers (`signed`/`unsigned`/`short`/`long`/`_Bool`),
-/// and function specifiers (`inline`/`register`/`auto`). c5 has no
-/// const-correctness, no narrower integers, and no inline expansion,
-/// so all three classes are recognised solely so unmodified C code
-/// tokenizes -- they have no semantic effect.
+/// and function specifiers (`inline`/`register`/`auto`). The
+/// `signed` and `long` modifiers carry semantic weight in c5
+/// (`signed` affects `char`'s signedness; `long` selects the 64-bit
+/// `Ty::Long` storage class under M31), but at the *modifier-loop*
+/// level they're still consumed by `parse_decl_base_type` -- they
+/// drive flag bits rather than producing a separate token stream.
 fn is_decl_modifier(tk: i64) -> bool {
     tk == Token::TypeQual as i64
         || tk == Token::IntMod as i64
         || tk == Token::Signed as i64
+        || tk == Token::Long as i64
         || tk == Token::FuncSpec as i64
 }
 
@@ -147,32 +184,76 @@ fn is_type_start_token(tk: i64) -> bool {
         || is_decl_modifier(tk)
 }
 
-/// Pick the right load op for the given `ty`. `char`-typed lvalues take
-/// `Op::Lc` (one-byte load); anything else (`int`, pointers, struct
-/// pointers) goes through `Op::Li` (eight-byte load).
+/// Pick the right load op for the given `ty`.
+///   * `Ty::Char`           -> `Op::Lc`  (1-byte zero-extending)
+///   * `Ty::Int` (scalar)   -> `Op::Lw`  (4-byte sign-extending; M31)
+///   * everything else      -> `Op::Li`  (8-byte word load)
+/// Pointers (any base type) go through `Op::Li` because every
+/// pointer is 8 bytes regardless of its pointee width.
 fn load_op_for(ty: i64) -> Op {
     if ty == Ty::Char as i64 {
         Op::Lc
+    } else if ty == Ty::Int as i64 {
+        Op::Lw
     } else {
         Op::Li
     }
 }
 
-/// Mirror of [`load_op_for`] for stores: `Sc` for `char`, `Si` otherwise.
+/// Mirror of [`load_op_for`] for stores.
+///   * `Ty::Char`           -> `Op::Sc`  (1-byte)
+///   * `Ty::Int` (scalar)   -> `Op::Sw`  (4-byte; M31)
+///   * everything else      -> `Op::Si`  (8-byte)
 fn store_op_for(ty: i64) -> Op {
     if ty == Ty::Char as i64 {
         Op::Sc
+    } else if ty == Ty::Int as i64 {
+        Op::Sw
     } else {
         Op::Si
+    }
+}
+
+/// True if `op_val` (the trailing word in `self.text`) is a scalar
+/// memory-load op -- one of `Op::Lc` / `Op::Lw` / `Op::Li`. The
+/// parser uses this in every "rewrite the trailing load into a Psh
+/// so the address survives" path: assignments, compound
+/// assignments, pre/post-inc/dec, address-of, etc. M31 added
+/// `Op::Lw` to the set; without this helper each site had its own
+/// `last == Op::Lc || last == Op::Li` predicate that silently
+/// excluded the new 4-byte load.
+fn is_scalar_load_op_val(op_val: i64) -> bool {
+    op_val == Op::Lc as i64 || op_val == Op::Lw as i64 || op_val == Op::Li as i64
+}
+
+/// Re-emit the same scalar load op that produced `op_val`. Caller
+/// has just rewritten the trailing slot to `Op::Psh` and now needs
+/// to load the same width again so the address-then-value pattern
+/// the increment / compound-assignment lowering expects falls out.
+fn reemit_scalar_load(op_val: i64) -> Op {
+    if op_val == Op::Lc as i64 {
+        Op::Lc
+    } else if op_val == Op::Lw as i64 {
+        Op::Lw
+    } else {
+        Op::Li
     }
 }
 
 #[derive(Debug, Clone)]
 struct StructDef {
     name: String,
-    /// Total size in bytes -- sum of field sizes, padded to 8 for
-    /// a struct, or `max(field size)` rounded up to 8 for a union.
+    /// Total size in bytes -- sum of field sizes (each placed at
+    /// its natural alignment) for structs, `max(field size)` for
+    /// unions, padded up to the struct's own alignment. Always at
+    /// least 8 (c5 has no zero-sized aggregates).
     size: usize,
+    /// Alignment of the aggregate in bytes -- the max alignment of
+    /// any field, capped at 8 (the rest of c5's IR -- locals,
+    /// stack pushes, GOT entries -- is 8-byte slotted, so
+    /// over-aligning a struct above 8 buys nothing). `0` until
+    /// `parse_aggregate_body` finishes.
+    align: usize,
     fields: Vec<StructField>,
     /// `true` for `union` definitions. The only effect on layout
     /// is that every field sits at offset 0 and the aggregate
@@ -742,6 +823,7 @@ impl Compiler {
         self.structs.push(StructDef {
             name: name.to_string(),
             size: 0,
+            align: 1,
             fields: Vec::new(),
             is_union: false,
         });
@@ -767,9 +849,15 @@ impl Compiler {
             && self.symbols[self.lex.curr_id_idx].class == Token::Typedef as i64
     }
 
-    /// Size in bytes of a value of the given `ty`. Pointers are always 8;
-    /// `char` is 1; `int` (and any other primitive that isn't a `char`) is
-    /// 8; struct values use the size recorded in the struct table.
+    /// Size in bytes of a value of the given `ty`.
+    ///   * pointers (any base type)  -> 8
+    ///   * scalar `char`             -> 1
+    ///   * scalar `int`              -> 4 (M31: `int` is 32-bit)
+    ///   * scalar `long`             -> 8
+    ///   * scalar `float` / `double` -> 8 (c5 stores every FP value
+    ///     through an 8-byte slot; the IEEE 754 single-precision
+    ///     narrowing is a future milestone, separate from M31)
+    ///   * struct values             -> recorded in the struct table
     fn size_of_type(&self, ty: i64) -> usize {
         if is_struct_ty(ty) {
             if struct_ptr_depth(ty) > 0 {
@@ -779,6 +867,35 @@ impl Compiler {
             }
         } else if ty == Ty::Char as i64 {
             1
+        } else if ty == Ty::Int as i64 {
+            4
+        } else {
+            // `long`, `float`, `double`, all pointers (long*, int*,
+            // char*, float*, ...) -- 8 bytes each.
+            8
+        }
+    }
+
+    /// Natural alignment (in bytes) for a value of the given `ty`.
+    /// Mirrors the C alignment rule: the value lives on a boundary
+    /// equal to its size for scalars (`char` = 1, `int` = 4,
+    /// `long` / pointer = 8). Struct values inherit the max
+    /// alignment of their fields, but c5 currently caps struct
+    /// alignment at 8 to match the rest of the IR's slot model.
+    fn align_of_type(&self, ty: i64) -> usize {
+        if is_struct_ty(ty) {
+            if struct_ptr_depth(ty) > 0 {
+                8
+            } else {
+                // Struct alignment = max field alignment, capped at 8.
+                // Computed eagerly during layout so we don't have to
+                // walk every nested struct on each call.
+                self.structs[struct_id_of(ty)].align.max(1)
+            }
+        } else if ty == Ty::Char as i64 {
+            1
+        } else if ty == Ty::Int as i64 {
+            4
         } else {
             8
         }
@@ -1570,20 +1687,28 @@ impl Compiler {
     }
 
     fn parse_decl_base_type(&mut self) -> Result<i64, C5Error> {
-        // Leading qualifiers / modifiers / specifiers -- all no-ops in c5.
-        // We track whether we saw an int modifier so a bare `unsigned x;`
-        // (no `int` keyword following) still produces an `int` type, the
-        // C implicit-int rule for these collapsed-to-int modifiers.
-        // `signed` is remembered separately so a `signed char` base
-        // gets promoted to int (the values are negative and need to
-        // load sign-extended, which a char-typed slot can't do).
+        // Leading qualifiers / modifiers / specifiers. Most are
+        // no-ops in c5; three carry semantic weight:
+        //   * `IntMod` (unsigned/short/_Bool): trips the implicit-
+        //     int rule so a bare `unsigned x;` still produces a
+        //     declaration of type `int`.
+        //   * `Signed`: a `signed char` base is promoted to `int`
+        //     (the negative range can't survive an Lc zero-extend).
+        //   * `Long`: under M31, `long` selects the 64-bit `Ty::Long`
+        //     storage class. `long long` enters the loop twice but
+        //     the resulting type is still `Ty::Long` (c5 has no
+        //     128-bit type).
         let mut saw_int_mod = false;
         let mut saw_signed = false;
+        let mut saw_long = false;
         while is_decl_modifier(self.lex.tk) {
             if self.lex.tk == Token::IntMod as i64 {
                 saw_int_mod = true;
             } else if self.lex.tk == Token::Signed as i64 {
                 saw_signed = true;
+                saw_int_mod = true;
+            } else if self.lex.tk == Token::Long as i64 {
+                saw_long = true;
                 saw_int_mod = true;
             }
             self.next()?;
@@ -1591,7 +1716,13 @@ impl Compiler {
 
         let bt = if self.lex.tk == Token::Int as i64 {
             self.next()?;
-            Ty::Int as i64
+            // `long int` / `long long int` -> Ty::Long; bare `int`
+            // -> Ty::Int (4 bytes after M31).
+            if saw_long {
+                Ty::Long as i64
+            } else {
+                Ty::Int as i64
+            }
         } else if self.lex.tk == Token::Char as i64 {
             self.next()?;
             // `signed char` -> int. A bare `char` (or `unsigned char`)
@@ -1607,6 +1738,9 @@ impl Compiler {
             Ty::Float as i64
         } else if self.lex.tk == Token::Double as i64 {
             self.next()?;
+            // `long double` is only as wide as `double` here -- c5
+            // has no 80- or 128-bit FP type. The trailing-modifier
+            // loop already silently consumes any extra `long`.
             Ty::Double as i64
         } else if self.lex.tk == Token::Enum as i64 {
             // `enum [Tag] [{ ... }]` -- in c5 every enum collapses
@@ -1663,7 +1797,13 @@ impl Compiler {
         } else if saw_int_mod {
             // Bare `unsigned x;` / `long x;` / `_Bool x;` -- the C
             // implicit-int rule applies for int-modifier-only decls.
-            Ty::Int as i64
+            // A bare `long x;` (no `int` keyword) also lands here
+            // and selects the 64-bit `Ty::Long`.
+            if saw_long {
+                Ty::Long as i64
+            } else {
+                Ty::Int as i64
+            }
         } else {
             return Err(C5Error::Compile(format!(
                 "{}: type expected",
@@ -1721,6 +1861,7 @@ impl Compiler {
                 self.structs.push(StructDef {
                     name: name.to_string(),
                     size: 0,
+                    align: 1,
                     fields: Vec::new(),
                     is_union,
                 });
@@ -1731,6 +1872,11 @@ impl Compiler {
         self.next()?; // consume `{`
 
         let mut offset = 0usize;
+        // Running max field alignment for the aggregate. Each
+        // non-bitfield field bumps this if its natural alignment
+        // exceeds the running max. The final struct alignment is
+        // capped at 8 because the rest of c5's IR slots at 8.
+        let mut struct_align: usize = 1;
         // Bit-packing state for contiguous bitfields. When
         // `bf_active` is true, `bf_storage_offset` is the byte
         // offset of the current 8-byte storage unit and
@@ -1945,27 +2091,34 @@ impl Compiler {
                     // aligned for a new field.
                     bf_active = false;
 
-                    // Layout: struct fields advance the cursor, all
-                    // 8-byte aligned. Union fields all live at offset 0;
-                    // we just track the per-field storage to update the
-                    // running max at end-of-loop.
+                    // Layout: struct fields advance the cursor at
+                    // their natural alignment (M31). `int` fields
+                    // pack 4 bytes; `long` / pointer fields use 8;
+                    // `char` packs at 1; struct fields inherit
+                    // their nested alignment. Union fields all sit
+                    // at offset 0 and contribute their size to the
+                    // running max.
                     let elem_size = self.size_of_type(field_ty);
                     let field_storage = if field_array_size > 0 {
                         elem_size * field_array_size as usize
                     } else {
                         elem_size
                     };
-                    let aligned_size = (field_storage + 7) & !7;
+                    let field_align = self.align_of_type(field_ty);
+                    if field_align > struct_align {
+                        struct_align = field_align;
+                    }
                     field_offset = if is_union {
                         0
                     } else {
-                        offset = (offset + 7) & !7;
+                        let mask = field_align - 1;
+                        offset = (offset + mask) & !mask;
                         let off = offset;
-                        offset += aligned_size;
+                        offset += field_storage;
                         off
                     };
-                    if is_union && aligned_size > offset {
-                        offset = aligned_size;
+                    if is_union && field_storage > offset {
+                        offset = field_storage;
                     }
                 }
 
@@ -1995,8 +2148,19 @@ impl Compiler {
         }
         self.next()?; // consume `}`
 
-        let total = (offset + 7) & !7;
-        self.structs[struct_id].size = total.max(8); // never zero-sized
+        // Cap struct alignment at 8 -- the rest of the IR slots
+        // 8-wide and never asks for stricter alignment, so going
+        // above 8 buys nothing (and would force structurally
+        // identical code to handle 16-byte SIMD-style aligns).
+        let struct_align = struct_align.min(8);
+        // Pad the struct's tail up to its alignment so consecutive
+        // elements of an array preserve every field's natural
+        // alignment. Empty / one-byte structs stay at the c5 floor
+        // of 8 bytes (no zero-sized aggregates).
+        let mask = struct_align - 1;
+        let total = (offset + mask) & !mask;
+        self.structs[struct_id].size = total.max(8);
+        self.structs[struct_id].align = struct_align;
         Ok(struct_id)
     }
 
@@ -2831,7 +2995,7 @@ impl Compiler {
                 // address in `a` (no final-load Li). `&s` just
                 // raises the type by one pointer level; no IR
                 // change needed.
-            } else if last == Op::Lc as i64 || last == Op::Li as i64 {
+            } else if is_scalar_load_op_val(last) {
                 // Scalar / pointer lvalue: drop the trailing load
                 // so what's left is the address-producing op.
                 self.text.pop();
@@ -2898,12 +3062,9 @@ impl Compiler {
             self.next()?;
             self.expr(Token::Inc as i64)?;
             let last = *self.text.last().unwrap();
-            if last == Op::Lc as i64 {
+            if is_scalar_load_op_val(last) {
                 *self.text.last_mut().unwrap() = Op::Psh as i64;
-                self.emit_op(Op::Lc);
-            } else if last == Op::Li as i64 {
-                *self.text.last_mut().unwrap() = Op::Psh as i64;
-                self.emit_op(Op::Li);
+                self.emit_op(reemit_scalar_load(last));
             } else {
                 return Err(C5Error::Compile(format!(
                     "{}: bad lvalue in pre-increment",
@@ -3046,7 +3207,7 @@ impl Compiler {
                     self.emit_op(Op::Mcpy);
                     self.emit_val(size as i64);
                     self.ty = t;
-                } else if last == Op::Lc as i64 || last == Op::Li as i64 {
+                } else if is_scalar_load_op_val(last) {
                     // Scalar / pointer assignment: rewrite the
                     // trailing load into a push so the address is
                     // preserved on the stack while the RHS evaluates.
@@ -3082,7 +3243,7 @@ impl Compiler {
                 let binop = self.lex.ival;
                 self.next()?;
                 let last = *self.text.last().unwrap();
-                if last != Op::Lc as i64 && last != Op::Li as i64 {
+                if !is_scalar_load_op_val(last) {
                     return Err(C5Error::Compile(format!(
                         "{}: bad lvalue in compound assignment",
                         self.lex.line
@@ -3093,11 +3254,7 @@ impl Compiler {
                 // the stack across the compound op.
                 *self.text.last_mut().unwrap() = Op::Psh as i64;
                 // Reload the current value into `a`.
-                self.emit_op(if load_op == Op::Lc as i64 {
-                    Op::Lc
-                } else {
-                    Op::Li
-                });
+                self.emit_op(reemit_scalar_load(load_op));
                 // Push the current value so the binop can pop it.
                 self.emit_op(Op::Psh);
                 // For pointer arithmetic with `+=` / `-=`, scale
@@ -3381,12 +3538,9 @@ impl Compiler {
                 self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::Inc as i64 || self.lex.tk == Token::Dec as i64 {
                 let last = *self.text.last().unwrap();
-                if last == Op::Lc as i64 {
+                if is_scalar_load_op_val(last) {
                     *self.text.last_mut().unwrap() = Op::Psh as i64;
-                    self.emit_op(Op::Lc);
-                } else if last == Op::Li as i64 {
-                    *self.text.last_mut().unwrap() = Op::Psh as i64;
-                    self.emit_op(Op::Li);
+                    self.emit_op(reemit_scalar_load(last));
                 } else {
                     return Err(C5Error::Compile(format!(
                         "{}: bad lvalue in post-increment",

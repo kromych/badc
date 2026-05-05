@@ -52,7 +52,8 @@ int main() {
         i = i + 1;
     }
     if (sum_n(xs, 5) != 15) return 1;
-    if (sizeof(xs) != 40) return 2;
+    // sizeof(xs) = 5 * sizeof(int) = 5 * 4 = 20 (M31).
+    if (sizeof(xs) != 20) return 2;
 
     // Global arrays survive into the data segment.
     i = 0;
@@ -61,7 +62,7 @@ int main() {
         i = i + 1;
     }
     if (g_xs[0] + g_xs[1] + g_xs[2] + g_xs[3] + g_xs[4] != 100) return 3;
-    if (sizeof(g_xs) != 40) return 4;
+    if (sizeof(g_xs) != 20) return 4;       // 5 * sizeof(int) = 20
     if (sizeof(g_buf) != 16) return 5;
 
     // char buffer with byte-by-byte writes.
@@ -83,7 +84,9 @@ int main() {
     if (pairs[0].a != 0) return 9;
     if (pairs[1].a != 1) return 10;
     if (pairs[2].b != 200) return 11;
-    if (sizeof(pairs) != 48) return 12;
+    // struct Pair = {int a; int b;} = 8 bytes (4+4) under M31.
+    // pairs[3] = 24 bytes total.
+    if (sizeof(pairs) != 24) return 12;
 
     // Struct field that is itself an array.
     h.total = 0;

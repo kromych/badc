@@ -7,9 +7,11 @@
 // a future milestone -- the parser doesn't yet handle the
 // `(*name)(...)` declarator shape.
 
-// Primitive aliases. c5 collapses every integer to 64-bit, so all of
-// these are the same underlying type today; the test pins that the
-// alias name is accepted at every type position.
+// Primitive aliases. Under M31 the underlying widths matter:
+// `int` is 32-bit (so `u32` lands in a 4-byte slot), `long long`
+// is 64-bit (so `u64` keeps its full range), and `char` is 1 byte.
+// The test pins that each alias name is accepted at every type
+// position and that the storage class follows the underlying type.
 typedef int u32;
 typedef unsigned char u8;
 typedef unsigned long long u64;
@@ -76,8 +78,10 @@ int main() {
 
     // Cast through a typedef-name.
     if ((u32)c != 65) return 7;
-    if (sizeof(u32) != 8) return 8;
-    if (sizeof(Pair) != 16) return 9;
+    if (sizeof(u32) != 4) return 8;        // M31: u32 = 4 bytes
+    // Pair = {u32 first; u32 second;} -> 4+4 = 8 bytes (struct
+    // floor of 8 also lands at exactly 8, so no padding visible).
+    if (sizeof(Pair) != 8) return 9;
 
     return 0;
 }

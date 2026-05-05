@@ -143,16 +143,16 @@ pub(crate) enum Token {
     /// and have no semantic effect. Recognizing them at the
     /// lexer level lets unmodified C headers tokenize.
     TypeQual,
-    /// Integer-type modifier (`unsigned`, `short`, `long`,
-    /// `_Bool`). c5 has a single 64-bit integer representation,
-    /// so most of these collapse onto plain `int`. The token is
-    /// consumed before, around, or instead of the base-type
-    /// token; if a declaration is `unsigned x;` (no `int`), the
-    /// parser still emits an `int` declaration. `long long int`
-    /// and `int long` equally parse to `int`. Severity-aware
-    /// programs that rely on 32-bit overflow semantics will
-    /// diverge -- see c99-gaps.md M31 for the eventual real-
-    /// width plan.
+    /// Integer-type modifier (`unsigned`, `short`, `_Bool`). c5
+    /// keeps `int` as a 32-bit type after M31, so these collapse
+    /// onto plain `int` (32-bit signed). The token is consumed
+    /// before, around, or instead of the base-type token; if a
+    /// declaration is `unsigned x;` (no `int`), the parser still
+    /// emits an `int` declaration. Programs that rely on the
+    /// signed/unsigned distinction at the bit level still narrow
+    /// uniformly to a 32-bit slot. `short` likewise still
+    /// collapses to `int` -- a real 16-bit slot is a future
+    /// extension to M31.
     IntMod,
     /// `signed` modifier -- separated from the rest of [`IntMod`]
     /// because c5 needs to know specifically when `signed` was
@@ -165,6 +165,13 @@ pub(crate) enum Token {
     /// as 255 and the parser stack indexing goes off into wild
     /// memory.
     Signed,
+    /// `long` modifier -- separated from [`IntMod`] under M31
+    /// because seeing `long` on a declaration's base type drives
+    /// the 64-bit `Ty::Long` selection (vs. the 32-bit `Ty::Int`
+    /// that bare `int` produces). `long long` parses by entering
+    /// this branch twice in a row; both spellings yield `Ty::Long`
+    /// so 64-bit-storage code stays portable across C platforms.
+    Long,
     /// Function specifier (`inline`, `register`, `auto`).
     /// Consumed as a no-op anywhere a storage class may
     /// appear. `auto` is the C default, `register` is a
@@ -211,19 +218,23 @@ pub(crate) enum Token {
 /// each band:
 ///   `float`   = 100, `float*`   = 102, `float**`   = 104, ...
 ///   `double`  = 200, `double*`  = 202, `double**`  = 204, ...
+///   `long`    = 300, `long*`    = 302, `long**`    = 304, ...   (M31)
 ///
 /// Struct types still start at `STRUCT_BASE` (1000) and follow the
-/// 1000-stride scheme in `compiler.rs`. Float bands sit between the
-/// integer-family and the struct-family ranges so neither bumps
-/// into them, and the helper predicates in `compiler.rs`
-/// (`is_float_ty`, `is_double_ty`, `is_pointer_ty`) classify a `ty`
-/// without callers needing to know the encoding.
+/// 1000-stride scheme in `compiler.rs`. Float and long bands sit
+/// between the integer-family and the struct-family ranges so
+/// neither bumps into them, and the helper predicates in
+/// `compiler.rs` (`is_float_ty`, `is_double_ty`, `is_long_ty`,
+/// `is_pointer_ty`) classify a `ty` without callers needing to
+/// know the encoding.
 #[repr(i64)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Ty {
     /// 8-bit character
     Char = 0,
-    /// 64-bit signed integer
+    /// 32-bit signed integer (M31). Was 64-bit until widths landed;
+    /// callers that want a guaranteed 64-bit slot should use `long`
+    /// (== `Ty::Long`).
     Int = 1,
     /// Pointer type (values > 1 represent pointer depth)
     Ptr = 2,
@@ -231,4 +242,9 @@ pub(crate) enum Ty {
     Float = 100,
     /// 64-bit IEEE double (scalar). `double*` = 202, etc.
     Double = 200,
+    /// 64-bit signed integer (M31). Distinct from `int` so callers
+    /// that need a real 64-bit slot can spell it `long` / `long
+    /// long` and have it survive `int`'s width-narrowing.
+    /// `long*` = 302, `long**` = 304, etc.
+    Long = 300,
 }

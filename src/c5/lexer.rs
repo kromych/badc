@@ -773,13 +773,15 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("restrict", Token::TypeQual),
     ("__restrict", Token::TypeQual),
     ("__restrict__", Token::TypeQual),
-    // Integer-type modifiers. `signed` is split off because it
-    // changes the meaning of a `char` base (signed-char arrays
-    // hold negative values that must load sign-extended).
+    // Integer-type modifiers. `signed` and `long` are split off:
+    // `signed` changes the meaning of a `char` base (signed-char
+    // arrays hold negative values that must load sign-extended);
+    // `long` selects the 64-bit `Ty::Long` storage class under
+    // M31 (otherwise an `int` declaration yields a 32-bit slot).
     ("signed", Token::Signed),
     ("unsigned", Token::IntMod),
     ("short", Token::IntMod),
-    ("long", Token::IntMod),
+    ("long", Token::Long),
     ("_Bool", Token::IntMod),
     // Function specifiers -- accepted, no effect.
     ("inline", Token::FuncSpec),

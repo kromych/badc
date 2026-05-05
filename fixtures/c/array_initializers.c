@@ -30,7 +30,8 @@ int main() {
     if (sizeof(g_msg) != 6) return 4;
 
     if (g_primes[0] + g_primes[1] + g_primes[2] + g_primes[3] + g_primes[4] != 28) return 5;
-    if (sizeof(g_primes) != 40) return 6;
+    // M31: 5 * sizeof(int) = 5 * 4 = 20.
+    if (sizeof(g_primes) != 20) return 6;
 
     if (g_buf[0] != 'h') return 7;
     if (g_buf[1] != 'i') return 8;
@@ -54,7 +55,9 @@ int main() {
     if (sizeof(msg) != 6) return 22;
 
     if (xs[0] + xs[1] + xs[2] != 600) return 23;
-    if (sizeof(xs) != 24) return 24;
+    // M31: 3 * sizeof(int) = 12. (Padded up to nothing -- no struct
+    // tail rule for plain arrays; the array's size is N*elem.)
+    if (sizeof(xs) != 12) return 24;
 
     if (buf2[0] != 'o') return 25;
     if (buf2[1] != 'k') return 26;

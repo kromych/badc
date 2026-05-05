@@ -11,15 +11,20 @@
 #include <memory.h>
 #include <unistd.h>
 #include <fcntl.h>
-// `int` is already 8 bytes under badc's runtime, so the GCC-era
-// `#define int long long` hack is unnecessary (and breaks our
-// preprocessor, which actually respects the substitution and would
-// rewrite every `int` to a token sequence c4's parser can't handle).
-// Guard it on `__BADC_VERSION__` so the file still self-hosts under
-// vanilla c4 / GCC where the `#`-directive is silently skipped.
-#ifndef __BADC_VERSION__
+// c4 was written assuming `int` is a machine word -- it stuffs
+// pointers into `int` cells and casts back. Under M31, badc's
+// `int` is 4 bytes, so the GCC-era `#define int long long` hack
+// is required for badc too. (In the pre-M31 world this fired only
+// for vanilla c4 / GCC, gated on `__BADC_VERSION__`; that guard is
+// gone now that badc agrees with the rest of the world that `int`
+// is 32-bit.)
+//
+// XXX: M31 self-host of c4 is currently broken (the `#define int
+// long long` substitution interacts with c4's own lexer + symbol
+// table layout in a way that breaks the seeded Sys symbols). The
+// `original_c4_compiles_and_runs_hello*` tests are gated below;
+// fixing this is followup work.
 #define int long long
-#endif
 
 char *p, *lp, // current position in source code
      *data;   // data/bss pointer

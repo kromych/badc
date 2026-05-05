@@ -1,35 +1,36 @@
 #include <stdlib.h>
 
-// Tree nodes are packed as int[3]: [value, left, right]. The left/
-// right cells hold pointer-shaped values, so we cast on the way in
-// and out to keep badc's type-checker quiet about mixing `int` and
-// `int *` -- the c4 dialect has no int** so flat-array nodes are
-// the natural shape, but the cells still want the right typing.
-int* insert(int *root, int val) {
+// Tree nodes are packed as long[3]: [value, left, right]. The cells
+// hold pointer-shaped values, so under M31 (where `int` is 4 bytes
+// and a pointer is 8) the storage type has to be `long`. We cast
+// between `long *` and `long` at every store/load to mix value and
+// pointer cells in the same array; the c4 dialect has no long**
+// so flat-array nodes are the natural shape.
+long* insert(long *root, long val) {
     if (root == 0) {
-        root = malloc(sizeof(int) + 2 * sizeof(int *));
+        root = malloc(sizeof(long) + 2 * sizeof(long *));
         root[0] = val;
         root[1] = 0;
         root[2] = 0;
         return root;
     }
     if (val < root[0]) {
-        root[1] = (int)insert((int *)root[1], val);
+        root[1] = (long)insert((long *)root[1], val);
     } else {
-        root[2] = (int)insert((int *)root[2], val);
+        root[2] = (long)insert((long *)root[2], val);
     }
     return root;
 }
 
-int search(int *root, int val) {
+int search(long *root, long val) {
     if (root == 0) return 0;
     if (root[0] == val) return 1;
-    if (val < root[0]) return search((int *)root[1], val);
-    return search((int *)root[2], val);
+    if (val < root[0]) return search((long *)root[1], val);
+    return search((long *)root[2], val);
 }
 
 int main() {
-    int *root;
+    long *root;
     root = 0;
     root = insert(root, 50);
     insert(root, 30);

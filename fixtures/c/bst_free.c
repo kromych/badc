@@ -1,30 +1,32 @@
 #include <stdlib.h>
 
-// Tree nodes are flat int[3] = [value, left, right]; the left/right
-// cells hold pointer-shaped values, hence the casts.
-void free_tree(int *root) {
+// Tree nodes are flat long[3] = [value, left, right]; the left/right
+// cells hold pointer-shaped values so the storage type has to be
+// `long` (8 bytes) under M31 -- `int` is 4 bytes and would truncate
+// the pointer cast.
+void free_tree(long *root) {
     if (root == 0) return;
 
     // Post-order traversal: visit children before the parent
-    free_tree((int *)root[1]); // left
-    free_tree((int *)root[2]); // right
+    free_tree((long *)root[1]); // left
+    free_tree((long *)root[2]); // right
 
     free(root);
 }
 
-int* insert(int *root, int val) {
+long* insert(long *root, long val) {
     if (root == 0) {
-        root = malloc(sizeof(int) + 2 * sizeof(int *));
+        root = malloc(sizeof(long) + 2 * sizeof(long *));
         root[0] = val; root[1] = 0; root[2] = 0;
         return root;
     }
-    if (val < root[0]) root[1] = (int)insert((int *)root[1], val);
-    else root[2] = (int)insert((int *)root[2], val);
+    if (val < root[0]) root[1] = (long)insert((long *)root[1], val);
+    else root[2] = (long)insert((long *)root[2], val);
     return root;
 }
 
 int main() {
-    int *root;
+    long *root;
     root = 0;
     root = insert(root, 50);
     insert(root, 30);

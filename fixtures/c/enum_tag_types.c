@@ -37,7 +37,8 @@ int main() {
     if (WEST != 3) return 8;
 
     if (classify(GREEN) != 102) return 9;
-    if (sizeof(xs) != 16) return 10;
+    // xs is `int xs[2]` (GREEN = 2). M31: 2 * sizeof(int) = 8.
+    if (sizeof(xs) != 8) return 10;
 
     // Enum-typed parameter accepts plain integer values too -- c5
     // doesn't enforce enum-strictness.

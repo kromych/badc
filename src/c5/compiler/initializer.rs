@@ -41,6 +41,47 @@ use super::types::{is_struct_ty, struct_id_of, struct_ptr_depth};
 use super::{Compiler, InitElemReloc};
 
 impl Compiler {
+    /// Push the relocation entry that an initializer element needs
+    /// at byte offset `here` within `self.data`.
+    ///   * `None`        -- plain integer constant, no entry.
+    ///   * `Data`        -- data-segment offset, push a DataReloc
+    ///                      so the per-format writer can patch the
+    ///                      slot to the runtime address.
+    ///   * `Code(sym)`   -- function bytecode PC, push a CodeReloc
+    ///                      and stash the symbol index for the
+    ///                      post-body fixup pass.
+    fn push_init_reloc(&mut self, here: usize, value: i64, reloc: InitElemReloc) {
+        match reloc {
+            InitElemReloc::None => {}
+            InitElemReloc::Data => {
+                self.data_relocs.push(crate::c5::program::DataReloc {
+                    data_offset: here as u64,
+                    target_offset: value as u64,
+                });
+            }
+            InitElemReloc::Code(sym_idx) => {
+                self.code_relocs.push(crate::c5::program::CodeReloc {
+                    data_offset: here as u64,
+                    target_bc_pc: value as u64,
+                });
+                self.code_reloc_sym_idx.push(sym_idx);
+            }
+        }
+    }
+
+    /// Write `n_bytes` little-endian bytes of `value` into
+    /// `self.data` at byte offset `here`. Caller has already
+    /// grown `self.data` to at least `here + n_bytes`.
+    fn write_init_bytes(&mut self, here: usize, value: i64, n_bytes: usize) {
+        if n_bytes == 1 {
+            self.data[here] = value as u8;
+        } else {
+            for i in 0..n_bytes {
+                self.data[here + i] = ((value >> (i * 8)) & 0xFF) as u8;
+            }
+        }
+    }
+
     /// Collect an array initializer into a flat list of per-element
     /// values together with a "needs data relocation" flag. Two
     /// shapes are accepted:
@@ -130,27 +171,15 @@ impl Compiler {
                 self.data.push(v as u8);
             }
         } else {
+            // Grow once to the final size, then lay bytes by index
+            // so we can share the LE-write + reloc-push helpers
+            // with `write_array_init_into_data` and
+            // `write_init_value`.
+            self.data.resize(start_addr + elements.len() * elem_size, 0);
             for (idx, &(v, reloc)) in elements.iter().enumerate() {
                 let here = start_addr + idx * elem_size;
-                for i in 0..elem_size {
-                    self.data.push(((v >> (i * 8)) & 0xFF) as u8);
-                }
-                match reloc {
-                    InitElemReloc::None => {}
-                    InitElemReloc::Data => {
-                        self.data_relocs.push(crate::c5::program::DataReloc {
-                            data_offset: here as u64,
-                            target_offset: v as u64,
-                        });
-                    }
-                    InitElemReloc::Code(sym_idx) => {
-                        self.code_relocs.push(crate::c5::program::CodeReloc {
-                            data_offset: here as u64,
-                            target_bc_pc: v as u64,
-                        });
-                        self.code_reloc_sym_idx.push(sym_idx);
-                    }
-                }
+                self.write_init_bytes(here, v, elem_size);
+                self.push_init_reloc(here, v, reloc);
             }
         }
         (start_addr, elements.len() * elem_size)
@@ -431,29 +460,8 @@ impl Compiler {
         value: i64,
         reloc: InitElemReloc,
     ) {
-        if field_size == 1 {
-            self.data[here] = value as u8;
-        } else {
-            for i in 0..field_size {
-                self.data[here + i] = ((value >> (i * 8)) & 0xFF) as u8;
-            }
-        }
-        match reloc {
-            InitElemReloc::None => {}
-            InitElemReloc::Data => {
-                self.data_relocs.push(crate::c5::program::DataReloc {
-                    data_offset: here as u64,
-                    target_offset: value as u64,
-                });
-            }
-            InitElemReloc::Code(sym_idx) => {
-                self.code_relocs.push(crate::c5::program::CodeReloc {
-                    data_offset: here as u64,
-                    target_bc_pc: value as u64,
-                });
-                self.code_reloc_sym_idx.push(sym_idx);
-            }
-        }
+        self.write_init_bytes(here, value, field_size);
+        self.push_init_reloc(here, value, reloc);
     }
 
     /// Write packed initializer bytes into `self.data` at
@@ -472,31 +480,14 @@ impl Compiler {
         let elem_size = self.size_of_type(elem_ty);
         let mut byte_off = var_offset as usize;
         for &(v, reloc) in elements {
-            if elem_size == 1 {
-                self.data[byte_off] = v as u8;
-                byte_off += 1;
-            } else {
-                for i in 0..elem_size {
-                    self.data[byte_off + i] = ((v >> (i * 8)) & 0xFF) as u8;
-                }
-                match reloc {
-                    InitElemReloc::None => {}
-                    InitElemReloc::Data => {
-                        self.data_relocs.push(crate::c5::program::DataReloc {
-                            data_offset: byte_off as u64,
-                            target_offset: v as u64,
-                        });
-                    }
-                    InitElemReloc::Code(sym_idx) => {
-                        self.code_relocs.push(crate::c5::program::CodeReloc {
-                            data_offset: byte_off as u64,
-                            target_bc_pc: v as u64,
-                        });
-                        self.code_reloc_sym_idx.push(sym_idx);
-                    }
-                }
-                byte_off += elem_size;
-            }
+            self.write_init_bytes(byte_off, v, elem_size);
+            // char-element arrays never carry a relocation kind --
+            // the elements are bare bytes from a string literal --
+            // so the reloc-push helper's None branch is the only
+            // one that fires for elem_size == 1. Keeping the call
+            // unconditional drops the size-1 special case.
+            self.push_init_reloc(byte_off, v, reloc);
+            byte_off += elem_size;
         }
     }
 

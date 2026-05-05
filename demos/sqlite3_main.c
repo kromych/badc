@@ -2,7 +2,20 @@
 // has no filesystem-relative `#include` support yet) before
 // compiling:
 //   cat demos/sqlite3/sqlite3.c demos/sqlite3_main.c > /tmp/combined.c
-//   target/release/badc /tmp/combined.c
+//   target/release/badc /tmp/combined.c \
+//     -DSQLITE_OMIT_LOAD_EXTENSION   -DSQLITE_THREADSAFE=0 \
+//     -DSQLITE_DEFAULT_MEMSTATUS=0   -DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1 \
+//     -DSQLITE_DQS=0                 -DSQLITE_OMIT_DEPRECATED \
+//     -DSQLITE_OMIT_PROGRESS_CALLBACK -DSQLITE_OMIT_SHARED_CACHE \
+//     -DSQLITE_OMIT_AUTOINIT         -DSQLITE_WITHOUT_ZONEMALLOC=1 \
+//     -DSQLITE_ENABLE_LOCKING_STYLE=0
+//
+// SQLITE_ENABLE_LOCKING_STYLE defaults to 1 on Apple targets and
+// pulls in the AFP locking path, which uses a `_IOWR(...)` macro
+// from `<sys/ioctl.h>` -- a header c5 doesn't ship. Forcing it to
+// 0 keeps the parser away from the AFP block. The other defines
+// drop sqlite features c5 doesn't implement (load-extension,
+// threading, etc.) so the amalgamation parses cleanly.
 //
 // Opens an in-memory database, runs a CREATE / INSERT / SELECT
 // round-trip, prints the values back, then exercises ORDER BY,

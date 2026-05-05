@@ -2158,8 +2158,19 @@ impl Compiler {
             });
             self.emit_op(store_op_for(self.ty));
         } else {
+            // The parse-error message includes the enclosing function
+            // name and (for `Token::Id`) the identifier name -- those
+            // two facts are what made bisecting sqlite3.c's `_IOWR`
+            // expansion tractable, and a generic "bad expression
+            // tk=174" is otherwise opaque.
+            let func = self.current_function_name.clone();
+            let id_name = if self.lex.tk == Token::Id as i64 {
+                Some(self.symbols[self.lex.curr_id_idx].name.clone())
+            } else {
+                None
+            };
             return Err(C5Error::Compile(format!(
-                "{}: bad expression tk={}",
+                "{}: bad expression tk={} (in {func}, id={id_name:?})",
                 self.lex.line, self.lex.tk
             )));
         }

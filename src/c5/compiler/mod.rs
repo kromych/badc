@@ -532,8 +532,7 @@ impl Compiler {
         self.emit_op(Op::StLocI);
         self.emit_val(rhs_temp);
         // Pop LHS off the c5 stack into `a` via Imm 0; Or.
-        self.emit_op(Op::Imm);
-        self.emit_val(0);
+        self.emit_imm(0);
         self.emit_op(Op::Or);
         self.emit_op(Op::Fcvtif);
         self.emit_op(Op::Psh);
@@ -940,13 +939,11 @@ impl Compiler {
             self.emit_op(Op::Psh); // stack: [..., field_addr, cleared]
             self.expr(Token::Assign as i64)?; // a = new_value
             self.emit_op(Op::Psh); // stack: [..., field_addr, cleared, new_value]
-            self.emit_op(Op::Imm);
-            self.emit_val(mask);
+            self.emit_imm(mask);
             self.emit_op(Op::And); // a = new_value & mask; stack: [..., field_addr, cleared]
             if bit_offset > 0 {
                 self.emit_op(Op::Psh);
-                self.emit_op(Op::Imm);
-                self.emit_val(bit_offset as i64);
+                self.emit_imm(bit_offset as i64);
                 self.emit_op(Op::Shl); // a = (new_value & mask) << bit_offset
             }
             // a = shifted; stack: [..., field_addr, cleared].
@@ -962,13 +959,11 @@ impl Compiler {
             self.emit_op(Op::Li); // a = full storage word
             if bit_offset > 0 {
                 self.emit_op(Op::Psh);
-                self.emit_op(Op::Imm);
-                self.emit_val(bit_offset as i64);
+                self.emit_imm(bit_offset as i64);
                 self.emit_op(Op::Shr); // a = (top >> bit_offset)
             }
             self.emit_op(Op::Psh);
-            self.emit_op(Op::Imm);
-            self.emit_val(mask);
+            self.emit_imm(mask);
             self.emit_op(Op::And); // a = (...) & mask
             self.ty = Ty::Int as i64;
             Ok(())
@@ -1305,6 +1300,16 @@ impl Compiler {
         self.source_functions.push(self.current_function_name.clone());
     }
 
+    /// Emit a plain `Op::Imm <val>` -- a 2-word `[op, operand]`
+    /// pair that pushes a 64-bit constant into the accumulator.
+    /// The constant is treated as a literal value with no
+    /// runtime address-fixup; for data-segment offsets that need
+    /// `__data` relocation use [`emit_data_imm`] instead.
+    fn emit_imm(&mut self, val: i64) {
+        self.emit_op(Op::Imm);
+        self.emit_val(val);
+    }
+
     /// Emit `Op::Imm <data_offset>` and record the operand's bytecode
     /// position in [`Compiler::data_imm_positions`]. Use this anywhere
     /// the immediate is the address of a string literal or a global --
@@ -1429,8 +1434,7 @@ impl Compiler {
                 self.lex.line
             )));
         } else if self.lex.tk == Token::Num as i64 {
-            self.emit_op(Op::Imm);
-            self.emit_val(self.lex.ival);
+            self.emit_imm(self.lex.ival);
             self.next()?;
             self.ty = Ty::Int as i64;
         } else if self.lex.tk == Token::FloatNum as i64 {
@@ -1441,8 +1445,7 @@ impl Compiler {
             // Until then, the `is_floating_scalar` self-ty marks
             // the value so it can't accidentally feed into integer
             // arithmetic (the binary-op handlers gate on this).
-            self.emit_op(Op::Imm);
-            self.emit_val(self.lex.ival);
+            self.emit_imm(self.lex.ival);
             self.next()?;
             self.ty = Ty::Double as i64;
         } else if self.lex.tk == '"' as i64 {
@@ -1531,8 +1534,7 @@ impl Compiler {
                     )));
                 }
             }
-            self.emit_op(Op::Imm);
-            self.emit_val(total_bytes);
+            self.emit_imm(total_bytes);
             self.ty = Ty::Int as i64;
         } else if self.lex.tk == Token::Id as i64 {
             let id_idx = self.lex.curr_id_idx;
@@ -1825,8 +1827,7 @@ impl Compiler {
                     self.symbols[id_idx].type_
                 };
             } else if self.symbols[id_idx].class == Token::Num as i64 {
-                self.emit_op(Op::Imm);
-                self.emit_val(self.symbols[id_idx].val);
+                self.emit_imm(self.symbols[id_idx].val);
                 self.ty = Ty::Int as i64;
             } else if self.symbols[id_idx].class == Token::Fun as i64 {
                 // Bare function reference (e.g. `fp = add;`). The value
@@ -1860,8 +1861,7 @@ impl Compiler {
                      (no GOT-trampoline support yet); calling through this pointer \
                      will fault"
                 ));
-                self.emit_op(Op::Imm);
-                self.emit_val(0);
+                self.emit_imm(0);
                 self.ty = Ty::Int as i64 + Ty::Ptr as i64;
             } else {
                 if self.symbols[id_idx].class == Token::Loc as i64 {
@@ -2077,16 +2077,14 @@ impl Compiler {
             self.next()?;
             self.expr(Token::Inc as i64)?;
             self.emit_op(Op::Psh);
-            self.emit_op(Op::Imm);
-            self.emit_val(0);
+            self.emit_imm(0);
             self.emit_op(Op::Eq);
             self.ty = Ty::Int as i64;
         } else if self.lex.tk == '~' as i64 {
             self.next()?;
             self.expr(Token::Inc as i64)?;
             self.emit_op(Op::Psh);
-            self.emit_op(Op::Imm);
-            self.emit_val(-1);
+            self.emit_imm(-1);
             self.emit_op(Op::Xor);
             self.ty = Ty::Int as i64;
         } else if self.lex.tk == Token::AddOp as i64 {
@@ -2100,8 +2098,7 @@ impl Compiler {
             // to the parsed f64 bit pattern, not a sign flip on the
             // integer-shaped operand.
             if self.lex.tk == Token::Num as i64 {
-                self.emit_op(Op::Imm);
-                self.emit_val(-self.lex.ival);
+                self.emit_imm(-self.lex.ival);
                 self.next()?;
                 self.ty = Ty::Int as i64;
             } else {
@@ -2111,8 +2108,7 @@ impl Compiler {
                     // self.ty already matches the operand's FP type
                 } else {
                     self.emit_op(Op::Psh);
-                    self.emit_op(Op::Imm);
-                    self.emit_val(-1);
+                    self.emit_imm(-1);
                     self.emit_op(Op::Mul);
                     self.ty = Ty::Int as i64;
                 }
@@ -2135,8 +2131,7 @@ impl Compiler {
                 )));
             }
             self.emit_op(Op::Psh);
-            self.emit_op(Op::Imm);
-            self.emit_val(self.pointee_step(self.ty));
+            self.emit_imm(self.pointee_step(self.ty));
             self.emit_op(if t == Token::Inc as i64 {
                 Op::Add
             } else {
@@ -2325,8 +2320,7 @@ impl Compiler {
                     let elem_size = self.size_of_type(elem_ty) as i64;
                     if elem_size > 1 {
                         self.emit_op(Op::Psh);
-                        self.emit_op(Op::Imm);
-                        self.emit_val(elem_size);
+                        self.emit_imm(elem_size);
                         self.emit_op(Op::Mul);
                     }
                 }
@@ -2507,8 +2501,7 @@ impl Compiler {
                     if self.is_ptr_scaling_nontrivial(t) {
                         let scale = self.pointee_size(t);
                         self.emit_op(Op::Psh);
-                        self.emit_op(Op::Imm);
-                        self.emit_val(scale);
+                        self.emit_imm(scale);
                         self.emit_op(Op::Mul);
                     }
                     self.emit_op(Op::Add);
@@ -2531,16 +2524,14 @@ impl Compiler {
                     if self.is_ptr_scaling_nontrivial(t) {
                         let scale = self.pointee_size(t);
                         self.emit_op(Op::Psh);
-                        self.emit_op(Op::Imm);
-                        self.emit_val(scale);
+                        self.emit_imm(scale);
                         self.emit_op(Op::Div);
                     }
                     self.ty = Ty::Int as i64;
                 } else if self.is_ptr_scaling_nontrivial(t) {
                     let scale = self.pointee_size(t);
                     self.emit_op(Op::Psh);
-                    self.emit_op(Op::Imm);
-                    self.emit_val(scale);
+                    self.emit_imm(scale);
                     self.emit_op(Op::Mul);
                     self.emit_op(Op::Sub);
                     self.ty = t;
@@ -2605,8 +2596,7 @@ impl Compiler {
                     )));
                 }
                 self.emit_op(Op::Psh);
-                self.emit_op(Op::Imm);
-                self.emit_val(self.pointee_step(self.ty));
+                self.emit_imm(self.pointee_step(self.ty));
                 self.emit_op(if self.lex.tk == Token::Inc as i64 {
                     Op::Add
                 } else {
@@ -2614,8 +2604,7 @@ impl Compiler {
                 });
                 self.emit_op(store_op_for(self.ty));
                 self.emit_op(Op::Psh);
-                self.emit_op(Op::Imm);
-                self.emit_val(self.pointee_step(self.ty));
+                self.emit_imm(self.pointee_step(self.ty));
                 self.emit_op(if self.lex.tk == Token::Inc as i64 {
                     Op::Sub
                 } else {
@@ -2650,8 +2639,7 @@ impl Compiler {
                 }
                 if two_d_stride > 0 {
                     self.emit_op(Op::Psh);
-                    self.emit_op(Op::Imm);
-                    self.emit_val(two_d_stride);
+                    self.emit_imm(two_d_stride);
                     self.emit_op(Op::Mul);
                     self.emit_op(Op::Add);
                     // 2D row pointer -- ty stays at the same pointer
@@ -2662,8 +2650,7 @@ impl Compiler {
                     if self.is_ptr_scaling_nontrivial(t) {
                         let scale = self.pointee_size(t);
                         self.emit_op(Op::Psh);
-                        self.emit_op(Op::Imm);
-                        self.emit_val(scale);
+                        self.emit_imm(scale);
                         self.emit_op(Op::Mul);
                     }
                     self.emit_op(Op::Add);
@@ -2732,8 +2719,7 @@ impl Compiler {
 
                 if field.offset > 0 {
                     self.emit_op(Op::Psh);
-                    self.emit_op(Op::Imm);
-                    self.emit_val(field.offset as i64);
+                    self.emit_imm(field.offset as i64);
                     self.emit_op(Op::Add);
                 }
                 self.ty = field.ty;
@@ -2804,8 +2790,7 @@ impl Compiler {
         if self.lex.tk != ';' as i64 {
             self.expr(Token::Assign as i64)?;
         } else {
-            self.emit_op(Op::Imm);
-            self.emit_val(1);
+            self.emit_imm(1);
         }
         self.emit_op(Op::Bz);
         let end_jmp_pc = self.text.len();
@@ -2895,8 +2880,7 @@ impl Compiler {
             self.emit_val(switch_val_offset);
             self.emit_op(Op::Li);
             self.emit_op(Op::Psh);
-            self.emit_op(Op::Imm);
-            self.emit_val(val);
+            self.emit_imm(val);
             self.emit_op(Op::Eq);
             self.emit_op(Op::Bnz);
             self.emit_val(pc as i64);

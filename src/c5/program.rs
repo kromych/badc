@@ -182,4 +182,18 @@ pub struct Program {
     /// `main` is trusted today. The Mach-O / ELF / VM / JIT
     /// paths ignore this field.
     pub dllmain_pc: Option<usize>,
+    /// Source-line debug map. Indexed by bytecode PC; each entry
+    /// is the 1-based source line of the C statement / expression
+    /// that produced this op. Operand slots inherit their op's
+    /// line. Unknown / unmapped entries are 0.
+    ///
+    /// Surfaced by `--dump-asm` as a `; line N` comment next to
+    /// each op so codegen failures can be traced back to a
+    /// specific C line, and exposed structurally by the
+    /// `bytecode_pc_to_line` helper for runtime crash reporters.
+    pub source_lines: Vec<u32>,
+    /// Source-function debug map. Same indexing as `source_lines`;
+    /// each entry is the name of the C function whose body the op
+    /// belongs to (empty string for top-level data emission).
+    pub source_functions: Vec<String>,
 }

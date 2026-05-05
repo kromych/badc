@@ -9,10 +9,19 @@
 // amalgamation.
 
 int main() {
-    sqlite3 *db;
-    int rc;
+    // The smallest sqlite call that touches no allocator / VFS
+    // state -- it returns the static `sqlite3_version[]` array's
+    // address. If this prints the right string, address-of-global,
+    // string-pointer return, and printf("%s") all work end-to-end.
+    const char *ver = sqlite3_libversion();
+    printf("sqlite3_libversion() -> %s\n", ver);
 
-    rc = sqlite3_open(":memory:", &db);
+    // The tiny extra step: get the source-id, also a const string.
+    const char *sid = sqlite3_sourceid();
+    printf("sqlite3_sourceid()   -> %s\n", sid);
+
+    sqlite3 *db;
+    int rc = sqlite3_open(":memory:", &db);
     if (rc) {
         printf("open failed: %d\n", rc);
         return 1;

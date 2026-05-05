@@ -164,6 +164,8 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         exports,
         dylibs,
         dllmain_pc,
+        source_lines: in_source_lines,
+        source_functions: in_source_functions,
     } = program;
 
     let mut insns = decode(&text, &data_imm_positions)?;
@@ -222,6 +224,12 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         })
         .collect();
 
+    // Source-line debug map: the optimizer mangles PCs (DCE, branch
+    // threading, peephole), so the per-pc source line that matched
+    // the unoptimized bytecode no longer matches. Drop the map at
+    // -O. Users debugging codegen turn -O off; users running -O
+    // give up structural debug info in exchange for tighter code.
+    let _ = (in_source_lines, in_source_functions);
     Ok(Program {
         text,
         data,
@@ -236,6 +244,8 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         exports,
         dylibs,
         dllmain_pc,
+        source_lines: Vec::new(),
+        source_functions: Vec::new(),
     })
 }
 
@@ -917,6 +927,8 @@ mod tests {
             exports: Vec::new(),
             dylibs: Vec::new(),
             dllmain_pc: None,
+            source_lines: Vec::new(),
+            source_functions: Vec::new(),
         }
     }
 
@@ -1188,6 +1200,8 @@ mod tests {
             exports: Vec::new(),
             dylibs: Vec::new(),
             dllmain_pc: None,
+            source_lines: Vec::new(),
+            source_functions: Vec::new(),
         };
         let opt = optimize(p).unwrap();
         // Main returns 5; if the ImmCode operand remapped wrong, the

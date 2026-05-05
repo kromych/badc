@@ -59,6 +59,7 @@ fn push_bytecode_listing(out: &mut String, program: &Program, build: &Build) {
     }
 
     let mut bc_pc = 0usize;
+    let mut last_fn_label: Option<String> = None;
     while bc_pc < program.text.len() {
         let raw = program.text[bc_pc];
         let Some(op) = Op::from_i64(raw) else {
@@ -82,12 +83,35 @@ fn push_bytecode_listing(out: &mut String, program: &Program, build: &Build) {
         // Find the *next* live entry to bound the byte range.
         let native_end = next_native_offset(build, bc_pc + op.word_size());
 
+        // Function-boundary marker: when the source function name
+        // changes, drop a `; <function>` header so the listing is
+        // navigable by C function name. Quiet when the debug map
+        // is empty (e.g. -O ran).
+        let cur_fn = program.source_functions.get(bc_pc);
+        if let Some(fn_name) = cur_fn
+            && !fn_name.is_empty()
+            && last_fn_label.as_deref() != Some(fn_name.as_str())
+        {
+            out.push_str(&format!(";\n; ---- {fn_name} ----\n;\n"));
+            last_fn_label = Some(fn_name.clone());
+        }
+
         let operand_str = if op.operand_count() > 0 {
             format!(" {}", program.text[bc_pc + 1])
         } else {
             String::new()
         };
-        out.push_str(&format!("[bc={:>4}] {:?}{}\n", bc_pc, op, operand_str));
+        // Source-line annotation. Indexed by bc_pc; 0 means
+        // "unknown" (the optimizer drops the map; data emit
+        // doesn't push entries).
+        let line_str = match program.source_lines.get(bc_pc).copied() {
+            Some(0) | None => String::new(),
+            Some(n) => format!("    ; line {n}"),
+        };
+        out.push_str(&format!(
+            "[bc={:>4}] {:?}{}{}\n",
+            bc_pc, op, operand_str, line_str
+        ));
         push_hex_bytes(out, &build.text[native_start..native_end], native_start);
 
         bc_pc += op.word_size();

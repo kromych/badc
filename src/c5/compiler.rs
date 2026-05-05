@@ -378,6 +378,20 @@ pub struct Compiler {
     /// it before falling back to the regular pointer-arithmetic
     /// stride. Zero means "use the regular stride."
     pending_index_stride: i64,
+
+    /// Per-bytecode-PC source line, parallel to `text`. Updated
+    /// on every emit_op / emit_val / emit_data_imm so each
+    /// emitted word carries the line number of the C statement
+    /// it came from. The codegen surfaces this through
+    /// `--dump-asm` and the runtime crash reporter.
+    source_lines: Vec<u32>,
+    /// Per-bytecode-PC current function name, parallel to
+    /// `text`. Empty string for top-level emit (data
+    /// initializers, file-scope decls).
+    source_functions: Vec<String>,
+    /// Name of the C function whose body is currently being
+    /// emitted. Set on `Op::Ent` emit and cleared on `Op::Lev`.
+    current_function_name: String,
 }
 
 impl Compiler {
@@ -499,6 +513,9 @@ impl Compiler {
             current_func_return_ty: 0,
             pending_fn_params: None,
             pending_index_stride: 0,
+            source_lines: Vec::new(),
+            source_functions: Vec::new(),
+            current_function_name: String::new(),
         }
     }
 
@@ -1969,6 +1986,8 @@ impl Compiler {
             code_relocs: self.code_relocs,
             dylibs: self.dylibs,
             dllmain_pc,
+            source_lines: self.source_lines,
+            source_functions: self.source_functions,
         })
     }
 
@@ -1983,10 +2002,17 @@ impl Compiler {
 
     fn emit_op(&mut self, op: Op) {
         self.text.push(op as i64);
+        // Mirror text.len() one-for-one in source_lines /
+        // source_functions so a bc_pc lookup is a direct
+        // index. Operand slots inherit the op's source position.
+        self.source_lines.push(self.lex.line as u32);
+        self.source_functions.push(self.current_function_name.clone());
     }
 
     fn emit_val(&mut self, val: i64) {
         self.text.push(val);
+        self.source_lines.push(self.lex.line as u32);
+        self.source_functions.push(self.current_function_name.clone());
     }
 
     /// Emit `Op::Imm <data_offset>` and record the operand's bytecode
@@ -5054,6 +5080,8 @@ impl Compiler {
                     // out-pointer.
                     let return_ty = self.symbols[id_idx].type_;
                     self.current_func_return_ty = return_ty;
+                    self.current_function_name =
+                        self.symbols[id_idx].name.clone();
                     let returns_struct =
                         is_struct_ty(return_ty) && struct_ptr_depth(return_ty) == 0;
 
@@ -5140,6 +5168,7 @@ impl Compiler {
                         }
                     }
                     self.emit_op(Op::Lev);
+                    self.current_function_name.clear();
 
                     self.text[ent_pc + 1] = self.max_loc_offs.max(self.loc_offs);
 

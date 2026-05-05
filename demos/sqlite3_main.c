@@ -53,23 +53,7 @@ int main() {
     fflush(stdout);
     if (mrc2 != 0) return 1;
 
-    void *p = sqlite3_malloc(64);
-    printf("[2.6] sqlite3_malloc(64)      -> %p\n", p);
-    fflush(stdout);
-    if (p == 0) return 1;
-    sqlite3_free(p);
-    printf("[2.7] sqlite3_free ok\n");
-    fflush(stdout);
-
-    int rc = sqlite3PCacheInitialize();
-    printf("[2.8] sqlite3PCacheInitialize -> %d\n", rc);
-    fflush(stdout);
-
-    rc = sqlite3OsInit();
-    printf("[2.9] sqlite3OsInit()         -> %d\n", rc);
-    fflush(stdout);
-
-    rc = sqlite3_initialize();
+    int rc = sqlite3_initialize();
     printf("[2.10] sqlite3_initialize()   -> %d\n", rc);
     fflush(stdout);
     if (rc != 0) return 1;

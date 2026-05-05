@@ -1312,12 +1312,19 @@ impl Compiler {
                 // the emitted bytecode (sizeof never evaluates its
                 // operand). Used for `sizeof(p->field)`, `sizeof(arr[i])`,
                 // and other postfix shapes where the type isn't a
-                // simple base + pointer level.
+                // simple base + pointer level. Also drop any
+                // `data_imm_positions` entries the expr produced --
+                // otherwise the saved positions alias the next
+                // Imm we emit (the size constant) and the native
+                // lowering treats it as a data offset, producing
+                // `adrp+add` instead of a plain mov-imm.
                 let saved_text_len = self.text.len();
                 let saved_ty = self.ty;
+                let saved_data_imm_positions = self.data_imm_positions.len();
                 self.expr(Token::Assign as i64)?;
                 let expr_ty = self.ty;
                 self.text.truncate(saved_text_len);
+                self.data_imm_positions.truncate(saved_data_imm_positions);
                 self.ty = saved_ty;
                 self.size_of_type(expr_ty) as i64
             };
@@ -2196,6 +2203,7 @@ impl Compiler {
                 arr_size * self.size_of_type(elem_ty) as i64
             } else {
                 let saved_text_len = self.text.len();
+                let saved_data_imm_positions = self.data_imm_positions.len();
                 let lev = if had_paren {
                     Token::Assign as i64
                 } else {
@@ -2203,6 +2211,7 @@ impl Compiler {
                 };
                 self.expr(lev)?;
                 self.text.truncate(saved_text_len);
+                self.data_imm_positions.truncate(saved_data_imm_positions);
                 self.size_of_type(self.ty) as i64
             };
             if had_paren {
@@ -2710,15 +2719,30 @@ impl Compiler {
             self.next()?;
             self.expr(Token::Inc as i64)?;
             let last = *self.text.last().unwrap();
-            if last == Op::Lc as i64 || last == Op::Li as i64 {
+            // Order matters here: a struct-value rvalue (`p->mutex`
+            // where `mutex` is a struct field, or `*p` where `p`
+            // is a struct pointer) leaves the field's address in
+            // `a` *without* emitting a trailing Li for the load
+            // that produced the address. But the parser may still
+            // have emitted an Li for *something earlier in the
+            // chain* (e.g. the `Li` that loaded `p`'s value to
+            // reach `p->mutex`). Popping that Li would unwind one
+            // step too far and yield `&p` instead of `&p->mutex`.
+            //
+            // So check the resulting type *first*: if `&expr`
+            // yields a struct value, the underlying address is
+            // already in `a` and we leave the IR alone. Only the
+            // remaining scalar / pointer-rvalue cases pop the
+            // trailing load.
+            if is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0 {
+                // Struct value -- the parser already left the
+                // address in `a` (no final-load Li). `&s` just
+                // raises the type by one pointer level; no IR
+                // change needed.
+            } else if last == Op::Lc as i64 || last == Op::Li as i64 {
                 // Scalar / pointer lvalue: drop the trailing load
                 // so what's left is the address-producing op.
                 self.text.pop();
-            } else if is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0 {
-                // Struct value -- the parser already left the
-                // address in `a` (no Li was emitted). `&s` just
-                // raises the type by one pointer level; no IR
-                // change needed.
             } else if is_pointer_ty(self.ty) {
                 // Array-decay shape: `&arr` and `&pPager->dbFileVers`
                 // when `dbFileVers` is a `char[16]` field. The

@@ -53,10 +53,79 @@ int main() {
     fflush(stdout);
     if (mrc2 != 0) return 1;
 
-    int rc = sqlite3_initialize();
-    printf("[2.10] sqlite3_initialize()   -> %d\n", rc);
-    fflush(stdout);
-    if (rc != 0) return 1;
+    // Tier 2.6: replicate the rest of sqlite3_initialize step-by-step
+    // so any SIGBUS / SIGSEGV is bracketed. Mirrors the amalgamation's
+    // body verbatim (SQLite 3.53.0 -- see sqlite3.c around line 189046).
+    sqlite3Config.isMallocInit = 1;
+    printf("[2.6a] isMallocInit=1\n"); fflush(stdout);
+
+    // Bisect each step that sqlite3MutexAlloc(1) takes.
+    // sqlite3MallocZero -> sqlite3Malloc (no recursion through
+    // sqlite3_initialize unlike the public sqlite3_malloc).
+    void *zz = sqlite3MallocZero(64);
+    printf("[2.6a0b] sqlite3MallocZero(64) = %p\n", zz); fflush(stdout);
+
+    char attr_buf[256];
+    int ar = pthread_mutexattr_init((char *)attr_buf);
+    printf("[2.6a0c] pthread_mutexattr_init -> %d\n", ar); fflush(stdout);
+    ar = pthread_mutexattr_settype((char *)attr_buf, 2);
+    printf("[2.6a0d] pthread_mutexattr_settype -> %d\n", ar); fflush(stdout);
+    char mutex_buf[256];
+    ar = pthread_mutex_init((char *)mutex_buf, (char *)attr_buf);
+    printf("[2.6a0e] pthread_mutex_init -> %d\n", ar); fflush(stdout);
+    ar = pthread_mutexattr_destroy((char *)attr_buf);
+    printf("[2.6a0f] pthread_mutexattr_destroy -> %d\n", ar); fflush(stdout);
+
+    // Replicate pthreadMutexAlloc(1) inline to find which step
+    // of "MallocZero + pthread mutex init" trips up.
+    printf("[2.6m1] inline replication: malloc\n"); fflush(stdout);
+    sqlite3_mutex *p = (sqlite3_mutex *)sqlite3MallocZero(64);
+    printf("[2.6m2] p=%p\n", p); fflush(stdout);
+    if (p) {
+        pthread_mutexattr_t recursiveAttr;
+        printf("[2.6m3] attr_init\n"); fflush(stdout);
+        pthread_mutexattr_init(&recursiveAttr);
+        printf("[2.6m4] attr_settype\n"); fflush(stdout);
+        pthread_mutexattr_settype(&recursiveAttr, 2);
+        printf("[2.6m5] mutex_init &p->mutex=%p &recursiveAttr=%p\n",
+               &p->mutex, &recursiveAttr); fflush(stdout);
+        pthread_mutex_init(&p->mutex, &recursiveAttr);
+        printf("[2.6m6] attr_destroy\n"); fflush(stdout);
+        pthread_mutexattr_destroy(&recursiveAttr);
+        printf("[2.6m7] inline replication done, p=%p\n", p); fflush(stdout);
+    }
+    sqlite3Config.pInitMutex = p;
+    printf("[2.6a1] pInitMutex (read) = %p\n", sqlite3Config.pInitMutex); fflush(stdout);
+    printf("[2.6b] pInitMutex=%p\n", sqlite3Config.pInitMutex); fflush(stdout);
+    sqlite3_mutex_enter(sqlite3Config.pInitMutex);
+    printf("[2.6c] entered pInitMutex\n"); fflush(stdout);
+
+    sqlite3Config.inProgress = 1;
+    printf("[2.7a] inProgress=1, sizeof(sqlite3BuiltinFunctions)=%d\n",
+           (int)sizeof(sqlite3BuiltinFunctions)); fflush(stdout);
+    memset(&sqlite3BuiltinFunctions, 0, sizeof(sqlite3BuiltinFunctions));
+    printf("[2.7b] memset ok\n"); fflush(stdout);
+
+    sqlite3RegisterBuiltinFunctions();
+    printf("[2.8] RegisterBuiltinFunctions ok\n"); fflush(stdout);
+
+    int rc = sqlite3PcacheInitialize();
+    printf("[2.9] sqlite3PcacheInitialize -> %d\n", rc); fflush(stdout);
+    if (rc) return 1;
+    sqlite3Config.isPCacheInit = 1;
+
+    rc = sqlite3OsInit();
+    printf("[2.10] sqlite3OsInit          -> %d\n", rc); fflush(stdout);
+    if (rc) return 1;
+
+    rc = sqlite3MemdbInit();
+    printf("[2.11] sqlite3MemdbInit       -> %d\n", rc); fflush(stdout);
+    if (rc) return 1;
+
+    sqlite3Config.isInit = 1;
+    sqlite3Config.inProgress = 0;
+    sqlite3_mutex_leave(sqlite3Config.pInitMutex);
+    printf("[2.12] init complete\n"); fflush(stdout);
 
     // Tier 3: open an in-memory db.
     sqlite3 *db;

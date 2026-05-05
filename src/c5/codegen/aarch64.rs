@@ -621,6 +621,27 @@ pub(super) fn enc_ldr32_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
     0xB940_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
+/// `LDRSW <Xt>, [<Xn|SP>, #imm]` -- 32-bit load sign-extended into
+/// the full 64-bit `Xt`, immediate offset scaled by 4. Used by
+/// [`Op::Lw`] for `int` lvalue reads under M31 -- the C signed-int
+/// model requires the high bit of the 4-byte slot to propagate.
+pub(super) fn enc_ldrsw_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    debug_assert!(imm.is_multiple_of(4), "ldrsw imm: {imm} not 4-byte aligned");
+    let scaled = imm / 4;
+    debug_assert!(scaled < 4096, "ldrsw imm: {imm} > 16380");
+    0xB980_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STR <Wt>, [<Xn|SP>, #imm]` -- 32-bit store (low half of `Xt`),
+/// immediate offset scaled by 4. Companion to [`enc_ldrsw_imm`] /
+/// [`enc_ldr32_imm`] for [`Op::Sw`] under M31.
+pub(super) fn enc_str32_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    debug_assert!(imm.is_multiple_of(4), "str32 imm: {imm} not 4-byte aligned");
+    let scaled = imm / 4;
+    debug_assert!(scaled < 4096, "str32 imm: {imm} > 16380");
+    0xB900_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
 /// `LDR <Xt>, [<Xn|SP>, <Xm>, LSL #3]` -- 64-bit load, base-plus-
 /// register-shifted-by-3. Used by the Win64 TLS lowering to fetch
 /// `tls_array[_tls_index]` (each entry is 8 bytes, hence LSL #3).
@@ -1353,6 +1374,15 @@ fn lower_op(
         Op::Sc => {
             let lhs = pop_lhs_reg(code, reg_state);
             emit(code, enc_strb_imm(Reg::X19, lhs, 0));
+        }
+        Op::Lw => emit(code, enc_ldrsw_imm(Reg::X19, Reg::X19, 0)),
+        Op::Sw => {
+            let lhs = pop_lhs_reg(code, reg_state);
+            // STR Wt encodes the same Rt as LDRSW Xt -- the W/X
+            // distinction lives in the opcode bits, not the
+            // register name. Pass X19; the encoder produces the
+            // 32-bit store form regardless.
+            emit(code, enc_str32_imm(Reg::X19, lhs, 0));
         }
         Op::Psh => {
             // With the native optimizer on AND a Pseudo classification

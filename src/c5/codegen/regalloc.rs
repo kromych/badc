@@ -250,6 +250,7 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C5E
             | Op::Mod
             | Op::Si
             | Op::Sc
+            | Op::Sw
             // Floating-point binary ops and comparisons consume one
             // pseudo push the same way their integer counterparts do
             // -- the FP value travels through the same c5 stack slot.
@@ -417,6 +418,7 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C5E
             | Op::Mod
             | Op::Si
             | Op::Sc
+            | Op::Sw
             | Op::Fadd
             | Op::Fsub
             | Op::Fmul

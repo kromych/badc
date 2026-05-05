@@ -334,6 +334,29 @@ pub(super) fn emit_mov_mem_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg)
     emit_modrm_mem(code, src, base, disp);
 }
 
+/// `MOVSXD r64, [base + disp]` -- 32-bit load sign-extended into a
+/// 64-bit destination. Encoding: `REX.W + 63 /r`. Used by [`Op::Lw`]
+/// for `int` lvalue reads under M31 -- C signed semantics require
+/// the high bit of the 4-byte slot to propagate.
+pub(super) fn emit_movsxd_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+    emit_byte(code, rex(true, dst.high(), false, base.high()));
+    emit_byte(code, 0x63);
+    emit_modrm_mem(code, dst, base, disp);
+}
+
+/// `MOV [base + disp], r32` -- 32-bit memory store of the low half
+/// of `src`. Encoding: no REX.W, just `89 /r` (with REX only if any
+/// operand register needs the high bank). Companion to
+/// [`emit_movsxd_r_mem`] for [`Op::Sw`].
+pub(super) fn emit_mov_mem32_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
+    let needs_rex = src.high() || base.high();
+    if needs_rex {
+        emit_byte(code, rex(false, src.high(), false, base.high()));
+    }
+    emit_byte(code, 0x89);
+    emit_modrm_mem(code, src, base, disp);
+}
+
 /// `LEA r64, [base + disp]` -- compute effective address.
 /// Encoding: `REX.W + 8D /r`.
 pub(super) fn emit_lea_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
@@ -1488,6 +1511,15 @@ fn lower_op(
         Op::Sc => {
             let lhs = pop_lhs_reg(code, reg_state);
             emit_mov_mem8_r(code, lhs, 0, Reg::R13);
+        }
+        Op::Lw => {
+            // r13 = (i64)*(i32*)r13 -- sign-extending 32-bit load.
+            emit_movsxd_r_mem(code, Reg::R13, Reg::R13, 0);
+        }
+        Op::Sw => {
+            // *(i32*)addr = r13[31:0]
+            let lhs = pop_lhs_reg(code, reg_state);
+            emit_mov_mem32_r(code, lhs, 0, Reg::R13);
         }
         Op::Psh => {
             // With the native optimizer on AND a Pseudo classification,

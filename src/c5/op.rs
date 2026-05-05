@@ -31,6 +31,17 @@ pub enum Op {
     Si,
     /// Store Character: Stores the lower byte of accumulator into address on stack.
     Sc,
+    /// Load Word: Loads a 32-bit signed value from the address in the
+    /// accumulator, sign-extending into the 64-bit accumulator. Used
+    /// for `int` lvalue reads under M31's real-width regime where
+    /// `int` is a 4-byte storage slot. Falls back to the 8-byte path
+    /// while M31 is incomplete; emitted for `int`-typed reads once
+    /// `size_of_type(Ty::Int) == 4` is in effect.
+    Lw,
+    /// Store Word: Stores the low 32 bits of the accumulator into the
+    /// address on top of stack. Companion to [`Op::Lw`] for 4-byte
+    /// `int` writes.
+    Sw,
     /// Push: Pushes the accumulator onto the stack.
     Psh,
     /// External library call. Followed by one operand: the index
@@ -199,7 +210,7 @@ pub enum Op {
     TlsLea,
 }
 
-const OPS: [Op; 64] = [
+const OPS: [Op; 66] = [
     Op::Lea,
     Op::Imm,
     Op::Jmp,
@@ -214,6 +225,8 @@ const OPS: [Op; 64] = [
     Op::Lc,
     Op::Si,
     Op::Sc,
+    Op::Lw,
+    Op::Sw,
     Op::Psh,
     Op::JsrExt,
     Op::Or,

@@ -394,6 +394,67 @@ impl<H: Host> Vm<H> {
         }
     }
 
+    /// 4-byte signed load with sign-extension into i32. Mirrors
+    /// `load_u8`'s stack-aware shape: an `Lw` against a stack slot
+    /// reads the low or high half of the 8-byte slot depending on
+    /// `addr & 4`. Off-stack reads pull 4 raw bytes from `data`.
+    /// Used by [`Op::Lw`] for `int` lvalue reads under M31's real-
+    /// width regime.
+    fn load_i32(&self, addr: usize) -> Result<i32, C5Error> {
+        if let Some(idx) = self.get_stack_idx(addr) {
+            if idx < self.stack.len() {
+                let word = self.stack[idx];
+                let byte_offset = (addr - STACK_BASE) % 8;
+                let shift = byte_offset * 8;
+                Ok(((word >> shift) & 0xFFFF_FFFF) as u32 as i32)
+            } else {
+                Err(C5Error::Runtime(format!(
+                    "Stack overflow read at addr {:x}",
+                    addr
+                )))
+            }
+        } else {
+            self.check_data_access(addr, 4, AccessKind::Read)?;
+            if addr + 4 <= self.data.len() {
+                let mut bytes = [0u8; 4];
+                bytes.copy_from_slice(&self.data[addr..addr + 4]);
+                Ok(i32::from_le_bytes(bytes))
+            } else {
+                Ok(0)
+            }
+        }
+    }
+
+    /// 4-byte store. On the stack, masks the target half of the
+    /// 8-byte slot so the other 4 bytes survive. Off-stack, writes
+    /// 4 raw bytes. Companion to [`load_i32`] for [`Op::Sw`].
+    fn store_i32(&mut self, addr: usize, val: i32) -> Result<(), C5Error> {
+        if let Some(idx) = self.get_stack_idx(addr) {
+            if idx < self.stack.len() {
+                let word = self.stack[idx] as u64;
+                let byte_offset = (addr - STACK_BASE) % 8;
+                let shift = byte_offset * 8;
+                let mask = !(0xFFFF_FFFFu64 << shift);
+                let new_val = (word & mask) | (((val as u32 as u64) << shift) as u64);
+                self.stack[idx] = new_val as i64;
+                Ok(())
+            } else {
+                Err(C5Error::Runtime(format!(
+                    "Stack overflow write at addr {:x}",
+                    addr
+                )))
+            }
+        } else {
+            self.check_data_access(addr, 4, AccessKind::Write)?;
+            if addr + 4 > self.data.len() {
+                self.data.resize(addr + 4, 0);
+            }
+            let bytes = val.to_le_bytes();
+            self.data[addr..addr + 4].copy_from_slice(&bytes);
+            Ok(())
+        }
+    }
+
     fn load_u8(&self, addr: usize) -> Result<u8, C5Error> {
         if let Some(idx) = self.get_stack_idx(addr) {
             if idx < self.stack.len() {
@@ -630,6 +691,14 @@ impl<H: Host> Vm<H> {
                     let addr = self.load_i64(sp)? as usize;
                     sp += 8;
                     self.store_u8(addr, a as u8)?;
+                }
+                Op::Lw => {
+                    a = self.load_i32(a as usize)? as i64;
+                }
+                Op::Sw => {
+                    let addr = self.load_i64(sp)? as usize;
+                    sp += 8;
+                    self.store_i32(addr, a as i32)?;
                 }
                 Op::Psh => {
                     sp -= 8;

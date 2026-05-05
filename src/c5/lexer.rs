@@ -152,6 +152,82 @@ impl Lexer {
             && (self.src[p].is_ascii_alphabetic() || self.src[p] == b'_')
     }
 
+    /// Count the number of comma-separated top-level groups
+    /// (`{...}`) that follow the current lex position before the
+    /// matching `}` at depth 0. The current token must already be
+    /// the array initializer's outer `{`. Used by the struct-
+    /// array initializer path to pre-allocate storage for every
+    /// element before any inner string-literal lex landing
+    /// re-orders the data segment. Returns 0 if the source ends
+    /// before the matching `}` (the parser then surfaces a normal
+    /// "}" expected error).
+    ///
+    /// String literals are skipped without expansion; comments
+    /// (`/*...*/` and `//`) are also stepped over so a comment
+    /// containing `{` doesn't bump the count.
+    pub fn count_top_level_groups_in_array(&self) -> usize {
+        let bytes = &self.src;
+        // We're positioned just past the outer `{`. Walk forward,
+        // tracking brace depth. Top-level (depth 1) `{` opens a
+        // new group; the matching `}` at depth 1 closes it. The
+        // depth-0 `}` ends the scan.
+        let mut p = self.pos;
+        let mut depth: i32 = 1;
+        let mut count: usize = 0;
+        let mut in_group = false;
+        while p < bytes.len() && depth > 0 {
+            let c = bytes[p];
+            if c == b'/' && p + 1 < bytes.len() && bytes[p + 1] == b'*' {
+                p += 2;
+                while p + 1 < bytes.len() && !(bytes[p] == b'*' && bytes[p + 1] == b'/') {
+                    p += 1;
+                }
+                p = (p + 2).min(bytes.len());
+                continue;
+            }
+            if c == b'/' && p + 1 < bytes.len() && bytes[p + 1] == b'/' {
+                while p < bytes.len() && bytes[p] != b'\n' {
+                    p += 1;
+                }
+                continue;
+            }
+            if c == b'"' || c == b'\'' {
+                let q = c;
+                p += 1;
+                while p < bytes.len() && bytes[p] != q {
+                    if bytes[p] == b'\\' && p + 1 < bytes.len() {
+                        p += 2;
+                    } else {
+                        p += 1;
+                    }
+                }
+                if p < bytes.len() {
+                    p += 1;
+                }
+                continue;
+            }
+            if c == b'{' {
+                if depth == 1 && !in_group {
+                    in_group = true;
+                    count += 1;
+                }
+                depth += 1;
+                p += 1;
+                continue;
+            }
+            if c == b'}' {
+                depth -= 1;
+                if depth == 1 {
+                    in_group = false;
+                }
+                p += 1;
+                continue;
+            }
+            p += 1;
+        }
+        count
+    }
+
     /// Advance to the next token. Identifiers are interned into `symbols`
     /// (with `index` kept in sync); string literals are appended to `data`
     /// and `ival` is set to their start address.

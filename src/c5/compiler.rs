@@ -189,8 +189,12 @@ enum InitElemReloc {
     None,
     /// Value is a data-segment offset; needs a DataReloc.
     Data,
-    /// Value is a function bytecode PC; needs a CodeReloc.
-    Code,
+    /// Value is a function bytecode PC; needs a CodeReloc. The
+    /// payload is the function's symbol index, captured at parse
+    /// time so the post-body fixup pass can look up the
+    /// resolved bytecode PC and patch both the data bytes and
+    /// the matching `Program::code_relocs` entry.
+    Code(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -392,6 +396,26 @@ pub struct Compiler {
     /// Name of the C function whose body is currently being
     /// emitted. Set on `Op::Ent` emit and cleared on `Op::Lev`.
     current_function_name: String,
+    /// Forward-call backpatch list. Each entry pairs a `Jsr`
+    /// operand's text position with the symbol it called. The
+    /// emit site stores `0` as a placeholder when the callee
+    /// hasn't seen its body yet (`Symbol::val == 0`); when the
+    /// body finally lands and `val` updates to the new `ent_pc`,
+    /// we walk this list and rewrite the placeholders. Without
+    /// this fixup pass, sqlite3 (and any C codebase that calls a
+    /// function declared in a header but defined further down)
+    /// jumps to PC 0 -- the binary's `main` entry -- and
+    /// recurses into garbage.
+    fn_call_fixups: Vec<(usize, usize)>,
+    /// Parallel symbol index for each entry in `code_relocs`.
+    /// `parse_constant_init_value` records a CodeReloc with the
+    /// callee's `Symbol::val` at parse time -- which is `0` for
+    /// any function whose body hasn't been emitted yet (sqlite's
+    /// VFS dispatch tables and friends). The
+    /// `apply_fn_call_fixups` pass uses this index to rewrite
+    /// each CodeReloc's `target_bc_pc` and the matching
+    /// data-segment bytes once every body has been parsed.
+    code_reloc_sym_idx: Vec<usize>,
 }
 
 impl Compiler {
@@ -516,6 +540,8 @@ impl Compiler {
             source_lines: Vec::new(),
             source_functions: Vec::new(),
             current_function_name: String::new(),
+            fn_call_fixups: Vec::new(),
+            code_reloc_sym_idx: Vec::new(),
         }
     }
 
@@ -1910,11 +1936,71 @@ impl Compiler {
 
     /// Compile the source. On success, the returned `Program` contains the
     /// bytecode, the static data segment, and the PC of `main`.
+    /// Resolve every recorded direct-call / function-pointer
+    /// reference against its callee's final `val`. Forward
+    /// declarations stash `val = 0` (the prototype-time
+    /// `text.len()`) at every call site emit; once the body
+    /// lands, `val` is rewritten to the body's `ent_pc`. This
+    /// pass walks the recorded operand positions and patches
+    /// each one in `text`. The bias on bare-function-reference
+    /// emits (`CODE_BASE + val`) is detected by reading the op
+    /// preceding the operand: `Op::Imm` means a value-context
+    /// reference (fp = name) so the operand carries the
+    /// `CODE_BASE` bias; otherwise the op is `Op::Jsr` and the
+    /// operand is a raw bytecode PC.
+    fn apply_fn_call_fixups(&mut self) -> Result<(), C5Error> {
+        for &(operand_pc, sym_idx) in &self.fn_call_fixups {
+            let target = self.symbols[sym_idx].val;
+            let op = self.text[operand_pc - 1];
+            if op == Op::Imm as i64 {
+                self.text[operand_pc] = CODE_BASE as i64 + target;
+            } else {
+                self.text[operand_pc] = target;
+            }
+        }
+        // Static-initializer function-pointer entries (sqlite's
+        // vtable / function-pointer struct fields). Each
+        // `CodeReloc` was recorded at parse time with the
+        // symbol's prototype-time `val` (often 0); the parallel
+        // `code_reloc_sym_idx` tracks the originating symbol so
+        // we can read its post-body `val` here. We rewrite both
+        // the `target_bc_pc` and the matching little-endian
+        // bytes in `data` -- both are sourced from the same
+        // value at write time, so both must agree post-fixup.
+        // The two arrays must be the same length (one symbol idx
+        // per code reloc); a length mismatch is a bug in a
+        // CodeReloc-emitting site that forgot to record its
+        // sym idx.
+        if self.code_relocs.len() != self.code_reloc_sym_idx.len() {
+            return Err(C5Error::Compile(format!(
+                "internal: code_relocs ({}) and code_reloc_sym_idx ({}) length mismatch \
+                 -- a CodeReloc emitter forgot to record its symbol idx",
+                self.code_relocs.len(),
+                self.code_reloc_sym_idx.len()
+            )));
+        }
+        for (reloc, &sym_idx) in self
+            .code_relocs
+            .iter_mut()
+            .zip(self.code_reloc_sym_idx.iter())
+        {
+            let new_target = self.symbols[sym_idx].val as u64;
+            reloc.target_bc_pc = new_target;
+            // Don't rewrite the data bytes -- the VM and per-target
+            // writers walk `code_relocs` and lay down their own
+            // bias (`CODE_BASE + target_bc_pc` for the VM; native
+            // VA for ELF / Mach-O / PE). They read `target_bc_pc`,
+            // not the placeholder bytes.
+        }
+        Ok(())
+    }
+
     pub fn compile(mut self) -> Result<Program, C5Error> {
         if let Some(e) = self.deferred_error.take() {
             return Err(e);
         }
         self.run_compile()?;
+        self.apply_fn_call_fixups()?;
         // `main` is optional today: shared-library output
         // (`OutputKind::SharedLibrary`) doesn't need an entry
         // point, and the executable-output writer surfaces a
@@ -2349,6 +2435,21 @@ impl Compiler {
                     }
                 } else if self.symbols[id_idx].class == Token::Fun as i64 {
                     self.emit_op(Op::Jsr);
+                    // Record a fixup so the operand gets re-resolved
+                    // after the callee's body lands. `val == 0`
+                    // means the body hasn't been parsed yet (the
+                    // symbol is from a forward declaration); the
+                    // value we emit now is a placeholder. After
+                    // every function body is parsed we walk this
+                    // list and rewrite each operand to the
+                    // post-body `ent_pc` of its callee. Calls that
+                    // already see a non-zero `val` (the callee's
+                    // body lands before the call, the common case)
+                    // still record an entry but the post-body walk
+                    // re-emits the same value -- a no-op rather
+                    // than a bug.
+                    let operand_pc = self.text.len();
+                    self.fn_call_fixups.push((operand_pc, id_idx));
                     self.emit_val(self.symbols[id_idx].val);
                 } else if self.symbols[id_idx].class == Token::Loc as i64
                     || self.symbols[id_idx].class == Token::Glo as i64
@@ -2417,6 +2518,8 @@ impl Compiler {
                 // bias -- that lets the VM tell apart "function pointer"
                 // from "data pointer", and refuse to deref the former.
                 self.emit_op(Op::Imm);
+                let operand_pc = self.text.len();
+                self.fn_call_fixups.push((operand_pc, id_idx));
                 self.emit_val(CODE_BASE as i64 + self.symbols[id_idx].val);
                 // Type as `int*` rather than `char*`: matches the
                 // conventional `int *fp = some_function;` idiom and
@@ -3488,7 +3591,7 @@ impl Compiler {
     fn collect_array_initializer(
         &mut self,
         elem_ty: i64,
-    ) -> Result<alloc::vec::Vec<(i64, bool)>, C5Error> {
+    ) -> Result<alloc::vec::Vec<(i64, InitElemReloc)>, C5Error> {
         if self.lex.tk == '"' as i64 && elem_ty == Ty::Char as i64 {
             let start_addr = self.lex.ival as usize;
             self.next()?;
@@ -3496,9 +3599,9 @@ impl Compiler {
                 self.next()?;
             }
             self.data.push(0);
-            let elems: alloc::vec::Vec<(i64, bool)> = self.data[start_addr..]
+            let elems: alloc::vec::Vec<(i64, InitElemReloc)> = self.data[start_addr..]
                 .iter()
-                .map(|&b| (b as i64, false))
+                .map(|&b| (b as i64, InitElemReloc::None))
                 .collect();
             return Ok(elems);
         }
@@ -3535,8 +3638,7 @@ impl Compiler {
             // both `Data` (string / `&global`) and `Code` (function
             // pointer) get a true reloc; integer constants don't.
             let (value, reloc) = self.parse_constant_init_value()?;
-            let needs_reloc = !matches!(reloc, InitElemReloc::None);
-            elements.push((value, needs_reloc));
+            elements.push((value, reloc));
             if self.lex.tk == ',' as i64 {
                 self.next()?;
             }
@@ -3555,7 +3657,7 @@ impl Compiler {
     fn pack_initializer_into_data(
         &mut self,
         elem_ty: i64,
-        elements: &[(i64, bool)],
+        elements: &[(i64, InitElemReloc)],
     ) -> (usize, usize) {
         let elem_size = self.size_of_type(elem_ty);
         let start_addr = self.data.len();
@@ -3564,16 +3666,26 @@ impl Compiler {
                 self.data.push(v as u8);
             }
         } else {
-            for (idx, &(v, needs_reloc)) in elements.iter().enumerate() {
+            for (idx, &(v, reloc)) in elements.iter().enumerate() {
                 let here = start_addr + idx * elem_size;
                 for i in 0..elem_size {
                     self.data.push(((v >> (i * 8)) & 0xFF) as u8);
                 }
-                if needs_reloc {
-                    self.data_relocs.push(crate::c5::program::DataReloc {
-                        data_offset: here as u64,
-                        target_offset: v as u64,
-                    });
+                match reloc {
+                    InitElemReloc::None => {}
+                    InitElemReloc::Data => {
+                        self.data_relocs.push(crate::c5::program::DataReloc {
+                            data_offset: here as u64,
+                            target_offset: v as u64,
+                        });
+                    }
+                    InitElemReloc::Code(sym_idx) => {
+                        self.code_relocs.push(crate::c5::program::CodeReloc {
+                            data_offset: here as u64,
+                            target_bc_pc: v as u64,
+                        });
+                        self.code_reloc_sym_idx.push(sym_idx);
+                    }
                 }
             }
         }
@@ -3693,7 +3805,7 @@ impl Compiler {
             if class == Token::Fun as i64 {
                 let bc_pc = self.symbols[idx].val;
                 self.next()?;
-                return Ok((bc_pc, InitElemReloc::Code));
+                return Ok((bc_pc, InitElemReloc::Code(idx)));
             }
             if class == Token::Num as i64 {
                 let v = self.symbols[idx].val;
@@ -3870,11 +3982,12 @@ impl Compiler {
                     target_offset: value as u64,
                 });
             }
-            InitElemReloc::Code => {
+            InitElemReloc::Code(sym_idx) => {
                 self.code_relocs.push(crate::c5::program::CodeReloc {
                     data_offset: here as u64,
                     target_bc_pc: value as u64,
                 });
+                self.code_reloc_sym_idx.push(sym_idx);
             }
         }
     }
@@ -3890,11 +4003,11 @@ impl Compiler {
         &mut self,
         var_offset: i64,
         elem_ty: i64,
-        elements: &[(i64, bool)],
+        elements: &[(i64, InitElemReloc)],
     ) {
         let elem_size = self.size_of_type(elem_ty);
         let mut byte_off = var_offset as usize;
-        for &(v, needs_reloc) in elements {
+        for &(v, reloc) in elements {
             if elem_size == 1 {
                 self.data[byte_off] = v as u8;
                 byte_off += 1;
@@ -3902,11 +4015,21 @@ impl Compiler {
                 for i in 0..elem_size {
                     self.data[byte_off + i] = ((v >> (i * 8)) & 0xFF) as u8;
                 }
-                if needs_reloc {
-                    self.data_relocs.push(crate::c5::program::DataReloc {
-                        data_offset: byte_off as u64,
-                        target_offset: v as u64,
-                    });
+                match reloc {
+                    InitElemReloc::None => {}
+                    InitElemReloc::Data => {
+                        self.data_relocs.push(crate::c5::program::DataReloc {
+                            data_offset: byte_off as u64,
+                            target_offset: v as u64,
+                        });
+                    }
+                    InitElemReloc::Code(sym_idx) => {
+                        self.code_relocs.push(crate::c5::program::CodeReloc {
+                            data_offset: byte_off as u64,
+                            target_bc_pc: v as u64,
+                        });
+                        self.code_reloc_sym_idx.push(sym_idx);
+                    }
                 }
                 byte_off += elem_size;
             }
@@ -4042,24 +4165,28 @@ impl Compiler {
                 if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
                     // Static-local of struct array, deferred size:
                     // `static struct T xs[] = { {...}, {...}, ... };`
-                    // Same shape as the file-scope path.
+                    // Pre-scan the source for the element count so
+                    // each element's storage stays contiguous even if
+                    // an element's parse appends a string literal to
+                    // `self.data`.
                     let elem_size = self.size_of_type(ty);
-                    let off = self.data.len() as i64;
-                    self.symbols[loc_idx].val = off;
                     if self.lex.tk != '{' as i64 {
                         return Err(C5Error::Compile(format!(
                             "{}: array initializer must start with `{{`",
                             self.lex.line
                         )));
                     }
+                    let count = self.lex.count_top_level_groups_in_array() as i64;
                     self.next()?;
-                    let mut count: i64 = 0;
+                    let off = self.data.len() as i64;
+                    self.symbols[loc_idx].val = off;
+                    for _ in 0..(count * elem_size as i64) {
+                        self.data.push(0);
+                    }
                     let sid = struct_id_of(ty);
+                    let mut i: i64 = 0;
                     while self.lex.tk != '}' as i64 {
-                        let here = self.data.len() as i64;
-                        for _ in 0..elem_size {
-                            self.data.push(0);
-                        }
+                        let here = off + i * elem_size as i64;
                         if self.lex.tk == '{' as i64 {
                             self.collect_struct_initializer(sid, here)?;
                         } else {
@@ -4068,7 +4195,7 @@ impl Compiler {
                                 self.lex.line
                             )));
                         }
-                        count += 1;
+                        i += 1;
                         if self.lex.tk == ',' as i64 {
                             self.next()?;
                         }
@@ -4140,16 +4267,21 @@ impl Compiler {
             // reserve one stack frame slot block and Mcpy the
             // staged bytes into it.
             if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 && self.lex.tk == '{' as i64 {
+                // Local deferred-size struct array. Same scan-then-
+                // pre-allocate dance as the file-scope path so an
+                // element's string-literal field doesn't shift the
+                // next element off its expected offset.
                 let elem_size = self.size_of_type(ty);
+                let count = self.lex.count_top_level_groups_in_array() as i64;
                 let staged_off = self.data.len();
                 self.next()?;
-                let mut count: i64 = 0;
+                for _ in 0..(count * elem_size as i64) {
+                    self.data.push(0);
+                }
                 let sid = struct_id_of(ty);
+                let mut i: i64 = 0;
                 while self.lex.tk != '}' as i64 {
-                    let here = self.data.len() as i64;
-                    for _ in 0..elem_size {
-                        self.data.push(0);
-                    }
+                    let here = staged_off as i64 + i * elem_size as i64;
                     if self.lex.tk == '{' as i64 {
                         self.collect_struct_initializer(sid, here)?;
                     } else {
@@ -4158,7 +4290,7 @@ impl Compiler {
                             self.lex.line
                         )));
                     }
-                    count += 1;
+                    i += 1;
                     if self.lex.tk == ',' as i64 {
                         self.next()?;
                     }
@@ -5109,6 +5241,13 @@ impl Compiler {
                     self.unresolved_gotos.clear();
 
                     let ent_pc = self.text.len();
+                    // Now that the body is being emitted, point the
+                    // symbol at the real `ent_pc`. Forward-declared
+                    // callers embedded `0` (the prototype-time
+                    // `text.len()`); the fixup pass at end of
+                    // run_compile rewrites their operands to this
+                    // post-body PC.
+                    self.symbols[id_idx].val = ent_pc as i64;
                     self.emit_op(Op::Ent);
                     self.emit_val(0); // patched below
 
@@ -5217,27 +5356,36 @@ impl Compiler {
                         self.next()?;
                         if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
                             // `struct T xs[] = { {...}, {...}, ... };`
-                            // Each element is a brace-list; we count
-                            // them, allocate storage per element on
-                            // the fly, and write each via
-                            // collect_struct_initializer.
+                            // Pre-scan the source to count elements so
+                            // every element's storage is pre-reserved
+                            // contiguously *before* any string literal
+                            // inside an element gets appended to
+                            // `self.data` and pushes subsequent
+                            // elements to a non-contiguous offset.
                             let elem_size = self.size_of_type(ty);
-                            let off = self.data.len() as i64;
-                            self.symbols[id_idx].val = off;
                             if self.lex.tk != '{' as i64 {
                                 return Err(C5Error::Compile(format!(
                                     "{}: array initializer must start with `{{`",
                                     self.lex.line
                                 )));
                             }
+                            let count = self.lex.count_top_level_groups_in_array() as i64;
                             self.next()?;
-                            let mut count: i64 = 0;
+                            let off = self.data.len() as i64;
+                            self.symbols[id_idx].val = off;
+                            for _ in 0..(count * elem_size as i64) {
+                                self.data.push(0);
+                            }
                             let sid = struct_id_of(ty);
+                            let mut i: i64 = 0;
                             while self.lex.tk != '}' as i64 {
-                                let here = self.data.len() as i64;
-                                for _ in 0..elem_size {
-                                    self.data.push(0);
+                                if i >= count {
+                                    return Err(C5Error::Compile(format!(
+                                        "{}: struct array element count miscount (parser scanned {count}, parsed past)",
+                                        self.lex.line
+                                    )));
                                 }
+                                let here = off + i * elem_size as i64;
                                 if self.lex.tk == '{' as i64 {
                                     self.collect_struct_initializer(sid, here)?;
                                 } else {
@@ -5246,7 +5394,7 @@ impl Compiler {
                                         self.lex.line
                                     )));
                                 }
-                                count += 1;
+                                i += 1;
                                 if self.lex.tk == ',' as i64 {
                                     self.next()?;
                                 }
@@ -5450,7 +5598,8 @@ impl Compiler {
                     "{line}: function-pointer initializer for `_Thread_local` not supported"
                 )));
             }
-            let bc_pc = self.symbols[self.lex.curr_id_idx].val;
+            let sym_idx = self.lex.curr_id_idx;
+            let bc_pc = self.symbols[sym_idx].val;
             self.next()?;
             let bytes = (bc_pc as u64).to_le_bytes();
             self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
@@ -5458,6 +5607,7 @@ impl Compiler {
                 data_offset: var_offset as u64,
                 target_bc_pc: bc_pc as u64,
             });
+            self.code_reloc_sym_idx.push(sym_idx);
             return Ok(());
         }
         // String literal in a `char *p` global initializer.

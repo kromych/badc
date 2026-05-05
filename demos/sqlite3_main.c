@@ -9,25 +9,33 @@
 // amalgamation.
 
 int main() {
-    // The smallest sqlite call that touches no allocator / VFS
-    // state -- it returns the static `sqlite3_version[]` array's
-    // address. If this prints the right string, address-of-global,
-    // string-pointer return, and printf("%s") all work end-to-end.
-    const char *ver = sqlite3_libversion();
-    printf("sqlite3_libversion() -> %s\n", ver);
+    // Smoke test driver. Walks progressively deeper sqlite3 entry
+    // points and reports the first runtime failure. Each tier is
+    // followed by `fflush(stdout)` so a SIGBUS / SIGSEGV between
+    // printf and the abort doesn't lose the diagnostics that
+    // came before it.
 
-    // The tiny extra step: get the source-id, also a const string.
-    const char *sid = sqlite3_sourceid();
-    printf("sqlite3_sourceid()   -> %s\n", sid);
+    // Tier 1: leaf functions returning const strings / integers.
+    printf("[1.1] sqlite3_libversion()      -> %s\n", sqlite3_libversion());
+    printf("[1.2] sqlite3_sourceid()        -> %s\n", sqlite3_sourceid());
+    printf("[1.3] sqlite3_libversion_number -> %d\n", sqlite3_libversion_number());
+    printf("[1.4] sqlite3_threadsafe()      -> %d\n", sqlite3_threadsafe());
+    fflush(stdout);
 
+    // Tier 2: library init -- touches mutex / config / malloc.
+    int rc = sqlite3_initialize();
+    printf("[2] sqlite3_initialize()      -> %d\n", rc);
+    fflush(stdout);
+    if (rc != 0) return 1;
+
+    // Tier 3: open an in-memory db.
     sqlite3 *db;
-    int rc = sqlite3_open(":memory:", &db);
-    if (rc) {
-        printf("open failed: %d\n", rc);
-        return 1;
-    }
-    printf("opened in-memory db\n");
+    rc = sqlite3_open(":memory:", &db);
+    printf("[3] sqlite3_open(\":memory:\") -> %d\n", rc);
+    fflush(stdout);
+    if (rc != 0) return 1;
 
     sqlite3_close(db);
+    printf("[ok] sqlite3 closed\n");
     return 0;
 }

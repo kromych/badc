@@ -43,6 +43,15 @@ pub(crate) struct Symbol {
     /// case lands.
     pub array_size: i64,
 
+    /// Inner dimension of a 2D array variable. For `T xs[N][M]`
+    /// we record `array_size = N*M` (total element count) and
+    /// `inner_array_size = M` so subscripting `xs[i]` scales by
+    /// `M * sizeof(T)` instead of `sizeof(T)` -- the first index
+    /// strides over rows, the second over elements. Zero for 1D
+    /// arrays. c5 doesn't express "array of M T" as a type, so
+    /// the symbol carries the dimension separately.
+    pub inner_array_size: i64,
+
     /// True once a `Token::Glo` symbol has been seen with an
     /// explicit initializer (`= ...`). Tentative-definition
     /// merges (C11 6.9.2): a forward `static T x;` (or the same

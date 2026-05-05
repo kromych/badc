@@ -368,6 +368,16 @@ pub struct Compiler {
     /// the trailing-decoration loop. None when the declarator
     /// wasn't this shape.
     pending_fn_params: Option<ParsedParams>,
+
+    /// Override stride for the next `[i]` postfix index. When we
+    /// load the address of a 2D-array variable (`T xs[N][M]`),
+    /// the first subscript should scale the index by
+    /// `M * sizeof(T)`, not `sizeof(T)`. The expr() identifier
+    /// branch sets this to `inner_array_size * sizeof(elem)` on a
+    /// 2D-array decay; the Brak postfix handler reads-and-clears
+    /// it before falling back to the regular pointer-arithmetic
+    /// stride. Zero means "use the regular stride."
+    pending_index_stride: i64,
 }
 
 impl Compiler {
@@ -467,6 +477,7 @@ impl Compiler {
             call_fp_arg_masks: Vec::new(),
             current_func_return_ty: 0,
             pending_fn_params: None,
+            pending_index_stride: 0,
         }
     }
 
@@ -757,7 +768,8 @@ impl Compiler {
                 || self.lex.peek_after_whitespace(b'('))
         {
             self.next()?; // consume the outer `(`
-            let (idx, mut inner_ty, _) = self.parse_declarator(ty)?;
+            let (idx, mut inner_ty, inner_array_size) =
+                self.parse_declarator(ty)?;
             // The inner declarator may have stopped on `(` if it
             // was a function-returning-fp shape like
             // `void (*foo(args1))(args2)`. In that case `foo` is
@@ -806,7 +818,7 @@ impl Compiler {
                     break;
                 }
             }
-            return Ok((idx, inner_ty, 0));
+            return Ok((idx, inner_ty, inner_array_size));
         }
 
         // Abstract declarator: type-only, no identifier. Most
@@ -865,14 +877,14 @@ impl Compiler {
                 self.next()?;
                 array_size = n;
             }
-            // Trailing `[N]` dimensions on a multi-dim array.
-            // c5's symbol table only carries one dimension; we
-            // collapse extras by multiplying their sizes onto
-            // `array_size` so total storage matches. Indexing
-            // `a[i][j]` won't compute the right offset on its
-            // own (the inner dim isn't tracked), but the array's
-            // bytes are reachable via `((T*)a)[i*M+j]` and
-            // memcpy / memset based access.
+            // Trailing `[M]` dimension for 2D arrays. c5 stores
+            // `array_size = N*M` (total element count) and
+            // `inner_array_size = M` on the symbol so the indexing
+            // path can scale the first index by `M * sizeof(T)`.
+            // Higher-dimensional arrays are flattened: their inner
+            // strides aren't tracked, but the byte storage is
+            // correct.
+            let mut inner_dim: i64 = 0;
             while self.lex.tk == Token::Brak as i64 {
                 self.next()?;
                 if self.lex.tk == ']' as i64 {
@@ -893,9 +905,15 @@ impl Compiler {
                     )));
                 }
                 self.next()?;
+                if inner_dim == 0 {
+                    inner_dim = m;
+                }
                 if array_size > 0 {
                     array_size *= m;
                 }
+            }
+            if inner_dim > 0 && idx != usize::MAX {
+                self.symbols[idx].inner_array_size = inner_dim;
             }
         }
 
@@ -2397,6 +2415,15 @@ impl Compiler {
                 // value type to look up offsets.
                 if is_array_var {
                     self.ty += Ty::Ptr as i64;
+                    // 2D-array decay: stash the row stride so the
+                    // next `[i]` postfix scales by the inner
+                    // dimension instead of the element size. The
+                    // Brak handler reads-and-clears it.
+                    let inner = self.symbols[id_idx].inner_array_size;
+                    if inner > 0 {
+                        let elem_ty = self.symbols[id_idx].type_;
+                        self.pending_index_stride = inner * self.size_of_type(elem_ty) as i64;
+                    }
                 } else if !is_struct_value {
                     // Pointers to structs and every scalar type go
                     // through the normal load_op_for path.
@@ -3089,6 +3116,14 @@ impl Compiler {
                 self.next()?;
             } else if self.lex.tk == Token::Brak as i64 {
                 self.next()?;
+                // Read-and-clear the 2D-array stride override. The
+                // identifier branch sets it on the array decay; if
+                // present, the first `[i]` scales by the row stride
+                // (M * sizeof(T)) instead of the element size and
+                // the result type stays a pointer so the next `[j]`
+                // scales by sizeof(T) the regular way.
+                let two_d_stride = self.pending_index_stride;
+                self.pending_index_stride = 0;
                 self.emit_op(Op::Psh);
                 self.expr(Token::Assign as i64)?;
                 if self.lex.tk == ']' as i64 {
@@ -3105,25 +3140,37 @@ impl Compiler {
                         self.lex.line
                     )));
                 }
-                if self.is_ptr_scaling_nontrivial(t) {
-                    let scale = self.pointee_size(t);
+                if two_d_stride > 0 {
                     self.emit_op(Op::Psh);
                     self.emit_op(Op::Imm);
-                    self.emit_val(scale);
+                    self.emit_val(two_d_stride);
                     self.emit_op(Op::Mul);
-                }
-                self.emit_op(Op::Add);
-                self.ty = t - Ty::Ptr as i64;
-                // `xs[i]` where `xs` is a `struct Foo *` yields a
-                // struct value -- the address-as-value rule. Skip
-                // the load so the `.field` operator can apply the
-                // field offset to the just-computed element
-                // address. Scalar / pointer / nested-pointer
-                // element types still take the regular load.
-                let elem_is_struct_value =
-                    is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
-                if !elem_is_struct_value {
-                    self.emit_op(load_op_for(self.ty));
+                    self.emit_op(Op::Add);
+                    // 2D row pointer -- ty stays at the same pointer
+                    // level; the next `[j]` decays it the regular
+                    // way to a scalar element.
+                    self.ty = t;
+                } else {
+                    if self.is_ptr_scaling_nontrivial(t) {
+                        let scale = self.pointee_size(t);
+                        self.emit_op(Op::Psh);
+                        self.emit_op(Op::Imm);
+                        self.emit_val(scale);
+                        self.emit_op(Op::Mul);
+                    }
+                    self.emit_op(Op::Add);
+                    self.ty = t - Ty::Ptr as i64;
+                    // `xs[i]` where `xs` is a `struct Foo *` yields a
+                    // struct value -- the address-as-value rule. Skip
+                    // the load so the `.field` operator can apply the
+                    // field offset to the just-computed element
+                    // address. Scalar / pointer / nested-pointer
+                    // element types still take the regular load.
+                    let elem_is_struct_value =
+                        is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
+                    if !elem_is_struct_value {
+                        self.emit_op(load_op_for(self.ty));
+                    }
                 }
             } else if self.lex.tk == Token::Arrow as i64 || self.lex.tk == Token::Dot as i64 {
                 // p->field / s.field. Both shapes resolve a struct
@@ -4154,6 +4201,42 @@ impl Compiler {
     /// matching store sequence via [`emit_local_init_store`].
     /// On entry the next token is a type-start (caller-checked); on
     /// exit the trailing `;` has been consumed.
+    /// Parse a `typedef` at block scope. Same shape as the file-
+    /// scope handler in run_compile, just routed here so block-
+    /// local typedefs (e.g. sqlite's `typedef void(*LOGFUNC_t)(...)`
+    /// inside a switch case) bind without bouncing through the
+    /// declaration parser.
+    fn parse_block_typedef(
+        &mut self,
+        block_symbols: &mut Vec<(usize, i64, i64, i64)>,
+    ) -> Result<(), C5Error> {
+        self.next()?; // consume `typedef`
+        let lbt = self.parse_decl_base_type()?;
+        while self.lex.tk != ';' as i64 {
+            let (id_idx, ty, _) = self.parse_declarator(lbt)?;
+            if id_idx == usize::MAX {
+                return Err(C5Error::Compile(format!(
+                    "{}: typedef requires a name",
+                    self.lex.line
+                )));
+            }
+            block_symbols.push((
+                id_idx,
+                self.symbols[id_idx].class,
+                self.symbols[id_idx].type_,
+                self.symbols[id_idx].val,
+            ));
+            self.symbols[id_idx].class = Token::Typedef as i64;
+            self.symbols[id_idx].type_ = ty;
+            self.symbols[id_idx].val = 0;
+            if self.lex.tk == ',' as i64 {
+                self.next()?;
+            }
+        }
+        self.next()?; // consume `;`
+        Ok(())
+    }
+
     fn parse_block_local_decl(
         &mut self,
         block_symbols: &mut Vec<(usize, i64, i64, i64)>,
@@ -4208,7 +4291,9 @@ impl Compiler {
         let mut block_symbols = Vec::new();
 
         while self.lex.tk != '}' as i64 {
-            if self.lex_is_type_start() {
+            if self.lex.tk == Token::Typedef as i64 {
+                self.parse_block_typedef(&mut block_symbols)?;
+            } else if self.lex_is_type_start() {
                 self.parse_block_local_decl(&mut block_symbols)?;
             } else {
                 self.stmt()?;

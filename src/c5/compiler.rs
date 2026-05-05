@@ -2696,7 +2696,16 @@ impl Compiler {
                     self.lex.line
                 )));
             }
-            self.emit_op(load_op_for(self.ty));
+            // `*p` where `p` is a struct pointer yields a struct
+            // *value*. c5 represents struct values address-as-
+            // value: the address goes in `a`, no load. The next
+            // op (`.field`, `= rhs` lowering Mcpy, etc.) reads
+            // the address from `a` directly.
+            let result_is_struct_value =
+                is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
+            if !result_is_struct_value {
+                self.emit_op(load_op_for(self.ty));
+            }
         } else if self.lex.tk == Token::AndOp as i64 {
             self.next()?;
             self.expr(Token::Inc as i64)?;

@@ -7,3 +7,5 @@
 *.o
 .DS_Store
 demos/sqlite3/
+hello
+sqlite3_main

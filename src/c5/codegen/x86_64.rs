@@ -1721,6 +1721,14 @@ fn lower_op(
             let bytes = lea_offset_bytes(off) as i32;
             emit_movzx_r_mem8(code, Reg::R13, Reg::RBP, bytes);
         }
+        Op::StLocI => {
+            // `*(bp + N*8) = a` -- store accumulator (r13) into a
+            // local frame slot. Mirrors LdLocI, just store
+            // direction.
+            let off = read_operand(text, pc, "StLocI")?;
+            let bytes = lea_offset_bytes(off) as i32;
+            emit_mov_mem_r(code, Reg::RBP, bytes, Reg::R13);
+        }
 
         // ---- Syscalls -- routed through the GOT. The codegen
         //      records a GotFixup at the call site; the ELF writer

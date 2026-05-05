@@ -231,6 +231,15 @@ impl Preprocessor {
             Target::MacOSAarch64 => {
                 macros.insert("__APPLE__".to_string(), "1".to_string());
                 macros.insert("__MACH__".to_string(), "1".to_string());
+                // sqlite3 amalgamation has a `defined(__APPLE__) &&
+                // !defined(SQLITE_WITHOUT_ZONEMALLOC)` block that
+                // pulls in `<malloc/malloc.h>` and the
+                // `malloc_zone_malloc` family. c5 doesn't yet bind
+                // those Mach symbols, so opt out of the zone path
+                // by default; users who want it can `#undef
+                // SQLITE_WITHOUT_ZONEMALLOC` before including the
+                // amalgamation.
+                macros.insert("SQLITE_WITHOUT_ZONEMALLOC".to_string(), "1".to_string());
             }
             Target::LinuxAarch64 | Target::LinuxX64 => {
                 macros.insert("__linux__".to_string(), "1".to_string());
@@ -296,7 +305,18 @@ impl Preprocessor {
         let mut cond_stack: Vec<CondFrame> = Vec::new();
         let mut active = true;
 
-        for (idx, line) in source.lines().enumerate() {
+        // Manual line iteration so multi-line function-like macro
+        // calls -- `assert(\n  expr\n);` -- can be joined into a
+        // single buffer before substitution. Per-line iteration
+        // would leave the call's `(` unmatched on the first line
+        // and the macro wouldn't expand. Subsequent consumed
+        // lines emit blank `\n`s so error line numbers stay
+        // grounded in the original source.
+        let lines: Vec<&str> = source.lines().collect();
+        let mut idx_iter = 0usize;
+        while idx_iter < lines.len() {
+            let idx = idx_iter;
+            let line = lines[idx];
             let line_no = idx + 1;
             let trimmed = line.trim_start();
 
@@ -471,13 +491,33 @@ impl Preprocessor {
                     }
                 }
                 out.push('\n');
+                idx_iter += 1;
                 continue;
             }
 
             if active {
-                out.push_str(&self.substitute(line, filename, line_no));
+                let mut buffer = String::from(line);
+                let mut consumed = 1usize;
+                while macro_call_unclosed(&buffer, &self.fn_macros)
+                    && idx + consumed < lines.len()
+                {
+                    buffer.push('\n');
+                    buffer.push_str(lines[idx + consumed]);
+                    consumed += 1;
+                }
+                out.push_str(&self.substitute(&buffer, filename, line_no));
+                out.push('\n');
+                // Preserve source line numbering by emitting a blank
+                // line for each extra source line we joined into the
+                // buffer.
+                for _ in 1..consumed {
+                    out.push('\n');
+                }
+                idx_iter += consumed;
+            } else {
+                out.push('\n');
+                idx_iter += 1;
             }
-            out.push('\n');
         }
 
         if !cond_stack.is_empty() {
@@ -1341,6 +1381,57 @@ fn parse_macro_args(s: &str) -> Option<(Vec<String>, usize)> {
         }
     }
     None
+}
+
+/// True if `buffer` contains a known function-like macro name
+/// followed by `(` and the matching `)` is *not* in the buffer.
+/// Used by the preprocessor's main driver to decide whether the
+/// next source line should be appended to the current logical
+/// line so a multi-line `assert(\n  expr\n)` call expands. Quotes
+/// and char literals are skipped so `"foo("` doesn't trigger.
+fn macro_call_unclosed(buffer: &str, fn_macros: &HashMap<String, FnMacro>) -> bool {
+    let bytes = buffer.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = bytes[i];
+        if c == b'"' || c == b'\'' {
+            let q = c;
+            i += 1;
+            while i < bytes.len() && bytes[i] != q {
+                if bytes[i] == b'\\' && i + 1 < bytes.len() {
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            if i < bytes.len() {
+                i += 1;
+            }
+            continue;
+        }
+        if c.is_ascii_alphabetic() || c == b'_' {
+            let start = i;
+            i += 1;
+            while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+                i += 1;
+            }
+            let name = &buffer[start..i];
+            if fn_macros.contains_key(name) {
+                let mut j = i;
+                while j < bytes.len()
+                    && (bytes[j] == b' ' || bytes[j] == b'\t' || bytes[j] == b'\n')
+                {
+                    j += 1;
+                }
+                if j < bytes.len() && bytes[j] == b'(' && parse_macro_args(&buffer[j..]).is_none() {
+                    return true;
+                }
+            }
+            continue;
+        }
+        i += 1;
+    }
+    false
 }
 
 /// Substitute `params` for `args` in a function-like macro body.

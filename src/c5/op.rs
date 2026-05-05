@@ -119,6 +119,15 @@ pub enum Op {
     LdLocI,
     /// `a = *(u8*)(bp + N*8)` -- fused `Lea N; Lc`.
     LdLocC,
+    /// `*(i64*)(bp + N*8) = a` -- store accumulator into a local
+    /// frame slot at the given offset, without disturbing the c5
+    /// stack or the accumulator. The compiler emits this when it
+    /// needs to spill a freshly-computed value (e.g. an indirect
+    /// call's function-pointer source) to a temp before the
+    /// surrounding code clobbers `a`. The regular `Lea N; Si`
+    /// pattern can't express this safely because `Lea` clobbers
+    /// `a` first.
+    StLocI,
 
     // --- Floating-point arithmetic and comparison ---
     //
@@ -190,7 +199,7 @@ pub enum Op {
     TlsLea,
 }
 
-const OPS: [Op; 63] = [
+const OPS: [Op; 64] = [
     Op::Lea,
     Op::Imm,
     Op::Jmp,
@@ -240,6 +249,7 @@ const OPS: [Op; 63] = [
     Op::GeI,
     Op::LdLocI,
     Op::LdLocC,
+    Op::StLocI,
     // Floating-point arithmetic / comparison / casts.
     Op::Fadd,
     Op::Fsub,
@@ -286,7 +296,7 @@ impl Op {
             // arithmetic / comparison ops.
             Lea | Imm | Jmp | Jsr | Bz | Bnz | Ent | Adj | JsrExt | AddI | SubI | MulI | AndI
             | OrI | XorI | ShlI | ShrI | EqI | NeI | LtI | GtI | LeI | GeI | LdLocI | LdLocC
-            | Mcpy | TlsLea => 1,
+            | StLocI | Mcpy | TlsLea => 1,
             // Everything else -- arithmetic, loads/stores, push,
             // indirect-jump, return, etc. -- is encoded in a
             // single word with no operand.

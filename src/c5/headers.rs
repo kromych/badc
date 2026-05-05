@@ -40,6 +40,7 @@ pub(super) fn embedded_header(name: &str) -> Option<&'static str> {
 /// `memory.h` is omitted: it's a legacy alias for `string.h` and
 /// would just produce duplicate hits in the diagnostic.
 pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
+    ("stddef.h", include_str!("../../headers/include/stddef.h")),
     ("string.h", include_str!("../../headers/include/string.h")),
     ("stdio.h", include_str!("../../headers/include/stdio.h")),
     ("stdlib.h", include_str!("../../headers/include/stdlib.h")),

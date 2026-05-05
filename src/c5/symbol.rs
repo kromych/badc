@@ -42,4 +42,13 @@ pub(crate) struct Symbol {
     /// vector of dimensions; today only the single-dimension
     /// case lands.
     pub array_size: i64,
+
+    /// True once a `Token::Glo` symbol has been seen with an
+    /// explicit initializer (`= ...`). Tentative-definition
+    /// merges (C11 6.9.2): a forward `static T x;` (or the same
+    /// translation unit's `extern T x;`) is allowed to be
+    /// re-declared and the later defining initializer fills in
+    /// the storage. A second declaration that *also* carries an
+    /// initializer is a real duplicate.
+    pub has_initializer: bool,
 }

@@ -23,13 +23,28 @@
 
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
-#pragma binding(libc::pthread_create,        "_pthread_create")
-#pragma binding(libc::pthread_join,          "_pthread_join")
-#pragma binding(libc::pthread_self,          "_pthread_self")
-#pragma binding(libc::pthread_mutex_init,    "_pthread_mutex_init")
-#pragma binding(libc::pthread_mutex_lock,    "_pthread_mutex_lock")
-#pragma binding(libc::pthread_mutex_unlock,  "_pthread_mutex_unlock")
-#pragma binding(libc::pthread_mutex_destroy, "_pthread_mutex_destroy")
+#pragma binding(libc::pthread_create,           "_pthread_create")
+#pragma binding(libc::pthread_join,             "_pthread_join")
+#pragma binding(libc::pthread_self,             "_pthread_self")
+#pragma binding(libc::pthread_equal,            "_pthread_equal")
+#pragma binding(libc::pthread_mutex_init,       "_pthread_mutex_init")
+#pragma binding(libc::pthread_mutex_lock,       "_pthread_mutex_lock")
+#pragma binding(libc::pthread_mutex_trylock,    "_pthread_mutex_trylock")
+#pragma binding(libc::pthread_mutex_unlock,     "_pthread_mutex_unlock")
+#pragma binding(libc::pthread_mutex_destroy,    "_pthread_mutex_destroy")
+#pragma binding(libc::pthread_mutexattr_init,   "_pthread_mutexattr_init")
+#pragma binding(libc::pthread_mutexattr_settype,"_pthread_mutexattr_settype")
+#pragma binding(libc::pthread_mutexattr_destroy,"_pthread_mutexattr_destroy")
+#pragma binding(libc::pthread_cond_init,        "_pthread_cond_init")
+#pragma binding(libc::pthread_cond_destroy,     "_pthread_cond_destroy")
+#pragma binding(libc::pthread_cond_wait,        "_pthread_cond_wait")
+#pragma binding(libc::pthread_cond_signal,      "_pthread_cond_signal")
+#pragma binding(libc::pthread_cond_broadcast,   "_pthread_cond_broadcast")
+#pragma binding(libc::pthread_key_create,       "_pthread_key_create")
+#pragma binding(libc::pthread_key_delete,       "_pthread_key_delete")
+#pragma binding(libc::pthread_setspecific,      "_pthread_setspecific")
+#pragma binding(libc::pthread_getspecific,      "_pthread_getspecific")
+#pragma binding(libc::pthread_once,             "_pthread_once")
 
 // pthread_mutex_t = 64 bytes on macOS (16-byte sig + 56-byte body).
 #define PTHREAD_MUTEX_SIZE 64
@@ -39,13 +54,28 @@
 
 #ifdef __linux__
 #pragma dylib(libc, "libc.so.6")
-#pragma binding(libc::pthread_create,        "pthread_create")
-#pragma binding(libc::pthread_join,          "pthread_join")
-#pragma binding(libc::pthread_self,          "pthread_self")
-#pragma binding(libc::pthread_mutex_init,    "pthread_mutex_init")
-#pragma binding(libc::pthread_mutex_lock,    "pthread_mutex_lock")
-#pragma binding(libc::pthread_mutex_unlock,  "pthread_mutex_unlock")
-#pragma binding(libc::pthread_mutex_destroy, "pthread_mutex_destroy")
+#pragma binding(libc::pthread_create,           "pthread_create")
+#pragma binding(libc::pthread_join,             "pthread_join")
+#pragma binding(libc::pthread_self,             "pthread_self")
+#pragma binding(libc::pthread_equal,            "pthread_equal")
+#pragma binding(libc::pthread_mutex_init,       "pthread_mutex_init")
+#pragma binding(libc::pthread_mutex_lock,       "pthread_mutex_lock")
+#pragma binding(libc::pthread_mutex_trylock,    "pthread_mutex_trylock")
+#pragma binding(libc::pthread_mutex_unlock,     "pthread_mutex_unlock")
+#pragma binding(libc::pthread_mutex_destroy,    "pthread_mutex_destroy")
+#pragma binding(libc::pthread_mutexattr_init,   "pthread_mutexattr_init")
+#pragma binding(libc::pthread_mutexattr_settype,"pthread_mutexattr_settype")
+#pragma binding(libc::pthread_mutexattr_destroy,"pthread_mutexattr_destroy")
+#pragma binding(libc::pthread_cond_init,        "pthread_cond_init")
+#pragma binding(libc::pthread_cond_destroy,     "pthread_cond_destroy")
+#pragma binding(libc::pthread_cond_wait,        "pthread_cond_wait")
+#pragma binding(libc::pthread_cond_signal,      "pthread_cond_signal")
+#pragma binding(libc::pthread_cond_broadcast,   "pthread_cond_broadcast")
+#pragma binding(libc::pthread_key_create,       "pthread_key_create")
+#pragma binding(libc::pthread_key_delete,       "pthread_key_delete")
+#pragma binding(libc::pthread_setspecific,      "pthread_setspecific")
+#pragma binding(libc::pthread_getspecific,      "pthread_getspecific")
+#pragma binding(libc::pthread_once,             "pthread_once")
 
 // glibc pthread_mutex_t is 40 bytes on x86_64, 48 on aarch64;
 // 64 covers both with room.
@@ -61,10 +91,66 @@
 #define PTHREAD_T_SIZE     8
 #endif
 
+// Static-storage initialisers for the opaque-buffer mutex /
+// condition variable types. Real libc uses a complex per-type
+// expansion; c5 only stores zero bytes (the buffers are uninit-
+// detectable at runtime), so a single zero-fill is enough.
+#define PTHREAD_MUTEX_INITIALIZER {0}
+#define PTHREAD_COND_INITIALIZER  {0}
+#define PTHREAD_ONCE_INIT          0
+
+// Opaque-buffer typedefs for the POSIX thread types. Each is a
+// struct wrapping a fixed-size byte buffer big enough for the
+// underlying libc layout on every supported target. c5 code
+// passes pointers to these into the bindings; the libc side
+// reads the actual platform layout.
+struct __c5_pthread_mutex { char __opaque[64]; };
+typedef struct __c5_pthread_mutex pthread_mutex_t;
+
+struct __c5_pthread_mutexattr { char __opaque[16]; };
+typedef struct __c5_pthread_mutexattr pthread_mutexattr_t;
+
+struct __c5_pthread_cond { char __opaque[64]; };
+typedef struct __c5_pthread_cond pthread_cond_t;
+
+struct __c5_pthread_condattr { char __opaque[16]; };
+typedef struct __c5_pthread_condattr pthread_condattr_t;
+
+struct __c5_pthread_attr { char __opaque[64]; };
+typedef struct __c5_pthread_attr pthread_attr_t;
+
+typedef int pthread_t;
+typedef int pthread_key_t;
+typedef int pthread_once_t;
+
 int pthread_create(int *thread, char *attr, int *start, char *arg);
 int pthread_join(int thread, int **retval);
 int pthread_self();
+int pthread_equal(int t1, int t2);
 int pthread_mutex_init(char *mutex, char *attr);
 int pthread_mutex_lock(char *mutex);
+int pthread_mutex_trylock(char *mutex);
 int pthread_mutex_unlock(char *mutex);
 int pthread_mutex_destroy(char *mutex);
+int pthread_mutexattr_init(char *attr);
+int pthread_mutexattr_settype(char *attr, int kind);
+int pthread_mutexattr_destroy(char *attr);
+int pthread_cond_init(char *cond, char *attr);
+int pthread_cond_destroy(char *cond);
+int pthread_cond_wait(char *cond, char *mutex);
+int pthread_cond_signal(char *cond);
+int pthread_cond_broadcast(char *cond);
+int pthread_key_create(int *key, int *destructor);
+int pthread_key_delete(int key);
+int pthread_setspecific(int key, char *val);
+char *pthread_getspecific(int key);
+int pthread_once(int *once_control, int *init_routine);
+
+// Mutex-type constants used by pthread_mutexattr_settype. Values
+// match the POSIX defaults; the bound libc reads them by integer
+// comparison so the exact platform mapping isn't c5's concern as
+// long as `RECURSIVE` is non-zero (sqlite uses recursive mutexes).
+#define PTHREAD_MUTEX_NORMAL        0
+#define PTHREAD_MUTEX_RECURSIVE     2
+#define PTHREAD_MUTEX_ERRORCHECK    1
+#define PTHREAD_MUTEX_DEFAULT       0

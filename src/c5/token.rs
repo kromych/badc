@@ -34,6 +34,15 @@ pub(crate) enum Token {
     While,
     /// Assignment '='
     Assign,
+    /// Compound assignment: `+=`, `-=`, `*=`, `/=`, `%=`, `&=`,
+    /// `|=`, `^=`, `<<=`, `>>=`. The underlying binary operator
+    /// (Token::AddOp / Token::SubOp / etc.) is stored in
+    /// `lex.ival` so this single token slot serves all ten forms
+    /// without shifting the rest of the enum's precedence levels.
+    /// Sits right after `Assign` so the Pratt-loop precedence
+    /// comparison (`tk >= lev`) treats compound-assigns at the
+    /// same level as `=`.
+    AssignOp,
     /// Ternary conditional '?'
     Cond,
     /// Logical OR '||'

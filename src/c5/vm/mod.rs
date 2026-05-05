@@ -769,6 +769,16 @@ impl<H: Host> Vm<H> {
                     a = self.load_u8(addr)? as i64;
                     pc += 1;
                 }
+                // Local-store: `*(bp + N*8) = a`. The compiler
+                // emits this to spill `a` to a temp slot without
+                // disturbing the c5 stack or `a`. (See Op::StLocI
+                // doc for why the regular `Lea N; Si` shape can't
+                // express this.)
+                Op::StLocI => {
+                    let addr = (bp as i64 + self.text[pc] * 8) as usize;
+                    self.store_i64(addr, a)?;
+                    pc += 1;
+                }
                 // Floating-point ops. Both operands enter as f64
                 // bit patterns in i64 form; we reinterpret with
                 // `f64::from_bits` for the math, then send the

@@ -332,6 +332,11 @@ impl Lexer {
                         }
                         self.pos += 1;
                     }
+                } else if self.pos < self.src.len() && self.src[self.pos] as char == '=' {
+                    self.pos += 1;
+                    self.tk = Token::AssignOp as i64;
+                    self.ival = Token::DivOp as i64;
+                    return Ok(());
                 } else {
                     self.tk = Token::DivOp as i64;
                     return Ok(());
@@ -445,6 +450,10 @@ impl Lexer {
                         if next_char == '+' {
                             self.pos += 1;
                             self.tk = Token::Inc as i64;
+                        } else if next_char == '=' {
+                            self.pos += 1;
+                            self.tk = Token::AssignOp as i64;
+                            self.ival = Token::AddOp as i64;
                         } else {
                             self.tk = Token::AddOp as i64;
                         }
@@ -456,6 +465,10 @@ impl Lexer {
                         } else if next_char == '>' {
                             self.pos += 1;
                             self.tk = Token::Arrow as i64;
+                        } else if next_char == '=' {
+                            self.pos += 1;
+                            self.tk = Token::AssignOp as i64;
+                            self.ival = Token::SubOp as i64;
                         } else {
                             self.tk = Token::SubOp as i64;
                         }
@@ -478,8 +491,17 @@ impl Lexer {
                             self.pos += 1;
                             self.tk = Token::LeOp as i64;
                         } else if next_char == '<' {
+                            // `<<` then optional `=` -- `<<=` is a
+                            // compound shift-assign; `<<` alone is
+                            // the shift operator.
                             self.pos += 1;
-                            self.tk = Token::ShlOp as i64;
+                            if self.pos < self.src.len() && self.src[self.pos] == b'=' {
+                                self.pos += 1;
+                                self.tk = Token::AssignOp as i64;
+                                self.ival = Token::ShlOp as i64;
+                            } else {
+                                self.tk = Token::ShlOp as i64;
+                            }
                         } else {
                             self.tk = Token::LtOp as i64;
                         }
@@ -490,7 +512,13 @@ impl Lexer {
                             self.tk = Token::GeOp as i64;
                         } else if next_char == '>' {
                             self.pos += 1;
-                            self.tk = Token::ShrOp as i64;
+                            if self.pos < self.src.len() && self.src[self.pos] == b'=' {
+                                self.pos += 1;
+                                self.tk = Token::AssignOp as i64;
+                                self.ival = Token::ShrOp as i64;
+                            } else {
+                                self.tk = Token::ShrOp as i64;
+                            }
                         } else {
                             self.tk = Token::GtOp as i64;
                         }
@@ -499,6 +527,10 @@ impl Lexer {
                         if next_char == '|' {
                             self.pos += 1;
                             self.tk = Token::Lor as i64;
+                        } else if next_char == '=' {
+                            self.pos += 1;
+                            self.tk = Token::AssignOp as i64;
+                            self.ival = Token::OrOp as i64;
                         } else {
                             self.tk = Token::OrOp as i64;
                         }
@@ -507,13 +539,41 @@ impl Lexer {
                         if next_char == '&' {
                             self.pos += 1;
                             self.tk = Token::Lan as i64;
+                        } else if next_char == '=' {
+                            self.pos += 1;
+                            self.tk = Token::AssignOp as i64;
+                            self.ival = Token::AndOp as i64;
                         } else {
                             self.tk = Token::AndOp as i64;
                         }
                     }
-                    '^' => self.tk = Token::XorOp as i64,
-                    '%' => self.tk = Token::ModOp as i64,
-                    '*' => self.tk = Token::MulOp as i64,
+                    '^' => {
+                        if next_char == '=' {
+                            self.pos += 1;
+                            self.tk = Token::AssignOp as i64;
+                            self.ival = Token::XorOp as i64;
+                        } else {
+                            self.tk = Token::XorOp as i64;
+                        }
+                    }
+                    '%' => {
+                        if next_char == '=' {
+                            self.pos += 1;
+                            self.tk = Token::AssignOp as i64;
+                            self.ival = Token::ModOp as i64;
+                        } else {
+                            self.tk = Token::ModOp as i64;
+                        }
+                    }
+                    '*' => {
+                        if next_char == '=' {
+                            self.pos += 1;
+                            self.tk = Token::AssignOp as i64;
+                            self.ival = Token::MulOp as i64;
+                        } else {
+                            self.tk = Token::MulOp as i64;
+                        }
+                    }
                     '[' => self.tk = Token::Brak as i64,
                     '?' => self.tk = Token::Cond as i64,
                     '.' => {

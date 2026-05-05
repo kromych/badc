@@ -1533,6 +1533,35 @@ fn lower_op(
             let offset = read_operand(text, pc, "LdLocC")?;
             emit_local_load(code, offset, /*byte=*/ true);
         }
+        Op::StLocI => {
+            // `*(bp + N*8) = a` -- store accumulator to a local
+            // frame slot. Mirrors `emit_local_load` with a store.
+            let offset = read_operand(text, pc, "StLocI")?;
+            let bytes = lea_offset_bytes(offset);
+            if (-256..256).contains(&bytes) {
+                emit(code, enc_stur(Reg::X19, Reg::X29, bytes as i32));
+            } else {
+                let abs = bytes.unsigned_abs();
+                if abs < 4096 {
+                    let imm = abs as u32;
+                    let word = if bytes >= 0 {
+                        enc_add_imm(Reg::X16, Reg::X29, imm)
+                    } else {
+                        enc_sub_imm(Reg::X16, Reg::X29, imm)
+                    };
+                    emit(code, word);
+                } else {
+                    load_imm64(code, Reg::X17, abs);
+                    let word = if bytes >= 0 {
+                        enc_add_reg(Reg::X16, Reg::X29, Reg::X17)
+                    } else {
+                        enc_sub_reg(Reg::X16, Reg::X29, Reg::X17)
+                    };
+                    emit(code, word);
+                }
+                emit(code, enc_str_imm(Reg::X19, Reg::X16, 0));
+            }
+        }
 
         // ---- External library call -- lower to a libc call
         //      through __got. ----

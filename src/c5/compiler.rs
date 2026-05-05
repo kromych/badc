@@ -193,17 +193,6 @@ enum InitElemReloc {
     Code,
 }
 
-/// One entry of a struct initializer, post-resolution: the
-/// field's byte offset, the field's storage size, the i64-shaped
-/// value to write, and how (if at all) the value must be relocated.
-#[derive(Debug, Clone)]
-struct StructInitElem {
-    field_offset: usize,
-    field_size: usize,
-    value: i64,
-    reloc: InitElemReloc,
-}
-
 #[derive(Debug, Clone)]
 struct StructField {
     name: String,
@@ -369,6 +358,16 @@ pub struct Compiler {
     /// codegen's hardcoded knowledge of which libc symbols live
     /// where.
     dylibs: Vec<DylibSpec>,
+
+    /// Side channel from `parse_declarator` to `run_compile`: when
+    /// the declarator's nested-paren branch encounters a "function
+    /// returning function pointer" shape (`T (*name(args1))(args2)`),
+    /// it parses `args1` via `parse_function_params` and stashes
+    /// them here so the caller can bind `name` as a function and
+    /// continue with the body. `args2` is consumed as a no-op via
+    /// the trailing-decoration loop. None when the declarator
+    /// wasn't this shape.
+    pending_fn_params: Option<ParsedParams>,
 }
 
 impl Compiler {
@@ -467,6 +466,7 @@ impl Compiler {
             pending_exports,
             call_fp_arg_masks: Vec::new(),
             current_func_return_ty: 0,
+            pending_fn_params: None,
         }
     }
 
@@ -534,21 +534,54 @@ impl Compiler {
         }
     }
 
-    /// Reject mixed int/float operands for an arithmetic or
-    /// comparison op. The IR has no in-place int-to-float
-    /// conversion when the int operand is already on the stack,
-    /// and the cleanest user-facing rule is to require an explicit
-    /// `(double)x` cast to lift the int side. Once both sides are
-    /// FP, the call sites pick the right `Op::Fxxx` and let the
-    /// codegen do the f64 work.
-    fn require_both_float(&self, lhs: i64, op: &str) -> Result<(), C5Error> {
-        if !is_floating_scalar(lhs) || !is_floating_scalar(self.ty) {
-            return Err(C5Error::Compile(format!(
-                "{}: `{op}` requires both operands to be the same kind \
-                 (float or int) -- add an explicit cast to lift one side",
-                self.lex.line
-            )));
+    /// Reconcile mixed int/float operands for an arithmetic /
+    /// comparison op so the matching `Op::Fxxx` can run. Two
+    /// shapes need bytecode work:
+    ///   * LHS float, RHS int: RHS is in `a`; emit `Op::Fcvtif`
+    ///     in place to lift it to f64.
+    ///   * LHS int, RHS float: LHS is on the c5 stack and `a`
+    ///     holds the float RHS. Spill RHS to a temp via
+    ///     `Op::StLocI`, recover LHS into `a` with `Imm 0; Or`
+    ///     (Or pops the stack into `a`), lift LHS via Fcvtif,
+    ///     push, then reload RHS into `a`. Net effect mirrors
+    ///     the float-float pattern.
+    ///
+    /// Returns `Ok(())` for both-float and both-int cases (no
+    /// emit). The caller's `is_floating_scalar(t) ||
+    /// is_floating_scalar(self.ty)` gate decides whether to use
+    /// the FP op afterwards; on return `self.ty` is the lifted
+    /// RHS's type when a lift happened.
+    fn require_both_float(&mut self, lhs: i64, _op: &str) -> Result<(), C5Error> {
+        let lhs_is_fp = is_floating_scalar(lhs);
+        let rhs_is_fp = is_floating_scalar(self.ty);
+        if lhs_is_fp == rhs_is_fp {
+            return Ok(());
         }
+        if lhs_is_fp && !rhs_is_fp {
+            self.emit_op(Op::Fcvtif);
+            self.ty = lhs;
+            return Ok(());
+        }
+        // !lhs_is_fp && rhs_is_fp -- spill float RHS, lift int LHS.
+        self.loc_offs += 1;
+        if self.loc_offs > self.max_loc_offs {
+            self.max_loc_offs = self.loc_offs;
+        }
+        let rhs_temp = -self.loc_offs;
+        let rhs_ty = self.ty;
+        self.emit_op(Op::StLocI);
+        self.emit_val(rhs_temp);
+        // Pop LHS off the c5 stack into `a` via Imm 0; Or.
+        self.emit_op(Op::Imm);
+        self.emit_val(0);
+        self.emit_op(Op::Or);
+        self.emit_op(Op::Fcvtif);
+        self.emit_op(Op::Psh);
+        // Reload RHS into `a`.
+        self.emit_op(Op::Lea);
+        self.emit_val(rhs_temp);
+        self.emit_op(Op::Li);
+        self.ty = rhs_ty;
         Ok(())
     }
 
@@ -725,6 +758,26 @@ impl Compiler {
         {
             self.next()?; // consume the outer `(`
             let (idx, mut inner_ty, _) = self.parse_declarator(ty)?;
+            // The inner declarator may have stopped on `(` if it
+            // was a function-returning-fp shape like
+            // `void (*foo(args1))(args2)`. In that case `foo` is
+            // the outer function whose params we MUST capture
+            // (the body will reference them); `args2` after the
+            // outer paren close is the function-pointer pointee's
+            // signature, which c5 doesn't track.
+            //
+            // When this branch fires we stash the parsed params
+            // on `self.pending_fn_params` so `run_compile` can
+            // bind `foo` as `Token::Fun` and parse the body even
+            // though the next token will be `{` (not `(` -- the
+            // params are already consumed).
+            if self.lex.tk == '(' as i64 {
+                self.next()?;
+                // parse_function_params consumes the matching `)`,
+                // so on return we're already past the inner args1.
+                let params = self.parse_function_params()?;
+                self.pending_fn_params = Some(params);
+            }
             if self.lex.tk != ')' as i64 {
                 return Err(C5Error::Compile(format!(
                     "{}: close paren expected in nested declarator",
@@ -912,37 +965,388 @@ impl Compiler {
         )))
     }
 
-    /// Parse a constant integer expression at parse time. The
-    /// grammar is narrow on purpose -- this is reached from
-    /// `int xs[N]` and similar dimension slots where the value
-    /// has to be known *during* declarator parsing. Accepts:
-    ///   * `Token::Num` with optional leading unary `-`,
-    ///   * `Token::Id` resolving to a `Token::Num`-class symbol
-    ///     (enum values fall in this bucket).
+    /// Parse a constant integer expression at parse time. Used
+    /// during declarator parsing where the value has to be known
+    /// before any bytecode emission (array dimensions, bitfield
+    /// widths, enum initialisers). Supports the c99 constant-
+    /// expression grammar: literals, identifiers bound to
+    /// integer constants (enum values, `#define`d numeric macros
+    /// the preprocessor expanded), parenthesised sub-expressions,
+    /// and the standard operator hierarchy.
     fn parse_constant_int(&mut self) -> Result<i64, C5Error> {
-        let neg = if self.lex.tk == Token::SubOp as i64 {
+        self.parse_const_expr_or()
+    }
+
+    fn parse_const_expr_or(&mut self) -> Result<i64, C5Error> {
+        let mut left = self.parse_const_expr_and()?;
+        while self.lex.tk == Token::Lor as i64 {
             self.next()?;
-            true
-        } else {
-            false
-        };
-        let v = if self.lex.tk == Token::Num as i64 {
+            let right = self.parse_const_expr_and()?;
+            left = if (left != 0) || (right != 0) { 1 } else { 0 };
+        }
+        Ok(left)
+    }
+
+    fn parse_const_expr_and(&mut self) -> Result<i64, C5Error> {
+        let mut left = self.parse_const_expr_bitor()?;
+        while self.lex.tk == Token::Lan as i64 {
+            self.next()?;
+            let right = self.parse_const_expr_bitor()?;
+            left = if (left != 0) && (right != 0) { 1 } else { 0 };
+        }
+        Ok(left)
+    }
+
+    fn parse_const_expr_bitor(&mut self) -> Result<i64, C5Error> {
+        let mut left = self.parse_const_expr_xor()?;
+        while self.lex.tk == Token::OrOp as i64 {
+            self.next()?;
+            let right = self.parse_const_expr_xor()?;
+            left |= right;
+        }
+        Ok(left)
+    }
+
+    fn parse_const_expr_xor(&mut self) -> Result<i64, C5Error> {
+        let mut left = self.parse_const_expr_bitand()?;
+        while self.lex.tk == Token::XorOp as i64 {
+            self.next()?;
+            let right = self.parse_const_expr_bitand()?;
+            left ^= right;
+        }
+        Ok(left)
+    }
+
+    fn parse_const_expr_bitand(&mut self) -> Result<i64, C5Error> {
+        let mut left = self.parse_const_expr_eq()?;
+        while self.lex.tk == Token::AndOp as i64 {
+            self.next()?;
+            let right = self.parse_const_expr_eq()?;
+            left &= right;
+        }
+        Ok(left)
+    }
+
+    fn parse_const_expr_eq(&mut self) -> Result<i64, C5Error> {
+        let mut left = self.parse_const_expr_rel()?;
+        loop {
+            if self.lex.tk == Token::EqOp as i64 {
+                self.next()?;
+                let r = self.parse_const_expr_rel()?;
+                left = (left == r) as i64;
+            } else if self.lex.tk == Token::NeOp as i64 {
+                self.next()?;
+                let r = self.parse_const_expr_rel()?;
+                left = (left != r) as i64;
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+
+    fn parse_const_expr_rel(&mut self) -> Result<i64, C5Error> {
+        let mut left = self.parse_const_expr_shift()?;
+        loop {
+            if self.lex.tk == Token::LtOp as i64 {
+                self.next()?;
+                let r = self.parse_const_expr_shift()?;
+                left = (left < r) as i64;
+            } else if self.lex.tk == Token::LeOp as i64 {
+                self.next()?;
+                let r = self.parse_const_expr_shift()?;
+                left = (left <= r) as i64;
+            } else if self.lex.tk == Token::GtOp as i64 {
+                self.next()?;
+                let r = self.parse_const_expr_shift()?;
+                left = (left > r) as i64;
+            } else if self.lex.tk == Token::GeOp as i64 {
+                self.next()?;
+                let r = self.parse_const_expr_shift()?;
+                left = (left >= r) as i64;
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+
+    fn parse_const_expr_shift(&mut self) -> Result<i64, C5Error> {
+        let mut left = self.parse_const_expr_add()?;
+        loop {
+            if self.lex.tk == Token::ShlOp as i64 {
+                self.next()?;
+                let r = self.parse_const_expr_add()?;
+                left <<= r;
+            } else if self.lex.tk == Token::ShrOp as i64 {
+                self.next()?;
+                let r = self.parse_const_expr_add()?;
+                left >>= r;
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+
+    fn parse_const_expr_add(&mut self) -> Result<i64, C5Error> {
+        let mut left = self.parse_const_expr_mul()?;
+        loop {
+            if self.lex.tk == Token::AddOp as i64 {
+                self.next()?;
+                let r = self.parse_const_expr_mul()?;
+                left = left.wrapping_add(r);
+            } else if self.lex.tk == Token::SubOp as i64 {
+                self.next()?;
+                let r = self.parse_const_expr_mul()?;
+                left = left.wrapping_sub(r);
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+
+    fn parse_const_expr_mul(&mut self) -> Result<i64, C5Error> {
+        let mut left = self.parse_const_expr_unary()?;
+        loop {
+            if self.lex.tk == Token::MulOp as i64 {
+                self.next()?;
+                let r = self.parse_const_expr_unary()?;
+                left = left.wrapping_mul(r);
+            } else if self.lex.tk == Token::DivOp as i64 {
+                self.next()?;
+                let r = self.parse_const_expr_unary()?;
+                left = if r == 0 { 0 } else { left / r };
+            } else if self.lex.tk == Token::ModOp as i64 {
+                self.next()?;
+                let r = self.parse_const_expr_unary()?;
+                left = if r == 0 { 0 } else { left % r };
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+
+    fn parse_const_expr_unary(&mut self) -> Result<i64, C5Error> {
+        if self.lex.tk == Token::SubOp as i64 {
+            self.next()?;
+            return Ok(-self.parse_const_expr_unary()?);
+        }
+        if self.lex.tk == Token::AddOp as i64 {
+            self.next()?;
+            return self.parse_const_expr_unary();
+        }
+        if self.lex.tk == '!' as i64 {
+            self.next()?;
+            let v = self.parse_const_expr_unary()?;
+            return Ok(if v == 0 { 1 } else { 0 });
+        }
+        if self.lex.tk == '~' as i64 {
+            self.next()?;
+            return Ok(!self.parse_const_expr_unary()?);
+        }
+        if self.lex.tk == Token::AndOp as i64 {
+            return self.parse_const_offsetof();
+        }
+        if self.lex.tk == Token::Sizeof as i64 {
+            // sizeof(type) inside a constant expression. Parse the
+            // type name + optional `*`s, return its byte size.
+            self.next()?;
+            let had_paren = self.lex.tk == '(' as i64;
+            if had_paren {
+                self.next()?;
+            }
+            let mut t = self.parse_decl_base_type()?;
+            while self.lex.tk == Token::MulOp as i64 {
+                self.next()?;
+                t += Ty::Ptr as i64;
+            }
+            if had_paren && self.lex.tk == ')' as i64 {
+                self.next()?;
+            }
+            return Ok(self.size_of_type(t) as i64);
+        }
+        self.parse_const_expr_primary()
+    }
+
+    /// Recognise the GCC-style `offsetof` expansion in a constant
+    /// expression -- `&((T*)<base>)->field[.field]*[[N]]`. The
+    /// macro typically expands to
+    ///   `((size_t)((char*)&((T*)0)->m - (char*)0))`
+    /// and shows up in C99 source for sized scratch buffers.
+    /// Evaluates to `<base> + offset_of(T, field...)`. The chain
+    /// supports nested `.field` for nested struct values and a
+    /// trailing `[N]` index for an array field.
+    fn parse_const_offsetof(&mut self) -> Result<i64, C5Error> {
+        let line = self.lex.line;
+        // Consume `&`.
+        self.next()?;
+        if self.lex.tk != '(' as i64 {
+            return Err(C5Error::Compile(format!(
+                "{line}: `&` in a constant expression must open the offsetof shape \
+                 `&((T*)expr)->field` (got tk={})",
+                self.lex.tk
+            )));
+        }
+        self.next()?;
+        if self.lex.tk != '(' as i64 {
+            return Err(C5Error::Compile(format!(
+                "{line}: expected `((T*)...` in offsetof shape (got tk={})",
+                self.lex.tk
+            )));
+        }
+        self.next()?;
+        if !self.lex_is_type_start() {
+            return Err(C5Error::Compile(format!(
+                "{line}: expected struct type in offsetof cast (got tk={})",
+                self.lex.tk
+            )));
+        }
+        let mut t = self.parse_decl_base_type()?;
+        while self.lex.tk == Token::MulOp as i64 {
+            self.next()?;
+            t += Ty::Ptr as i64;
+            while self.lex.tk == Token::TypeQual as i64 {
+                self.next()?;
+            }
+        }
+        if self.lex.tk != ')' as i64 {
+            return Err(C5Error::Compile(format!(
+                "{line}: close paren expected after type in offsetof cast"
+            )));
+        }
+        self.next()?;
+        // Base address (typically `0`).
+        let base = self.parse_const_expr_unary()?;
+        if self.lex.tk != ')' as i64 {
+            return Err(C5Error::Compile(format!(
+                "{line}: close paren expected after base in offsetof shape"
+            )));
+        }
+        self.next()?;
+        if self.lex.tk != Token::Arrow as i64 {
+            return Err(C5Error::Compile(format!(
+                "{line}: `->` expected in offsetof shape (got tk={})",
+                self.lex.tk
+            )));
+        }
+        self.next()?;
+        if !is_struct_ty(t) || struct_ptr_depth(t) == 0 {
+            return Err(C5Error::Compile(format!(
+                "{line}: offsetof requires `(T*)` for some struct T"
+            )));
+        }
+        // Drop one level of pointer to reach the struct value type.
+        let mut current_ty = t - Ty::Ptr as i64;
+        let mut total: i64 = base;
+        loop {
+            if !is_struct_ty(current_ty) || struct_ptr_depth(current_ty) != 0 {
+                return Err(C5Error::Compile(format!(
+                    "{line}: offsetof field chain reaches a non-struct value"
+                )));
+            }
+            if self.lex.tk != Token::Id as i64 {
+                return Err(C5Error::Compile(format!(
+                    "{line}: field name expected in offsetof chain"
+                )));
+            }
+            let sid = struct_id_of(current_ty);
+            let name = self.symbols[self.lex.curr_id_idx].name.clone();
+            let pos = self.structs[sid]
+                .fields
+                .iter()
+                .position(|f| f.name == name)
+                .ok_or_else(|| {
+                    C5Error::Compile(format!(
+                        "{line}: struct {} has no field {}",
+                        self.structs[sid].name, name
+                    ))
+                })?;
+            total += self.structs[sid].fields[pos].offset as i64;
+            current_ty = self.structs[sid].fields[pos].ty;
+            let field_array_size = self.structs[sid].fields[pos].array_size;
+            self.next()?;
+            // Optional `[N]` -- subscript inside the offsetof field
+            // chain. Multiplies the constant index by the element
+            // size of the field's array type.
+            if self.lex.tk == Token::Brak as i64 {
+                self.next()?;
+                let n = self.parse_const_expr_or()?;
+                if self.lex.tk != ']' as i64 {
+                    return Err(C5Error::Compile(format!(
+                        "{line}: close bracket expected in offsetof index"
+                    )));
+                }
+                self.next()?;
+                let _ = field_array_size;
+                total += n * self.size_of_type(current_ty) as i64;
+            }
+            if self.lex.tk == Token::Dot as i64 {
+                self.next()?;
+                continue;
+            }
+            break;
+        }
+        Ok(total)
+    }
+
+    fn parse_const_expr_primary(&mut self) -> Result<i64, C5Error> {
+        if self.lex.tk == '(' as i64 {
+            self.next()?;
+            // C-style cast in a constant expression --
+            // `(size_t)expr`, `(char*)0`, etc. c5's i64-shaped
+            // representation makes integer / pointer casts
+            // no-ops; consume the type and recurse.
+            if self.lex_is_type_start() {
+                let _ = self.parse_decl_base_type()?;
+                while self.lex.tk == Token::MulOp as i64
+                    || self.lex.tk == Token::TypeQual as i64
+                {
+                    self.next()?;
+                }
+                if self.lex.tk != ')' as i64 {
+                    return Err(C5Error::Compile(format!(
+                        "{}: close paren expected after cast",
+                        self.lex.line
+                    )));
+                }
+                self.next()?;
+                return self.parse_const_expr_unary();
+            }
+            let v = self.parse_const_expr_or()?;
+            if self.lex.tk != ')' as i64 {
+                return Err(C5Error::Compile(format!(
+                    "{}: close paren expected in constant expression",
+                    self.lex.line
+                )));
+            }
+            self.next()?;
+            return Ok(v);
+        }
+        if self.lex.tk == Token::Num as i64 {
             let v = self.lex.ival;
             self.next()?;
-            v
-        } else if self.lex.tk == Token::Id as i64
+            return Ok(v);
+        }
+        if self.lex.tk == Token::Id as i64
             && self.symbols[self.lex.curr_id_idx].class == Token::Num as i64
         {
             let v = self.symbols[self.lex.curr_id_idx].val;
             self.next()?;
-            v
-        } else {
-            return Err(C5Error::Compile(format!(
-                "{}: constant integer expected",
-                self.lex.line
-            )));
-        };
-        Ok(if neg { -v } else { v })
+            return Ok(v);
+        }
+        Err(C5Error::Compile(format!(
+            "{}: constant integer expected (got tk={}, id={:?})",
+            self.lex.line,
+            self.lex.tk,
+            if self.lex.tk == Token::Id as i64 {
+                Some(self.symbols[self.lex.curr_id_idx].name.clone())
+            } else {
+                None
+            }
+        )))
     }
 
     fn parse_decl_base_type(&mut self) -> Result<i64, C5Error> {
@@ -992,22 +1396,29 @@ impl Compiler {
             // "find or forward-declare" rule. The aggregate's
             // is_union flag is set when the body lands; until then
             // an opaque tag works for both shapes through pointers
-            // and typedefs.
-            let kind = if self.lex.tk == Token::Union as i64 {
-                "union"
-            } else {
-                "struct"
-            };
+            // and typedefs. Anonymous form (`typedef struct { ... }
+            // Name;`) gets a synthesised tag so it can register
+            // properly.
+            let is_union = self.lex.tk == Token::Union as i64;
+            let kind = if is_union { "union" } else { "struct" };
             self.next()?;
-            if self.lex.tk != Token::Id as i64 {
+            let name = if self.lex.tk == Token::Id as i64 {
+                let n = self.symbols[self.lex.curr_id_idx].name.clone();
+                self.next()?;
+                n
+            } else if self.lex.tk == '{' as i64 {
+                format!("__anon_{kind}_{}", self.structs.len())
+            } else {
                 return Err(C5Error::Compile(format!(
-                    "{}: {kind} name expected",
+                    "{}: {kind} name or `{{` expected",
                     self.lex.line
                 )));
-            }
-            let name = self.symbols[self.lex.curr_id_idx].name.clone();
-            self.next()?;
-            let id = self.find_or_forward_declare_struct(&name);
+            };
+            let id = if self.lex.tk == '{' as i64 {
+                self.parse_aggregate_body(&name, is_union)?
+            } else {
+                self.find_or_forward_declare_struct(&name)
+            };
             struct_ty_for(id)
         } else if self.is_lex_typedef_name() {
             // Typedef-name as base type. Resolve to the aliased
@@ -1125,20 +1536,27 @@ impl Compiler {
             {
                 let nested_is_union = self.lex.tk == Token::Union as i64;
                 self.next()?;
-                if self.lex.tk != Token::Id as i64 {
+                // Three shapes:
+                //   * `struct Foo { ... }` -- named definition.
+                //   * `struct Foo`         -- type use.
+                //   * `struct { ... }`     -- anonymous (no tag),
+                //                            inlined here. We
+                //                            synthesise a unique
+                //                            tag to register it
+                //                            in the struct table.
+                let inner_name = if self.lex.tk == Token::Id as i64 {
+                    let name = self.symbols[self.lex.curr_id_idx].name.clone();
+                    self.next()?;
+                    name
+                } else if self.lex.tk == '{' as i64 {
+                    let kind = if nested_is_union { "anon_union" } else { "anon_struct" };
+                    format!("__{kind}_{}_in_{}", self.structs.len(), name)
+                } else {
                     return Err(C5Error::Compile(format!(
-                        "{}: aggregate name expected in field type",
+                        "{}: aggregate name or `{{` expected in field type",
                         self.lex.line
                     )));
-                }
-                let inner_name = self.symbols[self.lex.curr_id_idx].name.clone();
-                self.next()?;
-                // Inline aggregate definition as a field type:
-                // `struct Foo { ... } *p, x;`. Define the inner
-                // aggregate in place before falling through to
-                // declarator parsing. SQLite uses this in
-                // sqlite3_index_info for nested constraint /
-                // orderby tables.
+                };
                 let inner_id = if self.lex.tk == '{' as i64 {
                     self.parse_aggregate_body(&inner_name, nested_is_union)?
                 } else {
@@ -2041,9 +2459,74 @@ impl Compiler {
             )));
         }
 
-        while self.lex.tk >= lev {
+        while self.lex.tk >= lev || self.lex.tk == '(' as i64 {
             t = self.ty;
-            if self.lex.tk == Token::Assign as i64 {
+            if self.lex.tk == '(' as i64 {
+                // Postfix indirect call: the expression so far put a
+                // function-pointer value in `a`. Examples:
+                //   `s.fp(args)` -- function-pointer struct field
+                //   `arr[i](args)` -- function-pointer array element
+                //   `(*fp)(args)` -- explicit dereference shape
+                // Direct identifier calls (`name(args)`) take the
+                // dedicated path higher up that knows the symbol's
+                // class and signature; that path consumes `(`
+                // immediately and never reaches the Pratt loop.
+                self.next()?;
+                // Spill the FP into a fresh local temp via Op::StLocI.
+                // The plain `Lea N; Si` shape can't express this
+                // without losing `a` (Lea clobbers `a`), so the c5
+                // dialect carries a dedicated store-local op for the
+                // case where `a` already holds the value.
+                self.loc_offs += 1;
+                if self.loc_offs > self.max_loc_offs {
+                    self.max_loc_offs = self.loc_offs;
+                }
+                let fp_temp = -self.loc_offs;
+                self.emit_op(Op::StLocI);
+                self.emit_val(fp_temp);
+                // Each arg lands in its own temp slot first
+                // (left-to-right eval), then we push them
+                // right-to-left so the first arg ends up on top of
+                // the c5 stack.
+                let mut temp_offsets: Vec<i64> = Vec::new();
+                let mut nargs: i64 = 0;
+                while self.lex.tk != ')' as i64 {
+                    self.loc_offs += 1;
+                    if self.loc_offs > self.max_loc_offs {
+                        self.max_loc_offs = self.loc_offs;
+                    }
+                    let temp_off = -self.loc_offs;
+                    temp_offsets.push(temp_off);
+                    self.emit_op(Op::Lea);
+                    self.emit_val(temp_off);
+                    self.emit_op(Op::Psh);
+                    self.expr(Token::Assign as i64)?;
+                    self.emit_op(Op::Si);
+                    nargs += 1;
+                    if self.lex.tk == ',' as i64 {
+                        self.next()?;
+                    }
+                }
+                self.next()?; // consume `)`
+                for &temp_off in temp_offsets.iter().rev() {
+                    self.emit_op(Op::Lea);
+                    self.emit_val(temp_off);
+                    self.emit_op(Op::Li);
+                    self.emit_op(Op::Psh);
+                }
+                self.emit_op(Op::Lea);
+                self.emit_val(fp_temp);
+                self.emit_op(Op::Li);
+                self.emit_op(Op::Jsri);
+                if nargs > 0 {
+                    self.emit_op(Op::Adj);
+                    self.emit_val(nargs);
+                }
+                // The dialect can't declare the return type of a
+                // function pointer, so default to `int`. Same call
+                // as the existing Loc/Glo Jsri path.
+                self.ty = Ty::Int as i64;
+            } else if self.lex.tk == Token::Assign as i64 {
                 self.next()?;
                 let last = *self.text.last().unwrap();
                 if last == Op::Lc as i64 || last == Op::Li as i64 {
@@ -2097,6 +2580,77 @@ impl Compiler {
                         self.lex.line
                     )));
                 }
+            } else if self.lex.tk == Token::AssignOp as i64 {
+                // Compound assignment `a OP= b`. The lexer stuffed
+                // the underlying binop's Token into `lex.ival`. The
+                // shape mirrors plain `=`: rewrite the trailing
+                // load (Op::Lc / Op::Li) into Op::Psh so the
+                // address sits on the stack, then load it again
+                // via Op::Li (or Op::Lc), push, evaluate the RHS,
+                // emit the binop, and store. Only scalar / pointer
+                // lvalues qualify -- structs and bitfields don't
+                // accept compound assignment in c5.
+                let binop = self.lex.ival;
+                self.next()?;
+                let last = *self.text.last().unwrap();
+                if last != Op::Lc as i64 && last != Op::Li as i64 {
+                    return Err(C5Error::Compile(format!(
+                        "{}: bad lvalue in compound assignment",
+                        self.lex.line
+                    )));
+                }
+                let load_op = last;
+                // Rewrite trailing load into push so addr stays on
+                // the stack across the compound op.
+                *self.text.last_mut().unwrap() = Op::Psh as i64;
+                // Reload the current value into `a`.
+                self.emit_op(if load_op == Op::Lc as i64 {
+                    Op::Lc
+                } else {
+                    Op::Li
+                });
+                // Push the current value so the binop can pop it.
+                self.emit_op(Op::Psh);
+                // For pointer arithmetic with `+=` / `-=`, scale
+                // the RHS by the element size before applying the
+                // op. We capture lhs ty here; rhs ty is known after
+                // expr().
+                let lhs_ty = self.ty;
+                self.expr(Token::Assign as i64)?;
+                if (binop == Token::AddOp as i64 || binop == Token::SubOp as i64)
+                    && lhs_ty > Ty::Ptr as i64
+                    && !is_floating_scalar(lhs_ty)
+                {
+                    let elem_ty = lhs_ty - Ty::Ptr as i64;
+                    let elem_size = self.size_of_type(elem_ty) as i64;
+                    if elem_size > 1 {
+                        self.emit_op(Op::Psh);
+                        self.emit_op(Op::Imm);
+                        self.emit_val(elem_size);
+                        self.emit_op(Op::Mul);
+                    }
+                }
+                let op = match binop {
+                    x if x == Token::AddOp as i64 => Op::Add,
+                    x if x == Token::SubOp as i64 => Op::Sub,
+                    x if x == Token::MulOp as i64 => Op::Mul,
+                    x if x == Token::DivOp as i64 => Op::Div,
+                    x if x == Token::ModOp as i64 => Op::Mod,
+                    x if x == Token::AndOp as i64 => Op::And,
+                    x if x == Token::OrOp as i64 => Op::Or,
+                    x if x == Token::XorOp as i64 => Op::Xor,
+                    x if x == Token::ShlOp as i64 => Op::Shl,
+                    x if x == Token::ShrOp as i64 => Op::Shr,
+                    _ => {
+                        return Err(C5Error::Compile(format!(
+                            "{}: unknown compound-assign opcode",
+                            self.lex.line
+                        )));
+                    }
+                };
+                self.emit_op(op);
+                self.ty = lhs_ty;
+                self.emit_op(store_op_for(self.ty));
             } else if self.lex.tk == Token::Cond as i64 {
                 self.next()?;
                 self.emit_op(Op::Bz);
@@ -2741,6 +3295,48 @@ impl Compiler {
     ///     (enum value, `#define`d constant), use its `val`
     ///   * `0` is special -- a NULL pointer / zero scalar, no reloc.
     fn parse_constant_init_value(&mut self) -> Result<(i64, InitElemReloc), C5Error> {
+        // Float literal -- store the f64 bit pattern. The struct
+        // field's declared type drives the runtime interpretation;
+        // the on-disk image is just bytes.
+        if self.lex.tk == Token::FloatNum as i64 {
+            let v = self.lex.ival;
+            self.next()?;
+            return Ok((v, InitElemReloc::None));
+        }
+        // `(type)expr` cast or `(expr)` parenthesized constant in a
+        // static initializer. After consuming `(`, peek the next
+        // token: if it starts a type, treat as a cast and recurse on
+        // the value (c5's i64-shaped representation makes integer /
+        // pointer casts no-ops). Otherwise it's a parenthesized
+        // constant expression -- evaluate it and expect `)`.
+        if self.lex.tk == '(' as i64 {
+            self.next()?;
+            if self.lex_is_type_start() {
+                let _ = self.parse_decl_base_type()?;
+                while self.lex.tk == Token::MulOp as i64
+                    || self.lex.tk == Token::TypeQual as i64
+                {
+                    self.next()?;
+                }
+                if self.lex.tk != ')' as i64 {
+                    return Err(C5Error::Compile(format!(
+                        "{}: close paren expected after cast in initializer",
+                        self.lex.line
+                    )));
+                }
+                self.next()?;
+                return self.parse_constant_init_value();
+            }
+            let v = self.parse_const_expr_or()?;
+            if self.lex.tk != ')' as i64 {
+                return Err(C5Error::Compile(format!(
+                    "{}: close paren expected in initializer",
+                    self.lex.line
+                )));
+            }
+            self.next()?;
+            return Ok((v, InitElemReloc::None));
+        }
         if self.lex.tk == '"' as i64 {
             let addr = self.lex.ival;
             self.next()?;
@@ -2805,7 +3401,8 @@ impl Compiler {
     fn collect_struct_initializer(
         &mut self,
         struct_id: usize,
-    ) -> Result<alloc::vec::Vec<StructInitElem>, C5Error> {
+        var_offset: i64,
+    ) -> Result<(), C5Error> {
         if self.lex.tk != '{' as i64 {
             return Err(C5Error::Compile(format!(
                 "{}: struct initializer must start with `{{`",
@@ -2813,7 +3410,6 @@ impl Compiler {
             )));
         }
         self.next()?;
-        let mut elements = alloc::vec::Vec::new();
         let mut pos: usize = 0;
         while self.lex.tk != '}' as i64 {
             // Designator?
@@ -2855,63 +3451,89 @@ impl Compiler {
                 )));
             }
             let field = self.structs[struct_id].fields[field_idx].clone();
-            let (value, reloc) = self.parse_constant_init_value()?;
-            elements.push(StructInitElem {
-                field_offset: field.offset,
-                field_size: self.size_of_type(field.ty),
-                value,
-                reloc,
-            });
+            let field_base = (var_offset as usize) + field.offset;
+            // Three field shapes get nested `{ ... }` initializers:
+            //   * array field (`T xs[N]`)
+            //   * value-typed nested struct
+            //   * value-typed nested union
+            // Pointer / scalar / bitfield fields read a single
+            // constant-expression value via parse_constant_init_value.
+            if field.array_size > 0 && self.lex.tk == '{' as i64 {
+                self.next()?;
+                let elem_size = self.size_of_type(field.ty);
+                let mut idx: usize = 0;
+                while self.lex.tk != '}' as i64 {
+                    if idx as i64 >= field.array_size {
+                        return Err(C5Error::Compile(format!(
+                            "{}: too many initializers for `{}.{}`",
+                            self.lex.line, self.structs[struct_id].name, field.name
+                        )));
+                    }
+                    let (value, reloc) = self.parse_constant_init_value()?;
+                    let here = field_base + idx * elem_size;
+                    self.write_init_value(here, elem_size, value, reloc);
+                    idx += 1;
+                    if self.lex.tk == ',' as i64 {
+                        self.next()?;
+                    }
+                }
+                self.next()?; // consume `}`
+            } else if is_struct_ty(field.ty)
+                && struct_ptr_depth(field.ty) == 0
+                && self.lex.tk == '{' as i64
+            {
+                let nested_sid = struct_id_of(field.ty);
+                self.collect_struct_initializer(nested_sid, field_base as i64)?;
+            } else {
+                let (value, reloc) = self.parse_constant_init_value()?;
+                let field_size = self.size_of_type(field.ty);
+                self.write_init_value(field_base, field_size, value, reloc);
+            }
             pos = field_idx + 1;
             if self.lex.tk == ',' as i64 {
                 self.next()?;
             }
         }
         self.next()?; // consume `}`
-        Ok(elements)
+        Ok(())
     }
 
-    /// Write a struct initializer's elements into the data segment
-    /// at `var_offset`, recording any DataReloc / CodeReloc needed
-    /// for pointer / function-pointer values. `var_offset` points
-    /// at the first byte of the struct in the data segment.
-    fn write_struct_init_into_data(
+    /// Write `field_size` little-endian bytes of `value` into
+    /// `self.data` at byte offset `here`, then push the
+    /// appropriate relocation if the value is a data offset
+    /// (string / `&global`) or a code PC (function pointer).
+    fn write_init_value(
         &mut self,
-        var_offset: i64,
-        elements: &[StructInitElem],
+        here: usize,
+        field_size: usize,
+        value: i64,
+        reloc: InitElemReloc,
     ) {
-        for elem in elements {
-            let here = var_offset as usize + elem.field_offset;
-            let v = elem.value;
-            // Always write the bytes (little-endian, full field
-            // size). For char fields write a single byte; everything
-            // else writes 8.
-            if elem.field_size == 1 {
-                self.data[here] = v as u8;
-            } else {
-                for i in 0..elem.field_size {
-                    self.data[here + i] = ((v >> (i * 8)) & 0xFF) as u8;
-                }
+        if field_size == 1 {
+            self.data[here] = value as u8;
+        } else {
+            for i in 0..field_size {
+                self.data[here + i] = ((value >> (i * 8)) & 0xFF) as u8;
             }
-            match elem.reloc {
-                InitElemReloc::None => {}
-                InitElemReloc::Data => {
-                    self.data_relocs.push(crate::c5::program::DataReloc {
-                        data_offset: here as u64,
-                        target_offset: v as u64,
-                    });
-                }
-                InitElemReloc::Code => {
-                    self.code_relocs.push(crate::c5::program::CodeReloc {
-                        data_offset: here as u64,
-                        target_bc_pc: v as u64,
-                    });
-                }
+        }
+        match reloc {
+            InitElemReloc::None => {}
+            InitElemReloc::Data => {
+                self.data_relocs.push(crate::c5::program::DataReloc {
+                    data_offset: here as u64,
+                    target_offset: value as u64,
+                });
+            }
+            InitElemReloc::Code => {
+                self.code_relocs.push(crate::c5::program::CodeReloc {
+                    data_offset: here as u64,
+                    target_bc_pc: value as u64,
+                });
             }
         }
     }
 
-    /// Write packed initializer bytes into `self.data` at
+/// Write packed initializer bytes into `self.data` at
     /// `var_offset` -- the address of a freshly allocated global
     /// array. Element values are little-endian; `elem_size`
     /// determines whether each value writes one byte (char arrays)
@@ -3071,6 +3693,47 @@ impl Compiler {
         if self.lex.tk == Token::Assign as i64 {
             self.next()?;
             if array_size == -1 {
+                if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+                    // Static-local of struct array, deferred size:
+                    // `static struct T xs[] = { {...}, {...}, ... };`
+                    // Same shape as the file-scope path.
+                    let elem_size = self.size_of_type(ty);
+                    let off = self.data.len() as i64;
+                    self.symbols[loc_idx].val = off;
+                    if self.lex.tk != '{' as i64 {
+                        return Err(C5Error::Compile(format!(
+                            "{}: array initializer must start with `{{`",
+                            self.lex.line
+                        )));
+                    }
+                    self.next()?;
+                    let mut count: i64 = 0;
+                    let sid = struct_id_of(ty);
+                    while self.lex.tk != '}' as i64 {
+                        let here = self.data.len() as i64;
+                        for _ in 0..elem_size {
+                            self.data.push(0);
+                        }
+                        if self.lex.tk == '{' as i64 {
+                            self.collect_struct_initializer(sid, here)?;
+                        } else {
+                            return Err(C5Error::Compile(format!(
+                                "{}: struct array element must be a brace list",
+                                self.lex.line
+                            )));
+                        }
+                        count += 1;
+                        if self.lex.tk == ',' as i64 {
+                            self.next()?;
+                        }
+                    }
+                    self.next()?;
+                    self.symbols[loc_idx].array_size = count;
+                    while self.data.len() % 8 != 0 {
+                        self.data.push(0);
+                    }
+                    return Ok(());
+                }
                 let elements = self.collect_array_initializer(ty)?;
                 let final_size = elements.len() as i64;
                 self.symbols[loc_idx].array_size = final_size;
@@ -3088,9 +3751,8 @@ impl Compiler {
                 self.write_array_init_into_data(var_offset, ty, &elements);
             } else if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
                 let sid = struct_id_of(ty);
-                let elems = self.collect_struct_initializer(sid)?;
                 let var_offset = self.symbols[loc_idx].val;
-                self.write_struct_init_into_data(var_offset, &elems);
+                self.collect_struct_initializer(sid, var_offset)?;
             } else {
                 let var_offset = self.symbols[loc_idx].val;
                 self.parse_global_initializer(ty, var_offset, false)?;
@@ -3480,6 +4142,16 @@ impl Compiler {
             self.next()?;
         } else {
             self.expr(Token::Assign as i64)?;
+            // Comma operator at expression-statement level:
+            // `(void)x, (void)y;`. Each expression evaluates for
+            // its side effects; the value of the chain is the
+            // last subexpression. expr(Assign) deliberately stops
+            // at `,` because c5's argument parser uses `,` as a
+            // separator -- we resume the chain here.
+            while self.lex.tk == ',' as i64 {
+                self.next()?;
+                self.expr(Token::Assign as i64)?;
+            }
             self.consume(b';', "semicolon expected")?;
         }
         Ok(())
@@ -3491,7 +4163,17 @@ impl Compiler {
             self.next()?;
             Ok(())
         } else {
-            Err(C5Error::Compile(format!("{}: {}", self.lex.line, msg)))
+            Err(C5Error::Compile(format!(
+                "{}: {} (got tk={}, id={:?})",
+                self.lex.line,
+                msg,
+                self.lex.tk,
+                if self.lex.tk == Token::Id as i64 {
+                    Some(self.symbols[self.lex.curr_id_idx].name.clone())
+                } else {
+                    None
+                }
+            )))
         }
     }
 
@@ -3756,14 +4438,22 @@ impl Compiler {
                 let is_union = self.lex.tk == Token::Union as i64;
                 let kind = if is_union { "union" } else { "struct" };
                 self.next()?;
-                if self.lex.tk != Token::Id as i64 {
+                let name = if self.lex.tk == Token::Id as i64 {
+                    let n = self.symbols[self.lex.curr_id_idx].name.clone();
+                    self.next()?;
+                    n
+                } else if self.lex.tk == '{' as i64 {
+                    // Anonymous: `typedef struct { ... } Foo;`. Synth
+                    // a tag so the inner body can register and so
+                    // the typedef-side declarator that follows still
+                    // sees a struct type.
+                    format!("__anon_{kind}_{}", self.structs.len())
+                } else {
                     return Err(C5Error::Compile(format!(
-                        "{}: {kind} name expected",
+                        "{}: {kind} name or `{{` expected",
                         self.lex.line
                     )));
-                }
-                let name = self.symbols[self.lex.curr_id_idx].name.clone();
-                self.next()?;
+                };
 
                 if self.lex.tk == '{' as i64 {
                     let id = self.parse_aggregate_body(&name, is_union)?;
@@ -3778,11 +4468,25 @@ impl Compiler {
                 bt = self.symbols[self.lex.curr_id_idx].type_;
                 self.next()?;
             }
+            // Trailing qualifiers / int modifiers between the base
+            // type and the declarators -- `Foo const *p`, `int long
+            // x`, etc. The base type is already chosen; these are
+            // pure no-ops in c5 but appear in real C source.
+            while is_decl_modifier(self.lex.tk) {
+                self.next()?;
+            }
 
             while self.lex.tk != ';' as i64 && self.lex.tk != '}' as i64 {
                 let (id_idx, ty, array_size) = self.parse_declarator(bt)?;
                 self.ty = ty;
                 self.symbols[id_idx].array_size = array_size;
+                // Function-returning-FP shape: parse_declarator
+                // already consumed the outer function's params.
+                // Synthesize the function-definition path: bind the
+                // symbol as Fun, install the captured params, then
+                // proceed straight into the body (the next token is
+                // `{`, not `(`).
+                let preconsumed_params = self.pending_fn_params.take();
 
                 // typedef branch: register a type alias and skip the
                 // function / global storage path entirely. Re-declaring
@@ -3820,10 +4524,33 @@ impl Compiler {
                 // *re-declared* as prototypes -- the source uses the
                 // declaration to teach the parser the type signature
                 // without overriding the function's binding-driven
-                // class/val. Anything else with class != 0 is a real
-                // duplicate.
+                // class/val. Function symbols with no body yet
+                // (Token::Fun, val == 0) can also be re-declared
+                // (sqlite-style amalgamations include the same
+                // prototype many times). A second body for the
+                // same Fun is still a real duplicate.
                 let was_sys = self.symbols[id_idx].class == Token::Sys as i64;
-                if self.symbols[id_idx].class != 0 && !was_sys {
+                // Forward / repeat function declarations: allowed
+                // either when the next token is `(` (the regular
+                // `int foo(args)` shape) OR when parse_declarator
+                // already consumed the outer params for the
+                // function-returning-FP shape (tk is `;` or `{`
+                // depending on prototype-vs-definition).
+                let was_fwd_fun = self.symbols[id_idx].class == Token::Fun as i64
+                    && (self.lex.tk == '(' as i64 || preconsumed_params.is_some());
+                // Tentative-definition merge (C11 6.9.2): a prior
+                // `static T x;` (no `=`) becomes the defining
+                // declaration when re-declared, optionally with an
+                // initializer this time. Function-shaped re-decls
+                // never go through this path.
+                let was_tentative_glo = self.symbols[id_idx].class == Token::Glo as i64
+                    && !self.symbols[id_idx].has_initializer
+                    && self.lex.tk != '(' as i64;
+                if self.symbols[id_idx].class != 0
+                    && !was_sys
+                    && !was_fwd_fun
+                    && !was_tentative_glo
+                {
                     return Err(C5Error::Compile(format!(
                         "{}: duplicate global definition",
                         self.lex.line
@@ -3831,14 +4558,25 @@ impl Compiler {
                 }
                 self.symbols[id_idx].type_ = ty;
 
-                if self.lex.tk == '(' as i64 {
+                if self.lex.tk == '(' as i64 || preconsumed_params.is_some() {
                     if !was_sys {
                         self.symbols[id_idx].class = Token::Fun as i64;
-                        self.symbols[id_idx].val = self.text.len() as i64;
+                        // Don't overwrite an already-bound Fun's
+                        // val (= bytecode pc) when this is just a
+                        // repeat prototype. The val will be
+                        // updated below if/when this is actually
+                        // a definition (the body is detected by
+                        // `tk == '{'` after the params).
+                        if self.symbols[id_idx].val == 0 {
+                            self.symbols[id_idx].val = self.text.len() as i64;
+                        }
                     }
-                    self.next()?;
-
-                    let params = self.parse_function_params()?;
+                    let params = if let Some(pp) = preconsumed_params {
+                        pp
+                    } else {
+                        self.next()?;
+                        self.parse_function_params()?
+                    };
 
                     // Stash the signature on the function symbol so
                     // call sites can type-check arguments later. For
@@ -4021,7 +4759,9 @@ impl Compiler {
                     }
                 } else {
                     self.symbols[id_idx].class = Token::Glo as i64;
-                    self.symbols[id_idx].is_thread_local = thread_local;
+                    if !was_tentative_glo {
+                        self.symbols[id_idx].is_thread_local = thread_local;
+                    }
                     // Deferred-size array global: the dimension
                     // comes from the initializer and storage is
                     // reserved after parsing it. Disallow on TLS
@@ -4041,18 +4781,72 @@ impl Compiler {
                             )));
                         }
                         self.next()?;
+                        if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+                            // `struct T xs[] = { {...}, {...}, ... };`
+                            // Each element is a brace-list; we count
+                            // them, allocate storage per element on
+                            // the fly, and write each via
+                            // collect_struct_initializer.
+                            let elem_size = self.size_of_type(ty);
+                            let off = self.data.len() as i64;
+                            self.symbols[id_idx].val = off;
+                            if self.lex.tk != '{' as i64 {
+                                return Err(C5Error::Compile(format!(
+                                    "{}: array initializer must start with `{{`",
+                                    self.lex.line
+                                )));
+                            }
+                            self.next()?;
+                            let mut count: i64 = 0;
+                            let sid = struct_id_of(ty);
+                            while self.lex.tk != '}' as i64 {
+                                let here = self.data.len() as i64;
+                                for _ in 0..elem_size {
+                                    self.data.push(0);
+                                }
+                                if self.lex.tk == '{' as i64 {
+                                    self.collect_struct_initializer(sid, here)?;
+                                } else {
+                                    return Err(C5Error::Compile(format!(
+                                        "{}: struct array element must be a brace list",
+                                        self.lex.line
+                                    )));
+                                }
+                                count += 1;
+                                if self.lex.tk == ',' as i64 {
+                                    self.next()?;
+                                }
+                            }
+                            self.next()?; // consume `}`
+                            self.symbols[id_idx].array_size = count;
+                            // Pad data to 8-byte alignment so the next
+                            // global doesn't land on an odd offset.
+                            while self.data.len() % 8 != 0 {
+                                self.data.push(0);
+                            }
+                            self.symbols[id_idx].has_initializer = true;
+                            if self.lex.tk == ',' as i64 {
+                                self.next()?;
+                            }
+                            continue;
+                        }
                         let elements = self.collect_array_initializer(ty)?;
                         let final_size = elements.len() as i64;
                         self.symbols[id_idx].array_size = final_size;
                         let total_bytes =
                             (self.size_of_type(ty) as i64) * final_size;
                         let aligned = ((total_bytes + 7) / 8) * 8;
+                        // On a tentative-merge path the prior
+                        // declaration would have had no `[]` either
+                        // (deferred size cannot be a re-decl), so
+                        // always allocate fresh storage here.
                         let off = self.data.len() as i64;
                         self.symbols[id_idx].val = off;
                         for _ in 0..aligned {
                             self.data.push(0);
                         }
                         self.write_array_init_into_data(off, ty, &elements);
+                        self.symbols[id_idx].has_initializer = true;
                     } else {
                         let bytes = if array_size > 0 {
                             let total = (self.size_of_type(ty) as i64) * array_size;
@@ -4060,7 +4854,16 @@ impl Compiler {
                         } else {
                             self.slots_of_type(ty) * 8
                         };
-                        let var_offset = if thread_local {
+                        // Tentative-merge: reuse the storage that was
+                        // already allocated for the prior declaration.
+                        // The initializer (if any) writes into the
+                        // existing slot. Mismatched array sizes between
+                        // the prior tentative and the new defining
+                        // declaration aren't merged here -- the prior
+                        // allocation would be too small or too large.
+                        let var_offset = if was_tentative_glo {
+                            self.symbols[id_idx].val
+                        } else if thread_local {
                             let off = self.tls_data.len() as i64;
                             self.symbols[id_idx].val = off;
                             for _ in 0..bytes {
@@ -4090,7 +4893,53 @@ impl Compiler {
                         // stay zero.
                         if self.lex.tk == Token::Assign as i64 {
                             self.next()?;
-                            if array_size > 0 {
+                            if array_size > 0
+                                && is_struct_ty(ty)
+                                && struct_ptr_depth(ty) == 0
+                            {
+                                if thread_local {
+                                    return Err(C5Error::Compile(format!(
+                                        "{}: array `_Thread_local` initialisers are not supported",
+                                        self.lex.line
+                                    )));
+                                }
+                                // Known-size struct array: write each
+                                // brace-list element into the pre-
+                                // allocated slot. Missing trailing
+                                // entries stay zero-init.
+                                let elem_size = self.size_of_type(ty);
+                                let sid = struct_id_of(ty);
+                                if self.lex.tk != '{' as i64 {
+                                    return Err(C5Error::Compile(format!(
+                                        "{}: array initializer must start with `{{`",
+                                        self.lex.line
+                                    )));
+                                }
+                                self.next()?;
+                                let mut idx: i64 = 0;
+                                while self.lex.tk != '}' as i64 {
+                                    if idx >= array_size {
+                                        return Err(C5Error::Compile(format!(
+                                            "{}: too many initializers for `{}`",
+                                            self.lex.line, self.symbols[id_idx].name
+                                        )));
+                                    }
+                                    let here = var_offset + idx * elem_size as i64;
+                                    if self.lex.tk == '{' as i64 {
+                                        self.collect_struct_initializer(sid, here)?;
+                                    } else {
+                                        return Err(C5Error::Compile(format!(
+                                            "{}: struct array element must be a brace list",
+                                            self.lex.line
+                                        )));
+                                    }
+                                    idx += 1;
+                                    if self.lex.tk == ',' as i64 {
+                                        self.next()?;
+                                    }
+                                }
+                                self.next()?; // consume `}`
+                            } else if array_size > 0 {
                                 if thread_local {
                                     return Err(C5Error::Compile(format!(
                                         "{}: array `_Thread_local` initialisers are not supported",
@@ -4120,8 +4969,7 @@ impl Compiler {
                                     )));
                                 }
                                 let sid = struct_id_of(ty);
-                                let elems = self.collect_struct_initializer(sid)?;
-                                self.write_struct_init_into_data(var_offset, &elems);
+                                self.collect_struct_initializer(sid, var_offset)?;
                             } else {
                                 self.parse_global_initializer(
                                     ty,
@@ -4129,6 +4977,7 @@ impl Compiler {
                                     thread_local,
                                 )?;
                             }
+                            self.symbols[id_idx].has_initializer = true;
                         }
                     }
                 }
@@ -4189,8 +5038,33 @@ impl Compiler {
                     self.symbols[target_idx].name
                 )));
             }
-            let target_offset = self.symbols[target_idx].val;
+            let mut target_offset = self.symbols[target_idx].val;
+            // For an array global, scale subsequent `[N]` indexes
+            // by the element size; for a scalar global the index
+            // (if any) is just byte-additive, and there usually
+            // isn't one.
+            let elem_size = if self.symbols[target_idx].array_size > 0 {
+                self.size_of_type(self.symbols[target_idx].type_) as i64
+            } else {
+                1
+            };
             self.next()?;
+            // Optional `[const_expr]` -- `&array[N]` and
+            // `&array[N+M]` etc. The constant-expression evaluator
+            // handles `+`, `-`, `*`, parens, `Token::Num`-class
+            // identifiers (enum / `#define`d constants).
+            if self.lex.tk == Token::Brak as i64 {
+                self.next()?;
+                let n = self.parse_constant_int()?;
+                if self.lex.tk != ']' as i64 {
+                    return Err(C5Error::Compile(format!(
+                        "{line}: close bracket expected in `&{}[...]`",
+                        self.symbols[target_idx].name
+                    )));
+                }
+                self.next()?;
+                target_offset += n * elem_size;
+            }
             // Write the target's data-segment offset into the
             // slot. The VM reads this directly because its
             // pointers are small data offsets (no image-base

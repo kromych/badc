@@ -1327,6 +1327,20 @@ impl Compiler {
         self.emit_val(target_pc);
     }
 
+    /// Emit `Psh; Imm <val>; <op>` -- the three-op idiom for
+    /// "apply `op` to the accumulator with `val` as the right-
+    /// hand operand". The optimizer's immediate-form pass fuses
+    /// the same triple into AddI / MulI / ShlI / etc., so the
+    /// runtime cost is identical; this helper just consolidates
+    /// the 11-odd parser sites that emit pointer-arithmetic
+    /// scaling, bitfield mask-and-shift, post/pre-increment step
+    /// values, and the like.
+    fn emit_binop_with_imm(&mut self, op: Op, val: i64) {
+        self.emit_op(Op::Psh);
+        self.emit_imm(val);
+        self.emit_op(op);
+    }
+
     /// Emit `Op::Imm <data_offset>` and record the operand's bytecode
     /// position in [`Compiler::data_imm_positions`]. Use this anywhere
     /// the immediate is the address of a string literal or a global --
@@ -2087,16 +2101,12 @@ impl Compiler {
         } else if self.lex.tk == '!' as i64 {
             self.next()?;
             self.expr(Token::Inc as i64)?;
-            self.emit_op(Op::Psh);
-            self.emit_imm(0);
-            self.emit_op(Op::Eq);
+            self.emit_binop_with_imm(Op::Eq, 0);
             self.ty = Ty::Int as i64;
         } else if self.lex.tk == '~' as i64 {
             self.next()?;
             self.expr(Token::Inc as i64)?;
-            self.emit_op(Op::Psh);
-            self.emit_imm(-1);
-            self.emit_op(Op::Xor);
+            self.emit_binop_with_imm(Op::Xor, -1);
             self.ty = Ty::Int as i64;
         } else if self.lex.tk == Token::AddOp as i64 {
             self.next()?;
@@ -2118,9 +2128,7 @@ impl Compiler {
                     self.emit_op(Op::Fneg);
                     // self.ty already matches the operand's FP type
                 } else {
-                    self.emit_op(Op::Psh);
-                    self.emit_imm(-1);
-                    self.emit_op(Op::Mul);
+                    self.emit_binop_with_imm(Op::Mul, -1);
                     self.ty = Ty::Int as i64;
                 }
             }
@@ -2327,9 +2335,7 @@ impl Compiler {
                     let elem_ty = lhs_ty - Ty::Ptr as i64;
                     let elem_size = self.size_of_type(elem_ty) as i64;
                     if elem_size > 1 {
-                        self.emit_op(Op::Psh);
-                        self.emit_imm(elem_size);
-                        self.emit_op(Op::Mul);
+                        self.emit_binop_with_imm(Op::Mul, elem_size);
                     }
                 }
                 let op = match binop {
@@ -2508,9 +2514,7 @@ impl Compiler {
                 } else {
                     if self.is_ptr_scaling_nontrivial(t) {
                         let scale = self.pointee_size(t);
-                        self.emit_op(Op::Psh);
-                        self.emit_imm(scale);
-                        self.emit_op(Op::Mul);
+                        self.emit_binop_with_imm(Op::Mul, scale);
                     }
                     self.emit_op(Op::Add);
                     self.ty = t;
@@ -2531,16 +2535,12 @@ impl Compiler {
                     self.emit_op(Op::Sub);
                     if self.is_ptr_scaling_nontrivial(t) {
                         let scale = self.pointee_size(t);
-                        self.emit_op(Op::Psh);
-                        self.emit_imm(scale);
-                        self.emit_op(Op::Div);
+                        self.emit_binop_with_imm(Op::Div, scale);
                     }
                     self.ty = Ty::Int as i64;
                 } else if self.is_ptr_scaling_nontrivial(t) {
                     let scale = self.pointee_size(t);
-                    self.emit_op(Op::Psh);
-                    self.emit_imm(scale);
-                    self.emit_op(Op::Mul);
+                    self.emit_binop_with_imm(Op::Mul, scale);
                     self.emit_op(Op::Sub);
                     self.ty = t;
                 } else {
@@ -2646,9 +2646,7 @@ impl Compiler {
                     )));
                 }
                 if two_d_stride > 0 {
-                    self.emit_op(Op::Psh);
-                    self.emit_imm(two_d_stride);
-                    self.emit_op(Op::Mul);
+                    self.emit_binop_with_imm(Op::Mul, two_d_stride);
                     self.emit_op(Op::Add);
                     // 2D row pointer -- ty stays at the same pointer
                     // level; the next `[j]` decays it the regular
@@ -2657,9 +2655,7 @@ impl Compiler {
                 } else {
                     if self.is_ptr_scaling_nontrivial(t) {
                         let scale = self.pointee_size(t);
-                        self.emit_op(Op::Psh);
-                        self.emit_imm(scale);
-                        self.emit_op(Op::Mul);
+                        self.emit_binop_with_imm(Op::Mul, scale);
                     }
                     self.emit_op(Op::Add);
                     self.ty = t - Ty::Ptr as i64;
@@ -2726,9 +2722,7 @@ impl Compiler {
                     .clone();
 
                 if field.offset > 0 {
-                    self.emit_op(Op::Psh);
-                    self.emit_imm(field.offset as i64);
-                    self.emit_op(Op::Add);
+                    self.emit_binop_with_imm(Op::Add, field.offset as i64);
                 }
                 self.ty = field.ty;
 
@@ -2883,9 +2877,7 @@ impl Compiler {
         for (val, pc) in cases {
             self.emit_lea(switch_val_offset);
             self.emit_op(Op::Li);
-            self.emit_op(Op::Psh);
-            self.emit_imm(val);
-            self.emit_op(Op::Eq);
+            self.emit_binop_with_imm(Op::Eq, val);
             self.emit_op(Op::Bnz);
             self.emit_val(pc as i64);
         }

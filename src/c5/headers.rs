@@ -41,6 +41,7 @@ pub(super) fn embedded_header(name: &str) -> Option<&'static str> {
 /// would just produce duplicate hits in the diagnostic.
 pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("stddef.h", include_str!("../../headers/include/stddef.h")),
+    ("stdint.h", include_str!("../../headers/include/stdint.h")),
     ("string.h", include_str!("../../headers/include/string.h")),
     ("stdio.h", include_str!("../../headers/include/stdio.h")),
     ("stdlib.h", include_str!("../../headers/include/stdlib.h")),
@@ -53,6 +54,14 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("c5io.h", include_str!("../../headers/include/c5io.h")),
     ("unistd.h", include_str!("../../headers/include/unistd.h")),
     ("fcntl.h", include_str!("../../headers/include/fcntl.h")),
+    (
+        "sys/types.h",
+        include_str!("../../headers/include/sys/types.h"),
+    ),
+    (
+        "sys/stat.h",
+        include_str!("../../headers/include/sys/stat.h"),
+    ),
     (
         "sys/mman.h",
         include_str!("../../headers/include/sys/mman.h"),

@@ -35,6 +35,10 @@
 #pragma binding(libc::strncat,  "_strncat")
 #pragma binding(libc::strerror, "_strerror")
 #pragma binding(libc::strdup,   "_strdup")
+#pragma binding(libc::strspn,   "_strspn")
+#pragma binding(libc::strcspn,  "_strcspn")
+#pragma binding(libc::strpbrk,  "_strpbrk")
+#pragma binding(libc::strtok,   "_strtok")
 #endif
 
 #ifdef __linux__
@@ -56,6 +60,10 @@
 #pragma binding(libc::strncat,  "strncat")
 #pragma binding(libc::strerror, "strerror")
 #pragma binding(libc::strdup,   "strdup")
+#pragma binding(libc::strspn,   "strspn")
+#pragma binding(libc::strcspn,  "strcspn")
+#pragma binding(libc::strpbrk,  "strpbrk")
+#pragma binding(libc::strtok,   "strtok")
 #endif
 
 #ifdef _WIN32
@@ -79,6 +87,10 @@
 // MSVC marks `strdup` as deprecated and exports the underscored form;
 // it's the universally available spelling on every modern msvcrt.
 #pragma binding(msvcrt::strdup,   "_strdup")
+#pragma binding(msvcrt::strspn,   "strspn")
+#pragma binding(msvcrt::strcspn,  "strcspn")
+#pragma binding(msvcrt::strpbrk,  "strpbrk")
+#pragma binding(msvcrt::strtok,   "strtok")
 #endif
 
 // Portable prototypes -- `char` is one byte, `int` is the c4 machine
@@ -100,3 +112,7 @@ char *strcat(char *dst, char *src);
 char *strncat(char *dst, char *src, int n);
 char *strerror(int errnum);
 char *strdup(char *s);
+int strspn(char *s, char *accept);
+int strcspn(char *s, char *reject);
+char *strpbrk(char *s, char *accept);
+char *strtok(char *s, char *delim);

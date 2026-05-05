@@ -240,6 +240,15 @@ impl Preprocessor {
                 // SQLITE_WITHOUT_ZONEMALLOC` before including the
                 // amalgamation.
                 macros.insert("SQLITE_WITHOUT_ZONEMALLOC".to_string(), "1".to_string());
+                // Apple-specific locking-style (`fsctl(F_FULLFSYNC)`,
+                // `_IOWR`, AFP / proxy file locking) lives in the
+                // sqlite amalgamation behind
+                // `SQLITE_ENABLE_LOCKING_STYLE`. The macros it
+                // expands rely on `<sys/disk.h>` shapes c5 doesn't
+                // model. Default to off; if a downstream user
+                // really wants it they can `#undef` and bring the
+                // bindings themselves.
+                macros.insert("SQLITE_ENABLE_LOCKING_STYLE".to_string(), "0".to_string());
             }
             Target::LinuxAarch64 | Target::LinuxX64 => {
                 macros.insert("__linux__".to_string(), "1".to_string());
@@ -647,12 +656,15 @@ impl Preprocessor {
                         ));
                     }
                 }
-            } else if c == b'"' {
-                // Copy string literals verbatim so identifier-looking
-                // bytes inside them aren't substituted.
-                out.push('"');
+            } else if c == b'"' || c == b'\'' {
+                // Copy string and character literals verbatim so
+                // identifier-looking bytes inside them aren't
+                // substituted, and so a quoted quote (`'"'` /
+                // `"\"")` doesn't open the *other* literal kind.
+                let quote = c;
+                out.push(quote as char);
                 i += 1;
-                while i < bytes.len() && bytes[i] != b'"' {
+                while i < bytes.len() && bytes[i] != quote {
                     if bytes[i] == b'\\' && i + 1 < bytes.len() {
                         out.push(bytes[i] as char);
                         out.push(bytes[i + 1] as char);
@@ -663,7 +675,7 @@ impl Preprocessor {
                     }
                 }
                 if i < bytes.len() {
-                    out.push('"');
+                    out.push(quote as char);
                     i += 1;
                 }
             } else {

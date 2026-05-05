@@ -13,18 +13,104 @@
 
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
-#pragma binding(libc::open,  "_open")
-#pragma binding(libc::read,  "_read")
-#pragma binding(libc::close, "_close")
-#pragma binding(libc::write, "_write")
+#pragma binding(libc::open,      "_open")
+#pragma binding(libc::read,      "_read")
+#pragma binding(libc::pread,     "_pread")
+#pragma binding(libc::close,     "_close")
+#pragma binding(libc::write,     "_write")
+#pragma binding(libc::pwrite,    "_pwrite")
+#pragma binding(libc::access,    "_access")
+#pragma binding(libc::lseek,     "_lseek")
+#pragma binding(libc::fsync,     "_fsync")
+#pragma binding(libc::ftruncate, "_ftruncate")
+#pragma binding(libc::fcntl,     "_fcntl")
+#pragma binding(libc::stat,      "_stat")
+#pragma binding(libc::lstat,     "_lstat")
+#pragma binding(libc::fstat,     "_fstat")
+#pragma binding(libc::unlink,    "_unlink")
+#pragma binding(libc::rmdir,     "_rmdir")
+#pragma binding(libc::getcwd,    "_getcwd")
+#pragma binding(libc::chdir,     "_chdir")
+#pragma binding(libc::getuid,    "_getuid")
+#pragma binding(libc::geteuid,   "_geteuid")
+#pragma binding(libc::getpid,    "_getpid")
+#pragma binding(libc::sleep,     "_sleep")
+#pragma binding(libc::usleep,    "_usleep")
+#pragma binding(libc::isatty,    "_isatty")
+#pragma binding(libc::readlink,  "_readlink")
+#pragma binding(libc::mkdir,     "_mkdir")
+#pragma binding(libc::dup,       "_dup")
+#pragma binding(libc::dup2,      "_dup2")
+#pragma binding(libc::pipe,      "_pipe")
+#pragma binding(libc::fork,      "_fork")
+#pragma binding(libc::fchmod,    "_fchmod")
+#pragma binding(libc::fchown,    "_fchown")
+#pragma binding(libc::utimes,    "_utimes")
+#pragma binding(libc::umask,     "_umask")
+#pragma binding(libc::chmod,     "_chmod")
+#pragma binding(libc::chown,     "_chown")
+#pragma binding(libc::truncate,  "_truncate")
+#pragma binding(libc::link,      "_link")
+#pragma binding(libc::symlink,   "_symlink")
+#pragma binding(libc::pathconf,  "_pathconf")
+#pragma binding(libc::sysconf,   "_sysconf")
+#pragma binding(libc::getrusage, "_getrusage")
+#pragma binding(libc::flock,     "_flock")
+#pragma binding(libc::nanosleep, "_nanosleep")
+#pragma binding(libc::getenv,    "_getenv")
+#pragma binding(libc::setenv,    "_setenv")
+#pragma binding(libc::unsetenv,  "_unsetenv")
 #endif
 
 #ifdef __linux__
 #pragma dylib(libc, "libc.so.6")
-#pragma binding(libc::open,  "open")
-#pragma binding(libc::read,  "read")
-#pragma binding(libc::close, "close")
-#pragma binding(libc::write, "write")
+#pragma binding(libc::open,      "open")
+#pragma binding(libc::read,      "read")
+#pragma binding(libc::pread,     "pread")
+#pragma binding(libc::close,     "close")
+#pragma binding(libc::write,     "write")
+#pragma binding(libc::pwrite,    "pwrite")
+#pragma binding(libc::access,    "access")
+#pragma binding(libc::lseek,     "lseek")
+#pragma binding(libc::fsync,     "fsync")
+#pragma binding(libc::ftruncate, "ftruncate")
+#pragma binding(libc::fcntl,     "fcntl")
+#pragma binding(libc::stat,      "stat")
+#pragma binding(libc::lstat,     "lstat")
+#pragma binding(libc::fstat,     "fstat")
+#pragma binding(libc::unlink,    "unlink")
+#pragma binding(libc::rmdir,     "rmdir")
+#pragma binding(libc::getcwd,    "getcwd")
+#pragma binding(libc::chdir,     "chdir")
+#pragma binding(libc::getuid,    "getuid")
+#pragma binding(libc::geteuid,   "geteuid")
+#pragma binding(libc::getpid,    "getpid")
+#pragma binding(libc::sleep,     "sleep")
+#pragma binding(libc::usleep,    "usleep")
+#pragma binding(libc::isatty,    "isatty")
+#pragma binding(libc::readlink,  "readlink")
+#pragma binding(libc::mkdir,     "mkdir")
+#pragma binding(libc::dup,       "dup")
+#pragma binding(libc::dup2,      "dup2")
+#pragma binding(libc::pipe,      "pipe")
+#pragma binding(libc::fork,      "fork")
+#pragma binding(libc::fchmod,    "fchmod")
+#pragma binding(libc::fchown,    "fchown")
+#pragma binding(libc::utimes,    "utimes")
+#pragma binding(libc::umask,     "umask")
+#pragma binding(libc::chmod,     "chmod")
+#pragma binding(libc::chown,     "chown")
+#pragma binding(libc::truncate,  "truncate")
+#pragma binding(libc::link,      "link")
+#pragma binding(libc::symlink,   "symlink")
+#pragma binding(libc::pathconf,  "pathconf")
+#pragma binding(libc::sysconf,   "sysconf")
+#pragma binding(libc::getrusage, "getrusage")
+#pragma binding(libc::flock,     "flock")
+#pragma binding(libc::nanosleep, "nanosleep")
+#pragma binding(libc::getenv,    "getenv")
+#pragma binding(libc::setenv,    "setenv")
+#pragma binding(libc::unsetenv,  "unsetenv")
 #endif
 
 #ifdef _WIN32
@@ -33,9 +119,84 @@
 #pragma binding(msvcrt::read,  "_read")
 #pragma binding(msvcrt::close, "_close")
 #pragma binding(msvcrt::write, "_write")
+#pragma binding(msvcrt::access,"_access")
+#pragma binding(msvcrt::lseek, "_lseek")
+#pragma binding(msvcrt::isatty,"_isatty")
+#pragma binding(msvcrt::dup,   "_dup")
+#pragma binding(msvcrt::dup2,  "_dup2")
 #endif
 
-int open(char *path, int flags);
+int open(char *path, int flags, ...);
 int read(int fd, char *buf, int n);
+int pread(int fd, char *buf, int n, int offset);
 int close(int fd);
 int write(int fd, char *buf, int n);
+int pwrite(int fd, char *buf, int n, int offset);
+int access(char *path, int mode);
+int lseek(int fd, int offset, int whence);
+int fsync(int fd);
+int ftruncate(int fd, int len);
+int fcntl(int fd, int cmd, ...);
+int stat(char *path, char *buf);
+int lstat(char *path, char *buf);
+int fstat(int fd, char *buf);
+int unlink(char *path);
+int rmdir(char *path);
+char *getcwd(char *buf, int n);
+int chdir(char *path);
+int getuid();
+int geteuid();
+int getpid();
+int sleep(int seconds);
+int usleep(int microseconds);
+int isatty(int fd);
+int readlink(char *path, char *buf, int n);
+int mkdir(char *path, int mode);
+int dup(int fd);
+int dup2(int oldfd, int newfd);
+int pipe(int *fds);
+int fork();
+int fchmod(int fd, int mode);
+int fchown(int fd, int uid, int gid);
+int utimes(char *path, char *times);
+int umask(int mode);
+int chmod(char *path, int mode);
+int chown(char *path, int uid, int gid);
+int truncate(char *path, int len);
+int link(char *from, char *to);
+int symlink(char *from, char *to);
+int pathconf(char *path, int name);
+int sysconf(int name);
+int getrusage(int who, char *usage);
+int flock(int fd, int operation);
+int nanosleep(char *req, char *rem);
+char *getenv(char *name);
+int setenv(char *name, char *value, int overwrite);
+int unsetenv(char *name);
+
+#define LOCK_SH 1
+#define LOCK_EX 2
+#define LOCK_UN 8
+#define LOCK_NB 4
+
+// sysconf(3) selectors. Names match POSIX; the underlying value
+// is platform-specific but the bound libc reads it directly.
+#define _SC_PAGESIZE      29
+#define _SC_PAGE_SIZE     _SC_PAGESIZE
+#define _SC_NPROCESSORS_ONLN 84
+#define _SC_OPEN_MAX      4
+#define _SC_ARG_MAX       0
+#define _SC_NPROC_ONLN    _SC_NPROCESSORS_ONLN
+
+// Standard fd numbers. Already defined above; redeclared here
+// for grep-ability.
+#ifndef SEEK_SET
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
+#endif
+
+#define F_OK 0
+#define R_OK 4
+#define W_OK 2
+#define X_OK 1

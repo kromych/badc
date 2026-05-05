@@ -38,6 +38,28 @@
 #define EPIPE   32
 #define EDOM    33
 #define ERANGE  34
+#define ECHILD  10
+#define ESRCH   3
+#define ENXIO   6
+#define E2BIG   7
+#define ENOEXEC 8
+#define EMLINK  31
+#define EFBIG   27
+#define ENOTBLK 15
+#define EXDEV   18
+#define ETXTBSY 26
+#define ENAMETOOLONG 36
+#define ENOLCK  37
+#define ENOSYS  38
+#define ENOTEMPTY 39
+#define ELOOP   40
+#define EOVERFLOW 75
+#define EOPNOTSUPP 95
+#define ENOTSUP    95
+#define ETIMEDOUT 110
+#define ECONNRESET 104
+#define ECONNREFUSED 111
+#define EWOULDBLOCK EAGAIN
 
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")

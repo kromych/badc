@@ -865,6 +865,38 @@ impl Compiler {
                 self.next()?;
                 array_size = n;
             }
+            // Trailing `[N]` dimensions on a multi-dim array.
+            // c5's symbol table only carries one dimension; we
+            // collapse extras by multiplying their sizes onto
+            // `array_size` so total storage matches. Indexing
+            // `a[i][j]` won't compute the right offset on its
+            // own (the inner dim isn't tracked), but the array's
+            // bytes are reachable via `((T*)a)[i*M+j]` and
+            // memcpy / memset based access.
+            while self.lex.tk == Token::Brak as i64 {
+                self.next()?;
+                if self.lex.tk == ']' as i64 {
+                    self.next()?;
+                    continue;
+                }
+                let m = self.parse_constant_int()?;
+                if m <= 0 {
+                    return Err(C5Error::Compile(format!(
+                        "{}: array dimension must be positive (got {m})",
+                        self.lex.line
+                    )));
+                }
+                if self.lex.tk != ']' as i64 {
+                    return Err(C5Error::Compile(format!(
+                        "{}: close bracket expected in array declarator",
+                        self.lex.line
+                    )));
+                }
+                self.next()?;
+                if array_size > 0 {
+                    array_size *= m;
+                }
+            }
         }
 
         Ok((idx, ty, array_size))
@@ -1151,22 +1183,65 @@ impl Compiler {
             return self.parse_const_offsetof();
         }
         if self.lex.tk == Token::Sizeof as i64 {
-            // sizeof(type) inside a constant expression. Parse the
-            // type name + optional `*`s, return its byte size.
+            // sizeof in a constant expression. Three shapes:
+            //   * sizeof(<type>)        -- size of the type.
+            //   * sizeof(<array-var>)   -- total array bytes.
+            //   * sizeof(<scalar-var>)  -- size of the variable's
+            //                              declared type (ignoring
+            //                              the array-decay rule
+            //                              that applies when the
+            //                              name is read as an
+            //                              expression).
             self.next()?;
             let had_paren = self.lex.tk == '(' as i64;
             if had_paren {
                 self.next()?;
             }
-            let mut t = self.parse_decl_base_type()?;
-            while self.lex.tk == Token::MulOp as i64 {
+            let total = if self.lex_is_type_start() {
+                let mut t = self.parse_decl_base_type()?;
+                while self.lex.tk == Token::MulOp as i64 {
+                    self.next()?;
+                    t += Ty::Ptr as i64;
+                }
+                self.size_of_type(t) as i64
+            } else if self.lex.tk == Token::Id as i64
+                && !self.lex.peek_after_whitespace(b'-')
+                && !self.lex.peek_after_whitespace(b'.')
+                && !self.lex.peek_after_whitespace(b'[')
+            {
+                // Bare identifier: `sizeof(name)`. Direct lookup so
+                // arrays use their array_size; postfix shapes
+                // (`name->field`, `name.field`, `name[i]`) drop
+                // through to the expr-based path below where the
+                // computed type drives sizeof.
+                let idx = self.lex.curr_id_idx;
+                let var_ty = self.symbols[idx].type_;
+                let arr = self.symbols[idx].array_size;
                 self.next()?;
-                t += Ty::Ptr as i64;
-            }
+                if arr > 0 {
+                    arr * self.size_of_type(var_ty) as i64
+                } else {
+                    self.size_of_type(var_ty) as i64
+                }
+            } else {
+                // sizeof(<expr>) -- compile-time. Run the regular
+                // expression parser to learn the type, then drop
+                // the emitted bytecode (sizeof never evaluates its
+                // operand). Used for `sizeof(p->field)`, `sizeof(arr[i])`,
+                // and other postfix shapes where the type isn't a
+                // simple base + pointer level.
+                let saved_text_len = self.text.len();
+                let saved_ty = self.ty;
+                self.expr(Token::Assign as i64)?;
+                let expr_ty = self.ty;
+                self.text.truncate(saved_text_len);
+                self.ty = saved_ty;
+                self.size_of_type(expr_ty) as i64
+            };
             if had_paren && self.lex.tk == ')' as i64 {
                 self.next()?;
             }
-            return Ok(self.size_of_type(t) as i64);
+            return Ok(total);
         }
         self.parse_const_expr_primary()
     }
@@ -1226,6 +1301,27 @@ impl Compiler {
             )));
         }
         self.next()?;
+        // Two postfix shapes follow the `&((T*)base)`:
+        //   * `->field[.field]*` -- the standard offsetof shape;
+        //     element type is the struct field, byte offset is
+        //     accumulated through the chain.
+        //   * `[const_expr]` -- pointer indexing into a typed
+        //     base, used for constant-time pointer arithmetic
+        //     like `&((char*)0)[7]` in static initializers.
+        if self.lex.tk == Token::Brak as i64 {
+            self.next()?;
+            let n = self.parse_const_expr_or()?;
+            if self.lex.tk != ']' as i64 {
+                return Err(C5Error::Compile(format!(
+                    "{line}: close bracket expected in offsetof index"
+                )));
+            }
+            self.next()?;
+            // (T*)base -- the pointee type is `t - Ty::Ptr`. Scale
+            // the index by the pointee's byte size.
+            let pointee_ty = t - Ty::Ptr as i64;
+            return Ok(base + n * self.size_of_type(pointee_ty) as i64);
+        }
         if self.lex.tk != Token::Arrow as i64 {
             return Err(C5Error::Compile(format!(
                 "{line}: `->` expected in offsetof shape (got tk={})",
@@ -2249,6 +2345,22 @@ impl Compiler {
                 // conventional `int *fp = some_function;` idiom and
                 // keeps the type-check loose-but-not-wrong.
                 self.ty = Ty::Int as i64 + Ty::Ptr as i64;
+            } else if self.symbols[id_idx].class == Token::Sys as i64 {
+                // Bare libc reference -- `fp = dlsym;`. Without a
+                // per-Sys trampoline the value can't actually be
+                // called indirectly; emit zero and warn so the
+                // user knows the slot is hollow until the runtime
+                // fills it.
+                let line = self.lex.line;
+                let name = self.symbols[id_idx].name.clone();
+                self.warn(format!(
+                    "{line}: warning: address of libc symbol `{name}` lowered as 0 \
+                     (no GOT-trampoline support yet); calling through this pointer \
+                     will fault"
+                ));
+                self.emit_op(Op::Imm);
+                self.emit_val(0);
+                self.ty = Ty::Int as i64 + Ty::Ptr as i64;
             } else {
                 if self.symbols[id_idx].class == Token::Loc as i64 {
                     self.emit_op(Op::Lea);
@@ -2304,6 +2416,46 @@ impl Compiler {
                     while self.lex.tk == Token::TypeQual as i64 {
                         self.next()?;
                     }
+                }
+                // Function-pointer cast inside a cast expression:
+                // any abstract function-pointer declarator after
+                // the base type. Common shapes:
+                //   `(int (*)(args))expr`
+                //   `(void (*)(void))expr`
+                //   `(void(*(*)(args))(void))expr`  -- function
+                //       returning function pointer
+                // c5's type representation is base + pointer-level,
+                // so we treat the entire abstract-declarator tail
+                // as a no-op pointer level. Counted-parens scan
+                // until the cast's outer `)` so even nested fp
+                // shapes consume cleanly.
+                if self.lex.tk == '(' as i64 {
+                    let mut depth: i64 = 1;
+                    self.next()?;
+                    let mut nested_ptrs: i64 = 0;
+                    while depth > 0 && self.lex.tk != 0 {
+                        if self.lex.tk == '(' as i64 {
+                            depth += 1;
+                        } else if self.lex.tk == ')' as i64 {
+                            depth -= 1;
+                            if depth == 0 {
+                                self.next()?;
+                                break;
+                            }
+                        } else if self.lex.tk == Token::MulOp as i64 && depth == 1 {
+                            nested_ptrs += 1;
+                        }
+                        self.next()?;
+                    }
+                    // Consume any further `(args)` decoration that
+                    // follows the inner declarator (`(args)` after
+                    // the inner `)`). Common in function-returning-
+                    // fp casts.
+                    if self.lex.tk == '(' as i64 {
+                        self.next()?;
+                        self.skip_balanced_parens_after_open()?;
+                    }
+                    t += nested_ptrs * (Ty::Ptr as i64);
                 }
                 if self.lex.tk == ')' as i64 {
                     self.next()?;
@@ -2369,6 +2521,13 @@ impl Compiler {
                 // address in `a` (no Li was emitted). `&s` just
                 // raises the type by one pointer level; no IR
                 // change needed.
+            } else if is_pointer_ty(self.ty) {
+                // Array-decay shape: `&arr` and `&pPager->dbFileVers`
+                // when `dbFileVers` is a `char[16]` field. The
+                // expression already yielded the array's address as
+                // its rvalue (no Li was emitted), so `&` is a no-op
+                // at the IR level; the type bump below tracks the
+                // extra pointer level.
             } else {
                 return Err(C5Error::Compile(format!(
                     "{}: bad address-of",
@@ -2657,6 +2816,17 @@ impl Compiler {
                 let b_else = self.text.len();
                 self.emit_val(0);
                 self.expr(Token::Assign as i64)?;
+                // Comma operator in the middle of a ternary:
+                // `cond ? (side_effect, value) : alt`. C allows
+                // `e1, e2, ..., eN` in the ternary's then-arm
+                // because the spec says it's an *expression*, not
+                // an assignment-expression. expr(Assign) stops at
+                // `,`; resume the chain here so the colon search
+                // finds its match.
+                while self.lex.tk == ',' as i64 {
+                    self.next()?;
+                    self.expr(Token::Assign as i64)?;
+                }
                 if self.lex.tk == ':' as i64 {
                     self.next()?;
                 } else {
@@ -3058,9 +3228,13 @@ impl Compiler {
         self.next()?;
         self.consume(b'(', "open paren expected")?;
 
-        // Initialization (optional).
+        // Initialization (optional). Comma operator: `for(i=0,j=0; ...)`.
         if self.lex.tk != ';' as i64 {
             self.expr(Token::Assign as i64)?;
+            while self.lex.tk == ',' as i64 {
+                self.next()?;
+                self.expr(Token::Assign as i64)?;
+            }
         }
         self.consume(b';', "semicolon expected after for-init")?;
 
@@ -3084,10 +3258,14 @@ impl Compiler {
 
         // Step (optional). Compiled before the body so the body can jump
         // back to it; the body itself is reached via the `body_jmp_pc`
-        // patched a few lines below.
+        // patched a few lines below. Comma operator: `i++, k--`.
         let step_pc = self.text.len();
         if self.lex.tk != ')' as i64 {
             self.expr(Token::Assign as i64)?;
+            while self.lex.tk == ',' as i64 {
+                self.next()?;
+                self.expr(Token::Assign as i64)?;
+            }
         }
         self.emit_op(Op::Jmp);
         self.emit_val(cond_pc as i64);
@@ -3227,21 +3405,32 @@ impl Compiler {
         self.next()?;
         let mut elements = alloc::vec::Vec::new();
         while self.lex.tk != '}' as i64 {
-            if self.lex.tk == '"' as i64 {
-                // String-pointer element: the literal lands in
-                // self.data; the element's value is the start
-                // offset and the native writers need a data
-                // relocation to patch it to the runtime address.
-                let addr = self.lex.ival;
-                self.next()?;
-                while self.lex.tk == '"' as i64 {
+            // Nested brace list (multi-dim array): `{ {1,2}, {3,4}, ... }`.
+            // c5's array-symbol storage carries a single flat
+            // dimension, so we flatten the rows by recursing and
+            // concatenating element vectors. Indexing into the
+            // multi-dim shape isn't precise (only the outermost
+            // dimension scales), but the bytes laid out in `data`
+            // match the equivalent `T xs[N*M]` layout, which is
+            // what code that walks the array linearly expects.
+            if self.lex.tk == '{' as i64 {
+                let mut inner = self.collect_array_initializer(elem_ty)?;
+                elements.append(&mut inner);
+                if self.lex.tk == ',' as i64 {
                     self.next()?;
                 }
-                self.data.push(0);
-                elements.push((addr, true));
-            } else {
-                elements.push((self.parse_constant_int()?, false));
+                continue;
             }
+            // Each element rides the same parser as struct field
+            // initializers -- handles bare integers, string
+            // literals, `&id`, function references, casts (`(u8*)"..."`),
+            // negative numbers, and offsetof. The reloc kind is
+            // mapped onto the array's `(value, needs_reloc)` shape:
+            // both `Data` (string / `&global`) and `Code` (function
+            // pointer) get a true reloc; integer constants don't.
+            let (value, reloc) = self.parse_constant_init_value()?;
+            let needs_reloc = !matches!(reloc, InitElemReloc::None);
+            elements.push((value, needs_reloc));
             if self.lex.tk == ',' as i64 {
                 self.next()?;
             }
@@ -3318,6 +3507,31 @@ impl Compiler {
                 {
                     self.next()?;
                 }
+                // Optional function-pointer abstract declarator
+                // `(*)(args)` after the base type. Same treatment
+                // as in the expression-level cast handler: scan
+                // counted parens until the cast's outer `)`,
+                // then skip the trailing `(args)` arg-list shape.
+                if self.lex.tk == '(' as i64 {
+                    let mut depth: i64 = 1;
+                    self.next()?;
+                    while depth > 0 && self.lex.tk != 0 {
+                        if self.lex.tk == '(' as i64 {
+                            depth += 1;
+                        } else if self.lex.tk == ')' as i64 {
+                            depth -= 1;
+                            if depth == 0 {
+                                self.next()?;
+                                break;
+                            }
+                        }
+                        self.next()?;
+                    }
+                    if self.lex.tk == '(' as i64 {
+                        self.next()?;
+                        self.skip_balanced_parens_after_open()?;
+                    }
+                }
                 if self.lex.tk != ')' as i64 {
                     return Err(C5Error::Compile(format!(
                         "{}: close paren expected after cast in initializer",
@@ -3380,9 +3594,35 @@ impl Compiler {
                 self.next()?;
                 return Ok((v, InitElemReloc::None));
             }
-            // Sys-class names (libc bindings) aren't usable as
-            // initializer values today -- their addresses come from
-            // the loader at runtime.
+            if class == Token::Sys as i64 {
+                // Address of a libc binding in a static initializer.
+                // The real address lives in the loader's GOT and isn't
+                // known at compile time; the proper fix is a per-Sys
+                // trampoline whose code-pc gets a CodeReloc into the
+                // data slot. Until that lands, emit zero with a
+                // warning so sqlite's VFS dispatch table compiles --
+                // the runtime fills in the slots before use through
+                // the platform-specific init path.
+                let line = self.lex.line;
+                let name = self.symbols[idx].name.clone();
+                self.warn(format!(
+                    "{line}: warning: address of libc symbol `{name}` in a static \
+                     initializer lowered as 0 (no GOT-trampoline support yet); \
+                     the runtime must overwrite the slot before first use"
+                ));
+                self.next()?;
+                return Ok((0, InitElemReloc::None));
+            }
+            if class == Token::Glo as i64 {
+                // Bare global identifier in a static initializer.
+                // For array globals (`static const char name[] =
+                // "..."`) this is the array-decay rule: the value
+                // is the array's data-segment offset; a DataReloc
+                // patches it to the runtime address.
+                let off = self.symbols[idx].val;
+                self.next()?;
+                return Ok((off, InitElemReloc::Data));
+            }
             return Err(C5Error::Compile(format!(
                 "{}: identifier `{}` is not a constant-expression value",
                 self.lex.line, self.symbols[idx].name
@@ -3789,6 +4029,49 @@ impl Compiler {
                 )));
             }
             self.next()?;
+            // Deferred-size local array of structs: `struct T xs[] = { {...}, ... };`.
+            // Stage each element in self.data, count them, then
+            // reserve one stack frame slot block and Mcpy the
+            // staged bytes into it.
+            if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 && self.lex.tk == '{' as i64 {
+                let elem_size = self.size_of_type(ty);
+                let staged_off = self.data.len();
+                self.next()?;
+                let mut count: i64 = 0;
+                let sid = struct_id_of(ty);
+                while self.lex.tk != '}' as i64 {
+                    let here = self.data.len() as i64;
+                    for _ in 0..elem_size {
+                        self.data.push(0);
+                    }
+                    if self.lex.tk == '{' as i64 {
+                        self.collect_struct_initializer(sid, here)?;
+                    } else {
+                        return Err(C5Error::Compile(format!(
+                            "{}: struct array element must be a brace list",
+                            self.lex.line
+                        )));
+                    }
+                    count += 1;
+                    if self.lex.tk == ',' as i64 {
+                        self.next()?;
+                    }
+                }
+                self.next()?;
+                self.symbols[loc_idx].array_size = count;
+                self.loc_offs += self.local_storage_slots(ty, count);
+                self.symbols[loc_idx].val = -self.loc_offs;
+                if self.loc_offs > self.max_loc_offs {
+                    self.max_loc_offs = self.loc_offs;
+                }
+                let local_val = self.symbols[loc_idx].val;
+                self.emit_local_array_init(
+                    local_val,
+                    staged_off,
+                    elem_size * count as usize,
+                );
+                return Ok(());
+            }
             let elements = self.collect_array_initializer(ty)?;
             let final_size = elements.len() as i64;
             self.symbols[loc_idx].array_size = final_size;
@@ -3826,6 +4109,22 @@ impl Compiler {
                 let (start_addr, total_bytes) =
                     self.pack_initializer_into_data(ty, &elements);
                 self.emit_local_array_init(local_val, start_addr, total_bytes);
+            } else if is_struct_ty(ty)
+                && struct_ptr_depth(ty) == 0
+                && self.lex.tk == '{' as i64
+            {
+                // Local struct value with brace-list initializer.
+                // Stage the bytes in `self.data` (so the bit
+                // pattern is shared across calls), then emit a
+                // Mcpy from the staged buffer to the local slot.
+                let elem_size = self.size_of_type(ty);
+                let staged_off = self.data.len();
+                for _ in 0..elem_size {
+                    self.data.push(0);
+                }
+                let sid = struct_id_of(ty);
+                self.collect_struct_initializer(sid, staged_off as i64)?;
+                self.emit_local_array_init(local_val, staged_off, elem_size);
             } else {
                 self.emit_local_init_store(local_val, ty)?;
             }
@@ -4025,14 +4324,11 @@ impl Compiler {
             self.parse_switch_stmt()?;
         } else if self.lex.tk == Token::Case as i64 {
             self.next()?;
-            if self.lex.tk != Token::Num as i64 {
-                return Err(C5Error::Compile(format!(
-                    "{}: invalid case value",
-                    self.lex.line
-                )));
-            }
-            let val = self.lex.ival;
-            self.next()?;
+            // Case label is a constant expression: integer literal,
+            // negated literal, parenthesised literal, enum / `#define`d
+            // constant. parse_const_expr_or covers all of these and the
+            // `(-16)` / `0x10|0x20` shapes sqlite uses.
+            let val = self.parse_const_expr_or()?;
             self.consume(b':', "expected colon after case")?;
             let Some(cases) = self.switch_cases.last_mut() else {
                 return Err(C5Error::Compile(format!(
@@ -5004,6 +5300,49 @@ impl Compiler {
         is_thread_local: bool,
     ) -> Result<(), C5Error> {
         let line = self.lex.line;
+        // Bare function reference in a global initializer:
+        // `static int (*fp)() = func;`. The value is the function's
+        // bytecode PC; a CodeReloc patches the slot to the runtime
+        // code address at load time.
+        if self.lex.tk == Token::Id as i64
+            && self.symbols[self.lex.curr_id_idx].class == Token::Fun as i64
+        {
+            if is_thread_local {
+                return Err(C5Error::Compile(format!(
+                    "{line}: function-pointer initializer for `_Thread_local` not supported"
+                )));
+            }
+            let bc_pc = self.symbols[self.lex.curr_id_idx].val;
+            self.next()?;
+            let bytes = (bc_pc as u64).to_le_bytes();
+            self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
+            self.code_relocs.push(crate::c5::program::CodeReloc {
+                data_offset: var_offset as u64,
+                target_bc_pc: bc_pc as u64,
+            });
+            return Ok(());
+        }
+        // String literal in a `char *p` global initializer.
+        if self.lex.tk == '"' as i64 && var_ty > Ty::Ptr as i64 {
+            if is_thread_local {
+                return Err(C5Error::Compile(format!(
+                    "{line}: string-literal initializer for `_Thread_local` not supported"
+                )));
+            }
+            let addr = self.lex.ival;
+            self.next()?;
+            while self.lex.tk == '"' as i64 {
+                self.next()?;
+            }
+            self.data.push(0);
+            let bytes = (addr as u64).to_le_bytes();
+            self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
+            self.data_relocs.push(crate::c5::program::DataReloc {
+                data_offset: var_offset as u64,
+                target_offset: addr as u64,
+            });
+            return Ok(());
+        }
         // `&<global>` -- address-of-global pointer init.
         if self.lex.tk == Token::AndOp as i64 {
             if is_thread_local {
@@ -5084,26 +5423,11 @@ impl Compiler {
             return Ok(());
         }
 
-        // Integer literal, optionally negated. Anything else
-        // is rejected.
-        let mut sign: i64 = 1;
-        if self.lex.tk == Token::SubOp as i64 {
-            sign = -1;
-            self.next()?;
-        } else if self.lex.tk == Token::AddOp as i64 {
-            // Unary `+` is a no-op; tolerate it for symmetry
-            // with the negation case.
-            self.next()?;
-        }
-        if self.lex.tk != Token::Num as i64 {
-            return Err(C5Error::Compile(format!(
-                "{line}: bad global initializer (expected integer constant \
-                 or `&<global>`, got tk={})",
-                self.lex.tk
-            )));
-        }
-        let value = sign.wrapping_mul(self.lex.ival);
-        self.next()?;
+        // Constant expression, evaluated at compile time. Handles
+        // integer literals, unary `+`/`-`, casts (`(size_t)expr`),
+        // arithmetic, parens, identifiers bound as `Token::Num`
+        // (enum / `#define`d constants), and the offsetof shape.
+        let value = self.parse_const_expr_or()?;
 
         let bytes = value.to_le_bytes();
         let segment = if is_thread_local {

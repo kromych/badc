@@ -71,6 +71,36 @@
 #pragma binding(msvcrt::atan2, "atan2")
 #endif
 
+// IEEE-754 sentinel values. The c5 lexer accepts the typical
+// `1e308 * 10.0` / `0.0 / 0.0` shapes so the math.h macros can
+// land their bit patterns without compiler intrinsics. Worth
+// noting that c5 widens both sides of the FP-overflow chain to
+// `double` automatically -- the resulting bit pattern is the
+// IEEE infinity and NaN that downstream code expects.
+#ifndef INFINITY
+#define INFINITY (1.0e+308 * 10.0)
+#endif
+#ifndef NAN
+#define NAN (0.0 / 0.0)
+#endif
+#ifndef HUGE_VAL
+#define HUGE_VAL INFINITY
+#endif
+#ifndef HUGE_VALF
+#define HUGE_VALF INFINITY
+#endif
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+#ifndef M_E
+#define M_E  2.71828182845904523536
+#endif
+
+int isnan(double x);
+int isinf(double x);
+int isfinite(double x);
+
 double sqrt(double x);
 double log(double x);
 double log10(double x);

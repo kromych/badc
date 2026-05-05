@@ -19,6 +19,25 @@
 #define SEEK_CUR 1
 #define SEEK_END 2
 
+#ifndef FILENAME_MAX
+#define FILENAME_MAX 4096
+#endif
+#ifndef FOPEN_MAX
+#define FOPEN_MAX    1024
+#endif
+#ifndef TMP_MAX
+#define TMP_MAX      308915776
+#endif
+#ifndef BUFSIZ
+#define BUFSIZ       8192
+#endif
+#ifndef L_tmpnam
+#define L_tmpnam     20
+#endif
+#ifndef PATH_MAX
+#define PATH_MAX     4096
+#endif
+
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::printf,    "_printf")

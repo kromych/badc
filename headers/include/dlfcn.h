@@ -17,8 +17,12 @@
 // `RTLD_LAZY` is only meaningful on POSIX; on Windows it's a no-op
 // flag for the convenience of cross-platform fixtures that pass it
 // through to `dlopen` regardless of target.
-#define RTLD_LAZY 1
-#define RTLD_NOW  2
+#define RTLD_LAZY    1
+#define RTLD_NOW     2
+#define RTLD_LOCAL   0
+#define RTLD_GLOBAL  256
+#define RTLD_DEFAULT ((void*)0)
+#define RTLD_NEXT    ((void*)-1)
 
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")

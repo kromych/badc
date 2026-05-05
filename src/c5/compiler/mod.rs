@@ -3788,6 +3788,12 @@ impl Compiler {
             let mut thread_local = false;
             let mut is_typedef = false;
             let mut saw_signed = false;
+            // M31: track `long` separately from the other int-modifiers
+            // so `typedef long long int u64;` and friends pick the
+            // 8-byte `Ty::Long` storage class instead of falling
+            // through as 4-byte `Ty::Int`.
+            let mut saw_long = false;
+            let mut saw_int_mod = false;
             loop {
                 if self.lex.tk == Token::ThreadLocal as i64 {
                     thread_local = true;
@@ -3797,6 +3803,14 @@ impl Compiler {
                     self.next()?;
                 } else if self.lex.tk == Token::Signed as i64 {
                     saw_signed = true;
+                    saw_int_mod = true;
+                    self.next()?;
+                } else if self.lex.tk == Token::Long as i64 {
+                    saw_long = true;
+                    saw_int_mod = true;
+                    self.next()?;
+                } else if self.lex.tk == Token::IntMod as i64 {
+                    saw_int_mod = true;
                     self.next()?;
                 } else if self.lex.tk == Token::Extern as i64
                     || self.lex.tk == Token::Static as i64
@@ -3809,7 +3823,14 @@ impl Compiler {
             }
             if self.lex.tk == Token::Int as i64 {
                 self.next()?;
-                bt = Ty::Int as i64;
+                // `long int` / `long long int` -> Ty::Long; bare `int`
+                // -> Ty::Int (4 bytes after M31). Mirror the same
+                // dispatch parse_decl_base_type uses.
+                bt = if saw_long {
+                    Ty::Long as i64
+                } else {
+                    Ty::Int as i64
+                };
             } else if self.lex.tk == Token::Char as i64 {
                 self.next()?;
                 // `signed char` -> int (see parse_decl_base_type for
@@ -3865,6 +3886,16 @@ impl Compiler {
                 // where `Foo` was bound by a prior `typedef`.
                 bt = self.symbols[self.lex.curr_id_idx].type_;
                 self.next()?;
+            } else if saw_int_mod {
+                // Bare modifier(s) without an explicit type keyword:
+                // `unsigned x;` / `short x;` / `long x;` (the
+                // implicit-int rule). `long` keeps its 8-byte
+                // selection -- mirror parse_decl_base_type's tail.
+                bt = if saw_long {
+                    Ty::Long as i64
+                } else {
+                    Ty::Int as i64
+                };
             }
             // Trailing qualifiers / int modifiers between the base
             // type and the declarators -- `Foo const *p`, `int long

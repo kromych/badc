@@ -143,24 +143,20 @@ int main() {
     printf("[3d] sqlite3_limit(db, 1, -1) = %d\n", sqlite3_limit(db, 1, -1));
     fflush(stdout);
 
+    printf("[3e] sizeof(Parse)=%d\n", (int)sizeof(Parse));
+    fflush(stdout);
+    sqlite3_stmt *st = 0;
+    const char *tail = 0;
+    printf("[4a] calling sqlite3_prepare_v2\n"); fflush(stdout);
+    rc = sqlite3_prepare_v2(db, "SELECT 1", 8, &st, &tail);
+    printf("[4b] prepare(SELECT 1, 8) -> %d, tail=%p, st=%p\n", rc, tail, st);
+    fflush(stdout);
+    if (st) sqlite3_finalize(st);
+
     rc = sqlite3_exec(db, "SELECT 1;", 0, 0, &errmsg);
     printf("[4] SELECT 1 -> %d (errmsg=%s)\n", rc, errmsg ? errmsg : "<null>");
     if (errmsg) sqlite3_free(errmsg);
     fflush(stdout);
-    errmsg = 0;
-
-    // Try sqlite3_prepare_v2 directly with explicit nBytes.
-    sqlite3_stmt *st = 0;
-    const char *tail = 0;
-    rc = sqlite3_prepare_v2(db, "SELECT 1", 8, &st, &tail);
-    printf("[4b] prepare(SELECT 1, 8) -> %d, tail=%p\n", rc, tail);
-    fflush(stdout);
-    if (st) sqlite3_finalize(st);
-
-    rc = sqlite3_prepare_v2(db, "SELECT 1", -1, &st, &tail);
-    printf("[4c] prepare(SELECT 1, -1) -> %d, tail=%p\n", rc, tail);
-    fflush(stdout);
-    if (st) sqlite3_finalize(st);
     fflush(stdout);
     if (rc != 0) return 1;
 

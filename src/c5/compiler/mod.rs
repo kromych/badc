@@ -1670,6 +1670,42 @@ impl Compiler {
         }
     }
 
+    /// If the most recently emitted op is a scalar load (`Op::Lc`
+    /// / `Op::Lw` / `Op::Li`), rewrite it in place to `Op::Psh` and
+    /// return the matching reload op so the caller can `emit_op` it
+    /// to put the original loaded value back into the accumulator.
+    /// Returns `None` if the trailing op isn't a scalar load, in
+    /// which case the caller reports its own "bad lvalue" error.
+    ///
+    /// The pattern shows up in pre/post-increment, plain
+    /// assignment, and compound assignment. Centralising the
+    /// `last() / last_mut() / Op::Psh` triple keeps the four
+    /// call sites in sync when M31-shaped ops (or any future
+    /// load-op variants) are added.
+    fn rewrite_trailing_load_as_psh(&mut self) -> Option<Op> {
+        let last = *self.text.last()?;
+        if !is_scalar_load_op_val(last) {
+            return None;
+        }
+        *self.text.last_mut().unwrap() = Op::Psh as i64;
+        Some(reemit_scalar_load(last))
+    }
+
+    /// If the most recently emitted op is a scalar load (`Op::Lc`
+    /// / `Op::Lw` / `Op::Li`), pop it -- the load's address-
+    /// producing source op then sits at the new tail, ready to
+    /// drive the surrounding lvalue operation. Returns `true` on
+    /// success. Used by `&expr` to convert an rvalue load chain
+    /// into an lvalue-address chain.
+    fn pop_trailing_scalar_load(&mut self) -> bool {
+        if matches!(self.text.last(), Some(&op) if is_scalar_load_op_val(op)) {
+            self.text.pop();
+            true
+        } else {
+            false
+        }
+    }
+
     // ---- Recursive descent ----
 
     fn expr(&mut self, lev: i64) -> Result<(), C5Error> {
@@ -2288,7 +2324,6 @@ impl Compiler {
         } else if self.lex.tk == Token::AndOp as i64 {
             self.next()?;
             self.expr(Token::Inc as i64)?;
-            let last = *self.text.last().unwrap();
             // Order matters here: a struct-value rvalue (`p->mutex`
             // where `mutex` is a struct field, or `*p` where `p`
             // is a struct pointer) leaves the field's address in
@@ -2309,10 +2344,9 @@ impl Compiler {
                 // address in `a` (no final-load Li). `&s` just
                 // raises the type by one pointer level; no IR
                 // change needed.
-            } else if is_scalar_load_op_val(last) {
-                // Scalar / pointer lvalue: drop the trailing load
-                // so what's left is the address-producing op.
-                self.text.pop();
+            } else if self.pop_trailing_scalar_load() {
+                // Scalar / pointer lvalue: dropped the trailing
+                // load so what's left is the address-producing op.
             } else if is_pointer_ty(self.ty) {
                 // Array-decay shape: `&arr` and `&pPager->dbFileVers`
                 // when `dbFileVers` is a `char[16]` field. The
@@ -2375,16 +2409,13 @@ impl Compiler {
             t = self.lex.tk;
             self.next()?;
             self.expr(Token::Inc as i64)?;
-            let last = *self.text.last().unwrap();
-            if is_scalar_load_op_val(last) {
-                *self.text.last_mut().unwrap() = Op::Psh as i64;
-                self.emit_op(reemit_scalar_load(last));
-            } else {
-                return Err(C5Error::Compile(format!(
+            let reload = self.rewrite_trailing_load_as_psh().ok_or_else(|| {
+                C5Error::Compile(format!(
                     "{}: bad lvalue in pre-increment",
                     self.lex.line
-                )));
-            }
+                ))
+            })?;
+            self.emit_op(reload);
             if is_floating_scalar(self.ty) {
                 return Err(C5Error::Compile(format!(
                     "{}: floating-point ++/-- not yet implemented",
@@ -2482,7 +2513,6 @@ impl Compiler {
                 self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::Assign as i64 {
                 self.next()?;
-                let last = *self.text.last().unwrap();
                 let lhs_is_struct_value = is_struct_ty(t) && struct_ptr_depth(t) == 0;
                 if lhs_is_struct_value {
                     // Struct-to-struct copy. The LHS already left
@@ -2521,11 +2551,10 @@ impl Compiler {
                     self.emit_op(Op::Mcpy);
                     self.emit_val(size as i64);
                     self.ty = t;
-                } else if is_scalar_load_op_val(last) {
-                    // Scalar / pointer assignment: rewrite the
-                    // trailing load into a push so the address is
+                } else if self.rewrite_trailing_load_as_psh().is_some() {
+                    // Scalar / pointer assignment: trailing load
+                    // rewritten to a push so the address is
                     // preserved on the stack while the RHS evaluates.
-                    *self.text.last_mut().unwrap() = Op::Psh as i64;
                     let line = self.lex.line;
                     self.expr(Token::Assign as i64)?;
                     let rhs_is_zero = self.last_emit_is_zero();
@@ -2556,19 +2585,18 @@ impl Compiler {
                 // accept compound assignment in c5.
                 let binop = self.lex.ival;
                 self.next()?;
-                let last = *self.text.last().unwrap();
-                if !is_scalar_load_op_val(last) {
-                    return Err(C5Error::Compile(format!(
+                // Rewrite the trailing load into a Psh so the
+                // address sits on the c5 stack across the compound
+                // op; the helper hands back the matching reload op
+                // so we can put the current value back into `a`
+                // before pushing it for the binop's pop.
+                let reload = self.rewrite_trailing_load_as_psh().ok_or_else(|| {
+                    C5Error::Compile(format!(
                         "{}: bad lvalue in compound assignment",
                         self.lex.line
-                    )));
-                }
-                let load_op = last;
-                // Rewrite trailing load into push so addr stays on
-                // the stack across the compound op.
-                *self.text.last_mut().unwrap() = Op::Psh as i64;
-                // Reload the current value into `a`.
-                self.emit_op(reemit_scalar_load(load_op));
+                    ))
+                })?;
+                self.emit_op(reload);
                 // Push the current value so the binop can pop it.
                 self.emit_op(Op::Psh);
                 // For pointer arithmetic with `+=` / `-=`, scale
@@ -2851,16 +2879,13 @@ impl Compiler {
                 self.emit_op(Op::Mod);
                 self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::Inc as i64 || self.lex.tk == Token::Dec as i64 {
-                let last = *self.text.last().unwrap();
-                if is_scalar_load_op_val(last) {
-                    *self.text.last_mut().unwrap() = Op::Psh as i64;
-                    self.emit_op(reemit_scalar_load(last));
-                } else {
-                    return Err(C5Error::Compile(format!(
+                let reload = self.rewrite_trailing_load_as_psh().ok_or_else(|| {
+                    C5Error::Compile(format!(
                         "{}: bad lvalue in post-increment",
                         self.lex.line
-                    )));
-                }
+                    ))
+                })?;
+                self.emit_op(reload);
                 if is_floating_scalar(self.ty) {
                     return Err(C5Error::Compile(format!(
                         "{}: floating-point ++/-- not yet implemented",

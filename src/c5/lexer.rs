@@ -148,8 +148,7 @@ impl Lexer {
         while p < self.src.len() && self.src[p].is_ascii_whitespace() {
             p += 1;
         }
-        p < self.src.len()
-            && (self.src[p].is_ascii_alphabetic() || self.src[p] == b'_')
+        p < self.src.len() && (self.src[p].is_ascii_alphabetic() || self.src[p] == b'_')
     }
 
     /// Count the number of comma-separated top-level groups

@@ -432,10 +432,7 @@ fn pc_to_index_in(insns: &[Insn], text: &[i64], target_pc: usize) -> Result<usiz
 /// per-insn-index remap table so callers (e.g., the code-reloc
 /// remapping in `optimize`) can translate any pre-optimisation
 /// bytecode PC through the original `insns` index.
-fn encode(
-    insns: &[Insn],
-    entry_idx: usize,
-) -> (Vec<i64>, usize, Vec<usize>, Vec<usize>) {
+fn encode(insns: &[Insn], entry_idx: usize) -> (Vec<i64>, usize, Vec<usize>, Vec<usize>) {
     // Pass A: assign post-DCE PCs, skipping Removed slots.
     let mut new_pc: Vec<usize> = vec![usize::MAX; insns.len() + 1];
     let mut pc = 0usize;

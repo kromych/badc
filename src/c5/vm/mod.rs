@@ -435,7 +435,7 @@ impl<H: Host> Vm<H> {
                 let byte_offset = (addr - STACK_BASE) % 8;
                 let shift = byte_offset * 8;
                 let mask = !(0xFFFF_FFFFu64 << shift);
-                let new_val = (word & mask) | (((val as u32 as u64) << shift) as u64);
+                let new_val = (word & mask) | ((val as u32 as u64) << shift);
                 self.stack[idx] = new_val as i64;
                 Ok(())
             } else {
@@ -750,19 +750,35 @@ impl<H: Host> Vm<H> {
                 // Unsigned compares: same operand layout, but
                 // interpret both stack-top and accumulator as u64.
                 Op::Ult => {
-                    a = if (self.load_i64(sp)? as u64) < (a as u64) { 1 } else { 0 };
+                    a = if (self.load_i64(sp)? as u64) < (a as u64) {
+                        1
+                    } else {
+                        0
+                    };
                     sp += 8;
                 }
                 Op::Ugt => {
-                    a = if (self.load_i64(sp)? as u64) > (a as u64) { 1 } else { 0 };
+                    a = if (self.load_i64(sp)? as u64) > (a as u64) {
+                        1
+                    } else {
+                        0
+                    };
                     sp += 8;
                 }
                 Op::Ule => {
-                    a = if (self.load_i64(sp)? as u64) <= (a as u64) { 1 } else { 0 };
+                    a = if (self.load_i64(sp)? as u64) <= (a as u64) {
+                        1
+                    } else {
+                        0
+                    };
                     sp += 8;
                 }
                 Op::Uge => {
-                    a = if (self.load_i64(sp)? as u64) >= (a as u64) { 1 } else { 0 };
+                    a = if (self.load_i64(sp)? as u64) >= (a as u64) {
+                        1
+                    } else {
+                        0
+                    };
                     sp += 8;
                 }
                 Op::Shl => {

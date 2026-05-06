@@ -421,10 +421,8 @@ impl Preprocessor {
                         // `cond_stack.last_mut()` borrows `self` for
                         // the frame -- evaluate the expression first
                         // and only then mutate the frame.
-                        let parent_active = cond_stack
-                            .last()
-                            .map(|f| f.parent_active)
-                            .ok_or_else(|| {
+                        let parent_active =
+                            cond_stack.last().map(|f| f.parent_active).ok_or_else(|| {
                                 C5Error::Compile(format!(
                                     "preprocessor:{line_no}: `#elif` with no matching `#if`"
                                 ))
@@ -510,8 +508,7 @@ impl Preprocessor {
             if active {
                 let mut buffer = String::from(line);
                 let mut consumed = 1usize;
-                while macro_call_unclosed(&buffer, &self.fn_macros)
-                    && idx + consumed < lines.len()
+                while macro_call_unclosed(&buffer, &self.fn_macros) && idx + consumed < lines.len()
                 {
                     buffer.push('\n');
                     buffer.push_str(lines[idx + consumed]);
@@ -623,9 +620,7 @@ impl Preprocessor {
                         let expanded_args: Vec<String> = args
                             .iter()
                             .map(|a| {
-                                self.substitute_with_blocklist(
-                                    a, filename, line_no, blocklist,
-                                )
+                                self.substitute_with_blocklist(a, filename, line_no, blocklist)
                             })
                             .collect();
                         let expanded = expand_fn_macro(macro_def, &expanded_args);
@@ -635,9 +630,8 @@ impl Preprocessor {
                         // trigger another round.
                         let mut nested: Vec<&str> = blocklist.to_vec();
                         nested.push(ident);
-                        let recursed = self.substitute_with_blocklist(
-                            &expanded, filename, line_no, &nested,
-                        );
+                        let recursed =
+                            self.substitute_with_blocklist(&expanded, filename, line_no, &nested);
                         out.push_str(&recursed);
                         i = j + after;
                         continue;
@@ -654,9 +648,9 @@ impl Preprocessor {
                     Some(expanded) => {
                         let mut nested: Vec<&str> = blocklist.to_vec();
                         nested.push(ident);
-                        out.push_str(&self.substitute_with_blocklist(
-                            &expanded, filename, line_no, &nested,
-                        ));
+                        out.push_str(
+                            &self.substitute_with_blocklist(&expanded, filename, line_no, &nested),
+                        );
                     }
                 }
             } else if c == b'"' || c == b'\'' {
@@ -784,8 +778,7 @@ impl Preprocessor {
                         }
                     }
                     if !name.is_empty() {
-                        let v = self.macros.contains_key(name)
-                            || self.fn_macros.contains_key(name);
+                        let v = self.macros.contains_key(name) || self.fn_macros.contains_key(name);
                         out.push_str(if v { "1" } else { "0" });
                         i = j;
                         continue;
@@ -1585,7 +1578,9 @@ impl<'a> IfExprParser<'a> {
             self.skip_ws();
             // Single `|`, but only if not followed by another `|`
             // (which would be `||`, the OR operator we already handled).
-            if self.peek_byte() == Some(b'|') && self.src.as_bytes().get(self.pos + 1) != Some(&b'|') {
+            if self.peek_byte() == Some(b'|')
+                && self.src.as_bytes().get(self.pos + 1) != Some(&b'|')
+            {
                 self.pos += 1;
                 let right = self.parse_bitxor()?;
                 left = IfValue::Int(left.as_int() | right.as_int());
@@ -1614,7 +1609,9 @@ impl<'a> IfExprParser<'a> {
         let mut left = self.parse_eq()?;
         loop {
             self.skip_ws();
-            if self.peek_byte() == Some(b'&') && self.src.as_bytes().get(self.pos + 1) != Some(&b'&') {
+            if self.peek_byte() == Some(b'&')
+                && self.src.as_bytes().get(self.pos + 1) != Some(&b'&')
+            {
                 self.pos += 1;
                 let right = self.parse_eq()?;
                 left = IfValue::Int(left.as_int() & right.as_int());
@@ -1753,9 +1750,7 @@ impl<'a> IfExprParser<'a> {
             let v = self.parse_or()?;
             self.skip_ws();
             if !self.eat_byte(b')') {
-                return Err(C5Error::Compile(alloc::format!(
-                    "preprocessor: missing `)` in `#if` expression",
-                )));
+                return Err(C5Error::Compile("preprocessor: missing `)` in `#if` expression".to_string()));
             }
             return Ok(v);
         }
@@ -1867,9 +1862,8 @@ impl<'a> IfExprParser<'a> {
                 break;
             }
         }
-        let body = self.src[start..self.pos].trim_end_matches(|c: char| {
-            matches!(c, 'u' | 'U' | 'l' | 'L')
-        });
+        let body = self.src[start..self.pos]
+            .trim_end_matches(['u', 'U', 'l', 'L']);
         let v = if radix == 10 {
             body.parse::<i64>()
         } else {
@@ -1931,9 +1925,7 @@ impl<'a> IfExprParser<'a> {
                     ));
                 }
             }
-            return Ok(IfValue::Int(
-                self.pp.macros.contains_key(&id) as i64,
-            ));
+            return Ok(IfValue::Int(self.pp.macros.contains_key(&id) as i64));
         }
         // Identifier -- look up in the macro table. Function-like
         // macros are skipped (they need an argument list which the
@@ -2187,9 +2179,8 @@ mod tests {
 
     #[test]
     fn variadic_macro_with_fixed_param() {
-        let out = process(
-            "#define LOG(level, ...) printf(level, __VA_ARGS__)\nLOG(\"x\", 1, 2);\n",
-        );
+        let out =
+            process("#define LOG(level, ...) printf(level, __VA_ARGS__)\nLOG(\"x\", 1, 2);\n");
         assert!(
             out.contains("printf(\"x\", 1, 2);"),
             "fixed param + __VA_ARGS__ should both substitute:\n{out}"

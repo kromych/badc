@@ -202,8 +202,8 @@ mod jit_impl {
         // at the function's actual code byte offset. Mirrors the
         // per-format writers' code-reloc handling but uses the
         // mmap'd region pointer directly.
-        if !build.code_relocs.is_empty() {
-            if let Some(region) = &mut data_region {
+        if !build.code_relocs.is_empty()
+            && let Some(region) = &mut data_region {
                 let bytes = region.as_mut_slice(build.data.len());
                 for r in &build.code_relocs {
                     let bc_pc = r.target_bc_pc as usize;
@@ -228,7 +228,6 @@ mod jit_impl {
                     bytes[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
                 }
             }
-        }
         apply_jit_fixups(
             target,
             unsafe { core::slice::from_raw_parts_mut(region.as_mut_ptr(), build.text.len()) },

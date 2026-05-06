@@ -181,10 +181,8 @@ fn field_access_on_opaque_struct_is_rejected() {
     // a field on the opaque value is still an error -- the
     // struct has no fields to look up. We don't pin the exact
     // wording, just that compilation fails.
-    match Compiler::new(
-        "int main() { struct Forward *p; p = 0; return p->x; }".to_string(),
-    )
-    .compile()
+    match Compiler::new("int main() { struct Forward *p; p = 0; return p->x; }".to_string())
+        .compile()
     {
         Err(_) => {}
         Ok(_) => panic!("expected compile error on field access through opaque struct"),

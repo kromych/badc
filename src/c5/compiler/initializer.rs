@@ -37,7 +37,7 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::op::Op;
 use super::super::token::{Token, Ty};
-use super::types::{is_struct_ty, struct_id_of, struct_ptr_depth, UNSIGNED_BIT};
+use super::types::{UNSIGNED_BIT, is_struct_ty, struct_id_of, struct_ptr_depth};
 use super::{Compiler, InitElemReloc};
 
 impl Compiler {
@@ -213,9 +213,7 @@ impl Compiler {
             self.next()?;
             if self.lex_is_type_start() {
                 let _ = self.parse_decl_base_type()?;
-                while self.lex.tk == Token::MulOp as i64
-                    || self.lex.tk == Token::TypeQual as i64
-                {
+                while self.lex.tk == Token::MulOp as i64 || self.lex.tk == Token::TypeQual as i64 {
                     self.next()?;
                 }
                 // Optional function-pointer abstract declarator
@@ -381,7 +379,8 @@ impl Compiler {
                     )));
                 }
                 self.next()?;
-                let pos_in_struct = self.structs[struct_id]
+                
+                self.structs[struct_id]
                     .fields
                     .iter()
                     .position(|f| f.name == field_name)
@@ -390,8 +389,7 @@ impl Compiler {
                             "{}: struct {} has no field {}",
                             self.lex.line, self.structs[struct_id].name, field_name
                         ))
-                    })?;
-                pos_in_struct
+                    })?
             } else {
                 pos
             };
@@ -515,11 +513,7 @@ impl Compiler {
     ///   Lea local_val ; Psh ; <init expr> ; Si | Sc | Mcpy
     /// On entry `tk` is positioned just past the `=`; on exit it
     /// is at the comma or semicolon following the initializer.
-    pub(super) fn emit_local_init_store(
-        &mut self,
-        local_val: i64,
-        ty: i64,
-    ) -> Result<(), C5Error> {
+    pub(super) fn emit_local_init_store(&mut self, local_val: i64, ty: i64) -> Result<(), C5Error> {
         self.emit_lea(local_val);
         self.emit_op(Op::Psh);
         self.expr(Token::Assign as i64)?;

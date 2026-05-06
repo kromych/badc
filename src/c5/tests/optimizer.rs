@@ -27,7 +27,7 @@ const FIXTURES: &[(&str, i64)] = &[
     ("nested_function_calls.c", 100),
     ("printf.c", 0),
     ("memory_ops.c", 0),
-    ("pointer_arithmetic_scaling.c", 104),  // M31: sizeof(int) = 4
+    ("pointer_arithmetic_scaling.c", 104), // M31: sizeof(int) = 4
     ("expression_precedence.c", 1),
     ("variable_shadowing.c", 10),
     ("pointer_arithmetic.c", 3),
@@ -36,7 +36,7 @@ const FIXTURES: &[(&str, i64)] = &[
     ("shebang.c", 7),
     ("sizeof_basic.c", 0),
     ("sizeof_expr.c", 0),
-    ("sizeof_with_write.c", 16),            // M31: 4 + 4 + 8
+    ("sizeof_with_write.c", 16), // M31: 4 + 4 + 8
     ("struct_basic.c", 25),
     ("struct_linked_list.c", 10),
     ("struct_sizeof.c", 0),

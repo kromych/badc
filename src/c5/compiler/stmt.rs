@@ -27,8 +27,8 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::op::Op;
 use super::super::token::Token;
-use super::types::{is_struct_ty, struct_ptr_depth};
 use super::Compiler;
+use super::types::{is_struct_ty, struct_ptr_depth};
 
 impl Compiler {
     /// `for (init; cond; step) body`. The body is emitted between the

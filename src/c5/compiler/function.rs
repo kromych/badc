@@ -35,9 +35,7 @@ impl Compiler {
         // `void` to `Token::Char`, so detect the shape via lookahead:
         // a `Char`/`void` token immediately followed by `)` and not
         // by an identifier (which would make this a real parameter).
-        if self.lex.tk == Token::Char as i64
-            && self.lex.peek_after_whitespace(b')')
-        {
+        if self.lex.tk == Token::Char as i64 && self.lex.peek_after_whitespace(b')') {
             self.next()?; // consume `void`
             // tk is now `)`; the outer loop sees it and exits.
         }

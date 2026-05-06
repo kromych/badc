@@ -19,8 +19,8 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::types::{
-    is_decl_modifier, is_struct_ty, round_up, struct_id_of, struct_ptr_depth, struct_ty_for,
-    UNSIGNED_BIT,
+    UNSIGNED_BIT, is_decl_modifier, is_struct_ty, round_up, struct_id_of, struct_ptr_depth,
+    struct_ty_for,
 };
 use super::{Compiler, StructDef, StructField};
 
@@ -119,8 +119,16 @@ impl Compiler {
             }
             let field_base = if self.lex.tk == Token::Int as i64 {
                 self.next()?;
-                let base = if saw_long { Ty::Long as i64 } else { Ty::Int as i64 };
-                if saw_unsigned { base | UNSIGNED_BIT } else { base }
+                let base = if saw_long {
+                    Ty::Long as i64
+                } else {
+                    Ty::Int as i64
+                };
+                if saw_unsigned {
+                    base | UNSIGNED_BIT
+                } else {
+                    base
+                }
             } else if self.lex.tk == Token::Char as i64 {
                 self.next()?;
                 // Mirror parse_decl_base_type: `signed char` field
@@ -139,9 +147,7 @@ impl Compiler {
             } else if self.lex.tk == Token::Double as i64 {
                 self.next()?;
                 Ty::Double as i64
-            } else if self.lex.tk == Token::Struct as i64
-                || self.lex.tk == Token::Union as i64
-            {
+            } else if self.lex.tk == Token::Struct as i64 || self.lex.tk == Token::Union as i64 {
                 let nested_is_union = self.lex.tk == Token::Union as i64;
                 self.next()?;
                 // Three shapes:
@@ -157,7 +163,11 @@ impl Compiler {
                     self.next()?;
                     name
                 } else if self.lex.tk == '{' as i64 {
-                    let kind = if nested_is_union { "anon_union" } else { "anon_struct" };
+                    let kind = if nested_is_union {
+                        "anon_union"
+                    } else {
+                        "anon_struct"
+                    };
                     format!("__{kind}_{}_in_{}", self.structs.len(), name)
                 } else {
                     return Err(C5Error::Compile(format!(
@@ -176,8 +186,16 @@ impl Compiler {
                 self.next()?;
                 aliased
             } else if saw_int_mod {
-                let base = if saw_long { Ty::Long as i64 } else { Ty::Int as i64 };
-                if saw_unsigned { base | UNSIGNED_BIT } else { base }
+                let base = if saw_long {
+                    Ty::Long as i64
+                } else {
+                    Ty::Int as i64
+                };
+                if saw_unsigned {
+                    base | UNSIGNED_BIT
+                } else {
+                    base
+                }
             } else {
                 return Err(C5Error::Compile(format!(
                     "{}: type expected in struct field",
@@ -238,10 +256,8 @@ impl Compiler {
                     break;
                 }
 
-                let (id_idx, field_ty, field_array_size) =
-                    self.parse_declarator(field_base)?;
-                let is_aggregate_value =
-                    is_struct_ty(field_ty) && struct_ptr_depth(field_ty) == 0;
+                let (id_idx, field_ty, field_array_size) = self.parse_declarator(field_base)?;
+                let is_aggregate_value = is_struct_ty(field_ty) && struct_ptr_depth(field_ty) == 0;
                 if is_aggregate_value
                     && field_array_size == 0
                     && self.structs[struct_id_of(field_ty)].fields.is_empty()

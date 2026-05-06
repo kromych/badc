@@ -24,10 +24,10 @@ mod stmt;
 mod types;
 
 use types::{
-    fp_result_ty, is_decl_modifier, is_floating_scalar, is_pointer_ty, is_scalar_load_op_val,
-    is_struct_ty, is_type_start_token, is_unsigned_ty, load_op_for, pointee_size_no_struct,
-    reemit_scalar_load, store_op_for, struct_id_of, struct_ptr_depth, struct_ty_for,
-    UNSIGNED_BIT,
+    UNSIGNED_BIT, fp_result_ty, is_decl_modifier, is_floating_scalar, is_pointer_ty,
+    is_scalar_load_op_val, is_struct_ty, is_type_start_token, is_unsigned_ty, load_op_for,
+    pointee_size_no_struct, reemit_scalar_load, store_op_for, struct_id_of, struct_ptr_depth,
+    struct_ty_for,
 };
 
 #[derive(Debug, Clone)]
@@ -737,7 +737,7 @@ impl Compiler {
             self.next()?; // consume `=`
             // a = field_addr; stack: [...]
             self.emit_op(Op::Psh); // stack: [..., field_addr]; a = field_addr
-            self.emit_op(Op::Li);  // a = old_value; stack: [..., field_addr]
+            self.emit_op(Op::Li); // a = old_value; stack: [..., field_addr]
             self.emit_op(Op::Psh); // stack: [..., field_addr, old_value]
             self.emit_op(Op::Imm);
             self.emit_val(!(mask << bit_offset)); // a = ~(mask << off)
@@ -843,7 +843,11 @@ impl Compiler {
             } else {
                 Ty::Int as i64
             };
-            if saw_unsigned { base | UNSIGNED_BIT } else { base }
+            if saw_unsigned {
+                base | UNSIGNED_BIT
+            } else {
+                base
+            }
         } else if self.lex.tk == Token::Char as i64 {
             self.next()?;
             // `signed char` -> int. A bare `char` (or `unsigned char`)
@@ -880,9 +884,7 @@ impl Compiler {
                 self.parse_enum_body()?;
             }
             Ty::Int as i64
-        } else if self.lex.tk == Token::Struct as i64
-            || self.lex.tk == Token::Union as i64
-        {
+        } else if self.lex.tk == Token::Struct as i64 || self.lex.tk == Token::Union as i64 {
             // Struct and union share the same tag table and the same
             // "find or forward-declare" rule. The aggregate's
             // is_union flag is set when the body lands; until then
@@ -927,7 +929,11 @@ impl Compiler {
             } else {
                 Ty::Int as i64
             };
-            if saw_unsigned { base | UNSIGNED_BIT } else { base }
+            if saw_unsigned {
+                base | UNSIGNED_BIT
+            } else {
+                base
+            }
         } else {
             return Err(C5Error::Compile(format!(
                 "{}: type expected",
@@ -944,7 +950,6 @@ impl Compiler {
 
         Ok(bt)
     }
-
 
     /// Compile the source. On success, the returned `Program` contains the
     /// bytecode, the static data segment, and the PC of `main`.
@@ -1105,13 +1110,15 @@ impl Compiler {
         // source_functions so a bc_pc lookup is a direct
         // index. Operand slots inherit the op's source position.
         self.source_lines.push(self.lex.line as u32);
-        self.source_functions.push(self.current_function_name.clone());
+        self.source_functions
+            .push(self.current_function_name.clone());
     }
 
     fn emit_val(&mut self, val: i64) {
         self.text.push(val);
         self.source_lines.push(self.lex.line as u32);
-        self.source_functions.push(self.current_function_name.clone());
+        self.source_functions
+            .push(self.current_function_name.clone());
     }
 
     /// Emit a plain `Op::Imm <val>` -- a 2-word `[op, operand]`
@@ -1199,7 +1206,7 @@ impl Compiler {
     /// otherwise start unaligned and `ldr x19, [x19]` would fault on
     /// macOS arm64.
     fn align_data_to_8(&mut self) {
-        while self.data.len() % 8 != 0 {
+        while !self.data.len().is_multiple_of(8) {
             self.data.push(0);
         }
     }
@@ -1750,8 +1757,7 @@ impl Compiler {
                     )));
                 }
                 self.ty = self.symbols[id_idx].type_;
-                let is_struct_value =
-                    is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
+                let is_struct_value = is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
                 let is_array_var = self.symbols[id_idx].array_size > 0;
                 // Array variables decay to a pointer to the first
                 // element: the symbol's address IS its value, no
@@ -1892,8 +1898,7 @@ impl Compiler {
             // value: the address goes in `a`, no load. The next
             // op (`.field`, `= rhs` lowering Mcpy, etc.) reads
             // the address from `a` directly.
-            let result_is_struct_value =
-                is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
+            let result_is_struct_value = is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
             if !result_is_struct_value {
                 self.emit_op(load_op_for(self.ty));
             }
@@ -1976,10 +1981,7 @@ impl Compiler {
             self.next()?;
             self.expr(Token::Inc as i64)?;
             let reload = self.rewrite_trailing_load_as_psh().ok_or_else(|| {
-                C5Error::Compile(format!(
-                    "{}: bad lvalue in pre-increment",
-                    self.lex.line
-                ))
+                C5Error::Compile(format!("{}: bad lvalue in pre-increment", self.lex.line))
             })?;
             self.emit_op(reload);
             if is_floating_scalar(self.ty) {
@@ -2449,10 +2451,7 @@ impl Compiler {
                 self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::Inc as i64 || self.lex.tk == Token::Dec as i64 {
                 let reload = self.rewrite_trailing_load_as_psh().ok_or_else(|| {
-                    C5Error::Compile(format!(
-                        "{}: bad lvalue in post-increment",
-                        self.lex.line
-                    ))
+                    C5Error::Compile(format!("{}: bad lvalue in post-increment", self.lex.line))
                 })?;
                 self.emit_op(reload);
                 if is_floating_scalar(self.ty) {
@@ -2631,11 +2630,6 @@ impl Compiler {
     // parse_block_typedef, parse_block_local_decl, parse_block_stmt,
     // stmt, consume) lives in `compiler/stmt.rs`.
 
-    /// Returned from [`Compiler::parse_function_params`]. Carries the
-    /// param symbol indices (for binding to stack slots in the function
-    /// body), the declared types (for the function signature), and the
-    /// variadic flag.
-
     fn run_compile(&mut self) -> Result<(), C5Error> {
         self.next()?;
         while self.lex.tk != 0 {
@@ -2700,7 +2694,11 @@ impl Compiler {
                 } else {
                     Ty::Int as i64
                 };
-                bt = if saw_unsigned { base | UNSIGNED_BIT } else { base };
+                bt = if saw_unsigned {
+                    base | UNSIGNED_BIT
+                } else {
+                    base
+                };
             } else if self.lex.tk == Token::Char as i64 {
                 self.next()?;
                 // `signed char` -> int (see parse_decl_base_type for
@@ -2721,9 +2719,7 @@ impl Compiler {
                 bt = Ty::Double as i64;
             } else if self.lex.tk == Token::Enum as i64 {
                 self.parse_enum_decl()?;
-            } else if self.lex.tk == Token::Struct as i64
-                || self.lex.tk == Token::Union as i64
-            {
+            } else if self.lex.tk == Token::Struct as i64 || self.lex.tk == Token::Union as i64 {
                 // Aggregate (struct or union) declaration. Three
                 // shapes:
                 //   <kw> Name { ... };           -- definition only
@@ -2772,7 +2768,11 @@ impl Compiler {
                 } else {
                     Ty::Int as i64
                 };
-                bt = if saw_unsigned { base | UNSIGNED_BIT } else { base };
+                bt = if saw_unsigned {
+                    base | UNSIGNED_BIT
+                } else {
+                    base
+                };
             }
             // Trailing qualifiers / int modifiers between the base
             // type and the declarators -- `Foo const *p`, `int long
@@ -2852,10 +2852,7 @@ impl Compiler {
                 let was_tentative_glo = self.symbols[id_idx].class == Token::Glo as i64
                     && !self.symbols[id_idx].has_initializer
                     && self.lex.tk != '(' as i64;
-                if self.symbols[id_idx].class != 0
-                    && !was_sys
-                    && !was_fwd_fun
-                    && !was_tentative_glo
+                if self.symbols[id_idx].class != 0 && !was_sys && !was_fwd_fun && !was_tentative_glo
                 {
                     return Err(C5Error::Compile(format!(
                         "{}: duplicate global definition",
@@ -2953,8 +2950,7 @@ impl Compiler {
                     // out-pointer.
                     let return_ty = self.symbols[id_idx].type_;
                     self.current_func_return_ty = return_ty;
-                    self.current_function_name =
-                        self.symbols[id_idx].name.clone();
+                    self.current_function_name = self.symbols[id_idx].name.clone();
                     let returns_struct =
                         is_struct_ty(return_ty) && struct_ptr_depth(return_ty) == 0;
 
@@ -3141,7 +3137,7 @@ impl Compiler {
                             self.symbols[id_idx].array_size = count;
                             // Pad data to 8-byte alignment so the next
                             // global doesn't land on an odd offset.
-                            while self.data.len() % 8 != 0 {
+                            while !self.data.len().is_multiple_of(8) {
                                 self.data.push(0);
                             }
                             self.symbols[id_idx].has_initializer = true;
@@ -3153,8 +3149,7 @@ impl Compiler {
                         let elements = self.collect_array_initializer(ty)?;
                         let final_size = elements.len() as i64;
                         self.symbols[id_idx].array_size = final_size;
-                        let total_bytes =
-                            (self.size_of_type(ty) as i64) * final_size;
+                        let total_bytes = (self.size_of_type(ty) as i64) * final_size;
                         let aligned = ((total_bytes + 7) / 8) * 8;
                         // On a tentative-merge path the prior
                         // declaration would have had no `[]` either
@@ -3219,10 +3214,7 @@ impl Compiler {
                         // stay zero.
                         if self.lex.tk == Token::Assign as i64 {
                             self.next()?;
-                            if array_size > 0
-                                && is_struct_ty(ty)
-                                && struct_ptr_depth(ty) == 0
-                            {
+                            if array_size > 0 && is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
                                 if thread_local {
                                     return Err(C5Error::Compile(format!(
                                         "{}: array `_Thread_local` initialisers are not supported",
@@ -3282,12 +3274,8 @@ impl Compiler {
                                         array_size
                                     )));
                                 }
-                                self.write_array_init_into_data(
-                                    var_offset, ty, &elements,
-                                );
-                            } else if is_struct_ty(ty)
-                                && struct_ptr_depth(ty) == 0
-                            {
+                                self.write_array_init_into_data(var_offset, ty, &elements);
+                            } else if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
                                 if thread_local {
                                     return Err(C5Error::Compile(format!(
                                         "{}: struct `_Thread_local` initialisers are not supported",
@@ -3297,11 +3285,7 @@ impl Compiler {
                                 let sid = struct_id_of(ty);
                                 self.collect_struct_initializer(sid, var_offset)?;
                             } else {
-                                self.parse_global_initializer(
-                                    ty,
-                                    var_offset,
-                                    thread_local,
-                                )?;
+                                self.parse_global_initializer(ty, var_offset, thread_local)?;
                             }
                             self.symbols[id_idx].has_initializer = true;
                         }
@@ -3315,5 +3299,4 @@ impl Compiler {
         }
         Ok(())
     }
-
 }

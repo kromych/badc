@@ -45,10 +45,7 @@ impl Compiler {
     /// still detect "the user wrote brackets" by remembering whether
     /// the decay happened, but for c5 today the equivalence is
     /// sufficient.
-    pub(super) fn parse_declarator(
-        &mut self,
-        base: i64,
-    ) -> Result<(usize, i64, i64), C5Error> {
+    pub(super) fn parse_declarator(&mut self, base: i64) -> Result<(usize, i64, i64), C5Error> {
         let mut ty = base;
         while self.lex.tk == Token::MulOp as i64 {
             self.next()?;
@@ -72,8 +69,7 @@ impl Compiler {
                 || self.lex.peek_after_whitespace_starts_ident())
         {
             self.next()?; // consume the outer `(`
-            let (idx, mut inner_ty, inner_array_size) =
-                self.parse_declarator(ty)?;
+            let (idx, mut inner_ty, inner_array_size) = self.parse_declarator(ty)?;
             // The inner declarator may have stopped on `(` if it
             // was a function-returning-fp shape like
             // `void (*foo(args1))(args2)`. In that case `foo` is

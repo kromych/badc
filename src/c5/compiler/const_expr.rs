@@ -19,8 +19,8 @@ use alloc::format;
 
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
-use super::types::{is_struct_ty, struct_id_of, struct_ptr_depth};
 use super::Compiler;
+use super::types::{is_struct_ty, struct_id_of, struct_ptr_depth};
 
 impl Compiler {
     /// Parse a constant integer expression at parse time. Used
@@ -443,9 +443,7 @@ impl Compiler {
             // no-ops; consume the type and recurse.
             if self.lex_is_type_start() {
                 let _ = self.parse_decl_base_type()?;
-                while self.lex.tk == Token::MulOp as i64
-                    || self.lex.tk == Token::TypeQual as i64
-                {
+                while self.lex.tk == Token::MulOp as i64 || self.lex.tk == Token::TypeQual as i64 {
                     self.next()?;
                 }
                 if self.lex.tk != ')' as i64 {

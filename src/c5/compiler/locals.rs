@@ -30,8 +30,8 @@ use alloc::format;
 
 use super::super::error::C5Error;
 use super::super::token::Token;
-use super::types::{is_struct_ty, struct_id_of, struct_ptr_depth};
 use super::Compiler;
+use super::types::{is_struct_ty, struct_id_of, struct_ptr_depth};
 
 impl Compiler {
     pub(super) fn parse_function_body_local_decl(&mut self) -> Result<(), C5Error> {
@@ -159,7 +159,7 @@ impl Compiler {
                     }
                     self.next()?;
                     self.symbols[loc_idx].array_size = count;
-                    while self.data.len() % 8 != 0 {
+                    while !self.data.len().is_multiple_of(8) {
                         self.data.push(0);
                     }
                     return Ok(());
@@ -263,11 +263,7 @@ impl Compiler {
                     self.max_loc_offs = self.loc_offs;
                 }
                 let local_val = self.symbols[loc_idx].val;
-                self.emit_local_array_init(
-                    local_val,
-                    staged_off,
-                    elem_size * count as usize,
-                );
+                self.emit_local_array_init(local_val, staged_off, elem_size * count as usize);
                 return Ok(());
             }
             let elements = self.collect_array_initializer(ty)?;
@@ -304,13 +300,9 @@ impl Compiler {
                         self.lex.line, self.symbols[loc_idx].name, init_count, max
                     )));
                 }
-                let (start_addr, total_bytes) =
-                    self.pack_initializer_into_data(ty, &elements);
+                let (start_addr, total_bytes) = self.pack_initializer_into_data(ty, &elements);
                 self.emit_local_array_init(local_val, start_addr, total_bytes);
-            } else if is_struct_ty(ty)
-                && struct_ptr_depth(ty) == 0
-                && self.lex.tk == '{' as i64
-            {
+            } else if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 && self.lex.tk == '{' as i64 {
                 // Local struct value with brace-list initializer.
                 // Stage the bytes in `self.data` (so the bit
                 // pattern is shared across calls), then emit a

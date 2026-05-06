@@ -33,6 +33,14 @@
 //! mprotect, optimizer -- runs on `extern crate alloc`.
 
 #![cfg_attr(not(feature = "std"), no_std)]
+// `+` and `-` at the start of a doc-comment line are heavy-use
+// markdown bullets in this codebase's narrative comments
+// (declarator / parser shapes, ABI option-bit lists). Rust 1.95
+// started flagging them as "list item without indentation" /
+// "overindented". The intent is paragraphs, not lists; silencing
+// the lint at the crate root is less invasive than rewriting
+// every comment.
+#![allow(clippy::doc_lazy_continuation, clippy::doc_overindented_list_items)]
 
 extern crate alloc;
 

@@ -20,8 +20,8 @@ use alloc::format;
 
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
-use super::types::is_pointer_ty;
 use super::Compiler;
+use super::types::is_pointer_ty;
 
 impl Compiler {
     /// Parse a global / TLS initializer's right-hand side and

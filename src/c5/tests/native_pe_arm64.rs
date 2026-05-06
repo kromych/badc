@@ -314,7 +314,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("recursion_factorial.c", 120),
     ("pointers.c", 200),
     ("pointer_arithmetic.c", 3),
-    ("pointer_arithmetic_scaling.c", 108),
+    ("pointer_arithmetic_scaling.c", 104), // sizeof(int) = 4
     ("expression_precedence.c", 1),
     ("variable_shadowing.c", 10),
     ("predefined_constants.c", 0),

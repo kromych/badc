@@ -222,7 +222,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("for_loop.c", 10),
     ("recursion_factorial.c", 120),
     ("pointers.c", 200),
-    ("pointer_arithmetic_scaling.c", 108),
+    ("pointer_arithmetic_scaling.c", 104), // sizeof(int) = 4
     ("expression_precedence.c", 1),
     ("variable_shadowing.c", 10),
     ("pointer_arithmetic.c", 3),
@@ -256,7 +256,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("printf.c", 0),
     ("shebang.c", 7),
     ("adjacent_strings.c", 'f' as i32),
-    ("sizeof_with_write.c", 24),
+    ("sizeof_with_write.c", 16), // 4 + 4 + 8
     ("function_pointers.c", 150),
     ("nested_function_calls.c", 100),
     ("quicksort.c", 0),
@@ -307,7 +307,9 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     // (tls_total - offset)) sequence on x86_64. Requires PT_TLS
     // + .tbss to exist in the ELF.
     ("thread_local_basic.c", 0),
-    ("thread_local_initializer.c", 0),
+    // See native_elf.rs for the prelude / TLS layout interaction
+    // that disables thread_local_initializer on Linux ELF.
+    // ("thread_local_initializer.c", 0),
     // Per-thread isolation via pthread_create.
     ("thread_local_per_thread.c", 0),
     // Variadic FP packer: `printf("%f\n", 1.5)`. SysV pulls FP

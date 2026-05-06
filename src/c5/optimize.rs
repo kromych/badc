@@ -347,6 +347,18 @@ fn decode(text: &[i64], data_imm_positions: &[usize]) -> Result<Vec<Insn>, C5Err
                 pc += 1;
                 Insn::TlsLea(v)
             }
+            Op::StLocI => {
+                // Compiler-emitted store-to-local: spills `a` into
+                // a fresh local temp slot. The op carries one
+                // operand -- the slot offset (negative, in c5
+                // stack words). Carried through unchanged; the
+                // optimizer's local-fusion peephole only consumes
+                // it as part of the input stream, never reorders
+                // it across other reads/writes of the same slot.
+                let v = text[pc];
+                pc += 1;
+                Insn::ArithI(Op::StLocI, v)
+            }
             // Optimizer-emitted immediate-form ops carry an operand
             // identical in shape to a regular op's operand. The
             // generic AddI/SubI/etc. arms below pull the operand

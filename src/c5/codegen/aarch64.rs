@@ -292,6 +292,72 @@ pub(super) fn enc_sub_imm(rd: Reg, rn: Reg, imm12: u32) -> u32 {
     0xD100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+/// `SUB <Xd>, <Xn|SP>, #imm12, LSL #12`. The shifted-12 form
+/// extends the reach of the immediate to multiples of 4096 up
+/// to ~16 MiB, used together with the unshifted form to cover
+/// any 24-bit byte count in two instructions.
+pub(super) fn enc_sub_imm_lsl12(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+    debug_assert!(imm12 < 4096, "sub imm lsl12: {imm12} > 12-bit max");
+    0xD140_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `ADD <Xd>, <Xn|SP>, #imm12, LSL #12`. Mirror of
+/// [`enc_sub_imm_lsl12`] -- used to fold large
+/// stack-restoration adjustments into two instructions.
+pub(super) fn enc_add_imm_lsl12(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+    debug_assert!(imm12 < 4096, "add imm lsl12: {imm12} > 12-bit max");
+    0x9140_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// Subtract `bytes` from SP. AArch64's `SUB (immediate)` carries
+/// a 12-bit value optionally left-shifted by 12, so a single
+/// instruction can cover `bytes < 4096` directly or any
+/// multiple of 4096 up to ~16 MiB. For values that don't fit
+/// either single-instruction form we emit two: one for the
+/// shifted-12 portion (high bits, multiples of 4096) and one
+/// for the remainder. Anything beyond 24 bits would need a
+/// register-form `SUB` -- not seen in practice, so we panic
+/// with a clear message rather than silently truncating.
+pub(super) fn emit_sub_sp_imm(code: &mut Vec<u8>, bytes: u32) {
+    if bytes == 0 {
+        return;
+    }
+    assert!(
+        bytes < (1 << 24),
+        "stack frame too large for 24-bit SUB immediate: {bytes} bytes"
+    );
+    let high = bytes & !0xfff;
+    let low = bytes & 0xfff;
+    if high != 0 {
+        emit(code, enc_sub_imm_lsl12(Reg::SP, Reg::SP, high >> 12));
+    }
+    if low != 0 {
+        emit(code, enc_sub_imm(Reg::SP, Reg::SP, low));
+    }
+}
+
+/// Add `bytes` to SP using the same 24-bit reach as
+/// [`emit_sub_sp_imm`]. Used by `Op::Adj` for argument-cleanup
+/// after a call, and by anything else that needs to grow the
+/// stack pointer back by more than 4 KiB in one go.
+pub(super) fn emit_add_sp_imm(code: &mut Vec<u8>, bytes: u32) {
+    if bytes == 0 {
+        return;
+    }
+    assert!(
+        bytes < (1 << 24),
+        "stack adjustment too large for 24-bit ADD immediate: {bytes} bytes"
+    );
+    let high = bytes & !0xfff;
+    let low = bytes & 0xfff;
+    if high != 0 {
+        emit(code, enc_add_imm_lsl12(Reg::SP, Reg::SP, high >> 12));
+    }
+    if low != 0 {
+        emit(code, enc_add_imm(Reg::SP, Reg::SP, low));
+    }
+}
+
 // ---- 3-register arithmetic / bitwise (shifted-register form, no shift). ----
 // Each follows the same template: a base opcode | Rm<<16 | Rn<<5 | Rd.
 // Verified against `clang -c -arch arm64` on Apple Silicon.
@@ -1288,7 +1354,7 @@ fn lower_op(
             let n = read_operand(text, pc, "Adj")?;
             if n != 0 {
                 let bytes = (n as u32) * 16;
-                emit(code, enc_add_imm(Reg::SP, Reg::SP, bytes));
+                emit_add_sp_imm(code, bytes);
             }
             for _ in 0..(n as usize) {
                 let popped = reg_state.pseudo_stack.pop();
@@ -2409,7 +2475,14 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool, callee_pool_dep
     if locals > 0 {
         let bytes = (locals as u32) * 8;
         let aligned = (bytes + 15) & !15;
-        emit(code, enc_sub_imm(Reg::SP, Reg::SP, aligned));
+        // SUB (immediate) only takes 12 bits unshifted, so for
+        // functions with more than ~511 locals (e.g. sqlite3's
+        // do_meta_command, which holds ~1500 locals across its
+        // many dot-command branches) we need the two-instruction
+        // shifted-12 split. Without this the immediate silently
+        // overflows into the shift bits and the prologue traps
+        // with SIGILL on first call.
+        emit_sub_sp_imm(code, aligned);
     }
     emit(code, enc_str_pre(Reg::X19, Reg::SP, -16));
     emit_save_pool(code, callee_pool_depth);

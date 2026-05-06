@@ -56,6 +56,7 @@ const FIXTURES: &[(&str, i64)] = &[
     ("enum_tag_types.c", 0),
     ("bitfields.c", 0),
     ("static_locals.c", 0),
+    ("large_stack_frame.c", 42),
     ("quicksort.c", 0),
     ("linked_list.c", 10),
     ("binary_search_tree.c", 0),

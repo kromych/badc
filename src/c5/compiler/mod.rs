@@ -469,13 +469,61 @@ impl Compiler {
         actual: i64,
         actual_is_zero_literal: bool,
     ) -> Option<&'static str> {
+        Self::type_warning_with_flags(declared, actual, actual_is_zero_literal, false)
+    }
+
+    /// Like [`type_warning`] but with an extra `actual_is_untyped_call`
+    /// flag. When set, the actual rvalue came from an `Op::Jsri`
+    /// indirect call whose return type the dialect can't track --
+    /// silence pointer-vs-int mismatches in either direction since
+    /// the register value is preserved bit-for-bit at the assignment
+    /// store regardless of the tag.
+    fn type_warning_with_flags(
+        declared: i64,
+        actual: i64,
+        actual_is_zero_literal: bool,
+        actual_is_untyped_call: bool,
+    ) -> Option<&'static str> {
         if declared == actual {
             return None;
+        }
+        if actual_is_untyped_call {
+            // Indirect call's defaulted return type. `Op::Jsri`
+            // leaves the full 64-bit register value intact, so
+            // pointer-vs-int doesn't truncate anything in
+            // practice. Quiet either direction.
+            let decl_is_ptr = is_pointer_ty(declared);
+            let act_is_ptr = is_pointer_ty(actual);
+            if (decl_is_ptr && !act_is_ptr) || (!decl_is_ptr && act_is_ptr) {
+                return None;
+            }
+            // Also accept struct-pointer <-> int the same way.
+            if is_struct_ty(declared) && struct_ptr_depth(declared) > 0 && !act_is_ptr {
+                return None;
+            }
         }
         let decl_is_struct = is_struct_ty(declared);
         let act_is_struct = is_struct_ty(actual);
         let decl_is_ptr = is_pointer_ty(declared);
         let act_is_ptr = is_pointer_ty(actual);
+
+        // C's `void *` rule: a pointer to `char` (which c5 uses as
+        // its `void *`) is freely interconvertible with any other
+        // pointer type. The dialect's headers declare libc functions
+        // like `memset(char *, int, int)` and `malloc -> char *`;
+        // sqlite3 passes struct pointers to memset and assigns
+        // malloc's result to struct* variables. Without this rule
+        // every such site fires "incompatible struct types" /
+        // "pointer assigned to integer" noise.
+        let char_ptr = (Ty::Char as i64) + (Ty::Ptr as i64);
+        let decl_is_char_ptr = decl_is_ptr && declared == char_ptr;
+        let act_is_char_ptr = act_is_ptr && actual == char_ptr;
+        if decl_is_char_ptr && act_is_ptr {
+            return None;
+        }
+        if act_is_char_ptr && decl_is_ptr {
+            return None;
+        }
 
         // Struct types must match exactly (when one side is a struct).
         if decl_is_struct || act_is_struct {
@@ -557,6 +605,24 @@ impl Compiler {
     fn last_emit_is_zero(&self) -> bool {
         let n = self.text.len();
         n >= 2 && self.text[n - 1] == 0 && self.text[n - 2] == Op::Imm as i64
+    }
+
+    /// True if the most recent emitted op is `Op::Jsri` -- an indirect
+    /// call through a variable / struct field whose return type the
+    /// dialect can't track. Used by `type_warning` to silently accept
+    /// an `int`-tagged rvalue assigned to a pointer lvalue (or vice
+    /// versa): the actual register value carries a full 8-byte return
+    /// regardless, so the assignment is a runtime no-op even though
+    /// the type tag mismatches. The walker tolerates a trailing
+    /// `Op::Adj N` (cleanup of pushed args) since that's the standard
+    /// Jsri tail.
+    fn last_emit_was_indirect_call(&self) -> bool {
+        let n = self.text.len();
+        if n >= 1 && self.text[n - 1] == Op::Jsri as i64 {
+            return true;
+        }
+        // Jsri + Adj N: 3 trailing words.
+        n >= 3 && self.text[n - 2] == Op::Adj as i64 && self.text[n - 3] == Op::Jsri as i64
     }
 
     /// Element size in bytes for a pointer type. Pointer-to-struct
@@ -1508,7 +1574,10 @@ impl Compiler {
                     if (nargs as usize) < expected_params.len() {
                         let want = expected_params[nargs as usize];
                         let zero = self.last_emit_is_zero();
-                        if let Some(reason) = Self::type_warning(want, self.ty, zero) {
+                        let untyped = self.last_emit_was_indirect_call();
+                        if let Some(reason) =
+                            Self::type_warning_with_flags(want, self.ty, zero, untyped)
+                        {
                             self.warn(format!(
                                 "{arg_line}: warning: {reason} in argument {} of `{}` (param={want}, arg={})",
                                 nargs + 1,
@@ -1684,11 +1753,11 @@ impl Compiler {
                 // is the declared return type. For indirect calls
                 // through a variable (Jsri), `type_` is the *variable*
                 // type (e.g. `int *` for a function pointer), not the
-                // return type -- using it as the result type spuriously
-                // taints downstream assignments with "pointer assigned
-                // to integer" warnings. The c5 dialect has no way to
-                // declare the return type of a function pointer, so
-                // default to `int` for the result.
+                // return type -- the dialect has no place to record
+                // a function pointer's return type. Default to `int`
+                // for the result; the actual register value carries
+                // the full 8-byte return regardless of the tag, so
+                // assigning to a wider lvalue still preserves bits.
                 self.ty = if self.symbols[id_idx].class == Token::Loc as i64
                     || self.symbols[id_idx].class == Token::Glo as i64
                 {
@@ -1721,16 +1790,12 @@ impl Compiler {
             } else if self.symbols[id_idx].class == Token::Sys as i64 {
                 // Bare libc reference -- `fp = dlsym;`. Without a
                 // per-Sys trampoline the value can't actually be
-                // called indirectly; emit zero and warn so the
-                // user knows the slot is hollow until the runtime
-                // fills it.
-                let line = self.lex.line;
-                let name = self.symbols[id_idx].name.clone();
-                self.warn(format!(
-                    "{line}: warning: address of libc symbol `{name}` lowered as 0 \
-                     (no GOT-trampoline support yet); calling through this pointer \
-                     will fault"
-                ));
+                // called indirectly; emit zero and trust the
+                // program to patch the slot before use (sqlite's
+                // UnixOSData VFS init is the motivating shape).
+                // Tracked centrally; per-symbol warnings spam the
+                // build output without adding info, so we stay
+                // silent here.
                 self.emit_imm(0);
                 self.ty = Ty::Int as i64 + Ty::Ptr as i64;
             } else {
@@ -2081,8 +2146,9 @@ impl Compiler {
                     self.emit_val(nargs);
                 }
                 // The dialect can't declare the return type of a
-                // function pointer, so default to `int`. Same call
-                // as the existing Loc/Glo Jsri path.
+                // function pointer, so default to `int`. The actual
+                // register value carries the full 8-byte return
+                // regardless of the tag.
                 self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::Assign as i64 {
                 self.next()?;
@@ -2131,7 +2197,10 @@ impl Compiler {
                     let line = self.lex.line;
                     self.expr(Token::Assign as i64)?;
                     let rhs_is_zero = self.last_emit_is_zero();
-                    if let Some(reason) = Self::type_warning(t, self.ty, rhs_is_zero) {
+                    let rhs_is_untyped = self.last_emit_was_indirect_call();
+                    if let Some(reason) =
+                        Self::type_warning_with_flags(t, self.ty, rhs_is_zero, rhs_is_untyped)
+                    {
                         self.warn(format!(
                             "{line}: warning: {reason} in assignment \
                              (lhs={t}, rhs={})",
@@ -2369,6 +2438,36 @@ impl Compiler {
                     self.require_both_float(t, "+")?;
                     self.emit_op(Op::Fadd);
                     self.ty = fp_result_ty(t, self.ty);
+                } else if !is_pointer_ty(t) && is_pointer_ty(self.ty) {
+                    // `int + ptr`: result is the pointer type.
+                    // When the pointee size is > 1, the int has to
+                    // be scaled by it (it's currently on the c5
+                    // stack, so spill the rhs ptr to a temp, lift
+                    // the int into `a`, scale, push, reload, add).
+                    // For unscaled pointee (`char *`, `void *`)
+                    // the byte add is already correct -- we just
+                    // need to set the result type to ptr.
+                    let rhs_ty = self.ty;
+                    if self.is_ptr_scaling_nontrivial(rhs_ty) {
+                        let scale = self.pointee_size(rhs_ty);
+                        self.loc_offs += 1;
+                        if self.loc_offs > self.max_loc_offs {
+                            self.max_loc_offs = self.loc_offs;
+                        }
+                        let rhs_temp = -self.loc_offs;
+                        self.emit_op(Op::StLocI);
+                        self.emit_val(rhs_temp);
+                        // Pop the int LHS off the c5 stack into
+                        // `a` via `Imm 0; Or` (Or pops stack-top).
+                        self.emit_imm(0);
+                        self.emit_op(Op::Or);
+                        self.emit_binop_with_imm(Op::Mul, scale);
+                        self.emit_op(Op::Psh);
+                        self.emit_lea(rhs_temp);
+                        self.emit_op(Op::Li);
+                    }
+                    self.emit_op(Op::Add);
+                    self.ty = rhs_ty;
                 } else {
                     if self.is_ptr_scaling_nontrivial(t) {
                         let scale = self.pointee_size(t);

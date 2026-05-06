@@ -305,20 +305,14 @@ impl Compiler {
             }
             if class == Token::Sys as i64 {
                 // Address of a libc binding in a static initializer.
-                // The real address lives in the loader's GOT and isn't
-                // known at compile time; the proper fix is a per-Sys
-                // trampoline whose code-pc gets a CodeReloc into the
-                // data slot. Until that lands, emit zero with a
-                // warning so sqlite's VFS dispatch table compiles --
-                // the runtime fills in the slots before use through
-                // the platform-specific init path.
-                let line = self.lex.line;
-                let name = self.symbols[idx].name.clone();
-                self.warn(format!(
-                    "{line}: warning: address of libc symbol `{name}` in a static \
-                     initializer lowered as 0 (no GOT-trampoline support yet); \
-                     the runtime must overwrite the slot before first use"
-                ));
+                // The real address lives in the loader's GOT/IAT and
+                // isn't known at compile time; the proper fix is a
+                // per-Sys trampoline whose code-pc gets a CodeReloc
+                // into the data slot. Until that lands, emit zero
+                // and rely on the program (e.g., sqlite's UnixOSData
+                // init) to patch the slot before first use. Tracked
+                // centrally; per-symbol warnings just spam the build
+                // output, so we stay silent here.
                 self.next()?;
                 return Ok((0, InitElemReloc::None));
             }

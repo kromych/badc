@@ -7,6 +7,11 @@
 
 #pragma once
 
+/* Pull in the canonical `struct timeval` definition so the
+** `struct rusage` declaration below references the same type
+** that `<time.h>` and the bound libc functions agree on. */
+#include <time.h>
+
 #define STDIN_FILENO  0
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2
@@ -199,10 +204,15 @@ int confstr(int name, char *buf, int len);
 #define RUSAGE_CHILDREN -1
 #define RUSAGE_THREAD    1
 
-struct __c5_timeval { int tv_sec; int tv_usec; };
+/* `struct timeval` is also defined in <time.h>; the two definitions
+** must stay in sync. The `struct rusage` shape below references it
+** by tag name so getrusage()'s `ru_utime` / `ru_stime` match the
+** `timeDiff(struct timeval *, struct timeval *)` callers in
+** sqlite3 shell.c. (Earlier this header carried a private
+** `struct __c5_timeval` alias that broke the type-check.) */
 struct rusage {
-    struct __c5_timeval ru_utime;
-    struct __c5_timeval ru_stime;
+    struct timeval ru_utime;
+    struct timeval ru_stime;
     int ru_maxrss;
     int ru_ixrss;
     int ru_idrss;

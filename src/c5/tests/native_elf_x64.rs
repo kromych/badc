@@ -387,7 +387,6 @@ fn getenv_value_natively() {
 }
 
 #[test]
-#[ignore = "M31: c4 self-host broken; see fixtures/c/c4.c"]
 fn original_c4_compiles_and_runs_hello_natively() {
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("fixtures");

@@ -115,7 +115,6 @@ fn optimizer_actually_shrinks_typical_fixtures() {
 }
 
 #[test]
-#[ignore = "M31: c4 self-host broken; see fixtures/c/c4.c"]
 fn optimizer_handles_c4_self_host() {
     // The big one -- c4.c parsing hello.c. Optimization must not break
     // self-host compilation; this is the canonical end-to-end check.

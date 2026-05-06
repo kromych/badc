@@ -405,7 +405,6 @@ fn fixture_parity() {
 }
 
 #[test]
-#[ignore = "M31: c4 self-host broken; see fixtures/c/c4.c"]
 fn original_c4_compiles_and_runs_hello_pe() {
     if !host_can_run_pe() {
         eprintln!("skip c4 self-host: no PE runner on this host");

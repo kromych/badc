@@ -318,7 +318,6 @@ fn fixture_parity_native_optimized() {
 //      AOT-ELF suite covers them via per-test subprocesses. ----
 
 #[test]
-#[ignore = "M31: c4 self-host broken; see fixtures/c/c4.c"]
 fn original_c4_compiles_and_runs_hello_jit() {
     // c4.c reads its first user argv entry as the source file to
     // compile-and-run; we hand it hello.c via JIT argv and expect
@@ -334,7 +333,6 @@ fn original_c4_compiles_and_runs_hello_jit() {
 }
 
 #[test]
-#[ignore = "M31: c4 self-host broken; see fixtures/c/c4.c"]
 fn original_c4_compiles_and_runs_hello_jit_native_optimized() {
     // Same as above but with the native optimizer on. c4.c is the
     // most complex program in the fixture set; if anything in the

@@ -416,7 +416,6 @@ fn getenv_value_natively() {
 }
 
 #[test]
-#[ignore = "M31: c4 self-host broken; see fixtures/c/c4.c"]
 fn original_c4_compiles_and_runs_hello_natively() {
     // Native ELF counterpart of the macOS `original_c4_compiles_and_runs_hello_natively`.
     // c4.c reads its first user argv entry as the source file to

@@ -378,7 +378,6 @@ int main() { return 0; }
 }
 
 #[test]
-#[ignore = "M31: c4 self-host broken under int-as-long-long substitution; see fixtures/c/c4.c"]
 fn original_c4_compiles_and_runs_hello() {
     // The canonical self-hosting test: Robert Swierczek's original c4.c
     // runs under badc, compiles hello.c, and runs the resulting program

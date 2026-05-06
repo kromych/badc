@@ -1341,6 +1341,30 @@ impl Compiler {
         self.emit_op(op);
     }
 
+    /// Save the current `class` / `type_` / `val` of
+    /// `self.symbols[idx]` into the matching shadow fields
+    /// `h_class` / `h_type` / `h_val`. Used at function-body
+    /// scope when a parameter or local declaration shadows an
+    /// outer name; the function-exit cleanup pass restores the
+    /// outer binding by reading the shadow fields back.
+    fn shadow_symbol(&mut self, idx: usize) {
+        let s = &mut self.symbols[idx];
+        s.h_class = s.class;
+        s.h_type = s.type_;
+        s.h_val = s.val;
+    }
+
+    /// Inverse of [`shadow_symbol`]: restore the saved outer
+    /// binding from the `h_*` shadow fields. Static method
+    /// because the cleanup pass walks `self.symbols.iter_mut()`
+    /// and already holds a `&mut Symbol`; passing the symbol
+    /// reference avoids re-borrowing the symbol table.
+    fn restore_shadowed_symbol(sym: &mut Symbol) {
+        sym.class = sym.h_class;
+        sym.type_ = sym.h_type;
+        sym.val = sym.h_val;
+    }
+
     /// Emit `Op::Imm <data_offset>` and record the operand's bytecode
     /// position in [`Compiler::data_imm_positions`]. Use this anywhere
     /// the immediate is the address of a string literal or a global --
@@ -2934,9 +2958,7 @@ impl Compiler {
                 )));
             }
 
-            self.symbols[loc_idx].h_class = self.symbols[loc_idx].class;
-            self.symbols[loc_idx].h_type = self.symbols[loc_idx].type_;
-            self.symbols[loc_idx].h_val = self.symbols[loc_idx].val;
+            self.shadow_symbol(loc_idx);
 
             if is_static {
                 self.symbols[loc_idx].class = Token::Glo as i64;
@@ -3750,11 +3772,9 @@ impl Compiler {
                 )));
             }
 
-            self.symbols[param_idx].h_class = self.symbols[param_idx].class;
+            self.shadow_symbol(param_idx);
             self.symbols[param_idx].class = Token::Loc as i64;
-            self.symbols[param_idx].h_type = self.symbols[param_idx].type_;
             self.symbols[param_idx].type_ = full_ty;
-            self.symbols[param_idx].h_val = self.symbols[param_idx].val;
             self.symbols[param_idx].array_size = 0;
 
             args.push(param_idx);
@@ -4043,9 +4063,7 @@ impl Compiler {
                         // the duplicate-global check.
                         for sym in self.symbols.iter_mut() {
                             if sym.class == Token::Loc as i64 {
-                                sym.class = sym.h_class;
-                                sym.type_ = sym.h_type;
-                                sym.val = sym.h_val;
+                                Self::restore_shadowed_symbol(sym);
                             }
                         }
                         // Outer loop sees `;` and exits; `self.next()`
@@ -4189,9 +4207,7 @@ impl Compiler {
 
                     for sym in self.symbols.iter_mut() {
                         if sym.class == Token::Loc as i64 {
-                            sym.class = sym.h_class;
-                            sym.type_ = sym.h_type;
-                            sym.val = sym.h_val;
+                            Self::restore_shadowed_symbol(sym);
                         }
                     }
                 } else {

@@ -1,4 +1,4 @@
-// M23b -- function-pointer typedefs and function-pointer
+// function-pointer typedefs and function-pointer
 // declarators. The fixture pins the typical sqlite shapes:
 //   - `typedef RET (*Name)(args);`
 //   - struct fields holding function pointers

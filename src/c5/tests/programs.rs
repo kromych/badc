@@ -86,7 +86,7 @@ fn file_io() {
 
 #[test]
 fn pointer_arithmetic_scaling() {
-    // p+1 advances by sizeof(int)=4 bytes (M31: `int` is 32-bit).
+    // p+1 advances by sizeof(int)=4 bytes (`int` is 32-bit).
     assert_eq!(run_fixture("pointer_arithmetic_scaling.c"), 104);
 }
 
@@ -143,7 +143,7 @@ fn sizeof_threads_through_malloc_write_and_return() {
     // sizeof(struct Packet) used in three positions in one program:
     // malloc size, write count, and the function's return value. Tests
     // that the same constant survives arithmetic and call-site
-    // propagation. M31 layout: code(4) + payload(4) + label(8) = 16.
+    // propagation. layout: code(4) + payload(4) + label(8) = 16.
     assert_eq!(run_fixture("sizeof_with_write.c"), 16);
 }
 
@@ -240,7 +240,7 @@ fn integer_literal_suffixes_are_consumed() {
 
 #[test]
 fn static_locals() {
-    // M29 -- `static T name [= init];` inside a function gets a
+    // `static T name [= init];` inside a function gets a
     // persistent slot in the data segment instead of the stack
     // frame. Counters, cached state, etc. survive across calls.
     // Two functions with the same-named static each have an
@@ -250,7 +250,7 @@ fn static_locals() {
 
 #[test]
 fn bitfields_basic() {
-    // M27 -- bitfields pack into shared 8-byte storage units;
+    // bitfields pack into shared 8-byte storage units;
     // reads use Li/Shr/And; writes use load-clear-shift-or-store.
     // Pins both single-bit flags and wider bitfields, plus
     // mutation that must not disturb adjacent bits.
@@ -259,7 +259,7 @@ fn bitfields_basic() {
 
 #[test]
 fn enum_tag_types() {
-    // M30 -- `enum Foo { ... };` registers a tag whose constants
+    // `enum Foo { ... };` registers a tag whose constants
     // resolve to integers; `enum Foo` then works as a type spec
     // (equivalent to int in c5) in parameter / return / local /
     // array-dimension positions.
@@ -268,7 +268,7 @@ fn enum_tag_types() {
 
 #[test]
 fn struct_initializers() {
-    // M28b -- struct initializers (designated + positional + mixed),
+    // struct initializers (designated + positional + mixed),
     // including function-pointer fields that need a CodeReloc so
     // the per-format writers patch the slot to the runtime code
     // address. Plain-data struct globals also covered.
@@ -277,7 +277,7 @@ fn struct_initializers() {
 
 #[test]
 fn array_initializers() {
-    // M28a -- string-literal and brace-list array initializers,
+    // string-literal and brace-list array initializers,
     // size-inferred and explicit-size shapes, at both file scope
     // and function scope.
     assert_eq!(run_fixture("array_initializers.c"), 0);
@@ -285,7 +285,7 @@ fn array_initializers() {
 
 #[test]
 fn unions_basic() {
-    // M26 -- unions: layout shares storage among members; field
+    // unions: layout shares storage among members; field
     // access uses the same path as struct fields with all offsets
     // = 0 and total size = max(member size). Tagged-union shape
     // (struct tag + nested union) also exercised.
@@ -294,7 +294,7 @@ fn unions_basic() {
 
 #[test]
 fn function_pointer_typedefs_and_fields() {
-    // M23b -- `typedef RET (*Name)(args);`, function-pointer struct
+    // `typedef RET (*Name)(args);`, function-pointer struct
     // fields, and function-pointer parameters all parse and run.
     // Calling through an FP-typed struct field directly (`s.cb(args)`)
     // is still missing -- the workaround in the fixture is to copy
@@ -304,7 +304,7 @@ fn function_pointer_typedefs_and_fields() {
 
 #[test]
 fn arrays_as_language_types() {
-    // M25 -- stack and global arrays, indexing with correct
+    // stack and global arrays, indexing with correct
     // per-element scaling (including struct arrays), array fields
     // inside a struct, sizeof(arr) returning N*elem_size, and
     // array-to-pointer decay through a pointer-typed parameter.
@@ -313,7 +313,7 @@ fn arrays_as_language_types() {
 
 #[test]
 fn local_init_and_block_scope_decls_work() {
-    // M24 -- local variable initializers and C99 block-scope
+    // local variable initializers and C99 block-scope
     // declarations interleaved with statements, including
     // shadowing in nested blocks.
     assert_eq!(run_fixture("local_init_and_block_scope.c"), 0);

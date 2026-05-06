@@ -1,4 +1,4 @@
-// M26 -- unions. Layout: every member at offset 0, total size =
+// unions. Layout: every member at offset 0, total size =
 // max(member size). Member access reuses the struct field path
 // (each field's `offset` is just 0 for a union).
 //

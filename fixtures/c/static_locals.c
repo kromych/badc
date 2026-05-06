@@ -1,4 +1,4 @@
-// M29 -- function-scope `static` storage. Each `static T name [=
+// function-scope `static` storage. Each `static T name [=
 // init];` declaration gets a persistent slot in the data segment.
 // The symbol is bound as Glo for the function's body and restored
 // to its prior class on block exit, so the next function with the

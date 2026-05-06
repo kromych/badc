@@ -1,7 +1,7 @@
 #include <stdlib.h>
 
 int main() {
-    // M31: cells must be `long` (8 bytes) so a single slot can hold
+    // cells must be `long` (8 bytes) so a single slot can hold
     // either a value or a pointer-shaped next link. With `int` cells
     // the next-pointer cast would truncate to 32 bits.
     long *head; long *temp; long *node;

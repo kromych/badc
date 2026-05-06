@@ -29,9 +29,9 @@ impl Compiler {
     /// Pre-registers `name` (or recycles a forward declaration) so
     /// self-referential pointer fields can find the aggregate
     /// mid-definition. Field offsets are placed at each field's
-    /// natural alignment under M31 (`int` packs at 4, `long` /
-    /// pointer at 8, `char` at 1); the aggregate's own alignment is
-    /// the max of its fields' alignments, capped at 8.
+    /// natural alignment (`int` packs at 4, `long` / pointer at 8,
+    /// `char` at 1); the aggregate's own alignment is the max of
+    /// its fields' alignments, capped at 8.
     ///
     /// On entry `tk` is `{`; on exit `tk` is the token AFTER the
     /// closing `}` (typically `;`).

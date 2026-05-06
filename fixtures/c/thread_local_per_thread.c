@@ -35,7 +35,7 @@ int main() {
     int *handle;
     int *create;
     int *join;
-    // pthread_t is 8 bytes; under M31 `int` is only 4, so writing
+    // pthread_t is 8 bytes; under  `int` is only 4, so writing
     // through `&tid` would clobber the next slot. See pthread_create.c.
     long tid;
     int *retval;

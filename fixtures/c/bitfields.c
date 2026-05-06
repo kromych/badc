@@ -1,4 +1,4 @@
-// M27 -- bitfields. Pack into shared 8-byte storage units; reads
+// bitfields. Pack into shared 8-byte storage units; reads
 // emit a `Li; Shr; And` extraction; writes emit a load-clear-shift-
 // or-store sequence that preserves the other bits in the unit.
 //

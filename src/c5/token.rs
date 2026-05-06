@@ -143,9 +143,9 @@ pub(crate) enum Token {
     /// and have no semantic effect. Recognizing them at the
     /// lexer level lets unmodified C headers tokenize.
     TypeQual,
-    /// Integer-type modifier (`unsigned`, `short`, `_Bool`). c5
-    /// keeps `int` as a 32-bit type after M31, so these collapse
-    /// onto plain `int` (32-bit signed). The token is consumed
+    /// Integer-type modifier (`short`, `_Bool`). `int` is a
+    /// 32-bit type, so these collapse onto plain `int` (32-bit
+    /// signed). The token is consumed
     /// before, around, or instead of the base-type token; if a
     /// declaration is `unsigned x;` (no `int`), the parser still
     /// emits an `int` declaration. Programs that rely on the
@@ -176,12 +176,12 @@ pub(crate) enum Token {
     /// against `SQLITE_MAX_PAGE_COUNT = 0xfffffffe`, which read as
     /// signed -2 and turned every page-1 fetch into SQLITE_FULL.
     Unsigned,
-    /// `long` modifier -- separated from [`IntMod`] under M31
-    /// because seeing `long` on a declaration's base type drives
-    /// the 64-bit `Ty::Long` selection (vs. the 32-bit `Ty::Int`
-    /// that bare `int` produces). `long long` parses by entering
-    /// this branch twice in a row; both spellings yield `Ty::Long`
-    /// so 64-bit-storage code stays portable across C platforms.
+    /// `long` modifier -- separated from [`IntMod`] because seeing
+    /// `long` on a declaration's base type drives the 64-bit
+    /// `Ty::Long` selection (vs. the 32-bit `Ty::Int` that bare
+    /// `int` produces). `long long` parses by entering this branch
+    /// twice in a row; both spellings yield `Ty::Long` so 64-bit-
+    /// storage code stays portable across C platforms.
     Long,
     /// Function specifier (`inline`, `register`, `auto`).
     /// Consumed as a no-op anywhere a storage class may

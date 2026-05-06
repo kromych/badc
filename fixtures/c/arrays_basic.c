@@ -1,4 +1,4 @@
-// M25 -- arrays as language types. Pre-M25 c5 required `int *xs =
+// arrays as language types. Pre- c5 required `int *xs =
 // malloc(N * sizeof *xs);` for any array; this fixture pins:
 //   - stack arrays of scalar types
 //   - global arrays
@@ -9,7 +9,7 @@
 //   - array fields inside a struct
 //   - char arrays for string-shaped buffers
 //
-// Aggregate / brace initializers (`int xs[] = {1, 2, 3};`) are M28
+// Aggregate / brace initializers (`int xs[] = {1, 2, 3};`) are aggregate
 // territory; this fixture only pins the bones.
 
 int g_xs[5];
@@ -52,7 +52,7 @@ int main() {
         i = i + 1;
     }
     if (sum_n(xs, 5) != 15) return 1;
-    // sizeof(xs) = 5 * sizeof(int) = 5 * 4 = 20 (M31).
+    // sizeof(xs) = 5 * sizeof(int) = 5 * 4 = 20.
     if (sizeof(xs) != 20) return 2;
 
     // Global arrays survive into the data segment.
@@ -84,7 +84,7 @@ int main() {
     if (pairs[0].a != 0) return 9;
     if (pairs[1].a != 1) return 10;
     if (pairs[2].b != 200) return 11;
-    // struct Pair = {int a; int b;} = 8 bytes (4+4) under M31.
+    // struct Pair = {int a; int b;} = 8 bytes (4+4).
     // pairs[3] = 24 bytes total.
     if (sizeof(pairs) != 24) return 12;
 

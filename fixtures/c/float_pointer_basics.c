@@ -5,10 +5,10 @@
 // and `double` types parse, float pointers stride one slot at a
 // time, and `sizeof` reports 8 for both scalars (c5 keeps every
 // FP value in an 8-byte slot; the IEEE 754 32-bit narrowing for
-// `float` is future work, separate from M31).
+// `float` is future work).
 //
 // 32-bit bit patterns round-trip through `int` (which is 4 bytes
-// after M31) and 64-bit bit patterns through `long`.
+//) and 64-bit bit patterns through `long`.
 int main() {
     float *fa;
     double *da;
@@ -28,11 +28,11 @@ int main() {
     fa = (float *)malloc(n * 8);
     da = (double *)malloc(n * 8);
 
-    // Index-write through float pointer (Sw, the M31 4-byte
+    // Index-write through float pointer (Sw, the  4-byte
     // store). The single-precision pattern fits in `int`.
     *(int *)&fa[0] = 0x3f800000;        // bit pattern of 1.0f
     *(int *)&fa[1] = 0x40000000;        // bit pattern of 2.0f
-    // Double's 64-bit pattern needs a real `long` slot under M31
+    // Double's 64-bit pattern needs a real `long` slot
     // -- `int` is 4 bytes and would truncate the high half.
     *(long *)&da[0] = 0x3ff0000000000000; // bit pattern of 1.0
     *(long *)&da[1] = 0x4000000000000000; // bit pattern of 2.0

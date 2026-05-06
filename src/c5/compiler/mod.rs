@@ -640,11 +640,11 @@ impl Compiler {
     /// Size in bytes of a value of the given `ty`.
     ///   * pointers (any base type)  -> 8
     ///   * scalar `char`             -> 1
-    ///   * scalar `int`              -> 4 (M31: `int` is 32-bit)
+    ///   * scalar `int`              -> 4 (32-bit signed)
     ///   * scalar `long`             -> 8
     ///   * scalar `float` / `double` -> 8 (c5 stores every FP value
-    ///     through an 8-byte slot; the IEEE 754 single-precision
-    ///     narrowing is a future milestone, separate from M31)
+    ///     through an 8-byte slot; IEEE 754 single-precision
+    ///     narrowing is future work)
     ///   * struct values             -> recorded in the struct table
     fn size_of_type(&self, ty: i64) -> usize {
         // Unsigned bit is orthogonal to width: `unsigned char` is
@@ -810,10 +810,10 @@ impl Compiler {
         //     declaration of type `int`.
         //   * `Signed`: a `signed char` base is promoted to `int`
         //     (the negative range can't survive an Lc zero-extend).
-        //   * `Long`: under M31, `long` selects the 64-bit `Ty::Long`
-        //     storage class. `long long` enters the loop twice but
-        //     the resulting type is still `Ty::Long` (c5 has no
-        //     128-bit type).
+        //   * `Long`: `long` selects the 64-bit `Ty::Long` storage
+        //     class. `long long` enters the loop twice but the
+        //     resulting type is still `Ty::Long` (c5 has no 128-bit
+        //     type).
         let mut saw_int_mod = false;
         let mut saw_signed = false;
         let mut saw_unsigned = false;
@@ -837,7 +837,7 @@ impl Compiler {
         let bt = if self.lex.tk == Token::Int as i64 {
             self.next()?;
             // `long int` / `long long int` -> Ty::Long; bare `int`
-            // -> Ty::Int (4 bytes after M31).
+            // -> Ty::Int (4 bytes).
             let base = if saw_long {
                 Ty::Long as i64
             } else {
@@ -1221,8 +1221,7 @@ impl Compiler {
     /// The pattern shows up in pre/post-increment, plain
     /// assignment, and compound assignment. Centralising the
     /// `last() / last_mut() / Op::Psh` triple keeps the four
-    /// call sites in sync when M31-shaped ops (or any future
-    /// load-op variants) are added.
+    /// call sites in sync when new load-op variants are added.
     fn rewrite_trailing_load_as_psh(&mut self) -> Option<Op> {
         let last = *self.text.last()?;
         if !is_scalar_load_op_val(last) {
@@ -1445,8 +1444,7 @@ impl Compiler {
                 // on. The c5-internal "address-as-value, hidden
                 // out-pointer at val=2" convention only works for
                 // c5-to-c5 calls. Refuse the call up front rather
-                // than emit a silently-broken sequence; the gap
-                // is documented in the M9 commit.
+                // than emit a silently-broken sequence.
                 if self.symbols[id_idx].class == Token::Sys as i64
                     && is_struct_ty(callee_ret_ty)
                     && struct_ptr_depth(callee_ret_ty) == 0
@@ -1676,9 +1674,9 @@ impl Compiler {
                 // For struct-returning callees, the result lives
                 // in the caller-allocated temp. After the call,
                 // load the temp's address into `a` so the
-                // expression's value (matching M5 struct-rvalue
-                // semantics: address-as-value) flows into the
-                // enclosing assignment / `.field` access.
+                // expression's value (struct-rvalue semantics:
+                // address-as-value) flows into the enclosing
+                // assignment / `.field` access.
                 if callee_returns_struct {
                     self.emit_lea(result_temp_off);
                 }
@@ -2647,7 +2645,7 @@ impl Compiler {
             let mut is_typedef = false;
             let mut saw_signed = false;
             let mut saw_unsigned = false;
-            // M31: track `long` separately from the other int-modifiers
+            // Track `long` separately from the other int-modifiers
             // so `typedef long long int u64;` and friends pick the
             // 8-byte `Ty::Long` storage class instead of falling
             // through as 4-byte `Ty::Int`.
@@ -2687,8 +2685,8 @@ impl Compiler {
             if self.lex.tk == Token::Int as i64 {
                 self.next()?;
                 // `long int` / `long long int` -> Ty::Long; bare `int`
-                // -> Ty::Int (4 bytes after M31). Mirror the same
-                // dispatch parse_decl_base_type uses.
+                // -> Ty::Int (4 bytes). Mirror the same dispatch
+                // `parse_decl_base_type` uses.
                 let base = if saw_long {
                     Ty::Long as i64
                 } else {
@@ -2990,7 +2988,7 @@ impl Compiler {
 
                     // Struct-value parameters: the caller pushed
                     // the struct's *address* into the param slot
-                    // (matching the M5 "address is the value" rule
+                    // (matching the "address is the value" rule
                     // for struct rvalues). Without a copy the
                     // function body's `p.field = v` would land in
                     // the caller's storage, which isn't C
@@ -2998,9 +2996,8 @@ impl Compiler {
                     // freshly allocated local and re-point the
                     // param's symbol so subsequent accesses inside
                     // the function go to the local copy. The
-                    // sequence reuses Op::Mcpy from M6 so neither
-                    // codegen needs new shapes for parameter
-                    // passing.
+                    // sequence reuses Op::Mcpy so neither codegen
+                    // needs new shapes for parameter passing.
                     for &idx in params.indices.iter() {
                         let pty = self.symbols[idx].type_;
                         if !is_struct_ty(pty) || struct_ptr_depth(pty) != 0 {

@@ -1,5 +1,5 @@
-// M24 -- local variable initializers and C99 block-scope
-// declarations. Pre-M24 c5 required all decls at the top of a
+// local variable initializers and C99 block-scope
+// declarations. Pre- c5 required all decls at the top of a
 // block; this fixture pins:
 //   - `int x = 5;` at the top of a function
 //   - declarations interleaved with statements

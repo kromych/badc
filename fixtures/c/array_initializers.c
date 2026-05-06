@@ -1,4 +1,4 @@
-// M28a -- string-literal and brace-list array initializers, both at
+// string-literal and brace-list array initializers, both at
 // function scope and at file scope. The fixture pins:
 //   - char buf[] = "literal"  -- size inferred from string + NUL
 //   - char buf[N] = "literal" -- explicit size, partial init, rest zero
@@ -30,7 +30,7 @@ int main() {
     if (sizeof(g_msg) != 6) return 4;
 
     if (g_primes[0] + g_primes[1] + g_primes[2] + g_primes[3] + g_primes[4] != 28) return 5;
-    // M31: 5 * sizeof(int) = 5 * 4 = 20.
+    // 5 * sizeof(int) = 5 * 4 = 20.
     if (sizeof(g_primes) != 20) return 6;
 
     if (g_buf[0] != 'h') return 7;
@@ -55,7 +55,7 @@ int main() {
     if (sizeof(msg) != 6) return 22;
 
     if (xs[0] + xs[1] + xs[2] != 600) return 23;
-    // M31: 3 * sizeof(int) = 12. (Padded up to nothing -- no struct
+    // 3 * sizeof(int) = 12. (Padded up to nothing -- no struct
     // tail rule for plain arrays; the array's size is N*elem.)
     if (sizeof(xs) != 12) return 24;
 

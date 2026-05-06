@@ -1,4 +1,4 @@
-// M23 -- typedef. The fixture exercises the typedef shapes sqlite
+// typedef. The fixture exercises the typedef shapes sqlite
 // uses heavily: primitive aliases, pointer aliases, forward struct
 // + typedef of the same name, and struct definition + typedef in a
 // single declaration.
@@ -7,7 +7,7 @@
 // a future milestone -- the parser doesn't yet handle the
 // `(*name)(...)` declarator shape.
 
-// Primitive aliases. Under M31 the underlying widths matter:
+// Primitive aliases. Under  the underlying widths matter:
 // `int` is 32-bit (so `u32` lands in a 4-byte slot), `long long`
 // is 64-bit (so `u64` keeps its full range), and `char` is 1 byte.
 // The test pins that each alias name is accepted at every type
@@ -78,7 +78,7 @@ int main() {
 
     // Cast through a typedef-name.
     if ((u32)c != 65) return 7;
-    if (sizeof(u32) != 4) return 8;        // M31: u32 = 4 bytes
+    if (sizeof(u32) != 4) return 8;        // u32 = 4 bytes
     // Pair = {u32 first; u32 second;} -> 4+4 = 8 bytes (struct
     // floor of 8 also lands at exactly 8, so no padding visible).
     if (sizeof(Pair) != 8) return 9;

@@ -165,9 +165,9 @@ fn struct_to_struct_assignment_type_mismatch_rejected() {
 
 #[test]
 fn forward_declared_struct_pointer_compiles() {
-    // M23: a `struct Foo *p` mention before any body is now a
-    // forward declaration -- the struct stays opaque (size 0,
-    // no fields) but pointer types and typedefs can refer to it.
+    // A `struct Foo *p` mention before any body is a forward
+    // declaration -- the struct stays opaque (size 0, no fields)
+    // but pointer types and typedefs can refer to it.
     // This is the C standard's behaviour and a hard requirement
     // for sqlite-style `typedef struct sqlite3 sqlite3;`-before-body.
     use super::run_str;

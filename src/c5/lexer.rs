@@ -772,11 +772,13 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("restrict", Token::TypeQual),
     ("__restrict", Token::TypeQual),
     ("__restrict__", Token::TypeQual),
-    // Integer-type modifiers. `signed` and `long` are split off:
-    // `signed` changes the meaning of a `char` base (signed-char
-    // arrays hold negative values that must load sign-extended);
-    // `long` selects the 64-bit `Ty::Long` storage class under
-    // M31 (otherwise an `int` declaration yields a 32-bit slot).
+    // Integer-type modifiers. `signed`, `unsigned`, and `long` are
+    // split off: `signed` changes the meaning of a `char` base
+    // (signed-char arrays hold negative values that must load
+    // sign-extended); `unsigned` flips the type-tag flag that
+    // routes compares through the unsigned ops; `long` selects the
+    // 64-bit `Ty::Long` storage class (otherwise an `int`
+    // declaration yields a 32-bit slot).
     ("signed", Token::Signed),
     ("unsigned", Token::Unsigned),
     ("short", Token::IntMod),

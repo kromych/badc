@@ -1,7 +1,7 @@
 #include <stdlib.h>
 
 // Tree nodes are packed as long[3]: [value, left, right]. The cells
-// hold pointer-shaped values, so under M31 (where `int` is 4 bytes
+// hold pointer-shaped values, so under  (where `int` is 4 bytes
 // and a pointer is 8) the storage type has to be `long`. We cast
 // between `long *` and `long` at every store/load to mix value and
 // pointer cells in the same array; the c4 dialect has no long**

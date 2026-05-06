@@ -1,4 +1,4 @@
-// M30 -- enum as a type tag. `enum Foo { ... };` registers each
+// enum as a type tag. `enum Foo { ... };` registers each
 // constant as a Token::Num; `enum Foo` then works as a type spec
 // equivalent to `int` in c5 (every integer in the dialect is a
 // 64-bit signed int, and enums collapse to that). The fixture
@@ -37,7 +37,7 @@ int main() {
     if (WEST != 3) return 8;
 
     if (classify(GREEN) != 102) return 9;
-    // xs is `int xs[2]` (GREEN = 2). M31: 2 * sizeof(int) = 8.
+    // xs is `int xs[2]` (GREEN = 2). 2 * sizeof(int) = 8.
     if (sizeof(xs) != 8) return 10;
 
     // Enum-typed parameter accepts plain integer values too -- c5

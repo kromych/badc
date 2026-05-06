@@ -182,7 +182,7 @@ pub(super) fn is_pointer_ty(ty: i64) -> bool {
 /// Element size in bytes of a pointee for the given pointer type
 /// (without struct-table awareness).
 ///   * `char*` -> 1 byte (the original c4 case)
-///   * one-level `int*` -> 4 bytes (M31: `int` is 32-bit)
+///   * one-level `int*` -> 4 bytes (`int` is 32-bit)
 ///   * one-level `long*` -> 8 bytes
 ///   * deeper pointers (`int**`, `long**`, etc.) -> 8 bytes
 ///     (because the pointee is itself a pointer)
@@ -222,11 +222,13 @@ pub(super) fn fp_result_ty(lhs: i64, rhs: i64) -> i64 {
 /// prefix as a no-op: type qualifiers (`const`/`volatile`/`restrict`),
 /// integer-type modifiers (`signed`/`unsigned`/`short`/`long`/`_Bool`),
 /// and function specifiers (`inline`/`register`/`auto`). The
-/// `signed` and `long` modifiers carry semantic weight in c5
-/// (`signed` affects `char`'s signedness; `long` selects the 64-bit
-/// `Ty::Long` storage class under M31), but at the *modifier-loop*
-/// level they're still consumed by `parse_decl_base_type` -- they
-/// drive flag bits rather than producing a separate token stream.
+/// `signed`, `unsigned`, and `long` modifiers carry semantic weight
+/// (`signed` affects `char`'s signedness; `unsigned` flips the
+/// type-tag bit that routes compares through unsigned ops; `long`
+/// selects the 64-bit `Ty::Long` storage class), but at the
+/// *modifier-loop* level they're still consumed by
+/// `parse_decl_base_type` -- they drive flag bits rather than
+/// producing a separate token stream.
 pub(super) fn is_decl_modifier(tk: i64) -> bool {
     tk == Token::TypeQual as i64
         || tk == Token::IntMod as i64
@@ -291,13 +293,13 @@ pub(super) fn store_op_for(ty: i64) -> Op {
 }
 
 /// True if `op_val` (the trailing word in `self.text`) is a scalar
-/// memory-load op -- one of `Op::Lc` / `Op::Lw` / `Op::Li`. The
-/// parser uses this in every "rewrite the trailing load into a Psh
-/// so the address survives" path: assignments, compound
-/// assignments, pre/post-inc/dec, address-of, etc. M31 added
-/// `Op::Lw` to the set; without this helper each site had its own
-/// `last == Op::Lc || last == Op::Li` predicate that silently
-/// excluded the new 4-byte load.
+/// memory-load op -- one of `Op::Lc` / `Op::Lw` / `Op::Lwu` /
+/// `Op::Li`. The parser uses this in every "rewrite the trailing
+/// load into a Psh so the address survives" path: assignments,
+/// compound assignments, pre/post-inc/dec, address-of, etc. The
+/// helper centralises the predicate so adding a new scalar load op
+/// is a one-line change here rather than an audit of every lvalue
+/// rewrite site.
 pub(super) fn is_scalar_load_op_val(op_val: i64) -> bool {
     op_val == Op::Lc as i64
         || op_val == Op::Lw as i64

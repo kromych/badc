@@ -27,7 +27,7 @@ int main() {
     // already what `p` evaluates to inside the parser, but
     // `&p` is still a legal expression and re-derives the same
     // pointer. (`&p` lets functions accept it via `struct Point *`
-    // until M6 adds by-value parameter passing.)
+    // until  adds by-value parameter passing.)
     {
         struct Point *pp;
         pp = &p;

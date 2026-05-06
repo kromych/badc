@@ -1,4 +1,4 @@
-// M21 -- standard predefined macros: __FILE__, __LINE__, __STDC__,
+// standard predefined macros: __FILE__, __LINE__, __STDC__,
 // __DATE__, __TIME__. The first two are dynamic (their expansion
 // changes with each line); __STDC__ is the constant 1; __DATE__ and
 // __TIME__ are seeded at badc build time and have the C99 formats

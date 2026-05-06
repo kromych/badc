@@ -1,4 +1,4 @@
-// M20 -- integer literal suffixes. The lexer accepts u/U/l/L plus any
+// integer literal suffixes. The lexer accepts u/U/l/L plus any
 // combination (ll, LL, ull, ULL, lu, ...) on decimal and hex literals.
 // In c5 the suffix is purely informational; the value is preserved
 // verbatim and lives in whatever storage the receiving variable
@@ -7,7 +7,7 @@
 int main() {
     int u, U, l, L, ull, ULL, llu, LLU, lu;
     int hex_u, hex_l, hex_ull;
-    // Big values need a real 64-bit slot under M31 -- `int` is 4
+    // Big values need a real 64-bit slot under  -- `int` is 4
     // bytes and would overflow on assignment.
     long big_dec, big_hex;
     int sum;

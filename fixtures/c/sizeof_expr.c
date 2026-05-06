@@ -6,7 +6,7 @@ int main() {
     long *q;
     char *s;
 
-    if (sizeof(x) != 4) return 1;       // M31: real i32 storage
+    if (sizeof(x) != 4) return 1;       // real i32 storage
     if (sizeof(y) != 8) return 2;
     if (sizeof(c) != 1) return 3;
     if (sizeof(p) != 8) return 4;

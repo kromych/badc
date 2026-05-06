@@ -633,7 +633,7 @@ pub(super) fn enc_ldr32_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
 
 /// `LDRSW <Xt>, [<Xn|SP>, #imm]` -- 32-bit load sign-extended into
 /// the full 64-bit `Xt`, immediate offset scaled by 4. Used by
-/// [`Op::Lw`] for `int` lvalue reads under M31 -- the C signed-int
+/// [`Op::Lw`] for signed `int` lvalue reads -- the C signed-int
 /// model requires the high bit of the 4-byte slot to propagate.
 pub(super) fn enc_ldrsw_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
     debug_assert!(imm.is_multiple_of(4), "ldrsw imm: {imm} not 4-byte aligned");
@@ -644,7 +644,7 @@ pub(super) fn enc_ldrsw_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
 
 /// `STR <Wt>, [<Xn|SP>, #imm]` -- 32-bit store (low half of `Xt`),
 /// immediate offset scaled by 4. Companion to [`enc_ldrsw_imm`] /
-/// [`enc_ldr32_imm`] for [`Op::Sw`] under M31.
+/// [`enc_ldr32_imm`] for [`Op::Sw`].
 pub(super) fn enc_str32_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
     debug_assert!(imm.is_multiple_of(4), "str32 imm: {imm} not 4-byte aligned");
     let scaled = imm / 4;

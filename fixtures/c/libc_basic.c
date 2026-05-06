@@ -1,4 +1,4 @@
-// M32 -- libc surface smoke test. Exercises the binding entries in
+// libc surface smoke test. Exercises the binding entries in
 // string.h, stdio.h, stdlib.h, and ctype.h that sqlite-shaped code
 // reaches for. The fixture deliberately avoids:
 //   * libc functions returning a 32-bit `int` in a way that the
@@ -6,7 +6,7 @@
 //     for instance) -- c5's calling convention reads the return
 //     register as a 64-bit value, and not every libc on every
 //     target sign-extends. For sign-sensitive checks the user
-//     should mask or re-sign-extend explicitly until M31 lands.
+//     should mask or re-sign-extend explicitly until  lands.
 //   * math.h FP returns -- aarch64 macOS variadic-FP and the
 //     existing FP-return convention cross-cut differently.
 // Both of those work for the *common* cases (strcmp == 0, sqrt

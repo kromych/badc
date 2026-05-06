@@ -27,7 +27,7 @@ int main() {
     write(STDOUT_FILENO, (char *)p, sizeof(struct Packet));
 
     // sizeof(struct Packet) -- code(4) + payload(4) + label(8) ->
-    // 16 bytes (M31 packs ints at 4 with no padding before the
+    // 16 bytes ( packs ints at 4 with no padding before the
     // 8-byte pointer because 4+4=8 is already aligned).
     return sizeof(struct Packet);
 }

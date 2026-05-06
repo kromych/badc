@@ -318,7 +318,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("for_loop.c", 10),
     ("recursion_factorial.c", 120),
     ("pointers.c", 200),
-    ("pointer_arithmetic_scaling.c", 104), // M31: sizeof(int) = 4
+    ("pointer_arithmetic_scaling.c", 104), // sizeof(int) = 4
     ("expression_precedence.c", 1),
     ("variable_shadowing.c", 10),
     ("pointer_arithmetic.c", 3),
@@ -355,7 +355,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("printf.c", 0),
     ("shebang.c", 7),
     ("adjacent_strings.c", 'f' as i32),
-    ("sizeof_with_write.c", 16), // M31: 4 + 4 + 8
+    ("sizeof_with_write.c", 16), // 4 + 4 + 8
     ("function_pointers.c", 150),
     ("nested_function_calls.c", 100),
     ("quicksort.c", 0),

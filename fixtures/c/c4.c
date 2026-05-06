@@ -12,14 +12,14 @@
 #include <unistd.h>
 #include <fcntl.h>
 // c4 was written assuming `int` is a machine word -- it stuffs
-// pointers into `int` cells and casts back. Under M31, badc's
+// pointers into `int` cells and casts back. badc's
 // `int` is 4 bytes, so the GCC-era `#define int long long` hack
-// is required for badc too. (In the pre-M31 world this fired only
+// is required for badc too. (In the pre- world this fired only
 // for vanilla c4 / GCC, gated on `__BADC_VERSION__`; that guard is
 // gone now that badc agrees with the rest of the world that `int`
 // is 32-bit.)
 //
-// XXX: M31 self-host of c4 is currently broken (the `#define int
+// XXX:  self-host of c4 is currently broken (the `#define int
 // long long` substitution interacts with c4's own lexer + symbol
 // table layout in a way that breaks the seeded Sys symbols). The
 // `original_c4_compiles_and_runs_hello*` tests are gated below;

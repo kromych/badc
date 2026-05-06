@@ -1,4 +1,4 @@
-// M22 -- preprocessor stringification (#), token pasting (##), and
+// preprocessor stringification (#), token pasting (##), and
 // variadic macros with __VA_ARGS__. The fixture keeps the test
 // surface modest -- string equality is checked byte-by-byte because
 // c5 doesn't have a bundled strcmp.
@@ -46,7 +46,7 @@ int main() {
     if (va_total != 6) return 8;
 
     // Variadic with one fixed arg + tail.
-    LOG("M22 OK: %d %d %d\n", 7, 8, 9);
+    LOG("OK: %d %d %d\n", 7, 8, 9);
 
     return 0;
 }

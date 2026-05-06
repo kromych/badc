@@ -2,7 +2,7 @@
 
 // Tree nodes are flat long[3] = [value, left, right]; the left/right
 // cells hold pointer-shaped values so the storage type has to be
-// `long` (8 bytes) under M31 -- `int` is 4 bytes and would truncate
+// `long` (8 bytes) under  -- `int` is 4 bytes and would truncate
 // the pointer cast.
 void free_tree(long *root) {
     if (root == 0) return;

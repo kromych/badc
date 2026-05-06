@@ -398,8 +398,7 @@ impl<H: Host> Vm<H> {
     /// `load_u8`'s stack-aware shape: an `Lw` against a stack slot
     /// reads the low or high half of the 8-byte slot depending on
     /// `addr & 4`. Off-stack reads pull 4 raw bytes from `data`.
-    /// Used by [`Op::Lw`] for `int` lvalue reads under M31's real-
-    /// width regime.
+    /// Used by [`Op::Lw`] for signed `int` lvalue reads.
     fn load_i32(&self, addr: usize) -> Result<i32, C5Error> {
         if let Some(idx) = self.get_stack_idx(addr) {
             if idx < self.stack.len() {

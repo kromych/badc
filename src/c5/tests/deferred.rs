@@ -212,8 +212,14 @@ fn libc_data_globals_windows() {
 // pointer. Affects every target -- the right fix is a
 // GOT/IAT-trampoline pipeline that resolves at load time.
 #[test]
-#[ignore = "deferred: address-of-libc-fn in static initializer lowered as 0; needs GOT/IAT trampoline"]
 fn libc_address_in_static_init() {
+    // #54 fixed: each `&libc_fn` in a static initializer now
+    // routes through a per-Sys trampoline (a tiny synthesized
+    // c5 function that re-pushes its declared args and
+    // re-dispatches via JsrExt). The CodeReloc machinery
+    // patches the recorded data slot to the trampoline's
+    // address at load time. Test stays around as a regression
+    // marker.
     let exit = jit_fixture_exit("deferred_libc_address_in_static_init.c");
     assert_eq!(
         exit, 0,

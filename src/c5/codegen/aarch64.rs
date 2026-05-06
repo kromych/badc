@@ -1386,6 +1386,7 @@ fn lower_op(
             emit(code, enc_strb_imm(Reg::X19, lhs, 0));
         }
         Op::Lw => emit(code, enc_ldrsw_imm(Reg::X19, Reg::X19, 0)),
+        Op::Lwu => emit(code, enc_ldr32_imm(Reg::X19, Reg::X19, 0)),
         Op::Sw => {
             let lhs = pop_lhs_reg(code, reg_state);
             // STR Wt encodes the same Rt as LDRSW Xt -- the W/X

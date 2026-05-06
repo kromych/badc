@@ -261,11 +261,15 @@ pub(super) fn is_type_start_token(tk: i64) -> bool {
 /// Pointers (any base type) go through `Op::Li` because every
 /// pointer is 8 bytes regardless of its pointee width.
 pub(super) fn load_op_for(ty: i64) -> Op {
+    let unsigned = is_unsigned_ty(ty);
     let ty = strip_unsigned(ty);
     if ty == Ty::Char as i64 {
         Op::Lc
     } else if ty == Ty::Int as i64 {
-        Op::Lw
+        // Pick zero-extending vs sign-extending 32-bit load
+        // by signedness. The store path (Op::Sw) doesn't care:
+        // it writes the low 32 bits regardless.
+        if unsigned { Op::Lwu } else { Op::Lw }
     } else {
         Op::Li
     }
@@ -295,7 +299,10 @@ pub(super) fn store_op_for(ty: i64) -> Op {
 /// `last == Op::Lc || last == Op::Li` predicate that silently
 /// excluded the new 4-byte load.
 pub(super) fn is_scalar_load_op_val(op_val: i64) -> bool {
-    op_val == Op::Lc as i64 || op_val == Op::Lw as i64 || op_val == Op::Li as i64
+    op_val == Op::Lc as i64
+        || op_val == Op::Lw as i64
+        || op_val == Op::Lwu as i64
+        || op_val == Op::Li as i64
 }
 
 /// Re-emit the same scalar load op that produced `op_val`. Caller
@@ -307,6 +314,8 @@ pub(super) fn reemit_scalar_load(op_val: i64) -> Op {
         Op::Lc
     } else if op_val == Op::Lw as i64 {
         Op::Lw
+    } else if op_val == Op::Lwu as i64 {
+        Op::Lwu
     } else {
         Op::Li
     }

@@ -336,11 +336,25 @@ pub(super) fn emit_mov_mem_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg)
 
 /// `MOVSXD r64, [base + disp]` -- 32-bit load sign-extended into a
 /// 64-bit destination. Encoding: `REX.W + 63 /r`. Used by [`Op::Lw`]
-/// for `int` lvalue reads under M31 -- C signed semantics require
-/// the high bit of the 4-byte slot to propagate.
+/// for signed `int` lvalue reads -- C signed semantics require the
+/// high bit of the 4-byte slot to propagate.
 pub(super) fn emit_movsxd_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
     emit_byte(code, rex(true, dst.high(), false, base.high()));
     emit_byte(code, 0x63);
+    emit_modrm_mem(code, dst, base, disp);
+}
+
+/// `MOV r32, [base + disp]` -- 32-bit load. The CPU implicitly
+/// zero-extends every write to a 32-bit GPR into the full 64-bit
+/// register, so this doubles as a zero-extending u32 load. Used by
+/// [`Op::Lwu`] for `unsigned int` lvalue reads. Encoding: no REX.W,
+/// just `8B /r` (with REX only if any operand needs the high bank).
+pub(super) fn emit_mov_r32_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+    let needs_rex = dst.high() || base.high();
+    if needs_rex {
+        emit_byte(code, rex(false, dst.high(), false, base.high()));
+    }
+    emit_byte(code, 0x8B);
     emit_modrm_mem(code, dst, base, disp);
 }
 
@@ -1515,6 +1529,11 @@ fn lower_op(
         Op::Lw => {
             // r13 = (i64)*(i32*)r13 -- sign-extending 32-bit load.
             emit_movsxd_r_mem(code, Reg::R13, Reg::R13, 0);
+        }
+        Op::Lwu => {
+            // r13 = (u64)*(u32*)r13 -- the 32-bit MOV implicitly
+            // zero-extends to the full 64-bit register.
+            emit_mov_r32_mem(code, Reg::R13, Reg::R13, 0);
         }
         Op::Sw => {
             // *(i32*)addr = r13[31:0]

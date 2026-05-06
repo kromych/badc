@@ -33,14 +33,20 @@ pub enum Op {
     Sc,
     /// Load Word: Loads a 32-bit signed value from the address in the
     /// accumulator, sign-extending into the 64-bit accumulator. Used
-    /// for `int` lvalue reads under M31's real-width regime where
-    /// `int` is a 4-byte storage slot. Falls back to the 8-byte path
-    /// while M31 is incomplete; emitted for `int`-typed reads once
-    /// `size_of_type(Ty::Int) == 4` is in effect.
+    /// for signed `int` lvalue reads where `int` is a 4-byte
+    /// storage slot.
     Lw,
+    /// Load Word Unsigned: Loads a 32-bit value from the address in
+    /// the accumulator, zero-extending into the 64-bit accumulator.
+    /// Used for `unsigned int` lvalue reads -- the high half must
+    /// stay zero so that `(unsigned int)-1` compares correctly
+    /// against `0xffffffff` and so that `1u - 2u` wraps to
+    /// `0xffffffff` rather than reading back as signed -1.
+    Lwu,
     /// Store Word: Stores the low 32 bits of the accumulator into the
-    /// address on top of stack. Companion to [`Op::Lw`] for 4-byte
-    /// `int` writes.
+    /// address on top of stack. Companion to [`Op::Lw`] / [`Op::Lwu`]
+    /// for 4-byte int writes (signed and unsigned share the same
+    /// store semantics; only the load differs).
     Sw,
     /// Push: Pushes the accumulator onto the stack.
     Psh,
@@ -230,7 +236,7 @@ pub enum Op {
     TlsLea,
 }
 
-const OPS: [Op; 74] = [
+const OPS: [Op; 75] = [
     Op::Lea,
     Op::Imm,
     Op::Jmp,
@@ -246,6 +252,7 @@ const OPS: [Op; 74] = [
     Op::Si,
     Op::Sc,
     Op::Lw,
+    Op::Lwu,
     Op::Sw,
     Op::Psh,
     Op::JsrExt,

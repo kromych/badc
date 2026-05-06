@@ -695,6 +695,13 @@ impl<H: Host> Vm<H> {
                 Op::Lw => {
                     a = self.load_i32(a as usize)? as i64;
                 }
+                Op::Lwu => {
+                    // Zero-extending 32-bit load -- read four bytes
+                    // through the same mechanism, then mask the high
+                    // half to 0 so unsigned compares see the bit
+                    // pattern rather than a sign-extended value.
+                    a = (self.load_i32(a as usize)? as u32) as i64;
+                }
                 Op::Sw => {
                     let addr = self.load_i64(sp)? as usize;
                     sp += 8;

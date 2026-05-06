@@ -15,6 +15,7 @@ use super::token::{Token, Ty};
 mod aggregate;
 mod const_expr;
 mod declarator;
+mod enum_decl;
 mod function;
 mod initializer;
 mod locals;
@@ -2628,58 +2629,6 @@ impl Compiler {
     // The statement family (parse_for_stmt, parse_switch_stmt,
     // parse_block_typedef, parse_block_local_decl, parse_block_stmt,
     // stmt, consume) lives in `compiler/stmt.rs`.
-
-    fn parse_enum_decl(&mut self) -> Result<(), C5Error> {
-        self.next()?;
-        // Optional tag name. c5 enums collapse to int regardless,
-        // so the tag is consumed without registration today (it's
-        // remembered implicitly through the matched constants).
-        if self.lex.tk == Token::Id as i64 {
-            self.next()?;
-        }
-        if self.lex.tk == '{' as i64 {
-            self.parse_enum_body()?;
-        }
-        Ok(())
-    }
-
-    /// Parse `{ A, B = 5, C, ... }` -- the constants list of an
-    /// `enum`. On entry tk is `{`; on exit the closing `}` has
-    /// been consumed. Each constant is registered as a
-    /// `Token::Num`-class symbol with `val` set to its enumerated
-    /// value, so subsequent uses (including in array dimensions
-    /// via `parse_constant_int`) resolve correctly.
-    fn parse_enum_body(&mut self) -> Result<(), C5Error> {
-        self.next()?; // consume `{`
-        let mut i: i64 = 0;
-        while self.lex.tk != '}' as i64 {
-            if self.lex.tk != Token::Id as i64 {
-                return Err(C5Error::Compile(format!(
-                    "{}: bad enum identifier",
-                    self.lex.line
-                )));
-            }
-            let idx = self.lex.curr_id_idx;
-            self.next()?;
-            if self.lex.tk == Token::Assign as i64 {
-                self.next()?;
-                // Constant expression -- handles literals, unary
-                // signs, parens, casts, shifts (`1 << 8`), and
-                // identifiers bound to prior `Token::Num` enum
-                // entries / `#define`d constants.
-                i = self.parse_const_expr_or()?;
-            }
-            self.symbols[idx].class = Token::Num as i64;
-            self.symbols[idx].type_ = Ty::Int as i64;
-            self.symbols[idx].val = i;
-            i += 1;
-            if self.lex.tk == ',' as i64 {
-                self.next()?;
-            }
-        }
-        self.next()?; // consume `}`
-        Ok(())
-    }
 
     /// Returned from [`Compiler::parse_function_params`]. Carries the
     /// param symbol indices (for binding to stack slots in the function

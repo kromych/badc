@@ -19,7 +19,7 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::types::{
-    is_decl_modifier, is_struct_ty, struct_id_of, struct_ptr_depth, struct_ty_for,
+    is_decl_modifier, is_struct_ty, round_up, struct_id_of, struct_ptr_depth, struct_ty_for,
 };
 use super::{Compiler, StructDef, StructField};
 
@@ -210,7 +210,7 @@ impl Compiler {
                     } else if !is_union {
                         // Allocate or extend a bitfield run for the padding.
                         if !bf_active || bf_next_bit + width > 64 {
-                            offset = (offset + 7) & !7;
+                            offset = round_up(offset, 8);
                             bf_storage_offset = offset;
                             offset += 8;
                             bf_next_bit = 0;
@@ -280,7 +280,7 @@ impl Compiler {
                         bit_offset = 0;
                     } else {
                         if !bf_active || bf_next_bit + bit_width > 64 {
-                            offset = (offset + 7) & !7;
+                            offset = round_up(offset, 8);
                             bf_storage_offset = offset;
                             offset += 8;
                             bf_next_bit = 0;
@@ -316,8 +316,7 @@ impl Compiler {
                     field_offset = if is_union {
                         0
                     } else {
-                        let mask = field_align - 1;
-                        offset = (offset + mask) & !mask;
+                        offset = round_up(offset, field_align);
                         let off = offset;
                         offset += field_storage;
                         off
@@ -362,8 +361,7 @@ impl Compiler {
         // elements of an array preserve every field's natural
         // alignment. Empty / one-byte structs stay at the c5 floor
         // of 8 bytes (no zero-sized aggregates).
-        let mask = struct_align - 1;
-        let total = (offset + mask) & !mask;
+        let total = round_up(offset, struct_align);
         self.structs[struct_id].size = total.max(8);
         self.structs[struct_id].align = struct_align;
         Ok(struct_id)

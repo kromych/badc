@@ -46,6 +46,17 @@ pub(super) const STRUCT_STRIDE: i64 = 1000;
 /// levels per band given the +2-per-`*` step.
 const FP_BAND_SIZE: i64 = 100;
 
+/// Round `x` up to the nearest multiple of `alignment` (which must
+/// be a power of two). Used by struct-field layout, struct-tail
+/// padding, bitfield-storage placement, and any other code that
+/// needs `(x + alignment-1) & ~(alignment-1)` -- the helper makes
+/// the intent explicit and centralises the +1/!mask off-by-one
+/// trap in one place.
+pub(super) fn round_up(x: usize, alignment: usize) -> usize {
+    let mask = alignment - 1;
+    (x + mask) & !mask
+}
+
 pub(super) fn is_struct_ty(ty: i64) -> bool {
     ty >= STRUCT_BASE
 }

@@ -67,14 +67,26 @@ pub enum Op {
     Eq,
     /// Inequality `!=`
     Ne,
-    /// Less Than `<`
+    /// Less Than `<` (signed)
     Lt,
-    /// Greater Than `>`
+    /// Greater Than `>` (signed)
     Gt,
-    /// Less Than or Equal `<=`
+    /// Less Than or Equal `<=` (signed)
     Le,
-    /// Greater Than or Equal `>=`
+    /// Greater Than or Equal `>=` (signed)
     Ge,
+    /// Less Than `<` (unsigned). Emitted whenever at least one
+    /// operand of a relational compare has an unsigned integer type
+    /// (`unsigned int`, `unsigned long`, typedefs onto u32/u64, etc.).
+    /// Treats both operands as u64 -- the high-bit-set bit pattern
+    /// is interpreted as a large positive, not a negative.
+    Ult,
+    /// Greater Than `>` (unsigned). See [`Op::Ult`].
+    Ugt,
+    /// Less Than or Equal `<=` (unsigned). See [`Op::Ult`].
+    Ule,
+    /// Greater Than or Equal `>=` (unsigned). See [`Op::Ult`].
+    Uge,
     /// Shift Left `<<`
     Shl,
     /// Shift Right `>>`
@@ -116,14 +128,22 @@ pub enum Op {
     EqI,
     /// `a = (a != N) as i64`
     NeI,
-    /// `a = (a < N) as i64`
+    /// `a = (a < N) as i64` (signed)
     LtI,
-    /// `a = (a > N) as i64`
+    /// `a = (a > N) as i64` (signed)
     GtI,
-    /// `a = (a <= N) as i64`
+    /// `a = (a <= N) as i64` (signed)
     LeI,
-    /// `a = (a >= N) as i64`
+    /// `a = (a >= N) as i64` (signed)
     GeI,
+    /// `a = ((a as u64) < (N as u64)) as i64`
+    UltI,
+    /// `a = ((a as u64) > (N as u64)) as i64`
+    UgtI,
+    /// `a = ((a as u64) <= (N as u64)) as i64`
+    UleI,
+    /// `a = ((a as u64) >= (N as u64)) as i64`
+    UgeI,
 
     // --- Load-local fusion ---
     /// `a = *(i64*)(bp + N*8)` -- fused `Lea N; Li`.
@@ -210,7 +230,7 @@ pub enum Op {
     TlsLea,
 }
 
-const OPS: [Op; 66] = [
+const OPS: [Op; 74] = [
     Op::Lea,
     Op::Imm,
     Op::Jmp,
@@ -238,6 +258,10 @@ const OPS: [Op; 66] = [
     Op::Gt,
     Op::Le,
     Op::Ge,
+    Op::Ult,
+    Op::Ugt,
+    Op::Ule,
+    Op::Uge,
     Op::Shl,
     Op::Shr,
     Op::Add,
@@ -260,6 +284,10 @@ const OPS: [Op; 66] = [
     Op::GtI,
     Op::LeI,
     Op::GeI,
+    Op::UltI,
+    Op::UgtI,
+    Op::UleI,
+    Op::UgeI,
     Op::LdLocI,
     Op::LdLocC,
     Op::StLocI,
@@ -308,8 +336,8 @@ impl Op {
             // dispatch, and the optimizer's immediate-form
             // arithmetic / comparison ops.
             Lea | Imm | Jmp | Jsr | Bz | Bnz | Ent | Adj | JsrExt | AddI | SubI | MulI | AndI
-            | OrI | XorI | ShlI | ShrI | EqI | NeI | LtI | GtI | LeI | GeI | LdLocI | LdLocC
-            | StLocI | Mcpy | TlsLea => 1,
+            | OrI | XorI | ShlI | ShrI | EqI | NeI | LtI | GtI | LeI | GeI | UltI | UgtI | UleI
+            | UgeI | LdLocI | LdLocC | StLocI | Mcpy | TlsLea => 1,
             // Everything else -- arithmetic, loads/stores, push,
             // indirect-jump, return, etc. -- is encoded in a
             // single word with no operand.

@@ -638,6 +638,10 @@ fn fold_arith(op: Op, a: i64, b: i64) -> Option<i64> {
         Op::Gt => (a > b) as i64,
         Op::Le => (a <= b) as i64,
         Op::Ge => (a >= b) as i64,
+        Op::Ult => ((a as u64) < (b as u64)) as i64,
+        Op::Ugt => ((a as u64) > (b as u64)) as i64,
+        Op::Ule => ((a as u64) <= (b as u64)) as i64,
+        Op::Uge => ((a as u64) >= (b as u64)) as i64,
         _ => return None,
     })
 }
@@ -767,6 +771,10 @@ fn immediate_form(op: Op) -> Option<Op> {
         Op::Gt => Op::GtI,
         Op::Le => Op::LeI,
         Op::Ge => Op::GeI,
+        Op::Ult => Op::UltI,
+        Op::Ugt => Op::UgtI,
+        Op::Ule => Op::UleI,
+        Op::Uge => Op::UgeI,
         _ => return None,
     })
 }

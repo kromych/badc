@@ -20,6 +20,7 @@ use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::types::{
     is_decl_modifier, is_struct_ty, round_up, struct_id_of, struct_ptr_depth, struct_ty_for,
+    UNSIGNED_BIT,
 };
 use super::{Compiler, StructDef, StructField};
 
@@ -99,18 +100,27 @@ impl Compiler {
             // produces an `int` field.
             let mut saw_int_mod = false;
             let mut saw_signed = false;
+            let mut saw_unsigned = false;
+            let mut saw_long = false;
             while is_decl_modifier(self.lex.tk) {
                 if self.lex.tk == Token::IntMod as i64 {
                     saw_int_mod = true;
                 } else if self.lex.tk == Token::Signed as i64 {
                     saw_signed = true;
                     saw_int_mod = true;
+                } else if self.lex.tk == Token::Unsigned as i64 {
+                    saw_unsigned = true;
+                    saw_int_mod = true;
+                } else if self.lex.tk == Token::Long as i64 {
+                    saw_long = true;
+                    saw_int_mod = true;
                 }
                 self.next()?;
             }
             let field_base = if self.lex.tk == Token::Int as i64 {
                 self.next()?;
-                Ty::Int as i64
+                let base = if saw_long { Ty::Long as i64 } else { Ty::Int as i64 };
+                if saw_unsigned { base | UNSIGNED_BIT } else { base }
             } else if self.lex.tk == Token::Char as i64 {
                 self.next()?;
                 // Mirror parse_decl_base_type: `signed char` field
@@ -118,6 +128,8 @@ impl Compiler {
                 // sign-extended. Plain / unsigned char stays 1 byte.
                 if saw_signed {
                     Ty::Int as i64
+                } else if saw_unsigned {
+                    Ty::Char as i64 | UNSIGNED_BIT
                 } else {
                     Ty::Char as i64
                 }
@@ -164,7 +176,8 @@ impl Compiler {
                 self.next()?;
                 aliased
             } else if saw_int_mod {
-                Ty::Int as i64
+                let base = if saw_long { Ty::Long as i64 } else { Ty::Int as i64 };
+                if saw_unsigned { base | UNSIGNED_BIT } else { base }
             } else {
                 return Err(C5Error::Compile(format!(
                     "{}: type expected in struct field",

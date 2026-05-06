@@ -23,8 +23,9 @@ mod types;
 
 use types::{
     fp_result_ty, is_decl_modifier, is_floating_scalar, is_pointer_ty, is_scalar_load_op_val,
-    is_struct_ty, is_type_start_token, load_op_for, pointee_size_no_struct, reemit_scalar_load,
-    store_op_for, struct_id_of, struct_ptr_depth, struct_ty_for,
+    is_struct_ty, is_type_start_token, is_unsigned_ty, load_op_for, pointee_size_no_struct,
+    reemit_scalar_load, store_op_for, struct_id_of, struct_ptr_depth, struct_ty_for,
+    UNSIGNED_BIT,
 };
 
 #[derive(Debug, Clone)]
@@ -644,6 +645,10 @@ impl Compiler {
     ///     narrowing is a future milestone, separate from M31)
     ///   * struct values             -> recorded in the struct table
     fn size_of_type(&self, ty: i64) -> usize {
+        // Unsigned bit is orthogonal to width: `unsigned char` is
+        // still 1 byte, `unsigned int` is still 4 bytes. Strip it
+        // before consulting the band identity.
+        let ty = ty & !UNSIGNED_BIT;
         if is_struct_ty(ty) {
             if struct_ptr_depth(ty) > 0 {
                 8
@@ -668,6 +673,7 @@ impl Compiler {
     /// alignment of their fields, but c5 currently caps struct
     /// alignment at 8 to match the rest of the IR's slot model.
     fn align_of_type(&self, ty: i64) -> usize {
+        let ty = ty & !UNSIGNED_BIT;
         if is_struct_ty(ty) {
             if struct_ptr_depth(ty) > 0 {
                 8
@@ -808,12 +814,16 @@ impl Compiler {
         //     128-bit type).
         let mut saw_int_mod = false;
         let mut saw_signed = false;
+        let mut saw_unsigned = false;
         let mut saw_long = false;
         while is_decl_modifier(self.lex.tk) {
             if self.lex.tk == Token::IntMod as i64 {
                 saw_int_mod = true;
             } else if self.lex.tk == Token::Signed as i64 {
                 saw_signed = true;
+                saw_int_mod = true;
+            } else if self.lex.tk == Token::Unsigned as i64 {
+                saw_unsigned = true;
                 saw_int_mod = true;
             } else if self.lex.tk == Token::Long as i64 {
                 saw_long = true;
@@ -826,11 +836,12 @@ impl Compiler {
             self.next()?;
             // `long int` / `long long int` -> Ty::Long; bare `int`
             // -> Ty::Int (4 bytes after M31).
-            if saw_long {
+            let base = if saw_long {
                 Ty::Long as i64
             } else {
                 Ty::Int as i64
-            }
+            };
+            if saw_unsigned { base | UNSIGNED_BIT } else { base }
         } else if self.lex.tk == Token::Char as i64 {
             self.next()?;
             // `signed char` -> int. A bare `char` (or `unsigned char`)
@@ -838,6 +849,8 @@ impl Compiler {
             // the negative half of its range when loaded.
             if saw_signed {
                 Ty::Int as i64
+            } else if saw_unsigned {
+                Ty::Char as i64 | UNSIGNED_BIT
             } else {
                 Ty::Char as i64
             }
@@ -907,11 +920,12 @@ impl Compiler {
             // implicit-int rule applies for int-modifier-only decls.
             // A bare `long x;` (no `int` keyword) also lands here
             // and selects the 64-bit `Ty::Long`.
-            if saw_long {
+            let base = if saw_long {
                 Ty::Long as i64
             } else {
                 Ty::Int as i64
-            }
+            };
+            if saw_unsigned { base | UNSIGNED_BIT } else { base }
         } else {
             return Err(C5Error::Compile(format!(
                 "{}: type expected",
@@ -1863,7 +1877,7 @@ impl Compiler {
         } else if self.lex.tk == Token::MulOp as i64 {
             self.next()?;
             self.expr(Token::Inc as i64)?;
-            if self.ty > Ty::Int as i64 {
+            if is_pointer_ty(self.ty) {
                 self.ty -= Ty::Ptr as i64;
             } else {
                 return Err(C5Error::Compile(format!(
@@ -2288,6 +2302,8 @@ impl Compiler {
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "<")?;
                     self.emit_op(Op::Flt);
+                } else if is_unsigned_ty(t) || is_unsigned_ty(self.ty) {
+                    self.emit_op(Op::Ult);
                 } else {
                     self.emit_op(Op::Lt);
                 }
@@ -2299,6 +2315,8 @@ impl Compiler {
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, ">")?;
                     self.emit_op(Op::Fgt);
+                } else if is_unsigned_ty(t) || is_unsigned_ty(self.ty) {
+                    self.emit_op(Op::Ugt);
                 } else {
                     self.emit_op(Op::Gt);
                 }
@@ -2310,6 +2328,8 @@ impl Compiler {
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "<=")?;
                     self.emit_op(Op::Fle);
+                } else if is_unsigned_ty(t) || is_unsigned_ty(self.ty) {
+                    self.emit_op(Op::Ule);
                 } else {
                     self.emit_op(Op::Le);
                 }
@@ -2321,6 +2341,8 @@ impl Compiler {
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, ">=")?;
                     self.emit_op(Op::Fge);
+                } else if is_unsigned_ty(t) || is_unsigned_ty(self.ty) {
+                    self.emit_op(Op::Uge);
                 } else {
                     self.emit_op(Op::Ge);
                 }
@@ -2680,6 +2702,7 @@ impl Compiler {
             let mut thread_local = false;
             let mut is_typedef = false;
             let mut saw_signed = false;
+            let mut saw_unsigned = false;
             // M31: track `long` separately from the other int-modifiers
             // so `typedef long long int u64;` and friends pick the
             // 8-byte `Ty::Long` storage class instead of falling
@@ -2695,6 +2718,10 @@ impl Compiler {
                     self.next()?;
                 } else if self.lex.tk == Token::Signed as i64 {
                     saw_signed = true;
+                    saw_int_mod = true;
+                    self.next()?;
+                } else if self.lex.tk == Token::Unsigned as i64 {
+                    saw_unsigned = true;
                     saw_int_mod = true;
                     self.next()?;
                 } else if self.lex.tk == Token::Long as i64 {
@@ -2718,17 +2745,24 @@ impl Compiler {
                 // `long int` / `long long int` -> Ty::Long; bare `int`
                 // -> Ty::Int (4 bytes after M31). Mirror the same
                 // dispatch parse_decl_base_type uses.
-                bt = if saw_long {
+                let base = if saw_long {
                     Ty::Long as i64
                 } else {
                     Ty::Int as i64
                 };
+                bt = if saw_unsigned { base | UNSIGNED_BIT } else { base };
             } else if self.lex.tk == Token::Char as i64 {
                 self.next()?;
                 // `signed char` -> int (see parse_decl_base_type for
                 // the same promotion). Plain / unsigned char stays
                 // a 1-byte slot.
-                bt = if saw_signed { Ty::Int as i64 } else { Ty::Char as i64 };
+                bt = if saw_signed {
+                    Ty::Int as i64
+                } else if saw_unsigned {
+                    Ty::Char as i64 | UNSIGNED_BIT
+                } else {
+                    Ty::Char as i64
+                };
             } else if self.lex.tk == Token::Float as i64 {
                 self.next()?;
                 bt = Ty::Float as i64;
@@ -2783,11 +2817,12 @@ impl Compiler {
                 // `unsigned x;` / `short x;` / `long x;` (the
                 // implicit-int rule). `long` keeps its 8-byte
                 // selection -- mirror parse_decl_base_type's tail.
-                bt = if saw_long {
+                let base = if saw_long {
                     Ty::Long as i64
                 } else {
                     Ty::Int as i64
                 };
+                bt = if saw_unsigned { base | UNSIGNED_BIT } else { base };
             }
             // Trailing qualifiers / int modifiers between the base
             // type and the declarators -- `Foo const *p`, `int long

@@ -779,7 +779,7 @@ const KEYWORDS: &[(&str, Token)] = &[
     // `long` selects the 64-bit `Ty::Long` storage class under
     // M31 (otherwise an `int` declaration yields a 32-bit slot).
     ("signed", Token::Signed),
-    ("unsigned", Token::IntMod),
+    ("unsigned", Token::Unsigned),
     ("short", Token::IntMod),
     ("long", Token::Long),
     ("_Bool", Token::IntMod),

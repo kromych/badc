@@ -483,9 +483,17 @@ pub(super) fn enc_cmp_reg(rn: Reg, rm: Reg) -> u32 {
 pub(super) enum Cond {
     Eq = 0,
     Ne = 1,
+    /// Unsigned `>=` (HS = CS). After SUBS, set when no borrow occurred.
+    Hs = 0x2,
+    /// Unsigned `<` (LO = CC). After SUBS, set when borrow occurred.
+    Lo = 0x3,
     /// FP "less than" -- N==1, set by FCMP when Dn < Dm (ordered).
     Mi = 0x4,
-    /// FP "less than or equal" -- C==0 || Z==1, after FCMP.
+    /// Unsigned `>`. After SUBS, set when C==1 && Z==0.
+    Hi = 0x8,
+    /// FP "less than or equal" / unsigned `<=` -- C==0 || Z==1.
+    /// Same flag-test for both because CMP and FCMP agree on the
+    /// boundary case here.
     Ls = 0x9,
     Lt = 0xB,
     Gt = 0xC,
@@ -514,13 +522,15 @@ impl Cond {
             Cond::Ge => Cond::Lt,
             Cond::Gt => Cond::Le,
             Cond::Le => Cond::Gt,
-            // Mi <-> Pl, Ls <-> Hi -- but the cmp+branch fusion
-            // peephole only fires for integer comparisons today;
-            // FP comparisons go through the cset-only path. Map
-            // them to the closest integer flip for safety so an
-            // accidental fuse path doesn't miscompile.
+            Cond::Lo => Cond::Hs,
+            Cond::Hs => Cond::Lo,
+            Cond::Hi => Cond::Ls,
+            Cond::Ls => Cond::Hi,
+            // Mi <-> Pl -- FP comparisons go through the cset-only
+            // path so the cmp+branch fusion peephole shouldn't
+            // reach here, but map to the closest integer flip in
+            // case it does.
             Cond::Mi => Cond::Ge,
-            Cond::Ls => Cond::Gt,
         }
     }
 }
@@ -1437,6 +1447,10 @@ fn lower_op(
         Op::Gt => lower_cmp(code, text, *pc, reg_state, branch_targets, Cond::Gt),
         Op::Le => lower_cmp(code, text, *pc, reg_state, branch_targets, Cond::Le),
         Op::Ge => lower_cmp(code, text, *pc, reg_state, branch_targets, Cond::Ge),
+        Op::Ult => lower_cmp(code, text, *pc, reg_state, branch_targets, Cond::Lo),
+        Op::Ugt => lower_cmp(code, text, *pc, reg_state, branch_targets, Cond::Hi),
+        Op::Ule => lower_cmp(code, text, *pc, reg_state, branch_targets, Cond::Ls),
+        Op::Uge => lower_cmp(code, text, *pc, reg_state, branch_targets, Cond::Hs),
 
         // ---- Shifts (signed >> matches c4 `int` semantics). ----
         Op::Shl => binop_with_pop(code, reg_state, enc_lslv),
@@ -1575,6 +1589,10 @@ fn lower_op(
         Op::GtI => imm_cmp(code, text, pc, "GtI", Cond::Gt, reg_state, branch_targets)?,
         Op::LeI => imm_cmp(code, text, pc, "LeI", Cond::Le, reg_state, branch_targets)?,
         Op::GeI => imm_cmp(code, text, pc, "GeI", Cond::Ge, reg_state, branch_targets)?,
+        Op::UltI => imm_cmp(code, text, pc, "UltI", Cond::Lo, reg_state, branch_targets)?,
+        Op::UgtI => imm_cmp(code, text, pc, "UgtI", Cond::Hi, reg_state, branch_targets)?,
+        Op::UleI => imm_cmp(code, text, pc, "UleI", Cond::Ls, reg_state, branch_targets)?,
+        Op::UgeI => imm_cmp(code, text, pc, "UgeI", Cond::Hs, reg_state, branch_targets)?,
         Op::LdLocI => {
             // `Lea N + Li` fused. a = *(bp + N*8)
             let offset = read_operand(text, pc, "LdLocI")?;

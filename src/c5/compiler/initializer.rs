@@ -37,7 +37,7 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::op::Op;
 use super::super::token::{Token, Ty};
-use super::types::{is_struct_ty, struct_id_of, struct_ptr_depth};
+use super::types::{is_struct_ty, struct_id_of, struct_ptr_depth, UNSIGNED_BIT};
 use super::{Compiler, InitElemReloc};
 
 impl Compiler {
@@ -97,7 +97,7 @@ impl Compiler {
         &mut self,
         elem_ty: i64,
     ) -> Result<Vec<(i64, InitElemReloc)>, C5Error> {
-        if self.lex.tk == '"' as i64 && elem_ty == Ty::Char as i64 {
+        if self.lex.tk == '"' as i64 && (elem_ty & !UNSIGNED_BIT) == Ty::Char as i64 {
             let start_addr = self.lex.ival as usize;
             self.next()?;
             while self.lex.tk == '"' as i64 {
@@ -526,7 +526,7 @@ impl Compiler {
         if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
             self.emit_op(Op::Mcpy);
             self.emit_val(self.size_of_type(ty) as i64);
-        } else if ty == Ty::Char as i64 {
+        } else if (ty & !UNSIGNED_BIT) == Ty::Char as i64 {
             self.emit_op(Op::Sc);
         } else {
             // Local int / long / pointer: the slot is a full c5

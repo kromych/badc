@@ -1579,6 +1579,10 @@ fn lower_op(
         Op::Gt => lower_cmp(code, text, *pc, reg_state, branch_targets, Cc::G),
         Op::Le => lower_cmp(code, text, *pc, reg_state, branch_targets, Cc::Le),
         Op::Ge => lower_cmp(code, text, *pc, reg_state, branch_targets, Cc::Ge),
+        Op::Ult => lower_cmp(code, text, *pc, reg_state, branch_targets, Cc::B),
+        Op::Ugt => lower_cmp(code, text, *pc, reg_state, branch_targets, Cc::A),
+        Op::Ule => lower_cmp(code, text, *pc, reg_state, branch_targets, Cc::Be),
+        Op::Uge => lower_cmp(code, text, *pc, reg_state, branch_targets, Cc::Ae),
 
         // ---- Shifts. Pop into lhs (rN or r10), shift by cl (=r13
         //      lo byte), then mov r13 = lhs.
@@ -1758,6 +1762,10 @@ fn lower_op(
         Op::GtI => imm_cmp(code, text, pc, "GtI", Cc::G, reg_state, branch_targets)?,
         Op::LeI => imm_cmp(code, text, pc, "LeI", Cc::Le, reg_state, branch_targets)?,
         Op::GeI => imm_cmp(code, text, pc, "GeI", Cc::Ge, reg_state, branch_targets)?,
+        Op::UltI => imm_cmp(code, text, pc, "UltI", Cc::B, reg_state, branch_targets)?,
+        Op::UgtI => imm_cmp(code, text, pc, "UgtI", Cc::A, reg_state, branch_targets)?,
+        Op::UleI => imm_cmp(code, text, pc, "UleI", Cc::Be, reg_state, branch_targets)?,
+        Op::UgeI => imm_cmp(code, text, pc, "UgeI", Cc::Ae, reg_state, branch_targets)?,
         Op::LdLocI => {
             let off = read_operand(text, pc, "LdLocI")?;
             let bytes = lea_offset_bytes(off) as i32;

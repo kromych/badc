@@ -46,6 +46,36 @@ pub(super) const STRUCT_STRIDE: i64 = 1000;
 /// levels per band given the +2-per-`*` step.
 const FP_BAND_SIZE: i64 = 100;
 
+/// High-bit flag set on a type tag to mark its underlying integer
+/// as unsigned. Orthogonal to the band scheme: stripped before any
+/// band-classifier helper consults it (`is_pointer_ty`,
+/// `is_long_ty`, `pointee_size_no_struct`, `load_op_for`, ...) so
+/// the bit is invisible everywhere except the few sites that
+/// directly query signedness (relational compares, signed/unsigned
+/// load fixups). Set by `parse_decl_base_type` when the
+/// declaration spelled `unsigned`, by typedef expansion of a
+/// `typedef u32 ...` shape, and by struct-field type tagging.
+///
+/// Bit chosen well above the band ranges: `STRUCT_BASE +
+/// N*STRIDE` for any plausible N stays under 1<<30, and the
+/// non-struct bands max out at 400.
+pub(super) const UNSIGNED_BIT: i64 = 1 << 30;
+
+/// `true` if `ty`'s underlying integer is tagged unsigned.
+pub(super) fn is_unsigned_ty(ty: i64) -> bool {
+    (ty & UNSIGNED_BIT) != 0
+}
+
+/// Drop the unsigned bit. Use to recover the bare band-encoded type
+/// before consulting a helper that classifies by band. Most of the
+/// helpers in this module call this at their entry; outside callers
+/// only need it when storing a type tag where a non-bit-flagged tag
+/// is expected (e.g., switch-table comparisons against `Ty::Int as
+/// i64`).
+pub(super) fn strip_unsigned(ty: i64) -> i64 {
+    ty & !UNSIGNED_BIT
+}
+
 /// Round `x` up to the nearest multiple of `alignment` (which must
 /// be a power of two). Used by struct-field layout, struct-tail
 /// padding, bitfield-storage placement, and any other code that
@@ -58,14 +88,17 @@ pub(super) fn round_up(x: usize, alignment: usize) -> usize {
 }
 
 pub(super) fn is_struct_ty(ty: i64) -> bool {
+    let ty = strip_unsigned(ty);
     ty >= STRUCT_BASE
 }
 
 pub(super) fn struct_id_of(ty: i64) -> usize {
+    let ty = strip_unsigned(ty);
     ((ty - STRUCT_BASE) / STRUCT_STRIDE) as usize
 }
 
 pub(super) fn struct_ptr_depth(ty: i64) -> i64 {
+    let ty = strip_unsigned(ty);
     ((ty - STRUCT_BASE) % STRUCT_STRIDE) / Ty::Ptr as i64
 }
 
@@ -74,11 +107,13 @@ pub(super) fn struct_ty_for(id: usize) -> i64 {
 }
 
 pub(super) fn is_float_ty(ty: i64) -> bool {
+    let ty = strip_unsigned(ty);
     let base = Ty::Float as i64;
     (base..base + FP_BAND_SIZE).contains(&ty)
 }
 
 pub(super) fn is_double_ty(ty: i64) -> bool {
+    let ty = strip_unsigned(ty);
     let base = Ty::Double as i64;
     (base..base + FP_BAND_SIZE).contains(&ty)
 }
@@ -88,6 +123,7 @@ pub(super) fn is_double_ty(ty: i64) -> bool {
 /// scheme as the integer family applies inside the band, so
 /// `long*` = 302, `long**` = 304, etc.
 pub(super) fn is_long_ty(ty: i64) -> bool {
+    let ty = strip_unsigned(ty);
     let base = Ty::Long as i64;
     (base..base + FP_BAND_SIZE).contains(&ty)
 }
@@ -95,6 +131,7 @@ pub(super) fn is_long_ty(ty: i64) -> bool {
 /// Pointer depth within the long band. Returns 0 for a scalar
 /// `long`, 1 for `long*`, 2 for `long**`, etc.
 pub(super) fn long_ptr_depth(ty: i64) -> i64 {
+    let ty = strip_unsigned(ty);
     if is_long_ty(ty) {
         (ty - Ty::Long as i64) / Ty::Ptr as i64
     } else {
@@ -109,10 +146,12 @@ pub(super) fn is_floating_ty(ty: i64) -> bool {
 
 /// `ty` is a *scalar* float/double -- not a pointer to one.
 pub(super) fn is_floating_scalar(ty: i64) -> bool {
+    let ty = strip_unsigned(ty);
     ty == Ty::Float as i64 || ty == Ty::Double as i64
 }
 
 pub(super) fn fp_ptr_depth(ty: i64) -> i64 {
+    let ty = strip_unsigned(ty);
     if is_float_ty(ty) {
         (ty - Ty::Float as i64) / Ty::Ptr as i64
     } else if is_double_ty(ty) {
@@ -128,6 +167,7 @@ pub(super) fn fp_ptr_depth(ty: i64) -> i64 {
 /// and structs have their own depth predicates that this helper
 /// unifies.
 pub(super) fn is_pointer_ty(ty: i64) -> bool {
+    let ty = strip_unsigned(ty);
     if is_struct_ty(ty) {
         struct_ptr_depth(ty) > 0
     } else if is_floating_ty(ty) {
@@ -151,6 +191,7 @@ pub(super) fn is_pointer_ty(ty: i64) -> bool {
 /// Pointer-to-struct goes through [`Compiler::pointee_size`]
 /// instead so the scale picks up the struct's real size.
 pub(super) fn pointee_size_no_struct(ty: i64) -> i64 {
+    let ty = strip_unsigned(ty);
     if ty == Ty::Ptr as i64 {
         1
     } else if ty == (Ty::Int as i64) + (Ty::Ptr as i64) {
@@ -168,6 +209,8 @@ pub(super) fn pointee_size_no_struct(ty: i64) -> i64 {
 /// through f64 ops anyway -- the type is purely for downstream
 /// type-warning bookkeeping.
 pub(super) fn fp_result_ty(lhs: i64, rhs: i64) -> i64 {
+    let lhs = strip_unsigned(lhs);
+    let rhs = strip_unsigned(rhs);
     if lhs == Ty::Double as i64 || rhs == Ty::Double as i64 {
         Ty::Double as i64
     } else {
@@ -188,6 +231,7 @@ pub(super) fn is_decl_modifier(tk: i64) -> bool {
     tk == Token::TypeQual as i64
         || tk == Token::IntMod as i64
         || tk == Token::Signed as i64
+        || tk == Token::Unsigned as i64
         || tk == Token::Long as i64
         || tk == Token::FuncSpec as i64
 }
@@ -217,6 +261,7 @@ pub(super) fn is_type_start_token(tk: i64) -> bool {
 /// Pointers (any base type) go through `Op::Li` because every
 /// pointer is 8 bytes regardless of its pointee width.
 pub(super) fn load_op_for(ty: i64) -> Op {
+    let ty = strip_unsigned(ty);
     if ty == Ty::Char as i64 {
         Op::Lc
     } else if ty == Ty::Int as i64 {
@@ -231,6 +276,7 @@ pub(super) fn load_op_for(ty: i64) -> Op {
 ///   * `Ty::Int` (scalar)   -> `Op::Sw`  (4-byte; M31)
 ///   * everything else      -> `Op::Si`  (8-byte)
 pub(super) fn store_op_for(ty: i64) -> Op {
+    let ty = strip_unsigned(ty);
     if ty == Ty::Char as i64 {
         Op::Sc
     } else if ty == Ty::Int as i64 {

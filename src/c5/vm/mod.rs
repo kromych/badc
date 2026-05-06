@@ -740,6 +740,24 @@ impl<H: Host> Vm<H> {
                     a = if self.load_i64(sp)? >= a { 1 } else { 0 };
                     sp += 8;
                 }
+                // Unsigned compares: same operand layout, but
+                // interpret both stack-top and accumulator as u64.
+                Op::Ult => {
+                    a = if (self.load_i64(sp)? as u64) < (a as u64) { 1 } else { 0 };
+                    sp += 8;
+                }
+                Op::Ugt => {
+                    a = if (self.load_i64(sp)? as u64) > (a as u64) { 1 } else { 0 };
+                    sp += 8;
+                }
+                Op::Ule => {
+                    a = if (self.load_i64(sp)? as u64) <= (a as u64) { 1 } else { 0 };
+                    sp += 8;
+                }
+                Op::Uge => {
+                    a = if (self.load_i64(sp)? as u64) >= (a as u64) { 1 } else { 0 };
+                    sp += 8;
+                }
                 Op::Shl => {
                     a = self.load_i64(sp)? << a;
                     sp += 8;
@@ -825,6 +843,22 @@ impl<H: Host> Vm<H> {
                 }
                 Op::GeI => {
                     a = (a >= self.text[pc]) as i64;
+                    pc += 1;
+                }
+                Op::UltI => {
+                    a = ((a as u64) < (self.text[pc] as u64)) as i64;
+                    pc += 1;
+                }
+                Op::UgtI => {
+                    a = ((a as u64) > (self.text[pc] as u64)) as i64;
+                    pc += 1;
+                }
+                Op::UleI => {
+                    a = ((a as u64) <= (self.text[pc] as u64)) as i64;
+                    pc += 1;
+                }
+                Op::UgeI => {
+                    a = ((a as u64) >= (self.text[pc] as u64)) as i64;
                     pc += 1;
                 }
                 // Local-load fusion: `a = *(bp + N*8)`.

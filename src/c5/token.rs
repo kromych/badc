@@ -165,6 +165,17 @@ pub(crate) enum Token {
     /// as 255 and the parser stack indexing goes off into wild
     /// memory.
     Signed,
+    /// `unsigned` modifier -- separated from [`IntMod`] so the
+    /// parser can mark the resulting integer type as unsigned.
+    /// `unsigned int x;` and `unsigned long y;` and `typedef
+    /// unsigned int u32;` all flow through `parse_decl_base_type`
+    /// where the `saw_unsigned` flag ORs `UNSIGNED_BIT` into the
+    /// chosen base type. Comparisons later check the bit and
+    /// pick `Op::Ult/Ugt/Ule/Uge` over their signed twins -- the
+    /// motivating bug was sqlite's `Pgno` (typedef u32) compared
+    /// against `SQLITE_MAX_PAGE_COUNT = 0xfffffffe`, which read as
+    /// signed -2 and turned every page-1 fetch into SQLITE_FULL.
+    Unsigned,
     /// `long` modifier -- separated from [`IntMod`] under M31
     /// because seeing `long` on a declaration's base type drives
     /// the 64-bit `Ty::Long` selection (vs. the 32-bit `Ty::Int`

@@ -217,3 +217,24 @@ fn libc_address_in_static_init() {
         "static-init libc fn-pointer slots should resolve at load time, not zero-fill"
     );
 }
+
+// ---- libc vfprintf called with a c5 va_list ----
+//
+// c5's `va_list` is `long *` walking 16-byte c5 stack slots;
+// the platform's libc vfprintf expects its own struct-shaped
+// va_list. Forwarding `vfprintf(out, fmt, ap)` from a c5
+// function corrupts the formatter -- the second `%d` reads
+// garbage. Same shape blocked sqlite3 shell.c's `cli_printf`
+// chain; the workaround there was to route through
+// `sqlite3_vmprintf` (c5-compiled). The general fix is either
+// to match c5's va_list to the platform's, or to ship c5-side
+// wrappers around every libc function that takes a va_list.
+#[test]
+#[ignore = "deferred: c5 va_list incompatible with libc vfprintf / vsnprintf et al."]
+fn libc_vfprintf_with_c5_va_list() {
+    let exit = jit_fixture_exit("deferred_libc_vfprintf_va_list.c");
+    assert_eq!(
+        exit, 0,
+        "vsnprintf via c5 va_list should work once the ABI gap closes"
+    );
+}

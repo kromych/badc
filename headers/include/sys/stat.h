@@ -13,25 +13,45 @@
 #ifndef _C5_SYS_STAT_H
 #define _C5_SYS_STAT_H
 
+// `struct stat` is a write-target for libc's `stat`/`lstat`/
+// `fstat` family. Per-platform actual sizes vary widely:
+//
+//   * macOS Darwin / `_lstat$INODE64`           = 144 bytes
+//   * Linux glibc / x86_64                      = 144 bytes
+//   * Linux glibc / aarch64                     = 128 bytes
+//   * Win32 / msvcrt's `_stat64`                =  96 bytes
+//
+// c5 lays out `int` as 4 bytes (the i64 stack slot is wide
+// enough for it but the field width itself is C's `int`).
+// The original 18-int declaration came out at 18 * 4 = 72
+// bytes -- libc's `stat` then merrily wrote past it and
+// stomped the saved frame pointer / link register, leading
+// to "the function returns 42 then SIGBUS on the way out"
+// behaviour. We grow the buffer to 256 bytes (longs +
+// trailing char-array padding) so every known platform's
+// `stat` fits, and reserve named slots for the dozen fields
+// programs actually read by name. Anything else falls into
+// `__pad`. Field offsets are still platform-specific; code
+// that wants pixel-perfect parsing should call `fstatat` and
+// unpack the bytes manually.
 struct stat {
-    int st_dev;
-    int st_ino;
-    int st_nlink;
-    int st_mode;
-    int st_uid;
-    int st_gid;
-    int st_rdev;
-    int st_size;
-    int st_blksize;
-    int st_blocks;
-    int st_atime;
-    int st_atimensec;
-    int st_mtime;
-    int st_mtimensec;
-    int st_ctime;
-    int st_ctimensec;
-    int __pad1;
-    int __pad2;
+    long st_dev;
+    long st_ino;
+    long st_nlink;
+    long st_mode;
+    long st_uid;
+    long st_gid;
+    long st_rdev;
+    long st_size;
+    long st_blksize;
+    long st_blocks;
+    long st_atime;
+    long st_atimensec;
+    long st_mtime;
+    long st_mtimensec;
+    long st_ctime;
+    long st_ctimensec;
+    char __pad[128];
 };
 
 // Mode bits
@@ -73,25 +93,33 @@ struct stat {
 // f_bsize after a statfs to size scratch buffers; the offset of
 // f_bsize varies, so we expose typedefs that cover the union of
 // known layouts.
+// `struct statfs` is the libc filesystem-info shape that
+// `statfs(2)` / `fstatfs(2)` write into. Field layouts vary
+// across libc flavors but in practice all add up to ~4 KiB
+// (path components dominate). Our buffer reserves 4096
+// bytes via a trailing `__pad[]` so every known platform
+// fits without further header surgery -- the overflow class
+// would otherwise stomp the saved frame pointer of the
+// caller (see fixtures/c/libc_struct_buf_size.c).
 struct statfs {
-    int f_bsize;
-    int f_iosize;
-    int f_blocks;
-    int f_bfree;
-    int f_bavail;
-    int f_files;
-    int f_ffree;
-    int f_fsid_a;
-    int f_fsid_b;
-    int f_owner;
-    int f_type;
-    int f_flags;
-    int f_fssubtype;
+    long f_bsize;
+    long f_iosize;
+    long f_blocks;
+    long f_bfree;
+    long f_bavail;
+    long f_files;
+    long f_ffree;
+    long f_fsid_a;
+    long f_fsid_b;
+    long f_owner;
+    long f_type;
+    long f_flags;
+    long f_fssubtype;
     char f_fstypename[16];
     char f_mntonname[1024];
     char f_mntfromname[1024];
-    int f_flags_ext;
-    char f_reserved[32];
+    long f_flags_ext;
+    char __pad[2048];
 };
 
 struct statvfs {

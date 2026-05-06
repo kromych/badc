@@ -63,12 +63,27 @@
 #define F_WRLCK 1
 #define F_UNLCK 2
 
+// `struct flock` is the F_GETLK/F_SETLK/F_SETLKW arg for
+// `fcntl`. Per-platform layouts differ:
+//
+//   macOS Darwin           : `off_t l_start, l_len; pid_t l_pid;
+//                             short l_type, l_whence;` -> 24 bytes
+//   Linux glibc / aarch64  : same layout, 32 bytes (8-byte aligned
+//                             trailing field).
+//
+// c5 ints are 4 bytes so a 5-int declaration came out at 20 bytes
+// and `fcntl(..., F_SETLK, &fl)` overran by 4-12 bytes -- enough
+// to clobber the saved frame pointer / link register and SIGBUS
+// the caller's epilogue. Reserve 64 bytes via a trailing
+// `__pad[]` so every known layout fits without further header
+// surgery.
 struct flock {
-    int l_type;
-    int l_whence;
-    int l_start;
-    int l_len;
+    long l_start;
+    long l_len;
     int l_pid;
+    short l_type;
+    short l_whence;
+    char __pad[64];
 };
 
 #ifdef __APPLE__

@@ -2177,7 +2177,7 @@ impl Compiler {
                 let lhs_ty = self.ty;
                 self.expr(Token::Assign as i64)?;
                 if (binop == Token::AddOp as i64 || binop == Token::SubOp as i64)
-                    && lhs_ty > Ty::Ptr as i64
+                    && is_pointer_ty(lhs_ty)
                     && !is_floating_scalar(lhs_ty)
                 {
                     let elem_ty = lhs_ty - Ty::Ptr as i64;

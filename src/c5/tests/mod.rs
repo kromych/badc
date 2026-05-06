@@ -19,6 +19,7 @@ use super::token::Token;
 use super::{C5Error, Compiler, Op, Program, Vm, optimize};
 
 mod codegen;
+mod deferred;
 mod intrinsics;
 mod jit;
 mod lexer;

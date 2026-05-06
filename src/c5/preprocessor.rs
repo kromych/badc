@@ -1750,7 +1750,9 @@ impl<'a> IfExprParser<'a> {
             let v = self.parse_or()?;
             self.skip_ws();
             if !self.eat_byte(b')') {
-                return Err(C5Error::Compile("preprocessor: missing `)` in `#if` expression".to_string()));
+                return Err(C5Error::Compile(
+                    "preprocessor: missing `)` in `#if` expression".to_string(),
+                ));
             }
             return Ok(v);
         }
@@ -1862,8 +1864,7 @@ impl<'a> IfExprParser<'a> {
                 break;
             }
         }
-        let body = self.src[start..self.pos]
-            .trim_end_matches(['u', 'U', 'l', 'L']);
+        let body = self.src[start..self.pos].trim_end_matches(['u', 'U', 'l', 'L']);
         let v = if radix == 10 {
             body.parse::<i64>()
         } else {

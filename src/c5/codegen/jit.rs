@@ -203,31 +203,32 @@ mod jit_impl {
         // per-format writers' code-reloc handling but uses the
         // mmap'd region pointer directly.
         if !build.code_relocs.is_empty()
-            && let Some(region) = &mut data_region {
-                let bytes = region.as_mut_slice(build.data.len());
-                for r in &build.code_relocs {
-                    let bc_pc = r.target_bc_pc as usize;
-                    let native_off = build
-                        .bytecode_to_native
-                        .get(bc_pc)
-                        .copied()
-                        .unwrap_or(usize::MAX);
-                    if native_off == usize::MAX {
-                        return Err(C5Error::Compile(format!(
-                            "JIT: code reloc references missing bytecode pc {bc_pc}"
-                        )));
-                    }
-                    let absolute = code_vmaddr + native_off as u64;
-                    let off = r.data_offset as usize;
-                    if off + 8 > bytes.len() {
-                        return Err(C5Error::Compile(format!(
-                            "JIT: code reloc offset {off:#x} past end of data region ({})",
-                            bytes.len()
-                        )));
-                    }
-                    bytes[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
+            && let Some(region) = &mut data_region
+        {
+            let bytes = region.as_mut_slice(build.data.len());
+            for r in &build.code_relocs {
+                let bc_pc = r.target_bc_pc as usize;
+                let native_off = build
+                    .bytecode_to_native
+                    .get(bc_pc)
+                    .copied()
+                    .unwrap_or(usize::MAX);
+                if native_off == usize::MAX {
+                    return Err(C5Error::Compile(format!(
+                        "JIT: code reloc references missing bytecode pc {bc_pc}"
+                    )));
                 }
+                let absolute = code_vmaddr + native_off as u64;
+                let off = r.data_offset as usize;
+                if off + 8 > bytes.len() {
+                    return Err(C5Error::Compile(format!(
+                        "JIT: code reloc offset {off:#x} past end of data region ({})",
+                        bytes.len()
+                    )));
+                }
+                bytes[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
             }
+        }
         apply_jit_fixups(
             target,
             unsafe { core::slice::from_raw_parts_mut(region.as_mut_ptr(), build.text.len()) },

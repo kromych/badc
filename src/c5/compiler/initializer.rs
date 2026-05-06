@@ -379,7 +379,7 @@ impl Compiler {
                     )));
                 }
                 self.next()?;
-                
+
                 self.structs[struct_id]
                     .fields
                     .iter()

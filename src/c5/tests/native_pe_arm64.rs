@@ -404,6 +404,38 @@ fn fixture_parity() {
     );
 }
 
+/// Deferred (#48): atoi("-17") returns the wrong value on
+/// PE/AArch64 when run through wine on Linux aarch64. Other libc
+/// surface (strcmp, isspace, ...) all pass; only the
+/// signed-negative `int` return through wine's arm64 libc
+/// translation is wrong. JIT and native macOS / Linux ELF lanes
+/// pass.
+#[test]
+#[ignore = "deferred (#48): wine arm64 atoi('-17') sign bug; other lanes pass"]
+fn deferred_atoi_negative() {
+    if !host_can_run_pe() {
+        eprintln!("skip deferred_atoi_negative: no PE runner on this host");
+        return;
+    }
+    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("fixtures");
+    path.push("c");
+    path.push("deferred_atoi_negative_pe_arm64.c");
+    let src = std::fs::read_to_string(&path).expect("read deferred fixture");
+    let outcome = build_and_run(&src, "deferred-atoi-negative", &[]);
+    match outcome {
+        RunOutcome::Exit(c) => {
+            assert_eq!(
+                c, 0,
+                "fixture should exit 0 once wine arm64 atoi sign is fixed"
+            )
+        }
+        RunOutcome::Signal(s) => panic!("deferred-atoi-negative killed by signal {s}"),
+        RunOutcome::BuildError(e) => panic!("deferred-atoi-negative build error: {e}"),
+        RunOutcome::HostCannotRun => {}
+    }
+}
+
 #[test]
 fn original_c4_compiles_and_runs_hello_pe() {
     if !host_can_run_pe() {

@@ -178,3 +178,42 @@ fn struct_fp_call_per_target() {
     let _ = jit_fixture_exit("deferred_struct_fp_call.c");
     panic!("(#50) PE/x64 struct fp-call repro pending; JIT lane passes the fixture in isolation");
 }
+
+// ---- libc data globals on Windows (stdin/stdout/stderr) ----
+//
+// `__c5_lazy_stream` in stdio.h has #ifdef arms for `__APPLE__`
+// (dlsym `__stdoutp`) and `__linux__` (dlsym `stdout`), but no
+// arm for Windows. Windows doesn't expose those as data
+// symbols at all -- programs go through `__acrt_iob_func(int)`
+// to get a `FILE *`. With no Windows arm, the lazy resolver
+// returns NULL and the first `fprintf(stdout, ...)` after that
+// reaches msvcrt with an invalid handle.
+//
+// JIT lane (macOS / Linux) resolves the data export via dlsym
+// today and the fixture exits 0; the test panics under
+// `--ignored` so the Windows-only failure stays surfaced.
+#[test]
+#[ignore = "deferred: libc data globals (stdin/stdout/stderr) need a Windows arm in __c5_lazy_stream"]
+fn libc_data_globals_windows() {
+    let _ = jit_fixture_exit("deferred_libc_data_globals_windows.c");
+    panic!("libc data globals: Windows arm of __c5_lazy_stream pending; macOS / Linux lanes pass");
+}
+
+// ---- Address-of-libc-fn in static initializer ----
+//
+// Static-init paths emit `Imm 0` plus a runtime-patch warning
+// when the right-hand side names a libc symbol. sqlite3's
+// UnixOSData VFS dispatch table relies on a runtime callback
+// to fill the slots; any code path that reads one of those
+// slots before the runtime patch fires sees a NULL function
+// pointer. Affects every target -- the right fix is a
+// GOT/IAT-trampoline pipeline that resolves at load time.
+#[test]
+#[ignore = "deferred: address-of-libc-fn in static initializer lowered as 0; needs GOT/IAT trampoline"]
+fn libc_address_in_static_init() {
+    let exit = jit_fixture_exit("deferred_libc_address_in_static_init.c");
+    assert_eq!(
+        exit, 0,
+        "static-init libc fn-pointer slots should resolve at load time, not zero-fill"
+    );
+}

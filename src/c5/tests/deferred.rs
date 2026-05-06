@@ -130,3 +130,51 @@ fn optimizer_aggregates_minimal_repro_pending() {
     let _ = jit_fixture_exit("deferred_optimizer_aggregates.c");
     panic!("(#46) placeholder fixture: bisect minimal repro from sqlite3 aggregate codegen");
 }
+
+// ---- size_t / ssize_t / time_t typedef widths (#52) ----
+//
+// `typedef int size_t;` etc. left over from before M31 made
+// `int` 4 bytes wide. Each width typedef should be pointer-wide
+// on 64-bit hosts; today they're 4 bytes and any libc bridge
+// that takes one truncates inputs > 2^31. JIT lane reproduces
+// this directly because `sizeof(size_t) == 4` is the broken
+// state on every host.
+#[test]
+#[ignore = "deferred (#52): size_t / ssize_t / time_t typedefs left at int (4 bytes) post-M31"]
+fn width_typedefs_truncated_to_int() {
+    let exit = jit_fixture_exit("deferred_width_typedefs.c");
+    assert_eq!(
+        exit, 0,
+        "size_t / ssize_t / time_t should be pointer-wide on 64-bit hosts"
+    );
+}
+
+// ---- Per-target long width (#51) ----
+//
+// On Windows (LLP64) `long` should be 4 bytes and `long long`
+// 8; the dialect picks 8 for both and collapses `long long`
+// onto Ty::Long. JIT runs only on LP64 hosts where
+// `sizeof(long) == sizeof(long long) == 8` happens to match
+// the platform ABI, so the bug doesn't surface here. The test
+// panics under `--ignored` so the gap stays visible until
+// per-target long-width plus a separate `Ty::LongLong` lands
+// (and a Windows-target test rig can run the fixture against
+// `__BADC_WINDOWS__`).
+#[test]
+#[ignore = "deferred (#51): long width -- Windows LLP64 vs Linux/macOS LP64; long/long long collapsed"]
+fn long_width_per_target() {
+    let _ = jit_fixture_exit("deferred_long_width.c");
+    panic!("(#51) per-target long width unimplemented; Windows-side fixture run is pending");
+}
+
+// ---- PE/x64 struct fp-call (#50) ----
+//
+// Same reasoning as #51: the bug only fires on PE/x64. The
+// fixture passes on JIT today; panic so the issue stays in
+// the --ignored failure list.
+#[test]
+#[ignore = "deferred (#50): function-pointer call through struct field returns wrong on PE/x64"]
+fn struct_fp_call_per_target() {
+    let _ = jit_fixture_exit("deferred_struct_fp_call.c");
+    panic!("(#50) PE/x64 struct fp-call repro pending; JIT lane passes the fixture in isolation");
+}

@@ -275,6 +275,27 @@ impl Lexer {
             } else if c.is_ascii_digit() {
                 let int_start = self.pos - 1;
                 let mut val = (c as u8 - b'0') as i64;
+                // Octal: a leading `0` followed by an octal digit
+                // means the literal is base-8 (C99 6.4.4.1: `0644`
+                // is `420`). `0` followed by `x`/`X` is hex; that
+                // branch is below. A bare `0` keeps `val == 0`.
+                if val == 0
+                    && self.pos < self.src.len()
+                    && (b'0'..=b'7').contains(&self.src[self.pos])
+                {
+                    while self.pos < self.src.len() && (b'0'..=b'7').contains(&self.src[self.pos]) {
+                        val = val * 8 + (self.src[self.pos] - b'0') as i64;
+                        self.pos += 1;
+                    }
+                    while self.pos < self.src.len()
+                        && matches!(self.src[self.pos], b'u' | b'U' | b'l' | b'L')
+                    {
+                        self.pos += 1;
+                    }
+                    self.ival = val;
+                    self.tk = Token::Num as i64;
+                    return Ok(());
+                }
                 if val == 0
                     && self.pos < self.src.len()
                     && (self.src[self.pos] as char == 'x' || self.src[self.pos] as char == 'X')

@@ -306,6 +306,21 @@ pub struct Compiler {
     /// each CodeReloc's `target_bc_pc` and the matching
     /// data-segment bytes once every body has been parsed.
     code_reloc_sym_idx: Vec<usize>,
+    /// Per-libc-symbol trampoline registry. When source code
+    /// reaches for the *address* of a `Token::Sys` binding --
+    /// either bare (`fp = lstat;`) or in a static initializer
+    /// (sqlite's `aSyscall[]` vtable) -- c5 has no compile-time
+    /// libc address to fold in. Instead we synthesize a tiny
+    /// c5 function that re-pushes its parameters and re-dispatches
+    /// through `Op::JsrExt`. Each entry maps `sys_sym_idx` to a
+    /// fresh synthetic-symbol idx whose `.val` carries the
+    /// trampoline's `bc_pc`; the existing `apply_fn_call_fixups`
+    /// machinery then patches every recorded data slot or
+    /// `Imm` operand to `CODE_BASE + bc_pc`. Trampolines are
+    /// emitted in [`Self::emit_sys_trampolines`] after every
+    /// real function body lands so they never split a caller
+    /// mid-emission.
+    sys_trampoline_sym: alloc::collections::BTreeMap<usize, usize>,
 }
 
 impl Compiler {
@@ -433,6 +448,7 @@ impl Compiler {
             current_function_name: String::new(),
             fn_call_fixups: Vec::new(),
             code_reloc_sym_idx: Vec::new(),
+            sys_trampoline_sym: alloc::collections::BTreeMap::new(),
             last_array_decay_size: 0,
         }
     }
@@ -1078,11 +1094,138 @@ impl Compiler {
         Ok(())
     }
 
+    /// Look up (or lazily allocate) the synthetic-symbol idx that
+    /// names the Sys-binding's per-call trampoline. Two clients
+    /// reach for this:
+    ///
+    /// * Static initializers that take the address of a libc fn
+    ///   (sqlite's `aSyscall[7].pCurrent = fcntl`-style table).
+    /// * Bare expression-position references (`fp = readlink;`).
+    ///
+    /// Both want a callable c5 function-pointer value with the
+    /// same call shape as the libc fn. We synthesize it lazily
+    /// in [`Self::emit_sys_trampolines`]; here we only ensure a
+    /// stable symbol exists that downstream fixups can reference.
+    fn ensure_sys_trampoline_sym(&mut self, sys_sym_idx: usize) -> usize {
+        if let Some(&idx) = self.sys_trampoline_sym.get(&sys_sym_idx) {
+            return idx;
+        }
+        let name = alloc::format!("__c5_sys_trampoline_{sys_sym_idx}");
+        let hash = lexer::hash_name(name.as_bytes());
+        let sym = crate::c5::symbol::Symbol {
+            name,
+            token: Token::Id as i64,
+            class: Token::Fun as i64,
+            type_: self.symbols[sys_sym_idx].type_,
+            params: self.symbols[sys_sym_idx].params.clone(),
+            is_variadic: self.symbols[sys_sym_idx].is_variadic,
+            val: 0,
+            ..Default::default()
+        };
+        let idx = self.symbols.len();
+        self.symbols.push(sym);
+        // SymbolIndex must stay in sync with `symbols` -- even
+        // for synthetic names that real source code can't reach
+        // for. Without this the next user identifier the lexer
+        // tries to register lands at a stale `idx` and chains
+        // get crossed (and unrelated identifiers vanish). The
+        // synthetic name is uniquely numbered so it can't shadow
+        // anything user-visible.
+        self.symbol_index.record(hash);
+        self.sys_trampoline_sym.insert(sys_sym_idx, idx);
+        idx
+    }
+
+    /// Emit the body of every requested Sys trampoline. Called
+    /// after every real function body has been parsed -- so the
+    /// emitted bytecode lands at the tail of `text` and never
+    /// splits a caller mid-emission. Each trampoline is the
+    /// shortest possible "re-push args, JsrExt, return" sequence:
+    ///
+    /// ```text
+    /// Ent 0
+    /// Lea 2  ; first arg slot
+    /// Li
+    /// Psh
+    /// Lea 3  ; second arg slot
+    /// Li
+    /// Psh
+    /// ...    ; one more pair per declared param
+    /// JsrExt <binding-idx>
+    /// Adj N  ; only if N > 0
+    /// Lev
+    /// ```
+    ///
+    /// Variadic libc fns lose anything beyond their declared
+    /// fixed prefix -- a trampoline can only forward what its
+    /// signature tells it to push. The two in-the-wild callers
+    /// (sqlite's `aSyscall[]` slots for `fcntl` and `ioctl`) work
+    /// because the cast at the use site lines up with the fixed
+    /// prefix the trampoline does forward.
+    fn emit_sys_trampolines(&mut self) {
+        let entries: alloc::vec::Vec<(usize, usize)> = self
+            .sys_trampoline_sym
+            .iter()
+            .map(|(&sys_idx, &tr_idx)| (sys_idx, tr_idx))
+            .collect();
+        for (sys_idx, tr_idx) in entries {
+            let bc_pc = self.text.len();
+            self.symbols[tr_idx].val = bc_pc as i64;
+
+            let fixed_nargs = self.symbols[sys_idx].params.len();
+            let is_variadic = self.symbols[sys_idx].is_variadic;
+            // For variadic libc fns the binding-declared param count
+            // is only the fixed prefix; sqlite's `aSyscall[]` table
+            // (open/fcntl/ioctl) wants the trampoline to forward
+            // *one* of the variadic args so the caller's
+            // 3-argument cast lines up with what `JsrExt` packs onto
+            // the macOS arm64 variadic-args stack region. Callers
+            // that pass strictly the fixed prefix end up reading one
+            // junk slot from above their own pushes, but no
+            // in-the-wild caller does -- they all add at least one
+            // extra arg precisely to feed the variadic. The general
+            // case (forward N variadic args where N is unknown at
+            // compile time) needs a real va_args bridge -- tracked
+            // separately with the `c5 va_list` work.
+            let nargs = if is_variadic {
+                fixed_nargs + 1
+            } else {
+                fixed_nargs
+            };
+            let binding_idx = self.symbols[sys_idx].val;
+
+            self.emit_op(Op::Ent);
+            self.emit_val(0);
+            // c5 uses cdecl push order: the first declared arg ends
+            // up on top of the stack (lowest address) so JsrExt can
+            // load arg-K from `sp + K*16`. We re-emit the pushes
+            // right-to-left -- last declared arg first -- so the
+            // trampoline's own JsrExt sees the same shape its
+            // caller passed in.
+            for i in (0..nargs).rev() {
+                self.emit_lea((i + 2) as i64);
+                self.emit_op(Op::Li);
+                self.emit_op(Op::Psh);
+            }
+            self.emit_op(Op::JsrExt);
+            self.emit_val(binding_idx);
+            if nargs > 0 {
+                self.emit_op(Op::Adj);
+                self.emit_val(nargs as i64);
+            }
+            self.emit_op(Op::Lev);
+        }
+    }
+
     pub fn compile(mut self) -> Result<Program, C5Error> {
         if let Some(e) = self.deferred_error.take() {
             return Err(e);
         }
         self.run_compile()?;
+        // Trampolines must land before fixups so their bc_pcs are
+        // resolved when `apply_fn_call_fixups` walks the recorded
+        // operands and `target_bc_pc` slots.
+        self.emit_sys_trampolines();
         self.apply_fn_call_fixups()?;
         // `main` is optional today: shared-library output
         // (`OutputKind::SharedLibrary`) doesn't need an entry
@@ -1788,15 +1931,25 @@ impl Compiler {
                 // keeps the type-check loose-but-not-wrong.
                 self.ty = Ty::Int as i64 + Ty::Ptr as i64;
             } else if self.symbols[id_idx].class == Token::Sys as i64 {
-                // Bare libc reference -- `fp = dlsym;`. Without a
-                // per-Sys trampoline the value can't actually be
-                // called indirectly; emit zero and trust the
-                // program to patch the slot before use (sqlite's
-                // UnixOSData VFS init is the motivating shape).
-                // Tracked centrally; per-symbol warnings spam the
-                // build output without adding info, so we stay
-                // silent here.
-                self.emit_imm(0);
+                // Bare libc reference -- `fp = readlink;`. We can't
+                // fold in the real GOT/IAT address at compile time,
+                // so we point the value at a per-Sys trampoline (a
+                // tiny synthetic c5 function that re-dispatches
+                // through `Op::JsrExt`). `apply_fn_call_fixups`
+                // then patches this `Imm` operand to
+                // `CODE_BASE + trampoline_pc` once
+                // [`Self::emit_sys_trampolines`] has placed the
+                // trampolines at the tail of `text`. The
+                // accompanying `code_imm_positions` entry tells the
+                // codegen this Imm carries a code pointer so it
+                // emits the right ADRP/ADD (or RIP-relative LEA)
+                // sequence.
+                let tr_idx = self.ensure_sys_trampoline_sym(id_idx);
+                self.emit_op(Op::Imm);
+                let operand_pc = self.text.len();
+                self.fn_call_fixups.push((operand_pc, tr_idx));
+                self.code_imm_positions.push(operand_pc);
+                self.emit_val(CODE_BASE as i64);
                 self.ty = Ty::Int as i64 + Ty::Ptr as i64;
             } else {
                 if self.symbols[id_idx].class == Token::Loc as i64 {

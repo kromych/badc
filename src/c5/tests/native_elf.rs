@@ -267,6 +267,8 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("bitfields.c", 0),
     ("static_locals.c", 0),
     ("large_stack_frame.c", 42),
+    ("octal_literal.c", 42),
+    ("sys_addr_in_static_init.c", 42),
     ("libc_basic.c", 0),
     ("memset_mcmp.c", 42),
     ("memcpy_basic.c", 'A' as i32),

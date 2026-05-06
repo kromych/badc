@@ -306,15 +306,20 @@ impl Compiler {
             if class == Token::Sys as i64 {
                 // Address of a libc binding in a static initializer.
                 // The real address lives in the loader's GOT/IAT and
-                // isn't known at compile time; the proper fix is a
-                // per-Sys trampoline whose code-pc gets a CodeReloc
-                // into the data slot. Until that lands, emit zero
-                // and rely on the program (e.g., sqlite's UnixOSData
-                // init) to patch the slot before first use. Tracked
-                // centrally; per-symbol warnings just spam the build
-                // output, so we stay silent here.
+                // can't be folded in at compile time, so we route the
+                // slot through a per-Sys trampoline (a tiny synthetic
+                // c5 function that re-pushes its declared args and
+                // re-dispatches via `Op::JsrExt`). The CodeReloc
+                // points at the trampoline's synthetic symbol; its
+                // `.val` holds the trampoline's `bc_pc` once
+                // [`Compiler::emit_sys_trampolines`] runs in the
+                // post-parse fixup pass. From the call site's view
+                // -- e.g., sqlite reading `aSyscall[7].pCurrent`
+                // through an `(int(*)(...))` cast and invoking it --
+                // it's an ordinary function pointer.
+                let tr_idx = self.ensure_sys_trampoline_sym(idx);
                 self.next()?;
-                return Ok((0, InitElemReloc::None));
+                return Ok((0, InitElemReloc::Code(tr_idx)));
             }
             if class == Token::Glo as i64 {
                 // Bare global identifier in a static initializer.

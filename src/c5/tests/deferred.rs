@@ -140,8 +140,11 @@ fn optimizer_aggregates_minimal_repro_pending() {
 // this directly because `sizeof(size_t) == 4` is the broken
 // state on every host.
 #[test]
-#[ignore = "deferred (#52): size_t / ssize_t / time_t typedefs left at int (4 bytes) post-M31"]
-fn width_typedefs_truncated_to_int() {
+fn width_typedefs_are_pointer_wide() {
+    // #52 fixed: `<stddef.h>`, `<sys/types.h>` and `<time.h>`
+    // now alias the byte-counting typedefs to `long`, so
+    // `sizeof(size_t)` etc. return 8 on 64-bit hosts. Test
+    // stays around as a regression marker.
     let exit = jit_fixture_exit("deferred_width_typedefs.c");
     assert_eq!(
         exit, 0,

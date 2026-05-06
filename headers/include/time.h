@@ -41,8 +41,13 @@ struct tm {
     char *tm_zone;
 };
 
-typedef int time_t;
-typedef int clock_t;
+// `time_t` and `clock_t` are 8-byte signed counts everywhere
+// 64-bit (Linux glibc, macOS Darwin, Windows UCRT after Y2038
+// transitioned everything to `long long`). Storing them as
+// `int` means values past 2038 wrap silently; programs that
+// `time(NULL)` and arithmetic on the result lose 4 bytes.
+typedef long time_t;
+typedef long clock_t;
 
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")

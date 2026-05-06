@@ -1,35 +1,38 @@
 // sys/types.h -- POSIX-style fundamental scalar typedefs.
 //
-// All collapse to plain `int` in c5 (every integer is the 64-bit
-// machine word). Real libc has separate widths per type; programs
-// that pass these through libc bindings get the right semantics
-// because the underlying syscall reads only the byte range it
-// cares about.
+// Width-sensitive types (`ssize_t`, `off_t`, byte counts) are
+// pointer-wide so libc routines that take them through their
+// natural register slot don't see truncation -- e.g.
+// `read(fd, buf, BIG)` was silently passing a 4-byte length
+// before #52 lifted these to `long`. Smaller scalar types
+// (uid_t, mode_t, ...) keep `int` since their on-disk shape is
+// 4 bytes everywhere and their c5-side stack slot is 8 bytes
+// either way.
 #ifndef _C5_SYS_TYPES_H
 #define _C5_SYS_TYPES_H
 
-typedef int ssize_t;
-typedef int off_t;
-typedef int off64_t;
-typedef int loff_t;
+typedef long ssize_t;
+typedef long off_t;
+typedef long off64_t;
+typedef long loff_t;
 typedef int pid_t;
 typedef int uid_t;
 typedef int gid_t;
 typedef int mode_t;
 typedef int dev_t;
-typedef int ino_t;
-typedef int ino64_t;
+typedef long ino_t;
+typedef long ino64_t;
 typedef int nlink_t;
 typedef int blksize_t;
-typedef int blkcnt_t;
-typedef int blkcnt64_t;
+typedef long blkcnt_t;
+typedef long blkcnt64_t;
 typedef int id_t;
 typedef int useconds_t;
 typedef int suseconds_t;
 typedef int clockid_t;
 typedef int timer_id_t;
-typedef int fsblkcnt_t;
-typedef int fsfilcnt_t;
+typedef long fsblkcnt_t;
+typedef long fsfilcnt_t;
 typedef int socklen_t;
 typedef int key_t;
 

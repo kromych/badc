@@ -252,6 +252,23 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("struct_by_value_param.c", 0),
     // Struct returned by value via the hidden out-pointer ABI.
     ("struct_by_value_return.c", 0),
+    // Unsigned-integer comparisons: pin that comparing a u32 / u64 /
+    // u8 against a value with the high bit set uses unsigned
+    // semantics (the dialect emits Op::Ult/Ugt/Ule/Uge for those
+    // operands and reaches them through every backend).
+    ("unsigned_compare.c", 0),
+    // `static const unsigned char arr[]` with 1-byte stride. The
+    // size_of_type / pointee scaling helpers strip the unsigned bit
+    // before classifying, so indexing scales by 1 not 8.
+    ("unsigned_char_array.c", 0),
+    // Compound assignment (`+=`, `-=`) on unsigned int / long /
+    // char: must NOT scale the RHS by element size (the
+    // `lhs_ty > Ty::Ptr` heuristic tripped on the unsigned bit).
+    ("unsigned_compound_assign.c", 0),
+    // Exhaustive coverage of integer ops across char/int/long
+    // widths and signed/unsigned. Catches regressions in the
+    // type-tag plumbing at one fixture.
+    ("integer_ops_exhaustive.c", 0),
     // `thread_local_*.c` aren't here -- the JIT path's host is
     // macOS arm64 in this repo, where TLS lowering isn't
     // implemented yet (Mach-O __thread_data + dyld

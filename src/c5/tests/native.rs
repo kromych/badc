@@ -444,6 +444,14 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     // at val=2).
     ("struct_by_value_param.c", 0),
     ("struct_by_value_return.c", 0),
+    // Unsigned-integer comparisons across char / int / long widths.
+    ("unsigned_compare.c", 0),
+    // Static const unsigned char array indexed with 1-byte stride.
+    ("unsigned_char_array.c", 0),
+    // `+=` / `-=` on unsigned lvalues -- no pointer-style scaling.
+    ("unsigned_compound_assign.c", 0),
+    // Exhaustive integer ops across widths + signedness.
+    ("integer_ops_exhaustive.c", 0),
 ];
 
 /// Build a fixture, sign it, run it with the given args, and return

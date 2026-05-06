@@ -1,7 +1,7 @@
 // DEFERRED: mixed signed / unsigned arithmetic doesn't promote to
 // a common unsigned type.
 //
-// C99 §6.3.1.8 says: when both operands are integers and one is
+// C99 sec 6.3.1.8 says: when both operands are integers and one is
 // unsigned (with rank >= the signed operand's), the signed
 // operand is converted to the unsigned type. So
 // `(int)-1 / (unsigned int)2` is computed as

@@ -280,17 +280,25 @@ impl Lexer {
                     && (self.src[self.pos] as char == 'x' || self.src[self.pos] as char == 'X')
                 {
                     self.pos += 1;
+                    // Accumulate via wrapping_mul / wrapping_add so a
+                    // hex literal that fills the full 64-bit range
+                    // (e.g. `0xFFFFFFFFFFFFFFFEul`) doesn't trip
+                    // debug-build overflow detection. The value is
+                    // stored as i64 but interpreted bit-for-bit;
+                    // wrap-on-overflow is the right shape for
+                    // "build a 64-bit pattern digit-by-digit."
                     while self.pos < self.src.len() {
                         let nc = self.src[self.pos] as char;
-                        if nc.is_ascii_digit() {
-                            val = val * 16 + (nc as u8 - b'0') as i64;
+                        let digit = if nc.is_ascii_digit() {
+                            (nc as u8 - b'0') as i64
                         } else if ('a'..='f').contains(&nc) {
-                            val = val * 16 + (nc as u8 - b'a' + 10) as i64;
+                            (nc as u8 - b'a' + 10) as i64
                         } else if ('A'..='F').contains(&nc) {
-                            val = val * 16 + (nc as u8 - b'A' + 10) as i64;
+                            (nc as u8 - b'A' + 10) as i64
                         } else {
                             break;
-                        }
+                        };
+                        val = val.wrapping_mul(16).wrapping_add(digit);
                         self.pos += 1;
                     }
                     // Hex literals can carry the standard integer suffix

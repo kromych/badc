@@ -87,7 +87,7 @@ fn unsigned_divide_and_modulo_are_signed() {
 #[test]
 #[ignore = "deferred: signed -> unsigned promotion in mixed expressions"]
 fn mixed_signed_unsigned_no_promotion() {
-    // C99 §6.3.1.8 promotes the signed operand to the unsigned
+    // C99 sec 6.3.1.8 promotes the signed operand to the unsigned
     // common type. Today the dialect picks the op based on the
     // operator (signed for arithmetic; mixed-sensitive for
     // compares) without converting.

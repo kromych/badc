@@ -16,7 +16,7 @@ int main() {
     line_b = __LINE__;
     if (line_b - line_a != 1) return 1;
 
-    // __STDC__ is the constant 1 per C99 §6.10.8.
+    // __STDC__ is the constant 1 per C99 sec 6.10.8.
     if (__STDC__ != 1) return 2;
 
     // __DATE__ is "Mmm dd yyyy" (11 characters). The space separator

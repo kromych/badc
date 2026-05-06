@@ -200,7 +200,7 @@ impl Preprocessor {
             format!("\"{crate_version}\""),
         );
         macros.insert("__BADC_TARGET__".to_string(), format!("\"{target_spec}\""));
-        // Standard predefines (C99 §6.10.8). c5 honours all of these
+        // Standard predefines (C99 sec 6.10.8). c5 honours all of these
         // except `__STDC_HOSTED__` (we don't expose a freestanding /
         // hosted distinction) and `__STDC_VERSION__` (the dialect is
         // a c4-shaped subset, not an implementation of any specific
@@ -289,13 +289,13 @@ impl Preprocessor {
     /// about; the top-level call uses `"<source>"`, `#include`'d
     /// files use the header name (`"stdio.h"`).
     fn process_named(&mut self, source: &str, filename: &str) -> Result<String, C5Error> {
-        // c99 §5.1.1.2 phase 2: every `\\\n` joins lines. We do this
+        // c99 sec 5.1.1.2 phase 2: every `\\\n` joins lines. We do this
         // up-front so the line-by-line preprocessor never sees a
         // continuation. Line counts are preserved by emitting blank
         // lines for each continuation consumed, so error messages
         // (and `__LINE__`) stay grounded in the original source.
         let unfolded = unfold_line_continuations(source);
-        // c99 §5.1.1.2 phase 3: remove comments. Done before macro
+        // c99 sec 5.1.1.2 phase 3: remove comments. Done before macro
         // substitution so a `#define X 0 /* note */` body doesn't
         // emit a stray `*/` into a surrounding source comment when
         // X is referenced from inside that comment. SQLite is the
@@ -474,7 +474,7 @@ impl Preprocessor {
                         }
                     }
                     Directive::Error(message) => {
-                        // C99 §6.10.5: `#error` produces a compile-time
+                        // C99 sec 6.10.5: `#error` produces a compile-time
                         // diagnostic. The text after the directive name,
                         // up to the newline, is the diagnostic message;
                         // we surface it verbatim through the standard
@@ -576,7 +576,7 @@ impl Preprocessor {
                     i += 1;
                 }
                 let ident = &line[start..i];
-                // C99 §6.10.8 dynamic predefines -- their expansion
+                // C99 sec 6.10.8 dynamic predefines -- their expansion
                 // depends on the current line / file, so they sit
                 // outside the static macro table.
                 if ident == "__LINE__" {
@@ -1175,7 +1175,7 @@ enum Directive<'a> {
     Endif,
     Pragma(&'a str),
     Include(&'a str),
-    /// `#error <message>` -- C99 §6.10.5. The diagnostic message is
+    /// `#error <message>` -- C99 sec 6.10.5. The diagnostic message is
     /// the literal text after `#error` up to the newline.
     Error(&'a str),
     Shebang,
@@ -1931,7 +1931,7 @@ impl<'a> IfExprParser<'a> {
         // Identifier -- look up in the macro table. Function-like
         // macros are skipped (they need an argument list which the
         // preprocessor evaluator doesn't simulate). Undefined names
-        // are 0 per c99 §6.10.1p4.
+        // are 0 per c99 sec 6.10.1p4.
         if let Some(value) = self.pp.macros.get(name) {
             // Strip a leading/trailing quote pair to detect strings.
             if value.starts_with('"') && value.ends_with('"') {

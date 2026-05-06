@@ -1337,7 +1337,7 @@ impl Compiler {
             self.ty = Ty::Ptr as i64;
         } else if self.lex.tk == Token::Sizeof as i64 {
             self.next()?;
-            // C99 §6.5.3.4: sizeof has two forms.
+            // C99 sec 6.5.3.4: sizeof has two forms.
             //   sizeof(<type>) -- parens required, parses a type name.
             //   sizeof <unary-expr> -- parens optional, parses an expr.
             // We disambiguate by peeking past `(` for a type-start

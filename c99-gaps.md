@@ -24,7 +24,7 @@ trying to compile mainstream open-source C. Severity 1
 (blocks specific idioms), 4 (workaround exists), 5 (nice
 to have).
 
-## §6.2 Concepts
+## sec 6.2 Concepts
 
 ### Linkage and storage classes
 - `extern` and `static` (file scope and function scope) --
@@ -62,7 +62,7 @@ to have).
   (the symbol's binding is overwritten on the second
   declaration).
 
-## §6.3 Conversions
+## sec 6.3 Conversions
 
 - Integer promotions, usual arithmetic conversions for
   scalars -- supported.
@@ -79,7 +79,7 @@ to have).
   through. `float` and `double` are real but `1.0f` doesn't
   promote to `double` in variadic calls. Severity: 3.
 
-## §6.4 Lexical elements
+## sec 6.4 Lexical elements
 
 ### Keywords / reserved words
 - Recognized: `char`, `else`, `enum`, `for`, `if`, `int`,
@@ -92,7 +92,7 @@ to have).
   The lexer consumes them at every declaration position
   with no semantic effect. Programs relying on
   const-correctness or inline expansion diverge silently
-  -- see the §6.7 type-specifier and §J notes for what
+  -- see the sec 6.7 type-specifier and sec J notes for what
   that means in practice.
 - Recognised with semantic effect: `signed` (changes
   `char` from unsigned 1-byte slot to int-promoted),
@@ -124,14 +124,14 @@ to have).
   total size = max(member size). Forward declarations,
   pointer-to-union, typedef-of-union, and union as a
   struct field all work. Bitfields inside a union are
-  still missing (those fall under §6.7.2.1). Severity:
+  still missing (those fall under sec 6.7.2.1). Severity:
   resolved for the common tagged-union pattern.
 - **Missing**: `_Complex`, `_Imaginary`. Severity 5.
 
 ### Identifiers
 - ASCII identifiers up to a generous internal limit --
   supported.
-- Universal character names (`А`) in identifiers --
+- Universal character names (`A`) in identifiers --
   **missing**. Severity: 5.
 
 ### Constants
@@ -174,7 +174,7 @@ to have).
   `headers/include/` set bundled with the binary; user
   search paths via `-I` aren't a CLI option. Severity: 3.
 
-## §6.5 Expressions
+## sec 6.5 Expressions
 
 ### Operators
 - Arithmetic, bitwise, logical, comparison, assignment,
@@ -204,7 +204,7 @@ to have).
 
 ### Struct/union member access
 - `.` and `->` for structs -- supported (M5/M6).
-- Unions -- **supported** (M26). See §6.4 keywords for
+- Unions -- **supported** (M26). See sec 6.4 keywords for
   layout details.
 - Bitfields -- **supported** (M27). `int x:N;` packs into
   shared 8-byte storage units; reads emit `Li; Shr; And`,
@@ -217,10 +217,10 @@ to have).
   semantics; in practice every sqlite-shaped use is a
   flag or small unsigned count, where the difference is
   unobservable. Bitfields can't be members of an array.
-- Bitfields -- **supported** (M27). See §6.4 keywords
+- Bitfields -- **supported** (M27). See sec 6.4 keywords
   for layout details.
 
-## §6.6 Constant expressions
+## sec 6.6 Constant expressions
 
 - Integer constants -- supported.
 - Address constants (e.g., `&global` in initializers) --
@@ -237,7 +237,7 @@ to have).
   (with optional unary `-`) and `&global` are accepted;
   `(int)(1.5 * 2)` etc. aren't.
 
-## §6.7 Declarations
+## sec 6.7 Declarations
 
 ### Type specifiers
 - `void` (recognized as an alias for `char`-shaped void
@@ -326,7 +326,7 @@ to have).
 ### typedef
 - **supported** (M23 + M23b). Function-pointer typedefs
   and the `(*Name)(args)` declarator shape are in.
-  See §6.4 keywords for the full list.
+  See sec 6.4 keywords for the full list.
 
 ### Tags / declarators
 - struct tags -- supported.
@@ -342,7 +342,7 @@ to have).
   forward declarations -- a feature few real codebases
   use, deferred.
 
-## §6.7.2.1 Structure / union specifiers
+## sec 6.7.2.1 Structure / union specifiers
 
 - Struct definitions, member access, struct-by-value
   parameters and return -- supported (M5-M9, with the
@@ -353,7 +353,7 @@ to have).
   Severity: 2 for cross-format binary compatibility, 3 for
   internal struct use.
 - Union -- **missing**. Severity: 2.
-- Bitfields -- **supported** (M27). See §6.4 keywords
+- Bitfields -- **supported** (M27). See sec 6.4 keywords
   for layout details.
 - Anonymous structs / unions -- **missing**. Severity: 4.
 - Forward struct declarations -- **supported** (M23).
@@ -364,7 +364,7 @@ to have).
   access on an opaque struct value still errors at the
   access site (the struct has no fields to look up).
 
-## §6.7.5 Declarators
+## sec 6.7.5 Declarators
 
 - Pointer types (`*`, `**`, ...) -- supported.
 - Function declarators with parameter list -- supported,
@@ -387,7 +387,7 @@ to have).
 - VLAs (`int a[n]`) -- **missing** (C99 specific).
   Severity: 4.
 
-## §6.7.7 Type names
+## sec 6.7.7 Type names
 
 - `<type-spec> <abstract-decl>` shape (`int *`,
   `struct Foo *`) -- supported in casts and `sizeof(...)`.
@@ -397,7 +397,7 @@ to have).
   field). Standalone abstract declarators in `sizeof`
   / casts (`(int(*)(int))ptr`) aren't yet supported.
 
-## §6.8 Statements and blocks
+## sec 6.8 Statements and blocks
 
 - Compound statements with locals at the top -- supported.
 - Local declarations interleaved with statements (C99
@@ -416,7 +416,7 @@ to have).
   (sqlite is pre-C99 and doesn't use this shape).
 - `restrict`-qualified locals -- **missing**.
 
-## §6.9 External definitions
+## sec 6.9 External definitions
 
 - Function definitions -- supported, with an optional
   `#pragma export(<name>)` directive (M15-M18) marking
@@ -427,7 +427,7 @@ to have).
   per `badc` invocation; no separate compilation /
   linking).
 
-## §6.10 Preprocessing directives
+## sec 6.10 Preprocessing directives
 
 - `#include` (`<...>` and `"..."`) -- supported.
 - `#define` of object-like macros, with replacement-list
@@ -465,9 +465,9 @@ to have).
   `\` and `"` escaped; `a ## b` token-pastes by trimming
   whitespace around the operator.
 - `__FILE__`, `__LINE__`, `__DATE__`, `__TIME__`,
-  `__STDC__` -- **supported** (M21). See §6.4 for details.
+  `__STDC__` -- **supported** (M21). See sec 6.4 for details.
 
-## §7 Library
+## sec 7 Library
 
 - Standard headers (`<stdio.h>`, `<stdlib.h>`,
   `<string.h>`, `<unistd.h>`, `<fcntl.h>`,
@@ -525,7 +525,7 @@ to have).
   unbundled libc functions like `strlen`) is reachable
   via `dlsym(dlopen(NULL, RTLD_NOW), "strlen")`.
 
-## §J Common implementation-defined behaviour
+## sec J Common implementation-defined behaviour
 (non-normative; included because it shapes user expectations)
 
 - Integer width / sign: `char` is 1-byte (unsigned by
@@ -538,7 +538,7 @@ to have).
   correctly through typed slots; transient register
   values from a single arithmetic op may not match the
   C standard's "value held at the slot's width" rule
-  until stored and reloaded (see §6.7 type specifiers).
+  until stored and reloaded (see sec 6.7 type specifiers).
 - `char` signedness: unsigned by default. `signed char`
   promotes to `int` so negative byte values load
   sign-extended (sqlite's LEMON-generated

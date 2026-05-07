@@ -39,59 +39,76 @@ trap 'rm -rf "${WORK}"' EXIT
 COMBINED="${WORK}/sqlite3shell_combined.c"
 cat "${SQLITE_DIR}/sqlite3.c" "${SQLITE_DIR}/shell.c" > "${COMBINED}"
 
-# The defines mirror what shell.c expects when compiled standalone.
-SHELL_BIN="${WORK}/sqlite3shell"
-"${BADC}" "${COMBINED}" -o "${SHELL_BIN}" \
-    -DSQLITE_OMIT_LOAD_EXTENSION \
-    -DSQLITE_THREADSAFE=0 \
-    -DSQLITE_DEFAULT_MEMSTATUS=0 \
-    -DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1 \
-    -DSQLITE_DQS=0 \
-    -DSQLITE_OMIT_DEPRECATED \
-    -DSQLITE_OMIT_PROGRESS_CALLBACK \
-    -DSQLITE_OMIT_SHARED_CACHE \
-    -DSQLITE_OMIT_AUTOINIT \
-    -DSQLITE_WITHOUT_ZONEMALLOC=1 \
-    -DSQLITE_ENABLE_LOCKING_STYLE=0
+build_shell() {
+    local out_path="$1"
+    shift
+    "${BADC}" "$@" "${COMBINED}" -o "${out_path}" \
+        -DSQLITE_OMIT_LOAD_EXTENSION \
+        -DSQLITE_THREADSAFE=0 \
+        -DSQLITE_DEFAULT_MEMSTATUS=0 \
+        -DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1 \
+        -DSQLITE_DQS=0 \
+        -DSQLITE_OMIT_DEPRECATED \
+        -DSQLITE_OMIT_PROGRESS_CALLBACK \
+        -DSQLITE_OMIT_SHARED_CACHE \
+        -DSQLITE_OMIT_AUTOINIT \
+        -DSQLITE_WITHOUT_ZONEMALLOC=1 \
+        -DSQLITE_ENABLE_LOCKING_STYLE=0
+}
 
-fail=0
+run_scenarios() {
+    local label="$1"
+    local shell_bin="$2"
+    local fail=0
 
-# ---- in-memory smoke ----
-INMEM_OUT="$(printf "CREATE TABLE t(x INTEGER, y TEXT);\nINSERT INTO t VALUES(-7,'neg'),(1,'hello'),(2,'world');\nSELECT * FROM t;\nSELECT count(*),sum(x),avg(x),min(x),max(x) FROM t;\n.quit\n" | "${SHELL_BIN}")"
-INMEM_EXPECT="-7|neg
+    # ---- in-memory smoke ----
+    local inmem_out inmem_expect
+    inmem_out="$(printf "CREATE TABLE t(x INTEGER, y TEXT);\nINSERT INTO t VALUES(-7,'neg'),(1,'hello'),(2,'world');\nSELECT * FROM t;\nSELECT count(*),sum(x),avg(x),min(x),max(x) FROM t;\n.quit\n" | "${shell_bin}")"
+    inmem_expect="-7|neg
 1|hello
 2|world
 3|-4|0.2|-7|2"
-if [ "${INMEM_OUT}" != "${INMEM_EXPECT}" ]; then
-    echo "smoke FAIL: in-memory output mismatch" >&2
-    diff <(echo "${INMEM_EXPECT}") <(echo "${INMEM_OUT}") >&2 || true
-    fail=1
-fi
+    if [ "${inmem_out}" != "${inmem_expect}" ]; then
+        echo "smoke FAIL [${label}]: in-memory output mismatch" >&2
+        diff <(echo "${inmem_expect}") <(echo "${inmem_out}") >&2 || true
+        fail=1
+    fi
 
-# ---- file-backed smoke ----
-DB="${WORK}/test.db"
-FILE_OUT="$(printf ".open ${DB}\nCREATE TABLE t(x INTEGER, y TEXT);\nINSERT INTO t VALUES(-7,'neg'),(1,'hello'),(2,'world');\n.quit\n" | "${SHELL_BIN}")"
-if [ -n "${FILE_OUT}" ]; then
-    echo "smoke FAIL: file-backed write produced unexpected output: ${FILE_OUT}" >&2
-    fail=1
-fi
-if [ ! -s "${DB}" ]; then
-    echo "smoke FAIL: file-backed write left empty db at ${DB}" >&2
-    fail=1
-fi
+    # ---- file-backed smoke ----
+    local db file_out reopen_out reopen_expect
+    db="${WORK}/${label}.db"
+    rm -f "${db}"
+    file_out="$(printf ".open ${db}\nCREATE TABLE t(x INTEGER, y TEXT);\nINSERT INTO t VALUES(-7,'neg'),(1,'hello'),(2,'world');\n.quit\n" | "${shell_bin}")"
+    if [ -n "${file_out}" ]; then
+        echo "smoke FAIL [${label}]: file-backed write produced unexpected output: ${file_out}" >&2
+        fail=1
+    fi
+    if [ ! -s "${db}" ]; then
+        echo "smoke FAIL [${label}]: file-backed write left empty db at ${db}" >&2
+        fail=1
+    fi
 
-# Reopen and read back -- proves the rows really persisted.
-REOPEN_OUT="$(printf ".open ${DB}\nSELECT * FROM t ORDER BY x;\n.quit\n" | "${SHELL_BIN}")"
-REOPEN_EXPECT="-7|neg
+    # Reopen and read back -- proves the rows really persisted.
+    reopen_out="$(printf ".open ${db}\nSELECT * FROM t ORDER BY x;\n.quit\n" | "${shell_bin}")"
+    reopen_expect="-7|neg
 1|hello
 2|world"
-if [ "${REOPEN_OUT}" != "${REOPEN_EXPECT}" ]; then
-    echo "smoke FAIL: file-backed reopen output mismatch" >&2
-    diff <(echo "${REOPEN_EXPECT}") <(echo "${REOPEN_OUT}") >&2 || true
-    fail=1
-fi
+    if [ "${reopen_out}" != "${reopen_expect}" ]; then
+        echo "smoke FAIL [${label}]: file-backed reopen output mismatch" >&2
+        diff <(echo "${reopen_expect}") <(echo "${reopen_out}") >&2 || true
+        fail=1
+    fi
 
-if [ "${fail}" -eq 0 ]; then
-    echo "smoke OK: in-memory + file-backed both green"
-fi
-exit "${fail}"
+    if [ "${fail}" -eq 0 ]; then
+        echo "smoke OK [${label}]: in-memory + file-backed both green"
+    fi
+    return "${fail}"
+}
+
+build_shell "${WORK}/sqlite3shell"      || { echo "smoke FAIL: build (no -O) failed" >&2; exit 1; }
+build_shell "${WORK}/sqlite3shell.opt" -O || { echo "smoke FAIL: build (-O) failed" >&2; exit 1; }
+
+overall=0
+run_scenarios "no-O" "${WORK}/sqlite3shell" || overall=1
+run_scenarios "-O"   "${WORK}/sqlite3shell.opt" || overall=1
+exit "${overall}"

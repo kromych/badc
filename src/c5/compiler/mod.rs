@@ -2284,19 +2284,28 @@ impl Compiler {
                         if mask != -1 {
                             self.emit_binop_with_imm(Op::And, mask);
                         }
-                    } else if target_size < source_size
-                        && (target_size == 1 || target_size == 2 || target_size == 4)
-                    {
-                        // Signed narrowing: shift-pair to mask + sign-extend
-                        // to the target storage width. Only emitted when
-                        // we're actually narrowing -- a (i32) cast of a
-                        // 4-byte source is a no-op the value already
-                        // satisfies, and emitting the shifts there would
-                        // mask out perfectly good high bits in code that
-                        // had widened earlier.
-                        let bits = 64i64 - (target_size as i64) * 8;
-                        self.emit_binop_with_imm(Op::Shl, bits);
-                        self.emit_binop_with_imm(Op::Shr, bits);
+                    } else if target_size == 1 || target_size == 2 || target_size == 4 {
+                        // Signed cast: shift-pair to mask + sign-extend
+                        // to the target storage width. Fires when:
+                        //  * the cast genuinely narrows (target_size <
+                        //    source_size) -- e.g. `(signed char)int_val`,
+                        //  * source is unsigned at the same width as the
+                        //    signed target -- the accumulator is zero-
+                        //    extended, but `(signed char)(unsigned char)`
+                        //    has to flip values >= 0x80 to negative per
+                        //    C99 6.3.1.3.
+                        // Skipped for same-width signed-to-signed casts
+                        // (already correctly sign-extended in the
+                        //  accumulator) and widening signed casts (the
+                        //  source-side load did the extension).
+                        let source_is_unsigned = is_unsigned_ty(self.ty);
+                        let needs_extend = target_size < source_size
+                            || (target_size == source_size && source_is_unsigned);
+                        if needs_extend {
+                            let bits = 64i64 - (target_size as i64) * 8;
+                            self.emit_binop_with_imm(Op::Shl, bits);
+                            self.emit_binop_with_imm(Op::Shr, bits);
+                        }
                     }
                 }
                 self.ty = t;

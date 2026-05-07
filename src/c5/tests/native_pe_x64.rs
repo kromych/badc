@@ -405,6 +405,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("octal_literal.c", 42),
     ("short_types.c", 42),
     ("long_long_distinct.c", 0),
+    ("signed_cast_extends.c", 0),
     ("fn_ptr_explicit_deref.c", 42),
     // libc_basic.c regresses at `atoi("-17") != -17` (return
     // 21) on both PE/x64 and PE/aarch64; same wine arm64 sign

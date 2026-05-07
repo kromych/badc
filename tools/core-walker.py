@@ -238,6 +238,12 @@ def main() -> int:
         default=0x1777,
         help="file offset where c5-emitted code begins (default 0x1777)",
     )
+    ap.add_argument(
+        "--code-end",
+        type=lambda x: int(x, 0),
+        default=0x3c6e0c,
+        help="file offset where the code segment ends. Values past this are data, not code, so the dump-asm lookup returns spurious last-line matches if we don't gate on it. Default matches the sqlite3 build's R+E LOAD range; check `readelf -l <bin>` for your binary.",
+    )
     ap.add_argument("--max-depth", type=int, default=64)
     ap.add_argument(
         "--dump-around-rbp",
@@ -250,9 +256,19 @@ def main() -> int:
         help="list every PT_LOAD segment in the core file with its vaddr range and exit. Useful for understanding where the stack and heap landed after a corruption.",
     )
     ap.add_argument(
+        "--dump-at",
+        type=lambda x: int(x, 0),
+        help="dump 16 8-byte slots starting at the given vaddr and exit. Useful for inspecting a specific frame's saved-rbp/saved-ret pair when the walker bailed out.",
+    )
+    ap.add_argument(
         "--scan-stack",
         action="store_true",
-        help="instead of walking the rbp chain, scan the stack page from rsp upward and print every 8-byte slot that looks like a code address. Use when the rbp chain dies early.",
+        help="instead of walking the rbp chain, scan from rsp upward and print every 8-byte slot that looks like a code address. Use when the rbp chain dies early.",
+    )
+    ap.add_argument(
+        "--scan-from",
+        type=lambda x: int(x, 0),
+        help="override the scan start address (defaults to rsp). Useful when rsp is in the emulator's alt-stack and the actual program stack is elsewhere -- e.g. point this at rbp to scan the real stack.",
     )
     ap.add_argument(
         "--scan-bytes",
@@ -281,6 +297,27 @@ def main() -> int:
         asm = parse_dump_asm(args.asm)
         print(f"# parsed {len(asm)} asm lines from {args.asm}")
 
+    if args.dump_at is not None:
+        print()
+        print(f"# memory at {args.dump_at:#x}")
+        for d in range(0, 128, 8):
+            addr = args.dump_at + d
+            slot = read_at(loads, raw, addr, 8)
+            if slot is None:
+                print(f"  {addr:>16x}: <unmapped>")
+                continue
+            (val,) = struct.unpack("<Q", slot)
+            tag = ""
+            file_off = val - args.load_base
+            if args.code_start <= file_off < args.code_end:
+                dump_off = file_off - args.code_start
+                if asm is not None and dump_off >= 0:
+                    entry = find_asm_for(asm, dump_off)
+                    if entry is not None:
+                        tag = f"  -> bc={entry.bc_pc} {entry.op}"
+            print(f"  {addr:>16x}: {val:#018x}{tag}")
+        return 0
+
     if args.list_segments:
         print()
         print(f"# core segments")
@@ -304,7 +341,7 @@ def main() -> int:
             (val,) = struct.unpack("<Q", slot)
             tag = ""
             file_off = val - args.load_base
-            if 0 < file_off < (1 << 28):
+            if args.code_start <= file_off < args.code_end:
                 dump_off = file_off - args.code_start
                 if asm is not None and dump_off >= 0:
                     entry = find_asm_for(asm, dump_off)
@@ -317,23 +354,24 @@ def main() -> int:
 
     if args.scan_stack:
         # Backup mode: ignore the rbp chain entirely and walk every
-        # 8-byte slot from rsp upward, reporting any value that looks
-        # like a code address. Useful when the rbp chain is broken
-        # (the crashing function smashed its saved frame pointer, or
-        # the codegen never set rbp). Bounds the scan so we don't
-        # walk an entire 8MB stack.
+        # 8-byte slot, reporting any value that looks like a code
+        # address. Useful when the rbp chain is broken (the crashing
+        # function smashed its saved frame pointer, or the codegen
+        # never set rbp). Bounds the scan so we don't walk an entire
+        # 8MB stack.
+        scan_from = args.scan_from if args.scan_from is not None else pr.rsp
         print()
-        print(f"# scanning stack from rsp={pr.rsp:#x} for code addresses")
+        print(f"# scanning {args.scan_bytes} bytes from {scan_from:#x} for code addresses")
         scanned = 0
         printed = 0
-        addr = pr.rsp
+        addr = scan_from
         while scanned < args.scan_bytes and printed < args.scan_max:
             slot = read_at(loads, raw, addr, 8)
             if slot is None:
                 break
             (val,) = struct.unpack("<Q", slot)
             file_off = val - args.load_base
-            if 0 < file_off < (1 << 28):
+            if args.code_start <= file_off < args.code_end:
                 dump_off = file_off - args.code_start
                 line = ""
                 if asm is not None and dump_off >= 0:

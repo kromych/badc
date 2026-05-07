@@ -42,16 +42,42 @@
 // `8 + p`, then Li reads `*(8 + p)`. If p is NULL the read lands
 // at address 8 -- which matches valgrind's report exactly.
 //
-// So the *direct* faulting condition is "C source dereferences a
-// NULL struct-pointer field." Sqlite's own source is well-tested,
-// so the more likely story is: under -O some upstream control flow
-// or value tracking goes wrong and we reach the deref with the
-// pointer field still NULL when in the no-O lane the same path
-// either branches around it or the field has been initialised by
-// then. With BADC_RSP_CHECK=1 (the new prologue/epilogue runtime
-// stack-pointer guard) I confirmed rsp and rbp stay sane all the
-// way up the call chain -- the corruption is *value*-level, not
-// stack-level.
+// ## The actual cause: saved-rbp corruption
+//
+// Walking a Linux x64 core dump with `tools/core-walker.py`:
+//
+//   #            rbp        ret_addr   resolved
+//   0   7ffffffbb240               0   (rip=0 -- jumped to NULL)
+//   1   7ffffffbb2f0      0x53a310   bc=325923 Jsr 318133
+//   2         7ff618      0x524385   bc=302727 Jsr 304465
+//                ↑
+//                rbp is a *data-segment* address, not a stack
+//                address. Frame 1's saved-rbp slot at
+//                [0x7ffffffbb2f0+0] has been overwritten with
+//                a 64-bit value that lives in the c5 binary's
+//                RW data segment (file_offset 0x3ff618).
+//
+// Frame 1's [rbp+8] is also wrong: it holds 0x524385 = post-Jsr
+// PC for `bc=302727 Jsr 304465`, but the function that owns
+// frame 1 (= `bc=325765 Ent 5`) was actually called via one of
+// nine different `Jsr 325765` sites in `bc=302522`'s body, none
+// of which is bc=302727. So *both* the saved rbp and the saved
+// return address in frame 1's prologue slots have been clobbered
+// after the prologue ran but before the next call.
+//
+// The corruption mechanism is now concrete: somewhere up the
+// call chain, function H's body wrote past its local frame and
+// landed on the saved-rbp slot. H's epilogue then `pop rbp`
+// loaded the garbage into rbp, restoring caller G with rbp
+// pointing into the data segment. G eventually called F (frame
+// 1 here), and F's prologue dutifully `push rbp` saved that
+// garbage into F's [rbp+0] -- which is what we see in the core.
+//
+// `BADC_RSP_CHECK=1` doesn't fire because rsp stays valid the
+// whole time (the corruption is to a *saved* rbp, not the live
+// one), and at every epilogue the live rbp matches the live rsp
+// just fine -- the wrong value gets picked up only at the next
+// `pop rbp`, well after the guard has cleared.
 //
 // The c5-emitted bytecode for this sequence is identical with and
 // without `peephole_local_load` (the only difference is the fused
@@ -135,20 +161,26 @@
 // the deferred-#46 development branch).
 //
 // Likely next steps to actually fix:
-//   1. Extract a c5-only repro via `creduce` (multi-hour run).
-//   2. Once the repro is small (<200 lines), bisect via
-//      `BADC_OPT_FUNC_RANGE` until the buggy function is named.
-//   3. Inspect the codegen difference between fused and unfused
-//      forms for that function -- the visible IR/regalloc is
-//      already known to match, so look at side-channels: data
-//      relocs, code relocs, pending_func_fixups, code_imm_positions.
-//   4. The optimizer drops `code_imm_positions` and falls back to
-//      the [CODE_BASE, CODE_BASE + text.len()) heuristic for
-//      function-pointer literals. If a regular int constant lands
-//      in that range it gets misclassified -- and the range shrinks
-//      by exactly the bytes the optimizer removes, which means the
-//      misclassification window is sensitive to which passes ran.
-//      Worth checking first.
+//   1. Add a runtime saved-rbp canary: at every prologue stamp a
+//      magic word at [rbp - K] for some out-of-frame K; at every
+//      epilogue check it. Or simpler: wrap every Si/Sc/Sw store
+//      in a runtime guard that traps if the destination overlaps
+//      [rbp+0..rbp+16] of any active frame. Either reproduces
+//      the corruption AT the corrupting site -- the function H
+//      that wrote past its local frame.
+//   2. Once H is named, look for an off-by-one in its frame-size
+//      computation: `Op::Ent N` reserves N 8-byte slots, but the
+//      regalloc analyzer's pool-save lives *below* those, so a
+//      Si to a Lea N where N happens to land at +0 from rbp
+//      would clobber the saved rbp. The optimizer's `local_load`
+//      pass shouldn't change frame sizes on its own, but it does
+//      shift PCs, and the codegen looks up per-function metadata
+//      by PC -- so a stale PC index could route a Si to the
+//      wrong frame slot.
+//   3. Cross-check by extracting a c5-only repro via `creduce`
+//      (multi-hour run). The predicate skeleton is in
+//      `/tmp/reduce/check.sh`. Use `tools/core-walker.py` to
+//      verify each reduction step keeps the saved-rbp clobber.
 //
 // `demos/sqlite3/smoke.sh` exercises the `-O` lane against the
 // in-memory and file-backed scenarios with simpler aggregates

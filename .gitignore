@@ -17,3 +17,10 @@ demos/sqlite3/*
 !demos/sqlite3/README.md
 hello
 sqlite3_main
+# Local crash artefacts (kept out of git but useful while working on
+# `tools/core-walker.py`).
+core
+core.*
+shell.x64.test
+shell.aarch64.test
+trigger.sql

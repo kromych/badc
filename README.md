@@ -311,3 +311,34 @@ through WINE as a cross-check against the native Windows runners
 A bare `cargo test` on a developer machine skips the WINE lane (so it
 doesn't shell out to wine for every PE fixture even on a wine-
 installed laptop); set `BADC_RUN_WINE=1` locally to run it.
+
+## Tools
+
+`tools/core-walker.py` walks the saved-rbp chain in a Linux ELF
+core dump and resolves every return address to the matching
+`[bc=N] OP` line in a `--dump-asm` listing. Useful when an
+optimized `-O` build crashes -- the source-line debug map is
+dropped at `-O`, but a non-PIE x64 binary lets us subtract the
+fixed `0x400000` load base from each saved return address and
+look the resulting file offset up in the dump. Modes:
+
+* default: walk the rbp chain, resolve each frame's saved
+  return address.
+* `--dump-around-rbp`: print the 16 8-byte slots around `rbp`.
+* `--scan-stack`: ignore the rbp chain, scan upward from `rsp`
+  for any 8-byte slot that looks like a code address, and
+  resolve each. Useful when stack corruption broke the rbp
+  chain -- the actual return addresses are usually still on the
+  stack, just no longer reachable through the saved-rbp links.
+* `--list-segments`: list every PT_LOAD in the core file with
+  its vaddr range. Useful for understanding where the stack and
+  the emulator's mappings ended up after a corruption.
+
+The "subtract the load base, look up in dump-asm" idea was
+suggested by [@kromych](https://github.com/kromych) while we were
+chasing a `-O`-only sqlite3 crash where every higher-level
+debugger path was blocked (orbstack's emulated x86_64 has no
+usable ptrace; lldb on macOS arm64 sees a different binary
+layout). It cuts straight through to "name the function that
+was running when we crashed" without needing a working debugger
+on the target.

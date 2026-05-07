@@ -2513,11 +2513,44 @@ impl Compiler {
                         self.emit_binop_with_imm(Op::Mul, elem_size);
                     }
                 }
+                // Floating-point lvalue (`double x; x *= 2.0;`) needs
+                // the FP variant of the binop, not the integer one.
+                // Without this, `x *= y` lowered to `Op::Mul` which
+                // multiplied the bit patterns of the two doubles as
+                // signed integers, producing a useless result. Surfaced
+                // as sqlite's `vdbe.c` `rB *= rA` (and `+=` / `-=`)
+                // returning 0 / Inf for any `INTEGER * REAL` expression
+                // -- which is why `avg(int_col * 1.0)` was wrong.
+                let lhs_is_fp = is_floating_scalar(lhs_ty);
                 let op = match binop {
-                    x if x == Token::AddOp as i64 => Op::Add,
-                    x if x == Token::SubOp as i64 => Op::Sub,
-                    x if x == Token::MulOp as i64 => Op::Mul,
-                    x if x == Token::DivOp as i64 => Op::Div,
+                    x if x == Token::AddOp as i64 => {
+                        if lhs_is_fp {
+                            Op::Fadd
+                        } else {
+                            Op::Add
+                        }
+                    }
+                    x if x == Token::SubOp as i64 => {
+                        if lhs_is_fp {
+                            Op::Fsub
+                        } else {
+                            Op::Sub
+                        }
+                    }
+                    x if x == Token::MulOp as i64 => {
+                        if lhs_is_fp {
+                            Op::Fmul
+                        } else {
+                            Op::Mul
+                        }
+                    }
+                    x if x == Token::DivOp as i64 => {
+                        if lhs_is_fp {
+                            Op::Fdiv
+                        } else {
+                            Op::Div
+                        }
+                    }
                     x if x == Token::ModOp as i64 => Op::Mod,
                     x if x == Token::AndOp as i64 => Op::And,
                     x if x == Token::OrOp as i64 => Op::Or,

@@ -106,17 +106,19 @@ run_scenarios() {
         fail=1
     fi
 
-    # ---- REAL column aggregates ----
-    # Direct REAL storage (no INTEGER -> REAL promotion via `*1.0`):
-    # exercises the FpDecode digit-pair writer for non-integer
-    # outputs. The `avg() of integer * 1.0` path goes through
-    # sqlite's Kahan-Babuska-Neumaier accumulator and isn't covered
-    # here -- it's still wrong in c5 (returns 0 instead of the
-    # actual mean), tracked as a separate float-arithmetic bug.
+    # ---- REAL column + INTEGER -> REAL promotion aggregates ----
+    # Direct REAL storage (no promotion): plain count/sum/avg/min/max
+    # over a REAL column. Then the `INTEGER * 1.0` promotion path
+    # which goes through sqlite's Kahan-Babuska-Neumaier accumulator
+    # -- this used to return 0 because c5's compound assignment
+    # (`rB *= rA` etc.) lowered to integer ops on the FP bit
+    # patterns. Now a real regression marker.
     local real_out real_expect
-    real_out="$(printf "CREATE TABLE r(x REAL);\nINSERT INTO r VALUES(1.5),(2.5),(3.5);\nSELECT count(*),sum(x),avg(x),min(x),max(x) FROM r;\nSELECT round(avg(x), 2) FROM r;\n.quit\n" | "${shell_bin}")"
+    real_out="$(printf "CREATE TABLE r(x REAL);\nINSERT INTO r VALUES(1.5),(2.5),(3.5);\nSELECT count(*),sum(x),avg(x),min(x),max(x) FROM r;\nSELECT round(avg(x), 2) FROM r;\nCREATE TABLE i(x INTEGER);\nINSERT INTO i VALUES(-7),(1),(2);\nSELECT sum(x*1.0),avg(x*1.0),total(x) FROM i;\nSELECT 1.0 + 2.0, 3.5 - 1.5, 2.5 * 4.0, 9.0 / 4.0;\n.quit\n" | "${shell_bin}")"
     real_expect="3|7.5|2.5|1.5|3.5
-2.5"
+2.5
+-4.0|-1.3333333333333333|-4.0
+3.0|2.0|10.0|2.25"
     if [ "${real_out}" != "${real_expect}" ]; then
         echo "smoke FAIL [${label}]: REAL aggregate mismatch" >&2
         diff <(echo "${real_expect}") <(echo "${real_out}") >&2 || true

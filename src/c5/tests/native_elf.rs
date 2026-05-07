@@ -12,7 +12,7 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
-use crate::{Compiler, Target, emit_native};
+use crate::{Compiler, NativeOptions, Target, emit_native, emit_native_with_options};
 
 /// Outcome of compiling-and-running a native ELF binary. Mirrors
 /// `super::native::RunOutcome` so failures can be diagnosed
@@ -39,11 +39,15 @@ fn build_and_run(src: &str, stem: &str) -> i32 {
 }
 
 fn build_and_run_outcome(src: &str, stem: &str) -> RunOutcome {
+    build_and_run_outcome_with_options(src, stem, NativeOptions::default())
+}
+
+fn build_and_run_outcome_with_options(src: &str, stem: &str, opts: NativeOptions) -> RunOutcome {
     let program = match Compiler::new(super::with_prelude(src)).compile() {
         Ok(p) => p,
         Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
     };
-    let bytes = match emit_native(&program, Target::LinuxAarch64) {
+    let bytes = match emit_native_with_options(&program, Target::LinuxAarch64, opts) {
         Ok(b) => b,
         Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),
     };
@@ -223,6 +227,10 @@ fn malloc_memset_memcmp_roundtrip() {
 //      either backend shows up as a Linux-specific failure. ----
 
 fn build_and_run_fixture(name: &str) -> RunOutcome {
+    build_and_run_fixture_with_options(name, NativeOptions::default(), "")
+}
+
+fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &str) -> RunOutcome {
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("fixtures");
     path.push("c");
@@ -230,7 +238,7 @@ fn build_and_run_fixture(name: &str) -> RunOutcome {
     let src =
         std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
     let stem = name.trim_end_matches(".c");
-    build_and_run_outcome(&src, &format!("elf-fixture-{stem}"))
+    build_and_run_outcome_with_options(&src, &format!("elf-fixture-{stem}{suffix}"), opts)
 }
 
 /// Same shape as `super::native::NATIVE_FIXTURES`. The two tables
@@ -370,6 +378,33 @@ fn fixture_parity() {
     assert!(
         failures.is_empty(),
         "{} of {} ELF fixtures regressed:\n  {}",
+        failures.len(),
+        NATIVE_ELF_FIXTURES.len(),
+        failures.join("\n  ")
+    );
+}
+
+/// `-O` parity for the ELF backend: every fixture must produce the
+/// same exit code with the optimizer enabled as without. Mirrors
+/// `super::jit::fixture_parity_native_optimized` so any optimizer
+/// regression specific to the ELF lowering (e.g. a peephole that
+/// fires only when the ELF writer emits its prologue shape) shows
+/// up here rather than only on macOS.
+#[test]
+fn fixture_parity_native_optimized() {
+    let opts = NativeOptions::new().with_optimize();
+    let mut failures: Vec<String> = Vec::new();
+    for (name, expected) in NATIVE_ELF_FIXTURES {
+        let outcome = build_and_run_fixture_with_options(name, opts, "-O");
+        if !outcome.matches(*expected) {
+            failures.push(format!(
+                "{name} (-O): expected exit {expected}, got {outcome:?}"
+            ));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{} of {} ELF fixtures regressed under -O:\n  {}",
         failures.len(),
         NATIVE_ELF_FIXTURES.len(),
         failures.join("\n  ")

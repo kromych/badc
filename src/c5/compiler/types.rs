@@ -139,6 +139,64 @@ pub(super) fn long_ptr_depth(ty: i64) -> i64 {
     }
 }
 
+/// C99 6.3.1.8 usual arithmetic conversions: pick the common type
+/// for a binary integer operation. Used by relational compares to
+/// decide between the signed (`Op::Lt/Gt/Le/Ge`) and unsigned
+/// (`Op::Ult/Ugt/Ule/Uge`) variants, and by arithmetic to tag the
+/// result type so subsequent shifts / compares route correctly.
+///
+/// Algorithm (after integer promotions, which c5 mostly already
+/// does at load time -- char and short loads zero- or sign-extend
+/// to the i64 register, matching `int` width semantically):
+///   * If both operands are signed or both are unsigned: result is
+///     the larger-rank type with the same signedness.
+///   * If mixed: the unsigned operand "wins" when its rank is
+///     greater than or equal to the signed operand's. When the
+///     signed type has strictly higher rank, c5's signed long can
+///     hold every unsigned int value (since long is 8 bytes vs
+///     unsigned int's 4), so the signed type wins.
+///
+/// For c5, the only ranks that come up here are int (4) and long
+/// (8); narrower types are promoted to int by the load ops before
+/// they reach the arithmetic / compare site.
+pub(super) fn usual_arith_common_ty(a: i64, b: i64) -> i64 {
+    let a_unsigned = is_unsigned_ty(a);
+    let b_unsigned = is_unsigned_ty(b);
+    let a_long = is_long_ty(strip_unsigned(a));
+    let b_long = is_long_ty(strip_unsigned(b));
+    let max_long = a_long || b_long;
+    let result_unsigned = if a_unsigned == b_unsigned {
+        // Same signedness: keep it.
+        a_unsigned
+    } else {
+        // Mixed: who has the higher rank?
+        let (u_long, s_long) = if a_unsigned {
+            (a_long, b_long)
+        } else {
+            (b_long, a_long)
+        };
+        // unsigned wins if its rank >= signed's. Otherwise signed
+        // wins (c5's int and long widths guarantee long-signed can
+        // hold every unsigned int value).
+        if u_long || !s_long {
+            true
+        } else {
+            // Signed long + unsigned int -> signed long.
+            false
+        }
+    };
+    let base = if max_long {
+        Ty::Long as i64
+    } else {
+        Ty::Int as i64
+    };
+    if result_unsigned {
+        base | UNSIGNED_BIT
+    } else {
+        base
+    }
+}
+
 /// `ty` is a `short` (or pointer to one). Short lives in its own
 /// 100-wide band starting at `Ty::Short` (400); the same +2-per-`*`
 /// scheme as the integer family applies inside the band, so

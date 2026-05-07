@@ -27,7 +27,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::{Compiler, Target, emit_native};
+use crate::{Compiler, NativeOptions, Target, emit_native_with_options};
 
 /// On Windows we run the binary directly; on macOS / Linux we go
 /// through WINE if the environment opts in via `BADC_RUN_WINE`.
@@ -125,6 +125,15 @@ impl RunOutcome {
 }
 
 fn build_and_run(src: &str, stem: &str, args: &[&str]) -> RunOutcome {
+    build_and_run_with_options(src, stem, args, NativeOptions::default())
+}
+
+fn build_and_run_with_options(
+    src: &str,
+    stem: &str,
+    args: &[&str],
+    opts: NativeOptions,
+) -> RunOutcome {
     // Compile with the same target the codegen will lower for, so
     // the per-target header (`headers/badc-windows-x64.h`) is the
     // one whose `#pragma dylib` / `#pragma binding` directives end
@@ -135,7 +144,7 @@ fn build_and_run(src: &str, stem: &str, args: &[&str]) -> RunOutcome {
             Ok(p) => p,
             Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
         };
-    let bytes = match emit_native(&program, Target::WindowsX64) {
+    let bytes = match emit_native_with_options(&program, Target::WindowsX64, opts) {
         Ok(b) => b,
         Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),
     };
@@ -337,6 +346,10 @@ fn variadic_printf_with_six_args_uses_stack_slots() {
 // ---------------- fixture parity ----------------
 
 fn build_and_run_fixture(name: &str) -> RunOutcome {
+    build_and_run_fixture_with_options(name, NativeOptions::default(), "")
+}
+
+fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &str) -> RunOutcome {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("fixtures");
     path.push("c");
@@ -344,7 +357,7 @@ fn build_and_run_fixture(name: &str) -> RunOutcome {
     let src =
         std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
     let stem = name.trim_end_matches(".c");
-    build_and_run(&src, &format!("fixture-{stem}"), &[name])
+    build_and_run_with_options(&src, &format!("fixture-{stem}{suffix}"), &[name], opts)
 }
 
 /// Subset of the cross-arch fixture corpus that doesn't lean on
@@ -467,6 +480,29 @@ fn fixture_parity() {
     assert!(
         failures.is_empty(),
         "{} of {} PE/x86_64 fixtures regressed:\n  {}",
+        failures.len(),
+        NATIVE_PE_X64_FIXTURES.len(),
+        failures.join("\n  ")
+    );
+}
+
+#[test]
+fn fixture_parity_native_optimized() {
+    if !host_can_run_pe() {
+        eprintln!("skip fixture_parity_native_optimized: no PE runner on this host");
+        return;
+    }
+    let opts = NativeOptions::new().with_optimize();
+    let mut failures: Vec<String> = Vec::new();
+    for (name, expected) in NATIVE_PE_X64_FIXTURES {
+        let outcome = build_and_run_fixture_with_options(name, opts, "-O");
+        if !outcome.matches(*expected) {
+            failures.push(format!("{name} (-O): expected {expected}, got {outcome:?}"));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{} of {} PE/x86_64 fixtures regressed under -O:\n  {}",
         failures.len(),
         NATIVE_PE_X64_FIXTURES.len(),
         failures.join("\n  ")

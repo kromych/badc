@@ -27,7 +27,7 @@ use types::{
     UNSIGNED_BIT, fp_result_ty, is_decl_modifier, is_floating_scalar, is_pointer_ty,
     is_scalar_load_op_val, is_struct_ty, is_type_start_token, is_unsigned_ty, load_op_for,
     pointee_size_no_struct, reemit_scalar_load, store_op_for, struct_id_of, struct_ptr_depth,
-    struct_ty_for,
+    struct_ty_for, usual_arith_common_ty,
 };
 
 #[derive(Debug, Clone)]
@@ -1395,6 +1395,83 @@ impl Compiler {
         self.emit_op(op);
     }
 
+    /// Emit `==` (or `!=` if `invert`) accounting for C99 6.3.1.8
+    /// usual-arithmetic-conversions when the LHS / RHS have
+    /// different signedness or widths.
+    ///
+    /// Plain `Op::Eq` is bit-equality at 64 bits, which goes wrong
+    /// when (a) the common type is narrower than 8 bytes and
+    /// (b) one operand is sign-extended into the high half while
+    /// the other isn't. e.g. `(int)-1 == (uint)0xFFFFFFFF` should be
+    /// true at the common `unsigned int` width, but the LHS lives
+    /// in the register as 0xFFFFFFFFFFFFFFFF (sign-extended via
+    /// `Op::Lw`) and the RHS as 0x00000000FFFFFFFF (zero-extended
+    /// via `Op::Lwu`), so straight `Eq` returns false.
+    ///
+    /// Strategy: if the common type is narrower than 8 bytes, fold
+    /// the LHS-on-stack and RHS-in-acc through XOR (which pops the
+    /// stack), AND with the common-width mask, then compare against
+    /// 0. Equal iff the masked-XOR is 0. The `Op::Xor` -> `Op::And`
+    /// -> `Op::Eq`/`Op::Ne` sequence is 5 ops; the wide-common
+    /// path uses 1, so the cost only lands on mixed-width sites.
+    fn emit_eq_with_common_width(&mut self, lhs_ty: i64, invert: bool) {
+        let plain_op = if invert { Op::Ne } else { Op::Eq };
+        // Pointers are 8 bytes regardless of pointee type and are
+        // always compared as full-width values; the common-width
+        // mask is only correct for actual integers. `p == 0`
+        // would otherwise mask the pointer to 32 bits and accept
+        // any pointer with low-half-zero as NULL.
+        if is_pointer_ty(lhs_ty) || is_pointer_ty(self.ty) {
+            self.emit_op(plain_op);
+            return;
+        }
+        // The XOR-mask trick only matters when one operand is
+        // signed and the other unsigned at a width narrower than
+        // 8 bytes -- that's when the sign-extension into the
+        // 64-bit register can make `(int)-1 == (uint)0xFFFFFFFF`
+        // come out false. When both operands have the same
+        // signedness, both loads produce matching 64-bit
+        // representations and plain `Op::Eq` already does the
+        // right thing. Skipping the trick for the same-
+        // signedness case keeps the per-eq cost at 1 op for the
+        // overwhelmingly common path.
+        let lhs_unsigned = is_unsigned_ty(lhs_ty);
+        let rhs_unsigned = is_unsigned_ty(self.ty);
+        if lhs_unsigned == rhs_unsigned {
+            self.emit_op(plain_op);
+            return;
+        }
+        let common = usual_arith_common_ty(lhs_ty, self.ty);
+        let common_size = self.size_of_type(common);
+        if common_size >= 8 {
+            self.emit_op(plain_op);
+            return;
+        }
+        // Narrow common type, mixed signedness: emit
+        // XOR-then-mask-then-compare-zero so the comparison sees
+        // only the low common-width bytes.
+        let mask: i64 = match common_size {
+            1 => 0xff,
+            2 => 0xffff,
+            4 => 0xffff_ffff,
+            _ => -1,
+        };
+        if mask == -1 {
+            self.emit_op(plain_op);
+            return;
+        }
+        // Acc holds RHS; stack-top holds LHS. `Op::Xor` does
+        // `acc = acc XOR top, sp += 8` -- after this, acc holds
+        // `LHS XOR RHS` (XOR is commutative) and the stack is
+        // restored to its pre-comparison state.
+        self.emit_op(Op::Xor);
+        // Mask the XOR to the common-type width: the comparison
+        // only cares about the low N bytes.
+        self.emit_binop_with_imm(Op::And, mask);
+        // Compare against 0.
+        self.emit_binop_with_imm(plain_op, 0);
+    }
+
     /// Save the current `class` / `type_` / `val` of
     /// `self.symbols[idx]` into the matching shadow fields
     /// `h_class` / `h_type` / `h_val`. Used at function-body
@@ -2647,7 +2724,7 @@ impl Compiler {
                     self.require_both_float(t, "==")?;
                     self.emit_op(Op::Feq);
                 } else {
-                    self.emit_op(Op::Eq);
+                    self.emit_eq_with_common_width(t, /*invert=*/ false);
                 }
                 self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::NeOp as i64 {
@@ -2658,7 +2735,7 @@ impl Compiler {
                     self.require_both_float(t, "!=")?;
                     self.emit_op(Op::Fne);
                 } else {
-                    self.emit_op(Op::Ne);
+                    self.emit_eq_with_common_width(t, /*invert=*/ true);
                 }
                 self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::LtOp as i64 {
@@ -2668,7 +2745,7 @@ impl Compiler {
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "<")?;
                     self.emit_op(Op::Flt);
-                } else if is_unsigned_ty(t) || is_unsigned_ty(self.ty) {
+                } else if is_unsigned_ty(usual_arith_common_ty(t, self.ty)) {
                     self.emit_op(Op::Ult);
                 } else {
                     self.emit_op(Op::Lt);
@@ -2681,7 +2758,7 @@ impl Compiler {
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, ">")?;
                     self.emit_op(Op::Fgt);
-                } else if is_unsigned_ty(t) || is_unsigned_ty(self.ty) {
+                } else if is_unsigned_ty(usual_arith_common_ty(t, self.ty)) {
                     self.emit_op(Op::Ugt);
                 } else {
                     self.emit_op(Op::Gt);
@@ -2694,7 +2771,7 @@ impl Compiler {
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "<=")?;
                     self.emit_op(Op::Fle);
-                } else if is_unsigned_ty(t) || is_unsigned_ty(self.ty) {
+                } else if is_unsigned_ty(usual_arith_common_ty(t, self.ty)) {
                     self.emit_op(Op::Ule);
                 } else {
                     self.emit_op(Op::Le);
@@ -2707,7 +2784,7 @@ impl Compiler {
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, ">=")?;
                     self.emit_op(Op::Fge);
-                } else if is_unsigned_ty(t) || is_unsigned_ty(self.ty) {
+                } else if is_unsigned_ty(usual_arith_common_ty(t, self.ty)) {
                     self.emit_op(Op::Uge);
                 } else {
                     self.emit_op(Op::Ge);

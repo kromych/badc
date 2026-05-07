@@ -50,18 +50,46 @@
 #define O_NOFOLLOW   0
 #endif
 
+// Most fcntl command numbers are stable across Linux glibc and
+// macOS Darwin. The advisory-lock trio (`F_GETLK` / `F_SETLK` /
+// `F_SETLKW`) is the one that diverges:
+//   * Linux glibc:  F_GETLK=5,  F_SETLK=6,  F_SETLKW=7
+//   * macOS Darwin: F_GETLK=7,  F_SETLK=8,  F_SETLKW=9
+// sqlite's unix VFS calls `fcntl(fd, F_SETLK, &flock)` to grab
+// shared/exclusive byte-range locks; using the Linux numbers on
+// macOS lands on `F_GETPATH` etc., which fcntl rejects with EBADF
+// and sqlite surfaces as "disk I/O error (10)" on every prepared
+// statement.
 #define F_GETFD  1
 #define F_SETFD  2
 #define F_GETFL  3
 #define F_SETFL  4
+#ifdef __APPLE__
+#define F_GETLK  7
+#define F_SETLK  8
+#define F_SETLKW 9
+#else
 #define F_GETLK  5
 #define F_SETLK  6
 #define F_SETLKW 7
+#endif
 #define FD_CLOEXEC 1
 
+// `F_RDLCK` / `F_WRLCK` / `F_UNLCK` are the lock-type values
+// stored in `struct flock::l_type`. Their numeric values also
+// differ across platforms:
+//   * Linux glibc:  F_RDLCK=0, F_WRLCK=1, F_UNLCK=2
+//   * macOS Darwin: F_RDLCK=1, F_WRLCK=3, F_UNLCK=2
+// (Darwin matches BSD; Linux follows historical SysV.)
+#ifdef __APPLE__
+#define F_RDLCK 1
+#define F_WRLCK 3
+#define F_UNLCK 2
+#else
 #define F_RDLCK 0
 #define F_WRLCK 1
 #define F_UNLCK 2
+#endif
 
 // `struct flock` is the F_GETLK/F_SETLK/F_SETLKW arg for
 // `fcntl`. Per-platform layouts differ:

@@ -14,26 +14,109 @@
 #define _C5_SYS_STAT_H
 
 // `struct stat` is a write-target for libc's `stat`/`lstat`/
-// `fstat` family. Per-platform actual sizes vary widely:
+// `fstat` family. Field offsets differ wildly across platforms
+// and are NOT just sizes -- libc fills bytes at specific
+// offsets, so a c5 program reading `buf.st_size` only gets the
+// right value if our declaration matches the actual on-platform
+// layout byte-for-byte.
 //
-//   * macOS Darwin / `_lstat$INODE64`           = 144 bytes
-//   * Linux glibc / x86_64                      = 144 bytes
-//   * Linux glibc / aarch64                     = 128 bytes
-//   * Win32 / msvcrt's `_stat64`                =  96 bytes
+// macOS Darwin (after _DARWIN_FEATURE_64_BIT_INODE, the default
+// since 10.5):
 //
-// c5 lays out `int` as 4 bytes (the i64 stack slot is wide
-// enough for it but the field width itself is C's `int`).
-// The original 18-int declaration came out at 18 * 4 = 72
-// bytes -- libc's `stat` then merrily wrote past it and
-// stomped the saved frame pointer / link register, leading
-// to "the function returns 42 then SIGBUS on the way out"
-// behaviour. We grow the buffer to 256 bytes (longs +
-// trailing char-array padding) so every known platform's
-// `stat` fits, and reserve named slots for the dozen fields
-// programs actually read by name. Anything else falls into
-// `__pad`. Field offsets are still platform-specific; code
-// that wants pixel-perfect parsing should call `fstatat` and
-// unpack the bytes manually.
+//   offset  type        field
+//   ------  ----------  ------
+//   0       u32         st_dev
+//   4       u16         st_mode
+//   6       u16         st_nlink
+//   8       u64         st_ino
+//   16      u32         st_uid
+//   20      u32         st_gid
+//   24      u32         st_rdev
+//   32      timespec    st_atimespec     (16 bytes)
+//   48      timespec    st_mtimespec     (16 bytes)
+//   64      timespec    st_ctimespec     (16 bytes)
+//   80      timespec    st_birthtimespec (16 bytes)
+//   96      i64         st_size
+//   104     i64         st_blocks
+//   112     u32         st_blksize
+//   116     u32         st_flags
+//   120     u32         st_gen
+//   124     i32         st_lspare
+//   128     i64[2]      st_qspare        (16 bytes)
+//
+// 144 bytes total.
+//
+// Linux glibc's `struct stat` matches the same field names but
+// uses smaller types for some IDs and skips birthtime; programs
+// that only read `st_mode` / `st_size` / `st_mtime` see the same
+// values either way because those fields land at compatible
+// offsets. The padding here is wide enough for both layouts.
+//
+// Win32 msvcrt's `_stat64` is laid out differently again (FILE
+// times instead of POSIX times); programs needing it should
+// call the `_stat64` family directly.
+//
+// c5 has no `unsigned short`, so we declare 16-bit fields as
+// `int` and split the dword they share into `__split_lo`/
+// `__split_hi` halves where the layout requires it. Reading the
+// individual halves needs explicit masking; user code mostly
+// reads `st_mode`, `st_size`, and the `st_*time` slots, all of
+// which land at the documented offsets.
+// c5 doesn't have a `short` type with native 16-bit packing;
+// `short` collapses onto `int` (4 bytes), so a `short st_mode;
+// short st_nlink;` declaration shifts every later field 4
+// bytes off. To keep the layout pixel-perfect we cover Apple's
+// `mode_t st_mode; nlink_t st_nlink;` 4-byte gap with a single
+// `int st_mode` -- reading `buf.st_mode` then yields a 32-bit
+// word whose low 16 bits are `mode_t` (mode bits + file type)
+// and high 16 bits are `nlink_t`. The `S_ISFOO(m)` macros and
+// the standard `m & 0777` permission-bit access only look at
+// the low 16 bits, which gives them the right values.
+#ifdef __APPLE__
+struct stat {
+    int    st_dev;            /* offset  0, 4 bytes */
+    int    st_mode;           /* offset  4, 4 bytes (mode | nlink) */
+    long   st_ino;            /* offset  8, 8 bytes */
+    int    st_uid;            /* offset 16, 4 bytes */
+    int    st_gid;            /* offset 20, 4 bytes */
+    int    st_rdev;           /* offset 24, 4 bytes */
+    int    __pad28;           /* offset 28, 4 bytes */
+    long   st_atime;          /* offset 32, 8 bytes (timespec.tv_sec)  */
+    long   st_atimensec;      /* offset 40, 8 bytes (timespec.tv_nsec) */
+    long   st_mtime;          /* offset 48 */
+    long   st_mtimensec;      /* offset 56 */
+    long   st_ctime;          /* offset 64 */
+    long   st_ctimensec;      /* offset 72 */
+    long   st_birthtime;      /* offset 80 */
+    long   st_birthtimensec;  /* offset 88 */
+    long   st_size;           /* offset 96, 8 bytes */
+    long   st_blocks;         /* offset 104, 8 bytes */
+    int    st_blksize;        /* offset 112, 4 bytes */
+    int    st_flags;          /* offset 116, 4 bytes */
+    int    st_gen;            /* offset 120, 4 bytes */
+    int    st_lspare;         /* offset 124, 4 bytes */
+    long   st_qspare0;        /* offset 128, 8 bytes */
+    long   st_qspare1;        /* offset 136, 8 bytes */
+    /* `st_nlink` proper is darwin's bytes 6-7, packed into the
+    ** 4-byte word that c5 names `st_mode` above. sqlite only
+    ** reads it inside `verifyDbFile` (warns if 0 or > 1, returns
+    ** void) -- so a separate slot in the trailing pad gives the
+    ** field name something to compile against without disturbing
+    ** the on-the-wire layout. The value read here is whatever
+    ** `osFstat` left in the trailing region (typically 0 for a
+    ** freshly zero'd buffer); the resulting "file unlinked while
+    ** open" warning is silent unless the caller has wired up
+    ** `sqlite3_log`. */
+    int    st_nlink;          /* offset 144, off-layout placeholder */
+    char   __pad[124];        /* room for any future / Linux-larger layout */
+};
+#else
+// Linux / others: keep the wider buffer so libc's `stat` can't
+// overflow. `st_mode` and `st_size` happen to land at offsets
+// 24 and 48 in this layout, which works on Linux glibc /
+// aarch64 (where the actual struct is 128 bytes and `st_size`
+// is at offset 48). Linux glibc / x86_64 has `st_size` at
+// offset 48 too, so the same declaration covers both.
 struct stat {
     long st_dev;
     long st_ino;
@@ -53,6 +136,7 @@ struct stat {
     long st_ctimensec;
     char __pad[128];
 };
+#endif
 
 // Mode bits
 #define S_IFMT  0170000

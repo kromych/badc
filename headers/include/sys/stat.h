@@ -110,13 +110,64 @@ struct stat {
     int    st_nlink;          /* offset 144, off-layout placeholder */
     char   __pad[124];        /* room for any future / Linux-larger layout */
 };
+#elif defined(__linux__) && defined(__x86_64__)
+// Linux glibc x86_64 layout. See bits/struct_stat.h:
+// dev, ino, nlink each 8 bytes; mode/uid/gid 4 bytes; rdev,
+// size, blksize, blocks each 8 bytes; three timespec slots;
+// trailing __unused[3] longs. 144 bytes total.
+struct stat {
+    long st_dev;             /* offset   0, 8 bytes */
+    long st_ino;             /* offset   8, 8 bytes */
+    long st_nlink;           /* offset  16, 8 bytes */
+    int  st_mode;            /* offset  24, 4 bytes */
+    int  st_uid;             /* offset  28, 4 bytes */
+    int  st_gid;             /* offset  32, 4 bytes */
+    int  __pad0;             /* offset  36, 4 bytes */
+    long st_rdev;            /* offset  40, 8 bytes */
+    long st_size;            /* offset  48, 8 bytes */
+    long st_blksize;         /* offset  56, 8 bytes */
+    long st_blocks;          /* offset  64, 8 bytes */
+    long st_atime;           /* offset  72, timespec.tv_sec */
+    long st_atimensec;       /* offset  80 */
+    long st_mtime;           /* offset  88 */
+    long st_mtimensec;       /* offset  96 */
+    long st_ctime;           /* offset 104 */
+    long st_ctimensec;       /* offset 112 */
+    long __unused0;          /* offset 120 */
+    long __unused1;          /* offset 128 */
+    long __unused2;          /* offset 136 */
+    char __pad[64];
+};
+#elif defined(__linux__) && defined(__aarch64__)
+// Linux glibc aarch64 layout. mode/nlink/uid/gid all 4 bytes
+// after a pair of 8-byte dev/ino. blksize is 4 bytes here. 128
+// bytes total.
+struct stat {
+    long st_dev;             /* offset   0, 8 bytes */
+    long st_ino;             /* offset   8, 8 bytes */
+    int  st_mode;            /* offset  16, 4 bytes */
+    int  st_nlink;           /* offset  20, 4 bytes */
+    int  st_uid;             /* offset  24, 4 bytes */
+    int  st_gid;             /* offset  28, 4 bytes */
+    long st_rdev;            /* offset  32, 8 bytes */
+    long __pad1;             /* offset  40, 8 bytes */
+    long st_size;            /* offset  48, 8 bytes */
+    int  st_blksize;         /* offset  56, 4 bytes */
+    int  __pad2;             /* offset  60, 4 bytes */
+    long st_blocks;          /* offset  64, 8 bytes */
+    long st_atime;           /* offset  72 */
+    long st_atimensec;       /* offset  80 */
+    long st_mtime;           /* offset  88 */
+    long st_mtimensec;       /* offset  96 */
+    long st_ctime;           /* offset 104 */
+    long st_ctimensec;       /* offset 112 */
+    int  __unused0;          /* offset 120 */
+    int  __unused1;          /* offset 124 */
+    char __pad[64];
+};
 #else
-// Linux / others: keep the wider buffer so libc's `stat` can't
-// overflow. `st_mode` and `st_size` happen to land at offsets
-// 24 and 48 in this layout, which works on Linux glibc /
-// aarch64 (where the actual struct is 128 bytes and `st_size`
-// is at offset 48). Linux glibc / x86_64 has `st_size` at
-// offset 48 too, so the same declaration covers both.
+// Generic / fallback: matches Linux x86_64. 8-byte fields
+// throughout for safety.
 struct stat {
     long st_dev;
     long st_ino;

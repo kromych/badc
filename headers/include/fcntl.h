@@ -92,27 +92,40 @@
 #endif
 
 // `struct flock` is the F_GETLK/F_SETLK/F_SETLKW arg for
-// `fcntl`. Per-platform layouts differ:
+// `fcntl`. Per-platform layouts differ in *field order*, not
+// just sizes:
 //
-//   macOS Darwin           : `off_t l_start, l_len; pid_t l_pid;
-//                             short l_type, l_whence;` -> 24 bytes
-//   Linux glibc / aarch64  : same layout, 32 bytes (8-byte aligned
-//                             trailing field).
+//   macOS Darwin : off_t l_start, off_t l_len, pid_t l_pid,
+//                  short l_type, short l_whence;
+//                  -> l_type at offset 20.
+//   Linux glibc  : short l_type, short l_whence, off_t l_start,
+//                  off_t l_len, pid_t l_pid;
+//                  -> l_type at offset 0.
 //
-// c5 ints are 4 bytes so a 5-int declaration came out at 20 bytes
-// and `fcntl(..., F_SETLK, &fl)` overran by 4-12 bytes -- enough
-// to clobber the saved frame pointer / link register and SIGBUS
-// the caller's epilogue. Reserve 64 bytes via a trailing
-// `__pad[]` so every known layout fits without further header
-// surgery.
+// c5 has no native 16-bit short; we widen to int (4 bytes) but
+// keep field offsets pixel-perfect so libc's fcntl reads the
+// l_type byte at the spot it expects. Trailing __pad[] keeps the
+// struct large enough that any extra trailing field libc writes
+// can't overflow the caller's frame.
+#ifdef __APPLE__
 struct flock {
-    long l_start;
-    long l_len;
-    int l_pid;
-    short l_type;
-    short l_whence;
+    long l_start;     /* offset  0 */
+    long l_len;       /* offset  8 */
+    int  l_pid;       /* offset 16 */
+    int  l_type;      /* offset 20, low 16 bits = short l_type */
+    int  l_whence;    /* offset 24, low 16 bits = short l_whence */
     char __pad[64];
 };
+#else
+struct flock {
+    int  l_type;      /* offset  0, low 16 bits */
+    int  l_whence;    /* offset  4, low 16 bits */
+    long l_start;     /* offset  8 */
+    long l_len;       /* offset 16 */
+    int  l_pid;       /* offset 24 */
+    char __pad[64];
+};
+#endif
 
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")

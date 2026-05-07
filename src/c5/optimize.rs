@@ -196,15 +196,84 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
     // stale entry only ever causes us to skip a fold that's safe, and
     // the next iteration picks it up.
     let mut targets = collect_branch_targets(&insns);
+
+    // BISECTION HOOKS (std-only). Read at runtime so we don't need
+    // to recompile to flip flags.
+    //   * BADC_OPT_OFF=<comma-list>: skip these passes entirely.
+    //     Names: constfold, branch_const, jump_next, imm_arith,
+    //     local_load, branch_thread, dce.
+    //   * BADC_OPT_FUNC_RANGE=lo,hi: only let peephole work touch
+    //     functions whose insn-order index is in [lo, hi). Outside
+    //     that range, every instruction is masked as a branch
+    //     target so the targets-respecting peepholes skip it.
+    //     Doesn't gate jump_next / branch_thread / DCE because
+    //     those don't take `targets`.
+    #[cfg(feature = "std")]
+    let off: alloc::collections::BTreeSet<alloc::string::String> = std::env::var("BADC_OPT_OFF")
+        .unwrap_or_default()
+        .split(',')
+        .map(alloc::string::ToString::to_string)
+        .collect();
+    #[cfg(not(feature = "std"))]
+    let off: alloc::collections::BTreeSet<alloc::string::String> =
+        alloc::collections::BTreeSet::new();
+
+    #[cfg(feature = "std")]
+    if let Ok(range) = std::env::var("BADC_OPT_FUNC_RANGE") {
+        let parts: Vec<&str> = range.split(',').collect();
+        if parts.len() == 2 {
+            let lo: usize = parts[0].parse().unwrap_or(0);
+            let hi: usize = parts[1].parse().unwrap_or(usize::MAX);
+            let func_starts: Vec<usize> = insns
+                .iter()
+                .enumerate()
+                .filter_map(|(i, ins)| match ins {
+                    Insn::NoArg(Op::Ent) | Insn::Ent(_) => Some(i),
+                    _ => None,
+                })
+                .collect();
+            for (n, &start) in func_starts.iter().enumerate() {
+                let end = func_starts.get(n + 1).copied().unwrap_or(insns.len());
+                if n < lo || n >= hi {
+                    for t in targets.iter_mut().take(end).skip(start) {
+                        *t = true;
+                    }
+                }
+            }
+        }
+    }
+
+    let off_constfold = off.contains("constfold");
+    let off_branch_const = off.contains("branch_const");
+    let off_jump_next = off.contains("jump_next");
+    let off_imm_arith = off.contains("imm_arith");
+    let off_local_load = off.contains("local_load");
+    let off_branch_thread = off.contains("branch_thread");
+    let off_dce = off.contains("dce");
+
     for _ in 0..16 {
         let mut changed = false;
-        changed |= peephole_constant_fold(&mut insns, &targets);
-        changed |= peephole_branch_on_constant(&mut insns, &targets);
-        changed |= peephole_jump_to_next(&mut insns);
-        changed |= peephole_immediate_arith(&mut insns, &targets);
-        changed |= peephole_local_load(&mut insns, &targets);
-        changed |= branch_threading(&mut insns);
-        changed |= dead_code_elimination(&mut insns, entry_idx);
+        if !off_constfold {
+            changed |= peephole_constant_fold(&mut insns, &targets);
+        }
+        if !off_branch_const {
+            changed |= peephole_branch_on_constant(&mut insns, &targets);
+        }
+        if !off_jump_next {
+            changed |= peephole_jump_to_next(&mut insns);
+        }
+        if !off_imm_arith {
+            changed |= peephole_immediate_arith(&mut insns, &targets);
+        }
+        if !off_local_load {
+            changed |= peephole_local_load(&mut insns, &targets);
+        }
+        if !off_branch_thread {
+            changed |= branch_threading(&mut insns);
+        }
+        if !off_dce {
+            changed |= dead_code_elimination(&mut insns, entry_idx);
+        }
         if !changed {
             break;
         }

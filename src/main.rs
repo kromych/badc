@@ -227,7 +227,7 @@ fn main() {
         }
     };
 
-    let program = if optimize_flag {
+    let program = if optimize_flag && std::env::var("BADC_BC_OPT_OFF").is_err() {
         match optimize(program) {
             Ok(p) => p,
             Err(e) => {

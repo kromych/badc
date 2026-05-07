@@ -1,11 +1,15 @@
 # Gaps to C99
 
-Snapshot reflects the dialect after the unsigned-integer
-support landed (compares emit dedicated unsigned ops, 32-bit
-unsigned loads zero-extend) and the sqlite3 :memory: smoke
-test runs end-to-end. The c5 dialect is a deliberately small
-subset of C with extras for the compiler's own use; this
-document catalogues the C99 features that aren't supported,
+Snapshot reflects the dialect after the integer-width pass
+landed (real `signed char` / `short` / `unsigned short` with
+their own 1- and 2-byte memory ops, narrowing casts that
+mask or sign-extend to the target storage width, the
+unsigned right-shift split into `Op::Shru`) and the sqlite3
+in-memory smoke test runs end-to-end with `count` / `sum`
+/ `avg` / `min` / `max` over both INTEGER and REAL
+columns. The c5 dialect is a deliberately small subset of
+C with extras for the compiler's own use; this document
+catalogues the C99 features that aren't supported,
 organized by spec section, so anyone evaluating "can I
 compile <real codebase> with badc?" knows what they'd hit.
 
@@ -87,19 +91,24 @@ to have).
   `goto`, `switch`, `case`, `default`, `struct`, `void`,
   `float`, `double`, `_Thread_local`, `extern`, `static`.
 - Recognised as no-op: `const`, `volatile`, `restrict`,
-  `__restrict`, `__restrict__`, `short`, `_Bool`,
-  `register`, `auto`, `inline`, `__inline`, `__inline__`.
-  The lexer consumes them at every declaration position
-  with no semantic effect. Programs relying on
-  const-correctness or inline expansion diverge silently
-  -- see the sec 6.7 type-specifier and sec J notes for what
-  that means in practice.
+  `__restrict`, `__restrict__`, `_Bool`, `register`,
+  `auto`, `inline`, `__inline`, `__inline__`. The lexer
+  consumes them at every declaration position with no
+  semantic effect. Programs relying on const-correctness
+  or inline expansion diverge silently -- see the sec 6.7
+  type-specifier and sec J notes for what that means in
+  practice.
 - Recognised with semantic effect: `signed` (changes
-  `char` from unsigned 1-byte slot to int-promoted),
-  `unsigned` (sets the unsigned bit on the type tag,
-  routing comparisons through `Op::Ult/Ugt/Ule/Uge` and
-  loads through the zero-extending `Op::Lwu`), `long`
-  (selects the 64-bit `Ty::Long` storage class).
+  `char` from a 1-byte zero-extending slot into a 1-byte
+  sign-extending slot via `Op::Lcs`; flowing through
+  `unsigned` for char keeps the `Op::Lc` zero-extending
+  load), `unsigned` (sets the unsigned bit on the type
+  tag, routing comparisons through `Op::Ult/Ugt/Ule/Uge`,
+  right-shift through `Op::Shru`, and 32-bit / 16-bit
+  loads through the zero-extending `Op::Lwu` / `Op::Lhu`),
+  `short` (selects the 16-bit `Ty::Short` storage class
+  with `Op::Lh` / `Op::Lhu` / `Op::Sh` for memory access),
+  `long` (selects the 64-bit `Ty::Long` storage class).
 - `typedef` -- **supported** (M23 + M23b). The lexer
   accepts the keyword and the parser registers a typedef
   name as a type alias for any underlying type. Shapes:
@@ -247,18 +256,21 @@ to have).
   function still produces a value (the unused
   accumulator). Severity: 3.
 - `char`, `int`, `float`, `double` -- supported.
-- `signed` / `unsigned` / `short` / `long` -- **partial**.
-  `int` is 4-byte signed; `long` / `long long` is 8-byte
-  signed; `unsigned` flips the type-tag bit so compares
-  emit unsigned ops and 32-bit loads zero-extend. `short`
-  still collapses onto `int` (no real 16-bit slot).
-  Unsigned arithmetic does **not** mask intermediate
-  results to the slot width: an `unsigned int` value held
-  in a register can carry sign-extension into the high
-  half from a previous signed op, so transient
-  bit-level expectations (`(~u32) == 0x00FF00FF`) only
-  hold after a store-and-reload through a typed slot.
-  Severity: 3.
+- `signed` / `unsigned` / `short` / `long` -- **supported**.
+  `char` is 1-byte (`signed char` sign-extends via
+  `Op::Lcs`, plain / `unsigned char` zero-extends via
+  `Op::Lc`); `short` / `unsigned short` is 2-byte with
+  `Op::Lh` / `Op::Lhu` / `Op::Sh`; `int` is 4-byte signed
+  (`unsigned int` zero-extends via `Op::Lwu`); `long` /
+  `long long` is 8-byte signed. `unsigned` flips the
+  type-tag bit so compares emit `Op::Ult/Ugt/Ule/Uge`,
+  right-shift goes through `Op::Shru`, narrowing casts
+  emit a width mask, and signed narrowing emits a
+  shift-pair sign-extend. Unsigned arithmetic still does
+  **not** mask intermediate register values to the slot
+  width: a transient bit-level expectation
+  (`(~u32) == 0x00FF00FF`) holds only after a
+  store-and-reload through a typed slot. Severity: 4.
 - `_Bool` -- **partial**: tokenizes; treated as `int`
   (full integer range, not 0/1 normalised). Programs
   that rely on `_Bool` storing exactly 0 or 1 will
@@ -529,20 +541,27 @@ to have).
 (non-normative; included because it shapes user expectations)
 
 - Integer width / sign: `char` is 1-byte (unsigned by
-  default; `signed char` promotes to `int`); `short`
-  collapses onto `int`; `int` is 4-byte signed; `long`
-  and `long long` are 8-byte signed. The `unsigned`
-  modifier flips the type-tag bit, routing comparisons
-  through unsigned ops and 32-bit loads through the
-  zero-extending `Op::Lwu`. Storage round-trips
-  correctly through typed slots; transient register
-  values from a single arithmetic op may not match the
-  C standard's "value held at the slot's width" rule
-  until stored and reloaded (see sec 6.7 type specifiers).
+  default; `signed char` is also 1 byte but loads
+  sign-extending); `short` is 2-byte with sign- or
+  zero-extending loads picked by `unsigned`; `int` is
+  4-byte signed; `long` and `long long` are 8-byte
+  signed. The `unsigned` modifier flips the type-tag
+  bit, routing comparisons through unsigned ops, right
+  shift through the logical `Op::Shru`, and narrow
+  loads through their zero-extending variants
+  (`Op::Lc`, `Op::Lhu`, `Op::Lwu`). Narrowing casts
+  emit a width mask (unsigned target) or a shift-pair
+  sign-extend (signed target) so the register value
+  reflects the C99 reinterpretation. Storage
+  round-trips correctly through typed slots; transient
+  register values from a single arithmetic op (e.g.
+  `~u32`) may carry the high half until stored and
+  reloaded (see sec 6.7 type specifiers).
 - `char` signedness: unsigned by default. `signed char`
-  promotes to `int` so negative byte values load
-  sign-extended (sqlite's LEMON-generated
-  `yyRuleInfoNRhs[]` table relies on this).
+  is a real 1-byte signed type with sign-extending
+  load via `Op::Lcs`, so negative byte values like
+  sqlite's LEMON-generated `yyRuleInfoNRhs[]` table
+  read back as the C99 signed value.
 - Pointer width: 64-bit.
 - Endianness: every host badc supports is little-endian.
 - Float rounding mode: IEEE 754 default (round-to-nearest,
@@ -578,12 +597,19 @@ roughly tie for "next priority":
    and parse; primitive / pointer / struct typedefs work.
    Function-pointer typedefs are still missing.
 5. ~~`signed` / `unsigned` / `short` / `long`~~ -- real
-   widths landed: `int` is 4 bytes, `long` / `long long`
-   is 8 bytes, `unsigned` flows through compares and
-   loads via dedicated ops. `short` still collapses onto
-   `int`. Unsigned arithmetic doesn't mask intermediate
-   register values to the slot width; round-tripping
-   through a typed slot is the correctness contract.
+   widths landed across the integer band: `signed char`
+   is 1 byte sign-extending, `short` is 2 bytes,
+   `int` is 4 bytes, `long` / `long long` is 8 bytes,
+   each with their own load / store ops. `unsigned`
+   flows through compares, right-shift, and loads via
+   dedicated ops. Narrowing casts emit a mask (unsigned
+   target) or shift-pair sign-extend (signed target).
+   The C99 integer-boundary final-boss fixture
+   (`fixtures/c/deferred_integer_boundary_c99.c`) passes.
+   Unsigned arithmetic still doesn't mask intermediate
+   register values to the slot width between ops; round-
+   tripping through a typed slot is the correctness
+   contract.
 6. ~~`union`~~ -- landed in M26. Tagged-union idioms
    work; bitfields inside a union are still missing.
 7. `#error`, `#`, `##`, `__VA_ARGS__`. Macros with
@@ -609,41 +635,35 @@ roughly tie for "next priority":
 
 ## Unsigned-types: still-pending pieces
 
-Compare semantics for `unsigned int` / `unsigned long` /
-`unsigned char` are first-class: declarations, typedefs,
-and struct fields all carry the unsigned bit through the
-type tag, comparisons emit `Op::Ult/Ugt/Ule/Uge`, and
-32-bit unsigned loads zero-extend through `Op::Lwu`.
-What's still pending:
+Compare semantics, right-shift, and load width for
+`unsigned char` / `unsigned short` / `unsigned int` /
+`unsigned long` are all first-class: declarations,
+typedefs, and struct fields carry the unsigned bit through
+the type tag, comparisons emit `Op::Ult/Ugt/Ule/Uge`,
+right-shift emits `Op::Shru` (logical), narrow loads
+zero-extend through `Op::Lc` / `Op::Lhu` / `Op::Lwu`, and
+narrowing casts emit a width mask. What's still pending:
 
-- **Unsigned arithmetic propagation.** A value held in a
-  64-bit register after a single op (e.g. `~u32`,
-  `u32 << K`) doesn't mask to the slot width until
-  stored and reloaded through a typed lvalue. Code that
-  expects bit-exact intermediate values without an
-  intervening store can diverge -- see the round-trip
-  pattern documented in `integer_ops_exhaustive.c`.
-- **Unsigned right-shift.** Signed and unsigned `>>`
-  both lower to `Op::Shr`, which is arithmetic
-  (sign-extending). An `unsigned int x >> 1` with the
-  high bit set behaves as a signed shift. A dedicated
-  unsigned shift op is not yet wired through.
+- **Unsigned arithmetic propagation between ops.** A
+  value held in a 64-bit register after a single op
+  (e.g. `~u32`, `u32 + u32` that overflows) doesn't
+  mask to the slot width until stored and reloaded
+  through a typed lvalue. Code that expects bit-exact
+  intermediate values without an intervening store can
+  diverge -- see the round-trip pattern documented in
+  `integer_ops_exhaustive.c`.
 - **Unsigned division / modulo.** `Op::Div` and
-  `Op::Mod` are signed-only. Programs computing
-  `(unsigned)x / (unsigned)y` with operands in the
-  signed-negative range will diverge.
+  `Op::Mod` are signed-only (ARM64 SDIV / x86_64 IDIV).
+  Programs computing `(unsigned)x / (unsigned)y` with
+  operands in the signed-negative range will diverge.
+  Fix: dedicated `Op::Divu` / `Op::Modu` routed when
+  either operand is unsigned, mirroring the
+  `Op::Shr` / `Op::Shru` split.
 - **Mixed signed / unsigned arithmetic.** No promotion
   to a common type happens at op emit; the operand types
   are consulted only for the comparison and load
   selection. `(int)-1 + (unsigned int)1` evaluates with
   signed semantics regardless of the unsigned operand.
-- **`unsigned short` / `unsigned char` arithmetic
-  width.** `short` still collapses onto `int`, so
-  `unsigned short` is just `unsigned int`. `unsigned
-  char` is a 1-byte slot but every load zero-extends to
-  64 bits; arithmetic-then-store wraps via `Op::Sc`'s
-  byte-store, but transient register values carry the
-  full 64-bit result.
 
 ## Pieces unique to c5 (worth keeping)
 

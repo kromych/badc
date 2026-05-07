@@ -84,40 +84,81 @@
 // at the 1-up level, the *caller's* saved-rbp slot value) is
 // below 0x10000000 (= "definitely not a stack address"). The
 // trap writes the function's bc PC to stderr via `SYS_write`
-// then `SYS_exit(99)` -- needed because orbstack/Rosetta strips
-// the program rip from SIGSEGV/SIGILL core dumps so a memory-
-// fault trap can't be located. Empirically, even with the 1-up
-// walk in place at all four sites, *none* of them fire on the
-// trigger query.
+// then `SYS_exit(99)`. Empirically, even with the 1-up walk in
+// place at all four sites, *none* of them fire on the trigger
+// query on linux-x64.
 //
-// What that "no fire" rules out:
-//   * The corrupting Si is not followed by any further `Jsr`,
-//     `Jsri`, or `Lev` op -- so the function never gets to a
-//     point where the canary would observe its own (or its
-//     caller's) saved-rbp slot post-corruption.
-// What that leaves:
-//   * The corruption happens during the very `call NULL` that
-//     produces the rip=0 crash -- e.g. a stack push at a
-//     misaligned rsp lands on F's saved-rbp slot.
-//   * Or it happens in Rosetta's signal-delivery path on
-//     orbstack-emulated x64 (the kernel switches to an alt
-//     stack at SIGSEGV time, which on emulated x64 might
-//     interact badly with our stack layout).
-//   * Or the corruption is to a *different* slot than the one
-//     in F's frame, and the F's-saved-rbp value we see in the
-//     core is itself a side-effect of the rip=0 fault rather
-//     than the original bug.
+// ## arm64 tells a completely different story
 //
-// Next concrete step: instrument every Si/Sc/Sw with the same
-// syscall trap, gated on the destination address falling within
-// `[rbp_caller_n + 0 .. rbp_caller_n + 8]` for any active
-// frame. That catches the bad write at the moment it happens.
-// The infrastructure is all in place -- only the per-store gate
-// needs writing. Alternatively, run the same trigger query on a
-// *native* Linux x64 box (not orbstack-emulated) -- if the bug
-// shows the same saved-rbp clobber there, it's a c5 codegen
-// bug; if not, it's a Rosetta-on-orbstack interaction we'd
-// document and skip on that environment.
+// Linux arm64 in orbstack runs *natively* (no emulation -- it's
+// the same arm64 instruction set as the host Apple Silicon),
+// and the same trigger query crashes there too, but with a
+// different optimizer pass (`branch_thread`) and a different
+// crash signature. Walking the arm64 core dump with
+// `tools/core-walker.py` (now arm64-aware):
+//
+//   #         fp                  ip      bc=N op
+//   0   ...c5c0   0x4e8ad8         bc=289753 Lc        <-- crash site
+//   1   ...c620   0x4e9edc         bc=291256 Jsr 289483
+//   2   ...c6d0   0x4ea3bc         bc=291649 Jsr 291242
+//   3   ...c850   0x507bd4         bc=329937 Jsr 291529
+//   ... 12 more frames ...
+//   16        0   0x40176c         (libc startup)
+//
+// Notice: the chain walks ALL THE WAY UP to libc, with rbp=0
+// terminating cleanly. *No stack corruption.* Every frame's
+// saved fp is a valid stack address, every saved lr resolves to
+// a real `Jsr <target>` op in its caller's body. Just a normal,
+// undamaged backtrace.
+//
+// The faulting op is `Lc` (load char) at bc=289753, with the
+// surrounding code reading `(char)*arg2`:
+//
+//   bc=289748 Lea -1
+//   bc=289750 Psh
+//   bc=289751 LdLocI 2          ; r13 = arg2
+//   bc=289753 Lc                ; r13 = (char) *r13   <-- CRASH
+//
+// arg2 is NULL at function entry. So on arm64 the bug is a
+// straight NULL-pointer deref, not stack corruption. The leaf's
+// caller (bc=291242 Ent 3) just forwards its own arg3 as the
+// leaf's arg, so the NULL came from even further up the chain
+// -- but the chain is intact and walkable. With branch_thread
+// disabled the branch-target diff is a normal threading rewrite
+// (`Bz target1; ...; target1: Jmp target2` -> `Bz target2`),
+// semantically equivalent at the function level. So the bug is
+// somewhere ELSE in the upstream call chain where threading
+// reroutes around a NULL check.
+//
+// ## So the picture for #46 is: TWO different per-arch bugs
+//
+//   linux-x64    : trigger pass = local_load
+//                  signature    = stack corruption (saved-rbp
+//                                  slot clobbered with a data-
+//                                  segment value), then a
+//                                  random `*p` lands at addr 8.
+//                  rip on crash = sometimes 0, sometimes a Li.
+//
+//   linux-arm64  : trigger pass = branch_thread
+//                  signature    = clean call stack, leaf does
+//                                  `(char)*NULL`, NULL came
+//                                  from upstream.
+//                  rip on crash = bc=289753 Lc.
+//
+// They share a SQLite-side trigger (`WHERE col > 0`) but the
+// c5-side mechanisms are independent. Fixing one likely won't
+// fix the other.
+//
+// Next steps:
+//   * arm64: walk the call chain backwards from the leaf's
+//     caller through every Jsr in the chain, looking for a
+//     site where the NULL value originates. The walker output
+//     names every frame's bc PC -- combined with a no-O dump
+//     (which preserves source_lines) we can name actual sqlite
+//     functions.
+//   * x64: the per-store guard (Si/Sc/Sw destination overlaps
+//     active frame's saved-rbp slot) is still the most direct
+//     way to catch the corrupting write.
 //
 // The c5-emitted bytecode for this sequence is identical with and
 // without `peephole_local_load` (the only difference is the fused

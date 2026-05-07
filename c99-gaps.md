@@ -20,6 +20,46 @@ Severity is from the perspective of porting mainstream C:
 3 = blocks specific idioms, 4 = workaround exists, 5 = rare
 in modern source.
 
+## Data-model picks (sec 6.2.5)
+
+c5 commits to a single fixed data model regardless of host:
+
+| type             | bytes |
+|------------------|-------|
+| `char`           | 1     |
+| `short`          | 2     |
+| `int`            | 4     |
+| `long`           | 8     |
+| `long long`      | 8     |
+| pointer / `T *`  | 8     |
+| `float`          | 8 (stored as double) |
+| `double`         | 8     |
+
+That is **LP64** (long, pointer = 64 bits; int = 32). All
+five supported targets - macOS aarch64, Linux aarch64,
+Linux x86_64, Windows aarch64, Windows x86_64 - get the
+same widths.
+
+Implications:
+- On Linux + macOS this matches the platform ABI, so c5
+  structs line up with libc's `long`-typed fields and
+  `time_t` / `off_t` / `size_t` round-trip cleanly.
+- On **Windows** the platform ABI is **LLP64** (`long`
+  is 32 bits there; only `long long` is 64). c5 keeps
+  `long` at 8 bytes anyway, so any libc surface that
+  carries a `long` (`time(long *)`, `fwrite` returning
+  `unsigned long` which the platform actually returns
+  as 32 bits, ...) ends up with mismatched widths. The
+  bundled `headers/include/badc-windows-*.h` works around
+  this by typedef-ing through `long long` instead of
+  `long`; user code that uses `long` directly diverges.
+  Severity: 3 for Windows-targeted ports; 5 elsewhere.
+- The historical 32-bit (`ILP32`) and 16-bit
+  (`I16LP32`) data models are not supported -- pointers
+  are 8 bytes everywhere.
+- `float` is currently stored as `double` (8 bytes); the
+  IEEE-754 single-precision narrowing is future work.
+
 ## Translation units (sec 6.9)
 
 - **Multiple translation units**: `badc` compiles a single
@@ -42,18 +82,50 @@ in modern source.
 
 ## Integer arithmetic intermediate-value width (sec 6.3, 6.5)
 
-- **Unsigned arithmetic propagation between ops.** A value
-  held in a 64-bit register after a single op (e.g. `~u32`,
-  `u32 + u32` that overflows) doesn't mask to the slot
-  width until stored and reloaded through a typed lvalue.
-  Code that expects bit-exact intermediate values without
-  an intervening store can diverge. Round-tripping through
-  a typed slot is the correctness contract today.
-  Severity: 4.
+c5 keeps every integer value sign- or zero-extended in the
+64-bit accumulator. After Add / Sub / Mul / Div / Mod, the
+result is the raw 64-bit operation; the C99-mandated wrap-
+to-common-type-width happens only when the value lands in
+a typed storage slot (via `Op::Sw` for int, `Op::Sh` for
+short, etc.). That covers the common case but diverges from
+clang / gcc when:
+
+- `(uint)0xFFFFFFFF + 1` is consumed without going through
+  a typed slot (e.g. immediately cast to `long long` or
+  passed to a wider variadic argument). C99 mandates 0
+  (wrap modulo 2^32); c5 leaves 0x100000000 in the
+  register. The both-unsigned-narrow case is masked
+  correctly today; mixed signed/unsigned (`u + 1` where
+  `1` is a bare int literal) is not. See
+  `fixtures/c/deferred_c99_arith_common_width.c`.
+- `(int x) * (int y)` overflows int -- C99 calls this UB,
+  but clang / gcc consistently truncate-and-sign-extend to
+  int width. c5 keeps the wider 64-bit product. See the
+  same fixture, exit code 5.
+- Bitwise / shift / unary `~` on `unsigned int`: the
+  result keeps the high half of the 64-bit register
+  rather than masking to 32 bits. `(~u32) & 0xFFFFFFFF`
+  is correct; `~u32` on its own carries the upper half.
+  See `fixtures/c/deferred_unsigned_arith_high_half.c`.
+
+Severity: 3 for code that bypasses typed storage; 4 for
+the common pattern where every result lands in a typed
+variable.
+
 - **Unsigned division / modulo** (`Op::Div` / `Op::Mod` are
   signed-only on every backend). Programs computing
   `(unsigned)x / (unsigned)y` with operands in the
   signed-negative range will diverge. Severity: 3.
+
+- **Mixed signed / unsigned promotion to the common type.**
+  Compares (`<`, `>`, `<=`, `>=`) and equality (`==`, `!=`)
+  now route through the C99 6.3.1.8 common type, so
+  `(long)-1 < (uint)1` returns true (signed common) and
+  `(int)-1 == (uint)0xFFFFFFFF` returns true (unsigned
+  common at narrow width via XOR-mask). Arithmetic still
+  doesn't fully promote -- mixed `int + uint` keeps the
+  signed-extended high half until the result hits a typed
+  slot (see the bullet above).
 
 ## Type specifiers (sec 6.7.2)
 

@@ -67,8 +67,9 @@ fn unsigned_right_shift_is_logical() {
     // `unsigned int x >> 1` lowers to `Op::Shru` (ARM64 LSR /
     // x86_64 SHR) when the LHS has an unsigned type, so the high
     // bit zero-extends rather than sign-extending. Was deferred
-    // until Op::Shru / ShruI landed.
-    let exit = jit_fixture_exit("deferred_unsigned_right_shift.c");
+    // until Op::Shru / ShruI landed; kept around as a regression
+    // marker.
+    let exit = jit_fixture_exit("unsigned_right_shift.c");
     assert_eq!(exit, 0, "fixture should exit 0");
 }
 
@@ -96,12 +97,32 @@ fn mixed_signed_unsigned_no_promotion() {
 }
 
 #[test]
+#[ignore = "deferred: arithmetic results not masked to common-type width when mixed signed/unsigned"]
+fn c99_arith_common_width() {
+    // After Add / Sub / Mul, c5 keeps the 64-bit accumulator
+    // value. C99 6.3.1.8 / 6.5 say the result lives at the
+    // common type's width, wrap-modulo-2^N for unsigned. Today
+    // c5 only masks when *both* operands are unsigned (the
+    // canonical `uint + uint` wrap case); mixed signed/unsigned
+    // (e.g. `(uint)0xFFFFFFFF + 1` where 1 is a bare int
+    // literal) keeps the wider value. Tracked by exit-code
+    // numbers in the fixture; today only code 5 (signed-overflow
+    // truncate-to-int convention from clang) fires from the
+    // failure list, the rest of the gaps surface only when
+    // results bypass typed storage (which sqlite happens not
+    // to do).
+    let exit = jit_fixture_exit("deferred_c99_arith_common_width.c");
+    assert_eq!(exit, 0, "C99 arith common-type width regression");
+}
+
+#[test]
 fn u16_load_store_is_two_bytes() {
     // `*(u16*)p` reads/writes exactly 2 bytes via Op::Lh / Op::Lhu
     // / Op::Sh and the matching aarch64 LDRSH / LDRH / STRH and
     // x86_64 movsx16 / movzx16 / mov16 helpers. Was deferred until
-    // real `Ty::Short` storage class landed.
-    let exit = jit_fixture_exit("deferred_u16_load_store.c");
+    // real `Ty::Short` storage class landed; kept as a regression
+    // marker.
+    let exit = jit_fixture_exit("u16_load_store.c");
     assert_eq!(exit, 0, "fixture should exit 0");
 }
 
@@ -115,7 +136,7 @@ fn integer_boundary_c99_final_boss() {
     // (a) `signed char` became a real 1-byte type with `Op::Lcs`
     // sign-extending load, (b) the cast lowering started masking
     // / sign-extending to the target storage width.
-    let exit = jit_fixture_exit("deferred_integer_boundary_c99.c");
+    let exit = jit_fixture_exit("integer_boundary_c99.c");
     assert_eq!(exit, 0, "C99 integer boundary regression");
 }
 
@@ -169,7 +190,7 @@ fn width_typedefs_are_pointer_wide() {
     // now alias the byte-counting typedefs to `long`, so
     // `sizeof(size_t)` etc. return 8 on 64-bit hosts. Test
     // stays around as a regression marker.
-    let exit = jit_fixture_exit("deferred_width_typedefs.c");
+    let exit = jit_fixture_exit("width_typedefs.c");
     assert_eq!(
         exit, 0,
         "size_t / ssize_t / time_t should be pointer-wide on 64-bit hosts"
@@ -267,7 +288,7 @@ fn libc_address_in_static_init() {
     // patches the recorded data slot to the trampoline's
     // address at load time. Test stays around as a regression
     // marker.
-    let exit = jit_fixture_exit("deferred_libc_address_in_static_init.c");
+    let exit = jit_fixture_exit("libc_address_in_static_init.c");
     assert_eq!(
         exit, 0,
         "static-init libc fn-pointer slots should resolve at load time, not zero-fill"

@@ -1395,6 +1395,52 @@ impl Compiler {
         self.emit_op(op);
     }
 
+    /// Mask the accumulator to the common-type storage width
+    /// when **both** operands are unsigned and the common type
+    /// is narrower than 8 bytes. This is the canonical
+    /// wrap-modulo-2^N case (`uint + uint`, `ushort - ushort`
+    /// after promotion-to-uint, etc.) where C99 mandates a
+    /// well-defined wrap.
+    ///
+    /// Mixed signed/unsigned and signed/signed are deliberately
+    /// left alone. Real code (sqlite included) routinely relies
+    /// on c5's wide-register behavior in these cases -- e.g.
+    /// `int n; long bytes = n * K;` expects the 64-bit register
+    /// to keep the wider product so the long-typed slot gets the
+    /// full value. Masking those would technically be more C99-
+    /// strict (clang truncates) but breaks the existing real-
+    /// world consumers. Tracked as a remaining gap in
+    /// `fixtures/c/deferred_c99_arith_common_width.c`.
+    fn maybe_mask_to_unsigned_width(&mut self, lhs_ty: i64, rhs_ty: i64) {
+        if is_pointer_ty(lhs_ty) || is_pointer_ty(rhs_ty) {
+            return;
+        }
+        if is_floating_scalar(lhs_ty) || is_floating_scalar(rhs_ty) {
+            return;
+        }
+        // Conservative: only mask when *both* operands are unsigned.
+        // The mixed signed-unsigned case (e.g. `u + 1` where 1 is
+        // a bare int literal) technically also has an unsigned
+        // common type per C99, but masking those broke real-world
+        // code (sqlite's REAL aggregate path) that relies on the
+        // wider 64-bit register surviving across mixed-arith
+        // operations. The both-unsigned case covers the canonical
+        // `uint + uint`, `ushort - ushort`, etc. wrap-modulo-2^N
+        // behaviour.
+        if !is_unsigned_ty(lhs_ty) || !is_unsigned_ty(rhs_ty) {
+            return;
+        }
+        let common = usual_arith_common_ty(lhs_ty, rhs_ty);
+        let common_size = self.size_of_type(common);
+        let mask: i64 = match common_size {
+            1 => 0xff,
+            2 => 0xffff,
+            4 => 0xffff_ffff,
+            _ => return,
+        };
+        self.emit_binop_with_imm(Op::And, mask);
+    }
+
     /// Emit `==` (or `!=` if `invert`) accounting for C99 6.3.1.8
     /// usual-arithmetic-conversions when the LHS / RHS have
     /// different signedness or widths.
@@ -2849,12 +2895,18 @@ impl Compiler {
                     self.emit_op(Op::Add);
                     self.ty = rhs_ty;
                 } else {
+                    let rhs_ty = self.ty;
                     if self.is_ptr_scaling_nontrivial(t) {
                         let scale = self.pointee_size(t);
                         self.emit_binop_with_imm(Op::Mul, scale);
                     }
                     self.emit_op(Op::Add);
-                    self.ty = t;
+                    if is_pointer_ty(t) {
+                        self.ty = t;
+                    } else {
+                        self.maybe_mask_to_unsigned_width(t, rhs_ty);
+                        self.ty = usual_arith_common_ty(t, rhs_ty);
+                    }
                 }
             } else if self.lex.tk == Token::SubOp as i64 {
                 self.next()?;
@@ -2881,8 +2933,14 @@ impl Compiler {
                     self.emit_op(Op::Sub);
                     self.ty = t;
                 } else {
+                    let rhs_ty = self.ty;
                     self.emit_op(Op::Sub);
-                    self.ty = t;
+                    if is_pointer_ty(t) {
+                        self.ty = t;
+                    } else {
+                        self.maybe_mask_to_unsigned_width(t, rhs_ty);
+                        self.ty = usual_arith_common_ty(t, rhs_ty);
+                    }
                 }
             } else if self.lex.tk == Token::MulOp as i64 {
                 self.next()?;
@@ -2893,8 +2951,10 @@ impl Compiler {
                     self.emit_op(Op::Fmul);
                     self.ty = fp_result_ty(t, self.ty);
                 } else {
+                    let rhs_ty = self.ty;
                     self.emit_op(Op::Mul);
-                    self.ty = Ty::Int as i64;
+                    self.maybe_mask_to_unsigned_width(t, rhs_ty);
+                    self.ty = usual_arith_common_ty(t, rhs_ty);
                 }
             } else if self.lex.tk == Token::DivOp as i64 {
                 self.next()?;

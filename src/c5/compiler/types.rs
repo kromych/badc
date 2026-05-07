@@ -139,27 +139,44 @@ pub(super) fn long_ptr_depth(ty: i64) -> i64 {
     }
 }
 
+/// C99 6.3.1.1 integer promotions: any operand whose rank is below
+/// `int` (i.e. char or short, signed or unsigned) is converted to
+/// `int` for the purpose of arithmetic. The signed-int range can
+/// hold every value of the original type because c5's int is 4
+/// bytes vs char's 1 / short's 2, so the result is always the
+/// signed `Ty::Int` -- the "convert to unsigned int" branch of the
+/// C99 rule never fires here.
+fn integer_promote(ty: i64) -> i64 {
+    let stripped = strip_unsigned(ty);
+    if stripped == Ty::Char as i64 || stripped == Ty::Short as i64 {
+        Ty::Int as i64
+    } else {
+        ty
+    }
+}
+
 /// C99 6.3.1.8 usual arithmetic conversions: pick the common type
 /// for a binary integer operation. Used by relational compares to
 /// decide between the signed (`Op::Lt/Gt/Le/Ge`) and unsigned
 /// (`Op::Ult/Ugt/Ule/Uge`) variants, and by arithmetic to tag the
 /// result type so subsequent shifts / compares route correctly.
 ///
-/// Algorithm (after integer promotions, which c5 mostly already
-/// does at load time -- char and short loads zero- or sign-extend
-/// to the i64 register, matching `int` width semantically):
-///   * If both operands are signed or both are unsigned: result is
-///     the larger-rank type with the same signedness.
-///   * If mixed: the unsigned operand "wins" when its rank is
-///     greater than or equal to the signed operand's. When the
-///     signed type has strictly higher rank, c5's signed long can
-///     hold every unsigned int value (since long is 8 bytes vs
-///     unsigned int's 4), so the signed type wins.
+/// Algorithm:
+///   1. Apply integer promotions to both operands (char / short
+///      -> int).
+///   2. If both promoted operands are signed or both are unsigned:
+///      result is the larger-rank type with the same signedness.
+///   3. If mixed: the unsigned operand "wins" when its rank is
+///      greater than or equal to the signed operand's. When the
+///      signed type has strictly higher rank, c5's signed long
+///      can hold every unsigned int value (since long is 8 bytes
+///      vs unsigned int's 4), so the signed type wins.
 ///
-/// For c5, the only ranks that come up here are int (4) and long
-/// (8); narrower types are promoted to int by the load ops before
-/// they reach the arithmetic / compare site.
+/// For c5, the only ranks that come up after integer promotion
+/// are int (4) and long (8).
 pub(super) fn usual_arith_common_ty(a: i64, b: i64) -> i64 {
+    let a = integer_promote(a);
+    let b = integer_promote(b);
     let a_unsigned = is_unsigned_ty(a);
     let b_unsigned = is_unsigned_ty(b);
     let a_long = is_long_ty(strip_unsigned(a));

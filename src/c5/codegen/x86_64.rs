@@ -817,6 +817,16 @@ pub(super) fn emit_movzx_r_mem8(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i
     emit_modrm_mem(code, dst, base, disp);
 }
 
+/// `MOVSX r64, byte ptr [base + disp]` -- load a byte sign-extended
+/// into a 64-bit register. Used by [`Op::Lcs`] for `signed char`
+/// lvalue reads. Encoding: `REX.W + 0F BE /r`.
+pub(super) fn emit_movsx_r_mem8(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+    emit_byte(code, rex(true, dst.high(), false, base.high()));
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0xBE);
+    emit_modrm_mem(code, dst, base, disp);
+}
+
 /// `MOVZX r64, r/m8` -- zero-extend a byte register into a 64-bit
 /// register. Encoding: `REX.W + 0F B6 /r` with `mod=11`. The REX
 /// prefix also disables the AH/CH/DH/BH high-byte aliases so we
@@ -1579,6 +1589,7 @@ fn lower_op(
             emit_mov_r_mem(code, Reg::R13, Reg::R13, 0);
         }
         Op::Lc => emit_movzx_r_mem8(code, Reg::R13, Reg::R13, 0),
+        Op::Lcs => emit_movsx_r_mem8(code, Reg::R13, Reg::R13, 0),
         Op::Si => {
             // pop addr; *addr = r13. With pool: addr is in rN
             // (no load needed). Without pool: pop r10 from stack.

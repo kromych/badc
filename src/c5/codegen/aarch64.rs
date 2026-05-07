@@ -774,6 +774,15 @@ pub(super) fn enc_ldrb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
     0x3940_0000 | (imm << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
+/// `LDRSB <Xt>, [<Xn|SP>, #imm]` -- byte load sign-extended into
+/// the full 64-bit `Xt`. Used by [`Op::Lcs`] for `signed char`
+/// lvalue reads. Encoding: opc=10 (sign-extend to 64-bit),
+/// size=00 (byte). Imm is unscaled (byte stride).
+pub(super) fn enc_ldrsb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    debug_assert!(imm < 4096, "ldrsb imm: {imm} > 4095");
+    0x3980_0000 | (imm << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
 /// `STRB <Wt>, [<Xn|SP>, #imm]` -- byte store. Stores the low 8 bits
 /// of `Wt` and ignores the rest, which is what c4's `Sc` opcode
 /// expects.
@@ -1473,6 +1482,7 @@ fn lower_op(
         // ---- Memory loads / stores ----
         Op::Li => emit(code, enc_ldr_imm(Reg::X19, Reg::X19, 0)),
         Op::Lc => emit(code, enc_ldrb_imm(Reg::X19, Reg::X19, 0)),
+        Op::Lcs => emit(code, enc_ldrsb_imm(Reg::X19, Reg::X19, 0)),
         Op::Si => {
             // pop addr; *addr = x19. With pool: addr is in xN
             // (skip the ldr). Without pool: pop from real stack.

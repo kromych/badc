@@ -406,7 +406,47 @@ impl Compiler {
             //   * value-typed nested union
             // Pointer / scalar / bitfield fields read a single
             // constant-expression value via parse_constant_init_value.
-            if field.array_size > 0 && self.lex.tk == '{' as i64 {
+            if field.array_size > 0
+                && self.lex.tk == '"' as i64
+                && (field.ty & !UNSIGNED_BIT) == Ty::Char as i64
+            {
+                // `struct S { char a[N]; } x = { "..." };` -- copy the
+                // string bytes (including the trailing NUL) into the
+                // char-array field, padding the remainder with zeroes.
+                // Without this branch the parser falls into the
+                // single-value path and writes the *pointer* to the
+                // string's data-segment slot into the field's first
+                // 8 bytes -- bug surfaced by sqlite's `sqlite3DigitPairs`
+                // union, where the all-string init produced garbage.
+                let start_addr = self.lex.ival as usize;
+                self.next()?;
+                while self.lex.tk == '"' as i64 {
+                    self.next()?;
+                }
+                self.data.push(0); // ensure NUL terminator
+                let max = field.array_size as usize;
+                let mut idx = 0usize;
+                while idx < max {
+                    let b = if start_addr + idx < self.data.len() {
+                        self.data[start_addr + idx]
+                    } else {
+                        0
+                    };
+                    self.write_init_value(
+                        field_base + idx,
+                        1,
+                        b as i64,
+                        super::initializer::InitElemReloc::None,
+                    );
+                    idx += 1;
+                    if start_addr + idx >= self.data.len() {
+                        // Past the string; remainder stays zero.
+                        // Still walk the loop so all `max` bytes are
+                        // explicitly written (zeroed above by
+                        // write_init_value when source byte is 0).
+                    }
+                }
+            } else if field.array_size > 0 && self.lex.tk == '{' as i64 {
                 self.next()?;
                 let elem_size = self.size_of_type(field.ty);
                 let mut idx: usize = 0;

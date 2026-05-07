@@ -284,17 +284,22 @@ pub(super) fn is_type_start_token(tk: i64) -> bool {
 }
 
 /// Pick the right load op for the given `ty`.
-///   * `Ty::Char`           -> `Op::Lc`  (1-byte zero-extending)
+///   * `Ty::Char` (scalar)  -> `Op::Lc` / `Op::Lcs` (1-byte zero- / sign-ext)
 ///   * `Ty::Short` (scalar) -> `Op::Lh` / `Op::Lhu` (2-byte sign- / zero-ext)
 ///   * `Ty::Int` (scalar)   -> `Op::Lw`  (4-byte sign-extending; M31)
 ///   * everything else      -> `Op::Li`  (8-byte word load)
 /// Pointers (any base type) go through `Op::Li` because every
 /// pointer is 8 bytes regardless of its pointee width.
+///
+/// The signed / unsigned split for `char` mirrors the pattern for
+/// short and int: bare `char` is unsigned in c5 (loads zero-ext
+/// via `Lc`), `signed char` loads sign-ext via `Lcs`. The store
+/// path is the same byte-store either way.
 pub(super) fn load_op_for(ty: i64) -> Op {
     let unsigned = is_unsigned_ty(ty);
     let ty = strip_unsigned(ty);
     if ty == Ty::Char as i64 {
-        Op::Lc
+        if unsigned { Op::Lc } else { Op::Lcs }
     } else if ty == Ty::Short as i64 {
         // 2-byte slot. Sign vs zero extension splits like Lw / Lwu.
         if unsigned { Op::Lhu } else { Op::Lh }
@@ -336,6 +341,7 @@ pub(super) fn store_op_for(ty: i64) -> Op {
 /// rewrite site.
 pub(super) fn is_scalar_load_op_val(op_val: i64) -> bool {
     op_val == Op::Lc as i64
+        || op_val == Op::Lcs as i64
         || op_val == Op::Lh as i64
         || op_val == Op::Lhu as i64
         || op_val == Op::Lw as i64
@@ -350,6 +356,8 @@ pub(super) fn is_scalar_load_op_val(op_val: i64) -> bool {
 pub(super) fn reemit_scalar_load(op_val: i64) -> Op {
     if op_val == Op::Lc as i64 {
         Op::Lc
+    } else if op_val == Op::Lcs as i64 {
+        Op::Lcs
     } else if op_val == Op::Lh as i64 {
         Op::Lh
     } else if op_val == Op::Lhu as i64 {

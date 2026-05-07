@@ -156,7 +156,7 @@ int main() {
     CHECK(sizeof(unsigned short) == 2, "sizeof(u16)");
     CHECK(sizeof(unsigned int)   == 4, "sizeof(u32)");
     CHECK(sizeof(unsigned long)  == 8, "sizeof(u64)");
-    CHECK(sizeof(signed char)    == sizeof(int),  "sizeof(signed char) promotes");
+    CHECK(sizeof(signed char)    == 1, "sizeof(signed char)");
     CHECK(sizeof(int)            == 4, "sizeof(int)");
     CHECK(sizeof(long)           == 8, "sizeof(long)");
 

@@ -56,59 +56,38 @@
 // times instead of POSIX times); programs needing it should
 // call the `_stat64` family directly.
 //
-// c5 has no `unsigned short`, so we declare 16-bit fields as
-// `int` and split the dword they share into `__split_lo`/
-// `__split_hi` halves where the layout requires it. Reading the
-// individual halves needs explicit masking; user code mostly
-// reads `st_mode`, `st_size`, and the `st_*time` slots, all of
-// which land at the documented offsets.
-// c5 doesn't have a `short` type with native 16-bit packing;
-// `short` collapses onto `int` (4 bytes), so a `short st_mode;
-// short st_nlink;` declaration shifts every later field 4
-// bytes off. To keep the layout pixel-perfect we cover Apple's
-// `mode_t st_mode; nlink_t st_nlink;` 4-byte gap with a single
-// `int st_mode` -- reading `buf.st_mode` then yields a 32-bit
-// word whose low 16 bits are `mode_t` (mode bits + file type)
-// and high 16 bits are `nlink_t`. The `S_ISFOO(m)` macros and
-// the standard `m & 0777` permission-bit access only look at
-// the low 16 bits, which gives them the right values.
+// c5 supports real 16-bit `short` (and `unsigned short`) via
+// `Op::Lh` / `Op::Lhu` / `Op::Sh`, so the per-platform stat
+// struct now uses `short st_mode; short st_nlink;` directly --
+// reading those fields lands on the right libc bytes without any
+// dword splitting / mask ceremony.
 #ifdef __APPLE__
 struct stat {
-    int    st_dev;            /* offset  0, 4 bytes */
-    int    st_mode;           /* offset  4, 4 bytes (mode | nlink) */
-    long   st_ino;            /* offset  8, 8 bytes */
-    int    st_uid;            /* offset 16, 4 bytes */
-    int    st_gid;            /* offset 20, 4 bytes */
-    int    st_rdev;           /* offset 24, 4 bytes */
-    int    __pad28;           /* offset 28, 4 bytes */
-    long   st_atime;          /* offset 32, 8 bytes (timespec.tv_sec)  */
-    long   st_atimensec;      /* offset 40, 8 bytes (timespec.tv_nsec) */
-    long   st_mtime;          /* offset 48 */
-    long   st_mtimensec;      /* offset 56 */
-    long   st_ctime;          /* offset 64 */
-    long   st_ctimensec;      /* offset 72 */
-    long   st_birthtime;      /* offset 80 */
-    long   st_birthtimensec;  /* offset 88 */
-    long   st_size;           /* offset 96, 8 bytes */
-    long   st_blocks;         /* offset 104, 8 bytes */
-    int    st_blksize;        /* offset 112, 4 bytes */
-    int    st_flags;          /* offset 116, 4 bytes */
-    int    st_gen;            /* offset 120, 4 bytes */
-    int    st_lspare;         /* offset 124, 4 bytes */
-    long   st_qspare0;        /* offset 128, 8 bytes */
-    long   st_qspare1;        /* offset 136, 8 bytes */
-    /* `st_nlink` proper is darwin's bytes 6-7, packed into the
-    ** 4-byte word that c5 names `st_mode` above. sqlite only
-    ** reads it inside `verifyDbFile` (warns if 0 or > 1, returns
-    ** void) -- so a separate slot in the trailing pad gives the
-    ** field name something to compile against without disturbing
-    ** the on-the-wire layout. The value read here is whatever
-    ** `osFstat` left in the trailing region (typically 0 for a
-    ** freshly zero'd buffer); the resulting "file unlinked while
-    ** open" warning is silent unless the caller has wired up
-    ** `sqlite3_log`. */
-    int    st_nlink;          /* offset 144, off-layout placeholder */
-    char   __pad[124];        /* room for any future / Linux-larger layout */
+    int             st_dev;            /* offset  0, 4 bytes */
+    unsigned short  st_mode;           /* offset  4, 2 bytes */
+    unsigned short  st_nlink;          /* offset  6, 2 bytes */
+    long            st_ino;            /* offset  8, 8 bytes */
+    int             st_uid;            /* offset 16, 4 bytes */
+    int             st_gid;            /* offset 20, 4 bytes */
+    int             st_rdev;           /* offset 24, 4 bytes */
+    int             __pad28;           /* offset 28, 4 bytes */
+    long            st_atime;          /* offset 32 (timespec.tv_sec)  */
+    long            st_atimensec;      /* offset 40 (timespec.tv_nsec) */
+    long            st_mtime;          /* offset 48 */
+    long            st_mtimensec;      /* offset 56 */
+    long            st_ctime;          /* offset 64 */
+    long            st_ctimensec;      /* offset 72 */
+    long            st_birthtime;      /* offset 80 */
+    long            st_birthtimensec;  /* offset 88 */
+    long            st_size;           /* offset 96, 8 bytes */
+    long            st_blocks;         /* offset 104, 8 bytes */
+    int             st_blksize;        /* offset 112, 4 bytes */
+    int             st_flags;          /* offset 116, 4 bytes */
+    int             st_gen;            /* offset 120, 4 bytes */
+    int             st_lspare;         /* offset 124, 4 bytes */
+    long            st_qspare0;        /* offset 128, 8 bytes */
+    long            st_qspare1;        /* offset 136, 8 bytes */
+    char            __pad[64];         /* room for any future / Linux-larger layout */
 };
 #elif defined(__linux__) && defined(__x86_64__)
 // Linux glibc x86_64 layout. See bits/struct_stat.h:

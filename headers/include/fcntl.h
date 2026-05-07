@@ -102,28 +102,30 @@
 //                  off_t l_len, pid_t l_pid;
 //                  -> l_type at offset 0.
 //
-// c5 has no native 16-bit short; we widen to int (4 bytes) but
-// keep field offsets pixel-perfect so libc's fcntl reads the
-// l_type byte at the spot it expects. Trailing __pad[] keeps the
-// struct large enough that any extra trailing field libc writes
-// can't overflow the caller's frame.
+// Both layouts use real 16-bit `short` for l_type / l_whence;
+// c5 supports `Ty::Short` natively (`Op::Lh` / `Op::Sh` 2-byte
+// memory ops) so the struct shape now lines up with libc.
+// Trailing __pad[] keeps the struct large enough that any extra
+// trailing field libc writes can't overflow the caller's frame.
 #ifdef __APPLE__
 struct flock {
-    long l_start;     /* offset  0 */
-    long l_len;       /* offset  8 */
-    int  l_pid;       /* offset 16 */
-    int  l_type;      /* offset 20, low 16 bits = short l_type */
-    int  l_whence;    /* offset 24, low 16 bits = short l_whence */
-    char __pad[64];
+    long  l_start;     /* offset  0 */
+    long  l_len;       /* offset  8 */
+    int   l_pid;       /* offset 16 */
+    short l_type;      /* offset 20 */
+    short l_whence;    /* offset 22 */
+    char  __pad[64];
 };
 #else
 struct flock {
-    int  l_type;      /* offset  0, low 16 bits */
-    int  l_whence;    /* offset  4, low 16 bits */
-    long l_start;     /* offset  8 */
-    long l_len;       /* offset 16 */
-    int  l_pid;       /* offset 24 */
-    char __pad[64];
+    short l_type;      /* offset  0 */
+    short l_whence;    /* offset  2 */
+    /* glibc inserts 4 bytes of padding so off_t l_start is 8-aligned. */
+    int   __pad0;      /* offset  4 */
+    long  l_start;     /* offset  8 */
+    long  l_len;       /* offset 16 */
+    int   l_pid;       /* offset 24 */
+    char  __pad[64];
 };
 #endif
 

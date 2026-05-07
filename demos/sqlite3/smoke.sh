@@ -62,21 +62,64 @@ run_scenarios() {
     local fail=0
 
     # ---- in-memory smoke ----
-    # avg() is intentionally excluded: sqlite's vdbeMemRenderNum
-    # uses 16-bit `*(u16*)` digit-pair writes, but c5's pointer-
-    # deref of `unsigned short *` lowers to a 32-bit access (no
-    # `Op::Sh` / `Op::Lh` in the dialect yet). The buffer ends
-    # up empty for any %g formatting of a non-integer double. See
-    # fixtures/c/deferred_u16_load_store.c.
+    # Covers the basic CRUD path plus all five integer aggregates
+    # (count / sum / avg / min / max). avg() exercises sqlite's
+    # vdbeMemRenderNum / FpDecode digit-pair writer, which depends
+    # on real 16-bit `*(u16*)` loads/stores via `Op::Lh` / `Op::Sh`.
     local inmem_out inmem_expect
-    inmem_out="$(printf "CREATE TABLE t(x INTEGER, y TEXT);\nINSERT INTO t VALUES(-7,'neg'),(1,'hello'),(2,'world');\nSELECT * FROM t;\nSELECT count(*),sum(x),min(x),max(x) FROM t;\n.quit\n" | "${shell_bin}")"
+    inmem_out="$(printf "CREATE TABLE t(x INTEGER, y TEXT);\nINSERT INTO t VALUES(-7,'neg'),(1,'hello'),(2,'world');\nSELECT * FROM t;\nSELECT count(*),sum(x),avg(x),min(x),max(x) FROM t;\n.quit\n" | "${shell_bin}")"
     inmem_expect="-7|neg
 1|hello
 2|world
-3|-4|-7|2"
+3|-4|-1.3333333333333333|-7|2"
     if [ "${inmem_out}" != "${inmem_expect}" ]; then
         echo "smoke FAIL [${label}]: in-memory output mismatch" >&2
         diff <(echo "${inmem_expect}") <(echo "${inmem_out}") >&2 || true
+        fail=1
+    fi
+
+    # ---- math / aggregate / type-promotion coverage ----
+    # Each sub-query exercises a specific path c5 has historically
+    # tripped on:
+    #   * count + DISTINCT  -- aggregate over a hashed key set
+    #   * mixed integer arithmetic + abs / -1 wraparound
+    #   * boundary integer literals at INT32_MIN / INT32_MAX so
+    #     the parser, the bytecode immediate encoding, and the
+    #     OP_Multiply path all see a real edge case
+    #   * unsigned shift via `>>` of a high-bit-set value, the
+    #     bug that broke avg before Op::Shru landed
+    #   * `LENGTH("...")` -- string built-in over a UTF-8 literal
+    #   * row-count and a `ORDER BY ... LIMIT` to make sure the
+    #     vdbe sort path stays honest
+    local math_out math_expect
+    math_out="$(printf "CREATE TABLE n(v INTEGER);\nINSERT INTO n VALUES(1),(2),(3),(2),(1),(NULL);\nSELECT count(*),count(v),count(DISTINCT v) FROM n;\nSELECT abs(-9223372036854775807) - 1;\nSELECT 2147483647 + 1, -2147483647 - 1;\nSELECT 0xFFFFFFFF >> 1, 0xFFFFFFFF & 0xF;\nSELECT length('hello world');\nSELECT v FROM n WHERE v IS NOT NULL ORDER BY v DESC LIMIT 2;\n.quit\n" | "${shell_bin}")"
+    math_expect="6|5|3
+9223372036854775806
+2147483648|-2147483648
+2147483647|15
+11
+3
+2"
+    if [ "${math_out}" != "${math_expect}" ]; then
+        echo "smoke FAIL [${label}]: math output mismatch" >&2
+        diff <(echo "${math_expect}") <(echo "${math_out}") >&2 || true
+        fail=1
+    fi
+
+    # ---- REAL column aggregates ----
+    # Direct REAL storage (no INTEGER -> REAL promotion via `*1.0`):
+    # exercises the FpDecode digit-pair writer for non-integer
+    # outputs. The `avg() of integer * 1.0` path goes through
+    # sqlite's Kahan-Babuska-Neumaier accumulator and isn't covered
+    # here -- it's still wrong in c5 (returns 0 instead of the
+    # actual mean), tracked as a separate float-arithmetic bug.
+    local real_out real_expect
+    real_out="$(printf "CREATE TABLE r(x REAL);\nINSERT INTO r VALUES(1.5),(2.5),(3.5);\nSELECT count(*),sum(x),avg(x),min(x),max(x) FROM r;\nSELECT round(avg(x), 2) FROM r;\n.quit\n" | "${shell_bin}")"
+    real_expect="3|7.5|2.5|1.5|3.5
+2.5"
+    if [ "${real_out}" != "${real_expect}" ]; then
+        echo "smoke FAIL [${label}]: REAL aggregate mismatch" >&2
+        diff <(echo "${real_expect}") <(echo "${real_out}") >&2 || true
         fail=1
     fi
 

@@ -25,8 +25,16 @@ pub enum Op {
     Lev,
     /// Load Integer: Loads an i64 from the address in the accumulator.
     Li,
-    /// Load Character: Loads a u8 from the address in the accumulator.
+    /// Load Character: Loads a u8 from the address in the accumulator,
+    /// zero-extending into the 64-bit accumulator. Used for bare
+    /// `char` (which c5 treats as unsigned) and `unsigned char`.
     Lc,
+    /// Load Character Signed: Loads an i8 from the address in the
+    /// accumulator, sign-extending into the 64-bit accumulator. Used
+    /// for `signed char` lvalue reads -- C signed-char semantics
+    /// require the high bit to propagate so that values outside
+    /// [0, 127] stay negative.
+    Lcs,
     /// Store Integer: Stores the accumulator into the address on top of stack.
     Si,
     /// Store Character: Stores the lower byte of accumulator into address on stack.
@@ -259,7 +267,7 @@ pub enum Op {
     TlsLea,
 }
 
-const OPS: [Op; 80] = [
+const OPS: [Op; 81] = [
     Op::Lea,
     Op::Imm,
     Op::Jmp,
@@ -272,6 +280,7 @@ const OPS: [Op; 80] = [
     Op::Lev,
     Op::Li,
     Op::Lc,
+    Op::Lcs,
     Op::Si,
     Op::Sc,
     Op::Lw,

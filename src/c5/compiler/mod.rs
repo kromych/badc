@@ -532,8 +532,13 @@ impl Compiler {
         // every such site fires "incompatible struct types" /
         // "pointer assigned to integer" noise.
         let char_ptr = (Ty::Char as i64) + (Ty::Ptr as i64);
-        let decl_is_char_ptr = decl_is_ptr && declared == char_ptr;
-        let act_is_char_ptr = act_is_ptr && actual == char_ptr;
+        // Strip UNSIGNED_BIT before comparing: `char *` (which c5
+        // treats as unsigned), `signed char *`, and `unsigned char *`
+        // are all interchangeable here -- the compatibility rule
+        // is "is this any kind of byte pointer?", not "do the
+        // signedness tags line up".
+        let decl_is_char_ptr = decl_is_ptr && (declared & !UNSIGNED_BIT) == char_ptr;
+        let act_is_char_ptr = act_is_ptr && (actual & !UNSIGNED_BIT) == char_ptr;
         if decl_is_char_ptr && act_is_ptr {
             return None;
         }
@@ -942,15 +947,20 @@ impl Compiler {
             }
         } else if self.lex.tk == Token::Char as i64 {
             self.next()?;
-            // `signed char` -> int. A bare `char` (or `unsigned char`)
-            // stays a 1-byte slot; `signed char` would otherwise lose
-            // the negative half of its range when loaded.
+            // `signed char` is a real 1-byte signed type; loads via
+            // `Op::Lcs` so the high bit propagates. Plain `char` is
+            // treated as unsigned in c5 (loads via `Op::Lc`,
+            // zero-extending), the same as `unsigned char`. The
+            // type tag distinguishes the two via `UNSIGNED_BIT`:
+            // bare and unsigned char carry it; signed char doesn't.
             if saw_signed {
-                Ty::Int as i64
-            } else if saw_unsigned {
-                Ty::Char as i64 | UNSIGNED_BIT
-            } else {
                 Ty::Char as i64
+            } else {
+                // Both bare `char` and `unsigned char` -- c5 picks
+                // the unsigned tag so existing code that loads byte
+                // values gets the zero-ext behavior it has always
+                // had. The store path is the same (`Op::Sc`).
+                Ty::Char as i64 | UNSIGNED_BIT
             }
         } else if self.lex.tk == Token::Float as i64 {
             self.next()?;
@@ -2093,20 +2103,22 @@ impl Compiler {
                     && !is_pointer_ty(t)
                     && !is_pointer_ty(self.ty)
                 {
-                    // Integer narrowing: when the target type is
-                    // narrower than the source AND unsigned, the
-                    // cast must mask the high bits or subsequent
-                    // expressions see the original wider value.
-                    // Without this, e.g. `(u32)x` of a u64 leaves
-                    // the high 32 bits in the register and only
-                    // gets truncated if the value is stored back
-                    // to a 4-byte slot. (Signed narrowing isn't
-                    // handled here -- it would need a sign-
-                    // extending pair, and existing fixtures rely
-                    // on the pre-cast value bits surviving.)
+                    // Cast to a non-pointer integer narrower than
+                    // 8 bytes: re-extend the accumulator to the
+                    // target storage width. c5 keeps every value
+                    // sign- or zero-extended to 64 bits in the
+                    // accumulator, so a cast that narrows in C99
+                    // is otherwise invisible until the value lands
+                    // in a typed slot.
+                    //
+                    // Unsigned target -> mask the high bits.
+                    // Signed target  -> shift-left then arith-shift-
+                    //                   right by (64 - width*8) so
+                    //                   the high bit of the target
+                    //                   propagates.
                     let target_size = self.size_of_type(t);
                     let source_size = self.size_of_type(self.ty);
-                    if is_unsigned_ty(t) && target_size < source_size {
+                    if is_unsigned_ty(t) {
                         let mask: i64 = match target_size {
                             1 => 0xff,
                             2 => 0xffff,
@@ -2116,6 +2128,19 @@ impl Compiler {
                         if mask != -1 {
                             self.emit_binop_with_imm(Op::And, mask);
                         }
+                    } else if target_size < source_size
+                        && (target_size == 1 || target_size == 2 || target_size == 4)
+                    {
+                        // Signed narrowing: shift-pair to mask + sign-extend
+                        // to the target storage width. Only emitted when
+                        // we're actually narrowing -- a (i32) cast of a
+                        // 4-byte source is a no-op the value already
+                        // satisfies, and emitting the shifts there would
+                        // mask out perfectly good high bits in code that
+                        // had widened earlier.
+                        let bits = 64i64 - (target_size as i64) * 8;
+                        self.emit_binop_with_imm(Op::Shl, bits);
+                        self.emit_binop_with_imm(Op::Shr, bits);
                     }
                 }
                 self.ty = t;
@@ -3051,15 +3076,13 @@ impl Compiler {
                 };
             } else if self.lex.tk == Token::Char as i64 {
                 self.next()?;
-                // `signed char` -> int (see parse_decl_base_type for
-                // the same promotion). Plain / unsigned char stays
-                // a 1-byte slot.
+                // `signed char` is a real 1-byte signed type; bare
+                // `char` and `unsigned char` are unsigned. Mirror
+                // parse_decl_base_type.
                 bt = if saw_signed {
-                    Ty::Int as i64
-                } else if saw_unsigned {
-                    Ty::Char as i64 | UNSIGNED_BIT
-                } else {
                     Ty::Char as i64
+                } else {
+                    Ty::Char as i64 | UNSIGNED_BIT
                 };
             } else if self.lex.tk == Token::Float as i64 {
                 self.next()?;

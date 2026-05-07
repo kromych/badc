@@ -106,21 +106,17 @@ fn u16_load_store_is_two_bytes() {
 }
 
 #[test]
-#[ignore = "deferred: C99 integer-boundary final-boss; documents known gaps"]
 fn integer_boundary_c99_final_boss() {
-    // The fixture is a comprehensive C99 spec encoding for every
-    // signed / unsigned x {char, short, int, long} combination
-    // across load, store, sign / zero extension, narrowing cast,
-    // overflow, shift, compare. Each CHECK has a unique exit
-    // code so a non-zero exit pinpoints the gap. Today three
-    // codes (100 / 136 / 150 / 151) reflect by-design c5
-    // behavior (signed-char-as-int, same-width sign-extension on
-    // signed -> unsigned cast); the rest pass.
+    // Comprehensive C99 spec encoding for every signed / unsigned
+    // x {char, short, int, long} combination across load, store,
+    // sign / zero extension, narrowing cast, overflow, shift, and
+    // compare. Each CHECK carries a unique exit code so a
+    // regression pinpoints the exact boundary. Was deferred until
+    // (a) `signed char` became a real 1-byte type with `Op::Lcs`
+    // sign-extending load, (b) the cast lowering started masking
+    // / sign-extending to the target storage width.
     let exit = jit_fixture_exit("deferred_integer_boundary_c99.c");
-    assert_eq!(
-        exit, 0,
-        "fixture should exit 0 once every C99 boundary lands"
-    );
+    assert_eq!(exit, 0, "C99 integer boundary regression");
 }
 
 // ---- Linux ELF TLS interaction (#47) ----

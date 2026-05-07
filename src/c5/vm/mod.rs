@@ -740,6 +740,9 @@ impl<H: Host> Vm<H> {
                 Op::Lc => {
                     a = self.load_u8(a as usize)? as i64;
                 }
+                Op::Lcs => {
+                    a = (self.load_u8(a as usize)? as i8) as i64;
+                }
                 Op::Si => {
                     let addr = self.load_i64(sp)? as usize;
                     sp += 8;

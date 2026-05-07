@@ -343,7 +343,15 @@ impl Lexer {
                     if !nc.is_ascii_digit() {
                         break;
                     }
-                    val = val * 10 + (nc as u8 - b'0') as i64;
+                    // Decimal-literal accumulator: wrap around at i64
+                    // overflow rather than panicking under debug
+                    // builds. C99 says any integer constant outside
+                    // the representable range has implementation-
+                    // defined behavior; clang and gcc both fold to
+                    // the wrapped value at the chosen type's width.
+                    val = (val as u64)
+                        .wrapping_mul(10)
+                        .wrapping_add((nc as u8 - b'0') as u64) as i64;
                     self.pos += 1;
                 }
 

@@ -27,7 +27,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::{Compiler, NativeOptions, Target, emit_native, emit_native_with_options};
+use crate::{Compiler, NativeOptions, Target, emit_native_with_options};
 
 /// On Windows we run the binary directly; on Linux we go through
 /// WINE if the environment opts in via `BADC_RUN_WINE`. Returns

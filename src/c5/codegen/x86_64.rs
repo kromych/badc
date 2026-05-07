@@ -677,6 +677,14 @@ pub(super) fn emit_sar_r_cl(code: &mut Vec<u8>, dst: Reg) {
     emit_byte(code, modrm(0b11, 7, dst.lo()));
 }
 
+/// `SHR r/m64, cl` -- logical right shift (zero fills high bits).
+/// ModR/M.reg = 5. Used by [`Op::Shru`] / unsigned `>>`.
+pub(super) fn emit_shr_r_cl(code: &mut Vec<u8>, dst: Reg) {
+    emit_byte(code, rex(true, false, false, dst.high()));
+    emit_byte(code, 0xD3);
+    emit_byte(code, modrm(0b11, 5, dst.lo()));
+}
+
 /// `SHL r/m64, imm8`. ModR/M.reg = 4, imm at end.
 pub(super) fn emit_shl_r_imm8(code: &mut Vec<u8>, dst: Reg, imm: u8) {
     emit_byte(code, rex(true, false, false, dst.high()));
@@ -1692,9 +1700,9 @@ fn lower_op(
 
         // ---- Shifts. Pop into lhs (rN or r10), shift by cl (=r13
         //      lo byte), then mov r13 = lhs.
-        Op::Shl => shift_with_pop(code, reg_state, /*arithmetic=*/ false),
-        Op::Shr => shift_with_pop(code, reg_state, /*arithmetic=*/ true),
-        Op::Shru => shift_with_pop(code, reg_state, /*arithmetic=*/ false),
+        Op::Shl => shift_with_pop(code, reg_state, ShiftKind::Left),
+        Op::Shr => shift_with_pop(code, reg_state, ShiftKind::ArithRight),
+        Op::Shru => shift_with_pop(code, reg_state, ShiftKind::LogicalRight),
 
         Op::Div => div_or_mod_with_pop(code, reg_state, /*want_remainder=*/ false),
         Op::Mod => div_or_mod_with_pop(code, reg_state, /*want_remainder=*/ true),
@@ -2447,16 +2455,28 @@ fn lower_cmp(
     }
 }
 
+/// Direction / signedness pick for `shift_with_pop`. The three
+/// kinds map to the three c5 shift ops:
+/// * `Op::Shl`  -> `ShiftKind::Left`     (`SHL r, cl`)
+/// * `Op::Shr`  -> `ShiftKind::ArithRight` (`SAR r, cl`)
+/// * `Op::Shru` -> `ShiftKind::LogicalRight` (`SHR r, cl`)
+#[derive(Clone, Copy)]
+enum ShiftKind {
+    Left,
+    ArithRight,
+    LogicalRight,
+}
+
 /// Pop the LHS, shift it by cl (lo byte of r13), mov r13 = lhs.
-fn shift_with_pop(code: &mut Vec<u8>, reg_state: &mut RegState<'_>, arithmetic_right: bool) {
+fn shift_with_pop(code: &mut Vec<u8>, reg_state: &mut RegState<'_>, kind: ShiftKind) {
     let lhs = pop_lhs_reg(code, reg_state);
     // The shift count register is fixed to cl. mov rcx, r13 first
     // since the shift will overwrite r13's role on the read side.
     emit_mov_rr(code, Reg::RCX, Reg::R13);
-    if arithmetic_right {
-        emit_sar_r_cl(code, lhs);
-    } else {
-        emit_shl_r_cl(code, lhs);
+    match kind {
+        ShiftKind::Left => emit_shl_r_cl(code, lhs),
+        ShiftKind::ArithRight => emit_sar_r_cl(code, lhs),
+        ShiftKind::LogicalRight => emit_shr_r_cl(code, lhs),
     }
     emit_mov_rr(code, Reg::R13, lhs);
 }

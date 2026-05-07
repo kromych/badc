@@ -50,7 +50,7 @@
 //   0   7ffffffbb240               0   (rip=0 -- jumped to NULL)
 //   1   7ffffffbb2f0      0x53a310   bc=325923 Jsr 318133
 //   2         7ff618      0x524385   bc=302727 Jsr 304465
-//                ↑
+//                ^
 //                rbp is a *data-segment* address, not a stack
 //                address. Frame 1's saved-rbp slot at
 //                [0x7ffffffbb2f0+0] has been overwritten with

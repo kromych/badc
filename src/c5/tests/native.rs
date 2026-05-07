@@ -348,6 +348,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("large_stack_frame.c", 42),
     ("octal_literal.c", 42),
     ("short_types.c", 42),
+    ("long_long_distinct.c", 0),
     ("fn_ptr_explicit_deref.c", 42),
     ("sys_addr_in_static_init.c", 42),
     ("libc_struct_buf_size.c", 42),

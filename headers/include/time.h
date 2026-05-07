@@ -46,8 +46,17 @@ struct tm {
 // transitioned everything to `long long`). Storing them as
 // `int` means values past 2038 wrap silently; programs that
 // `time(NULL)` and arithmetic on the result lose 4 bytes.
+//
+// On Windows we're LLP64 (`long` = 32 bits), so these have to
+// be `long long` to keep 64-bit width and match the UCRT ABI.
+// On Linux/macOS LP64, `long` is already 64 bits.
+#ifdef __BADC_WINDOWS__
+typedef long long time_t;
+typedef long long clock_t;
+#else
 typedef long time_t;
 typedef long clock_t;
+#endif
 
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")

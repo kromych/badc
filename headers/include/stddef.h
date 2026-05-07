@@ -1,10 +1,11 @@
 // stddef.h -- the standard "common definitions" header.
 // `size_t` and `ptrdiff_t` are pointer-wide on every 64-bit
-// host (LP64 macOS / Linux: 8 bytes; LLP64 Windows: 8 bytes
-// pointer but 4-byte `long`; we still alias `long` and accept
-// the small Windows skew per #51). `wchar_t` stays at `int`
-// width since UTF-16 / UTF-32 codepoints fit in 4 bytes and
-// no host expects a wider value here.
+// host: 8 bytes on LP64 (Linux/macOS) where `long` already
+// matches a pointer, and 8 bytes on LLP64 (Windows) where
+// `long` is only 32 bits and we have to fall back to
+// `long long` to keep the right width. `wchar_t` stays at
+// `int` width since UTF-16 / UTF-32 codepoints fit in 4 bytes
+// and no host expects a wider value here.
 //
 // NULL is the canonical zero pointer literal. The offsetof
 // shape `&((T*)0)->m` is recognised by the constant-expression
@@ -13,8 +14,13 @@
 #ifndef _C5_STDDEF_H
 #define _C5_STDDEF_H
 
+#ifdef __BADC_WINDOWS__
+typedef long long size_t;
+typedef long long ptrdiff_t;
+#else
 typedef long size_t;
 typedef long ptrdiff_t;
+#endif
 typedef int wchar_t;
 
 #ifndef NULL

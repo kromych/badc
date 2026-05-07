@@ -188,15 +188,40 @@
 // where a guarding `if(pExpr->pLeft)` should have skipped the
 // call but threading rerouted around it.
 //
+// ## Synthetic repro attempts
+//
+// Two minimised synthetic tests in c5 (a `while(p)
+// if/elseif/elseif`-style state machine, then a faithful
+// `while(p) switch(p->op)` with all the relevant TK_xxx codes
+// and a recursive helper) both compile and run correctly under
+// `-O` on macos-arm64 host AND linux-arm64 (= the same
+// orbstack VM that crashes on the sqlite trigger). So the bug
+// requires more than just "while + switch + walk a pointer
+// chain" -- it needs:
+//   * a deep call chain (16+ frames),
+//   * many specific branches per function (frame 2's
+//     `sqlite3ExprAddCollateString` has 5 different writes to
+//     the slot that becomes the leaf's NULL arg2),
+//   * something about the actual sqlite control flow that
+//     `branch_threading` rewires in a way that's locally
+//     equivalent but globally wrong.
+//
 // ## Next steps
 //
-//   * arm64: confirm the name (resolveSelectStep vs. expected
-//     sqlite3ExprAffinity), then walk backwards through the
-//     chain to find the call site that should have null-checked
-//     before recursing. The diff that branch_thread introduces
-//     is small (we already verified the per-function structure
-//     is preserved) so the buggy threading is confined to one
-//     specific Bz/Jmp pair.
+//   * arm64: add a per-`Op::Ent` runtime guard that traps with
+//     the function's bc PC if its FIRST arg is NULL. Set
+//     `BADC_NULL_ARG_CHECK=<leaf-bc>` to fire on the leaf, then
+//     bisect upward by setting it to each frame in the chain.
+//     The first frame whose call passes NULL is one hop above
+//     the bug. The infrastructure mirrors the existing
+//     `BADC_SAVED_RBP_CHECK` syscall trap, so it's a small
+//     code change.
+//   * arm64: alternatively, diff the bytecode of every function
+//     in the call chain (frames 0..15) between bt-on and
+//     bt-off, looking for a function where the threading
+//     changes don't preserve the value the leaf sees. We've
+//     already confirmed frames 0-2 are equivalent; the
+//     interesting frame is somewhere deeper.
 //   * x64: the per-store guard (Si/Sc/Sw destination overlaps
 //     active frame's saved-rbp slot) is still the most direct
 //     way to catch the corrupting write.

@@ -155,6 +155,18 @@ jobs:
         # The no_std variant -- no StdHost adapter, alloc only. Library-
         # only because the binary needs std for argv / stdio.
         run: cargo build --locked --no-default-features --lib --verbose
+      - name: sqlite3 amalgamation smoke (unix only)
+        # Fetch upstream sqlite, apply our patch series, compile
+        # `sqlite3.c + shell.c` with the freshly-built badc, and
+        # round-trip the in-memory and file-backed scenarios.
+        # Skips on Windows runners -- the `setup.sh` and
+        # `smoke.sh` scripts assume bash + curl + unzip + patch,
+        # all of which are available on macos / ubuntu by default
+        # but would need a bash port to run on windows-latest.
+        if: matrix.os == 'macos-latest' || matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm'
+        run: |
+          cargo build --release --locked
+          ./demos/sqlite3/smoke.sh
 
   features:
     name: feature combos

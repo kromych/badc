@@ -6,6 +6,14 @@
 *.obj
 *.o
 .DS_Store
-demos/sqlite3/
+# SQLite amalgamation -- not committed; `demos/sqlite3/setup.sh`
+# fetches the upstream tarball and applies our patches, leaving
+# the four .c/.h files behind. The patches and the build/smoke
+# scripts ARE committed (next re-includes).
+demos/sqlite3/*
+!demos/sqlite3/setup.sh
+!demos/sqlite3/smoke.sh
+!demos/sqlite3/patches/
+!demos/sqlite3/README.md
 hello
 sqlite3_main

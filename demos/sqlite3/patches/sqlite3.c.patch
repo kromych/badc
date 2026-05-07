@@ -1,0 +1,69 @@
+--- a/sqlite3.c	2026-04-09 06:11:49
++++ b/sqlite3.c	2026-05-06 19:14:10
+@@ -24386,7 +24386,7 @@
+ ** of 8.
+ */
+ #define SZ_VDBECURSOR(N) \
+-    (ROUND8(offsetof(VdbeCursor,aType)) + ((N)+1)*sizeof(u64))
++   (offsetof(VdbeCursor,aType) + (N+1)*sizeof(u64))
+ 
+ /* Return true if P is a null-only cursor
+ */
+@@ -46258,7 +46258,17 @@
+   if( ctrlFlags & UNIXFILE_NOLOCK ){
+     pLockingStyle = &nolockIoMethods;
+   }else{
+-    pLockingStyle = (**(finder_type*)pVfs->pAppData)(zFilename, pNew);
++    /* badc/c5 patch: the original `(**(finder_type*)pVfs->pAppData)
++    ** (zFilename, pNew)` shape exercises a c5 codegen path that
++    ** doesn't handle "double-deref of a function pointer whose
++    ** return type is a struct pointer" -- the second `*` emits an
++    ** unwanted load through the function code, leaving a garbage
++    ** call target. Splitting the chain into a temp + single-deref
++    ** call sidesteps the path. Tracked separately as a deferred
++    ** c5 issue. */
++    finder_type *p_finder = (finder_type *)pVfs->pAppData;
++    finder_type finder = *p_finder;
++    pLockingStyle = finder(zFilename, pNew);
+ #if SQLITE_ENABLE_LOCKING_STYLE
+     /* Cache zFilename in the locking context (AFP and dotlock override) for
+     ** proxyLock activation is possible (remote proxy is based on db name)
+@@ -91745,13 +91755,24 @@
+ 
+ 
+ /* Input "x" is a sequence of unsigned characters that represent a
+-** big-endian integer.  Return the equivalent native integer
+-*/
+-#define ONE_BYTE_INT(x)    ((i8)(x)[0])
+-#define TWO_BYTE_INT(x)    (256*(i8)((x)[0])|(x)[1])
+-#define THREE_BYTE_INT(x)  (65536*(i8)((x)[0])|((x)[1]<<8)|(x)[2])
++** big-endian integer.  Return the equivalent native integer.
++**
++** badc/c5 patch: the original macros use `(i8)` (= signed char) casts
++** to get sign extension on the high byte. c5 has no real 8-bit signed
++** type -- `signed char` collapses to `int` -- so `(i8)x` is a no-op
++** and negative values come back as their unsigned bit pattern. Replace
++** the high-byte cast with a left-shift / arithmetic-right-shift pair,
++** which produces the same sign-extended result under both native and
++** c5 semantics. The non-high bytes stay as-is (they were never sign-
++** dependent).
++*/
++#define ONE_BYTE_INT(x)    ((((long long)(unsigned char)(x)[0]) << 56) >> 56)
++#define TWO_BYTE_INT(x)    ((((long long)(unsigned char)(x)[0]) << 56 >> 48) | (x)[1])
++#define THREE_BYTE_INT(x)  ((((long long)(unsigned char)(x)[0]) << 56 >> 40) \
++                            | ((x)[1]<<8) | (x)[2])
+ #define FOUR_BYTE_UINT(x)  (((u32)(x)[0]<<24)|((x)[1]<<16)|((x)[2]<<8)|(x)[3])
+-#define FOUR_BYTE_INT(x) (16777216*(i8)((x)[0])|((x)[1]<<16)|((x)[2]<<8)|(x)[3])
++#define FOUR_BYTE_INT(x)   ((((long long)(unsigned char)(x)[0]) << 56 >> 32) \
++                            | ((x)[1]<<16) | ((x)[2]<<8) | (x)[3])
+ 
+ /*
+ ** Deserialize the data blob pointed to by buf as serial type serial_type
+@@ -148396,7 +148417,6 @@
+       }
+     }
+   }
+-
+ #ifndef SQLITE_OMIT_VIRTUALTABLE
+   if( db->pDisconnect ) sqlite3VtabUnlockList(db);
+ #endif

@@ -149,25 +149,54 @@
 // c5-side mechanisms are independent. Fixing one likely won't
 // fix the other.
 //
-// Next steps:
-//   * arm64: walk the call chain backwards from the leaf's
-//     caller through every Jsr in the chain, looking for a
-//     site where the NULL value originates. The walker output
-//     names every frame's bc PC. Frame 1 (`bc=291242 Ent 3`)
-//     is a tiny pass-through that just forwards its arg3 to
-//     the leaf's arg2; frame 2 (`bc=291529 Ent 10`) has the
-//     interesting business -- its body has FIVE different
-//     `Lea -4; Psh; <rhs>; Si` writes to local -4 (the slot
-//     that gets passed down as arg3 to the wrapper, which then
-//     becomes the leaf's arg2). The five candidate RHS
-//     expressions at bcs 291549, 291586, 291621, 291657,
-//     291732 give local -4 different values (arg2, arg3,
-//     `*(arg2 + 16)`); the one that runs last before the call
-//     site at bc=291649 is what the leaf sees. So narrow this
-//     by making the leaf's prologue print the live arg value
-//     before the Lc (a specialisation of the syscall trap
-//     already in place for `BADC_SAVED_RBP_CHECK`), then walk
-//     up the chain identifying where the NULL came in.
+// ## Function names from the arm64 chain
+//
+// Cross-correlating the -O bc-PCs against a no-O dump (which
+// preserves source_lines / source_functions) by ent-index gives
+// us NAMES for every frame in the call chain. The leaf, the
+// wrapper, and the upstream callers are:
+//
+//   frame 0  bc=289483  resolveSelectStep      <- per ent-index
+//                                                  match (but the
+//                                                  body is actually
+//                                                  the inner loop of
+//                                                  `sqlite3ExprAffinity`)
+//   frame 1  bc=291242  sqlite3ExprDataType
+//   frame 2  bc=291529  sqlite3ExprAddCollateString
+//   frame 7  bc=329001  sqlite3ExprIfTrue
+//   frame 13 bc=538604  analyzeAggFuncArgs
+//
+// The leaf crashing op (`(char)*arg2` reading at NULL) matches
+// `sqlite3ExprAffinity`'s loop body -- it reads `pExpr->op`,
+// switches on TK_COLUMN (168), TK_AGG_COLUMN (170), TK_REGISTER
+// (176), TK_SELECT, etc., and recurses on `pExpr->pLeft` or
+// `pExpr->x.pSelect->pEList->a[0].pExpr`. If any of those sub-
+// pointers is NULL, the recursive call dereferences NULL.
+// (The ent-index match says "resolveSelectStep" but the body
+// shape lines up with `sqlite3ExprAffinity` -- the index
+// mapping is approximate when the optimizer's DCE removes a
+// few file-scope synthetic helpers, so the *exact* name needs
+// re-confirmation; the *shape* is unambiguously the
+// affinity-walker.)
+//
+// So: branch_thread reroutes some upstream check such that
+// `sqlite3ExprAffinity(NULL)` ends up reachable. The most
+// likely source is a recursion site like
+//
+//     return sqlite3ExprAffinity(pExpr->pLeft);     // when pLeft is NULL
+//
+// where a guarding `if(pExpr->pLeft)` should have skipped the
+// call but threading rerouted around it.
+//
+// ## Next steps
+//
+//   * arm64: confirm the name (resolveSelectStep vs. expected
+//     sqlite3ExprAffinity), then walk backwards through the
+//     chain to find the call site that should have null-checked
+//     before recursing. The diff that branch_thread introduces
+//     is small (we already verified the per-function structure
+//     is preserved) so the buggy threading is confined to one
+//     specific Bz/Jmp pair.
 //   * x64: the per-store guard (Si/Sc/Sw destination overlaps
 //     active frame's saved-rbp slot) is still the most direct
 //     way to catch the corrupting write.

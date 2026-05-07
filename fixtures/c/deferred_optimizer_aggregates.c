@@ -153,9 +153,21 @@
 //   * arm64: walk the call chain backwards from the leaf's
 //     caller through every Jsr in the chain, looking for a
 //     site where the NULL value originates. The walker output
-//     names every frame's bc PC -- combined with a no-O dump
-//     (which preserves source_lines) we can name actual sqlite
-//     functions.
+//     names every frame's bc PC. Frame 1 (`bc=291242 Ent 3`)
+//     is a tiny pass-through that just forwards its arg3 to
+//     the leaf's arg2; frame 2 (`bc=291529 Ent 10`) has the
+//     interesting business -- its body has FIVE different
+//     `Lea -4; Psh; <rhs>; Si` writes to local -4 (the slot
+//     that gets passed down as arg3 to the wrapper, which then
+//     becomes the leaf's arg2). The five candidate RHS
+//     expressions at bcs 291549, 291586, 291621, 291657,
+//     291732 give local -4 different values (arg2, arg3,
+//     `*(arg2 + 16)`); the one that runs last before the call
+//     site at bc=291649 is what the leaf sees. So narrow this
+//     by making the leaf's prologue print the live arg value
+//     before the Lc (a specialisation of the syscall trap
+//     already in place for `BADC_SAVED_RBP_CHECK`), then walk
+//     up the chain identifying where the NULL came in.
 //   * x64: the per-store guard (Si/Sc/Sw destination overlaps
 //     active frame's saved-rbp slot) is still the most direct
 //     way to catch the corrupting write.

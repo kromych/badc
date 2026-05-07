@@ -195,8 +195,6 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
     // appears live), but never the other way round -- which means a
     // stale entry only ever causes us to skip a fold that's safe, and
     // the next iteration picks it up.
-    let mut targets = collect_branch_targets(&insns);
-
     // BISECTION HOOKS (std-only). Read at runtime so we don't need
     // to recompile to flip flags.
     //   * BADC_OPT_OFF=<comma-list>: skip these passes entirely.
@@ -219,29 +217,44 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         alloc::collections::BTreeSet::new();
 
     #[cfg(feature = "std")]
-    if let Ok(range) = std::env::var("BADC_OPT_FUNC_RANGE") {
-        let parts: Vec<&str> = range.split(',').collect();
-        if parts.len() == 2 {
-            let lo: usize = parts[0].parse().unwrap_or(0);
-            let hi: usize = parts[1].parse().unwrap_or(usize::MAX);
-            let func_starts: Vec<usize> = insns
-                .iter()
-                .enumerate()
-                .filter_map(|(i, ins)| match ins {
-                    Insn::NoArg(Op::Ent) | Insn::Ent(_) => Some(i),
-                    _ => None,
-                })
-                .collect();
-            for (n, &start) in func_starts.iter().enumerate() {
-                let end = func_starts.get(n + 1).copied().unwrap_or(insns.len());
-                if n < lo || n >= hi {
-                    for t in targets.iter_mut().take(end).skip(start) {
-                        *t = true;
-                    }
+    let func_range: Option<(usize, usize)> = std::env::var("BADC_OPT_FUNC_RANGE")
+        .ok()
+        .and_then(|s| {
+            let parts: Vec<&str> = s.split(',').collect();
+            if parts.len() == 2 {
+                Some((
+                    parts[0].parse().unwrap_or(0),
+                    parts[1].parse().unwrap_or(usize::MAX),
+                ))
+            } else {
+                None
+            }
+        });
+    #[cfg(not(feature = "std"))]
+    let func_range: Option<(usize, usize)> = None;
+
+    let mask_off_funcs = |insns: &[Insn], targets: &mut [bool]| {
+        let Some((lo, hi)) = func_range else { return };
+        let func_starts: Vec<usize> = insns
+            .iter()
+            .enumerate()
+            .filter_map(|(i, ins)| match ins {
+                Insn::NoArg(Op::Ent) | Insn::Ent(_) => Some(i),
+                _ => None,
+            })
+            .collect();
+        for (n, &start) in func_starts.iter().enumerate() {
+            let end = func_starts.get(n + 1).copied().unwrap_or(insns.len());
+            if n < lo || n >= hi {
+                for t in targets.iter_mut().take(end).skip(start) {
+                    *t = true;
                 }
             }
         }
-    }
+    };
+
+    let mut targets = collect_branch_targets(&insns);
+    mask_off_funcs(&insns, &mut targets);
 
     let off_constfold = off.contains("constfold");
     let off_branch_const = off.contains("branch_const");
@@ -281,6 +294,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         // iteration. Cheap (one O(N) sweep) compared to the four
         // rebuilds we used to do per iteration.
         targets = collect_branch_targets(&insns);
+        mask_off_funcs(&insns, &mut targets);
     }
 
     let (text, entry_pc, data_imm_positions, new_pc) = encode(&insns, entry_idx);

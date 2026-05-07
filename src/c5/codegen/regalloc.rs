@@ -460,11 +460,23 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C5E
         );
     }
 
-    Ok(RegStackPlan {
+    let plan = RegStackPlan {
         push_kind,
         funcs,
         func_at_pc,
-    })
+    };
+
+    #[cfg(feature = "std")]
+    if std::env::var("BADC_DUMP_PLAN").is_ok() {
+        for (i, f) in plan.funcs.iter().enumerate() {
+            eprintln!(
+                "plan[{}] ent_pc={} callee_depth={} caller_depth={} use_pool={}",
+                i, f.ent_pc, f.callee_depth, f.caller_depth, f.use_pool
+            );
+        }
+    }
+
+    Ok(plan)
 }
 
 #[cfg(test)]

@@ -2402,6 +2402,28 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool, abi: Abi, pool_
 /// and the return address, so we pop the ret addr into a temp, drop
 /// the slots, then push it back before `ret` consumes it.
 fn emit_epilogue(code: &mut Vec<u8>, is_main: bool, pool_depth: u8) {
+    // STACK-CHECK INSTRUMENT (#46 bisection). When BADC_RSP_CHECK is
+    // set in the env, emit a runtime check at the start of every
+    // epilogue: rsp must equal rbp minus the prologue's reservation.
+    // Mismatch => `ud2` (illegal instruction trap) so the OS catches
+    // it on the spot rather than letting it cascade up the call stack.
+    #[cfg(feature = "std")]
+    if std::env::var("BADC_RSP_CHECK").is_ok() {
+        // At epilogue start, both rsp and rbp must point into a valid
+        // stack region. If rsp/rbp got corrupted upstream, trap before
+        // we propagate the corruption further into the call chain.
+        // Encoded sequence:
+        //   mov rax, rsp; cmp rax, 0x1000; ja ok1; ud2; ok1:
+        //   mov rax, rbp; cmp rax, 0x1000; ja ok2; ud2; ok2:
+        emit_mov_rr(code, Reg::RAX, Reg::RSP);
+        code.extend_from_slice(&[0x48, 0x3d, 0x00, 0x10, 0x00, 0x00]); // cmp rax, 0x1000
+        code.extend_from_slice(&[0x77, 0x02]); // ja +2
+        code.extend_from_slice(&[0x0f, 0x0b]); // ud2
+        emit_mov_rr(code, Reg::RAX, Reg::RBP);
+        code.extend_from_slice(&[0x48, 0x3d, 0x00, 0x10, 0x00, 0x00]); // cmp rax, 0x1000
+        code.extend_from_slice(&[0x77, 0x02]); // ja +2
+        code.extend_from_slice(&[0x0f, 0x0b]); // ud2
+    }
     emit_mov_rr(code, Reg::RAX, Reg::R13);
     // Restore the pool first (it sits on top of saved-r13).
     emit_restore_pool(code, pool_depth);

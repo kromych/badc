@@ -457,7 +457,7 @@ fn fixture_parity_native_optimized() {
 /// translation is wrong. JIT and native macOS / Linux ELF lanes
 /// pass.
 #[test]
-#[ignore = "deferred (#48): wine arm64 atoi('-17') sign bug; other lanes pass"]
+#[ignore = "deferred (gh #13): wine arm64 atoi('-17') sign bug; other lanes pass"]
 fn deferred_atoi_negative() {
     if !host_can_run_pe() {
         eprintln!("skip deferred_atoi_negative: no PE runner on this host");

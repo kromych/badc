@@ -9,15 +9,20 @@
 //! When one of these starts passing, that's the signal to delete
 //! the `#[ignore]` attribute, move the fixture into the regular
 //! `JIT_FIXTURES` / `NATIVE_FIXTURES` lists, and close the
-//! tracking task.
+//! tracking GitHub issue.
 //!
 //! The fixtures themselves live in `fixtures/c/deferred_*.c`. The
 //! prefix makes them easy to grep for and skips the normal
 //! fixture-parity tables (which only pick up unprefixed names).
 //!
+//! Each test below carries the matching `gh #N` -- the GitHub
+//! issue tracking the bug. See `gh issue list --label deferred`
+//! (or just `gh issue list` and grep for the `c5:` / target
+//! prefix) for the latest status.
+//!
 //! Gating: gated identically to `super::jit` so the fixtures load
 //! into the in-process JIT on the platforms that support it. PE-
-//! and Linux-ELF-specific deferred fixtures (`#47`, `#48`) are
+//! and Linux-ELF-specific deferred fixtures (#12 / #13 / #14) are
 //! checked in separate per-format harnesses below.
 
 #![cfg(any(
@@ -51,7 +56,7 @@ fn jit_fixture_exit(name: &str) -> i32 {
 // ---- Unsigned-arithmetic gaps from c99-gaps.md ----
 
 #[test]
-#[ignore = "deferred: unsigned arithmetic high-half not masked through registers"]
+#[ignore = "deferred (gh #20): unsigned arithmetic high-half not masked through registers"]
 fn unsigned_arith_high_half_not_masked() {
     // Today this fixture exits 1 (the very first check fires)
     // because `~u` carries the sign-extended high half across
@@ -59,7 +64,7 @@ fn unsigned_arith_high_half_not_masked() {
     // / shift / arithmetic ops to the slot width before the
     // comparison observes it, or store-and-reload.
     let exit = jit_fixture_exit("deferred_unsigned_arith_high_half.c");
-    assert_eq!(exit, 0, "fixture should exit 0 once the bug is fixed");
+    assert_eq!(exit, 0, "fixture should exit 0 once gh #20 lands");
 }
 
 #[test]
@@ -74,7 +79,7 @@ fn unsigned_right_shift_is_logical() {
 }
 
 #[test]
-#[ignore = "deferred: unsigned divide / modulo use signed ops"]
+#[ignore = "deferred (gh #21): unsigned divide / modulo use signed ops"]
 fn unsigned_divide_and_modulo_are_signed() {
     // `Op::Div` / `Op::Mod` lower to SDIV (ARM64) / IDIV
     // (x86_64). Unsigned operands with the high bit set come
@@ -82,22 +87,22 @@ fn unsigned_divide_and_modulo_are_signed() {
     // `Op::Divu` / `Op::Modu` routed when either operand is
     // unsigned.
     let exit = jit_fixture_exit("deferred_unsigned_div_mod.c");
-    assert_eq!(exit, 0, "fixture should exit 0 once the bug is fixed");
+    assert_eq!(exit, 0, "fixture should exit 0 once gh #21 lands");
 }
 
 #[test]
-#[ignore = "deferred: signed -> unsigned promotion in mixed expressions"]
+#[ignore = "deferred (gh #22): signed -> unsigned promotion in mixed expressions"]
 fn mixed_signed_unsigned_no_promotion() {
     // C99 sec 6.3.1.8 promotes the signed operand to the unsigned
     // common type. Today the dialect picks the op based on the
     // operator (signed for arithmetic; mixed-sensitive for
     // compares) without converting.
     let exit = jit_fixture_exit("deferred_mixed_signed_unsigned.c");
-    assert_eq!(exit, 0, "fixture should exit 0 once the bug is fixed");
+    assert_eq!(exit, 0, "fixture should exit 0 once gh #22 lands");
 }
 
 #[test]
-#[ignore = "deferred: arithmetic results not masked to common-type width when mixed signed/unsigned"]
+#[ignore = "deferred (gh #22): arithmetic results not masked to common-type width when mixed signed/unsigned"]
 fn c99_arith_common_width() {
     // After Add / Sub / Mul, c5 keeps the 64-bit accumulator
     // value. C99 6.3.1.8 / 6.5 say the result lives at the
@@ -149,7 +154,7 @@ fn integer_boundary_c99_final_boss() {
 // so it actually exercises the failure mode.
 #[cfg(target_os = "linux")]
 #[test]
-#[ignore = "deferred (#47): Linux ELF TLS layout shifts when static-local state lands nearby"]
+#[ignore = "deferred (gh #12): Linux ELF TLS layout shifts when static-local state lands nearby"]
 fn linux_elf_tls_layout_with_static_locals() {
     let exit = jit_fixture_exit("deferred_tls_with_static_locals.c");
     assert_eq!(
@@ -166,7 +171,7 @@ fn linux_elf_tls_layout_with_static_locals() {
 // failure list until someone replaces the placeholder with a
 // real bisected repro.
 #[test]
-#[ignore = "deferred (#46): optimizer SIGSEGVs on sqlite3 aggregate codegen; minimal repro not yet extracted"]
+#[ignore = "deferred (gh #23): optimizer SIGSEGVs on sqlite3 aggregate codegen; minimal repro not yet extracted"]
 fn optimizer_aggregates_minimal_repro_pending() {
     // Once a real repro is in place this test should compile via
     // `jit_run_with_options(..., NativeOptions::new().with_optimize())`
@@ -209,7 +214,7 @@ fn width_typedefs_are_pointer_wide() {
 // (and a Windows-target test rig can run the fixture against
 // `__BADC_WINDOWS__`).
 #[test]
-#[ignore = "deferred (#51): long width -- Windows LLP64 vs Linux/macOS LP64; long/long long collapsed"]
+#[ignore = "deferred (gh #15): long width -- Windows LLP64 vs Linux/macOS LP64; long/long long collapsed"]
 fn long_width_per_target() {
     let _ = jit_fixture_exit("deferred_long_width.c");
     panic!("(#51) per-target long width unimplemented; Windows-side fixture run is pending");
@@ -221,7 +226,7 @@ fn long_width_per_target() {
 // fixture passes on JIT today; panic so the issue stays in
 // the --ignored failure list.
 #[test]
-#[ignore = "deferred (#50): function-pointer call through struct field returns wrong on PE/x64"]
+#[ignore = "deferred (gh #14): function-pointer call through struct field returns wrong on PE/x64"]
 fn struct_fp_call_per_target() {
     let _ = jit_fixture_exit("deferred_struct_fp_call.c");
     panic!("(#50) PE/x64 struct fp-call repro pending; JIT lane passes the fixture in isolation");
@@ -241,7 +246,7 @@ fn struct_fp_call_per_target() {
 // fix needs the type encoding to distinguish "pointer to function"
 // from "pointer to data" -- bigger than this iteration.
 #[test]
-#[ignore = "deferred (#60): `(**fp)(args)` over-derefs through function code when the function pointer's return type is a struct pointer"]
+#[ignore = "deferred (gh #19): `(**fp)(args)` over-derefs through function code when the function pointer's return type is a struct pointer"]
 fn fn_ptr_double_deref_struct_return() {
     let exit = jit_fixture_exit("deferred_fn_ptr_struct_return.c");
     assert_eq!(
@@ -264,7 +269,7 @@ fn fn_ptr_double_deref_struct_return() {
 // today and the fixture exits 0; the test panics under
 // `--ignored` so the Windows-only failure stays surfaced.
 #[test]
-#[ignore = "deferred: libc data globals (stdin/stdout/stderr) need a Windows arm in __c5_lazy_stream"]
+#[ignore = "deferred (gh #16): libc data globals (stdin/stdout/stderr) need a Windows arm in __c5_lazy_stream"]
 fn libc_data_globals_windows() {
     let _ = jit_fixture_exit("deferred_libc_data_globals_windows.c");
     panic!("libc data globals: Windows arm of __c5_lazy_stream pending; macOS / Linux lanes pass");
@@ -307,7 +312,7 @@ fn libc_address_in_static_init() {
 // to match c5's va_list to the platform's, or to ship c5-side
 // wrappers around every libc function that takes a va_list.
 #[test]
-#[ignore = "deferred: c5 va_list incompatible with libc vfprintf / vsnprintf et al."]
+#[ignore = "deferred (gh #18): c5 va_list incompatible with libc vfprintf / vsnprintf et al."]
 fn libc_vfprintf_with_c5_va_list() {
     let exit = jit_fixture_exit("deferred_libc_vfprintf_va_list.c");
     assert_eq!(

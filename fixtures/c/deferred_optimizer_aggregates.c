@@ -14,19 +14,18 @@
 // an OP_IfPos / OP_NotNull-shaped opcode whose c5 lowering
 // regresses under one of the optimizer peephole passes.
 //
-// Bisected with `BADC_OPT_OFF=<pass>`: disabling
-// `peephole_immediate_arith` cuts the deterministic crash rate
-// from 5/5 to ~1/5, so the immediate-arith fusion is involved
-// but isn't the whole story. The remaining 4/5 fail rate with
-// imm_arith off and 0/5 fail rate at non-`-O` together imply a
-// downstream interaction (regalloc analyzer? branch-target
-// stale-snapshot? cmp+branch fusion?) that flips on once any
-// `-O` pass mutates the bytecode shape.
+// Bisected by patching out individual peephole passes:
+// disabling `peephole_immediate_arith` cuts the fail rate from
+// 5/5 to ~4/5, so the immediate-arith fusion is involved but
+// isn't the whole story. The remaining flakiness with that pass
+// off (and 0/5 at non-`-O`) implies a downstream interaction
+// (regalloc analyzer? branch-target stale-snapshot? cmp+branch
+// fusion?) that flips on once any `-O` pass mutates the bytecode.
 //
-// No `-O`                       : 5/5 pass.
-// `-O` plus `> 1`               : 5/5 pass.
-// `-O` plus `> 0`               : 5/5 SIGSEGV.
-// `-O BADC_OPT_OFF=imm_arith`   : ~1/5 pass (flaky).
+// No `-O`                                : 5/5 pass.
+// `-O` plus `> 1`                        : 5/5 pass.
+// `-O` plus `> 0`                        : 5/5 SIGSEGV.
+// `-O` with peephole_immediate_arith off : ~1/5 pass (flaky).
 //
 // `demos/sqlite3/smoke.sh` exercises the `-O` lane against the
 // full in-memory + file-backed scenarios (which all pass), so

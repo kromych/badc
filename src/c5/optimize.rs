@@ -196,31 +196,15 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
     // stale entry only ever causes us to skip a fold that's safe, and
     // the next iteration picks it up.
     let mut targets = collect_branch_targets(&insns);
-    let off = std::env::var("BADC_OPT_OFF").unwrap_or_default();
-    let off: alloc::collections::BTreeSet<&str> = off.split(',').collect();
     for _ in 0..16 {
         let mut changed = false;
-        if !off.contains("constfold") {
-            changed |= peephole_constant_fold(&mut insns, &targets);
-        }
-        if !off.contains("branch_const") {
-            changed |= peephole_branch_on_constant(&mut insns, &targets);
-        }
-        if !off.contains("jump_next") {
-            changed |= peephole_jump_to_next(&mut insns);
-        }
-        if !off.contains("imm_arith") {
-            changed |= peephole_immediate_arith(&mut insns, &targets);
-        }
-        if !off.contains("local_load") {
-            changed |= peephole_local_load(&mut insns, &targets);
-        }
-        if !off.contains("branch_thread") {
-            changed |= branch_threading(&mut insns);
-        }
-        if !off.contains("dce") {
-            changed |= dead_code_elimination(&mut insns, entry_idx);
-        }
+        changed |= peephole_constant_fold(&mut insns, &targets);
+        changed |= peephole_branch_on_constant(&mut insns, &targets);
+        changed |= peephole_jump_to_next(&mut insns);
+        changed |= peephole_immediate_arith(&mut insns, &targets);
+        changed |= peephole_local_load(&mut insns, &targets);
+        changed |= branch_threading(&mut insns);
+        changed |= dead_code_elimination(&mut insns, entry_idx);
         if !changed {
             break;
         }

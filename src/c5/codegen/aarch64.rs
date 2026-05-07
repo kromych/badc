@@ -1519,9 +1519,11 @@ fn lower_op(
         Op::Ule => lower_cmp(code, text, *pc, reg_state, branch_targets, Cond::Ls),
         Op::Uge => lower_cmp(code, text, *pc, reg_state, branch_targets, Cond::Hs),
 
-        // ---- Shifts (signed >> matches c4 `int` semantics). ----
+        // ---- Shifts. Shr is arithmetic (signed); Shru is logical
+        //      (unsigned), emitted when the LHS has an unsigned type.
         Op::Shl => binop_with_pop(code, reg_state, enc_lslv),
         Op::Shr => binop_with_pop(code, reg_state, enc_asrv),
+        Op::Shru => binop_with_pop(code, reg_state, enc_lsrv),
 
         // ---- Arithmetic. Sub, Div, Mod are not commutative, so the
         //      pop goes on the LHS of the operation.
@@ -1650,6 +1652,7 @@ fn lower_op(
         Op::XorI => imm_arith(code, text, pc, "XorI", enc_eor_reg)?,
         Op::ShlI => imm_arith(code, text, pc, "ShlI", enc_lslv)?,
         Op::ShrI => imm_arith(code, text, pc, "ShrI", enc_asrv)?,
+        Op::ShruI => imm_arith(code, text, pc, "ShruI", enc_lsrv)?,
         Op::EqI => imm_cmp(code, text, pc, "EqI", Cond::Eq, reg_state, branch_targets)?,
         Op::NeI => imm_cmp(code, text, pc, "NeI", Cond::Ne, reg_state, branch_targets)?,
         Op::LtI => imm_cmp(code, text, pc, "LtI", Cond::Lt, reg_state, branch_targets)?,

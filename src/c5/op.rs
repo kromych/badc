@@ -95,8 +95,12 @@ pub enum Op {
     Uge,
     /// Shift Left `<<`
     Shl,
-    /// Shift Right `>>`
+    /// Shift Right `>>` (arithmetic / sign-extending). Emitted when
+    /// the LHS has a signed integer type.
     Shr,
+    /// Shift Right `>>` (logical / zero-extending). Emitted when the
+    /// LHS has an unsigned integer type. ARM64 `LSR`, x86_64 `SHR`.
+    Shru,
     /// Addition `+`
     Add,
     /// Subtraction `-`
@@ -128,8 +132,11 @@ pub enum Op {
     XorI,
     /// `a = a << N`
     ShlI,
-    /// `a = a >> N`
+    /// `a = a >> N` (arithmetic / sign-extending)
     ShrI,
+    /// `a = a >> N` (logical / zero-extending). Emitted when the
+    /// LHS has an unsigned integer type. ARM64 `LSR`, x86_64 `SHR`.
+    ShruI,
     /// `a = (a == N) as i64`
     EqI,
     /// `a = (a != N) as i64`
@@ -236,7 +243,7 @@ pub enum Op {
     TlsLea,
 }
 
-const OPS: [Op; 75] = [
+const OPS: [Op; 77] = [
     Op::Lea,
     Op::Imm,
     Op::Jmp,
@@ -271,6 +278,7 @@ const OPS: [Op; 75] = [
     Op::Uge,
     Op::Shl,
     Op::Shr,
+    Op::Shru,
     Op::Add,
     Op::Sub,
     Op::Mul,
@@ -285,6 +293,7 @@ const OPS: [Op; 75] = [
     Op::XorI,
     Op::ShlI,
     Op::ShrI,
+    Op::ShruI,
     Op::EqI,
     Op::NeI,
     Op::LtI,
@@ -343,8 +352,8 @@ impl Op {
             // dispatch, and the optimizer's immediate-form
             // arithmetic / comparison ops.
             Lea | Imm | Jmp | Jsr | Bz | Bnz | Ent | Adj | JsrExt | AddI | SubI | MulI | AndI
-            | OrI | XorI | ShlI | ShrI | EqI | NeI | LtI | GtI | LeI | GeI | UltI | UgtI | UleI
-            | UgeI | LdLocI | LdLocC | StLocI | Mcpy | TlsLea => 1,
+            | OrI | XorI | ShlI | ShrI | ShruI | EqI | NeI | LtI | GtI | LeI | GeI | UltI
+            | UgtI | UleI | UgeI | LdLocI | LdLocC | StLocI | Mcpy | TlsLea => 1,
             // Everything else -- arithmetic, loads/stores, push,
             // indirect-jump, return, etc. -- is encoded in a
             // single word with no operand.

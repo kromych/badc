@@ -2075,6 +2075,35 @@ impl Compiler {
                     self.emit_op(Op::Fcvtif);
                 } else if !target_is_fp && source_is_fp {
                     self.emit_op(Op::Fcvtfi);
+                } else if !target_is_fp
+                    && !source_is_fp
+                    && !is_pointer_ty(t)
+                    && !is_pointer_ty(self.ty)
+                {
+                    // Integer narrowing: when the target type is
+                    // narrower than the source AND unsigned, the
+                    // cast must mask the high bits or subsequent
+                    // expressions see the original wider value.
+                    // Without this, e.g. `(u32)x` of a u64 leaves
+                    // the high 32 bits in the register and only
+                    // gets truncated if the value is stored back
+                    // to a 4-byte slot. (Signed narrowing isn't
+                    // handled here -- it would need a sign-
+                    // extending pair, and existing fixtures rely
+                    // on the pre-cast value bits surviving.)
+                    let target_size = self.size_of_type(t);
+                    let source_size = self.size_of_type(self.ty);
+                    if is_unsigned_ty(t) && target_size < source_size {
+                        let mask: i64 = match target_size {
+                            1 => 0xff,
+                            2 => 0xffff,
+                            4 => 0xffff_ffff,
+                            _ => -1,
+                        };
+                        if mask != -1 {
+                            self.emit_binop_with_imm(Op::And, mask);
+                        }
+                    }
                 }
                 self.ty = t;
             } else {
@@ -2456,7 +2485,13 @@ impl Compiler {
                     x if x == Token::OrOp as i64 => Op::Or,
                     x if x == Token::XorOp as i64 => Op::Xor,
                     x if x == Token::ShlOp as i64 => Op::Shl,
-                    x if x == Token::ShrOp as i64 => Op::Shr,
+                    x if x == Token::ShrOp as i64 => {
+                        if is_unsigned_ty(lhs_ty) {
+                            Op::Shru
+                        } else {
+                            Op::Shr
+                        }
+                    }
                     _ => {
                         return Err(C5Error::Compile(format!(
                             "{}: unknown compound-assign opcode",
@@ -2617,8 +2652,16 @@ impl Compiler {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::AddOp as i64)?;
-                self.emit_op(Op::Shr);
-                self.ty = Ty::Int as i64;
+                // Pick logical (Shru) for unsigned LHS, arithmetic (Shr) otherwise.
+                // The RHS is the shift count; only the LHS sign matters.
+                if is_unsigned_ty(t) {
+                    self.emit_op(Op::Shru);
+                    // Preserve LHS unsigned-ness so chained shifts/compares stay unsigned.
+                    self.ty = t;
+                } else {
+                    self.emit_op(Op::Shr);
+                    self.ty = Ty::Int as i64;
+                }
             } else if self.lex.tk == Token::AddOp as i64 {
                 self.next()?;
                 self.emit_op(Op::Psh);

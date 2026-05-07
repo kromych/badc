@@ -247,6 +247,7 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C5E
             | Op::Uge
             | Op::Shl
             | Op::Shr
+            | Op::Shru
             | Op::Add
             | Op::Sub
             | Op::Mul
@@ -419,6 +420,7 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C5E
             | Op::Uge
             | Op::Shl
             | Op::Shr
+            | Op::Shru
             | Op::Add
             | Op::Sub
             | Op::Mul

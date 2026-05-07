@@ -217,9 +217,8 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         alloc::collections::BTreeSet::new();
 
     #[cfg(feature = "std")]
-    let func_range: Option<(usize, usize)> = std::env::var("BADC_OPT_FUNC_RANGE")
-        .ok()
-        .and_then(|s| {
+    let func_range: Option<(usize, usize)> =
+        std::env::var("BADC_OPT_FUNC_RANGE").ok().and_then(|s| {
             let parts: Vec<&str> = s.split(',').collect();
             if parts.len() == 2 {
                 Some((
@@ -724,6 +723,12 @@ fn fold_arith(op: Op, a: i64, b: i64) -> Option<i64> {
             }
             a.wrapping_shr(b as u32)
         }
+        Op::Shru => {
+            if !(0..64).contains(&b) {
+                return None;
+            }
+            ((a as u64).wrapping_shr(b as u32)) as i64
+        }
         Op::Eq => (a == b) as i64,
         Op::Ne => (a != b) as i64,
         Op::Lt => (a < b) as i64,
@@ -857,6 +862,7 @@ fn immediate_form(op: Op) -> Option<Op> {
         Op::Xor => Op::XorI,
         Op::Shl => Op::ShlI,
         Op::Shr => Op::ShrI,
+        Op::Shru => Op::ShruI,
         Op::Eq => Op::EqI,
         Op::Ne => Op::NeI,
         Op::Lt => Op::LtI,

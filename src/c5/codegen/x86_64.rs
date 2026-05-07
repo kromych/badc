@@ -659,6 +659,14 @@ pub(super) fn emit_sar_r_imm8(code: &mut Vec<u8>, dst: Reg, imm: u8) {
     emit_byte(code, imm);
 }
 
+/// `SHR r/m64, imm8` (logical right shift). ModR/M.reg = 5, imm at end.
+pub(super) fn emit_shr_r_imm8(code: &mut Vec<u8>, dst: Reg, imm: u8) {
+    emit_byte(code, rex(true, false, false, dst.high()));
+    emit_byte(code, 0xC1);
+    emit_byte(code, modrm(0b11, 5, dst.lo()));
+    emit_byte(code, imm);
+}
+
 // ---- Immediate-form ALU. `ADD r/m64, imm32` / `SUB r/m64, imm32`,
 //      etc. All share opcode `81` with a different /N digit.
 
@@ -1628,6 +1636,7 @@ fn lower_op(
         //      lo byte), then mov r13 = lhs.
         Op::Shl => shift_with_pop(code, reg_state, /*arithmetic=*/ false),
         Op::Shr => shift_with_pop(code, reg_state, /*arithmetic=*/ true),
+        Op::Shru => shift_with_pop(code, reg_state, /*arithmetic=*/ false),
 
         Op::Div => div_or_mod_with_pop(code, reg_state, /*want_remainder=*/ false),
         Op::Mod => div_or_mod_with_pop(code, reg_state, /*want_remainder=*/ true),
@@ -1813,6 +1822,10 @@ fn lower_op(
         Op::ShrI => {
             let n = read_operand(text, pc, "ShrI")? as u32;
             emit_sar_r_imm8(code, Reg::R13, (n & 0x3f) as u8);
+        }
+        Op::ShruI => {
+            let n = read_operand(text, pc, "ShruI")? as u32;
+            emit_shr_r_imm8(code, Reg::R13, (n & 0x3f) as u8);
         }
         Op::EqI => imm_cmp(code, text, pc, "EqI", Cc::E, reg_state, branch_targets)?,
         Op::NeI => imm_cmp(code, text, pc, "NeI", Cc::Ne, reg_state, branch_targets)?,

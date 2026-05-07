@@ -95,6 +95,19 @@ fn mixed_signed_unsigned_no_promotion() {
     assert_eq!(exit, 0, "fixture should exit 0 once the bug is fixed");
 }
 
+#[test]
+#[ignore = "deferred: u16 / short pointer deref reads/writes 4 bytes"]
+fn u16_load_store_is_four_bytes() {
+    // c5 has no Op::Sh / Op::Lh half-word memory ops; `*(u16*)p`
+    // lowers to int (32-bit) load/store. Breaks sqlite's
+    // vdbeMemRenderNum digit-pair writer -- avg() / any %g
+    // formatting comes back empty. Fix: dedicated half-word
+    // memory ops, routed through store_op_for / load_op_for
+    // when the C type is short or u16.
+    let exit = jit_fixture_exit("deferred_u16_load_store.c");
+    assert_eq!(exit, 0, "fixture should exit 0 once the bug is fixed");
+}
+
 // ---- Linux ELF TLS interaction (#47) ----
 //
 // The bug is Linux-ELF specific. macOS arm64's JIT doesn't

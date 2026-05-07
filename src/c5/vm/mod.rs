@@ -788,6 +788,11 @@ impl<H: Host> Vm<H> {
                     a = self.load_i64(sp)? >> a;
                     sp += 8;
                 }
+                Op::Shru => {
+                    let lhs = self.load_i64(sp)? as u64;
+                    a = (lhs >> (a as u64 & 63)) as i64;
+                    sp += 8;
+                }
                 Op::Add => {
                     a += self.load_i64(sp)?;
                     sp += 8;
@@ -841,6 +846,10 @@ impl<H: Host> Vm<H> {
                 }
                 Op::ShrI => {
                     a = a.wrapping_shr(self.text[pc] as u32);
+                    pc += 1;
+                }
+                Op::ShruI => {
+                    a = ((a as u64).wrapping_shr(self.text[pc] as u32)) as i64;
                     pc += 1;
                 }
                 Op::EqI => {

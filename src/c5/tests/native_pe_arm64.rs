@@ -334,6 +334,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("static_locals.c", 0),
     ("large_stack_frame.c", 42),
     ("octal_literal.c", 42),
+    ("fn_ptr_explicit_deref.c", 42),
     // libc_basic.c regresses at `atoi("-17") != -17` (return 21)
     // on both PE/x64 and PE/aarch64. Wine-arm64 thunk doesn't
     // sign-extend int returns into x0's high half (#48); the

@@ -2246,10 +2246,46 @@ impl Compiler {
                 //   `s.fp(args)` -- function-pointer struct field
                 //   `arr[i](args)` -- function-pointer array element
                 //   `(*fp)(args)` -- explicit dereference shape
+                //   `(**fpp)(args)` -- dereference through a pointer
+                //                       to a function-pointer variable
+                //                       (sqlite's posixIoFinder
+                //                       chain inside `unixOpen`)
                 // Direct identifier calls (`name(args)`) take the
                 // dedicated path higher up that knows the symbol's
                 // class and signature; that path consumes `(`
                 // immediately and never reaches the Pratt loop.
+                //
+                // C's function-pointer-decay rule says `*fp` (where
+                // `fp` is a function-pointer rvalue) is a no-op:
+                // the dereferenced "function lvalue" auto-decays
+                // back to a function pointer for any subsequent use.
+                // The unary `*` handler emits an `Op::Li` regardless
+                // -- it can't tell at parse time that the operand
+                // will be called rather than loaded -- so the chain
+                // ends one Li too deep, with `a` holding the first
+                // 8 bytes of the callee's code instead of its
+                // address. We undo that here: if `self.ty` says we
+                // ended on a non-pointer (= the last `*` removed
+                // the final pointer level) and the most recent emit
+                // was an `Op::Li`, pop the Li and restore one
+                // pointer level so the spill below sees the actual
+                // function pointer.
+                if !is_pointer_ty(self.ty) {
+                    let last = self.text.last().copied();
+                    let is_load = matches!(
+                        last,
+                        Some(x) if x == Op::Li as i64
+                            || x == Op::Lc as i64
+                            || x == Op::Lw as i64
+                            || x == Op::Lwu as i64
+                    );
+                    if is_load {
+                        self.text.pop();
+                        self.source_lines.pop();
+                        self.source_functions.pop();
+                        self.ty += Ty::Ptr as i64;
+                    }
+                }
                 self.next()?;
                 // Spill the FP into a fresh local temp via Op::StLocI.
                 // The plain `Lea N; Si` shape can't express this

@@ -182,6 +182,29 @@ fn struct_fp_call_per_target() {
     panic!("(#50) PE/x64 struct fp-call repro pending; JIT lane passes the fixture in isolation");
 }
 
+// ---- Function-pointer-decay through `**fp` returning struct
+//      pointer (#60) ----
+//
+// `(*fp)(args)` and `(**fp)(args)` both auto-decay to a regular
+// call per C; the dialect's conservative pop-redundant-load fix
+// catches the int-return form but not the struct-pointer-return
+// form (the over-deref still leaves a pointer-typed `ty` so the
+// fix's `!is_pointer_ty` check skips). sqlite's
+// `(**(finder_type*)pVfs->pAppData)(...)` inside `unixOpen` is
+// the in-the-wild trigger; it's currently patched in the
+// vendored sqlite3.c with a temp-variable workaround. A proper
+// fix needs the type encoding to distinguish "pointer to function"
+// from "pointer to data" -- bigger than this iteration.
+#[test]
+#[ignore = "deferred (#60): `(**fp)(args)` over-derefs through function code when the function pointer's return type is a struct pointer"]
+fn fn_ptr_double_deref_struct_return() {
+    let exit = jit_fixture_exit("deferred_fn_ptr_struct_return.c");
+    assert_eq!(
+        exit, 0,
+        "double-deref of a function pointer should auto-decay to the call regardless of the return type"
+    );
+}
+
 // ---- libc data globals on Windows (stdin/stdout/stderr) ----
 //
 // `__c5_lazy_stream` in stdio.h has #ifdef arms for `__APPLE__`

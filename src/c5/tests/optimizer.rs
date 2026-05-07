@@ -58,6 +58,7 @@ const FIXTURES: &[(&str, i64)] = &[
     ("static_locals.c", 0),
     ("large_stack_frame.c", 42),
     ("octal_literal.c", 42),
+    ("fn_ptr_explicit_deref.c", 42),
     ("quicksort.c", 0),
     ("linked_list.c", 10),
     ("binary_search_tree.c", 0),

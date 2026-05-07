@@ -80,38 +80,44 @@
 // `pop rbp`, well after the guard has cleared.
 //
 // `BADC_SAVED_RBP_CHECK=1` -- a more targeted check that traps
-// at every prologue / epilogue / `Jsr` if [rbp+0] is below
-// 0x10000000 (= "definitely not a stack address"). The trap
-// writes the function's bc PC to stderr via `SYS_write` then
-// `SYS_exit(99)` -- needed because orbstack/Rosetta strips the
-// program rip from SIGSEGV/SIGILL core dumps so a memory-fault
-// trap can't be located. Empirically:
-//   * prologue check: doesn't fire (the saved-rbp slot is fresh
-//     when control reaches the prologue's last instruction).
-//   * epilogue check: doesn't fire (the corrupting function
-//     never reaches its own epilogue -- it's the same function
-//     where rip eventually goes to 0).
-//   * Jsr check: doesn't fire (the corrupting function doesn't
-//     issue any further Jsr after the write).
-// All three "doesn't fire" results together pin the corrupter
-// to a function whose body writes to a clobbered slot and then
-// crashes before doing anything else observable. The leaf
-// `bc=318133 Ent 86` (called from `bc=325765`'s `Jsr 318133` at
-// `bc=325923`, with rip=0 at the next call) is the natural
-// suspect: 86 locals is a large enough frame that a wrong
-// `Lea N` could land at `[rbp + 0]` (frame 1's saved-rbp slot
-// sits some bytes above leaf's rbp; the offset depends on how
-// the optimizer routed args through Pseudo pushes).
+// at every prologue / epilogue / `Jsr` / `Jsri` if [rbp+0] (or,
+// at the 1-up level, the *caller's* saved-rbp slot value) is
+// below 0x10000000 (= "definitely not a stack address"). The
+// trap writes the function's bc PC to stderr via `SYS_write`
+// then `SYS_exit(99)` -- needed because orbstack/Rosetta strips
+// the program rip from SIGSEGV/SIGILL core dumps so a memory-
+// fault trap can't be located. Empirically, even with the 1-up
+// walk in place at all four sites, *none* of them fire on the
+// trigger query.
+//
+// What that "no fire" rules out:
+//   * The corrupting Si is not followed by any further `Jsr`,
+//     `Jsri`, or `Lev` op -- so the function never gets to a
+//     point where the canary would observe its own (or its
+//     caller's) saved-rbp slot post-corruption.
+// What that leaves:
+//   * The corruption happens during the very `call NULL` that
+//     produces the rip=0 crash -- e.g. a stack push at a
+//     misaligned rsp lands on F's saved-rbp slot.
+//   * Or it happens in Rosetta's signal-delivery path on
+//     orbstack-emulated x64 (the kernel switches to an alt
+//     stack at SIGSEGV time, which on emulated x64 might
+//     interact badly with our stack layout).
+//   * Or the corruption is to a *different* slot than the one
+//     in F's frame, and the F's-saved-rbp value we see in the
+//     core is itself a side-effect of the rip=0 fault rather
+//     than the original bug.
 //
 // Next concrete step: instrument every Si/Sc/Sw with the same
 // syscall trap, gated on the destination address falling within
 // `[rbp_caller_n + 0 .. rbp_caller_n + 8]` for any active
 // frame. That catches the bad write at the moment it happens.
-// Or: pre-compute a stable "frame canary" stamp at every Ent
-// (e.g., write a magic word at [rbp+16] or [rbp-locals_end-8])
-// and verify it before each Jsri or libc call. Either approach
-// turns the silent corruption into a deterministic trap with
-// the bc PC of the buggy store in stderr.
+// The infrastructure is all in place -- only the per-store gate
+// needs writing. Alternatively, run the same trigger query on a
+// *native* Linux x64 box (not orbstack-emulated) -- if the bug
+// shows the same saved-rbp clobber there, it's a c5 codegen
+// bug; if not, it's a Rosetta-on-orbstack interaction we'd
+// document and skip on that environment.
 //
 // The c5-emitted bytecode for this sequence is identical with and
 // without `peephole_local_load` (the only difference is the fused

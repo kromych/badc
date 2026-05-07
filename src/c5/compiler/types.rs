@@ -139,6 +139,27 @@ pub(super) fn long_ptr_depth(ty: i64) -> i64 {
     }
 }
 
+/// `ty` is a `long long` (or pointer to one). Long-long lives in
+/// its own 100-wide band starting at `Ty::LongLong` (500); the
+/// same +2-per-`*` scheme as the integer family applies inside
+/// the band, so `long long*` = 502, `long long**` = 504, etc.
+pub(super) fn is_long_long_ty(ty: i64) -> bool {
+    let ty = strip_unsigned(ty);
+    let base = Ty::LongLong as i64;
+    (base..base + FP_BAND_SIZE).contains(&ty)
+}
+
+/// Pointer depth within the long-long band. Returns 0 for a
+/// scalar `long long`, 1 for `long long*`, etc.
+pub(super) fn long_long_ptr_depth(ty: i64) -> i64 {
+    let ty = strip_unsigned(ty);
+    if is_long_long_ty(ty) {
+        (ty - Ty::LongLong as i64) / Ty::Ptr as i64
+    } else {
+        0
+    }
+}
+
 /// C99 6.3.1.1 integer promotions: any operand whose rank is below
 /// `int` (i.e. char or short, signed or unsigned) is converted to
 /// `int` for the purpose of arithmetic. The signed-int range can
@@ -155,6 +176,53 @@ fn integer_promote(ty: i64) -> i64 {
     }
 }
 
+/// C99 integer-conversion rank for the post-integer-promotion
+/// types c5 supports. Higher number = higher rank; the actual
+/// values are arbitrary, only ordering matters.
+///   int        -> 1
+///   long       -> 2
+///   long long  -> 3
+fn integer_rank(ty: i64) -> u8 {
+    let stripped = strip_unsigned(ty);
+    if is_long_long_ty(stripped) {
+        3
+    } else if is_long_ty(stripped) {
+        2
+    } else {
+        // Already integer-promoted, so int / unsigned int.
+        1
+    }
+}
+
+/// True if a signed type of `signed_rank` can represent every value
+/// of an unsigned type at `unsigned_rank` on `target`.
+///
+/// On LP64 (`long` is 8 bytes), signed long holds all uint values.
+/// On LLP64 (`long` is 4 bytes), signed long is the same width as
+/// unsigned int, so it can't represent uint's high half. Long long
+/// (always 8 bytes) holds all uint values everywhere; it also holds
+/// all unsigned long values on LLP64 but not on LP64 (where ulong
+/// is also 8 bytes).
+fn signed_holds_unsigned(signed_rank: u8, unsigned_rank: u8, target: super::super::Target) -> bool {
+    if target.is_windows() {
+        // LLP64: int=4, long=4, long long=8.
+        // signed long long (rank 3) holds unsigned int (rank 1) and
+        //   unsigned long (rank 2).
+        // signed long (rank 2) is same width as unsigned int (rank 1)
+        //   -- cannot hold its high values.
+        // signed int (rank 1) is same width as unsigned int (rank 1)
+        //   -- already same rank, doesn't hit this path.
+        signed_rank == 3 && unsigned_rank <= 2
+    } else {
+        // LP64: int=4, long=8, long long=8.
+        // signed long (rank 2) holds unsigned int (rank 1).
+        // signed long long (rank 3) holds unsigned int (rank 1).
+        // signed long long (rank 3) does NOT hold unsigned long
+        //   (rank 2) -- they're the same width.
+        signed_rank >= 2 && unsigned_rank == 1
+    }
+}
+
 /// C99 6.3.1.8 usual arithmetic conversions: pick the common type
 /// for a binary integer operation. Used by relational compares to
 /// decide between the signed (`Op::Lt/Gt/Le/Ge`) and unsigned
@@ -164,48 +232,59 @@ fn integer_promote(ty: i64) -> i64 {
 /// Algorithm:
 ///   1. Apply integer promotions to both operands (char / short
 ///      -> int).
-///   2. If both promoted operands are signed or both are unsigned:
-///      result is the larger-rank type with the same signedness.
-///   3. If mixed: the unsigned operand "wins" when its rank is
-///      greater than or equal to the signed operand's. When the
-///      signed type has strictly higher rank, c5's signed long
-///      can hold every unsigned int value (since long is 8 bytes
-///      vs unsigned int's 4), so the signed type wins.
+///   2. If both promoted operands have the same signedness, the
+///      common type is the higher-rank one with the same
+///      signedness.
+///   3. If mixed signedness:
+///      a. If the unsigned operand's rank >= the signed operand's,
+///         the common type is unsigned at the unsigned rank.
+///      b. Else if the signed type can hold every value of the
+///         unsigned type (depends on the target's data model),
+///         the common type is signed at the signed rank.
+///      c. Otherwise the common type is unsigned at the signed
+///         operand's rank.
 ///
-/// For c5, the only ranks that come up after integer promotion
-/// are int (4) and long (8).
-pub(super) fn usual_arith_common_ty(a: i64, b: i64) -> i64 {
+/// The data-model-dependent step is rule (b): on LP64 a signed
+/// long can hold all unsigned int values (long is wider); on LLP64
+/// it can't (long and unsigned int are both 32-bit), so unsigned
+/// wins. `Ty::LongLong` wins everywhere it appears.
+pub(super) fn usual_arith_common_ty(a: i64, b: i64, target: super::super::Target) -> i64 {
     let a = integer_promote(a);
     let b = integer_promote(b);
     let a_unsigned = is_unsigned_ty(a);
     let b_unsigned = is_unsigned_ty(b);
-    let a_long = is_long_ty(strip_unsigned(a));
-    let b_long = is_long_ty(strip_unsigned(b));
-    let max_long = a_long || b_long;
-    let result_unsigned = if a_unsigned == b_unsigned {
-        // Same signedness: keep it.
-        a_unsigned
+    let a_rank = integer_rank(a);
+    let b_rank = integer_rank(b);
+    let max_rank = a_rank.max(b_rank);
+
+    let (result_rank, result_unsigned) = if a_unsigned == b_unsigned {
+        // Same signedness: higher rank wins, signedness preserved.
+        (max_rank, a_unsigned)
     } else {
-        // Mixed: who has the higher rank?
-        let (u_long, s_long) = if a_unsigned {
-            (a_long, b_long)
+        // Mixed signedness. Identify the (rank, signedness) of
+        // each operand class.
+        let (u_rank, s_rank) = if a_unsigned {
+            (a_rank, b_rank)
         } else {
-            (b_long, a_long)
+            (b_rank, a_rank)
         };
-        // unsigned wins if its rank >= signed's. Otherwise signed
-        // wins (c5's int and long widths guarantee long-signed can
-        // hold every unsigned int value).
-        if u_long || !s_long {
-            true
+        if u_rank >= s_rank {
+            // Unsigned wins.
+            (u_rank, true)
+        } else if signed_holds_unsigned(s_rank, u_rank, target) {
+            // Signed wins (signed type can hold all unsigned values).
+            (s_rank, false)
         } else {
-            // Signed long + unsigned int -> signed long.
-            false
+            // Signed has higher rank but can't hold the unsigned's
+            // values: result is unsigned at the signed's rank.
+            (s_rank, true)
         }
     };
-    let base = if max_long {
-        Ty::Long as i64
-    } else {
-        Ty::Int as i64
+
+    let base = match result_rank {
+        3 => Ty::LongLong as i64,
+        2 => Ty::Long as i64,
+        _ => Ty::Int as i64,
     };
     if result_unsigned {
         base | UNSIGNED_BIT
@@ -268,6 +347,8 @@ pub(super) fn is_pointer_ty(ty: i64) -> bool {
         struct_ptr_depth(ty) > 0
     } else if is_floating_ty(ty) {
         fp_ptr_depth(ty) > 0
+    } else if is_long_long_ty(ty) {
+        long_long_ptr_depth(ty) > 0
     } else if is_long_ty(ty) {
         long_ptr_depth(ty) > 0
     } else if is_short_ty(ty) {
@@ -358,30 +439,39 @@ pub(super) fn is_type_start_token(tk: i64) -> bool {
         || is_decl_modifier(tk)
 }
 
-/// Pick the right load op for the given `ty`.
-///   * `Ty::Char` (scalar)  -> `Op::Lc` / `Op::Lcs` (1-byte zero- / sign-ext)
-///   * `Ty::Short` (scalar) -> `Op::Lh` / `Op::Lhu` (2-byte sign- / zero-ext)
-///   * `Ty::Int` (scalar)   -> `Op::Lw`  (4-byte sign-extending; M31)
-///   * everything else      -> `Op::Li`  (8-byte word load)
-/// Pointers (any base type) go through `Op::Li` because every
-/// pointer is 8 bytes regardless of its pointee width.
+/// Pick the right load op for the given `ty`, factoring in the
+/// target's data model (LP64 vs LLP64 picks for `long`).
+///   * `Ty::Char` (scalar)   -> `Op::Lc` / `Op::Lcs` (1-byte)
+///   * `Ty::Short` (scalar)  -> `Op::Lh` / `Op::Lhu` (2-byte)
+///   * `Ty::Int` (scalar)    -> `Op::Lw`  / `Op::Lwu` (4-byte)
+///   * `Ty::Long` (scalar)   -> 4-byte on Windows / 8-byte on Unix
+///   * `Ty::LongLong` (scalar) -> always 8-byte (`Op::Li`)
+///   * everything else       -> `Op::Li`
 ///
-/// The signed / unsigned split for `char` mirrors the pattern for
-/// short and int: bare `char` is unsigned in c5 (loads zero-ext
-/// via `Lc`), `signed char` loads sign-ext via `Lcs`. The store
-/// path is the same byte-store either way.
-pub(super) fn load_op_for(ty: i64) -> Op {
+/// Pointers (any base type) go through `Op::Li` because every
+/// pointer is 8 bytes regardless of its pointee width or target.
+///
+/// The signed / unsigned split for `char` / `short` / `int`
+/// picks between the sign- and zero-extending load ops; the
+/// matching store widths (`Op::Sc` / `Op::Sh` / `Op::Sw` /
+/// `Op::Si`) don't care about signedness.
+pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> Op {
     let unsigned = is_unsigned_ty(ty);
-    let ty = strip_unsigned(ty);
-    if ty == Ty::Char as i64 {
+    let stripped = strip_unsigned(ty);
+    if is_pointer_ty(ty) {
+        // Pointers are always 8 bytes (slot + native register
+        // width). The Long-vs-LongLong distinction here would
+        // wrongly route `long *` through Lw on Windows.
+        return Op::Li;
+    }
+    if stripped == Ty::Char as i64 {
         if unsigned { Op::Lc } else { Op::Lcs }
-    } else if ty == Ty::Short as i64 {
-        // 2-byte slot. Sign vs zero extension splits like Lw / Lwu.
+    } else if stripped == Ty::Short as i64 {
         if unsigned { Op::Lhu } else { Op::Lh }
-    } else if ty == Ty::Int as i64 {
-        // Pick zero-extending vs sign-extending 32-bit load
-        // by signedness. The store path (Op::Sw) doesn't care:
-        // it writes the low 32 bits regardless.
+    } else if stripped == Ty::Int as i64 {
+        if unsigned { Op::Lwu } else { Op::Lw }
+    } else if stripped == Ty::Long as i64 && target.is_windows() {
+        // LLP64: `long` is 32 bits, same load path as int.
         if unsigned { Op::Lwu } else { Op::Lw }
     } else {
         Op::Li
@@ -389,17 +479,19 @@ pub(super) fn load_op_for(ty: i64) -> Op {
 }
 
 /// Mirror of [`load_op_for`] for stores.
-///   * `Ty::Char`           -> `Op::Sc`  (1-byte)
-///   * `Ty::Short` (scalar) -> `Op::Sh`  (2-byte)
-///   * `Ty::Int` (scalar)   -> `Op::Sw`  (4-byte; M31)
-///   * everything else      -> `Op::Si`  (8-byte)
-pub(super) fn store_op_for(ty: i64) -> Op {
-    let ty = strip_unsigned(ty);
-    if ty == Ty::Char as i64 {
+pub(super) fn store_op_for(ty: i64, target: super::super::Target) -> Op {
+    let stripped = strip_unsigned(ty);
+    if is_pointer_ty(ty) {
+        return Op::Si;
+    }
+    if stripped == Ty::Char as i64 {
         Op::Sc
-    } else if ty == Ty::Short as i64 {
+    } else if stripped == Ty::Short as i64 {
         Op::Sh
-    } else if ty == Ty::Int as i64 {
+    } else if stripped == Ty::Int as i64 {
+        Op::Sw
+    } else if stripped == Ty::Long as i64 && target.is_windows() {
+        // LLP64: `long` stores as 4 bytes, same as int.
         Op::Sw
     } else {
         Op::Si

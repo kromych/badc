@@ -243,6 +243,14 @@ pub struct Compiler {
     /// where.
     dylibs: Vec<DylibSpec>,
 
+    /// The native target this compilation is producing for.
+    /// Drives data-model picks: `long` is 8 bytes on LP64
+    /// (Linux / macOS) and 4 bytes on LLP64 (Windows). Stored
+    /// here so per-`ty` helpers (`size_of_type`, `align_of_type`,
+    /// `load_op_for`, `store_op_for`) can pick the right width
+    /// without threading the target through every call site.
+    target: Target,
+
     /// Side channel from `parse_declarator` to `run_compile`: when
     /// the declarator's nested-paren branch encounters a "function
     /// returning function pointer" shape (`T (*name(args1))(args2)`),
@@ -419,6 +427,7 @@ impl Compiler {
             symbol_index,
             deferred_error,
             dylibs,
+            target,
             text: Vec::new(),
             data,
             ty: 0,
@@ -649,15 +658,20 @@ impl Compiler {
     /// Element size in bytes for a pointer type. Pointer-to-struct
     /// looks up the struct's real size; everything else falls back
     /// to the static [`pointee_size_no_struct`] (1 for `char*`, 8
-    /// for any other pointer level).
+    /// for any other pointer level), with one target-dependent
+    /// override: `long *` is 4 bytes on LLP64 (Windows) and 8
+    /// bytes on LP64 (Linux / macOS).
     fn pointee_size(&self, ptr_ty: i64) -> i64 {
         if is_struct_ty(ptr_ty) && struct_ptr_depth(ptr_ty) == 1 {
             // Single-level pointer-to-struct: the pointee is the
             // struct value, whose size lives in the struct table.
-            self.structs[struct_id_of(ptr_ty)].size as i64
-        } else {
-            pointee_size_no_struct(ptr_ty)
+            return self.structs[struct_id_of(ptr_ty)].size as i64;
         }
+        let stripped = ptr_ty & !UNSIGNED_BIT;
+        if stripped == (Ty::Long as i64) + (Ty::Ptr as i64) && self.target.is_windows() {
+            return 4;
+        }
+        pointee_size_no_struct(ptr_ty)
     }
 
     /// True if pointer arithmetic on `ptr_ty` scales the offset by
@@ -750,9 +764,15 @@ impl Compiler {
             2
         } else if ty == Ty::Int as i64 {
             4
+        } else if ty == Ty::Long as i64 {
+            // Per-target: LP64 (Linux / macOS) -> 8; LLP64
+            // (Windows) -> 4. The `long long` spelling stays at
+            // 8 bytes everywhere via `Ty::LongLong`.
+            if self.target.is_windows() { 4 } else { 8 }
         } else {
-            // `long`, `float`, `double`, all pointers (long*, int*,
-            // char*, short*, float*, ...) -- 8 bytes each.
+            // `long long`, `float`, `double`, all pointers
+            // (long long*, long*, int*, char*, short*, float*,
+            // ...) -- 8 bytes each.
             8
         }
     }
@@ -780,6 +800,8 @@ impl Compiler {
             2
         } else if ty == Ty::Int as i64 {
             4
+        } else if ty == Ty::Long as i64 {
+            if self.target.is_windows() { 4 } else { 8 }
         } else {
             8
         }
@@ -895,20 +917,22 @@ impl Compiler {
 
     fn parse_decl_base_type(&mut self) -> Result<i64, C5Error> {
         // Leading qualifiers / modifiers / specifiers. Most are
-        // no-ops in c5; three carry semantic weight:
-        //   * `IntMod` (unsigned/short/_Bool): trips the implicit-
-        //     int rule so a bare `unsigned x;` still produces a
-        //     declaration of type `int`.
-        //   * `Signed`: a `signed char` base is promoted to `int`
-        //     (the negative range can't survive an Lc zero-extend).
-        //   * `Long`: `long` selects the 64-bit `Ty::Long` storage
-        //     class. `long long` enters the loop twice but the
-        //     resulting type is still `Ty::Long` (c5 has no 128-bit
-        //     type).
+        // no-ops in c5; the ones that carry semantic weight:
+        //   * `IntMod` (`_Bool`): trips the implicit-int rule.
+        //   * `Signed`: a `signed char` base loads sign-extending
+        //     via `Op::Lcs` (instead of bare-`char`'s zero-ext).
+        //   * `Unsigned`: ORs `UNSIGNED_BIT` into the type tag.
+        //   * `Short`: selects the 16-bit `Ty::Short` storage class.
+        //   * `Long`: first occurrence selects `Ty::Long`. Second
+        //     occurrence promotes to `Ty::LongLong` (the C99 / C11
+        //     `long long` type, always 64 bits regardless of
+        //     target). The first-vs-second distinction matters on
+        //     LLP64 (Windows): `long` is 32 bits there, `long long`
+        //     stays 64.
         let mut saw_int_mod = false;
         let mut saw_signed = false;
         let mut saw_unsigned = false;
-        let mut saw_long = false;
+        let mut long_count: u8 = 0;
         let mut saw_short = false;
         while is_decl_modifier(self.lex.tk) {
             if self.lex.tk == Token::IntMod as i64 {
@@ -920,7 +944,7 @@ impl Compiler {
                 saw_unsigned = true;
                 saw_int_mod = true;
             } else if self.lex.tk == Token::Long as i64 {
-                saw_long = true;
+                long_count = long_count.saturating_add(1);
                 saw_int_mod = true;
             } else if self.lex.tk == Token::Short as i64 {
                 saw_short = true;
@@ -928,12 +952,18 @@ impl Compiler {
             }
             self.next()?;
         }
+        let saw_long = long_count >= 1;
+        let saw_long_long = long_count >= 2;
 
         let bt = if self.lex.tk == Token::Int as i64 {
             self.next()?;
-            // `long int` / `long long int` -> Ty::Long; `short int`
-            // -> Ty::Short (2 bytes); bare `int` -> Ty::Int (4 bytes).
-            let base = if saw_long {
+            // `long long int` -> Ty::LongLong (always 64-bit);
+            // `long int` -> Ty::Long (LP64 = 64-bit, LLP64 =
+            // 32-bit); `short int` -> Ty::Short (2 bytes);
+            // bare `int` -> Ty::Int (4 bytes).
+            let base = if saw_long_long {
+                Ty::LongLong as i64
+            } else if saw_long {
                 Ty::Long as i64
             } else if saw_short {
                 Ty::Short as i64
@@ -1022,12 +1052,15 @@ impl Compiler {
             self.next()?;
             aliased
         } else if saw_int_mod {
-            // Bare `unsigned x;` / `long x;` / `short x;` / `_Bool x;` --
-            // the C implicit-int rule applies for int-modifier-only decls.
-            // A bare `long x;` (no `int` keyword) lands here and selects
-            // the 64-bit `Ty::Long`; a bare `short x;` selects the
-            // 16-bit `Ty::Short`.
-            let base = if saw_long {
+            // Bare `unsigned x;` / `long x;` / `long long x;` /
+            // `short x;` / `_Bool x;` -- the C implicit-int rule
+            // applies for int-modifier-only decls. `long long`
+            // selects `Ty::LongLong` (always 64-bit); `long`
+            // selects `Ty::Long` (LP64 -> 64-bit, LLP64 ->
+            // 32-bit); `short` selects `Ty::Short` (16-bit).
+            let base = if saw_long_long {
+                Ty::LongLong as i64
+            } else if saw_long {
                 Ty::Long as i64
             } else if saw_short {
                 Ty::Short as i64
@@ -1430,7 +1463,7 @@ impl Compiler {
         if !is_unsigned_ty(lhs_ty) || !is_unsigned_ty(rhs_ty) {
             return;
         }
-        let common = usual_arith_common_ty(lhs_ty, rhs_ty);
+        let common = usual_arith_common_ty(lhs_ty, rhs_ty, self.target);
         let common_size = self.size_of_type(common);
         let mask: i64 = match common_size {
             1 => 0xff,
@@ -1487,7 +1520,7 @@ impl Compiler {
             self.emit_op(plain_op);
             return;
         }
-        let common = usual_arith_common_ty(lhs_ty, self.ty);
+        let common = usual_arith_common_ty(lhs_ty, self.ty, self.target);
         let common_size = self.size_of_type(common);
         if common_size >= 8 {
             self.emit_op(plain_op);
@@ -2148,7 +2181,7 @@ impl Compiler {
                 } else if !is_struct_value {
                     // Pointers to structs and every scalar type go
                     // through the normal load_op_for path.
-                    self.emit_op(load_op_for(self.ty));
+                    self.emit_op(load_op_for(self.ty, self.target));
                 }
             }
         } else if self.lex.tk == '(' as i64 {
@@ -2306,7 +2339,7 @@ impl Compiler {
             // the address from `a` directly.
             let result_is_struct_value = is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
             if !result_is_struct_value {
-                self.emit_op(load_op_for(self.ty));
+                self.emit_op(load_op_for(self.ty, self.target));
             }
         } else if self.lex.tk == Token::AndOp as i64 {
             self.next()?;
@@ -2403,7 +2436,7 @@ impl Compiler {
             } else {
                 Op::Sub
             });
-            self.emit_op(store_op_for(self.ty));
+            self.emit_op(store_op_for(self.ty, self.target));
         } else {
             // The parse-error message includes the enclosing function
             // name and (for `Token::Id`) the identifier name -- those
@@ -2587,7 +2620,7 @@ impl Compiler {
                         ));
                     }
                     self.ty = t;
-                    self.emit_op(store_op_for(self.ty));
+                    self.emit_op(store_op_for(self.ty, self.target));
                 } else {
                     return Err(C5Error::Compile(format!(
                         "{}: bad lvalue in assignment",
@@ -2695,7 +2728,7 @@ impl Compiler {
                 };
                 self.emit_op(op);
                 self.ty = lhs_ty;
-                self.emit_op(store_op_for(self.ty));
+                self.emit_op(store_op_for(self.ty, self.target));
             } else if self.lex.tk == Token::Cond as i64 {
                 self.next()?;
                 self.emit_op(Op::Bz);
@@ -2791,7 +2824,7 @@ impl Compiler {
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "<")?;
                     self.emit_op(Op::Flt);
-                } else if is_unsigned_ty(usual_arith_common_ty(t, self.ty)) {
+                } else if is_unsigned_ty(usual_arith_common_ty(t, self.ty, self.target)) {
                     self.emit_op(Op::Ult);
                 } else {
                     self.emit_op(Op::Lt);
@@ -2804,7 +2837,7 @@ impl Compiler {
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, ">")?;
                     self.emit_op(Op::Fgt);
-                } else if is_unsigned_ty(usual_arith_common_ty(t, self.ty)) {
+                } else if is_unsigned_ty(usual_arith_common_ty(t, self.ty, self.target)) {
                     self.emit_op(Op::Ugt);
                 } else {
                     self.emit_op(Op::Gt);
@@ -2817,7 +2850,7 @@ impl Compiler {
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, "<=")?;
                     self.emit_op(Op::Fle);
-                } else if is_unsigned_ty(usual_arith_common_ty(t, self.ty)) {
+                } else if is_unsigned_ty(usual_arith_common_ty(t, self.ty, self.target)) {
                     self.emit_op(Op::Ule);
                 } else {
                     self.emit_op(Op::Le);
@@ -2830,7 +2863,7 @@ impl Compiler {
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
                     self.require_both_float(t, ">=")?;
                     self.emit_op(Op::Fge);
-                } else if is_unsigned_ty(usual_arith_common_ty(t, self.ty)) {
+                } else if is_unsigned_ty(usual_arith_common_ty(t, self.ty, self.target)) {
                     self.emit_op(Op::Uge);
                 } else {
                     self.emit_op(Op::Ge);
@@ -2905,7 +2938,7 @@ impl Compiler {
                         self.ty = t;
                     } else {
                         self.maybe_mask_to_unsigned_width(t, rhs_ty);
-                        self.ty = usual_arith_common_ty(t, rhs_ty);
+                        self.ty = usual_arith_common_ty(t, rhs_ty, self.target);
                     }
                 }
             } else if self.lex.tk == Token::SubOp as i64 {
@@ -2939,7 +2972,7 @@ impl Compiler {
                         self.ty = t;
                     } else {
                         self.maybe_mask_to_unsigned_width(t, rhs_ty);
-                        self.ty = usual_arith_common_ty(t, rhs_ty);
+                        self.ty = usual_arith_common_ty(t, rhs_ty, self.target);
                     }
                 }
             } else if self.lex.tk == Token::MulOp as i64 {
@@ -2954,7 +2987,7 @@ impl Compiler {
                     let rhs_ty = self.ty;
                     self.emit_op(Op::Mul);
                     self.maybe_mask_to_unsigned_width(t, rhs_ty);
-                    self.ty = usual_arith_common_ty(t, rhs_ty);
+                    self.ty = usual_arith_common_ty(t, rhs_ty, self.target);
                 }
             } else if self.lex.tk == Token::DivOp as i64 {
                 self.next()?;
@@ -3004,7 +3037,7 @@ impl Compiler {
                 } else {
                     Op::Sub
                 });
-                self.emit_op(store_op_for(self.ty));
+                self.emit_op(store_op_for(self.ty, self.target));
                 self.emit_op(Op::Psh);
                 self.emit_imm(self.pointee_step(self.ty));
                 self.emit_op(if self.lex.tk == Token::Inc as i64 {
@@ -3062,7 +3095,7 @@ impl Compiler {
                     let elem_is_struct_value =
                         is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
                     if !elem_is_struct_value {
-                        self.emit_op(load_op_for(self.ty));
+                        self.emit_op(load_op_for(self.ty, self.target));
                     }
                 }
             } else if self.lex.tk == Token::Arrow as i64 || self.lex.tk == Token::Dot as i64 {
@@ -3150,7 +3183,7 @@ impl Compiler {
                         // instead of `N * sizeof(T)`.
                         self.last_array_decay_size = field.array_size;
                     } else if !field_is_struct_value {
-                        self.emit_op(load_op_for(self.ty));
+                        self.emit_op(load_op_for(self.ty, self.target));
                     }
                 }
             } else {
@@ -3184,12 +3217,13 @@ impl Compiler {
             let mut is_typedef = false;
             let mut saw_signed = false;
             let mut saw_unsigned = false;
-            // Track `long` and `short` separately from the other
-            // int-modifiers so `typedef long long int u64;` picks the
-            // 8-byte `Ty::Long` and `typedef short int s16;` picks
-            // the 2-byte `Ty::Short`, instead of falling through as
-            // 4-byte `Ty::Int`.
-            let mut saw_long = false;
+            // Track `long` count and `short` separately from the
+            // other int-modifiers so `typedef long long int u64;`
+            // picks the 8-byte `Ty::LongLong`, `typedef long int
+            // l;` picks `Ty::Long` (LP64 -> 8 bytes, LLP64 -> 4),
+            // and `typedef short int s16;` picks `Ty::Short`,
+            // instead of all falling through as 4-byte `Ty::Int`.
+            let mut long_count: u8 = 0;
             let mut saw_short = false;
             let mut saw_int_mod = false;
             loop {
@@ -3208,7 +3242,7 @@ impl Compiler {
                     saw_int_mod = true;
                     self.next()?;
                 } else if self.lex.tk == Token::Long as i64 {
-                    saw_long = true;
+                    long_count = long_count.saturating_add(1);
                     saw_int_mod = true;
                     self.next()?;
                 } else if self.lex.tk == Token::Short as i64 {
@@ -3227,12 +3261,17 @@ impl Compiler {
                     break;
                 }
             }
+            let saw_long = long_count >= 1;
+            let saw_long_long = long_count >= 2;
             if self.lex.tk == Token::Int as i64 {
                 self.next()?;
-                // `long int` / `long long int` -> Ty::Long; `short
-                // int` -> Ty::Short; bare `int` -> Ty::Int. Mirror
-                // the dispatch in `parse_decl_base_type`.
-                let base = if saw_long {
+                // `long long int` -> Ty::LongLong; `long int` ->
+                // Ty::Long; `short int` -> Ty::Short; bare `int`
+                // -> Ty::Int. Mirror the dispatch in
+                // `parse_decl_base_type`.
+                let base = if saw_long_long {
+                    Ty::LongLong as i64
+                } else if saw_long {
                     Ty::Long as i64
                 } else if saw_short {
                     Ty::Short as i64
@@ -3303,11 +3342,14 @@ impl Compiler {
                 self.next()?;
             } else if saw_int_mod {
                 // Bare modifier(s) without an explicit type keyword:
-                // `unsigned x;` / `short x;` / `long x;` (the
-                // implicit-int rule). `long` keeps its 8-byte
-                // selection, `short` keeps its 2-byte selection --
-                // mirror parse_decl_base_type's tail.
-                let base = if saw_long {
+                // `unsigned x;` / `short x;` / `long x;` /
+                // `long long x;` (the implicit-int rule). Mirror
+                // parse_decl_base_type's tail: `long long` ->
+                // Ty::LongLong, `long` -> Ty::Long, `short` ->
+                // Ty::Short.
+                let base = if saw_long_long {
+                    Ty::LongLong as i64
+                } else if saw_long {
                     Ty::Long as i64
                 } else if saw_short {
                     Ty::Short as i64

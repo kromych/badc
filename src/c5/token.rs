@@ -261,9 +261,10 @@ pub(crate) enum Ty {
     Float = 100,
     /// 64-bit IEEE double (scalar). `double*` = 202, etc.
     Double = 200,
-    /// 64-bit signed integer (M31). Distinct from `int` so callers
-    /// that need a real 64-bit slot can spell it `long` / `long
-    /// long` and have it survive `int`'s width-narrowing.
+    /// Per-target signed integer for `long`. LP64 (Linux / macOS):
+    /// 8 bytes. LLP64 (Windows): 4 bytes. The `Compiler::target`
+    /// switches the load / store / size at each access site;
+    /// `Ty::Long` is the *type* tag, not a width commitment.
     /// `long*` = 302, `long**` = 304, etc.
     Long = 300,
     /// 16-bit signed integer. Distinct from `int` so `short` is a
@@ -271,4 +272,11 @@ pub(crate) enum Ty {
     /// tolerated"). `short*` = 402, `short**` = 404, etc. Sits in
     /// its own band [400, 500) leaving 50 pointer levels.
     Short = 400,
+    /// 64-bit signed integer for `long long`. Always 8 bytes,
+    /// regardless of target. Distinct from `Ty::Long` so the
+    /// LP64-vs-LLP64 width split flows through cleanly:
+    /// `long long` is the spelling that always means "64-bit
+    /// integer" in real C, and c5 keeps the same guarantee.
+    /// `long long*` = 502, `long long**` = 504, etc.
+    LongLong = 500,
 }

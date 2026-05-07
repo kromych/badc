@@ -94,6 +94,15 @@ impl Target {
         }
     }
 
+    /// Windows targets follow LLP64: `long` is 32 bits, `long long`
+    /// is 64 bits, pointer is 64 bits. Linux and macOS follow LP64
+    /// (long is 64 bits). The data-model choice matters at every
+    /// `long`-typed memory access -- size, alignment, load / store
+    /// op, and the C99 usual-arithmetic-conversions rank.
+    pub fn is_windows(self) -> bool {
+        matches!(self, Target::WindowsX64 | Target::WindowsAarch64)
+    }
+
     /// Default target -- used when callers (mostly tests) construct a
     /// [`Compiler`] without an explicit `--target` choice. Picks the
     /// target matching the host badc is running on; someone running

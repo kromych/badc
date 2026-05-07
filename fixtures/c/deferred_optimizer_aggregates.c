@@ -1,25 +1,37 @@
 // DEFERRED (#46): optimizer regression on the sqlite3 aggregates
-// path. With `-O` the `:memory:` smoke test runs through tiers
-// 1-8 (open, prepare SELECT 1, CREATE TABLE, INSERT, ORDER BY)
-// and produces correct row output. Tier 9 (prepare aggregates
-// SELECT COUNT/MIN/MAX/SUM) starts compiling, then SIGSEGV at
-// runtime.
+// path. The `:memory:` smoke (CREATE / INSERT / SELECT plain
+// aggregates / GROUP BY) all run cleanly with `-O` on the
+// host; what stays broken is one specific shape:
 //
-// No -O = pass; -O = SIGSEGV. The crash is downstream of any of
-// the compiler-frontend / VM / regalloc paths the smaller
-// fixtures cover, so a minimal isolated repro hasn't been
-// extracted yet.
+//   `SELECT count(*) FILTER (WHERE x op 0) FROM ...`
 //
-// The placeholder body below exits 0 immediately so the fixture
-// itself isn't broken; the real test is "run sqlite3 with -O and
-// observe the smoke driver completing tier 9 cleanly". The
-// trigger lives in the LEMON-generated parser's interaction with
-// VDBE-codegen for aggregate functions (sqlite3CodeOnce + the
-// xStep/xFinal vtables).
+// where `op` is `>`, `!=` (or any comparison-against-the-
+// literal-`0`). Equivalent forms (`>= 1`, `> 1`) work cleanly,
+// so the trigger is sqlite's special-case handling of the
+// constant zero in the WHERE clause -- VDBE codegen probably
+// emits an op that c5/badc's optimizer mishandles. The crash
+// is a SIGSEGV the moment the prepared statement runs, not a
+// compile-time mismatch.
+//
+// No `-O`             : pass.
+// `-O` plus `> 1`     : pass.
+// `-O` plus `> 0`     : SIGSEGV.
+//
+// Reproducer is "build sqlite3 with -O and run the trigger
+// query"; a minimal isolated c5 repro hasn't been extracted
+// yet because the bug needs sqlite's VDBE-emit path to land on
+// the specific opcode.
+//
+// `demos/sqlite3/smoke.sh` exercises the `-O` lane against the
+// full in-memory + file-backed scenarios (which all pass), so
+// when this regression closes the existing CI step will
+// confirm the broader path stays green; the test below is a
+// structural placeholder until a c5-only repro lands.
 #include <stdio.h>
 
 int main() {
-    // Placeholder: when the optimizer-on-sqlite3 lane goes green
-    // this fixture should be replaced with a minimised repro.
+    // Placeholder: when the optimizer-on-sqlite3 lane goes
+    // green this fixture should be replaced with a minimised
+    // repro.
     return 0;
 }

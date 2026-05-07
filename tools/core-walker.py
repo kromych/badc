@@ -50,7 +50,11 @@ class LoadSegment:
 
 @dataclass
 class PrStatus:
-    """Subset of `struct elf_prstatus` we care about (Linux x86_64)."""
+    """Subset of `struct elf_prstatus` we care about. The fields are
+    named after x86_64 (rip / rsp / rbp) but populated from whatever
+    the core's ELF machine type is -- on aarch64 the same slots hold
+    pc / sp / fp (= x29). The walker treats them as "instruction
+    pointer / stack pointer / frame pointer" abstractly."""
 
     pid: int
     rip: int
@@ -58,20 +62,25 @@ class PrStatus:
     rbp: int
 
 
-def parse_core(path: Path) -> tuple[list[LoadSegment], list[PrStatus], bytes]:
-    """Read the core file. Returns (load_segments, prstatuses, raw_bytes)."""
+# ELF e_machine values. The core's machine field identifies the arch
+# of the *crashed program*, which dictates the NT_PRSTATUS register
+# layout we need to parse.
+EM_X86_64 = 62
+EM_AARCH64 = 183
+
+
+def parse_core(path: Path) -> tuple[list[LoadSegment], list[PrStatus], bytes, int]:
+    """Read the core file. Returns (load_segments, prstatuses,
+    raw_bytes, e_machine). `e_machine` selects the PRSTATUS register
+    layout (EM_X86_64 vs EM_AARCH64)."""
     raw = path.read_bytes()
 
-    # ELF header (64-bit). We assume little-endian x86_64 throughout --
-    # the writer is a Linux kernel, the reader is whatever runs this
-    # script. ELF magic + class + endianness are checked, the rest of
-    # the header offsets are positional.
     if raw[:4] != b"\x7fELF":
         raise SystemExit(f"{path}: not an ELF file")
     if raw[4] != ELFCLASS64:
         raise SystemExit(f"{path}: not ELF64")
 
-    e_type, _, _, _, e_phoff = struct.unpack_from("<HHIQQ", raw, 16)
+    e_type, e_machine, _, _, e_phoff = struct.unpack_from("<HHIQQ", raw, 16)
     if e_type != ET_CORE:
         raise SystemExit(f"{path}: not a core dump (e_type={e_type})")
 
@@ -89,13 +98,23 @@ def parse_core(path: Path) -> tuple[list[LoadSegment], list[PrStatus], bytes]:
         elif p_type == PT_NOTE:
             notes.append(raw[p_offset : p_offset + p_filesz])
 
-    prstatuses = [_parse_prstatus(n) for n in notes]
+    prstatuses = [_parse_prstatus(n, e_machine) for n in notes]
     prstatuses = [p for p in prstatuses if p is not None]
-    return loads, prstatuses, raw
+    return loads, prstatuses, raw, e_machine
 
 
-def _parse_prstatus(note_segment: bytes) -> PrStatus | None:
-    """Walk one PT_NOTE segment for the first NT_PRSTATUS entry."""
+def _parse_prstatus(note_segment: bytes, e_machine: int) -> PrStatus | None:
+    """Walk one PT_NOTE segment for the first NT_PRSTATUS entry. The
+    register slot offsets depend on `e_machine`:
+
+    * x86_64: pr_reg holds `struct user_regs_struct` -- rip at index
+      16, rsp at 19, rbp at 4 (counting 8-byte slots from offset 112
+      in the desc).
+    * aarch64: pr_reg holds 33 u64 registers (x0..x30, sp, pc) plus
+      pstate. fp = x29 (index 29), lr = x30 (index 30), sp at 31,
+      pc at 32. We treat fp as "rbp" and pc as "rip" for the
+      walker's purposes.
+    """
     pos = 0
     while pos + 12 <= len(note_segment):
         n_namesz, n_descsz, n_type = struct.unpack_from("<III", note_segment, pos)
@@ -106,19 +125,21 @@ def _parse_prstatus(note_segment: bytes) -> PrStatus | None:
         desc_pad = (n_descsz + 3) & ~3
         next_pos = desc_off + desc_pad
         if n_type == NT_PRSTATUS:
-            # Linux x86_64 elf_prstatus layout (we only need a few
-            # fields). The general-purpose registers live in the
-            # `pr_reg` member at offset 112; the order is fixed by
-            # arch/x86/include/uapi/asm/ptrace.h's `struct user_regs_struct`:
-            #   r15 r14 r13 r12 rbp rbx r11 r10 r9 r8 rax rcx rdx rsi rdi
-            #   orig_rax rip cs eflags rsp ss fs_base gs_base ds es fs gs
             pr_reg_off = desc_off + 112
-            regs = struct.unpack_from("<27Q", note_segment, pr_reg_off)
-            rbp = regs[4]
-            rip = regs[16]
-            rsp = regs[19]
-            pid_off = desc_off + 32  # pr_pid in elf_prstatus
+            pid_off = desc_off + 32
             (pid,) = struct.unpack_from("<I", note_segment, pid_off)
+            if e_machine == EM_X86_64:
+                regs = struct.unpack_from("<27Q", note_segment, pr_reg_off)
+                rbp = regs[4]
+                rip = regs[16]
+                rsp = regs[19]
+            elif e_machine == EM_AARCH64:
+                regs = struct.unpack_from("<34Q", note_segment, pr_reg_off)
+                rbp = regs[29]  # fp = x29
+                rsp = regs[31]
+                rip = regs[32]
+            else:
+                raise SystemExit(f"unsupported e_machine {e_machine}")
             return PrStatus(pid=pid, rip=rip, rsp=rsp, rbp=rbp)
         pos = next_pos
     return None
@@ -284,13 +305,14 @@ def main() -> int:
     )
     args = ap.parse_args()
 
-    loads, prstatuses, raw = parse_core(args.core)
+    loads, prstatuses, raw, e_machine = parse_core(args.core)
     if not prstatuses:
         print("no NT_PRSTATUS in core; can't read rip/rsp/rbp", file=sys.stderr)
         return 2
     pr = prstatuses[0]
-    print(f"# core: pid={pr.pid} rip={pr.rip:#x} rsp={pr.rsp:#x} rbp={pr.rbp:#x}")
-    print(f"# load_base={args.load_base:#x} code_start={args.code_start:#x}")
+    arch = {EM_X86_64: "x86_64", EM_AARCH64: "aarch64"}.get(e_machine, f"machine={e_machine}")
+    print(f"# core: arch={arch} pid={pr.pid} ip={pr.rip:#x} sp={pr.rsp:#x} fp={pr.rbp:#x}")
+    print(f"# load_base={args.load_base:#x} code_start={args.code_start:#x} code_end={args.code_end:#x}")
 
     asm: list[AsmLine] | None = None
     if args.asm and args.asm.exists():

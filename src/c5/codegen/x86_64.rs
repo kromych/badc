@@ -371,6 +371,40 @@ pub(super) fn emit_mov_mem32_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Re
     emit_modrm_mem(code, src, base, disp);
 }
 
+/// `MOVSX r64, [base + disp]` (16-bit memory source) -- 16-bit load
+/// sign-extended into a 64-bit register. Used by [`Op::Lh`] for
+/// `short` lvalue reads. Encoding: `REX.W + 0F BF /r`.
+pub(super) fn emit_movsx_r_mem16(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+    emit_byte(code, rex(true, dst.high(), false, base.high()));
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0xBF);
+    emit_modrm_mem(code, dst, base, disp);
+}
+
+/// `MOVZX r64, [base + disp]` (16-bit memory source) -- 16-bit load
+/// zero-extended into a 64-bit register. Used by [`Op::Lhu`] for
+/// `unsigned short` / `u16` lvalue reads. Encoding: `REX.W + 0F B7 /r`.
+pub(super) fn emit_movzx_r_mem16(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+    emit_byte(code, rex(true, dst.high(), false, base.high()));
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0xB7);
+    emit_modrm_mem(code, dst, base, disp);
+}
+
+/// `MOV [base + disp], r16` -- 16-bit memory store of the low half-
+/// word of `src`. Encoding: `66` prefix (operand-size override to
+/// 16-bit) + optional REX (no W) + `89 /r`. Companion to
+/// [`emit_movsx_r_mem16`] / [`emit_movzx_r_mem16`] for [`Op::Sh`].
+pub(super) fn emit_mov_mem16_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
+    emit_byte(code, 0x66);
+    let needs_rex = src.high() || base.high();
+    if needs_rex {
+        emit_byte(code, rex(false, src.high(), false, base.high()));
+    }
+    emit_byte(code, 0x89);
+    emit_modrm_mem(code, src, base, disp);
+}
+
 /// `LEA r64, [base + disp]` -- compute effective address.
 /// Encoding: `REX.W + 8D /r`.
 pub(super) fn emit_lea_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
@@ -1568,6 +1602,19 @@ fn lower_op(
             // *(i32*)addr = r13[31:0]
             let lhs = pop_lhs_reg(code, reg_state);
             emit_mov_mem32_r(code, lhs, 0, Reg::R13);
+        }
+        Op::Lh => {
+            // r13 = (i64)*(i16*)r13 -- sign-extending 16-bit load.
+            emit_movsx_r_mem16(code, Reg::R13, Reg::R13, 0);
+        }
+        Op::Lhu => {
+            // r13 = (u64)*(u16*)r13 -- zero-extending 16-bit load.
+            emit_movzx_r_mem16(code, Reg::R13, Reg::R13, 0);
+        }
+        Op::Sh => {
+            // *(i16*)addr = r13[15:0]
+            let lhs = pop_lhs_reg(code, reg_state);
+            emit_mov_mem16_r(code, lhs, 0, Reg::R13);
         }
         Op::Psh => {
             // With the native optimizer on AND a Pseudo classification,

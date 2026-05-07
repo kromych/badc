@@ -741,11 +741,13 @@ impl Compiler {
             }
         } else if ty == Ty::Char as i64 {
             1
+        } else if ty == Ty::Short as i64 {
+            2
         } else if ty == Ty::Int as i64 {
             4
         } else {
             // `long`, `float`, `double`, all pointers (long*, int*,
-            // char*, float*, ...) -- 8 bytes each.
+            // char*, short*, float*, ...) -- 8 bytes each.
             8
         }
     }
@@ -769,6 +771,8 @@ impl Compiler {
             }
         } else if ty == Ty::Char as i64 {
             1
+        } else if ty == Ty::Short as i64 {
+            2
         } else if ty == Ty::Int as i64 {
             4
         } else {
@@ -900,6 +904,7 @@ impl Compiler {
         let mut saw_signed = false;
         let mut saw_unsigned = false;
         let mut saw_long = false;
+        let mut saw_short = false;
         while is_decl_modifier(self.lex.tk) {
             if self.lex.tk == Token::IntMod as i64 {
                 saw_int_mod = true;
@@ -912,16 +917,21 @@ impl Compiler {
             } else if self.lex.tk == Token::Long as i64 {
                 saw_long = true;
                 saw_int_mod = true;
+            } else if self.lex.tk == Token::Short as i64 {
+                saw_short = true;
+                saw_int_mod = true;
             }
             self.next()?;
         }
 
         let bt = if self.lex.tk == Token::Int as i64 {
             self.next()?;
-            // `long int` / `long long int` -> Ty::Long; bare `int`
-            // -> Ty::Int (4 bytes).
+            // `long int` / `long long int` -> Ty::Long; `short int`
+            // -> Ty::Short (2 bytes); bare `int` -> Ty::Int (4 bytes).
             let base = if saw_long {
                 Ty::Long as i64
+            } else if saw_short {
+                Ty::Short as i64
             } else {
                 Ty::Int as i64
             };
@@ -1002,12 +1012,15 @@ impl Compiler {
             self.next()?;
             aliased
         } else if saw_int_mod {
-            // Bare `unsigned x;` / `long x;` / `_Bool x;` -- the C
-            // implicit-int rule applies for int-modifier-only decls.
-            // A bare `long x;` (no `int` keyword) also lands here
-            // and selects the 64-bit `Ty::Long`.
+            // Bare `unsigned x;` / `long x;` / `short x;` / `_Bool x;` --
+            // the C implicit-int rule applies for int-modifier-only decls.
+            // A bare `long x;` (no `int` keyword) lands here and selects
+            // the 64-bit `Ty::Long`; a bare `short x;` selects the
+            // 16-bit `Ty::Short`.
             let base = if saw_long {
                 Ty::Long as i64
+            } else if saw_short {
+                Ty::Short as i64
             } else {
                 Ty::Int as i64
             };
@@ -2976,11 +2989,13 @@ impl Compiler {
             let mut is_typedef = false;
             let mut saw_signed = false;
             let mut saw_unsigned = false;
-            // Track `long` separately from the other int-modifiers
-            // so `typedef long long int u64;` and friends pick the
-            // 8-byte `Ty::Long` storage class instead of falling
-            // through as 4-byte `Ty::Int`.
+            // Track `long` and `short` separately from the other
+            // int-modifiers so `typedef long long int u64;` picks the
+            // 8-byte `Ty::Long` and `typedef short int s16;` picks
+            // the 2-byte `Ty::Short`, instead of falling through as
+            // 4-byte `Ty::Int`.
             let mut saw_long = false;
+            let mut saw_short = false;
             let mut saw_int_mod = false;
             loop {
                 if self.lex.tk == Token::ThreadLocal as i64 {
@@ -3001,6 +3016,10 @@ impl Compiler {
                     saw_long = true;
                     saw_int_mod = true;
                     self.next()?;
+                } else if self.lex.tk == Token::Short as i64 {
+                    saw_short = true;
+                    saw_int_mod = true;
+                    self.next()?;
                 } else if self.lex.tk == Token::IntMod as i64 {
                     saw_int_mod = true;
                     self.next()?;
@@ -3015,11 +3034,13 @@ impl Compiler {
             }
             if self.lex.tk == Token::Int as i64 {
                 self.next()?;
-                // `long int` / `long long int` -> Ty::Long; bare `int`
-                // -> Ty::Int (4 bytes). Mirror the same dispatch
-                // `parse_decl_base_type` uses.
+                // `long int` / `long long int` -> Ty::Long; `short
+                // int` -> Ty::Short; bare `int` -> Ty::Int. Mirror
+                // the dispatch in `parse_decl_base_type`.
                 let base = if saw_long {
                     Ty::Long as i64
+                } else if saw_short {
+                    Ty::Short as i64
                 } else {
                     Ty::Int as i64
                 };
@@ -3091,9 +3112,12 @@ impl Compiler {
                 // Bare modifier(s) without an explicit type keyword:
                 // `unsigned x;` / `short x;` / `long x;` (the
                 // implicit-int rule). `long` keeps its 8-byte
-                // selection -- mirror parse_decl_base_type's tail.
+                // selection, `short` keeps its 2-byte selection --
+                // mirror parse_decl_base_type's tail.
                 let base = if saw_long {
                     Ty::Long as i64
+                } else if saw_short {
+                    Ty::Short as i64
                 } else {
                     Ty::Int as i64
                 };

@@ -48,6 +48,22 @@ pub enum Op {
     /// for 4-byte int writes (signed and unsigned share the same
     /// store semantics; only the load differs).
     Sw,
+    /// Load Half: Loads a 16-bit signed value from the address in
+    /// the accumulator, sign-extending into the 64-bit accumulator.
+    /// Used for `short` lvalue reads where `short` is a 2-byte
+    /// storage slot. ARM64 `LDRSH`, x86_64 `MOVSX r64, m16`.
+    Lh,
+    /// Load Half Unsigned: Loads a 16-bit value from the address in
+    /// the accumulator, zero-extending into the 64-bit accumulator.
+    /// Used for `unsigned short` / `u16` reads, and for the
+    /// `*(u16*)p` pattern that appears in sqlite's number rendering.
+    /// ARM64 `LDRH`, x86_64 `MOVZX r64, m16`.
+    Lhu,
+    /// Store Half: Stores the low 16 bits of the accumulator into
+    /// the address on top of stack. Companion to [`Op::Lh`] /
+    /// [`Op::Lhu`] for 2-byte short writes (signed and unsigned
+    /// share the same store; only the load differs).
+    Sh,
     /// Push: Pushes the accumulator onto the stack.
     Psh,
     /// External library call. Followed by one operand: the index
@@ -243,7 +259,7 @@ pub enum Op {
     TlsLea,
 }
 
-const OPS: [Op; 77] = [
+const OPS: [Op; 80] = [
     Op::Lea,
     Op::Imm,
     Op::Jmp,
@@ -261,6 +277,9 @@ const OPS: [Op; 77] = [
     Op::Lw,
     Op::Lwu,
     Op::Sw,
+    Op::Lh,
+    Op::Lhu,
+    Op::Sh,
     Op::Psh,
     Op::JsrExt,
     Op::Or,

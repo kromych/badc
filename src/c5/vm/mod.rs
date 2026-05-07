@@ -424,6 +424,65 @@ impl<H: Host> Vm<H> {
         }
     }
 
+    /// 2-byte signed load with sign-extension into i16. Used by
+    /// [`Op::Lh`] for `short` lvalue reads. Mirrors `load_i32`'s
+    /// stack-aware shape: an `Lh` against a stack slot reads two
+    /// of the 8 bytes depending on `addr & 6`.
+    fn load_i16(&self, addr: usize) -> Result<i16, C5Error> {
+        if let Some(idx) = self.get_stack_idx(addr) {
+            if idx < self.stack.len() {
+                let word = self.stack[idx];
+                let byte_offset = (addr - STACK_BASE) % 8;
+                let shift = byte_offset * 8;
+                Ok(((word >> shift) & 0xFFFF) as u16 as i16)
+            } else {
+                Err(C5Error::Runtime(format!(
+                    "Stack overflow read at addr {:x}",
+                    addr
+                )))
+            }
+        } else {
+            self.check_data_access(addr, 2, AccessKind::Read)?;
+            if addr + 2 <= self.data.len() {
+                let mut bytes = [0u8; 2];
+                bytes.copy_from_slice(&self.data[addr..addr + 2]);
+                Ok(i16::from_le_bytes(bytes))
+            } else {
+                Ok(0)
+            }
+        }
+    }
+
+    /// 2-byte store. On the stack, masks the target half-word of
+    /// the 8-byte slot so the other 6 bytes survive. Off-stack,
+    /// writes 2 raw bytes. Companion to [`load_i16`] for [`Op::Sh`].
+    fn store_i16(&mut self, addr: usize, val: i16) -> Result<(), C5Error> {
+        if let Some(idx) = self.get_stack_idx(addr) {
+            if idx < self.stack.len() {
+                let word = self.stack[idx] as u64;
+                let byte_offset = (addr - STACK_BASE) % 8;
+                let shift = byte_offset * 8;
+                let mask = !(0xFFFFu64 << shift);
+                let new_val = (word & mask) | ((val as u16 as u64) << shift);
+                self.stack[idx] = new_val as i64;
+                Ok(())
+            } else {
+                Err(C5Error::Runtime(format!(
+                    "Stack overflow write at addr {:x}",
+                    addr
+                )))
+            }
+        } else {
+            self.check_data_access(addr, 2, AccessKind::Write)?;
+            if addr + 2 > self.data.len() {
+                self.data.resize(addr + 2, 0);
+            }
+            let bytes = val.to_le_bytes();
+            self.data[addr..addr + 2].copy_from_slice(&bytes);
+            Ok(())
+        }
+    }
+
     /// 4-byte store. On the stack, masks the target half of the
     /// 8-byte slot so the other 4 bytes survive. Off-stack, writes
     /// 4 raw bytes. Companion to [`load_i32`] for [`Op::Sw`].
@@ -705,6 +764,22 @@ impl<H: Host> Vm<H> {
                     let addr = self.load_i64(sp)? as usize;
                     sp += 8;
                     self.store_i32(addr, a as i32)?;
+                }
+                Op::Lh => {
+                    a = self.load_i16(a as usize)? as i64;
+                }
+                Op::Lhu => {
+                    // Zero-extending 16-bit load -- read two bytes
+                    // through the same mechanism, then mask the
+                    // high 48 bits to 0 so unsigned compares see
+                    // the bit pattern rather than a sign-extended
+                    // value.
+                    a = (self.load_i16(a as usize)? as u16) as i64;
+                }
+                Op::Sh => {
+                    let addr = self.load_i64(sp)? as usize;
+                    sp += 8;
+                    self.store_i16(addr, a as i16)?;
                 }
                 Op::Psh => {
                     sp -= 8;

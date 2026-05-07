@@ -102,6 +102,7 @@ impl Compiler {
             let mut saw_signed = false;
             let mut saw_unsigned = false;
             let mut saw_long = false;
+            let mut saw_short = false;
             while is_decl_modifier(self.lex.tk) {
                 if self.lex.tk == Token::IntMod as i64 {
                     saw_int_mod = true;
@@ -114,6 +115,9 @@ impl Compiler {
                 } else if self.lex.tk == Token::Long as i64 {
                     saw_long = true;
                     saw_int_mod = true;
+                } else if self.lex.tk == Token::Short as i64 {
+                    saw_short = true;
+                    saw_int_mod = true;
                 }
                 self.next()?;
             }
@@ -121,6 +125,8 @@ impl Compiler {
                 self.next()?;
                 let base = if saw_long {
                     Ty::Long as i64
+                } else if saw_short {
+                    Ty::Short as i64
                 } else {
                     Ty::Int as i64
                 };
@@ -188,6 +194,8 @@ impl Compiler {
             } else if saw_int_mod {
                 let base = if saw_long {
                     Ty::Long as i64
+                } else if saw_short {
+                    Ty::Short as i64
                 } else {
                     Ty::Int as i64
                 };

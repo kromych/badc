@@ -152,7 +152,8 @@ int main() {
 
     // ------- Sizeof per band -------
     CHECK(sizeof(unsigned char)  == 1, "sizeof(u8)");
-    CHECK(sizeof(unsigned short) == sizeof(int),  "sizeof(u16) collapses to int");
+    CHECK(sizeof(short)          == 2, "sizeof(short)");
+    CHECK(sizeof(unsigned short) == 2, "sizeof(u16)");
     CHECK(sizeof(unsigned int)   == 4, "sizeof(u32)");
     CHECK(sizeof(unsigned long)  == 8, "sizeof(u64)");
     CHECK(sizeof(signed char)    == sizeof(int),  "sizeof(signed char) promotes");

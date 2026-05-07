@@ -150,10 +150,18 @@ pub(crate) enum Token {
     /// declaration is `unsigned x;` (no `int`), the parser still
     /// emits an `int` declaration. Programs that rely on the
     /// signed/unsigned distinction at the bit level still narrow
-    /// uniformly to a 32-bit slot. `short` likewise still
-    /// collapses to `int` -- a real 16-bit slot is a future
-    /// extension to M31.
+    /// uniformly to a 32-bit slot. The remaining IntMod tokens
+    /// today are `_Bool` (which c5 maps to int) -- `short` was
+    /// promoted to its own [`Token::Short`] so it can drive the
+    /// 16-bit `Ty::Short` storage class.
     IntMod,
+    /// `short` modifier -- a real 2-byte width specifier. Drives
+    /// `parse_decl_base_type` to pick `Ty::Short` rather than
+    /// `Ty::Int`, so `short` declarations get a 2-byte slot,
+    /// `Op::Lh` / `Op::Sh` for memory access, and proper sign /
+    /// zero extension on load. `unsigned short` ORs in
+    /// `UNSIGNED_BIT` and switches the load to `Op::Lhu`.
+    Short,
     /// `signed` modifier -- separated from the rest of [`IntMod`]
     /// because c5 needs to know specifically when `signed` was
     /// applied to a `char` base. A bare `char` collapses to a
@@ -258,4 +266,9 @@ pub(crate) enum Ty {
     /// long` and have it survive `int`'s width-narrowing.
     /// `long*` = 302, `long**` = 304, etc.
     Long = 300,
+    /// 16-bit signed integer. Distinct from `int` so `short` is a
+    /// real 2-byte storage slot (not just an "int that the lexer
+    /// tolerated"). `short*` = 402, `short**` = 404, etc. Sits in
+    /// its own band [400, 500) leaving 50 pointer levels.
+    Short = 400,
 }

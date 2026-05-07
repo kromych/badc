@@ -810,7 +810,7 @@ const KEYWORDS: &[(&str, Token)] = &[
     // declaration yields a 32-bit slot).
     ("signed", Token::Signed),
     ("unsigned", Token::Unsigned),
-    ("short", Token::IntMod),
+    ("short", Token::Short),
     ("long", Token::Long),
     ("_Bool", Token::IntMod),
     // Function specifiers -- accepted, no effect.

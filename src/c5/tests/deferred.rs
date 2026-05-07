@@ -63,13 +63,13 @@ fn unsigned_arith_high_half_not_masked() {
 }
 
 #[test]
-#[ignore = "deferred: unsigned right shift uses arithmetic shift"]
-fn unsigned_right_shift_is_arithmetic() {
-    // `unsigned int x >> 1` lowers to `Op::Shr` which is
-    // ARM64 ASR / x86_64 SAR -- arithmetic. Logical shift
-    // requires a separate `Op::Shru`.
+fn unsigned_right_shift_is_logical() {
+    // `unsigned int x >> 1` lowers to `Op::Shru` (ARM64 LSR /
+    // x86_64 SHR) when the LHS has an unsigned type, so the high
+    // bit zero-extends rather than sign-extending. Was deferred
+    // until Op::Shru / ShruI landed.
     let exit = jit_fixture_exit("deferred_unsigned_right_shift.c");
-    assert_eq!(exit, 0, "fixture should exit 0 once the bug is fixed");
+    assert_eq!(exit, 0, "fixture should exit 0");
 }
 
 #[test]
@@ -96,16 +96,31 @@ fn mixed_signed_unsigned_no_promotion() {
 }
 
 #[test]
-#[ignore = "deferred: u16 / short pointer deref reads/writes 4 bytes"]
-fn u16_load_store_is_four_bytes() {
-    // c5 has no Op::Sh / Op::Lh half-word memory ops; `*(u16*)p`
-    // lowers to int (32-bit) load/store. Breaks sqlite's
-    // vdbeMemRenderNum digit-pair writer -- avg() / any %g
-    // formatting comes back empty. Fix: dedicated half-word
-    // memory ops, routed through store_op_for / load_op_for
-    // when the C type is short or u16.
+fn u16_load_store_is_two_bytes() {
+    // `*(u16*)p` reads/writes exactly 2 bytes via Op::Lh / Op::Lhu
+    // / Op::Sh and the matching aarch64 LDRSH / LDRH / STRH and
+    // x86_64 movsx16 / movzx16 / mov16 helpers. Was deferred until
+    // real `Ty::Short` storage class landed.
     let exit = jit_fixture_exit("deferred_u16_load_store.c");
-    assert_eq!(exit, 0, "fixture should exit 0 once the bug is fixed");
+    assert_eq!(exit, 0, "fixture should exit 0");
+}
+
+#[test]
+#[ignore = "deferred: C99 integer-boundary final-boss; documents known gaps"]
+fn integer_boundary_c99_final_boss() {
+    // The fixture is a comprehensive C99 spec encoding for every
+    // signed / unsigned x {char, short, int, long} combination
+    // across load, store, sign / zero extension, narrowing cast,
+    // overflow, shift, compare. Each CHECK has a unique exit
+    // code so a non-zero exit pinpoints the gap. Today three
+    // codes (100 / 136 / 150 / 151) reflect by-design c5
+    // behavior (signed-char-as-int, same-width sign-extension on
+    // signed -> unsigned cast); the rest pass.
+    let exit = jit_fixture_exit("deferred_integer_boundary_c99.c");
+    assert_eq!(
+        exit, 0,
+        "fixture should exit 0 once every C99 boundary lands"
+    );
 }
 
 // ---- Linux ELF TLS interaction (#47) ----

@@ -139,6 +139,27 @@ pub(super) fn long_ptr_depth(ty: i64) -> i64 {
     }
 }
 
+/// `ty` is a `short` (or pointer to one). Short lives in its own
+/// 100-wide band starting at `Ty::Short` (400); the same +2-per-`*`
+/// scheme as the integer family applies inside the band, so
+/// `short*` = 402, `short**` = 404, etc.
+pub(super) fn is_short_ty(ty: i64) -> bool {
+    let ty = strip_unsigned(ty);
+    let base = Ty::Short as i64;
+    (base..base + FP_BAND_SIZE).contains(&ty)
+}
+
+/// Pointer depth within the short band. Returns 0 for a scalar
+/// `short`, 1 for `short*`, 2 for `short**`, etc.
+pub(super) fn short_ptr_depth(ty: i64) -> i64 {
+    let ty = strip_unsigned(ty);
+    if is_short_ty(ty) {
+        (ty - Ty::Short as i64) / Ty::Ptr as i64
+    } else {
+        0
+    }
+}
+
 /// `ty` is a value of any floating-point type (or pointer to one).
 pub(super) fn is_floating_ty(ty: i64) -> bool {
     is_float_ty(ty) || is_double_ty(ty)
@@ -174,6 +195,8 @@ pub(super) fn is_pointer_ty(ty: i64) -> bool {
         fp_ptr_depth(ty) > 0
     } else if is_long_ty(ty) {
         long_ptr_depth(ty) > 0
+    } else if is_short_ty(ty) {
+        short_ptr_depth(ty) > 0
     } else {
         ty >= Ty::Ptr as i64
     }
@@ -197,6 +220,9 @@ pub(super) fn pointee_size_no_struct(ty: i64) -> i64 {
     } else if ty == (Ty::Int as i64) + (Ty::Ptr as i64) {
         // Bare `int*` -- pointee is a 4-byte int.
         4
+    } else if ty == (Ty::Short as i64) + (Ty::Ptr as i64) {
+        // Bare `short*` -- pointee is a 2-byte short.
+        2
     } else {
         8
     }
@@ -235,6 +261,7 @@ pub(super) fn is_decl_modifier(tk: i64) -> bool {
         || tk == Token::Signed as i64
         || tk == Token::Unsigned as i64
         || tk == Token::Long as i64
+        || tk == Token::Short as i64
         || tk == Token::FuncSpec as i64
 }
 
@@ -258,6 +285,7 @@ pub(super) fn is_type_start_token(tk: i64) -> bool {
 
 /// Pick the right load op for the given `ty`.
 ///   * `Ty::Char`           -> `Op::Lc`  (1-byte zero-extending)
+///   * `Ty::Short` (scalar) -> `Op::Lh` / `Op::Lhu` (2-byte sign- / zero-ext)
 ///   * `Ty::Int` (scalar)   -> `Op::Lw`  (4-byte sign-extending; M31)
 ///   * everything else      -> `Op::Li`  (8-byte word load)
 /// Pointers (any base type) go through `Op::Li` because every
@@ -267,6 +295,9 @@ pub(super) fn load_op_for(ty: i64) -> Op {
     let ty = strip_unsigned(ty);
     if ty == Ty::Char as i64 {
         Op::Lc
+    } else if ty == Ty::Short as i64 {
+        // 2-byte slot. Sign vs zero extension splits like Lw / Lwu.
+        if unsigned { Op::Lhu } else { Op::Lh }
     } else if ty == Ty::Int as i64 {
         // Pick zero-extending vs sign-extending 32-bit load
         // by signedness. The store path (Op::Sw) doesn't care:
@@ -279,12 +310,15 @@ pub(super) fn load_op_for(ty: i64) -> Op {
 
 /// Mirror of [`load_op_for`] for stores.
 ///   * `Ty::Char`           -> `Op::Sc`  (1-byte)
+///   * `Ty::Short` (scalar) -> `Op::Sh`  (2-byte)
 ///   * `Ty::Int` (scalar)   -> `Op::Sw`  (4-byte; M31)
 ///   * everything else      -> `Op::Si`  (8-byte)
 pub(super) fn store_op_for(ty: i64) -> Op {
     let ty = strip_unsigned(ty);
     if ty == Ty::Char as i64 {
         Op::Sc
+    } else if ty == Ty::Short as i64 {
+        Op::Sh
     } else if ty == Ty::Int as i64 {
         Op::Sw
     } else {
@@ -302,6 +336,8 @@ pub(super) fn store_op_for(ty: i64) -> Op {
 /// rewrite site.
 pub(super) fn is_scalar_load_op_val(op_val: i64) -> bool {
     op_val == Op::Lc as i64
+        || op_val == Op::Lh as i64
+        || op_val == Op::Lhu as i64
         || op_val == Op::Lw as i64
         || op_val == Op::Lwu as i64
         || op_val == Op::Li as i64
@@ -314,6 +350,10 @@ pub(super) fn is_scalar_load_op_val(op_val: i64) -> bool {
 pub(super) fn reemit_scalar_load(op_val: i64) -> Op {
     if op_val == Op::Lc as i64 {
         Op::Lc
+    } else if op_val == Op::Lh as i64 {
+        Op::Lh
+    } else if op_val == Op::Lhu as i64 {
+        Op::Lhu
     } else if op_val == Op::Lw as i64 {
         Op::Lw
     } else if op_val == Op::Lwu as i64 {

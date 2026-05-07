@@ -733,6 +733,38 @@ pub(super) fn enc_ldr_reg_lsl3(rt: Reg, rn: Reg, rm: Reg) -> u32 {
     0xF860_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
+/// `LDRSH <Xt>, [<Xn|SP>, #imm]` -- 16-bit load sign-extended into
+/// the full 64-bit `Xt`, immediate offset scaled by 2. Used by
+/// [`Op::Lh`] for `short` lvalue reads. Encoding: opc=10
+/// (sign-extend to 64-bit), size=01 (halfword).
+pub(super) fn enc_ldrsh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    debug_assert!(imm.is_multiple_of(2), "ldrsh imm: {imm} not 2-byte aligned");
+    let scaled = imm / 2;
+    debug_assert!(scaled < 4096, "ldrsh imm: {imm} > 8190");
+    0x7980_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LDRH <Wt>, [<Xn|SP>, #imm]` -- 16-bit load zero-extended into
+/// `Wt` (which clears the high 32 bits of `Xt`), immediate offset
+/// scaled by 2. Used by [`Op::Lhu`] for `unsigned short` lvalue
+/// reads. Encoding: opc=01 (load), size=01.
+pub(super) fn enc_ldrh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    debug_assert!(imm.is_multiple_of(2), "ldrh imm: {imm} not 2-byte aligned");
+    let scaled = imm / 2;
+    debug_assert!(scaled < 4096, "ldrh imm: {imm} > 8190");
+    0x7940_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STRH <Wt>, [<Xn|SP>, #imm]` -- 16-bit store (low half of `Wt`),
+/// immediate offset scaled by 2. Companion to [`enc_ldrsh_imm`] /
+/// [`enc_ldrh_imm`] for [`Op::Sh`].
+pub(super) fn enc_strh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    debug_assert!(imm.is_multiple_of(2), "strh imm: {imm} not 2-byte aligned");
+    let scaled = imm / 2;
+    debug_assert!(scaled < 4096, "strh imm: {imm} > 8190");
+    0x7900_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
 /// `LDRB <Wt>, [<Xn|SP>, #imm]` -- byte load, zero-extended into a
 /// 32-bit register (which on AArch64 means the high 32 bits of the
 /// 64-bit register are also cleared). c4 promotes char to int on
@@ -1460,6 +1492,12 @@ fn lower_op(
             // register name. Pass X19; the encoder produces the
             // 32-bit store form regardless.
             emit(code, enc_str32_imm(Reg::X19, lhs, 0));
+        }
+        Op::Lh => emit(code, enc_ldrsh_imm(Reg::X19, Reg::X19, 0)),
+        Op::Lhu => emit(code, enc_ldrh_imm(Reg::X19, Reg::X19, 0)),
+        Op::Sh => {
+            let lhs = pop_lhs_reg(code, reg_state);
+            emit(code, enc_strh_imm(Reg::X19, lhs, 0));
         }
         Op::Psh => {
             // With the native optimizer on AND a Pseudo classification

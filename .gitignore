@@ -24,3 +24,4 @@ core.*
 shell.x64.test
 shell.aarch64.test
 trigger.sql
+.claude/

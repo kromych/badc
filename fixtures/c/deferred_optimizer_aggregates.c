@@ -79,6 +79,40 @@
 // just fine -- the wrong value gets picked up only at the next
 // `pop rbp`, well after the guard has cleared.
 //
+// `BADC_SAVED_RBP_CHECK=1` -- a more targeted check that traps
+// at every prologue / epilogue / `Jsr` if [rbp+0] is below
+// 0x10000000 (= "definitely not a stack address"). The trap
+// writes the function's bc PC to stderr via `SYS_write` then
+// `SYS_exit(99)` -- needed because orbstack/Rosetta strips the
+// program rip from SIGSEGV/SIGILL core dumps so a memory-fault
+// trap can't be located. Empirically:
+//   * prologue check: doesn't fire (the saved-rbp slot is fresh
+//     when control reaches the prologue's last instruction).
+//   * epilogue check: doesn't fire (the corrupting function
+//     never reaches its own epilogue -- it's the same function
+//     where rip eventually goes to 0).
+//   * Jsr check: doesn't fire (the corrupting function doesn't
+//     issue any further Jsr after the write).
+// All three "doesn't fire" results together pin the corrupter
+// to a function whose body writes to a clobbered slot and then
+// crashes before doing anything else observable. The leaf
+// `bc=318133 Ent 86` (called from `bc=325765`'s `Jsr 318133` at
+// `bc=325923`, with rip=0 at the next call) is the natural
+// suspect: 86 locals is a large enough frame that a wrong
+// `Lea N` could land at `[rbp + 0]` (frame 1's saved-rbp slot
+// sits some bytes above leaf's rbp; the offset depends on how
+// the optimizer routed args through Pseudo pushes).
+//
+// Next concrete step: instrument every Si/Sc/Sw with the same
+// syscall trap, gated on the destination address falling within
+// `[rbp_caller_n + 0 .. rbp_caller_n + 8]` for any active
+// frame. That catches the bad write at the moment it happens.
+// Or: pre-compute a stable "frame canary" stamp at every Ent
+// (e.g., write a magic word at [rbp+16] or [rbp-locals_end-8])
+// and verify it before each Jsri or libc call. Either approach
+// turns the silent corruption into a deterministic trap with
+// the bc PC of the buggy store in stderr.
+//
 // The c5-emitted bytecode for this sequence is identical with and
 // without `peephole_local_load` (the only difference is the fused
 // LdLocI 2 vs the unfused Lea 2 + Li, both of which compile to
@@ -144,6 +178,18 @@
 //                                 Useful for catching stack
 //                                 corruption upstream of where
 //                                 it visibly faults.
+//   BADC_SAVED_RBP_CHECK=1        instrument every prologue,
+//                                 epilogue, and `Op::Jsr` site
+//                                 with a runtime check that the
+//                                 saved-rbp slot at [rbp+0]
+//                                 looks like a stack address
+//                                 (i.e., > 0x10000000). On a
+//                                 trip, write the failing
+//                                 function's bc PC to stderr
+//                                 (8 raw bytes via SYS_write)
+//                                 and SYS_exit(99). The bc PC
+//                                 maps directly to a `[bc=N]`
+//                                 line in `--dump-asm`.
 //
 // And the demo smoke script reproduces the crash at HEAD:
 //

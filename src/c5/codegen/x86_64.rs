@@ -1444,8 +1444,99 @@ fn lower_op(
         Op::Ent => {
             let locals = read_operand(text, pc, "Ent")?;
             emit_prologue(code, locals, in_main, abi, reg_state.current_callee_depth);
+            // BADC_SAVED_RBP_CHECK: per-function trap that fires if
+            // the saved-rbp slot at [rbp+0] doesn't look like a stack
+            // address. Emitted AFTER the prologue completes (rbp /
+            // rsp / pool-save all set up). On a trip, write the
+            // function's bc PC (8 bytes) to stderr via SYS_write,
+            // then SYS_exit(99). orbstack/Rosetta strips the saved
+            // rip from the SIGSEGV/SIGILL core dump (the kernel
+            // records the emulator's rip, not the program's), so
+            // a memory-fault trap doesn't yield a usable bc PC --
+            // hence the syscall route, which exits cleanly with
+            // the bc PC printed to stderr.
+            #[cfg(feature = "std")]
+            if std::env::var("BADC_SAVED_RBP_CHECK").is_ok() && !in_main {
+                // mov rax, [rbp]
+                emit_mov_r_mem(code, Reg::RAX, Reg::RBP, 0);
+                // cmp rax, 0x10000000
+                code.extend_from_slice(&[0x48, 0x3d, 0x00, 0x00, 0x00, 0x10]);
+                // ja over the syscall block (we'll patch the offset
+                // once we know its byte length).
+                let ja_off = code.len();
+                code.extend_from_slice(&[0x77, 0x00]); // placeholder
+                let block_start = code.len();
+                // sub rsp, 16  (room for the bc-pc write buffer +
+                //   keep the stack 16-aligned across the syscall).
+                code.extend_from_slice(&[0x48, 0x83, 0xec, 0x10]);
+                // mov rax, op_pc (movabs rax, imm64)
+                code.push(0x48);
+                code.push(0xb8);
+                code.extend_from_slice(&(op_pc as u64).to_le_bytes());
+                // mov [rsp], rax
+                code.extend_from_slice(&[0x48, 0x89, 0x04, 0x24]);
+                // mov eax, 1   (SYS_write)
+                code.extend_from_slice(&[0xb8, 0x01, 0x00, 0x00, 0x00]);
+                // mov edi, 2   (stderr)
+                code.extend_from_slice(&[0xbf, 0x02, 0x00, 0x00, 0x00]);
+                // mov rsi, rsp  (buffer = rsp)
+                code.extend_from_slice(&[0x48, 0x89, 0xe6]);
+                // mov edx, 8   (write 8 bytes)
+                code.extend_from_slice(&[0xba, 0x08, 0x00, 0x00, 0x00]);
+                // syscall
+                code.extend_from_slice(&[0x0f, 0x05]);
+                // mov eax, 60  (SYS_exit)
+                code.extend_from_slice(&[0xb8, 0x3c, 0x00, 0x00, 0x00]);
+                // mov edi, 99  (exit code)
+                code.extend_from_slice(&[0xbf, 0x63, 0x00, 0x00, 0x00]);
+                // syscall
+                code.extend_from_slice(&[0x0f, 0x05]);
+                // patch ja's displacement
+                let block_len = code.len() - block_start;
+                if block_len <= 0x7f {
+                    code[ja_off + 1] = block_len as u8;
+                } else {
+                    panic!("saved-rbp check syscall block too long for short ja");
+                }
+            }
         }
-        Op::Lev => emit_epilogue(code, in_main, reg_state.current_callee_depth),
+        Op::Lev => {
+            // BADC_SAVED_RBP_CHECK at every Lev: same syscall trap as
+            // the prologue check, but at function-RETURN time. If the
+            // body clobbered our saved-rbp slot, [rbp+0] no longer
+            // looks like a stack address; trap and write op_pc to
+            // stderr. This identifies the *corrupting* function
+            // (the one whose body wrote past its frame), not the
+            // downstream function that picks up the garbage rbp.
+            #[cfg(feature = "std")]
+            if std::env::var("BADC_SAVED_RBP_CHECK").is_ok() && !in_main {
+                emit_mov_r_mem(code, Reg::RAX, Reg::RBP, 0);
+                code.extend_from_slice(&[0x48, 0x3d, 0x00, 0x00, 0x00, 0x10]);
+                let ja_off = code.len();
+                code.extend_from_slice(&[0x77, 0x00]);
+                let block_start = code.len();
+                code.extend_from_slice(&[0x48, 0x83, 0xec, 0x10]);
+                code.push(0x48);
+                code.push(0xb8);
+                code.extend_from_slice(&(op_pc as u64).to_le_bytes());
+                code.extend_from_slice(&[0x48, 0x89, 0x04, 0x24]);
+                code.extend_from_slice(&[0xb8, 0x01, 0x00, 0x00, 0x00]);
+                code.extend_from_slice(&[0xbf, 0x02, 0x00, 0x00, 0x00]);
+                code.extend_from_slice(&[0x48, 0x89, 0xe6]);
+                code.extend_from_slice(&[0xba, 0x08, 0x00, 0x00, 0x00]);
+                code.extend_from_slice(&[0x0f, 0x05]);
+                code.extend_from_slice(&[0xb8, 0x3c, 0x00, 0x00, 0x00]);
+                code.extend_from_slice(&[0xbf, 0x63, 0x00, 0x00, 0x00]);
+                code.extend_from_slice(&[0x0f, 0x05]);
+                let block_len = code.len() - block_start;
+                if block_len <= 0x7f {
+                    code[ja_off + 1] = block_len as u8;
+                } else {
+                    panic!("saved-rbp Lev check syscall block too long for short ja");
+                }
+            }
+            emit_epilogue(code, in_main, reg_state.current_callee_depth);
+        }
         Op::Adj => {
             // Drop N pushed slots (16 bytes each, matching Op::Psh).
             // The analyzer guarantees these were all Real pushes;
@@ -1662,6 +1753,40 @@ fn lower_op(
         }
         Op::Jsr => {
             let target = read_operand(text, pc, "Jsr")? as usize;
+            // BADC_SAVED_RBP_CHECK at every Jsr: verify our own
+            // [rbp+0] is still a stack address. If a body op
+            // wrote past the local frame and clobbered the saved
+            // rbp slot, this fires AT the next Jsr -- which is
+            // typically right after the corrupting Si/Sc/Sw, so
+            // the bc PC printed (the Jsr's PC) is one or two ops
+            // downstream of the actual buggy store.
+            #[cfg(feature = "std")]
+            if std::env::var("BADC_SAVED_RBP_CHECK").is_ok() && !in_main {
+                emit_mov_r_mem(code, Reg::RAX, Reg::RBP, 0);
+                code.extend_from_slice(&[0x48, 0x3d, 0x00, 0x00, 0x00, 0x10]);
+                let ja_off = code.len();
+                code.extend_from_slice(&[0x77, 0x00]);
+                let block_start = code.len();
+                code.extend_from_slice(&[0x48, 0x83, 0xec, 0x10]);
+                code.push(0x48);
+                code.push(0xb8);
+                code.extend_from_slice(&(op_pc as u64).to_le_bytes());
+                code.extend_from_slice(&[0x48, 0x89, 0x04, 0x24]);
+                code.extend_from_slice(&[0xb8, 0x01, 0x00, 0x00, 0x00]);
+                code.extend_from_slice(&[0xbf, 0x02, 0x00, 0x00, 0x00]);
+                code.extend_from_slice(&[0x48, 0x89, 0xe6]);
+                code.extend_from_slice(&[0xba, 0x08, 0x00, 0x00, 0x00]);
+                code.extend_from_slice(&[0x0f, 0x05]);
+                code.extend_from_slice(&[0xb8, 0x3c, 0x00, 0x00, 0x00]);
+                code.extend_from_slice(&[0xbf, 0x63, 0x00, 0x00, 0x00]);
+                code.extend_from_slice(&[0x0f, 0x05]);
+                let block_len = code.len() - block_start;
+                if block_len <= 0x7f {
+                    code[ja_off + 1] = block_len as u8;
+                } else {
+                    panic!("saved-rbp Jsr check syscall block too long for short ja");
+                }
+            }
             fixups.push(Fixup {
                 native_offset: code.len(),
                 target_bytecode_pc: target,
@@ -2384,6 +2509,12 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool, abi: Abi, pool_
     emit_sub_rsp_imm32(code, 16);
     emit_mov_mem_r(code, Reg::RSP, 0, Reg::R13);
 
+    // (the BADC_SAVED_RBP_CHECK hook gets injected *after* the
+    // prologue completes -- emit_prologue_saved_rbp_check below.
+    // It needs to know the function's bc PC, which the prologue
+    // helper itself doesn't have, so the caller in lower_op
+    // emits it after `Op::Ent` consumes its operand.)
+
     // Save the pool registers actually used by this function.
     // System V x86_64 makes rbx, r12, r14, r15 callee-saved, so
     // we don't need to spill them at every call site -- one save
@@ -2412,9 +2543,6 @@ fn emit_epilogue(code: &mut Vec<u8>, is_main: bool, pool_depth: u8) {
         // At epilogue start, both rsp and rbp must point into a valid
         // stack region. If rsp/rbp got corrupted upstream, trap before
         // we propagate the corruption further into the call chain.
-        // Encoded sequence:
-        //   mov rax, rsp; cmp rax, 0x1000; ja ok1; ud2; ok1:
-        //   mov rax, rbp; cmp rax, 0x1000; ja ok2; ud2; ok2:
         emit_mov_rr(code, Reg::RAX, Reg::RSP);
         code.extend_from_slice(&[0x48, 0x3d, 0x00, 0x10, 0x00, 0x00]); // cmp rax, 0x1000
         code.extend_from_slice(&[0x77, 0x02]); // ja +2
@@ -2424,6 +2552,10 @@ fn emit_epilogue(code: &mut Vec<u8>, is_main: bool, pool_depth: u8) {
         code.extend_from_slice(&[0x77, 0x02]); // ja +2
         code.extend_from_slice(&[0x0f, 0x0b]); // ud2
     }
+    // (BADC_SAVED_RBP_CHECK at function-return time is emitted in
+    // lower_op's `Op::Lev` arm so it has access to op_pc -- the
+    // value the trap writes to stderr identifies the corrupting
+    // function.)
     emit_mov_rr(code, Reg::RAX, Reg::R13);
     // Restore the pool first (it sits on top of saved-r13).
     emit_restore_pool(code, pool_depth);

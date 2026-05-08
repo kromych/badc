@@ -217,6 +217,45 @@ impl Compiler {
             self.next()?;
         }
         let lbt = self.parse_decl_base_type()?;
+        // Function-prototype declaration at block scope:
+        // `extern int foo(int);` -- the name is an identifier, the
+        // next token is `(`, and what follows is a parameter list
+        // ending with `);`. c5 has no separate translation units,
+        // so the whole declaration is a no-op; the linker /
+        // codegen-side import resolution finds the symbol via its
+        // own table. Skip to the matching `;` and return.
+        if self.lex.tk == Token::Id as i64 && self.lex.peek_after_whitespace(b'(') {
+            // Counted-paren skip from the name. Walk past the
+            // identifier, then the `(`, then balance braces until
+            // the matching `)`. Function-pointer declarators
+            // (`int (*fn)(int)`) don't reach this branch -- they
+            // start with `(` rather than an identifier.
+            self.next()?; // consume name
+            self.next()?; // consume `(`
+            let mut depth: i64 = 1;
+            while depth > 0 && self.lex.tk != 0 {
+                if self.lex.tk == '(' as i64 {
+                    depth += 1;
+                } else if self.lex.tk == ')' as i64 {
+                    depth -= 1;
+                    if depth == 0 {
+                        self.next()?;
+                        break;
+                    }
+                }
+                self.next()?;
+            }
+            // Trailing `;` plus an optional comma-separated list
+            // of further function prototypes are skipped: the
+            // standard form is one declaration per `;`, but the
+            // C grammar would in principle allow `int foo(int),
+            // bar(int);`. Skip until the terminator.
+            while self.lex.tk != ';' as i64 && self.lex.tk != 0 {
+                self.next()?;
+            }
+            self.next()?;
+            return Ok(());
+        }
         while self.lex.tk != ';' as i64 {
             let (loc_idx, ty, array_size) = self.parse_declarator(lbt)?;
             self.ty = ty;

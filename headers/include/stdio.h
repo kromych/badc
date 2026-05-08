@@ -176,6 +176,65 @@ typedef struct __c5_FILE FILE;
 #pragma binding(msvcrt::setvbuf,   "setvbuf")
 #pragma binding(msvcrt::remove,    "remove")
 #pragma binding(msvcrt::rename,    "rename")
+// Wide-string companion shell.c reaches for to open paths that
+// contain non-ASCII characters: it converts the UTF-8 input to
+// UTF-16 via MultiByteToWideChar and then calls _wfopen. The
+// Windows CRT spells the entry point with the leading underscore.
+#pragma binding(msvcrt::_wfopen,   "_wfopen")
+// shell.c also reaches for `_wpopen` / `_pclose` to drive the
+// `.system` and pager pipes when the path needs UTF-16. The Windows
+// CRT spells the popen entry point with a leading underscore on
+// both the byte-string and wide-string flavours.
+#pragma binding(msvcrt::_wpopen,   "_wpopen")
+#pragma binding(msvcrt::_popen,    "_popen")
+#pragma binding(msvcrt::_pclose,   "_pclose")
+// shell.c reaches for the wide-string fs APIs to walk archives /
+// snapshots whose paths contain non-ASCII characters, plus a few
+// Win32-spelled fileno / setmode / isatty / access helpers that
+// every Windows console interaction routes through.
+#pragma binding(msvcrt::_fileno,        "_fileno")
+#pragma binding(msvcrt::_isatty,        "_isatty")
+#pragma binding(msvcrt::_setmode,       "_setmode")
+#pragma binding(msvcrt::_access,        "_access")
+#pragma binding(msvcrt::_stat,          "_stat")
+#pragma binding(msvcrt::_stat64,        "_stat64")
+#pragma binding(msvcrt::_fstat64,       "_fstat64")
+#pragma binding(msvcrt::_wstat,         "_wstat")
+#pragma binding(msvcrt::_wchmod,        "_wchmod")
+#pragma binding(msvcrt::_wmkdir,        "_wmkdir")
+#pragma binding(msvcrt::_wunlink,       "_wunlink")
+#pragma binding(msvcrt::_wfullpath,     "_wfullpath")
+#pragma binding(msvcrt::_wfindfirst,    "_wfindfirst")
+#pragma binding(msvcrt::_wfindnext,     "_wfindnext")
+#pragma binding(msvcrt::_findclose,     "_findclose")
+// Wide-string IO companions to fgets / fputs / putc, plus the
+// process-environment helpers shell.c uses for `.system` / `--`
+// argv passing on Windows. Names spelled with the leading
+// underscore where the MSVC CRT does so.
+#pragma binding(msvcrt::fgetws,         "fgetws")
+#pragma binding(msvcrt::fputws,         "fputws")
+#pragma binding(msvcrt::_getws,         "_getws")
+#pragma binding(msvcrt::_putws,         "_putws")
+#pragma binding(msvcrt::_wgetenv,       "_wgetenv")
+#pragma binding(msvcrt::_wputenv,       "_wputenv")
+#pragma binding(msvcrt::_wsystem,       "_wsystem")
+#pragma binding(msvcrt::_wgetcwd,       "_wgetcwd")
+#pragma binding(msvcrt::_wchdir,        "_wchdir")
+#pragma binding(msvcrt::_wrename,       "_wrename")
+#pragma binding(msvcrt::_wremove,       "_wremove")
+#pragma binding(msvcrt::_wtoi,          "_wtoi")
+#pragma binding(msvcrt::wcslen,         "wcslen")
+#pragma binding(msvcrt::wcscmp,         "wcscmp")
+#pragma binding(msvcrt::wcsncmp,        "wcsncmp")
+#pragma binding(msvcrt::wcschr,         "wcschr")
+#pragma binding(msvcrt::wcsrchr,        "wcsrchr")
+#pragma binding(msvcrt::wcsstr,         "wcsstr")
+#pragma binding(msvcrt::wcscpy,         "wcscpy")
+#pragma binding(msvcrt::wcsncpy,        "wcsncpy")
+#pragma binding(msvcrt::wcscat,         "wcscat")
+#pragma binding(msvcrt::wcsncat,        "wcsncat")
+#pragma binding(msvcrt::wcsdup,         "_wcsdup")
+#pragma binding(msvcrt::_wcsicmp,       "_wcsicmp")
 #endif
 
 int printf(char *fmt, ...);
@@ -205,6 +264,93 @@ int clearerr(FILE *stream);
 int setvbuf(FILE *stream, char *buf, int mode, int size);
 int remove(char *path);
 int rename(char *old_path, char *new_path);
+#ifdef _WIN32
+FILE *_wfopen(unsigned short *path, unsigned short *mode);
+FILE *_wpopen(unsigned short *cmd, unsigned short *mode);
+FILE *_popen(char *cmd, char *mode);
+int   _pclose(FILE *stream);
+int   _fileno(FILE *stream);
+int   _isatty(int fd);
+int   _setmode(int fd, int mode);
+int   _access(char *path, int mode);
+// MSVC CRT stat-result shapes. shell.c reads `st_size`, `st_mode`,
+// `st_mtime`, and `st_ctime` so those fields live at the offsets
+// the runtime expects. The 64-bit-time variant (`_stat64`) is the
+// one shell.c reaches for to handle files past 2038.
+struct _stat {
+    unsigned int  st_dev;
+    unsigned short st_ino;
+    unsigned short st_mode;
+    short         st_nlink;
+    short         st_uid;
+    short         st_gid;
+    unsigned int  st_rdev;
+    long long     st_size;
+    long long     st_atime;
+    long long     st_mtime;
+    long long     st_ctime;
+};
+struct _stat64 {
+    unsigned int  st_dev;
+    unsigned short st_ino;
+    unsigned short st_mode;
+    short         st_nlink;
+    short         st_uid;
+    short         st_gid;
+    unsigned int  st_rdev;
+    long long     st_size;
+    long long     st_atime;
+    long long     st_mtime;
+    long long     st_ctime;
+};
+int   _stat(char *path, struct _stat *buf);
+int   _stat64(char *path, struct _stat64 *buf);
+int   _fstat64(int fd, struct _stat64 *buf);
+int   _wstat(unsigned short *path, struct _stat *buf);
+int   _wchmod(unsigned short *path, int mode);
+int   _wmkdir(unsigned short *path);
+int   _wunlink(unsigned short *path);
+unsigned short *_wfullpath(unsigned short *abs, unsigned short *rel, long long size);
+long long _wfindfirst(unsigned short *pat, void *find_data);
+int   _wfindnext(long long handle, void *find_data);
+int   _findclose(long long handle);
+unsigned short *fgetws(unsigned short *buf, int n, FILE *stream);
+int   fputws(unsigned short *s, FILE *stream);
+unsigned short *_getws(unsigned short *buf);
+int   _putws(unsigned short *s);
+unsigned short *_wgetenv(unsigned short *name);
+int   _wputenv(unsigned short *name_eq_value);
+int   _wsystem(unsigned short *cmd);
+unsigned short *_wgetcwd(unsigned short *buf, int n);
+int   _wchdir(unsigned short *path);
+int   _wrename(unsigned short *old, unsigned short *new_);
+int   _wremove(unsigned short *path);
+int   _wtoi(unsigned short *s);
+long long wcslen(unsigned short *s);
+int   wcscmp(unsigned short *a, unsigned short *b);
+int   wcsncmp(unsigned short *a, unsigned short *b, long long n);
+unsigned short *wcschr(unsigned short *s, int c);
+unsigned short *wcsrchr(unsigned short *s, int c);
+unsigned short *wcsstr(unsigned short *hay, unsigned short *needle);
+unsigned short *wcscpy(unsigned short *dst, unsigned short *src);
+unsigned short *wcsncpy(unsigned short *dst, unsigned short *src, long long n);
+unsigned short *wcscat(unsigned short *dst, unsigned short *src);
+unsigned short *wcsncat(unsigned short *dst, unsigned short *src, long long n);
+unsigned short *wcsdup(unsigned short *s);
+int   _wcsicmp(unsigned short *a, unsigned short *b);
+
+// `_setmode` flag values from <fcntl.h> on the MSVC CRT. Modes
+// shell.c uses are O_BINARY (raw bytes through stdin/stdout for
+// the shell pipeline) and O_TEXT / O_WTEXT (auto CRLF + locale-
+// aware translation). Values pinned by the platform.
+#define _O_TEXT       0x4000
+#define _O_BINARY     0x8000
+#define _O_WTEXT      0x10000
+#define _O_U16TEXT    0x20000
+#define _O_U8TEXT     0x40000
+#define O_TEXT        _O_TEXT
+#define O_BINARY      _O_BINARY
+#endif
 char *dlsym(char *handle, char *name);
 
 // Lazy resolver for `stdin` / `stdout` / `stderr`. Index

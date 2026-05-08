@@ -43,6 +43,43 @@ impl Compiler {
             self.next()?;
         }
         let lbt = self.parse_decl_base_type()?;
+        // Function-prototype declaration at function-body scope:
+        // `extern int foo(int);` -- the next two tokens are an
+        // identifier and `(`, and what follows is a parameter list
+        // ending with `);`. c5 has no separate translation units,
+        // so the declaration is a no-op; the import resolver finds
+        // the symbol via its own table. Skip to the `;` and return.
+        // Mirrors the matching branch in `parse_block_local_decl`
+        // for `{` blocks nested below the function body's top
+        // level.
+        if self.lex.tk == Token::Id as i64 && self.lex.peek_after_whitespace(b'(') {
+            self.next()?; // consume name
+            self.next()?; // consume `(`
+            let mut depth: i64 = 1;
+            while depth > 0 && self.lex.tk != 0 {
+                if self.lex.tk == '(' as i64 {
+                    depth += 1;
+                } else if self.lex.tk == ')' as i64 {
+                    depth -= 1;
+                    if depth == 0 {
+                        self.next()?;
+                        break;
+                    }
+                }
+                self.next()?;
+            }
+            while self.lex.tk != ';' as i64 && self.lex.tk != 0 {
+                self.next()?;
+            }
+            self.next()?;
+            // `lbt` was used to drive parse_decl_base_type only;
+            // for a declaration that turns out to be a function
+            // prototype, the symbol table mutation lives in the
+            // codegen-side import resolver, so the local-decl
+            // bookkeeping (shadow_symbol, allocate_*) is skipped.
+            let _ = lbt;
+            return Ok(());
+        }
         while self.lex.tk != ';' as i64 {
             let (loc_idx, ty, array_size) = self.parse_declarator(lbt)?;
             // gh #19 fn-pointer lineage carries through to local

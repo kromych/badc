@@ -91,6 +91,21 @@ run_scenarios() {
     local shell_bin="$2"
     local fail=0
 
+    # Diag mode: report the shell binary's own exit code via a
+    # direct invocation BEFORE the regular smoke runs. The smoke
+    # captures only stdout, so a shell that exits non-zero before
+    # writing any data looks the same as one that ran successfully
+    # but emitted nothing. Probing here distinguishes the two.
+    if [ "${BADC_RUN_DIAG:-}" = "1" ]; then
+        echo "=== shell ${label} probe ===" >&2
+        ls -la "${shell_bin}" >&2 || true
+        set +e
+        "${shell_bin}" </dev/null
+        local probe_rc=$?
+        set -e
+        echo "=== shell ${label} direct exit=${probe_rc} ===" >&2
+    fi
+
     # ---- in-memory smoke ----
     # Covers the basic CRUD path plus all five integer aggregates
     # (count / sum / avg / min / max). avg() exercises sqlite's

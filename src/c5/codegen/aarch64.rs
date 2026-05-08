@@ -1778,6 +1778,7 @@ fn lower_op(
                 abi,
                 imports,
                 fp_mask,
+                target,
             )?;
         }
 
@@ -2015,6 +2016,7 @@ fn emit_libc_call(
     abi: Abi,
     imports: &super::ResolvedImports,
     fp_arg_mask: u32,
+    target: super::Target,
 ) -> Result<(), C5Error> {
     let import_index = imports.index_of_binding(binding_idx).ok_or_else(|| {
         C5Error::Compile(format!(
@@ -2174,12 +2176,56 @@ fn emit_libc_call(
         }
     }
 
-    // Move the libc return value into x19 so the caller sees it as
-    // the new accumulator. (For functions that don't return -- e.g.
-    // `exit` -- the call doesn't reach this point at runtime, so the
-    // mov is harmless dead code.)
-    emit_mov_reg(code, Reg::X19, Reg::X0);
+    // Sign- or zero-extend a sub-word return into the full 64-bit
+    // accumulator before downstream consumers read it. AAPCS64
+    // doesn't promise the upper bits of X0 for an `int` return, so
+    // a downstream `x19 != -17` comparison would see junk above
+    // EAX otherwise. Emitted on every aarch64 target -- the
+    // extension is a no-op when the prototype is already 64-bit
+    // (pointer, `long long`, LP64 `long`).
+    let ext = super::return_extension(
+        imports.imports[import_index].return_type_tag,
+        target,
+    );
+    emit_extend_x19_for_return(code, ext);
+    if matches!(ext, super::ReturnExt::None) {
+        // Move the libc return value into x19 so the caller sees it
+        // as the new accumulator. (For functions that don't return
+        // -- e.g. `exit` -- the call doesn't reach this point at
+        // runtime, so the mov is harmless dead code.) The extension
+        // emitter above already wrote x19 for non-None cases.
+        emit_mov_reg(code, Reg::X19, Reg::X0);
+    }
     Ok(())
+}
+
+/// Extend a libc return value sitting in X0 into the c5
+/// accumulator (X19), per `ext`. AAPCS64 leaves the upper bits of
+/// X0 unspecified for sub-word returns, so this is the bridge
+/// between the host return-register convention and c5's 64-bit
+/// accumulator. Sequences mirror the x86_64 helper -- per AAPCS64
+/// the unsigned-half encodings (`uxtw`, etc.) implicitly clear the
+/// upper bits, and the signed half uses the matching `sxtw` /
+/// `sxth` / `sxtb`.
+fn emit_extend_x19_for_return(code: &mut Vec<u8>, ext: super::ReturnExt) {
+    use super::ReturnExt;
+    // Encodings (X19 = reg 19, X0 / W0 = reg 0):
+    //   sxtb x19, w0   -- 0x93401C13
+    //   sxth x19, w0   -- 0x93403C13
+    //   sxtw x19, w0   -- 0x93407C13
+    //   uxtb w19, w0   -- 0x53001C13  (upper 32 bits zeroed by 32-bit form)
+    //   uxth w19, w0   -- 0x53003C13
+    //   mov  w19, w0   -- 0x2A0003F3  (32-bit ORR; zero-extends)
+    let word: u32 = match ext {
+        ReturnExt::None => return,
+        ReturnExt::Sign8 => 0x93401C13,
+        ReturnExt::Sign16 => 0x93403C13,
+        ReturnExt::Sign32 => 0x93407C13,
+        ReturnExt::Zero8 => 0x53001C13,
+        ReturnExt::Zero16 => 0x53003C13,
+        ReturnExt::Zero32 => 0x2A0003F3,
+    };
+    emit(code, word);
 }
 
 /// Lookup the per-call FP-arg bitmap by JsrExt PC. Linear scan;

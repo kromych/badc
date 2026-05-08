@@ -2011,6 +2011,7 @@ mod tests {
                     dylib_index: 0,
                     is_variadic: false,
                     fixed_args: 3,
+                    return_type_tag: 0,
                 }],
                 dylibs: vec![ResolvedDylib {
                     name: "libc".into(),

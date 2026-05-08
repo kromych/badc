@@ -406,12 +406,8 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("stdint_widths.c", 0),
     ("fd_set_macros.c", 0),
     ("fn_ptr_explicit_deref.c", 42),
-    // libc_basic.c regresses at `atoi("-17") != -17` (return
-    // 21) on both PE/x64 and PE/aarch64; same wine arm64 sign
-    // bug (#48) but also affects native Windows x64. Excluded
-    // from the active list so CI stays unblocked while the
-    // libc-int-return cross-cut is investigated.
-    // ("libc_basic.c", 0),
+    ("libc_basic.c", 0),
+    ("static_init_cast_funcptr.c", 0),
     ("memset_mcmp.c", 42),
     ("memcpy_basic.c", 'A' as i32),
     ("struct_basic.c", 25),

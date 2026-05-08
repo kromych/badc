@@ -174,6 +174,96 @@ pub(crate) enum Machine {
     X86_64,
 }
 
+/// Post-call extension recipe for a libc return value. The host
+/// ABI puts sub-word integer returns in the low bits of the
+/// platform's return register and leaves the upper bits undefined
+/// (Win64 spec) or merely unspecified (SysV); c5's accumulator is
+/// 64-bit so the codegen must extend before downstream ops read
+/// it. Built from a [`ResolvedImport::return_type_tag`] via
+/// [`return_extension`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ReturnExt {
+    /// Already 64-bit (pointer, `long long`, LP64 `long`,
+    /// `void`/no return, FP) -- caller copies the host return
+    /// register into the accumulator without touching it.
+    None,
+    /// Sign-extend the low 8 / 16 / 32 bits.
+    Sign8,
+    Sign16,
+    Sign32,
+    /// Zero-extend the low 8 / 16 / 32 bits.
+    Zero8,
+    Zero16,
+    Zero32,
+}
+
+/// Decide how to extend a libc return value into the c5
+/// accumulator. `target` is needed to decide the `long` width:
+/// LP64 (Linux / macOS) -- 8 bytes, no extension; LLP64 (Windows)
+/// -- 4 bytes, extend per the unsigned bit.
+pub(crate) fn return_extension(return_type_tag: i64, target: Target) -> ReturnExt {
+    use crate::c5::compiler::types as ty_helpers;
+    use crate::c5::token::Ty;
+    if return_type_tag == 0 {
+        // No prototype on file -- assume the binding's caller
+        // already produced a sane 64-bit value (legacy headers
+        // that haven't grown a `int foo(...);` declaration). The
+        // sites that need extension are the ones with a real
+        // prototype.
+        return ReturnExt::None;
+    }
+    let unsigned = ty_helpers::is_unsigned_ty(return_type_tag);
+    let bare = ty_helpers::strip_unsigned(return_type_tag);
+    if ty_helpers::is_pointer_ty(bare) {
+        return ReturnExt::None;
+    }
+    if ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare) {
+        // FP returns ride XMM / V0; the int-return-register copy
+        // is dead code for those signatures.
+        return ReturnExt::None;
+    }
+    if ty_helpers::is_long_long_ty(bare) {
+        return ReturnExt::None;
+    }
+    if ty_helpers::is_long_ty(bare) {
+        // LP64: long is 8 bytes -- no extension. LLP64: long is
+        // 4 bytes -- extend per signedness.
+        if target.long_width_bytes() == 8 {
+            return ReturnExt::None;
+        }
+        return if unsigned {
+            ReturnExt::Zero32
+        } else {
+            ReturnExt::Sign32
+        };
+    }
+    if bare == Ty::Int as i64 {
+        return if unsigned {
+            ReturnExt::Zero32
+        } else {
+            ReturnExt::Sign32
+        };
+    }
+    if bare == Ty::Short as i64 {
+        return if unsigned {
+            ReturnExt::Zero16
+        } else {
+            ReturnExt::Sign16
+        };
+    }
+    if bare == Ty::Char as i64 {
+        // Lexer aliases `void` -> `Ty::Char`. Either way, signed
+        // is the safer extension for an 8-bit return; unsigned is
+        // a hint from a `unsigned char` prototype.
+        return if unsigned {
+            ReturnExt::Zero8
+        } else {
+            ReturnExt::Sign8
+        };
+    }
+    ReturnExt::None
+}
+
 /// One resolved external import: a binding the program reaches
 /// for via `Op::JsrExt`, plus everything the codegen and writer
 /// need to wire it up. Built once per compilation by
@@ -211,6 +301,18 @@ pub(crate) struct ResolvedImport {
     /// per AAPCS64; only the variadic tail spills to the stack.
     /// Meaningful only when `is_variadic == true`.
     pub fixed_args: usize,
+    /// Return type tag (`Symbol::type_` encoding -- bare `Ty::Char`
+    /// / `Ty::Int` / `Ty::Long` / ... possibly OR'd with the
+    /// unsigned bit). The codegen reads it after the call to decide
+    /// whether the host's return register holds a sub-word value
+    /// that needs sign- or zero-extension before becoming the c5
+    /// accumulator. Without the extension, msvcrt's `int` returns
+    /// (atoi, fclose, ...) leave the upper 32 bits of RAX
+    /// undefined, and a downstream 64-bit comparison against a
+    /// negative literal sees garbage. `0` (= `Ty::Char` = "no
+    /// prototype seen") falls through with no extension; `void`
+    /// also reduces to `Ty::Char` since the lexer aliases it.
+    pub return_type_tag: i64,
 }
 
 /// One resolved dylib the program needs at load time. Distinct from
@@ -269,7 +371,7 @@ impl ResolvedImports {
         if self.imports.iter().any(|i| i.local_name == local_name) {
             return Ok(());
         }
-        let mut found: Option<(i64, &str, &str, &str, bool, usize)> = None;
+        let mut found: Option<(i64, &str, &str, &str, bool, usize, i64)> = None;
         let mut binding_idx: i64 = 0;
         'outer: for spec in &program.dylibs {
             for b in &spec.bindings {
@@ -281,13 +383,15 @@ impl ResolvedImports {
                         b.real_symbol.as_str(),
                         b.is_variadic,
                         b.fixed_args,
+                        b.return_type_tag,
                     ));
                     break 'outer;
                 }
                 binding_idx += 1;
             }
         }
-        let Some((idx, dylib_name, dylib_path, real_symbol, is_variadic, fixed_args)) = found
+        let Some((idx, dylib_name, dylib_path, real_symbol, is_variadic, fixed_args, return_ty)) =
+            found
         else {
             return Err(C5Error::Compile(format!(
                 "no `#pragma binding(<dylib>::{local_name}, ...)` is in scope -- the target's \
@@ -312,6 +416,7 @@ impl ResolvedImports {
             dylib_index,
             is_variadic,
             fixed_args,
+            return_type_tag: return_ty,
         });
         Ok(())
     }
@@ -388,6 +493,7 @@ impl ResolvedImports {
                 dylib_index,
                 is_variadic: b.is_variadic,
                 fixed_args: b.fixed_args,
+                return_type_tag: b.return_type_tag,
             });
         }
 
@@ -1039,6 +1145,18 @@ impl Target {
                 variadic_on_stack: false,
                 variadic_zero_xmm_count: false,
             },
+        }
+    }
+
+    /// Width of `long` for this target, in bytes. LP64 (Linux,
+    /// macOS) -- 8 bytes; LLP64 (Windows) -- 4 bytes. Mirrors
+    /// what `Compiler::size_of_type` returns for `Ty::Long`;
+    /// hoisted onto `Target` so the codegen-side helpers can ask
+    /// without dragging in the parser's type table.
+    pub(crate) fn long_width_bytes(self) -> usize {
+        match self {
+            Target::WindowsX64 | Target::WindowsAarch64 => 4,
+            Target::MacOSAarch64 | Target::LinuxAarch64 | Target::LinuxX64 => 8,
         }
     }
 }

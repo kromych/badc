@@ -21,7 +21,7 @@ mod global_init;
 mod initializer;
 mod locals;
 mod stmt;
-mod types;
+pub(crate) mod types;
 
 use types::{
     UNSIGNED_BIT, fp_result_ty, is_decl_modifier, is_floating_scalar, is_pointer_ty,
@@ -3658,11 +3658,19 @@ impl Compiler {
                         let name = self.symbols[id_idx].name.clone();
                         let fixed = params.types.len();
                         let variadic = params.is_variadic;
+                        // `ty` is the return type the parser extracted just
+                        // above. Stash it so the codegen knows whether the
+                        // libc call leaves a 32-bit value with junk in the
+                        // upper half of the host return register (msvcrt
+                        // `int` returns) and needs sign / zero extension
+                        // before the result becomes the c5 accumulator.
+                        let ret_ty = ty;
                         for spec in self.dylibs.iter_mut() {
                             for binding in spec.bindings.iter_mut() {
                                 if binding.local_name == name {
                                     binding.is_variadic = variadic;
                                     binding.fixed_args = fixed;
+                                    binding.return_type_tag = ret_ty;
                                 }
                             }
                         }

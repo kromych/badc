@@ -109,6 +109,18 @@ pub(crate) struct Binding {
     /// the codegen reads the c5 stack directly without the
     /// register/stack split).
     pub fixed_args: usize,
+    /// Return type tag (encoded the same way as `Symbol::type_` --
+    /// `Ty::Char`/`Ty::Int`/`Ty::Long`/... with the unsigned bit
+    /// optionally OR'd in). Set by the parser when the prototype
+    /// is folded onto the binding. The codegen reads it after a
+    /// libc call to decide whether the return needs sign- or
+    /// zero-extension into the c5 accumulator -- msvcrt's int
+    /// returns leave the upper 32 bits of RAX undefined per the
+    /// Win64 ABI, so a downstream 64-bit comparison sees garbage
+    /// without an explicit extension. `0` (= `Ty::Char`) when
+    /// the prototype hasn't been seen yet; the codegen treats
+    /// that as "no extension needed".
+    pub return_type_tag: i64,
     /// c5-side name the source uses (e.g. `printf`).
     pub local_name: String,
     /// Symbol name exported by the dylib. Differs from `local_name`
@@ -1043,6 +1055,7 @@ impl Preprocessor {
         dylib.bindings.push(Binding {
             is_variadic: false,
             fixed_args: 0,
+            return_type_tag: 0,
             local_name: local_name.to_string(),
             real_symbol: real_symbol.to_string(),
         });

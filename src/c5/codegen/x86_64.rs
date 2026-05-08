@@ -280,6 +280,32 @@ pub(super) fn emit_mov_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, modrm(0b11, src.lo(), dst.lo()));
 }
 
+/// Extend a libc return value sitting in `RAX` to fill the
+/// full 64-bit register, per `ext`. msvcrt's int-typed returns
+/// (atoi, fclose, isatty, ...) leave the upper 32 bits undefined,
+/// so callers that consume the result through c5's 64-bit
+/// accumulator need this before reading. Encodings are spelled
+/// out as raw bytes -- the dst/src are always RAX/EAX/AX/AL so
+/// the ModR/M byte is fixed.
+pub(super) fn emit_extend_rax_for_return(code: &mut Vec<u8>, ext: super::ReturnExt) {
+    use super::ReturnExt;
+    match ext {
+        ReturnExt::None => {}
+        // movsxd rax, eax -- REX.W + 63 /r, ModR/M C0.
+        ReturnExt::Sign32 => emit_bytes(code, &[0x48, 0x63, 0xC0]),
+        // mov eax, eax -- 32-bit MOV implicitly zero-extends to RAX.
+        ReturnExt::Zero32 => emit_bytes(code, &[0x89, 0xC0]),
+        // movsx rax, ax -- REX.W + 0F BF /r, ModR/M C0.
+        ReturnExt::Sign16 => emit_bytes(code, &[0x48, 0x0F, 0xBF, 0xC0]),
+        // movzx rax, ax -- REX.W + 0F B7 /r, ModR/M C0.
+        ReturnExt::Zero16 => emit_bytes(code, &[0x48, 0x0F, 0xB7, 0xC0]),
+        // movsx rax, al -- REX.W + 0F BE /r, ModR/M C0.
+        ReturnExt::Sign8 => emit_bytes(code, &[0x48, 0x0F, 0xBE, 0xC0]),
+        // movzx rax, al -- REX.W + 0F B6 /r, ModR/M C0.
+        ReturnExt::Zero8 => emit_bytes(code, &[0x48, 0x0F, 0xB6, 0xC0]),
+    }
+}
+
 /// `MOV r64, imm64` -- 10-byte absolute load.
 /// Encoding: `REX.W + B8+rd io` -- the register goes into the low 3
 /// bits of the opcode byte (REX.B carries the high bit).
@@ -1953,6 +1979,7 @@ fn lower_op(
                 abi,
                 imports,
                 fp_mask,
+                target,
             )?;
         }
 
@@ -2130,6 +2157,7 @@ fn emit_libc_call(
     abi: Abi,
     imports: &super::ResolvedImports,
     fp_arg_mask: u32,
+    target: super::Target,
 ) -> Result<(), C5Error> {
     let import_index = imports.index_of_binding(binding_idx).ok_or_else(|| {
         C5Error::Compile(format!(
@@ -2250,6 +2278,22 @@ fn emit_libc_call(
     }
 
     {
+        // Sign- or zero-extend a sub-word return into a full
+        // 64-bit value before it becomes the c5 accumulator.
+        // Required on Win64: msvcrt's `int`-typed entry points
+        // (atoi, isatty, fclose, ...) leave the upper 32 bits of
+        // RAX undefined, so a downstream `r13 != -17` comparison
+        // would see garbage. Linux glibc happens to leave the
+        // upper bits zeroed out, but the ABI doesn't promise it,
+        // and the extension is a no-op when `return_type_tag` is
+        // already 64-bit-wide (pointer, `long long`, LP64
+        // `long`, ...) so emitting it on every target is the
+        // simpler choice.
+        let ext = super::return_extension(
+            imports.imports[import_index].return_type_tag,
+            target,
+        );
+        emit_extend_rax_for_return(code, ext);
         // Move the libc return value into r13 so the c5 caller
         // sees it as the new accumulator. (For functions that
         // don't return -- e.g. `exit` -- the call doesn't reach

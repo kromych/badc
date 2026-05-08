@@ -62,7 +62,7 @@ const FP_BAND_SIZE: i64 = 100;
 pub(super) const UNSIGNED_BIT: i64 = 1 << 30;
 
 /// `true` if `ty`'s underlying integer is tagged unsigned.
-pub(super) fn is_unsigned_ty(ty: i64) -> bool {
+pub(crate) fn is_unsigned_ty(ty: i64) -> bool {
     (ty & UNSIGNED_BIT) != 0
 }
 
@@ -72,7 +72,7 @@ pub(super) fn is_unsigned_ty(ty: i64) -> bool {
 /// only need it when storing a type tag where a non-bit-flagged tag
 /// is expected (e.g., switch-table comparisons against `Ty::Int as
 /// i64`).
-pub(super) fn strip_unsigned(ty: i64) -> i64 {
+pub(crate) fn strip_unsigned(ty: i64) -> i64 {
     ty & !UNSIGNED_BIT
 }
 
@@ -106,13 +106,13 @@ pub(super) fn struct_ty_for(id: usize) -> i64 {
     STRUCT_BASE + (id as i64) * STRUCT_STRIDE
 }
 
-pub(super) fn is_float_ty(ty: i64) -> bool {
+pub(crate) fn is_float_ty(ty: i64) -> bool {
     let ty = strip_unsigned(ty);
     let base = Ty::Float as i64;
     (base..base + FP_BAND_SIZE).contains(&ty)
 }
 
-pub(super) fn is_double_ty(ty: i64) -> bool {
+pub(crate) fn is_double_ty(ty: i64) -> bool {
     let ty = strip_unsigned(ty);
     let base = Ty::Double as i64;
     (base..base + FP_BAND_SIZE).contains(&ty)
@@ -122,7 +122,7 @@ pub(super) fn is_double_ty(ty: i64) -> bool {
 /// 100-wide band starting at `Ty::Long`; the same +2-per-`*`
 /// scheme as the integer family applies inside the band, so
 /// `long*` = 302, `long**` = 304, etc.
-pub(super) fn is_long_ty(ty: i64) -> bool {
+pub(crate) fn is_long_ty(ty: i64) -> bool {
     let ty = strip_unsigned(ty);
     let base = Ty::Long as i64;
     (base..base + FP_BAND_SIZE).contains(&ty)
@@ -143,7 +143,7 @@ pub(super) fn long_ptr_depth(ty: i64) -> i64 {
 /// its own 100-wide band starting at `Ty::LongLong` (500); the
 /// same +2-per-`*` scheme as the integer family applies inside
 /// the band, so `long long*` = 502, `long long**` = 504, etc.
-pub(super) fn is_long_long_ty(ty: i64) -> bool {
+pub(crate) fn is_long_long_ty(ty: i64) -> bool {
     let ty = strip_unsigned(ty);
     let base = Ty::LongLong as i64;
     (base..base + FP_BAND_SIZE).contains(&ty)
@@ -341,7 +341,7 @@ pub(super) fn fp_ptr_depth(ty: i64) -> i64 {
 /// quick proxy for "is a pointer"; the bands for floats, longs,
 /// and structs have their own depth predicates that this helper
 /// unifies.
-pub(super) fn is_pointer_ty(ty: i64) -> bool {
+pub(crate) fn is_pointer_ty(ty: i64) -> bool {
     let ty = strip_unsigned(ty);
     if is_struct_ty(ty) {
         struct_ptr_depth(ty) > 0

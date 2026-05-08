@@ -7,6 +7,19 @@
 #ifndef _C5_DIRENT_H
 #define _C5_DIRENT_H
 
+// On Windows, sqlite's bundled shell.c rolls its own DIR / dirent
+// implementation on top of FindFirstFile / FindNextFile. The
+// roll-your-own struct has Windows-flavoured fields
+// (`d_attributes`) that don't appear on POSIX, so we skip the
+// POSIX layout here and let shell.c's `#if defined(_WIN32) &&
+// defined(_MSC_VER)` block define everything itself. Programs
+// that include `<dirent.h>` on Windows for the function decls
+// alone get the empty-but-flagged-included header.
+#ifdef _WIN32
+#endif
+
+#ifndef _WIN32
+
 #include <sys/types.h>
 
 struct __c5_DIR { char __opaque[256]; };
@@ -54,5 +67,7 @@ DIR *opendir(char *path);
 struct dirent *readdir(DIR *dir);
 int closedir(DIR *dir);
 int rewinddir(DIR *dir);
+
+#endif /* !_WIN32 */
 
 #endif

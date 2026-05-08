@@ -76,7 +76,8 @@ build_shell() {
         -DSQLITE_OMIT_AUTOINIT \
         -DSQLITE_WITHOUT_ZONEMALLOC=1 \
         -DSQLITE_ENABLE_LOCKING_STYLE=0 \
-        -DSQLITE_DISABLE_INTRINSIC
+        -DSQLITE_DISABLE_INTRINSIC \
+        -DSQLITE_OMIT_SEH
 }
 
 run_scenarios() {

@@ -235,6 +235,48 @@ typedef struct __c5_FILE FILE;
 #pragma binding(msvcrt::wcsncat,        "wcsncat")
 #pragma binding(msvcrt::wcsdup,         "_wcsdup")
 #pragma binding(msvcrt::_wcsicmp,       "_wcsicmp")
+// MSVC "safe" CRT variants (`_s` suffix) sqlite reaches for under
+// `_MSC_VER`. Behaviour matches the bare form for the call sites
+// sqlite uses; the "safe" prefix is a Microsoft naming convention
+// for the bounded-buffer rewrite of the legacy entry points.
+#pragma binding(msvcrt::localtime_s,    "localtime_s")
+#pragma binding(msvcrt::gmtime_s,       "gmtime_s")
+#pragma binding(msvcrt::ctime_s,        "ctime_s")
+#pragma binding(msvcrt::asctime_s,      "asctime_s")
+#pragma binding(msvcrt::strerror_s,     "strerror_s")
+#pragma binding(msvcrt::_strdup,        "_strdup")
+#pragma binding(msvcrt::_strnicmp,      "_strnicmp")
+#pragma binding(msvcrt::_stricmp,       "_stricmp")
+#pragma binding(msvcrt::_get_errno,     "_get_errno")
+#pragma binding(msvcrt::_set_errno,     "_set_errno")
+#pragma binding(msvcrt::_errno,         "_errno")
+#pragma binding(msvcrt::_environ,       "_environ")
+#pragma binding(msvcrt::__argc,         "__argc")
+#pragma binding(msvcrt::__argv,         "__argv")
+#pragma binding(msvcrt::__wargv,        "__wargv")
+#pragma binding(msvcrt::__getmainargs,  "__getmainargs")
+#pragma binding(msvcrt::_getch,         "_getch")
+#pragma binding(msvcrt::_kbhit,         "_kbhit")
+#pragma binding(msvcrt::_msize,         "_msize")
+#pragma binding(msvcrt::_open,          "_open")
+#pragma binding(msvcrt::_close,         "_close")
+#pragma binding(msvcrt::_read,          "_read")
+#pragma binding(msvcrt::_write,         "_write")
+#pragma binding(msvcrt::_lseek,         "_lseek")
+#pragma binding(msvcrt::_lseeki64,      "_lseeki64")
+#pragma binding(msvcrt::_chsize,        "_chsize")
+#pragma binding(msvcrt::_chsize_s,      "_chsize_s")
+#pragma binding(msvcrt::_chmod,         "_chmod")
+#pragma binding(msvcrt::_unlink,        "_unlink")
+#pragma binding(msvcrt::_getcwd,        "_getcwd")
+#pragma binding(msvcrt::_chdir,         "_chdir")
+#pragma binding(msvcrt::_getpid,        "_getpid")
+#pragma binding(msvcrt::_dup,           "_dup")
+#pragma binding(msvcrt::_dup2,          "_dup2")
+#pragma binding(msvcrt::_fdopen,        "_fdopen")
+#pragma binding(msvcrt::_byteswap_ulong,  "_byteswap_ulong")
+#pragma binding(msvcrt::_byteswap_uint64, "_byteswap_uint64")
+#pragma binding(msvcrt::_byteswap_ushort, "_byteswap_ushort")
 #endif
 
 int printf(char *fmt, ...);
@@ -303,9 +345,34 @@ struct _stat64 {
     long long     st_mtime;
     long long     st_ctime;
 };
+// `__stat64` is an internal MSVC alias for `_stat64`; some
+// shell.c paths reach for the double-underscore spelling. Same
+// layout, same use; declared as its own struct because c5's
+// struct-tag namespace doesn't track aliases.
+struct __stat64 {
+    unsigned int  st_dev;
+    unsigned short st_ino;
+    unsigned short st_mode;
+    short         st_nlink;
+    short         st_uid;
+    short         st_gid;
+    unsigned int  st_rdev;
+    long long     st_size;
+    long long     st_atime;
+    long long     st_mtime;
+    long long     st_ctime;
+};
+#define _S_IFMT       0xF000
+#define _S_IFDIR      0x4000
+#define _S_IFCHR      0x2000
+#define _S_IFIFO      0x1000
+#define _S_IFREG      0x8000
+#define _S_IREAD      0x0100
+#define _S_IWRITE     0x0080
+#define _S_IEXEC      0x0040
 int   _stat(char *path, struct _stat *buf);
 int   _stat64(char *path, struct _stat64 *buf);
-int   _fstat64(int fd, struct _stat64 *buf);
+int   _fstat64(int fd, void *buf);
 int   _wstat(unsigned short *path, struct _stat *buf);
 int   _wchmod(unsigned short *path, int mode);
 int   _wmkdir(unsigned short *path);
@@ -338,6 +405,88 @@ unsigned short *wcscat(unsigned short *dst, unsigned short *src);
 unsigned short *wcsncat(unsigned short *dst, unsigned short *src, long long n);
 unsigned short *wcsdup(unsigned short *s);
 int   _wcsicmp(unsigned short *a, unsigned short *b);
+int   localtime_s();
+int   gmtime_s();
+int   ctime_s();
+int   asctime_s();
+int   strerror_s();
+char *_strdup();
+int   _strnicmp();
+int   _stricmp();
+int   _get_errno();
+int   _set_errno();
+int  *_errno();
+char **_environ();
+int   __argc();
+char **__argv();
+unsigned short **__wargv();
+int   __getmainargs();
+int   _getch();
+int   _kbhit();
+long long _msize(void *p);
+int   _open(char *path, int flags, int mode);
+int   _close(int fd);
+long long _read(int fd, void *buf, long long n);
+long long _write(int fd, void *buf, long long n);
+long long _lseek(int fd, long long off, int whence);
+long long _lseeki64(int fd, long long off, int whence);
+int   _chsize(int fd, long long size);
+int   _chsize_s(int fd, long long size);
+int   _chmod(char *path, int mode);
+int   _unlink(char *path);
+char *_getcwd(char *buf, int n);
+int   _chdir(char *path);
+int   _getpid();
+int   _dup(int fd);
+int   _dup2(int fd, int newfd);
+FILE *_fdopen(int fd, char *mode);
+unsigned int       _byteswap_ulong(unsigned int v);
+unsigned long long _byteswap_uint64(unsigned long long v);
+unsigned short     _byteswap_ushort(unsigned short v);
+
+// MSVC's `_findfirst`/`_findnext` companion structs. Layout
+// pinned to the Win64 SDK so the kernel-emitted records match
+// what shell.c reads. Per MSVC: `time_t` is 64-bit on the 64-bit
+// CRT; `_fsize_t` is `unsigned long` (32-bit on LLP64). Wide
+// names are 260 wchars; ANSI variant is 260 chars.
+struct _finddata_t {
+    unsigned int  attrib;
+    long long     time_create;
+    long long     time_access;
+    long long     time_write;
+    unsigned int  size;
+    char          name[260];
+};
+struct _wfinddata_t {
+    unsigned int   attrib;
+    long long      time_create;
+    long long      time_access;
+    long long      time_write;
+    unsigned int   size;
+    unsigned short name[260];
+};
+struct _finddata64_t {
+    unsigned int  attrib;
+    long long     time_create;
+    long long     time_access;
+    long long     time_write;
+    long long     size;
+    char          name[260];
+};
+struct _wfinddata64_t {
+    unsigned int   attrib;
+    long long      time_create;
+    long long      time_access;
+    long long      time_write;
+    long long      size;
+    unsigned short name[260];
+};
+#define _A_NORMAL     0x00
+#define _A_RDONLY     0x01
+#define _A_HIDDEN     0x02
+#define _A_SYSTEM     0x04
+#define _A_SUBDIR     0x10
+#define _A_ARCH       0x20
 
 // `_setmode` flag values from <fcntl.h> on the MSVC CRT. Modes
 // shell.c uses are O_BINARY (raw bytes through stdin/stdout for

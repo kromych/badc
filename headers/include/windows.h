@@ -24,6 +24,21 @@
 // sqlite's prototypes parse without c5 having to model the
 // extension keywords. WINBASEAPI / WINAPI / WINAPI_INLINE / VOID
 // / FAR / NEAR are the spellings sqlite's `os_win.c` reaches for.
+// MSVC decoration spellings used by sqlite + the bundled C runtime
+// headers. None of them affect codegen on c5 -- the IAT routes
+// the call regardless of inline / dllimport tagging -- so they
+// expand to nothing. `__declspec(...)` swallows its argument
+// list; `__forceinline` / `__inline` collapse to nothing.
+// Win32 TCHAR-aware string macros. Real headers expand these to
+// `L"..."` under `UNICODE`; we treat them as no-ops because c5's
+// runtime always reaches for the ANSI-flavoured calls. The
+// matching `LoadLibrary` / `GetModuleHandle` / etc. macros pick
+// the `A` suffix variant.
+#define _T(x) x
+#define __TEXT(x) x
+#define TEXT(x) x
+#define LoadLibrary LoadLibraryA
+#define GetModuleHandle GetModuleHandleA
 #define WINBASEAPI
 #define WINAPI
 #define WINAPI_INLINE
@@ -326,6 +341,14 @@ typedef struct _OSVERSIONINFOW *POSVERSIONINFOW;
 #define FILE_FLAG_OVERLAPPED           0x40000000
 #define FILE_FLAG_WRITE_THROUGH        0x80000000
 #define FILE_FLAG_DELETE_ON_CLOSE      0x04000000
+#define FILE_FLAG_BACKUP_SEMANTICS     0x02000000
+#define FILE_FLAG_POSIX_SEMANTICS      0x01000000
+#define FILE_FLAG_OPEN_REPARSE_POINT   0x00200000
+#define FILE_FLAG_OPEN_NO_RECALL       0x00100000
+#define FILE_FLAG_NO_BUFFERING         0x20000000
+#define FILE_FLAG_SEQUENTIAL_SCAN      0x08000000
+#define FILE_WRITE_ATTRIBUTES          0x100
+#define FILE_READ_ATTRIBUTES           0x80
 #define INVALID_HANDLE_VALUE           ((HANDLE)-1)
 #define INVALID_FILE_ATTRIBUTES        0xFFFFFFFF
 #define INVALID_SET_FILE_POINTER       0xFFFFFFFF
@@ -410,6 +433,39 @@ typedef struct _OSVERSIONINFOW *POSVERSIONINFOW;
 #define WAIT_TIMEOUT                   258
 #define WAIT_ABANDONED                 0x00000080
 
+// SEH exception codes sqlite checks against in its mmap recovery
+// hook. Spelled out because c5's preprocessor can't expand the
+// MSVC `EXCEPTION_*` enum the SDK headers normally provide.
+#define EXCEPTION_IN_PAGE_ERROR        0xC0000006
+#define EXCEPTION_ACCESS_VIOLATION     0xC0000005
+#define EXCEPTION_EXECUTE_HANDLER      1
+#define EXCEPTION_CONTINUE_SEARCH      0
+#define EXCEPTION_CONTINUE_EXECUTION   (-1)
+
+// SEH descriptor structs sqlite's mmap-recovery filter walks.
+// Layout pinned to the Win64 SDK so kernel-emitted records can
+// be read field-by-field. `ExceptionInformation` is the standard
+// 15-slot array; sqlite reads index 1 to recover the faulting
+// virtual address.
+struct _EXCEPTION_RECORD {
+    DWORD                     ExceptionCode;
+    DWORD                     ExceptionFlags;
+    struct _EXCEPTION_RECORD *ExceptionRecord;
+    void                     *ExceptionAddress;
+    DWORD                     NumberParameters;
+    ULONG_PTR                 ExceptionInformation[15];
+};
+typedef struct _EXCEPTION_RECORD EXCEPTION_RECORD;
+typedef struct _EXCEPTION_RECORD *PEXCEPTION_RECORD;
+
+struct _EXCEPTION_POINTERS {
+    EXCEPTION_RECORD *ExceptionRecord;
+    void             *ContextRecord;
+};
+typedef struct _EXCEPTION_POINTERS EXCEPTION_POINTERS;
+typedef struct _EXCEPTION_POINTERS *PEXCEPTION_POINTERS;
+typedef struct _EXCEPTION_POINTERS *LPEXCEPTION_POINTERS;
+
 struct _SYSTEMTIME {
     WORD wYear;
     WORD wMonth;
@@ -475,6 +531,79 @@ struct _WIN32_FIND_DATAW {
 typedef struct _WIN32_FIND_DATAW WIN32_FIND_DATAW;
 typedef struct _WIN32_FIND_DATAW *LPWIN32_FIND_DATAW;
 typedef struct _WIN32_FIND_DATAW *PWIN32_FIND_DATAW;
+
+// Console-info structs shell.c reads when sniffing whether stdout
+// is a terminal vs a redirected pipe. Layouts pinned to the Win64
+// SDK so the kernel-emitted records align with c5's reads.
+struct _COORD {
+    SHORT X;
+    SHORT Y;
+};
+typedef struct _COORD COORD;
+typedef struct _COORD *PCOORD;
+
+struct _SMALL_RECT {
+    SHORT Left;
+    SHORT Top;
+    SHORT Right;
+    SHORT Bottom;
+};
+typedef struct _SMALL_RECT SMALL_RECT;
+typedef struct _SMALL_RECT *PSMALL_RECT;
+
+struct _CONSOLE_SCREEN_BUFFER_INFO {
+    COORD      dwSize;
+    COORD      dwCursorPosition;
+    WORD       wAttributes;
+    SMALL_RECT srWindow;
+    COORD      dwMaximumWindowSize;
+};
+typedef struct _CONSOLE_SCREEN_BUFFER_INFO CONSOLE_SCREEN_BUFFER_INFO;
+typedef struct _CONSOLE_SCREEN_BUFFER_INFO *PCONSOLE_SCREEN_BUFFER_INFO;
+
+#define STD_INPUT_HANDLE  ((DWORD)-10)
+#define STD_OUTPUT_HANDLE ((DWORD)-11)
+#define STD_ERROR_HANDLE  ((DWORD)-12)
+#define ENABLE_PROCESSED_INPUT          0x0001
+#define ENABLE_LINE_INPUT               0x0002
+#define ENABLE_ECHO_INPUT               0x0004
+#define ENABLE_WINDOW_INPUT             0x0008
+#define ENABLE_MOUSE_INPUT              0x0010
+#define ENABLE_INSERT_MODE              0x0020
+#define ENABLE_QUICK_EDIT_MODE          0x0040
+#define ENABLE_EXTENDED_FLAGS           0x0080
+#define ENABLE_AUTO_POSITION            0x0100
+#define ENABLE_VIRTUAL_TERMINAL_INPUT   0x0200
+#define ENABLE_PROCESSED_OUTPUT         0x0001
+#define ENABLE_WRAP_AT_EOL_OUTPUT       0x0002
+#define ENABLE_VIRTUAL_TERMINAL_PROCESSING 0x0004
+#define DISABLE_NEWLINE_AUTO_RETURN     0x0008
+#define ENABLE_LVB_GRID_WORLDWIDE       0x0010
+
+// Foreground / background console attribute bits (pinned).
+#define FOREGROUND_BLUE                 0x0001
+#define FOREGROUND_GREEN                0x0002
+#define FOREGROUND_RED                  0x0004
+#define FOREGROUND_INTENSITY            0x0008
+#define BACKGROUND_BLUE                 0x0010
+#define BACKGROUND_GREEN                0x0020
+#define BACKGROUND_RED                  0x0040
+#define BACKGROUND_INTENSITY            0x0080
+#define COMMON_LVB_LEADING_BYTE         0x0100
+#define COMMON_LVB_TRAILING_BYTE        0x0200
+#define COMMON_LVB_GRID_HORIZONTAL      0x0400
+#define COMMON_LVB_GRID_LVERTICAL       0x0800
+#define COMMON_LVB_GRID_RVERTICAL       0x1000
+#define COMMON_LVB_REVERSE_VIDEO        0x4000
+#define COMMON_LVB_UNDERSCORE           0x8000
+
+// Console control-event codes the SetConsoleCtrlHandler callback
+// distinguishes between -- shell.c uses these for ^C handling.
+#define CTRL_C_EVENT        0
+#define CTRL_BREAK_EVENT    1
+#define CTRL_CLOSE_EVENT    2
+#define CTRL_LOGOFF_EVENT   5
+#define CTRL_SHUTDOWN_EVENT 6
 
 char *VirtualAlloc(char *addr, long long size, int type, int protect);
 int VirtualProtect(char *addr, long long size, int new_protect, int *old_protect);
@@ -596,6 +725,89 @@ int DeleteCriticalSection(char *cs);
 #pragma binding(kernel32::SetFileAttributesW,      "SetFileAttributesW")
 #pragma binding(kernel32::GetEnvironmentVariableA, "GetEnvironmentVariableA")
 #pragma binding(kernel32::GetEnvironmentVariableW, "GetEnvironmentVariableW")
+#pragma binding(kernel32::SetFileTime,             "SetFileTime")
+#pragma binding(kernel32::GetFileTime,             "GetFileTime")
+#pragma binding(kernel32::GetTempFileNameA,        "GetTempFileNameA")
+#pragma binding(kernel32::GetTempFileNameW,        "GetTempFileNameW")
+#pragma binding(kernel32::GetCurrentProcess,       "GetCurrentProcess")
+#pragma binding(kernel32::DuplicateHandle,         "DuplicateHandle")
+#pragma binding(kernel32::SetFilePointerEx,        "SetFilePointerEx")
+#pragma binding(kernel32::GetFileSizeEx,           "GetFileSizeEx")
+#pragma binding(kernel32::CreateMutexA,            "CreateMutexA")
+#pragma binding(kernel32::CreateEventW,            "CreateEventW")
+#pragma binding(kernel32::ReleaseMutex,            "ReleaseMutex")
+#pragma binding(kernel32::SetEvent,                "SetEvent")
+#pragma binding(kernel32::ResetEvent,              "ResetEvent")
+#pragma binding(kernel32::OpenMutexA,              "OpenMutexA")
+#pragma binding(kernel32::OpenMutexW,              "OpenMutexW")
+#pragma binding(kernel32::OpenEventA,              "OpenEventA")
+#pragma binding(kernel32::OpenEventW,              "OpenEventW")
+#pragma binding(kernel32::RaiseException,          "RaiseException")
+#pragma binding(kernel32::IsDebuggerPresent,       "IsDebuggerPresent")
+#pragma binding(kernel32::DebugBreak,              "DebugBreak")
+#pragma binding(kernel32::SetUnhandledExceptionFilter, "SetUnhandledExceptionFilter")
+#pragma binding(kernel32::AddVectoredExceptionHandler, "AddVectoredExceptionHandler")
+#pragma binding(kernel32::RemoveVectoredExceptionHandler, "RemoveVectoredExceptionHandler")
+#pragma binding(kernel32::TerminateProcess,        "TerminateProcess")
+#pragma binding(kernel32::GetSystemDirectoryA,     "GetSystemDirectoryA")
+#pragma binding(kernel32::GetSystemDirectoryW,     "GetSystemDirectoryW")
+#pragma binding(kernel32::GetWindowsDirectoryA,    "GetWindowsDirectoryA")
+#pragma binding(kernel32::GetWindowsDirectoryW,    "GetWindowsDirectoryW")
+#pragma binding(kernel32::ExpandEnvironmentStringsA, "ExpandEnvironmentStringsA")
+#pragma binding(kernel32::ExpandEnvironmentStringsW, "ExpandEnvironmentStringsW")
+#pragma binding(kernel32::SearchPathA,             "SearchPathA")
+#pragma binding(kernel32::SearchPathW,             "SearchPathW")
+#pragma binding(kernel32::CreateProcessA,          "CreateProcessA")
+#pragma binding(kernel32::CreateProcessW,          "CreateProcessW")
+#pragma binding(kernel32::GetStdHandle,            "GetStdHandle")
+#pragma binding(kernel32::SetStdHandle,            "SetStdHandle")
+#pragma binding(kernel32::GetConsoleMode,          "GetConsoleMode")
+#pragma binding(kernel32::SetConsoleMode,          "SetConsoleMode")
+#pragma binding(kernel32::GetConsoleOutputCP,      "GetConsoleOutputCP")
+#pragma binding(kernel32::SetConsoleOutputCP,      "SetConsoleOutputCP")
+#pragma binding(kernel32::GetConsoleCP,            "GetConsoleCP")
+#pragma binding(kernel32::SetConsoleCP,            "SetConsoleCP")
+#pragma binding(kernel32::WriteConsoleW,           "WriteConsoleW")
+#pragma binding(kernel32::WriteConsoleA,           "WriteConsoleA")
+#pragma binding(kernel32::ReadConsoleW,            "ReadConsoleW")
+#pragma binding(kernel32::ReadConsoleA,            "ReadConsoleA")
+#pragma binding(kernel32::FlushConsoleInputBuffer, "FlushConsoleInputBuffer")
+#pragma binding(kernel32::GetConsoleScreenBufferInfo, "GetConsoleScreenBufferInfo")
+#pragma binding(kernel32::SetConsoleScreenBufferSize, "SetConsoleScreenBufferSize")
+#pragma binding(kernel32::SetConsoleCursorPosition, "SetConsoleCursorPosition")
+#pragma binding(kernel32::SetConsoleTextAttribute, "SetConsoleTextAttribute")
+#pragma binding(kernel32::FillConsoleOutputCharacterA, "FillConsoleOutputCharacterA")
+#pragma binding(kernel32::FillConsoleOutputCharacterW, "FillConsoleOutputCharacterW")
+#pragma binding(kernel32::FillConsoleOutputAttribute, "FillConsoleOutputAttribute")
+#pragma binding(kernel32::ScrollConsoleScreenBufferA, "ScrollConsoleScreenBufferA")
+#pragma binding(kernel32::ScrollConsoleScreenBufferW, "ScrollConsoleScreenBufferW")
+#pragma binding(kernel32::SetConsoleTitleA,        "SetConsoleTitleA")
+#pragma binding(kernel32::SetConsoleTitleW,        "SetConsoleTitleW")
+#pragma binding(kernel32::GetConsoleTitleA,        "GetConsoleTitleA")
+#pragma binding(kernel32::GetConsoleTitleW,        "GetConsoleTitleW")
+#pragma binding(kernel32::PeekConsoleInputA,       "PeekConsoleInputA")
+#pragma binding(kernel32::PeekConsoleInputW,       "PeekConsoleInputW")
+#pragma binding(kernel32::ReadConsoleInputA,       "ReadConsoleInputA")
+#pragma binding(kernel32::ReadConsoleInputW,       "ReadConsoleInputW")
+#pragma binding(kernel32::WriteConsoleInputA,      "WriteConsoleInputA")
+#pragma binding(kernel32::WriteConsoleInputW,      "WriteConsoleInputW")
+#pragma binding(kernel32::SetConsoleCtrlHandler,   "SetConsoleCtrlHandler")
+#pragma binding(kernel32::GenerateConsoleCtrlEvent,"GenerateConsoleCtrlEvent")
+#pragma binding(kernel32::AllocConsole,            "AllocConsole")
+#pragma binding(kernel32::FreeConsole,             "FreeConsole")
+#pragma binding(kernel32::AttachConsole,           "AttachConsole")
+#pragma binding(kernel32::GetConsoleProcessList,   "GetConsoleProcessList")
+#pragma binding(kernel32::GetConsoleWindow,        "GetConsoleWindow")
+#pragma binding(kernel32::GetSystemTimePreciseAsFileTime, "GetSystemTimePreciseAsFileTime")
+#pragma binding(kernel32::QueryPerformanceFrequency, "QueryPerformanceFrequency")
+#pragma binding(kernel32::GetTickCount64,          "GetTickCount64")
+#pragma binding(kernel32::SwitchToThread,          "SwitchToThread")
+#pragma binding(kernel32::SleepEx,                 "SleepEx")
+#pragma binding(kernel32::GetTimeZoneInformation,  "GetTimeZoneInformation")
+#pragma binding(kernel32::SystemTimeToTzSpecificLocalTime, "SystemTimeToTzSpecificLocalTime")
+#pragma binding(kernel32::TzSpecificLocalTimeToSystemTime, "TzSpecificLocalTimeToSystemTime")
+#pragma binding(kernel32::GetLocalTime,            "GetLocalTime")
+#pragma binding(kernel32::SetLastError,            "SetLastError")
 // rpcrt4-resident UUID helpers; sqlite gates these on
 // `SQLITE_WIN32_USE_UUID`. The kernel32 dylib hosts the binding
 // nominally -- runtime resolution still goes through the
@@ -688,6 +900,89 @@ int SetFileAttributesA();
 int SetFileAttributesW();
 int GetEnvironmentVariableA();
 int GetEnvironmentVariableW();
+int SetFileTime();
+int GetFileTime();
+int GetTempFileNameA();
+int GetTempFileNameW();
+HANDLE GetCurrentProcess();
+int DuplicateHandle();
+int SetFilePointerEx();
+int GetFileSizeEx();
+HANDLE CreateMutexA();
+HANDLE CreateEventW();
+int ReleaseMutex();
+int SetEvent();
+int ResetEvent();
+HANDLE OpenMutexA();
+HANDLE OpenMutexW();
+HANDLE OpenEventA();
+HANDLE OpenEventW();
+int RaiseException();
+int IsDebuggerPresent();
+int DebugBreak();
+int SetUnhandledExceptionFilter();
+int AddVectoredExceptionHandler();
+int RemoveVectoredExceptionHandler();
+int TerminateProcess();
+int GetSystemDirectoryA();
+int GetSystemDirectoryW();
+int GetWindowsDirectoryA();
+int GetWindowsDirectoryW();
+int ExpandEnvironmentStringsA();
+int ExpandEnvironmentStringsW();
+int SearchPathA();
+int SearchPathW();
+int CreateProcessA();
+int CreateProcessW();
+HANDLE GetStdHandle();
+int SetStdHandle();
+int GetConsoleMode();
+int SetConsoleMode();
+int GetConsoleOutputCP();
+int SetConsoleOutputCP();
+int GetConsoleCP();
+int SetConsoleCP();
+int WriteConsoleW();
+int WriteConsoleA();
+int ReadConsoleW();
+int ReadConsoleA();
+int FlushConsoleInputBuffer();
+int GetConsoleScreenBufferInfo();
+int SetConsoleScreenBufferSize();
+int SetConsoleCursorPosition();
+int SetConsoleTextAttribute();
+int FillConsoleOutputCharacterA();
+int FillConsoleOutputCharacterW();
+int FillConsoleOutputAttribute();
+int ScrollConsoleScreenBufferA();
+int ScrollConsoleScreenBufferW();
+int SetConsoleTitleA();
+int SetConsoleTitleW();
+int GetConsoleTitleA();
+int GetConsoleTitleW();
+int PeekConsoleInputA();
+int PeekConsoleInputW();
+int ReadConsoleInputA();
+int ReadConsoleInputW();
+int WriteConsoleInputA();
+int WriteConsoleInputW();
+int SetConsoleCtrlHandler();
+int GenerateConsoleCtrlEvent();
+int AllocConsole();
+int FreeConsole();
+int AttachConsole();
+int GetConsoleProcessList();
+HWND GetConsoleWindow();
+int GetSystemTimePreciseAsFileTime();
+int QueryPerformanceFrequency();
+unsigned long long GetTickCount64();
+int SwitchToThread();
+int SleepEx();
+int GetTimeZoneInformation();
+int SystemTimeToTzSpecificLocalTime();
+int TzSpecificLocalTimeToSystemTime();
+int GetLocalTime();
+int SetLastError();
 int UuidCreate();
 int UuidCreateSequential();
 #endif

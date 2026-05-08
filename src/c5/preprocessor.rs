@@ -217,6 +217,7 @@ impl Preprocessor {
     ///     `__BADC_WINDOWS__` we used before this commit.
     pub fn new(target_spec: &str, target: Target, crate_version: &str) -> Self {
         let mut macros: HashMap<String, String> = HashMap::new();
+        let mut fn_macros: HashMap<String, FnMacro> = HashMap::new();
         macros.insert(
             "__BADC_VERSION__".to_string(),
             format!("\"{crate_version}\""),
@@ -262,11 +263,91 @@ impl Preprocessor {
                 macros.insert("_WIN32".to_string(), "1".to_string());
                 macros.insert("_WIN64".to_string(), "1".to_string());
                 macros.insert("__BADC_WINDOWS__".to_string(), "1".to_string());
+                // Pretend to be MSVC so headers that gate
+                // CRT-flavoured paths on `_MSC_VER` (sqlite's
+                // bundled `windirent` -> opendir / readdir
+                // shim, plus dozens of similar `#if defined(_WIN32)
+                // && defined(_MSC_VER)` blocks across third-party
+                // sources) light up. The version number is the
+                // 1900-series spelling for VS2015+ -- everything
+                // sqlite checks against expects `_MSC_VER >= 1300`
+                // or thereabouts. badc's runtime hits msvcrt.dll
+                // anyway so this matches what the code is going
+                // to call.
+                macros.insert("_MSC_VER".to_string(), "1900".to_string());
+                // Pretend to be MinGW alongside MSVC. The two are
+                // mostly mutually exclusive in upstream code, but
+                // we want both #if branches to fire favourably:
+                // sqlite gates the wmain() wrapper on
+                // `defined(_WIN32) && !defined(__MINGW32__)`, and
+                // setting the macro skips that wrapper so the
+                // standard-named `main` stays visible to c5's entry
+                // resolver. The `_MSC_VER` block above still fires
+                // (most CRT-flavoured paths gate on _MSC_VER alone).
+                macros.insert("__MINGW32__".to_string(), "1".to_string());
+                // MSVC decorator macros sqlite expects to no-op
+                // when its `_MSC_VER` branches are active. None of
+                // them affect codegen on c5 (the IAT routes calls
+                // regardless of dllimport / inline tagging), and
+                // sqlite emits them BEFORE any include statement
+                // could provide them, so they have to live in the
+                // built-in predefines.
+                let mut empty_object = |name: &str| {
+                    macros.insert(name.to_string(), String::new());
+                };
+                empty_object("__forceinline");
+                empty_object("__inline");
+                empty_object("_inline");
+                empty_object("__cdecl");
+                empty_object("__stdcall");
+                empty_object("__fastcall");
+                empty_object("__thiscall");
+                empty_object("__vectorcall");
+                empty_object("__nullable");
+                empty_object("__nonnull");
+                empty_object("__ptr32");
+                empty_object("__ptr64");
+                empty_object("__unaligned");
+                empty_object("_CRTIMP");
+                empty_object("_CRT_GUARDOVERFLOW");
+                empty_object("_Inout_");
+                empty_object("_In_");
+                empty_object("_In_opt_");
+                empty_object("_In_z_");
+                empty_object("_In_opt_z_");
+                empty_object("_Out_");
+                empty_object("_Out_opt_");
+                empty_object("_Outptr_");
+                empty_object("_Outptr_opt_");
+                // Function-like decorator macros (`__declspec(x)`,
+                // `__pragma(x)`, `_CRT_INSECURE_DEPRECATE(reason)`,
+                // ...) expand to nothing. The 1-arg shape covers
+                // every form sqlite + the bundled CRT headers
+                // emit; none of them rely on argument concatenation
+                // or stringification.
+                let mut empty_fn = |name: &str| {
+                    fn_macros.insert(
+                        name.to_string(),
+                        FnMacro {
+                            params: alloc::vec!["x".to_string()],
+                            body: String::new(),
+                            is_variadic: false,
+                        },
+                    );
+                };
+                empty_fn("__declspec");
+                empty_fn("__pragma");
+                empty_fn("_CRT_INSECURE_DEPRECATE");
+                empty_fn("_CRT_NONSTDC_DEPRECATE");
+                empty_fn("_CRT_OBSOLETE");
+                empty_fn("_CRT_DEPRECATE_TEXT");
+                empty_fn("_Pre_satisfies_");
+                empty_fn("_Post_satisfies_");
             }
         }
         Self {
             macros,
-            fn_macros: HashMap::new(),
+            fn_macros,
             dylibs: Vec::new(),
             exports: Vec::new(),
             pragma_once_files: BTreeSet::new(),

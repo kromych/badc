@@ -169,16 +169,20 @@ jobs:
         # Same script, run under Git Bash (preinstalled on every
         # github-hosted Windows runner). Marked
         # `continue-on-error: true` so the lane stays a *signal*
-        # rather than a gate while the Windows port catches up.
-        # Progress so far: past `__umulh` / `_umul128` (resolved
-        # via SQLITE_DISABLE_INTRINSIC); past windows.h struct-
-        # type errors (DWORD / WORD / FILETIME / SYSTEMTIME etc.
-        # typedef'd in the bundled header). Currently blocked on
-        # gh #31 -- c5's const-init evaluator rejects the
-        # `(SYSCALL)funcname` casts in sqlite's Windows VFS
-        # syscall-redirection table. Each step closer is a real
-        # commit on this branch; the lane goes green when the
-        # last gap closes.
+        # rather than a gate while runtime correctness on Windows
+        # catches up. Progress so far: past `__umulh` / `_umul128`
+        # (-DSQLITE_DISABLE_INTRINSIC), past `(SYSCALL)funcname`
+        # const-init casts (gh #31), past PE/x64 struct fp-call
+        # (gh #50), past sub-word libc returns (gh #48), past
+        # the kernel32 / msvcrt binding-surface bring-up (gh #66).
+        # Compile now succeeds on both `windows-latest` and
+        # `windows-11-arm`; the residual is runtime: the kernel32
+        # bindings landed with `int Name();` (zero-arg) prototypes,
+        # which means the per-symbol arg-shuffling trampolines emit
+        # zero `Psh`es and the call into kernel32 sees junk
+        # arguments. Lane goes green once the trampoline learns
+        # to honour the cast'd prototype at the call site instead
+        # of the binding's declared params.
         if: matrix.os == 'windows-latest' || matrix.os == 'windows-11-arm'
         continue-on-error: true
         shell: bash

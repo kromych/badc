@@ -55,6 +55,18 @@ Compile knobs:
                            they exist, so a user-edited copy of
                            a bundled header can override the
                            one shipped in the badc binary.
+  -include FILE            Splice the named header in front of
+                           the source as if `#include \"FILE\"` had
+                           been written at the top of the
+                           translation unit. Resolved through
+                           the same -I / embedded-registry chain
+                           as a normal #include. Repeatable;
+                           order matters (later flags expand
+                           after earlier ones). Used to opt
+                           translation units into the MSVC-
+                           shape predefines via
+                           `-include msvc_compat.h` when
+                           targeting Windows.
 
 VM-only knobs (require --interp):
   --track-pointers         Allocation tracking + use-after-free guard.
@@ -124,6 +136,7 @@ fn main() {
     let mut defines: Vec<(String, String)> = Vec::new();
     let mut undefines: Vec<String> = Vec::new();
     let mut include_paths: Vec<String> = Vec::new();
+    let mut force_includes: Vec<String> = Vec::new();
 
     let mut iter = raw.into_iter();
     let prog0 = iter.next().unwrap_or_default();
@@ -199,6 +212,21 @@ fn main() {
             s if s.starts_with("-I") && s.len() > 2 => {
                 include_paths.push(s[2..].to_string());
             }
+            // gcc / clang -include FILE: splice the named header
+            // in front of the source as if `#include "FILE"` had
+            // been written at the top of the translation unit.
+            // Repeatable; later flags expand top-to-bottom in the
+            // order given. The header is resolved through the
+            // same -I / embedded-registry chain as a normal
+            // `#include`, so a build driver can drop a checked-in
+            // copy into `./include/` to override the bundled one.
+            "-include" => match iter.next() {
+                Some(name) => force_includes.push(name),
+                None => {
+                    eprintln!("badc: -include requires a header name");
+                    std::process::exit(1);
+                }
+            },
             s if s.starts_with("--target=") => {
                 target_spec = Some(s["--target=".len()..].to_string());
             }
@@ -300,16 +328,22 @@ fn main() {
     // predefines into the compiler. The bytecode itself is target-
     // independent; only the resolved binding map and the
     // preprocessor predefines vary.
-    let program =
-        match Compiler::with_full_options(contents, target, &defines, &undefines, &include_paths)
-            .compile()
-        {
-            Ok(p) => p,
-            Err(e) => {
-                eprintln!("{}", e);
-                std::process::exit(1);
-            }
-        };
+    let program = match Compiler::with_full_options(
+        contents,
+        target,
+        &defines,
+        &undefines,
+        &include_paths,
+        &force_includes,
+    )
+    .compile()
+    {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    };
 
     let program = if optimize_flag && std::env::var("BADC_BC_OPT_OFF").is_err() {
         match optimize(program) {

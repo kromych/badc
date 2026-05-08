@@ -64,7 +64,13 @@ build_shell() {
     # everywhere for symmetry; on Linux/macOS it's a tiny
     # codesize win (the fallback is slightly bigger than the
     # intrinsic), nothing more.
-    "${BADC}" "$@" "${COMBINED}" -o "${out_path}" \
+    # `-include msvc_compat.h` opts this translation unit into
+    # the MSVC-shape predefines (`_MSC_VER=1900`, `__MINGW32__=1`,
+    # `__int64 -> long long`, the `__declspec(x)` empty-decorator
+    # family, etc.). The header internally `#ifdef _WIN32` so the
+    # same flag is a no-op on macOS / Linux smoke runs and the
+    # command line stays uniform across hosts (gh #34).
+    "${BADC}" "$@" -include msvc_compat.h "${COMBINED}" -o "${out_path}" \
         -DSQLITE_OMIT_LOAD_EXTENSION \
         -DSQLITE_THREADSAFE=0 \
         -DSQLITE_DEFAULT_MEMSTATUS=0 \

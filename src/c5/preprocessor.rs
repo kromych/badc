@@ -187,6 +187,14 @@ pub(crate) struct Preprocessor {
     /// keeps the field but never reads from it (the embedded
     /// headers are always available).
     search_paths: Vec<String>,
+    /// Headers to splice in front of the user's translation unit,
+    /// before any source line is preprocessed. Mirrors gcc /
+    /// clang's `-include FILE` flag: each name resolves through
+    /// the same search-path / embedded-header chain as a regular
+    /// `#include "name"` and is processed exactly as if the user
+    /// had written that directive at the top of their source.
+    /// Plumbed in from the CLI's `-include FILE` flag.
+    force_includes: Vec<String>,
 }
 
 impl Preprocessor {
@@ -217,7 +225,7 @@ impl Preprocessor {
     ///     `__BADC_WINDOWS__` we used before this commit.
     pub fn new(target_spec: &str, target: Target, crate_version: &str) -> Self {
         let mut macros: HashMap<String, String> = HashMap::new();
-        let mut fn_macros: HashMap<String, FnMacro> = HashMap::new();
+        let fn_macros: HashMap<String, FnMacro> = HashMap::new();
         macros.insert(
             "__BADC_VERSION__".to_string(),
             format!("\"{crate_version}\""),
@@ -260,106 +268,20 @@ impl Preprocessor {
                 macros.insert("__unix__".to_string(), "1".to_string());
             }
             Target::WindowsX64 | Target::WindowsAarch64 => {
+                // Genuine target-detection macros only. The MSVC-
+                // mimicry surface (`_MSC_VER`, `__MINGW32__`,
+                // `__int64`, the `__declspec(x)` empty-decorator
+                // family, etc.) lives in the bundled
+                // `msvc_compat.h` header and is opted into per
+                // translation unit via `badc -include
+                // msvc_compat.h ...` (gh #34). Keeping the
+                // predefine table to genuine target-detection
+                // surfaces the "is this TU pretending to be MSVC?"
+                // question at the command line, where the build
+                // driver is the right place to answer it.
                 macros.insert("_WIN32".to_string(), "1".to_string());
                 macros.insert("_WIN64".to_string(), "1".to_string());
                 macros.insert("__BADC_WINDOWS__".to_string(), "1".to_string());
-                // Pretend to be MSVC so headers that gate
-                // CRT-flavoured paths on `_MSC_VER` (sqlite's
-                // bundled `windirent` -> opendir / readdir
-                // shim, plus dozens of similar `#if defined(_WIN32)
-                // && defined(_MSC_VER)` blocks across third-party
-                // sources) light up. The version number is the
-                // 1900-series spelling for VS2015+ -- everything
-                // sqlite checks against expects `_MSC_VER >= 1300`
-                // or thereabouts. badc's runtime hits msvcrt.dll
-                // anyway so this matches what the code is going
-                // to call.
-                macros.insert("_MSC_VER".to_string(), "1900".to_string());
-                // Pretend to be MinGW alongside MSVC. The two are
-                // mostly mutually exclusive in upstream code, but
-                // we want both #if branches to fire favourably:
-                // sqlite gates the wmain() wrapper on
-                // `defined(_WIN32) && !defined(__MINGW32__)`, and
-                // setting the macro skips that wrapper so the
-                // standard-named `main` stays visible to c5's entry
-                // resolver. The `_MSC_VER` block above still fires
-                // (most CRT-flavoured paths gate on _MSC_VER alone).
-                macros.insert("__MINGW32__".to_string(), "1".to_string());
-                // MSVC decorator macros sqlite expects to no-op
-                // when its `_MSC_VER` branches are active. None of
-                // them affect codegen on c5 (the IAT routes calls
-                // regardless of dllimport / inline tagging), and
-                // sqlite emits them BEFORE any include statement
-                // could provide them, so they have to live in the
-                // built-in predefines.
-                // MSVC's 8-byte-integer keyword. c5's lexer doesn't
-                // know `__int64` natively; sqlite's amalgamation, in
-                // its `defined(_MSC_VER)` typedef branch, spells
-                // `sqlite_int64` as `__int64` and `sqlite_uint64` as
-                // `unsigned __int64`. Without this expansion, c5
-                // falls back to `int` (4 bytes), which silently
-                // truncates every `i64` / `u64` field across sqlite
-                // -- including `db->flags`, whose bit-31
-                // `SQLITE_EnableView = 0x80000000` then sign-
-                // extends through later widening and trips the
-                // `SQLITE_CorruptRdOnly` (HI(0x2) = bit 33) check
-                // inside `sqlite3VdbeHalt`, fabricating a
-                // SQLITE_CORRUPT for every prepare against a fresh
-                // `:memory:` DB. Map to `long long` (8 bytes
-                // everywhere) so the LLP64 / cross-CRT path matches
-                // what real MSVC produces.
-                macros.insert("__int64".to_string(), "long long".to_string());
-                let mut empty_object = |name: &str| {
-                    macros.insert(name.to_string(), String::new());
-                };
-                empty_object("__forceinline");
-                empty_object("__inline");
-                empty_object("_inline");
-                empty_object("__cdecl");
-                empty_object("__stdcall");
-                empty_object("__fastcall");
-                empty_object("__thiscall");
-                empty_object("__vectorcall");
-                empty_object("__nullable");
-                empty_object("__nonnull");
-                empty_object("__ptr32");
-                empty_object("__ptr64");
-                empty_object("__unaligned");
-                empty_object("_CRTIMP");
-                empty_object("_CRT_GUARDOVERFLOW");
-                empty_object("_Inout_");
-                empty_object("_In_");
-                empty_object("_In_opt_");
-                empty_object("_In_z_");
-                empty_object("_In_opt_z_");
-                empty_object("_Out_");
-                empty_object("_Out_opt_");
-                empty_object("_Outptr_");
-                empty_object("_Outptr_opt_");
-                // Function-like decorator macros (`__declspec(x)`,
-                // `__pragma(x)`, `_CRT_INSECURE_DEPRECATE(reason)`,
-                // ...) expand to nothing. The 1-arg shape covers
-                // every form sqlite + the bundled CRT headers
-                // emit; none of them rely on argument concatenation
-                // or stringification.
-                let mut empty_fn = |name: &str| {
-                    fn_macros.insert(
-                        name.to_string(),
-                        FnMacro {
-                            params: alloc::vec!["x".to_string()],
-                            body: String::new(),
-                            is_variadic: false,
-                        },
-                    );
-                };
-                empty_fn("__declspec");
-                empty_fn("__pragma");
-                empty_fn("_CRT_INSECURE_DEPRECATE");
-                empty_fn("_CRT_NONSTDC_DEPRECATE");
-                empty_fn("_CRT_OBSOLETE");
-                empty_fn("_CRT_DEPRECATE_TEXT");
-                empty_fn("_Pre_satisfies_");
-                empty_fn("_Post_satisfies_");
             }
         }
         Self {
@@ -370,6 +292,7 @@ impl Preprocessor {
             pragma_once_files: BTreeSet::new(),
             include_stack: Vec::new(),
             search_paths: Vec::new(),
+            force_includes: Vec::new(),
         }
     }
 
@@ -383,6 +306,17 @@ impl Preprocessor {
         if !self.search_paths.iter().any(|p| p == path) {
             self.search_paths.push(path.to_string());
         }
+    }
+
+    /// Add a header to splice in front of the user's translation
+    /// unit, before any source line is preprocessed. Mirrors gcc /
+    /// clang's `-include FILE` flag. The name is resolved through
+    /// the same chain as a regular `#include "name"` -- filesystem
+    /// search paths first (so a checked-in copy of the header
+    /// wins), then the embedded registry. Order matters: multiple
+    /// `-include` flags expand top-to-bottom in the order given.
+    pub fn add_force_include(&mut self, name: &str) {
+        self.force_includes.push(name.to_string());
     }
 
     /// Predefine an object-like macro from the build driver --
@@ -414,6 +348,27 @@ impl Preprocessor {
     /// lines, which shifts user-source line numbers downstream of
     /// the include but keeps lines *within* a file aligned.
     pub fn process(&mut self, source: &str) -> Result<String, C5Error> {
+        // -include FILE plumbing: synthesize an `#include "name"`
+        // line per registered force-include and process them as a
+        // preamble before the user's source. Each force-include
+        // header runs with the same line-counter / `__FILE__` /
+        // search-path machinery as a regular `#include`, so a
+        // failure inside the header (say a typo'd `#pragma`) gets
+        // a diagnostic naming that header rather than the user's
+        // source. The synthesized preamble itself uses
+        // `<force-include>` as its filename label so any
+        // diagnostic targeting one of the synthesized lines
+        // points at that label and the line in the original
+        // source isn't shifted from the user's perspective.
+        if !self.force_includes.is_empty() {
+            let mut preamble = String::new();
+            for name in &self.force_includes.clone() {
+                preamble.push_str(&format!("#include \"{name}\"\n"));
+            }
+            let mut combined = self.process_named(&preamble, "<force-include>")?;
+            combined.push_str(&self.process_named(source, "<source>")?);
+            return Ok(combined);
+        }
         self.process_named(source, "<source>")
     }
 

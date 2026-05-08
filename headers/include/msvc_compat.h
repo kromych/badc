@@ -1,0 +1,113 @@
+// msvc_compat.h -- opt-in MSVC-shape predefines + decorator no-ops.
+//
+// Why this header exists. Lots of third-party C (sqlite, raylib,
+// the SDL lineage, every project that bundles a "windirent.h"
+// shim) gates Windows-flavoured code paths on `defined(_MSC_VER)`
+// and spells fixed-width integers with MSVC's `__int64` keyword.
+// c5 doesn't speak `__int64` natively and isn't really MSVC, but
+// when its windows-x64 / windows-arm64 backend is the target
+// translation unit, those gates are exactly the right ones to
+// fire -- the produced PE links msvcrt.dll, follows the MS x64
+// ABI, and is what real MSVC would have built.
+//
+// Earlier badc revisions baked this MSVC mimicry into the
+// preprocessor's built-in predefines (so `-target=windows-*`
+// implicitly defined `_MSC_VER` etc.). gh #34 moves it here:
+// build drivers opt in deliberately with
+//
+//     badc -include msvc_compat.h ... source.c
+//
+// -- mirroring gcc / clang's -include flag. That keeps
+// preprocessor.rs's predefine table to genuine target-detection
+// (_WIN32 / _WIN64 / __BADC_WINDOWS__) and surfaces the "is this
+// translation unit pretending to be MSVC?" question at the
+// command line where it belongs.
+//
+// Internally `#ifdef _WIN32` so dropping `-include msvc_compat.h`
+// on a non-Windows target is a no-op rather than a compile error
+// -- the same smoke.sh command line then works on every host.
+
+#pragma once
+
+#ifdef _WIN32
+
+// Pretend to be MSVC so headers that gate CRT-flavoured paths on
+// `_MSC_VER` (sqlite's bundled `windirent` -> opendir / readdir
+// shim, plus dozens of similar `#if defined(_WIN32) &&
+// defined(_MSC_VER)` blocks across third-party sources) light up.
+// The 1900 series is the VS2015+ spelling -- everything sqlite
+// checks against expects `_MSC_VER >= 1300` or thereabouts. badc's
+// runtime hits msvcrt.dll anyway so this matches what the code is
+// going to call.
+#define _MSC_VER 1900
+
+// Pretend to be MinGW alongside MSVC. The two are mostly mutually
+// exclusive in upstream code, but we want both #if branches to fire
+// favourably: sqlite gates the wmain() wrapper on `defined(_WIN32)
+// && !defined(__MINGW32__)`, and setting the macro skips that
+// wrapper so the standard-named `main` stays visible to c5's entry
+// resolver. The `_MSC_VER` block above still fires (most CRT-
+// flavoured paths gate on _MSC_VER alone).
+#define __MINGW32__ 1
+
+// MSVC's 8-byte-integer keyword. c5's lexer doesn't know `__int64`
+// natively; sqlite's amalgamation, in its `defined(_MSC_VER)`
+// typedef branch, spells `sqlite_int64` as `__int64` and
+// `sqlite_uint64` as `unsigned __int64`. Without this expansion,
+// c5 falls back to `int` (4 bytes), which silently truncates every
+// `i64` / `u64` field across sqlite -- including `db->flags`,
+// whose bit-31 `SQLITE_EnableView = 0x80000000` then sign-extends
+// through later widening and trips the `SQLITE_CorruptRdOnly`
+// (HI(0x2) = bit 33) check inside `sqlite3VdbeHalt`, fabricating
+// a SQLITE_CORRUPT for every prepare against a fresh `:memory:`
+// DB. Map to `long long` (8 bytes everywhere) so the LLP64 /
+// cross-CRT path matches what real MSVC produces.
+#define __int64 long long
+
+// MSVC decorator macros third-party headers expect to no-op when
+// their `_MSC_VER` branches are active. None of them affect
+// codegen on c5 (the IAT routes calls regardless of dllimport /
+// inline tagging), and headers emit them BEFORE any include
+// statement could provide them, so they have to be visible the
+// instant the translation unit starts -- hence the `-include`
+// shape.
+#define __forceinline
+#define __inline
+#define _inline
+#define __cdecl
+#define __stdcall
+#define __fastcall
+#define __thiscall
+#define __vectorcall
+#define __nullable
+#define __nonnull
+#define __ptr32
+#define __ptr64
+#define __unaligned
+#define _CRTIMP
+#define _CRT_GUARDOVERFLOW
+#define _Inout_
+#define _In_
+#define _In_opt_
+#define _In_z_
+#define _In_opt_z_
+#define _Out_
+#define _Out_opt_
+#define _Outptr_
+#define _Outptr_opt_
+
+// Function-like decorator macros (`__declspec(x)`, `__pragma(x)`,
+// `_CRT_INSECURE_DEPRECATE(reason)`, ...) expand to nothing. The
+// 1-arg shape covers every form sqlite + the bundled CRT headers
+// emit; none of them rely on argument concatenation or
+// stringification.
+#define __declspec(x)
+#define __pragma(x)
+#define _CRT_INSECURE_DEPRECATE(x)
+#define _CRT_NONSTDC_DEPRECATE(x)
+#define _CRT_OBSOLETE(x)
+#define _CRT_DEPRECATE_TEXT(x)
+#define _Pre_satisfies_(x)
+#define _Post_satisfies_(x)
+
+#endif /* _WIN32 */

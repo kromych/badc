@@ -202,24 +202,6 @@ fn width_typedefs_are_pointer_wide() {
     );
 }
 
-// ---- Per-target long width (#51) ----
-//
-// On Windows (LLP64) `long` should be 4 bytes and `long long`
-// 8; the dialect picks 8 for both and collapses `long long`
-// onto Ty::Long. JIT runs only on LP64 hosts where
-// `sizeof(long) == sizeof(long long) == 8` happens to match
-// the platform ABI, so the bug doesn't surface here. The test
-// panics under `--ignored` so the gap stays visible until
-// per-target long-width plus a separate `Ty::LongLong` lands
-// (and a Windows-target test rig can run the fixture against
-// `__BADC_WINDOWS__`).
-#[test]
-#[ignore = "deferred (gh #15): long width -- Windows LLP64 vs Linux/macOS LP64; long/long long collapsed"]
-fn long_width_per_target() {
-    let _ = jit_fixture_exit("deferred_long_width.c");
-    panic!("(#51) per-target long width unimplemented; Windows-side fixture run is pending");
-}
-
 // ---- PE/x64 struct fp-call (#50) ----
 //
 // Same reasoning as #51: the bug only fires on PE/x64. The

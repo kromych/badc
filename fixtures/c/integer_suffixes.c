@@ -7,9 +7,10 @@
 int main() {
     int u, U, l, L, ull, ULL, llu, LLU, lu;
     int hex_u, hex_l, hex_ull;
-    // Big values need a real 64-bit slot under  -- `int` is 4
-    // bytes and would overflow on assignment.
-    long big_dec, big_hex;
+    // Big values need a real 64-bit slot -- `int` is 4 bytes and
+    // would overflow on assignment, and `long` is only 4 bytes on
+    // LLP64 (Windows). `long long` is 8 bytes on every target.
+    long long big_dec, big_hex;
     int sum;
 
     u = 1u;

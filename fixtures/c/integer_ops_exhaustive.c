@@ -1,5 +1,8 @@
-// Exhaustive coverage of integer operations across the three
-// width bands (`char`, `int`, `long`) and both signednesses. Every
+// Exhaustive coverage of integer operations across the four
+// width bands (`char`, `short`, `int`, `long long`) and both
+// signednesses. `long long` is the portable 64-bit pick: `long`
+// is only 32 bits on Windows LLP64 and would collapse onto the
+// `int` band there. Every
 // signed/unsigned operator in the dialect runs at least once
 // against a value that distinguishes the two semantics: a high-bit
 // pattern that reads as a large positive unsigned and as a small
@@ -39,14 +42,14 @@ int main() {
 
     // 64-bit width.
     {
-        unsigned long u = 0xFFFFFFFFFFFFFFFE;
-        unsigned long one = 1;
+        unsigned long long u = 0xFFFFFFFFFFFFFFFE;
+        unsigned long long one = 1;
         CHECK( u   >  one, "u64 huge > 1");
         CHECK( u   >= one, "u64 huge >= 1");
         CHECK( one <  u,   "u64 1 < huge");
 
-        long s = -2;
-        long one_s = 1;
+        long long s = -2;
+        long long one_s = 1;
         CHECK( one_s > s,  "i64 1 > -2");
         CHECK( s     < 0,  "i64 -2 < 0");
     }
@@ -82,7 +85,7 @@ int main() {
         CHECK(wrap == 0xFFFFFFFF, "u32 1-2 wraps");
     }
     {
-        unsigned long u = 1000;
+        unsigned long long u = 1000;
         u += 415;   CHECK(u == 1415, "u64 += 415");
         u *= 3;     CHECK(u == 4245, "u64 *= 3");
         u /= 5;     CHECK(u == 849,  "u64 /= 5");
@@ -121,8 +124,8 @@ int main() {
         CHECK(sv == 0x80000000u, "u32 1<<31");
     }
     {
-        unsigned long u = 1;
-        CHECK((u << 63) == 0x8000000000000000ul, "u64 1<<63");
+        unsigned long long u = 1;
+        CHECK((u << 63) == 0x8000000000000000ull, "u64 1<<63");
     }
 
     // ------- Mixed signed / unsigned compares -------
@@ -145,20 +148,20 @@ int main() {
         ++uc; CHECK(uc == 255, "u8 ++ to UCHAR_MAX");
         ++uc; CHECK(uc == 0,   "u8 ++ wraps to 0");
 
-        unsigned long ul = 0xFFFFFFFFFFFFFFFE;
+        unsigned long long ul = 0xFFFFFFFFFFFFFFFE;
         ++ul; CHECK(ul == 0xFFFFFFFFFFFFFFFF, "u64 ++ to UMAX");
         ++ul; CHECK(ul == 0,                  "u64 ++ wraps to 0");
     }
 
     // ------- Sizeof per band -------
-    CHECK(sizeof(unsigned char)  == 1, "sizeof(u8)");
-    CHECK(sizeof(short)          == 2, "sizeof(short)");
-    CHECK(sizeof(unsigned short) == 2, "sizeof(u16)");
-    CHECK(sizeof(unsigned int)   == 4, "sizeof(u32)");
-    CHECK(sizeof(unsigned long)  == 8, "sizeof(u64)");
-    CHECK(sizeof(signed char)    == 1, "sizeof(signed char)");
-    CHECK(sizeof(int)            == 4, "sizeof(int)");
-    CHECK(sizeof(long)           == 8, "sizeof(long)");
+    CHECK(sizeof(unsigned char)      == 1, "sizeof(u8)");
+    CHECK(sizeof(short)              == 2, "sizeof(short)");
+    CHECK(sizeof(unsigned short)     == 2, "sizeof(u16)");
+    CHECK(sizeof(unsigned int)       == 4, "sizeof(u32)");
+    CHECK(sizeof(unsigned long long) == 8, "sizeof(u64)");
+    CHECK(sizeof(signed char)        == 1, "sizeof(signed char)");
+    CHECK(sizeof(int)                == 4, "sizeof(int)");
+    CHECK(sizeof(long long)          == 8, "sizeof(long long)");
 
     return 0;
 }

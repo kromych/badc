@@ -192,6 +192,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("signed_cast_extends.c", 0),
     ("fn_ptr_struct_return.c", 0),
     ("stdint_widths.c", 0),
+    ("fd_set_macros.c", 0),
     ("fn_ptr_explicit_deref.c", 42),
     ("sys_addr_in_static_init.c", 42),
     ("libc_struct_buf_size.c", 42),

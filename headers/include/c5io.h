@@ -1,13 +1,13 @@
 // c5io.h -- c5-side reimplementation of formatted output, walking
 // the c5 va_list directly.
 //
-// The c5 va_list is `int *` advancing 16 bytes per slot (see
-// stdarg.h); libc's vprintf / vfprintf expect the host platform's
-// native va_list struct, which on macOS arm64 is a register-save
-// area + an overflow pointer rather than a flat stack walk. Those
-// shapes are incompatible, and bridging them per platform is more
-// fragile than just reimplementing the formatter on top of c5's
-// own primitives.
+// The c5 va_list is a `long long *` cursor walking 16-byte stack
+// slots (see stdarg.h); libc's vprintf / vfprintf expect the host
+// platform's native va_list struct, which on macOS arm64 is a
+// register-save area + an overflow pointer rather than a flat
+// stack walk. Those shapes are incompatible, and bridging them
+// per platform is more fragile than just reimplementing the
+// formatter on top of c5's own primitives.
 //
 // What this header provides:
 //   c5_vfprintf(fd, fmt, ap)   -- format `fmt` to file descriptor
@@ -167,9 +167,15 @@ int c5_vfprintf(int fd, char *fmt, va_list ap) {
                 total = total + c5_emit_int(fd, va_arg(ap, int));
                 i = i + 1;
             } else if (c == 'u') {
-                // %u prints the bit pattern as decimal. For values
-                // with the high bit set this would require 64-bit
-                // unsigned division, which c5 lacks; treat as %d.
+                // %u: print as unsigned decimal. We share the
+                // signed-decimal path (c5_emit_int operates on the
+                // 32-bit `int` slot's bit pattern); values with the
+                // high bit set come out as the negative-equivalent
+                // signed decimal rather than the strict unsigned
+                // value. Strict %u for full 64-bit values needs
+                // working 64-bit unsigned division, which today
+                // produces wrong results for high-bit-set inputs --
+                // gh #43 tracks the codegen fix.
                 total = total + c5_emit_int(fd, va_arg(ap, int));
                 i = i + 1;
             } else if (c == 'x') {

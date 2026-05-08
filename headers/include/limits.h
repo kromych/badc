@@ -1,11 +1,17 @@
 // limits.h -- compile-time limits for integer types.
 //
-// c5 collapses every integer to a 64-bit signed word, so the
-// "real" limits are all 64-bit. We expose the conventional
-// 32-bit values for INT_MAX / INT_MIN / UINT_MAX so portable
-// programs that test against `INT_MAX` for overflow guards see
-// the value they expect; programs that need a true 64-bit
-// limit reach for `<stdint.h>` (`INT64_MAX` etc.).
+// `<stdint.h>` exposes fixed-width values (`INT32_MAX`,
+// `INT64_MAX`, ...). This header gives the platform-named limits
+// (`INT_MAX`, `LONG_MAX`, ...) which depend on the data model:
+//
+//   * `int` is 4 bytes on every supported target.
+//   * `long` is 8 bytes on LP64 (Linux / macOS), 4 bytes on
+//     LLP64 (Windows). The LONG_* values branch on
+//     `__BADC_WINDOWS__` accordingly.
+//   * `long long` is 8 bytes everywhere.
+//
+// Programs that want a target-independent 64-bit limit should
+// reach for `INT64_MAX` (in stdint.h) or `LLONG_MAX`.
 #ifndef _C5_LIMITS_H
 #define _C5_LIMITS_H
 
@@ -26,13 +32,22 @@
 #define INT_MAX     2147483647
 #define UINT_MAX    4294967295
 
+#ifdef __BADC_WINDOWS__
+// LLP64: long is 32 bits, same range as int.
+#define LONG_MIN  INT_MIN
+#define LONG_MAX  INT_MAX
+#define ULONG_MAX UINT_MAX
+#else
+// LP64: long is 64 bits.
 #define LONG_MIN   (-9223372036854775807-1)
 #define LONG_MAX     9223372036854775807
 #define ULONG_MAX   18446744073709551615
+#endif
 
-#define LLONG_MIN  LONG_MIN
-#define LLONG_MAX  LONG_MAX
-#define ULLONG_MAX ULONG_MAX
+// long long is 8 bytes on every target.
+#define LLONG_MIN  (-9223372036854775807-1)
+#define LLONG_MAX    9223372036854775807
+#define ULLONG_MAX  18446744073709551615
 
 #define PATH_MAX    4096
 #define NAME_MAX    255

@@ -1,10 +1,11 @@
 // time.h -- coarse-grained clock interfaces.
 //
-// `time_t` is just `int` in c5 (everything is 64-bit signed). The
-// finer-grained POSIX shapes (`struct timespec`, `struct timeval`)
-// are exposed as opaque structs so programs can pass through
-// pointers without c5 needing to model the exact layout (which
-// differs across libc versions anyway).
+// `time_t` is 8 bytes on every supported target -- `long` on LP64
+// (Linux/macOS), `long long` on LLP64 (Windows). The finer-grained
+// POSIX shapes (`struct timespec`, `struct timeval`) carry a
+// `time_t`-sized seconds count, so their layout matches the libc
+// view byte-for-byte and `clock_gettime`/`gettimeofday` can write
+// into them directly.
 
 #pragma once
 
@@ -12,15 +13,33 @@
 #define CLOCK_REALTIME 0
 #define CLOCK_MONOTONIC 1
 
+// `tv_sec` is `time_t` per POSIX; we just inline the per-target
+// width so the typedef order doesn't matter. `tv_nsec` / `tv_usec`
+// are signed long on POSIX (8 on LP64, 4 on LLP64), which we
+// likewise spell out per target. `time_t` itself is declared
+// alongside the binding pragmas below, since `clock_t` shares
+// the same width.
+#ifdef __BADC_WINDOWS__
 struct timespec {
-    int tv_sec;
-    int tv_nsec;
+    long long tv_sec;
+    long long tv_nsec;
 };
 
 struct timeval {
-    int tv_sec;
-    int tv_usec;
+    long long tv_sec;
+    long long tv_usec;
 };
+#else
+struct timespec {
+    long tv_sec;
+    long tv_nsec;
+};
+
+struct timeval {
+    long tv_sec;
+    long tv_usec;
+};
+#endif
 
 // `struct tm` exposed as an opaque mirror of the libc shape so
 // programs that walk the broken-down components (`tm_year`,

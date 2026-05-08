@@ -39,13 +39,13 @@
 
 #pragma once
 
-// c5 doesn't have typedef, so va_list is a #define that expands to
-// the underlying `long long *` type. `va_list ap;` becomes
-// `long long * ap;`. Storing the cursor as `long long *` means
-// pointer arithmetic strides 8 bytes everywhere -- one half of a
-// c5 16-byte slot -- so the `+2` in the macros below advances
-// exactly one slot on LP64 and LLP64 alike.
-#define va_list            long long *
+// `va_list` is just a cursor over the c5 stack. Storing it as
+// `long long *` means pointer arithmetic strides 8 bytes
+// everywhere -- one half of a c5 16-byte slot -- so the `+2` in
+// the macros below advances exactly one slot on LP64 (Linux/macOS)
+// and LLP64 (Windows) alike. `int *` (4-byte stride) and `long *`
+// (4 on Windows, 8 on LP64) would both land mid-slot somewhere.
+typedef long long *va_list;
 
 #define va_start(ap, last) ap = ((long long *)&(last)) + 2
 #define va_arg(ap, T)      (ap = ap + 2, *(T *)(ap - 2))

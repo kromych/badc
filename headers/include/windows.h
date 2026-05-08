@@ -42,12 +42,68 @@
 // for safety / future fields.
 #define CRITICAL_SECTION_SIZE 64
 
-// HANDLE on Win64 is `void *` (8 bytes); we declare it as
-// `long long` so c5's storage and load match the platform width.
-// Same for SIZE_T (memory sizes via VirtualAlloc / VirtualFree
-// take SIZE_T = 8 bytes). DWORD-shaped values (Sleep, dwFlags,
-// thread IDs) stay `int` -- Windows DWORD is 4 bytes everywhere.
-typedef long long HANDLE;
+// Windows API integer typedefs. The widths are pinned by the
+// platform ABI -- DWORD is 32 bits, WORD 16, BYTE 8 -- so c5's
+// struct layouts match what kernel32 / msvcrt expect when
+// reading the same struct on the other side.
+//
+//   * HANDLE / SIZE_T / LPVOID / pointers: 8 bytes (Win64 LLP64).
+//   * DWORD / BOOL / LONG: 4 bytes (= c5's `int`).
+//   * WORD / SHORT: 2 bytes.
+//   * BYTE: 1 byte.
+//   * UINT_PTR / ULONG_PTR / DWORD_PTR / LARGE_INTEGER: 8 bytes.
+//
+// The header only declares the surface sqlite + the bundled c5
+// fixtures actually reach for; extend on demand. Wide-string
+// types (LPWSTR / LPCWSTR) point at unsigned short rather than
+// `wchar_t` because c5 doesn't have a separate wchar_t typedef
+// and msvcrt's wchar is 16-bit anyway.
+typedef long long          HANDLE;
+typedef long long          SIZE_T;
+typedef long long          LARGE_INTEGER;
+typedef long long          ULONG_PTR;
+typedef long long          UINT_PTR;
+typedef long long          DWORD_PTR;
+typedef long long          LONG_PTR;
+typedef int                BOOL;
+typedef int                LONG;
+typedef int                HRESULT;
+typedef unsigned int       DWORD;
+typedef unsigned int       UINT;
+typedef unsigned int       ULONG;
+typedef short              SHORT;
+typedef unsigned short     WORD;
+typedef unsigned short     USHORT;
+typedef unsigned char      BYTE;
+typedef unsigned char      UCHAR;
+typedef void              *LPVOID;
+typedef void              *PVOID;
+typedef char              *LPSTR;
+typedef char              *LPCSTR;
+typedef unsigned short    *LPWSTR;
+typedef unsigned short    *LPCWSTR;
+
+// FILETIME / SYSTEMTIME -- the two structs sqlite's Windows VFS
+// uses (file timestamps + broken-down localtime fallback). Layout
+// matches the Win64 ABI byte-for-byte so kernel32 calls writing
+// these can hand back results c5 can read.
+struct _FILETIME {
+    DWORD dwLowDateTime;
+    DWORD dwHighDateTime;
+};
+typedef struct _FILETIME FILETIME;
+
+struct _SYSTEMTIME {
+    WORD wYear;
+    WORD wMonth;
+    WORD wDayOfWeek;
+    WORD wDay;
+    WORD wHour;
+    WORD wMinute;
+    WORD wSecond;
+    WORD wMilliseconds;
+};
+typedef struct _SYSTEMTIME SYSTEMTIME;
 
 char *VirtualAlloc(char *addr, long long size, int type, int protect);
 int VirtualProtect(char *addr, long long size, int new_protect, int *old_protect);

@@ -165,18 +165,17 @@ jobs:
           cargo build --release --locked
           ./demos/sqlite3/smoke.sh
 
-      - name: sqlite3 amalgamation smoke (windows; expected-failing)
+      - name: sqlite3 amalgamation smoke (windows)
         # Same script, run under Git Bash (preinstalled on every
-        # github-hosted Windows runner). Marked
-        # `continue-on-error: true` so the lane stays a *signal*
-        # rather than a gate: it currently fails because the c5
-        # Windows port has gaps (missing windows.h shim, MSVC
-        # intrinsics like `__umulh`, libc data-globals on Windows
-        # arm, etc.). Once the gaps close, the lane goes green
-        # and we know parity is reached -- gh #66 tracks the
-        # remaining work.
+        # github-hosted Windows runner). The Windows port is now
+        # at parity with the unix lanes -- continue-on-error has
+        # been dropped so a regression on either Windows runner
+        # blocks merges. Tracked-but-resolved: __umulh /
+        # _umul128 intrinsics (sidestepped via
+        # SQLITE_DISABLE_INTRINSIC), windows.h types
+        # (typedef'd in the bundled header), libc data globals
+        # on Windows arm (gh #16).
         if: matrix.os == 'windows-latest' || matrix.os == 'windows-11-arm'
-        continue-on-error: true
         shell: bash
         run: |
           cargo build --release --locked

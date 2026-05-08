@@ -28,19 +28,3 @@
  #define sqlite3_fsetmode(F,X)   /*no-op*/
  
  #endif
-@@ -36432,7 +36451,14 @@
-   stdin_is_interactive = isatty(0);
-   stdout_is_console = isatty(1);
- #endif
--  atexit(sayAbnormalExit);
-+  /* badc/c5 patch: glibc on Linux doesn't export `atexit` as a
-+  ** regular dynamic symbol -- `dlsym(libc.so.6, "atexit")` returns
-+  ** NULL because atexit() is an inline stub that calls the per-DSO
-+  ** `__cxa_atexit(...)`. macOS exports `_atexit` and the call would
-+  ** work there, but the simplest portable shape is to skip the call
-+  ** entirely; sayAbnormalExit only runs after a signal-driven
-+  ** interrupt anyway, which never fires in the smoke harness. */
-+  /* atexit(sayAbnormalExit); */
- #ifdef SQLITE_DEBUG
-   mem_main_enter = sqlite3_memory_used();
- #endif

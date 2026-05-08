@@ -73,7 +73,16 @@
 #pragma binding(libc::bsearch, "bsearch")
 #pragma binding(libc::rand,    "rand")
 #pragma binding(libc::srand,   "srand")
-#pragma binding(libc::atexit,  "atexit")
+// glibc doesn't export `atexit` as a regular dynamic symbol --
+// it's an inline that calls per-DSO `__cxa_atexit(handler, NULL,
+// dso_handle)`, so `dlsym(libc.so.6, "atexit")` returns NULL and
+// any c5 binary that calls atexit fails at exec with
+// "undefined symbol: atexit". Bind the underlying entrypoint
+// directly and route atexit() through a header-side macro
+// (declared further down), filling in NULL for both the closure
+// arg and the dso handle. NULL as dso_handle is glibc's spelling
+// for "register on the main program's exit chain."
+#pragma binding(libc::__cxa_atexit, "__cxa_atexit")
 #pragma binding(libc::strtoul, "strtoul")
 #pragma binding(libc::mkstemp, "mkstemp")
 #pragma binding(libc::mkdtemp, "mkdtemp")
@@ -132,7 +141,16 @@ int qsort(char *base, int n, int size, int *cmp);
 char *bsearch(char *key, char *base, int n, int size, int *cmp);
 int rand();
 int srand(int seed);
+#ifdef __linux__
+// See the binding-block comment above. `__cxa_atexit` takes a
+// 1-arg handler signature `void (*)(void *)`; c5 callees with
+// 0 declared params silently ignore the host's first arg
+// register.
+int __cxa_atexit(int *handler, char *arg, char *dso);
+#define atexit(handler) __cxa_atexit((handler), 0, 0)
+#else
 int atexit(int *handler);
+#endif
 int strtoul(char *s, char **endp, int base);
 int mkstemp(char *templ);
 char *mkdtemp(char *templ);

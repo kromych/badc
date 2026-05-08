@@ -13,6 +13,7 @@
 demos/sqlite3/*
 !demos/sqlite3/setup.sh
 !demos/sqlite3/smoke.sh
+!demos/sqlite3/diag.c
 !demos/sqlite3/patches/
 !demos/sqlite3/README.md
 hello

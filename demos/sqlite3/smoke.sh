@@ -267,6 +267,40 @@ SHELL_OPT="${WORK}/sqlite3shell.opt${EXE_SUFFIX}"
 build_shell "${SHELL_NOOPT}"      || { echo "smoke FAIL: build (no -O) failed" >&2; exit 1; }
 build_shell "${SHELL_OPT}"     -O || { echo "smoke FAIL: build (-O) failed" >&2; exit 1; }
 
+# `diag.c` is a tiny stderr-tracing shell-shim that exercises the
+# sqlite C API against `:memory:` over piped stdin without any of
+# shell.c's tty / line-editor / console-mode plumbing. When
+# BADC_RUN_DIAG=1 (set by the Windows CI lane), build + run it
+# with the in-memory smoke input so the CI log captures
+# checkpoint stderr from each sqlite step. If the regular shell
+# emits empty stdout but diag prints rows, the bug is shell.c-
+# specific; if both are silent, the bug is below shell.c.
+if [ "${BADC_RUN_DIAG:-}" = "1" ]; then
+    DIAG_BIN="${WORK}/sqlite3diag${EXE_SUFFIX}"
+    DIAG_COMBINED="${WORK}/sqlite3diag_combined.c"
+    cat "${SQLITE_DIR}/sqlite3.c" "${SQLITE_DIR}/diag.c" > "${DIAG_COMBINED}"
+    "${BADC}" -include msvc_compat.h "${DIAG_COMBINED}" -o "${DIAG_BIN}" \
+        -DSQLITE_OMIT_LOAD_EXTENSION \
+        -DSQLITE_THREADSAFE=0 \
+        -DSQLITE_DEFAULT_MEMSTATUS=0 \
+        -DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1 \
+        -DSQLITE_DQS=0 \
+        -DSQLITE_OMIT_DEPRECATED \
+        -DSQLITE_OMIT_PROGRESS_CALLBACK \
+        -DSQLITE_OMIT_SHARED_CACHE \
+        -DSQLITE_OMIT_AUTOINIT \
+        -DSQLITE_WITHOUT_ZONEMALLOC=1 \
+        -DSQLITE_ENABLE_LOCKING_STYLE=0 \
+        -DSQLITE_DISABLE_INTRINSIC \
+        -DSQLITE_OMIT_SEH || { echo "diag: build failed" >&2; }
+    if [ -x "${DIAG_BIN}" ]; then
+        echo "=== diag run (in-memory smoke input) ===" >&2
+        printf "CREATE TABLE t(x INTEGER, y TEXT);\nINSERT INTO t VALUES(-7,'neg'),(1,'hello'),(2,'world');\nSELECT * FROM t;\n.quit\n" \
+            | "${DIAG_BIN}" || echo "=== diag exit=$? ===" >&2
+        echo "=== /diag run ===" >&2
+    fi
+fi
+
 overall=0
 run_scenarios "no-O" "${SHELL_NOOPT}" || overall=1
 run_scenarios "-O"   "${SHELL_OPT}"   || overall=1

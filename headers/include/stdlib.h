@@ -1,12 +1,18 @@
 // stdlib.h -- general-purpose libc surface: allocator, conversions,
 // process control.
 //
-// `exit` on Windows binds to `kernel32!ExitProcess`, which doesn't
-// run msvcrt's atexit / stream flushing. For a c5 program that's
-// what you usually want -- the alternative is `msvcrt!exit` which
-// pulls in CRT init the rest of our binary doesn't perform. If a
-// fixture starts caring about stdout being flushed on exit on
-// Windows, that's the lever to pull.
+// `exit` on Windows binds to `msvcrt!exit`, which runs the CRT's
+// atexit chain + flushes stdout / stderr before terminating. The
+// previous binding (`kernel32!ExitProcess`) was chosen back when
+// no fixture depended on stdio flushing -- a fast, no-init exit
+// for the small fixtures that just `return 0`. sqlite's shell
+// changed that: a piped `printf "select 1;" | sqlite3 :memory:`
+// run produced empty output with `ExitProcess` because every
+// SELECT row sat in stdout's fully-buffered pipe and got
+// discarded on the unflushed exit. msvcrt's `exit` is already
+// loaded for everything else we link, so the CRT-init concern
+// from the original comment doesn't apply to programs that
+// touch stdio at all.
 
 #pragma once
 
@@ -118,7 +124,7 @@
 #pragma binding(msvcrt::bsearch,   "bsearch")
 #pragma binding(msvcrt::rand,      "rand")
 #pragma binding(msvcrt::srand,     "srand")
-#pragma binding(kernel32::exit,    "ExitProcess")
+#pragma binding(msvcrt::exit,      "exit")
 #endif
 
 char *malloc(int size);

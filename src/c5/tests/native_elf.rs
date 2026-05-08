@@ -96,8 +96,29 @@ fn unique_temp_path(prefix: &str, stem: &str) -> std::path::PathBuf {
 /// the kernel's writeback isn't strictly synchronous and parallel
 /// `cargo test` threads can amplify the window.
 fn exec_with_retry(path: &Path) -> std::io::Result<std::process::Output> {
+    exec_with_retry_envs::<&str, &str>(path, &[])
+}
+
+/// Same as [`exec_with_retry`] but with optional environment-variable
+/// pairs forwarded to the spawned process. Lets `getenv_value` etc.
+/// share the ETXTBUSY back-off without dropping their `.env(...)`
+/// configuration; running on the ubuntu-24.04-arm GHA runner makes
+/// the race tight enough that `Command::new(...).output()` straight
+/// up faulted with code 26 mid-suite (pre-fix CI run 25561368984).
+fn exec_with_retry_envs<K, V>(path: &Path, envs: &[(K, V)]) -> std::io::Result<std::process::Output>
+where
+    K: AsRef<std::ffi::OsStr>,
+    V: AsRef<std::ffi::OsStr>,
+{
+    let build = || {
+        let mut cmd = Command::new(path);
+        for (k, v) in envs.iter() {
+            cmd.env(k, v);
+        }
+        cmd
+    };
     for attempt in 0..10 {
-        match Command::new(path).output() {
+        match build().output() {
             Ok(o) => return Ok(o),
             Err(e) if e.raw_os_error() == Some(26) => {
                 // ETXTBUSY -- back off and retry.
@@ -107,7 +128,7 @@ fn exec_with_retry(path: &Path) -> std::io::Result<std::process::Output> {
         }
     }
     // One last attempt with a propagated error.
-    Command::new(path).output()
+    build().output()
 }
 
 fn set_executable(path: &Path) {
@@ -434,14 +455,31 @@ fn file_io_natively() {
     let src = std::fs::read_to_string(&path).unwrap();
     let program = Compiler::new(src).compile().expect("compile file_io.c");
     let bytes = emit_native(&program, Target::LinuxAarch64).expect("emit_native");
-    let bin_path = std::env::temp_dir().join("badc-elf-test-file_io.bin");
+    let bin_path = unique_temp_path("badc-elf-test-file_io", "file_io");
     std::fs::write(&bin_path, &bytes).unwrap();
     set_executable(&bin_path);
 
-    let output = Command::new(&bin_path)
-        .current_dir(std::env::temp_dir())
-        .output()
-        .expect("exec native binary");
+    // ETXTBUSY-tolerant exec; retry helper carries `current_dir`.
+    let mut last: Option<std::io::Result<std::process::Output>> = None;
+    for attempt in 0..10 {
+        let mut cmd = Command::new(&bin_path);
+        cmd.current_dir(std::env::temp_dir());
+        match cmd.output() {
+            Ok(o) => {
+                last = Some(Ok(o));
+                break;
+            }
+            Err(e) if e.raw_os_error() == Some(26) => {
+                std::thread::sleep(std::time::Duration::from_millis(10 * (attempt + 1)));
+                last = Some(Err(e));
+            }
+            Err(e) => {
+                last = Some(Err(e));
+                break;
+            }
+        }
+    }
+    let output = last.unwrap().expect("exec native binary");
     let _ = std::fs::remove_file(&bin_path);
     let _ = std::fs::remove_file(&dummy_path);
     assert_eq!(output.status.code(), Some(0));
@@ -458,13 +496,11 @@ fn getenv_value_natively() {
         .compile()
         .expect("compile getenv_value.c");
     let bytes = emit_native(&program, Target::LinuxAarch64).expect("emit_native");
-    let bin_path = std::env::temp_dir().join("badc-elf-test-getenv.bin");
+    let bin_path = unique_temp_path("badc-elf-test-getenv", "getenv_value");
     std::fs::write(&bin_path, &bytes).unwrap();
     set_executable(&bin_path);
 
-    let output = Command::new(&bin_path)
-        .env("C4RS_TEST_GETENV", "Vox")
-        .output()
+    let output = exec_with_retry_envs(&bin_path, &[("C4RS_TEST_GETENV", "Vox")])
         .expect("exec native binary");
     let _ = std::fs::remove_file(&bin_path);
     assert_eq!(output.status.code(), Some('V' as i32));
@@ -483,14 +519,30 @@ fn original_c4_compiles_and_runs_hello_natively() {
     let src = std::fs::read_to_string(&path).unwrap();
     let program = Compiler::new(src).compile().expect("compile c4.c");
     let bytes = emit_native(&program, Target::LinuxAarch64).expect("emit_native");
-    let bin_path = std::env::temp_dir().join("badc-elf-test-c4.bin");
+    let bin_path = unique_temp_path("badc-elf-test-c4", "c4");
     std::fs::write(&bin_path, &bytes).unwrap();
     set_executable(&bin_path);
 
-    let output = Command::new(&bin_path)
-        .arg(concat!(env!("CARGO_MANIFEST_DIR"), "/hello.c"))
-        .output()
-        .expect("exec native binary");
+    // ETXTBUSY-tolerant exec; retry helper carries the argv.
+    let arg = concat!(env!("CARGO_MANIFEST_DIR"), "/hello.c");
+    let mut last: Option<std::io::Result<std::process::Output>> = None;
+    for attempt in 0..10 {
+        match Command::new(&bin_path).arg(arg).output() {
+            Ok(o) => {
+                last = Some(Ok(o));
+                break;
+            }
+            Err(e) if e.raw_os_error() == Some(26) => {
+                std::thread::sleep(std::time::Duration::from_millis(10 * (attempt + 1)));
+                last = Some(Err(e));
+            }
+            Err(e) => {
+                last = Some(Err(e));
+                break;
+            }
+        }
+    }
+    let output = last.unwrap().expect("exec native binary");
     let _ = std::fs::remove_file(&bin_path);
     assert_eq!(
         output.status.code(),

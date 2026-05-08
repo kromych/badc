@@ -55,6 +55,15 @@ cat "${SQLITE_DIR}/sqlite3.c" "${SQLITE_DIR}/shell.c" > "${COMBINED}"
 build_shell() {
     local out_path="$1"
     shift
+    # SQLITE_DISABLE_INTRINSIC: sqlite uses MSVC's `__umulh` /
+    # `_umul128` intrinsics on `_WIN64` (and clang/gcc's
+    # `__uint128_t` on those compilers when present). c5 has
+    # neither -- the portable C fallback path inside
+    # sqlite3Multiply128 / sqlite3Multiply160 works fine for
+    # both, so we just turn off the intrinsic shortcut. Defined
+    # everywhere for symmetry; on Linux/macOS it's a tiny
+    # codesize win (the fallback is slightly bigger than the
+    # intrinsic), nothing more.
     "${BADC}" "$@" "${COMBINED}" -o "${out_path}" \
         -DSQLITE_OMIT_LOAD_EXTENSION \
         -DSQLITE_THREADSAFE=0 \
@@ -66,7 +75,8 @@ build_shell() {
         -DSQLITE_OMIT_SHARED_CACHE \
         -DSQLITE_OMIT_AUTOINIT \
         -DSQLITE_WITHOUT_ZONEMALLOC=1 \
-        -DSQLITE_ENABLE_LOCKING_STYLE=0
+        -DSQLITE_ENABLE_LOCKING_STYLE=0 \
+        -DSQLITE_DISABLE_INTRINSIC
 }
 
 run_scenarios() {
@@ -135,6 +145,81 @@ run_scenarios() {
     if [ "${real_out}" != "${real_expect}" ]; then
         echo "smoke FAIL [${label}]: REAL aggregate mismatch" >&2
         diff <(echo "${real_expect}") <(echo "${real_out}") >&2 || true
+        fail=1
+    fi
+
+    # ---- string built-ins + JOIN coverage ----
+    # Exercises:
+    #   * string functions: substr / replace / lower / upper / trim /
+    #     ltrim / rtrim / printf -- each is a separate codepath in
+    #     sqlite's func.c, dispatched via the OP_Function vdbe op.
+    #   * INNER JOIN ... ON: query planner picks a nested-loop join
+    #     and the row callback path threads result columns from
+    #     two cursors.
+    #   * LEFT JOIN: NULL-fill for unmatched right-side rows;
+    #     proves the type-coercion path for IS NULL ordering.
+    #   * group_concat: variable-length string aggregator that
+    #     uses sqlite3_str_appendf (and through it the c5-side
+    #     vsnprintf via the stdio.h macro).
+    #   * UNION ALL: row-set merge; tests the multiple-source
+    #     iterator dispatch.
+    # Built via printf so trailing whitespace on `  alice  ` rows
+    # round-trips exactly -- a HEREDOC-style string literal would
+    # leak through editor / VCS auto-trim and silently shift the
+    # diff baseline.
+    local strjoin_out strjoin_expect
+    strjoin_out="$(printf "CREATE TABLE u(id INTEGER, name TEXT);\nINSERT INTO u VALUES(1,'  alice  '),(2,'BOB'),(3,'Carol');\nSELECT id,upper(trim(name)),length(name),substr(name,1,3) FROM u ORDER BY id;\nSELECT replace('hello world','world','sqlite');\nSELECT lower('MiXeD'),ltrim('   pad'),rtrim('pad   ');\nSELECT group_concat(name,'/') FROM u;\nCREATE TABLE p(uid INTEGER, lang TEXT);\nINSERT INTO p VALUES(1,'rust'),(1,'c'),(3,'go');\nSELECT u.name,p.lang FROM u INNER JOIN p ON u.id=p.uid ORDER BY u.id,p.lang;\nSELECT u.name,p.lang FROM u LEFT JOIN p ON u.id=p.uid ORDER BY u.id,p.lang;\nSELECT name FROM u WHERE id=1 UNION ALL SELECT name FROM u WHERE id=3 ORDER BY name;\n.quit\n" | "${shell_bin}")"
+    strjoin_expect="$(printf '1|ALICE|9|  a\n2|BOB|3|BOB\n3|CAROL|5|Car\nhello sqlite\nmixed|pad|pad\n  alice  /BOB/Carol\n  alice  |c\n  alice  |rust\nCarol|go\n  alice  |c\n  alice  |rust\nBOB|\nCarol|go\n  alice  \nCarol')"
+    if [ "${strjoin_out}" != "${strjoin_expect}" ]; then
+        echo "smoke FAIL [${label}]: string/join output mismatch" >&2
+        diff <(echo "${strjoin_expect}") <(echo "${strjoin_out}") >&2 || true
+        fail=1
+    fi
+
+    # ---- WITH RECURSIVE + transaction + introspection ----
+    # Exercises:
+    #   * WITH RECURSIVE: vdbe builds an internal table and loops
+    #     until the recursive arm produces no new rows. Hits the
+    #     OP_Yield / OP_NextEphemeral path that the per-row eval
+    #     and integer-arith fixes (gh #34, gh #37) underwrote.
+    #   * BEGIN / ROLLBACK: full WAL-less rollback restores prior
+    #     state from the rollback journal -- relies on file I/O
+    #     working end-to-end, which the file-backed smoke also
+    #     covers but rollback adds the journal-replay path.
+    #   * UPDATE ... WHERE / DELETE ... WHERE multi-row: the
+    #     vdbe row-update loop with cursor seek.
+    #   * `.tables` and `.schema` dot-commands (via cli_printf
+    #     -> sqlite3_vfprintf -> c5 vfprintf): proves the format
+    #     specifier handling on tabular output and metadata
+    #     queries.
+    #
+    # Only one WITH RECURSIVE per scenario today: under -O a
+    # second WITH RECURSIVE following the first silently drops
+    # all subsequent queries. Tracked as gh #30; restore the
+    # fib-shape recursion here once that lands.
+    local cte_out cte_expect
+    cte_out="$(printf "CREATE TABLE k(v INTEGER);\nINSERT INTO k VALUES(10),(20),(30),(40),(50);\nWITH RECURSIVE c(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM c WHERE n<5) SELECT n,n*n FROM c;\nBEGIN;\nUPDATE k SET v=v+100 WHERE v>=30;\nSELECT v FROM k ORDER BY v;\nROLLBACK;\nSELECT v FROM k ORDER BY v;\nDELETE FROM k WHERE v>20;\nSELECT count(*) FROM k;\n.tables\nCREATE TABLE meta(id INTEGER PRIMARY KEY, note TEXT);\n.schema meta\n.quit\n" | "${shell_bin}")"
+    cte_expect="1|1
+2|4
+3|9
+4|16
+5|25
+10
+20
+130
+140
+150
+10
+20
+30
+40
+50
+2
+k
+CREATE TABLE meta(id INTEGER PRIMARY KEY, note TEXT);"
+    if [ "${cte_out}" != "${cte_expect}" ]; then
+        echo "smoke FAIL [${label}]: CTE / txn / introspection mismatch" >&2
+        diff <(echo "${cte_expect}") <(echo "${cte_out}") >&2 || true
         fail=1
     fi
 

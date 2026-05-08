@@ -300,15 +300,23 @@ if [ "${BADC_RUN_DIAG:-}" = "1" ]; then
             file "${DIAG_BIN}" >&2 || true
         fi
         echo "=== diag run (in-memory smoke input) ===" >&2
-        # Direct invocation (no pipe) first to probe the loader --
-        # exit-127 from bash would otherwise hide whether the binary
-        # itself rejected stdin or never started. Then the piped run
-        # for actual checkpoint output.
+        # Wrap each invocation in a `set +e` block: the smoke
+        # script otherwise runs under `set -e -o pipefail`, so a
+        # non-zero exit from the diag binary kills the script
+        # before the regular shell smoke gets a chance to run --
+        # which loses the diff output for the actual lane the
+        # CI step is gated on.
+        set +e
+        # Direct invocation (no pipe) first to probe the loader.
+        # /dev/null on stdin so it doesn't hang waiting for input.
         "${DIAG_BIN}" </dev/null
-        echo "=== diag direct exit=$? ===" >&2
+        ddir=$?
+        echo "=== diag direct exit=${ddir} ===" >&2
         printf "CREATE TABLE t(x INTEGER, y TEXT);\nINSERT INTO t VALUES(-7,'neg'),(1,'hello'),(2,'world');\nSELECT * FROM t;\n.quit\n" \
             | "${DIAG_BIN}"
-        echo "=== diag piped exit=$? ===" >&2
+        dpip=$?
+        echo "=== diag piped exit=${dpip} ===" >&2
+        set -e
         echo "=== /diag run ===" >&2
     else
         echo "=== diag binary not produced at ${DIAG_BIN} ===" >&2

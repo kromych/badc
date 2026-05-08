@@ -1897,10 +1897,15 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
     // delta when it walks the rebase opcode stream below.
     for r in &build.code_relocs {
         let bc_pc = r.target_bc_pc as usize;
+        // Prefer the per-function arg-shuffling thunk; see pe.rs's
+        // matching comment. AAPCS64 doesn't require this on its own
+        // but threading both initializer paths through the same
+        // thunk lookup keeps the per-format writers uniform.
         let native_off = build
-            .bytecode_to_native
-            .get(bc_pc)
+            .func_thunk_offsets
+            .get(&bc_pc)
             .copied()
+            .or_else(|| build.bytecode_to_native.get(bc_pc).copied())
             .unwrap_or(usize::MAX);
         if native_off == usize::MAX {
             return Err(C5Error::Compile(format!(
@@ -1997,6 +2002,7 @@ mod tests {
             data_fixups: Vec::new(),
             func_fixups: Vec::new(),
             bytecode_to_native: Vec::new(),
+            func_thunk_offsets: alloc::collections::BTreeMap::new(),
             imports: ResolvedImports {
                 imports: vec![ResolvedImport {
                     binding_idx: 0,

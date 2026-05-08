@@ -351,6 +351,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("long_long_distinct.c", 0),
     ("signed_cast_extends.c", 0),
     ("fn_ptr_struct_return.c", 0),
+    ("static_init_struct_fp_call.c", 0),
     ("stdint_widths.c", 0),
     ("fd_set_macros.c", 0),
     ("fn_ptr_explicit_deref.c", 42),

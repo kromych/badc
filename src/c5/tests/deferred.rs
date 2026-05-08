@@ -202,18 +202,6 @@ fn width_typedefs_are_pointer_wide() {
     );
 }
 
-// ---- PE/x64 struct fp-call (#50) ----
-//
-// Same reasoning as #51: the bug only fires on PE/x64. The
-// fixture passes on JIT today; panic so the issue stays in
-// the --ignored failure list.
-#[test]
-#[ignore = "deferred (gh #14): function-pointer call through struct field returns wrong on PE/x64"]
-fn struct_fp_call_per_target() {
-    let _ = jit_fixture_exit("deferred_struct_fp_call.c");
-    panic!("(#50) PE/x64 struct fp-call repro pending; JIT lane passes the fixture in isolation");
-}
-
 // ---- libc data globals on Windows (stdin/stdout/stderr) ----
 //
 // `__c5_lazy_stream` in stdio.h has #ifdef arms for `__APPLE__`

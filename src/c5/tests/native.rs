@@ -352,6 +352,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("signed_cast_extends.c", 0),
     ("fn_ptr_struct_return.c", 0),
     ("static_init_cast_funcptr.c", 0),
+    ("static_init_struct_fp_call.c", 0),
     ("stdint_widths.c", 0),
     ("fd_set_macros.c", 0),
     ("fn_ptr_explicit_deref.c", 42),

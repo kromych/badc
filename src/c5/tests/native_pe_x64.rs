@@ -392,12 +392,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("function_pointer_typedefs.c", 0),
     ("unions_basic.c", 0),
     ("array_initializers.c", 0),
-    // struct_initializers.c regresses on PE/x64 -- the
-    // function-pointer call through a struct field returns the
-    // wrong value (`fn(2, 3) != 5`). Linux x64 + macOS arm64
-    // pass the same fixture; tracked as deferred (#50). PE/arm64
-    // still includes it (passes).
-    // ("struct_initializers.c", 0),
+    ("struct_initializers.c", 0),
     ("enum_tag_types.c", 0),
     ("bitfields.c", 0),
     ("static_locals.c", 0),
@@ -407,6 +402,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("long_long_distinct.c", 0),
     ("signed_cast_extends.c", 0),
     ("fn_ptr_struct_return.c", 0),
+    ("static_init_struct_fp_call.c", 0),
     ("stdint_widths.c", 0),
     ("fd_set_macros.c", 0),
     ("fn_ptr_explicit_deref.c", 42),

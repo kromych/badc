@@ -1355,6 +1355,18 @@ pub(super) fn lower(
     for (_, target_bc_pc) in &pending_func_fixups {
         addr_taken.insert(*target_bc_pc);
     }
+    // Static-init function-pointer slots (`static fp_t fp = func;`,
+    // dispatch tables, etc.) also need a thunk on Win64: the slot's
+    // value gets called via Jsri, and the lowering allocates 32 bytes
+    // of shadow space before the call. Without a thunk to re-spill
+    // the host register args back onto the c5 stack, the callee's
+    // `[rbp+16]` reads the shadow region instead of the args. SysV
+    // and AAPCS64 work without thunks because their Jsri lowering
+    // doesn't disturb rsp, but the writers all share this map so the
+    // thunk gets baked into every initializer slot regardless.
+    for r in &program.code_relocs {
+        addr_taken.insert(r.target_bc_pc as usize);
+    }
     for &func_pc in &addr_taken {
         let n_params = param_count_for_func(&program.text, func_pc);
         if n_params == 0 {
@@ -1419,6 +1431,7 @@ pub(super) fn lower(
         data_fixups,
         func_fixups,
         bytecode_to_native,
+        func_thunk_offsets: thunk_for_func,
         // Set by `lower_for` after this returns; see the matching
         // comment on the aarch64 lowering's `Build` construction.
         imports: super::ResolvedImports::default(),

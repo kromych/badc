@@ -1206,6 +1206,18 @@ pub(super) fn lower(
     for (_, target_bc_pc) in &pending_func_fixups {
         addr_taken.insert(*target_bc_pc);
     }
+    // Static-init function-pointer slots (`static fp_t fp = func;`,
+    // dispatch tables) take the function's address too -- without a
+    // thunk the writer would patch the slot with the bare body, and
+    // the call would land on Lev's `[fp+16]` reads with garbage in
+    // the host's argument registers. AAPCS64 happens to work even
+    // without a thunk because Jsri doesn't disturb sp before the
+    // call (no shadow space), but threading both fixup paths
+    // through the same map keeps the per-format writers uniform
+    // with x86_64.
+    for r in &program.code_relocs {
+        addr_taken.insert(r.target_bc_pc as usize);
+    }
     for &func_pc in &addr_taken {
         let n_params = param_count_for_func(&program.text, func_pc);
         if n_params == 0 {
@@ -1275,6 +1287,7 @@ pub(super) fn lower(
         data_fixups,
         func_fixups,
         bytecode_to_native,
+        func_thunk_offsets: thunk_for_func,
         // `imports` is set by `lower_for` after this returns; the
         // resolver runs once up there and the value is shared with
         // both the lowering and the writer. Default-empty here keeps

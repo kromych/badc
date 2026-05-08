@@ -773,10 +773,20 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
         // moves the image.
         for r in &build.code_relocs {
             let bc_pc = r.target_bc_pc as usize;
+            // Prefer the per-function arg-shuffling thunk: Win64
+            // Jsri allocates 32 bytes of shadow space before the
+            // call, so a bare-body landing point would have its
+            // `[rbp+16]` reads pointing into the shadow region
+            // instead of the c5-stack args. The thunk re-spills
+            // the host-ABI register args back onto the c5 stack
+            // before falling into the body. Functions with zero
+            // params don't have a thunk -- they don't read args
+            // anyway -- so fall back to the bare body.
             let native_off = build
-                .bytecode_to_native
-                .get(bc_pc)
+                .func_thunk_offsets
+                .get(&bc_pc)
                 .copied()
+                .or_else(|| build.bytecode_to_native.get(bc_pc).copied())
                 .unwrap_or(usize::MAX);
             if native_off == usize::MAX {
                 return Err(C5Error::Compile(format!(

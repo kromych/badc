@@ -1,26 +1,40 @@
 // stdint.h -- fixed-width integer types and constant macros.
 //
-// c5 collapses every integer to a 64-bit signed word, so all the
-// fixed-width integer typedefs alias plain `int`. The constant
-// macros (`INT8_C(c)`, `UINT64_C(c)`, ...) are identity wrappers;
-// the suffix is stripped because c5's lexer ignores integer
-// literal suffixes anyway.
+// c5 now exposes real per-width integer storage (M31 split out
+// signed char / short / int / long / long long), so the
+// fixed-width typedefs alias the underlying type with the
+// matching byte width on every supported target:
+//
+//   * `int8_t`  / `uint8_t`  -> 1 byte (signed / unsigned char)
+//   * `int16_t` / `uint16_t` -> 2 bytes (short / unsigned short)
+//   * `int32_t` / `uint32_t` -> 4 bytes (int / unsigned int)
+//   * `int64_t` / `uint64_t` -> 8 bytes (long long / unsigned long long)
+//
+// `intptr_t` and `intmax_t` are 8 bytes on every supported
+// target -- pointer-wide on LP64 (Linux / macOS) and LLP64
+// (Windows) alike. We use `long long` rather than `long` so the
+// width is independent of the LP64-vs-LLP64 split (`long` is 4
+// bytes on Windows).
+//
+// The constant macros (`INT8_C(c)` ... `UINTMAX_C(c)`) are
+// identity wrappers; c5's lexer ignores integer-literal
+// suffixes, and the receiving slot's typedef pins the width.
 #ifndef _C5_STDINT_H
 #define _C5_STDINT_H
 
-typedef int int8_t;
-typedef int int16_t;
-typedef int int32_t;
-typedef int int64_t;
-typedef int intptr_t;
-typedef int intmax_t;
+typedef signed char         int8_t;
+typedef short               int16_t;
+typedef int                 int32_t;
+typedef long long           int64_t;
+typedef long long           intptr_t;
+typedef long long           intmax_t;
 
-typedef int uint8_t;
-typedef int uint16_t;
-typedef int uint32_t;
-typedef int uint64_t;
-typedef int uintptr_t;
-typedef int uintmax_t;
+typedef unsigned char       uint8_t;
+typedef unsigned short      uint16_t;
+typedef unsigned int        uint32_t;
+typedef unsigned long long  uint64_t;
+typedef unsigned long long  uintptr_t;
+typedef unsigned long long  uintmax_t;
 
 #define INT8_C(c)   c
 #define INT16_C(c)  c

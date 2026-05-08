@@ -42,9 +42,16 @@
 // for safety / future fields.
 #define CRITICAL_SECTION_SIZE 64
 
-char *VirtualAlloc(char *addr, int size, int type, int protect);
-int VirtualProtect(char *addr, int size, int new_protect, int *old_protect);
-int VirtualFree(char *addr, int size, int type);
+// HANDLE on Win64 is `void *` (8 bytes); we declare it as
+// `long long` so c5's storage and load match the platform width.
+// Same for SIZE_T (memory sizes via VirtualAlloc / VirtualFree
+// take SIZE_T = 8 bytes). DWORD-shaped values (Sleep, dwFlags,
+// thread IDs) stay `int` -- Windows DWORD is 4 bytes everywhere.
+typedef long long HANDLE;
+
+char *VirtualAlloc(char *addr, long long size, int type, int protect);
+int VirtualProtect(char *addr, long long size, int new_protect, int *old_protect);
+int VirtualFree(char *addr, long long size, int type);
 char *LoadLibraryA(char *name);
 char *GetProcAddress(char *module, char *name);
 int FreeLibrary(char *module);
@@ -52,15 +59,14 @@ int GetLastError();
 int ExitProcess(int status);
 int Sleep(int milliseconds);
 
-// CreateThread returns a thread HANDLE (kernel object) -- treat as
-// an opaque int. Args mirror the Win32 prototype: lpThreadAttributes,
-// dwStackSize, lpStartAddress, lpParameter, dwCreationFlags,
-// lpThreadId.
-int CreateThread(char *attrs, int stack_size, int *start, char *param,
-                 int flags, int *thread_id);
-int WaitForSingleObject(int handle, int millis);
-int CloseHandle(int handle);
-int GetExitCodeThread(int handle, int *exit_code);
+// CreateThread returns a thread HANDLE (kernel object). Args
+// mirror the Win32 prototype: lpThreadAttributes, dwStackSize,
+// lpStartAddress, lpParameter, dwCreationFlags, lpThreadId.
+HANDLE CreateThread(char *attrs, long long stack_size, int *start, char *param,
+                    int flags, int *thread_id);
+int WaitForSingleObject(HANDLE handle, int millis);
+int CloseHandle(HANDLE handle);
+int GetExitCodeThread(HANDLE handle, int *exit_code);
 int GetCurrentThreadId();
 int InitializeCriticalSection(char *cs);
 int EnterCriticalSection(char *cs);

@@ -40,10 +40,13 @@ char *g_lock;            // pthread_mutex_t* or CRITICAL_SECTION*
 
 // Per-platform thread handles.
 #ifdef _WIN32
-int *g_handles;
-int *g_thread_ids;
+// HANDLEs are pointer-sized (8 bytes on Win64). Storage has to
+// be `long long *` -- `int *` would only stride 4 bytes per
+// element and mangle the second handle onwards.
+long long *g_handles;
+int       *g_thread_ids;
 #else
-int *g_threads;          // pthread_t[NUM_THREADS] (8 bytes each)
+pthread_t *g_threads;
 #endif
 
 void lock() {
@@ -113,12 +116,12 @@ int main() {
     int total;
 
 #ifdef _WIN32
-    g_handles    = malloc(sizeof(int) * NUM_THREADS);
+    g_handles    = malloc(sizeof(long long) * NUM_THREADS);
     g_thread_ids = malloc(sizeof(int) * NUM_THREADS);
     g_lock       = malloc(CRITICAL_SECTION_SIZE);
     InitializeCriticalSection(g_lock);
 #else
-    g_threads    = malloc(PTHREAD_T_SIZE * NUM_THREADS);
+    g_threads    = malloc(sizeof(pthread_t) * NUM_THREADS);
     g_lock       = malloc(PTHREAD_MUTEX_SIZE);
     pthread_mutex_init(g_lock, 0);
 #endif
@@ -150,7 +153,7 @@ int main() {
         WaitForSingleObject(g_handles[i], INFINITE);
         CloseHandle(g_handles[i]);
 #else
-        pthread_join((int)g_threads[i], 0);
+        pthread_join(g_threads[i], 0);
 #endif
         i = i + 1;
     }

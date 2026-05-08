@@ -119,14 +119,28 @@ typedef struct __c5_pthread_condattr pthread_condattr_t;
 struct __c5_pthread_attr { char __opaque[64]; };
 typedef struct __c5_pthread_attr pthread_attr_t;
 
-typedef int pthread_t;
-typedef int pthread_key_t;
-typedef int pthread_once_t;
+// `pthread_t` is pointer-sized on every supported POSIX target
+// (an opaque struct pointer on macOS, `unsigned long` on Linux
+// glibc); we need 8 bytes of storage per handle so the libc
+// can write a real ID and the c5-side join can pass it back
+// unbroken. Plain `int` was 8 bytes pre-M31 but has been 4 since
+// real i32 storage landed -- the gap is what made
+// `demos/threads.c` print all zeroes (each pthread_create wrote
+// 8 bytes into a 4-byte slot, smashing the next handle).
+//
+// `pthread_once_t` is `long` (8 bytes) on macOS and `int` (4)
+// on Linux glibc; we use `long long` to cover both. The libc
+// reads only the low 4 bytes on Linux, so the wider slot is
+// harmless. `pthread_key_t` is `unsigned long` on macOS and
+// `unsigned int` on Linux glibc -- same shape, same fix.
+typedef long long pthread_t;
+typedef long long pthread_key_t;
+typedef long long pthread_once_t;
 
-int pthread_create(int *thread, char *attr, int *start, char *arg);
-int pthread_join(int thread, int **retval);
-int pthread_self();
-int pthread_equal(int t1, int t2);
+int pthread_create(pthread_t *thread, char *attr, int *start, char *arg);
+int pthread_join(pthread_t thread, int **retval);
+pthread_t pthread_self();
+int pthread_equal(pthread_t t1, pthread_t t2);
 int pthread_mutex_init(char *mutex, char *attr);
 int pthread_mutex_lock(char *mutex);
 int pthread_mutex_trylock(char *mutex);
@@ -140,11 +154,11 @@ int pthread_cond_destroy(char *cond);
 int pthread_cond_wait(char *cond, char *mutex);
 int pthread_cond_signal(char *cond);
 int pthread_cond_broadcast(char *cond);
-int pthread_key_create(int *key, int *destructor);
-int pthread_key_delete(int key);
-int pthread_setspecific(int key, char *val);
-char *pthread_getspecific(int key);
-int pthread_once(int *once_control, int *init_routine);
+int pthread_key_create(pthread_key_t *key, int *destructor);
+int pthread_key_delete(pthread_key_t key);
+int pthread_setspecific(pthread_key_t key, char *val);
+char *pthread_getspecific(pthread_key_t key);
+int pthread_once(pthread_once_t *once_control, int *init_routine);
 
 // Mutex-type constants used by pthread_mutexattr_settype. Values
 // match the POSIX defaults; the bound libc reads them by integer

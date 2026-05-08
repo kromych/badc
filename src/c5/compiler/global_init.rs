@@ -38,19 +38,65 @@ impl Compiler {
         is_thread_local: bool,
     ) -> Result<(), C5Error> {
         let line = self.lex.line;
+        // Optional `(TYPE)` cast prefix. const-init only cares about
+        // the resulting value, not the cast type, so we skip the
+        // type spec and re-enter from the post-cast token. Used by
+        // sqlite's Windows VFS dispatch table (`(SYSCALL)funcname`).
+        // Detection is the same `lex_is_type_start` predicate the
+        // runtime cast handler in `expr()` uses; if the inner token
+        // isn't a type start, this is a parenthesised expression --
+        // recurse on the inner and require the closing `)`.
+        if self.lex.tk == '(' as i64 {
+            self.next()?;
+            if self.lex_is_type_start() {
+                // Discard the cast destination type. Counted-paren
+                // skip handles abstract function-pointer declarators
+                // (`(SYSCALL)`, `(int (*)(int))`, etc.) without us
+                // having to model the declarator grammar twice.
+                let mut depth: i64 = 1;
+                while depth > 0 && self.lex.tk != 0 {
+                    if self.lex.tk == '(' as i64 {
+                        depth += 1;
+                    } else if self.lex.tk == ')' as i64 {
+                        depth -= 1;
+                        if depth == 0 {
+                            self.next()?;
+                            break;
+                        }
+                    }
+                    self.next()?;
+                }
+                return self.parse_global_initializer(var_ty, var_offset, is_thread_local);
+            }
+            // Parenthesised expression: recurse on the inner and
+            // consume the matching `)`.
+            self.parse_global_initializer(var_ty, var_offset, is_thread_local)?;
+            if self.lex.tk == ')' as i64 {
+                self.next()?;
+            }
+            return Ok(());
+        }
         // Bare function reference in a global initializer:
         // `static int (*fp)() = func;`. The value is the function's
         // bytecode PC; a CodeReloc patches the slot to the runtime
-        // code address at load time.
+        // code address at load time. Token::Sys (a libc-bound name)
+        // routes through `ensure_sys_trampoline_sym` first to get a
+        // synthetic Token::Fun whose val is filled in later by
+        // `emit_sys_trampolines`; from that point on it follows the
+        // same CodeReloc path as a user-defined function.
         if self.lex.tk == Token::Id as i64
-            && self.symbols[self.lex.curr_id_idx].class == Token::Fun as i64
+            && (self.symbols[self.lex.curr_id_idx].class == Token::Fun as i64
+                || self.symbols[self.lex.curr_id_idx].class == Token::Sys as i64)
         {
             if is_thread_local {
                 return Err(C5Error::Compile(format!(
                     "{line}: function-pointer initializer for `_Thread_local` not supported"
                 )));
             }
-            let sym_idx = self.lex.curr_id_idx;
+            let mut sym_idx = self.lex.curr_id_idx;
+            if self.symbols[sym_idx].class == Token::Sys as i64 {
+                sym_idx = self.ensure_sys_trampoline_sym(sym_idx);
+            }
             let bc_pc = self.symbols[sym_idx].val;
             self.next()?;
             let bytes = (bc_pc as u64).to_le_bytes();

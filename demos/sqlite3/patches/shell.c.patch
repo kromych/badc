@@ -26,15 +26,3 @@
  #define sqlite3_fsetmode(F,X)   /*no-op*/
  
  #endif
-@@ -36432,7 +36449,10 @@
-   stdin_is_interactive = isatty(0);
-   stdout_is_console = isatty(1);
- #endif
--  atexit(sayAbnormalExit);
-+  /* badc/c5 patch: atexit() takes a c5 function pointer; libc's
-+  ** atexit chain may not be safe to call back into c5-compiled
-+  ** code on this platform. Skipped while investigated. */
-+  /* atexit(sayAbnormalExit); */
- #ifdef SQLITE_DEBUG
-   mem_main_enter = sqlite3_memory_used();
- #endif

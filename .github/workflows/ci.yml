@@ -155,15 +155,29 @@ jobs:
         # The no_std variant -- no StdHost adapter, alloc only. Library-
         # only because the binary needs std for argv / stdio.
         run: cargo build --locked --no-default-features --lib --verbose
-      - name: sqlite3 amalgamation smoke (unix only)
+      - name: sqlite3 amalgamation smoke (unix)
         # Fetch upstream sqlite, apply our patch series, compile
         # `sqlite3.c + shell.c` with the freshly-built badc, and
-        # round-trip the in-memory and file-backed scenarios.
-        # Skips on Windows runners -- the `setup.sh` and
-        # `smoke.sh` scripts assume bash + curl + unzip + patch,
-        # all of which are available on macos / ubuntu by default
-        # but would need a bash port to run on windows-latest.
+        # round-trip the in-memory and file-backed scenarios at
+        # both -O and noO.
         if: matrix.os == 'macos-latest' || matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm'
+        run: |
+          cargo build --release --locked
+          ./demos/sqlite3/smoke.sh
+
+      - name: sqlite3 amalgamation smoke (windows; expected-failing)
+        # Same script, run under Git Bash (preinstalled on every
+        # github-hosted Windows runner). Marked
+        # `continue-on-error: true` so the lane stays a *signal*
+        # rather than a gate: it currently fails because the c5
+        # Windows port has gaps (missing windows.h shim, MSVC
+        # intrinsics like `__umulh`, libc data-globals on Windows
+        # arm, etc.). Once the gaps close, the lane goes green
+        # and we know parity is reached -- gh #66 tracks the
+        # remaining work.
+        if: matrix.os == 'windows-latest' || matrix.os == 'windows-11-arm'
+        continue-on-error: true
+        shell: bash
         run: |
           cargo build --release --locked
           ./demos/sqlite3/smoke.sh

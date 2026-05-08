@@ -22,11 +22,24 @@ SQLITE_DIR="$(cd "$(dirname "$SELF")" && pwd)"
 REPO_ROOT="$(cd "${SQLITE_DIR}/../.." && pwd)"
 
 BADC="${BADC:-${REPO_ROOT}/target/release/badc}"
+# On Windows hosts (Git Bash) cargo writes `badc.exe`; accept either.
+if [ ! -x "${BADC}" ] && [ -x "${BADC}.exe" ]; then
+    BADC="${BADC}.exe"
+fi
 if [ ! -x "${BADC}" ]; then
     echo "smoke: BADC=${BADC} not found / not executable" >&2
     echo "       hint: cargo build --release --manifest-path=${REPO_ROOT}/Cargo.toml" >&2
     exit 2
 fi
+
+# Match the host's executable suffix so badc's auto-extension
+# logic (`.exe` on Windows, none elsewhere) and the script's
+# explicit pipe-to-shell paths line up. `OSTYPE` is the cheapest
+# Git-Bash-aware test that doesn't require external tooling.
+EXE_SUFFIX=""
+case "${OSTYPE:-}" in
+    msys*|cygwin*|win32*) EXE_SUFFIX=".exe" ;;
+esac
 
 # Ensure the patched sqlite source is in place. setup.sh is
 # idempotent so re-running is cheap on a primed runner.
@@ -156,10 +169,13 @@ run_scenarios() {
     return "${fail}"
 }
 
-build_shell "${WORK}/sqlite3shell"      || { echo "smoke FAIL: build (no -O) failed" >&2; exit 1; }
-build_shell "${WORK}/sqlite3shell.opt" -O || { echo "smoke FAIL: build (-O) failed" >&2; exit 1; }
+SHELL_NOOPT="${WORK}/sqlite3shell${EXE_SUFFIX}"
+SHELL_OPT="${WORK}/sqlite3shell.opt${EXE_SUFFIX}"
+
+build_shell "${SHELL_NOOPT}"      || { echo "smoke FAIL: build (no -O) failed" >&2; exit 1; }
+build_shell "${SHELL_OPT}"     -O || { echo "smoke FAIL: build (-O) failed" >&2; exit 1; }
 
 overall=0
-run_scenarios "no-O" "${WORK}/sqlite3shell" || overall=1
-run_scenarios "-O"   "${WORK}/sqlite3shell.opt" || overall=1
+run_scenarios "no-O" "${SHELL_NOOPT}" || overall=1
+run_scenarios "-O"   "${SHELL_OPT}"   || overall=1
 exit "${overall}"

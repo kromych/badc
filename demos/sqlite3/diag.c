@@ -21,8 +21,22 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "sqlite3.h"
+
+/* Bypass stdio so a raw kernel-write checkpoint fires even if the
+** lazy `__c5_lazy_stream` resolver hasn't run / has the wrong
+** address. write(2, ..., n) hits msvcrt's `_write` directly via
+** the c5 IAT trampoline -- no FILE * indirection, no setvbuf
+** state. If the binary loads at all, this prints. */
+#define BLAM(MSG)                                          \
+    do {                                                    \
+        const char *__m = (MSG);                            \
+        int __n = 0;                                        \
+        while (__m[__n]) __n++;                             \
+        write(2, (char *)__m, __n);                         \
+    } while (0)
 
 /* Single-row callback: emit `col0|col1|...` to stdout exactly the
 ** way `sqlite3` shell's default "list" mode does, so the smoke
@@ -46,6 +60,12 @@ int main(int argc, char **argv) {
     char *p;
     sqlite3 *db;
     char *errmsg;
+
+    /* Raw write(2) checkpoint -- runs even if stdio isn't set up.
+    ** If this prints but `[diag] enter` doesn't, fprintf / stderr
+    ** is broken on this platform. If neither prints, main never
+    ** ran (loader / pre-main-stub problem). */
+    BLAM("BLAM: write(2) reached main\n");
 
     fprintf(stderr, "[diag] enter argc=%d\n", argc); fflush(stderr);
 

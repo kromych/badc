@@ -165,26 +165,22 @@ jobs:
           cargo build --release --locked
           ./demos/sqlite3/smoke.sh
 
-      - name: sqlite3 amalgamation smoke (windows; expected-failing)
+      - name: sqlite3 amalgamation smoke (windows)
         # Same script, run under Git Bash (preinstalled on every
-        # github-hosted Windows runner). Marked
-        # `continue-on-error: true` so the lane stays a *signal*
-        # rather than a gate while runtime correctness on Windows
-        # catches up. Progress so far: past `__umulh` / `_umul128`
-        # (-DSQLITE_DISABLE_INTRINSIC), past `(SYSCALL)funcname`
-        # const-init casts (gh #31), past PE/x64 struct fp-call
-        # (gh #50), past sub-word libc returns (gh #48), past
-        # the kernel32 / msvcrt binding-surface bring-up (gh #66).
-        # Compile now succeeds on both `windows-latest` and
-        # `windows-11-arm`; the residual is runtime: the kernel32
-        # bindings landed with `int Name();` (zero-arg) prototypes,
-        # which means the per-symbol arg-shuffling trampolines emit
-        # zero `Psh`es and the call into kernel32 sees junk
-        # arguments. Lane goes green once the trampoline learns
-        # to honour the cast'd prototype at the call site instead
-        # of the binding's declared params.
+        # github-hosted Windows runner). Once expected-failing
+        # behind `continue-on-error: true`; that came off after
+        # the `__int64` predefine landed (sqlite's amalgamation
+        # took the `defined(_MSC_VER)` typedef branch and spelled
+        # `sqlite_int64` / `sqlite_uint64` with `__int64`, which
+        # c5's lexer didn't recognise; falling back to `int`
+        # silently truncated every `i64` / `u64` field across
+        # sqlite, including `db->flags`, whose bit-31
+        # `SQLITE_EnableView = 0x80000000` then sign-extended and
+        # tripped the `SQLITE_CorruptRdOnly` (HI(0x2) = bit 33)
+        # check inside `sqlite3VdbeHalt`, fabricating
+        # SQLITE_CORRUPT for every prepare against a fresh
+        # `:memory:` DB).
         if: matrix.os == 'windows-latest' || matrix.os == 'windows-11-arm'
-        continue-on-error: true
         shell: bash
         run: |
           cargo build --release --locked

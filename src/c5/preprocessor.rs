@@ -292,6 +292,23 @@ impl Preprocessor {
                 // sqlite emits them BEFORE any include statement
                 // could provide them, so they have to live in the
                 // built-in predefines.
+                // MSVC's 8-byte-integer keyword. c5's lexer doesn't
+                // know `__int64` natively; sqlite's amalgamation, in
+                // its `defined(_MSC_VER)` typedef branch, spells
+                // `sqlite_int64` as `__int64` and `sqlite_uint64` as
+                // `unsigned __int64`. Without this expansion, c5
+                // falls back to `int` (4 bytes), which silently
+                // truncates every `i64` / `u64` field across sqlite
+                // -- including `db->flags`, whose bit-31
+                // `SQLITE_EnableView = 0x80000000` then sign-
+                // extends through later widening and trips the
+                // `SQLITE_CorruptRdOnly` (HI(0x2) = bit 33) check
+                // inside `sqlite3VdbeHalt`, fabricating a
+                // SQLITE_CORRUPT for every prepare against a fresh
+                // `:memory:` DB. Map to `long long` (8 bytes
+                // everywhere) so the LLP64 / cross-CRT path matches
+                // what real MSVC produces.
+                macros.insert("__int64".to_string(), "long long".to_string());
                 let mut empty_object = |name: &str| {
                     macros.insert(name.to_string(), String::new());
                 };

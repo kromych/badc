@@ -277,6 +277,16 @@ typedef struct __c5_FILE FILE;
 #pragma binding(msvcrt::_byteswap_ulong,  "_byteswap_ulong")
 #pragma binding(msvcrt::_byteswap_uint64, "_byteswap_uint64")
 #pragma binding(msvcrt::_byteswap_ushort, "_byteswap_ushort")
+// `__acrt_iob_func(int)` is the CRT helper that returns a
+// FILE * to the requested standard stream (0=stdin, 1=stdout,
+// 2=stderr). Used by `__c5_lazy_stream` above to back the
+// `stdin` / `stdout` / `stderr` macros on Windows -- msvcrt
+// doesn't export those as data symbols.
+// `__iob_func()` is the pre-UCRT spelling msvcrt.dll exports;
+// `__acrt_iob_func(int)` is the UCRT replacement. Wine's bundled
+// msvcrt is the legacy flavour, so bind the legacy spelling and
+// teach `__c5_lazy_stream` to walk the returned FILE-array slot.
+#pragma binding(msvcrt::__iob_func, "__iob_func")
 #endif
 
 int printf(char *fmt, ...);
@@ -443,6 +453,7 @@ FILE *_fdopen(int fd, char *mode);
 unsigned int       _byteswap_ulong(unsigned int v);
 unsigned long long _byteswap_uint64(unsigned long long v);
 unsigned short     _byteswap_ushort(unsigned short v);
+FILE *__iob_func();
 
 // MSVC's `_findfirst`/`_findnext` companion structs. Layout
 // pinned to the Win64 SDK so the kernel-emitted records match
@@ -550,6 +561,25 @@ static char *__c5_lazy_stream(int idx) {
     names[2] = "stderr";
     char **slot = (char **)dlsym((char *)0, names[idx]);
     if (slot) __c5_stream_cache[idx] = *slot;
+#endif
+#ifdef _WIN32
+    // Windows msvcrt doesn't expose `stdin` / `stdout` / `stderr`
+    // as exported data symbols. Programs reach the underlying
+    // FILE * through the helper `__acrt_iob_func(int)`, which
+    // returns a pointer into the CRT's per-process `_iob` array.
+    // Older msvcrt (pre-UCRT) called the same helper `__iob_func`
+    // -- bind both spellings and let the CRT pick whichever it
+    // exports. The trampoline side gh #66 already declared the
+    // bindings; here we only need the lazy-resolver arm.
+    // msvcrt's `__iob_func()` returns a pointer to its 3-entry
+    // `_iob` array (stdin / stdout / stderr). On the legacy
+    // (pre-UCRT) wine / Windows msvcrt, `sizeof(_iobuf)` is 48
+    // bytes -- 8B _ptr + 4B _cnt (+4B padding) + 8B _base + 4B
+    // _flag + 4B _file + 4B _charbuf + 4B _bufsiz + 8B _tmpfname.
+    // We need the address of the requested entry, so cast the
+    // base to a byte pointer and step by 48 bytes per slot.
+    char *iob = (char *)__iob_func();
+    if (iob) __c5_stream_cache[idx] = iob + idx * 48;
 #endif
     return __c5_stream_cache[idx];
 }

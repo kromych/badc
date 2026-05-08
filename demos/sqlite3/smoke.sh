@@ -307,7 +307,53 @@ if [ "${BADC_RUN_DIAG:-}" = "1" ]; then
         "${HELLO_BIN}" </dev/null
         hello_rc=$?
         set -e
-        echo "=== hello exit=${hello_rc} ===" >&2
+        echo "=== hello bash exit=${hello_rc} ===" >&2
+    fi
+
+    # Tier 1.5: hello+sqlite -- minimal main + the entire sqlite
+    # amalgamation linked in. If hello.c works alone but this
+    # tier exits non-zero, the failure is the IAT pulled in by
+    # sqlite (some symbol the runner's msvcrt / kernel32 doesn't
+    # export), not anything sqlite does at runtime.
+    HELLOSQ_BIN="${WORK}/sqlite3hellosq${EXE_SUFFIX}"
+    HELLOSQ_COMBINED="${WORK}/sqlite3hellosq_combined.c"
+    cat "${SQLITE_DIR}/sqlite3.c" "${SQLITE_DIR}/hello.c" > "${HELLOSQ_COMBINED}"
+    "${BADC}" -include msvc_compat.h "${HELLOSQ_COMBINED}" -o "${HELLOSQ_BIN}" \
+        -DSQLITE_OMIT_LOAD_EXTENSION \
+        -DSQLITE_THREADSAFE=0 \
+        -DSQLITE_DEFAULT_MEMSTATUS=0 \
+        -DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1 \
+        -DSQLITE_DQS=0 \
+        -DSQLITE_OMIT_DEPRECATED \
+        -DSQLITE_OMIT_PROGRESS_CALLBACK \
+        -DSQLITE_OMIT_SHARED_CACHE \
+        -DSQLITE_OMIT_AUTOINIT \
+        -DSQLITE_WITHOUT_ZONEMALLOC=1 \
+        -DSQLITE_ENABLE_LOCKING_STYLE=0 \
+        -DSQLITE_DISABLE_INTRINSIC \
+        -DSQLITE_OMIT_SEH || echo "hellosq: build failed" >&2
+    if [ -e "${HELLOSQ_BIN}" ]; then
+        echo "=== hello+sqlite run ===" >&2
+        set +e
+        "${HELLOSQ_BIN}" </dev/null
+        hellosq_rc=$?
+        set -e
+        echo "=== hello+sqlite bash exit=${hellosq_rc} ===" >&2
+        # On Windows lanes, also probe via cmd.exe so we get the
+        # real Windows process exit code instead of bash's 127
+        # mapping for "couldn't exec". Translate the bash path to
+        # a Windows path via cygpath if the tool is available
+        # (Git Bash ships with it).
+        if command -v cmd.exe >/dev/null 2>&1; then
+            if command -v cygpath >/dev/null 2>&1; then
+                winpath=$(cygpath -w "${HELLOSQ_BIN}")
+            else
+                winpath="${HELLOSQ_BIN}"
+            fi
+            echo "=== hello+sqlite cmd.exe probe (winpath=${winpath}) ===" >&2
+            cmd.exe //c "${winpath} & echo errorlevel=%errorlevel%" >&2 || true
+            echo "=== /hello+sqlite cmd.exe probe ===" >&2
+        fi
     fi
 
     DIAG_BIN="${WORK}/sqlite3diag${EXE_SUFFIX}"

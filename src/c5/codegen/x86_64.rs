@@ -2333,10 +2333,7 @@ fn emit_libc_call(
         // already 64-bit-wide (pointer, `long long`, LP64
         // `long`, ...) so emitting it on every target is the
         // simpler choice.
-        let ext = super::return_extension(
-            imports.imports[import_index].return_type_tag,
-            target,
-        );
+        let ext = super::return_extension(imports.imports[import_index].return_type_tag, target);
         emit_extend_rax_for_return(code, ext);
         // Move the libc return value into r13 so the c5 caller
         // sees it as the new accumulator. (For functions that

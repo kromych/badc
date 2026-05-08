@@ -2208,10 +2208,7 @@ fn emit_libc_call(
     // EAX otherwise. Emitted on every aarch64 target -- the
     // extension is a no-op when the prototype is already 64-bit
     // (pointer, `long long`, LP64 `long`).
-    let ext = super::return_extension(
-        imports.imports[import_index].return_type_tag,
-        target,
-    );
+    let ext = super::return_extension(imports.imports[import_index].return_type_tag, target);
     emit_extend_x19_for_return(code, ext);
     if matches!(ext, super::ReturnExt::None) {
         // Move the libc return value into x19 so the caller sees it
@@ -2296,11 +2293,7 @@ fn emit_got_call(code: &mut Vec<u8>, got_fixups: &mut Vec<GotFixup>, import_inde
 /// `BR x16` instead of `BLR x16`. The libc fn's `RET` returns
 /// directly to the c5 caller of the trampoline, skipping the
 /// trampoline entirely on the way back. Used by `Op::TailExt`.
-fn emit_got_tail_jump(
-    code: &mut Vec<u8>,
-    got_fixups: &mut Vec<GotFixup>,
-    import_index: usize,
-) {
+fn emit_got_tail_jump(code: &mut Vec<u8>, got_fixups: &mut Vec<GotFixup>, import_index: usize) {
     let adrp_offset = code.len();
     got_fixups.push(GotFixup {
         adrp_offset,

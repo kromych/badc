@@ -97,17 +97,29 @@
 #define _Outptr_opt_
 
 // Function-like decorator macros (`__declspec(x)`, `__pragma(x)`,
-// `_CRT_INSECURE_DEPRECATE(reason)`, ...) expand to nothing. The
-// 1-arg shape covers every form sqlite + the bundled CRT headers
-// emit; none of them rely on argument concatenation or
-// stringification.
+// `_Pre_satisfies_(x)`, ...) expand to nothing. The 1-arg shape
+// covers every form sqlite + the bundled CRT headers emit; none
+// of them rely on argument concatenation or stringification.
 #define __declspec(x)
 #define __pragma(x)
-#define _CRT_INSECURE_DEPRECATE(x)
-#define _CRT_NONSTDC_DEPRECATE(x)
-#define _CRT_OBSOLETE(x)
-#define _CRT_DEPRECATE_TEXT(x)
 #define _Pre_satisfies_(x)
 #define _Post_satisfies_(x)
+
+// NOTE: `_CRT_INSECURE_DEPRECATE` / `_CRT_NONSTDC_DEPRECATE` /
+// `_CRT_OBSOLETE` / `_CRT_DEPRECATE_TEXT` are deliberately NOT
+// defined here. sqlite's `localtime_s` selector gates on
+// `defined(_MSC_VER) && defined(_CRT_INSECURE_DEPRECATE)`; if the
+// macro is visible, sqlite emits a `localtime_s()` call and the
+// produced PE pulls `localtime_s` into its msvcrt IAT. The legacy
+// `msvcrt.dll` shipped on github-hosted Windows runners does not
+// export that symbol (it's a Secure-CRT addition that lives in
+// `msvcr*.dll` / UCRT, never re-exported by `msvcrt.dll`), so
+// the loader rejects the binary at startup with an unresolved-
+// import failure that surfaces as exit-code 127. Leaving the
+// macro undefined makes sqlite fall through to its plain
+// `localtime` path. None of the third-party C we currently
+// compile against actually *uses* the macro to mark its own
+// functions, so the no-op definition isn't load-bearing -- only
+// the visibility check is.
 
 #endif /* _WIN32 */

@@ -248,7 +248,12 @@ const ARM64_PACKED_FUNCTION_MAX_BYTES: u32 = 2048 * 4;
 // ----------------------------------------------------------------
 
 const STUB_IMPORT_GETMAINARGS: (&str, &str) = ("__getmainargs", "msvcrt.dll");
-const STUB_IMPORT_EXIT: (&str, &str) = ("ExitProcess", "kernel32.dll");
+// `msvcrt!exit`, not `kernel32!ExitProcess` -- the CRT version
+// runs the atexit chain, calls `_fcloseall`, and flushes stdout
+// / stderr before terminating. With raw `ExitProcess` the shell
+// loses its last line of output when stdout is a pipe (sqlite3's
+// SELECT rows go missing on the windows-latest CI smoke).
+const STUB_IMPORT_EXIT: (&str, &str) = ("exit", "msvcrt.dll");
 
 // ----------------------------------------------------------------
 // Top-level writer.

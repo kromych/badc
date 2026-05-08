@@ -291,6 +291,25 @@ build_shell "${SHELL_OPT}"     -O || { echo "smoke FAIL: build (-O) failed" >&2;
 # emits empty stdout but diag prints rows, the bug is shell.c-
 # specific; if both are silent, the bug is below shell.c.
 if [ "${BADC_RUN_DIAG:-}" = "1" ]; then
+    # Tier 1 probe: dead-minimal hello-world (no sqlite, no shell,
+    # no fprintf). If THIS exits non-zero, the failure is in the
+    # entry stub / loader path itself, not sqlite-imports-related.
+    HELLO_BIN="${WORK}/sqlite3hello${EXE_SUFFIX}"
+    "${BADC}" -include msvc_compat.h "${SQLITE_DIR}/hello.c" -o "${HELLO_BIN}" \
+        || echo "hello: build failed" >&2
+    if [ -e "${HELLO_BIN}" ]; then
+        echo "=== hello run ===" >&2
+        ls -la "${HELLO_BIN}" >&2 || true
+        if command -v file >/dev/null 2>&1; then
+            file "${HELLO_BIN}" >&2 || true
+        fi
+        set +e
+        "${HELLO_BIN}" </dev/null
+        hello_rc=$?
+        set -e
+        echo "=== hello exit=${hello_rc} ===" >&2
+    fi
+
     DIAG_BIN="${WORK}/sqlite3diag${EXE_SUFFIX}"
     DIAG_COMBINED="${WORK}/sqlite3diag_combined.c"
     cat "${SQLITE_DIR}/sqlite3.c" "${SQLITE_DIR}/diag.c" > "${DIAG_COMBINED}"

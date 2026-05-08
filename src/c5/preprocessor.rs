@@ -165,6 +165,16 @@ pub(crate) struct Preprocessor {
     /// cycles. Pushed on `#include`, popped when we finish processing
     /// the header.
     include_stack: Vec<String>,
+    /// Filesystem search paths for `#include`. Probed in order
+    /// before falling back to the bundled in-binary headers, so
+    /// a user can `cp $(badc --dump-headers) ./include/...` and
+    /// override one without rebuilding badc. Plumbed in from the
+    /// CLI's `-I path` flag and any built-in defaults
+    /// (`./include`, `./headers/include`). Filesystem reads are
+    /// gated behind `cfg(feature = "std")`; the no_std build
+    /// keeps the field but never reads from it (the embedded
+    /// headers are always available).
+    search_paths: Vec<String>,
 }
 
 impl Preprocessor {
@@ -249,6 +259,19 @@ impl Preprocessor {
             exports: Vec::new(),
             pragma_once_files: BTreeSet::new(),
             include_stack: Vec::new(),
+            search_paths: Vec::new(),
+        }
+    }
+
+    /// Append a filesystem search path probed before the bundled
+    /// headers on `#include`. Paths are tried in insertion order;
+    /// the first matching `<path>/<name>` wins. Plumb in from
+    /// `-I path` on the CLI; built-in defaults like `./include`
+    /// can be added the same way at startup so users don't have
+    /// to repeat them on every invocation.
+    pub fn add_search_path(&mut self, path: &str) {
+        if !self.search_paths.iter().any(|p| p == path) {
+            self.search_paths.push(path.to_string());
         }
     }
 
@@ -935,11 +958,22 @@ impl Preprocessor {
         if self.pragma_once_files.contains(name) {
             return Ok(String::new());
         }
-        let Some(content) = embedded_header(name) else {
-            // Unknown header: drop it on the floor and let any
-            // missing-symbol error fall out of the lexer / codegen
-            // downstream. Matches the historical pre-`#include`
-            // behaviour.
+        // Resolution order:
+        //   1. Filesystem search paths added via `add_search_path`
+        //      (= the CLI's `-I` flag plus any built-in defaults).
+        //      Lets a user override a bundled header by dropping
+        //      the modified file at `./include/<name>` without
+        //      rebuilding badc.
+        //   2. Bundled in-binary header (the include_str! set in
+        //      `headers.rs`).
+        //   3. Silent miss -- preserve the historical "drop the
+        //      include on the floor" behaviour so legacy fixtures
+        //      with cosmetic `#include`s don't fail.
+        // The result is owned `String` because filesystem-loaded
+        // bodies don't have static lifetime; the embedded path
+        // copies its `&'static str` into one to share the type.
+        let resolved: Option<String> = self.find_include(name);
+        let Some(content) = resolved else {
             return Ok(String::new());
         };
         if self.include_stack.iter().any(|f| f == name) {
@@ -949,9 +983,28 @@ impl Preprocessor {
             )));
         }
         self.include_stack.push(name.to_string());
-        let result = self.process_named(content, name);
+        let result = self.process_named(&content, name);
         self.include_stack.pop();
         result
+    }
+
+    /// Look `name` up in the search-path chain and the embedded
+    /// registry. See `process_include` for the resolution order.
+    fn find_include(&self, name: &str) -> Option<String> {
+        #[cfg(feature = "std")]
+        for path in &self.search_paths {
+            let candidate = if path.is_empty() {
+                name.to_string()
+            } else if path.ends_with('/') || path.ends_with('\\') {
+                format!("{path}{name}")
+            } else {
+                format!("{path}/{name}")
+            };
+            if let Ok(body) = std::fs::read_to_string(&candidate) {
+                return Some(body);
+            }
+        }
+        embedded_header(name).map(|s| s.to_string())
     }
 
     /// `#pragma binding(dylib::local_name, "real_symbol")` -- record

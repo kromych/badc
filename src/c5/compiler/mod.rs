@@ -396,6 +396,21 @@ impl Compiler {
         defines: &[(String, String)],
         undefines: &[String],
     ) -> Self {
+        Self::with_full_options(source, target, defines, undefines, &[])
+    }
+
+    /// Same as [`Self::with_options`] but also takes a list of
+    /// filesystem search paths probed before the bundled in-binary
+    /// headers on `#include`. Plumbed in from the CLI's `-I path`
+    /// flag plus auto-detected defaults (`./include`,
+    /// `./headers/include`).
+    pub fn with_full_options(
+        source: String,
+        target: Target,
+        defines: &[(String, String)],
+        undefines: &[String],
+        include_paths: &[String],
+    ) -> Self {
         // Run the preprocessor first so we know the
         // `#pragma binding(...)` set before seeding the symbol
         // table. The bindings come from whichever standard headers
@@ -411,6 +426,9 @@ impl Compiler {
         // infallible so the `Compiler::new(src).compile()` shape
         // every existing caller uses keeps working.
         let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
+        for path in include_paths {
+            pp.add_search_path(path);
+        }
         for (name, body) in defines {
             pp.define(name, body);
         }

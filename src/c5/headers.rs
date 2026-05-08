@@ -34,6 +34,13 @@ pub(super) fn embedded_header(name: &str) -> Option<&'static str> {
         .find_map(|&(n, body)| if n == name { Some(body) } else { None })
 }
 
+/// All bundled headers, as a `(name, body)` slice. Public so the
+/// CLI's `--dump-headers` flag can iterate the registry without
+/// reaching into the preprocessor.
+pub fn embedded_headers() -> &'static [(&'static str, &'static str)] {
+    EMBEDDED_HEADERS
+}
+
 /// Every header the registry knows about, as a `(name, body)` slice.
 /// Iterable -- the compiler walks this list when an unknown function
 /// call appears in source so it can suggest the right `#include`.

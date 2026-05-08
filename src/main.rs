@@ -18,6 +18,11 @@ Output mode -- pick at most one (defaults to \"compile to native binary\"):
                            No source is executed.
   --list-symbols           Print pre-defined keywords / library calls /
                            constants and exit. Takes no source.
+  --dump-headers           Print every bundled header (with file
+                           separators) to stdout and exit. Useful
+                           for extracting them into `./include` so
+                           you can override one without rebuilding
+                           badc.
 
 Compile knobs:
   -O, --optimize           Enable the bytecode optimizer + native
@@ -35,15 +40,23 @@ Compile knobs:
                            `#define` / `#undef` still apply on top.
   -U NAME                  Drop a predefine before the source
                            runs, including any default predefine.
+  -I path                  Add a filesystem header search path
+                           probed before the bundled in-binary
+                           headers on #include. Repeatable. The
+                           current directory's `./include` and
+                           `./headers/include` are auto-added if
+                           they exist, so a user-edited copy of
+                           a bundled header can override the
+                           one shipped in the badc binary.
 
 VM-only knobs (require --interp):
   --track-pointers         Allocation tracking + use-after-free guard.
   --trace                  Per-instruction stdout trace (noisy).
 
 Mutually exclusive: --interp / --jit / --shared / --dump-asm /
---list-symbols all pick the output mode; you can only pick one.
---track-pointers and --trace require --interp. -o makes no sense
-under --interp / --list-symbols.";
+--list-symbols / --dump-headers all pick the output mode; you can
+only pick one. --track-pointers and --trace require --interp. -o
+makes no sense under --interp / --list-symbols / --dump-headers.";
 
 /// Where the AOT codesign tool lives on every macOS install. Hardcoded
 /// so we don't accidentally pick up a homebrew shim that signs differently.
@@ -70,6 +83,9 @@ enum Mode {
     /// `--list-symbols` -- print the pre-defined symbol table
     /// and exit. Takes no source file.
     ListSymbols,
+    /// `--dump-headers` -- print every bundled header (with
+    /// file separators) to stdout and exit. Takes no source.
+    DumpHeaders,
 }
 
 impl Mode {
@@ -81,6 +97,7 @@ impl Mode {
             Mode::Jit => "--jit",
             Mode::DumpAsm => "--dump-asm",
             Mode::ListSymbols => "--list-symbols",
+            Mode::DumpHeaders => "--dump-headers",
         }
     }
 }
@@ -99,6 +116,7 @@ fn main() {
     let mut target_spec: Option<String> = None;
     let mut defines: Vec<(String, String)> = Vec::new();
     let mut undefines: Vec<String> = Vec::new();
+    let mut include_paths: Vec<String> = Vec::new();
 
     let mut iter = raw.into_iter();
     let prog0 = iter.next().unwrap_or_default();
@@ -121,6 +139,7 @@ fn main() {
             "--track-pointers" => track_pointers = true,
             "--trace" => trace = true,
             "--list-symbols" => claim(&mut mode, Mode::ListSymbols),
+            "--dump-headers" => claim(&mut mode, Mode::DumpHeaders),
             "--optimize" | "-O" => optimize_flag = true,
             "--dump-asm" => claim(&mut mode, Mode::DumpAsm),
             "--jit" => claim(&mut mode, Mode::Jit),
@@ -163,10 +182,32 @@ fn main() {
             s if s.starts_with("-U") && s.len() > 2 => {
                 undefines.push(s[2..].to_string());
             }
+            "-I" => match iter.next() {
+                Some(p) => include_paths.push(p),
+                None => {
+                    eprintln!("badc: -I requires a path argument");
+                    std::process::exit(1);
+                }
+            },
+            s if s.starts_with("-I") && s.len() > 2 => {
+                include_paths.push(s[2..].to_string());
+            }
             s if s.starts_with("--target=") => {
                 target_spec = Some(s["--target=".len()..].to_string());
             }
             _ => args.push(arg),
+        }
+    }
+
+    // Auto-add common header overlays so a developer iterating on
+    // the bundled headers can edit `./include/...` (or
+    // `./headers/include/...` from the repo root) and have the
+    // change take effect without rebuilding badc. User-supplied
+    // -I paths still win because they were pushed earlier in the
+    // search order.
+    for default in ["./include", "./headers/include"] {
+        if std::path::Path::new(default).is_dir() && !include_paths.iter().any(|p| p == default) {
+            include_paths.push(default.to_string());
         }
     }
 
@@ -191,7 +232,12 @@ fn main() {
     }
 
     // -o makes no sense for modes that don't write to disk.
-    if output_path.is_some() && matches!(mode, Mode::Interp | Mode::ListSymbols | Mode::Jit) {
+    if output_path.is_some()
+        && matches!(
+            mode,
+            Mode::Interp | Mode::ListSymbols | Mode::DumpHeaders | Mode::Jit
+        )
+    {
         eprintln!(
             "badc: -o is only meaningful for native compilation \
              (current mode is {})",
@@ -202,6 +248,11 @@ fn main() {
 
     if mode == Mode::ListSymbols {
         print_predefined_symbols();
+        return;
+    }
+
+    if mode == Mode::DumpHeaders {
+        dump_bundled_headers();
         return;
     }
 
@@ -219,13 +270,16 @@ fn main() {
     // predefines into the compiler. The bytecode itself is target-
     // independent; only the resolved binding map and the
     // preprocessor predefines vary.
-    let program = match Compiler::with_options(contents, target, &defines, &undefines).compile() {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("{}", e);
-            std::process::exit(1);
-        }
-    };
+    let program =
+        match Compiler::with_full_options(contents, target, &defines, &undefines, &include_paths)
+            .compile()
+        {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("{}", e);
+                std::process::exit(1);
+            }
+        };
 
     let program = if optimize_flag && std::env::var("BADC_BC_OPT_OFF").is_err() {
         match optimize(program) {
@@ -309,6 +363,7 @@ fn main() {
             emit_native_binary(&program, &out, target, native_opts, mode);
         }
         Mode::ListSymbols => unreachable!("handled above"),
+        Mode::DumpHeaders => unreachable!("handled above"),
     }
 }
 
@@ -453,6 +508,26 @@ fn codesign(path: &std::path::Path) {
 /// library functions, and integer constants -- grouped by kind. Useful
 /// for scripting (`badc --list-symbols | grep PROT_`) and for spotting
 /// what's available without `#include`.
+/// `--dump-headers` writer. Prints every bundled header to stdout
+/// with a one-line `// ===== <name> =====` separator before each
+/// body, suitable for piping through `awk` to extract a subset
+/// or for redirecting the whole stream to a directory tree (see
+/// the `--help` blurb -- the conventional shape is to redirect
+/// into `./include` and let `-I.` plus future filesystem search
+/// override the embedded copy).
+fn dump_bundled_headers() {
+    for (name, body) in badc::embedded_headers() {
+        println!("// ===== {name} =====");
+        // Bodies already end with `\n`; `print!` rather than
+        // `println!` so we don't add a stray blank line between
+        // the last byte and the next separator.
+        print!("{body}");
+        if !body.ends_with('\n') {
+            println!();
+        }
+    }
+}
+
 fn print_predefined_symbols() {
     let symbols = predefined_symbols();
 

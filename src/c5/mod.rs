@@ -27,6 +27,7 @@ pub use {
     },
     compiler::Compiler,
     error::C5Error,
+    headers::embedded_headers,
     host::{Host, Overwrite},
     lexer::{PredefinedKind, PredefinedSymbol, predefined_symbols},
     op::Op,

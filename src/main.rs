@@ -1,3 +1,4 @@
+use std::io::{IsTerminal, Read, Write};
 use std::path::PathBuf;
 
 use badc::{
@@ -7,6 +8,9 @@ use badc::{
 
 const USAGE: &str = "\
 usage: badc [options] <source.c> [program-args...]
+       badc [options] -    [program-args...]   (read source from stdin)
+       cat foo.c | badc [options]              (same -- stdin auto-detected
+                                                when not a terminal)
 
 Output mode -- pick at most one (defaults to \"compile to native binary\"):
   --interp                 Run under the bytecode VM (with optional safety net).
@@ -35,6 +39,9 @@ Compile knobs:
   -o <path>                Output path. Default depends on output
                            mode and target (.exe / .dylib / .so /
                            .dll suffixes added as appropriate).
+                           Pass `-` (or omit -o entirely when
+                           stdout is a pipe) to write the binary
+                           bytes to stdout for shell-pipeline use.
   -D NAME[=VALUE]          Predefine an object-like macro (`-D X`
                            is equivalent to `-D X=1`). Source-level
                            `#define` / `#undef` still apply on top.
@@ -256,15 +263,38 @@ fn main() {
         return;
     }
 
-    if args.len() < 2 {
+    // Source resolution. Three shapes are accepted:
+    //   * `badc <path>` -- positional source file. (Existing
+    //     default path -- unchanged.)
+    //   * `badc -`      -- read source from stdin explicitly.
+    //   * `cat foo.c | badc` -- no positional, stdin is a pipe;
+    //     auto-detect and read from stdin. Falls back to the
+    //     usage error when stdin is a terminal (= the user
+    //     forgot the source file).
+    // `path` keeps a synthetic value (`"-"` or `"<stdin>"`) when
+    // the source came from stdin so default_output_path /
+    // jit_run / VM `argv[0]` reads still get a sensible name.
+    let read_stdin_source = || -> String {
+        let mut s = String::new();
+        std::io::stdin()
+            .read_to_string(&mut s)
+            .expect("Could not read stdin");
+        s
+    };
+    let (path, contents): (String, String) = if args.len() >= 2 && args[1] != "-" {
+        let p = args[1].clone();
+        let mut file = std::fs::File::open(&p).expect("Could not open file");
+        let mut s = String::new();
+        Read::read_to_string(&mut file, &mut s).expect("Could not read file");
+        (p, s)
+    } else if (args.len() >= 2 && args[1] == "-") || !std::io::stdin().is_terminal() {
+        // Reserve `-` in argv[0]'s slot so VM-mode `argv[0]` gets
+        // something readable rather than the empty string.
+        ("-".to_string(), read_stdin_source())
+    } else {
         eprintln!("{USAGE}");
         std::process::exit(1);
-    }
-
-    let path = &args[1];
-    let mut file = std::fs::File::open(path).expect("Could not open file");
-    let mut contents = String::new();
-    std::io::Read::read_to_string(&mut file, &mut contents).expect("Could not read file");
+    };
 
     // Thread the user's `--target` choice plus any `-D` / `-U`
     // predefines into the compiler. The bytecode itself is target-
@@ -356,11 +386,27 @@ fn main() {
             }
         }
         Mode::NativeExecutable | Mode::SharedLibrary => {
-            // Default: lower to a native binary, write it,
-            // mark it executable, and (on macOS hosts emitting
-            // Mach-O) ad-hoc codesign so dyld accepts it.
-            let out = output_path.unwrap_or_else(|| default_output_path(path, target, mode));
-            emit_native_binary(&program, &out, target, native_opts, mode);
+            // Default: lower to a native binary, write it, mark
+            // it executable, and (on macOS hosts emitting Mach-O)
+            // ad-hoc codesign so dyld accepts it.
+            //
+            // gh #28 piped-output: if the user passed `-o -` or
+            // didn't specify -o and stdout is a pipe (= we're in
+            // the middle of a shell pipeline like
+            // `... | badc | run-on-target`), write the bytes
+            // straight to stdout instead of disk. The
+            // mark-executable + codesign + per-target nag messages
+            // are skipped -- the caller knows what they're doing.
+            let pipe_to_stdout = match output_path.as_deref() {
+                Some(p) => p == std::path::Path::new("-"),
+                None => !std::io::stdout().is_terminal(),
+            };
+            if pipe_to_stdout {
+                emit_native_binary_to_stdout(&program, target, native_opts);
+            } else {
+                let out = output_path.unwrap_or_else(|| default_output_path(&path, target, mode));
+                emit_native_binary(&program, &out, target, native_opts, mode);
+            }
         }
         Mode::ListSymbols => unreachable!("handled above"),
         Mode::DumpHeaders => unreachable!("handled above"),
@@ -406,6 +452,26 @@ fn default_output_path(source: &str, target: Target, mode: Mode) -> PathBuf {
 /// out to `codesign --sign -` so the loader will accept it. ELF
 /// binaries don't need signing; cross-format combinations print an
 /// advisory line and skip the signing step.
+/// Lower the program to a native binary and write it to stdout
+/// rather than a file on disk. Used by gh #28's pipe-mode (the
+/// caller redirected stdout, or asked for `-o -`). No
+/// mark-executable / codesign / per-target reminder -- the
+/// downstream of the pipe gets to handle those.
+fn emit_native_binary_to_stdout(program: &badc::Program, target: Target, options: NativeOptions) {
+    let bytes = match emit_native_with_options(program, target, options) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    };
+    if let Err(e) = std::io::stdout().write_all(&bytes) {
+        eprintln!("badc: failed to write binary to stdout: {e}");
+        std::process::exit(1);
+    }
+    let _ = std::io::stdout().flush();
+}
+
 fn emit_native_binary(
     program: &badc::Program,
     out: &std::path::Path,

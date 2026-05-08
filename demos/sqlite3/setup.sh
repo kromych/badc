@@ -51,10 +51,17 @@ done
 
 # Apply each patch. `-p1` strips the `a/` / `b/` prefixes the
 # patches were generated with. `-d` runs the patch in the sqlite
-# dir so the relative filenames inside the patch resolve.
-for p in "${PATCHES_DIR}"/*.patch; do
-    log "applying $(basename "$p")"
-    patch -d "${SQLITE_DIR}" -p1 -s -i "$p"
-done
+# dir so the relative filenames inside the patch resolve. The
+# `compgen -G` guard makes the empty-patches-directory case a
+# clean no-op rather than a "file not found" error from the
+# shell glob expanding to itself.
+if compgen -G "${PATCHES_DIR}/*.patch" > /dev/null; then
+    for p in "${PATCHES_DIR}"/*.patch; do
+        log "applying $(basename "$p")"
+        patch -d "${SQLITE_DIR}" -p1 -s -i "$p"
+    done
+else
+    log "no patches to apply (clean upstream)"
+fi
 
 log "done -- $(ls -l "${SQLITE_DIR}"/{sqlite3.c,shell.c} | awk '{print $9, $5}')"

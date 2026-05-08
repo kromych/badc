@@ -218,3 +218,280 @@ int c5_vfprintf(int fd, char *fmt, va_list ap) {
 int c5_vprintf(char *fmt, va_list ap) {
     return c5_vfprintf(STDOUT_FILENO, fmt, ap);
 }
+
+// Buffer-mode counterparts of c5_emit_*. They append to `buf` at
+// `*cursor`, capping at `size - 1` (leaving room for a trailing
+// NUL), but ALWAYS advance `*cursor` so the final value reflects
+// the would-have-been-written length per snprintf semantics.
+// Pass `size <= 0` to skip writes entirely (length-only mode).
+int c5_buf_putc(char *buf, int size, int *cursor, int c) {
+    if (size > 0 && *cursor + 1 < size) buf[*cursor] = (char)c;
+    *cursor = *cursor + 1;
+    return 1;
+}
+
+int c5_buf_puts(char *buf, int size, int *cursor, char *s) {
+    int n;
+    if (s == 0) s = "(null)";
+    n = 0;
+    while (s[n] != 0) {
+        c5_buf_putc(buf, size, cursor, s[n]);
+        n = n + 1;
+    }
+    return n;
+}
+
+// snprintf-shaped buffer formatter walking c5's `va_list`
+// directly. Recognises a useful subset of C99's printf format:
+//
+//   * Conversions: d, u, x, X, p, c, s, %.
+//   * Flags: '-' (left-align), '0' (zero-pad).
+//   * Width: literal digits or '*' (read int from va_list).
+//   * Precision: '.<digits>' or '.*' (read int from va_list).
+//     For %s precision is the maximum chars to copy. For %d/%x
+//     precision (when set) becomes the minimum-digit width with
+//     '0' fill, ignoring the '0' flag.
+//   * Length modifiers (`l`, `ll`, `h`, `hh`, `z`, `j`, `t`):
+//     parsed and ignored -- c5's `int` value already covers the
+//     ranges these widen / narrow.
+//
+// Float specifiers (%f, %e, %g) and the rare %n / %a aren't
+// implemented and emit literally; sqlite's own
+// `sqlite3_vmprintf` covers the rich-formatter use cases in
+// c5-compiled code.
+//
+// Returns the number of bytes that would have been written (=
+// the strlen of the unbounded result), matching libc vsnprintf:
+// callers compare against `size` to detect truncation.
+int c5_vsnprintf(char *buf, int size, char *fmt, va_list ap) {
+    int cursor;
+    int i;
+    int j;
+    int val;
+    int neg;
+    int d;
+    int width;
+    int prec;
+    int has_prec;
+    int left_align;
+    int zero_pad;
+    int len;
+    int pad_amt;
+    char c;
+    char tmp[32];
+    char *str;
+    cursor = 0;
+    i = 0;
+    while (fmt[i] != 0) {
+        c = fmt[i];
+        if (c != '%') {
+            c5_buf_putc(buf, size, &cursor, c);
+            i = i + 1;
+            continue;
+        }
+        // Parse %[flags][width][.prec][length]<conversion>.
+        i = i + 1;
+        left_align = 0;
+        zero_pad = 0;
+        // Flags. Only '-' and '0' are honoured; '+', ' ', '#'
+        // are accepted but ignored (no sign-display, no
+        // alternate form).
+        while (fmt[i] == '-' || fmt[i] == '0' || fmt[i] == '+'
+                || fmt[i] == ' ' || fmt[i] == '#') {
+            if (fmt[i] == '-') left_align = 1;
+            else if (fmt[i] == '0') zero_pad = 1;
+            i = i + 1;
+        }
+        // Width.
+        width = 0;
+        if (fmt[i] == '*') {
+            width = va_arg(ap, int);
+            if (width < 0) { left_align = 1; width = -width; }
+            i = i + 1;
+        } else {
+            while (fmt[i] >= '0' && fmt[i] <= '9') {
+                width = width * 10 + (fmt[i] - '0');
+                i = i + 1;
+            }
+        }
+        // Precision.
+        prec = 0;
+        has_prec = 0;
+        if (fmt[i] == '.') {
+            has_prec = 1;
+            i = i + 1;
+            if (fmt[i] == '*') {
+                prec = va_arg(ap, int);
+                if (prec < 0) { has_prec = 0; prec = 0; }
+                i = i + 1;
+            } else {
+                while (fmt[i] >= '0' && fmt[i] <= '9') {
+                    prec = prec * 10 + (fmt[i] - '0');
+                    i = i + 1;
+                }
+            }
+        }
+        // Length modifiers -- consume and ignore. c5 keeps every
+        // integer-shaped value in an 8-byte slot, so the length
+        // wouldn't change which va_arg we pull.
+        while (fmt[i] == 'l' || fmt[i] == 'h' || fmt[i] == 'z'
+                || fmt[i] == 'j' || fmt[i] == 't') {
+            i = i + 1;
+        }
+        c = fmt[i];
+        if (c == 'd') {
+            val = va_arg(ap, int);
+            neg = 0;
+            if (val < 0) { neg = 1; val = -val; }
+            j = c5_emit_digits(tmp, 31, val, 10);
+            len = 31 - j;
+            if (neg) len = len + 1;
+            // Zero-pad to precision (if set) overrides space-pad
+            // to width below; precision is min digits.
+            int min_digits = has_prec ? prec : 0;
+            int extra_zeros = 0;
+            if (len - (neg ? 1 : 0) < min_digits) {
+                extra_zeros = min_digits - (len - (neg ? 1 : 0));
+                len = len + extra_zeros;
+            }
+            pad_amt = width > len ? width - len : 0;
+            // Right-pad with spaces if left-aligned, else
+            // pad-left with space (or '0' if zero_pad and no
+            // explicit precision).
+            char pad_ch = (zero_pad && !has_prec && !left_align) ? '0' : ' ';
+            if (!left_align) {
+                while (pad_amt > 0) {
+                    c5_buf_putc(buf, size, &cursor, pad_ch);
+                    pad_amt = pad_amt - 1;
+                }
+            }
+            if (neg) c5_buf_putc(buf, size, &cursor, '-');
+            while (extra_zeros > 0) {
+                c5_buf_putc(buf, size, &cursor, '0');
+                extra_zeros = extra_zeros - 1;
+            }
+            while (j < 31) {
+                c5_buf_putc(buf, size, &cursor, tmp[j]);
+                j = j + 1;
+            }
+            if (left_align) {
+                while (pad_amt > 0) {
+                    c5_buf_putc(buf, size, &cursor, ' ');
+                    pad_amt = pad_amt - 1;
+                }
+            }
+            i = i + 1;
+        } else if (c == 'u' || c == 'x' || c == 'X') {
+            val = va_arg(ap, int);
+            j = c5_emit_digits(tmp, 31, val, c == 'u' ? 10 : 16);
+            len = 31 - j;
+            int min_digits = has_prec ? prec : 0;
+            int extra_zeros = 0;
+            if (len < min_digits) {
+                extra_zeros = min_digits - len;
+                len = len + extra_zeros;
+            }
+            pad_amt = width > len ? width - len : 0;
+            char pad_ch = (zero_pad && !has_prec && !left_align) ? '0' : ' ';
+            if (!left_align) {
+                while (pad_amt > 0) {
+                    c5_buf_putc(buf, size, &cursor, pad_ch);
+                    pad_amt = pad_amt - 1;
+                }
+            }
+            while (extra_zeros > 0) {
+                c5_buf_putc(buf, size, &cursor, '0');
+                extra_zeros = extra_zeros - 1;
+            }
+            while (j < 31) {
+                c5_buf_putc(buf, size, &cursor, tmp[j]);
+                j = j + 1;
+            }
+            if (left_align) {
+                while (pad_amt > 0) {
+                    c5_buf_putc(buf, size, &cursor, ' ');
+                    pad_amt = pad_amt - 1;
+                }
+            }
+            i = i + 1;
+        } else if (c == 'p') {
+            val = va_arg(ap, int);
+            c5_buf_putc(buf, size, &cursor, '0');
+            c5_buf_putc(buf, size, &cursor, 'x');
+            j = 15;
+            while (j >= 0) {
+                d = (val >> (j * 4)) & 15;
+                if (d < 10) c5_buf_putc(buf, size, &cursor, '0' + d);
+                else c5_buf_putc(buf, size, &cursor, 'a' + d - 10);
+                j = j - 1;
+            }
+            i = i + 1;
+        } else if (c == 'c') {
+            int ch_val = va_arg(ap, int);
+            pad_amt = width > 1 ? width - 1 : 0;
+            if (!left_align) {
+                while (pad_amt > 0) {
+                    c5_buf_putc(buf, size, &cursor, ' ');
+                    pad_amt = pad_amt - 1;
+                }
+            }
+            c5_buf_putc(buf, size, &cursor, ch_val);
+            if (left_align) {
+                while (pad_amt > 0) {
+                    c5_buf_putc(buf, size, &cursor, ' ');
+                    pad_amt = pad_amt - 1;
+                }
+            }
+            i = i + 1;
+        } else if (c == 's') {
+            str = va_arg(ap, char *);
+            if (str == 0) str = "(null)";
+            // Compute display length. Precision caps for %s.
+            len = 0;
+            while (str[len] != 0) len = len + 1;
+            if (has_prec && prec < len) len = prec;
+            pad_amt = width > len ? width - len : 0;
+            if (!left_align) {
+                while (pad_amt > 0) {
+                    c5_buf_putc(buf, size, &cursor, ' ');
+                    pad_amt = pad_amt - 1;
+                }
+            }
+            j = 0;
+            while (j < len) {
+                c5_buf_putc(buf, size, &cursor, str[j]);
+                j = j + 1;
+            }
+            if (left_align) {
+                while (pad_amt > 0) {
+                    c5_buf_putc(buf, size, &cursor, ' ');
+                    pad_amt = pad_amt - 1;
+                }
+            }
+            i = i + 1;
+        } else if (c == '%') {
+            c5_buf_putc(buf, size, &cursor, '%');
+            i = i + 1;
+        } else if (c == 0) {
+            // Trailing '%' -- bail without consuming a va_arg.
+        } else {
+            // Unimplemented specifier (e.g. %f, %e, %g, %n) --
+            // emit the raw `%<spec>` for round-trippability and
+            // skip the va_arg we don't know how to consume. The
+            // caller's arg list will be off by one for that
+            // conversion, but the alternative (silent va_arg
+            // shift) is worse: it'd corrupt every subsequent
+            // conversion in the same fmt.
+            c5_buf_putc(buf, size, &cursor, '%');
+            c5_buf_putc(buf, size, &cursor, c);
+            i = i + 1;
+        }
+    }
+    // NUL-terminate within capacity. snprintf says: if size > 0,
+    // the output is always NUL-terminated, possibly truncated.
+    if (size > 0) {
+        if (cursor < size) buf[cursor] = 0;
+        else buf[size - 1] = 0;
+    }
+    return cursor;
+}

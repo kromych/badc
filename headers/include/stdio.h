@@ -182,9 +182,6 @@ int printf(char *fmt, ...);
 int fprintf(FILE *stream, char *fmt, ...);
 int sprintf(char *buf, char *fmt, ...);
 int snprintf(char *buf, int size, char *fmt, ...);
-int vfprintf(FILE *stream, char *fmt, char *args);
-int vsprintf(char *buf, char *fmt, char *args);
-int vsnprintf(char *buf, int size, char *fmt, char *args);
 int sscanf(char *src, char *fmt, ...);
 FILE *fopen(char *path, char *mode);
 int fclose(FILE *stream);
@@ -265,3 +262,65 @@ static char *__c5_lazy_stream(int idx) {
 #define stdin   ((FILE *)__c5_lazy_stream(0))
 #define stdout  ((FILE *)__c5_lazy_stream(1))
 #define stderr  ((FILE *)__c5_lazy_stream(2))
+
+// libc's vfprintf / vprintf / vsprintf / vsnprintf take a
+// platform-native va_list -- a register-save struct on aarch64 /
+// x86_64, not the flat `long long *` cursor c5's <stdarg.h>
+// produces. Calling libc directly with c5's va_list returns
+// garbage; we route every v* call through a c5-side formatter
+// (`c5_vsnprintf` in <c5io.h>) that walks the cursor the way c5
+// emits it.
+//
+// Plain printf / fprintf / sprintf / snprintf still bind to libc
+// because their `...` varargs go through the host ABI's register
+// packing -- the platform's variadic call shape is exactly what
+// the c5 codegen emits for `func(a, b, c)`, so no bridge is
+// needed there. Only the v* variants need the c5 detour.
+//
+// User-side syntax doesn't change: source still calls
+// `vfprintf(stream, fmt, ap)` etc.; the macros below redirect the
+// call to the c5-side implementation. The upstream sqlite shell
+// `#define sqlite3_vfprintf vfprintf` transitively follows.
+#include <c5io.h>
+
+int c5_vfprintf_FILE(FILE *out, char *fmt, va_list ap) {
+    char buf[8192];
+    int n;
+    n = c5_vsnprintf(buf, 8192, fmt, ap);
+    fputs(buf, out);
+    return n;
+}
+
+int c5_vprintf_stdout(char *fmt, va_list ap) {
+    return c5_vfprintf_FILE(stdout, fmt, ap);
+}
+
+// Unbounded buffer formatter -- mirrors libc's vsprintf, where
+// the caller is responsible for sizing the buffer. Implemented
+// as a thin wrapper around c5_vsnprintf with INT_MAX as the
+// cap.
+int c5_vsprintf_unbounded(char *buf, char *fmt, va_list ap) {
+    return c5_vsnprintf(buf, 0x7FFFFFFF, fmt, ap);
+}
+
+// Object-like aliases (rather than function-like) so the
+// substitution chain works even through an intermediate
+// object-like alias like sqlite's
+// `#define sqlite3_vfprintf vfprintf`. c5's preprocessor
+// rescans only the expansion text for further macro names, not
+// the surrounding tokens (C99 6.10.3.4 strictly requires both),
+// so a function-like `#define vfprintf(s,f,a) ...` would only
+// expand at direct `vfprintf(...)` call sites and leave
+// `sqlite3_vfprintf(...)`-derived `vfprintf` tokens unresolved.
+// Object-like aliases sidestep the rescan-window issue: the
+// substitution doesn't depend on a `(` check.
+//
+// vsprintf passes 0x7FFFFFFF as the size cap (= effectively
+// unlimited) so the unbounded shape matches libc semantics; in
+// practice the c5 caller has to supply a buffer large enough
+// for the output -- vsnprintf (the bounded form) is the safer
+// choice and where most code lands.
+#define vfprintf  c5_vfprintf_FILE
+#define vprintf   c5_vprintf_stdout
+#define vsnprintf c5_vsnprintf
+#define vsprintf  c5_vsprintf_unbounded

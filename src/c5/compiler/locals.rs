@@ -45,6 +45,10 @@ impl Compiler {
         let lbt = self.parse_decl_base_type()?;
         while self.lex.tk != ';' as i64 {
             let (loc_idx, ty, array_size) = self.parse_declarator(lbt)?;
+            // gh #19 fn-pointer lineage carries through to local
+            // bindings -- pick up the side-channel parse_declarator
+            // (or the typedef base type) populated.
+            let fn_ptr_indirection = self.pending_fn_ptr_indirection.take().unwrap_or(0);
             self.ty = ty;
             if self.symbols[loc_idx].class == Token::Loc as i64 {
                 return Err(C5Error::Compile(format!(
@@ -63,6 +67,9 @@ impl Compiler {
                 self.symbols[loc_idx].class = Token::Loc as i64;
                 self.symbols[loc_idx].type_ = ty;
                 self.allocate_local_with_init(loc_idx, ty, array_size)?;
+            }
+            if fn_ptr_indirection > 0 {
+                self.symbols[loc_idx].fn_ptr_indirection = fn_ptr_indirection;
             }
 
             if self.lex.tk == ',' as i64 {

@@ -261,6 +261,17 @@ pub struct Compiler {
     /// wasn't this shape.
     pending_fn_params: Option<ParsedParams>,
 
+    /// Side channel from `parse_declarator` to its caller: when
+    /// the declarator was function-pointer-shaped, this is the
+    /// number of pointer levels between the resulting variable's
+    /// loaded value and the underlying fn-pointer rvalue, plus 1
+    /// (matching `Symbol::fn_ptr_indirection`'s convention).
+    /// `None` when the declarator wasn't fn-pointer-shaped, so
+    /// the caller doesn't have to clear a stale value before
+    /// each parse. The caller takes() the value when binding the
+    /// symbol.
+    pending_fn_ptr_indirection: Option<i64>,
+
     /// Override stride for the next `[i]` postfix index. When we
     /// load the address of a 2D-array variable (`T xs[N][M]`),
     /// the first subscript should scale the index by
@@ -280,6 +291,26 @@ pub struct Compiler {
     /// `expr()` call so a previous decay doesn't leak into an
     /// unrelated sizeof.
     last_array_decay_size: i64,
+
+    /// Depth from the value currently in the accumulator down to
+    /// a function-pointer rvalue, or -1 if the running expression
+    /// has no function-pointer lineage. Concretely:
+    ///
+    ///   * 0  -- value IS a fn pointer; one more unary `*` is the
+    ///           C function-pointer-decay no-op (gh #19).
+    ///   * N>0 -- N more derefs to reach the fn pointer.
+    ///   * -1 -- not in a fn-ptr-tracked chain; existing behavior.
+    ///
+    /// Seeded by the identifier-load path from
+    /// `Symbol::fn_ptr_indirection` and updated by unary `*` /
+    /// `&`. Cleared by `emit_op` so any unrelated emit
+    /// invalidates the trace; identifier loads and `*` re-set it
+    /// when applicable. Used to suppress the spurious `Li` that
+    /// the existing unary `*` handler would emit when chasing a
+    /// function pointer whose return type is itself a pointer
+    /// (so the post-`*` type still satisfies `is_pointer_ty` and
+    /// the call-site fallback can't fire).
+    fn_ptr_chain_depth: i64,
 
     /// Per-bytecode-PC source line, parallel to `text`. Updated
     /// on every emit_op / emit_val / emit_data_imm so each
@@ -451,6 +482,7 @@ impl Compiler {
             call_fp_arg_masks: Vec::new(),
             current_func_return_ty: 0,
             pending_fn_params: None,
+            pending_fn_ptr_indirection: None,
             pending_index_stride: 0,
             source_lines: Vec::new(),
             source_functions: Vec::new(),
@@ -459,6 +491,7 @@ impl Compiler {
             code_reloc_sym_idx: Vec::new(),
             sys_trampoline_sym: alloc::collections::BTreeMap::new(),
             last_array_decay_size: 0,
+            fn_ptr_chain_depth: -1,
         }
     }
 
@@ -1049,6 +1082,13 @@ impl Compiler {
             // Typedef-name as base type. Resolve to the aliased
             // type and consume the identifier.
             let aliased = self.symbols[self.lex.curr_id_idx].type_;
+            // Carry the typedef's fn-pointer lineage forward (gh
+            // #19) so a later `fn_t fp` declaration ends up with
+            // the right indirection count.
+            let typedef_fpi = self.symbols[self.lex.curr_id_idx].fn_ptr_indirection;
+            if typedef_fpi > 0 {
+                self.pending_fn_ptr_indirection = Some(typedef_fpi);
+            }
             self.next()?;
             aliased
         } else if saw_int_mod {
@@ -1370,6 +1410,12 @@ impl Compiler {
     // ---- Code emission ----
 
     fn emit_op(&mut self, op: Op) {
+        // Any emit invalidates the function-pointer chain
+        // tracking. Identifier loads and the unary `*` handler
+        // re-seed it after their own emits when the symbol /
+        // result is in fn-ptr lineage (see
+        // `fn_ptr_chain_depth`).
+        self.fn_ptr_chain_depth = -1;
         self.text.push(op as i64);
         // Mirror text.len() one-for-one in source_lines /
         // source_functions so a bc_pc lookup is a direct
@@ -2182,6 +2228,18 @@ impl Compiler {
                     // Pointers to structs and every scalar type go
                     // through the normal load_op_for path.
                     self.emit_op(load_op_for(self.ty, self.target));
+                    // gh #19: seed the fn-pointer chain depth from
+                    // the symbol's recorded indirection. emit_op
+                    // just cleared the field; re-set it now so the
+                    // surrounding unary-`*` chain can recognise
+                    // function-pointer decay. `fn_ptr_indirection`
+                    // is "indirection above fn-ptr, plus 1"; depth
+                    // after the load is one less (the load itself
+                    // consumed one indirection level).
+                    let fpi = self.symbols[id_idx].fn_ptr_indirection;
+                    if fpi > 0 {
+                        self.fn_ptr_chain_depth = fpi - 1;
+                    }
                 }
             }
         } else if self.lex.tk == '(' as i64 {
@@ -2191,9 +2249,19 @@ impl Compiler {
                 // float, double, or struct base, with any number of
                 // `*` markers and pointer-level qualifiers.
                 t = self.parse_decl_base_type()?;
+                // gh #19 lineage: if the base type came from a
+                // typedef-of-fn-pointer, parse_decl_base_type seeded
+                // `pending_fn_ptr_indirection`; the leading `*`s
+                // below add directly to that count. The abstract
+                // fn-ptr branch further down overrides this when a
+                // `(*)(args)` shape is present in the cast.
+                let mut cast_fpi = self.pending_fn_ptr_indirection.take();
                 while self.lex.tk == Token::MulOp as i64 {
                     self.next()?;
                     t += Ty::Ptr as i64;
+                    if let Some(fpi) = cast_fpi {
+                        cast_fpi = Some(fpi + 1);
+                    }
                     while self.lex.tk == Token::TypeQual as i64 {
                         self.next()?;
                     }
@@ -2237,6 +2305,13 @@ impl Compiler {
                         self.skip_balanced_parens_after_open()?;
                     }
                     t += nested_ptrs * (Ty::Ptr as i64);
+                    // Abstract fn-ptr declarator: the inner `*`
+                    // count IS the indirection from the cast's
+                    // result down to the fn-ptr rvalue, plus 1
+                    // (matching `Symbol::fn_ptr_indirection`).
+                    if nested_ptrs > 0 {
+                        cast_fpi = Some(nested_ptrs);
+                    }
                 }
                 if self.lex.tk == ')' as i64 {
                     self.next()?;
@@ -2309,6 +2384,17 @@ impl Compiler {
                     }
                 }
                 self.ty = t;
+                // gh #19: re-seed the fn-ptr chain depth from the
+                // cast destination so a unary `*` chain that
+                // follows a `(fn_t*)expr` cast (sqlite's
+                // `(**(finder_type*)pVfs->pAppData)(...)` shape)
+                // can recognise the decay. The cast result lives
+                // in `a`, so the depth is `cast_fpi - 1`.
+                if let Some(fpi) = cast_fpi
+                    && fpi > 0
+                {
+                    self.fn_ptr_chain_depth = fpi - 1;
+                }
             } else {
                 self.expr(Token::Assign as i64)?;
                 // Comma operator within parens: `(a, b, c)` evaluates
@@ -2333,22 +2419,58 @@ impl Compiler {
         } else if self.lex.tk == Token::MulOp as i64 {
             self.next()?;
             self.expr(Token::Inc as i64)?;
-            if is_pointer_ty(self.ty) {
-                self.ty -= Ty::Ptr as i64;
+            // C function-pointer decay (6.3.2.1 / 6.3.4): `*` on
+            // a function-pointer rvalue is a no-op -- it yields
+            // back the same function pointer. The chain-depth
+            // side-channel marks the operand as already at the
+            // fn-ptr level, so we suppress the load and leave
+            // both the type and the accumulator unchanged. Next
+            // `*` keeps decaying; eventually the postfix `(`
+            // call-site reads `a` as the function pointer.
+            //
+            // Without this branch the existing handler emits a
+            // spurious `Li` that loads through the function
+            // pointer's bit pattern, hits unmapped memory, and
+            // SIGBUSes when called. The conservative pop in the
+            // call-site path catches this only when the result
+            // type drops to a non-pointer; if the function's
+            // return type is itself a pointer (sqlite's
+            // `finder_type` returning `sqlite3_io_methods *`,
+            // gh #19) the pop is short-circuited and the
+            // garbage call target slips through.
+            if self.fn_ptr_chain_depth == 0 {
+                // Decay no-op. Keep depth at 0: the decayed
+                // result is itself a fn-ptr rvalue, so any
+                // further `*`s also decay.
+                // Note: emit_op was not called, so the chain
+                // depth is preserved (no clear happened).
             } else {
-                return Err(C5Error::Compile(format!(
-                    "{}: bad dereference",
-                    self.lex.line
-                )));
-            }
-            // `*p` where `p` is a struct pointer yields a struct
-            // *value*. c5 represents struct values address-as-
-            // value: the address goes in `a`, no load. The next
-            // op (`.field`, `= rhs` lowering Mcpy, etc.) reads
-            // the address from `a` directly.
-            let result_is_struct_value = is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
-            if !result_is_struct_value {
-                self.emit_op(load_op_for(self.ty, self.target));
+                if is_pointer_ty(self.ty) {
+                    self.ty -= Ty::Ptr as i64;
+                } else {
+                    return Err(C5Error::Compile(format!(
+                        "{}: bad dereference",
+                        self.lex.line
+                    )));
+                }
+                // `*p` where `p` is a struct pointer yields a struct
+                // *value*. c5 represents struct values address-as-
+                // value: the address goes in `a`, no load. The next
+                // op (`.field`, `= rhs` lowering Mcpy, etc.) reads
+                // the address from `a` directly.
+                let result_is_struct_value =
+                    is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
+                if !result_is_struct_value {
+                    let prior_depth = self.fn_ptr_chain_depth;
+                    self.emit_op(load_op_for(self.ty, self.target));
+                    // emit_op cleared the chain depth. Restore it
+                    // one level deeper if the operand was tracked:
+                    // a real deref consumes one level of indirection
+                    // toward the fn-ptr. (-1 stays -1.)
+                    if prior_depth > 0 {
+                        self.fn_ptr_chain_depth = prior_depth - 1;
+                    }
+                }
             }
         } else if self.lex.tk == Token::AndOp as i64 {
             self.next()?;
@@ -2390,6 +2512,12 @@ impl Compiler {
                 )));
             }
             self.ty += Ty::Ptr as i64;
+            // gh #19: `&` adds one pointer level toward the fn-ptr
+            // for any chain we were tracking. -1 (untracked) stays
+            // -1.
+            if self.fn_ptr_chain_depth >= 0 {
+                self.fn_ptr_chain_depth += 1;
+            }
         } else if self.lex.tk == '!' as i64 {
             self.next()?;
             self.expr(Token::Inc as i64)?;
@@ -3348,6 +3476,15 @@ impl Compiler {
                 // Typedef-name as base type at file scope: `Foo bar;`
                 // where `Foo` was bound by a prior `typedef`.
                 bt = self.symbols[self.lex.curr_id_idx].type_;
+                // Carry the typedef's fn-ptr lineage forward so a
+                // declarator like `fn_t fp` (no leading `*`) still
+                // gets `Symbol::fn_ptr_indirection = 1`. The
+                // declarator itself, if it adds leading `*`s, will
+                // bump this further before the symbol is bound.
+                let typedef_fpi = self.symbols[self.lex.curr_id_idx].fn_ptr_indirection;
+                if typedef_fpi > 0 {
+                    self.pending_fn_ptr_indirection = Some(typedef_fpi);
+                }
                 self.next()?;
             } else if saw_int_mod {
                 // Bare modifier(s) without an explicit type keyword:
@@ -3381,8 +3518,16 @@ impl Compiler {
 
             while self.lex.tk != ';' as i64 && self.lex.tk != '}' as i64 {
                 let (id_idx, ty, array_size) = self.parse_declarator(bt)?;
+                // gh #19: pick up the fn-pointer indirection
+                // count the declarator (or its typedef base type)
+                // recorded, and store it on the symbol so a later
+                // identifier load can seed the chain-depth tracker.
+                let fn_ptr_indirection = self.pending_fn_ptr_indirection.take().unwrap_or(0);
                 self.ty = ty;
                 self.symbols[id_idx].array_size = array_size;
+                if fn_ptr_indirection > 0 {
+                    self.symbols[id_idx].fn_ptr_indirection = fn_ptr_indirection;
+                }
                 // Function-returning-FP shape: parse_declarator
                 // already consumed the outer function's params.
                 // Synthesize the function-definition path: bind the

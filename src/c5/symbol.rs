@@ -57,4 +57,23 @@ pub(crate) struct Symbol {
     /// the storage. A second declaration that *also* carries an
     /// initializer is a real duplicate.
     pub has_initializer: bool,
+
+    /// Number of derefs from this variable's *loaded value* down
+    /// to a function-pointer rvalue, plus 1, or 0 if the variable
+    /// has no function-pointer lineage. Concretely:
+    ///
+    ///   * `int (*fp)(int)`        -> 1 (loaded value IS the fn ptr)
+    ///   * `fn_t fp;` via typedef  -> 1 (same)
+    ///   * `fn_t *pp;`             -> 2 (one more deref needed)
+    ///   * `int x;`                -> 0 (no lineage)
+    ///
+    /// The `+1` lets a default-zero field encode "no lineage"
+    /// distinctly from "value is direct fn ptr" (which would
+    /// otherwise also be zero). Read by the identifier-load path
+    /// to seed `Compiler::fn_ptr_chain_depth` and ultimately
+    /// decide whether a unary `*` is a real deref or a C decay
+    /// no-op (gh #19). c5 doesn't carry function-pointer
+    /// distinction in the type tag itself, so this side-channel
+    /// is the only durable trace.
+    pub fn_ptr_indirection: i64,
 }

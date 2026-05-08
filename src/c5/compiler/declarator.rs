@@ -47,14 +47,30 @@ impl Compiler {
     /// sufficient.
     pub(super) fn parse_declarator(&mut self, base: i64) -> Result<(usize, i64, i64), C5Error> {
         let mut ty = base;
+        let mut leading_ptr_count: i64 = 0;
         while self.lex.tk == Token::MulOp as i64 {
             self.next()?;
             ty += Ty::Ptr as i64;
+            leading_ptr_count += 1;
             // Pointer-level qualifiers: `int *const p`, `int *volatile p`,
             // `char *restrict s`. Consumed; no semantic effect.
             while self.lex.tk == Token::TypeQual as i64 {
                 self.next()?;
             }
+        }
+        // gh #19 lineage propagation: if the caller pre-seeded
+        // `pending_fn_ptr_indirection` from a typedef-of-fn-ptr
+        // base type, the leading `*`s here add directly to the
+        // indirection count: `fn_t fp` -> 1, `fn_t *pp` -> 2,
+        // `fn_t **ppp` -> 3. The fn-ptr-declarator branch below
+        // overrides this with its own value when it fires (the
+        // declarator carries explicit fn-pointer shape rather
+        // than inheriting from the base type), so we update
+        // pending only when leading `*`s actually accumulated.
+        if leading_ptr_count > 0
+            && let Some(fpi) = self.pending_fn_ptr_indirection
+        {
+            self.pending_fn_ptr_indirection = Some(fpi + leading_ptr_count);
         }
 
         // Function-pointer declarator: `RET (*Name)(args)`, possibly
@@ -69,7 +85,27 @@ impl Compiler {
                 || self.lex.peek_after_whitespace_starts_ident())
         {
             self.next()?; // consume the outer `(`
+            let outer_ty_before_inner = ty;
             let (idx, mut inner_ty, inner_array_size) = self.parse_declarator(ty)?;
+            // Function-pointer lineage trace (gh #19): the inner
+            // declarator's leading `*`s plus the fn-pointer's own
+            // pointer level give the indirection count from the
+            // variable's loaded value down to the fn-pointer
+            // rvalue, plus 1. For `T (*name)(args)` the inner
+            // declarator added one Ptr (the `*`), so depth = 1 -
+            // matching Symbol::fn_ptr_indirection's "value IS fn
+            // ptr" convention. For `T (**name)(args)` the inner
+            // added two Ptrs, depth = 2 (one more deref needed).
+            let ty_delta = inner_ty - outer_ty_before_inner;
+            let inner_ptr_levels = ty_delta / (Ty::Ptr as i64);
+            if inner_ptr_levels > 0 {
+                // Only set the side-channel for the OUTERMOST
+                // fn-ptr declarator: the inner recursive call may
+                // itself have set it for a nested fn-ptr declarator
+                // (function-returning-fp shape), and the outer
+                // call's value is the right one to expose.
+                self.pending_fn_ptr_indirection = Some(inner_ptr_levels);
+            }
             // The inner declarator may have stopped on `(` if it
             // was a function-returning-fp shape like
             // `void (*foo(args1))(args2)`. In that case `foo` is

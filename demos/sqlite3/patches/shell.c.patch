@@ -1,17 +1,19 @@
---- a/shell.c	2026-04-09 06:11:49
-+++ b/shell.c	2026-05-06 07:07:48
-@@ -340,7 +340,24 @@
+--- a/shell.c
++++ b/shell.c
+@@ -340,7 +340,26 @@
  #define sqlite3_fgets     fgets
  #define sqlite3_fputs     fputs
  #define sqlite3_fprintf   fprintf
 -#define sqlite3_vfprintf  vfprintf
 +/* badc/c5 patch: route v?fprintf through a c5-safe wrapper on
 +** non-Windows too. Originally `sqlite3_vfprintf` was a macro for
-+** libc `vfprintf`, but c5's `va_list` (`long *` walking 16-byte
-+** stack slots) is not the platform's va_list (a struct on
-+** aarch64 / x86_64), so libc's vfprintf misreads the args. The
-+** wrapper routes through `sqlite3_vmprintf` (c5-compiled, so it
-+** walks the va_list correctly), then writes via `fputs`.
++** libc `vfprintf`, but c5's `va_list` (`long long *` walking
++** 16-byte stack slots) is not the platform's va_list (a struct
++** on aarch64 / x86_64), so libc's vfprintf misreads the args.
++** The wrapper routes through `sqlite3_vmprintf` (c5-compiled,
++** so it walks the va_list correctly), then writes via `fputs`.
++** Tracked as gh #57 -- bridging c5's va_list to the platform
++** ABI is the proper fix; this stub is the workaround.
 +*/
 +static int sqlite3_vfprintf(FILE *out, const char *zFormat, va_list ap){
 +    char *z = sqlite3_vmprintf(zFormat, ap);
@@ -25,4 +27,20 @@
 +}
  #define sqlite3_fsetmode(F,X)   /*no-op*/
  
+ #endif
+@@ -36432,7 +36451,14 @@
+   stdin_is_interactive = isatty(0);
+   stdout_is_console = isatty(1);
+ #endif
+-  atexit(sayAbnormalExit);
++  /* badc/c5 patch: glibc on Linux doesn't export `atexit` as a
++  ** regular dynamic symbol -- `dlsym(libc.so.6, "atexit")` returns
++  ** NULL because atexit() is an inline stub that calls the per-DSO
++  ** `__cxa_atexit(...)`. macOS exports `_atexit` and the call would
++  ** work there, but the simplest portable shape is to skip the call
++  ** entirely; sayAbnormalExit only runs after a signal-driven
++  ** interrupt anyway, which never fires in the smoke harness. */
++  /* atexit(sayAbnormalExit); */
+ #ifdef SQLITE_DEBUG
+   mem_main_enter = sqlite3_memory_used();
  #endif

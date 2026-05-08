@@ -20,12 +20,20 @@
 #define SEEK_END 2
 
 // setvbuf modes -- non-buffered, line-buffered, fully-buffered.
-// macOS / Linux / Win32 all happen to use the same numeric
-// values for these (2/1/0 respectively), so a single set works
-// regardless of target.
+// macOS / Linux land on (_IONBF=2, _IOLBF=1, _IOFBF=0); MSVC
+// msvcrt uses (_IONBF=4, _IOLBF=64, _IOFBF=0). Calling msvcrt's
+// setvbuf with the POSIX values trips its `_invalid_parameter`
+// handler -- so the values diverge per target. The macros below
+// resolve the right pair at preprocess time, no runtime check.
+#ifdef _WIN32
+#define _IONBF 4
+#define _IOLBF 64
+#define _IOFBF 0
+#else
 #define _IONBF 2
 #define _IOLBF 1
 #define _IOFBF 0
+#endif
 
 #ifndef FILENAME_MAX
 #define FILENAME_MAX 4096

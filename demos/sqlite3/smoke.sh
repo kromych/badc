@@ -293,11 +293,25 @@ if [ "${BADC_RUN_DIAG:-}" = "1" ]; then
         -DSQLITE_ENABLE_LOCKING_STYLE=0 \
         -DSQLITE_DISABLE_INTRINSIC \
         -DSQLITE_OMIT_SEH || { echo "diag: build failed" >&2; }
-    if [ -x "${DIAG_BIN}" ]; then
+    if [ -e "${DIAG_BIN}" ]; then
+        echo "=== diag artefact ===" >&2
+        ls -la "${DIAG_BIN}" >&2 || true
+        if command -v file >/dev/null 2>&1; then
+            file "${DIAG_BIN}" >&2 || true
+        fi
         echo "=== diag run (in-memory smoke input) ===" >&2
+        # Direct invocation (no pipe) first to probe the loader --
+        # exit-127 from bash would otherwise hide whether the binary
+        # itself rejected stdin or never started. Then the piped run
+        # for actual checkpoint output.
+        "${DIAG_BIN}" </dev/null
+        echo "=== diag direct exit=$? ===" >&2
         printf "CREATE TABLE t(x INTEGER, y TEXT);\nINSERT INTO t VALUES(-7,'neg'),(1,'hello'),(2,'world');\nSELECT * FROM t;\n.quit\n" \
-            | "${DIAG_BIN}" || echo "=== diag exit=$? ===" >&2
+            | "${DIAG_BIN}"
+        echo "=== diag piped exit=$? ===" >&2
         echo "=== /diag run ===" >&2
+    else
+        echo "=== diag binary not produced at ${DIAG_BIN} ===" >&2
     fi
 fi
 

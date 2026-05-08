@@ -351,7 +351,12 @@ if [ "${BADC_RUN_DIAG:-}" = "1" ]; then
                 winpath="${HELLOSQ_BIN}"
             fi
             echo "=== hello+sqlite cmd.exe probe (winpath=${winpath}) ===" >&2
-            cmd.exe //c "${winpath} & echo errorlevel=%errorlevel%" >&2 || true
+            # Capture both stdout and stderr from the spawned binary
+            # via `2>&1` so we see whatever it actually printed.
+            # `start /WAIT /B` runs in the same console and waits for
+            # exit so the errorlevel reflects the spawned process,
+            # not the START command itself.
+            cmd.exe //c "${winpath} 2>&1 & echo errorlevel=%errorlevel%" >&2 || true
             echo "=== /hello+sqlite cmd.exe probe ===" >&2
         fi
     fi

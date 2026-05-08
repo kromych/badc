@@ -661,6 +661,15 @@ pub(super) fn enc_blr(rn: Reg) -> u32 {
     0xD63F_0000 | ((rn.0 as u32) << 5)
 }
 
+/// `BR <Xn>` -- branch (no link) to the address in `Xn`. Used by
+/// the `Op::TailExt` lowering to forward control to the IAT/GOT-
+/// resolved libc address without saving a return point: the libc
+/// fn's `RET` lands back at the c5 caller's post-Jsri continuation
+/// instead of bouncing back through the trampoline.
+pub(super) fn enc_br(rn: Reg) -> u32 {
+    0xD61F_0000 | ((rn.0 as u32) << 5)
+}
+
 /// `SVC #imm16` -- supervisor call (system call). On Linux/aarch64
 /// the kernel reads the intrinsic number from `x8` and the arguments
 /// from `x0..x5`; the immediate is conventionally zero.
@@ -1781,6 +1790,22 @@ fn lower_op(
                 target,
             )?;
         }
+        Op::TailExt => {
+            // Tail-jump trampoline body. See the matching x86_64
+            // arm + the `Op::TailExt` doc in op.rs for the
+            // calling-convention bookkeeping; on aarch64 the
+            // sequence is `adrp x16, GOT; ldr x16, [x16, off];
+            // br x16`, which the writer patches the same way as
+            // the regular GOT-call shape.
+            let binding_idx = read_operand(text, pc, "TailExt")?;
+            let import_index = imports.index_of_binding(binding_idx).ok_or_else(|| {
+                C5Error::Compile(alloc::format!(
+                    "native codegen (aarch64): no import slot for binding {binding_idx} -- \
+                     the resolver should have placed it"
+                ))
+            })?;
+            emit_got_tail_jump(code, got_fixups, import_index);
+        }
 
         // ---- Floating-point arithmetic ----
         //
@@ -2264,6 +2289,26 @@ fn emit_got_call(code: &mut Vec<u8>, got_fixups: &mut Vec<GotFixup>, import_inde
     emit(code, enc_adrp(Reg::X16, 0));
     emit(code, enc_ldr_imm(Reg::X16, Reg::X16, 0));
     emit(code, enc_blr(Reg::X16));
+}
+
+/// Tail-jump variant of [`emit_got_call`]: same `adrp+ldr`
+/// patch-bookkeeping the writer recognises, but with a final
+/// `BR x16` instead of `BLR x16`. The libc fn's `RET` returns
+/// directly to the c5 caller of the trampoline, skipping the
+/// trampoline entirely on the way back. Used by `Op::TailExt`.
+fn emit_got_tail_jump(
+    code: &mut Vec<u8>,
+    got_fixups: &mut Vec<GotFixup>,
+    import_index: usize,
+) {
+    let adrp_offset = code.len();
+    got_fixups.push(GotFixup {
+        adrp_offset,
+        import_index,
+    });
+    emit(code, enc_adrp(Reg::X16, 0));
+    emit(code, enc_ldr_imm(Reg::X16, Reg::X16, 0));
+    emit(code, enc_br(Reg::X16));
 }
 
 /// Pop the top of the VM push-stack -- either a pool register `xN`

@@ -1288,34 +1288,64 @@ impl Compiler {
 
             let fixed_nargs = self.symbols[sys_idx].params.len();
             let is_variadic = self.symbols[sys_idx].is_variadic;
-            // For variadic libc fns the binding-declared param count
-            // is only the fixed prefix; sqlite's `aSyscall[]` table
-            // (open/fcntl/ioctl) wants the trampoline to forward
-            // *one* of the variadic args so the caller's
-            // 3-argument cast lines up with what `JsrExt` packs onto
-            // the macOS arm64 variadic-args stack region. Callers
-            // that pass strictly the fixed prefix end up reading one
-            // junk slot from above their own pushes, but no
-            // in-the-wild caller does -- they all add at least one
-            // extra arg precisely to feed the variadic. The general
-            // case (forward N variadic args where N is unknown at
-            // compile time) needs a real va_args bridge -- tracked
-            // separately with the `c5 va_list` work.
+            let binding_idx = self.symbols[sys_idx].val;
+
+            // Two trampoline shapes coexist:
+            //
+            // * Prototype-bearing bindings (`int fopen(char *,
+            //   char *);`, ..., or any `int foo(...);`) get the
+            //   classic `Ent + Lea/Li/Psh + JsrExt + Adj + Lev`
+            //   body. The forwarded arg count matches the
+            //   prototype, and the JsrExt lowering's per-arg
+            //   FP-mask + post-call sub-word extension (#48) both
+            //   stay in scope.
+            //
+            // * Bindings with *no* declared params (just
+            //   `int Name();`) -- e.g. the kernel32 surface that
+            //   sqlite's `aSyscall[]` table casts back to the
+            //   right arity at the call site -- get the
+            //   single-op `Op::TailExt` body. The trampoline is
+            //   `jmp [rip+iat]` and the caller's `Op::Jsri`
+            //   lowering owns the host-ABI arg setup, return-
+            //   register copy, and stack adjustment. Sub-word
+            //   extension is left to the caller (sqlite casts
+            //   the result to the right type explicitly), which
+            //   matches what real-world dispatch-table consumers
+            //   already do.
+            if fixed_nargs == 0 && !is_variadic {
+                self.emit_op(Op::TailExt);
+                self.emit_val(binding_idx);
+                continue;
+            }
+
+            // For variadic libc fns the binding-declared param
+            // count is only the fixed prefix; sqlite's
+            // `aSyscall[]` table (open/fcntl/ioctl) wants the
+            // trampoline to forward *one* of the variadic args
+            // so the caller's 3-argument cast lines up with what
+            // `JsrExt` packs onto the macOS arm64 variadic-args
+            // stack region. Callers that pass strictly the fixed
+            // prefix end up reading one junk slot from above
+            // their own pushes, but no in-the-wild caller does
+            // -- they all add at least one extra arg precisely
+            // to feed the variadic. The general case (forward N
+            // variadic args where N is unknown at compile time)
+            // needs a real va_args bridge -- tracked separately
+            // with the `c5 va_list` work.
             let nargs = if is_variadic {
                 fixed_nargs + 1
             } else {
                 fixed_nargs
             };
-            let binding_idx = self.symbols[sys_idx].val;
 
             self.emit_op(Op::Ent);
             self.emit_val(0);
-            // c5 uses cdecl push order: the first declared arg ends
-            // up on top of the stack (lowest address) so JsrExt can
-            // load arg-K from `sp + K*16`. We re-emit the pushes
-            // right-to-left -- last declared arg first -- so the
-            // trampoline's own JsrExt sees the same shape its
-            // caller passed in.
+            // c5 uses cdecl push order: the first declared arg
+            // ends up on top of the stack (lowest address) so
+            // JsrExt can load arg-K from `sp + K*16`. We re-emit
+            // the pushes right-to-left -- last declared arg
+            // first -- so the trampoline's own JsrExt sees the
+            // same shape its caller passed in.
             for i in (0..nargs).rev() {
                 self.emit_lea((i + 2) as i64);
                 self.emit_op(Op::Li);

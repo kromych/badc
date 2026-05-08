@@ -265,9 +265,36 @@ pub enum Op {
     /// op as a plain `Op::Imm tls_base + offset` (no real per-
     /// thread isolation; the VM is single-threaded).
     TlsLea,
+    /// Tail-jump to an external library symbol. Followed by one
+    /// operand: the binding-table index. Used as the entire body
+    /// of the per-Sys-symbol address-take trampoline -- the
+    /// trampoline lives at the bytecode-PC stamped on the
+    /// synthetic Token::Fun's `val`, and the codegen lowers
+    /// `Op::TailExt` to a single `jmp [rip+iat_disp32]`-shape
+    /// instruction (or its aarch64 equivalent). The host's
+    /// argument registers and shadow-space stack args -- already
+    /// prepared by the caller's `Op::Jsri` lowering -- are
+    /// forwarded straight through, so the libc fn sees exactly
+    /// what the caller's `Adj N` declared. There's no `Ent`,
+    /// no c5-stack push/pop, and no `Lev` after this op: the
+    /// libc fn's `ret` returns directly to the caller's
+    /// post-Jsri continuation.
+    ///
+    /// Replaces the multi-op trampoline body
+    /// (`Ent / Lea / Li / Psh / JsrExt / Adj / Lev`) for libc
+    /// symbols whose address gets taken; the old shape forwarded
+    /// only as many args as the binding's prototype declared,
+    /// which broke when sqlite's `aSyscall[]` table cast a
+    /// kernel32 fn to a different-arity function-pointer type
+    /// at the call site. The tail-jump shape is independent of
+    /// the binding's declared arity. Placed at the end of the
+    /// enum so the `OPS[]` lookup table's tail entry matches the
+    /// enum discriminant -- adding new ops elsewhere requires
+    /// keeping the two in lockstep.
+    TailExt,
 }
 
-const OPS: [Op; 81] = [
+const OPS: [Op; 82] = [
     Op::Lea,
     Op::Imm,
     Op::Jmp,
@@ -351,6 +378,7 @@ const OPS: [Op; 81] = [
     Op::Fcvtif,
     Op::Mcpy,
     Op::TlsLea,
+    Op::TailExt,
 ];
 
 impl Op {
@@ -379,9 +407,9 @@ impl Op {
             // Single-operand ops: control flow, frame setup, libc
             // dispatch, and the optimizer's immediate-form
             // arithmetic / comparison ops.
-            Lea | Imm | Jmp | Jsr | Bz | Bnz | Ent | Adj | JsrExt | AddI | SubI | MulI | AndI
-            | OrI | XorI | ShlI | ShrI | ShruI | EqI | NeI | LtI | GtI | LeI | GeI | UltI
-            | UgtI | UleI | UgeI | LdLocI | LdLocC | StLocI | Mcpy | TlsLea => 1,
+            Lea | Imm | Jmp | Jsr | Bz | Bnz | Ent | Adj | JsrExt | TailExt | AddI | SubI
+            | MulI | AndI | OrI | XorI | ShlI | ShrI | ShruI | EqI | NeI | LtI | GtI | LeI
+            | GeI | UltI | UgtI | UleI | UgeI | LdLocI | LdLocC | StLocI | Mcpy | TlsLea => 1,
             // Everything else -- arithmetic, loads/stores, push,
             // indirect-jump, return, etc. -- is encoded in a
             // single word with no operand.

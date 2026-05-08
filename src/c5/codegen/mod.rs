@@ -454,7 +454,7 @@ impl ResolvedImports {
                 // optimizer / VM will surface it.
                 break;
             };
-            if matches!(op, Op::JsrExt) {
+            if matches!(op, Op::JsrExt | Op::TailExt) {
                 let idx = program.text[pc + 1];
                 if seen.insert(idx) {
                     used.push(idx);

@@ -100,6 +100,10 @@ enum Insn {
     /// `JsrExt <binding_idx>` -- external library call, indexed by
     /// the program's flat `#pragma binding` table position.
     JsrExt(i64),
+    /// `TailExt <binding_idx>` -- tail-jump to an external library
+    /// symbol. Forms the entire body of a per-Sys-symbol address-
+    /// take trampoline; carries through the optimizer unchanged.
+    TailExt(i64),
     /// Branch-style op (`Jmp`/`Jsr`/`Bz`/`Bnz`); operand is the IR index
     /// of the target instruction.
     Branch(BrKind, usize),
@@ -138,6 +142,7 @@ impl Insn {
             | Insn::Ent(_)
             | Insn::Adj(_)
             | Insn::JsrExt(_)
+            | Insn::TailExt(_)
             | Insn::Branch(_, _)
             | Insn::ArithI(_, _)
             | Insn::Mcpy(_)
@@ -403,6 +408,11 @@ fn decode(text: &[i64], data_imm_positions: &[usize]) -> Result<Vec<Insn>, C5Err
                 pc += 1;
                 Insn::JsrExt(v)
             }
+            Op::TailExt => {
+                let v = text[pc];
+                pc += 1;
+                Insn::TailExt(v)
+            }
             Op::Jmp | Op::Jsr | Op::Bz | Op::Bnz => {
                 let target = text[pc] as usize;
                 pc += 1;
@@ -578,6 +588,10 @@ fn encode(insns: &[Insn], entry_idx: usize) -> (Vec<i64>, usize, Vec<usize>, Vec
             }
             Insn::JsrExt(v) => {
                 text.push(Op::JsrExt as i64);
+                text.push(*v);
+            }
+            Insn::TailExt(v) => {
+                text.push(Op::TailExt as i64);
                 text.push(*v);
             }
             Insn::Branch(kind, target) => {
@@ -963,7 +977,15 @@ fn dead_code_elimination(insns: &mut [Insn], entry_idx: usize) -> bool {
 
     seed(&mut worklist, &mut visited, entry_idx);
     for (i, ins) in insns.iter().enumerate() {
-        if matches!(ins, Insn::Ent(_)) {
+        if matches!(ins, Insn::Ent(_) | Insn::TailExt(_)) {
+            // Both `Ent` (regular c5 functions) and `TailExt`
+            // (single-op libc-tail-jump trampolines) are reachable
+            // through function pointers we may not have traced.
+            // Without seeding `TailExt` here, the post-Lev tail
+            // emitted by `emit_sys_trampolines` falls outside the
+            // reachability set and DCE prunes it -- which then
+            // propagates a `usize::MAX` into the matching
+            // `code_relocs` entry through `new_pc[Removed_idx]`.
             seed(&mut worklist, &mut visited, i);
         }
         if let Insn::ImmCode(t) = ins {
@@ -984,6 +1006,12 @@ fn dead_code_elimination(insns: &mut [Insn], entry_idx: usize) -> bool {
         // codegen will emit it as unreachable bytes; no harm done.
         let (fall_through, branch_target) = match ins {
             Insn::NoArg(Op::Lev) => (false, None),
+            // `TailExt` is a tail-jump: the libc fn's `RET`
+            // returns directly to the c5 caller of the
+            // trampoline, not to whatever follows in bytecode.
+            // Treat it as a terminator so DCE doesn't trace into
+            // the next trampoline (or whatever junk follows).
+            Insn::TailExt(_) => (false, None),
             Insn::Branch(kind, t) => (kind.falls_through(), Some(*t)),
             _ => (true, None),
         };

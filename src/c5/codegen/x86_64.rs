@@ -924,6 +924,26 @@ pub(super) fn emit_call_qword_rip32(code: &mut Vec<u8>, disp32: i32) {
 /// compute the `disp32` measurement origin (just after the call).
 pub(super) const CALL_QWORD_RIP32_LEN: usize = 6;
 
+/// `JMP qword ptr [rip+disp32]` -- 6-byte indirect tail-jump
+/// through a memory operand. Same `FF /4` opcode family as the
+/// indirect `CALL` above; only the `/4` ModR/M extension changes
+/// (4 = JMP, 2 = CALL). Used by `Op::TailExt` to forward control
+/// from a c5 trampoline to the IAT/GOT-resolved libc address
+/// without disturbing the caller's argument registers or shadow
+/// space. Disp32 measurement origin is the byte just past the
+/// instruction; the writer (PE / ELF / Mach-O) patches `disp32`
+/// to the resolved IAT / GOT slot RVA, identical to how
+/// `emit_call_qword_rip32`'s site is patched.
+pub(super) fn emit_jmp_qword_rip32(code: &mut Vec<u8>, disp32: i32) {
+    emit_byte(code, 0xFF);
+    emit_byte(code, modrm(0b00, 4, 0b101));
+    emit_i32(code, disp32);
+}
+
+/// Byte length of [`emit_jmp_qword_rip32`]. Same encoding family
+/// as the indirect call, so the length is also 6.
+pub(super) const JMP_QWORD_RIP32_LEN: usize = 6;
+
 /// `XOR eax, eax` -- 32-bit form, zero-extends to 64 (sets rax = 0).
 /// Used as the System V variadic-ABI "no XMM args" marker before
 /// printf-shape calls: AL must be 0 going in.
@@ -1981,6 +2001,30 @@ fn lower_op(
                 fp_mask,
                 target,
             )?;
+        }
+        Op::TailExt => {
+            // Tail-jump trampoline body. The caller's `Op::Jsri`
+            // lowering already loaded the c5-stack args into the
+            // host ABI's argument registers / shadow-space slots,
+            // so the libc fn sees exactly what the caller's `Adj N`
+            // declared; we just forward control through the IAT/GOT
+            // slot and let the libc fn's `ret` carry us back to the
+            // caller. No frame setup, no stack manipulation, no
+            // post-call accumulator copy -- the call site's Jsri
+            // lowering is responsible for the round-trip.
+            let binding_idx = read_operand(text, pc, "TailExt")?;
+            let import_index = imports.index_of_binding(binding_idx).ok_or_else(|| {
+                C5Error::Compile(alloc::format!(
+                    "native codegen (x86_64): no import slot for binding {binding_idx} -- \
+                     the resolver should have placed it"
+                ))
+            })?;
+            let instr_offset = code.len();
+            got_fixups.push(GotFixup {
+                adrp_offset: instr_offset,
+                import_index,
+            });
+            emit_jmp_qword_rip32(code, 0);
         }
 
         // ---- Floating-point ----

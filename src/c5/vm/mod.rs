@@ -1143,6 +1143,59 @@ impl<H: Host> Vm<H> {
                         }
                     };
                 }
+                Op::TailExt => {
+                    // Tail-jump variant of `Op::JsrExt`: dispatches to
+                    // the same shim table but pops the caller's
+                    // return PC at the end instead of falling through
+                    // to the trampoline's `Adj N + Lev`. Used as the
+                    // entire body of the per-Sys-symbol address-take
+                    // trampoline (see `Op::TailExt` doc in op.rs).
+                    //
+                    // Stack at entry: `sp` points at the return PC the
+                    // caller's `Op::Jsri` pushed, with `arg_0` at
+                    // `sp+8`, `arg_1` at `sp+16`, ... The shim
+                    // functions expect `arg_0` at the passed `sp+0`,
+                    // so we pass `sp + 8`. (`exit` is the lone
+                    // exception that swallows the value rather than
+                    // returning to the caller.)
+                    let binding_idx = self.text[pc];
+                    pc += 1;
+                    let local_name = self.binding_name(binding_idx)?;
+                    let arg_sp = sp + 8;
+                    a = match local_name {
+                        "open" => self.intrinsic_open(arg_sp)?,
+                        "read" => self.intrinsic_read(arg_sp)?,
+                        "close" => self.intrinsic_close(arg_sp)?,
+                        "malloc" => self.intrinsic_malloc(arg_sp)?,
+                        "free" => self.intrinsic_free(arg_sp)?,
+                        "memset" => self.intrinsic_memset(arg_sp)?,
+                        "memcmp" => self.intrinsic_memcmp(arg_sp)?,
+                        "memcpy" => self.intrinsic_memcpy(arg_sp)?,
+                        "printf" => self.intrinsic_printf(arg_sp, pc)?,
+                        "exit" => return self.load_i64(arg_sp),
+                        "write" => self.intrinsic_write(arg_sp)?,
+                        "getenv" => self.intrinsic_getenv(arg_sp)?,
+                        "setenv" => self.intrinsic_setenv(arg_sp)?,
+                        "dlopen" => self.intrinsic_dlopen(arg_sp)?,
+                        "dlsym" => self.intrinsic_dlsym(arg_sp)?,
+                        "dlclose" => self.intrinsic_dlclose(arg_sp)?,
+                        "dlerror" => self.intrinsic_dlerror()?,
+                        other => {
+                            return Err(C5Error::Runtime(alloc::format!(
+                                "VM: no shim for binding `{other}` -- the VM only knows the \
+                                 standard libc surface (open/read/close/printf/...). Drop \
+                                 `--interp` (or use `--jit`) to reach the rest of libc."
+                            )));
+                        }
+                    };
+                    // Pop the caller-pushed return PC. There's no
+                    // `Ent` paired with this `TailExt`, so we don't
+                    // restore bp -- the trampoline body is exactly
+                    // one instruction.
+                    let raw = self.load_i64(sp)?;
+                    pc = self.decode_pc(raw)?;
+                    sp += 8;
+                }
             }
         }
     }

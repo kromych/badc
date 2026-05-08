@@ -3,6 +3,13 @@
 // `aSyscall[]` array, where each row casts a function name to
 // the generic `(SYSCALL)` typedef before storing it).
 //
+// The fixture is wired into the JIT, macOS native, and ELF (x64
+// + aarch64) parity tables. The PE/x64 and PE/aarch64 lanes are
+// skipped because gh #50 (struct fp-call with a function-pointer
+// member runs wrong on PE) trips first; the cast-prefix
+// mechanism this fixture exercises is independent of #50, but
+// the call-through-struct that the OK assertions rely on isn't.
+//
 // Pre-fix the const-init parser only accepted the bare
 // `func` form; a `(TYPE)` cast prefix in the same position was
 // rejected with "identifier `func` is not a constant-expression

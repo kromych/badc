@@ -165,31 +165,26 @@ jobs:
           cargo build --release --locked
           ./demos/sqlite3/smoke.sh
 
-      - name: sqlite3 amalgamation smoke (windows; expected-failing)
+      - name: sqlite3 amalgamation smoke (windows)
         # Same script, run under Git Bash (preinstalled on every
-        # github-hosted Windows runner). Marked
-        # `continue-on-error: true` so the lane stays a *signal*
-        # rather than a gate while shell-level runtime correctness
-        # on Windows catches up. Recent fixes already in: predefine
-        # `__int64 -> long long` (sqlite's `_MSC_VER` typedef
-        # branch otherwise truncated u64 / i64 fields across the
-        # amalgamation, fabricating SQLITE_CORRUPT for every
-        # prepare against a fresh :memory: DB). Residual: the
-        # bundled shell still emits nothing on real-Windows runners
-        # even though the in-process API path now succeeds in
-        # cross-build smoke tests, suggesting a shell.c-specific
-        # stdio / buffering issue that is yet to be tracked down.
+        # github-hosted Windows runner). Used to be marked
+        # `continue-on-error: true` while we worked through the
+        # series of root causes blocking shell-on-Windows:
+        # InterlockedCompareExchange (kernel32 doesn't export it
+        # any more -- compiler intrinsic on modern Windows; shimmed
+        # in `msvc_compat.h`), missing `atexit` binding (stdlib.h
+        # bound it for Linux but not Windows; c5 was lowering the
+        # call to address 0), CRLF translation in shell stdout
+        # (smoke now strips `\r` before diff), the LARGE_INTEGER
+        # struct shape (header used a flat 24-byte fallback;
+        # rewritten to the real anon-union shape after c5 learned
+        # to promote anonymous-aggregate members), and finally
+        # the smoke driver itself piping `/tmp/...` paths into the
+        # native PE shell (CreateFileA reads `/tmp/foo` as
+        # `<drive>:\tmp\foo`; smoke now translates via cygpath).
+        # All of those landed; the lane is now a real gate.
         if: matrix.os == 'windows-latest' || matrix.os == 'windows-11-arm'
-        continue-on-error: true
         shell: bash
-        env:
-          # Builds + runs `demos/sqlite3/diag.c`, a tiny stderr-tracing
-          # shell shim that exercises the sqlite C API directly. Used
-          # to bisect "shell.c emits nothing on Windows" -- if diag's
-          # checkpoints + rows show up but the real shell stays
-          # silent, the issue is shell.c-specific (tty / line-editor
-          # / console-mode plumbing).
-          BADC_RUN_DIAG: "1"
         run: |
           cargo build --release --locked
           ./demos/sqlite3/smoke.sh

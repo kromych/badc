@@ -125,6 +125,16 @@
 #pragma binding(msvcrt::rand,      "rand")
 #pragma binding(msvcrt::srand,     "srand")
 #pragma binding(msvcrt::exit,      "exit")
+// msvcrt's atexit() takes a `void (*)(void)` and registers it on
+// the CRT's exit chain. The `#ifdef __linux__` branch routes
+// atexit through `__cxa_atexit(handler, NULL, NULL)` because
+// glibc doesn't export atexit as a regular dynamic symbol; on
+// Windows msvcrt exports the bare `atexit` directly so we bind
+// it as itself. Without this binding c5 emits a call to an
+// unresolved symbol that lands at address 0 and SIGSEGVs --
+// which manifested as shell.c's exit-139 right after the
+// `[probe] before atexit` checkpoint on real Windows runners.
+#pragma binding(msvcrt::atexit,    "atexit")
 #endif
 
 char *malloc(int size);

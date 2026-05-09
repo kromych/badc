@@ -407,6 +407,31 @@ impl Preprocessor {
         // break a thousand other things).
         out.push_str(&format_line_marker(1, filename));
 
+        // Track the *effective* filename for `#include` restore
+        // markers and `__FILE__`. This starts as `filename` (the
+        // physical name we got handed) but a `#line N "other"`
+        // directive in the user source can rewrite it -- and once
+        // it does, every subsequent `#include` boundary in this
+        // buffer needs to restore to *that* name, not back to the
+        // original `filename`. The amalgamator (scripts/amalgamate.py)
+        // depends on this: it puts a `#line 1 "real_path.c"` at the
+        // top of each glued-in TU, then if that TU does its own
+        // `#include`s the closing marker we emit when the include
+        // returns must put us back inside `real_path.c`, not the
+        // amalgamated container.
+        let mut current_file: alloc::string::String = filename.into();
+
+        // Source-relative line number for the current iteration. We
+        // can't just use `idx_iter + 1` (the buffer's physical line)
+        // because a `#line N "file"` resets the lexer's counter; if
+        // we then close an `#include` with a buffer-line marker the
+        // lexer snaps back to physical-buffer coordinates and every
+        // subsequent attribution shifts. Track it explicitly: the
+        // counter advances by 1 per processed input line, +consumed
+        // for multi-line macro joins, and a `#line N` resets it to
+        // `N` for the next iteration.
+        let mut source_line: usize = 1;
+
         // `cond_stack` mirrors the nesting of `#if` / `#ifdef`. Each
         // entry is `(parent_active, this_branch_taken,
         // saw_else)`. `parent_active` is the enclosing branch's
@@ -578,6 +603,7 @@ impl Preprocessor {
                                         out.push('#');
                                         out.push_str(directive);
                                         out.push('\n');
+                                        source_line += 1;
                                         idx_iter += 1;
                                         continue;
                                     }
@@ -590,16 +616,27 @@ impl Preprocessor {
                         if active {
                             let included = self.process_include(name, line_no)?;
                             out.push_str(&included);
-                            // Marker tells the lexer to attribute the
-                            // *next* source line to `(filename,
-                            // line_no + 1)` -- i.e. the line right
-                            // after this `#include`. The marker's
-                            // trailing `\n` is the *only* `\n` we
-                            // emit for this directive (the iteration
-                            // skips the bottom `out.push('\n')`),
-                            // because the marker is what stands in
-                            // for the original `#include` line.
-                            out.push_str(&format_line_marker(line_no + 1, filename));
+                            // Closing marker uses `source_line + 1`
+                            // (NOT `line_no + 1`) and `current_file`
+                            // (NOT the static `filename` param).
+                            // `source_line` tracks the user's
+                            // intended source-line numbering across
+                            // any prior `#line` directives in this
+                            // buffer, which is what the lexer's
+                            // counter actually reflects after the
+                            // last marker we emitted. Using `line_no`
+                            // here would snap the lexer back to
+                            // physical-buffer coordinates and
+                            // misattribute every subsequent emit --
+                            // the bug that gh #50 plumbing exposed
+                            // when the amalgamator started gluing
+                            // sqlite3.c + shell.c through `#line`
+                            // markers.
+                            out.push_str(&format_line_marker(
+                                source_line + 1,
+                                &current_file,
+                            ));
+                            source_line += 1;
                             idx_iter += 1;
                             continue;
                         }
@@ -613,8 +650,22 @@ impl Preprocessor {
                             // input line in, one marker line out),
                             // so we skip the bottom `\n` for the
                             // same reason as `#include`.
-                            let target_file = file.unwrap_or(filename);
-                            out.push_str(&format_line_marker(line, target_file));
+                            // Update the *effective* filename so the
+                            // next `#include` returns here, not to
+                            // the buffer's original `filename`. A
+                            // bare `#line N` (no filename) keeps
+                            // the current file -- C99 6.10.4 -- so
+                            // we only rewrite when `file` is
+                            // present.
+                            if let Some(f) = file {
+                                current_file = f.into();
+                            }
+                            out.push_str(&format_line_marker(line, &current_file));
+                            // Next iteration's source-line counter
+                            // is exactly `line` (the marker says so
+                            // to the lexer, and our preprocessor
+                            // tracker has to mirror that).
+                            source_line = line;
                             idx_iter += 1;
                             continue;
                         }
@@ -647,6 +698,7 @@ impl Preprocessor {
                     }
                 }
                 out.push('\n');
+                source_line += 1;
                 idx_iter += 1;
                 continue;
             }
@@ -668,9 +720,11 @@ impl Preprocessor {
                 for _ in 1..consumed {
                     out.push('\n');
                 }
+                source_line += consumed;
                 idx_iter += consumed;
             } else {
                 out.push('\n');
+                source_line += 1;
                 idx_iter += 1;
             }
         }

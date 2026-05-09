@@ -302,6 +302,31 @@ if [ "${BADC_RUN_DIAG:-}" = "1" ]; then
     PROBE_BIN="${WORK}/sqlite3probe${EXE_SUFFIX}"
     "${BADC}" -include msvc_compat.h "${SQLITE_DIR}/probe_imports.c" -o "${PROBE_BIN}" \
         || echo "probe: build failed" >&2
+    # Tier 0.5: shell-startup probe -- replicates shell.c's first
+    # few main() statements (setvbuf / isatty / atexit / fgetc)
+    # with stderr checkpoints between each call. shell.exe is
+    # SIGSEGVing on real Windows; this isolates which call.
+    SSP_BIN="${WORK}/sqlite3sshell_startup${EXE_SUFFIX}"
+    "${BADC}" -include msvc_compat.h "${SQLITE_DIR}/shell_startup_probe.c" -o "${SSP_BIN}" \
+        || echo "shell-startup-probe: build failed" >&2
+    if [ -e "${SSP_BIN}" ]; then
+        echo "=== shell-startup-probe run ===" >&2
+        set +e
+        "${SSP_BIN}" </dev/null
+        ssp_rc=$?
+        set -e
+        echo "=== shell-startup-probe bash exit=${ssp_rc} ===" >&2
+        if command -v cmd.exe >/dev/null 2>&1; then
+            if command -v cygpath >/dev/null 2>&1; then
+                ssp_winpath=$(cygpath -w "${SSP_BIN}")
+            else
+                ssp_winpath="${SSP_BIN}"
+            fi
+            cmd.exe //v:on //c "${ssp_winpath} 2>&1 < NUL & echo errorlevel=!errorlevel!" >&2 || true
+        fi
+        echo "=== /shell-startup-probe ===" >&2
+    fi
+
     if [ -e "${PROBE_BIN}" ]; then
         echo "=== probe imports run ===" >&2
         set +e

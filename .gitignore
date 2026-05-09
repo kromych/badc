@@ -16,6 +16,7 @@ demos/sqlite3/*
 !demos/sqlite3/diag.c
 !demos/sqlite3/hello.c
 !demos/sqlite3/probe_imports.c
+!demos/sqlite3/shell_startup_probe.c
 !demos/sqlite3/patches/
 !demos/sqlite3/README.md
 hello

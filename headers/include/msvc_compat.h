@@ -114,34 +114,36 @@
 // functions, so the no-op definition isn't load-bearing -- only
 // the visibility check is.
 
-// `InterlockedCompareExchange` shim. On modern Windows
-// (Server 2019 / 2022 / 2025), kernel32.dll does NOT export
-// `InterlockedCompareExchange` as a real function -- in MSVC
-// it's inlined to `lock cmpxchg` via a compiler intrinsic
-// (`_InterlockedCompareExchange` from <intrin.h>). Statically
-// importing the bare name produces a PE the loader rejects
-// with STATUS_ENTRYPOINT_NOT_FOUND (0xC0000139) at startup,
-// which surfaces as bash exit=127 / cmd.exe errorlevel
-// -1073741511. sqlite's `os_win.c` already handles this case
-// -- it gates on `#if defined(InterlockedCompareExchange)`
-// and, when defined, uses the macro inline instead of the
-// `aSyscall[].pCurrent` dispatch. Define a non-atomic c5-side
-// implementation here so the macro path is taken.
+// `InterlockedCompareExchange` is *not* a real kernel32 export on
+// modern Windows (Server 2019 / 2022 / 2025) -- in MSVC it's a
+// compiler intrinsic (`_InterlockedCompareExchange` from
+// <intrin.h>) that lowers inline to `lock cmpxchg`. A PE that
+// imports the bare name dies at load with STATUS_ENTRYPOINT_NOT_FOUND
+// (0xC0000139), surfacing as bash exit=127 / cmd.exe errorlevel
+// -1073741511. So we declare it here as a regular c5 function
+// with the proper Win32 signature (the API is documented as
+// `LONG InterlockedCompareExchange(LONG volatile *Destination,
+// LONG Exchange, LONG Comparand)`; c5 currently treats `LONG`
+// as `int` and drops `volatile`, but we keep the qualifier in
+// the declaration as documentation -- it's the right shape for
+// a future pass that *does* honor it). sqlite's `os_win.c`
+// gates on `#if defined(InterlockedCompareExchange)` and uses
+// the symbol inline instead of the `aSyscall[].pCurrent`
+// dispatch, so we don't need a `#define` shim.
 //
-// The non-atomic shim is *fine* for the single-threaded smoke
-// harness: sqlite's only multi-threaded use site is
+// The non-atomic implementation is *fine* for the single-threaded
+// smoke harness: sqlite's only multi-threaded use site is
 // `winMutexInit` / `winMutexEnd` (line ~31180 in sqlite3.c),
-// which the smoke avoids by setting `SQLITE_THREADSAFE=0`.
-// A multi-threaded build would need a real CAS -- either a
-// c5 inline-asm primitive or a small assembly fixture
-// linked alongside the source.
-static int _c5_InterlockedCompareExchange(
-    int *dest, int exchange, int comparand
+// which the smoke avoids by setting `SQLITE_THREADSAFE=0`. A
+// multi-threaded build would need a real CAS -- either a c5
+// inline-asm primitive or a small assembly fixture linked
+// alongside the source.
+static int InterlockedCompareExchange(
+    int volatile *dest, int exchange, int comparand
 ) {
     int original = *dest;
     if (original == comparand) *dest = exchange;
     return original;
 }
-#define InterlockedCompareExchange _c5_InterlockedCompareExchange
 
 #endif /* _WIN32 */

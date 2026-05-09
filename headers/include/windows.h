@@ -694,7 +694,6 @@ int DeleteCriticalSection(char *cs);
 #pragma binding(kernel32::HeapReAlloc,             "HeapReAlloc")
 #pragma binding(kernel32::HeapSize,                "HeapSize")
 #pragma binding(kernel32::HeapValidate,            "HeapValidate")
-#pragma binding(kernel32::InterlockedCompareExchange, "InterlockedCompareExchange")
 #pragma binding(kernel32::LoadLibraryW,            "LoadLibraryW")
 #pragma binding(kernel32::LocalFree,               "LocalFree")
 #pragma binding(kernel32::LockFile,                "LockFile")
@@ -869,7 +868,6 @@ int HeapFree();
 int HeapReAlloc();
 int HeapSize();
 int HeapValidate();
-int InterlockedCompareExchange();
 int LoadLibraryW();
 int LocalFree();
 int LockFile();

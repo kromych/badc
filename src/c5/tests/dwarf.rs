@@ -84,6 +84,19 @@ fn dwarfdump_debug_info(path: &Path) -> Option<String> {
     Some(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
+/// Run `dwarfdump --debug-frame <path>` to inspect the CFI
+/// section directly. CFI lives outside `.debug_info` -- it has
+/// its own `.debug_frame` (ELF / Mach-O `__debug_frame`)
+/// section -- so the type-tree dumper above can't see it.
+fn dwarfdump_debug_frame(path: &Path) -> Option<String> {
+    let out = Command::new("dwarfdump")
+        .arg("--debug-frame")
+        .arg(path)
+        .output()
+        .ok()?;
+    Some(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
 #[test]
 fn lldb_resolves_distinct_base_types() {
     let path = build_signed_mach_o(
@@ -264,6 +277,67 @@ fn lldb_resolves_union_with_overlapping_fields() {
     assert!(
         out.contains("union Variant"),
         "expected `union Variant` rendering in:\n{out}"
+    );
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn dwarfdump_emits_cfi_with_post_prologue_rules() {
+    // gh #47: emit a CIE describing c5's standard prologue, plus
+    // an FDE per user function. Previously the section didn't
+    // exist and the unwinder fell back to prologue heuristics
+    // (fragile under -O / restructured frames). Verify the
+    // expected CFI rules land in `__debug_frame`.
+    let path = build_signed_mach_o(
+        r#"
+        int helper(int x) { return x + 1; }
+        int main() { return helper(41); }
+        "#,
+        "cfi_basic",
+    );
+    let Some(out) = dwarfdump_debug_frame(&path) else {
+        eprintln!("dwarfdump not on PATH -- skipping CFI smoke test");
+        let _ = std::fs::remove_file(&path);
+        return;
+    };
+    // CIE assertions: c5's prologue convention on aarch64 has
+    // CFA = WSP at function entry, code_alignment_factor 4
+    // (instructions are 4 bytes), data_alignment_factor -8
+    // (8-byte saved-register slots), return-address register x30.
+    assert!(
+        out.contains("Code alignment factor: 4"),
+        "CIE missing aarch64 code_alignment_factor:\n{out}"
+    );
+    assert!(
+        out.contains("Data alignment factor: -8"),
+        "CIE missing data_alignment_factor:\n{out}"
+    );
+    assert!(
+        out.contains("Return address column: 30"),
+        "CIE missing aarch64 return-address column:\n{out}"
+    );
+    assert!(
+        out.contains("CFA=WSP"),
+        "CIE entry-state CFA rule missing:\n{out}"
+    );
+    // Each user function (we have helper + main, plus libc
+    // trampolines) gets an FDE. After the prologue's
+    // `DW_CFA_advance_loc`, the rules switch to fp-based.
+    assert!(
+        out.contains("DW_CFA_advance_loc"),
+        "FDE didn't advance past the prologue:\n{out}"
+    );
+    assert!(
+        out.contains("CFA=W29+16"),
+        "post-prologue CFA = x29 + 16 rule missing:\n{out}"
+    );
+    assert!(
+        out.contains("W29=[CFA-16]"),
+        "x29 saved at CFA-16 rule missing:\n{out}"
+    );
+    assert!(
+        out.contains("W30=[CFA-8]"),
+        "x30 saved at CFA-8 rule missing:\n{out}"
     );
     let _ = std::fs::remove_file(&path);
 }

@@ -1013,7 +1013,8 @@ pub(super) fn write(
     let dwarf_abbrev_off = dwarf_info_off + dwarf_sections.debug_info.len() as u64;
     let dwarf_line_off = dwarf_abbrev_off + dwarf_sections.debug_abbrev.len() as u64;
     let dwarf_str_off = dwarf_line_off + dwarf_sections.debug_line.len() as u64;
-    let shstrtab_off = dwarf_str_off + dwarf_sections.debug_str.len() as u64;
+    let dwarf_frame_off = dwarf_str_off + dwarf_sections.debug_str.len() as u64;
+    let shstrtab_off = dwarf_frame_off + dwarf_sections.debug_frame.len() as u64;
     // .shstrtab content: NUL + section names. Index 0 is the
     // empty name (SHT_NULL sentinel uses sh_name=0). Names cover
     // the full set of sections in the section-header table:
@@ -1036,10 +1037,11 @@ pub(super) fn write(
         ".debug_abbrev", // 13
         ".debug_line",   // 14
         ".debug_str",    // 15
-        ".shstrtab",     // 16
+        ".debug_frame",  // 16
+        ".shstrtab",     // 17
     ];
     let mut shstrtab: Vec<u8> = Vec::new();
-    let mut shstrtab_offsets: [u32; 17] = [0; 17];
+    let mut shstrtab_offsets: [u32; 18] = [0; 18];
     for (i, s) in shstrtab_bytes.iter().enumerate() {
         shstrtab_offsets[i] = shstrtab.len() as u32;
         shstrtab.extend_from_slice(s.as_bytes());
@@ -1066,7 +1068,7 @@ pub(super) fn write(
         + 1 // .got
         + (if has_data { 1 } else { 0 }) // .data
         + (if has_tbss { 1 } else { 0 }) // .tbss
-        + 4 // .debug_* x 4
+        + 5 // .debug_* x 5 (info, abbrev, line, str, frame)
         + 1; // .shstrtab
     let total_filesize = shdr_off + n_section_headers * ELF64_SHDR_SIZE;
     // shstrtab is the last section in the table; its index is
@@ -1355,6 +1357,7 @@ pub(super) fn write(
     out.extend_from_slice(&dwarf_sections.debug_abbrev);
     out.extend_from_slice(&dwarf_sections.debug_line);
     out.extend_from_slice(&dwarf_sections.debug_str);
+    out.extend_from_slice(&dwarf_sections.debug_frame);
     debug_assert_eq!(out.len() as u64, shstrtab_off);
 
     // .shstrtab
@@ -1610,8 +1613,10 @@ pub(super) fn write(
         );
     }
 
-    // [N+2..N+5] DWARF debug sections (file-only metadata, no
-    // SHF_ALLOC so the loader skips them).
+    // [N+2..N+6] DWARF debug sections (file-only metadata, no
+    // SHF_ALLOC so the loader skips them). `.debug_frame` (gh #47)
+    // carries the CFI a debugger / unwinder reads to walk through
+    // optimised frames without prologue heuristics.
     let dwarf_section_specs: &[(u32, u64, u64)] = &[
         (
             shstrtab_offsets[12],
@@ -1632,6 +1637,11 @@ pub(super) fn write(
             shstrtab_offsets[15],
             dwarf_str_off,
             dwarf_sections.debug_str.len() as u64,
+        ),
+        (
+            shstrtab_offsets[16],
+            dwarf_frame_off,
+            dwarf_sections.debug_frame.len() as u64,
         ),
     ];
     for &(name_off, off, sz) in dwarf_section_specs {
@@ -1656,7 +1666,7 @@ pub(super) fn write(
     write_struct(
         &mut out,
         &Elf64Shdr {
-            sh_name: shstrtab_offsets[16],
+            sh_name: shstrtab_offsets[17],
             sh_type: SHT_STRTAB,
             sh_flags: 0,
             sh_addr: 0,

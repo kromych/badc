@@ -149,6 +149,35 @@ const LINE_BASE: i8 = -1;
 const LINE_RANGE: u8 = 14;
 const OPCODE_BASE: u8 = 13;
 
+// ---- Call Frame Information opcodes (DWARF 4, table 7.23) ----
+
+/// `DW_CFA_advance_loc` is encoded as an opcode-with-operand: the
+/// top two bits are `0b01` (= 0x40) and the low six bits carry
+/// the factored delta. Used inline; broken out as a helper.
+const DW_CFA_ADVANCE_LOC_HI: u8 = 0x40;
+const DW_CFA_OFFSET_HI: u8 = 0x80;
+
+const DW_CFA_NOP: u8 = 0x00;
+const DW_CFA_ADVANCE_LOC1: u8 = 0x02;
+const DW_CFA_ADVANCE_LOC2: u8 = 0x03;
+const DW_CFA_ADVANCE_LOC4: u8 = 0x04;
+const DW_CFA_DEF_CFA: u8 = 0x0c;
+
+// Architecture-specific register codes used in CFI rules.
+//
+// AArch64 follows ABI table A.1: x0..x30 = 0..30, sp = 31.
+// x86_64 follows the SysV / DWARF 4 register numbering: rax=0,
+// rdx=1, rcx=2, rbx=3, rsi=4, rdi=5, rbp=6, rsp=7, r8..r15=8..15,
+// "Return Address" virtual column = 16 (i.e. RIP).
+
+const AARCH64_REG_X29: u8 = 29;
+const AARCH64_REG_X30: u8 = 30;
+const AARCH64_REG_SP: u8 = 31;
+
+const X86_64_REG_RBP: u8 = 6;
+const X86_64_REG_RSP: u8 = 7;
+const X86_64_REG_RA: u8 = 16;
+
 // ---- wire-format schemas ----
 
 /// Compilation-unit header for `.debug_info` (DWARF 4, 32-bit
@@ -245,7 +274,7 @@ impl DebugLineProgramHeader {
 
 // ---- Emitter entry point ----
 
-/// The four byte vectors the emitter produces. Per-target writers
+/// The byte vectors the emitter produces. Per-target writers
 /// (Mach-O / ELF / PE) wrap these into their format-specific
 /// debug-section containers.
 pub(crate) struct DwarfSections {
@@ -253,6 +282,12 @@ pub(crate) struct DwarfSections {
     pub debug_abbrev: Vec<u8>,
     pub debug_line: Vec<u8>,
     pub debug_str: Vec<u8>,
+    /// Call Frame Information (DWARF 4 `.debug_frame` form): one
+    /// CIE describing c5's standard prologue, plus one FDE per
+    /// user function. ELF wires this into `.debug_frame`, Mach-O
+    /// into `__debug_frame` of the `__DWARF` segment. Empty when
+    /// the build has no callable functions.
+    pub debug_frame: Vec<u8>,
 }
 
 /// Produce DWARF for `program` / `build`.
@@ -308,6 +343,7 @@ pub(crate) fn emit(
         target,
         &program.structs,
     );
+    let debug_frame = build_debug_frame(target, &subs);
     let debug_str = strs.into_bytes();
 
     DwarfSections {
@@ -315,6 +351,7 @@ pub(crate) fn emit(
         debug_abbrev,
         debug_line,
         debug_str,
+        debug_frame,
     }
 }
 
@@ -324,6 +361,11 @@ struct Subprog {
     name_off: u32,
     low_pc: u64,
     high_pc: u64,
+    /// Native bytes from `low_pc` to the first byte of the
+    /// function body (after the standard prologue). Drives the
+    /// CFI FDE's `DW_CFA_advance_loc` so the post-prologue CFA
+    /// rule starts at the right PC.
+    prologue_size: u32,
     /// Locals + formal-parameters that c5 captured for this
     /// subprogram (see `Compiler::variables`). The DWARF emitter
     /// turns each into a `DW_TAG_variable` /
@@ -340,6 +382,28 @@ struct SubprogVar {
     type_tag: i64,
     /// Frame-pointer-relative byte offset (c5's `fp_slot * 8`).
     fp_byte_offset: i64,
+}
+
+/// Native bytes from a function's `low_pc` to the first byte of
+/// its body -- i.e. the size of the standard prologue emitted by
+/// the arch lowerings. Used by the CFI emitter (gh #47) to
+/// `DW_CFA_advance_loc` past the prologue before installing the
+/// post-prologue CFA rule. Returns 0 for empty / DCE'd functions
+/// where the body's PC isn't recoverable; the unwinder then
+/// applies the post-prologue rule from PC = low_pc, which is
+/// wrong inside the prologue but the function never executes
+/// anyway.
+fn prologue_size_for(ent_pc: usize, low_pc: usize, build: &Build) -> u32 {
+    let body_start = build
+        .bytecode_to_native
+        .get(ent_pc + Op::Ent.word_size())
+        .copied()
+        .unwrap_or(low_pc);
+    if body_start == usize::MAX || body_start <= low_pc {
+        0
+    } else {
+        (body_start - low_pc) as u32
+    }
 }
 
 fn collect_subprograms(
@@ -453,6 +517,7 @@ fn collect_subprograms(
             name_off,
             low_pc: code_vmaddr + lo as u64,
             high_pc: code_vmaddr + hi as u64,
+            prologue_size: prologue_size_for(ent_pc, lo, build),
             variables,
         });
     }
@@ -1263,6 +1328,303 @@ fn emit_type_die(
             body.push(DW_ATE_ADDRESS);
         }
     }
+}
+
+// ---- .debug_frame (Call Frame Information) ----
+
+/// Coarse arch flavour the CFI emitter dispatches on. Matches
+/// `super::Arch` but is decoded directly from `Target` so the
+/// helpers can stay self-contained without pulling the full
+/// `Build`/`Abi` plumbing in.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CfiArch {
+    Aarch64,
+    X86_64,
+}
+
+impl CfiArch {
+    fn of(target: Target) -> Self {
+        match target {
+            Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
+                CfiArch::Aarch64
+            }
+            Target::LinuxX64 | Target::WindowsX64 => CfiArch::X86_64,
+        }
+    }
+}
+
+/// `code_alignment_factor` -- the multiplier applied to factored
+/// PC deltas in CIE / FDE instructions. AArch64 instructions are
+/// uniformly 4 bytes, so 4 minimises the byte cost of
+/// `DW_CFA_advance_loc`. x86_64 has variable-length instructions,
+/// so 1 is the only safe choice.
+fn cfi_code_alignment_factor(arch: CfiArch) -> u64 {
+    match arch {
+        CfiArch::Aarch64 => 4,
+        CfiArch::X86_64 => 1,
+    }
+}
+
+/// `data_alignment_factor` -- the multiplier applied to factored
+/// register-save offsets. We pick `-8` so a positive ULEB factor
+/// `N` lands `N * -8` bytes from CFA, which is what every saved
+/// register on a 64-bit target wants (caller frame above CFA,
+/// saves below).
+const CFI_DATA_ALIGNMENT_FACTOR: i64 = -8;
+
+/// DWARF return-address register column. AArch64 saves the link
+/// register in x30 at function entry. x86_64 uses the virtual
+/// "RA" column 16.
+fn cfi_return_address_register(arch: CfiArch) -> u64 {
+    match arch {
+        CfiArch::Aarch64 => AARCH64_REG_X30 as u64,
+        CfiArch::X86_64 => X86_64_REG_RA as u64,
+    }
+}
+
+/// Initial CFI rules effective at function entry. Encoded into
+/// the CIE so every FDE inherits them and only emits the deltas
+/// the prologue introduces.
+fn write_cie_initial_instructions(out: &mut Vec<u8>, arch: CfiArch) {
+    match arch {
+        CfiArch::Aarch64 => {
+            // CFA = sp + 0; the link register is in x30 (CIE's
+            // return-address register column already names it).
+            out.push(DW_CFA_DEF_CFA);
+            write_uleb128(out, AARCH64_REG_SP as u64);
+            write_uleb128(out, 0);
+        }
+        CfiArch::X86_64 => {
+            // `call` pushed the return address before transferring
+            // control, so CFA = rsp + 8 with the return address
+            // saved at CFA - 8 (factored 1 against -8).
+            out.push(DW_CFA_DEF_CFA);
+            write_uleb128(out, X86_64_REG_RSP as u64);
+            write_uleb128(out, 8);
+            out.push(DW_CFA_OFFSET_HI | X86_64_REG_RA);
+            write_uleb128(out, 1);
+        }
+    }
+}
+
+/// CFI rules effective from the first byte of the function body
+/// (i.e. after the prologue completes). Standard c5 prologue
+/// shape: fp/lr saved into a 16-byte slot at the top of the
+/// frame; on aarch64 x29 is then set to sp; on x86_64 rbp is set
+/// to rsp.
+fn write_post_prologue_instructions(out: &mut Vec<u8>, arch: CfiArch) {
+    match arch {
+        CfiArch::Aarch64 => {
+            // CFA = x29 + 16. x29 itself was saved at the new
+            // sp = x29 + 0 = CFA - 16; x30 was saved at sp + 8 =
+            // CFA - 8. Both factored against -8 (factor 2 / 1).
+            out.push(DW_CFA_DEF_CFA);
+            write_uleb128(out, AARCH64_REG_X29 as u64);
+            write_uleb128(out, 16);
+            out.push(DW_CFA_OFFSET_HI | AARCH64_REG_X29);
+            write_uleb128(out, 2);
+            out.push(DW_CFA_OFFSET_HI | AARCH64_REG_X30);
+            write_uleb128(out, 1);
+        }
+        CfiArch::X86_64 => {
+            // CFA = rbp + 16 (rbp covers ret-addr + saved-rbp
+            // slots). rbp itself saved at CFA - 16; the return
+            // address at CFA - 8 was already declared by the CIE
+            // and stays put.
+            out.push(DW_CFA_DEF_CFA);
+            write_uleb128(out, X86_64_REG_RBP as u64);
+            write_uleb128(out, 16);
+            out.push(DW_CFA_OFFSET_HI | X86_64_REG_RBP);
+            write_uleb128(out, 2);
+        }
+    }
+}
+
+/// Encode a `DW_CFA_advance_loc` covering `bytes` of native code,
+/// expanding into the smallest opcode form that fits the factored
+/// delta. AArch64 always factors evenly (instructions are 4
+/// bytes); x86_64 uses code_alignment_factor = 1 so the byte
+/// count goes through unchanged.
+fn write_advance_loc(out: &mut Vec<u8>, arch: CfiArch, bytes: u32) {
+    let factor = cfi_code_alignment_factor(arch) as u32;
+    debug_assert_eq!(
+        bytes % factor,
+        0,
+        "prologue size {bytes} not divisible by code_alignment_factor {factor}"
+    );
+    let units = bytes / factor;
+    if units == 0 {
+        return;
+    }
+    if units < 64 {
+        out.push(DW_CFA_ADVANCE_LOC_HI | units as u8);
+    } else if units < 256 {
+        out.push(DW_CFA_ADVANCE_LOC1);
+        out.push(units as u8);
+    } else if units < 65_536 {
+        out.push(DW_CFA_ADVANCE_LOC2);
+        out.extend_from_slice(&(units as u16).to_le_bytes());
+    } else {
+        out.push(DW_CFA_ADVANCE_LOC4);
+        out.extend_from_slice(&units.to_le_bytes());
+    }
+}
+
+/// Round `body.len()` up to a multiple of 8 (the CIE / FDE
+/// alignment for 64-bit DWARF) by appending `DW_CFA_nop` (0x00)
+/// padding.
+fn pad_to_alignment(body: &mut Vec<u8>, alignment: usize) {
+    while body.len() % alignment != 0 {
+        body.push(DW_CFA_NOP);
+    }
+}
+
+/// Common-Information Entry header (`.debug_frame` form).
+/// `unit_length` covers everything after itself; `cie_id =
+/// 0xffffffff` distinguishes a CIE from an FDE in `.debug_frame`
+/// (FDEs carry a real offset there). DWARF 4 added the
+/// `address_size` / `segment_selector_size` bytes; before that,
+/// version 3 ran without them.
+#[repr(C, packed)]
+struct DebugFrameCieHeader {
+    unit_length: u32,
+    cie_id: u32,
+    version: u8,
+    /// First byte of the augmentation cstring (always `0` for
+    /// the empty augmentation we use). Splitting it out lets the
+    /// schema document the field even though the augmentation is
+    /// nominally variable-length.
+    augmentation_terminator: u8,
+    address_size: u8,
+    segment_selector_size: u8,
+}
+
+impl DebugFrameCieHeader {
+    fn write_le(&self, out: &mut Vec<u8>) {
+        let DebugFrameCieHeader {
+            unit_length,
+            cie_id,
+            version,
+            augmentation_terminator,
+            address_size,
+            segment_selector_size,
+        } = *self;
+        out.extend_from_slice(&unit_length.to_le_bytes());
+        out.extend_from_slice(&cie_id.to_le_bytes());
+        out.push(version);
+        out.push(augmentation_terminator);
+        out.push(address_size);
+        out.push(segment_selector_size);
+    }
+}
+
+/// Frame-Description Entry header (`.debug_frame` form).
+/// `cie_pointer` is an absolute offset from the start of
+/// `.debug_frame` to the matching CIE; we keep one CIE at offset
+/// 0 so every FDE here points at 0.
+#[repr(C, packed)]
+struct DebugFrameFdeHeader {
+    unit_length: u32,
+    cie_pointer: u32,
+    initial_location: u64,
+    address_range: u64,
+}
+
+impl DebugFrameFdeHeader {
+    fn write_le(&self, out: &mut Vec<u8>) {
+        let DebugFrameFdeHeader {
+            unit_length,
+            cie_pointer,
+            initial_location,
+            address_range,
+        } = *self;
+        out.extend_from_slice(&unit_length.to_le_bytes());
+        out.extend_from_slice(&cie_pointer.to_le_bytes());
+        out.extend_from_slice(&initial_location.to_le_bytes());
+        out.extend_from_slice(&address_range.to_le_bytes());
+    }
+}
+
+/// Build the `.debug_frame` section: one CIE at offset 0 plus one
+/// FDE per `Subprog`. Empty if there are no subs (no callable
+/// user functions). Returns the raw byte vector.
+fn build_debug_frame(target: Target, subs: &[Subprog]) -> Vec<u8> {
+    if subs.is_empty() {
+        return Vec::new();
+    }
+    let arch = CfiArch::of(target);
+    let mut out: Vec<u8> = Vec::with_capacity(64 + subs.len() * 32);
+
+    // ---- CIE ----
+    //
+    // Build the body (everything after `unit_length`) so we know
+    // its size before writing the prefix.
+    let mut cie_body: Vec<u8> = Vec::new();
+    write_uleb128(&mut cie_body, cfi_code_alignment_factor(arch));
+    write_sleb128(&mut cie_body, CFI_DATA_ALIGNMENT_FACTOR);
+    write_uleb128(&mut cie_body, cfi_return_address_register(arch));
+    write_cie_initial_instructions(&mut cie_body, arch);
+
+    // Header is 8 bytes for `unit_length + cie_id` plus 4 bytes
+    // for `version + augmentation_terminator + address_size +
+    // segment_selector_size` -- but we count `unit_length`'s 4
+    // bytes for the consumer-facing length, so subtract them.
+    // Pad the entire CIE record (header + body) to a multiple of
+    // 8 bytes so the FDE that follows starts on an 8-aligned
+    // offset (DWARF requires this for 64-bit address-size CFI).
+    let mut cie = Vec::with_capacity(16 + cie_body.len());
+    let cie_inner_len = (4 /* cie_id */ + 1 /* version */ + 1 /* aug NUL */
+        + 1 /* address_size */ + 1 /* segment_size */ + cie_body.len()) as u32;
+    let header = DebugFrameCieHeader {
+        unit_length: cie_inner_len,
+        cie_id: 0xffff_ffff,
+        version: 4,
+        augmentation_terminator: 0,
+        address_size: 8,
+        segment_selector_size: 0,
+    };
+    header.write_le(&mut cie);
+    cie.extend_from_slice(&cie_body);
+    pad_to_alignment(&mut cie, 8);
+    // Patch the unit_length to cover any DW_CFA_nop padding we
+    // added. The header wrote `cie_inner_len` not knowing about
+    // alignment; the actual length is `cie.len() - 4` (minus the
+    // unit_length field itself).
+    let actual_cie_unit_length = (cie.len() - 4) as u32;
+    cie[..4].copy_from_slice(&actual_cie_unit_length.to_le_bytes());
+    out.extend_from_slice(&cie);
+
+    // ---- FDEs ----
+
+    for sub in subs {
+        let mut fde_body: Vec<u8> = Vec::new();
+        // Skip past the prologue, then install the post-prologue
+        // CFA rule. Functions whose prologue size couldn't be
+        // recovered (DCE'd, etc.) pass `prologue_size == 0` and
+        // get the rule installed at the function's first byte.
+        if sub.prologue_size > 0 {
+            write_advance_loc(&mut fde_body, arch, sub.prologue_size);
+        }
+        write_post_prologue_instructions(&mut fde_body, arch);
+
+        let mut fde = Vec::with_capacity(24 + fde_body.len());
+        let fde_inner_len = (4 /* cie_pointer */ + 8 /* initial_location */
+            + 8 /* address_range */ + fde_body.len()) as u32;
+        let header = DebugFrameFdeHeader {
+            unit_length: fde_inner_len,
+            cie_pointer: 0,
+            initial_location: sub.low_pc,
+            address_range: sub.high_pc - sub.low_pc,
+        };
+        header.write_le(&mut fde);
+        fde.extend_from_slice(&fde_body);
+        pad_to_alignment(&mut fde, 8);
+        let actual_fde_unit_length = (fde.len() - 4) as u32;
+        fde[..4].copy_from_slice(&actual_fde_unit_length.to_le_bytes());
+        out.extend_from_slice(&fde);
+    }
+
+    out
 }
 
 // ---- .debug_line ----

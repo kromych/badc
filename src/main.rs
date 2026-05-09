@@ -251,7 +251,7 @@ fn main() {
     let target = match Target::parse(target_spec.as_deref()) {
         Ok(t) => t,
         Err(e) => {
-            eprintln!("{e}");
+            eprint_diagnostic(e);
             std::process::exit(1);
         }
     };
@@ -350,7 +350,7 @@ fn main() {
     {
         Ok(p) => p,
         Err(e) => {
-            eprintln!("{}", e);
+            eprint_diagnostic(e);
             std::process::exit(1);
         }
     };
@@ -365,7 +365,7 @@ fn main() {
         match optimize(program) {
             Ok(p) => p,
             Err(e) => {
-                eprintln!("{}", e);
+                eprint_diagnostic(e);
                 std::process::exit(1);
             }
         }
@@ -402,7 +402,7 @@ fn main() {
         Mode::DumpAsm => match dump_native_listing_with_options(&program, target, native_opts) {
             Ok(s) => print!("{s}"),
             Err(e) => {
-                eprintln!("{e}");
+                eprint_diagnostic(e);
                 std::process::exit(1);
             }
         },
@@ -414,7 +414,7 @@ fn main() {
             match jit_run_with_options(&program, &c_args, native_opts) {
                 Ok(code) => std::process::exit(code),
                 Err(e) => {
-                    eprintln!("{e}");
+                    eprint_diagnostic(e);
                     std::process::exit(1);
                 }
             }
@@ -434,7 +434,7 @@ fn main() {
             match vm.run() {
                 Ok(res) => println!("exit({})", res),
                 Err(e) => {
-                    eprintln!("{}", e);
+                    eprint_diagnostic(e);
                     std::process::exit(1);
                 }
             }
@@ -465,6 +465,17 @@ fn main() {
         Mode::ListSymbols => unreachable!("handled above"),
         Mode::DumpHeaders => unreachable!("handled above"),
     }
+}
+
+/// Print `msg` to stderr through `colorize_diagnostic`, deciding
+/// once whether stderr is a TTY. Use for any user-visible error or
+/// warning the CLI emits -- it's a no-op for messages that don't
+/// look like a diagnostic, so plain "badc: file not found" lines
+/// pass through unchanged.
+fn eprint_diagnostic(msg: impl core::fmt::Display) {
+    let stderr_is_tty = std::io::stderr().is_terminal();
+    let s = msg.to_string();
+    eprintln!("{}", colorize_diagnostic(&s, stderr_is_tty));
 }
 
 /// Add ANSI color around the severity word (`warning:`, `error:`,
@@ -559,7 +570,7 @@ fn emit_native_binary_to_stdout(program: &badc::Program, target: Target, options
     let bytes = match emit_native_with_options(program, target, options) {
         Ok(b) => b,
         Err(e) => {
-            eprintln!("{e}");
+            eprint_diagnostic(e);
             std::process::exit(1);
         }
     };
@@ -580,7 +591,7 @@ fn emit_native_binary(
     let bytes = match emit_native_with_options(program, target, options) {
         Ok(b) => b,
         Err(e) => {
-            eprintln!("{e}");
+            eprint_diagnostic(e);
             std::process::exit(1);
         }
     };

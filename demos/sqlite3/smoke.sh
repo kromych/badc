@@ -334,29 +334,41 @@ if [ "${BADC_RUN_DIAG:-}" = "1" ]; then
         -DSQLITE_OMIT_SEH || echo "hellosq: build failed" >&2
     if [ -e "${HELLOSQ_BIN}" ]; then
         echo "=== hello+sqlite run ===" >&2
+        # Run from a tmp directory so the side-channel `hello.proof`
+        # file (written by main if main runs at all) lands in a
+        # known place we can inspect afterwards regardless of which
+        # invocation path actually printed.
+        proof_dir="${WORK}/proof_run"
+        mkdir -p "${proof_dir}"
+        rm -f "${proof_dir}/hello.proof"
         set +e
-        "${HELLOSQ_BIN}" </dev/null
+        ( cd "${proof_dir}" && "${HELLOSQ_BIN}" </dev/null )
         hellosq_rc=$?
         set -e
         echo "=== hello+sqlite bash exit=${hellosq_rc} ===" >&2
-        # On Windows lanes, also probe via cmd.exe so we get the
-        # real Windows process exit code instead of bash's 127
-        # mapping for "couldn't exec". Translate the bash path to
-        # a Windows path via cygpath if the tool is available
-        # (Git Bash ships with it).
+        if [ -f "${proof_dir}/hello.proof" ]; then
+            echo "=== hello+sqlite proof-file present ===" >&2
+            cat "${proof_dir}/hello.proof" >&2
+            echo "=== /hello+sqlite proof-file ===" >&2
+        else
+            echo "=== hello+sqlite proof-file ABSENT (main never ran or fopen failed) ===" >&2
+        fi
         if command -v cmd.exe >/dev/null 2>&1; then
             if command -v cygpath >/dev/null 2>&1; then
                 winpath=$(cygpath -w "${HELLOSQ_BIN}")
             else
                 winpath="${HELLOSQ_BIN}"
             fi
+            rm -f "${proof_dir}/hello.proof"
             echo "=== hello+sqlite cmd.exe probe (winpath=${winpath}) ===" >&2
-            # Capture both stdout and stderr from the spawned binary
-            # via `2>&1` so we see whatever it actually printed.
-            # `start /WAIT /B` runs in the same console and waits for
-            # exit so the errorlevel reflects the spawned process,
-            # not the START command itself.
-            cmd.exe //c "${winpath} 2>&1 & echo errorlevel=%errorlevel%" >&2 || true
+            ( cd "${proof_dir}" && cmd.exe //c "${winpath} 2>&1 & echo errorlevel=%errorlevel%" >&2 ) || true
+            if [ -f "${proof_dir}/hello.proof" ]; then
+                echo "=== hello+sqlite cmd-proof present ===" >&2
+                cat "${proof_dir}/hello.proof" >&2
+                echo "=== /hello+sqlite cmd-proof ===" >&2
+            else
+                echo "=== hello+sqlite cmd-proof ABSENT ===" >&2
+            fi
             echo "=== /hello+sqlite cmd.exe probe ===" >&2
         fi
     fi

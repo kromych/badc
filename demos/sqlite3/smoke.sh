@@ -308,7 +308,17 @@ if [ "${BADC_RUN_DIAG:-}" = "1" ]; then
         "${PROBE_BIN}" </dev/null
         probe_rc=$?
         set -e
-        echo "=== probe imports exit=${probe_rc} ===" >&2
+        echo "=== probe imports bash exit=${probe_rc} ===" >&2
+        if command -v cmd.exe >/dev/null 2>&1; then
+            if command -v cygpath >/dev/null 2>&1; then
+                probe_winpath=$(cygpath -w "${PROBE_BIN}")
+            else
+                probe_winpath="${PROBE_BIN}"
+            fi
+            echo "=== probe imports cmd.exe (winpath=${probe_winpath}) ===" >&2
+            cmd.exe //v:on //c "${probe_winpath} 2>&1 & echo errorlevel=!errorlevel!" >&2 || true
+            echo "=== /probe imports cmd.exe ===" >&2
+        fi
     fi
 
     # Tier 1 probe: dead-minimal hello-world (no sqlite, no shell,

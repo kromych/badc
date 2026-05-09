@@ -21,6 +21,7 @@ fn run(text: Vec<i64>) -> i64 {
         dllmain_pc: None,
         source_lines: vec![],
         source_functions: vec![],
+        source_path: String::new(),
     };
     Vm::new(program).run().unwrap()
 }
@@ -122,6 +123,7 @@ fn invalid_opcode_is_a_runtime_error() {
         dllmain_pc: None,
         source_lines: vec![],
         source_functions: vec![],
+        source_path: String::new(),
     };
     let err = Vm::new(program).run().unwrap_err();
     assert!(
@@ -149,6 +151,7 @@ fn empty_program_errors_cleanly() {
         dllmain_pc: None,
         source_lines: vec![],
         source_functions: vec![],
+        source_path: String::new(),
     };
     let err = Vm::new(program).run().unwrap_err();
     assert!(

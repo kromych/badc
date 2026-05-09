@@ -208,4 +208,16 @@ pub struct Program {
     /// each entry is the name of the C function whose body the op
     /// belongs to (empty string for top-level data emission).
     pub source_functions: Vec<String>,
+    /// Filesystem path of the input `.c` file, when known. Set by
+    /// the CLI shim from the user's argv before
+    /// [`crate::emit_native`] runs; the c5 frontend itself doesn't
+    /// know the path, so it leaves this empty for the
+    /// `compile_str` / stdin / fixture paths.
+    ///
+    /// The DWARF emitter (gh #44) uses this as the CU's
+    /// `DW_AT_name` and the line program's only file entry, so
+    /// `lldb image lookup -n foo` reports `foo at /path/to/src.c:N`
+    /// instead of `<unknown>:N`. Empty falls back to `<unknown>`.
+    /// The VM / JIT / interpreter ignore it.
+    pub source_path: String,
 }

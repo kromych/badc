@@ -1835,7 +1835,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         dwarf_filesize,
         dwarf_tail_pad,
     ) = if emit_dwarf {
-        let s = dwarf::emit(program, build, code_vmaddr_base, "<unknown>");
+        let s = dwarf::emit(program, build, code_vmaddr_base, &program.source_path);
         let fileoff = data_fileoff + data_filesize;
         let info = fileoff;
         let abbrev = info + s.debug_info.len() as u64;
@@ -2273,6 +2273,7 @@ mod tests {
             dllmain_pc: None,
             source_lines: Vec::new(),
             source_functions: Vec::new(),
+            source_path: String::new(),
         }
     }
 

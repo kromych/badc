@@ -328,7 +328,7 @@ fn main() {
     // predefines into the compiler. The bytecode itself is target-
     // independent; only the resolved binding map and the
     // preprocessor predefines vary.
-    let program = match Compiler::with_full_options(
+    let mut program = match Compiler::with_full_options(
         contents,
         target,
         &defines,
@@ -344,6 +344,12 @@ fn main() {
             std::process::exit(1);
         }
     };
+    // The compiler doesn't see the user's filesystem path; thread
+    // it onto the Program so the DWARF emitter (gh #44) can put a
+    // real `DW_AT_name` on the compilation-unit DIE. lldb / gdb
+    // then show `foo.c:N` instead of `<unknown>:N` next to every
+    // resolved address.
+    program.source_path = path.clone();
 
     let program = if optimize_flag && std::env::var("BADC_BC_OPT_OFF").is_err() {
         match optimize(program) {

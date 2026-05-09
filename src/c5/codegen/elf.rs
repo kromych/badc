@@ -977,7 +977,7 @@ pub(super) fn write(
     // _start stub sits ahead of build.text in the code blob;
     // shared libraries skip the stub so stub_len = 0 there).
     let dwarf_text_vmaddr = code_vmaddr + stub_len;
-    let dwarf_sections = dwarf::emit(program, build, dwarf_text_vmaddr, "<unknown>");
+    let dwarf_sections = dwarf::emit(program, build, dwarf_text_vmaddr, &program.source_path);
     let dwarf_off = segment2_end;
     let dwarf_info_off = dwarf_off;
     let dwarf_abbrev_off = dwarf_info_off + dwarf_sections.debug_info.len() as u64;
@@ -1513,6 +1513,7 @@ mod tests {
             dllmain_pc: None,
             source_lines: Vec::new(),
             source_functions: Vec::new(),
+            source_path: String::new(),
         }
     }
 

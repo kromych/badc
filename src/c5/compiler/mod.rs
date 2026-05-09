@@ -1450,6 +1450,10 @@ impl Compiler {
             dllmain_pc,
             source_lines: self.source_lines,
             source_functions: self.source_functions,
+            // The compiler doesn't see the input path -- the CLI
+            // shim sets this on the returned `Program` before
+            // calling `emit_native_*` (gh #44).
+            source_path: String::new(),
         })
     }
 

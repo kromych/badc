@@ -174,13 +174,34 @@ fn collect_subprograms(
     // Sentinel for end-of-last-function range.
     let total_native = build.text.len();
 
+    // c5's source-function tracking attributes some `Op::Ent`s to
+    // the wrong containing C function -- in sqlite's amalgamation
+    // there are 15 Ents that c5 calls "yy_reduce" but whose source
+    // lines + actual code belong to setupLookaside,
+    // sqlite3_db_release_memory, etc. (gh #48). Without
+    // disambiguation, lldb's `b yy_reduce` returns 15 matches and
+    // the user can't tell which is the real one. Suffix duplicates
+    // with `.<N>` so the legitimate first-occurrence keeps the
+    // bare name and `b yy_reduce` resolves to one location. The
+    // upstream c5 tracking is a separate fix (the suffixed names
+    // still point at real bytecode, so backtraces inside the
+    // mis-attributed regions are no worse than they were).
+    let mut name_seen: alloc::collections::BTreeMap<alloc::string::String, u32> =
+        alloc::collections::BTreeMap::new();
     for (i, &ent_pc) in ent_pcs.iter().enumerate() {
-        let name = program
+        let raw_name = program
             .source_functions
             .get(ent_pc)
             .filter(|s| !s.is_empty())
             .cloned()
             .unwrap_or_else(|| format!("fn_bc_{ent_pc}"));
+        let count = name_seen.entry(raw_name.clone()).or_insert(0);
+        let name = if *count == 0 {
+            raw_name
+        } else {
+            format!("{raw_name}.{}", *count)
+        };
+        *count += 1;
         let name_off = strs.intern(&name);
 
         let lo = build

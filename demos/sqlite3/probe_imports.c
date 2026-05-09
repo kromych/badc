@@ -13,24 +13,38 @@
 */
 
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 #include <windows.h>
+
+/* Write through unbuffered fd 2 (stderr) so missing-symbol output
+** survives even if msvcrt's stdout buffering isn't flushed before
+** the loader / OS tears the process down. printf() on Windows
+** Server 2025 was observed buffering forever in this configuration
+** -- raw write(2,...) bypasses the CRT-side FILE * machinery. */
+static void emit(char *s) {
+    int n = (int)strlen(s);
+    write(2, s, n);
+}
 
 static void probe(char *dll_handle, char *name) {
     char *p = GetProcAddress(dll_handle, name);
     if (p) {
-        printf("OK      %s\n", name);
+        emit("OK      ");
     } else {
-        printf("MISSING %s\n", name);
+        emit("MISSING ");
     }
+    emit(name);
+    emit("\n");
 }
 
 int main(int argc, char **argv) {
     char *m = LoadLibraryA("msvcrt.dll");
     char *k = LoadLibraryA("kernel32.dll");
-    printf("msvcrt=%p kernel32=%p\n", (void *)m, (void *)k);
+    if (m) emit("msvcrt OK\n"); else emit("msvcrt MISSING\n");
+    if (k) emit("kernel32 OK\n"); else emit("kernel32 MISSING\n");
     if (!m || !k) {
-        printf("LoadLibrary failed\n");
+        emit("LoadLibrary failed -- aborting probe\n");
         return 1;
     }
 

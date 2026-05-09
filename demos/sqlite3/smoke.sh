@@ -361,7 +361,11 @@ if [ "${BADC_RUN_DIAG:-}" = "1" ]; then
             fi
             rm -f "${proof_dir}/hello.proof"
             echo "=== hello+sqlite cmd.exe probe (winpath=${winpath}) ===" >&2
-            ( cd "${proof_dir}" && cmd.exe //c "${winpath} 2>&1 & echo errorlevel=%errorlevel%" >&2 ) || true
+            # `/v:on` enables delayed expansion so `!errorlevel!` is
+            # evaluated AFTER the binary runs (without it, cmd.exe
+            # substitutes %errorlevel% at parse time -- before the
+            # spawn -- giving the meaningless 0 from the outer shell).
+            ( cd "${proof_dir}" && cmd.exe //v:on //c "${winpath} 2>&1 & echo errorlevel=!errorlevel!" >&2 ) || true
             if [ -f "${proof_dir}/hello.proof" ]; then
                 echo "=== hello+sqlite cmd-proof present ===" >&2
                 cat "${proof_dir}/hello.proof" >&2

@@ -322,6 +322,13 @@ pub struct Compiler {
     /// `text`. Empty string for top-level emit (data
     /// initializers, file-scope decls).
     source_functions: Vec<String>,
+    /// Per-function locals + parameters captured at body close,
+    /// before the c5 shadow-symbol restore unwinds the binding.
+    /// gh #46 -- the DWARF emitter walks this list to attach
+    /// `DW_TAG_variable` / `DW_TAG_formal_parameter` DIEs to the
+    /// matching subprogram, which lets lldb's `frame variable` and
+    /// `watchpoint set variable foo` work for c5-emitted code.
+    variables: Vec<crate::c5::program::VariableInfo>,
     /// Name of the C function whose body is currently being
     /// emitted. Set on `Op::Ent` emit and cleared on `Op::Lev`.
     current_function_name: String,
@@ -509,6 +516,7 @@ impl Compiler {
             pending_index_stride: 0,
             source_lines: Vec::new(),
             source_functions: Vec::new(),
+            variables: Vec::new(),
             current_function_name: String::new(),
             fn_call_fixups: Vec::new(),
             code_reloc_sym_idx: Vec::new(),
@@ -1454,6 +1462,7 @@ impl Compiler {
             // shim sets this on the returned `Program` before
             // calling `emit_native_*` (gh #44).
             source_path: String::new(),
+            variables: self.variables,
         })
     }
 
@@ -3866,6 +3875,35 @@ impl Compiler {
                         }
                     }
 
+                    // gh #46 -- snapshot the function's locals +
+                    // formal parameters before `restore_shadowed_symbol`
+                    // unwinds the bindings. The DWARF emitter groups
+                    // these by `function_bc_pc` (the Ent's PC) and
+                    // emits `DW_TAG_formal_parameter` /
+                    // `DW_TAG_variable` DIEs as children of the
+                    // matching subprogram, with `DW_OP_fbreg` locations
+                    // derived from `fp_slot * 8`. Slots `0..2` cover
+                    // the saved-x29 / saved-x30 area and don't
+                    // correspond to a user-visible name; everything
+                    // else is either a parameter (val >= 2) or a
+                    // local (val < 0).
+                    let param_set: alloc::collections::BTreeSet<usize> =
+                        params.indices.iter().copied().collect();
+                    for (i, sym) in self.symbols.iter().enumerate() {
+                        if sym.class == Token::Loc as i64
+                            && sym.val != 0
+                            && sym.val != 1
+                            && !sym.name.is_empty()
+                        {
+                            self.variables.push(crate::c5::program::VariableInfo {
+                                function_bc_pc: ent_pc as u64,
+                                name: sym.name.clone(),
+                                type_tag: sym.type_,
+                                fp_slot: sym.val,
+                                is_parameter: param_set.contains(&i),
+                            });
+                        }
+                    }
                     for sym in self.symbols.iter_mut() {
                         if sym.class == Token::Loc as i64 {
                             Self::restore_shadowed_symbol(sym);

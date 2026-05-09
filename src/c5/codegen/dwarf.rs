@@ -43,6 +43,9 @@ use crate::c5::program::Program;
 
 const DW_TAG_COMPILE_UNIT: u8 = 0x11;
 const DW_TAG_SUBPROGRAM: u8 = 0x2e;
+const DW_TAG_BASE_TYPE: u8 = 0x24;
+const DW_TAG_FORMAL_PARAMETER: u8 = 0x05;
+const DW_TAG_VARIABLE: u32 = 0x34;
 
 const DW_CHILDREN_NO: u8 = 0x00;
 const DW_CHILDREN_YES: u8 = 0x01;
@@ -55,6 +58,15 @@ const DW_AT_LANGUAGE: u32 = 0x13;
 const DW_AT_COMP_DIR: u32 = 0x1b;
 const DW_AT_EXTERNAL: u32 = 0x3f;
 const DW_AT_PRODUCER: u32 = 0x25;
+const DW_AT_BYTE_SIZE: u32 = 0x0b;
+const DW_AT_ENCODING: u32 = 0x3e;
+const DW_AT_TYPE: u32 = 0x49;
+const DW_AT_LOCATION: u32 = 0x02;
+const DW_AT_FRAME_BASE: u32 = 0x40;
+
+// DW_ATE_* encodings for DW_TAG_base_type DW_AT_encoding.
+const DW_ATE_SIGNED: u8 = 0x05;
+const DW_ATE_ADDRESS: u8 = 0x01;
 
 const DW_FORM_ADDR: u32 = 0x01;
 const DW_FORM_DATA1: u32 = 0x0b;
@@ -62,6 +74,19 @@ const DW_FORM_DATA8: u32 = 0x07;
 const DW_FORM_STRP: u32 = 0x0e;
 const DW_FORM_FLAG_PRESENT: u32 = 0x19;
 const DW_FORM_SEC_OFFSET: u32 = 0x17;
+const DW_FORM_REF4: u32 = 0x13;
+const DW_FORM_EXPRLOC: u32 = 0x18;
+
+// DW_OP_* opcodes used in location / frame-base expressions.
+const DW_OP_FBREG: u8 = 0x91;
+/// `DW_OP_breg29 <sleb128>` (= 0x70 + 29) -- "frame base is the
+/// value of register x29 plus N". Used in DW_AT_frame_base so
+/// `DW_OP_fbreg` location expressions resolve against $x29.
+/// `DW_OP_reg29` (0x6d) is "the variable IS in register x29",
+/// which lldb interprets differently from "the frame base is
+/// stored at x29's address" -- breg gets the right semantics
+/// for c5's stack-frame layout.
+const DW_OP_BREG29: u8 = 0x8d;
 
 const DW_LANG_C99: u8 = 0x0c;
 
@@ -111,6 +136,9 @@ pub(crate) fn emit(
     } else {
         source_path
     });
+    // Names for the two phase-2 base type DIEs (gh #46).
+    let int_type_name_off = strs.intern("int");
+    let ptr_type_name_off = strs.intern("void *");
 
     // Walk the bytecode, collect one `Subprog` per `Op::Ent`.
     let subs = collect_subprograms(program, build, code_vmaddr, &mut strs);
@@ -125,6 +153,8 @@ pub(crate) fn emit(
         line_unit_off,
         code_vmaddr,
         build.text.len() as u64,
+        int_type_name_off,
+        ptr_type_name_off,
         &subs,
     );
 
@@ -142,6 +172,19 @@ struct Subprog {
     name_off: u32,
     low_pc: u64,
     high_pc: u64,
+    /// Locals + formal-parameters that c5 captured for this
+    /// subprogram (see `Compiler::variables`). The DWARF emitter
+    /// turns each into a `DW_TAG_variable` /
+    /// `DW_TAG_formal_parameter` child of the subprogram DIE.
+    variables: Vec<SubprogVar>,
+}
+
+struct SubprogVar {
+    name_off: u32,
+    is_parameter: bool,
+    is_pointer: bool,
+    /// Frame-pointer-relative byte offset (c5's `fp_slot * 8`).
+    fp_byte_offset: i64,
 }
 
 fn collect_subprograms(
@@ -225,10 +268,38 @@ fn collect_subprograms(
             continue;
         }
 
+        // Pull this subprogram's locals + parameters from
+        // `program.variables` (gh #46). Captured by the c5
+        // frontend at function-body close, indexed by the Ent's
+        // bytecode pc so a simple equality check groups them.
+        let function_bc_pc = ent_pc as u64;
+        let variables = program
+            .variables
+            .iter()
+            .filter(|v| v.function_bc_pc == function_bc_pc)
+            .map(|v| SubprogVar {
+                name_off: strs.intern(&v.name),
+                is_parameter: v.is_parameter,
+                is_pointer: crate::c5::compiler::types::is_pointer_ty(v.type_tag),
+                // c5's slot -> byte conversion: positive (args)
+                // use 16-byte AAPCS64 slot stride starting at
+                // `(slot - 1) * 16` (so slot 2 -> +16, slot 3 ->
+                // +32). Negative (locals) use 8-byte stride. Mirror
+                // of `aarch64::lea_offset_bytes`. The x86_64 backend
+                // matches; both arches share this layout.
+                fp_byte_offset: if v.fp_slot >= 2 {
+                    (v.fp_slot - 1) * 16
+                } else {
+                    v.fp_slot * 8
+                },
+            })
+            .collect();
+
         out.push(Subprog {
             name_off,
             low_pc: code_vmaddr + lo as u64,
             high_pc: code_vmaddr + hi as u64,
+            variables,
         });
     }
 
@@ -251,20 +322,63 @@ fn build_debug_abbrev() -> Vec<u8> {
     write_attr(&mut buf, DW_AT_LOW_PC, DW_FORM_ADDR);
     write_attr(&mut buf, DW_AT_HIGH_PC, DW_FORM_DATA8);
     write_attr(&mut buf, DW_AT_STMT_LIST, DW_FORM_SEC_OFFSET);
-    // End of attribute list.
     write_uleb128(&mut buf, 0);
     write_uleb128(&mut buf, 0);
 
-    // Abbrev 2: DW_TAG_subprogram, no children.
+    // Abbrev 2: DW_TAG_subprogram, has children (formal_param,
+    // variable). Phase 2 (gh #46) added DW_AT_frame_base so
+    // `DW_OP_fbreg` location expressions in the children resolve
+    // against `$x29` (c5's frame pointer).
     write_uleb128(&mut buf, 2);
     write_uleb128(&mut buf, DW_TAG_SUBPROGRAM as u64);
-    buf.push(DW_CHILDREN_NO);
+    buf.push(DW_CHILDREN_YES);
     write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
     write_attr(&mut buf, DW_AT_LOW_PC, DW_FORM_ADDR);
     // High PC as DATA8 means "size in bytes from low_pc". Cheaper
     // than DW_FORM_addr and matches gcc / clang's DWARF 4 output.
     write_attr(&mut buf, DW_AT_HIGH_PC, DW_FORM_DATA8);
     write_attr(&mut buf, DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT);
+    write_attr(&mut buf, DW_AT_FRAME_BASE, DW_FORM_EXPRLOC);
+    write_uleb128(&mut buf, 0);
+    write_uleb128(&mut buf, 0);
+
+    // Abbrev 3: DW_TAG_base_type. Two instances are emitted in
+    // .debug_info: a 4-byte signed `int` and an 8-byte `void *`.
+    // Variable / parameter DIEs reference whichever matches their
+    // c5 type tag (pointer => the address-encoded entry, all
+    // others => the int entry). Phase 3 will replace this with
+    // per-c5-type-tag base / pointer / struct DIEs.
+    write_uleb128(&mut buf, 3);
+    write_uleb128(&mut buf, DW_TAG_BASE_TYPE as u64);
+    buf.push(DW_CHILDREN_NO);
+    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
+    write_attr(&mut buf, DW_AT_BYTE_SIZE, DW_FORM_DATA1);
+    write_attr(&mut buf, DW_AT_ENCODING, DW_FORM_DATA1);
+    write_uleb128(&mut buf, 0);
+    write_uleb128(&mut buf, 0);
+
+    // Abbrev 4: DW_TAG_variable (local). DW_AT_location is a
+    // DWARF expression -- for c5 locals it's
+    // `DW_OP_fbreg <sleb128 byte-offset>`, with the frame base
+    // resolved via the subprogram's DW_AT_frame_base.
+    write_uleb128(&mut buf, 4);
+    write_uleb128(&mut buf, DW_TAG_VARIABLE as u64);
+    buf.push(DW_CHILDREN_NO);
+    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
+    write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
+    write_attr(&mut buf, DW_AT_LOCATION, DW_FORM_EXPRLOC);
+    write_uleb128(&mut buf, 0);
+    write_uleb128(&mut buf, 0);
+
+    // Abbrev 5: DW_TAG_formal_parameter. Same shape as the local
+    // variable abbrev; the tag itself is what tells lldb /
+    // gdb to render the entry as a parameter rather than a local.
+    write_uleb128(&mut buf, 5);
+    write_uleb128(&mut buf, DW_TAG_FORMAL_PARAMETER as u64);
+    buf.push(DW_CHILDREN_NO);
+    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
+    write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
+    write_attr(&mut buf, DW_AT_LOCATION, DW_FORM_EXPRLOC);
     write_uleb128(&mut buf, 0);
     write_uleb128(&mut buf, 0);
 
@@ -280,6 +394,7 @@ fn write_attr(buf: &mut Vec<u8>, attr: u32, form: u32) {
 
 // ---- .debug_info ----
 
+#[allow(clippy::too_many_arguments)]
 fn build_debug_info(
     cu_name_off: u32,
     comp_dir_off: u32,
@@ -287,6 +402,8 @@ fn build_debug_info(
     line_unit_off: u32,
     cu_low_pc: u64,
     cu_size: u64,
+    int_type_name_off: u32,
+    ptr_type_name_off: u32,
     subs: &[Subprog],
 ) -> Vec<u8> {
     // DWARF 4 32-bit unit header is 11 bytes:
@@ -298,9 +415,16 @@ fn build_debug_info(
     //
     // We can't write `unit_length` until we know the body size, so
     // build the body first, then prepend the header.
-    let mut body = Vec::with_capacity(64 + subs.len() * 32);
+    //
+    // DW_FORM_ref4 references in this CU encode a CU-relative
+    // byte offset; the unit starts at .debug_info offset 0, so
+    // CU-relative == .debug_info-absolute. We track the
+    // `header_len`-shifted position of each type DIE so child
+    // DIEs can refer back to it.
+    const HEADER_LEN: usize = 11;
+    let mut body: Vec<u8> = Vec::with_capacity(64 + subs.len() * 48);
 
-    // CU DIE: abbrev code 1.
+    // CU DIE: abbrev 1.
     write_uleb128(&mut body, 1);
     body.extend_from_slice(&producer_off.to_le_bytes());
     body.push(DW_LANG_C99);
@@ -310,21 +434,69 @@ fn build_debug_info(
     body.extend_from_slice(&cu_size.to_le_bytes());
     body.extend_from_slice(&line_unit_off.to_le_bytes());
 
-    // Subprogram children.
+    // Type DIEs (CU children, abbrev 3). Two entries cover phase
+    // 2's variable / parameter shapes: a 4-byte signed `int` and
+    // an 8-byte address-encoded `void *`. Variables / parameters
+    // pick whichever matches their c5 pointer-or-not status.
+    let int_type_off = (body.len() + HEADER_LEN) as u32;
+    write_uleb128(&mut body, 3);
+    body.extend_from_slice(&int_type_name_off.to_le_bytes());
+    body.push(4);
+    body.push(DW_ATE_SIGNED);
+
+    let ptr_type_off = (body.len() + HEADER_LEN) as u32;
+    write_uleb128(&mut body, 3);
+    body.extend_from_slice(&ptr_type_name_off.to_le_bytes());
+    body.push(8);
+    body.push(DW_ATE_ADDRESS);
+
+    // Subprogram children, each with its own variable /
+    // formal_parameter children.
     for s in subs {
         write_uleb128(&mut body, 2);
         body.extend_from_slice(&s.name_off.to_le_bytes());
         body.extend_from_slice(&s.low_pc.to_le_bytes());
         body.extend_from_slice(&(s.high_pc - s.low_pc).to_le_bytes());
-        // DW_FORM_flag_present has no data: its presence in the
-        // abbrev is enough to convey the flag.
+        // DW_AT_external is DW_FORM_flag_present -- no bytes.
+        // DW_AT_frame_base (DW_FORM_exprloc): "frame base is
+        // x29 + 0", encoded as `DW_OP_breg29 0`. Two bytes:
+        // opcode + sleb128(0).
+        write_uleb128(&mut body, 2);
+        body.push(DW_OP_BREG29);
+        body.push(0);
+
+        // Variable / formal_parameter children. Order: parameters
+        // first (lldb's frame-variable ordering matches the
+        // declaration order; we keep it close enough for c5's
+        // single-pass capture by sorting here).
+        let mut sorted: Vec<&SubprogVar> = s.variables.iter().collect();
+        sorted.sort_by_key(|v| (!v.is_parameter, v.fp_byte_offset));
+        for v in sorted {
+            let abbrev = if v.is_parameter { 5 } else { 4 };
+            write_uleb128(&mut body, abbrev);
+            body.extend_from_slice(&v.name_off.to_le_bytes());
+            let type_off = if v.is_pointer {
+                ptr_type_off
+            } else {
+                int_type_off
+            };
+            body.extend_from_slice(&type_off.to_le_bytes());
+            // Location: DW_OP_fbreg <sleb128 offset-from-frame-base>.
+            let mut loc: Vec<u8> = Vec::with_capacity(8);
+            loc.push(DW_OP_FBREG);
+            write_sleb128(&mut loc, v.fp_byte_offset);
+            write_uleb128(&mut body, loc.len() as u64);
+            body.extend_from_slice(&loc);
+        }
+        // Children-list terminator for this subprogram.
+        body.push(0);
     }
 
-    // CU children list terminator: a single null abbrev code.
+    // CU children list terminator.
     body.push(0);
 
     // Header.
-    let mut out = Vec::with_capacity(11 + body.len());
+    let mut out = Vec::with_capacity(HEADER_LEN + body.len());
     let unit_length = (body.len() + 7) as u32; // version(2) + abbrev_off(4) + addr_size(1)
     out.extend_from_slice(&unit_length.to_le_bytes());
     out.extend_from_slice(&4u16.to_le_bytes()); // DWARF version 4

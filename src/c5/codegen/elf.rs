@@ -1514,6 +1514,7 @@ mod tests {
             source_lines: Vec::new(),
             source_functions: Vec::new(),
             source_path: String::new(),
+            variables: Vec::new(),
         }
     }
 

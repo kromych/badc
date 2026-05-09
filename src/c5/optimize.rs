@@ -352,6 +352,32 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
             }
         }
     }
+
+    // Remap variable records' `function_bc_pc` through the same
+    // PC table. Compiler captured each Loc symbol with the *pre-
+    // optimizer* Ent position; the optimizer can shift Ents to
+    // new positions (DCE never removes them, but earlier
+    // instructions may collapse). gh #46 -- without this remap
+    // the DWARF emitter's `function_bc_pc == ent_pc` filter
+    // misses every function under -O, so `frame variable` works
+    // at noO but goes silent at -O.
+    let pc_at_idx_for_pc: alloc::collections::BTreeMap<u64, usize> = pc_at_idx
+        .iter()
+        .enumerate()
+        .map(|(idx, &pc)| (pc as u64, idx))
+        .collect();
+    let out_variables: Vec<crate::c5::program::VariableInfo> = in_variables
+        .into_iter()
+        .filter_map(|mut v| {
+            let idx = *pc_at_idx_for_pc.get(&v.function_bc_pc)?;
+            let new_bc_pc = new_pc.get(idx).copied()?;
+            if new_bc_pc == usize::MAX {
+                return None;
+            }
+            v.function_bc_pc = new_bc_pc as u64;
+            Some(v)
+        })
+        .collect();
     Ok(Program {
         text,
         data,
@@ -378,7 +404,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         source_lines: out_source_lines,
         source_functions: out_source_functions,
         source_path,
-        variables: in_variables,
+        variables: out_variables,
     })
 }
 

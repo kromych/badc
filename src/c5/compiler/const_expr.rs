@@ -269,6 +269,11 @@ impl Compiler {
                 let expr_ty = self.ty;
                 let array_count = self.last_array_decay_size;
                 self.text.truncate(saved_text_len);
+                // Keep parallel debug arrays in sync with `text`;
+                // see compiler/mod.rs's matching comment on the
+                // sister truncate (gh #48 root cause).
+                self.source_lines.truncate(saved_text_len);
+                self.source_functions.truncate(saved_text_len);
                 self.data_imm_positions.truncate(saved_data_imm_positions);
                 self.ty = saved_ty;
                 self.last_array_decay_size = 0;

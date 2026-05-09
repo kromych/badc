@@ -1742,6 +1742,13 @@ impl Compiler {
     fn pop_trailing_scalar_load(&mut self) -> bool {
         if matches!(self.text.last(), Some(&op) if is_scalar_load_op_val(op)) {
             self.text.pop();
+            // Keep parallel debug arrays in sync with `text`
+            // (gh #48). Without these matching pops the
+            // source_functions / source_lines tail drifts past
+            // text.len() and every later emit_op lands in the
+            // wrong slot.
+            self.source_lines.pop();
+            self.source_functions.pop();
             true
         } else {
             false
@@ -1893,6 +1900,18 @@ impl Compiler {
                 let array_count = self.last_array_decay_size;
                 let expr_ty = self.ty;
                 self.text.truncate(saved_text_len);
+                // Keep `source_lines` / `source_functions` in
+                // sync with `text` (gh #48 root cause). Without
+                // these matching truncates the parallel arrays
+                // grow longer than `text`, and every subsequent
+                // `emit_op` lands its source-line / source-function
+                // entry at the wrong bytecode PC -- the visible
+                // symptom is that all functions parsed after the
+                // first array-size expression get attributed to the
+                // *previous* function's name in the DWARF
+                // subprogram DIEs.
+                self.source_lines.truncate(saved_text_len);
+                self.source_functions.truncate(saved_text_len);
                 self.data_imm_positions.truncate(saved_data_imm_positions);
                 self.last_array_decay_size = 0;
                 if array_count > 0 {

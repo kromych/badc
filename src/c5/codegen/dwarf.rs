@@ -47,7 +47,7 @@ use alloc::format;
 use alloc::vec::Vec;
 
 use super::{Build, Target};
-use crate::c5::compiler::types;
+use crate::c5::compiler::{StructDef, types};
 use crate::c5::op::Op;
 use crate::c5::program::Program;
 use crate::c5::token::Ty;
@@ -64,6 +64,9 @@ const DW_TAG_BASE_TYPE: u8 = 0x24;
 const DW_TAG_POINTER_TYPE: u8 = 0x0f;
 const DW_TAG_FORMAL_PARAMETER: u8 = 0x05;
 const DW_TAG_VARIABLE: u32 = 0x34;
+const DW_TAG_STRUCTURE_TYPE: u8 = 0x13;
+const DW_TAG_UNION_TYPE: u8 = 0x17;
+const DW_TAG_MEMBER: u8 = 0x0d;
 
 const DW_CHILDREN_NO: u8 = 0x00;
 const DW_CHILDREN_YES: u8 = 0x01;
@@ -81,6 +84,17 @@ const DW_AT_ENCODING: u32 = 0x3e;
 const DW_AT_TYPE: u32 = 0x49;
 const DW_AT_LOCATION: u32 = 0x02;
 const DW_AT_FRAME_BASE: u32 = 0x40;
+/// `DW_AT_data_member_location` (0x38) carries the byte offset of
+/// a member from the start of its containing struct / union.
+const DW_AT_DATA_MEMBER_LOCATION: u32 = 0x38;
+/// `DW_AT_bit_offset` (0x0c) is DWARF 3-style; deprecated in v4
+/// but every consumer we target still handles it. Encodes the
+/// distance from the MSB of the storage unit to the MSB of the
+/// bitfield (so on little-endian targets we transform c5's
+/// LSB-relative `bit_offset` into `storage_bits - lsb - width`
+/// at emit time).
+const DW_AT_BIT_OFFSET: u32 = 0x0c;
+const DW_AT_BIT_SIZE: u32 = 0x0d;
 
 // `DW_ATE_*` encodings for `DW_TAG_base_type`'s `DW_AT_encoding`.
 const DW_ATE_ADDRESS: u8 = 0x01;
@@ -92,6 +106,7 @@ const DW_ATE_UNSIGNED_CHAR: u8 = 0x08;
 
 const DW_FORM_ADDR: u32 = 0x01;
 const DW_FORM_DATA1: u32 = 0x0b;
+const DW_FORM_DATA4: u32 = 0x06;
 const DW_FORM_DATA8: u32 = 0x07;
 const DW_FORM_STRP: u32 = 0x0e;
 const DW_FORM_FLAG_PRESENT: u32 = 0x19;
@@ -271,12 +286,13 @@ pub(crate) fn emit(
     // Walk the bytecode, collect one `Subprog` per `Op::Ent`.
     let subs = collect_subprograms(program, build, code_vmaddr, &mut strs);
 
-    // Build the type catalog: distinct base types referenced by
-    // any captured variable, plus a placeholder `void *` for
-    // pointers / structs (those reach proper DIEs in gh #58 / gh
-    // #59). String interning happens here so the strtab is
-    // finalised just before we write `.debug_str`.
-    let catalog = TypeCatalog::collect(&subs, &mut strs, target);
+    // Build the type catalog. Walks captured variables, then
+    // transitively pulls in struct fields' types so a member
+    // declared `struct Foo *next` reaches a real `DW_TAG_pointer`
+    // -> `DW_TAG_structure_type` chain. String interning happens
+    // here so the strtab is finalised just before we write
+    // `.debug_str`.
+    let catalog = TypeCatalog::collect(&subs, &mut strs, target, &program.structs);
 
     let debug_abbrev = build_debug_abbrev();
     let (debug_line, line_unit_off) = build_debug_line(program, build, code_vmaddr, source_path);
@@ -290,6 +306,7 @@ pub(crate) fn emit(
         &catalog,
         &subs,
         target,
+        &program.structs,
     );
     let debug_str = strs.into_bytes();
 
@@ -460,12 +477,14 @@ struct BaseTypeKey {
 
 /// One entry in the type catalog. Sort order (derived from the
 /// declaration order of the variants and the field order within
-/// `Pointer`) puts base DIEs first, then pointer chains grouped
-/// by leaf and ordered by ascending depth, then the placeholder
-/// `void *` DIE last. That ordering matters: a pointer DIE at
-/// depth `N` references the pointer DIE at depth `N - 1` (or the
-/// base DIE at depth 1), so the pointee must already be emitted
-/// when we get to it.
+/// each variant) puts base DIEs first, then pointer chains grouped
+/// by leaf and ordered by ascending depth, then struct DIEs by id,
+/// then struct-pointer chains, then the `void *` placeholder. That
+/// ordering matters for non-struct entries: a `Pointer` at depth
+/// `N` references depth `N - 1`, so the pointee must already be
+/// emitted. Struct member type-refs go through a precomputed
+/// offset table (the layout pass) so mutually-recursive struct
+/// fields work without a forward-decl pass.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum CatalogEntry {
     /// Scalar base type. Direct DIE -- `DW_AT_name`, `DW_AT_byte_size`,
@@ -476,29 +495,94 @@ enum CatalogEntry {
     /// `Pointer { leaf, depth - 1 }` for `depth > 1`, or at
     /// `Base(leaf)` for `depth == 1`.
     Pointer { leaf: BaseTypeKey, depth: u8 },
-    /// Placeholder `void *` for variables we can't yet resolve to
-    /// a real chain -- structs and pointers-to-structs today (gh
-    /// #59 lifts them out into proper struct DIEs).
+    /// Aggregate type by struct-registry id. The DIE is
+    /// `DW_TAG_structure_type` (or `DW_TAG_union_type` for unions),
+    /// with one `DW_TAG_member` child per `StructField`. Member
+    /// type-refs are resolved through the catalog so a
+    /// `struct A { struct B *b; }` works regardless of declaration
+    /// order.
+    Struct { id: u32 },
+    /// Pointer chain rooted at a struct. `depth >= 1`; same DIE
+    /// shape as `Pointer`, with `DW_AT_type` pointing at
+    /// `StructPointer { id, depth - 1 }` for depth > 1 or
+    /// `Struct { id }` for depth == 1.
+    StructPointer { id: u32, depth: u8 },
+    /// Placeholder `void *` for variables we can't classify (a
+    /// type tag the c5 frontend produced that doesn't fit any
+    /// band). Should be empty in well-formed programs but kept
+    /// as a safe fallback so an unknown tag never crashes the
+    /// emitter.
     VoidStar,
+}
+
+impl CatalogEntry {
+    /// Bytes this entry's DIE consumes on the wire. The layout
+    /// pass walks `catalog.entries` once with `die_size` to build
+    /// a CU-relative offset for every entry, so mutually-recursive
+    /// struct fields can pick up a target offset for an entry
+    /// that hasn't been written yet. ULEB-encoded abbrev codes
+    /// fit in a single byte for codes 1..127; we have 10, so the
+    /// 1-byte assumption holds.
+    fn die_size(&self, structs: &[StructDef]) -> u32 {
+        match self {
+            // abbrev(1) + name(4 strp) + byte_size(1) + encoding(1)
+            CatalogEntry::Base(_) | CatalogEntry::VoidStar => 7,
+            // abbrev(1) + byte_size(1) + type(4 ref4)
+            CatalogEntry::Pointer { .. } | CatalogEntry::StructPointer { .. } => 6,
+            CatalogEntry::Struct { id } => {
+                // abbrev(1) + name(4) + byte_size(4 DATA4)
+                let mut size: u32 = 1 + 4 + 4;
+                if let Some(s) = structs.get(*id as usize) {
+                    for f in &s.fields {
+                        // member abbrev(1) + name(4) + type(4) + location(4)
+                        size += 13;
+                        if f.bit_width > 0 {
+                            // + byte_size(1) + bit_offset(1) + bit_size(1)
+                            size += 3;
+                        }
+                    }
+                }
+                // children-list terminator
+                size += 1;
+                size
+            }
+        }
+    }
 }
 
 struct TypeCatalog {
     /// All entries in deterministic emission order. The `BTreeSet`
-    /// ordering is exactly what we want for `.debug_info` writes
-    /// (see `CatalogEntry`'s docs), so we just iterate it.
+    /// ordering doubles as the wire order (see `CatalogEntry`'s
+    /// docs); a flat `Vec` after collection lets us index by
+    /// emission order.
     entries: Vec<CatalogEntry>,
     /// Per-base interned `DW_AT_name` offset. Pointer DIEs don't
     /// carry a name; the base they ultimately resolve to does.
     base_names: BTreeMap<BaseTypeKey, u32>,
+    /// Per-struct interned `DW_AT_name` offset, keyed by struct
+    /// id. Anonymous structs (empty source name) get a synthesised
+    /// `struct@N` placeholder so DIE resolution still produces a
+    /// non-empty string.
+    struct_names: BTreeMap<u32, u32>,
+    /// Per-struct interned member `DW_AT_name` offsets, keyed by
+    /// struct id. The inner `Vec` aligns 1:1 with
+    /// `StructDef::fields`.
+    struct_member_names: BTreeMap<u32, Vec<u32>>,
     /// `DW_AT_name` for the placeholder `void *` DIE. Zero when
-    /// the catalog has no `VoidStar` entry (no struct- or
-    /// unresolved-pointer-typed variables).
+    /// the catalog has no `VoidStar` entry.
     void_star_name_off: u32,
 }
 
 impl TypeCatalog {
-    fn collect(subs: &[Subprog], strs: &mut StrTable, target: Target) -> Self {
+    fn collect(
+        subs: &[Subprog],
+        strs: &mut StrTable,
+        target: Target,
+        structs: &[StructDef],
+    ) -> Self {
         let mut entries: BTreeSet<CatalogEntry> = BTreeSet::new();
+        // Walk every captured variable / parameter to seed the
+        // catalog with the types user code references directly.
         for sub in subs {
             for v in &sub.variables {
                 let entry = classify(v.type_tag, target);
@@ -506,13 +590,64 @@ impl TypeCatalog {
             }
         }
 
-        // Intern base names; the void* placeholder gets one too
-        // when present.
+        // Transitive expansion: every Struct entry pulls in its
+        // members' types, which can themselves pull in more
+        // structs. Worklist over distinct struct ids; cycles are
+        // broken by `visited`. Mutually-recursive structs (a
+        // common shape in real C codebases) are fine because the
+        // layout pass below resolves member type-refs against
+        // precomputed offsets, not write-time positions.
+        let mut visited: BTreeSet<u32> = BTreeSet::new();
+        let mut queue: Vec<u32> = entries
+            .iter()
+            .filter_map(|e| match e {
+                CatalogEntry::Struct { id } | CatalogEntry::StructPointer { id, .. } => Some(*id),
+                _ => None,
+            })
+            .collect();
+        while let Some(id) = queue.pop() {
+            if !visited.insert(id) {
+                continue;
+            }
+            let Some(s) = structs.get(id as usize) else {
+                continue;
+            };
+            for f in &s.fields {
+                let entry = classify(f.ty, target);
+                Self::insert_with_chain(&mut entries, entry);
+                if let CatalogEntry::Struct { id } | CatalogEntry::StructPointer { id, .. } = entry
+                {
+                    queue.push(id);
+                }
+            }
+        }
+
+        // Intern names. Bases first; then struct names + every
+        // struct's member names (BTreeMap iteration is sorted, so
+        // the strtab order is deterministic). Void* gets one if
+        // any variable resolved that way.
         let mut base_names: BTreeMap<BaseTypeKey, u32> = BTreeMap::new();
+        let mut struct_names: BTreeMap<u32, u32> = BTreeMap::new();
+        let mut struct_member_names: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
         let needs_void_star = entries.contains(&CatalogEntry::VoidStar);
         for entry in &entries {
-            if let CatalogEntry::Base(key) = entry {
-                base_names.entry(*key).or_insert_with(|| strs.intern(key.name));
+            match entry {
+                CatalogEntry::Base(key) => {
+                    base_names.entry(*key).or_insert_with(|| strs.intern(key.name));
+                }
+                CatalogEntry::Struct { id } => {
+                    if let Some(s) = structs.get(*id as usize) {
+                        let display = if s.name.is_empty() {
+                            format!("struct@{id}")
+                        } else {
+                            s.name.clone()
+                        };
+                        struct_names.entry(*id).or_insert_with(|| strs.intern(&display));
+                        let members = s.fields.iter().map(|f| strs.intern(&f.name)).collect();
+                        struct_member_names.entry(*id).or_insert(members);
+                    }
+                }
+                _ => {}
             }
         }
         let void_star_name_off = if needs_void_star {
@@ -524,19 +659,29 @@ impl TypeCatalog {
         TypeCatalog {
             entries: entries.into_iter().collect(),
             base_names,
+            struct_names,
+            struct_member_names,
             void_star_name_off,
         }
     }
 
     /// Insert `entry` and -- when it's a pointer chain -- every
-    /// shallower chain entry plus the rooting base DIE, so the
+    /// shallower chain entry plus the rooting type DIE, so the
     /// emission walk finds each level's pointee already present.
+    /// Struct-rooted chains follow the same shape with `Struct {
+    /// id }` as the eventual root.
     fn insert_with_chain(entries: &mut BTreeSet<CatalogEntry>, entry: CatalogEntry) {
         match entry {
             CatalogEntry::Pointer { leaf, depth } => {
                 entries.insert(CatalogEntry::Base(leaf));
                 for d in 1..=depth {
                     entries.insert(CatalogEntry::Pointer { leaf, depth: d });
+                }
+            }
+            CatalogEntry::StructPointer { id, depth } => {
+                entries.insert(CatalogEntry::Struct { id });
+                for d in 1..=depth {
+                    entries.insert(CatalogEntry::StructPointer { id, depth: d });
                 }
             }
             other => {
@@ -546,20 +691,26 @@ impl TypeCatalog {
     }
 }
 
-/// Resolve a c5 type tag to its catalog entry. Pointers to base
-/// types become `Pointer { leaf, depth >= 1 }`; bare scalars
-/// become `Base(...)`; everything else (structs, struct pointers,
-/// anything we can't cleanly decompose) routes to `VoidStar`.
-///
-/// Phase 1C (gh #59) replaces the struct-routed `VoidStar`s with
-/// proper struct / pointer-to-struct DIEs.
+/// Resolve a c5 type tag to its catalog entry. Scalars become
+/// `Base(...)`, pointer-to-scalar chains become `Pointer { leaf,
+/// depth }`, struct values become `Struct { id }`, struct-pointer
+/// chains become `StructPointer { id, depth }`. Anything we can't
+/// classify falls back to `VoidStar`.
 fn classify(ty: i64, target: Target) -> CatalogEntry {
     let unsigned = types::is_unsigned_ty(ty);
     let bare = types::strip_unsigned(ty);
 
-    // Struct types live above STRUCT_BASE -- defer to phase 1C.
+    // Struct band: separate id + pointer-depth via the helpers
+    // c5's frontend already uses (`struct_id_of`, `struct_ptr_depth`).
     if bare >= types::STRUCT_BASE {
-        return CatalogEntry::VoidStar;
+        let id = ((bare - types::STRUCT_BASE) / 1000) as u32;
+        let depth_in_band = (bare - types::STRUCT_BASE) % 1000;
+        let depth = (depth_in_band / Ty::Ptr as i64) as u8;
+        return if depth == 0 {
+            CatalogEntry::Struct { id }
+        } else {
+            CatalogEntry::StructPointer { id, depth }
+        };
     }
 
     let ptr_step = Ty::Ptr as i64;
@@ -761,15 +912,68 @@ fn build_debug_abbrev() -> Vec<u8> {
 
     // Abbrev 6: DW_TAG_pointer_type. Used by every entry of a
     // pointer-chain DIE (`int *`, `int **`, `unsigned long *`,
-    // ...). DW_AT_byte_size is constant 8 across our supported
-    // targets; DW_AT_TYPE is a CU-relative ref4 to the pointee
-    // (the depth-1 pointer DIE for chains, the base-type DIE
-    // for the depth-1 entry).
+    // `struct Foo *`, ...). DW_AT_byte_size is constant 8 across
+    // our supported targets; DW_AT_TYPE is a CU-relative ref4 to
+    // the pointee (the depth-1 pointer DIE for chains, or the
+    // base / struct DIE for the depth-1 entry).
     write_uleb128(&mut buf, 6);
     write_uleb128(&mut buf, DW_TAG_POINTER_TYPE as u64);
     buf.push(DW_CHILDREN_NO);
     write_attr(&mut buf, DW_AT_BYTE_SIZE, DW_FORM_DATA1);
     write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
+    write_uleb128(&mut buf, 0);
+    write_uleb128(&mut buf, 0);
+
+    // Abbrev 7: DW_TAG_structure_type. Has children (one
+    // DW_TAG_member per c5 `StructField`). DW_AT_byte_size is
+    // DATA4 since real-world aggregates exceed 256 bytes
+    // routinely (sqlite's `Vdbe` runs to a few KB).
+    write_uleb128(&mut buf, 7);
+    write_uleb128(&mut buf, DW_TAG_STRUCTURE_TYPE as u64);
+    buf.push(DW_CHILDREN_YES);
+    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
+    write_attr(&mut buf, DW_AT_BYTE_SIZE, DW_FORM_DATA4);
+    write_uleb128(&mut buf, 0);
+    write_uleb128(&mut buf, 0);
+
+    // Abbrev 8: DW_TAG_union_type. Same shape as the structure
+    // abbrev; the tag is what tells lldb / gdb to render `s.x`
+    // and `s.y` as overlapping rather than sequential.
+    write_uleb128(&mut buf, 8);
+    write_uleb128(&mut buf, DW_TAG_UNION_TYPE as u64);
+    buf.push(DW_CHILDREN_YES);
+    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
+    write_attr(&mut buf, DW_AT_BYTE_SIZE, DW_FORM_DATA4);
+    write_uleb128(&mut buf, 0);
+    write_uleb128(&mut buf, 0);
+
+    // Abbrev 9: DW_TAG_member -- a regular (non-bitfield) struct
+    // / union field. DW_AT_data_member_location is the byte offset
+    // of the field from the start of its containing aggregate.
+    write_uleb128(&mut buf, 9);
+    write_uleb128(&mut buf, DW_TAG_MEMBER as u64);
+    buf.push(DW_CHILDREN_NO);
+    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
+    write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
+    write_attr(&mut buf, DW_AT_DATA_MEMBER_LOCATION, DW_FORM_DATA4);
+    write_uleb128(&mut buf, 0);
+    write_uleb128(&mut buf, 0);
+
+    // Abbrev 10: DW_TAG_member with bitfield extras
+    // (DWARF 3-style: byte_size + bit_offset + bit_size on top of
+    // the regular member triple). lldb / gdb both still handle
+    // this shape on DWARF 4 input; switching to DWARF 5's
+    // `DW_AT_data_bit_offset` is a follow-up if a consumer ever
+    // breaks.
+    write_uleb128(&mut buf, 10);
+    write_uleb128(&mut buf, DW_TAG_MEMBER as u64);
+    buf.push(DW_CHILDREN_NO);
+    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
+    write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
+    write_attr(&mut buf, DW_AT_DATA_MEMBER_LOCATION, DW_FORM_DATA4);
+    write_attr(&mut buf, DW_AT_BYTE_SIZE, DW_FORM_DATA1);
+    write_attr(&mut buf, DW_AT_BIT_OFFSET, DW_FORM_DATA1);
+    write_attr(&mut buf, DW_AT_BIT_SIZE, DW_FORM_DATA1);
     write_uleb128(&mut buf, 0);
     write_uleb128(&mut buf, 0);
 
@@ -796,6 +1000,7 @@ fn build_debug_info(
     catalog: &TypeCatalog,
     subs: &[Subprog],
     target: Target,
+    structs: &[StructDef],
 ) -> Vec<u8> {
     // Build the body first so we know its size before prepending
     // the unit header. CU-relative `DW_FORM_ref4` offsets are
@@ -812,56 +1017,34 @@ fn build_debug_info(
     body.extend_from_slice(&cu_size.to_le_bytes());
     body.extend_from_slice(&line_unit_off.to_le_bytes());
 
-    // Type DIEs (CU children). Walk the catalog in its
-    // deterministic order: bases first, then pointer chains in
-    // ascending depth (so each level's pointee is already
-    // emitted), then the void* placeholder. Record CU-relative
-    // offsets so variable / formal_parameter children -- and the
-    // pointer DIEs themselves -- can back-reference them.
+    // Layout pass: precompute the CU-relative offset every
+    // catalog entry will land at, *before* writing any of them.
+    // Member type-refs in struct DIEs reach forward to other
+    // structs (linked-list nodes, mutually-recursive
+    // aggregates), so write-time positions aren't enough.
+    // `die_size` is deterministic, so the pass is exact.
     let mut entry_offsets: BTreeMap<CatalogEntry, u32> = BTreeMap::new();
-    for entry in &catalog.entries {
-        let off = (body.len() as u32) + DebugInfoUnitHeader::SIZE;
-        entry_offsets.insert(*entry, off);
-        match entry {
-            CatalogEntry::Base(key) => {
-                let name_off = catalog
-                    .base_names
-                    .get(key)
-                    .copied()
-                    .expect("collect() interned every base in base_names");
-                write_uleb128(&mut body, 3);
-                body.extend_from_slice(&name_off.to_le_bytes());
-                body.push(key.byte_size);
-                body.push(key.encoding);
-            }
-            CatalogEntry::Pointer { leaf, depth } => {
-                let pointee = if *depth == 1 {
-                    CatalogEntry::Base(*leaf)
-                } else {
-                    CatalogEntry::Pointer {
-                        leaf: *leaf,
-                        depth: depth - 1,
-                    }
-                };
-                let pointee_off = *entry_offsets.get(&pointee).expect(
-                    "pointer chain insertion guarantees the depth-1 / base entry was emitted",
-                );
-                write_uleb128(&mut body, 6);
-                body.push(8); // DW_AT_byte_size: pointers are 8 bytes everywhere we target.
-                body.extend_from_slice(&pointee_off.to_le_bytes());
-            }
-            CatalogEntry::VoidStar => {
-                // Keep the depth-0 base-type representation for
-                // back-compat (DW_ATE_address shaped). Replaced by
-                // a real DW_TAG_pointer_type-with-no-DW_AT_TYPE
-                // when struct DIEs land in gh #59 and the only
-                // remaining fallback case is true `void *`.
-                write_uleb128(&mut body, 3);
-                body.extend_from_slice(&catalog.void_star_name_off.to_le_bytes());
-                body.push(8);
-                body.push(DW_ATE_ADDRESS);
-            }
+    {
+        let mut cursor = (body.len() as u32) + DebugInfoUnitHeader::SIZE;
+        for entry in &catalog.entries {
+            entry_offsets.insert(*entry, cursor);
+            cursor += entry.die_size(structs);
         }
+    }
+
+    // Emit pass: walk entries in catalog order. Each write
+    // advances `body` by exactly `die_size` bytes; we sanity-check
+    // that against the precomputed offset to catch encoding
+    // drift (an attribute width that doesn't match the abbrev
+    // declaration would be silent corruption otherwise).
+    for entry in &catalog.entries {
+        let pre_pos = (body.len() as u32) + DebugInfoUnitHeader::SIZE;
+        debug_assert_eq!(
+            pre_pos,
+            entry_offsets[entry],
+            "die_size disagreed with the emitter for {entry:?}",
+        );
+        emit_type_die(entry, &mut body, catalog, structs, &entry_offsets, target);
     }
 
     // Subprogram children, each with its own variable /
@@ -927,6 +1110,140 @@ fn build_debug_info(
     header.write_le(&mut out);
     out.extend_from_slice(&body);
     out
+}
+
+/// Emit one type DIE into `body`. Walks the entry's variant,
+/// pulling pointee / member references out of `entry_offsets`
+/// (built by the layout pass). The byte count this writes must
+/// match `entry.die_size(structs)` exactly -- the layout pass
+/// relied on it -- which is why the abbrev / form widths here
+/// mirror the abbrev table verbatim.
+fn emit_type_die(
+    entry: &CatalogEntry,
+    body: &mut Vec<u8>,
+    catalog: &TypeCatalog,
+    structs: &[StructDef],
+    entry_offsets: &BTreeMap<CatalogEntry, u32>,
+    target: Target,
+) {
+    match entry {
+        CatalogEntry::Base(key) => {
+            let name_off = catalog
+                .base_names
+                .get(key)
+                .copied()
+                .expect("collect() interned every base in base_names");
+            write_uleb128(body, 3);
+            body.extend_from_slice(&name_off.to_le_bytes());
+            body.push(key.byte_size);
+            body.push(key.encoding);
+        }
+        CatalogEntry::Pointer { leaf, depth } => {
+            let pointee = if *depth == 1 {
+                CatalogEntry::Base(*leaf)
+            } else {
+                CatalogEntry::Pointer {
+                    leaf: *leaf,
+                    depth: depth - 1,
+                }
+            };
+            let pointee_off = *entry_offsets
+                .get(&pointee)
+                .expect("chain insertion guarantees the pointee was placed");
+            write_uleb128(body, 6);
+            body.push(8);
+            body.extend_from_slice(&pointee_off.to_le_bytes());
+        }
+        CatalogEntry::StructPointer { id, depth } => {
+            let pointee = if *depth == 1 {
+                CatalogEntry::Struct { id: *id }
+            } else {
+                CatalogEntry::StructPointer {
+                    id: *id,
+                    depth: depth - 1,
+                }
+            };
+            let pointee_off = *entry_offsets
+                .get(&pointee)
+                .expect("chain insertion guarantees the pointee was placed");
+            write_uleb128(body, 6);
+            body.push(8);
+            body.extend_from_slice(&pointee_off.to_le_bytes());
+        }
+        CatalogEntry::Struct { id } => {
+            let s = structs
+                .get(*id as usize)
+                .expect("Struct entries only land in the catalog when the id is in-range");
+            let abbrev = if s.is_union { 8 } else { 7 };
+            let name_off = catalog
+                .struct_names
+                .get(id)
+                .copied()
+                .expect("collect() interned every struct name");
+            write_uleb128(body, abbrev);
+            body.extend_from_slice(&name_off.to_le_bytes());
+            // DW_AT_byte_size as DATA4 -- structs over 256 bytes
+            // happen all the time (sqlite's Vdbe runs to several
+            // KB).
+            body.extend_from_slice(&(s.size as u32).to_le_bytes());
+
+            let member_names = catalog
+                .struct_member_names
+                .get(id)
+                .expect("collect() interned every struct's member names alongside the name");
+            for (i, f) in s.fields.iter().enumerate() {
+                let member_name_off = member_names[i];
+                // Resolve member type. Arrays decay to the
+                // element type DIE today (see gh #59 follow-up:
+                // emit `DW_TAG_array_type` so `ptype` shows
+                // `T xs[N]` instead of just `T xs`); the offsets
+                // for subsequent fields are already correct
+                // because c5 baked the array stride into the
+                // member offsets at parse time.
+                let member_entry = classify(f.ty, target);
+                let member_type_off = *entry_offsets
+                    .get(&member_entry)
+                    .expect("collect() walked every struct field's type into the catalog");
+
+                if f.bit_width == 0 {
+                    // Regular member: abbrev 9.
+                    write_uleb128(body, 9);
+                    body.extend_from_slice(&member_name_off.to_le_bytes());
+                    body.extend_from_slice(&member_type_off.to_le_bytes());
+                    body.extend_from_slice(&(f.offset as u32).to_le_bytes());
+                } else {
+                    // Bitfield: abbrev 10. c5 packs bitfields
+                    // into 8-byte storage units; convert c5's
+                    // LSB-relative `bit_offset` to DWARF v4's
+                    // MSB-relative `DW_AT_bit_offset` on
+                    // little-endian targets:
+                    //   dwarf_bit_offset = 64 - lsb_offset - width
+                    write_uleb128(body, 10);
+                    body.extend_from_slice(&member_name_off.to_le_bytes());
+                    body.extend_from_slice(&member_type_off.to_le_bytes());
+                    body.extend_from_slice(&(f.offset as u32).to_le_bytes());
+                    body.push(8); // DW_AT_byte_size: storage unit is 8 bytes.
+                    let dwarf_bit_offset = 64u32
+                        .saturating_sub(f.bit_offset)
+                        .saturating_sub(f.bit_width);
+                    body.push(dwarf_bit_offset as u8);
+                    body.push(f.bit_width as u8);
+                }
+            }
+            // Children-list terminator for this struct.
+            body.push(0);
+        }
+        CatalogEntry::VoidStar => {
+            // 8-byte address-encoded base type. Effectively
+            // `void *` in user-facing rendering -- once unknown
+            // tags are extinct this entry can be removed
+            // entirely.
+            write_uleb128(body, 3);
+            body.extend_from_slice(&catalog.void_star_name_off.to_le_bytes());
+            body.push(8);
+            body.push(DW_ATE_ADDRESS);
+        }
+    }
 }
 
 // ---- .debug_line ----
@@ -1320,11 +1637,25 @@ mod tests {
     }
 
     #[test]
-    fn classify_struct_routes_to_void_star() {
-        // Plain struct id 0 (no pointer level) -- still a void*
-        // fallback in phase 1B; gh #59 lifts it to a real struct DIE.
+    fn classify_struct_value_routes_to_struct_entry() {
+        // Plain struct id 0 (no pointer level) lands on the
+        // dedicated `Struct` variant; phase 1C emits a real
+        // DW_TAG_structure_type.
         let struct_ty = types::STRUCT_BASE;
-        assert_eq!(classify(struct_ty, Target::LinuxX64), CatalogEntry::VoidStar);
+        assert_eq!(
+            classify(struct_ty, Target::LinuxX64),
+            CatalogEntry::Struct { id: 0 },
+        );
+    }
+
+    #[test]
+    fn classify_struct_pointer_returns_chain_entry() {
+        // `struct Foo *` -- id 0 at depth 1.
+        let s_ptr = types::STRUCT_BASE + Ty::Ptr as i64;
+        assert_eq!(
+            classify(s_ptr, Target::LinuxX64),
+            CatalogEntry::StructPointer { id: 0, depth: 1 },
+        );
     }
 
     #[test]

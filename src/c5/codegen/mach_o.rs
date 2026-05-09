@@ -2344,6 +2344,7 @@ mod tests {
             source_file_indices: Vec::new(),
             source_path: String::new(),
             variables: Vec::new(),
+            structs: Vec::new(),
         }
     }
 

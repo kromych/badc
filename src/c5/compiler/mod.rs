@@ -31,25 +31,25 @@ use types::{
 };
 
 #[derive(Debug, Clone)]
-pub(super) struct StructDef {
-    pub(super) name: String,
+pub struct StructDef {
+    pub name: String,
     /// Total size in bytes -- sum of field sizes (each placed at
     /// its natural alignment) for structs, `max(field size)` for
     /// unions, padded up to the struct's own alignment. Always at
     /// least 8 (c5 has no zero-sized aggregates).
-    pub(super) size: usize,
+    pub size: usize,
     /// Alignment of the aggregate in bytes -- the max alignment of
     /// any field, capped at 8 (the rest of c5's IR -- locals,
     /// stack pushes, GOT entries -- is 8-byte slotted, so
     /// over-aligning a struct above 8 buys nothing). `0` until
     /// `parse_aggregate_body` finishes.
-    pub(super) align: usize,
-    pub(super) fields: Vec<StructField>,
+    pub align: usize,
+    pub fields: Vec<StructField>,
     /// `true` for `union` definitions. The only effect on layout
     /// is that every field sits at offset 0 and the aggregate
     /// size is `max(field size)` instead of the sum. Member
     /// access otherwise reuses the struct path verbatim.
-    pub(super) is_union: bool,
+    pub is_union: bool,
 }
 
 /// Relocation kind for one initializer-element value. Tracks
@@ -70,27 +70,27 @@ pub(super) enum InitElemReloc {
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct StructField {
-    pub(super) name: String,
+pub struct StructField {
+    pub name: String,
     /// Byte offset of the field from the start of the struct.
     /// For a bitfield, the byte offset of the *storage unit*
     /// (8-byte word) the bitfield lives in.
-    pub(super) offset: usize,
+    pub offset: usize,
     /// `ty`-encoded type of the field.
-    pub(super) ty: i64,
+    pub ty: i64,
     /// Array dimension if the field was declared as `T xs[N]`;
     /// 0 when the field is a scalar / pointer / struct value.
     /// `s.xs` decays to a pointer-to-element the same way a
     /// local array does.
-    pub(super) array_size: i64,
+    pub array_size: i64,
     /// Bit offset within the 8-byte storage unit. Meaningful only
     /// when `bit_width > 0`.
-    pub(super) bit_offset: u32,
+    pub bit_offset: u32,
     /// Bit width of a bitfield, or 0 for a regular field. Bitfields
     /// pack into shared 8-byte storage units; reads emit
     /// `Li; Imm bit_offset; Shr; Imm mask; And` and writes emit a
     /// load-clear-shift-or-store sequence.
-    pub(super) bit_width: u32,
+    pub bit_width: u32,
 }
 
 /// Bundle returned from `parse_function_params` -- keeps the per-param
@@ -143,7 +143,7 @@ pub struct Compiler {
     switch_defaults: Vec<Option<usize>>,
 
     /// Defined struct types, indexed by struct id.
-    structs: Vec<StructDef>,
+    pub(super) structs: Vec<StructDef>,
 
     /// Type-mismatch warnings collected during compilation. Stored as
     /// formatted lines so the final consumer (CLI / test) can dump them
@@ -1540,6 +1540,11 @@ impl Compiler {
             // calling `emit_native_*` (gh #44).
             source_path: String::new(),
             variables: self.variables,
+            // Struct registry, exposed so the DWARF emitter can
+            // walk member offsets / bitfield layouts and produce
+            // `DW_TAG_structure_type` DIEs (gh #59). The VM /
+            // JIT / interpreter ignore this field.
+            structs: self.structs,
         })
     }
 

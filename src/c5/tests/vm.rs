@@ -25,6 +25,7 @@ fn run(text: Vec<i64>) -> i64 {
         source_file_indices: vec![],
         source_path: String::new(),
         variables: Vec::new(),
+        structs: Vec::new(),
     };
     Vm::new(program).run().unwrap()
 }
@@ -130,6 +131,7 @@ fn invalid_opcode_is_a_runtime_error() {
         source_file_indices: vec![],
         source_path: String::new(),
         variables: Vec::new(),
+        structs: Vec::new(),
     };
     let err = Vm::new(program).run().unwrap_err();
     assert!(
@@ -161,6 +163,7 @@ fn empty_program_errors_cleanly() {
         source_file_indices: vec![],
         source_path: String::new(),
         variables: Vec::new(),
+        structs: Vec::new(),
     };
     let err = Vm::new(program).run().unwrap_err();
     assert!(

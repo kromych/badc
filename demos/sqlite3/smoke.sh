@@ -112,7 +112,7 @@ run_scenarios() {
     # vdbeMemRenderNum / FpDecode digit-pair writer, which depends
     # on real 16-bit `*(u16*)` loads/stores via `Op::Lh` / `Op::Sh`.
     local inmem_out inmem_expect
-    inmem_out="$(printf "CREATE TABLE t(x INTEGER, y TEXT);\nINSERT INTO t VALUES(-7,'neg'),(1,'hello'),(2,'world');\nSELECT * FROM t;\nSELECT count(*),sum(x),avg(x),min(x),max(x) FROM t;\n.quit\n" | "${shell_bin}")"
+    inmem_out="$(printf "CREATE TABLE t(x INTEGER, y TEXT);\nINSERT INTO t VALUES(-7,'neg'),(1,'hello'),(2,'world');\nSELECT * FROM t;\nSELECT count(*),sum(x),avg(x),min(x),max(x) FROM t;\n.quit\n" | "${shell_bin}" | tr -d '\r')"
     inmem_expect="-7|neg
 1|hello
 2|world
@@ -137,7 +137,7 @@ run_scenarios() {
     #   * row-count and a `ORDER BY ... LIMIT` to make sure the
     #     vdbe sort path stays honest
     local math_out math_expect
-    math_out="$(printf "CREATE TABLE n(v INTEGER);\nINSERT INTO n VALUES(1),(2),(3),(2),(1),(NULL);\nSELECT count(*),count(v),count(DISTINCT v) FROM n;\nSELECT abs(-9223372036854775807) - 1;\nSELECT 2147483647 + 1, -2147483647 - 1;\nSELECT 0xFFFFFFFF >> 1, 0xFFFFFFFF & 0xF;\nSELECT length('hello world');\nSELECT v FROM n WHERE v IS NOT NULL ORDER BY v DESC LIMIT 2;\n.quit\n" | "${shell_bin}")"
+    math_out="$(printf "CREATE TABLE n(v INTEGER);\nINSERT INTO n VALUES(1),(2),(3),(2),(1),(NULL);\nSELECT count(*),count(v),count(DISTINCT v) FROM n;\nSELECT abs(-9223372036854775807) - 1;\nSELECT 2147483647 + 1, -2147483647 - 1;\nSELECT 0xFFFFFFFF >> 1, 0xFFFFFFFF & 0xF;\nSELECT length('hello world');\nSELECT v FROM n WHERE v IS NOT NULL ORDER BY v DESC LIMIT 2;\n.quit\n" | "${shell_bin}" | tr -d '\r')"
     math_expect="6|5|3
 9223372036854775806
 2147483648|-2147483648
@@ -159,7 +159,7 @@ run_scenarios() {
     # (`rB *= rA` etc.) lowered to integer ops on the FP bit
     # patterns. Now a real regression marker.
     local real_out real_expect
-    real_out="$(printf "CREATE TABLE r(x REAL);\nINSERT INTO r VALUES(1.5),(2.5),(3.5);\nSELECT count(*),sum(x),avg(x),min(x),max(x) FROM r;\nSELECT round(avg(x), 2) FROM r;\nCREATE TABLE i(x INTEGER);\nINSERT INTO i VALUES(-7),(1),(2);\nSELECT sum(x*1.0),avg(x*1.0),total(x) FROM i;\nSELECT 1.0 + 2.0, 3.5 - 1.5, 2.5 * 4.0, 9.0 / 4.0;\n.quit\n" | "${shell_bin}")"
+    real_out="$(printf "CREATE TABLE r(x REAL);\nINSERT INTO r VALUES(1.5),(2.5),(3.5);\nSELECT count(*),sum(x),avg(x),min(x),max(x) FROM r;\nSELECT round(avg(x), 2) FROM r;\nCREATE TABLE i(x INTEGER);\nINSERT INTO i VALUES(-7),(1),(2);\nSELECT sum(x*1.0),avg(x*1.0),total(x) FROM i;\nSELECT 1.0 + 2.0, 3.5 - 1.5, 2.5 * 4.0, 9.0 / 4.0;\n.quit\n" | "${shell_bin}" | tr -d '\r')"
     real_expect="3|7.5|2.5|1.5|3.5
 2.5
 -4.0|-1.3333333333333333|-4.0
@@ -190,7 +190,7 @@ run_scenarios() {
     # leak through editor / VCS auto-trim and silently shift the
     # diff baseline.
     local strjoin_out strjoin_expect
-    strjoin_out="$(printf "CREATE TABLE u(id INTEGER, name TEXT);\nINSERT INTO u VALUES(1,'  alice  '),(2,'BOB'),(3,'Carol');\nSELECT id,upper(trim(name)),length(name),substr(name,1,3) FROM u ORDER BY id;\nSELECT replace('hello world','world','sqlite');\nSELECT lower('MiXeD'),ltrim('   pad'),rtrim('pad   ');\nSELECT group_concat(name,'/') FROM u;\nCREATE TABLE p(uid INTEGER, lang TEXT);\nINSERT INTO p VALUES(1,'rust'),(1,'c'),(3,'go');\nSELECT u.name,p.lang FROM u INNER JOIN p ON u.id=p.uid ORDER BY u.id,p.lang;\nSELECT u.name,p.lang FROM u LEFT JOIN p ON u.id=p.uid ORDER BY u.id,p.lang;\nSELECT name FROM u WHERE id=1 UNION ALL SELECT name FROM u WHERE id=3 ORDER BY name;\n.quit\n" | "${shell_bin}")"
+    strjoin_out="$(printf "CREATE TABLE u(id INTEGER, name TEXT);\nINSERT INTO u VALUES(1,'  alice  '),(2,'BOB'),(3,'Carol');\nSELECT id,upper(trim(name)),length(name),substr(name,1,3) FROM u ORDER BY id;\nSELECT replace('hello world','world','sqlite');\nSELECT lower('MiXeD'),ltrim('   pad'),rtrim('pad   ');\nSELECT group_concat(name,'/') FROM u;\nCREATE TABLE p(uid INTEGER, lang TEXT);\nINSERT INTO p VALUES(1,'rust'),(1,'c'),(3,'go');\nSELECT u.name,p.lang FROM u INNER JOIN p ON u.id=p.uid ORDER BY u.id,p.lang;\nSELECT u.name,p.lang FROM u LEFT JOIN p ON u.id=p.uid ORDER BY u.id,p.lang;\nSELECT name FROM u WHERE id=1 UNION ALL SELECT name FROM u WHERE id=3 ORDER BY name;\n.quit\n" | "${shell_bin}" | tr -d '\r')"
     strjoin_expect="$(printf '1|ALICE|9|  a\n2|BOB|3|BOB\n3|CAROL|5|Car\nhello sqlite\nmixed|pad|pad\n  alice  /BOB/Carol\n  alice  |c\n  alice  |rust\nCarol|go\n  alice  |c\n  alice  |rust\nBOB|\nCarol|go\n  alice  \nCarol')"
     if [ "${strjoin_out}" != "${strjoin_expect}" ]; then
         echo "smoke FAIL [${label}]: string/join output mismatch" >&2
@@ -220,7 +220,7 @@ run_scenarios() {
     # all subsequent queries. Tracked as gh #30; restore the
     # fib-shape recursion here once that lands.
     local cte_out cte_expect
-    cte_out="$(printf "CREATE TABLE k(v INTEGER);\nINSERT INTO k VALUES(10),(20),(30),(40),(50);\nWITH RECURSIVE c(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM c WHERE n<5) SELECT n,n*n FROM c;\nBEGIN;\nUPDATE k SET v=v+100 WHERE v>=30;\nSELECT v FROM k ORDER BY v;\nROLLBACK;\nSELECT v FROM k ORDER BY v;\nDELETE FROM k WHERE v>20;\nSELECT count(*) FROM k;\n.tables\nCREATE TABLE meta(id INTEGER PRIMARY KEY, note TEXT);\n.schema meta\n.quit\n" | "${shell_bin}")"
+    cte_out="$(printf "CREATE TABLE k(v INTEGER);\nINSERT INTO k VALUES(10),(20),(30),(40),(50);\nWITH RECURSIVE c(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM c WHERE n<5) SELECT n,n*n FROM c;\nBEGIN;\nUPDATE k SET v=v+100 WHERE v>=30;\nSELECT v FROM k ORDER BY v;\nROLLBACK;\nSELECT v FROM k ORDER BY v;\nDELETE FROM k WHERE v>20;\nSELECT count(*) FROM k;\n.tables\nCREATE TABLE meta(id INTEGER PRIMARY KEY, note TEXT);\n.schema meta\n.quit\n" | "${shell_bin}" | tr -d '\r')"
     cte_expect="1|1
 2|4
 3|9
@@ -249,7 +249,7 @@ CREATE TABLE meta(id INTEGER PRIMARY KEY, note TEXT);"
     local db file_out reopen_out reopen_expect
     db="${WORK}/${label}.db"
     rm -f "${db}"
-    file_out="$(printf ".open ${db}\nCREATE TABLE t(x INTEGER, y TEXT);\nINSERT INTO t VALUES(-7,'neg'),(1,'hello'),(2,'world');\n.quit\n" | "${shell_bin}")"
+    file_out="$(printf ".open ${db}\nCREATE TABLE t(x INTEGER, y TEXT);\nINSERT INTO t VALUES(-7,'neg'),(1,'hello'),(2,'world');\n.quit\n" | "${shell_bin}" | tr -d '\r')"
     if [ -n "${file_out}" ]; then
         echo "smoke FAIL [${label}]: file-backed write produced unexpected output: ${file_out}" >&2
         fail=1
@@ -260,7 +260,7 @@ CREATE TABLE meta(id INTEGER PRIMARY KEY, note TEXT);"
     fi
 
     # Reopen and read back -- proves the rows really persisted.
-    reopen_out="$(printf ".open ${db}\nSELECT * FROM t ORDER BY x;\n.quit\n" | "${shell_bin}")"
+    reopen_out="$(printf ".open ${db}\nSELECT * FROM t ORDER BY x;\n.quit\n" | "${shell_bin}" | tr -d '\r')"
     reopen_expect="-7|neg
 1|hello
 2|world"

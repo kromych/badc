@@ -682,15 +682,8 @@ fn write_line_program(buf: &mut Vec<u8>, program: &Program, build: &Build, code_
         // file-table plumbing landed (or that never crossed an
         // `#include` / `#line`) leave `source_file_indices`
         // empty, in which case every PC stays on file 1.
-        let lex_idx = program
-            .source_file_indices
-            .get(bc_pc)
-            .copied()
-            .unwrap_or(0) as usize;
-        let file = dwarf_file_for_lex_idx
-            .get(lex_idx)
-            .copied()
-            .unwrap_or(1);
+        let lex_idx = program.source_file_indices.get(bc_pc).copied().unwrap_or(0) as usize;
+        let file = dwarf_file_for_lex_idx.get(lex_idx).copied().unwrap_or(1);
         let target_addr = code_vmaddr + native as u64;
         if target_addr > state_addr {
             advance_pc(buf, target_addr - state_addr);

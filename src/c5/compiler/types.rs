@@ -88,13 +88,14 @@ pub(super) fn round_up(x: usize, alignment: usize) -> usize {
 }
 
 /// Render a c5 type tag back into a C-like spelling: `int`, `char *`,
-/// `unsigned long **`, `struct@5`, etc. Used by the redeclaration-
-/// mismatch warning so the user can see the prior and current
-/// signatures rather than just "different parameter list". The output
-/// is approximate -- struct ids round-trip as `struct@N` because we
-/// don't carry struct names back through the type tag -- but it's
-/// good enough to spot which side disagrees.
-pub(super) fn format_type(ty: i64) -> alloc::string::String {
+/// `unsigned long **`, `struct ShellText *`, etc. Used by the
+/// redeclaration-mismatch warning so the user can see the prior and
+/// current signatures rather than just "different parameter list".
+/// `structs` is the compiler's struct registry -- when supplied, the
+/// renderer looks up the struct's source name; the fallback
+/// `struct@N` shows up only when the table isn't reachable
+/// (e.g. unit tests that build types by hand).
+pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::string::String {
     use alloc::format;
     let unsigned = (ty & UNSIGNED_BIT) != 0;
     let bare = strip_unsigned(ty);
@@ -102,7 +103,13 @@ pub(super) fn format_type(ty: i64) -> alloc::string::String {
     if bare >= STRUCT_BASE {
         let id = struct_id_of(bare);
         let depth = struct_ptr_depth(bare) as usize;
-        return format!("{prefix}struct@{id}{}", "*".repeat(depth));
+        let name = structs
+            .get(id)
+            .map(|s| s.name.as_str())
+            .filter(|n| !n.is_empty())
+            .map(alloc::string::ToString::to_string)
+            .unwrap_or_else(|| format!("@{id}"));
+        return format!("{prefix}struct {name}{}", "*".repeat(depth));
     }
     let (base, leaf) = if (Ty::Float as i64..Ty::Float as i64 + FP_BAND_SIZE).contains(&bare) {
         (Ty::Float as i64, "float")
@@ -129,16 +136,19 @@ pub(super) fn format_type(ty: i64) -> alloc::string::String {
 
 /// Render a function signature: `<return> (<params>[, ...])`. Used by
 /// the redeclaration-mismatch warning to print the prior and current
-/// shapes side-by-side.
+/// shapes side-by-side. `structs` plumbs through to `format_type` so
+/// struct-typed parameters render as `struct Name *` instead of
+/// `struct@N *`.
 pub(super) fn format_signature(
     return_ty: i64,
     params: &[i64],
     is_variadic: bool,
+    structs: &[super::StructDef],
 ) -> alloc::string::String {
     use alloc::format;
     use alloc::string::ToString;
     let mut parts: alloc::vec::Vec<alloc::string::String> =
-        params.iter().map(|&p| format_type(p)).collect();
+        params.iter().map(|&p| format_type(p, structs)).collect();
     if is_variadic {
         parts.push("...".to_string());
     }
@@ -150,7 +160,7 @@ pub(super) fn format_signature(
     } else {
         parts.join(", ")
     };
-    format!("{} ({inside})", format_type(return_ty))
+    format!("{} ({inside})", format_type(return_ty, structs))
 }
 
 pub(super) fn is_struct_ty(ty: i64) -> bool {

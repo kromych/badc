@@ -3828,9 +3828,14 @@ impl Compiler {
                     if prior_was_known && (return_differs || variadic_differs || params_differ) {
                         let name = self.symbols[id_idx].name.clone();
                         let line = self.lex.line;
-                        let prior_sig =
-                            format_signature(prior_return_ty, &prior_params, prior_is_variadic);
-                        let new_sig = format_signature(ty, &params.types, params.is_variadic);
+                        let prior_sig = format_signature(
+                            prior_return_ty,
+                            &prior_params,
+                            prior_is_variadic,
+                            &self.structs,
+                        );
+                        let new_sig =
+                            format_signature(ty, &params.types, params.is_variadic, &self.structs);
                         self.warn_at(
                             line,
                             format!(

@@ -103,12 +103,12 @@ const DF_BIND_NOW: u64 = 0x8;
 
 // nlist / Elf64_Sym fields.
 const STB_GLOBAL: u8 = 1;
-const STT_NOTYPE: u8 = 0;
-/// `STT_FUNC` symbol type -- `st_info` low nibble for an
-/// exported function. Used in shared-library output to mark
-/// each `#pragma export(...)` entry as a callable code
-/// symbol; dlsym surfaces only `STT_FUNC` and `STT_NOTYPE`
-/// non-undef entries.
+/// `STT_FUNC` symbol type -- `st_info` low nibble for both
+/// imported and exported functions. Imports use it so debuggers
+/// (`gdb`, `lldb`) treat the dynamic-symbol entry as a callable
+/// breakpoint target; exports use it so `dlsym` surfaces them as
+/// code (dlsym only resolves `STT_FUNC` / `STT_NOTYPE`-non-undef
+/// entries).
 const STT_FUNC: u8 = 2;
 const SHN_UNDEF: u16 = 0;
 
@@ -484,7 +484,17 @@ fn build_dynsym(
             &mut out,
             &Elf64Sym {
                 st_name: name_off,
-                st_info: (STB_GLOBAL << 4) | STT_NOTYPE,
+                // Every c5 import today is a function (libc's
+                // `malloc` / `printf` / `exit` and the kernel32
+                // entry stubs); marking them `STT_FUNC` gives
+                // tools the right hint without affecting how the
+                // dynamic linker resolves the relocation. The
+                // previous `STT_NOTYPE` made `gdb` and `nm` treat
+                // every import as untyped data, which masks the
+                // import as a viable breakpoint target and lets
+                // matchers fall through to inlined `malloc()` call
+                // sites in the dynamic linker's source.
+                st_info: (STB_GLOBAL << 4) | STT_FUNC,
                 st_other: 0, // STV_DEFAULT
                 st_shndx: SHN_UNDEF,
                 st_value: 0,

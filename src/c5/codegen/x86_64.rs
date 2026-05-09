@@ -1500,6 +1500,8 @@ pub(super) fn lower(
         // is not in our target list.
         macho_tlv_fixups: Vec::new(),
         macho_tlv_descriptors: Vec::new(),
+        // Overwritten by `lower_for` from `NativeOptions::debug_info`.
+        debug_info: true,
     })
 }
 

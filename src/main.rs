@@ -31,6 +31,8 @@ Output mode -- pick at most one (defaults to \"compile to native binary\"):
 Compile knobs:
   -O, --optimize           Enable the bytecode optimizer + native
                            regalloc.
+  --no-debug, -g0          Skip DWARF emission. Shrinks
+                           the output by ~10-30%.
   --target=<spec>          Pick the binary format (one of
                            macos-aarch64, linux-aarch64, linux-x64,
                            windows-x64, windows-arm64). Defaults to
@@ -131,6 +133,7 @@ fn main() {
     let mut track_pointers = false;
     let mut trace = false;
     let mut optimize_flag = false;
+    let mut emit_debug_info = true;
     let mut output_path: Option<PathBuf> = None;
     let mut target_spec: Option<String> = None;
     let mut defines: Vec<(String, String)> = Vec::new();
@@ -161,6 +164,7 @@ fn main() {
             "--list-symbols" => claim(&mut mode, Mode::ListSymbols),
             "--dump-headers" => claim(&mut mode, Mode::DumpHeaders),
             "--optimize" | "-O" => optimize_flag = true,
+            "--no-debug" | "-g0" => emit_debug_info = false,
             "--dump-asm" => claim(&mut mode, Mode::DumpAsm),
             "--jit" => claim(&mut mode, Mode::Jit),
             "--shared" => claim(&mut mode, Mode::SharedLibrary),
@@ -395,6 +399,7 @@ fn main() {
     } else {
         NativeOptions::new()
     };
+    native_opts = native_opts.with_debug_info(emit_debug_info);
     if mode == Mode::SharedLibrary {
         native_opts = native_opts.with_shared_library();
     }

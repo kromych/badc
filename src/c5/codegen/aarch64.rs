@@ -1321,6 +1321,8 @@ pub(super) fn lower(
         dllmain_pc: None,
         macho_tlv_fixups,
         macho_tlv_descriptors,
+        // Overwritten by `lower_for` from `NativeOptions::debug_info`.
+        debug_info: true,
     })
 }
 

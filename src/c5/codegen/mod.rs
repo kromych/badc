@@ -665,6 +665,13 @@ pub(crate) struct Build {
     /// `IMAGE_OPTIONAL_HEADER64::AddressOfEntryPoint` at the
     /// user's body via `bytecode_to_native[pc]`.
     pub dllmain_pc: Option<usize>,
+    /// Mirror of [`NativeOptions::debug_info`]. The per-format
+    /// writers gate DWARF section emission on this -- when
+    /// `false`, no `.debug_*` sections appear in the output
+    /// image (gh #62). Defaults to `true` for `Build::default()`
+    /// so existing tests that build a `Build` by hand keep the
+    /// pre-#62 behaviour.
+    pub debug_info: bool,
 }
 
 /// One macOS arm64 Thread-Local Variable. A 24-byte `__thread_vars`
@@ -795,7 +802,7 @@ pub(crate) struct FuncFixup {
 /// [`jit_run_with_options`]; the zero-arg public functions
 /// (`emit_native`, ...) construct `NativeOptions::default()` and
 /// delegate.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy)]
 pub struct NativeOptions {
     /// Run the per-function register allocator. The c5 bytecode
     /// pushes the left operand of every binary op onto the stack;
@@ -824,6 +831,19 @@ pub struct NativeOptions {
     /// entry-point machinery, and promotes
     /// `Program::exports` to externally visible symbols.
     pub output_kind: OutputKind,
+    /// Emit DWARF (`.debug_info` + `.debug_abbrev` + `.debug_line`
+    /// + `.debug_str` + `.debug_frame`) into the output binary.
+    ///
+    /// On by default, matching gcc / clang behaviour for an
+    /// implicit `-g` build. Turning it off via `--no-debug` /
+    /// `-g0` shrinks the artifact (~10-30% on sqlite-class
+    /// inputs), trims compile time (the type-catalog walk is
+    /// non-trivial on big amalgamations), and -- because the
+    /// only varying input across runs that differ in source
+    /// path is the DWARF blob -- gives byte-identical
+    /// production binaries useful for golden-hash bisection.
+    /// See gh #62.
+    pub debug_info: bool,
 }
 
 /// Distinguishes "produce an executable" from "produce a
@@ -849,12 +869,22 @@ pub enum OutputKind {
     SharedLibrary,
 }
 
+impl Default for NativeOptions {
+    /// Defaults: optimizer off, executable output, DWARF on.
+    /// Matches the implicit-`-g` behaviour of gcc / clang and
+    /// the pre-#62 codegen.
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NativeOptions {
     /// Convenience builder. `NativeOptions::new().with_optimize()`.
     pub const fn new() -> Self {
         Self {
             optimize: false,
             output_kind: OutputKind::Executable,
+            debug_info: true,
         }
     }
 
@@ -868,6 +898,14 @@ impl NativeOptions {
     /// and return self.
     pub const fn with_shared_library(mut self) -> Self {
         self.output_kind = OutputKind::SharedLibrary;
+        self
+    }
+
+    /// Set [`Self::debug_info`] and return self. Pass `false`
+    /// to skip DWARF emission (gh #62) -- the writer drops the
+    /// debug sections entirely from the output image.
+    pub const fn with_debug_info(mut self, on: bool) -> Self {
+        self.debug_info = on;
         self
     }
 }
@@ -955,6 +993,7 @@ fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Resul
     build.exports = program.exports.clone();
     build.output_kind = options.output_kind;
     build.dllmain_pc = program.dllmain_pc;
+    build.debug_info = options.debug_info;
     append_build_info(&mut build);
     Ok(build)
 }

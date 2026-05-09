@@ -1016,13 +1016,29 @@ pub(super) fn write(
         super::Machine::Aarch64 => super::Target::LinuxAarch64,
         super::Machine::X86_64 => super::Target::LinuxX64,
     };
-    let dwarf_sections = dwarf::emit(
-        program,
-        build,
-        elf_target,
-        dwarf_text_vmaddr,
-        &program.source_path,
-    );
+    // gh #62: skip the type-catalog walk + line program entirely
+    // when the user passed `--no-debug`. Empty sections collapse
+    // every `dwarf_*_off` into `dwarf_off` (= `segment2_end`) and
+    // `shstrtab_off` lands right after, so the file body is
+    // self-consistent without per-write conditionals.
+    let emit_dwarf = build.debug_info;
+    let dwarf_sections = if emit_dwarf {
+        dwarf::emit(
+            program,
+            build,
+            elf_target,
+            dwarf_text_vmaddr,
+            &program.source_path,
+        )
+    } else {
+        dwarf::DwarfSections {
+            debug_info: Vec::new(),
+            debug_abbrev: Vec::new(),
+            debug_line: Vec::new(),
+            debug_str: Vec::new(),
+            debug_frame: Vec::new(),
+        }
+    };
     let dwarf_off = segment2_end;
     let dwarf_info_off = dwarf_off;
     let dwarf_abbrev_off = dwarf_info_off + dwarf_sections.debug_info.len() as u64;
@@ -1035,30 +1051,43 @@ pub(super) fn write(
     // the full set of sections in the section-header table:
     // loaded segments (.interp, .dynsym, ..., .text, .data) plus
     // the debug-only metadata sections.
-    let shstrtab_bytes: &[&str] = &[
-        "",              // 0
-        ".interp",       // 1
-        ".dynsym",       // 2
-        ".dynstr",       // 3
-        ".hash",         // 4
-        ".rela.dyn",     // 5
-        ".text",         // 6
-        ".tdata",        // 7  (only present when has_tls)
-        ".dynamic",      // 8
-        ".got",          // 9
-        ".data",         // 10
-        ".tbss",         // 11 (only present when has_tls)
-        ".debug_info",   // 12
-        ".debug_abbrev", // 13
-        ".debug_line",   // 14
-        ".debug_str",    // 15
-        ".debug_frame",  // 16
-        ".shstrtab",     // 17
-    ];
+    //
+    // Indices 0..=11 are stable; 12..=16 are the DWARF names,
+    // present only when `emit_dwarf` is true (gh #62 -- when the
+    // user passed `--no-debug`, these names don't go into the
+    // string table at all). The `.shstrtab` self-name is always
+    // last; callers reach it via `shstrtab_idx_self` rather than
+    // a fixed numeric index.
+    let mut shstrtab_names: Vec<&str> = Vec::with_capacity(18);
+    shstrtab_names.extend_from_slice(&[
+        "",          // 0
+        ".interp",   // 1
+        ".dynsym",   // 2
+        ".dynstr",   // 3
+        ".hash",     // 4
+        ".rela.dyn", // 5
+        ".text",     // 6
+        ".tdata",    // 7  (only present when has_tls)
+        ".dynamic",  // 8
+        ".got",      // 9
+        ".data",     // 10
+        ".tbss",     // 11 (only present when has_tls)
+    ]);
+    if emit_dwarf {
+        shstrtab_names.extend_from_slice(&[
+            ".debug_info",   // 12
+            ".debug_abbrev", // 13
+            ".debug_line",   // 14
+            ".debug_str",    // 15
+            ".debug_frame",  // 16
+        ]);
+    }
+    let shstrtab_idx_self = shstrtab_names.len();
+    shstrtab_names.push(".shstrtab");
     let mut shstrtab: Vec<u8> = Vec::new();
-    let mut shstrtab_offsets: [u32; 18] = [0; 18];
-    for (i, s) in shstrtab_bytes.iter().enumerate() {
-        shstrtab_offsets[i] = shstrtab.len() as u32;
+    let mut shstrtab_offsets: Vec<u32> = Vec::with_capacity(shstrtab_names.len());
+    for s in &shstrtab_names {
+        shstrtab_offsets.push(shstrtab.len() as u32);
         shstrtab.extend_from_slice(s.as_bytes());
         shstrtab.push(0);
     }
@@ -1083,7 +1112,7 @@ pub(super) fn write(
         + 1 // .got
         + (if has_data { 1 } else { 0 }) // .data
         + (if has_tbss { 1 } else { 0 }) // .tbss
-        + 5 // .debug_* x 5 (info, abbrev, line, str, frame)
+        + (if emit_dwarf { 5 } else { 0 }) // .debug_* x 5 (info, abbrev, line, str, frame); gh #62
         + 1; // .shstrtab
     let total_filesize = shdr_off + n_section_headers * ELF64_SHDR_SIZE;
     // shstrtab is the last section in the table; its index is
@@ -1631,57 +1660,62 @@ pub(super) fn write(
     // [N+2..N+6] DWARF debug sections (file-only metadata, no
     // SHF_ALLOC so the loader skips them). `.debug_frame` (gh #47)
     // carries the CFI a debugger / unwinder reads to walk through
-    // optimised frames without prologue heuristics.
-    let dwarf_section_specs: &[(u32, u64, u64)] = &[
-        (
-            shstrtab_offsets[12],
-            dwarf_info_off,
-            dwarf_sections.debug_info.len() as u64,
-        ),
-        (
-            shstrtab_offsets[13],
-            dwarf_abbrev_off,
-            dwarf_sections.debug_abbrev.len() as u64,
-        ),
-        (
-            shstrtab_offsets[14],
-            dwarf_line_off,
-            dwarf_sections.debug_line.len() as u64,
-        ),
-        (
-            shstrtab_offsets[15],
-            dwarf_str_off,
-            dwarf_sections.debug_str.len() as u64,
-        ),
-        (
-            shstrtab_offsets[16],
-            dwarf_frame_off,
-            dwarf_sections.debug_frame.len() as u64,
-        ),
-    ];
-    for &(name_off, off, sz) in dwarf_section_specs {
-        write_struct(
-            &mut out,
-            &Elf64Shdr {
-                sh_name: name_off,
-                sh_type: SHT_PROGBITS,
-                sh_flags: 0,
-                sh_addr: 0,
-                sh_offset: off,
-                sh_size: sz,
-                sh_link: 0,
-                sh_info: 0,
-                sh_addralign: 1,
-                sh_entsize: 0,
-            },
-        );
+    // optimised frames without prologue heuristics. Suppressed
+    // when `--no-debug` was passed (gh #62) -- the section table
+    // simply omits these five entries; nothing else in the file
+    // image references them.
+    if emit_dwarf {
+        let dwarf_section_specs: &[(u32, u64, u64)] = &[
+            (
+                shstrtab_offsets[12],
+                dwarf_info_off,
+                dwarf_sections.debug_info.len() as u64,
+            ),
+            (
+                shstrtab_offsets[13],
+                dwarf_abbrev_off,
+                dwarf_sections.debug_abbrev.len() as u64,
+            ),
+            (
+                shstrtab_offsets[14],
+                dwarf_line_off,
+                dwarf_sections.debug_line.len() as u64,
+            ),
+            (
+                shstrtab_offsets[15],
+                dwarf_str_off,
+                dwarf_sections.debug_str.len() as u64,
+            ),
+            (
+                shstrtab_offsets[16],
+                dwarf_frame_off,
+                dwarf_sections.debug_frame.len() as u64,
+            ),
+        ];
+        for &(name_off, off, sz) in dwarf_section_specs {
+            write_struct(
+                &mut out,
+                &Elf64Shdr {
+                    sh_name: name_off,
+                    sh_type: SHT_PROGBITS,
+                    sh_flags: 0,
+                    sh_addr: 0,
+                    sh_offset: off,
+                    sh_size: sz,
+                    sh_link: 0,
+                    sh_info: 0,
+                    sh_addralign: 1,
+                    sh_entsize: 0,
+                },
+            );
+        }
     }
 
     // [last] .shstrtab.
     write_struct(
         &mut out,
         &Elf64Shdr {
-            sh_name: shstrtab_offsets[17],
+            sh_name: shstrtab_offsets[shstrtab_idx_self],
             sh_type: SHT_STRTAB,
             sh_flags: 0,
             sh_addr: 0,
@@ -1881,6 +1915,7 @@ mod tests {
             dllmain_pc: None,
             macho_tlv_fixups: Vec::new(),
             macho_tlv_descriptors: Vec::new(),
+            debug_info: true,
         }
     }
 

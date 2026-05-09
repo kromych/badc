@@ -375,10 +375,11 @@ pub(super) fn write(
     let edata_section_present = is_dll && !build.exports.is_empty();
     // gh #42: emit DWARF debug sections in PE images so lldb /
     // gdb can resolve user-function names + types in PE
-    // backtraces. Always present today (the cost is a few KB of
-    // discardable bytes); future toggle could gate on whether
-    // the program has any user functions.
-    let dwarf_section_present = true;
+    // backtraces. Suppressed when the user passed `--no-debug` /
+    // `-g0` (gh #62) -- the section headers + payload + COFF
+    // string table are all skipped, `pointer_to_symbol_table`
+    // returns to 0, and `SizeOfImage` shrinks accordingly.
+    let dwarf_section_present = build.debug_info;
     let headers_size = headers_raw_size(
         data_section_present,
         reloc_section_present,

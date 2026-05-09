@@ -1628,9 +1628,13 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // distinct vmaddrs, dyld's `vmsize > filesize` check passes
     // and dyld 4's dlsym-by-symbol-table fallback no longer
     // shadows the strtab against __DWARF.
-    let emit_dwarf = true;
+    let emit_dwarf = build.debug_info;
     let _ = is_dylib;
-    let dwarf_seg_size = (SEGMENT_COMMAND_64_SIZE + 5 * SECTION_64_SIZE) as u64;
+    let dwarf_seg_size = if emit_dwarf {
+        (SEGMENT_COMMAND_64_SIZE + 5 * SECTION_64_SIZE) as u64
+    } else {
+        0
+    };
     let dyld_info_size = DYLD_INFO_COMMAND_SIZE as u64;
     let symtab_size = SYMTAB_COMMAND_SIZE as u64;
     let dysymtab_size = DYSYMTAB_COMMAND_SIZE as u64;
@@ -2401,6 +2405,7 @@ mod tests {
             dllmain_pc: None,
             macho_tlv_fixups: Vec::new(),
             macho_tlv_descriptors: Vec::new(),
+            debug_info: true,
         }
     }
 

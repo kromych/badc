@@ -1892,7 +1892,13 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         dwarf_filesize,
         dwarf_tail_pad,
     ) = if emit_dwarf {
-        let s = dwarf::emit(program, build, code_vmaddr_base, &program.source_path);
+        let s = dwarf::emit(
+            program,
+            build,
+            super::Target::MacOSAarch64,
+            code_vmaddr_base,
+            &program.source_path,
+        );
         let fileoff = data_fileoff + data_filesize;
         let info = fileoff;
         let abbrev = info + s.debug_info.len() as u64;

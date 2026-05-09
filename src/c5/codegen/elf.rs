@@ -997,7 +997,17 @@ pub(super) fn write(
     // _start stub sits ahead of build.text in the code blob;
     // shared libraries skip the stub so stub_len = 0 there).
     let dwarf_text_vmaddr = code_vmaddr + stub_len;
-    let dwarf_sections = dwarf::emit(program, build, dwarf_text_vmaddr, &program.source_path);
+    let elf_target = match machine {
+        super::Machine::Aarch64 => super::Target::LinuxAarch64,
+        super::Machine::X86_64 => super::Target::LinuxX64,
+    };
+    let dwarf_sections = dwarf::emit(
+        program,
+        build,
+        elf_target,
+        dwarf_text_vmaddr,
+        &program.source_path,
+    );
     let dwarf_off = segment2_end;
     let dwarf_info_off = dwarf_off;
     let dwarf_abbrev_off = dwarf_info_off + dwarf_sections.debug_info.len() as u64;

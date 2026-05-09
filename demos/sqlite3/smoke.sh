@@ -291,6 +291,26 @@ build_shell "${SHELL_OPT}"     -O || { echo "smoke FAIL: build (-O) failed" >&2;
 # emits empty stdout but diag prints rows, the bug is shell.c-
 # specific; if both are silent, the bug is below shell.c.
 if [ "${BADC_RUN_DIAG:-}" = "1" ]; then
+    # Tier 0 probe: enumerate which msvcrt + kernel32 symbols
+    # GetProcAddress can resolve at runtime. The hello+sqlite IAT
+    # references ~85 symbols statically; if the loader rejects
+    # the binary with STATUS_ENTRYPOINT_NOT_FOUND (errorlevel
+    # -1073741511), it's because ONE of those names isn't
+    # exported by the runner's DLLs. This probe loads each DLL
+    # via LoadLibraryA + GetProcAddress so we get a per-symbol
+    # `OK` / `MISSING` line in the CI log.
+    PROBE_BIN="${WORK}/sqlite3probe${EXE_SUFFIX}"
+    "${BADC}" -include msvc_compat.h "${SQLITE_DIR}/probe_imports.c" -o "${PROBE_BIN}" \
+        || echo "probe: build failed" >&2
+    if [ -e "${PROBE_BIN}" ]; then
+        echo "=== probe imports run ===" >&2
+        set +e
+        "${PROBE_BIN}" </dev/null
+        probe_rc=$?
+        set -e
+        echo "=== probe imports exit=${probe_rc} ===" >&2
+    fi
+
     # Tier 1 probe: dead-minimal hello-world (no sqlite, no shell,
     # no fprintf). If THIS exits non-zero, the failure is in the
     # entry stub / loader path itself, not sqlite-imports-related.

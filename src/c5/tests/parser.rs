@@ -106,8 +106,7 @@ fn matching_redeclaration_is_silent() {
     // typically include the same prototype many times via shared
     // headers. Repeats with identical signatures must not
     // produce noise.
-    let src =
-        "int f(int x); int f(int x); int f(int x) { return x; } int main() { return f(7); }";
+    let src = "int f(int x); int f(int x); int f(int x) { return x; } int main() { return f(7); }";
     let prog = crate::c5::Compiler::new(src.to_string()).compile().unwrap();
     assert!(
         prog.warnings.is_empty(),

@@ -246,10 +246,30 @@ CREATE TABLE meta(id INTEGER PRIMARY KEY, note TEXT);"
     fi
 
     # ---- file-backed smoke ----
-    local db file_out reopen_out reopen_expect
+    local db file_out reopen_out reopen_expect db_for_shell
     db="${WORK}/${label}.db"
     rm -f "${db}"
-    file_out="$(printf ".open ${db}\nCREATE TABLE t(x INTEGER, y TEXT);\nINSERT INTO t VALUES(-7,'neg'),(1,'hello'),(2,'world');\n.quit\n" | "${shell_bin}" | tr -d '\r')"
+    # The shell binary is a native Win32 process on the windows
+    # CI lanes (Git Bash hosts the `bash` script, but the
+    # `${shell_bin}` it spawns is a real PE that only understands
+    # Windows paths). `${WORK}` lands in `/tmp/...` form because
+    # mktemp -d ran inside Git Bash, but feeding `/tmp/foo` to
+    # msvcrt's `CreateFileA` makes it look like a path off the
+    # current-drive root (`<drive>:\tmp\foo`), which doesn't
+    # exist on the runner. Translate the path to its Windows
+    # equivalent via cygpath before piping it as `.open` input.
+    #
+    # Use `-m` (mixed: drive letter + FORWARD slashes) instead
+    # of `-w` (drive + backslashes). Windows' CreateFileA accepts
+    # both, but forward slashes round-trip cleanly through
+    # `printf "..."` -- backslashes would get interpreted as
+    # printf escapes (`\U` in `C:\Users`, `\t` in `\Temp`, ...).
+    if command -v cygpath >/dev/null 2>&1; then
+        db_for_shell=$(cygpath -m "${db}")
+    else
+        db_for_shell="${db}"
+    fi
+    file_out="$(printf ".open ${db_for_shell}\nCREATE TABLE t(x INTEGER, y TEXT);\nINSERT INTO t VALUES(-7,'neg'),(1,'hello'),(2,'world');\n.quit\n" | "${shell_bin}" | tr -d '\r')"
     if [ -n "${file_out}" ]; then
         echo "smoke FAIL [${label}]: file-backed write produced unexpected output: ${file_out}" >&2
         fail=1
@@ -260,7 +280,8 @@ CREATE TABLE meta(id INTEGER PRIMARY KEY, note TEXT);"
     fi
 
     # Reopen and read back -- proves the rows really persisted.
-    reopen_out="$(printf ".open ${db}\nSELECT * FROM t ORDER BY x;\n.quit\n" | "${shell_bin}" | tr -d '\r')"
+    # Same Windows-path translation as the write step above.
+    reopen_out="$(printf ".open ${db_for_shell}\nSELECT * FROM t ORDER BY x;\n.quit\n" | "${shell_bin}" | tr -d '\r')"
     reopen_expect="-7|neg
 1|hello
 2|world"

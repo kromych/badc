@@ -61,6 +61,7 @@ use crate::c5::token::Ty;
 const DW_TAG_COMPILE_UNIT: u8 = 0x11;
 const DW_TAG_SUBPROGRAM: u8 = 0x2e;
 const DW_TAG_BASE_TYPE: u8 = 0x24;
+const DW_TAG_POINTER_TYPE: u8 = 0x0f;
 const DW_TAG_FORMAL_PARAMETER: u8 = 0x05;
 const DW_TAG_VARIABLE: u32 = 0x34;
 
@@ -457,69 +458,170 @@ struct BaseTypeKey {
     encoding: u8,
 }
 
+/// One entry in the type catalog. Sort order (derived from the
+/// declaration order of the variants and the field order within
+/// `Pointer`) puts base DIEs first, then pointer chains grouped
+/// by leaf and ordered by ascending depth, then the placeholder
+/// `void *` DIE last. That ordering matters: a pointer DIE at
+/// depth `N` references the pointer DIE at depth `N - 1` (or the
+/// base DIE at depth 1), so the pointee must already be emitted
+/// when we get to it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum CatalogEntry {
+    /// Scalar base type. Direct DIE -- `DW_AT_name`, `DW_AT_byte_size`,
+    /// `DW_AT_encoding`.
+    Base(BaseTypeKey),
+    /// Pointer chain rooted at `leaf` with `depth >= 1`. The DIE
+    /// is a `DW_TAG_pointer_type` whose `DW_AT_type` points at
+    /// `Pointer { leaf, depth - 1 }` for `depth > 1`, or at
+    /// `Base(leaf)` for `depth == 1`.
+    Pointer { leaf: BaseTypeKey, depth: u8 },
+    /// Placeholder `void *` for variables we can't yet resolve to
+    /// a real chain -- structs and pointers-to-structs today (gh
+    /// #59 lifts them out into proper struct DIEs).
+    VoidStar,
+}
+
 struct TypeCatalog {
-    /// Base types in deterministic emission order. Each entry pairs
-    /// a key with its interned `DW_AT_name` offset; the CU-relative
-    /// DIE offset is computed at emission time and resolved against
-    /// the per-base lookup map built alongside.
-    bases: Vec<(BaseTypeKey, u32)>,
-    /// True when any captured variable was a pointer or struct, so
-    /// we also emit the placeholder `void *` DIE that pointer- /
-    /// struct-typed variables reference until gh #58 / gh #59
-    /// extend the catalog with proper pointer-chain / struct DIEs.
-    needs_void_star: bool,
+    /// All entries in deterministic emission order. The `BTreeSet`
+    /// ordering is exactly what we want for `.debug_info` writes
+    /// (see `CatalogEntry`'s docs), so we just iterate it.
+    entries: Vec<CatalogEntry>,
+    /// Per-base interned `DW_AT_name` offset. Pointer DIEs don't
+    /// carry a name; the base they ultimately resolve to does.
+    base_names: BTreeMap<BaseTypeKey, u32>,
+    /// `DW_AT_name` for the placeholder `void *` DIE. Zero when
+    /// the catalog has no `VoidStar` entry (no struct- or
+    /// unresolved-pointer-typed variables).
     void_star_name_off: u32,
 }
 
 impl TypeCatalog {
     fn collect(subs: &[Subprog], strs: &mut StrTable, target: Target) -> Self {
-        let mut keys: BTreeSet<BaseTypeKey> = BTreeSet::new();
-        let mut needs_void_star = false;
+        let mut entries: BTreeSet<CatalogEntry> = BTreeSet::new();
         for sub in subs {
             for v in &sub.variables {
-                match base_key_for(v.type_tag, target) {
-                    Some(key) => {
-                        keys.insert(key);
-                    }
-                    None => {
-                        needs_void_star = true;
-                    }
-                }
+                let entry = classify(v.type_tag, target);
+                Self::insert_with_chain(&mut entries, entry);
             }
         }
-        let bases: Vec<(BaseTypeKey, u32)> = keys
-            .into_iter()
-            .map(|k| (k, strs.intern(k.name)))
-            .collect();
+
+        // Intern base names; the void* placeholder gets one too
+        // when present.
+        let mut base_names: BTreeMap<BaseTypeKey, u32> = BTreeMap::new();
+        let needs_void_star = entries.contains(&CatalogEntry::VoidStar);
+        for entry in &entries {
+            if let CatalogEntry::Base(key) = entry {
+                base_names.entry(*key).or_insert_with(|| strs.intern(key.name));
+            }
+        }
         let void_star_name_off = if needs_void_star {
             strs.intern("void *")
         } else {
             0
         };
+
         TypeCatalog {
-            bases,
-            needs_void_star,
+            entries: entries.into_iter().collect(),
+            base_names,
             void_star_name_off,
+        }
+    }
+
+    /// Insert `entry` and -- when it's a pointer chain -- every
+    /// shallower chain entry plus the rooting base DIE, so the
+    /// emission walk finds each level's pointee already present.
+    fn insert_with_chain(entries: &mut BTreeSet<CatalogEntry>, entry: CatalogEntry) {
+        match entry {
+            CatalogEntry::Pointer { leaf, depth } => {
+                entries.insert(CatalogEntry::Base(leaf));
+                for d in 1..=depth {
+                    entries.insert(CatalogEntry::Pointer { leaf, depth: d });
+                }
+            }
+            other => {
+                entries.insert(other);
+            }
         }
     }
 }
 
-/// Map a c5 type tag to its scalar base-type key. Returns `None`
-/// for pointers (gh #58 will replace the void* placeholder with a
-/// proper pointer-chain DIE) and structs (gh #59 likewise).
-fn base_key_for(ty: i64, target: Target) -> Option<BaseTypeKey> {
-    if types::is_pointer_ty(ty) {
-        return None;
-    }
+/// Resolve a c5 type tag to its catalog entry. Pointers to base
+/// types become `Pointer { leaf, depth >= 1 }`; bare scalars
+/// become `Base(...)`; everything else (structs, struct pointers,
+/// anything we can't cleanly decompose) routes to `VoidStar`.
+///
+/// Phase 1C (gh #59) replaces the struct-routed `VoidStar`s with
+/// proper struct / pointer-to-struct DIEs.
+fn classify(ty: i64, target: Target) -> CatalogEntry {
     let unsigned = types::is_unsigned_ty(ty);
     let bare = types::strip_unsigned(ty);
 
-    // Struct types share the i64 namespace but live above
-    // `types::STRUCT_BASE`; matched here before any of the scalar
-    // bands so they don't accidentally fall through.
+    // Struct types live above STRUCT_BASE -- defer to phase 1C.
     if bare >= types::STRUCT_BASE {
-        return None;
+        return CatalogEntry::VoidStar;
     }
+
+    let ptr_step = Ty::Ptr as i64;
+    let band_size: i64 = 100;
+
+    // Compute (leaf-tag, pointer-depth) by detecting which band
+    // `bare` lives in. Each non-integer band sits at a fixed
+    // offset; the integer family shares chars (even bare) and
+    // ints (odd bare) in the [0, 100) range.
+    let (leaf_tag, depth) = if bare < band_size {
+        // Integer family: even = char, odd = int.
+        let depth = (bare / ptr_step) as u8;
+        let leaf = if bare % ptr_step == 0 {
+            Ty::Char as i64
+        } else {
+            Ty::Int as i64
+        };
+        (leaf, depth)
+    } else if (Ty::Float as i64..Ty::Float as i64 + band_size).contains(&bare) {
+        let depth = ((bare - Ty::Float as i64) / ptr_step) as u8;
+        (Ty::Float as i64, depth)
+    } else if (Ty::Double as i64..Ty::Double as i64 + band_size).contains(&bare) {
+        let depth = ((bare - Ty::Double as i64) / ptr_step) as u8;
+        (Ty::Double as i64, depth)
+    } else if (Ty::Long as i64..Ty::Long as i64 + band_size).contains(&bare) {
+        let depth = ((bare - Ty::Long as i64) / ptr_step) as u8;
+        (Ty::Long as i64, depth)
+    } else if (Ty::Short as i64..Ty::Short as i64 + band_size).contains(&bare) {
+        let depth = ((bare - Ty::Short as i64) / ptr_step) as u8;
+        (Ty::Short as i64, depth)
+    } else if (Ty::LongLong as i64..Ty::LongLong as i64 + band_size).contains(&bare) {
+        let depth = ((bare - Ty::LongLong as i64) / ptr_step) as u8;
+        (Ty::LongLong as i64, depth)
+    } else {
+        return CatalogEntry::VoidStar;
+    };
+
+    let leaf_signed = if unsigned {
+        leaf_tag | types::UNSIGNED_BIT
+    } else {
+        leaf_tag
+    };
+    let leaf_key = match base_key_for_leaf(leaf_signed, target) {
+        Some(k) => k,
+        None => return CatalogEntry::VoidStar,
+    };
+    if depth == 0 {
+        CatalogEntry::Base(leaf_key)
+    } else {
+        CatalogEntry::Pointer {
+            leaf: leaf_key,
+            depth,
+        }
+    }
+}
+
+/// Build a `BaseTypeKey` for a *bare* leaf scalar tag (no pointer
+/// depth). Caller handles the pointer extraction; this just maps
+/// the leaf-band tag to its DWARF wire-form attributes.
+fn base_key_for_leaf(leaf_tag: i64, target: Target) -> Option<BaseTypeKey> {
+    let unsigned = types::is_unsigned_ty(leaf_tag);
+    let bare = types::strip_unsigned(leaf_tag);
 
     let key = if bare == Ty::Char as i64 {
         BaseTypeKey {
@@ -657,6 +759,20 @@ fn build_debug_abbrev() -> Vec<u8> {
     write_uleb128(&mut buf, 0);
     write_uleb128(&mut buf, 0);
 
+    // Abbrev 6: DW_TAG_pointer_type. Used by every entry of a
+    // pointer-chain DIE (`int *`, `int **`, `unsigned long *`,
+    // ...). DW_AT_byte_size is constant 8 across our supported
+    // targets; DW_AT_TYPE is a CU-relative ref4 to the pointee
+    // (the depth-1 pointer DIE for chains, the base-type DIE
+    // for the depth-1 entry).
+    write_uleb128(&mut buf, 6);
+    write_uleb128(&mut buf, DW_TAG_POINTER_TYPE as u64);
+    buf.push(DW_CHILDREN_NO);
+    write_attr(&mut buf, DW_AT_BYTE_SIZE, DW_FORM_DATA1);
+    write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
+    write_uleb128(&mut buf, 0);
+    write_uleb128(&mut buf, 0);
+
     // End of abbreviation table.
     write_uleb128(&mut buf, 0);
     buf
@@ -696,30 +812,57 @@ fn build_debug_info(
     body.extend_from_slice(&cu_size.to_le_bytes());
     body.extend_from_slice(&line_unit_off.to_le_bytes());
 
-    // Type DIEs (CU children, abbrev 3). One per distinct c5
-    // scalar tag the program references; pointer / struct vars
-    // route to a single trailing void* placeholder until gh #58 /
-    // gh #59. Record CU-relative offsets so the variable /
-    // formal_parameter children can back-reference them.
-    let mut base_offsets: BTreeMap<BaseTypeKey, u32> = BTreeMap::new();
-    for &(key, name_off) in &catalog.bases {
+    // Type DIEs (CU children). Walk the catalog in its
+    // deterministic order: bases first, then pointer chains in
+    // ascending depth (so each level's pointee is already
+    // emitted), then the void* placeholder. Record CU-relative
+    // offsets so variable / formal_parameter children -- and the
+    // pointer DIEs themselves -- can back-reference them.
+    let mut entry_offsets: BTreeMap<CatalogEntry, u32> = BTreeMap::new();
+    for entry in &catalog.entries {
         let off = (body.len() as u32) + DebugInfoUnitHeader::SIZE;
-        base_offsets.insert(key, off);
-        write_uleb128(&mut body, 3);
-        body.extend_from_slice(&name_off.to_le_bytes());
-        body.push(key.byte_size);
-        body.push(key.encoding);
+        entry_offsets.insert(*entry, off);
+        match entry {
+            CatalogEntry::Base(key) => {
+                let name_off = catalog
+                    .base_names
+                    .get(key)
+                    .copied()
+                    .expect("collect() interned every base in base_names");
+                write_uleb128(&mut body, 3);
+                body.extend_from_slice(&name_off.to_le_bytes());
+                body.push(key.byte_size);
+                body.push(key.encoding);
+            }
+            CatalogEntry::Pointer { leaf, depth } => {
+                let pointee = if *depth == 1 {
+                    CatalogEntry::Base(*leaf)
+                } else {
+                    CatalogEntry::Pointer {
+                        leaf: *leaf,
+                        depth: depth - 1,
+                    }
+                };
+                let pointee_off = *entry_offsets.get(&pointee).expect(
+                    "pointer chain insertion guarantees the depth-1 / base entry was emitted",
+                );
+                write_uleb128(&mut body, 6);
+                body.push(8); // DW_AT_byte_size: pointers are 8 bytes everywhere we target.
+                body.extend_from_slice(&pointee_off.to_le_bytes());
+            }
+            CatalogEntry::VoidStar => {
+                // Keep the depth-0 base-type representation for
+                // back-compat (DW_ATE_address shaped). Replaced by
+                // a real DW_TAG_pointer_type-with-no-DW_AT_TYPE
+                // when struct DIEs land in gh #59 and the only
+                // remaining fallback case is true `void *`.
+                write_uleb128(&mut body, 3);
+                body.extend_from_slice(&catalog.void_star_name_off.to_le_bytes());
+                body.push(8);
+                body.push(DW_ATE_ADDRESS);
+            }
+        }
     }
-    let void_star_off = if catalog.needs_void_star {
-        let off = (body.len() as u32) + DebugInfoUnitHeader::SIZE;
-        write_uleb128(&mut body, 3);
-        body.extend_from_slice(&catalog.void_star_name_off.to_le_bytes());
-        body.push(8);
-        body.push(DW_ATE_ADDRESS);
-        Some(off)
-    } else {
-        None
-    };
 
     // Subprogram children, each with its own variable /
     // formal_parameter children.
@@ -746,17 +889,16 @@ fn build_debug_info(
             let abbrev = if v.is_parameter { 5 } else { 4 };
             write_uleb128(&mut body, abbrev);
             body.extend_from_slice(&v.name_off.to_le_bytes());
-            // Resolve this variable's c5 type tag. Pointers /
-            // structs route to the void* placeholder; the
-            // catalog guarantees `void_star_off` is set whenever
-            // any var resolved that way, so the unwrap can't fire.
-            let type_off = match base_key_for(v.type_tag, target) {
-                Some(key) => *base_offsets
-                    .get(&key)
-                    .expect("catalog covers every base key referenced by a variable"),
-                None => void_star_off
-                    .expect("catalog flags needs_void_star whenever a non-base var exists"),
-            };
+            // Resolve this variable's c5 type tag through the
+            // catalog: scalar -> Base DIE, pointer-chain ->
+            // Pointer DIE at the right depth, struct / unknown ->
+            // VoidStar placeholder. The catalog's collect() walks
+            // every captured variable, so a lookup miss is
+            // impossible.
+            let entry = classify(v.type_tag, target);
+            let type_off = *entry_offsets
+                .get(&entry)
+                .expect("catalog includes every entry produced by classify()");
             body.extend_from_slice(&type_off.to_le_bytes());
             // Location: DW_OP_fbreg <sleb128 offset-from-frame-base>.
             let mut loc: Vec<u8> = Vec::with_capacity(8);
@@ -1122,10 +1264,17 @@ mod tests {
         assert_eq!(buf, [1u8, 1, 1, (-1i8) as u8, 14, 13]);
     }
 
+    fn base_of(ty: i64, target: Target) -> BaseTypeKey {
+        match classify(ty, target) {
+            CatalogEntry::Base(k) => k,
+            other => panic!("expected Base, got {other:?} for ty={ty}"),
+        }
+    }
+
     #[test]
-    fn base_key_for_distinguishes_signed_unsigned() {
-        let signed = base_key_for(Ty::Int as i64, Target::LinuxX64).unwrap();
-        let unsigned = base_key_for(Ty::Int as i64 | types::UNSIGNED_BIT, Target::LinuxX64).unwrap();
+    fn classify_distinguishes_signed_unsigned() {
+        let signed = base_of(Ty::Int as i64, Target::LinuxX64);
+        let unsigned = base_of(Ty::Int as i64 | types::UNSIGNED_BIT, Target::LinuxX64);
         assert_ne!(signed, unsigned);
         assert_eq!(signed.byte_size, 4);
         assert_eq!(signed.encoding, DW_ATE_SIGNED);
@@ -1133,29 +1282,66 @@ mod tests {
     }
 
     #[test]
-    fn base_key_for_long_follows_data_model() {
-        let lp64 = base_key_for(Ty::Long as i64, Target::LinuxX64).unwrap();
-        let llp64 = base_key_for(Ty::Long as i64, Target::WindowsX64).unwrap();
+    fn classify_long_follows_data_model() {
+        let lp64 = base_of(Ty::Long as i64, Target::LinuxX64);
+        let llp64 = base_of(Ty::Long as i64, Target::WindowsX64);
         assert_eq!(lp64.byte_size, 8);
         assert_eq!(llp64.byte_size, 4);
     }
 
     #[test]
-    fn base_key_for_char_uses_signed_char_encoding() {
-        let signed = base_key_for(Ty::Char as i64, Target::LinuxX64).unwrap();
-        let unsigned =
-            base_key_for(Ty::Char as i64 | types::UNSIGNED_BIT, Target::LinuxX64).unwrap();
+    fn classify_char_uses_signed_char_encoding() {
+        let signed = base_of(Ty::Char as i64, Target::LinuxX64);
+        let unsigned = base_of(Ty::Char as i64 | types::UNSIGNED_BIT, Target::LinuxX64);
         assert_eq!(signed.byte_size, 1);
         assert_eq!(signed.encoding, DW_ATE_SIGNED_CHAR);
         assert_eq!(unsigned.encoding, DW_ATE_UNSIGNED_CHAR);
     }
 
     #[test]
-    fn base_key_for_pointer_falls_through_to_void_star() {
-        // `int*` -> None, so the catalog routes it to the void*
-        // placeholder until gh #58.
+    fn classify_pointer_returns_chain_entry() {
+        // `int*` -> Pointer{leaf=int, depth=1}; `int**` -> depth=2.
         let int_ptr = (Ty::Int as i64) + (Ty::Ptr as i64);
-        assert!(base_key_for(int_ptr, Target::LinuxX64).is_none());
+        let int_ptr_ptr = (Ty::Int as i64) + 2 * (Ty::Ptr as i64);
+        match classify(int_ptr, Target::LinuxX64) {
+            CatalogEntry::Pointer { leaf, depth } => {
+                assert_eq!(leaf.name, "int");
+                assert_eq!(depth, 1);
+            }
+            other => panic!("expected Pointer, got {other:?}"),
+        }
+        match classify(int_ptr_ptr, Target::LinuxX64) {
+            CatalogEntry::Pointer { leaf, depth } => {
+                assert_eq!(leaf.name, "int");
+                assert_eq!(depth, 2);
+            }
+            other => panic!("expected Pointer, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn classify_struct_routes_to_void_star() {
+        // Plain struct id 0 (no pointer level) -- still a void*
+        // fallback in phase 1B; gh #59 lifts it to a real struct DIE.
+        let struct_ty = types::STRUCT_BASE;
+        assert_eq!(classify(struct_ty, Target::LinuxX64), CatalogEntry::VoidStar);
+    }
+
+    #[test]
+    fn pointer_chain_insert_back_fills_shallower_levels() {
+        let mut entries: BTreeSet<CatalogEntry> = BTreeSet::new();
+        let leaf = base_of(Ty::Int as i64, Target::LinuxX64);
+        TypeCatalog::insert_with_chain(
+            &mut entries,
+            CatalogEntry::Pointer { leaf, depth: 3 },
+        );
+        // Should have: Base(int), Pointer{int, 1}, Pointer{int, 2},
+        // Pointer{int, 3}.
+        assert!(entries.contains(&CatalogEntry::Base(leaf)));
+        for d in 1..=3 {
+            assert!(entries.contains(&CatalogEntry::Pointer { leaf, depth: d }));
+        }
+        assert_eq!(entries.len(), 4);
     }
 
     fn decode_uleb128(buf: &[u8]) -> (u64, usize) {

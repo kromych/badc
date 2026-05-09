@@ -122,4 +122,34 @@
 // functions, so the no-op definition isn't load-bearing -- only
 // the visibility check is.
 
+// `InterlockedCompareExchange` shim. On modern Windows
+// (Server 2019 / 2022 / 2025), kernel32.dll does NOT export
+// `InterlockedCompareExchange` as a real function -- in MSVC
+// it's inlined to `lock cmpxchg` via a compiler intrinsic
+// (`_InterlockedCompareExchange` from <intrin.h>). Statically
+// importing the bare name produces a PE the loader rejects
+// with STATUS_ENTRYPOINT_NOT_FOUND (0xC0000139) at startup,
+// which surfaces as bash exit=127 / cmd.exe errorlevel
+// -1073741511. sqlite's `os_win.c` already handles this case
+// -- it gates on `#if defined(InterlockedCompareExchange)`
+// and, when defined, uses the macro inline instead of the
+// `aSyscall[].pCurrent` dispatch. Define a non-atomic c5-side
+// implementation here so the macro path is taken.
+//
+// The non-atomic shim is *fine* for the single-threaded smoke
+// harness: sqlite's only multi-threaded use site is
+// `winMutexInit` / `winMutexEnd` (line ~31180 in sqlite3.c),
+// which the smoke avoids by setting `SQLITE_THREADSAFE=0`.
+// A multi-threaded build would need a real CAS -- either a
+// c5 inline-asm primitive or a small assembly fixture
+// linked alongside the source.
+static int _c5_InterlockedCompareExchange(
+    int *dest, int exchange, int comparand
+) {
+    int original = *dest;
+    if (original == comparand) *dest = exchange;
+    return original;
+}
+#define InterlockedCompareExchange _c5_InterlockedCompareExchange
+
 #endif /* _WIN32 */

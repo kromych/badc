@@ -320,12 +320,38 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         })
         .collect();
 
-    // Source-line debug map: the optimizer mangles PCs (DCE, branch
-    // threading, peephole), so the per-pc source line that matched
-    // the unoptimized bytecode no longer matches. Drop the map at
-    // -O. Users debugging codegen turn -O off; users running -O
-    // give up structural debug info in exchange for tighter code.
-    let _ = (in_source_lines, in_source_functions);
+    // Remap source-line / source-function debug info through the
+    // optimizer so dump-asm and DWARF (gh #39) keep their names and
+    // line numbers at -O. For each pre-opt insn index `i`: its OLD
+    // bc-pc was `pc_at_idx[i]` and its NEW bc-pc is `new_pc[i]`.
+    // Each insn occupies `word_size()` text words; copy the
+    // per-word entries verbatim into the new arrays. Removed insns
+    // contribute zero words and drop out naturally; instructions
+    // that survive but get retargeted (branch threading) keep their
+    // original source line, since the C statement they translate is
+    // unchanged.
+    let mut out_source_lines: Vec<u32> = vec![0; text.len()];
+    let mut out_source_functions: Vec<alloc::string::String> =
+        vec![alloc::string::String::new(); text.len()];
+    for (i, ins) in insns.iter().enumerate() {
+        if ins.is_removed() || new_pc[i] == usize::MAX {
+            continue;
+        }
+        let old_pc = pc_at_idx[i];
+        let w = ins.word_size();
+        for k in 0..w {
+            let new_word_pc = new_pc[i] + k;
+            let old_word_pc = old_pc + k;
+            if new_word_pc < out_source_lines.len() && old_word_pc < in_source_lines.len() {
+                out_source_lines[new_word_pc] = in_source_lines[old_word_pc];
+            }
+            if new_word_pc < out_source_functions.len()
+                && old_word_pc < in_source_functions.len()
+            {
+                out_source_functions[new_word_pc] = in_source_functions[old_word_pc].clone();
+            }
+        }
+    }
     Ok(Program {
         text,
         data,
@@ -349,8 +375,8 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         exports,
         dylibs,
         dllmain_pc,
-        source_lines: Vec::new(),
-        source_functions: Vec::new(),
+        source_lines: out_source_lines,
+        source_functions: out_source_functions,
     })
 }
 

@@ -39,6 +39,7 @@ use super::program::Program;
 
 mod aarch64;
 mod disasm;
+mod dwarf;
 mod elf;
 mod jit;
 mod mach_o;
@@ -889,7 +890,7 @@ pub fn emit_native_with_options(
     options: NativeOptions,
 ) -> Result<Vec<u8>, C5Error> {
     let build = lower_for(program, target, options)?;
-    write_for(&build, target)
+    write_for(program, &build, target)
 }
 
 /// Lower the program for `target`, returning the per-arch `Build`
@@ -976,9 +977,9 @@ fn append_build_info(build: &mut Build) {
     build.text.push(0);
 }
 
-fn write_for(build: &Build, target: Target) -> Result<Vec<u8>, C5Error> {
+fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>, C5Error> {
     match target {
-        Target::MacOSAarch64 => mach_o::write(build),
+        Target::MacOSAarch64 => mach_o::write(program, build),
         Target::LinuxAarch64 => elf::write(build, Machine::Aarch64),
         Target::LinuxX64 => elf::write(build, Machine::X86_64),
         Target::WindowsX64 => pe::write(build, Machine::X86_64),

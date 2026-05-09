@@ -117,11 +117,23 @@ const SHN_UNDEF: u16 = 0;
 const R_AARCH64_GLOB_DAT: u64 = 1025;
 const R_X86_64_GLOB_DAT: u64 = 6;
 
-/// 4 KiB page alignment is the AArch64 minimum and what most Linuxes
-/// expect for ELF segment alignment. (Kernel page size on arm64 is
-/// configurable -- 4K, 16K, or 64K -- but ELF p_align of 0x1000 works
-/// across the board because the loader rounds up.)
-const PAGE_SIZE: u64 = 0x1000;
+/// Maximum supported page size, used both for `p_align` and for
+/// VA spacing between adjacent `PT_LOAD` segments. Distros build
+/// AArch64 Linux kernels with 4K, 16K, or **64K** pages, and the
+/// kernel can only enforce distinct permissions at page
+/// granularity. With a 64K-page kernel, two LOAD segments at e.g.
+/// `0x400000` (R+E) and `0x406000` (RW) collapse into the same
+/// kernel page; whichever permission the loader picks for that
+/// page, one of the segments ends up wrong -- and `.text` ending
+/// up non-executable manifests as `SIGSEGV (invalid permissions
+/// for mapped object)` on the first instruction.
+///
+/// `binutils ld` defaults to `-z max-page-size=0x10000` on
+/// AArch64 Linux for exactly this reason. We do the same, which
+/// trades ~60K of file-size padding (ET_EXEC binaries gain one
+/// 64K hole between the R+E and RW segments) for correctness on
+/// all three page-size configurations.
+const PAGE_SIZE: u64 = 0x10000;
 
 /// Default load address for non-PIE ET_EXEC binaries on Linux/aarch64.
 /// The kernel maps the binary at exactly this vmaddr (no slide); all

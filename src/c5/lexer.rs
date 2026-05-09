@@ -7,6 +7,74 @@ use super::error::C5Error;
 use super::symbol::Symbol;
 use super::token::{Token, Ty};
 
+/// Default struct-alignment cap when no `#pragma pack(N)` is
+/// active. Mirrors the existing aggregate-layout cap at 8 bytes
+/// (c5's IR slot width); explicit pack pragmas can lower it.
+const DEFAULT_PACK: usize = 8;
+
+/// Clamp a user-supplied pack value to `[1, DEFAULT_PACK]`. C99
+/// permits 1, 2, 4, 8, 16; we don't expose 16 because c5's
+/// struct-alignment cap is 8 and a stricter request would just
+/// inflate the alignment with no payoff. `0` is treated as
+/// "default" (matching `#pragma pack()` with no arg).
+fn clamp_pack(n: usize) -> usize {
+    if n == 0 || n > DEFAULT_PACK {
+        DEFAULT_PACK
+    } else {
+        n
+    }
+}
+
+/// One parsed `#pragma pack(...)` directive. The lexer scans the
+/// directive inline and folds it into [`Lexer::pack_stack`] via
+/// [`Lexer::apply_pack_directive`].
+#[derive(Debug, Clone, Copy)]
+enum PackDirective {
+    /// `#pragma pack(N)` -- replace top of stack with N.
+    Set(usize),
+    /// `#pragma pack()` -- replace top with DEFAULT_PACK.
+    Reset,
+    /// `#pragma pack(push, N)` -- push N onto the stack.
+    Push(usize),
+    /// `#pragma pack(pop)` -- pop one frame (no-op if at bottom).
+    Pop,
+}
+
+/// Parse a single `#`-prefix-stripped line as `pragma pack(...)`.
+/// Returns the directive on a successful match, `None` for any
+/// other shape (including malformed-pack and non-pack pragmas)
+/// so the caller can fall back to "skip the line silently".
+///
+/// Accepts the four MSVC-compatible shapes:
+///   * `pragma pack(N)`            -> [`PackDirective::Set`]
+///   * `pragma pack()`             -> [`PackDirective::Reset`]
+///   * `pragma pack(push, N)`      -> [`PackDirective::Push`]
+///   * `pragma pack(pop)`          -> [`PackDirective::Pop`]
+///
+/// The arg whitespace is liberal -- any combination of spaces /
+/// tabs is accepted between tokens to match how cpp / msvc
+/// tolerate user formatting.
+fn parse_pragma_pack_line(body: &[u8]) -> Option<PackDirective> {
+    let s = core::str::from_utf8(body).ok()?.trim();
+    let rest = s.strip_prefix("pragma")?.trim_start();
+    let rest = rest.strip_prefix("pack")?.trim_start();
+    let after_open = rest.strip_prefix('(')?;
+    let close = after_open.find(')')?;
+    let inner = after_open[..close].trim();
+    if inner.is_empty() {
+        return Some(PackDirective::Reset);
+    }
+    if inner == "pop" {
+        return Some(PackDirective::Pop);
+    }
+    if let Some(rest) = inner.strip_prefix("push") {
+        let rest = rest.trim_start();
+        let rest = rest.strip_prefix(',')?.trim_start();
+        return rest.parse::<usize>().ok().map(PackDirective::Push);
+    }
+    inner.parse::<usize>().ok().map(PackDirective::Set)
+}
+
 pub(crate) struct Lexer {
     src: Vec<u8>,
     pos: usize,
@@ -16,6 +84,28 @@ pub(crate) struct Lexer {
     pub tk: i64,
     pub ival: i64,
     pub curr_id_idx: usize,
+
+    /// `#pragma pack(N)` stack. Top of stack is the active pack value
+    /// at the current source position; struct layout (`aggregate.rs`)
+    /// reads it via [`Self::current_pack`] and clamps each field's
+    /// natural alignment by it.
+    ///
+    /// State machine:
+    ///   * `pragma pack(N)`         -- replace top of stack with N.
+    ///   * `pragma pack()`          -- replace top with the default
+    ///                                 (8 -- c5's existing layout cap).
+    ///   * `pragma pack(push, N)`   -- push N.
+    ///   * `pragma pack(pop)`       -- pop one frame; stack always
+    ///                                 keeps at least the bottom default.
+    ///
+    /// Values are clamped to `[1, 8]` because c5's IR slots at 8
+    /// and there's no use for stricter alignment than that. Updates
+    /// happen inline as the lexer scans `#pragma pack(...)` lines
+    /// (the preprocessor passes them through verbatim instead of
+    /// stripping like other pragmas, since pack is position-
+    /// dependent within the source and can't be batched up the way
+    /// `#pragma binding(...)` is).
+    pack_stack: Vec<usize>,
 }
 
 /// Side index for `Vec<Symbol>` so identifier lookup stops being O(N).
@@ -125,6 +215,58 @@ impl Lexer {
             tk: 0,
             ival: 0,
             curr_id_idx: 0,
+            // Bottom of the stack is the default pack -- c5 already
+            // caps struct alignment at 8, and that's the implicit
+            // upper bound here too. Real `#pragma pack(N)` updates
+            // happen via `apply_pack_directive`.
+            pack_stack: vec![DEFAULT_PACK],
+        }
+    }
+
+    /// Active `#pragma pack(N)` value at the current source
+    /// position. `aggregate.rs` clamps each struct field's natural
+    /// alignment by this when laying out a struct definition. The
+    /// default 8 matches c5's pre-existing struct-layout behaviour
+    /// (no packing); any explicit `#pragma pack(N)` lowers it.
+    pub fn current_pack(&self) -> usize {
+        *self.pack_stack.last().unwrap_or(&DEFAULT_PACK)
+    }
+
+    /// Apply one parsed `#pragma pack(...)` directive to the stack.
+    /// Called from the lexer when it encounters the directive
+    /// inline (the preprocessor passes pack pragmas through as
+    /// literal `#pragma pack(...)` lines rather than stripping them
+    /// like other pragmas, because pack is source-position-
+    /// dependent in a way the per-translation-unit `dylibs` /
+    /// `bindings` accumulator can't capture).
+    fn apply_pack_directive(&mut self, dir: PackDirective) {
+        match dir {
+            PackDirective::Set(n) => {
+                let n = clamp_pack(n);
+                if let Some(top) = self.pack_stack.last_mut() {
+                    *top = n;
+                } else {
+                    self.pack_stack.push(n);
+                }
+            }
+            PackDirective::Reset => {
+                if let Some(top) = self.pack_stack.last_mut() {
+                    *top = DEFAULT_PACK;
+                } else {
+                    self.pack_stack.push(DEFAULT_PACK);
+                }
+            }
+            PackDirective::Push(n) => {
+                self.pack_stack.push(clamp_pack(n));
+            }
+            PackDirective::Pop => {
+                // Always keep one frame so `current_pack()` always
+                // has an answer. Popping past the bottom is a
+                // user error in real cpp; we silently ignore here.
+                if self.pack_stack.len() > 1 {
+                    self.pack_stack.pop();
+                }
+            }
         }
     }
 
@@ -248,15 +390,27 @@ impl Lexer {
             if c == '\n' {
                 self.line += 1;
             } else if c == '#' {
-                // Skip the rest of the line. Stray `#` lines that the
-                // preprocessor didn't consume reach here -- the
-                // historical c4 lexer treated `#` as a line-comment
-                // marker, and we keep that fallback so e.g. a leading
-                // shebang line lets source files be made
-                // executable with `#!/usr/bin/env badc`.
-                while self.pos < self.src.len() && self.src[self.pos] as char != '\n' {
-                    self.pos += 1;
+                // Two `#`-line shapes survive into the lexer:
+                //   * `#pragma pack(...)` -- the preprocessor passes
+                //     pack pragmas through verbatim (they're
+                //     source-position-dependent, unlike the binding
+                //     / dylib / export pragmas the preprocessor
+                //     batches). Parse the args and fold into
+                //     `pack_stack`.
+                //   * Any other `#` line -- preserve the historical
+                //     c4 line-comment fallback (shebangs,
+                //     unrecognised pragmas, stray `#`s the
+                //     preprocessor didn't consume). Skip to EOL.
+                let line_start = self.pos;
+                let mut line_end = line_start;
+                while line_end < self.src.len() && self.src[line_end] as char != '\n' {
+                    line_end += 1;
                 }
+                let body = &self.src[line_start..line_end];
+                if let Some(dir) = parse_pragma_pack_line(body) {
+                    self.apply_pack_directive(dir);
+                }
+                self.pos = line_end;
             } else if c.is_ascii_alphabetic() || c == '_' {
                 let start = self.pos - 1;
                 let mut hash: i64 = c as i64;

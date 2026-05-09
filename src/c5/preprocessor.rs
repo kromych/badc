@@ -550,6 +550,26 @@ impl Preprocessor {
                                     self.pragma_once_files.insert(filename.to_string());
                                 }
                                 PragmaDirective::Other => {
+                                    // `#pragma pack(...)` is source-position-
+                                    // sensitive: a struct definition that
+                                    // follows a `pack(1)` directive packs at
+                                    // 1, but a struct AFTER a subsequent
+                                    // `pack()` reverts. We can't batch those
+                                    // up through the preprocessor's
+                                    // `dylibs` / `bindings` accumulator the
+                                    // way other pragmas are handled --
+                                    // we'd lose ordering. Pass the line
+                                    // through verbatim so the lexer
+                                    // reaches it inline; the lexer's `#`
+                                    // handler folds the directive into
+                                    // its `pack_stack`.
+                                    if pragma_is_pack(args) {
+                                        out.push('#');
+                                        out.push_str(directive);
+                                        out.push('\n');
+                                        idx_iter += 1;
+                                        continue;
+                                    }
                                     self.parse_pragma(args, line_no)?;
                                 }
                             }
@@ -1316,6 +1336,21 @@ fn parse_pragma_directive(args: &str) -> PragmaDirective {
     } else {
         PragmaDirective::Other
     }
+}
+
+/// True when `args` is the head of a `pack(...)` pragma -- the
+/// preprocessor passes those through verbatim so the lexer can
+/// fold them into its `pack_stack` at the right source position
+/// (see the `Directive::Pragma` arm in `process_named`).
+fn pragma_is_pack(args: &str) -> bool {
+    let trimmed = args.trim_start();
+    let Some(rest) = trimmed.strip_prefix("pack") else {
+        return false;
+    };
+    // `pack(...)` -- the next non-whitespace byte must be `(`.
+    // Anything else (`packfoo`, `pack_extra`) is a different
+    // pragma the preprocessor still wants to silently swallow.
+    rest.trim_start().starts_with('(')
 }
 
 fn parse_directive(rest: &str) -> Directive<'_> {

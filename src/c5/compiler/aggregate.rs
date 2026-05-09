@@ -344,13 +344,21 @@ impl Compiler {
                     // their nested alignment. Union fields all sit
                     // at offset 0 and contribute their size to the
                     // running max.
+                    //
+                    // `#pragma pack(N)` clamps each field's natural
+                    // alignment by N (and the aggregate's overall
+                    // alignment). The lexer tracks the active pack
+                    // value via [`Lexer::current_pack`]; default is
+                    // 8 (no-op) so unpacked structs lay out exactly
+                    // as before.
+                    let pack = self.lex.current_pack();
                     let elem_size = self.size_of_type(field_ty);
                     let field_storage = if field_array_size > 0 {
                         elem_size * field_array_size as usize
                     } else {
                         elem_size
                     };
-                    let field_align = self.align_of_type(field_ty);
+                    let field_align = self.align_of_type(field_ty).min(pack);
                     if field_align > struct_align {
                         struct_align = field_align;
                     }
@@ -397,13 +405,20 @@ impl Compiler {
         // 8-wide and never asks for stricter alignment, so going
         // above 8 buys nothing (and would force structurally
         // identical code to handle 16-byte SIMD-style aligns).
-        let struct_align = struct_align.min(8);
+        // `#pragma pack(N)` further clamps the cap; field-level
+        // clamping above already prevents struct_align from
+        // exceeding pack, but cap here too so an empty struct
+        // under `pack(1)` still ends up with align=1.
+        let struct_align = struct_align.min(8).min(self.lex.current_pack());
         // Pad the struct's tail up to its alignment so consecutive
         // elements of an array preserve every field's natural
-        // alignment. Empty / one-byte structs stay at the c5 floor
-        // of 8 bytes (no zero-sized aggregates).
+        // alignment. Empty structs floor at 1 byte (so a `struct
+        // *p` always has a meaningful sizeof for pointer
+        // arithmetic, matching GCC's empty-struct extension);
+        // every other struct's size is whatever the field cursor
+        // ended up at, rounded to the struct's own alignment.
         let total = round_up(offset, struct_align);
-        self.structs[struct_id].size = total.max(8);
+        self.structs[struct_id].size = total.max(1);
         self.structs[struct_id].align = struct_align;
         Ok(struct_id)
     }

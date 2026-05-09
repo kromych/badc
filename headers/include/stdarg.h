@@ -7,8 +7,13 @@
 // is the fixed-arg count.
 //
 // Each c5 stack slot is 16 bytes (8 bytes of value + 8 bytes of
-// pad), and an `int *` in c5 advances 8 bytes per `+1`, so "skip
-// one slot" is `+2`.
+// pad). Pointer arithmetic on `long long *` strides 8 bytes per
+// `+1` on every supported target -- LP64 (Linux/macOS) and LLP64
+// (Windows) both -- so "skip one 16-byte slot" is `+2`. We use
+// `long long *` rather than `long *` because `long` is only 4
+// bytes on Windows LLP64 and `long *` would stride 4 there,
+// landing mid-slot. `int *` has the same 4-byte-stride problem
+// on every target.
 //
 // Usage:
 //
@@ -34,10 +39,14 @@
 
 #pragma once
 
-// c5 doesn't have typedef, so va_list is a #define that expands to
-// the underlying int * type. `va_list ap;` becomes `int * ap;`.
-#define va_list            int *
+// `va_list` is just a cursor over the c5 stack. Storing it as
+// `long long *` means pointer arithmetic strides 8 bytes
+// everywhere -- one half of a c5 16-byte slot -- so the `+2` in
+// the macros below advances exactly one slot on LP64 (Linux/macOS)
+// and LLP64 (Windows) alike. `int *` (4-byte stride) and `long *`
+// (4 on Windows, 8 on LP64) would both land mid-slot somewhere.
+typedef long long *va_list;
 
-#define va_start(ap, last) ap = ((int *)&(last)) + 2
+#define va_start(ap, last) ap = ((long long *)&(last)) + 2
 #define va_arg(ap, T)      (ap = ap + 2, *(T *)(ap - 2))
 #define va_end(ap)

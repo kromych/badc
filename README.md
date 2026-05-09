@@ -100,9 +100,16 @@ Use `--interp` if you want those.
 
 ### What is supported
 
-#### From the C language side
-
-** TBD **
+A summary of what the dialect parses + lowers, and where it
+diverges from C99, lives in [`c99-gaps.md`](c99-gaps.md). Short
+version: c5 covers most of the language (full preprocessor, the
+integer + float arithmetic surface, structs / unions / bitfields
+/ enums / typedef, function pointers, varargs, `_Thread_local`,
+anonymous struct/union members, `#pragma pack(N)`, ...) on a
+fixed LP64 data model. The doc enumerates rejected idioms,
+divergent behaviour, and the c5-only extensions (`#pragma
+dylib` / `binding` / `export`, `#pragma once`, the bytecode VM,
+the in-process JIT).
 
 #### From the pre-processor side
 
@@ -110,13 +117,19 @@ The preprocessor pre-defines a small standard set, double-underscore
 wrapped in the gcc / clang / msvc convention so they don't collide
 with user identifiers:
 
-    __BADC_VERSION__   "0.1.0"           crate version
-    __BADC_TARGET__    "macos-aarch64"   canonical target id
+    __BADC_VERSION__   "0.0.6"           crate version (string literal)
+    __BADC_TARGET__    "macos-aarch64"   canonical target id (string literal)
     __aarch64__ / __arm64__              AArch64 targets
     __x86_64__ / __amd64__               x86_64 targets
+    _WIN32 / _WIN64                      Windows targets only
     __BADC_WINDOWS__                     Windows targets only
+    __APPLE__                            macOS target only
+    __linux__                            Linux targets only
 
-** TBD **
+The MSVC mimicry surface (`_MSC_VER` / `__MINGW32__` / `__int64`
+/ `__declspec` / etc.) lives in `headers/include/msvc_compat.h`
+and is opted into per translation unit with
+`-include msvc_compat.h`.
 
 ### Per-target headers and bindings
 
@@ -305,9 +318,39 @@ in-process path the same way.
 
 CI runs the matrix on `ubuntu-latest`, `ubuntu-24.04-arm`,
 `macos-latest`, `windows-latest`, and `windows-11-arm`. The two
-Linux runners additionally exercise the matching Windows PE
-through WINE as a cross-check against the native Windows runners
--- they need to set `BADC_RUN_WINE=1` to opt in to that lane.
-A bare `cargo test` on a developer machine skips the WINE lane (so it
-doesn't shell out to wine for every PE fixture even on a wine-
-installed laptop); set `BADC_RUN_WINE=1` locally to run it.
+Windows runners additionally run the sqlite3 amalgamation smoke
+(`demos/sqlite3/smoke.py`) end-to-end. The PE-via-WINE lane is
+gated on `BADC_RUN_WINE=1`; a bare `cargo test` on a developer
+machine skips it, and CI doesn't currently set it (the native
+Windows runners cover the same surface directly).
+
+## Tools
+
+`tools/core-walker.py` walks the saved-rbp chain in a Linux ELF
+core dump and resolves every return address to the matching
+`[bc=N] OP` line in a `--dump-asm` listing. Useful when an
+optimized `-O` build crashes -- the source-line debug map is
+dropped at `-O`, but a non-PIE x64 binary lets us subtract the
+fixed `0x400000` load base from each saved return address and
+look the resulting file offset up in the dump. Modes:
+
+* default: walk the rbp chain, resolve each frame's saved
+  return address.
+* `--dump-around-rbp`: print the 16 8-byte slots around `rbp`.
+* `--scan-stack`: ignore the rbp chain, scan upward from `rsp`
+  for any 8-byte slot that looks like a code address, and
+  resolve each. Useful when stack corruption broke the rbp
+  chain -- the actual return addresses are usually still on the
+  stack, just no longer reachable through the saved-rbp links.
+* `--list-segments`: list every PT_LOAD in the core file with
+  its vaddr range. Useful for understanding where the stack and
+  the emulator's mappings ended up after a corruption.
+
+The "subtract the load base, look up in dump-asm" idea was
+suggested by [@kromych](https://github.com/kromych) while we were
+chasing a `-O`-only sqlite3 crash where every higher-level
+debugger path was blocked (orbstack's emulated x86_64 has no
+usable ptrace; lldb on macOS arm64 sees a different binary
+layout). It cuts straight through to "name the function that
+was running when we crashed" without needing a working debugger
+on the target.

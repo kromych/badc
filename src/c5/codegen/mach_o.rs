@@ -1236,25 +1236,25 @@ struct TlvBindContext {
 /// `data_section_offset_in_segment + data_offset`.
 fn build_rebase_opcodes(
     data_relocs: &[crate::c5::program::DataReloc],
+    code_relocs: &[crate::c5::program::CodeReloc],
     segment: u8,
     data_section_offset_in_segment: u64,
 ) -> Vec<u8> {
-    if data_relocs.is_empty() {
+    if data_relocs.is_empty() && code_relocs.is_empty() {
         return Vec::new();
     }
     let mut out = Vec::new();
     out.push(REBASE_OPCODE_SET_TYPE_IMM | REBASE_TYPE_POINTER);
-    // Sort relocs by data_offset so we can walk them with a
-    // single SET_SEGMENT + DO_REBASE_ULEB_TIMES burst when
-    // contiguous, falling back to one explicit
-    // SET_SEGMENT_AND_OFFSET_ULEB + DO_REBASE per entry
-    // otherwise. Today's compiler emits at most a handful
-    // of relocs so we use the simple per-entry form;
-    // contiguous-burst is a future optimization.
-    let mut sorted: Vec<_> = data_relocs.to_vec();
-    sorted.sort_by_key(|r| r.data_offset);
-    for r in &sorted {
-        let seg_off = data_section_offset_in_segment + r.data_offset;
+    // Both data-pointer and code-pointer slots need the same
+    // pointer-typed rebase opcode -- dyld just adds the slide. Sort
+    // the merged list by data_offset so a future contiguous-burst
+    // pass can walk it cleanly.
+    let mut all: Vec<u64> = Vec::with_capacity(data_relocs.len() + code_relocs.len());
+    all.extend(data_relocs.iter().map(|r| r.data_offset));
+    all.extend(code_relocs.iter().map(|r| r.data_offset));
+    all.sort();
+    for &off in &all {
+        let seg_off = data_section_offset_in_segment + off;
         out.push(REBASE_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB | (segment & 0x0F));
         put_uleb128(&mut out, seg_off);
         // `REBASE_OPCODE_DO_REBASE_IMM_TIMES | 1` -- one entry,
@@ -1585,6 +1585,7 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
     );
     let rebase_ops = build_rebase_opcodes(
         &build.data_relocs,
+        &build.code_relocs,
         SEG_INDEX_DATA,
         data_section_offset_in_segment,
     );
@@ -1890,6 +1891,37 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
         }
         data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
     }
+    // Function-pointer initializers in the data segment: pre-fill
+    // each slot with the function's preferred-load-address VA
+    // (text vmaddr + native code offset). dyld adds the slide
+    // delta when it walks the rebase opcode stream below.
+    for r in &build.code_relocs {
+        let bc_pc = r.target_bc_pc as usize;
+        // Prefer the per-function arg-shuffling thunk; see pe.rs's
+        // matching comment. AAPCS64 doesn't require this on its own
+        // but threading both initializer paths through the same
+        // thunk lookup keeps the per-format writers uniform.
+        let native_off = build
+            .func_thunk_offsets
+            .get(&bc_pc)
+            .copied()
+            .or_else(|| build.bytecode_to_native.get(bc_pc).copied())
+            .unwrap_or(usize::MAX);
+        if native_off == usize::MAX {
+            return Err(C5Error::Compile(format!(
+                "Mach-O: code reloc references missing bytecode pc {bc_pc}"
+            )));
+        }
+        let preferred_va = code_vmaddr_base + native_off as u64;
+        let off = r.data_offset as usize;
+        if off + 8 > data_with_relocs.len() {
+            return Err(C5Error::Compile(format!(
+                "Mach-O: code reloc offset {off:#x} past end of __data ({})",
+                data_with_relocs.len()
+            )));
+        }
+        data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
+    }
     out.extend_from_slice(&data_with_relocs);
     if tls_present {
         // __thread_vars: one 24-byte descriptor per TLS variable.
@@ -1970,6 +2002,7 @@ mod tests {
             data_fixups: Vec::new(),
             func_fixups: Vec::new(),
             bytecode_to_native: Vec::new(),
+            func_thunk_offsets: alloc::collections::BTreeMap::new(),
             imports: ResolvedImports {
                 imports: vec![ResolvedImport {
                     binding_idx: 0,
@@ -1978,6 +2011,7 @@ mod tests {
                     dylib_index: 0,
                     is_variadic: false,
                     fixed_args: 3,
+                    return_type_tag: 0,
                 }],
                 dylibs: vec![ResolvedDylib {
                     name: "libc".into(),
@@ -1989,6 +2023,7 @@ mod tests {
             tls_init_size: 0,
             tls_index_fixups: Vec::new(),
             data_relocs: Vec::new(),
+            code_relocs: Vec::new(),
             exports: Vec::new(),
             output_kind: super::super::OutputKind::Executable,
             dllmain_pc: None,

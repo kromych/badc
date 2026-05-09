@@ -1,3 +1,4 @@
+use std::io::{IsTerminal, Read, Write};
 use std::path::PathBuf;
 
 use badc::{
@@ -7,6 +8,9 @@ use badc::{
 
 const USAGE: &str = "\
 usage: badc [options] <source.c> [program-args...]
+       badc [options] -    [program-args...]   (read source from stdin)
+       cat foo.c | badc [options]              (same -- stdin auto-detected
+                                                when not a terminal)
 
 Output mode -- pick at most one (defaults to \"compile to native binary\"):
   --interp                 Run under the bytecode VM (with optional safety net).
@@ -18,6 +22,11 @@ Output mode -- pick at most one (defaults to \"compile to native binary\"):
                            No source is executed.
   --list-symbols           Print pre-defined keywords / library calls /
                            constants and exit. Takes no source.
+  --dump-headers           Print every bundled header (with file
+                           separators) to stdout and exit. Useful
+                           for extracting them into `./include` so
+                           you can override one without rebuilding
+                           badc.
 
 Compile knobs:
   -O, --optimize           Enable the bytecode optimizer + native
@@ -30,15 +39,43 @@ Compile knobs:
   -o <path>                Output path. Default depends on output
                            mode and target (.exe / .dylib / .so /
                            .dll suffixes added as appropriate).
+                           Pass `-` (or omit -o entirely when
+                           stdout is a pipe) to write the binary
+                           bytes to stdout for shell-pipeline use.
+  -D NAME[=VALUE]          Predefine an object-like macro (`-D X`
+                           is equivalent to `-D X=1`). Source-level
+                           `#define` / `#undef` still apply on top.
+  -U NAME                  Drop a predefine before the source
+                           runs, including any default predefine.
+  -I path                  Add a filesystem header search path
+                           probed before the bundled in-binary
+                           headers on #include. Repeatable. The
+                           current directory's `./include` and
+                           `./headers/include` are auto-added if
+                           they exist, so a user-edited copy of
+                           a bundled header can override the
+                           one shipped in the badc binary.
+  -include FILE            Splice the named header in front of
+                           the source as if `#include \"FILE\"` had
+                           been written at the top of the
+                           translation unit. Resolved through
+                           the same -I / embedded-registry chain
+                           as a normal #include. Repeatable;
+                           order matters (later flags expand
+                           after earlier ones). Used to opt
+                           translation units into the MSVC-
+                           shape predefines via
+                           `-include msvc_compat.h` when
+                           targeting Windows.
 
 VM-only knobs (require --interp):
   --track-pointers         Allocation tracking + use-after-free guard.
   --trace                  Per-instruction stdout trace (noisy).
 
 Mutually exclusive: --interp / --jit / --shared / --dump-asm /
---list-symbols all pick the output mode; you can only pick one.
---track-pointers and --trace require --interp. -o makes no sense
-under --interp / --list-symbols.";
+--list-symbols / --dump-headers all pick the output mode; you can
+only pick one. --track-pointers and --trace require --interp. -o
+makes no sense under --interp / --list-symbols / --dump-headers.";
 
 /// Where the AOT codesign tool lives on every macOS install. Hardcoded
 /// so we don't accidentally pick up a homebrew shim that signs differently.
@@ -65,6 +102,9 @@ enum Mode {
     /// `--list-symbols` -- print the pre-defined symbol table
     /// and exit. Takes no source file.
     ListSymbols,
+    /// `--dump-headers` -- print every bundled header (with
+    /// file separators) to stdout and exit. Takes no source.
+    DumpHeaders,
 }
 
 impl Mode {
@@ -76,6 +116,7 @@ impl Mode {
             Mode::Jit => "--jit",
             Mode::DumpAsm => "--dump-asm",
             Mode::ListSymbols => "--list-symbols",
+            Mode::DumpHeaders => "--dump-headers",
         }
     }
 }
@@ -92,6 +133,10 @@ fn main() {
     let mut optimize_flag = false;
     let mut output_path: Option<PathBuf> = None;
     let mut target_spec: Option<String> = None;
+    let mut defines: Vec<(String, String)> = Vec::new();
+    let mut undefines: Vec<String> = Vec::new();
+    let mut include_paths: Vec<String> = Vec::new();
+    let mut force_includes: Vec<String> = Vec::new();
 
     let mut iter = raw.into_iter();
     let prog0 = iter.next().unwrap_or_default();
@@ -114,6 +159,7 @@ fn main() {
             "--track-pointers" => track_pointers = true,
             "--trace" => trace = true,
             "--list-symbols" => claim(&mut mode, Mode::ListSymbols),
+            "--dump-headers" => claim(&mut mode, Mode::DumpHeaders),
             "--optimize" | "-O" => optimize_flag = true,
             "--dump-asm" => claim(&mut mode, Mode::DumpAsm),
             "--jit" => claim(&mut mode, Mode::Jit),
@@ -129,10 +175,74 @@ fn main() {
                     std::process::exit(1);
                 }
             },
+            "-D" => match iter.next() {
+                Some(s) => match s.split_once('=') {
+                    Some((name, body)) => defines.push((name.to_string(), body.to_string())),
+                    None => defines.push((s, String::from("1"))),
+                },
+                None => {
+                    eprintln!("badc: -D requires NAME[=VALUE]");
+                    std::process::exit(1);
+                }
+            },
+            s if s.starts_with("-D") && s.len() > 2 => {
+                let body = &s[2..];
+                match body.split_once('=') {
+                    Some((name, body)) => defines.push((name.to_string(), body.to_string())),
+                    None => defines.push((body.to_string(), String::from("1"))),
+                }
+            }
+            "-U" => match iter.next() {
+                Some(s) => undefines.push(s),
+                None => {
+                    eprintln!("badc: -U requires a NAME");
+                    std::process::exit(1);
+                }
+            },
+            s if s.starts_with("-U") && s.len() > 2 => {
+                undefines.push(s[2..].to_string());
+            }
+            "-I" => match iter.next() {
+                Some(p) => include_paths.push(p),
+                None => {
+                    eprintln!("badc: -I requires a path argument");
+                    std::process::exit(1);
+                }
+            },
+            s if s.starts_with("-I") && s.len() > 2 => {
+                include_paths.push(s[2..].to_string());
+            }
+            // gcc / clang -include FILE: splice the named header
+            // in front of the source as if `#include "FILE"` had
+            // been written at the top of the translation unit.
+            // Repeatable; later flags expand top-to-bottom in the
+            // order given. The header is resolved through the
+            // same -I / embedded-registry chain as a normal
+            // `#include`, so a build driver can drop a checked-in
+            // copy into `./include/` to override the bundled one.
+            "-include" => match iter.next() {
+                Some(name) => force_includes.push(name),
+                None => {
+                    eprintln!("badc: -include requires a header name");
+                    std::process::exit(1);
+                }
+            },
             s if s.starts_with("--target=") => {
                 target_spec = Some(s["--target=".len()..].to_string());
             }
             _ => args.push(arg),
+        }
+    }
+
+    // Auto-add common header overlays so a developer iterating on
+    // the bundled headers can edit `./include/...` (or
+    // `./headers/include/...` from the repo root) and have the
+    // change take effect without rebuilding badc. User-supplied
+    // -I paths still win because they were pushed earlier in the
+    // search order.
+    for default in ["./include", "./headers/include"] {
+        if std::path::Path::new(default).is_dir() && !include_paths.iter().any(|p| p == default) {
+            include_paths.push(default.to_string());
         }
     }
 
@@ -157,7 +267,12 @@ fn main() {
     }
 
     // -o makes no sense for modes that don't write to disk.
-    if output_path.is_some() && matches!(mode, Mode::Interp | Mode::ListSymbols | Mode::Jit) {
+    if output_path.is_some()
+        && matches!(
+            mode,
+            Mode::Interp | Mode::ListSymbols | Mode::DumpHeaders | Mode::Jit
+        )
+    {
         eprintln!(
             "badc: -o is only meaningful for native compilation \
              (current mode is {})",
@@ -171,21 +286,58 @@ fn main() {
         return;
     }
 
-    if args.len() < 2 {
-        eprintln!("{USAGE}");
-        std::process::exit(1);
+    if mode == Mode::DumpHeaders {
+        dump_bundled_headers();
+        return;
     }
 
-    let path = &args[1];
-    let mut file = std::fs::File::open(path).expect("Could not open file");
-    let mut contents = String::new();
-    std::io::Read::read_to_string(&mut file, &mut contents).expect("Could not read file");
+    // Source resolution. Three shapes are accepted:
+    //   * `badc <path>` -- positional source file. (Existing
+    //     default path -- unchanged.)
+    //   * `badc -`      -- read source from stdin explicitly.
+    //   * `cat foo.c | badc` -- no positional, stdin is a pipe;
+    //     auto-detect and read from stdin. Falls back to the
+    //     usage error when stdin is a terminal (= the user
+    //     forgot the source file).
+    // `path` keeps a synthetic value (`"-"` or `"<stdin>"`) when
+    // the source came from stdin so default_output_path /
+    // jit_run / VM `argv[0]` reads still get a sensible name.
+    let read_stdin_source = || -> String {
+        let mut s = String::new();
+        std::io::stdin()
+            .read_to_string(&mut s)
+            .expect("Could not read stdin");
+        s
+    };
+    let (path, contents): (String, String) = if args.len() >= 2 && args[1] != "-" {
+        let p = args[1].clone();
+        let mut file = std::fs::File::open(&p).expect("Could not open file");
+        let mut s = String::new();
+        Read::read_to_string(&mut file, &mut s).expect("Could not read file");
+        (p, s)
+    } else if (args.len() >= 2 && args[1] == "-") || !std::io::stdin().is_terminal() {
+        // Reserve `-` in argv[0]'s slot so VM-mode `argv[0]` gets
+        // something readable rather than the empty string.
+        ("-".to_string(), read_stdin_source())
+    } else {
+        eprintln!("{USAGE}");
+        std::process::exit(1);
+    };
 
-    // Thread the user's `--target` choice into the compiler so the
-    // preprocessor pulls in `headers/badc-{target}.h` rather than the
-    // default. The bytecode itself is target-independent; only the
-    // auto-prepended header and the resolved import map vary.
-    let program = match Compiler::with_target(contents, target).compile() {
+    // Thread the user's `--target` choice plus any `-D` / `-U`
+    // predefines into the compiler. The bytecode itself is target-
+    // independent; only the resolved binding map and the
+    // preprocessor predefines vary.
+    let program = match Compiler::with_full_options(
+        contents,
+        target,
+        &defines,
+        &undefines,
+        &include_paths,
+        &force_includes,
+    )
+    .compile()
+    {
         Ok(p) => p,
         Err(e) => {
             eprintln!("{}", e);
@@ -193,7 +345,7 @@ fn main() {
         }
     };
 
-    let program = if optimize_flag {
+    let program = if optimize_flag && std::env::var("BADC_BC_OPT_OFF").is_err() {
         match optimize(program) {
             Ok(p) => p,
             Err(e) => {
@@ -268,13 +420,30 @@ fn main() {
             }
         }
         Mode::NativeExecutable | Mode::SharedLibrary => {
-            // Default: lower to a native binary, write it,
-            // mark it executable, and (on macOS hosts emitting
-            // Mach-O) ad-hoc codesign so dyld accepts it.
-            let out = output_path.unwrap_or_else(|| default_output_path(path, target, mode));
-            emit_native_binary(&program, &out, target, native_opts, mode);
+            // Default: lower to a native binary, write it, mark
+            // it executable, and (on macOS hosts emitting Mach-O)
+            // ad-hoc codesign so dyld accepts it.
+            //
+            // gh #28 piped-output: if the user passed `-o -` or
+            // didn't specify -o and stdout is a pipe (= we're in
+            // the middle of a shell pipeline like
+            // `... | badc | run-on-target`), write the bytes
+            // straight to stdout instead of disk. The
+            // mark-executable + codesign + per-target nag messages
+            // are skipped -- the caller knows what they're doing.
+            let pipe_to_stdout = match output_path.as_deref() {
+                Some(p) => p == std::path::Path::new("-"),
+                None => !std::io::stdout().is_terminal(),
+            };
+            if pipe_to_stdout {
+                emit_native_binary_to_stdout(&program, target, native_opts);
+            } else {
+                let out = output_path.unwrap_or_else(|| default_output_path(&path, target, mode));
+                emit_native_binary(&program, &out, target, native_opts, mode);
+            }
         }
         Mode::ListSymbols => unreachable!("handled above"),
+        Mode::DumpHeaders => unreachable!("handled above"),
     }
 }
 
@@ -317,6 +486,26 @@ fn default_output_path(source: &str, target: Target, mode: Mode) -> PathBuf {
 /// out to `codesign --sign -` so the loader will accept it. ELF
 /// binaries don't need signing; cross-format combinations print an
 /// advisory line and skip the signing step.
+/// Lower the program to a native binary and write it to stdout
+/// rather than a file on disk. Used by gh #28's pipe-mode (the
+/// caller redirected stdout, or asked for `-o -`). No
+/// mark-executable / codesign / per-target reminder -- the
+/// downstream of the pipe gets to handle those.
+fn emit_native_binary_to_stdout(program: &badc::Program, target: Target, options: NativeOptions) {
+    let bytes = match emit_native_with_options(program, target, options) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    };
+    if let Err(e) = std::io::stdout().write_all(&bytes) {
+        eprintln!("badc: failed to write binary to stdout: {e}");
+        std::process::exit(1);
+    }
+    let _ = std::io::stdout().flush();
+}
+
 fn emit_native_binary(
     program: &badc::Program,
     out: &std::path::Path,
@@ -419,6 +608,26 @@ fn codesign(path: &std::path::Path) {
 /// library functions, and integer constants -- grouped by kind. Useful
 /// for scripting (`badc --list-symbols | grep PROT_`) and for spotting
 /// what's available without `#include`.
+/// `--dump-headers` writer. Prints every bundled header to stdout
+/// with a one-line `// ===== <name> =====` separator before each
+/// body, suitable for piping through `awk` to extract a subset
+/// or for redirecting the whole stream to a directory tree (see
+/// the `--help` blurb -- the conventional shape is to redirect
+/// into `./include` and let `-I.` plus future filesystem search
+/// override the embedded copy).
+fn dump_bundled_headers() {
+    for (name, body) in badc::embedded_headers() {
+        println!("// ===== {name} =====");
+        // Bodies already end with `\n`; `print!` rather than
+        // `println!` so we don't add a stray blank line between
+        // the last byte and the next separator.
+        print!("{body}");
+        if !body.ends_with('\n') {
+            println!();
+        }
+    }
+}
+
 fn print_predefined_symbols() {
     let symbols = predefined_symbols();
 

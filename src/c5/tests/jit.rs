@@ -166,11 +166,42 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("for_loop.c", 10),
     ("recursion_factorial.c", 120),
     ("pointers.c", 200),
-    ("pointer_arithmetic_scaling.c", 108),
+    ("pointer_arithmetic_scaling.c", 104), // sizeof(int) = 4
     ("expression_precedence.c", 1),
     ("variable_shadowing.c", 10),
     ("pointer_arithmetic.c", 3),
     ("predefined_constants.c", 0),
+    ("c99_qualifiers.c", 0),
+    ("integer_suffixes.c", 0),
+    ("predefined_macros.c", 0),
+    ("macro_operators.c", 0),
+    ("typedef_basic.c", 0),
+    ("local_init_and_block_scope.c", 0),
+    ("arrays_basic.c", 0),
+    ("function_pointer_typedefs.c", 0),
+    ("unions_basic.c", 0),
+    ("array_initializers.c", 0),
+    ("struct_initializers.c", 0),
+    ("enum_tag_types.c", 0),
+    ("bitfields.c", 0),
+    ("struct_layout.c", 0),
+    ("anonymous_aggregates.c", 0),
+    ("static_locals.c", 0),
+    ("large_stack_frame.c", 42),
+    ("octal_literal.c", 42),
+    ("short_types.c", 42),
+    ("long_long_distinct.c", 0),
+    ("signed_cast_extends.c", 0),
+    ("fn_ptr_struct_return.c", 0),
+    ("static_init_cast_funcptr.c", 0),
+    ("static_init_struct_fp_call.c", 0),
+    ("libc_data_globals.c", 0),
+    ("stdint_widths.c", 0),
+    ("fd_set_macros.c", 0),
+    ("fn_ptr_explicit_deref.c", 42),
+    ("sys_addr_in_static_init.c", 42),
+    ("libc_struct_buf_size.c", 42),
+    ("libc_basic.c", 0),
     ("memset_mcmp.c", 42),
     ("memcpy_basic.c", 'A' as i32),
     ("struct_basic.c", 25),
@@ -185,7 +216,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("printf.c", 0),
     ("shebang.c", 7),
     ("adjacent_strings.c", 'f' as i32),
-    ("sizeof_with_write.c", 24),
+    ("sizeof_with_write.c", 16), // 4 + 4 + 8
     ("function_pointers.c", 150),
     ("nested_function_calls.c", 100),
     ("quicksort.c", 0),
@@ -237,6 +268,23 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("struct_by_value_param.c", 0),
     // Struct returned by value via the hidden out-pointer ABI.
     ("struct_by_value_return.c", 0),
+    // Unsigned-integer comparisons: pin that comparing a u32 / u64 /
+    // u8 against a value with the high bit set uses unsigned
+    // semantics (the dialect emits Op::Ult/Ugt/Ule/Uge for those
+    // operands and reaches them through every backend).
+    ("unsigned_compare.c", 0),
+    // `static const unsigned char arr[]` with 1-byte stride. The
+    // size_of_type / pointee scaling helpers strip the unsigned bit
+    // before classifying, so indexing scales by 1 not 8.
+    ("unsigned_char_array.c", 0),
+    // Compound assignment (`+=`, `-=`) on unsigned int / long /
+    // char: must NOT scale the RHS by element size (the
+    // `lhs_ty > Ty::Ptr` heuristic tripped on the unsigned bit).
+    ("unsigned_compound_assign.c", 0),
+    // Exhaustive coverage of integer ops across char/int/long
+    // widths and signed/unsigned. Catches regressions in the
+    // type-tag plumbing at one fixture.
+    ("integer_ops_exhaustive.c", 0),
     // `thread_local_*.c` aren't here -- the JIT path's host is
     // macOS arm64 in this repo, where TLS lowering isn't
     // implemented yet (Mach-O __thread_data + dyld

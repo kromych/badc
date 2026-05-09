@@ -86,8 +86,8 @@ fn file_io() {
 
 #[test]
 fn pointer_arithmetic_scaling() {
-    // p+1 advances by sizeof(int)=8 bytes.
-    assert_eq!(run_fixture("pointer_arithmetic_scaling.c"), 108);
+    // p+1 advances by sizeof(int)=4 bytes (`int` is 32-bit).
+    assert_eq!(run_fixture("pointer_arithmetic_scaling.c"), 104);
 }
 
 #[test]
@@ -143,8 +143,8 @@ fn sizeof_threads_through_malloc_write_and_return() {
     // sizeof(struct Packet) used in three positions in one program:
     // malloc size, write count, and the function's return value. Tests
     // that the same constant survives arithmetic and call-site
-    // propagation. struct Packet has 3 x 8-byte fields -> 24.
-    assert_eq!(run_fixture("sizeof_with_write.c"), 24);
+    // propagation. layout: code(4) + payload(4) + label(8) = 16.
+    assert_eq!(run_fixture("sizeof_with_write.c"), 16);
 }
 
 #[test]
@@ -218,6 +218,163 @@ fn predefined_constants_are_visible() {
     // an integer constant the lexer pre-binds before any user code is
     // parsed. Returns 0 if every comparison holds.
     assert_eq!(run_fixture("predefined_constants.c"), 0);
+}
+
+#[test]
+fn c99_qualifiers_parse_as_no_ops() {
+    // const, volatile, restrict, signed, unsigned, short, long, _Bool,
+    // register, auto, inline -- recognised by the lexer and consumed at
+    // every declaration position the parser visits. Returns 0 if every
+    // shape parsed and ran.
+    assert_eq!(run_fixture("c99_qualifiers.c"), 0);
+}
+
+#[test]
+fn integer_literal_suffixes_are_consumed() {
+    // u/U/l/L/ll/LL/ULL etc. on decimal and hex integer literals --
+    // accepted by the lexer and the value preserved verbatim (c5 has a
+    // single 64-bit int representation; the suffix is informational).
+    // Returns 0 if every literal lands at the expected value.
+    assert_eq!(run_fixture("integer_suffixes.c"), 0);
+}
+
+#[test]
+fn static_locals() {
+    // `static T name [= init];` inside a function gets a
+    // persistent slot in the data segment instead of the stack
+    // frame. Counters, cached state, etc. survive across calls.
+    // Two functions with the same-named static each have an
+    // independent slot.
+    assert_eq!(run_fixture("static_locals.c"), 0);
+}
+
+#[test]
+fn bitfields_basic() {
+    // bitfields pack into shared 8-byte storage units;
+    // reads use Li/Shr/And; writes use load-clear-shift-or-store.
+    // Pins both single-bit flags and wider bitfields, plus
+    // mutation that must not disturb adjacent bits.
+    assert_eq!(run_fixture("bitfields.c"), 0);
+}
+
+#[test]
+fn enum_tag_types() {
+    // `enum Foo { ... };` registers a tag whose constants
+    // resolve to integers; `enum Foo` then works as a type spec
+    // (equivalent to int in c5) in parameter / return / local /
+    // array-dimension positions.
+    assert_eq!(run_fixture("enum_tag_types.c"), 0);
+}
+
+#[test]
+fn struct_initializers() {
+    // struct initializers (designated + positional + mixed),
+    // including function-pointer fields that need a CodeReloc so
+    // the per-format writers patch the slot to the runtime code
+    // address. Plain-data struct globals also covered.
+    assert_eq!(run_fixture("struct_initializers.c"), 0);
+}
+
+#[test]
+fn array_initializers() {
+    // string-literal and brace-list array initializers,
+    // size-inferred and explicit-size shapes, at both file scope
+    // and function scope.
+    assert_eq!(run_fixture("array_initializers.c"), 0);
+}
+
+#[test]
+fn unions_basic() {
+    // unions: layout shares storage among members; field
+    // access uses the same path as struct fields with all offsets
+    // = 0 and total size = max(member size). Tagged-union shape
+    // (struct tag + nested union) also exercised.
+    assert_eq!(run_fixture("unions_basic.c"), 0);
+}
+
+#[test]
+fn function_pointer_typedefs_and_fields() {
+    // `typedef RET (*Name)(args);`, function-pointer struct
+    // fields, and function-pointer parameters all parse and run.
+    // Calling through an FP-typed struct field directly (`s.cb(args)`)
+    // is still missing -- the workaround in the fixture is to copy
+    // the field into a local before calling.
+    assert_eq!(run_fixture("function_pointer_typedefs.c"), 0);
+}
+
+#[test]
+fn arrays_as_language_types() {
+    // stack and global arrays, indexing with correct
+    // per-element scaling (including struct arrays), array fields
+    // inside a struct, sizeof(arr) returning N*elem_size, and
+    // array-to-pointer decay through a pointer-typed parameter.
+    assert_eq!(run_fixture("arrays_basic.c"), 0);
+}
+
+#[test]
+fn local_init_and_block_scope_decls_work() {
+    // local variable initializers and C99 block-scope
+    // declarations interleaved with statements, including
+    // shadowing in nested blocks.
+    assert_eq!(run_fixture("local_init_and_block_scope.c"), 0);
+}
+
+#[test]
+fn typedef_basics_work() {
+    // typedef of primitives, pointers, forward struct + alias,
+    // single-declaration struct + alias, typedef-name in
+    // parameters / return / struct fields / casts / sizeof.
+    assert_eq!(run_fixture("typedef_basic.c"), 0);
+}
+
+#[test]
+fn macro_operators_work() {
+    // # (stringify), ## (token paste), __VA_ARGS__ in variadic
+    // macros. The fixture exercises each operator and checks the
+    // resulting program runs to completion.
+    assert_eq!(run_fixture("macro_operators.c"), 0);
+}
+
+#[test]
+fn predefined_macros_resolve() {
+    // __FILE__, __LINE__, __STDC__, __DATE__, __TIME__ -- the standard
+    // C99 predefines. __LINE__ and __FILE__ expand dynamically per
+    // line; the rest are seeded once.
+    assert_eq!(run_fixture("predefined_macros.c"), 0);
+}
+
+#[test]
+fn error_directive_aborts_compilation() {
+    // `#error` produces a compile-time diagnostic with the message
+    // text. Compilation must fail and the message must surface in the
+    // diagnostic.
+    use crate::c5::Compiler;
+    let src = "#error must abort here\nint main() { return 0; }\n";
+    let err = Compiler::new(src.to_string())
+        .compile()
+        .expect_err("#error should abort compilation");
+    let msg = format!("{err:?}");
+    assert!(
+        msg.contains("must abort here"),
+        "expected the #error message in the diagnostic, got {msg:?}"
+    );
+}
+
+#[test]
+fn error_directive_in_inactive_branch_is_ignored() {
+    // `#error` inside a `#if 0` block must not abort -- the C standard
+    // requires the directive to fire only when the branch is active.
+    use crate::c5::Compiler;
+    let src = "\
+#define USE 1
+#if USE == 0
+#error wrong branch
+#endif
+int main() { return 0; }
+";
+    Compiler::new(src.to_string())
+        .compile()
+        .expect("#error in inactive branch must not fire");
 }
 
 #[test]

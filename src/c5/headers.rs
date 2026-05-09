@@ -34,19 +34,44 @@ pub(super) fn embedded_header(name: &str) -> Option<&'static str> {
         .find_map(|&(n, body)| if n == name { Some(body) } else { None })
 }
 
+/// All bundled headers, as a `(name, body)` slice. Public so the
+/// CLI's `--dump-headers` flag can iterate the registry without
+/// reaching into the preprocessor.
+pub fn embedded_headers() -> &'static [(&'static str, &'static str)] {
+    EMBEDDED_HEADERS
+}
+
 /// Every header the registry knows about, as a `(name, body)` slice.
 /// Iterable -- the compiler walks this list when an unknown function
 /// call appears in source so it can suggest the right `#include`.
 /// `memory.h` is omitted: it's a legacy alias for `string.h` and
 /// would just produce duplicate hits in the diagnostic.
 pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
+    ("stddef.h", include_str!("../../headers/include/stddef.h")),
+    ("stdint.h", include_str!("../../headers/include/stdint.h")),
+    ("limits.h", include_str!("../../headers/include/limits.h")),
     ("string.h", include_str!("../../headers/include/string.h")),
     ("stdio.h", include_str!("../../headers/include/stdio.h")),
     ("stdlib.h", include_str!("../../headers/include/stdlib.h")),
     ("stdarg.h", include_str!("../../headers/include/stdarg.h")),
+    ("ctype.h", include_str!("../../headers/include/ctype.h")),
+    ("math.h", include_str!("../../headers/include/math.h")),
+    ("errno.h", include_str!("../../headers/include/errno.h")),
+    ("assert.h", include_str!("../../headers/include/assert.h")),
+    ("time.h", include_str!("../../headers/include/time.h")),
     ("c5io.h", include_str!("../../headers/include/c5io.h")),
+    ("dirent.h", include_str!("../../headers/include/dirent.h")),
+    ("pwd.h", include_str!("../../headers/include/pwd.h")),
     ("unistd.h", include_str!("../../headers/include/unistd.h")),
     ("fcntl.h", include_str!("../../headers/include/fcntl.h")),
+    (
+        "sys/types.h",
+        include_str!("../../headers/include/sys/types.h"),
+    ),
+    (
+        "sys/stat.h",
+        include_str!("../../headers/include/sys/stat.h"),
+    ),
     (
         "sys/mman.h",
         include_str!("../../headers/include/sys/mman.h"),
@@ -62,6 +87,18 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("pthread.h", include_str!("../../headers/include/pthread.h")),
     ("dlfcn.h", include_str!("../../headers/include/dlfcn.h")),
     ("windows.h", include_str!("../../headers/include/windows.h")),
+    // Opt-in MSVC-shape predefines (gh #34): no `#pragma binding`
+    // here, just `#define _MSC_VER 1900`, `#define __int64 long
+    // long`, the `__declspec(x)` family of empty-decorator
+    // macros, etc. Build drivers that need to compile sqlite /
+    // raylib / etc. against the Windows backend opt in via
+    // `badc -include msvc_compat.h ...`. Internally guarded by
+    // `#ifdef _WIN32` so the same command line stays valid on
+    // every host.
+    (
+        "msvc_compat.h",
+        include_str!("../../headers/include/msvc_compat.h"),
+    ),
     // Legacy alias: <memory.h> predates POSIX's consolidation of
     // mem*/str* under <string.h>. Mapped from `embedded_header` but
     // not enumerated here -- the suggestion path would otherwise

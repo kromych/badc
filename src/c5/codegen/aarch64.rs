@@ -292,6 +292,72 @@ pub(super) fn enc_sub_imm(rd: Reg, rn: Reg, imm12: u32) -> u32 {
     0xD100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+/// `SUB <Xd>, <Xn|SP>, #imm12, LSL #12`. The shifted-12 form
+/// extends the reach of the immediate to multiples of 4096 up
+/// to ~16 MiB, used together with the unshifted form to cover
+/// any 24-bit byte count in two instructions.
+pub(super) fn enc_sub_imm_lsl12(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+    debug_assert!(imm12 < 4096, "sub imm lsl12: {imm12} > 12-bit max");
+    0xD140_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `ADD <Xd>, <Xn|SP>, #imm12, LSL #12`. Mirror of
+/// [`enc_sub_imm_lsl12`] -- used to fold large
+/// stack-restoration adjustments into two instructions.
+pub(super) fn enc_add_imm_lsl12(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+    debug_assert!(imm12 < 4096, "add imm lsl12: {imm12} > 12-bit max");
+    0x9140_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// Subtract `bytes` from SP. AArch64's `SUB (immediate)` carries
+/// a 12-bit value optionally left-shifted by 12, so a single
+/// instruction can cover `bytes < 4096` directly or any
+/// multiple of 4096 up to ~16 MiB. For values that don't fit
+/// either single-instruction form we emit two: one for the
+/// shifted-12 portion (high bits, multiples of 4096) and one
+/// for the remainder. Anything beyond 24 bits would need a
+/// register-form `SUB` -- not seen in practice, so we panic
+/// with a clear message rather than silently truncating.
+pub(super) fn emit_sub_sp_imm(code: &mut Vec<u8>, bytes: u32) {
+    if bytes == 0 {
+        return;
+    }
+    assert!(
+        bytes < (1 << 24),
+        "stack frame too large for 24-bit SUB immediate: {bytes} bytes"
+    );
+    let high = bytes & !0xfff;
+    let low = bytes & 0xfff;
+    if high != 0 {
+        emit(code, enc_sub_imm_lsl12(Reg::SP, Reg::SP, high >> 12));
+    }
+    if low != 0 {
+        emit(code, enc_sub_imm(Reg::SP, Reg::SP, low));
+    }
+}
+
+/// Add `bytes` to SP using the same 24-bit reach as
+/// [`emit_sub_sp_imm`]. Used by `Op::Adj` for argument-cleanup
+/// after a call, and by anything else that needs to grow the
+/// stack pointer back by more than 4 KiB in one go.
+pub(super) fn emit_add_sp_imm(code: &mut Vec<u8>, bytes: u32) {
+    if bytes == 0 {
+        return;
+    }
+    assert!(
+        bytes < (1 << 24),
+        "stack adjustment too large for 24-bit ADD immediate: {bytes} bytes"
+    );
+    let high = bytes & !0xfff;
+    let low = bytes & 0xfff;
+    if high != 0 {
+        emit(code, enc_add_imm_lsl12(Reg::SP, Reg::SP, high >> 12));
+    }
+    if low != 0 {
+        emit(code, enc_add_imm(Reg::SP, Reg::SP, low));
+    }
+}
+
 // ---- 3-register arithmetic / bitwise (shifted-register form, no shift). ----
 // Each follows the same template: a base opcode | Rm<<16 | Rn<<5 | Rd.
 // Verified against `clang -c -arch arm64` on Apple Silicon.
@@ -483,9 +549,17 @@ pub(super) fn enc_cmp_reg(rn: Reg, rm: Reg) -> u32 {
 pub(super) enum Cond {
     Eq = 0,
     Ne = 1,
+    /// Unsigned `>=` (HS = CS). After SUBS, set when no borrow occurred.
+    Hs = 0x2,
+    /// Unsigned `<` (LO = CC). After SUBS, set when borrow occurred.
+    Lo = 0x3,
     /// FP "less than" -- N==1, set by FCMP when Dn < Dm (ordered).
     Mi = 0x4,
-    /// FP "less than or equal" -- C==0 || Z==1, after FCMP.
+    /// Unsigned `>`. After SUBS, set when C==1 && Z==0.
+    Hi = 0x8,
+    /// FP "less than or equal" / unsigned `<=` -- C==0 || Z==1.
+    /// Same flag-test for both because CMP and FCMP agree on the
+    /// boundary case here.
     Ls = 0x9,
     Lt = 0xB,
     Gt = 0xC,
@@ -514,13 +588,15 @@ impl Cond {
             Cond::Ge => Cond::Lt,
             Cond::Gt => Cond::Le,
             Cond::Le => Cond::Gt,
-            // Mi <-> Pl, Ls <-> Hi -- but the cmp+branch fusion
-            // peephole only fires for integer comparisons today;
-            // FP comparisons go through the cset-only path. Map
-            // them to the closest integer flip for safety so an
-            // accidental fuse path doesn't miscompile.
+            Cond::Lo => Cond::Hs,
+            Cond::Hs => Cond::Lo,
+            Cond::Hi => Cond::Ls,
+            Cond::Ls => Cond::Hi,
+            // Mi <-> Pl -- FP comparisons go through the cset-only
+            // path so the cmp+branch fusion peephole shouldn't
+            // reach here, but map to the closest integer flip in
+            // case it does.
             Cond::Mi => Cond::Ge,
-            Cond::Ls => Cond::Gt,
         }
     }
 }
@@ -585,6 +661,15 @@ pub(super) fn enc_blr(rn: Reg) -> u32 {
     0xD63F_0000 | ((rn.0 as u32) << 5)
 }
 
+/// `BR <Xn>` -- branch (no link) to the address in `Xn`. Used by
+/// the `Op::TailExt` lowering to forward control to the IAT/GOT-
+/// resolved libc address without saving a return point: the libc
+/// fn's `RET` lands back at the c5 caller's post-Jsri continuation
+/// instead of bouncing back through the trampoline.
+pub(super) fn enc_br(rn: Reg) -> u32 {
+    0xD61F_0000 | ((rn.0 as u32) << 5)
+}
+
 /// `SVC #imm16` -- supervisor call (system call). On Linux/aarch64
 /// the kernel reads the intrinsic number from `x8` and the arguments
 /// from `x0..x5`; the immediate is conventionally zero.
@@ -621,6 +706,27 @@ pub(super) fn enc_ldr32_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
     0xB940_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
+/// `LDRSW <Xt>, [<Xn|SP>, #imm]` -- 32-bit load sign-extended into
+/// the full 64-bit `Xt`, immediate offset scaled by 4. Used by
+/// [`Op::Lw`] for signed `int` lvalue reads -- the C signed-int
+/// model requires the high bit of the 4-byte slot to propagate.
+pub(super) fn enc_ldrsw_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    debug_assert!(imm.is_multiple_of(4), "ldrsw imm: {imm} not 4-byte aligned");
+    let scaled = imm / 4;
+    debug_assert!(scaled < 4096, "ldrsw imm: {imm} > 16380");
+    0xB980_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STR <Wt>, [<Xn|SP>, #imm]` -- 32-bit store (low half of `Xt`),
+/// immediate offset scaled by 4. Companion to [`enc_ldrsw_imm`] /
+/// [`enc_ldr32_imm`] for [`Op::Sw`].
+pub(super) fn enc_str32_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    debug_assert!(imm.is_multiple_of(4), "str32 imm: {imm} not 4-byte aligned");
+    let scaled = imm / 4;
+    debug_assert!(scaled < 4096, "str32 imm: {imm} > 16380");
+    0xB900_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
 /// `LDR <Xt>, [<Xn|SP>, <Xm>, LSL #3]` -- 64-bit load, base-plus-
 /// register-shifted-by-3. Used by the Win64 TLS lowering to fetch
 /// `tls_array[_tls_index]` (each entry is 8 bytes, hence LSL #3).
@@ -636,6 +742,38 @@ pub(super) fn enc_ldr_reg_lsl3(rt: Reg, rn: Reg, rm: Reg) -> u32 {
     0xF860_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
+/// `LDRSH <Xt>, [<Xn|SP>, #imm]` -- 16-bit load sign-extended into
+/// the full 64-bit `Xt`, immediate offset scaled by 2. Used by
+/// [`Op::Lh`] for `short` lvalue reads. Encoding: opc=10
+/// (sign-extend to 64-bit), size=01 (halfword).
+pub(super) fn enc_ldrsh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    debug_assert!(imm.is_multiple_of(2), "ldrsh imm: {imm} not 2-byte aligned");
+    let scaled = imm / 2;
+    debug_assert!(scaled < 4096, "ldrsh imm: {imm} > 8190");
+    0x7980_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LDRH <Wt>, [<Xn|SP>, #imm]` -- 16-bit load zero-extended into
+/// `Wt` (which clears the high 32 bits of `Xt`), immediate offset
+/// scaled by 2. Used by [`Op::Lhu`] for `unsigned short` lvalue
+/// reads. Encoding: opc=01 (load), size=01.
+pub(super) fn enc_ldrh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    debug_assert!(imm.is_multiple_of(2), "ldrh imm: {imm} not 2-byte aligned");
+    let scaled = imm / 2;
+    debug_assert!(scaled < 4096, "ldrh imm: {imm} > 8190");
+    0x7940_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STRH <Wt>, [<Xn|SP>, #imm]` -- 16-bit store (low half of `Wt`),
+/// immediate offset scaled by 2. Companion to [`enc_ldrsh_imm`] /
+/// [`enc_ldrh_imm`] for [`Op::Sh`].
+pub(super) fn enc_strh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    debug_assert!(imm.is_multiple_of(2), "strh imm: {imm} not 2-byte aligned");
+    let scaled = imm / 2;
+    debug_assert!(scaled < 4096, "strh imm: {imm} > 8190");
+    0x7900_0000 | (scaled << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
 /// `LDRB <Wt>, [<Xn|SP>, #imm]` -- byte load, zero-extended into a
 /// 32-bit register (which on AArch64 means the high 32 bits of the
 /// 64-bit register are also cleared). c4 promotes char to int on
@@ -643,6 +781,15 @@ pub(super) fn enc_ldr_reg_lsl3(rt: Reg, rn: Reg, rm: Reg) -> u32 {
 pub(super) fn enc_ldrb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
     debug_assert!(imm < 4096, "ldrb imm: {imm} > 4095");
     0x3940_0000 | (imm << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LDRSB <Xt>, [<Xn|SP>, #imm]` -- byte load sign-extended into
+/// the full 64-bit `Xt`. Used by [`Op::Lcs`] for `signed char`
+/// lvalue reads. Encoding: opc=10 (sign-extend to 64-bit),
+/// size=00 (byte). Imm is unscaled (byte stride).
+pub(super) fn enc_ldrsb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+    debug_assert!(imm < 4096, "ldrsb imm: {imm} > 4095");
+    0x3980_0000 | (imm << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
 /// `STRB <Wt>, [<Xn|SP>, #imm]` -- byte store. Stores the low 8 bits
@@ -983,6 +1130,7 @@ pub(super) fn lower(
     // is fine -- this list grows linearly with the number of distinct
     // string-literal / global references in the program).
     let data_imm_positions: &[usize] = &program.data_imm_positions;
+    let code_imm_positions: &[usize] = &program.code_imm_positions;
 
     // Track which function we're currently inside so the prologue
     // and epilogue agree on whether to push/pop the argc/argv pair.
@@ -1038,6 +1186,7 @@ pub(super) fn lower(
             &mut macho_tlv_fixups,
             &mut macho_tlv_descriptors,
             data_imm_positions,
+            code_imm_positions,
             in_main,
             abi,
             &mut reg_state,
@@ -1065,6 +1214,18 @@ pub(super) fn lower(
     let mut addr_taken: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
     for (_, target_bc_pc) in &pending_func_fixups {
         addr_taken.insert(*target_bc_pc);
+    }
+    // Static-init function-pointer slots (`static fp_t fp = func;`,
+    // dispatch tables) take the function's address too -- without a
+    // thunk the writer would patch the slot with the bare body, and
+    // the call would land on Lev's `[fp+16]` reads with garbage in
+    // the host's argument registers. AAPCS64 happens to work even
+    // without a thunk because Jsri doesn't disturb sp before the
+    // call (no shadow space), but threading both fixup paths
+    // through the same map keeps the per-format writers uniform
+    // with x86_64.
+    for r in &program.code_relocs {
+        addr_taken.insert(r.target_bc_pc as usize);
     }
     for &func_pc in &addr_taken {
         let n_params = param_count_for_func(&program.text, func_pc);
@@ -1135,6 +1296,7 @@ pub(super) fn lower(
         data_fixups,
         func_fixups,
         bytecode_to_native,
+        func_thunk_offsets: thunk_for_func,
         // `imports` is set by `lower_for` after this returns; the
         // resolver runs once up there and the value is shared with
         // both the lowering and the writer. Default-empty here keeps
@@ -1145,6 +1307,7 @@ pub(super) fn lower(
         tls_init_size: program.tls_init_size,
         tls_index_fixups,
         data_relocs: Vec::new(),
+        code_relocs: Vec::new(),
         exports: Vec::new(),
         output_kind: super::OutputKind::Executable,
         dllmain_pc: None,
@@ -1226,6 +1389,7 @@ fn lower_op(
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
     data_imm_positions: &[usize],
+    code_imm_positions: &[usize],
     in_main: bool,
     abi: Abi,
     reg_state: &mut RegState<'_>,
@@ -1253,7 +1417,7 @@ fn lower_op(
             let n = read_operand(text, pc, "Adj")?;
             if n != 0 {
                 let bytes = (n as u32) * 16;
-                emit(code, enc_add_imm(Reg::SP, Reg::SP, bytes));
+                emit_add_sp_imm(code, bytes);
             }
             for _ in 0..(n as usize) {
                 let popped = reg_state.pseudo_stack.pop();
@@ -1280,9 +1444,27 @@ fn lower_op(
                     data_offset: v as u64,
                 });
                 emit_adrp_add_placeholder(code);
-            } else if (v as usize) >= CODE_BASE && ((v as usize) - CODE_BASE) < text.len() {
-                // Function-pointer literal. Resolve after the walk so
-                // we can map the bytecode PC to a native offset.
+            } else if code_imm_positions.binary_search(&operand_pc).is_ok() {
+                // Function-pointer literal. The compiler tagged this
+                // operand_pc explicitly so we don't have to infer
+                // from the value's range -- a user constant in
+                // [CODE_BASE, CODE_BASE + text.len()) would otherwise
+                // be misclassified as a func ptr (e.g. 0x20000000
+                // == CODE_BASE).
+                let target_bc_pc = (v as usize) - CODE_BASE;
+                let adrp_offset = code.len();
+                pending_func_fixups.push((adrp_offset, target_bc_pc));
+                emit_adrp_add_placeholder(code);
+            } else if code_imm_positions.is_empty()
+                && (v as usize) >= CODE_BASE
+                && ((v as usize) - CODE_BASE) < text.len()
+            {
+                // Fallback heuristic for the optimized (-O) path,
+                // which doesn't carry per-Imm provenance through
+                // its peephole passes. This is the original c5
+                // disambiguation rule and is correct for any
+                // program whose constants stay below CODE_BASE
+                // (= 0x20000000).
                 let target_bc_pc = (v as usize) - CODE_BASE;
                 let adrp_offset = code.len();
                 pending_func_fixups.push((adrp_offset, target_bc_pc));
@@ -1322,6 +1504,7 @@ fn lower_op(
         // ---- Memory loads / stores ----
         Op::Li => emit(code, enc_ldr_imm(Reg::X19, Reg::X19, 0)),
         Op::Lc => emit(code, enc_ldrb_imm(Reg::X19, Reg::X19, 0)),
+        Op::Lcs => emit(code, enc_ldrsb_imm(Reg::X19, Reg::X19, 0)),
         Op::Si => {
             // pop addr; *addr = x19. With pool: addr is in xN
             // (skip the ldr). Without pool: pop from real stack.
@@ -1331,6 +1514,22 @@ fn lower_op(
         Op::Sc => {
             let lhs = pop_lhs_reg(code, reg_state);
             emit(code, enc_strb_imm(Reg::X19, lhs, 0));
+        }
+        Op::Lw => emit(code, enc_ldrsw_imm(Reg::X19, Reg::X19, 0)),
+        Op::Lwu => emit(code, enc_ldr32_imm(Reg::X19, Reg::X19, 0)),
+        Op::Sw => {
+            let lhs = pop_lhs_reg(code, reg_state);
+            // STR Wt encodes the same Rt as LDRSW Xt -- the W/X
+            // distinction lives in the opcode bits, not the
+            // register name. Pass X19; the encoder produces the
+            // 32-bit store form regardless.
+            emit(code, enc_str32_imm(Reg::X19, lhs, 0));
+        }
+        Op::Lh => emit(code, enc_ldrsh_imm(Reg::X19, Reg::X19, 0)),
+        Op::Lhu => emit(code, enc_ldrh_imm(Reg::X19, Reg::X19, 0)),
+        Op::Sh => {
+            let lhs = pop_lhs_reg(code, reg_state);
+            emit(code, enc_strh_imm(Reg::X19, lhs, 0));
         }
         Op::Psh => {
             // With the native optimizer on AND a Pseudo classification
@@ -1385,10 +1584,16 @@ fn lower_op(
         Op::Gt => lower_cmp(code, text, *pc, reg_state, branch_targets, Cond::Gt),
         Op::Le => lower_cmp(code, text, *pc, reg_state, branch_targets, Cond::Le),
         Op::Ge => lower_cmp(code, text, *pc, reg_state, branch_targets, Cond::Ge),
+        Op::Ult => lower_cmp(code, text, *pc, reg_state, branch_targets, Cond::Lo),
+        Op::Ugt => lower_cmp(code, text, *pc, reg_state, branch_targets, Cond::Hi),
+        Op::Ule => lower_cmp(code, text, *pc, reg_state, branch_targets, Cond::Ls),
+        Op::Uge => lower_cmp(code, text, *pc, reg_state, branch_targets, Cond::Hs),
 
-        // ---- Shifts (signed >> matches c4 `int` semantics). ----
+        // ---- Shifts. Shr is arithmetic (signed); Shru is logical
+        //      (unsigned), emitted when the LHS has an unsigned type.
         Op::Shl => binop_with_pop(code, reg_state, enc_lslv),
         Op::Shr => binop_with_pop(code, reg_state, enc_asrv),
+        Op::Shru => binop_with_pop(code, reg_state, enc_lsrv),
 
         // ---- Arithmetic. Sub, Div, Mod are not commutative, so the
         //      pop goes on the LHS of the operation.
@@ -1517,12 +1722,17 @@ fn lower_op(
         Op::XorI => imm_arith(code, text, pc, "XorI", enc_eor_reg)?,
         Op::ShlI => imm_arith(code, text, pc, "ShlI", enc_lslv)?,
         Op::ShrI => imm_arith(code, text, pc, "ShrI", enc_asrv)?,
+        Op::ShruI => imm_arith(code, text, pc, "ShruI", enc_lsrv)?,
         Op::EqI => imm_cmp(code, text, pc, "EqI", Cond::Eq, reg_state, branch_targets)?,
         Op::NeI => imm_cmp(code, text, pc, "NeI", Cond::Ne, reg_state, branch_targets)?,
         Op::LtI => imm_cmp(code, text, pc, "LtI", Cond::Lt, reg_state, branch_targets)?,
         Op::GtI => imm_cmp(code, text, pc, "GtI", Cond::Gt, reg_state, branch_targets)?,
         Op::LeI => imm_cmp(code, text, pc, "LeI", Cond::Le, reg_state, branch_targets)?,
         Op::GeI => imm_cmp(code, text, pc, "GeI", Cond::Ge, reg_state, branch_targets)?,
+        Op::UltI => imm_cmp(code, text, pc, "UltI", Cond::Lo, reg_state, branch_targets)?,
+        Op::UgtI => imm_cmp(code, text, pc, "UgtI", Cond::Hi, reg_state, branch_targets)?,
+        Op::UleI => imm_cmp(code, text, pc, "UleI", Cond::Ls, reg_state, branch_targets)?,
+        Op::UgeI => imm_cmp(code, text, pc, "UgeI", Cond::Hs, reg_state, branch_targets)?,
         Op::LdLocI => {
             // `Lea N + Li` fused. a = *(bp + N*8)
             let offset = read_operand(text, pc, "LdLocI")?;
@@ -1531,6 +1741,35 @@ fn lower_op(
         Op::LdLocC => {
             let offset = read_operand(text, pc, "LdLocC")?;
             emit_local_load(code, offset, /*byte=*/ true);
+        }
+        Op::StLocI => {
+            // `*(bp + N*8) = a` -- store accumulator to a local
+            // frame slot. Mirrors `emit_local_load` with a store.
+            let offset = read_operand(text, pc, "StLocI")?;
+            let bytes = lea_offset_bytes(offset);
+            if (-256..256).contains(&bytes) {
+                emit(code, enc_stur(Reg::X19, Reg::X29, bytes as i32));
+            } else {
+                let abs = bytes.unsigned_abs();
+                if abs < 4096 {
+                    let imm = abs as u32;
+                    let word = if bytes >= 0 {
+                        enc_add_imm(Reg::X16, Reg::X29, imm)
+                    } else {
+                        enc_sub_imm(Reg::X16, Reg::X29, imm)
+                    };
+                    emit(code, word);
+                } else {
+                    load_imm64(code, Reg::X17, abs);
+                    let word = if bytes >= 0 {
+                        enc_add_reg(Reg::X16, Reg::X29, Reg::X17)
+                    } else {
+                        enc_sub_reg(Reg::X16, Reg::X29, Reg::X17)
+                    };
+                    emit(code, word);
+                }
+                emit(code, enc_str_imm(Reg::X19, Reg::X16, 0));
+            }
         }
 
         // ---- External library call -- lower to a libc call
@@ -1548,7 +1787,24 @@ fn lower_op(
                 abi,
                 imports,
                 fp_mask,
+                target,
             )?;
+        }
+        Op::TailExt => {
+            // Tail-jump trampoline body. See the matching x86_64
+            // arm + the `Op::TailExt` doc in op.rs for the
+            // calling-convention bookkeeping; on aarch64 the
+            // sequence is `adrp x16, GOT; ldr x16, [x16, off];
+            // br x16`, which the writer patches the same way as
+            // the regular GOT-call shape.
+            let binding_idx = read_operand(text, pc, "TailExt")?;
+            let import_index = imports.index_of_binding(binding_idx).ok_or_else(|| {
+                C5Error::Compile(alloc::format!(
+                    "native codegen (aarch64): no import slot for binding {binding_idx} -- \
+                     the resolver should have placed it"
+                ))
+            })?;
+            emit_got_tail_jump(code, got_fixups, import_index);
         }
 
         // ---- Floating-point arithmetic ----
@@ -1785,6 +2041,7 @@ fn emit_libc_call(
     abi: Abi,
     imports: &super::ResolvedImports,
     fp_arg_mask: u32,
+    target: super::Target,
 ) -> Result<(), C5Error> {
     let import_index = imports.index_of_binding(binding_idx).ok_or_else(|| {
         C5Error::Compile(format!(
@@ -1944,12 +2201,53 @@ fn emit_libc_call(
         }
     }
 
-    // Move the libc return value into x19 so the caller sees it as
-    // the new accumulator. (For functions that don't return -- e.g.
-    // `exit` -- the call doesn't reach this point at runtime, so the
-    // mov is harmless dead code.)
-    emit_mov_reg(code, Reg::X19, Reg::X0);
+    // Sign- or zero-extend a sub-word return into the full 64-bit
+    // accumulator before downstream consumers read it. AAPCS64
+    // doesn't promise the upper bits of X0 for an `int` return, so
+    // a downstream `x19 != -17` comparison would see junk above
+    // EAX otherwise. Emitted on every aarch64 target -- the
+    // extension is a no-op when the prototype is already 64-bit
+    // (pointer, `long long`, LP64 `long`).
+    let ext = super::return_extension(imports.imports[import_index].return_type_tag, target);
+    emit_extend_x19_for_return(code, ext);
+    if matches!(ext, super::ReturnExt::None) {
+        // Move the libc return value into x19 so the caller sees it
+        // as the new accumulator. (For functions that don't return
+        // -- e.g. `exit` -- the call doesn't reach this point at
+        // runtime, so the mov is harmless dead code.) The extension
+        // emitter above already wrote x19 for non-None cases.
+        emit_mov_reg(code, Reg::X19, Reg::X0);
+    }
     Ok(())
+}
+
+/// Extend a libc return value sitting in X0 into the c5
+/// accumulator (X19), per `ext`. AAPCS64 leaves the upper bits of
+/// X0 unspecified for sub-word returns, so this is the bridge
+/// between the host return-register convention and c5's 64-bit
+/// accumulator. Sequences mirror the x86_64 helper -- per AAPCS64
+/// the unsigned-half encodings (`uxtw`, etc.) implicitly clear the
+/// upper bits, and the signed half uses the matching `sxtw` /
+/// `sxth` / `sxtb`.
+fn emit_extend_x19_for_return(code: &mut Vec<u8>, ext: super::ReturnExt) {
+    use super::ReturnExt;
+    // Encodings (X19 = reg 19, X0 / W0 = reg 0):
+    //   sxtb x19, w0   -- 0x93401C13
+    //   sxth x19, w0   -- 0x93403C13
+    //   sxtw x19, w0   -- 0x93407C13
+    //   uxtb w19, w0   -- 0x53001C13  (upper 32 bits zeroed by 32-bit form)
+    //   uxth w19, w0   -- 0x53003C13
+    //   mov  w19, w0   -- 0x2A0003F3  (32-bit ORR; zero-extends)
+    let word: u32 = match ext {
+        ReturnExt::None => return,
+        ReturnExt::Sign8 => 0x93401C13,
+        ReturnExt::Sign16 => 0x93403C13,
+        ReturnExt::Sign32 => 0x93407C13,
+        ReturnExt::Zero8 => 0x53001C13,
+        ReturnExt::Zero16 => 0x53003C13,
+        ReturnExt::Zero32 => 0x2A0003F3,
+    };
+    emit(code, word);
 }
 
 /// Lookup the per-call FP-arg bitmap by JsrExt PC. Linear scan;
@@ -1988,6 +2286,22 @@ fn emit_got_call(code: &mut Vec<u8>, got_fixups: &mut Vec<GotFixup>, import_inde
     emit(code, enc_adrp(Reg::X16, 0));
     emit(code, enc_ldr_imm(Reg::X16, Reg::X16, 0));
     emit(code, enc_blr(Reg::X16));
+}
+
+/// Tail-jump variant of [`emit_got_call`]: same `adrp+ldr`
+/// patch-bookkeeping the writer recognises, but with a final
+/// `BR x16` instead of `BLR x16`. The libc fn's `RET` returns
+/// directly to the c5 caller of the trampoline, skipping the
+/// trampoline entirely on the way back. Used by `Op::TailExt`.
+fn emit_got_tail_jump(code: &mut Vec<u8>, got_fixups: &mut Vec<GotFixup>, import_index: usize) {
+    let adrp_offset = code.len();
+    got_fixups.push(GotFixup {
+        adrp_offset,
+        import_index,
+    });
+    emit(code, enc_adrp(Reg::X16, 0));
+    emit(code, enc_ldr_imm(Reg::X16, Reg::X16, 0));
+    emit(code, enc_br(Reg::X16));
 }
 
 /// Pop the top of the VM push-stack -- either a pool register `xN`
@@ -2309,7 +2623,14 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool, callee_pool_dep
     if locals > 0 {
         let bytes = (locals as u32) * 8;
         let aligned = (bytes + 15) & !15;
-        emit(code, enc_sub_imm(Reg::SP, Reg::SP, aligned));
+        // SUB (immediate) only takes 12 bits unshifted, so for
+        // functions with more than ~511 locals (e.g. sqlite3's
+        // do_meta_command, which holds ~1500 locals across its
+        // many dot-command branches) we need the two-instruction
+        // shifted-12 split. Without this the immediate silently
+        // overflows into the shift bits and the prologue traps
+        // with SIGILL on first call.
+        emit_sub_sp_imm(code, aligned);
     }
     emit(code, enc_str_pre(Reg::X19, Reg::SP, -16));
     emit_save_pool(code, callee_pool_depth);

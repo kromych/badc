@@ -31,9 +31,7 @@
 //!
 //! What's not:
 //!
-//! * Function-like macros (`#define MAX(a, b) ...`).
 //! * Multi-line `#define` continuations.
-//! * Token pasting / stringification.
 //! * Boolean operators (`&&`, `||`, `!`) inside `#if`.
 //!
 //! Also supported:
@@ -111,6 +109,18 @@ pub(crate) struct Binding {
     /// the codegen reads the c5 stack directly without the
     /// register/stack split).
     pub fixed_args: usize,
+    /// Return type tag (encoded the same way as `Symbol::type_` --
+    /// `Ty::Char`/`Ty::Int`/`Ty::Long`/... with the unsigned bit
+    /// optionally OR'd in). Set by the parser when the prototype
+    /// is folded onto the binding. The codegen reads it after a
+    /// libc call to decide whether the return needs sign- or
+    /// zero-extension into the c5 accumulator -- msvcrt's int
+    /// returns leave the upper 32 bits of RAX undefined per the
+    /// Win64 ABI, so a downstream 64-bit comparison sees garbage
+    /// without an explicit extension. `0` (= `Ty::Char`) when
+    /// the prototype hasn't been seen yet; the codegen treats
+    /// that as "no extension needed".
+    pub return_type_tag: i64,
     /// c5-side name the source uses (e.g. `printf`).
     pub local_name: String,
     /// Symbol name exported by the dylib. Differs from `local_name`
@@ -127,8 +137,14 @@ pub(crate) struct Binding {
 /// macros are stored separately in `macros` as plain strings.
 #[derive(Debug, Clone)]
 struct FnMacro {
+    /// Named parameters in source order, *not* including the `...` of
+    /// a variadic macro -- variadics are flagged by `is_variadic` and
+    /// the trailing arguments accessed through `__VA_ARGS__`.
     params: Vec<String>,
     body: String,
+    /// `true` for `#define foo(a, ...)` -- any extra arguments are
+    /// joined with `, ` and substituted for `__VA_ARGS__` in the body.
+    is_variadic: bool,
 }
 
 /// Output of a successful preprocessor run: the substituted source
@@ -161,6 +177,24 @@ pub(crate) struct Preprocessor {
     /// cycles. Pushed on `#include`, popped when we finish processing
     /// the header.
     include_stack: Vec<String>,
+    /// Filesystem search paths for `#include`. Probed in order
+    /// before falling back to the bundled in-binary headers, so
+    /// a user can `cp $(badc --dump-headers) ./include/...` and
+    /// override one without rebuilding badc. Plumbed in from the
+    /// CLI's `-I path` flag and any built-in defaults
+    /// (`./include`, `./headers/include`). Filesystem reads are
+    /// gated behind `cfg(feature = "std")`; the no_std build
+    /// keeps the field but never reads from it (the embedded
+    /// headers are always available).
+    search_paths: Vec<String>,
+    /// Headers to splice in front of the user's translation unit,
+    /// before any source line is preprocessed. Mirrors gcc /
+    /// clang's `-include FILE` flag: each name resolves through
+    /// the same search-path / embedded-header chain as a regular
+    /// `#include "name"` and is processed exactly as if the user
+    /// had written that directive at the top of their source.
+    /// Plumbed in from the CLI's `-include FILE` flag.
+    force_includes: Vec<String>,
 }
 
 impl Preprocessor {
@@ -191,11 +225,29 @@ impl Preprocessor {
     ///     `__BADC_WINDOWS__` we used before this commit.
     pub fn new(target_spec: &str, target: Target, crate_version: &str) -> Self {
         let mut macros: HashMap<String, String> = HashMap::new();
+        let fn_macros: HashMap<String, FnMacro> = HashMap::new();
         macros.insert(
             "__BADC_VERSION__".to_string(),
             format!("\"{crate_version}\""),
         );
         macros.insert("__BADC_TARGET__".to_string(), format!("\"{target_spec}\""));
+        // Standard predefines (C99 sec 6.10.8). c5 honours all of these
+        // except `__STDC_HOSTED__` (we don't expose a freestanding /
+        // hosted distinction) and `__STDC_VERSION__` (the dialect is
+        // a c4-shaped subset, not an implementation of any specific
+        // C standard year). `__DATE__` and `__TIME__` are seeded at
+        // badc build time -- C99 says they reflect "the date and
+        // time of translation", and the closest analogue for an
+        // embedded library is the build time of badc itself.
+        macros.insert("__STDC__".to_string(), "1".to_string());
+        macros.insert(
+            "__DATE__".to_string(),
+            format!("\"{}\"", env!("BADC_BUILD_DATE")),
+        );
+        macros.insert(
+            "__TIME__".to_string(),
+            format!("\"{}\"", env!("BADC_BUILD_TIME")),
+        );
         match target {
             Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
                 macros.insert("__aarch64__".to_string(), "1".to_string());
@@ -216,6 +268,17 @@ impl Preprocessor {
                 macros.insert("__unix__".to_string(), "1".to_string());
             }
             Target::WindowsX64 | Target::WindowsAarch64 => {
+                // Genuine target-detection macros only. The MSVC-
+                // mimicry surface (`_MSC_VER`, `__MINGW32__`,
+                // `__int64`, the `__declspec(x)` empty-decorator
+                // family, etc.) lives in the bundled
+                // `msvc_compat.h` header and is opted into per
+                // translation unit via `badc -include
+                // msvc_compat.h ...` (gh #34). Keeping the
+                // predefine table to genuine target-detection
+                // surfaces the "is this TU pretending to be MSVC?"
+                // question at the command line, where the build
+                // driver is the right place to answer it.
                 macros.insert("_WIN32".to_string(), "1".to_string());
                 macros.insert("_WIN64".to_string(), "1".to_string());
                 macros.insert("__BADC_WINDOWS__".to_string(), "1".to_string());
@@ -223,12 +286,58 @@ impl Preprocessor {
         }
         Self {
             macros,
-            fn_macros: HashMap::new(),
+            fn_macros,
             dylibs: Vec::new(),
             exports: Vec::new(),
             pragma_once_files: BTreeSet::new(),
             include_stack: Vec::new(),
+            search_paths: Vec::new(),
+            force_includes: Vec::new(),
         }
+    }
+
+    /// Append a filesystem search path probed before the bundled
+    /// headers on `#include`. Paths are tried in insertion order;
+    /// the first matching `<path>/<name>` wins. Plumb in from
+    /// `-I path` on the CLI; built-in defaults like `./include`
+    /// can be added the same way at startup so users don't have
+    /// to repeat them on every invocation.
+    pub fn add_search_path(&mut self, path: &str) {
+        if !self.search_paths.iter().any(|p| p == path) {
+            self.search_paths.push(path.to_string());
+        }
+    }
+
+    /// Add a header to splice in front of the user's translation
+    /// unit, before any source line is preprocessed. Mirrors gcc /
+    /// clang's `-include FILE` flag. The name is resolved through
+    /// the same chain as a regular `#include "name"` -- filesystem
+    /// search paths first (so a checked-in copy of the header
+    /// wins), then the embedded registry. Order matters: multiple
+    /// `-include` flags expand top-to-bottom in the order given.
+    pub fn add_force_include(&mut self, name: &str) {
+        self.force_includes.push(name.to_string());
+    }
+
+    /// Predefine an object-like macro from the build driver --
+    /// the CLI's `-D NAME` / `-D NAME=VALUE` plumbs through here.
+    /// The empty body resolves to `1`, matching cpp's convention.
+    /// Late definitions in source still win, so a `-D X=0`
+    /// followed by `#define X 1` in source ends up with `X = 1`.
+    pub fn define(&mut self, name: &str, body: &str) {
+        let body = if body.is_empty() { "1" } else { body };
+        self.macros.insert(name.to_string(), body.to_string());
+    }
+
+    /// Drop a predefine -- the CLI's `-U NAME` plumbs here. Removes
+    /// from both the object-like and function-like tables so a
+    /// header that conditionally re-defines the same name on a
+    /// different shape gets a clean slate. Object-like and fn-like
+    /// macros never coexist in `cpp` (a `#define X` shadows a prior
+    /// `#define X(a)` and vice versa); this mirrors that.
+    pub fn undef(&mut self, name: &str) {
+        self.macros.remove(name);
+        self.fn_macros.remove(name);
     }
 
     /// Run the preprocessor over `source` and return the substituted
@@ -239,6 +348,27 @@ impl Preprocessor {
     /// lines, which shifts user-source line numbers downstream of
     /// the include but keeps lines *within* a file aligned.
     pub fn process(&mut self, source: &str) -> Result<String, C5Error> {
+        // -include FILE plumbing: synthesize an `#include "name"`
+        // line per registered force-include and process them as a
+        // preamble before the user's source. Each force-include
+        // header runs with the same line-counter / `__FILE__` /
+        // search-path machinery as a regular `#include`, so a
+        // failure inside the header (say a typo'd `#pragma`) gets
+        // a diagnostic naming that header rather than the user's
+        // source. The synthesized preamble itself uses
+        // `<force-include>` as its filename label so any
+        // diagnostic targeting one of the synthesized lines
+        // points at that label and the line in the original
+        // source isn't shifted from the user's perspective.
+        if !self.force_includes.is_empty() {
+            let mut preamble = String::new();
+            for name in &self.force_includes.clone() {
+                preamble.push_str(&format!("#include \"{name}\"\n"));
+            }
+            let mut combined = self.process_named(&preamble, "<force-include>")?;
+            combined.push_str(&self.process_named(source, "<source>")?);
+            return Ok(combined);
+        }
         self.process_named(source, "<source>")
     }
 
@@ -247,6 +377,23 @@ impl Preprocessor {
     /// about; the top-level call uses `"<source>"`, `#include`'d
     /// files use the header name (`"stdio.h"`).
     fn process_named(&mut self, source: &str, filename: &str) -> Result<String, C5Error> {
+        // c99 sec 5.1.1.2 phase 2: every `\\\n` joins lines. We do this
+        // up-front so the line-by-line preprocessor never sees a
+        // continuation. Line counts are preserved by emitting blank
+        // lines for each continuation consumed, so error messages
+        // (and `__LINE__`) stay grounded in the original source.
+        let unfolded = unfold_line_continuations(source);
+        // c99 sec 5.1.1.2 phase 3: remove comments. Done before macro
+        // substitution so a `#define X 0 /* note */` body doesn't
+        // emit a stray `*/` into a surrounding source comment when
+        // X is referenced from inside that comment. SQLite is the
+        // canonical example: it has many such inline-commented
+        // numeric `#define`s and references them from doc-comment
+        // blocks. Without this pass the macro expansion's `*/`
+        // closes the surrounding `/* ... */` early and the lexer
+        // sees comment tail text as code.
+        let stripped = strip_c_comments(&unfolded);
+        let source = stripped.as_str();
         let mut out = String::with_capacity(source.len());
 
         // `cond_stack` mirrors the nesting of `#if` / `#ifdef`. Each
@@ -258,7 +405,18 @@ impl Preprocessor {
         let mut cond_stack: Vec<CondFrame> = Vec::new();
         let mut active = true;
 
-        for (idx, line) in source.lines().enumerate() {
+        // Manual line iteration so multi-line function-like macro
+        // calls -- `assert(\n  expr\n);` -- can be joined into a
+        // single buffer before substitution. Per-line iteration
+        // would leave the call's `(` unmatched on the first line
+        // and the macro wouldn't expand. Subsequent consumed
+        // lines emit blank `\n`s so error line numbers stay
+        // grounded in the original source.
+        let lines: Vec<&str> = source.lines().collect();
+        let mut idx_iter = 0usize;
+        while idx_iter < lines.len() {
+            let idx = idx_iter;
+            let line = lines[idx];
             let line_no = idx + 1;
             let trimmed = line.trim_start();
 
@@ -271,13 +429,23 @@ impl Preprocessor {
                             self.fn_macros.remove(name);
                         }
                     }
-                    Directive::DefineFn(name, params, body) => {
+                    Directive::DefineFn(name, mut params, body) => {
                         if active {
+                            // C99 variadic macro: a trailing `...` in the
+                            // parameter list opts in to `__VA_ARGS__`.
+                            // GCC's named-rest extension (`#define
+                            // foo(args...)`) is not supported -- the
+                            // parameter must be the literal `...`.
+                            let is_variadic = params.last().is_some_and(|p| *p == "...");
+                            if is_variadic {
+                                params.pop();
+                            }
                             self.fn_macros.insert(
                                 name.to_string(),
                                 FnMacro {
                                     params: params.iter().map(|s| s.to_string()).collect(),
                                     body: body.to_string(),
+                                    is_variadic,
                                 },
                             );
                             self.macros.remove(name);
@@ -336,6 +504,37 @@ impl Preprocessor {
                         frame.any_branch_taken |= taken;
                         active = taken;
                     }
+                    Directive::Elif(expr) => {
+                        // The directive eval needs a `&Self`, but
+                        // `cond_stack.last_mut()` borrows `self` for
+                        // the frame -- evaluate the expression first
+                        // and only then mutate the frame.
+                        let parent_active =
+                            cond_stack.last().map(|f| f.parent_active).ok_or_else(|| {
+                                C5Error::Compile(format!(
+                                    "preprocessor:{line_no}: `#elif` with no matching `#if`"
+                                ))
+                            })?;
+                        let any_taken_so_far = cond_stack
+                            .last()
+                            .map(|f| f.any_branch_taken)
+                            .unwrap_or(false);
+                        let eligible = parent_active && !any_taken_so_far;
+                        let cond = if eligible {
+                            self.eval_condition(expr, line_no)?
+                        } else {
+                            false
+                        };
+                        let frame = cond_stack.last_mut().unwrap();
+                        if frame.saw_else {
+                            return Err(C5Error::Compile(format!(
+                                "preprocessor:{line_no}: `#elif` after `#else` for the same `#if`"
+                            )));
+                        }
+                        frame.this_branch_taken = cond;
+                        frame.any_branch_taken |= cond;
+                        active = cond;
+                    }
                     Directive::Endif => {
                         let frame = cond_stack.pop().ok_or_else(|| {
                             C5Error::Compile(format!(
@@ -351,6 +550,26 @@ impl Preprocessor {
                                     self.pragma_once_files.insert(filename.to_string());
                                 }
                                 PragmaDirective::Other => {
+                                    // `#pragma pack(...)` is source-position-
+                                    // sensitive: a struct definition that
+                                    // follows a `pack(1)` directive packs at
+                                    // 1, but a struct AFTER a subsequent
+                                    // `pack()` reverts. We can't batch those
+                                    // up through the preprocessor's
+                                    // `dylibs` / `bindings` accumulator the
+                                    // way other pragmas are handled --
+                                    // we'd lose ordering. Pass the line
+                                    // through verbatim so the lexer
+                                    // reaches it inline; the lexer's `#`
+                                    // handler folds the directive into
+                                    // its `pack_stack`.
+                                    if pragma_is_pack(args) {
+                                        out.push('#');
+                                        out.push_str(directive);
+                                        out.push('\n');
+                                        idx_iter += 1;
+                                        continue;
+                                    }
                                     self.parse_pragma(args, line_no)?;
                                 }
                             }
@@ -360,6 +579,21 @@ impl Preprocessor {
                         if active {
                             let included = self.process_include(name, line_no)?;
                             out.push_str(&included);
+                        }
+                    }
+                    Directive::Error(message) => {
+                        // C99 sec 6.10.5: `#error` produces a compile-time
+                        // diagnostic. The text after the directive name,
+                        // up to the newline, is the diagnostic message;
+                        // we surface it verbatim through the standard
+                        // C5Error path so the same downstream tooling
+                        // that reports lexer / parser failures handles
+                        // it.
+                        if active {
+                            return Err(C5Error::Compile(format!(
+                                "{filename}:{line_no}: #error {}",
+                                message.trim()
+                            )));
                         }
                     }
                     Directive::Other => {
@@ -375,13 +609,32 @@ impl Preprocessor {
                     }
                 }
                 out.push('\n');
+                idx_iter += 1;
                 continue;
             }
 
             if active {
-                out.push_str(&self.substitute(line));
+                let mut buffer = String::from(line);
+                let mut consumed = 1usize;
+                while macro_call_unclosed(&buffer, &self.fn_macros) && idx + consumed < lines.len()
+                {
+                    buffer.push('\n');
+                    buffer.push_str(lines[idx + consumed]);
+                    consumed += 1;
+                }
+                out.push_str(&self.substitute(&buffer, filename, line_no));
+                out.push('\n');
+                // Preserve source line numbering by emitting a blank
+                // line for each extra source line we joined into the
+                // buffer.
+                for _ in 1..consumed {
+                    out.push('\n');
+                }
+                idx_iter += consumed;
+            } else {
+                out.push('\n');
+                idx_iter += 1;
             }
-            out.push('\n');
         }
 
         if !cond_stack.is_empty() {
@@ -399,7 +652,26 @@ impl Preprocessor {
     /// continue). Replacement is iterative with a per-call visited
     /// set so `#define A B` `#define B 5` chains expand fully but
     /// `#define A A` doesn't loop forever.
-    fn substitute(&self, line: &str) -> String {
+    ///
+    /// `filename` and `line_no` feed the special predefined macros
+    /// `__FILE__` and `__LINE__`, which can't live in the static
+    /// `macros` table because their expansion changes on every line.
+    fn substitute(&self, line: &str, filename: &str, line_no: usize) -> String {
+        self.substitute_with_blocklist(line, filename, line_no, &[])
+    }
+
+    /// Like [`substitute`], but `blocklist` enumerates macro names
+    /// currently being expanded -- the C99 "blue paint" rule says a
+    /// macro doesn't re-expand inside its own replacement list.
+    /// SQLite-style self-shadowing (`static T name; #define name
+    /// GLOBAL(T, name)`) blows the stack without this guard.
+    fn substitute_with_blocklist(
+        &self,
+        line: &str,
+        filename: &str,
+        line_no: usize,
+        blocklist: &[&str],
+    ) -> String {
         let bytes = line.as_bytes();
         let mut out = String::with_capacity(line.len());
         let mut i = 0;
@@ -412,6 +684,25 @@ impl Preprocessor {
                     i += 1;
                 }
                 let ident = &line[start..i];
+                // C99 sec 6.10.8 dynamic predefines -- their expansion
+                // depends on the current line / file, so they sit
+                // outside the static macro table.
+                if ident == "__LINE__" {
+                    out.push_str(&format!("{line_no}"));
+                    continue;
+                }
+                if ident == "__FILE__" {
+                    out.push('"');
+                    out.push_str(filename);
+                    out.push('"');
+                    continue;
+                }
+                // C99 "blue paint": don't re-expand a name that's
+                // already being expanded on the current chain.
+                if blocklist.contains(&ident) {
+                    out.push_str(ident);
+                    continue;
+                }
                 // Function-like macro: only expands when the next
                 // non-whitespace character is `(`. The C standard
                 // allows whitespace between the name and the open
@@ -425,10 +716,30 @@ impl Preprocessor {
                         && bytes[j] == b'('
                         && let Some((args, after)) = parse_macro_args(&line[j..])
                     {
-                        let expanded = expand_fn_macro(macro_def, &args);
+                        // C99 argument substitution rule: each arg is
+                        // macro-expanded *before* being substituted
+                        // into the body (parameters that participate
+                        // in `#` or `##` are exempt, but expand_fn_macro
+                        // handles those cases by reading the parameter's
+                        // unexpanded text directly). Pre-expand here
+                        // with `ident` not yet on the blocklist -- the
+                        // outer macro's blue paint only kicks in for
+                        // the rescan of the substituted body.
+                        let expanded_args: Vec<String> = args
+                            .iter()
+                            .map(|a| {
+                                self.substitute_with_blocklist(a, filename, line_no, blocklist)
+                            })
+                            .collect();
+                        let expanded = expand_fn_macro(macro_def, &expanded_args);
                         // Re-substitute so nested macro names inside
-                        // the expansion get a chance too.
-                        let recursed = self.substitute(&expanded);
+                        // the expansion get a chance too -- but mark
+                        // `ident` as being expanded so it doesn't
+                        // trigger another round.
+                        let mut nested: Vec<&str> = blocklist.to_vec();
+                        nested.push(ident);
+                        let recursed =
+                            self.substitute_with_blocklist(&expanded, filename, line_no, &nested);
                         out.push_str(&recursed);
                         i = j + after;
                         continue;
@@ -442,14 +753,23 @@ impl Preprocessor {
                 // allocation per source identifier.
                 match self.expand(ident) {
                     None => out.push_str(ident),
-                    Some(expanded) => out.push_str(&self.substitute(&expanded)),
+                    Some(expanded) => {
+                        let mut nested: Vec<&str> = blocklist.to_vec();
+                        nested.push(ident);
+                        out.push_str(
+                            &self.substitute_with_blocklist(&expanded, filename, line_no, &nested),
+                        );
+                    }
                 }
-            } else if c == b'"' {
-                // Copy string literals verbatim so identifier-looking
-                // bytes inside them aren't substituted.
-                out.push('"');
+            } else if c == b'"' || c == b'\'' {
+                // Copy string and character literals verbatim so
+                // identifier-looking bytes inside them aren't
+                // substituted, and so a quoted quote (`'"'` /
+                // `"\"")` doesn't open the *other* literal kind.
+                let quote = c;
+                out.push(quote as char);
                 i += 1;
-                while i < bytes.len() && bytes[i] != b'"' {
+                while i < bytes.len() && bytes[i] != quote {
                     if bytes[i] == b'\\' && i + 1 < bytes.len() {
                         out.push(bytes[i] as char);
                         out.push(bytes[i + 1] as char);
@@ -460,7 +780,7 @@ impl Preprocessor {
                     }
                 }
                 if i < bytes.len() {
-                    out.push('"');
+                    out.push(quote as char);
                     i += 1;
                 }
             } else {
@@ -499,33 +819,117 @@ impl Preprocessor {
         self.expand(name).unwrap_or_else(|| name.to_string())
     }
 
-    fn eval_condition(&self, expr: &str, line_no: usize) -> Result<bool, C5Error> {
-        let expr = expr.trim();
-        if let Some((lhs, rhs)) = expr.split_once("==") {
-            let l = self.expand_or_self(lhs.trim());
-            let r = self.expand_or_self(rhs.trim());
-            Ok(l == r)
-        } else if let Some((lhs, rhs)) = expr.split_once("!=") {
-            let l = self.expand_or_self(lhs.trim());
-            let r = self.expand_or_self(rhs.trim());
-            Ok(l != r)
-        } else if let Some(name) = expr
-            .strip_prefix("defined(")
-            .and_then(|s| s.strip_suffix(')'))
-        {
-            Ok(self.macros.contains_key(name.trim()))
-        } else if !expr.is_empty() && expr.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-            // Bare identifier: truthy iff defined and the expansion
-            // is a non-zero, non-empty value. Anything else lands in
-            // the error path below so the source author notices.
-            let v = self.expand_or_self(expr);
-            Ok(!v.is_empty() && v != "0")
-        } else {
-            Err(C5Error::Compile(format!(
-                "preprocessor:{line_no}: `#if` expression {expr:?} not understood (only `NAME`, \
-                 `defined(NAME)`, `LHS == RHS`, `LHS != RHS` are supported)"
-            )))
+    /// Pre-pass for `#if` evaluation: protect every `defined(NAME)`
+    /// (and `defined NAME`) by replacing it with `1` or `0` *before*
+    /// macro substitution. Otherwise `substitute` would expand the
+    /// argument and lose the original name. Returns a fully
+    /// macro-substituted string suitable for the `#if` expression
+    /// parser.
+    fn expand_for_if(&self, expr: &str) -> String {
+        let mut out = String::with_capacity(expr.len());
+        let bytes = expr.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            // Skip whitespace.
+            if (bytes[i] as char).is_ascii_whitespace() {
+                out.push(bytes[i] as char);
+                i += 1;
+                continue;
+            }
+            // Strip `/* ... */` block comments and `// ...` line
+            // comments. SQLite peppers them on `#if` lines.
+            if bytes[i] == b'/' && bytes.get(i + 1) == Some(&b'*') {
+                i += 2;
+                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                    i += 1;
+                }
+                i = (i + 2).min(bytes.len());
+                out.push(' ');
+                continue;
+            }
+            if bytes[i] == b'/' && bytes.get(i + 1) == Some(&b'/') {
+                i = bytes.len();
+                continue;
+            }
+            // Match `defined` keyword (must be a complete word).
+            if bytes[i..].starts_with(b"defined") {
+                let after = i + b"defined".len();
+                let prev_is_word =
+                    i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
+                let next_is_word = bytes
+                    .get(after)
+                    .is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'_');
+                if !prev_is_word && !next_is_word {
+                    let mut j = after;
+                    while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
+                        j += 1;
+                    }
+                    let with_paren = bytes.get(j) == Some(&b'(');
+                    if with_paren {
+                        j += 1;
+                        while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
+                            j += 1;
+                        }
+                    }
+                    let name_start = j;
+                    while j < bytes.len() && (bytes[j].is_ascii_alphanumeric() || bytes[j] == b'_')
+                    {
+                        j += 1;
+                    }
+                    let name = &expr[name_start..j];
+                    if with_paren {
+                        while j < bytes.len() && (bytes[j] as char).is_ascii_whitespace() {
+                            j += 1;
+                        }
+                        if bytes.get(j) == Some(&b')') {
+                            j += 1;
+                        }
+                    }
+                    if !name.is_empty() {
+                        let v = self.macros.contains_key(name) || self.fn_macros.contains_key(name);
+                        out.push_str(if v { "1" } else { "0" });
+                        i = j;
+                        continue;
+                    }
+                }
+            }
+            out.push(bytes[i] as char);
+            i += 1;
         }
+        // Now expand all remaining identifiers (object + function-
+        // like) via the standard substitute pass. Then strip block
+        // and line comments from the result -- macro bodies can
+        // carry inline `/* ... */` comments that survive expansion
+        // and would otherwise confuse the expression tokenizer.
+        let substituted = self.substitute(&out, "<#if>", 0);
+        strip_comments(&substituted)
+    }
+
+    fn eval_condition(&self, expr: &str, line_no: usize) -> Result<bool, C5Error> {
+        // Full c99 `#if` expression evaluator: integer constants,
+        // identifiers (treated as 0 if undefined), `defined(X)`,
+        // unary `!`, comparisons, and boolean operators with
+        // standard precedence. Strings (`"..."`) round-trip as
+        // their canonical form so `__BADC_TARGET__ == "macos"`
+        // still works as before.
+        //
+        // Pre-substitute the expression through the macro table so
+        // function-like macros (`__has_attribute(x)`) and chained
+        // object-like macros (`SQLITE_VERSION_NUMBER`) expand before
+        // the parser sees them. `defined(X)` is protected by a
+        // pre-pass that converts it to a literal 0/1 since
+        // substitute would otherwise expand X away.
+        let prepared = self.expand_for_if(expr);
+        let mut p = IfExprParser::new(&prepared, self);
+        let v = p.parse_or()?;
+        p.skip_ws();
+        if !p.at_end() {
+            return Err(C5Error::Compile(alloc::format!(
+                "preprocessor:{line_no}: trailing junk in `#if` expression: {:?}",
+                p.tail()
+            )));
+        }
+        Ok(v.truthy())
     }
 
     /// Recognise `dylib(...)` and `binding(...)`. Other pragmas
@@ -639,11 +1043,22 @@ impl Preprocessor {
         if self.pragma_once_files.contains(name) {
             return Ok(String::new());
         }
-        let Some(content) = embedded_header(name) else {
-            // Unknown header: drop it on the floor and let any
-            // missing-symbol error fall out of the lexer / codegen
-            // downstream. Matches the historical pre-`#include`
-            // behaviour.
+        // Resolution order:
+        //   1. Filesystem search paths added via `add_search_path`
+        //      (= the CLI's `-I` flag plus any built-in defaults).
+        //      Lets a user override a bundled header by dropping
+        //      the modified file at `./include/<name>` without
+        //      rebuilding badc.
+        //   2. Bundled in-binary header (the include_str! set in
+        //      `headers.rs`).
+        //   3. Silent miss -- preserve the historical "drop the
+        //      include on the floor" behaviour so legacy fixtures
+        //      with cosmetic `#include`s don't fail.
+        // The result is owned `String` because filesystem-loaded
+        // bodies don't have static lifetime; the embedded path
+        // copies its `&'static str` into one to share the type.
+        let resolved: Option<String> = self.find_include(name);
+        let Some(content) = resolved else {
             return Ok(String::new());
         };
         if self.include_stack.iter().any(|f| f == name) {
@@ -653,9 +1068,28 @@ impl Preprocessor {
             )));
         }
         self.include_stack.push(name.to_string());
-        let result = self.process_named(content, name);
+        let result = self.process_named(&content, name);
         self.include_stack.pop();
         result
+    }
+
+    /// Look `name` up in the search-path chain and the embedded
+    /// registry. See `process_include` for the resolution order.
+    fn find_include(&self, name: &str) -> Option<String> {
+        #[cfg(feature = "std")]
+        for path in &self.search_paths {
+            let candidate = if path.is_empty() {
+                name.to_string()
+            } else if path.ends_with('/') || path.ends_with('\\') {
+                format!("{path}{name}")
+            } else {
+                format!("{path}/{name}")
+            };
+            if let Ok(body) = std::fs::read_to_string(&candidate) {
+                return Some(body);
+            }
+        }
+        embedded_header(name).map(|s| s.to_string())
     }
 
     /// `#pragma binding(dylib::local_name, "real_symbol")` -- record
@@ -694,11 +1128,132 @@ impl Preprocessor {
         dylib.bindings.push(Binding {
             is_variadic: false,
             fixed_args: 0,
+            return_type_tag: 0,
             local_name: local_name.to_string(),
             real_symbol: real_symbol.to_string(),
         });
         Ok(())
     }
+}
+
+/// Strip C-style `/* ... */` block comments and `// ...` line
+/// comments from a single-line buffer. Used on the post-macro-
+/// expansion `#if` expression where inlined comments would
+/// otherwise confuse the expression tokenizer.
+fn strip_comments(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'/' && bytes.get(i + 1) == Some(&b'*') {
+            i += 2;
+            while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                i += 1;
+            }
+            i = (i + 2).min(bytes.len());
+            out.push(' ');
+            continue;
+        }
+        if bytes[i] == b'/' && bytes.get(i + 1) == Some(&b'/') {
+            break;
+        }
+        out.push(bytes[i] as char);
+        i += 1;
+    }
+    out
+}
+
+/// Phase-3 comment removal: strip `/* ... */` block comments and
+/// `// ...` line comments from the entire source. Each comment is
+/// replaced by a single space so token boundaries are preserved
+/// (`a/**/b` becomes `a b`, not `ab`). Newlines inside block
+/// comments stay as `\n` so line numbers and `__LINE__` are
+/// faithful to the original source. Quoted strings and char
+/// literals are passed through unchanged so `"//"` doesn't get
+/// misread as a line comment.
+fn strip_c_comments(source: &str) -> String {
+    let mut out = String::with_capacity(source.len());
+    let bytes = source.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = bytes[i];
+        if c == b'/' && bytes.get(i + 1) == Some(&b'*') {
+            // Block comment.
+            i += 2;
+            while i + 1 < bytes.len() {
+                if bytes[i] == b'*' && bytes[i + 1] == b'/' {
+                    i += 2;
+                    break;
+                }
+                if bytes[i] == b'\n' {
+                    out.push('\n');
+                }
+                i += 1;
+            }
+            out.push(' ');
+            continue;
+        }
+        if c == b'/' && bytes.get(i + 1) == Some(&b'/') {
+            // Line comment -- skip to next newline (don't consume it).
+            i += 2;
+            while i < bytes.len() && bytes[i] != b'\n' {
+                i += 1;
+            }
+            out.push(' ');
+            continue;
+        }
+        if c == b'"' || c == b'\'' {
+            // Pass-through quoted literal so `"//"` etc. survive.
+            let quote = c;
+            out.push(c as char);
+            i += 1;
+            while i < bytes.len() && bytes[i] != quote {
+                if bytes[i] == b'\\' && i + 1 < bytes.len() {
+                    out.push(bytes[i] as char);
+                    out.push(bytes[i + 1] as char);
+                    i += 2;
+                } else {
+                    out.push(bytes[i] as char);
+                    i += 1;
+                }
+            }
+            if i < bytes.len() {
+                out.push(quote as char);
+                i += 1;
+            }
+            continue;
+        }
+        out.push(c as char);
+        i += 1;
+    }
+    out
+}
+
+/// Phase-2 line-continuation collapse: every line ending in `\\`
+/// joins with the next, preserving total line count by emitting
+/// blank padding lines. The c99 spec runs this before all other
+/// preprocessing passes.
+fn unfold_line_continuations(source: &str) -> String {
+    let mut out = String::with_capacity(source.len());
+    let mut iter = source.lines().peekable();
+    while let Some(line) = iter.next() {
+        let mut joined = line.to_string();
+        let mut padding = 0;
+        while joined.ends_with('\\') {
+            joined.pop();
+            padding += 1;
+            match iter.next() {
+                Some(next) => joined.push_str(next),
+                None => break,
+            }
+        }
+        out.push_str(&joined);
+        out.push('\n');
+        for _ in 0..padding {
+            out.push('\n');
+        }
+    }
+    out
 }
 
 /// Identifier check: ASCII letter or `_` to start, alnum or `_`
@@ -753,9 +1308,15 @@ enum Directive<'a> {
     Ifndef(&'a str),
     If(&'a str),
     Else,
+    /// `#elif <expr>` -- like `#else` followed by a re-evaluated
+    /// `#if <expr>`, but only takes if no preceding branch did.
+    Elif(&'a str),
     Endif,
     Pragma(&'a str),
     Include(&'a str),
+    /// `#error <message>` -- C99 sec 6.10.5. The diagnostic message is
+    /// the literal text after `#error` up to the newline.
+    Error(&'a str),
     Shebang,
     Other,
 }
@@ -775,6 +1336,21 @@ fn parse_pragma_directive(args: &str) -> PragmaDirective {
     } else {
         PragmaDirective::Other
     }
+}
+
+/// True when `args` is the head of a `pack(...)` pragma -- the
+/// preprocessor passes those through verbatim so the lexer can
+/// fold them into its `pack_stack` at the right source position
+/// (see the `Directive::Pragma` arm in `process_named`).
+fn pragma_is_pack(args: &str) -> bool {
+    let trimmed = args.trim_start();
+    let Some(rest) = trimmed.strip_prefix("pack") else {
+        return false;
+    };
+    // `pack(...)` -- the next non-whitespace byte must be `(`.
+    // Anything else (`packfoo`, `pack_extra`) is a different
+    // pragma the preprocessor still wants to silently swallow.
+    rest.trim_start().starts_with('(')
 }
 
 fn parse_directive(rest: &str) -> Directive<'_> {
@@ -823,6 +1399,17 @@ fn parse_directive(rest: &str) -> Directive<'_> {
     if let Some(after) = rest.strip_prefix("ifndef") {
         return Directive::Ifndef(after.trim());
     }
+    if let Some(after) = rest.strip_prefix("elif") {
+        // `#elif EXPR` -- treated as `#else` followed by a re-evaluated
+        // `#if EXPR`, but only if no preceding branch was taken.
+        if after
+            .chars()
+            .next()
+            .is_none_or(|c| !c.is_ascii_alphanumeric() && c != '_')
+        {
+            return Directive::Elif(after);
+        }
+    }
     if let Some(after) = rest.strip_prefix("if") {
         // Discriminate `#if` from `#ifdef`/`#ifndef` -- the latter
         // were caught above.
@@ -848,6 +1435,15 @@ fn parse_directive(rest: &str) -> Directive<'_> {
     }
     if let Some(after) = rest.strip_prefix("pragma") {
         return Directive::Pragma(after.trim());
+    }
+    if let Some(after) = rest.strip_prefix("error") {
+        // Accept `#error` with no message and `#error <text>`. C99
+        // doesn't actually require any message text -- the
+        // diagnostic is the directive itself -- but most users
+        // expect to be able to write `#error "must be x86"`.
+        if after.is_empty() || after.starts_with(char::is_whitespace) {
+            return Directive::Error(after.trim_start());
+        }
     }
     if let Some(after) = rest.strip_prefix("include") {
         let trimmed = after.trim();
@@ -949,25 +1545,667 @@ fn parse_macro_args(s: &str) -> Option<(Vec<String>, usize)> {
     None
 }
 
-/// Substitute `params` for `args` in a function-like macro body.
-/// Whole-word match -- a parameter named `T` replaces only the
-/// identifier `T`, never `T` inside another word like `Tx`.
-fn expand_fn_macro(def: &FnMacro, args: &[String]) -> String {
-    let bytes = def.body.as_bytes();
-    let mut out = String::with_capacity(def.body.len());
+/// True if `buffer` contains a known function-like macro name
+/// followed by `(` and the matching `)` is *not* in the buffer.
+/// Used by the preprocessor's main driver to decide whether the
+/// next source line should be appended to the current logical
+/// line so a multi-line `assert(\n  expr\n)` call expands. Quotes
+/// and char literals are skipped so `"foo("` doesn't trigger.
+fn macro_call_unclosed(buffer: &str, fn_macros: &HashMap<String, FnMacro>) -> bool {
+    let bytes = buffer.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
         let c = bytes[i];
+        if c == b'"' || c == b'\'' {
+            let q = c;
+            i += 1;
+            while i < bytes.len() && bytes[i] != q {
+                if bytes[i] == b'\\' && i + 1 < bytes.len() {
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            if i < bytes.len() {
+                i += 1;
+            }
+            continue;
+        }
         if c.is_ascii_alphabetic() || c == b'_' {
             let start = i;
             i += 1;
             while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
                 i += 1;
             }
+            let name = &buffer[start..i];
+            if fn_macros.contains_key(name) {
+                let mut j = i;
+                while j < bytes.len()
+                    && (bytes[j] == b' ' || bytes[j] == b'\t' || bytes[j] == b'\n')
+                {
+                    j += 1;
+                }
+                if j < bytes.len() && bytes[j] == b'(' && parse_macro_args(&buffer[j..]).is_none() {
+                    return true;
+                }
+            }
+            continue;
+        }
+        i += 1;
+    }
+    false
+}
+
+/// Substitute `params` for `args` in a function-like macro body.
+/// Whole-word match -- a parameter named `T` replaces only the
+/// identifier `T`, never `T` inside another word like `Tx`.
+///
+/// Also handles the C99 macro operators:
+///   - `#param` stringifies the literal argument text into a string
+///     literal (with `\` and `"` escaped).
+///   - `a ## b` token-pastes the two surrounding tokens after
+///     substitution, dropping any whitespace around the `##`.
+///   - `__VA_ARGS__` substitutes the variadic-tail args joined with
+///     `, ` for variadic macros (`#define foo(...)` /
+///     `#define foo(a, ...)`).
+/// Value produced by the `#if`-expression evaluator.
+///
+/// `Int` is the c99 integer-constant case (`#if X >= 5`); `Str` is
+/// the c5 extension where macros can hold quoted strings (`#if
+/// __BADC_TARGET__ == "macos-aarch64"`). The two interop only via
+/// equality / inequality -- mixing them in arithmetic is rejected.
+#[derive(Debug, Clone)]
+enum IfValue {
+    Int(i64),
+    Str(String),
+}
+
+impl IfValue {
+    fn truthy(&self) -> bool {
+        match self {
+            IfValue::Int(n) => *n != 0,
+            IfValue::Str(s) => !s.is_empty(),
+        }
+    }
+    fn as_int(&self) -> i64 {
+        match self {
+            IfValue::Int(n) => *n,
+            IfValue::Str(s) => {
+                // String coerced to int: 0 unless the bytes happen
+                // to parse as a number. Real c programs rarely
+                // mix; this is purely defensive.
+                s.parse().unwrap_or(0)
+            }
+        }
+    }
+}
+
+/// Tiny recursive-descent parser for `#if` expressions. Mirrors the
+/// c99 precedence (top to bottom):
+///
+///   `||` | `&&` | `|` | `^` | `&` | `== !=` | `< <= > >=` |
+///   `<< >>` | `+ -` | `* / %` | unary `! - + ~` | primary
+///
+/// Primaries are integer literals (decimal / hex / octal with the
+/// usual c99 suffixes), `defined(NAME)` / `defined NAME`, identifiers
+/// (resolved through the macro table -- undefined names evaluate to
+/// 0), parenthesised sub-expressions, and string literals (preserved
+/// for the c5-extension `==`/`!=` shape).
+struct IfExprParser<'a> {
+    src: &'a str,
+    pos: usize,
+    pp: &'a Preprocessor,
+}
+
+impl<'a> IfExprParser<'a> {
+    fn new(src: &'a str, pp: &'a Preprocessor) -> Self {
+        Self { src, pos: 0, pp }
+    }
+    fn at_end(&self) -> bool {
+        self.pos >= self.src.len()
+    }
+    fn tail(&self) -> &str {
+        &self.src[self.pos..]
+    }
+    fn peek_byte(&self) -> Option<u8> {
+        self.src.as_bytes().get(self.pos).copied()
+    }
+    fn skip_ws(&mut self) {
+        while let Some(b) = self.peek_byte() {
+            if b.is_ascii_whitespace() {
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+    }
+    fn eat(&mut self, s: &str) -> bool {
+        self.skip_ws();
+        if self.src[self.pos..].starts_with(s) {
+            self.pos += s.len();
+            true
+        } else {
+            false
+        }
+    }
+    fn eat_byte(&mut self, b: u8) -> bool {
+        self.skip_ws();
+        if self.peek_byte() == Some(b) {
+            self.pos += 1;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn parse_or(&mut self) -> Result<IfValue, C5Error> {
+        let mut left = self.parse_and()?;
+        loop {
+            self.skip_ws();
+            if self.eat("||") {
+                let right = self.parse_and()?;
+                left = IfValue::Int((left.truthy() || right.truthy()) as i64);
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+
+    fn parse_and(&mut self) -> Result<IfValue, C5Error> {
+        let mut left = self.parse_bitor()?;
+        loop {
+            self.skip_ws();
+            if self.eat("&&") {
+                let right = self.parse_bitor()?;
+                left = IfValue::Int((left.truthy() && right.truthy()) as i64);
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+
+    fn parse_bitor(&mut self) -> Result<IfValue, C5Error> {
+        let mut left = self.parse_bitxor()?;
+        loop {
+            self.skip_ws();
+            // Single `|`, but only if not followed by another `|`
+            // (which would be `||`, the OR operator we already handled).
+            if self.peek_byte() == Some(b'|')
+                && self.src.as_bytes().get(self.pos + 1) != Some(&b'|')
+            {
+                self.pos += 1;
+                let right = self.parse_bitxor()?;
+                left = IfValue::Int(left.as_int() | right.as_int());
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+
+    fn parse_bitxor(&mut self) -> Result<IfValue, C5Error> {
+        let mut left = self.parse_bitand()?;
+        loop {
+            self.skip_ws();
+            if self.eat_byte(b'^') {
+                let right = self.parse_bitand()?;
+                left = IfValue::Int(left.as_int() ^ right.as_int());
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+
+    fn parse_bitand(&mut self) -> Result<IfValue, C5Error> {
+        let mut left = self.parse_eq()?;
+        loop {
+            self.skip_ws();
+            if self.peek_byte() == Some(b'&')
+                && self.src.as_bytes().get(self.pos + 1) != Some(&b'&')
+            {
+                self.pos += 1;
+                let right = self.parse_eq()?;
+                left = IfValue::Int(left.as_int() & right.as_int());
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+
+    fn parse_eq(&mut self) -> Result<IfValue, C5Error> {
+        let mut left = self.parse_rel()?;
+        loop {
+            self.skip_ws();
+            if self.eat("==") {
+                let right = self.parse_rel()?;
+                left = IfValue::Int(if_value_eq(&left, &right) as i64);
+            } else if self.eat("!=") {
+                let right = self.parse_rel()?;
+                left = IfValue::Int(!if_value_eq(&left, &right) as i64);
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+
+    fn parse_rel(&mut self) -> Result<IfValue, C5Error> {
+        let mut left = self.parse_shift()?;
+        loop {
+            self.skip_ws();
+            if self.eat("<=") {
+                let right = self.parse_shift()?;
+                left = IfValue::Int((left.as_int() <= right.as_int()) as i64);
+            } else if self.eat(">=") {
+                let right = self.parse_shift()?;
+                left = IfValue::Int((left.as_int() >= right.as_int()) as i64);
+            } else if self.peek_byte() == Some(b'<')
+                && self.src.as_bytes().get(self.pos + 1) != Some(&b'<')
+            {
+                self.pos += 1;
+                let right = self.parse_shift()?;
+                left = IfValue::Int((left.as_int() < right.as_int()) as i64);
+            } else if self.peek_byte() == Some(b'>')
+                && self.src.as_bytes().get(self.pos + 1) != Some(&b'>')
+            {
+                self.pos += 1;
+                let right = self.parse_shift()?;
+                left = IfValue::Int((left.as_int() > right.as_int()) as i64);
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+
+    fn parse_shift(&mut self) -> Result<IfValue, C5Error> {
+        let mut left = self.parse_addsub()?;
+        loop {
+            self.skip_ws();
+            if self.eat("<<") {
+                let right = self.parse_addsub()?;
+                left = IfValue::Int(left.as_int() << right.as_int());
+            } else if self.eat(">>") {
+                let right = self.parse_addsub()?;
+                left = IfValue::Int(left.as_int() >> right.as_int());
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+
+    fn parse_addsub(&mut self) -> Result<IfValue, C5Error> {
+        let mut left = self.parse_muldiv()?;
+        loop {
+            self.skip_ws();
+            if self.eat_byte(b'+') {
+                let right = self.parse_muldiv()?;
+                left = IfValue::Int(left.as_int().wrapping_add(right.as_int()));
+            } else if self.eat_byte(b'-') {
+                let right = self.parse_muldiv()?;
+                left = IfValue::Int(left.as_int().wrapping_sub(right.as_int()));
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+
+    fn parse_muldiv(&mut self) -> Result<IfValue, C5Error> {
+        let mut left = self.parse_unary()?;
+        loop {
+            self.skip_ws();
+            if self.eat_byte(b'*') {
+                let right = self.parse_unary()?;
+                left = IfValue::Int(left.as_int().wrapping_mul(right.as_int()));
+            } else if self.eat_byte(b'/') {
+                let right = self.parse_unary()?;
+                let r = right.as_int();
+                left = IfValue::Int(if r == 0 { 0 } else { left.as_int() / r });
+            } else if self.eat_byte(b'%') {
+                let right = self.parse_unary()?;
+                let r = right.as_int();
+                left = IfValue::Int(if r == 0 { 0 } else { left.as_int() % r });
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+
+    fn parse_unary(&mut self) -> Result<IfValue, C5Error> {
+        self.skip_ws();
+        if self.eat_byte(b'!') {
+            let v = self.parse_unary()?;
+            return Ok(IfValue::Int((!v.truthy()) as i64));
+        }
+        if self.eat_byte(b'~') {
+            let v = self.parse_unary()?;
+            return Ok(IfValue::Int(!v.as_int()));
+        }
+        if self.eat_byte(b'-') {
+            let v = self.parse_unary()?;
+            return Ok(IfValue::Int(-v.as_int()));
+        }
+        if self.eat_byte(b'+') {
+            return self.parse_unary();
+        }
+        self.parse_primary()
+    }
+
+    fn parse_primary(&mut self) -> Result<IfValue, C5Error> {
+        self.skip_ws();
+        if self.eat_byte(b'(') {
+            let v = self.parse_or()?;
+            self.skip_ws();
+            if !self.eat_byte(b')') {
+                return Err(C5Error::Compile(
+                    "preprocessor: missing `)` in `#if` expression".to_string(),
+                ));
+            }
+            return Ok(v);
+        }
+        if self.eat_byte(b'"') {
+            // String literal -- read to closing `"`. No escape
+            // handling beyond plain bytes; the c5 use cases compare
+            // simple paths.
+            let start = self.pos;
+            while let Some(b) = self.peek_byte() {
+                if b == b'"' {
+                    let s = self.src[start..self.pos].to_string();
+                    self.pos += 1;
+                    return Ok(IfValue::Str(format!("\"{s}\"")));
+                }
+                self.pos += 1;
+            }
+            return Err(C5Error::Compile(
+                "preprocessor: unterminated string in `#if` expression".to_string(),
+            ));
+        }
+        if self.eat_byte(b'\'') {
+            // Character literal -- a single byte, optionally escaped.
+            // Multi-char (`'AB'`) is implementation-defined; we use
+            // the last byte, which matches gcc's choice.
+            let bytes = self.src.as_bytes();
+            let mut acc: i64 = 0;
+            while let Some(b) = self.peek_byte() {
+                if b == b'\'' {
+                    self.pos += 1;
+                    return Ok(IfValue::Int(acc));
+                }
+                if b == b'\\' && self.pos + 1 < bytes.len() {
+                    self.pos += 2;
+                    let esc = bytes[self.pos - 1];
+                    let ch = match esc {
+                        b'n' => 0x0A,
+                        b't' => 0x09,
+                        b'r' => 0x0D,
+                        b'0' => 0x00,
+                        b'\\' => b'\\',
+                        b'\'' => b'\'',
+                        b'"' => b'"',
+                        b'a' => 0x07,
+                        b'b' => 0x08,
+                        b'f' => 0x0C,
+                        b'v' => 0x0B,
+                        other => other,
+                    };
+                    acc = (acc << 8) | (ch as i64);
+                } else {
+                    acc = (acc << 8) | (b as i64);
+                    self.pos += 1;
+                }
+            }
+            return Err(C5Error::Compile(
+                "preprocessor: unterminated char literal in `#if`".to_string(),
+            ));
+        }
+        // Integer literal? Decimal, hex (0x...), or octal (0...).
+        if let Some(b) = self.peek_byte() {
+            if b.is_ascii_digit() {
+                return self.parse_int_literal();
+            }
+            if b.is_ascii_alphabetic() || b == b'_' {
+                return self.parse_ident_or_defined();
+            }
+        }
+        Err(C5Error::Compile(alloc::format!(
+            "preprocessor: unexpected `{}` in `#if` expression",
+            self.tail().chars().next().unwrap_or(' ')
+        )))
+    }
+
+    fn parse_int_literal(&mut self) -> Result<IfValue, C5Error> {
+        let bytes = self.src.as_bytes();
+        let start = self.pos;
+        let mut radix: u32 = 10;
+        if bytes.get(self.pos) == Some(&b'0') {
+            if bytes.get(self.pos + 1) == Some(&b'x') || bytes.get(self.pos + 1) == Some(&b'X') {
+                self.pos += 2;
+                radix = 16;
+            } else if bytes
+                .get(self.pos + 1)
+                .is_some_and(|b| (*b as char).is_ascii_digit())
+            {
+                self.pos += 1;
+                radix = 8;
+            } else {
+                self.pos += 1;
+            }
+        }
+        let body_start = self.pos;
+        while let Some(b) = self.peek_byte() {
+            let is_digit = match radix {
+                16 => b.is_ascii_hexdigit(),
+                _ => b.is_ascii_digit(),
+            };
+            if !is_digit {
+                break;
+            }
+            self.pos += 1;
+        }
+        // Eat any integer suffix (uUlL combinations) without
+        // touching the value.
+        while let Some(b) = self.peek_byte() {
+            if matches!(b, b'u' | b'U' | b'l' | b'L') {
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+        let body = self.src[start..self.pos].trim_end_matches(['u', 'U', 'l', 'L']);
+        let v = if radix == 10 {
+            body.parse::<i64>()
+        } else {
+            // Strip the "0x" / leading "0" prefix.
+            let stripped = if radix == 16 {
+                body.trim_start_matches("0x").trim_start_matches("0X")
+            } else {
+                body.trim_start_matches('0')
+            };
+            if stripped.is_empty() {
+                Ok(0i64)
+            } else {
+                i64::from_str_radix(stripped, radix)
+            }
+        };
+        let _ = body_start;
+        match v {
+            Ok(n) => Ok(IfValue::Int(n)),
+            Err(_) => Err(C5Error::Compile(alloc::format!(
+                "preprocessor: malformed integer literal {body:?} in `#if`",
+            ))),
+        }
+    }
+
+    fn parse_ident_or_defined(&mut self) -> Result<IfValue, C5Error> {
+        let start = self.pos;
+        while let Some(b) = self.peek_byte() {
+            if b.is_ascii_alphanumeric() || b == b'_' {
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+        let name = &self.src[start..self.pos];
+        if name == "defined" {
+            // `defined NAME` or `defined(NAME)` -- both are valid.
+            self.skip_ws();
+            let with_paren = self.eat_byte(b'(');
+            self.skip_ws();
+            let id_start = self.pos;
+            while let Some(b) = self.peek_byte() {
+                if b.is_ascii_alphanumeric() || b == b'_' {
+                    self.pos += 1;
+                } else {
+                    break;
+                }
+            }
+            if id_start == self.pos {
+                return Err(C5Error::Compile(
+                    "preprocessor: identifier expected after `defined`".to_string(),
+                ));
+            }
+            let id = self.src[id_start..self.pos].to_string();
+            if with_paren {
+                self.skip_ws();
+                if !self.eat_byte(b')') {
+                    return Err(C5Error::Compile(
+                        "preprocessor: missing `)` after `defined(NAME`".to_string(),
+                    ));
+                }
+            }
+            return Ok(IfValue::Int(self.pp.macros.contains_key(&id) as i64));
+        }
+        // Identifier -- look up in the macro table. Function-like
+        // macros are skipped (they need an argument list which the
+        // preprocessor evaluator doesn't simulate). Undefined names
+        // are 0 per c99 sec 6.10.1p4.
+        if let Some(value) = self.pp.macros.get(name) {
+            // Strip a leading/trailing quote pair to detect strings.
+            if value.starts_with('"') && value.ends_with('"') {
+                return Ok(IfValue::Str(value.clone()));
+            }
+            // Numeric? Try parsing.
+            if let Ok(n) = value.parse::<i64>() {
+                return Ok(IfValue::Int(n));
+            }
+            // The macro might itself be a name; recursively expand
+            // (bounded) and try once more. The bare-identifier case
+            // in c99 evaluates an undefined macro to 0; a defined
+            // macro whose body isn't a number falls through to a
+            // string-shaped value.
+            let expanded = self.pp.expand_or_self(name);
+            if let Ok(n) = expanded.parse::<i64>() {
+                return Ok(IfValue::Int(n));
+            }
+            return Ok(IfValue::Str(expanded));
+        }
+        Ok(IfValue::Int(0))
+    }
+}
+
+fn if_value_eq(a: &IfValue, b: &IfValue) -> bool {
+    match (a, b) {
+        (IfValue::Int(x), IfValue::Int(y)) => x == y,
+        (IfValue::Str(x), IfValue::Str(y)) => x == y,
+        (IfValue::Int(x), IfValue::Str(y)) | (IfValue::Str(y), IfValue::Int(x)) => {
+            // Mixed: prefer int interpretation if the string parses,
+            // else compare numerically with 0.
+            y.trim_matches('"').parse::<i64>().ok() == Some(*x)
+        }
+    }
+}
+
+fn expand_fn_macro(def: &FnMacro, args: &[String]) -> String {
+    // Pre-compute the comma-joined string for __VA_ARGS__. Empty when
+    // the macro isn't variadic or no trailing args were supplied.
+    let va_args_str: String = if def.is_variadic {
+        let var_start = def.params.len();
+        if args.len() > var_start {
+            args[var_start..].join(", ")
+        } else {
+            String::new()
+        }
+    } else {
+        String::new()
+    };
+
+    let bytes = def.body.as_bytes();
+    let mut out = String::with_capacity(def.body.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = bytes[i];
+        if c == b'#' && i + 1 < bytes.len() && bytes[i + 1] == b'#' {
+            // Token-paste: drop the `##` and any whitespace bracketing
+            // it. The C standard says `a ## b` joins the *tokens*
+            // before / after the operator; for c5's textual
+            // preprocessor that means trim trailing whitespace from
+            // what we've already emitted, then skip the operator and
+            // any leading whitespace before the next token.
+            while out.ends_with(' ') || out.ends_with('\t') {
+                out.pop();
+            }
+            i += 2;
+            while i < bytes.len() && (bytes[i] == b' ' || bytes[i] == b'\t') {
+                i += 1;
+            }
+        } else if c == b'#' {
+            // Stringification: `#param` -> `"<arg>"`. The C standard
+            // says the operand must be a parameter; we follow that
+            // and pass a stray `#` through unchanged.
+            let mut j = i + 1;
+            while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t') {
+                j += 1;
+            }
+            if j < bytes.len() && (bytes[j].is_ascii_alphabetic() || bytes[j] == b'_') {
+                let start = j;
+                while j < bytes.len() && (bytes[j].is_ascii_alphanumeric() || bytes[j] == b'_') {
+                    j += 1;
+                }
+                let name = &def.body[start..j];
+                let arg_text: Option<&str> = if name == "__VA_ARGS__" && def.is_variadic {
+                    Some(va_args_str.as_str())
+                } else if let Some(idx) = def.params.iter().position(|p| p == name) {
+                    args.get(idx).map(|s| s.as_str())
+                } else {
+                    None
+                };
+                if let Some(arg) = arg_text {
+                    out.push('"');
+                    for byte in arg.bytes() {
+                        match byte {
+                            b'"' => out.push_str("\\\""),
+                            b'\\' => out.push_str("\\\\"),
+                            _ => out.push(byte as char),
+                        }
+                    }
+                    out.push('"');
+                    i = j;
+                    continue;
+                }
+            }
+            out.push('#');
+            i += 1;
+        } else if c.is_ascii_alphabetic() || c == b'_' {
+            let start = i;
+            i += 1;
+            while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+                i += 1;
+            }
             let word = &def.body[start..i];
-            match def.params.iter().position(|p| p == word) {
-                Some(idx) if idx < args.len() => out.push_str(&args[idx]),
-                _ => out.push_str(word),
+            if word == "__VA_ARGS__" && def.is_variadic {
+                out.push_str(&va_args_str);
+            } else {
+                match def.params.iter().position(|p| p == word) {
+                    Some(idx) if idx < args.len() => out.push_str(&args[idx]),
+                    _ => out.push_str(word),
+                }
             }
         } else if c == b'"' || c == b'\'' {
             // Pass literals through unchanged so identifier-like
@@ -1051,6 +2289,57 @@ mod tests {
         // (no parens) stays a plain identifier.
         let out = process("#define NOOP(x)\nNOOP(arg);\nint NOOP;\n");
         assert!(out.contains(";\nint NOOP;"));
+    }
+
+    #[test]
+    fn stringify_operator_quotes_argument() {
+        let out = process("#define STR(x) #x\nchar *s = STR(hello world);\n");
+        assert!(
+            out.contains("\"hello world\""),
+            "stringification should produce a string literal:\n{out}"
+        );
+    }
+
+    #[test]
+    fn stringify_escapes_quote_and_backslash() {
+        // The arg is the string-literal token `"hi"` (a balanced-quoted
+        // pair) -- macro_args parses it as one arg whose text is
+        // literally `"hi"`. Stringification must wrap that in another
+        // pair of quotes and escape the inner ones, yielding
+        // `"\"hi\""`.
+        let out = process("#define STR(x) #x\nchar *s = STR(\"hi\");\n");
+        assert!(
+            out.contains("\"\\\"hi\\\"\""),
+            "stringification must escape `\"`:\n{out}"
+        );
+    }
+
+    #[test]
+    fn token_paste_joins_tokens() {
+        let out = process("#define PASTE(a, b) a ## b\nint PASTE(x, y) = 0;\n");
+        assert!(
+            out.contains("int xy = 0;"),
+            "## should produce the joined identifier:\n{out}"
+        );
+    }
+
+    #[test]
+    fn variadic_macro_expands_va_args() {
+        let out = process("#define CALL(...) f(__VA_ARGS__)\nCALL(1, 2, 3);\n");
+        assert!(
+            out.contains("f(1, 2, 3);"),
+            "__VA_ARGS__ should join the variadic args with `, `:\n{out}"
+        );
+    }
+
+    #[test]
+    fn variadic_macro_with_fixed_param() {
+        let out =
+            process("#define LOG(level, ...) printf(level, __VA_ARGS__)\nLOG(\"x\", 1, 2);\n");
+        assert!(
+            out.contains("printf(\"x\", 1, 2);"),
+            "fixed param + __VA_ARGS__ should both substitute:\n{out}"
+        );
     }
 
     #[test]

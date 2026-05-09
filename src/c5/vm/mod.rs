@@ -137,6 +137,17 @@ impl<H: Host> Vm<H> {
         // existing data-side access checks. The starting offset is
         // captured before the TLS bytes are appended.
         let mut data = program.data;
+        // Apply CodeReloc entries: function-pointer initializers in
+        // the data segment store `CODE_BASE + bc_pc` so Op::Jsri
+        // recognises the slot's value as a code address. The
+        // compiler can't bake this in directly because the VM's
+        // CODE_BASE constant lives in this crate; we patch each
+        // slot here at VM construction time.
+        for r in &program.code_relocs {
+            let off = r.data_offset as usize;
+            let runtime = (super::CODE_BASE as u64).wrapping_add(r.target_bc_pc);
+            data[off..off + 8].copy_from_slice(&runtime.to_le_bytes());
+        }
         let tls_base = data.len();
         data.extend_from_slice(&program.tls_data);
         Self {
@@ -239,6 +250,18 @@ impl<H: Host> Vm<H> {
             return Ok(());
         }
         if addr < self.static_end {
+            return Ok(());
+        }
+        // Stack frame addresses are implicitly trusted -- frames
+        // come and go on Ent/Lev and aren't tracked individually
+        // by the allocation tracker. `load_u8` / `store_u8`
+        // already special-case stack addresses in their primary
+        // path; the bulk-access checks (Mcpy, intrinsic memcpy /
+        // memcmp / memset) need the same exemption to avoid
+        // rejecting legitimate stack-to-stack copies emitted for
+        // struct-by-value parameter passing, struct-value
+        // assignment, and `struct Foo p = q;` initializers.
+        if (STACK_BASE..STACK_BASE + STACK_CAPACITY * 8).contains(&addr) {
             return Ok(());
         }
         for alloc in &self.allocations {
@@ -367,6 +390,125 @@ impl<H: Host> Vm<H> {
             }
             let bytes = val.to_le_bytes();
             self.data[addr..addr + 8].copy_from_slice(&bytes);
+            Ok(())
+        }
+    }
+
+    /// 4-byte signed load with sign-extension into i32. Mirrors
+    /// `load_u8`'s stack-aware shape: an `Lw` against a stack slot
+    /// reads the low or high half of the 8-byte slot depending on
+    /// `addr & 4`. Off-stack reads pull 4 raw bytes from `data`.
+    /// Used by [`Op::Lw`] for signed `int` lvalue reads.
+    fn load_i32(&self, addr: usize) -> Result<i32, C5Error> {
+        if let Some(idx) = self.get_stack_idx(addr) {
+            if idx < self.stack.len() {
+                let word = self.stack[idx];
+                let byte_offset = (addr - STACK_BASE) % 8;
+                let shift = byte_offset * 8;
+                Ok(((word >> shift) & 0xFFFF_FFFF) as u32 as i32)
+            } else {
+                Err(C5Error::Runtime(format!(
+                    "Stack overflow read at addr {:x}",
+                    addr
+                )))
+            }
+        } else {
+            self.check_data_access(addr, 4, AccessKind::Read)?;
+            if addr + 4 <= self.data.len() {
+                let mut bytes = [0u8; 4];
+                bytes.copy_from_slice(&self.data[addr..addr + 4]);
+                Ok(i32::from_le_bytes(bytes))
+            } else {
+                Ok(0)
+            }
+        }
+    }
+
+    /// 2-byte signed load with sign-extension into i16. Used by
+    /// [`Op::Lh`] for `short` lvalue reads. Mirrors `load_i32`'s
+    /// stack-aware shape: an `Lh` against a stack slot reads two
+    /// of the 8 bytes depending on `addr & 6`.
+    fn load_i16(&self, addr: usize) -> Result<i16, C5Error> {
+        if let Some(idx) = self.get_stack_idx(addr) {
+            if idx < self.stack.len() {
+                let word = self.stack[idx];
+                let byte_offset = (addr - STACK_BASE) % 8;
+                let shift = byte_offset * 8;
+                Ok(((word >> shift) & 0xFFFF) as u16 as i16)
+            } else {
+                Err(C5Error::Runtime(format!(
+                    "Stack overflow read at addr {:x}",
+                    addr
+                )))
+            }
+        } else {
+            self.check_data_access(addr, 2, AccessKind::Read)?;
+            if addr + 2 <= self.data.len() {
+                let mut bytes = [0u8; 2];
+                bytes.copy_from_slice(&self.data[addr..addr + 2]);
+                Ok(i16::from_le_bytes(bytes))
+            } else {
+                Ok(0)
+            }
+        }
+    }
+
+    /// 2-byte store. On the stack, masks the target half-word of
+    /// the 8-byte slot so the other 6 bytes survive. Off-stack,
+    /// writes 2 raw bytes. Companion to [`load_i16`] for [`Op::Sh`].
+    fn store_i16(&mut self, addr: usize, val: i16) -> Result<(), C5Error> {
+        if let Some(idx) = self.get_stack_idx(addr) {
+            if idx < self.stack.len() {
+                let word = self.stack[idx] as u64;
+                let byte_offset = (addr - STACK_BASE) % 8;
+                let shift = byte_offset * 8;
+                let mask = !(0xFFFFu64 << shift);
+                let new_val = (word & mask) | ((val as u16 as u64) << shift);
+                self.stack[idx] = new_val as i64;
+                Ok(())
+            } else {
+                Err(C5Error::Runtime(format!(
+                    "Stack overflow write at addr {:x}",
+                    addr
+                )))
+            }
+        } else {
+            self.check_data_access(addr, 2, AccessKind::Write)?;
+            if addr + 2 > self.data.len() {
+                self.data.resize(addr + 2, 0);
+            }
+            let bytes = val.to_le_bytes();
+            self.data[addr..addr + 2].copy_from_slice(&bytes);
+            Ok(())
+        }
+    }
+
+    /// 4-byte store. On the stack, masks the target half of the
+    /// 8-byte slot so the other 4 bytes survive. Off-stack, writes
+    /// 4 raw bytes. Companion to [`load_i32`] for [`Op::Sw`].
+    fn store_i32(&mut self, addr: usize, val: i32) -> Result<(), C5Error> {
+        if let Some(idx) = self.get_stack_idx(addr) {
+            if idx < self.stack.len() {
+                let word = self.stack[idx] as u64;
+                let byte_offset = (addr - STACK_BASE) % 8;
+                let shift = byte_offset * 8;
+                let mask = !(0xFFFF_FFFFu64 << shift);
+                let new_val = (word & mask) | ((val as u32 as u64) << shift);
+                self.stack[idx] = new_val as i64;
+                Ok(())
+            } else {
+                Err(C5Error::Runtime(format!(
+                    "Stack overflow write at addr {:x}",
+                    addr
+                )))
+            }
+        } else {
+            self.check_data_access(addr, 4, AccessKind::Write)?;
+            if addr + 4 > self.data.len() {
+                self.data.resize(addr + 4, 0);
+            }
+            let bytes = val.to_le_bytes();
+            self.data[addr..addr + 4].copy_from_slice(&bytes);
             Ok(())
         }
     }
@@ -598,6 +740,9 @@ impl<H: Host> Vm<H> {
                 Op::Lc => {
                     a = self.load_u8(a as usize)? as i64;
                 }
+                Op::Lcs => {
+                    a = (self.load_u8(a as usize)? as i8) as i64;
+                }
                 Op::Si => {
                     let addr = self.load_i64(sp)? as usize;
                     sp += 8;
@@ -607,6 +752,37 @@ impl<H: Host> Vm<H> {
                     let addr = self.load_i64(sp)? as usize;
                     sp += 8;
                     self.store_u8(addr, a as u8)?;
+                }
+                Op::Lw => {
+                    a = self.load_i32(a as usize)? as i64;
+                }
+                Op::Lwu => {
+                    // Zero-extending 32-bit load -- read four bytes
+                    // through the same mechanism, then mask the high
+                    // half to 0 so unsigned compares see the bit
+                    // pattern rather than a sign-extended value.
+                    a = (self.load_i32(a as usize)? as u32) as i64;
+                }
+                Op::Sw => {
+                    let addr = self.load_i64(sp)? as usize;
+                    sp += 8;
+                    self.store_i32(addr, a as i32)?;
+                }
+                Op::Lh => {
+                    a = self.load_i16(a as usize)? as i64;
+                }
+                Op::Lhu => {
+                    // Zero-extending 16-bit load -- read two bytes
+                    // through the same mechanism, then mask the
+                    // high 48 bits to 0 so unsigned compares see
+                    // the bit pattern rather than a sign-extended
+                    // value.
+                    a = (self.load_i16(a as usize)? as u16) as i64;
+                }
+                Op::Sh => {
+                    let addr = self.load_i64(sp)? as usize;
+                    sp += 8;
+                    self.store_i16(addr, a as i16)?;
                 }
                 Op::Psh => {
                     sp -= 8;
@@ -648,12 +824,51 @@ impl<H: Host> Vm<H> {
                     a = if self.load_i64(sp)? >= a { 1 } else { 0 };
                     sp += 8;
                 }
+                // Unsigned compares: same operand layout, but
+                // interpret both stack-top and accumulator as u64.
+                Op::Ult => {
+                    a = if (self.load_i64(sp)? as u64) < (a as u64) {
+                        1
+                    } else {
+                        0
+                    };
+                    sp += 8;
+                }
+                Op::Ugt => {
+                    a = if (self.load_i64(sp)? as u64) > (a as u64) {
+                        1
+                    } else {
+                        0
+                    };
+                    sp += 8;
+                }
+                Op::Ule => {
+                    a = if (self.load_i64(sp)? as u64) <= (a as u64) {
+                        1
+                    } else {
+                        0
+                    };
+                    sp += 8;
+                }
+                Op::Uge => {
+                    a = if (self.load_i64(sp)? as u64) >= (a as u64) {
+                        1
+                    } else {
+                        0
+                    };
+                    sp += 8;
+                }
                 Op::Shl => {
                     a = self.load_i64(sp)? << a;
                     sp += 8;
                 }
                 Op::Shr => {
                     a = self.load_i64(sp)? >> a;
+                    sp += 8;
+                }
+                Op::Shru => {
+                    let lhs = self.load_i64(sp)? as u64;
+                    a = (lhs >> (a as u64 & 63)) as i64;
                     sp += 8;
                 }
                 Op::Add => {
@@ -711,6 +926,10 @@ impl<H: Host> Vm<H> {
                     a = a.wrapping_shr(self.text[pc] as u32);
                     pc += 1;
                 }
+                Op::ShruI => {
+                    a = ((a as u64).wrapping_shr(self.text[pc] as u32)) as i64;
+                    pc += 1;
+                }
                 Op::EqI => {
                     a = (a == self.text[pc]) as i64;
                     pc += 1;
@@ -735,6 +954,22 @@ impl<H: Host> Vm<H> {
                     a = (a >= self.text[pc]) as i64;
                     pc += 1;
                 }
+                Op::UltI => {
+                    a = ((a as u64) < (self.text[pc] as u64)) as i64;
+                    pc += 1;
+                }
+                Op::UgtI => {
+                    a = ((a as u64) > (self.text[pc] as u64)) as i64;
+                    pc += 1;
+                }
+                Op::UleI => {
+                    a = ((a as u64) <= (self.text[pc] as u64)) as i64;
+                    pc += 1;
+                }
+                Op::UgeI => {
+                    a = ((a as u64) >= (self.text[pc] as u64)) as i64;
+                    pc += 1;
+                }
                 // Local-load fusion: `a = *(bp + N*8)`.
                 Op::LdLocI => {
                     let addr = (bp as i64 + self.text[pc] * 8) as usize;
@@ -744,6 +979,16 @@ impl<H: Host> Vm<H> {
                 Op::LdLocC => {
                     let addr = (bp as i64 + self.text[pc] * 8) as usize;
                     a = self.load_u8(addr)? as i64;
+                    pc += 1;
+                }
+                // Local-store: `*(bp + N*8) = a`. The compiler
+                // emits this to spill `a` to a temp slot without
+                // disturbing the c5 stack or `a`. (See Op::StLocI
+                // doc for why the regular `Lea N; Si` shape can't
+                // express this.)
+                Op::StLocI => {
+                    let addr = (bp as i64 + self.text[pc] * 8) as usize;
+                    self.store_i64(addr, a)?;
                     pc += 1;
                 }
                 // Floating-point ops. Both operands enter as f64
@@ -897,6 +1142,59 @@ impl<H: Host> Vm<H> {
                             )));
                         }
                     };
+                }
+                Op::TailExt => {
+                    // Tail-jump variant of `Op::JsrExt`: dispatches to
+                    // the same shim table but pops the caller's
+                    // return PC at the end instead of falling through
+                    // to the trampoline's `Adj N + Lev`. Used as the
+                    // entire body of the per-Sys-symbol address-take
+                    // trampoline (see `Op::TailExt` doc in op.rs).
+                    //
+                    // Stack at entry: `sp` points at the return PC the
+                    // caller's `Op::Jsri` pushed, with `arg_0` at
+                    // `sp+8`, `arg_1` at `sp+16`, ... The shim
+                    // functions expect `arg_0` at the passed `sp+0`,
+                    // so we pass `sp + 8`. (`exit` is the lone
+                    // exception that swallows the value rather than
+                    // returning to the caller.)
+                    let binding_idx = self.text[pc];
+                    pc += 1;
+                    let local_name = self.binding_name(binding_idx)?;
+                    let arg_sp = sp + 8;
+                    a = match local_name {
+                        "open" => self.intrinsic_open(arg_sp)?,
+                        "read" => self.intrinsic_read(arg_sp)?,
+                        "close" => self.intrinsic_close(arg_sp)?,
+                        "malloc" => self.intrinsic_malloc(arg_sp)?,
+                        "free" => self.intrinsic_free(arg_sp)?,
+                        "memset" => self.intrinsic_memset(arg_sp)?,
+                        "memcmp" => self.intrinsic_memcmp(arg_sp)?,
+                        "memcpy" => self.intrinsic_memcpy(arg_sp)?,
+                        "printf" => self.intrinsic_printf(arg_sp, pc)?,
+                        "exit" => return self.load_i64(arg_sp),
+                        "write" => self.intrinsic_write(arg_sp)?,
+                        "getenv" => self.intrinsic_getenv(arg_sp)?,
+                        "setenv" => self.intrinsic_setenv(arg_sp)?,
+                        "dlopen" => self.intrinsic_dlopen(arg_sp)?,
+                        "dlsym" => self.intrinsic_dlsym(arg_sp)?,
+                        "dlclose" => self.intrinsic_dlclose(arg_sp)?,
+                        "dlerror" => self.intrinsic_dlerror()?,
+                        other => {
+                            return Err(C5Error::Runtime(alloc::format!(
+                                "VM: no shim for binding `{other}` -- the VM only knows the \
+                                 standard libc surface (open/read/close/printf/...). Drop \
+                                 `--interp` (or use `--jit`) to reach the rest of libc."
+                            )));
+                        }
+                    };
+                    // Pop the caller-pushed return PC. There's no
+                    // `Ent` paired with this `TailExt`, so we don't
+                    // restore bp -- the trampoline body is exactly
+                    // one instruction.
+                    let raw = self.load_i64(sp)?;
+                    pc = self.decode_pc(raw)?;
+                    sp += 8;
                 }
             }
         }

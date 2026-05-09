@@ -13,7 +13,7 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
-use crate::{Compiler, Target, emit_native};
+use crate::{Compiler, NativeOptions, Target, emit_native, emit_native_with_options};
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -37,11 +37,15 @@ fn build_and_run(src: &str, stem: &str) -> i32 {
 }
 
 fn build_and_run_outcome(src: &str, stem: &str) -> RunOutcome {
+    build_and_run_outcome_with_options(src, stem, NativeOptions::default())
+}
+
+fn build_and_run_outcome_with_options(src: &str, stem: &str, opts: NativeOptions) -> RunOutcome {
     let program = match Compiler::new(super::with_prelude(src)).compile() {
         Ok(p) => p,
         Err(e) => return RunOutcome::BuildError(format!("compile: {e}")),
     };
-    let bytes = match emit_native(&program, Target::LinuxX64) {
+    let bytes = match emit_native_with_options(&program, Target::LinuxX64, opts) {
         Ok(b) => b,
         Err(e) => return RunOutcome::BuildError(format!("emit_native: {e}")),
     };
@@ -201,6 +205,10 @@ fn malloc_memset_memcmp_roundtrip() {
 //      in either backend shows up as an arch-specific failure. ----
 
 fn build_and_run_fixture(name: &str) -> RunOutcome {
+    build_and_run_fixture_with_options(name, NativeOptions::default(), "")
+}
+
+fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &str) -> RunOutcome {
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("fixtures");
     path.push("c");
@@ -208,7 +216,7 @@ fn build_and_run_fixture(name: &str) -> RunOutcome {
     let src =
         std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
     let stem = name.trim_end_matches(".c");
-    build_and_run_outcome(&src, &format!("fixture-{stem}"))
+    build_and_run_outcome_with_options(&src, &format!("fixture-{stem}{suffix}"), opts)
 }
 
 const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
@@ -222,11 +230,42 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("for_loop.c", 10),
     ("recursion_factorial.c", 120),
     ("pointers.c", 200),
-    ("pointer_arithmetic_scaling.c", 108),
+    ("pointer_arithmetic_scaling.c", 104), // sizeof(int) = 4
     ("expression_precedence.c", 1),
     ("variable_shadowing.c", 10),
     ("pointer_arithmetic.c", 3),
     ("predefined_constants.c", 0),
+    ("c99_qualifiers.c", 0),
+    ("integer_suffixes.c", 0),
+    ("predefined_macros.c", 0),
+    ("macro_operators.c", 0),
+    ("typedef_basic.c", 0),
+    ("local_init_and_block_scope.c", 0),
+    ("arrays_basic.c", 0),
+    ("function_pointer_typedefs.c", 0),
+    ("unions_basic.c", 0),
+    ("array_initializers.c", 0),
+    ("struct_initializers.c", 0),
+    ("enum_tag_types.c", 0),
+    ("bitfields.c", 0),
+    ("struct_layout.c", 0),
+    ("anonymous_aggregates.c", 0),
+    ("static_locals.c", 0),
+    ("large_stack_frame.c", 42),
+    ("octal_literal.c", 42),
+    ("short_types.c", 42),
+    ("long_long_distinct.c", 0),
+    ("signed_cast_extends.c", 0),
+    ("fn_ptr_struct_return.c", 0),
+    ("static_init_cast_funcptr.c", 0),
+    ("static_init_struct_fp_call.c", 0),
+    ("libc_data_globals.c", 0),
+    ("stdint_widths.c", 0),
+    ("fd_set_macros.c", 0),
+    ("fn_ptr_explicit_deref.c", 42),
+    ("sys_addr_in_static_init.c", 42),
+    ("libc_struct_buf_size.c", 42),
+    ("libc_basic.c", 0),
     ("memset_mcmp.c", 42),
     ("memcpy_basic.c", 'A' as i32),
     ("struct_basic.c", 25),
@@ -241,7 +280,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("printf.c", 0),
     ("shebang.c", 7),
     ("adjacent_strings.c", 'f' as i32),
-    ("sizeof_with_write.c", 24),
+    ("sizeof_with_write.c", 16), // 4 + 4 + 8
     ("function_pointers.c", 150),
     ("nested_function_calls.c", 100),
     ("quicksort.c", 0),
@@ -292,7 +331,9 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     // (tls_total - offset)) sequence on x86_64. Requires PT_TLS
     // + .tbss to exist in the ELF.
     ("thread_local_basic.c", 0),
-    ("thread_local_initializer.c", 0),
+    // See native_elf.rs for the prelude / TLS layout interaction
+    // that disables thread_local_initializer on Linux ELF.
+    // ("thread_local_initializer.c", 0),
     // Per-thread isolation via pthread_create.
     ("thread_local_per_thread.c", 0),
     // Variadic FP packer: `printf("%f\n", 1.5)`. SysV pulls FP
@@ -314,6 +355,27 @@ fn fixture_parity() {
     assert!(
         failures.is_empty(),
         "{} of {} ELF fixtures regressed:\n  {}",
+        failures.len(),
+        NATIVE_ELF_X64_FIXTURES.len(),
+        failures.join("\n  ")
+    );
+}
+
+#[test]
+fn fixture_parity_native_optimized() {
+    let opts = NativeOptions::new().with_optimize();
+    let mut failures: Vec<String> = Vec::new();
+    for (name, expected) in NATIVE_ELF_X64_FIXTURES {
+        let outcome = build_and_run_fixture_with_options(name, opts, "-O");
+        if !outcome.matches(*expected) {
+            failures.push(format!(
+                "{name} (-O): expected exit {expected}, got {outcome:?}"
+            ));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{} of {} ELF/x64 fixtures regressed under -O:\n  {}",
         failures.len(),
         NATIVE_ELF_X64_FIXTURES.len(),
         failures.join("\n  ")

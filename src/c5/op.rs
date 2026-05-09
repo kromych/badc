@@ -25,12 +25,53 @@ pub enum Op {
     Lev,
     /// Load Integer: Loads an i64 from the address in the accumulator.
     Li,
-    /// Load Character: Loads a u8 from the address in the accumulator.
+    /// Load Character: Loads a u8 from the address in the accumulator,
+    /// zero-extending into the 64-bit accumulator. Used for bare
+    /// `char` (which c5 treats as unsigned) and `unsigned char`.
     Lc,
+    /// Load Character Signed: Loads an i8 from the address in the
+    /// accumulator, sign-extending into the 64-bit accumulator. Used
+    /// for `signed char` lvalue reads -- C signed-char semantics
+    /// require the high bit to propagate so that values outside
+    /// [0, 127] stay negative.
+    Lcs,
     /// Store Integer: Stores the accumulator into the address on top of stack.
     Si,
     /// Store Character: Stores the lower byte of accumulator into address on stack.
     Sc,
+    /// Load Word: Loads a 32-bit signed value from the address in the
+    /// accumulator, sign-extending into the 64-bit accumulator. Used
+    /// for signed `int` lvalue reads where `int` is a 4-byte
+    /// storage slot.
+    Lw,
+    /// Load Word Unsigned: Loads a 32-bit value from the address in
+    /// the accumulator, zero-extending into the 64-bit accumulator.
+    /// Used for `unsigned int` lvalue reads -- the high half must
+    /// stay zero so that `(unsigned int)-1` compares correctly
+    /// against `0xffffffff` and so that `1u - 2u` wraps to
+    /// `0xffffffff` rather than reading back as signed -1.
+    Lwu,
+    /// Store Word: Stores the low 32 bits of the accumulator into the
+    /// address on top of stack. Companion to [`Op::Lw`] / [`Op::Lwu`]
+    /// for 4-byte int writes (signed and unsigned share the same
+    /// store semantics; only the load differs).
+    Sw,
+    /// Load Half: Loads a 16-bit signed value from the address in
+    /// the accumulator, sign-extending into the 64-bit accumulator.
+    /// Used for `short` lvalue reads where `short` is a 2-byte
+    /// storage slot. ARM64 `LDRSH`, x86_64 `MOVSX r64, m16`.
+    Lh,
+    /// Load Half Unsigned: Loads a 16-bit value from the address in
+    /// the accumulator, zero-extending into the 64-bit accumulator.
+    /// Used for `unsigned short` / `u16` reads, and for the
+    /// `*(u16*)p` pattern that appears in sqlite's number rendering.
+    /// ARM64 `LDRH`, x86_64 `MOVZX r64, m16`.
+    Lhu,
+    /// Store Half: Stores the low 16 bits of the accumulator into
+    /// the address on top of stack. Companion to [`Op::Lh`] /
+    /// [`Op::Lhu`] for 2-byte short writes (signed and unsigned
+    /// share the same store; only the load differs).
+    Sh,
     /// Push: Pushes the accumulator onto the stack.
     Psh,
     /// External library call. Followed by one operand: the index
@@ -56,18 +97,34 @@ pub enum Op {
     Eq,
     /// Inequality `!=`
     Ne,
-    /// Less Than `<`
+    /// Less Than `<` (signed)
     Lt,
-    /// Greater Than `>`
+    /// Greater Than `>` (signed)
     Gt,
-    /// Less Than or Equal `<=`
+    /// Less Than or Equal `<=` (signed)
     Le,
-    /// Greater Than or Equal `>=`
+    /// Greater Than or Equal `>=` (signed)
     Ge,
+    /// Less Than `<` (unsigned). Emitted whenever at least one
+    /// operand of a relational compare has an unsigned integer type
+    /// (`unsigned int`, `unsigned long`, typedefs onto u32/u64, etc.).
+    /// Treats both operands as u64 -- the high-bit-set bit pattern
+    /// is interpreted as a large positive, not a negative.
+    Ult,
+    /// Greater Than `>` (unsigned). See [`Op::Ult`].
+    Ugt,
+    /// Less Than or Equal `<=` (unsigned). See [`Op::Ult`].
+    Ule,
+    /// Greater Than or Equal `>=` (unsigned). See [`Op::Ult`].
+    Uge,
     /// Shift Left `<<`
     Shl,
-    /// Shift Right `>>`
+    /// Shift Right `>>` (arithmetic / sign-extending). Emitted when
+    /// the LHS has a signed integer type.
     Shr,
+    /// Shift Right `>>` (logical / zero-extending). Emitted when the
+    /// LHS has an unsigned integer type. ARM64 `LSR`, x86_64 `SHR`.
+    Shru,
     /// Addition `+`
     Add,
     /// Subtraction `-`
@@ -99,26 +156,46 @@ pub enum Op {
     XorI,
     /// `a = a << N`
     ShlI,
-    /// `a = a >> N`
+    /// `a = a >> N` (arithmetic / sign-extending)
     ShrI,
+    /// `a = a >> N` (logical / zero-extending). Emitted when the
+    /// LHS has an unsigned integer type. ARM64 `LSR`, x86_64 `SHR`.
+    ShruI,
     /// `a = (a == N) as i64`
     EqI,
     /// `a = (a != N) as i64`
     NeI,
-    /// `a = (a < N) as i64`
+    /// `a = (a < N) as i64` (signed)
     LtI,
-    /// `a = (a > N) as i64`
+    /// `a = (a > N) as i64` (signed)
     GtI,
-    /// `a = (a <= N) as i64`
+    /// `a = (a <= N) as i64` (signed)
     LeI,
-    /// `a = (a >= N) as i64`
+    /// `a = (a >= N) as i64` (signed)
     GeI,
+    /// `a = ((a as u64) < (N as u64)) as i64`
+    UltI,
+    /// `a = ((a as u64) > (N as u64)) as i64`
+    UgtI,
+    /// `a = ((a as u64) <= (N as u64)) as i64`
+    UleI,
+    /// `a = ((a as u64) >= (N as u64)) as i64`
+    UgeI,
 
     // --- Load-local fusion ---
     /// `a = *(i64*)(bp + N*8)` -- fused `Lea N; Li`.
     LdLocI,
     /// `a = *(u8*)(bp + N*8)` -- fused `Lea N; Lc`.
     LdLocC,
+    /// `*(i64*)(bp + N*8) = a` -- store accumulator into a local
+    /// frame slot at the given offset, without disturbing the c5
+    /// stack or the accumulator. The compiler emits this when it
+    /// needs to spill a freshly-computed value (e.g. an indirect
+    /// call's function-pointer source) to a temp before the
+    /// surrounding code clobbers `a`. The regular `Lea N; Si`
+    /// pattern can't express this safely because `Lea` clobbers
+    /// `a` first.
+    StLocI,
 
     // --- Floating-point arithmetic and comparison ---
     //
@@ -188,9 +265,36 @@ pub enum Op {
     /// op as a plain `Op::Imm tls_base + offset` (no real per-
     /// thread isolation; the VM is single-threaded).
     TlsLea,
+    /// Tail-jump to an external library symbol. Followed by one
+    /// operand: the binding-table index. Used as the entire body
+    /// of the per-Sys-symbol address-take trampoline -- the
+    /// trampoline lives at the bytecode-PC stamped on the
+    /// synthetic Token::Fun's `val`, and the codegen lowers
+    /// `Op::TailExt` to a single `jmp [rip+iat_disp32]`-shape
+    /// instruction (or its aarch64 equivalent). The host's
+    /// argument registers and shadow-space stack args -- already
+    /// prepared by the caller's `Op::Jsri` lowering -- are
+    /// forwarded straight through, so the libc fn sees exactly
+    /// what the caller's `Adj N` declared. There's no `Ent`,
+    /// no c5-stack push/pop, and no `Lev` after this op: the
+    /// libc fn's `ret` returns directly to the caller's
+    /// post-Jsri continuation.
+    ///
+    /// Replaces the multi-op trampoline body
+    /// (`Ent / Lea / Li / Psh / JsrExt / Adj / Lev`) for libc
+    /// symbols whose address gets taken; the old shape forwarded
+    /// only as many args as the binding's prototype declared,
+    /// which broke when sqlite's `aSyscall[]` table cast a
+    /// kernel32 fn to a different-arity function-pointer type
+    /// at the call site. The tail-jump shape is independent of
+    /// the binding's declared arity. Placed at the end of the
+    /// enum so the `OPS[]` lookup table's tail entry matches the
+    /// enum discriminant -- adding new ops elsewhere requires
+    /// keeping the two in lockstep.
+    TailExt,
 }
 
-const OPS: [Op; 63] = [
+const OPS: [Op; 82] = [
     Op::Lea,
     Op::Imm,
     Op::Jmp,
@@ -203,8 +307,15 @@ const OPS: [Op; 63] = [
     Op::Lev,
     Op::Li,
     Op::Lc,
+    Op::Lcs,
     Op::Si,
     Op::Sc,
+    Op::Lw,
+    Op::Lwu,
+    Op::Sw,
+    Op::Lh,
+    Op::Lhu,
+    Op::Sh,
     Op::Psh,
     Op::JsrExt,
     Op::Or,
@@ -216,8 +327,13 @@ const OPS: [Op; 63] = [
     Op::Gt,
     Op::Le,
     Op::Ge,
+    Op::Ult,
+    Op::Ugt,
+    Op::Ule,
+    Op::Uge,
     Op::Shl,
     Op::Shr,
+    Op::Shru,
     Op::Add,
     Op::Sub,
     Op::Mul,
@@ -232,14 +348,20 @@ const OPS: [Op; 63] = [
     Op::XorI,
     Op::ShlI,
     Op::ShrI,
+    Op::ShruI,
     Op::EqI,
     Op::NeI,
     Op::LtI,
     Op::GtI,
     Op::LeI,
     Op::GeI,
+    Op::UltI,
+    Op::UgtI,
+    Op::UleI,
+    Op::UgeI,
     Op::LdLocI,
     Op::LdLocC,
+    Op::StLocI,
     // Floating-point arithmetic / comparison / casts.
     Op::Fadd,
     Op::Fsub,
@@ -256,6 +378,7 @@ const OPS: [Op; 63] = [
     Op::Fcvtif,
     Op::Mcpy,
     Op::TlsLea,
+    Op::TailExt,
 ];
 
 impl Op {
@@ -284,9 +407,9 @@ impl Op {
             // Single-operand ops: control flow, frame setup, libc
             // dispatch, and the optimizer's immediate-form
             // arithmetic / comparison ops.
-            Lea | Imm | Jmp | Jsr | Bz | Bnz | Ent | Adj | JsrExt | AddI | SubI | MulI | AndI
-            | OrI | XorI | ShlI | ShrI | EqI | NeI | LtI | GtI | LeI | GeI | LdLocI | LdLocC
-            | Mcpy | TlsLea => 1,
+            Lea | Imm | Jmp | Jsr | Bz | Bnz | Ent | Adj | JsrExt | TailExt | AddI | SubI
+            | MulI | AndI | OrI | XorI | ShlI | ShrI | ShruI | EqI | NeI | LtI | GtI | LeI
+            | GeI | UltI | UgtI | UleI | UgeI | LdLocI | LdLocC | StLocI | Mcpy | TlsLea => 1,
             // Everything else -- arithmetic, loads/stores, push,
             // indirect-jump, return, etc. -- is encoded in a
             // single word with no operand.

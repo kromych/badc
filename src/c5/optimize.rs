@@ -100,6 +100,10 @@ enum Insn {
     /// `JsrExt <binding_idx>` -- external library call, indexed by
     /// the program's flat `#pragma binding` table position.
     JsrExt(i64),
+    /// `TailExt <binding_idx>` -- tail-jump to an external library
+    /// symbol. Forms the entire body of a per-Sys-symbol address-
+    /// take trampoline; carries through the optimizer unchanged.
+    TailExt(i64),
     /// Branch-style op (`Jmp`/`Jsr`/`Bz`/`Bnz`); operand is the IR index
     /// of the target instruction.
     Branch(BrKind, usize),
@@ -138,6 +142,7 @@ impl Insn {
             | Insn::Ent(_)
             | Insn::Adj(_)
             | Insn::JsrExt(_)
+            | Insn::TailExt(_)
             | Insn::Branch(_, _)
             | Insn::ArithI(_, _)
             | Insn::Mcpy(_)
@@ -156,17 +161,38 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         entry_pc,
         warnings,
         data_imm_positions,
+        code_imm_positions: _,
         tls_data,
         tls_init_size,
         call_fp_arg_masks,
         data_relocs,
+        code_relocs,
         exports,
         dylibs,
         dllmain_pc,
+        source_lines: in_source_lines,
+        source_functions: in_source_functions,
     } = program;
 
     let mut insns = decode(&text, &data_imm_positions)?;
-    let entry_idx = pc_to_index_in(&insns, &text, entry_pc)?;
+    // Build a single pc -> insn-index table by walking `insns`
+    // once. Sqlite's amalgamation produces ~1M instructions and a
+    // few hundred CodeReloc entries; the previous shape called
+    // `pc_to_index_in` once per reloc, each call walking `insns`
+    // linearly, which was O(N*K) and dominated `-O` wall time
+    // (~100ms / 400ms on sqlite3.c+shell.c). One O(N) build + K
+    // binary searches collapses it to O(N + K log N).
+    let pc_at_idx = build_pc_at_idx(&insns);
+    let entry_idx = lookup_pc(&pc_at_idx, entry_pc, insns.len(), text.len())?;
+    // Snapshot the insn index of every CodeReloc target *before*
+    // the peephole passes mutate the insn vector. Each target_bc_pc
+    // points at a function's first instruction; the corresponding
+    // index stays valid through DCE / peephole because function
+    // entries aren't removed.
+    let code_reloc_indices: Vec<usize> = code_relocs
+        .iter()
+        .map(|r| lookup_pc(&pc_at_idx, r.target_bc_pc as usize, insns.len(), text.len()))
+        .collect::<Result<Vec<_>, _>>()?;
 
     // Run rewrites to a fixed point. Each pass returns true if it made
     // a change; we loop until none of them did. Bound the loop with a
@@ -182,16 +208,97 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
     // appears live), but never the other way round -- which means a
     // stale entry only ever causes us to skip a fold that's safe, and
     // the next iteration picks it up.
+    // BISECTION HOOKS (std-only). Read at runtime so we don't need
+    // to recompile to flip flags.
+    //   * BADC_OPT_OFF=<comma-list>: skip these passes entirely.
+    //     Names: constfold, branch_const, jump_next, imm_arith,
+    //     local_load, branch_thread, dce.
+    //   * BADC_OPT_FUNC_RANGE=lo,hi: only let peephole work touch
+    //     functions whose insn-order index is in [lo, hi). Outside
+    //     that range, every instruction is masked as a branch
+    //     target so the targets-respecting peepholes skip it.
+    //     Doesn't gate jump_next / branch_thread / DCE because
+    //     those don't take `targets`.
+    #[cfg(feature = "std")]
+    let off: alloc::collections::BTreeSet<alloc::string::String> = std::env::var("BADC_OPT_OFF")
+        .unwrap_or_default()
+        .split(',')
+        .map(alloc::string::ToString::to_string)
+        .collect();
+    #[cfg(not(feature = "std"))]
+    let off: alloc::collections::BTreeSet<alloc::string::String> =
+        alloc::collections::BTreeSet::new();
+
+    #[cfg(feature = "std")]
+    let func_range: Option<(usize, usize)> =
+        std::env::var("BADC_OPT_FUNC_RANGE").ok().and_then(|s| {
+            let parts: Vec<&str> = s.split(',').collect();
+            if parts.len() == 2 {
+                Some((
+                    parts[0].parse().unwrap_or(0),
+                    parts[1].parse().unwrap_or(usize::MAX),
+                ))
+            } else {
+                None
+            }
+        });
+    #[cfg(not(feature = "std"))]
+    let func_range: Option<(usize, usize)> = None;
+
+    let mask_off_funcs = |insns: &[Insn], targets: &mut [bool]| {
+        let Some((lo, hi)) = func_range else { return };
+        let func_starts: Vec<usize> = insns
+            .iter()
+            .enumerate()
+            .filter_map(|(i, ins)| match ins {
+                Insn::NoArg(Op::Ent) | Insn::Ent(_) => Some(i),
+                _ => None,
+            })
+            .collect();
+        for (n, &start) in func_starts.iter().enumerate() {
+            let end = func_starts.get(n + 1).copied().unwrap_or(insns.len());
+            if n < lo || n >= hi {
+                for t in targets.iter_mut().take(end).skip(start) {
+                    *t = true;
+                }
+            }
+        }
+    };
+
     let mut targets = collect_branch_targets(&insns);
+    mask_off_funcs(&insns, &mut targets);
+
+    let off_constfold = off.contains("constfold");
+    let off_branch_const = off.contains("branch_const");
+    let off_jump_next = off.contains("jump_next");
+    let off_imm_arith = off.contains("imm_arith");
+    let off_local_load = off.contains("local_load");
+    let off_branch_thread = off.contains("branch_thread");
+    let off_dce = off.contains("dce");
+
     for _ in 0..16 {
         let mut changed = false;
-        changed |= peephole_constant_fold(&mut insns, &targets);
-        changed |= peephole_branch_on_constant(&mut insns, &targets);
-        changed |= peephole_jump_to_next(&mut insns);
-        changed |= peephole_immediate_arith(&mut insns, &targets);
-        changed |= peephole_local_load(&mut insns, &targets);
-        changed |= branch_threading(&mut insns);
-        changed |= dead_code_elimination(&mut insns, entry_idx);
+        if !off_constfold {
+            changed |= peephole_constant_fold(&mut insns, &targets);
+        }
+        if !off_branch_const {
+            changed |= peephole_branch_on_constant(&mut insns, &targets);
+        }
+        if !off_jump_next {
+            changed |= peephole_jump_to_next(&mut insns);
+        }
+        if !off_imm_arith {
+            changed |= peephole_immediate_arith(&mut insns, &targets);
+        }
+        if !off_local_load {
+            changed |= peephole_local_load(&mut insns, &targets);
+        }
+        if !off_branch_thread {
+            changed |= branch_threading(&mut insns);
+        }
+        if !off_dce {
+            changed |= dead_code_elimination(&mut insns, entry_idx);
+        }
         if !changed {
             break;
         }
@@ -199,22 +306,51 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         // iteration. Cheap (one O(N) sweep) compared to the four
         // rebuilds we used to do per iteration.
         targets = collect_branch_targets(&insns);
+        mask_off_funcs(&insns, &mut targets);
     }
 
-    let (text, entry_pc, data_imm_positions) = encode(&insns, entry_idx);
+    let (text, entry_pc, data_imm_positions, new_pc) = encode(&insns, entry_idx);
+
+    let remapped_code_relocs: Vec<_> = code_relocs
+        .iter()
+        .zip(&code_reloc_indices)
+        .map(|(r, &idx)| crate::c5::program::CodeReloc {
+            data_offset: r.data_offset,
+            target_bc_pc: new_pc[idx] as u64,
+        })
+        .collect();
+
+    // Source-line debug map: the optimizer mangles PCs (DCE, branch
+    // threading, peephole), so the per-pc source line that matched
+    // the unoptimized bytecode no longer matches. Drop the map at
+    // -O. Users debugging codegen turn -O off; users running -O
+    // give up structural debug info in exchange for tighter code.
+    let _ = (in_source_lines, in_source_functions);
     Ok(Program {
         text,
         data,
         entry_pc,
         warnings,
         data_imm_positions,
+        // The optimizer doesn't track per-Imm provenance through
+        // its peephole passes (it would need to remap operand
+        // PCs across every transformation). Leave this empty;
+        // -O code uses the value-range heuristic in codegen,
+        // which works correctly for any program whose constants
+        // don't fall in [CODE_BASE, CODE_BASE + text.len()).
+        // The non-O path uses the precise list from the
+        // compiler.
+        code_imm_positions: Vec::new(),
         tls_data,
         tls_init_size,
         call_fp_arg_masks,
         data_relocs,
+        code_relocs: remapped_code_relocs,
         exports,
         dylibs,
         dllmain_pc,
+        source_lines: Vec::new(),
+        source_functions: Vec::new(),
     })
 }
 
@@ -280,6 +416,11 @@ fn decode(text: &[i64], data_imm_positions: &[usize]) -> Result<Vec<Insn>, C5Err
                 pc += 1;
                 Insn::JsrExt(v)
             }
+            Op::TailExt => {
+                let v = text[pc];
+                pc += 1;
+                Insn::TailExt(v)
+            }
             Op::Jmp | Op::Jsr | Op::Bz | Op::Bnz => {
                 let target = text[pc] as usize;
                 pc += 1;
@@ -305,6 +446,18 @@ fn decode(text: &[i64], data_imm_positions: &[usize]) -> Result<Vec<Insn>, C5Err
                 let v = text[pc];
                 pc += 1;
                 Insn::TlsLea(v)
+            }
+            Op::StLocI => {
+                // Compiler-emitted store-to-local: spills `a` into
+                // a fresh local temp slot. The op carries one
+                // operand -- the slot offset (negative, in c5
+                // stack words). Carried through unchanged; the
+                // optimizer's local-fusion peephole only consumes
+                // it as part of the input stream, never reorders
+                // it across other reads/writes of the same slot.
+                let v = text[pc];
+                pc += 1;
+                Insn::ArithI(Op::StLocI, v)
             }
             // Optimizer-emitted immediate-form ops carry an operand
             // identical in shape to a regular op's operand. The
@@ -357,29 +510,54 @@ fn lookup_idx(pc_to_idx: &[usize], pc: usize) -> Option<usize> {
 /// Convert an old PC (into the original `text`) to its IR index by
 /// re-walking the IR. Only used once for `entry_pc` -- too rare to
 /// justify keeping the decode-time `pc_to_idx` table around.
-fn pc_to_index_in(insns: &[Insn], text: &[i64], target_pc: usize) -> Result<usize, C5Error> {
+/// Build a sorted (strictly monotonic) table where
+/// `pc_at_idx[i]` is the bytecode pc at which insn `i` starts.
+/// Length = `insns.len() + 1`; the trailing entry is the
+/// past-the-end pc, used only by the empty-program edge case in
+/// [`lookup_pc`].
+fn build_pc_at_idx(insns: &[Insn]) -> Vec<usize> {
+    let mut out = Vec::with_capacity(insns.len() + 1);
     let mut pc = 0usize;
-    for (i, ins) in insns.iter().enumerate() {
-        if pc == target_pc {
-            return Ok(i);
-        }
+    for ins in insns {
+        out.push(pc);
         pc += ins.word_size();
     }
-    if pc == target_pc && target_pc == text.len() {
-        // Entry past end: empty-program edge case. Caller deals.
-        return Ok(insns.len());
+    out.push(pc);
+    out
+}
+
+/// Resolve a bytecode pc back to the originating insn index. The
+/// pcs in `pc_at_idx` are strictly increasing (each `Insn` has
+/// `word_size() >= 1`), so a binary search lands on the exact
+/// match in O(log N). Returns `Ok(insns_len)` for the
+/// empty-program past-the-end case the caller tolerates.
+fn lookup_pc(
+    pc_at_idx: &[usize],
+    target_pc: usize,
+    insns_len: usize,
+    text_len: usize,
+) -> Result<usize, C5Error> {
+    match pc_at_idx.binary_search(&target_pc) {
+        Ok(idx) if idx <= insns_len => Ok(idx),
+        Ok(_) | Err(_) => {
+            if target_pc == text_len {
+                // Entry past end: empty-program edge case.
+                Ok(insns_len)
+            } else {
+                Err(C5Error::Compile(format!(
+                    "optimizer: entry_pc {target_pc} is not an instruction start"
+                )))
+            }
+        }
     }
-    Err(C5Error::Compile(format!(
-        "optimizer: entry_pc {target_pc} is not an instruction start"
-    )))
 }
 
 /// Re-encode the IR to a flat bytecode vector. Returns
-/// `(text, entry_pc, data_imm_positions)` -- the third element is the
-/// fresh side channel of operand positions for `Op::Imm` words that
-/// hold a data-segment offset, so the native codegen can locate them
-/// in the rewritten bytecode.
-fn encode(insns: &[Insn], entry_idx: usize) -> (Vec<i64>, usize, Vec<usize>) {
+/// `(text, entry_pc, data_imm_positions, new_pc)`. `new_pc` is the
+/// per-insn-index remap table so callers (e.g., the code-reloc
+/// remapping in `optimize`) can translate any pre-optimisation
+/// bytecode PC through the original `insns` index.
+fn encode(insns: &[Insn], entry_idx: usize) -> (Vec<i64>, usize, Vec<usize>, Vec<usize>) {
     // Pass A: assign post-DCE PCs, skipping Removed slots.
     let mut new_pc: Vec<usize> = vec![usize::MAX; insns.len() + 1];
     let mut pc = 0usize;
@@ -445,6 +623,10 @@ fn encode(insns: &[Insn], entry_idx: usize) -> (Vec<i64>, usize, Vec<usize>) {
                 text.push(Op::JsrExt as i64);
                 text.push(*v);
             }
+            Insn::TailExt(v) => {
+                text.push(Op::TailExt as i64);
+                text.push(*v);
+            }
             Insn::Branch(kind, target) => {
                 let resolved = resolve_target(*target);
                 text.push(kind.to_op() as i64);
@@ -466,7 +648,7 @@ fn encode(insns: &[Insn], entry_idx: usize) -> (Vec<i64>, usize, Vec<usize>) {
         }
     }
 
-    (text, resolve_target(entry_idx), data_imm_positions)
+    (text, resolve_target(entry_idx), data_imm_positions, new_pc)
 }
 
 // --- Helpers shared across passes ---------------------------------
@@ -588,12 +770,22 @@ fn fold_arith(op: Op, a: i64, b: i64) -> Option<i64> {
             }
             a.wrapping_shr(b as u32)
         }
+        Op::Shru => {
+            if !(0..64).contains(&b) {
+                return None;
+            }
+            ((a as u64).wrapping_shr(b as u32)) as i64
+        }
         Op::Eq => (a == b) as i64,
         Op::Ne => (a != b) as i64,
         Op::Lt => (a < b) as i64,
         Op::Gt => (a > b) as i64,
         Op::Le => (a <= b) as i64,
         Op::Ge => (a >= b) as i64,
+        Op::Ult => ((a as u64) < (b as u64)) as i64,
+        Op::Ugt => ((a as u64) > (b as u64)) as i64,
+        Op::Ule => ((a as u64) <= (b as u64)) as i64,
+        Op::Uge => ((a as u64) >= (b as u64)) as i64,
         _ => return None,
     })
 }
@@ -717,12 +909,17 @@ fn immediate_form(op: Op) -> Option<Op> {
         Op::Xor => Op::XorI,
         Op::Shl => Op::ShlI,
         Op::Shr => Op::ShrI,
+        Op::Shru => Op::ShruI,
         Op::Eq => Op::EqI,
         Op::Ne => Op::NeI,
         Op::Lt => Op::LtI,
         Op::Gt => Op::GtI,
         Op::Le => Op::LeI,
         Op::Ge => Op::GeI,
+        Op::Ult => Op::UltI,
+        Op::Ugt => Op::UgtI,
+        Op::Ule => Op::UleI,
+        Op::Uge => Op::UgeI,
         _ => return None,
     })
 }
@@ -813,7 +1010,15 @@ fn dead_code_elimination(insns: &mut [Insn], entry_idx: usize) -> bool {
 
     seed(&mut worklist, &mut visited, entry_idx);
     for (i, ins) in insns.iter().enumerate() {
-        if matches!(ins, Insn::Ent(_)) {
+        if matches!(ins, Insn::Ent(_) | Insn::TailExt(_)) {
+            // Both `Ent` (regular c5 functions) and `TailExt`
+            // (single-op libc-tail-jump trampolines) are reachable
+            // through function pointers we may not have traced.
+            // Without seeding `TailExt` here, the post-Lev tail
+            // emitted by `emit_sys_trampolines` falls outside the
+            // reachability set and DCE prunes it -- which then
+            // propagates a `usize::MAX` into the matching
+            // `code_relocs` entry through `new_pc[Removed_idx]`.
             seed(&mut worklist, &mut visited, i);
         }
         if let Insn::ImmCode(t) = ins {
@@ -834,6 +1039,12 @@ fn dead_code_elimination(insns: &mut [Insn], entry_idx: usize) -> bool {
         // codegen will emit it as unreachable bytes; no harm done.
         let (fall_through, branch_target) = match ins {
             Insn::NoArg(Op::Lev) => (false, None),
+            // `TailExt` is a tail-jump: the libc fn's `RET`
+            // returns directly to the c5 caller of the
+            // trampoline, not to whatever follows in bytecode.
+            // Treat it as a terminator so DCE doesn't trace into
+            // the next trampoline (or whatever junk follows).
+            Insn::TailExt(_) => (false, None),
             Insn::Branch(kind, t) => (kind.falls_through(), Some(*t)),
             _ => (true, None),
         };
@@ -885,13 +1096,17 @@ mod tests {
             entry_pc: 0,
             warnings: Vec::new(),
             data_imm_positions: Vec::new(),
+            code_imm_positions: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,
             call_fp_arg_masks: Vec::new(),
             data_relocs: Vec::new(),
+            code_relocs: Vec::new(),
             exports: Vec::new(),
             dylibs: Vec::new(),
             dllmain_pc: None,
+            source_lines: Vec::new(),
+            source_functions: Vec::new(),
         }
     }
 
@@ -1155,13 +1370,17 @@ mod tests {
             entry_pc: 0,
             warnings: Vec::new(),
             data_imm_positions: Vec::new(),
+            code_imm_positions: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,
             call_fp_arg_masks: Vec::new(),
             data_relocs: Vec::new(),
+            code_relocs: Vec::new(),
             exports: Vec::new(),
             dylibs: Vec::new(),
             dllmain_pc: None,
+            source_lines: Vec::new(),
+            source_functions: Vec::new(),
         };
         let opt = optimize(p).unwrap();
         // Main returns 5; if the ImmCode operand remapped wrong, the

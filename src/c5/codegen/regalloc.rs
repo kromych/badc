@@ -241,8 +241,13 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C5E
             | Op::Gt
             | Op::Le
             | Op::Ge
+            | Op::Ult
+            | Op::Ugt
+            | Op::Ule
+            | Op::Uge
             | Op::Shl
             | Op::Shr
+            | Op::Shru
             | Op::Add
             | Op::Sub
             | Op::Mul
@@ -250,6 +255,8 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C5E
             | Op::Mod
             | Op::Si
             | Op::Sc
+            | Op::Sw
+            | Op::Sh
             // Floating-point binary ops and comparisons consume one
             // pseudo push the same way their integer counterparts do
             // -- the FP value travels through the same c5 stack slot.
@@ -408,8 +415,13 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C5E
             | Op::Gt
             | Op::Le
             | Op::Ge
+            | Op::Ult
+            | Op::Ugt
+            | Op::Ule
+            | Op::Uge
             | Op::Shl
             | Op::Shr
+            | Op::Shru
             | Op::Add
             | Op::Sub
             | Op::Mul
@@ -417,6 +429,8 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C5E
             | Op::Mod
             | Op::Si
             | Op::Sc
+            | Op::Sw
+            | Op::Sh
             | Op::Fadd
             | Op::Fsub
             | Op::Fmul
@@ -450,11 +464,23 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C5E
         );
     }
 
-    Ok(RegStackPlan {
+    let plan = RegStackPlan {
         push_kind,
         funcs,
         func_at_pc,
-    })
+    };
+
+    #[cfg(feature = "std")]
+    if std::env::var("BADC_DUMP_PLAN").is_ok() {
+        for (i, f) in plan.funcs.iter().enumerate() {
+            eprintln!(
+                "plan[{}] ent_pc={} callee_depth={} caller_depth={} use_pool={}",
+                i, f.ent_pc, f.callee_depth, f.caller_depth, f.use_pool
+            );
+        }
+    }
+
+    Ok(plan)
 }
 
 #[cfg(test)]

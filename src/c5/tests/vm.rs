@@ -10,13 +10,17 @@ fn run(text: Vec<i64>) -> i64 {
         entry_pc: 0,
         warnings: vec![],
         data_imm_positions: vec![],
+        code_imm_positions: vec![],
         tls_data: vec![],
         tls_init_size: 0,
         call_fp_arg_masks: vec![],
         data_relocs: vec![],
+        code_relocs: vec![],
         exports: vec![],
         dylibs: vec![],
         dllmain_pc: None,
+        source_lines: vec![],
+        source_functions: vec![],
     };
     Vm::new(program).run().unwrap()
 }
@@ -107,13 +111,17 @@ fn invalid_opcode_is_a_runtime_error() {
         entry_pc: 0,
         warnings: vec![],
         data_imm_positions: vec![],
+        code_imm_positions: vec![],
         tls_data: vec![],
         tls_init_size: 0,
         call_fp_arg_masks: vec![],
         data_relocs: vec![],
+        code_relocs: vec![],
         exports: vec![],
         dylibs: vec![],
         dllmain_pc: None,
+        source_lines: vec![],
+        source_functions: vec![],
     };
     let err = Vm::new(program).run().unwrap_err();
     assert!(
@@ -130,13 +138,17 @@ fn empty_program_errors_cleanly() {
         entry_pc: 0,
         warnings: vec![],
         data_imm_positions: vec![],
+        code_imm_positions: vec![],
         tls_data: vec![],
         tls_init_size: 0,
         call_fp_arg_masks: vec![],
         data_relocs: vec![],
+        code_relocs: vec![],
         exports: vec![],
         dylibs: vec![],
         dllmain_pc: None,
+        source_lines: vec![],
+        source_functions: vec![],
     };
     let err = Vm::new(program).run().unwrap_err();
     assert!(

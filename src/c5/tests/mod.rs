@@ -19,6 +19,7 @@ use super::token::Token;
 use super::{C5Error, Compiler, Op, Program, Vm, optimize};
 
 mod codegen;
+mod deferred;
 mod intrinsics;
 mod jit;
 mod lexer;
@@ -81,9 +82,22 @@ pub fn compile_str(src: &str) -> Program {
     Compiler::new(with_prelude(src)).compile().unwrap()
 }
 
-/// Compile a fixture.
+/// Compile inline source WITHOUT the standard prelude. Used by the
+/// codegen tests that assert byte-for-byte equality on the emitted
+/// bytecode -- those tests can't tolerate the lazy-stream helper
+/// (or any future prelude-only function) appearing in the output.
+pub fn compile_str_bare(src: &str) -> Program {
+    Compiler::new(src.to_string()).compile().unwrap()
+}
+
+/// Compile a fixture with the standard prelude.
 pub fn compile_fixture(name: &str) -> Program {
     compile_str(&load_fixture(name))
+}
+
+/// Compile a fixture WITHOUT the standard prelude.
+pub fn compile_fixture_bare(name: &str) -> Program {
+    compile_str_bare(&load_fixture(name))
 }
 
 /// Compile + run inline source. Pointer tracking is on by default so the

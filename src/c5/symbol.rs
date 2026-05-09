@@ -21,13 +21,67 @@ pub(crate) struct Symbol {
     pub is_variadic: bool,
 
     /// Set on a `Token::Glo` symbol declared with the
-    /// `_Thread_local` storage class (C11). The frontend parses
-    /// the keyword and propagates the flag here; the codegen
-    /// lowering still rejects access at compile time -- the per-
-    /// target TLS sequences (ELF .tdata/.tbss + GOT slot,
-    /// PE TLS directory + _tls_index, Mach-O __thread_data) are
-    /// the next milestone. Frontend-only today so the syntax
-    /// parses and the type checker doesn't choke; M8 swaps the
-    /// reject for real lowering.
+    /// `_Thread_local` storage class (C11). Drives the TLS
+    /// lowering paths in the per-target writers: ELF .tdata /
+    /// .tbss + GOT slot, PE TLS directory + _tls_index, Mach-O
+    /// __thread_data + __thread_vars. The VM treats the slot
+    /// like a regular global (single-threaded execution).
     pub is_thread_local: bool,
+
+    /// For an array-typed local or global, the declared element
+    /// count from `int xs[N]`. Zero means "not an array" (the
+    /// symbol is a scalar, struct value, or pointer). The
+    /// element type is in `type_`; the total byte storage is
+    /// `array_size * size_of_type(type_)`. In expression
+    /// position the symbol decays to a pointer-to-element --
+    /// the load step is suppressed and `type_` is bumped by
+    /// `Ty::Ptr`. Multi-dim arrays would extend this with a
+    /// vector of dimensions; today only the single-dimension
+    /// case lands.
+    pub array_size: i64,
+
+    /// Inner dimension of a 2D array variable. For `T xs[N][M]`
+    /// we record `array_size = N*M` (total element count) and
+    /// `inner_array_size = M` so subscripting `xs[i]` scales by
+    /// `M * sizeof(T)` instead of `sizeof(T)` -- the first index
+    /// strides over rows, the second over elements. Zero for 1D
+    /// arrays. c5 doesn't express "array of M T" as a type, so
+    /// the symbol carries the dimension separately.
+    pub inner_array_size: i64,
+
+    /// True once a `Token::Glo` symbol has been seen with an
+    /// explicit initializer (`= ...`). Tentative-definition
+    /// merges (C11 6.9.2): a forward `static T x;` (or the same
+    /// translation unit's `extern T x;`) is allowed to be
+    /// re-declared and the later defining initializer fills in
+    /// the storage. A second declaration that *also* carries an
+    /// initializer is a real duplicate.
+    pub has_initializer: bool,
+
+    /// Number of derefs from this variable's *loaded value* down
+    /// to a function-pointer rvalue, plus 1, or 0 if the variable
+    /// has no function-pointer lineage. Concretely:
+    ///
+    ///   * `int (*fp)(int)`        -> 1 (loaded value IS the fn ptr)
+    ///   * `fn_t fp;` via typedef  -> 1 (same)
+    ///   * `fn_t *pp;`             -> 2 (one more deref needed)
+    ///   * `int x;`                -> 0 (no lineage)
+    ///
+    /// The `+1` lets a default-zero field encode "no lineage"
+    /// distinctly from "value is direct fn ptr" (which would
+    /// otherwise also be zero). Read by the identifier-load path
+    /// to seed `Compiler::fn_ptr_chain_depth` and ultimately
+    /// decide whether a unary `*` is a real deref or a C decay
+    /// no-op (gh #19). c5 doesn't carry function-pointer
+    /// distinction in the type tag itself, so this side-channel
+    /// is the only durable trace.
+    pub fn_ptr_indirection: i64,
+    /// Shadow slot for `fn_ptr_indirection`, saved by
+    /// `shadow_symbol` and restored by `restore_shadowed_symbol`.
+    /// Without it, a parameter or local that re-uses an outer
+    /// fn-ptr name (or any name a previous binding tagged as
+    /// fn-ptr lineage) inherits the stale tag, and a plain
+    /// `*p = ...` against the rebound scalar pointer is treated
+    /// as a fn-ptr decay no-op.
+    pub h_fn_ptr_indirection: i64,
 }

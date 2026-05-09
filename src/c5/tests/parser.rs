@@ -42,10 +42,25 @@ fn missing_semicolon_after_statement() {
 
 #[test]
 fn duplicate_global_definition() {
+    // Two defining declarations -- both have an initializer -- must
+    // fail. The tentative-definition merge (`int x; int x = 5;`) is
+    // now allowed; only an actual redefinition with conflicting
+    // initializers trips the duplicate check.
     expect_compile_error(
-        "int x; int x; int main() { return 0; }",
+        "int x = 1; int x = 2; int main() { return 0; }",
         "duplicate global definition",
     );
+}
+
+#[test]
+fn tentative_definition_merge() {
+    // `int x;` + `int x = 5;` -- the prior declaration is tentative
+    // (no initializer); the second one supplies the initializer.
+    // Allowed by C11 6.9.2; sqlite3 amalgamation relies on this.
+    let src = "int x; int x = 5; int main() { return x; }";
+    let prog = crate::c5::Compiler::new(src.to_string()).compile().unwrap();
+    let vm_result = crate::c5::Vm::new(prog).run().unwrap();
+    assert_eq!(vm_result, 5);
 }
 
 #[test]
@@ -149,11 +164,29 @@ fn struct_to_struct_assignment_type_mismatch_rejected() {
 }
 
 #[test]
-fn unknown_struct_name_is_rejected() {
-    expect_compile_error(
-        "int main() { struct Missing *p; return 0; }",
-        "unknown struct Missing",
-    );
+fn forward_declared_struct_pointer_compiles() {
+    // A `struct Foo *p` mention before any body is a forward
+    // declaration -- the struct stays opaque (size 0, no fields)
+    // but pointer types and typedefs can refer to it.
+    // This is the C standard's behaviour and a hard requirement
+    // for sqlite-style `typedef struct sqlite3 sqlite3;`-before-body.
+    use super::run_str;
+    let exit = run_str("int main() { struct Forward *p; p = 0; return 7; }");
+    assert_eq!(exit, 7);
+}
+
+#[test]
+fn field_access_on_opaque_struct_is_rejected() {
+    // The pointer mention above auto-forward-declares; touching
+    // a field on the opaque value is still an error -- the
+    // struct has no fields to look up. We don't pin the exact
+    // wording, just that compilation fails.
+    match Compiler::new("int main() { struct Forward *p; p = 0; return p->x; }".to_string())
+        .compile()
+    {
+        Err(_) => {}
+        Ok(_) => panic!("expected compile error on field access through opaque struct"),
+    }
 }
 
 #[test]
@@ -343,13 +376,14 @@ fn float_increment_not_yet_implemented() {
 }
 
 #[test]
-fn float_int_mixed_addition_requires_cast() {
-    // The IR has no in-place int-to-float promotion when the int
-    // operand is already on the stack, so c5 requires an explicit
-    // cast to lift the int side. `(double)i + 1.0` works; bare
-    // `i + 1.0` doesn't.
-    expect_compile_error(
-        "int main() { int i; double y; i = 1; y = i + 1.0; return 0; }",
-        "requires both operands to be the same kind",
-    );
+fn float_int_mixed_addition_auto_promotes() {
+    // Mixed int / float operands now auto-promote -- the int side
+    // is lifted to f64 (via `Op::Fcvtif` for the RHS-int case, or
+    // via the spill-recover-Fcvtif sequence using `Op::StLocI` for
+    // the LHS-int case). `(double)i + 1.0` and bare `i + 1.0` both
+    // compile and produce the same result.
+    let src = "int main() { int i; double y; i = 3; y = i + 1.5; return (int)y; }";
+    let prog = crate::c5::Compiler::new(src.to_string()).compile().unwrap();
+    let vm_result = crate::c5::Vm::new(prog).run().unwrap();
+    assert_eq!(vm_result, 4);
 }

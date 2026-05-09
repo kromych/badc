@@ -228,6 +228,7 @@ fn binding_names_seed_token_sys_when_dylibs_provided() {
         bindings: vec![Binding {
             is_variadic: false,
             fixed_args: 1,
+            return_type_tag: 0,
             local_name: "malloc".into(),
             real_symbol: "malloc".into(),
         }],

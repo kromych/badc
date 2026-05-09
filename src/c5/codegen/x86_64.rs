@@ -280,6 +280,32 @@ pub(super) fn emit_mov_rr(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, modrm(0b11, src.lo(), dst.lo()));
 }
 
+/// Extend a libc return value sitting in `RAX` to fill the
+/// full 64-bit register, per `ext`. msvcrt's int-typed returns
+/// (atoi, fclose, isatty, ...) leave the upper 32 bits undefined,
+/// so callers that consume the result through c5's 64-bit
+/// accumulator need this before reading. Encodings are spelled
+/// out as raw bytes -- the dst/src are always RAX/EAX/AX/AL so
+/// the ModR/M byte is fixed.
+pub(super) fn emit_extend_rax_for_return(code: &mut Vec<u8>, ext: super::ReturnExt) {
+    use super::ReturnExt;
+    match ext {
+        ReturnExt::None => {}
+        // movsxd rax, eax -- REX.W + 63 /r, ModR/M C0.
+        ReturnExt::Sign32 => emit_bytes(code, &[0x48, 0x63, 0xC0]),
+        // mov eax, eax -- 32-bit MOV implicitly zero-extends to RAX.
+        ReturnExt::Zero32 => emit_bytes(code, &[0x89, 0xC0]),
+        // movsx rax, ax -- REX.W + 0F BF /r, ModR/M C0.
+        ReturnExt::Sign16 => emit_bytes(code, &[0x48, 0x0F, 0xBF, 0xC0]),
+        // movzx rax, ax -- REX.W + 0F B7 /r, ModR/M C0.
+        ReturnExt::Zero16 => emit_bytes(code, &[0x48, 0x0F, 0xB7, 0xC0]),
+        // movsx rax, al -- REX.W + 0F BE /r, ModR/M C0.
+        ReturnExt::Sign8 => emit_bytes(code, &[0x48, 0x0F, 0xBE, 0xC0]),
+        // movzx rax, al -- REX.W + 0F B6 /r, ModR/M C0.
+        ReturnExt::Zero8 => emit_bytes(code, &[0x48, 0x0F, 0xB6, 0xC0]),
+    }
+}
+
 /// `MOV r64, imm64` -- 10-byte absolute load.
 /// Encoding: `REX.W + B8+rd io` -- the register goes into the low 3
 /// bits of the opcode byte (REX.B carries the high bit).
@@ -330,6 +356,77 @@ pub(super) fn emit_mov_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32)
 /// Encoding: `REX.W + 89 /r`.
 pub(super) fn emit_mov_mem_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
     emit_byte(code, rex(true, src.high(), false, base.high()));
+    emit_byte(code, 0x89);
+    emit_modrm_mem(code, src, base, disp);
+}
+
+/// `MOVSXD r64, [base + disp]` -- 32-bit load sign-extended into a
+/// 64-bit destination. Encoding: `REX.W + 63 /r`. Used by [`Op::Lw`]
+/// for signed `int` lvalue reads -- C signed semantics require the
+/// high bit of the 4-byte slot to propagate.
+pub(super) fn emit_movsxd_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+    emit_byte(code, rex(true, dst.high(), false, base.high()));
+    emit_byte(code, 0x63);
+    emit_modrm_mem(code, dst, base, disp);
+}
+
+/// `MOV r32, [base + disp]` -- 32-bit load. The CPU implicitly
+/// zero-extends every write to a 32-bit GPR into the full 64-bit
+/// register, so this doubles as a zero-extending u32 load. Used by
+/// [`Op::Lwu`] for `unsigned int` lvalue reads. Encoding: no REX.W,
+/// just `8B /r` (with REX only if any operand needs the high bank).
+pub(super) fn emit_mov_r32_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+    let needs_rex = dst.high() || base.high();
+    if needs_rex {
+        emit_byte(code, rex(false, dst.high(), false, base.high()));
+    }
+    emit_byte(code, 0x8B);
+    emit_modrm_mem(code, dst, base, disp);
+}
+
+/// `MOV [base + disp], r32` -- 32-bit memory store of the low half
+/// of `src`. Encoding: no REX.W, just `89 /r` (with REX only if any
+/// operand register needs the high bank). Companion to
+/// [`emit_movsxd_r_mem`] for [`Op::Sw`].
+pub(super) fn emit_mov_mem32_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
+    let needs_rex = src.high() || base.high();
+    if needs_rex {
+        emit_byte(code, rex(false, src.high(), false, base.high()));
+    }
+    emit_byte(code, 0x89);
+    emit_modrm_mem(code, src, base, disp);
+}
+
+/// `MOVSX r64, [base + disp]` (16-bit memory source) -- 16-bit load
+/// sign-extended into a 64-bit register. Used by [`Op::Lh`] for
+/// `short` lvalue reads. Encoding: `REX.W + 0F BF /r`.
+pub(super) fn emit_movsx_r_mem16(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+    emit_byte(code, rex(true, dst.high(), false, base.high()));
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0xBF);
+    emit_modrm_mem(code, dst, base, disp);
+}
+
+/// `MOVZX r64, [base + disp]` (16-bit memory source) -- 16-bit load
+/// zero-extended into a 64-bit register. Used by [`Op::Lhu`] for
+/// `unsigned short` / `u16` lvalue reads. Encoding: `REX.W + 0F B7 /r`.
+pub(super) fn emit_movzx_r_mem16(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+    emit_byte(code, rex(true, dst.high(), false, base.high()));
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0xB7);
+    emit_modrm_mem(code, dst, base, disp);
+}
+
+/// `MOV [base + disp], r16` -- 16-bit memory store of the low half-
+/// word of `src`. Encoding: `66` prefix (operand-size override to
+/// 16-bit) + optional REX (no W) + `89 /r`. Companion to
+/// [`emit_movsx_r_mem16`] / [`emit_movzx_r_mem16`] for [`Op::Sh`].
+pub(super) fn emit_mov_mem16_r(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg) {
+    emit_byte(code, 0x66);
+    let needs_rex = src.high() || base.high();
+    if needs_rex {
+        emit_byte(code, rex(false, src.high(), false, base.high()));
+    }
     emit_byte(code, 0x89);
     emit_modrm_mem(code, src, base, disp);
 }
@@ -606,6 +703,14 @@ pub(super) fn emit_sar_r_cl(code: &mut Vec<u8>, dst: Reg) {
     emit_byte(code, modrm(0b11, 7, dst.lo()));
 }
 
+/// `SHR r/m64, cl` -- logical right shift (zero fills high bits).
+/// ModR/M.reg = 5. Used by [`Op::Shru`] / unsigned `>>`.
+pub(super) fn emit_shr_r_cl(code: &mut Vec<u8>, dst: Reg) {
+    emit_byte(code, rex(true, false, false, dst.high()));
+    emit_byte(code, 0xD3);
+    emit_byte(code, modrm(0b11, 5, dst.lo()));
+}
+
 /// `SHL r/m64, imm8`. ModR/M.reg = 4, imm at end.
 pub(super) fn emit_shl_r_imm8(code: &mut Vec<u8>, dst: Reg, imm: u8) {
     emit_byte(code, rex(true, false, false, dst.high()));
@@ -619,6 +724,14 @@ pub(super) fn emit_sar_r_imm8(code: &mut Vec<u8>, dst: Reg, imm: u8) {
     emit_byte(code, rex(true, false, false, dst.high()));
     emit_byte(code, 0xC1);
     emit_byte(code, modrm(0b11, 7, dst.lo()));
+    emit_byte(code, imm);
+}
+
+/// `SHR r/m64, imm8` (logical right shift). ModR/M.reg = 5, imm at end.
+pub(super) fn emit_shr_r_imm8(code: &mut Vec<u8>, dst: Reg, imm: u8) {
+    emit_byte(code, rex(true, false, false, dst.high()));
+    emit_byte(code, 0xC1);
+    emit_byte(code, modrm(0b11, 5, dst.lo()));
     emit_byte(code, imm);
 }
 
@@ -738,6 +851,16 @@ pub(super) fn emit_movzx_r_mem8(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i
     emit_modrm_mem(code, dst, base, disp);
 }
 
+/// `MOVSX r64, byte ptr [base + disp]` -- load a byte sign-extended
+/// into a 64-bit register. Used by [`Op::Lcs`] for `signed char`
+/// lvalue reads. Encoding: `REX.W + 0F BE /r`.
+pub(super) fn emit_movsx_r_mem8(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32) {
+    emit_byte(code, rex(true, dst.high(), false, base.high()));
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0xBE);
+    emit_modrm_mem(code, dst, base, disp);
+}
+
 /// `MOVZX r64, r/m8` -- zero-extend a byte register into a 64-bit
 /// register. Encoding: `REX.W + 0F B6 /r` with `mod=11`. The REX
 /// prefix also disables the AH/CH/DH/BH high-byte aliases so we
@@ -800,6 +923,26 @@ pub(super) fn emit_call_qword_rip32(code: &mut Vec<u8>, disp32: i32) {
 /// Byte length of [`emit_call_qword_rip32`]. Used by the writer to
 /// compute the `disp32` measurement origin (just after the call).
 pub(super) const CALL_QWORD_RIP32_LEN: usize = 6;
+
+/// `JMP qword ptr [rip+disp32]` -- 6-byte indirect tail-jump
+/// through a memory operand. Same `FF /4` opcode family as the
+/// indirect `CALL` above; only the `/4` ModR/M extension changes
+/// (4 = JMP, 2 = CALL). Used by `Op::TailExt` to forward control
+/// from a c5 trampoline to the IAT/GOT-resolved libc address
+/// without disturbing the caller's argument registers or shadow
+/// space. Disp32 measurement origin is the byte just past the
+/// instruction; the writer (PE / ELF / Mach-O) patches `disp32`
+/// to the resolved IAT / GOT slot RVA, identical to how
+/// `emit_call_qword_rip32`'s site is patched.
+pub(super) fn emit_jmp_qword_rip32(code: &mut Vec<u8>, disp32: i32) {
+    emit_byte(code, 0xFF);
+    emit_byte(code, modrm(0b00, 4, 0b101));
+    emit_i32(code, disp32);
+}
+
+/// Byte length of [`emit_jmp_qword_rip32`]. Same encoding family
+/// as the indirect call, so the length is also 6.
+pub(super) const JMP_QWORD_RIP32_LEN: usize = 6;
 
 /// `XOR eax, eax` -- 32-bit form, zero-extends to 64 (sets rax = 0).
 /// Used as the System V variadic-ABI "no XMM args" marker before
@@ -1180,6 +1323,7 @@ pub(super) fn lower(
     // displacement to it.
     let mut tls_index_fixups: Vec<super::TlsIndexFixup> = Vec::new();
     let data_imm_positions: &[usize] = &program.data_imm_positions;
+    let code_imm_positions: &[usize] = &program.code_imm_positions;
 
     let mut in_main = false;
     let mut pc = 0usize;
@@ -1226,6 +1370,7 @@ pub(super) fn lower(
             &mut pending_func_fixups,
             &mut tls_index_fixups,
             data_imm_positions,
+            code_imm_positions,
             in_main,
             abi,
             &mut reg_state,
@@ -1255,6 +1400,18 @@ pub(super) fn lower(
     let mut addr_taken: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
     for (_, target_bc_pc) in &pending_func_fixups {
         addr_taken.insert(*target_bc_pc);
+    }
+    // Static-init function-pointer slots (`static fp_t fp = func;`,
+    // dispatch tables, etc.) also need a thunk on Win64: the slot's
+    // value gets called via Jsri, and the lowering allocates 32 bytes
+    // of shadow space before the call. Without a thunk to re-spill
+    // the host register args back onto the c5 stack, the callee's
+    // `[rbp+16]` reads the shadow region instead of the args. SysV
+    // and AAPCS64 work without thunks because their Jsri lowering
+    // doesn't disturb rsp, but the writers all share this map so the
+    // thunk gets baked into every initializer slot regardless.
+    for r in &program.code_relocs {
+        addr_taken.insert(r.target_bc_pc as usize);
     }
     for &func_pc in &addr_taken {
         let n_params = param_count_for_func(&program.text, func_pc);
@@ -1320,6 +1477,7 @@ pub(super) fn lower(
         data_fixups,
         func_fixups,
         bytecode_to_native,
+        func_thunk_offsets: thunk_for_func,
         // Set by `lower_for` after this returns; see the matching
         // comment on the aarch64 lowering's `Build` construction.
         imports: super::ResolvedImports::default(),
@@ -1328,6 +1486,7 @@ pub(super) fn lower(
         tls_init_size: program.tls_init_size,
         tls_index_fixups,
         data_relocs: Vec::new(),
+        code_relocs: Vec::new(),
         exports: Vec::new(),
         output_kind: super::OutputKind::Executable,
         dllmain_pc: None,
@@ -1388,6 +1547,7 @@ fn lower_op(
     pending_func_fixups: &mut Vec<(usize, usize)>,
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     data_imm_positions: &[usize],
+    code_imm_positions: &[usize],
     in_main: bool,
     abi: Abi,
     reg_state: &mut RegState<'_>,
@@ -1403,8 +1563,29 @@ fn lower_op(
         Op::Ent => {
             let locals = read_operand(text, pc, "Ent")?;
             emit_prologue(code, locals, in_main, abi, reg_state.current_callee_depth);
+            // BADC_SAVED_RBP_CHECK at function entry: trap if our own
+            // saved-rbp slot (= what our caller pushed) is below the
+            // "looks like a stack address" threshold. Caller's rbp
+            // got clobbered before it called us. Skipped in main
+            // because the libc startup stub leaves rbp = 0 there.
+            if !in_main {
+                emit_saved_rbp_check(code, op_pc, 0);
+            }
         }
-        Op::Lev => emit_epilogue(code, in_main, reg_state.current_callee_depth),
+        Op::Lev => {
+            // BADC_SAVED_RBP_CHECK at function exit: catches the
+            // corrupting function on its way out if the body's
+            // last stamp was the bad write to its own [rbp+0]
+            // (= 0-level check). Plus a 1-level check (= caller's
+            // saved-rbp slot, accessed via *(*rbp)), which catches
+            // the case where this body wrote past its frame and
+            // landed on the caller's saved-rbp slot.
+            if !in_main {
+                emit_saved_rbp_check(code, op_pc, 0);
+                emit_saved_rbp_check(code, op_pc, 1);
+            }
+            emit_epilogue(code, in_main, reg_state.current_callee_depth);
+        }
         Op::Adj => {
             // Drop N pushed slots (16 bytes each, matching Op::Psh).
             // The analyzer guarantees these were all Real pushes;
@@ -1438,9 +1619,21 @@ fn lower_op(
                     data_offset: v as u64,
                 });
                 emit_lea_r_rip32(code, Reg::R13, 0);
-            } else if (v as usize) >= CODE_BASE && ((v as usize) - CODE_BASE) < text.len() {
-                // Function-pointer literal. Resolve the target
-                // bytecode PC to a native offset post-walk.
+            } else if code_imm_positions.binary_search(&operand_pc).is_ok() {
+                // Function-pointer literal. Compiler tagged this
+                // operand_pc explicitly -- see aarch64 for why we
+                // can't safely infer from the value alone.
+                let target_bc_pc = (v as usize) - CODE_BASE;
+                let instr_offset = code.len();
+                pending_func_fixups.push((instr_offset, target_bc_pc));
+                emit_lea_r_rip32(code, Reg::R13, 0);
+            } else if code_imm_positions.is_empty()
+                && (v as usize) >= CODE_BASE
+                && ((v as usize) - CODE_BASE) < text.len()
+            {
+                // Fallback heuristic for the optimized (-O) path
+                // which doesn't carry per-Imm provenance through
+                // its peephole passes.
                 let target_bc_pc = (v as usize) - CODE_BASE;
                 let instr_offset = code.len();
                 pending_func_fixups.push((instr_offset, target_bc_pc));
@@ -1463,6 +1656,7 @@ fn lower_op(
             emit_mov_r_mem(code, Reg::R13, Reg::R13, 0);
         }
         Op::Lc => emit_movzx_r_mem8(code, Reg::R13, Reg::R13, 0),
+        Op::Lcs => emit_movsx_r_mem8(code, Reg::R13, Reg::R13, 0),
         Op::Si => {
             // pop addr; *addr = r13. With pool: addr is in rN
             // (no load needed). Without pool: pop r10 from stack.
@@ -1472,6 +1666,33 @@ fn lower_op(
         Op::Sc => {
             let lhs = pop_lhs_reg(code, reg_state);
             emit_mov_mem8_r(code, lhs, 0, Reg::R13);
+        }
+        Op::Lw => {
+            // r13 = (i64)*(i32*)r13 -- sign-extending 32-bit load.
+            emit_movsxd_r_mem(code, Reg::R13, Reg::R13, 0);
+        }
+        Op::Lwu => {
+            // r13 = (u64)*(u32*)r13 -- the 32-bit MOV implicitly
+            // zero-extends to the full 64-bit register.
+            emit_mov_r32_mem(code, Reg::R13, Reg::R13, 0);
+        }
+        Op::Sw => {
+            // *(i32*)addr = r13[31:0]
+            let lhs = pop_lhs_reg(code, reg_state);
+            emit_mov_mem32_r(code, lhs, 0, Reg::R13);
+        }
+        Op::Lh => {
+            // r13 = (i64)*(i16*)r13 -- sign-extending 16-bit load.
+            emit_movsx_r_mem16(code, Reg::R13, Reg::R13, 0);
+        }
+        Op::Lhu => {
+            // r13 = (u64)*(u16*)r13 -- zero-extending 16-bit load.
+            emit_movzx_r_mem16(code, Reg::R13, Reg::R13, 0);
+        }
+        Op::Sh => {
+            // *(i16*)addr = r13[15:0]
+            let lhs = pop_lhs_reg(code, reg_state);
+            emit_mov_mem16_r(code, lhs, 0, Reg::R13);
         }
         Op::Psh => {
             // With the native optimizer on AND a Pseudo classification,
@@ -1531,11 +1752,16 @@ fn lower_op(
         Op::Gt => lower_cmp(code, text, *pc, reg_state, branch_targets, Cc::G),
         Op::Le => lower_cmp(code, text, *pc, reg_state, branch_targets, Cc::Le),
         Op::Ge => lower_cmp(code, text, *pc, reg_state, branch_targets, Cc::Ge),
+        Op::Ult => lower_cmp(code, text, *pc, reg_state, branch_targets, Cc::B),
+        Op::Ugt => lower_cmp(code, text, *pc, reg_state, branch_targets, Cc::A),
+        Op::Ule => lower_cmp(code, text, *pc, reg_state, branch_targets, Cc::Be),
+        Op::Uge => lower_cmp(code, text, *pc, reg_state, branch_targets, Cc::Ae),
 
         // ---- Shifts. Pop into lhs (rN or r10), shift by cl (=r13
         //      lo byte), then mov r13 = lhs.
-        Op::Shl => shift_with_pop(code, reg_state, /*arithmetic=*/ false),
-        Op::Shr => shift_with_pop(code, reg_state, /*arithmetic=*/ true),
+        Op::Shl => shift_with_pop(code, reg_state, ShiftKind::Left),
+        Op::Shr => shift_with_pop(code, reg_state, ShiftKind::ArithRight),
+        Op::Shru => shift_with_pop(code, reg_state, ShiftKind::LogicalRight),
 
         Op::Div => div_or_mod_with_pop(code, reg_state, /*want_remainder=*/ false),
         Op::Mod => div_or_mod_with_pop(code, reg_state, /*want_remainder=*/ true),
@@ -1591,6 +1817,15 @@ fn lower_op(
         }
         Op::Jsr => {
             let target = read_operand(text, pc, "Jsr")? as usize;
+            // BADC_SAVED_RBP_CHECK before every Jsr: verify both our
+            // own saved-rbp slot AND our caller's saved-rbp slot
+            // (1-up). Catches the corrupting function the moment it
+            // tries to call further down the chain, with the Jsr's
+            // bc PC printed to stderr.
+            if !in_main {
+                emit_saved_rbp_check(code, op_pc, 0);
+                emit_saved_rbp_check(code, op_pc, 1);
+            }
             fixups.push(Fixup {
                 native_offset: code.len(),
                 target_bytecode_pc: target,
@@ -1602,6 +1837,15 @@ fn lower_op(
             emit_mov_rr(code, Reg::R13, Reg::RAX);
         }
         Op::Jsri => {
+            // BADC_SAVED_RBP_CHECK before Jsri: catches the
+            // corrupting function the moment it tries to call
+            // (indirectly) something else. r13 holds the call
+            // target -- the canary uses rax/rdi/rsi/rdx, leaving
+            // r13 untouched until the actual call.
+            if !in_main {
+                emit_saved_rbp_check(code, op_pc, 0);
+                emit_saved_rbp_check(code, op_pc, 1);
+            }
             // Indirect call: target in r13, args already pushed onto
             // the VM stack in 16-byte slots.
             //
@@ -1704,12 +1948,20 @@ fn lower_op(
             let n = read_operand(text, pc, "ShrI")? as u32;
             emit_sar_r_imm8(code, Reg::R13, (n & 0x3f) as u8);
         }
+        Op::ShruI => {
+            let n = read_operand(text, pc, "ShruI")? as u32;
+            emit_shr_r_imm8(code, Reg::R13, (n & 0x3f) as u8);
+        }
         Op::EqI => imm_cmp(code, text, pc, "EqI", Cc::E, reg_state, branch_targets)?,
         Op::NeI => imm_cmp(code, text, pc, "NeI", Cc::Ne, reg_state, branch_targets)?,
         Op::LtI => imm_cmp(code, text, pc, "LtI", Cc::L, reg_state, branch_targets)?,
         Op::GtI => imm_cmp(code, text, pc, "GtI", Cc::G, reg_state, branch_targets)?,
         Op::LeI => imm_cmp(code, text, pc, "LeI", Cc::Le, reg_state, branch_targets)?,
         Op::GeI => imm_cmp(code, text, pc, "GeI", Cc::Ge, reg_state, branch_targets)?,
+        Op::UltI => imm_cmp(code, text, pc, "UltI", Cc::B, reg_state, branch_targets)?,
+        Op::UgtI => imm_cmp(code, text, pc, "UgtI", Cc::A, reg_state, branch_targets)?,
+        Op::UleI => imm_cmp(code, text, pc, "UleI", Cc::Be, reg_state, branch_targets)?,
+        Op::UgeI => imm_cmp(code, text, pc, "UgeI", Cc::Ae, reg_state, branch_targets)?,
         Op::LdLocI => {
             let off = read_operand(text, pc, "LdLocI")?;
             let bytes = lea_offset_bytes(off) as i32;
@@ -1719,6 +1971,14 @@ fn lower_op(
             let off = read_operand(text, pc, "LdLocC")?;
             let bytes = lea_offset_bytes(off) as i32;
             emit_movzx_r_mem8(code, Reg::R13, Reg::RBP, bytes);
+        }
+        Op::StLocI => {
+            // `*(bp + N*8) = a` -- store accumulator (r13) into a
+            // local frame slot. Mirrors LdLocI, just store
+            // direction.
+            let off = read_operand(text, pc, "StLocI")?;
+            let bytes = lea_offset_bytes(off) as i32;
+            emit_mov_mem_r(code, Reg::RBP, bytes, Reg::R13);
         }
 
         // ---- Syscalls -- routed through the GOT. The codegen
@@ -1739,7 +1999,32 @@ fn lower_op(
                 abi,
                 imports,
                 fp_mask,
+                target,
             )?;
+        }
+        Op::TailExt => {
+            // Tail-jump trampoline body. The caller's `Op::Jsri`
+            // lowering already loaded the c5-stack args into the
+            // host ABI's argument registers / shadow-space slots,
+            // so the libc fn sees exactly what the caller's `Adj N`
+            // declared; we just forward control through the IAT/GOT
+            // slot and let the libc fn's `ret` carry us back to the
+            // caller. No frame setup, no stack manipulation, no
+            // post-call accumulator copy -- the call site's Jsri
+            // lowering is responsible for the round-trip.
+            let binding_idx = read_operand(text, pc, "TailExt")?;
+            let import_index = imports.index_of_binding(binding_idx).ok_or_else(|| {
+                C5Error::Compile(alloc::format!(
+                    "native codegen (x86_64): no import slot for binding {binding_idx} -- \
+                     the resolver should have placed it"
+                ))
+            })?;
+            let instr_offset = code.len();
+            got_fixups.push(GotFixup {
+                adrp_offset: instr_offset,
+                import_index,
+            });
+            emit_jmp_qword_rip32(code, 0);
         }
 
         // ---- Floating-point ----
@@ -1916,6 +2201,7 @@ fn emit_libc_call(
     abi: Abi,
     imports: &super::ResolvedImports,
     fp_arg_mask: u32,
+    target: super::Target,
 ) -> Result<(), C5Error> {
     let import_index = imports.index_of_binding(binding_idx).ok_or_else(|| {
         C5Error::Compile(format!(
@@ -2036,6 +2322,19 @@ fn emit_libc_call(
     }
 
     {
+        // Sign- or zero-extend a sub-word return into a full
+        // 64-bit value before it becomes the c5 accumulator.
+        // Required on Win64: msvcrt's `int`-typed entry points
+        // (atoi, isatty, fclose, ...) leave the upper 32 bits of
+        // RAX undefined, so a downstream `r13 != -17` comparison
+        // would see garbage. Linux glibc happens to leave the
+        // upper bits zeroed out, but the ABI doesn't promise it,
+        // and the extension is a no-op when `return_type_tag` is
+        // already 64-bit-wide (pointer, `long long`, LP64
+        // `long`, ...) so emitting it on every target is the
+        // simpler choice.
+        let ext = super::return_extension(imports.imports[import_index].return_type_tag, target);
+        emit_extend_rax_for_return(code, ext);
         // Move the libc return value into r13 so the c5 caller
         // sees it as the new accumulator. (For functions that
         // don't return -- e.g. `exit` -- the call doesn't reach
@@ -2076,6 +2375,86 @@ fn pop_lhs_reg(code: &mut Vec<u8>, reg_state: &mut RegState<'_>) -> Reg {
         }
     }
 }
+
+/// `BADC_SAVED_RBP_CHECK` runtime canary: read the value at the given
+/// rbp-offset (typically 0 = saved-rbp slot, +0x10 = first arg, etc.),
+/// and if it's below 0x1000_0000 (a heuristic "this is not a stack
+/// address" threshold, but treating zero as "no caller, don't trip")
+/// write `op_pc` (8 raw bytes) to stderr via SYS_write and SYS_exit(99).
+///
+/// Used at every `Op::Ent`, `Op::Lev`, `Op::Jsr`, and `Op::Jsri` site
+/// when the env var is set, with `up_levels = 0` for "check our own
+/// saved rbp" and `up_levels = 1` for "check the caller's saved rbp"
+/// (= the slot the caller's prologue pushed when it was called -- which
+/// is the slot the leaf bug clobbers in the #46 sqlite3 crash).
+///
+/// Skipped under `is_main` because the libc startup stub leaves rbp = 0
+/// when calling main, which would always trip a 0-level check.
+#[cfg(feature = "std")]
+fn emit_saved_rbp_check(code: &mut Vec<u8>, op_pc: usize, up_levels: u8) {
+    if std::env::var("BADC_SAVED_RBP_CHECK").is_err() {
+        return;
+    }
+    // Walk up `up_levels` saved-rbp links into rax.
+    //   mov rax, [rbp]       (0-level: load saved rbp slot value)
+    //   for each additional level: mov rax, [rax]
+    emit_mov_r_mem(code, Reg::RAX, Reg::RBP, 0);
+    for _ in 0..up_levels {
+        // First skip if rax == 0 (we'd dereference NULL otherwise).
+        // test rax, rax; jz skip
+        code.extend_from_slice(&[0x48, 0x85, 0xc0]);
+        let jz_off = code.len();
+        code.extend_from_slice(&[0x74, 0x00]); // placeholder
+        // mov rax, [rax]
+        emit_mov_r_mem(code, Reg::RAX, Reg::RAX, 0);
+        let jz_skip = code.len() - (jz_off + 2);
+        code[jz_off + 1] = jz_skip as u8;
+    }
+    // cmp rax, 0x10000000
+    code.extend_from_slice(&[0x48, 0x3d, 0x00, 0x00, 0x00, 0x10]);
+    // ja over the trap block (rax > 0x10000000 = "looks like a stack
+    // address", we're fine).
+    let ja_off = code.len();
+    code.extend_from_slice(&[0x77, 0x00]);
+    // Also treat rax == 0 as "skip" -- main's saved rbp is 0
+    // (libc startup), and any 1-up walk that lands on it would
+    // otherwise trip every non-main function's check at 1-up
+    // level. test rax, rax; jz over the trap.
+    code.extend_from_slice(&[0x48, 0x85, 0xc0]); // test rax, rax
+    let jz_off = code.len();
+    code.extend_from_slice(&[0x74, 0x00]);
+    let block_start = code.len();
+    // The trap: write op_pc (8 bytes) to stderr, exit 99.
+    //   sub rsp, 16            (room + 16-byte alignment)
+    code.extend_from_slice(&[0x48, 0x83, 0xec, 0x10]);
+    //   movabs rax, op_pc
+    code.push(0x48);
+    code.push(0xb8);
+    code.extend_from_slice(&(op_pc as u64).to_le_bytes());
+    //   mov [rsp], rax
+    code.extend_from_slice(&[0x48, 0x89, 0x04, 0x24]);
+    //   mov eax, 1; mov edi, 2; mov rsi, rsp; mov edx, 8; syscall
+    code.extend_from_slice(&[0xb8, 0x01, 0x00, 0x00, 0x00]);
+    code.extend_from_slice(&[0xbf, 0x02, 0x00, 0x00, 0x00]);
+    code.extend_from_slice(&[0x48, 0x89, 0xe6]);
+    code.extend_from_slice(&[0xba, 0x08, 0x00, 0x00, 0x00]);
+    code.extend_from_slice(&[0x0f, 0x05]);
+    //   mov eax, 60; mov edi, 99; syscall
+    code.extend_from_slice(&[0xb8, 0x3c, 0x00, 0x00, 0x00]);
+    code.extend_from_slice(&[0xbf, 0x63, 0x00, 0x00, 0x00]);
+    code.extend_from_slice(&[0x0f, 0x05]);
+    let block_len = code.len() - block_start;
+    if block_len > 0x7f {
+        panic!("saved-rbp canary trap block too long for short ja");
+    }
+    code[ja_off + 1] = (block_len + 5) as u8; // ja must skip past the
+    // extra "test+jz" pair we inserted between cmp and the trap block,
+    // so the ja's target is the same as jz's target = past the trap.
+    code[jz_off + 1] = block_len as u8;
+}
+
+#[cfg(not(feature = "std"))]
+fn emit_saved_rbp_check(_code: &mut Vec<u8>, _op_pc: usize, _up_levels: u8) {}
 
 /// Pop the LHS, then run the encoder. `commutative = true` collapses
 /// to a single `r13 op= lhs` (one instruction). `commutative = false`
@@ -2174,16 +2553,28 @@ fn lower_cmp(
     }
 }
 
+/// Direction / signedness pick for `shift_with_pop`. The three
+/// kinds map to the three c5 shift ops:
+/// * `Op::Shl`  -> `ShiftKind::Left`     (`SHL r, cl`)
+/// * `Op::Shr`  -> `ShiftKind::ArithRight` (`SAR r, cl`)
+/// * `Op::Shru` -> `ShiftKind::LogicalRight` (`SHR r, cl`)
+#[derive(Clone, Copy)]
+enum ShiftKind {
+    Left,
+    ArithRight,
+    LogicalRight,
+}
+
 /// Pop the LHS, shift it by cl (lo byte of r13), mov r13 = lhs.
-fn shift_with_pop(code: &mut Vec<u8>, reg_state: &mut RegState<'_>, arithmetic_right: bool) {
+fn shift_with_pop(code: &mut Vec<u8>, reg_state: &mut RegState<'_>, kind: ShiftKind) {
     let lhs = pop_lhs_reg(code, reg_state);
     // The shift count register is fixed to cl. mov rcx, r13 first
     // since the shift will overwrite r13's role on the read side.
     emit_mov_rr(code, Reg::RCX, Reg::R13);
-    if arithmetic_right {
-        emit_sar_r_cl(code, lhs);
-    } else {
-        emit_shl_r_cl(code, lhs);
+    match kind {
+        ShiftKind::Left => emit_shl_r_cl(code, lhs),
+        ShiftKind::ArithRight => emit_sar_r_cl(code, lhs),
+        ShiftKind::LogicalRight => emit_shr_r_cl(code, lhs),
     }
     emit_mov_rr(code, Reg::R13, lhs);
 }
@@ -2301,6 +2692,12 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool, abi: Abi, pool_
     emit_sub_rsp_imm32(code, 16);
     emit_mov_mem_r(code, Reg::RSP, 0, Reg::R13);
 
+    // (the BADC_SAVED_RBP_CHECK hook gets injected *after* the
+    // prologue completes -- emit_prologue_saved_rbp_check below.
+    // It needs to know the function's bc PC, which the prologue
+    // helper itself doesn't have, so the caller in lower_op
+    // emits it after `Op::Ent` consumes its operand.)
+
     // Save the pool registers actually used by this function.
     // System V x86_64 makes rbx, r12, r14, r15 callee-saved, so
     // we don't need to spill them at every call site -- one save
@@ -2319,6 +2716,29 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool, abi: Abi, pool_
 /// and the return address, so we pop the ret addr into a temp, drop
 /// the slots, then push it back before `ret` consumes it.
 fn emit_epilogue(code: &mut Vec<u8>, is_main: bool, pool_depth: u8) {
+    // STACK-CHECK INSTRUMENT (#46 bisection). When BADC_RSP_CHECK is
+    // set in the env, emit a runtime check at the start of every
+    // epilogue: rsp must equal rbp minus the prologue's reservation.
+    // Mismatch => `ud2` (illegal instruction trap) so the OS catches
+    // it on the spot rather than letting it cascade up the call stack.
+    #[cfg(feature = "std")]
+    if std::env::var("BADC_RSP_CHECK").is_ok() {
+        // At epilogue start, both rsp and rbp must point into a valid
+        // stack region. If rsp/rbp got corrupted upstream, trap before
+        // we propagate the corruption further into the call chain.
+        emit_mov_rr(code, Reg::RAX, Reg::RSP);
+        code.extend_from_slice(&[0x48, 0x3d, 0x00, 0x10, 0x00, 0x00]); // cmp rax, 0x1000
+        code.extend_from_slice(&[0x77, 0x02]); // ja +2
+        code.extend_from_slice(&[0x0f, 0x0b]); // ud2
+        emit_mov_rr(code, Reg::RAX, Reg::RBP);
+        code.extend_from_slice(&[0x48, 0x3d, 0x00, 0x10, 0x00, 0x00]); // cmp rax, 0x1000
+        code.extend_from_slice(&[0x77, 0x02]); // ja +2
+        code.extend_from_slice(&[0x0f, 0x0b]); // ud2
+    }
+    // (BADC_SAVED_RBP_CHECK at function-return time is emitted in
+    // lower_op's `Op::Lev` arm so it has access to op_pc -- the
+    // value the trap writes to stderr identifies the corrupting
+    // function.)
     emit_mov_rr(code, Reg::RAX, Reg::R13);
     // Restore the pool first (it sits on top of saved-r13).
     emit_restore_pool(code, pool_depth);

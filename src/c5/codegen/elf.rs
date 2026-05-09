@@ -1146,6 +1146,42 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
         }
         data_with_relocs[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
     }
+    // Function-pointer initializers in the data segment: translate
+    // each bytecode PC to a native code-segment offset (skipping
+    // the prologue stub at the start of the code blob), add the
+    // text vmaddr, and write the absolute code address. ET_EXEC
+    // means no slide so the bytes hold the final VA -- no
+    // .rela.dyn entries needed.
+    for r in &build.code_relocs {
+        let bc_pc = r.target_bc_pc as usize;
+        // Prefer the per-function arg-shuffling thunk; see the
+        // matching comment in pe.rs's code_reloc loop. SysV doesn't
+        // require this on its own (Jsri reads c5-stack args without
+        // a shadow-space alloc, so a bare body works by accident),
+        // but the lowering already emits the thunk and routing both
+        // initializer paths through it keeps the per-format writers
+        // uniform.
+        let native_off = build
+            .func_thunk_offsets
+            .get(&bc_pc)
+            .copied()
+            .or_else(|| build.bytecode_to_native.get(bc_pc).copied())
+            .unwrap_or(usize::MAX);
+        if native_off == usize::MAX {
+            return Err(C5Error::Compile(format!(
+                "ELF: code reloc references missing bytecode pc {bc_pc}"
+            )));
+        }
+        let absolute = code_vmaddr + stub_len + native_off as u64;
+        let off = r.data_offset as usize;
+        if off + 8 > data_with_relocs.len() {
+            return Err(C5Error::Compile(format!(
+                "ELF: code reloc offset {off:#x} past end of .data ({})",
+                data_with_relocs.len()
+            )));
+        }
+        data_with_relocs[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
+    }
     out.extend_from_slice(&data_with_relocs);
 
     // .tdata -- initialised TLS image. The first `tls_init_size`
@@ -1290,6 +1326,7 @@ mod tests {
             data_fixups: Vec::new(),
             func_fixups: Vec::new(),
             bytecode_to_native: Vec::new(),
+            func_thunk_offsets: alloc::collections::BTreeMap::new(),
             imports: ResolvedImports {
                 imports: vec![ResolvedImport {
                     binding_idx: 0,
@@ -1298,6 +1335,7 @@ mod tests {
                     dylib_index: 0,
                     is_variadic: false,
                     fixed_args: 1,
+                    return_type_tag: 0,
                 }],
                 dylibs: vec![ResolvedDylib {
                     name: "libc".into(),
@@ -1309,6 +1347,7 @@ mod tests {
             tls_init_size: 0,
             tls_index_fixups: Vec::new(),
             data_relocs: Vec::new(),
+            code_relocs: Vec::new(),
             exports: Vec::new(),
             output_kind: super::super::OutputKind::Executable,
             dllmain_pc: None,

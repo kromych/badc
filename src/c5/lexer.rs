@@ -7,6 +7,74 @@ use super::error::C5Error;
 use super::symbol::Symbol;
 use super::token::{Token, Ty};
 
+/// Default struct-alignment cap when no `#pragma pack(N)` is
+/// active. Mirrors the existing aggregate-layout cap at 8 bytes
+/// (c5's IR slot width); explicit pack pragmas can lower it.
+const DEFAULT_PACK: usize = 8;
+
+/// Clamp a user-supplied pack value to `[1, DEFAULT_PACK]`. C99
+/// permits 1, 2, 4, 8, 16; we don't expose 16 because c5's
+/// struct-alignment cap is 8 and a stricter request would just
+/// inflate the alignment with no payoff. `0` is treated as
+/// "default" (matching `#pragma pack()` with no arg).
+fn clamp_pack(n: usize) -> usize {
+    if n == 0 || n > DEFAULT_PACK {
+        DEFAULT_PACK
+    } else {
+        n
+    }
+}
+
+/// One parsed `#pragma pack(...)` directive. The lexer scans the
+/// directive inline and folds it into [`Lexer::pack_stack`] via
+/// [`Lexer::apply_pack_directive`].
+#[derive(Debug, Clone, Copy)]
+enum PackDirective {
+    /// `#pragma pack(N)` -- replace top of stack with N.
+    Set(usize),
+    /// `#pragma pack()` -- replace top with DEFAULT_PACK.
+    Reset,
+    /// `#pragma pack(push, N)` -- push N onto the stack.
+    Push(usize),
+    /// `#pragma pack(pop)` -- pop one frame (no-op if at bottom).
+    Pop,
+}
+
+/// Parse a single `#`-prefix-stripped line as `pragma pack(...)`.
+/// Returns the directive on a successful match, `None` for any
+/// other shape (including malformed-pack and non-pack pragmas)
+/// so the caller can fall back to "skip the line silently".
+///
+/// Accepts the four MSVC-compatible shapes:
+///   * `pragma pack(N)`            -> [`PackDirective::Set`]
+///   * `pragma pack()`             -> [`PackDirective::Reset`]
+///   * `pragma pack(push, N)`      -> [`PackDirective::Push`]
+///   * `pragma pack(pop)`          -> [`PackDirective::Pop`]
+///
+/// The arg whitespace is liberal -- any combination of spaces /
+/// tabs is accepted between tokens to match how cpp / msvc
+/// tolerate user formatting.
+fn parse_pragma_pack_line(body: &[u8]) -> Option<PackDirective> {
+    let s = core::str::from_utf8(body).ok()?.trim();
+    let rest = s.strip_prefix("pragma")?.trim_start();
+    let rest = rest.strip_prefix("pack")?.trim_start();
+    let after_open = rest.strip_prefix('(')?;
+    let close = after_open.find(')')?;
+    let inner = after_open[..close].trim();
+    if inner.is_empty() {
+        return Some(PackDirective::Reset);
+    }
+    if inner == "pop" {
+        return Some(PackDirective::Pop);
+    }
+    if let Some(rest) = inner.strip_prefix("push") {
+        let rest = rest.trim_start();
+        let rest = rest.strip_prefix(',')?.trim_start();
+        return rest.parse::<usize>().ok().map(PackDirective::Push);
+    }
+    inner.parse::<usize>().ok().map(PackDirective::Set)
+}
+
 pub(crate) struct Lexer {
     src: Vec<u8>,
     pos: usize,
@@ -16,6 +84,28 @@ pub(crate) struct Lexer {
     pub tk: i64,
     pub ival: i64,
     pub curr_id_idx: usize,
+
+    /// `#pragma pack(N)` stack. Top of stack is the active pack value
+    /// at the current source position; struct layout (`aggregate.rs`)
+    /// reads it via [`Self::current_pack`] and clamps each field's
+    /// natural alignment by it.
+    ///
+    /// State machine:
+    ///   * `pragma pack(N)`         -- replace top of stack with N.
+    ///   * `pragma pack()`          -- replace top with the default
+    ///                                 (8 -- c5's existing layout cap).
+    ///   * `pragma pack(push, N)`   -- push N.
+    ///   * `pragma pack(pop)`       -- pop one frame; stack always
+    ///                                 keeps at least the bottom default.
+    ///
+    /// Values are clamped to `[1, 8]` because c5's IR slots at 8
+    /// and there's no use for stricter alignment than that. Updates
+    /// happen inline as the lexer scans `#pragma pack(...)` lines
+    /// (the preprocessor passes them through verbatim instead of
+    /// stripping like other pragmas, since pack is position-
+    /// dependent within the source and can't be batched up the way
+    /// `#pragma binding(...)` is).
+    pack_stack: Vec<usize>,
 }
 
 /// Side index for `Vec<Symbol>` so identifier lookup stops being O(N).
@@ -125,6 +215,58 @@ impl Lexer {
             tk: 0,
             ival: 0,
             curr_id_idx: 0,
+            // Bottom of the stack is the default pack -- c5 already
+            // caps struct alignment at 8, and that's the implicit
+            // upper bound here too. Real `#pragma pack(N)` updates
+            // happen via `apply_pack_directive`.
+            pack_stack: vec![DEFAULT_PACK],
+        }
+    }
+
+    /// Active `#pragma pack(N)` value at the current source
+    /// position. `aggregate.rs` clamps each struct field's natural
+    /// alignment by this when laying out a struct definition. The
+    /// default 8 matches c5's pre-existing struct-layout behaviour
+    /// (no packing); any explicit `#pragma pack(N)` lowers it.
+    pub fn current_pack(&self) -> usize {
+        *self.pack_stack.last().unwrap_or(&DEFAULT_PACK)
+    }
+
+    /// Apply one parsed `#pragma pack(...)` directive to the stack.
+    /// Called from the lexer when it encounters the directive
+    /// inline (the preprocessor passes pack pragmas through as
+    /// literal `#pragma pack(...)` lines rather than stripping them
+    /// like other pragmas, because pack is source-position-
+    /// dependent in a way the per-translation-unit `dylibs` /
+    /// `bindings` accumulator can't capture).
+    fn apply_pack_directive(&mut self, dir: PackDirective) {
+        match dir {
+            PackDirective::Set(n) => {
+                let n = clamp_pack(n);
+                if let Some(top) = self.pack_stack.last_mut() {
+                    *top = n;
+                } else {
+                    self.pack_stack.push(n);
+                }
+            }
+            PackDirective::Reset => {
+                if let Some(top) = self.pack_stack.last_mut() {
+                    *top = DEFAULT_PACK;
+                } else {
+                    self.pack_stack.push(DEFAULT_PACK);
+                }
+            }
+            PackDirective::Push(n) => {
+                self.pack_stack.push(clamp_pack(n));
+            }
+            PackDirective::Pop => {
+                // Always keep one frame so `current_pack()` always
+                // has an answer. Popping past the bottom is a
+                // user error in real cpp; we silently ignore here.
+                if self.pack_stack.len() > 1 {
+                    self.pack_stack.pop();
+                }
+            }
         }
     }
 
@@ -136,6 +278,95 @@ impl Lexer {
             p += 1;
         }
         p < self.src.len() && self.src[p] == b
+    }
+
+    /// True if the next non-whitespace byte is the start of an
+    /// identifier (alpha or `_`). Used by the parse_declarator
+    /// nested-paren disambiguator to recognise the redundant-
+    /// paren shape `(name[N])` -- the inner declarator is a
+    /// regular identifier rather than `*name` or `(*...)`.
+    pub fn peek_after_whitespace_starts_ident(&self) -> bool {
+        let mut p = self.pos;
+        while p < self.src.len() && self.src[p].is_ascii_whitespace() {
+            p += 1;
+        }
+        p < self.src.len() && (self.src[p].is_ascii_alphabetic() || self.src[p] == b'_')
+    }
+
+    /// Count the number of comma-separated top-level groups
+    /// (`{...}`) that follow the current lex position before the
+    /// matching `}` at depth 0. The current token must already be
+    /// the array initializer's outer `{`. Used by the struct-
+    /// array initializer path to pre-allocate storage for every
+    /// element before any inner string-literal lex landing
+    /// re-orders the data segment. Returns 0 if the source ends
+    /// before the matching `}` (the parser then surfaces a normal
+    /// "}" expected error).
+    ///
+    /// String literals are skipped without expansion; comments
+    /// (`/*...*/` and `//`) are also stepped over so a comment
+    /// containing `{` doesn't bump the count.
+    pub fn count_top_level_groups_in_array(&self) -> usize {
+        let bytes = &self.src;
+        // We're positioned just past the outer `{`. Walk forward,
+        // tracking brace depth. Top-level (depth 1) `{` opens a
+        // new group; the matching `}` at depth 1 closes it. The
+        // depth-0 `}` ends the scan.
+        let mut p = self.pos;
+        let mut depth: i32 = 1;
+        let mut count: usize = 0;
+        let mut in_group = false;
+        while p < bytes.len() && depth > 0 {
+            let c = bytes[p];
+            if c == b'/' && p + 1 < bytes.len() && bytes[p + 1] == b'*' {
+                p += 2;
+                while p + 1 < bytes.len() && !(bytes[p] == b'*' && bytes[p + 1] == b'/') {
+                    p += 1;
+                }
+                p = (p + 2).min(bytes.len());
+                continue;
+            }
+            if c == b'/' && p + 1 < bytes.len() && bytes[p + 1] == b'/' {
+                while p < bytes.len() && bytes[p] != b'\n' {
+                    p += 1;
+                }
+                continue;
+            }
+            if c == b'"' || c == b'\'' {
+                let q = c;
+                p += 1;
+                while p < bytes.len() && bytes[p] != q {
+                    if bytes[p] == b'\\' && p + 1 < bytes.len() {
+                        p += 2;
+                    } else {
+                        p += 1;
+                    }
+                }
+                if p < bytes.len() {
+                    p += 1;
+                }
+                continue;
+            }
+            if c == b'{' {
+                if depth == 1 && !in_group {
+                    in_group = true;
+                    count += 1;
+                }
+                depth += 1;
+                p += 1;
+                continue;
+            }
+            if c == b'}' {
+                depth -= 1;
+                if depth == 1 {
+                    in_group = false;
+                }
+                p += 1;
+                continue;
+            }
+            p += 1;
+        }
+        count
     }
 
     /// Advance to the next token. Identifiers are interned into `symbols`
@@ -159,15 +390,27 @@ impl Lexer {
             if c == '\n' {
                 self.line += 1;
             } else if c == '#' {
-                // Skip the rest of the line. Stray `#` lines that the
-                // preprocessor didn't consume reach here -- the
-                // historical c4 lexer treated `#` as a line-comment
-                // marker, and we keep that fallback so e.g. a leading
-                // shebang line lets source files be made
-                // executable with `#!/usr/bin/env badc`.
-                while self.pos < self.src.len() && self.src[self.pos] as char != '\n' {
-                    self.pos += 1;
+                // Two `#`-line shapes survive into the lexer:
+                //   * `#pragma pack(...)` -- the preprocessor passes
+                //     pack pragmas through verbatim (they're
+                //     source-position-dependent, unlike the binding
+                //     / dylib / export pragmas the preprocessor
+                //     batches). Parse the args and fold into
+                //     `pack_stack`.
+                //   * Any other `#` line -- preserve the historical
+                //     c4 line-comment fallback (shebangs,
+                //     unrecognised pragmas, stray `#`s the
+                //     preprocessor didn't consume). Skip to EOL.
+                let line_start = self.pos;
+                let mut line_end = line_start;
+                while line_end < self.src.len() && self.src[line_end] as char != '\n' {
+                    line_end += 1;
                 }
+                let body = &self.src[line_start..line_end];
+                if let Some(dir) = parse_pragma_pack_line(body) {
+                    self.apply_pack_directive(dir);
+                }
+                self.pos = line_end;
             } else if c.is_ascii_alphabetic() || c == '_' {
                 let start = self.pos - 1;
                 let mut hash: i64 = c as i64;
@@ -186,22 +429,62 @@ impl Lexer {
             } else if c.is_ascii_digit() {
                 let int_start = self.pos - 1;
                 let mut val = (c as u8 - b'0') as i64;
+                // Octal: a leading `0` followed by an octal digit
+                // means the literal is base-8 (C99 6.4.4.1: `0644`
+                // is `420`). `0` followed by `x`/`X` is hex; that
+                // branch is below. A bare `0` keeps `val == 0`.
+                if val == 0
+                    && self.pos < self.src.len()
+                    && (b'0'..=b'7').contains(&self.src[self.pos])
+                {
+                    while self.pos < self.src.len() && (b'0'..=b'7').contains(&self.src[self.pos]) {
+                        val = val * 8 + (self.src[self.pos] - b'0') as i64;
+                        self.pos += 1;
+                    }
+                    while self.pos < self.src.len()
+                        && matches!(self.src[self.pos], b'u' | b'U' | b'l' | b'L')
+                    {
+                        self.pos += 1;
+                    }
+                    self.ival = val;
+                    self.tk = Token::Num as i64;
+                    return Ok(());
+                }
                 if val == 0
                     && self.pos < self.src.len()
                     && (self.src[self.pos] as char == 'x' || self.src[self.pos] as char == 'X')
                 {
                     self.pos += 1;
+                    // Accumulate via wrapping_mul / wrapping_add so a
+                    // hex literal that fills the full 64-bit range
+                    // (e.g. `0xFFFFFFFFFFFFFFFEul`) doesn't trip
+                    // debug-build overflow detection. The value is
+                    // stored as i64 but interpreted bit-for-bit;
+                    // wrap-on-overflow is the right shape for
+                    // "build a 64-bit pattern digit-by-digit."
                     while self.pos < self.src.len() {
                         let nc = self.src[self.pos] as char;
-                        if nc.is_ascii_digit() {
-                            val = val * 16 + (nc as u8 - b'0') as i64;
+                        let digit = if nc.is_ascii_digit() {
+                            (nc as u8 - b'0') as i64
                         } else if ('a'..='f').contains(&nc) {
-                            val = val * 16 + (nc as u8 - b'a' + 10) as i64;
+                            (nc as u8 - b'a' + 10) as i64
                         } else if ('A'..='F').contains(&nc) {
-                            val = val * 16 + (nc as u8 - b'A' + 10) as i64;
+                            (nc as u8 - b'A' + 10) as i64
                         } else {
                             break;
-                        }
+                        };
+                        val = val.wrapping_mul(16).wrapping_add(digit);
+                        self.pos += 1;
+                    }
+                    // Hex literals can carry the standard integer suffix
+                    // letters (u/U/l/L plus ll/LL combinations such as
+                    // 0xFFFFULL). c5 has a single 64-bit integer
+                    // representation so the suffix is purely
+                    // informational; we consume any sequence of suffix
+                    // letters and store the value unchanged.
+                    while self.pos < self.src.len()
+                        && matches!(self.src[self.pos], b'u' | b'U' | b'l' | b'L')
+                    {
                         self.pos += 1;
                     }
                     self.ival = val;
@@ -214,8 +497,34 @@ impl Lexer {
                     if !nc.is_ascii_digit() {
                         break;
                     }
-                    val = val * 10 + (nc as u8 - b'0') as i64;
+                    // Decimal-literal accumulator: wrap around at i64
+                    // overflow rather than panicking under debug
+                    // builds. C99 says any integer constant outside
+                    // the representable range has implementation-
+                    // defined behavior; clang and gcc both fold to
+                    // the wrapped value at the chosen type's width.
+                    val = (val as u64)
+                        .wrapping_mul(10)
+                        .wrapping_add((nc as u8 - b'0') as u64) as i64;
                     self.pos += 1;
+                }
+
+                // Decimal integer suffix: u/U/l/L in any combination
+                // (1u, 1L, 1ULL, 1lu, ...). When any suffix letter is
+                // present, the literal is unambiguously an integer --
+                // no float-suffix `f`/`F` can follow because the
+                // standard doesn't allow it on integer literals.
+                if self.pos < self.src.len()
+                    && matches!(self.src[self.pos], b'u' | b'U' | b'l' | b'L')
+                {
+                    while self.pos < self.src.len()
+                        && matches!(self.src[self.pos], b'u' | b'U' | b'l' | b'L')
+                    {
+                        self.pos += 1;
+                    }
+                    self.ival = val;
+                    self.tk = Token::Num as i64;
+                    return Ok(());
                 }
 
                 // Float literal: integer body followed by a `.`,
@@ -288,6 +597,26 @@ impl Lexer {
                     while self.pos < self.src.len() && self.src[self.pos] as char != '\n' {
                         self.pos += 1;
                     }
+                } else if self.pos < self.src.len() && self.src[self.pos] as char == '*' {
+                    // C-style `/* ... */` block comment. Track newlines
+                    // so `self.line` stays accurate -- error messages
+                    // and `__LINE__` upstream depend on it.
+                    self.pos += 1;
+                    while self.pos + 1 < self.src.len() {
+                        if self.src[self.pos] == b'*' && self.src[self.pos + 1] == b'/' {
+                            self.pos += 2;
+                            break;
+                        }
+                        if self.src[self.pos] == b'\n' {
+                            self.line += 1;
+                        }
+                        self.pos += 1;
+                    }
+                } else if self.pos < self.src.len() && self.src[self.pos] as char == '=' {
+                    self.pos += 1;
+                    self.tk = Token::AssignOp as i64;
+                    self.ival = Token::DivOp as i64;
+                    return Ok(());
                 } else {
                     self.tk = Token::DivOp as i64;
                     return Ok(());
@@ -401,6 +730,10 @@ impl Lexer {
                         if next_char == '+' {
                             self.pos += 1;
                             self.tk = Token::Inc as i64;
+                        } else if next_char == '=' {
+                            self.pos += 1;
+                            self.tk = Token::AssignOp as i64;
+                            self.ival = Token::AddOp as i64;
                         } else {
                             self.tk = Token::AddOp as i64;
                         }
@@ -412,6 +745,10 @@ impl Lexer {
                         } else if next_char == '>' {
                             self.pos += 1;
                             self.tk = Token::Arrow as i64;
+                        } else if next_char == '=' {
+                            self.pos += 1;
+                            self.tk = Token::AssignOp as i64;
+                            self.ival = Token::SubOp as i64;
                         } else {
                             self.tk = Token::SubOp as i64;
                         }
@@ -434,8 +771,17 @@ impl Lexer {
                             self.pos += 1;
                             self.tk = Token::LeOp as i64;
                         } else if next_char == '<' {
+                            // `<<` then optional `=` -- `<<=` is a
+                            // compound shift-assign; `<<` alone is
+                            // the shift operator.
                             self.pos += 1;
-                            self.tk = Token::ShlOp as i64;
+                            if self.pos < self.src.len() && self.src[self.pos] == b'=' {
+                                self.pos += 1;
+                                self.tk = Token::AssignOp as i64;
+                                self.ival = Token::ShlOp as i64;
+                            } else {
+                                self.tk = Token::ShlOp as i64;
+                            }
                         } else {
                             self.tk = Token::LtOp as i64;
                         }
@@ -446,7 +792,13 @@ impl Lexer {
                             self.tk = Token::GeOp as i64;
                         } else if next_char == '>' {
                             self.pos += 1;
-                            self.tk = Token::ShrOp as i64;
+                            if self.pos < self.src.len() && self.src[self.pos] == b'=' {
+                                self.pos += 1;
+                                self.tk = Token::AssignOp as i64;
+                                self.ival = Token::ShrOp as i64;
+                            } else {
+                                self.tk = Token::ShrOp as i64;
+                            }
                         } else {
                             self.tk = Token::GtOp as i64;
                         }
@@ -455,6 +807,10 @@ impl Lexer {
                         if next_char == '|' {
                             self.pos += 1;
                             self.tk = Token::Lor as i64;
+                        } else if next_char == '=' {
+                            self.pos += 1;
+                            self.tk = Token::AssignOp as i64;
+                            self.ival = Token::OrOp as i64;
                         } else {
                             self.tk = Token::OrOp as i64;
                         }
@@ -463,13 +819,41 @@ impl Lexer {
                         if next_char == '&' {
                             self.pos += 1;
                             self.tk = Token::Lan as i64;
+                        } else if next_char == '=' {
+                            self.pos += 1;
+                            self.tk = Token::AssignOp as i64;
+                            self.ival = Token::AndOp as i64;
                         } else {
                             self.tk = Token::AndOp as i64;
                         }
                     }
-                    '^' => self.tk = Token::XorOp as i64,
-                    '%' => self.tk = Token::ModOp as i64,
-                    '*' => self.tk = Token::MulOp as i64,
+                    '^' => {
+                        if next_char == '=' {
+                            self.pos += 1;
+                            self.tk = Token::AssignOp as i64;
+                            self.ival = Token::XorOp as i64;
+                        } else {
+                            self.tk = Token::XorOp as i64;
+                        }
+                    }
+                    '%' => {
+                        if next_char == '=' {
+                            self.pos += 1;
+                            self.tk = Token::AssignOp as i64;
+                            self.ival = Token::ModOp as i64;
+                        } else {
+                            self.tk = Token::ModOp as i64;
+                        }
+                    }
+                    '*' => {
+                        if next_char == '=' {
+                            self.pos += 1;
+                            self.tk = Token::AssignOp as i64;
+                            self.ival = Token::MulOp as i64;
+                        } else {
+                            self.tk = Token::MulOp as i64;
+                        }
+                    }
                     '[' => self.tk = Token::Brak as i64,
                     '?' => self.tk = Token::Cond as i64,
                     '.' => {
@@ -572,6 +956,36 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("extern", Token::Extern),
     ("static", Token::Static),
     ("void", Token::Char),
+    // Type qualifiers -- consumed everywhere a type qualifier
+    // may appear; no semantic effect.
+    ("const", Token::TypeQual),
+    ("volatile", Token::TypeQual),
+    ("restrict", Token::TypeQual),
+    ("__restrict", Token::TypeQual),
+    ("__restrict__", Token::TypeQual),
+    // Integer-type modifiers. `signed`, `unsigned`, and `long` are
+    // split off: `signed` changes the meaning of a `char` base
+    // (signed-char arrays hold negative values that must load
+    // sign-extended); `unsigned` flips the type-tag flag that
+    // routes compares through the unsigned ops; `long` selects the
+    // 64-bit `Ty::Long` storage class (otherwise an `int`
+    // declaration yields a 32-bit slot).
+    ("signed", Token::Signed),
+    ("unsigned", Token::Unsigned),
+    ("short", Token::Short),
+    ("long", Token::Long),
+    ("_Bool", Token::IntMod),
+    // Function specifiers -- accepted, no effect.
+    ("inline", Token::FuncSpec),
+    ("__inline", Token::FuncSpec),
+    ("__inline__", Token::FuncSpec),
+    ("register", Token::FuncSpec),
+    ("auto", Token::FuncSpec),
+    // typedef -- drives the parser's type-alias registration.
+    ("typedef", Token::Typedef),
+    // union -- like struct, but all members share offset 0 and
+    // the size is max(member). Same identifier namespace.
+    ("union", Token::Union),
     ("main", Token::Id),
 ];
 

@@ -164,26 +164,34 @@ typedef int                NTSTATUS;
 typedef int               *LPBOOL;
 typedef int               *PBOOL;
 
-// LARGE_INTEGER / ULARGE_INTEGER -- the real Windows headers
-// declare these as a union of an anonymous struct and a 64-bit
-// integer. c5 doesn't model anonymous nesting, so the layout is
-// flattened to a struct with `LowPart` / `HighPart` / `QuadPart`
-// fields. Has to come after the DWORD typedef above; the c5
-// frontend resolves struct-field types at struct-decl time.
-struct _LARGE_INTEGER {
-    DWORD LowPart;
-    int   HighPart;
+union _LARGE_INTEGER {
+    struct {
+        DWORD LowPart;
+        LONG  HighPart;
+    };
+    struct {
+        DWORD LowPart;
+        LONG  HighPart;
+    } u;
     long long QuadPart;
 };
-struct _ULARGE_INTEGER {
-    DWORD LowPart;
-    DWORD HighPart;
+
+union _ULARGE_INTEGER {
+    struct {
+        DWORD LowPart;
+        DWORD HighPart;
+    };
+    struct {
+        DWORD LowPart;
+        DWORD HighPart;
+    } u;
     unsigned long long QuadPart;
 };
-typedef struct _LARGE_INTEGER  LARGE_INTEGER;
-typedef struct _ULARGE_INTEGER ULARGE_INTEGER;
-typedef struct _LARGE_INTEGER  *PLARGE_INTEGER;
-typedef struct _ULARGE_INTEGER *PULARGE_INTEGER;
+
+typedef union _LARGE_INTEGER  LARGE_INTEGER;
+typedef union _ULARGE_INTEGER ULARGE_INTEGER;
+typedef union _LARGE_INTEGER  *PLARGE_INTEGER;
+typedef union _ULARGE_INTEGER *PULARGE_INTEGER;
 
 typedef void              *HLOCAL;
 typedef void              *HGLOBAL;

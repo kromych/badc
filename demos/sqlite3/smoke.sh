@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Build the patched sqlite3 amalgamation + shell with badc and
-# run a fixed smoke test against in-memory and file-backed
-# databases. Returns 0 on success, non-zero with a diagnostic
-# message on failure.
+# Build the sqlite3 amalgamation + shell with badc and run a
+# fixed smoke test against in-memory and file-backed databases.
+# Returns 0 on success, non-zero with a diagnostic message on
+# failure.
 #
 # Used by the CI workflow + by developers who want a quick
 # end-to-end check after a c5 / codegen change. Does not depend
@@ -41,8 +41,8 @@ case "${OSTYPE:-}" in
     msys*|cygwin*|win32*) EXE_SUFFIX=".exe" ;;
 esac
 
-# Ensure the patched sqlite source is in place. setup.sh is
-# idempotent so re-running is cheap on a primed runner.
+# Ensure the sqlite source is in place. setup.sh is idempotent
+# so re-running is cheap on a primed runner.
 "${SQLITE_DIR}/setup.sh"
 
 # Concatenate -- badc takes a single translation unit, and we
@@ -69,7 +69,7 @@ build_shell() {
     # `__int64 -> long long`, the `__declspec(x)` empty-decorator
     # family, etc.). The header internally `#ifdef _WIN32` so the
     # same flag is a no-op on macOS / Linux smoke runs and the
-    # command line stays uniform across hosts (gh #34).
+    # command line stays uniform across hosts.
     "${BADC}" "$@" -include msvc_compat.h "${COMBINED}" -o "${out_path}" \
         -DSQLITE_OMIT_LOAD_EXTENSION \
         -DSQLITE_THREADSAFE=0 \
@@ -90,21 +90,6 @@ run_scenarios() {
     local label="$1"
     local shell_bin="$2"
     local fail=0
-
-    # Diag mode: report the shell binary's own exit code via a
-    # direct invocation BEFORE the regular smoke runs. The smoke
-    # captures only stdout, so a shell that exits non-zero before
-    # writing any data looks the same as one that ran successfully
-    # but emitted nothing. Probing here distinguishes the two.
-    if [ "${BADC_RUN_DIAG:-}" = "1" ]; then
-        echo "=== shell ${label} probe ===" >&2
-        ls -la "${shell_bin}" >&2 || true
-        set +e
-        "${shell_bin}" </dev/null
-        local probe_rc=$?
-        set -e
-        echo "=== shell ${label} direct exit=${probe_rc} ===" >&2
-    fi
 
     # ---- in-memory smoke ----
     # Covers the basic CRUD path plus all five integer aggregates
@@ -302,203 +287,6 @@ SHELL_OPT="${WORK}/sqlite3shell.opt${EXE_SUFFIX}"
 
 build_shell "${SHELL_NOOPT}"      || { echo "smoke FAIL: build (no -O) failed" >&2; exit 1; }
 build_shell "${SHELL_OPT}"     -O || { echo "smoke FAIL: build (-O) failed" >&2; exit 1; }
-
-# `diag.c` is a tiny stderr-tracing shell-shim that exercises the
-# sqlite C API against `:memory:` over piped stdin without any of
-# shell.c's tty / line-editor / console-mode plumbing. When
-# BADC_RUN_DIAG=1 (set by the Windows CI lane), build + run it
-# with the in-memory smoke input so the CI log captures
-# checkpoint stderr from each sqlite step. If the regular shell
-# emits empty stdout but diag prints rows, the bug is shell.c-
-# specific; if both are silent, the bug is below shell.c.
-if [ "${BADC_RUN_DIAG:-}" = "1" ]; then
-    # Tier 0 probe: enumerate which msvcrt + kernel32 symbols
-    # GetProcAddress can resolve at runtime. The hello+sqlite IAT
-    # references ~85 symbols statically; if the loader rejects
-    # the binary with STATUS_ENTRYPOINT_NOT_FOUND (errorlevel
-    # -1073741511), it's because ONE of those names isn't
-    # exported by the runner's DLLs. This probe loads each DLL
-    # via LoadLibraryA + GetProcAddress so we get a per-symbol
-    # `OK` / `MISSING` line in the CI log.
-    PROBE_BIN="${WORK}/sqlite3probe${EXE_SUFFIX}"
-    "${BADC}" -include msvc_compat.h "${SQLITE_DIR}/probe_imports.c" -o "${PROBE_BIN}" \
-        || echo "probe: build failed" >&2
-    # Tier 0.5: shell-startup probe -- replicates shell.c's first
-    # few main() statements (setvbuf / isatty / atexit / fgetc)
-    # with stderr checkpoints between each call. shell.exe is
-    # SIGSEGVing on real Windows; this isolates which call.
-    SSP_BIN="${WORK}/sqlite3sshell_startup${EXE_SUFFIX}"
-    "${BADC}" -include msvc_compat.h "${SQLITE_DIR}/shell_startup_probe.c" -o "${SSP_BIN}" \
-        || echo "shell-startup-probe: build failed" >&2
-    if [ -e "${SSP_BIN}" ]; then
-        echo "=== shell-startup-probe run ===" >&2
-        set +e
-        "${SSP_BIN}" </dev/null
-        ssp_rc=$?
-        set -e
-        echo "=== shell-startup-probe bash exit=${ssp_rc} ===" >&2
-        if command -v cmd.exe >/dev/null 2>&1; then
-            if command -v cygpath >/dev/null 2>&1; then
-                ssp_winpath=$(cygpath -w "${SSP_BIN}")
-            else
-                ssp_winpath="${SSP_BIN}"
-            fi
-            cmd.exe //v:on //c "${ssp_winpath} 2>&1 < NUL & echo errorlevel=!errorlevel!" >&2 || true
-        fi
-        echo "=== /shell-startup-probe ===" >&2
-    fi
-
-    if [ -e "${PROBE_BIN}" ]; then
-        echo "=== probe imports run ===" >&2
-        set +e
-        "${PROBE_BIN}" </dev/null
-        probe_rc=$?
-        set -e
-        echo "=== probe imports bash exit=${probe_rc} ===" >&2
-        if command -v cmd.exe >/dev/null 2>&1; then
-            if command -v cygpath >/dev/null 2>&1; then
-                probe_winpath=$(cygpath -w "${PROBE_BIN}")
-            else
-                probe_winpath="${PROBE_BIN}"
-            fi
-            echo "=== probe imports cmd.exe (winpath=${probe_winpath}) ===" >&2
-            cmd.exe //v:on //c "${probe_winpath} 2>&1 & echo errorlevel=!errorlevel!" >&2 || true
-            echo "=== /probe imports cmd.exe ===" >&2
-        fi
-    fi
-
-    # Tier 1 probe: dead-minimal hello-world (no sqlite, no shell,
-    # no fprintf). If THIS exits non-zero, the failure is in the
-    # entry stub / loader path itself, not sqlite-imports-related.
-    HELLO_BIN="${WORK}/sqlite3hello${EXE_SUFFIX}"
-    "${BADC}" -include msvc_compat.h "${SQLITE_DIR}/hello.c" -o "${HELLO_BIN}" \
-        || echo "hello: build failed" >&2
-    if [ -e "${HELLO_BIN}" ]; then
-        echo "=== hello run ===" >&2
-        ls -la "${HELLO_BIN}" >&2 || true
-        if command -v file >/dev/null 2>&1; then
-            file "${HELLO_BIN}" >&2 || true
-        fi
-        set +e
-        "${HELLO_BIN}" </dev/null
-        hello_rc=$?
-        set -e
-        echo "=== hello bash exit=${hello_rc} ===" >&2
-    fi
-
-    # Tier 1.5: hello+sqlite -- minimal main + the entire sqlite
-    # amalgamation linked in. If hello.c works alone but this
-    # tier exits non-zero, the failure is the IAT pulled in by
-    # sqlite (some symbol the runner's msvcrt / kernel32 doesn't
-    # export), not anything sqlite does at runtime.
-    HELLOSQ_BIN="${WORK}/sqlite3hellosq${EXE_SUFFIX}"
-    HELLOSQ_COMBINED="${WORK}/sqlite3hellosq_combined.c"
-    cat "${SQLITE_DIR}/sqlite3.c" "${SQLITE_DIR}/hello.c" > "${HELLOSQ_COMBINED}"
-    "${BADC}" -include msvc_compat.h "${HELLOSQ_COMBINED}" -o "${HELLOSQ_BIN}" \
-        -DSQLITE_OMIT_LOAD_EXTENSION \
-        -DSQLITE_THREADSAFE=0 \
-        -DSQLITE_DEFAULT_MEMSTATUS=0 \
-        -DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1 \
-        -DSQLITE_DQS=0 \
-        -DSQLITE_OMIT_DEPRECATED \
-        -DSQLITE_OMIT_PROGRESS_CALLBACK \
-        -DSQLITE_OMIT_SHARED_CACHE \
-        -DSQLITE_OMIT_AUTOINIT \
-        -DSQLITE_WITHOUT_ZONEMALLOC=1 \
-        -DSQLITE_ENABLE_LOCKING_STYLE=0 \
-        -DSQLITE_DISABLE_INTRINSIC \
-        -DSQLITE_OMIT_SEH || echo "hellosq: build failed" >&2
-    if [ -e "${HELLOSQ_BIN}" ]; then
-        echo "=== hello+sqlite run ===" >&2
-        # Run from a tmp directory so the side-channel `hello.proof`
-        # file (written by main if main runs at all) lands in a
-        # known place we can inspect afterwards regardless of which
-        # invocation path actually printed.
-        proof_dir="${WORK}/proof_run"
-        mkdir -p "${proof_dir}"
-        rm -f "${proof_dir}/hello.proof"
-        set +e
-        ( cd "${proof_dir}" && "${HELLOSQ_BIN}" </dev/null )
-        hellosq_rc=$?
-        set -e
-        echo "=== hello+sqlite bash exit=${hellosq_rc} ===" >&2
-        if [ -f "${proof_dir}/hello.proof" ]; then
-            echo "=== hello+sqlite proof-file present ===" >&2
-            cat "${proof_dir}/hello.proof" >&2
-            echo "=== /hello+sqlite proof-file ===" >&2
-        else
-            echo "=== hello+sqlite proof-file ABSENT (main never ran or fopen failed) ===" >&2
-        fi
-        if command -v cmd.exe >/dev/null 2>&1; then
-            if command -v cygpath >/dev/null 2>&1; then
-                winpath=$(cygpath -w "${HELLOSQ_BIN}")
-            else
-                winpath="${HELLOSQ_BIN}"
-            fi
-            rm -f "${proof_dir}/hello.proof"
-            echo "=== hello+sqlite cmd.exe probe (winpath=${winpath}) ===" >&2
-            # `/v:on` enables delayed expansion so `!errorlevel!` is
-            # evaluated AFTER the binary runs (without it, cmd.exe
-            # substitutes %errorlevel% at parse time -- before the
-            # spawn -- giving the meaningless 0 from the outer shell).
-            ( cd "${proof_dir}" && cmd.exe //v:on //c "${winpath} 2>&1 & echo errorlevel=!errorlevel!" >&2 ) || true
-            if [ -f "${proof_dir}/hello.proof" ]; then
-                echo "=== hello+sqlite cmd-proof present ===" >&2
-                cat "${proof_dir}/hello.proof" >&2
-                echo "=== /hello+sqlite cmd-proof ===" >&2
-            else
-                echo "=== hello+sqlite cmd-proof ABSENT ===" >&2
-            fi
-            echo "=== /hello+sqlite cmd.exe probe ===" >&2
-        fi
-    fi
-
-    DIAG_BIN="${WORK}/sqlite3diag${EXE_SUFFIX}"
-    DIAG_COMBINED="${WORK}/sqlite3diag_combined.c"
-    cat "${SQLITE_DIR}/sqlite3.c" "${SQLITE_DIR}/diag.c" > "${DIAG_COMBINED}"
-    "${BADC}" -include msvc_compat.h "${DIAG_COMBINED}" -o "${DIAG_BIN}" \
-        -DSQLITE_OMIT_LOAD_EXTENSION \
-        -DSQLITE_THREADSAFE=0 \
-        -DSQLITE_DEFAULT_MEMSTATUS=0 \
-        -DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1 \
-        -DSQLITE_DQS=0 \
-        -DSQLITE_OMIT_DEPRECATED \
-        -DSQLITE_OMIT_PROGRESS_CALLBACK \
-        -DSQLITE_OMIT_SHARED_CACHE \
-        -DSQLITE_OMIT_AUTOINIT \
-        -DSQLITE_WITHOUT_ZONEMALLOC=1 \
-        -DSQLITE_ENABLE_LOCKING_STYLE=0 \
-        -DSQLITE_DISABLE_INTRINSIC \
-        -DSQLITE_OMIT_SEH || { echo "diag: build failed" >&2; }
-    if [ -e "${DIAG_BIN}" ]; then
-        echo "=== diag artefact ===" >&2
-        ls -la "${DIAG_BIN}" >&2 || true
-        if command -v file >/dev/null 2>&1; then
-            file "${DIAG_BIN}" >&2 || true
-        fi
-        echo "=== diag run (in-memory smoke input) ===" >&2
-        # Wrap each invocation in a `set +e` block: the smoke
-        # script otherwise runs under `set -e -o pipefail`, so a
-        # non-zero exit from the diag binary kills the script
-        # before the regular shell smoke gets a chance to run --
-        # which loses the diff output for the actual lane the
-        # CI step is gated on.
-        set +e
-        # Direct invocation (no pipe) first to probe the loader.
-        # /dev/null on stdin so it doesn't hang waiting for input.
-        "${DIAG_BIN}" </dev/null
-        ddir=$?
-        echo "=== diag direct exit=${ddir} ===" >&2
-        printf "CREATE TABLE t(x INTEGER, y TEXT);\nINSERT INTO t VALUES(-7,'neg'),(1,'hello'),(2,'world');\nSELECT * FROM t;\n.quit\n" \
-            | "${DIAG_BIN}"
-        dpip=$?
-        echo "=== diag piped exit=${dpip} ===" >&2
-        set -e
-        echo "=== /diag run ===" >&2
-    else
-        echo "=== diag binary not produced at ${DIAG_BIN} ===" >&2
-    fi
-fi
 
 overall=0
 run_scenarios "no-O" "${SHELL_NOOPT}" || overall=1

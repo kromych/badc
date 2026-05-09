@@ -161,7 +161,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         entry_pc,
         warnings,
         data_imm_positions,
-        code_imm_positions: _,
+        code_imm_positions: in_code_imm_positions,
         tls_data,
         tls_init_size,
         call_fp_arg_masks,
@@ -176,7 +176,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         variables: in_variables,
     } = program;
 
-    let mut insns = decode(&text, &data_imm_positions)?;
+    let mut insns = decode(&text, &data_imm_positions, &in_code_imm_positions)?;
     // Build a single pc -> insn-index table by walking `insns`
     // once. Sqlite's amalgamation produces ~1M instructions and a
     // few hundred CodeReloc entries; the previous shape called
@@ -311,7 +311,8 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         mask_off_funcs(&insns, &mut targets);
     }
 
-    let (text, entry_pc, data_imm_positions, new_pc) = encode(&insns, entry_idx);
+    let (text, entry_pc, data_imm_positions, code_imm_positions, new_pc) =
+        encode(&insns, entry_idx);
 
     let remapped_code_relocs: Vec<_> = code_relocs
         .iter()
@@ -384,15 +385,14 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         entry_pc,
         warnings,
         data_imm_positions,
-        // The optimizer doesn't track per-Imm provenance through
-        // its peephole passes (it would need to remap operand
-        // PCs across every transformation). Leave this empty;
-        // -O code uses the value-range heuristic in codegen,
-        // which works correctly for any program whose constants
-        // don't fall in [CODE_BASE, CODE_BASE + text.len()).
-        // The non-O path uses the precise list from the
-        // compiler.
-        code_imm_positions: Vec::new(),
+        // Re-emitted by `encode()` from the post-DCE `Insn::ImmCode`
+        // entries. Leaving this empty and relying on the value-range
+        // heuristic in codegen (`v >= CODE_BASE && v - CODE_BASE <
+        // text.len()`) misclassifies user constants that happen to
+        // land in that range -- sqlite's `EP_IsFalse` is `0x20000000`,
+        // exactly `CODE_BASE`, which is how gh #30 turned an integer
+        // flag into a func-ptr ADRP+ADD and corrupted `Expr.flags`.
+        code_imm_positions,
         tls_data,
         tls_init_size,
         call_fp_arg_masks,
@@ -415,9 +415,22 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
 /// segment offset; we promote those to `Insn::ImmData` so peephole
 /// passes leave them alone (folding a pointer with an int would be
 /// wrong) and the encoder can re-emit a fresh position list.
-fn decode(text: &[i64], data_imm_positions: &[usize]) -> Result<Vec<Insn>, C5Error> {
+/// `code_imm_positions` is the analogous side channel for `Op::Imm`
+/// operands that hold a `CODE_BASE + pc` function-pointer literal;
+/// we use it to upgrade only those `Imm`s to `Insn::ImmCode` (the
+/// alternative -- the value-range heuristic alone -- misclassifies
+/// any user constant in `[CODE_BASE, CODE_BASE + text.len())` as a
+/// func-ptr and corrupts integer literals like sqlite's `EP_IsFalse
+/// = 0x20000000`, which is exactly `CODE_BASE`; cf. gh #30).
+fn decode(
+    text: &[i64],
+    data_imm_positions: &[usize],
+    code_imm_positions: &[usize],
+) -> Result<Vec<Insn>, C5Error> {
     let is_data_imm: alloc::collections::BTreeSet<usize> =
         data_imm_positions.iter().copied().collect();
+    let is_code_imm: alloc::collections::BTreeSet<usize> =
+        code_imm_positions.iter().copied().collect();
     // Pass A: parse each instruction, recording where in the text each
     // IR instruction starts so we can build PC -> index later.
     let mut insns: Vec<Insn> = Vec::new();
@@ -529,7 +542,23 @@ fn decode(text: &[i64], data_imm_positions: &[usize]) -> Result<Vec<Insn>, C5Err
 
     // Pass C: rewrite branch targets PC -> index, and upgrade
     // `Imm <CODE_BASE + pc>` whose target is an Ent to `ImmCode`.
+    // We promote on the compiler's `code_imm_positions` side channel,
+    // not on a value-range heuristic, so user constants that happen
+    // to land in `[CODE_BASE, CODE_BASE + text.len())` are left as
+    // plain `Imm`. If the side channel is absent (e.g., a `Program`
+    // built directly without going through the compiler -- mostly
+    // unit tests) we fall back to the heuristic so those still
+    // resolve `Imm <code_addr>` correctly.
+    let mut text_walk_pc = 0usize;
+    let use_heuristic = code_imm_positions.is_empty();
     for ins in insns.iter_mut() {
+        let operand_pc = text_walk_pc + 1;
+        let word_size = match ins {
+            Insn::NoArg(_) => 1,
+            Insn::Removed => 0,
+            _ => 2,
+        };
+        text_walk_pc += word_size;
         match ins {
             Insn::Branch(_, target) => {
                 let idx = lookup_idx(&pc_to_idx, *target).ok_or_else(|| {
@@ -541,7 +570,9 @@ fn decode(text: &[i64], data_imm_positions: &[usize]) -> Result<Vec<Insn>, C5Err
             }
             Insn::Imm(v) => {
                 let raw = *v as usize;
-                if raw >= CODE_BASE && raw - CODE_BASE < text.len() {
+                let tagged = is_code_imm.contains(&operand_pc);
+                let in_range = raw >= CODE_BASE && raw - CODE_BASE < text.len();
+                if tagged || (use_heuristic && in_range) {
                     let target_pc = raw - CODE_BASE;
                     if let Some(idx) = lookup_idx(&pc_to_idx, target_pc)
                         && is_ent.get(idx).copied().unwrap_or(false)
@@ -607,11 +638,22 @@ fn lookup_pc(
 }
 
 /// Re-encode the IR to a flat bytecode vector. Returns
-/// `(text, entry_pc, data_imm_positions, new_pc)`. `new_pc` is the
-/// per-insn-index remap table so callers (e.g., the code-reloc
-/// remapping in `optimize`) can translate any pre-optimisation
-/// bytecode PC through the original `insns` index.
-fn encode(insns: &[Insn], entry_idx: usize) -> (Vec<i64>, usize, Vec<usize>, Vec<usize>) {
+/// `(text, entry_pc, data_imm_positions, code_imm_positions, new_pc)`.
+/// `new_pc` is the per-insn-index remap table so callers (e.g., the
+/// code-reloc remapping in `optimize`) can translate any
+/// pre-optimisation bytecode PC through the original `insns` index.
+/// `code_imm_positions` mirrors `data_imm_positions`: every operand
+/// slot whose word holds a `CODE_BASE + pc` function-pointer literal
+/// (i.e., came from an `Insn::ImmCode`). The codegen uses this to
+/// disambiguate user constants that happen to land in the
+/// `[CODE_BASE, CODE_BASE + text.len())` range -- sqlite's
+/// `EP_IsFalse` is `0x20000000` and collides with `CODE_BASE`
+/// exactly, so the previous "fall back to range heuristic at -O"
+/// shape misclassified that integer as a func ptr (gh #30).
+fn encode(
+    insns: &[Insn],
+    entry_idx: usize,
+) -> (Vec<i64>, usize, Vec<usize>, Vec<usize>, Vec<usize>) {
     // Pass A: assign post-DCE PCs, skipping Removed slots.
     let mut new_pc: Vec<usize> = vec![usize::MAX; insns.len() + 1];
     let mut pc = 0usize;
@@ -644,6 +686,7 @@ fn encode(insns: &[Insn], entry_idx: usize) -> (Vec<i64>, usize, Vec<usize>, Vec
     // Pass B: emit, resolving targets through new_pc.
     let mut text = Vec::with_capacity(pc);
     let mut data_imm_positions: Vec<usize> = Vec::new();
+    let mut code_imm_positions: Vec<usize> = Vec::new();
     for ins in insns {
         match ins {
             Insn::NoArg(op) => text.push(*op as i64),
@@ -658,6 +701,7 @@ fn encode(insns: &[Insn], entry_idx: usize) -> (Vec<i64>, usize, Vec<usize>, Vec
             Insn::ImmCode(target) => {
                 let resolved = resolve_target(*target);
                 text.push(Op::Imm as i64);
+                code_imm_positions.push(text.len());
                 text.push((CODE_BASE + resolved) as i64);
             }
             Insn::ImmData(v) => {
@@ -702,7 +746,13 @@ fn encode(insns: &[Insn], entry_idx: usize) -> (Vec<i64>, usize, Vec<usize>, Vec
         }
     }
 
-    (text, resolve_target(entry_idx), data_imm_positions, new_pc)
+    (
+        text,
+        resolve_target(entry_idx),
+        data_imm_positions,
+        code_imm_positions,
+        new_pc,
+    )
 }
 
 // --- Helpers shared across passes ---------------------------------
@@ -1164,6 +1214,32 @@ mod tests {
             source_path: String::new(),
             variables: Vec::new(),
         }
+    }
+
+    #[test]
+    fn imm_equal_to_code_base_is_not_promoted() {
+        // gh #30: a user constant whose value happens to land in
+        // `[CODE_BASE, CODE_BASE + text.len())` (sqlite's
+        // `EP_IsFalse` is `0x20000000`, exactly `CODE_BASE`) must
+        // survive the optimizer as a plain integer. The empty
+        // `code_imm_positions` here means "no compiler-tagged
+        // func-ptr literals" -- the only func-ptr-shaped thing in
+        // the Program is the entry-Ent at PC 0, which the old
+        // value-range heuristic latched onto.
+        let p = prog(vec![
+            Op::Ent as i64,
+            0,
+            Op::Imm as i64,
+            CODE_BASE as i64,
+            Op::Lev as i64,
+        ]);
+        let opt = optimize(p).unwrap();
+        // The interpreter doesn't go through the codegen disambig
+        // path, but it does walk `Insn::ImmCode` if we wrongly
+        // promoted -- and on a hand-built input with empty
+        // `code_imm_positions`, that's the regression we want to
+        // pin. Run via VM and assert the constant came through.
+        assert_eq!(Vm::new(opt).run().unwrap(), CODE_BASE as i64);
     }
 
     #[test]

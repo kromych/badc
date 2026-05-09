@@ -1300,50 +1300,75 @@ pub(super) fn write(
     // sections, .shstrtab. Each entry's `sh_name` indexes into
     // `shstrtab_offsets`. None of the debug sections is
     // SHF_ALLOC -- they're file-only metadata.
-    write_struct(&mut out, &Elf64Shdr {
-        sh_name: shstrtab_offsets[0],
-        sh_type: SHT_NULL,
-        sh_flags: 0,
-        sh_addr: 0,
-        sh_offset: 0,
-        sh_size: 0,
-        sh_link: 0,
-        sh_info: 0,
-        sh_addralign: 0,
-        sh_entsize: 0,
-    });
-    let dwarf_section_specs: &[(u32, u64, u64)] = &[
-        (shstrtab_offsets[1], dwarf_info_off, dwarf_sections.debug_info.len() as u64),
-        (shstrtab_offsets[2], dwarf_abbrev_off, dwarf_sections.debug_abbrev.len() as u64),
-        (shstrtab_offsets[3], dwarf_line_off, dwarf_sections.debug_line.len() as u64),
-        (shstrtab_offsets[4], dwarf_str_off, dwarf_sections.debug_str.len() as u64),
-    ];
-    for &(name_off, off, sz) in dwarf_section_specs {
-        write_struct(&mut out, &Elf64Shdr {
-            sh_name: name_off,
-            sh_type: SHT_PROGBITS,
+    write_struct(
+        &mut out,
+        &Elf64Shdr {
+            sh_name: shstrtab_offsets[0],
+            sh_type: SHT_NULL,
             sh_flags: 0,
             sh_addr: 0,
-            sh_offset: off,
-            sh_size: sz,
+            sh_offset: 0,
+            sh_size: 0,
+            sh_link: 0,
+            sh_info: 0,
+            sh_addralign: 0,
+            sh_entsize: 0,
+        },
+    );
+    let dwarf_section_specs: &[(u32, u64, u64)] = &[
+        (
+            shstrtab_offsets[1],
+            dwarf_info_off,
+            dwarf_sections.debug_info.len() as u64,
+        ),
+        (
+            shstrtab_offsets[2],
+            dwarf_abbrev_off,
+            dwarf_sections.debug_abbrev.len() as u64,
+        ),
+        (
+            shstrtab_offsets[3],
+            dwarf_line_off,
+            dwarf_sections.debug_line.len() as u64,
+        ),
+        (
+            shstrtab_offsets[4],
+            dwarf_str_off,
+            dwarf_sections.debug_str.len() as u64,
+        ),
+    ];
+    for &(name_off, off, sz) in dwarf_section_specs {
+        write_struct(
+            &mut out,
+            &Elf64Shdr {
+                sh_name: name_off,
+                sh_type: SHT_PROGBITS,
+                sh_flags: 0,
+                sh_addr: 0,
+                sh_offset: off,
+                sh_size: sz,
+                sh_link: 0,
+                sh_info: 0,
+                sh_addralign: 1,
+                sh_entsize: 0,
+            },
+        );
+    }
+    write_struct(
+        &mut out,
+        &Elf64Shdr {
+            sh_name: shstrtab_offsets[5],
+            sh_type: SHT_STRTAB,
+            sh_flags: 0,
+            sh_addr: 0,
+            sh_offset: shstrtab_off,
+            sh_size: shstrtab_size,
             sh_link: 0,
             sh_info: 0,
             sh_addralign: 1,
             sh_entsize: 0,
-        });
-    }
-    write_struct(&mut out, &Elf64Shdr {
-        sh_name: shstrtab_offsets[5],
-        sh_type: SHT_STRTAB,
-        sh_flags: 0,
-        sh_addr: 0,
-        sh_offset: shstrtab_off,
-        sh_size: shstrtab_size,
-        sh_link: 0,
-        sh_info: 0,
-        sh_addralign: 1,
-        sh_entsize: 0,
-    });
+        },
+    );
 
     debug_assert_eq!(out.len() as u64, total_filesize);
 

@@ -345,9 +345,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
             if new_word_pc < out_source_lines.len() && old_word_pc < in_source_lines.len() {
                 out_source_lines[new_word_pc] = in_source_lines[old_word_pc];
             }
-            if new_word_pc < out_source_functions.len()
-                && old_word_pc < in_source_functions.len()
-            {
+            if new_word_pc < out_source_functions.len() && old_word_pc < in_source_functions.len() {
                 out_source_functions[new_word_pc] = in_source_functions[old_word_pc].clone();
             }
         }

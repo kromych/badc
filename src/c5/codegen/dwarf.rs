@@ -507,7 +507,9 @@ impl StrTable {
         // a single NUL works as the empty-string root entry. Some
         // consumers don't tolerate the table starting at a
         // non-NUL byte.
-        StrTable { bytes: Vec::from(&[0u8][..]) }
+        StrTable {
+            bytes: Vec::from(&[0u8][..]),
+        }
     }
     fn intern(&mut self, s: &str) -> u32 {
         let off = self.bytes.len() as u32;
@@ -537,8 +539,7 @@ fn write_uleb128(buf: &mut Vec<u8>, mut value: u64) {
 fn write_sleb128(buf: &mut Vec<u8>, mut value: i64) {
     loop {
         let byte = (value & 0x7f) as u8;
-        let cont = !((value == 0 && (byte & 0x40) == 0)
-            || (value == -1 && (byte & 0x40) != 0));
+        let cont = !((value == 0 && (byte & 0x40) == 0) || (value == -1 && (byte & 0x40) != 0));
         value >>= 7;
         if cont {
             buf.push(byte | 0x80);

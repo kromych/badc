@@ -396,6 +396,17 @@ impl Preprocessor {
         let source = stripped.as_str();
         let mut out = String::with_capacity(source.len());
 
+        // Emit a leading line marker so the lexer attributes
+        // tokens in this buffer to `(filename, 1)`. The
+        // `format!` writes a GNU-style `# 1 "filename"\n` shape;
+        // `parse_line_marker` in the lexer handles both the GNU
+        // form and a C99 `#line N "filename"` -- they share the
+        // same parsing path. Filenames with `"` or `\` get
+        // backslash-escaped so they round-trip; other bytes pass
+        // through verbatim (paths with embedded LF would already
+        // break a thousand other things).
+        out.push_str(&format_line_marker(1, filename));
+
         // `cond_stack` mirrors the nesting of `#if` / `#ifdef`. Each
         // entry is `(parent_active, this_branch_taken,
         // saw_else)`. `parent_active` is the enclosing branch's
@@ -579,6 +590,33 @@ impl Preprocessor {
                         if active {
                             let included = self.process_include(name, line_no)?;
                             out.push_str(&included);
+                            // Marker tells the lexer to attribute the
+                            // *next* source line to `(filename,
+                            // line_no + 1)` -- i.e. the line right
+                            // after this `#include`. The marker's
+                            // trailing `\n` is the *only* `\n` we
+                            // emit for this directive (the iteration
+                            // skips the bottom `out.push('\n')`),
+                            // because the marker is what stands in
+                            // for the original `#include` line.
+                            out.push_str(&format_line_marker(line_no + 1, filename));
+                            idx_iter += 1;
+                            continue;
+                        }
+                    }
+                    Directive::Line { line, file } => {
+                        if active {
+                            // C99 6.10.4: `#line N` retargets the next
+                            // source line's number; with `"file"` it
+                            // also retargets the filename. The marker
+                            // we emit replaces the `#line` line (one
+                            // input line in, one marker line out),
+                            // so we skip the bottom `\n` for the
+                            // same reason as `#include`.
+                            let target_file = file.unwrap_or(filename);
+                            out.push_str(&format_line_marker(line, target_file));
+                            idx_iter += 1;
+                            continue;
                         }
                     }
                     Directive::Error(message) => {
@@ -1314,6 +1352,13 @@ enum Directive<'a> {
     Endif,
     Pragma(&'a str),
     Include(&'a str),
+    /// `#line N` or `#line N "file"` (C99 6.10.4). The filename
+    /// is optional -- bare `#line N` keeps the current file and
+    /// just retargets the line counter.
+    Line {
+        line: usize,
+        file: Option<&'a str>,
+    },
     /// `#error <message>` -- C99 sec 6.10.5. The diagnostic message is
     /// the literal text after `#error` up to the newline.
     Error(&'a str),
@@ -1328,6 +1373,26 @@ enum Directive<'a> {
 enum PragmaDirective {
     Once,
     Other,
+}
+
+/// Format a GNU-style line marker (`# N "file"\n`) for the lexer.
+/// Filenames get the minimum C-string escape (`\\` and `\"` are
+/// escaped, everything else passes through). The lexer's
+/// `parse_line_marker` decodes the same shape: it sets
+/// `self.line = N - 1` and `self.file = file`, so the very next
+/// `\n` consumed by the outer loop bumps `self.line` to `N` --
+/// which means the next source line in the buffer is attributed
+/// to `(file, N)`.
+fn format_line_marker(line: usize, file: &str) -> String {
+    let mut escaped = String::with_capacity(file.len());
+    for ch in file.chars() {
+        match ch {
+            '\\' => escaped.push_str("\\\\"),
+            '"' => escaped.push_str("\\\""),
+            other => escaped.push(other),
+        }
+    }
+    format!("# {line} \"{escaped}\"\n")
 }
 
 fn parse_pragma_directive(args: &str) -> PragmaDirective {
@@ -1443,6 +1508,25 @@ fn parse_directive(rest: &str) -> Directive<'_> {
         // expect to be able to write `#error "must be x86"`.
         if after.is_empty() || after.starts_with(char::is_whitespace) {
             return Directive::Error(after.trim_start());
+        }
+    }
+    if let Some(after) = rest.strip_prefix("line") {
+        let trimmed = after.trim();
+        // Line number is required.
+        let mut split = trimmed.splitn(2, char::is_whitespace);
+        if let Some(num) = split.next()
+            && let Ok(line) = num.parse::<usize>()
+        {
+            // Optional `"file"` -- strip surrounding quotes if
+            // present. Anything malformed (e.g. unclosed quote)
+            // falls through to `Other` and gets silently dropped,
+            // matching how every other malformed directive is
+            // handled.
+            let file = split.next().and_then(|tail| {
+                let t = tail.trim();
+                t.strip_prefix('"').and_then(|s| s.strip_suffix('"'))
+            });
+            return Directive::Line { line, file };
         }
     }
     if let Some(after) = rest.strip_prefix("include") {
@@ -2493,10 +2577,46 @@ mod tests {
     }
 
     #[test]
+    fn leading_marker_names_top_level_source() {
+        // gh #49: every preprocessed buffer opens with a GNU line
+        // marker so the lexer attributes the first source line to
+        // `(<source>, 1)` rather than letting its initial state
+        // decide. Without this, an `#include` later in the buffer
+        // would never have a "previous file" to return to.
+        let out = process("int x;\n");
+        assert!(out.starts_with("# 1 \"<source>\"\n"));
+    }
+
+    #[test]
+    fn line_directive_retargets_file_and_line() {
+        // gh #51: `#line N "file"` rewrites the lexer's
+        // `(file, line)` state so the next source line is
+        // attributed to `(file, N)`.
+        let out = process("#line 100 \"fakegen.c\"\nint x;\n");
+        // The `#line` line itself is consumed by the marker; the
+        // next non-blank output should be a `# 100 "fakegen.c"`
+        // marker followed (eventually) by `int x;`.
+        assert!(out.contains("# 100 \"fakegen.c\""));
+        assert!(out.contains("int x;"));
+    }
+
+    #[test]
+    fn line_directive_without_filename_keeps_current_file() {
+        // C99 6.10.4: bare `#line N` retargets the line counter
+        // but leaves the filename alone.
+        let out = process("#line 50\nint x;\n");
+        // The marker re-uses the current filename (`<source>`).
+        assert!(out.contains("# 50 \"<source>\""));
+    }
+
+    #[test]
     fn directives_become_blank_lines_for_line_alignment() {
+        // The preprocessor prepends a `# 1 "<source>"\n` GNU line
+        // marker so the lexer can attribute later tokens to a
+        // specific (file, line). Skip it before counting.
         let src = "#define X 1\nint a = X;\n";
         let out = process(src);
-        let lines: Vec<&str> = out.lines().collect();
+        let lines: Vec<&str> = out.lines().skip_while(|l| l.starts_with('#')).collect();
         assert_eq!(lines.len(), 2);
         assert_eq!(lines[0], "");
         assert!(lines[1].contains("int a = 1;"));

@@ -117,6 +117,15 @@ const LC_ID_DYLIB: u32 = 0xD;
 const LC_DYLD_INFO_ONLY: u32 = 0x22 | LC_REQ_DYLD;
 const LC_MAIN: u32 = 0x28 | LC_REQ_DYLD;
 const LC_BUILD_VERSION: u32 = 0x32;
+/// `LC_UUID` -- 16-byte image identity. dyld uses it to dedup
+/// modules in process-image lists; without it lldb's
+/// `DynamicLoaderDarwin` re-registers our image after launch
+/// against the static target image, triggering "address ...
+/// maps to more than one section" warnings on every launch.
+const LC_UUID: u32 = 0x1b;
+/// Total bytes of `LC_UUID` on disk: 4 (cmd) + 4 (cmdsize) +
+/// 16 (uuid) = 24.
+const UUID_COMMAND_SIZE: usize = 24;
 
 const VM_PROT_READ: u32 = 1;
 const VM_PROT_WRITE: u32 = 2;
@@ -891,18 +900,19 @@ fn segment_dwarf(
             flags: 0,
         },
     );
-    let dwarf_section = |sectname: &str, offset: u32, size: u64| Section64 {
+    let dwarf_section = |sectname: &str, addr: u64, offset: u32, size: u64| Section64 {
         sectname: pack_name16(sectname),
         segname: pack_name16("__DWARF"),
-        // `nm` rejects sections whose `addr < segment.vmaddr`,
-        // so the section address tracks the segment's. The
-        // `S_ATTR_DEBUG` flag tells lldb / `dyld_info` / Apple's
-        // symbolicator that this section is debug-only metadata
-        // -- without it, lldb treats `addr+size` as a loaded
-        // range that overlaps `__TEXT` / `__DATA` (since the
-        // segment reuses `__LINKEDIT.vmaddr`) and refuses to
-        // install breakpoints anywhere in the executable.
-        addr: vmaddr,
+        // Section addresses go ascending across the segment so
+        // each `__debug_*` claims a distinct vmaddr range. With
+        // every section's addr pinned at `segment.vmaddr` lldb
+        // emits "address ... maps to more than one section"
+        // warnings on every launch (it sees N sections starting
+        // at the same vmaddr). The `S_ATTR_DEBUG` flag still
+        // marks the section as debug-only so dyld doesn't try
+        // to load these bytes; the unique addrs are purely for
+        // lldb's section-resolution disambiguator.
+        addr,
         size,
         offset,
         align: 0,
@@ -913,21 +923,26 @@ fn segment_dwarf(
         reserved2: 0,
         reserved3: 0,
     };
+    let info_addr = vmaddr;
+    let abbrev_addr = info_addr + info_size;
+    let line_addr = abbrev_addr + abbrev_size;
+    let str_addr = line_addr + line_size;
+    let _ = vmaddr;
     write_struct(
         &mut out,
-        &dwarf_section("__debug_info", info_offset, info_size),
+        &dwarf_section("__debug_info", info_addr, info_offset, info_size),
     );
     write_struct(
         &mut out,
-        &dwarf_section("__debug_abbrev", abbrev_offset, abbrev_size),
+        &dwarf_section("__debug_abbrev", abbrev_addr, abbrev_offset, abbrev_size),
     );
     write_struct(
         &mut out,
-        &dwarf_section("__debug_line", line_offset, line_size),
+        &dwarf_section("__debug_line", line_addr, line_offset, line_size),
     );
     write_struct(
         &mut out,
-        &dwarf_section("__debug_str", str_offset, str_size),
+        &dwarf_section("__debug_str", str_addr, str_offset, str_size),
     );
     debug_assert_eq!(out.len(), TOTAL);
     out
@@ -992,6 +1007,49 @@ fn dylib_command(cmd: u32, path: &str) -> Vec<u8> {
     out.push(0); // NUL
     pad_to(&mut out, 8);
     debug_assert_eq!(out.len() as u32, cmdsize);
+    out
+}
+
+/// `LC_UUID` -- 16-byte module-identity blob. Computed as a
+/// FNV-1a hash of the build's text + data so that two
+/// byte-identical compilations share a UUID (useful for cache
+/// keying, dSYM matching). Doesn't have to be cryptographic;
+/// lldb only uses it to deduplicate modules.
+fn uuid_command(text: &[u8], data: &[u8]) -> Vec<u8> {
+    fn fnv1a128(bytes: &[u8]) -> [u8; 16] {
+        // Two interleaved 64-bit FNV-1a hashes give a 128-bit
+        // result without needing a real cryptographic primitive.
+        // Sufficient identity for lldb's dedup keying.
+        let mut h0: u64 = 0xcbf2_9ce4_8422_2325;
+        let mut h1: u64 = 0xa5e8_a87b_7de0_b591;
+        for (i, &b) in bytes.iter().enumerate() {
+            if i & 1 == 0 {
+                h0 ^= b as u64;
+                h0 = h0.wrapping_mul(0x100_0000_01b3);
+            } else {
+                h1 ^= b as u64;
+                h1 = h1.wrapping_mul(0x100_0000_01b3);
+            }
+        }
+        let mut out = [0u8; 16];
+        out[0..8].copy_from_slice(&h0.to_le_bytes());
+        out[8..16].copy_from_slice(&h1.to_le_bytes());
+        // Mark as "version 4 / variant DCE" so consumers that
+        // care about the RFC 4122 type bits (rarely; most just
+        // treat it as opaque bytes) see something sensible.
+        out[6] = (out[6] & 0x0f) | 0x40;
+        out[8] = (out[8] & 0x3f) | 0x80;
+        out
+    }
+    let mut hash_input: Vec<u8> = Vec::with_capacity(text.len() + data.len());
+    hash_input.extend_from_slice(text);
+    hash_input.extend_from_slice(data);
+    let uuid = fnv1a128(&hash_input);
+    let mut out = Vec::with_capacity(UUID_COMMAND_SIZE);
+    out.extend_from_slice(&LC_UUID.to_le_bytes());
+    out.extend_from_slice(&(UUID_COMMAND_SIZE as u32).to_le_bytes());
+    out.extend_from_slice(&uuid);
+    debug_assert_eq!(out.len(), UUID_COMMAND_SIZE);
     out
 }
 
@@ -1579,6 +1637,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         .map(|d| load_dylib(&d.path))
         .collect();
     let bv = build_version();
+    let uuid_lc = uuid_command(&build.text, &build.data);
     // Shared libraries replace `LC_MAIN` (24 bytes) with
     // `LC_ID_DYLIB` (carries this image's install name --
     // hard-coded to `@rpath/c5-output.dylib`; programs that
@@ -1608,6 +1667,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         + dylinker.len() as u64
         + dylibs_total
         + bv.len() as u64
+        + uuid_lc.len() as u64
         + entry_lc_size;
 
     // ---- step 4: figure out file/vmaddr layout ----
@@ -2007,7 +2067,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // ncmds: 4 segments (5 with __DWARF) + dyldinfo + symtab +
     //        dysymtab + dylinker + N dylibs + build_version
     //        + main (or LC_ID_DYLIB for dylibs).
-    let ncmds: u32 = 10 + (emit_dwarf as u32) + build.imports.dylibs.len() as u32;
+    let ncmds: u32 = 11 + (emit_dwarf as u32) + build.imports.dylibs.len() as u32;
     let mut header_flags = MH_DYLDLINK | MH_TWOLEVEL | MH_PIE;
     if tls_present {
         header_flags |= MH_HAS_TLV_DESCRIPTORS;
@@ -2052,6 +2112,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         out.extend_from_slice(lc);
     }
     out.extend_from_slice(&bv);
+    out.extend_from_slice(&uuid_lc);
     if let Some(lc) = &id_dylib_lc {
         out.extend_from_slice(lc);
     } else {
@@ -2345,13 +2406,13 @@ mod tests {
     }
 
     #[test]
-    fn ncmds_baseline_is_eleven_plus_dylibs() {
-        // tiny_build has 1 dylib (libSystem) -> baseline 11 LCs
+    fn ncmds_baseline_is_twelve_plus_dylibs() {
+        // tiny_build has 1 dylib (libSystem) -> baseline 12 LCs
         // (5 segments incl. __DWARF + dyld_info + symtab +
-        // dysymtab + dylinker + build_version + main) plus 1
-        // LC_LOAD_DYLIB.
+        // dysymtab + dylinker + build_version + uuid + main)
+        // plus 1 LC_LOAD_DYLIB.
         let bytes = write(&tiny_program(), &tiny_build()).unwrap();
-        assert_eq!(read_u32(&bytes, 16), 12);
+        assert_eq!(read_u32(&bytes, 16), 13);
     }
 
     #[test]

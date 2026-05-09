@@ -144,6 +144,15 @@ const ELF64_SHDR_SIZE: u64 = 64;
 const SHT_NULL: u32 = 0;
 const SHT_PROGBITS: u32 = 1;
 const SHT_STRTAB: u32 = 3;
+const SHT_RELA: u32 = 4;
+const SHT_HASH: u32 = 5;
+const SHT_DYNAMIC: u32 = 6;
+const SHT_DYNSYM: u32 = 11;
+
+// Section header flags (Elf64_Shdr.sh_flags).
+const SHF_WRITE: u64 = 0x1;
+const SHF_ALLOC: u64 = 0x2;
+const SHF_EXECINSTR: u64 = 0x4;
 
 // ------------------------------------------------------------------
 // On-disk shapes. `#[repr(C)]` with explicit fields plus a
@@ -985,17 +994,31 @@ pub(super) fn write(
     let dwarf_str_off = dwarf_line_off + dwarf_sections.debug_line.len() as u64;
     let shstrtab_off = dwarf_str_off + dwarf_sections.debug_str.len() as u64;
     // .shstrtab content: NUL + section names. Index 0 is the
-    // empty name (SHT_NULL sentinel uses sh_name=0).
+    // empty name (SHT_NULL sentinel uses sh_name=0). Names cover
+    // the full set of sections in the section-header table:
+    // loaded segments (.interp, .dynsym, ..., .text, .data) plus
+    // the debug-only metadata sections.
     let shstrtab_bytes: &[&str] = &[
-        "",
-        ".debug_info",
-        ".debug_abbrev",
-        ".debug_line",
-        ".debug_str",
-        ".shstrtab",
+        "",              // 0
+        ".interp",       // 1
+        ".dynsym",       // 2
+        ".dynstr",       // 3
+        ".hash",         // 4
+        ".rela.dyn",     // 5
+        ".text",         // 6
+        ".tdata",        // 7  (only present when has_tls)
+        ".dynamic",      // 8
+        ".got",          // 9
+        ".data",         // 10
+        ".tbss",         // 11 (only present when has_tls)
+        ".debug_info",   // 12
+        ".debug_abbrev", // 13
+        ".debug_line",   // 14
+        ".debug_str",    // 15
+        ".shstrtab",     // 16
     ];
     let mut shstrtab: Vec<u8> = Vec::new();
-    let mut shstrtab_offsets: [u32; 6] = [0; 6];
+    let mut shstrtab_offsets: [u32; 17] = [0; 17];
     for (i, s) in shstrtab_bytes.iter().enumerate() {
         shstrtab_offsets[i] = shstrtab.len() as u32;
         shstrtab.extend_from_slice(s.as_bytes());
@@ -1003,9 +1026,31 @@ pub(super) fn write(
     }
     let shstrtab_size = shstrtab.len() as u64;
     let shdr_off = round_up(shstrtab_off + shstrtab_size, 8);
-    let n_section_headers: u64 = 6;
+    // Section count: 1 NULL + .interp + .dynsym + .dynstr +
+    // .hash + .rela.dyn + .text + (optional .tdata) +
+    // .dynamic + .got + (optional .data) + (optional .tbss) +
+    // 4 .debug_* + .shstrtab. Counted dynamically.
+    let has_data = !build.data.is_empty();
+    let has_tdata = has_tls && tdata_size > 0;
+    let has_tbss = has_tls && tbss_size > 0;
+    let n_section_headers: u64 = 1 // NULL
+        + 1 // .interp
+        + 1 // .dynsym
+        + 1 // .dynstr
+        + 1 // .hash
+        + 1 // .rela.dyn
+        + 1 // .text
+        + (if has_tdata { 1 } else { 0 }) // .tdata
+        + 1 // .dynamic
+        + 1 // .got
+        + (if has_data { 1 } else { 0 }) // .data
+        + (if has_tbss { 1 } else { 0 }) // .tbss
+        + 4 // .debug_* x 4
+        + 1; // .shstrtab
     let total_filesize = shdr_off + n_section_headers * ELF64_SHDR_SIZE;
-    let shstrtab_idx: u16 = 5;
+    // shstrtab is the last section in the table; its index is
+    // n_section_headers - 1.
+    let shstrtab_idx: u16 = (n_section_headers - 1) as u16;
 
     // ---- Build the bytes. ----
     let mut out: Vec<u8> = Vec::with_capacity(total_filesize as usize);
@@ -1296,10 +1341,33 @@ pub(super) fn write(
     }
     debug_assert_eq!(out.len() as u64, shdr_off);
 
-    // Section header table: NULL sentinel, four DWARF
-    // sections, .shstrtab. Each entry's `sh_name` indexes into
-    // `shstrtab_offsets`. None of the debug sections is
-    // SHF_ALLOC -- they're file-only metadata.
+    // Section header table: a full table covering loaded
+    // segments (NULL sentinel, .interp, .dynsym, .dynstr, .hash,
+    // .rela.dyn, .text, optional .tdata, .dynamic, .got, optional
+    // .data, optional .tbss) plus the four DWARF sections and
+    // .shstrtab.
+    //
+    // Without entries for the loaded segments, gdb segfaults on
+    // `b main` (no section contains main's vmaddr) and `strip`
+    // collapses the binary to ~488 bytes (it interprets the
+    // missing section table as "no real content"). lldb on
+    // Linux similarly mis-resolves names. The bytes the headers
+    // describe are already on disk; we just describe them.
+    // Section indices are computed as we emit; .dynsym /
+    // .dynstr / .dynamic / etc. need to reference each other by
+    // index in `sh_link`, so capture each one's slot before
+    // emitting the next.
+    let null_shdr_idx: u16 = 0;
+    let _ = null_shdr_idx;
+    let interp_shdr_idx: u16 = 1;
+    let _ = interp_shdr_idx;
+    let dynsym_shdr_idx: u16 = 2;
+    let dynstr_shdr_idx: u16 = 3;
+    let _hash_shdr_idx: u16 = 4;
+    let _rela_shdr_idx: u16 = 5;
+    let _ = (dynsym_shdr_idx, dynstr_shdr_idx);
+
+    // [0] NULL sentinel.
     write_struct(
         &mut out,
         &Elf64Shdr {
@@ -1315,24 +1383,228 @@ pub(super) fn write(
             sh_entsize: 0,
         },
     );
+
+    // [1] .interp -- the dynamic linker path string.
+    write_struct(
+        &mut out,
+        &Elf64Shdr {
+            sh_name: shstrtab_offsets[1],
+            sh_type: SHT_PROGBITS,
+            sh_flags: SHF_ALLOC,
+            sh_addr: interp_vmaddr,
+            sh_offset: interp_off,
+            sh_size: interp_path_str.len() as u64 + 1,
+            sh_link: 0,
+            sh_info: 0,
+            sh_addralign: 1,
+            sh_entsize: 0,
+        },
+    );
+
+    // [2] .dynsym -- dynamic symbol table. sh_link = .dynstr,
+    // sh_info = index of first non-local symbol (we have only
+    // a NULL sentinel + globals, so 1).
+    let dynsym_link_pending: u16 = dynstr_shdr_idx;
+    write_struct(
+        &mut out,
+        &Elf64Shdr {
+            sh_name: shstrtab_offsets[2],
+            sh_type: SHT_DYNSYM,
+            sh_flags: SHF_ALLOC,
+            sh_addr: dynsym_vmaddr,
+            sh_offset: dynsym_off,
+            sh_size: dynsym.len() as u64,
+            sh_link: dynsym_link_pending as u32,
+            sh_info: 1,
+            sh_addralign: 8,
+            sh_entsize: ELF64_SYM_SIZE,
+        },
+    );
+
+    // [3] .dynstr -- string table for .dynsym.
+    write_struct(
+        &mut out,
+        &Elf64Shdr {
+            sh_name: shstrtab_offsets[3],
+            sh_type: SHT_STRTAB,
+            sh_flags: SHF_ALLOC,
+            sh_addr: dynstr_vmaddr,
+            sh_offset: dynstr_off,
+            sh_size: dynstr.len() as u64,
+            sh_link: 0,
+            sh_info: 0,
+            sh_addralign: 1,
+            sh_entsize: 0,
+        },
+    );
+
+    // [4] .hash -- DT_HASH bucket / chain table.
+    let dynsym_idx_for_hash = dynsym_shdr_idx;
+    write_struct(
+        &mut out,
+        &Elf64Shdr {
+            sh_name: shstrtab_offsets[4],
+            sh_type: SHT_HASH,
+            sh_flags: SHF_ALLOC,
+            sh_addr: hash_vmaddr,
+            sh_offset: hash_off,
+            sh_size: hash.len() as u64,
+            sh_link: dynsym_idx_for_hash as u32,
+            sh_info: 0,
+            sh_addralign: 8,
+            sh_entsize: 4,
+        },
+    );
+
+    // [5] .rela.dyn -- relocations resolved at load time.
+    write_struct(
+        &mut out,
+        &Elf64Shdr {
+            sh_name: shstrtab_offsets[5],
+            sh_type: SHT_RELA,
+            sh_flags: SHF_ALLOC,
+            sh_addr: rela_vmaddr,
+            sh_offset: rela_off,
+            sh_size: rela_size,
+            sh_link: dynsym_idx_for_hash as u32,
+            sh_info: 0,
+            sh_addralign: 8,
+            sh_entsize: ELF64_RELA_SIZE,
+        },
+    );
+
+    // [6] .text -- the executable code segment. The size covers
+    // the entry stub + build.text; the address is `code_vmaddr`.
+    write_struct(
+        &mut out,
+        &Elf64Shdr {
+            sh_name: shstrtab_offsets[6],
+            sh_type: SHT_PROGBITS,
+            sh_flags: SHF_ALLOC | SHF_EXECINSTR,
+            sh_addr: code_vmaddr,
+            sh_offset: code_off,
+            sh_size: code_size,
+            sh_link: 0,
+            sh_info: 0,
+            sh_addralign: 16,
+            sh_entsize: 0,
+        },
+    );
+
+    // [optional] .tdata -- TLS image template (when has_tdata).
+    if has_tdata {
+        write_struct(
+            &mut out,
+            &Elf64Shdr {
+                sh_name: shstrtab_offsets[7],
+                sh_type: SHT_PROGBITS,
+                sh_flags: SHF_ALLOC | SHF_WRITE | 0x400, // SHF_TLS
+                sh_addr: tdata_vmaddr,
+                sh_offset: tdata_off,
+                sh_size: tdata_size,
+                sh_link: 0,
+                sh_info: 0,
+                sh_addralign: 8,
+                sh_entsize: 0,
+            },
+        );
+    }
+
+    // [N] .dynamic -- dynamic linking info table.
+    write_struct(
+        &mut out,
+        &Elf64Shdr {
+            sh_name: shstrtab_offsets[8],
+            sh_type: SHT_DYNAMIC,
+            sh_flags: SHF_ALLOC | SHF_WRITE,
+            sh_addr: dynamic_vmaddr,
+            sh_offset: dynamic_off,
+            sh_size: dynamic_size,
+            sh_link: dynstr_shdr_idx as u32,
+            sh_info: 0,
+            sh_addralign: 8,
+            sh_entsize: ELF64_DYN_SIZE,
+        },
+    );
+
+    // [N+1] .got -- global offset table (one slot per import).
+    write_struct(
+        &mut out,
+        &Elf64Shdr {
+            sh_name: shstrtab_offsets[9],
+            sh_type: SHT_PROGBITS,
+            sh_flags: SHF_ALLOC | SHF_WRITE,
+            sh_addr: got_vmaddr,
+            sh_offset: got_off,
+            sh_size: got_size,
+            sh_link: 0,
+            sh_info: 0,
+            sh_addralign: 8,
+            sh_entsize: 8,
+        },
+    );
+
+    // [optional] .data -- the initialised data segment.
+    if has_data {
+        write_struct(
+            &mut out,
+            &Elf64Shdr {
+                sh_name: shstrtab_offsets[10],
+                sh_type: SHT_PROGBITS,
+                sh_flags: SHF_ALLOC | SHF_WRITE,
+                sh_addr: data_vmaddr,
+                sh_offset: data_off,
+                sh_size: data_size,
+                sh_link: 0,
+                sh_info: 0,
+                sh_addralign: 8,
+                sh_entsize: 0,
+            },
+        );
+    }
+
+    // [optional] .tbss -- TLS zero-fill (no file backing).
+    if has_tbss {
+        // .tbss has no file-resident bytes; sh_offset still
+        // points where the loader-zeroed region would conceptually
+        // start so tools can compute its boundaries.
+        write_struct(
+            &mut out,
+            &Elf64Shdr {
+                sh_name: shstrtab_offsets[11],
+                sh_type: 8,                              // SHT_NOBITS
+                sh_flags: SHF_ALLOC | SHF_WRITE | 0x400, // SHF_TLS
+                sh_addr: tdata_vmaddr + tdata_size,
+                sh_offset: tdata_off + tdata_size,
+                sh_size: tbss_size,
+                sh_link: 0,
+                sh_info: 0,
+                sh_addralign: 8,
+                sh_entsize: 0,
+            },
+        );
+    }
+
+    // [N+2..N+5] DWARF debug sections (file-only metadata, no
+    // SHF_ALLOC so the loader skips them).
     let dwarf_section_specs: &[(u32, u64, u64)] = &[
         (
-            shstrtab_offsets[1],
+            shstrtab_offsets[12],
             dwarf_info_off,
             dwarf_sections.debug_info.len() as u64,
         ),
         (
-            shstrtab_offsets[2],
+            shstrtab_offsets[13],
             dwarf_abbrev_off,
             dwarf_sections.debug_abbrev.len() as u64,
         ),
         (
-            shstrtab_offsets[3],
+            shstrtab_offsets[14],
             dwarf_line_off,
             dwarf_sections.debug_line.len() as u64,
         ),
         (
-            shstrtab_offsets[4],
+            shstrtab_offsets[15],
             dwarf_str_off,
             dwarf_sections.debug_str.len() as u64,
         ),
@@ -1354,10 +1626,12 @@ pub(super) fn write(
             },
         );
     }
+
+    // [last] .shstrtab.
     write_struct(
         &mut out,
         &Elf64Shdr {
-            sh_name: shstrtab_offsets[5],
+            sh_name: shstrtab_offsets[16],
             sh_type: SHT_STRTAB,
             sh_flags: 0,
             sh_addr: 0,

@@ -304,16 +304,26 @@ fn main() {
     // jit_run / VM `argv[0]` reads still get a sensible name.
     let read_stdin_source = || -> String {
         let mut s = String::new();
-        std::io::stdin()
-            .read_to_string(&mut s)
-            .expect("Could not read stdin");
+        if let Err(e) = std::io::stdin().read_to_string(&mut s) {
+            eprintln!("badc: error reading stdin: {e}");
+            std::process::exit(1);
+        }
         s
     };
     let (path, contents): (String, String) = if args.len() >= 2 && args[1] != "-" {
         let p = args[1].clone();
-        let mut file = std::fs::File::open(&p).expect("Could not open file");
+        let mut file = match std::fs::File::open(&p) {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("badc: cannot open `{p}`: {e}");
+                std::process::exit(1);
+            }
+        };
         let mut s = String::new();
-        Read::read_to_string(&mut file, &mut s).expect("Could not read file");
+        if let Err(e) = Read::read_to_string(&mut file, &mut s) {
+            eprintln!("badc: error reading `{p}`: {e}");
+            std::process::exit(1);
+        }
         (p, s)
     } else if (args.len() >= 2 && args[1] == "-") || !std::io::stdin().is_terminal() {
         // Reserve `-` in argv[0]'s slot so VM-mode `argv[0]` gets

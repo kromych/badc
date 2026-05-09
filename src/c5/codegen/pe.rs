@@ -2617,8 +2617,13 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        let bytes = write(&program, &build, Machine::X86_64, super::super::Target::WindowsX64)
-            .expect("write PE");
+        let bytes = write(
+            &program,
+            &build,
+            Machine::X86_64,
+            super::super::Target::WindowsX64,
+        )
+        .expect("write PE");
         let (rva, size) = read_data_directory(&bytes, DATA_DIRECTORY_TLS);
         assert_eq!(rva, 0, "TLS RVA must be 0 when no TLS present");
         assert_eq!(size, 0, "TLS size must be 0 when no TLS present");
@@ -2641,8 +2646,13 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        let bytes = write(&program, &build, Machine::X86_64, super::super::Target::WindowsX64)
-            .expect("write PE");
+        let bytes = write(
+            &program,
+            &build,
+            Machine::X86_64,
+            super::super::Target::WindowsX64,
+        )
+        .expect("write PE");
         let (tls_rva, tls_size) = read_data_directory(&bytes, DATA_DIRECTORY_TLS);
         assert_ne!(tls_rva, 0, "expected non-zero TLS directory RVA");
         assert_eq!(
@@ -2744,9 +2754,13 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        let bytes =
-            write(&program, &build, Machine::Aarch64, super::super::Target::WindowsAarch64)
-                .expect("write PE");
+        let bytes = write(
+            &program,
+            &build,
+            Machine::Aarch64,
+            super::super::Target::WindowsAarch64,
+        )
+        .expect("write PE");
         let (tls_rva, tls_size) = read_data_directory(&bytes, DATA_DIRECTORY_TLS);
         assert_ne!(tls_rva, 0, "expected non-zero TLS directory RVA");
         assert_eq!(tls_size, IMAGE_TLS_DIRECTORY64_SIZE);
@@ -2921,8 +2935,13 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        let bytes = write(&program, &build, Machine::X86_64, super::super::Target::WindowsX64)
-            .expect("write PE");
+        let bytes = write(
+            &program,
+            &build,
+            Machine::X86_64,
+            super::super::Target::WindowsX64,
+        )
+        .expect("write PE");
         let (rva, size) = read_data_directory(&bytes, DATA_DIRECTORY_BASERELOC);
         assert_eq!(rva, 0, "TLS-free image must not advertise .reloc RVA");
         assert_eq!(size, 0, "TLS-free image must not advertise .reloc size");
@@ -3106,8 +3125,13 @@ mod tests {
             super::super::NativeOptions::new().with_shared_library(),
         )
         .expect("lower");
-        let bytes = write(&program, &build, Machine::X86_64, super::super::Target::WindowsX64)
-            .expect("write PE");
+        let bytes = write(
+            &program,
+            &build,
+            Machine::X86_64,
+            super::super::Target::WindowsX64,
+        )
+        .expect("write PE");
         let (entry, base) = read_entry_point_and_base_of_code(&bytes);
         assert_eq!(
             entry, base,
@@ -3152,8 +3176,13 @@ mod tests {
              should leave DllMain past offset 0 in build.text \
              (got {dllmain_native_off:#x})"
         );
-        let bytes = write(&program, &build, Machine::X86_64, super::super::Target::WindowsX64)
-            .expect("write PE");
+        let bytes = write(
+            &program,
+            &build,
+            Machine::X86_64,
+            super::super::Target::WindowsX64,
+        )
+        .expect("write PE");
         let (entry, base) = read_entry_point_and_base_of_code(&bytes);
         assert_eq!(
             entry,
@@ -3178,8 +3207,13 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        let bytes = write(&program, &build, Machine::X86_64, super::super::Target::WindowsX64)
-            .expect("write PE");
+        let bytes = write(
+            &program,
+            &build,
+            Machine::X86_64,
+            super::super::Target::WindowsX64,
+        )
+        .expect("write PE");
         let chars = read_coff_characteristics(&bytes);
         assert_eq!(
             chars & IMAGE_FILE_DLL,
@@ -3208,9 +3242,13 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        let bytes =
-            write(&program, &build, Machine::Aarch64, super::super::Target::WindowsAarch64)
-                .expect("write PE");
+        let bytes = write(
+            &program,
+            &build,
+            Machine::Aarch64,
+            super::super::Target::WindowsAarch64,
+        )
+        .expect("write PE");
 
         // DOS magic.
         assert_eq!(&bytes[0..2], b"MZ");

@@ -1474,7 +1474,7 @@ fn write_advance_loc(out: &mut Vec<u8>, arch: CfiArch, bytes: u32) {
 /// alignment for 64-bit DWARF) by appending `DW_CFA_nop` (0x00)
 /// padding.
 fn pad_to_alignment(body: &mut Vec<u8>, alignment: usize) {
-    while body.len() % alignment != 0 {
+    while !body.len().is_multiple_of(alignment) {
         body.push(DW_CFA_NOP);
     }
 }
@@ -1574,7 +1574,8 @@ fn build_debug_frame(target: Target, subs: &[Subprog]) -> Vec<u8> {
     // offset (DWARF requires this for 64-bit address-size CFI).
     let mut cie = Vec::with_capacity(16 + cie_body.len());
     let cie_inner_len = (4 /* cie_id */ + 1 /* version */ + 1 /* aug NUL */
-        + 1 /* address_size */ + 1 /* segment_size */ + cie_body.len()) as u32;
+        + 1 /* address_size */ + 1 /* segment_size */ + cie_body.len())
+        as u32;
     let header = DebugFrameCieHeader {
         unit_length: cie_inner_len,
         cie_id: 0xffff_ffff,

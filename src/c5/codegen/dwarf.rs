@@ -94,6 +94,7 @@ const DW_LANG_C99: u8 = 0x0c;
 const DW_LNS_COPY: u8 = 0x01;
 const DW_LNS_ADVANCE_PC: u8 = 0x02;
 const DW_LNS_ADVANCE_LINE: u8 = 0x03;
+const DW_LNS_SET_FILE: u8 = 0x04;
 
 // Extended-opcode prefix is `0x00`; the byte after the length
 // names the extended op.
@@ -555,17 +556,37 @@ fn build_debug_line(
     }
     // include_directories: empty list (just the terminator).
     hdr_after_len_field.push(0);
-    // file_names: one entry naming the source.
-    let name = if source_path.is_empty() {
+    // file_names: DWARF file numbering starts at 1 (0 is reserved
+    // for "no file"), so the first entry in this list lands at
+    // index 1. We open with the translation-unit path (the CLI
+    // sets `program.source_path` from argv before emit), then
+    // append every header the lexer's GNU line-marker handling
+    // collected -- skipping its placeholder `"<source>"` since
+    // we've already emitted the real path. The runtime
+    // `source_file_indices` column is remapped to DWARF
+    // numbering through `dwarf_file_idx_for_source_files_idx`
+    // when emitting `DW_LNS_set_file` rows.
+    let tu_name = if source_path.is_empty() {
         "<unknown>"
     } else {
         source_path
     };
-    hdr_after_len_field.extend_from_slice(name.as_bytes());
-    hdr_after_len_field.push(0);
-    write_uleb128(&mut hdr_after_len_field, 0); // dir_idx (0 = comp_dir)
-    write_uleb128(&mut hdr_after_len_field, 0); // mtime
-    write_uleb128(&mut hdr_after_len_field, 0); // file size
+    let emit_file_entry = |hdr: &mut Vec<u8>, name: &str| {
+        hdr.extend_from_slice(name.as_bytes());
+        hdr.push(0);
+        write_uleb128(hdr, 0); // dir_idx (0 = comp_dir)
+        write_uleb128(hdr, 0); // mtime
+        write_uleb128(hdr, 0); // file size
+    };
+    emit_file_entry(&mut hdr_after_len_field, tu_name);
+    for src in &program.source_files {
+        // Skip the lexer's placeholder; the TU is already
+        // entry 1 under its real path.
+        if src == "<source>" {
+            continue;
+        }
+        emit_file_entry(&mut hdr_after_len_field, src);
+    }
     hdr_after_len_field.push(0); // file_names terminator
 
     // header_length = bytes from end of header_length field to
@@ -608,8 +629,32 @@ fn write_line_program(buf: &mut Vec<u8>, program: &Program, build: &Build, code_
     // Anchor address at the start of code.
     write_set_address(buf, code_vmaddr);
 
+    // Pre-compute the lexer-index -> DWARF-file-number remap. The
+    // `program.source_files` table starts at index 0 (the lexer
+    // interns the TU's lexer-side label `"<source>"` first, then
+    // each `#include`d header). DWARF file numbers start at 1 (0
+    // is reserved for "no file"). We elide the `"<source>"`
+    // placeholder from the file table and reserve DWARF index 1
+    // for the TU's real path; every other lexer-source entry
+    // gets a fresh DWARF index in declaration order.
+    let mut next_dwarf_idx: u64 = 2;
+    let dwarf_file_for_lex_idx: Vec<u64> = program
+        .source_files
+        .iter()
+        .map(|name| {
+            if name == "<source>" {
+                1
+            } else {
+                let idx = next_dwarf_idx;
+                next_dwarf_idx += 1;
+                idx
+            }
+        })
+        .collect();
+
     let mut state_addr: u64 = code_vmaddr;
     let mut state_line: i64 = 1;
+    let mut state_file: u64 = 1;
     let mut emitted_any = false;
 
     let mut bc_pc = 0usize;
@@ -632,10 +677,29 @@ fn write_line_program(buf: &mut Vec<u8>, program: &Program, build: &Build, code_
             bc_pc += op.word_size();
             continue;
         }
+        // Resolve the lexer's per-PC file index through the
+        // remap above. Programs that compiled before the
+        // file-table plumbing landed (or that never crossed an
+        // `#include` / `#line`) leave `source_file_indices`
+        // empty, in which case every PC stays on file 1.
+        let lex_idx = program
+            .source_file_indices
+            .get(bc_pc)
+            .copied()
+            .unwrap_or(0) as usize;
+        let file = dwarf_file_for_lex_idx
+            .get(lex_idx)
+            .copied()
+            .unwrap_or(1);
         let target_addr = code_vmaddr + native as u64;
         if target_addr > state_addr {
             advance_pc(buf, target_addr - state_addr);
             state_addr = target_addr;
+        }
+        if file != state_file {
+            buf.push(DW_LNS_SET_FILE);
+            write_uleb128(buf, file);
+            state_file = file;
         }
         if line != state_line {
             advance_line(buf, line - state_line);

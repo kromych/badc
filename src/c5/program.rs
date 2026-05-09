@@ -208,4 +208,77 @@ pub struct Program {
     /// each entry is the name of the C function whose body the op
     /// belongs to (empty string for top-level data emission).
     pub source_functions: Vec<String>,
+    /// Source-file table indexed by `source_file_indices`. Populated
+    /// by the lexer's GNU line-marker handling: each `#include`
+    /// boundary or `#line N "file"` directive interns a fresh
+    /// filename. Index 0 is the user's translation-unit source
+    /// (the `--source-path` CLI arg, falling back to the lexer's
+    /// initial `"<source>"` placeholder).
+    pub source_files: Vec<String>,
+    /// Per-PC index into `source_files`. Same indexing as
+    /// `source_lines`. The DWARF line program walks this to emit
+    /// `DW_LNS_set_file` at every transition so `lldb image lookup`
+    /// reports the *header*'s name when the PC came from a header,
+    /// not the user's translation-unit file.
+    pub source_file_indices: Vec<u16>,
+    /// Filesystem path of the input `.c` file, when known. Set by
+    /// the CLI shim from the user's argv before
+    /// [`crate::emit_native`] runs; the c5 frontend itself doesn't
+    /// know the path, so it leaves this empty for the
+    /// `compile_str` / stdin / fixture paths.
+    ///
+    /// The DWARF emitter (gh #44) uses this as the CU's
+    /// `DW_AT_name` and the line program's only file entry, so
+    /// `lldb image lookup -n foo` reports `foo at /path/to/src.c:N`
+    /// instead of `<unknown>:N`. Empty falls back to `<unknown>`.
+    /// The VM / JIT / interpreter ignore it.
+    pub source_path: String,
+    /// Per-function local + formal-parameter records, captured at
+    /// function-body close (just before the c5 `Token::Loc`
+    /// shadowing is unwound). Indexed by lookup -- consumers
+    /// (gh #46 DWARF emitter) filter by `function_bc_pc` to gather
+    /// the variables that belong to each subprogram.
+    ///
+    /// `fp_slot` is the c5 frame-relative slot the symbol resolves
+    /// to: positive values are arguments (`fp + slot*8`, which is
+    /// `fp+0x10` for the first arg etc.), negative values are
+    /// locals (`fp + slot*8`, e.g. `-1` -> `fp - 8`). DWARF turns
+    /// this into a `DW_AT_location` with `DW_OP_fbreg` so lldb /
+    /// gdb can resolve a variable name to its current stack
+    /// address.
+    ///
+    /// Empty when c5 is run as a library (no driver-side capture)
+    /// or the program contains no functions. The VM / JIT /
+    /// interpreter ignore this field.
+    pub variables: Vec<VariableInfo>,
+}
+
+/// A single local variable or formal parameter belonging to a
+/// specific c5-emitted function, captured for DWARF emission
+/// (gh #46). The function is identified by `function_bc_pc` --
+/// the bytecode PC of its `Op::Ent`, which the DWARF emitter
+/// already uses to find the matching subprogram DIE.
+#[derive(Debug, Clone)]
+pub struct VariableInfo {
+    /// Bytecode PC of the owning function's `Op::Ent`. Same value
+    /// the subprogram-discovery walk in `dwarf::collect_subprograms`
+    /// produces, so the DWARF emitter can group variables by
+    /// subprogram with a simple equality check.
+    pub function_bc_pc: u64,
+    /// Source-level identifier (parameter or local name).
+    pub name: String,
+    /// c5 type tag (`Ty` enum encoded as `i64`). Pointer levels
+    /// follow the `+= 2` convention; struct types live in the
+    /// `STRUCT_BASE +` band.
+    pub type_tag: i64,
+    /// Frame-relative slot. `>=2` is an argument (caller pushed
+    /// it at `fp + slot*8`); `<0` is a local (the function
+    /// allocated it at `fp + slot*8`, with the value negative).
+    /// Slots `0..2` are the saved-x29 / saved-x30 area and don't
+    /// hold user-visible variables.
+    pub fp_slot: i64,
+    /// True for arguments (`Token::Loc` symbols introduced by the
+    /// parameter list) so the DWARF emitter picks
+    /// `DW_TAG_formal_parameter`; locals get `DW_TAG_variable`.
+    pub is_parameter: bool,
 }

@@ -269,6 +269,12 @@ impl Compiler {
                 let expr_ty = self.ty;
                 let array_count = self.last_array_decay_size;
                 self.text.truncate(saved_text_len);
+                // Keep parallel debug arrays in sync with `text`;
+                // see compiler/mod.rs's matching comment on the
+                // sister truncate (gh #48 root cause).
+                self.source_lines.truncate(saved_text_len);
+                self.source_functions.truncate(saved_text_len);
+                self.source_file_indices.truncate(saved_text_len);
                 self.data_imm_positions.truncate(saved_data_imm_positions);
                 self.ty = saved_ty;
                 self.last_array_decay_size = 0;
@@ -305,25 +311,34 @@ impl Compiler {
         // Consume `&`.
         self.next()?;
         if self.lex.tk != '(' as i64 {
-            return Err(C5Error::Compile(format!(
-                "{line}: `&` in a constant expression must open the offsetof shape \
+            return Err(self.compile_err_at(
+                line,
+                format!(
+                    "`&` in a constant expression must open the offsetof shape \
                  `&((T*)expr)->field` (got tk={})",
-                self.lex.tk
-            )));
+                    self.lex.tk
+                ),
+            ));
         }
         self.next()?;
         if self.lex.tk != '(' as i64 {
-            return Err(C5Error::Compile(format!(
-                "{line}: expected `((T*)...` in offsetof shape (got tk={})",
-                self.lex.tk
-            )));
+            return Err(self.compile_err_at(
+                line,
+                format!(
+                    "expected `((T*)...` in offsetof shape (got tk={})",
+                    self.lex.tk
+                ),
+            ));
         }
         self.next()?;
         if !self.lex_is_type_start() {
-            return Err(C5Error::Compile(format!(
-                "{line}: expected struct type in offsetof cast (got tk={})",
-                self.lex.tk
-            )));
+            return Err(self.compile_err_at(
+                line,
+                format!(
+                    "expected struct type in offsetof cast (got tk={})",
+                    self.lex.tk
+                ),
+            ));
         }
         let mut t = self.parse_decl_base_type()?;
         while self.lex.tk == Token::MulOp as i64 {
@@ -334,17 +349,17 @@ impl Compiler {
             }
         }
         if self.lex.tk != ')' as i64 {
-            return Err(C5Error::Compile(format!(
-                "{line}: close paren expected after type in offsetof cast"
-            )));
+            return Err(
+                self.compile_err_at(line, "close paren expected after type in offsetof cast")
+            );
         }
         self.next()?;
         // Base address (typically `0`).
         let base = self.parse_const_expr_unary()?;
         if self.lex.tk != ')' as i64 {
-            return Err(C5Error::Compile(format!(
-                "{line}: close paren expected after base in offsetof shape"
-            )));
+            return Err(
+                self.compile_err_at(line, "close paren expected after base in offsetof shape")
+            );
         }
         self.next()?;
         // Two postfix shapes follow the `&((T*)base)`:
@@ -358,9 +373,7 @@ impl Compiler {
             self.next()?;
             let n = self.parse_const_expr_or()?;
             if self.lex.tk != ']' as i64 {
-                return Err(C5Error::Compile(format!(
-                    "{line}: close bracket expected in offsetof index"
-                )));
+                return Err(self.compile_err_at(line, "close bracket expected in offsetof index"));
             }
             self.next()?;
             // (T*)base -- the pointee type is `t - Ty::Ptr`. Scale
@@ -369,30 +382,26 @@ impl Compiler {
             return Ok(base + n * self.size_of_type(pointee_ty) as i64);
         }
         if self.lex.tk != Token::Arrow as i64 {
-            return Err(C5Error::Compile(format!(
-                "{line}: `->` expected in offsetof shape (got tk={})",
-                self.lex.tk
-            )));
+            return Err(self.compile_err_at(
+                line,
+                format!("`->` expected in offsetof shape (got tk={})", self.lex.tk),
+            ));
         }
         self.next()?;
         if !is_struct_ty(t) || struct_ptr_depth(t) == 0 {
-            return Err(C5Error::Compile(format!(
-                "{line}: offsetof requires `(T*)` for some struct T"
-            )));
+            return Err(self.compile_err_at(line, "offsetof requires `(T*)` for some struct T"));
         }
         // Drop one level of pointer to reach the struct value type.
         let mut current_ty = t - Ty::Ptr as i64;
         let mut total: i64 = base;
         loop {
             if !is_struct_ty(current_ty) || struct_ptr_depth(current_ty) != 0 {
-                return Err(C5Error::Compile(format!(
-                    "{line}: offsetof field chain reaches a non-struct value"
-                )));
+                return Err(
+                    self.compile_err_at(line, "offsetof field chain reaches a non-struct value")
+                );
             }
             if self.lex.tk != Token::Id as i64 {
-                return Err(C5Error::Compile(format!(
-                    "{line}: field name expected in offsetof chain"
-                )));
+                return Err(self.compile_err_at(line, "field name expected in offsetof chain"));
             }
             let sid = struct_id_of(current_ty);
             let name = self.symbols[self.lex.curr_id_idx].name.clone();
@@ -401,10 +410,10 @@ impl Compiler {
                 .iter()
                 .position(|f| f.name == name)
                 .ok_or_else(|| {
-                    C5Error::Compile(format!(
-                        "{line}: struct {} has no field {}",
-                        self.structs[sid].name, name
-                    ))
+                    self.compile_err_at(
+                        line,
+                        format!("struct {} has no field {}", self.structs[sid].name, name),
+                    )
                 })?;
             total += self.structs[sid].fields[pos].offset as i64;
             current_ty = self.structs[sid].fields[pos].ty;
@@ -417,9 +426,9 @@ impl Compiler {
                 self.next()?;
                 let n = self.parse_const_expr_or()?;
                 if self.lex.tk != ']' as i64 {
-                    return Err(C5Error::Compile(format!(
-                        "{line}: close bracket expected in offsetof index"
-                    )));
+                    return Err(
+                        self.compile_err_at(line, "close bracket expected in offsetof index")
+                    );
                 }
                 self.next()?;
                 let _ = field_array_size;
@@ -447,20 +456,14 @@ impl Compiler {
                     self.next()?;
                 }
                 if self.lex.tk != ')' as i64 {
-                    return Err(C5Error::Compile(format!(
-                        "{}: close paren expected after cast",
-                        self.lex.line
-                    )));
+                    return Err(self.compile_err("close paren expected after cast"));
                 }
                 self.next()?;
                 return self.parse_const_expr_unary();
             }
             let v = self.parse_const_expr_or()?;
             if self.lex.tk != ')' as i64 {
-                return Err(C5Error::Compile(format!(
-                    "{}: close paren expected in constant expression",
-                    self.lex.line
-                )));
+                return Err(self.compile_err("close paren expected in constant expression"));
             }
             self.next()?;
             return Ok(v);
@@ -477,9 +480,8 @@ impl Compiler {
             self.next()?;
             return Ok(v);
         }
-        Err(C5Error::Compile(format!(
-            "{}: constant integer expected (got tk={}, id={:?})",
-            self.lex.line,
+        Err(self.compile_err(format!(
+            "constant integer expected (got tk={}, id={:?})",
             self.lex.tk,
             if self.lex.tk == Token::Id as i64 {
                 Some(self.symbols[self.lex.curr_id_idx].name.clone())

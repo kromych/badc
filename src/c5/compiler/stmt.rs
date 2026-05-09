@@ -173,10 +173,7 @@ impl Compiler {
         while self.lex.tk != ';' as i64 {
             let (id_idx, ty, _) = self.parse_declarator(lbt)?;
             if id_idx == usize::MAX {
-                return Err(C5Error::Compile(format!(
-                    "{}: typedef requires a name",
-                    self.lex.line
-                )));
+                return Err(self.compile_err("typedef requires a name"));
             }
             block_symbols.push((
                 id_idx,
@@ -372,10 +369,7 @@ impl Compiler {
             if self.lex.tk == Token::While as i64 {
                 self.next()?;
             } else {
-                return Err(C5Error::Compile(format!(
-                    "{}: while expected after do",
-                    self.lex.line
-                )));
+                return Err(self.compile_err("while expected after do"));
             }
 
             let cond_pc = self.text.len();
@@ -405,10 +399,7 @@ impl Compiler {
             let val = self.parse_const_expr_or()?;
             self.consume(b':', "expected colon after case")?;
             let Some(cases) = self.switch_cases.last_mut() else {
-                return Err(C5Error::Compile(format!(
-                    "{}: case outside switch",
-                    self.lex.line
-                )));
+                return Err(self.compile_err("case outside switch"));
             };
             cases.push((val, self.text.len()));
             self.stmt()?;
@@ -416,20 +407,14 @@ impl Compiler {
             self.next()?;
             self.consume(b':', "expected colon after default")?;
             let Some(def) = self.switch_defaults.last_mut() else {
-                return Err(C5Error::Compile(format!(
-                    "{}: default outside switch",
-                    self.lex.line
-                )));
+                return Err(self.compile_err("default outside switch"));
             };
             *def = Some(self.text.len());
             self.stmt()?;
         } else if self.lex.tk == Token::Goto as i64 {
             self.next()?;
             if self.lex.tk != Token::Id as i64 {
-                return Err(C5Error::Compile(format!(
-                    "{}: expected identifier after goto",
-                    self.lex.line
-                )));
+                return Err(self.compile_err("expected identifier after goto"));
             }
             let target_name = self.symbols[self.lex.curr_id_idx].name.clone();
             self.next()?;
@@ -447,10 +432,7 @@ impl Compiler {
         } else if self.lex.tk == Token::Break as i64 {
             self.next()?;
             if self.loop_breaks.is_empty() {
-                return Err(C5Error::Compile(format!(
-                    "{}: break outside of loop or switch",
-                    self.lex.line
-                )));
+                return Err(self.compile_err("break outside of loop or switch"));
             }
             self.emit_op(Op::Jmp);
             let pc = self.text.len();
@@ -460,10 +442,7 @@ impl Compiler {
         } else if self.lex.tk == Token::Continue as i64 {
             self.next()?;
             if self.loop_continues.is_empty() {
-                return Err(C5Error::Compile(format!(
-                    "{}: continue outside of loop",
-                    self.lex.line
-                )));
+                return Err(self.compile_err("continue outside of loop"));
             }
             self.emit_op(Op::Jmp);
             let pc = self.text.len();
@@ -490,11 +469,10 @@ impl Compiler {
                     self.emit_op(Op::Psh);
                     self.expr(Token::Assign as i64)?;
                     if !is_struct_ty(self.ty) || struct_ptr_depth(self.ty) != 0 {
-                        return Err(C5Error::Compile(format!(
-                            "{}: returning a non-struct value from a \
+                        return Err(self.compile_err(
+                            "returning a non-struct value from a \
                              struct-returning function",
-                            self.lex.line
-                        )));
+                        ));
                     }
                     let size = self.size_of_type(ret_ty);
                     self.emit_op(Op::Mcpy);
@@ -532,9 +510,8 @@ impl Compiler {
             self.next()?;
             Ok(())
         } else {
-            Err(C5Error::Compile(format!(
-                "{}: {} (got tk={}, id={:?})",
-                self.lex.line,
+            Err(self.compile_err(format!(
+                "{} (got tk={}, id={:?})",
                 msg,
                 self.lex.tk,
                 if self.lex.tk == Token::Id as i64 {

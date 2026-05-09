@@ -251,7 +251,7 @@ fn main() {
     let target = match Target::parse(target_spec.as_deref()) {
         Ok(t) => t,
         Err(e) => {
-            eprintln!("{e}");
+            eprint_diagnostic(e);
             std::process::exit(1);
         }
     };
@@ -304,16 +304,26 @@ fn main() {
     // jit_run / VM `argv[0]` reads still get a sensible name.
     let read_stdin_source = || -> String {
         let mut s = String::new();
-        std::io::stdin()
-            .read_to_string(&mut s)
-            .expect("Could not read stdin");
+        if let Err(e) = std::io::stdin().read_to_string(&mut s) {
+            eprintln!("badc: error reading stdin: {e}");
+            std::process::exit(1);
+        }
         s
     };
     let (path, contents): (String, String) = if args.len() >= 2 && args[1] != "-" {
         let p = args[1].clone();
-        let mut file = std::fs::File::open(&p).expect("Could not open file");
+        let mut file = match std::fs::File::open(&p) {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("badc: cannot open `{p}`: {e}");
+                std::process::exit(1);
+            }
+        };
         let mut s = String::new();
-        Read::read_to_string(&mut file, &mut s).expect("Could not read file");
+        if let Err(e) = Read::read_to_string(&mut file, &mut s) {
+            eprintln!("badc: error reading `{p}`: {e}");
+            std::process::exit(1);
+        }
         (p, s)
     } else if (args.len() >= 2 && args[1] == "-") || !std::io::stdin().is_terminal() {
         // Reserve `-` in argv[0]'s slot so VM-mode `argv[0]` gets
@@ -328,28 +338,35 @@ fn main() {
     // predefines into the compiler. The bytecode itself is target-
     // independent; only the resolved binding map and the
     // preprocessor predefines vary.
-    let program = match Compiler::with_full_options(
+    let mut program = match Compiler::with_full_options_and_label(
         contents,
         target,
         &defines,
         &undefines,
         &include_paths,
         &force_includes,
+        &path,
     )
     .compile()
     {
         Ok(p) => p,
         Err(e) => {
-            eprintln!("{}", e);
+            eprint_diagnostic(e);
             std::process::exit(1);
         }
     };
+    // The compiler doesn't see the user's filesystem path; thread
+    // it onto the Program so the DWARF emitter (gh #44) can put a
+    // real `DW_AT_name` on the compilation-unit DIE. lldb / gdb
+    // then show `foo.c:N` instead of `<unknown>:N` next to every
+    // resolved address.
+    program.source_path = path.clone();
 
     let program = if optimize_flag && std::env::var("BADC_BC_OPT_OFF").is_err() {
         match optimize(program) {
             Ok(p) => p,
             Err(e) => {
-                eprintln!("{}", e);
+                eprint_diagnostic(e);
                 std::process::exit(1);
             }
         }
@@ -357,11 +374,15 @@ fn main() {
         program
     };
 
-    // Type-mismatch and arity warnings (if any) -- print once, before
-    // the program runs. They never fail the compile, but they do go to
-    // stderr so a `2>/dev/null` user can suppress.
+    // Type-mismatch / arity / signature-redecl warnings (if any) --
+    // print once, before the program runs. They never fail the
+    // compile, but they go to stderr so a `2>/dev/null` user can
+    // suppress. Each warning arrives in gcc / clang shape
+    // (`<file>:<line>: warning: <message>`); when stderr is a TTY
+    // we color the severity word so they pop out of build logs.
+    let stderr_is_tty = std::io::stderr().is_terminal();
     for w in &program.warnings {
-        eprintln!("{w}");
+        eprintln!("{}", colorize_diagnostic(w, stderr_is_tty));
     }
 
     // `--optimize` / `-O` enables both the bytecode optimizer (above)
@@ -382,7 +403,7 @@ fn main() {
         Mode::DumpAsm => match dump_native_listing_with_options(&program, target, native_opts) {
             Ok(s) => print!("{s}"),
             Err(e) => {
-                eprintln!("{e}");
+                eprint_diagnostic(e);
                 std::process::exit(1);
             }
         },
@@ -394,7 +415,7 @@ fn main() {
             match jit_run_with_options(&program, &c_args, native_opts) {
                 Ok(code) => std::process::exit(code),
                 Err(e) => {
-                    eprintln!("{e}");
+                    eprint_diagnostic(e);
                     std::process::exit(1);
                 }
             }
@@ -414,7 +435,7 @@ fn main() {
             match vm.run() {
                 Ok(res) => println!("exit({})", res),
                 Err(e) => {
-                    eprintln!("{}", e);
+                    eprint_diagnostic(e);
                     std::process::exit(1);
                 }
             }
@@ -445,6 +466,61 @@ fn main() {
         Mode::ListSymbols => unreachable!("handled above"),
         Mode::DumpHeaders => unreachable!("handled above"),
     }
+}
+
+/// Print `msg` to stderr through `colorize_diagnostic`, deciding
+/// once whether stderr is a TTY. Use for any user-visible error or
+/// warning the CLI emits -- it's a no-op for messages that don't
+/// look like a diagnostic, so plain "badc: file not found" lines
+/// pass through unchanged.
+fn eprint_diagnostic(msg: impl core::fmt::Display) {
+    let stderr_is_tty = std::io::stderr().is_terminal();
+    let s = msg.to_string();
+    eprintln!("{}", colorize_diagnostic(&s, stderr_is_tty));
+}
+
+/// Add ANSI color around the severity word (`warning:`, `error:`,
+/// `info:` / `note:`) inside a diagnostic line. We accept either
+/// the gcc shape `<file>:<line>: warning: <msg>` or any line
+/// whose severity word is followed by a colon and a space; the
+/// rest of the message stays untouched. Falls through unchanged
+/// when stderr isn't a TTY so build logs stay greppable.
+fn colorize_diagnostic(line: &str, is_tty: bool) -> std::borrow::Cow<'_, str> {
+    if !is_tty {
+        return std::borrow::Cow::Borrowed(line);
+    }
+    // Find the first ` <severity>: ` -- after the `<file>:<line>: `
+    // anchor in gcc-shape lines, or at the front for severity-first
+    // lines (legacy / future-style). Severity words are matched
+    // case-insensitively against a small allow-list so a
+    // user-supplied identifier accidentally containing `:` doesn't
+    // get re-colored.
+    const SEVERITIES: &[(&str, &str)] = &[
+        ("error", "\x1b[1;31m"), // bold red
+        ("Error", "\x1b[1;31m"),
+        ("warning", "\x1b[1;33m"), // bold yellow
+        ("Warning", "\x1b[1;33m"),
+        ("info", "\x1b[1;36m"), // bold cyan
+        ("Info", "\x1b[1;36m"),
+        ("note", "\x1b[1;36m"),
+        ("Note", "\x1b[1;36m"),
+    ];
+    const RESET: &str = "\x1b[0m";
+    for (word, color) in SEVERITIES {
+        let needle = format!(" {word}: ");
+        if let Some(pos) = line.find(&needle) {
+            let prefix = &line[..pos + 1];
+            let rest = &line[pos + needle.len()..];
+            return std::borrow::Cow::Owned(format!("{prefix}{color}{word}:{RESET} {rest}"));
+        }
+        // Severity at the very start of the line.
+        let head = format!("{word}: ");
+        if line.starts_with(&head) {
+            let rest = &line[head.len()..];
+            return std::borrow::Cow::Owned(format!("{color}{word}:{RESET} {rest}"));
+        }
+    }
+    std::borrow::Cow::Borrowed(line)
 }
 
 /// Default `-o` value for native compilation. Picks an
@@ -495,7 +571,7 @@ fn emit_native_binary_to_stdout(program: &badc::Program, target: Target, options
     let bytes = match emit_native_with_options(program, target, options) {
         Ok(b) => b,
         Err(e) => {
-            eprintln!("{e}");
+            eprint_diagnostic(e);
             std::process::exit(1);
         }
     };
@@ -516,7 +592,7 @@ fn emit_native_binary(
     let bytes = match emit_native_with_options(program, target, options) {
         Ok(b) => b,
         Err(e) => {
-            eprintln!("{e}");
+            eprint_diagnostic(e);
             std::process::exit(1);
         }
     };

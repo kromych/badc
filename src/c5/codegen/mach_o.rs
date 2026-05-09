@@ -68,7 +68,9 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
+use super::super::program::Program;
 use super::Build;
+use super::dwarf;
 
 // ------------------------------------------------------------------
 // Mach-O constants. Names mirror `<mach-o/loader.h>` and `<mach-o/nlist.h>`
@@ -115,6 +117,15 @@ const LC_ID_DYLIB: u32 = 0xD;
 const LC_DYLD_INFO_ONLY: u32 = 0x22 | LC_REQ_DYLD;
 const LC_MAIN: u32 = 0x28 | LC_REQ_DYLD;
 const LC_BUILD_VERSION: u32 = 0x32;
+/// `LC_UUID` -- 16-byte image identity. dyld uses it to dedup
+/// modules in process-image lists; without it lldb's
+/// `DynamicLoaderDarwin` re-registers our image after launch
+/// against the static target image, triggering "address ...
+/// maps to more than one section" warnings on every launch.
+const LC_UUID: u32 = 0x1b;
+/// Total bytes of `LC_UUID` on disk: 4 (cmd) + 4 (cmdsize) +
+/// 16 (uuid) = 24.
+const UUID_COMMAND_SIZE: usize = 24;
 
 const VM_PROT_READ: u32 = 1;
 const VM_PROT_WRITE: u32 = 2;
@@ -192,6 +203,18 @@ const SECT_INDEX_TEXT: u8 = 1;
 /// Segment indices, in the order they appear as `LC_SEGMENT_64` load
 /// commands. Bind opcodes refer to segments by this index.
 const SEG_INDEX_DATA: u8 = 2;
+
+/// `S_ATTR_DEBUG` -- set on every section inside `__DWARF`.
+/// Tells `nm`, `lldb`, `dyld_info`, and the Apple symbolicator
+/// that this section is debug-only metadata: no code, no data,
+/// don't try to install breakpoints into its vmaddr range, and
+/// don't fold its symbols into the executable's lookup table.
+/// Without this flag, lldb sees the section's `addr+size` as a
+/// loaded range that overlaps `__TEXT` / `__DATA`, prints
+/// "address ... maps to more than one section" warnings, and
+/// refuses to resolve breakpoints set inside what it (wrongly)
+/// thinks is a debug-overlapping region.
+const S_ATTR_DEBUG: u32 = 0x0200_0000;
 
 /// Mach-O section type bits used by the TLV layout. See
 /// `<mach-o/loader.h>` for the full set; we only need
@@ -809,6 +832,122 @@ fn segment_data(
     out
 }
 
+/// `LC_SEGMENT_64` for `__DWARF` containing the four phase-1
+/// debug sections (`__debug_info`, `__debug_abbrev`,
+/// `__debug_line`, `__debug_str`).
+///
+/// Mach-O conventions for "DWARF embedded in a final-linked
+/// executable" -- the form lldb expects when it cracks the
+/// image directly rather than via a `.dSYM` bundle:
+///
+/// * `vmsize` rounds the debug filesize up to a page. Newer
+///   `dyld_info` (Xcode 15+) rejects any `vmsize < filesize`
+///   with "segment '...' filesize exceeds vmsize" -- which
+///   then aborts `dyld_info -imports` before it prints any
+///   bindings, breaking the structural Mach-O tests that pipe
+///   through it. Older Apple tools tolerated `vmsize = 0`,
+///   but we now mirror what ld64 emits when it keeps
+///   `__DWARF` in-binary: a real, page-sized vmsize.
+/// * `vmaddr` sits in its own page-aligned slot between
+///   `__DATA.vmaddr + __DATA.vmsize` and `__LINKEDIT.vmaddr`
+///   so the kernel's segment-overlap check stays clean.
+/// * `initprot = maxprot = 0`. The bytes get mapped (because
+///   vmsize > 0) but never accessed at runtime -- code only
+///   reads __TEXT and writes __DATA, lldb / dsymutil read the
+///   debug sections via the file image, and the kernel
+///   accepts `prot = 0` as "reserved address space, no
+///   permissions".
+/// * Each section's `addr` mirrors `vmaddr` so `nm`'s
+///   `addr >= segment.vmaddr` invariant holds; the
+///   `S_ATTR_DEBUG` flag tells lldb / dyld_info / the Apple
+///   symbolicator that the section is debug-only metadata so
+///   address-based breakpoints aren't shadowed by it.
+///
+/// The four section file offsets and sizes are passed in by
+/// the caller, which has just laid out the slot for `__DWARF`
+/// between `__DATA` and `__LINKEDIT` in the order the sections
+/// appear here.
+#[allow(clippy::too_many_arguments)]
+fn segment_dwarf(
+    vmaddr: u64,
+    vmsize: u64,
+    fileoff: u64,
+    filesize: u64,
+    info_offset: u32,
+    info_size: u64,
+    abbrev_offset: u32,
+    abbrev_size: u64,
+    line_offset: u32,
+    line_size: u64,
+    str_offset: u32,
+    str_size: u64,
+) -> Vec<u8> {
+    const TOTAL: usize = SEGMENT_COMMAND_64_SIZE + 4 * SECTION_64_SIZE;
+    let mut out = Vec::with_capacity(TOTAL);
+    write_struct(
+        &mut out,
+        &SegmentCommand64 {
+            cmd: LC_SEGMENT_64,
+            cmdsize: TOTAL as u32,
+            segname: pack_name16("__DWARF"),
+            vmaddr,
+            vmsize,
+            fileoff,
+            filesize,
+            maxprot: 0,
+            initprot: 0,
+            nsects: 4,
+            flags: 0,
+        },
+    );
+    let dwarf_section = |sectname: &str, addr: u64, offset: u32, size: u64| Section64 {
+        sectname: pack_name16(sectname),
+        segname: pack_name16("__DWARF"),
+        // Section addresses go ascending across the segment so
+        // each `__debug_*` claims a distinct vmaddr range. With
+        // every section's addr pinned at `segment.vmaddr` lldb
+        // emits "address ... maps to more than one section"
+        // warnings on every launch (it sees N sections starting
+        // at the same vmaddr). The `S_ATTR_DEBUG` flag still
+        // marks the section as debug-only so dyld doesn't try
+        // to load these bytes; the unique addrs are purely for
+        // lldb's section-resolution disambiguator.
+        addr,
+        size,
+        offset,
+        align: 0,
+        reloff: 0,
+        nreloc: 0,
+        flags: S_ATTR_DEBUG,
+        reserved1: 0,
+        reserved2: 0,
+        reserved3: 0,
+    };
+    let info_addr = vmaddr;
+    let abbrev_addr = info_addr + info_size;
+    let line_addr = abbrev_addr + abbrev_size;
+    let str_addr = line_addr + line_size;
+    let _ = vmaddr;
+    write_struct(
+        &mut out,
+        &dwarf_section("__debug_info", info_addr, info_offset, info_size),
+    );
+    write_struct(
+        &mut out,
+        &dwarf_section("__debug_abbrev", abbrev_addr, abbrev_offset, abbrev_size),
+    );
+    write_struct(
+        &mut out,
+        &dwarf_section("__debug_line", line_addr, line_offset, line_size),
+    );
+    write_struct(
+        &mut out,
+        &dwarf_section("__debug_str", str_addr, str_offset, str_size),
+    );
+    debug_assert_eq!(out.len(), TOTAL);
+    out
+}
+
 /// Compute the cmdsize for a variable-length load command whose body
 /// is a fixed `head_size` followed by a NUL-terminated path padded to
 /// 8 bytes.
@@ -868,6 +1007,49 @@ fn dylib_command(cmd: u32, path: &str) -> Vec<u8> {
     out.push(0); // NUL
     pad_to(&mut out, 8);
     debug_assert_eq!(out.len() as u32, cmdsize);
+    out
+}
+
+/// `LC_UUID` -- 16-byte module-identity blob. Computed as a
+/// FNV-1a hash of the build's text + data so that two
+/// byte-identical compilations share a UUID (useful for cache
+/// keying, dSYM matching). Doesn't have to be cryptographic;
+/// lldb only uses it to deduplicate modules.
+fn uuid_command(text: &[u8], data: &[u8]) -> Vec<u8> {
+    fn fnv1a128(bytes: &[u8]) -> [u8; 16] {
+        // Two interleaved 64-bit FNV-1a hashes give a 128-bit
+        // result without needing a real cryptographic primitive.
+        // Sufficient identity for lldb's dedup keying.
+        let mut h0: u64 = 0xcbf2_9ce4_8422_2325;
+        let mut h1: u64 = 0xa5e8_a87b_7de0_b591;
+        for (i, &b) in bytes.iter().enumerate() {
+            if i & 1 == 0 {
+                h0 ^= b as u64;
+                h0 = h0.wrapping_mul(0x100_0000_01b3);
+            } else {
+                h1 ^= b as u64;
+                h1 = h1.wrapping_mul(0x100_0000_01b3);
+            }
+        }
+        let mut out = [0u8; 16];
+        out[0..8].copy_from_slice(&h0.to_le_bytes());
+        out[8..16].copy_from_slice(&h1.to_le_bytes());
+        // Mark as "version 4 / variant DCE" so consumers that
+        // care about the RFC 4122 type bits (rarely; most just
+        // treat it as opaque bytes) see something sensible.
+        out[6] = (out[6] & 0x0f) | 0x40;
+        out[8] = (out[8] & 0x3f) | 0x80;
+        out
+    }
+    let mut hash_input: Vec<u8> = Vec::with_capacity(text.len() + data.len());
+    hash_input.extend_from_slice(text);
+    hash_input.extend_from_slice(data);
+    let uuid = fnv1a128(&hash_input);
+    let mut out = Vec::with_capacity(UUID_COMMAND_SIZE);
+    out.extend_from_slice(&LC_UUID.to_le_bytes());
+    out.extend_from_slice(&(UUID_COMMAND_SIZE as u32).to_le_bytes());
+    out.extend_from_slice(&uuid);
+    debug_assert_eq!(out.len(), UUID_COMMAND_SIZE);
     out
 }
 
@@ -1034,8 +1216,8 @@ fn apply_got_fixups(
         let target_page = target_vmaddr & !0xFFF;
         let page_diff = target_page as i64 - adrp_page as i64;
         if page_diff & 0xFFF != 0 {
-            return Err(C5Error::Compile(format!(
-                "Mach-O: GOT page diff {page_diff} not 4 KiB aligned"
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("Mach-O: GOT page diff {page_diff} not 4 KiB aligned"),
             )));
         }
         let imm21 = (page_diff >> 12) as i32;
@@ -1045,8 +1227,8 @@ fn apply_got_fixups(
         // 8-aligned.
         let in_page = (target_vmaddr & 0xFFF) as u32;
         if !in_page.is_multiple_of(8) {
-            return Err(C5Error::Compile(format!(
-                "Mach-O: GOT slot offset {in_page:#x} not 8-aligned"
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("Mach-O: GOT slot offset {in_page:#x} not 8-aligned"),
             )));
         }
 
@@ -1083,8 +1265,8 @@ fn patch_adrp_add(
     let target_page = target_vmaddr & !0xFFF;
     let page_diff = target_page as i64 - adrp_page as i64;
     if page_diff & 0xFFF != 0 {
-        return Err(C5Error::Compile(format!(
-            "Mach-O: {label} page diff {page_diff} not 4 KiB aligned"
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!("Mach-O: {label} page diff {page_diff} not 4 KiB aligned"),
         )));
     }
     let imm21 = (page_diff >> 12) as i32;
@@ -1148,8 +1330,8 @@ fn apply_macho_tlv_fixups(
         let target_page = descriptor_vmaddr & !0xFFF;
         let page_diff = target_page as i64 - adrp_page as i64;
         if page_diff & 0xFFF != 0 {
-            return Err(C5Error::Compile(format!(
-                "Mach-O: TLV adrp page diff {page_diff} not 4 KiB aligned"
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("Mach-O: TLV adrp page diff {page_diff} not 4 KiB aligned"),
             )));
         }
         let imm21 = (page_diff >> 12) as i32;
@@ -1384,7 +1566,7 @@ fn build_strtab(symbols: &[&str]) -> (Vec<u8>, Vec<u32>) {
 // emit the whole image.
 // ------------------------------------------------------------------
 
-pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
+pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error> {
     let code = &build.text;
     let tls_present = !build.macho_tlv_descriptors.is_empty();
     let n_tlv = build.macho_tlv_descriptors.len();
@@ -1428,12 +1610,25 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
     let data_seg_size: u64 =
         SEGMENT_COMMAND_64_SIZE as u64 + data_seg_section_count * SECTION_64_SIZE as u64;
     let linkedit_seg_size = SEGMENT_COMMAND_64_SIZE as u64;
+    let is_dylib = build.output_kind == super::OutputKind::SharedLibrary;
+    // __DWARF holds the four phase-1 debug sections
+    // (__debug_info, __debug_abbrev, __debug_line, __debug_str)
+    // -- 72 + 4*80 = 392 bytes of LC. Emitted for both
+    // executables and dylibs (gh #45). The dylib coverage gate
+    // dropped after the layout reshuffle that gave __DWARF its
+    // own page-aligned vmaddr slot between __DATA and
+    // __LINKEDIT (commit "give __DWARF a real vmsize..."). With
+    // distinct vmaddrs, dyld's `vmsize > filesize` check passes
+    // and dyld 4's dlsym-by-symbol-table fallback no longer
+    // shadows the strtab against __DWARF.
+    let emit_dwarf = true;
+    let _ = is_dylib;
+    let dwarf_seg_size = (SEGMENT_COMMAND_64_SIZE + 4 * SECTION_64_SIZE) as u64;
     let dyld_info_size = DYLD_INFO_COMMAND_SIZE as u64;
     let symtab_size = SYMTAB_COMMAND_SIZE as u64;
     let dysymtab_size = DYSYMTAB_COMMAND_SIZE as u64;
     let main_size = ENTRY_POINT_COMMAND_SIZE as u64;
 
-    let is_dylib = build.output_kind == super::OutputKind::SharedLibrary;
     let dylinker = load_dylinker("/usr/lib/dyld");
     let dylib_lcs: Vec<Vec<u8>> = build
         .imports
@@ -1442,6 +1637,7 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
         .map(|d| load_dylib(&d.path))
         .collect();
     let bv = build_version();
+    let uuid_lc = uuid_command(&build.text, &build.data);
     // Shared libraries replace `LC_MAIN` (24 bytes) with
     // `LC_ID_DYLIB` (carries this image's install name --
     // hard-coded to `@rpath/c5-output.dylib`; programs that
@@ -1464,12 +1660,14 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
         + text_seg_size
         + data_seg_size
         + linkedit_seg_size
+        + dwarf_seg_size
         + dyld_info_size
         + symtab_size
         + dysymtab_size
         + dylinker.len() as u64
         + dylibs_total
         + bv.len() as u64
+        + uuid_lc.len() as u64
         + entry_lc_size;
 
     // ---- step 4: figure out file/vmaddr layout ----
@@ -1631,10 +1829,12 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
             .copied()
             .unwrap_or(usize::MAX);
         if native_off == usize::MAX {
-            return Err(C5Error::Compile(format!(
-                "Mach-O: exported function `{}` (bc PC {}) doesn't \
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "Mach-O: exported function `{}` (bc PC {}) doesn't \
                  align with any native instruction",
-                exp.name, exp.bytecode_pc
+                    exp.name, exp.bytecode_pc
+                ),
             )));
         }
         let n_value = code_vmaddr_base + native_off as u64;
@@ -1668,14 +1868,85 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
     // walks them in that order and the LC_DYLD_INFO_ONLY
     // command's `rebase_off`/`bind_off` fields can name them
     // independently.
-    let linkedit_fileoff = data_fileoff + data_filesize;
+    // ---- __DWARF layout ----
+    //
+    // Phase 1 DWARF (gh #39 / gh #40) sits between __DATA and
+    // __LINKEDIT in *both* LC order and file order. __LINKEDIT
+    // has to remain the last file-resident segment because
+    // `codesign --sign -` appends `LC_CODE_SIGNATURE` and grows
+    // __LINKEDIT's filesize to cover the signature blob; any
+    // bytes past __LINKEDIT would get clobbered. The segment
+    // declares `vmsize = 0` so dyld skips the mmap -- the bytes
+    // are file-only metadata that lldb / gdb pick up via the
+    // LC_SEGMENT_64. Sections are packed back-to-back -- DWARF
+    // readers don't require any alignment between them, and
+    // the per-section `size` field stops them at the last real
+    // byte regardless of the segment's tail pad.
+    let (
+        dwarf_sections,
+        dwarf_fileoff,
+        dwarf_info_offset,
+        dwarf_abbrev_offset,
+        dwarf_line_offset,
+        dwarf_str_offset,
+        dwarf_filesize,
+        dwarf_tail_pad,
+    ) = if emit_dwarf {
+        let s = dwarf::emit(program, build, code_vmaddr_base, &program.source_path);
+        let fileoff = data_fileoff + data_filesize;
+        let info = fileoff;
+        let abbrev = info + s.debug_info.len() as u64;
+        let line = abbrev + s.debug_abbrev.len() as u64;
+        let strs = line + s.debug_line.len() as u64;
+        let sections_size = s.debug_info.len() as u64
+            + s.debug_abbrev.len() as u64
+            + s.debug_line.len() as u64
+            + s.debug_str.len() as u64;
+        // Pad up to a page so __LINKEDIT's fileoff lands on a
+        // page boundary. dyld checks that every segment's
+        // `fileoff % PAGE_SIZE == vmaddr % PAGE_SIZE`, and
+        // __LINKEDIT sits on a page-aligned vmaddr.
+        let filesize = round_up(sections_size, PAGE_SIZE);
+        let pad = (filesize - sections_size) as usize;
+        (s, fileoff, info, abbrev, line, strs, filesize, pad)
+    } else {
+        (
+            dwarf::DwarfSections {
+                debug_info: Vec::new(),
+                debug_abbrev: Vec::new(),
+                debug_line: Vec::new(),
+                debug_str: Vec::new(),
+            },
+            data_fileoff + data_filesize,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        )
+    };
+
+    let linkedit_fileoff = dwarf_fileoff + dwarf_filesize;
     let rebase_off = linkedit_fileoff;
     let bind_off = rebase_off + rebase_ops.len() as u64;
     let symoff = bind_off + bind_ops.len() as u64;
     let stroff = symoff + symtab.len() as u64;
     let linkedit_payload = rebase_ops.len() + bind_ops.len() + symtab.len() + strtab.len();
     let linkedit_filesize = linkedit_payload as u64;
-    let linkedit_vmaddr = data_vmaddr + data_vmsize;
+    // __DWARF claims its own page-aligned vmaddr range between
+    // __DATA and __LINKEDIT (when emit_dwarf), so the
+    // segment-vmaddr ordering stays monotonic and dyld_info's
+    // "filesize <= vmsize" check holds. When emit_dwarf=false
+    // the slot collapses to zero and __LINKEDIT abuts __DATA
+    // directly, matching the pre-DWARF layout.
+    let dwarf_vmaddr = data_vmaddr + data_vmsize;
+    let dwarf_vmsize = if emit_dwarf {
+        round_up(dwarf_filesize, PAGE_SIZE)
+    } else {
+        0
+    };
+    let linkedit_vmaddr = dwarf_vmaddr + dwarf_vmsize;
     let linkedit_vmsize = round_up(linkedit_filesize.max(PAGE_SIZE), PAGE_SIZE);
 
     // ---- step 5: build the load commands ----
@@ -1733,6 +2004,24 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
         VM_PROT_READ,
         VM_PROT_READ,
     );
+    let dwarf_segment = if emit_dwarf {
+        segment_dwarf(
+            dwarf_vmaddr,
+            dwarf_vmsize,
+            dwarf_fileoff,
+            dwarf_filesize,
+            dwarf_info_offset as u32,
+            dwarf_sections.debug_info.len() as u64,
+            dwarf_abbrev_offset as u32,
+            dwarf_sections.debug_abbrev.len() as u64,
+            dwarf_line_offset as u32,
+            dwarf_sections.debug_line.len() as u64,
+            dwarf_str_offset as u32,
+            dwarf_sections.debug_str.len() as u64,
+        )
+    } else {
+        Vec::new()
+    };
     let dyld_info = dyld_info_only(
         rebase_off as u32,
         rebase_ops.len() as u32,
@@ -1765,6 +2054,7 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
     debug_assert_eq!(text_segment.len() as u64, text_seg_size);
     debug_assert_eq!(data_segment.len() as u64, data_seg_size);
     debug_assert_eq!(linkedit.len() as u64, linkedit_seg_size);
+    debug_assert_eq!(dwarf_segment.len() as u64, dwarf_seg_size);
     if !is_dylib {
         debug_assert_eq!(main_lc.len() as u64, main_size);
     }
@@ -1776,9 +2066,10 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
 
     // mach_header_64. We have undefined symbols now (_write); MH_NOUNDEFS
     // is dropped accordingly.
-    // ncmds: 4 segments + dyldinfo + symtab + dysymtab + dylinker
-    //        + N dylibs + build_version + main
-    let ncmds: u32 = (10 + build.imports.dylibs.len()) as u32;
+    // ncmds: 4 segments (5 with __DWARF) + dyldinfo + symtab +
+    //        dysymtab + dylinker + N dylibs + build_version
+    //        + main (or LC_ID_DYLIB for dylibs).
+    let ncmds: u32 = 11 + (emit_dwarf as u32) + build.imports.dylibs.len() as u32;
     let mut header_flags = MH_DYLDLINK | MH_TWOLEVEL | MH_PIE;
     if tls_present {
         header_flags |= MH_HAS_TLV_DESCRIPTORS;
@@ -1802,9 +2093,18 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
     // Load commands, ordered by Apple's convention: segments first,
     // then dyld_info family, then symbol tables, then dylinker /
     // dylib / build_version / main (or LC_ID_DYLIB for shared libs).
+    // Segment LC order: __PAGEZERO, __TEXT, __DATA, __DWARF
+    // (executables only), __LINKEDIT -- the layout
+    // `go build` produces for executables. __DWARF reuses
+    // __LINKEDIT's vmaddr with vmsize=0, so the loaded image's
+    // address space stays monotonic non-decreasing.
+    // File-resident order matches LC order.
     out.extend_from_slice(&pagezero);
     out.extend_from_slice(&text_segment);
     out.extend_from_slice(&data_segment);
+    if emit_dwarf {
+        out.extend_from_slice(&dwarf_segment);
+    }
     out.extend_from_slice(&linkedit);
     out.extend_from_slice(&dyld_info);
     out.extend_from_slice(&symtab_lc);
@@ -1814,6 +2114,7 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
         out.extend_from_slice(lc);
     }
     out.extend_from_slice(&bv);
+    out.extend_from_slice(&uuid_lc);
     if let Some(lc) = &id_dylib_lc {
         out.extend_from_slice(lc);
     } else {
@@ -1884,9 +2185,11 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
         let preferred_va = data_section_vmaddr + r.target_offset;
         let off = r.data_offset as usize;
         if off + 8 > data_with_relocs.len() {
-            return Err(C5Error::Compile(format!(
-                "Mach-O: data reloc offset {off:#x} past end of __data ({})",
-                data_with_relocs.len()
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "Mach-O: data reloc offset {off:#x} past end of __data ({})",
+                    data_with_relocs.len()
+                ),
             )));
         }
         data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
@@ -1908,16 +2211,18 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
             .or_else(|| build.bytecode_to_native.get(bc_pc).copied())
             .unwrap_or(usize::MAX);
         if native_off == usize::MAX {
-            return Err(C5Error::Compile(format!(
-                "Mach-O: code reloc references missing bytecode pc {bc_pc}"
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("Mach-O: code reloc references missing bytecode pc {bc_pc}"),
             )));
         }
         let preferred_va = code_vmaddr_base + native_off as u64;
         let off = r.data_offset as usize;
         if off + 8 > data_with_relocs.len() {
-            return Err(C5Error::Compile(format!(
-                "Mach-O: code reloc offset {off:#x} past end of __data ({})",
-                data_with_relocs.len()
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "Mach-O: code reloc offset {off:#x} past end of __data ({})",
+                    data_with_relocs.len()
+                ),
             )));
         }
         data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
@@ -1958,9 +2263,25 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
     }
     out.resize((data_fileoff + data_filesize) as usize, 0);
 
+    // __DWARF contents (executables only -- dylibs skip phase
+    // 1 DWARF, see `emit_dwarf`). Order matches what
+    // `segment_dwarf` pointed each section at: info, abbrev,
+    // line, str. Sits ahead of __LINKEDIT so codesign can grow
+    // __LINKEDIT at the file tail without trampling debug
+    // bytes.
+    if emit_dwarf {
+        debug_assert_eq!(out.len() as u64, dwarf_fileoff);
+        out.extend_from_slice(&dwarf_sections.debug_info);
+        out.extend_from_slice(&dwarf_sections.debug_abbrev);
+        out.extend_from_slice(&dwarf_sections.debug_line);
+        out.extend_from_slice(&dwarf_sections.debug_str);
+        out.resize(out.len() + dwarf_tail_pad, 0);
+    }
+
     // __LINKEDIT contents. Order matches what
     // LC_DYLD_INFO_ONLY's offsets name: rebase_off first, then
     // bind_off, then symtab, then strtab.
+    debug_assert_eq!(out.len() as u64, linkedit_fileoff);
     out.extend_from_slice(&rebase_ops);
     out.extend_from_slice(&bind_ops);
     out.extend_from_slice(&symtab);
@@ -1969,9 +2290,8 @@ pub(super) fn write(build: &Build) -> Result<Vec<u8>, C5Error> {
     debug_assert_eq!(out.len() as u64, total_filesize);
 
     if out.len() > u32::MAX as usize {
-        return Err(C5Error::Compile(format!(
-            "Mach-O writer: image too large ({} bytes)",
-            out.len()
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!("Mach-O writer: image too large ({} bytes)", out.len()),
         )));
     }
     Ok(out)
@@ -1991,6 +2311,36 @@ mod tests {
     /// the bind-opcode / symtab / dylib paths produce non-empty
     /// output worth asserting on. Real lowering populates this
     /// from the program's `#pragma binding`s.
+    /// Empty `Program` paired with `tiny_build`. The DWARF
+    /// emitter needs *a* program to walk for `Op::Ent`s --
+    /// passing the matching empty `text` + `source_*` keeps
+    /// the debug-segment payload trivial without changing
+    /// the structural invariants the tests check.
+    fn tiny_program() -> Program {
+        Program {
+            text: Vec::new(),
+            data: Vec::new(),
+            entry_pc: 0,
+            warnings: Vec::new(),
+            data_imm_positions: Vec::new(),
+            code_imm_positions: Vec::new(),
+            call_fp_arg_masks: Vec::new(),
+            tls_data: Vec::new(),
+            tls_init_size: 0,
+            data_relocs: Vec::new(),
+            code_relocs: Vec::new(),
+            exports: Vec::new(),
+            dylibs: Vec::new(),
+            dllmain_pc: None,
+            source_lines: Vec::new(),
+            source_functions: Vec::new(),
+            source_files: Vec::new(),
+            source_file_indices: Vec::new(),
+            source_path: String::new(),
+            variables: Vec::new(),
+        }
+    }
+
     fn tiny_build() -> Build {
         use super::super::{ResolvedDylib, ResolvedImport, ResolvedImports};
         Build {
@@ -2038,37 +2388,38 @@ mod tests {
 
     #[test]
     fn writes_mh_magic_64() {
-        let bytes = write(&tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
         assert_eq!(read_u32(&bytes, 0), MH_MAGIC_64);
     }
 
     #[test]
     fn cpu_type_is_arm64() {
-        let bytes = write(&tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
         assert_eq!(read_u32(&bytes, 4), CPU_TYPE_ARM64);
     }
 
     #[test]
     fn filetype_is_mh_execute() {
-        let bytes = write(&tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
         assert_eq!(read_u32(&bytes, 12), MH_EXECUTE);
     }
 
     #[test]
     fn flags_include_pie_and_dyldlink() {
-        let bytes = write(&tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
         let flags = read_u32(&bytes, 24);
         assert_ne!(flags & MH_PIE, 0, "MH_PIE not set");
         assert_ne!(flags & MH_DYLDLINK, 0, "MH_DYLDLINK not set");
     }
 
     #[test]
-    fn ncmds_baseline_is_ten_plus_dylibs() {
-        // tiny_build has 1 dylib (libSystem) -> baseline 10 LCs
-        // (4 segments + dyld_info + symtab + dysymtab + dylinker
-        // + build_version + main) plus 1 LC_LOAD_DYLIB.
-        let bytes = write(&tiny_build()).unwrap();
-        assert_eq!(read_u32(&bytes, 16), 11);
+    fn ncmds_baseline_is_twelve_plus_dylibs() {
+        // tiny_build has 1 dylib (libSystem) -> baseline 12 LCs
+        // (5 segments incl. __DWARF + dyld_info + symtab +
+        // dysymtab + dylinker + build_version + uuid + main)
+        // plus 1 LC_LOAD_DYLIB.
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
+        assert_eq!(read_u32(&bytes, 16), 13);
     }
 
     #[test]
@@ -2080,7 +2431,7 @@ mod tests {
         // (32 + sizeofcmds), because we leave padding between the LC
         // stream and the code so codesign can grow the LCs in place
         // without overwriting the entry point.
-        let bytes = write(&tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
         let sizeofcmds = read_u32(&bytes, 20) as usize;
         let mut p = 32usize;
         let lc_end = 32 + sizeofcmds;
@@ -2107,7 +2458,7 @@ mod tests {
 
     #[test]
     fn output_alignment_invariants() {
-        let bytes = write(&tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
         // strtab is padded to 8 bytes, so the whole image is too.
         assert_eq!(bytes.len() % 8, 0);
         // Two full segments worth of file-resident data (__TEXT, __DATA)
@@ -2139,7 +2490,7 @@ mod tests {
 
     #[test]
     fn bind_stream_contains_symbol_name() {
-        let bytes = write(&tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
         // Walk the LCs to find LC_DYLD_INFO_ONLY, read bind_off+size,
         // confirm the symbol "_write" appears in there as a NUL-
         // terminated string.
@@ -2166,7 +2517,7 @@ mod tests {
 
     #[test]
     fn strtab_starts_with_leading_nul() {
-        let bytes = write(&tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
         let sizeofcmds = read_u32(&bytes, 20) as usize;
         let mut p = 32usize;
         let lc_end = 32 + sizeofcmds;
@@ -2198,7 +2549,7 @@ mod tests {
     fn otool_h_parses_the_image() {
         use std::io::Write;
         use std::process::Command;
-        let bytes = write(&tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
         let path = std::env::temp_dir().join("badc-m1-3-h.bin");
         let mut f = std::fs::File::create(&path).unwrap();
         f.write_all(&bytes).unwrap();
@@ -2228,7 +2579,7 @@ mod tests {
     fn dyld_info_imports_lists_write() {
         use std::io::Write;
         use std::process::Command;
-        let bytes = write(&tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
         let path = std::env::temp_dir().join("badc-m1-3-bind.bin");
         let mut f = std::fs::File::create(&path).unwrap();
         f.write_all(&bytes).unwrap();
@@ -2290,7 +2641,7 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        let bytes = write(&build).expect("write Mach-O");
+        let bytes = write(&tiny_program(), &build).expect("write Mach-O");
 
         // mach_header_64.flags carries MH_HAS_TLV_DESCRIPTORS.
         let flags = read_u32(&bytes, 24);
@@ -2381,7 +2732,7 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        let bytes = write(&build).expect("write Mach-O");
+        let bytes = write(&tiny_program(), &build).expect("write Mach-O");
         let flags = read_u32(&bytes, 24);
         assert_eq!(
             flags & MH_HAS_TLV_DESCRIPTORS,
@@ -2398,7 +2749,7 @@ mod tests {
     fn nm_reports_write_undefined() {
         use std::io::Write;
         use std::process::Command;
-        let bytes = write(&tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
         let path = std::env::temp_dir().join("badc-m1-3-nm.bin");
         let mut f = std::fs::File::create(&path).unwrap();
         f.write_all(&bytes).unwrap();

@@ -56,9 +56,8 @@ impl Compiler {
                 id
             }
             Some(_) => {
-                return Err(C5Error::Compile(format!(
-                    "{}: {} `{}` already defined",
-                    self.lex.line,
+                return Err(self.compile_err(format!(
+                    "{} `{}` already defined",
                     if is_union { "union" } else { "struct" },
                     name
                 )));
@@ -196,10 +195,7 @@ impl Compiler {
                         false,
                     )
                 } else {
-                    return Err(C5Error::Compile(format!(
-                        "{}: aggregate name or `{{` expected in field type",
-                        self.lex.line
-                    )));
+                    return Err(self.compile_err("aggregate name or `{{` expected in field type"));
                 };
                 let inner_id = if self.lex.tk == '{' as i64 {
                     self.parse_aggregate_body(&inner_name, nested_is_union)?
@@ -232,10 +228,7 @@ impl Compiler {
                     base
                 }
             } else {
-                return Err(C5Error::Compile(format!(
-                    "{}: type expected in struct field",
-                    self.lex.line
-                )));
+                return Err(self.compile_err("type expected in struct field"));
             };
 
             // Trailing modifiers: `int long`, `unsigned long long`, etc.
@@ -326,9 +319,8 @@ impl Compiler {
                     self.next()?;
                     let n = self.parse_constant_int()?;
                     if n < 0 {
-                        return Err(C5Error::Compile(format!(
-                            "{}: bitfield width must be non-negative (got {n})",
-                            self.lex.line
+                        return Err(self.compile_err(format!(
+                            "bitfield width must be non-negative (got {n})"
                         )));
                     }
                     Some(n as u32)
@@ -367,10 +359,7 @@ impl Compiler {
                     && field_array_size == 0
                     && self.structs[struct_id_of(field_ty)].fields.is_empty()
                 {
-                    return Err(C5Error::Compile(format!(
-                        "{}: aggregate-value field of incomplete type",
-                        self.lex.line
-                    )));
+                    return Err(self.compile_err("aggregate-value field of incomplete type"));
                 }
                 let field_name = self.symbols[id_idx].name.clone();
 
@@ -383,30 +372,20 @@ impl Compiler {
                 let field_offset: usize;
                 if self.lex.tk == ':' as i64 {
                     if field_array_size != 0 {
-                        return Err(C5Error::Compile(format!(
-                            "{}: array fields cannot also be bitfields",
-                            self.lex.line
-                        )));
+                        return Err(self.compile_err("array fields cannot also be bitfields"));
                     }
                     if is_aggregate_value {
-                        return Err(C5Error::Compile(format!(
-                            "{}: aggregate fields cannot also be bitfields",
-                            self.lex.line
-                        )));
+                        return Err(self.compile_err("aggregate fields cannot also be bitfields"));
                     }
                     self.next()?;
                     let n = self.parse_constant_int()?;
                     if n <= 0 {
-                        return Err(C5Error::Compile(format!(
-                            "{}: bitfield width must be positive (got {n})",
-                            self.lex.line
-                        )));
+                        return Err(
+                            self.compile_err(format!("bitfield width must be positive (got {n})"))
+                        );
                     }
                     if n > 64 {
-                        return Err(C5Error::Compile(format!(
-                            "{}: bitfield width {n} exceeds 64",
-                            self.lex.line
-                        )));
+                        return Err(self.compile_err(format!("bitfield width {n} exceeds 64")));
                     }
                     bit_width = n as u32;
                     if is_union {
@@ -485,10 +464,7 @@ impl Compiler {
             }
 
             if self.lex.tk != ';' as i64 {
-                return Err(C5Error::Compile(format!(
-                    "{}: semicolon expected after struct field",
-                    self.lex.line
-                )));
+                return Err(self.compile_err("semicolon expected after struct field"));
             }
             self.next()?;
         }

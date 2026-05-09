@@ -111,10 +111,9 @@ impl Compiler {
             return Ok(elems);
         }
         if self.lex.tk != '{' as i64 {
-            return Err(C5Error::Compile(format!(
-                "{}: array initializer must be a string literal or `{{ ... }}`",
-                self.lex.line
-            )));
+            return Err(
+                self.compile_err("array initializer must be a string literal or `{{ ... }}`")
+            );
         }
         self.next()?;
         let mut elements = Vec::new();
@@ -242,20 +241,14 @@ impl Compiler {
                     }
                 }
                 if self.lex.tk != ')' as i64 {
-                    return Err(C5Error::Compile(format!(
-                        "{}: close paren expected after cast in initializer",
-                        self.lex.line
-                    )));
+                    return Err(self.compile_err("close paren expected after cast in initializer"));
                 }
                 self.next()?;
                 return self.parse_constant_init_value();
             }
             let v = self.parse_const_expr_or()?;
             if self.lex.tk != ')' as i64 {
-                return Err(C5Error::Compile(format!(
-                    "{}: close paren expected in initializer",
-                    self.lex.line
-                )));
+                return Err(self.compile_err("close paren expected in initializer"));
             }
             self.next()?;
             return Ok((v, InitElemReloc::None));
@@ -273,17 +266,14 @@ impl Compiler {
             // `&global` -- address-of-global pointer init.
             self.next()?;
             if self.lex.tk != Token::Id as i64 {
-                return Err(C5Error::Compile(format!(
-                    "{}: identifier expected after `&` in initializer",
-                    self.lex.line
-                )));
+                return Err(self.compile_err("identifier expected after `&` in initializer"));
             }
             let target_idx = self.lex.curr_id_idx;
             let class = self.symbols[target_idx].class;
             if class != Token::Glo as i64 {
-                return Err(C5Error::Compile(format!(
-                    "{}: `&{}` -- only addresses of globals are accepted in static initializers",
-                    self.lex.line, self.symbols[target_idx].name
+                return Err(self.compile_err(format!(
+                    "`&{}` -- only addresses of globals are accepted in static initializers",
+                    self.symbols[target_idx].name
                 )));
             }
             let off = self.symbols[target_idx].val;
@@ -331,9 +321,9 @@ impl Compiler {
                 self.next()?;
                 return Ok((off, InitElemReloc::Data));
             }
-            return Err(C5Error::Compile(format!(
-                "{}: identifier `{}` is not a constant-expression value",
-                self.lex.line, self.symbols[idx].name
+            return Err(self.compile_err(format!(
+                "identifier `{}` is not a constant-expression value",
+                self.symbols[idx].name
             )));
         }
         // Fall back to integer literal (with optional unary `-`).
@@ -352,10 +342,7 @@ impl Compiler {
         var_offset: i64,
     ) -> Result<(), C5Error> {
         if self.lex.tk != '{' as i64 {
-            return Err(C5Error::Compile(format!(
-                "{}: struct initializer must start with `{{`",
-                self.lex.line
-            )));
+            return Err(self.compile_err("struct initializer must start with `{{`"));
         }
         self.next()?;
         let mut pos: usize = 0;
@@ -364,18 +351,14 @@ impl Compiler {
             let field_idx = if self.lex.tk == Token::Dot as i64 {
                 self.next()?;
                 if self.lex.tk != Token::Id as i64 {
-                    return Err(C5Error::Compile(format!(
-                        "{}: field name expected after `.`",
-                        self.lex.line
-                    )));
+                    return Err(self.compile_err("field name expected after `.`"));
                 }
                 let field_name = self.symbols[self.lex.curr_id_idx].name.clone();
                 self.next()?;
                 if self.lex.tk != Token::Assign as i64 {
-                    return Err(C5Error::Compile(format!(
-                        "{}: `=` expected after `.{field_name}` designator",
-                        self.lex.line
-                    )));
+                    return Err(
+                        self.compile_err(format!("`=` expected after `.{field_name}` designator"))
+                    );
                 }
                 self.next()?;
 
@@ -384,18 +367,18 @@ impl Compiler {
                     .iter()
                     .position(|f| f.name == field_name)
                     .ok_or_else(|| {
-                        C5Error::Compile(format!(
-                            "{}: struct {} has no field {}",
-                            self.lex.line, self.structs[struct_id].name, field_name
+                        self.compile_err(format!(
+                            "struct {} has no field {}",
+                            self.structs[struct_id].name, field_name
                         ))
                     })?
             } else {
                 pos
             };
             if field_idx >= self.structs[struct_id].fields.len() {
-                return Err(C5Error::Compile(format!(
-                    "{}: too many initializers for struct {}",
-                    self.lex.line, self.structs[struct_id].name
+                return Err(self.compile_err(format!(
+                    "too many initializers for struct {}",
+                    self.structs[struct_id].name
                 )));
             }
             let field = self.structs[struct_id].fields[field_idx].clone();
@@ -452,9 +435,9 @@ impl Compiler {
                 let mut idx: usize = 0;
                 while self.lex.tk != '}' as i64 {
                     if idx as i64 >= field.array_size {
-                        return Err(C5Error::Compile(format!(
-                            "{}: too many initializers for `{}.{}`",
-                            self.lex.line, self.structs[struct_id].name, field.name
+                        return Err(self.compile_err(format!(
+                            "too many initializers for `{}.{}`",
+                            self.structs[struct_id].name, field.name
                         )));
                     }
                     let (value, reloc) = self.parse_constant_init_value()?;

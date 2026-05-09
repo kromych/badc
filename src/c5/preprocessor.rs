@@ -195,6 +195,14 @@ pub(crate) struct Preprocessor {
     /// had written that directive at the top of their source.
     /// Plumbed in from the CLI's `-include FILE` flag.
     force_includes: Vec<String>,
+    /// Filename label used for the top-level translation unit's
+    /// `#line 1 "..."` marker. Defaults to `"<source>"` -- the CLI
+    /// overrides it with the real argv path so error / warning
+    /// messages report `./hello.c:5: error: ...` instead of the
+    /// `<source>:5: ...` placeholder. The DWARF emitter still
+    /// uses `Program::source_path` separately; this is purely the
+    /// preprocessor / lexer / diagnostics view.
+    source_label: String,
 }
 
 impl Preprocessor {
@@ -293,6 +301,18 @@ impl Preprocessor {
             include_stack: Vec::new(),
             search_paths: Vec::new(),
             force_includes: Vec::new(),
+            source_label: "<source>".to_string(),
+        }
+    }
+
+    /// Override the filename label used for the top-level translation
+    /// unit's leading line marker. Default is `"<source>"`; the CLI
+    /// passes the argv path so error messages name the file the user
+    /// actually opened. No-op when the path is empty (stdin / fixture
+    /// paths leave the placeholder in place).
+    pub fn set_source_label(&mut self, label: &str) {
+        if !label.is_empty() {
+            self.source_label = label.to_string();
         }
     }
 
@@ -366,10 +386,12 @@ impl Preprocessor {
                 preamble.push_str(&format!("#include \"{name}\"\n"));
             }
             let mut combined = self.process_named(&preamble, "<force-include>")?;
-            combined.push_str(&self.process_named(source, "<source>")?);
+            let label = self.source_label.clone();
+            combined.push_str(&self.process_named(source, &label)?);
             return Ok(combined);
         }
-        self.process_named(source, "<source>")
+        let label = self.source_label.clone();
+        self.process_named(source, &label)
     }
 
     /// Recursive entry point. `filename` labels the buffer so error
@@ -395,6 +417,42 @@ impl Preprocessor {
         let stripped = strip_c_comments(&unfolded);
         let source = stripped.as_str();
         let mut out = String::with_capacity(source.len());
+
+        // Emit a leading line marker so the lexer attributes
+        // tokens in this buffer to `(filename, 1)`. The
+        // `format!` writes a GNU-style `# 1 "filename"\n` shape;
+        // `parse_line_marker` in the lexer handles both the GNU
+        // form and a C99 `#line N "filename"` -- they share the
+        // same parsing path. Filenames with `"` or `\` get
+        // backslash-escaped so they round-trip; other bytes pass
+        // through verbatim (paths with embedded LF would already
+        // break a thousand other things).
+        out.push_str(&format_line_marker(1, filename));
+
+        // Track the *effective* filename for `#include` restore
+        // markers and `__FILE__`. This starts as `filename` (the
+        // physical name we got handed) but a `#line N "other"`
+        // directive in the user source can rewrite it -- and once
+        // it does, every subsequent `#include` boundary in this
+        // buffer needs to restore to *that* name, not back to the
+        // original `filename`. The amalgamator (scripts/amalgamate.py)
+        // depends on this: it puts a `#line 1 "real_path.c"` at the
+        // top of each glued-in TU, then if that TU does its own
+        // `#include`s the closing marker we emit when the include
+        // returns must put us back inside `real_path.c`, not the
+        // amalgamated container.
+        let mut current_file: alloc::string::String = filename.into();
+
+        // Source-relative line number for the current iteration. We
+        // can't just use `idx_iter + 1` (the buffer's physical line)
+        // because a `#line N "file"` resets the lexer's counter; if
+        // we then close an `#include` with a buffer-line marker the
+        // lexer snaps back to physical-buffer coordinates and every
+        // subsequent attribution shifts. Track it explicitly: the
+        // counter advances by 1 per processed input line, +consumed
+        // for multi-line macro joins, and a `#line N` resets it to
+        // `N` for the next iteration.
+        let mut source_line: usize = 1;
 
         // `cond_stack` mirrors the nesting of `#if` / `#ifdef`. Each
         // entry is `(parent_active, this_branch_taken,
@@ -489,13 +547,17 @@ impl Preprocessor {
                     }
                     Directive::Else => {
                         let frame = cond_stack.last_mut().ok_or_else(|| {
-                            C5Error::Compile(format!(
-                                "preprocessor:{line_no}: `#else` with no matching `#if`"
+                            C5Error::Compile(super::error::fmt_compile_err(
+                                filename,
+                                line_no,
+                                "`#else` with no matching `#if`",
                             ))
                         })?;
                         if frame.saw_else {
-                            return Err(C5Error::Compile(format!(
-                                "preprocessor:{line_no}: duplicate `#else` for the same `#if`"
+                            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                                filename,
+                                line_no,
+                                "duplicate `#else` for the same `#if`",
                             )));
                         }
                         frame.saw_else = true;
@@ -511,8 +573,10 @@ impl Preprocessor {
                         // and only then mutate the frame.
                         let parent_active =
                             cond_stack.last().map(|f| f.parent_active).ok_or_else(|| {
-                                C5Error::Compile(format!(
-                                    "preprocessor:{line_no}: `#elif` with no matching `#if`"
+                                C5Error::Compile(super::error::fmt_compile_err(
+                                    filename,
+                                    line_no,
+                                    "`#elif` with no matching `#if`",
                                 ))
                             })?;
                         let any_taken_so_far = cond_stack
@@ -527,8 +591,10 @@ impl Preprocessor {
                         };
                         let frame = cond_stack.last_mut().unwrap();
                         if frame.saw_else {
-                            return Err(C5Error::Compile(format!(
-                                "preprocessor:{line_no}: `#elif` after `#else` for the same `#if`"
+                            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                                filename,
+                                line_no,
+                                "`#elif` after `#else` for the same `#if`",
                             )));
                         }
                         frame.this_branch_taken = cond;
@@ -537,8 +603,10 @@ impl Preprocessor {
                     }
                     Directive::Endif => {
                         let frame = cond_stack.pop().ok_or_else(|| {
-                            C5Error::Compile(format!(
-                                "preprocessor:{line_no}: `#endif` with no matching `#if`"
+                            C5Error::Compile(super::error::fmt_compile_err(
+                                filename,
+                                line_no,
+                                "`#endif` with no matching `#if`",
                             ))
                         })?;
                         active = frame.parent_active;
@@ -567,18 +635,68 @@ impl Preprocessor {
                                         out.push('#');
                                         out.push_str(directive);
                                         out.push('\n');
+                                        source_line += 1;
                                         idx_iter += 1;
                                         continue;
                                     }
-                                    self.parse_pragma(args, line_no)?;
+                                    self.parse_pragma(args, line_no, filename)?;
                                 }
                             }
                         }
                     }
                     Directive::Include(name) => {
                         if active {
-                            let included = self.process_include(name, line_no)?;
+                            let included = self.process_include(name, line_no, filename)?;
                             out.push_str(&included);
+                            // Closing marker uses `source_line + 1`
+                            // (NOT `line_no + 1`) and `current_file`
+                            // (NOT the static `filename` param).
+                            // `source_line` tracks the user's
+                            // intended source-line numbering across
+                            // any prior `#line` directives in this
+                            // buffer, which is what the lexer's
+                            // counter actually reflects after the
+                            // last marker we emitted. Using `line_no`
+                            // here would snap the lexer back to
+                            // physical-buffer coordinates and
+                            // misattribute every subsequent emit --
+                            // the bug that gh #50 plumbing exposed
+                            // when the amalgamator started gluing
+                            // sqlite3.c + shell.c through `#line`
+                            // markers.
+                            out.push_str(&format_line_marker(source_line + 1, &current_file));
+                            source_line += 1;
+                            idx_iter += 1;
+                            continue;
+                        }
+                    }
+                    Directive::Line { line, file } => {
+                        if active {
+                            // C99 6.10.4: `#line N` retargets the next
+                            // source line's number; with `"file"` it
+                            // also retargets the filename. The marker
+                            // we emit replaces the `#line` line (one
+                            // input line in, one marker line out),
+                            // so we skip the bottom `\n` for the
+                            // same reason as `#include`.
+                            // Update the *effective* filename so the
+                            // next `#include` returns here, not to
+                            // the buffer's original `filename`. A
+                            // bare `#line N` (no filename) keeps
+                            // the current file -- C99 6.10.4 -- so
+                            // we only rewrite when `file` is
+                            // present.
+                            if let Some(f) = file {
+                                current_file = f.into();
+                            }
+                            out.push_str(&format_line_marker(line, &current_file));
+                            // Next iteration's source-line counter
+                            // is exactly `line` (the marker says so
+                            // to the lexer, and our preprocessor
+                            // tracker has to mirror that).
+                            source_line = line;
+                            idx_iter += 1;
+                            continue;
                         }
                     }
                     Directive::Error(message) => {
@@ -590,9 +708,10 @@ impl Preprocessor {
                         // that reports lexer / parser failures handles
                         // it.
                         if active {
-                            return Err(C5Error::Compile(format!(
-                                "{filename}:{line_no}: #error {}",
-                                message.trim()
+                            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                                filename,
+                                line_no,
+                                &format!("#error {}", message.trim()),
                             )));
                         }
                     }
@@ -609,6 +728,7 @@ impl Preprocessor {
                     }
                 }
                 out.push('\n');
+                source_line += 1;
                 idx_iter += 1;
                 continue;
             }
@@ -630,17 +750,19 @@ impl Preprocessor {
                 for _ in 1..consumed {
                     out.push('\n');
                 }
+                source_line += consumed;
                 idx_iter += consumed;
             } else {
                 out.push('\n');
+                source_line += 1;
                 idx_iter += 1;
             }
         }
 
         if !cond_stack.is_empty() {
-            return Err(C5Error::Compile(
-                "preprocessor: unterminated `#if` / `#ifdef` block".to_string(),
-            ));
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                "preprocessor: unterminated `#if` / `#ifdef` block",
+            )));
         }
 
         Ok(out)
@@ -924,9 +1046,14 @@ impl Preprocessor {
         let v = p.parse_or()?;
         p.skip_ws();
         if !p.at_end() {
-            return Err(C5Error::Compile(alloc::format!(
-                "preprocessor:{line_no}: trailing junk in `#if` expression: {:?}",
-                p.tail()
+            // Note: `expand_if_expr` doesn't carry a `filename` --
+            // it operates on a single line of an expanded `#if` /
+            // `#elif` expression. Use `<unknown>` here; callers that
+            // hit this case usually have a filename one frame up.
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                "<unknown>",
+                line_no,
+                &alloc::format!("trailing junk in `#if` expression: {:?}", p.tail()),
             )));
         }
         Ok(v.truthy())
@@ -936,25 +1063,25 @@ impl Preprocessor {
     /// are accepted silently -- the c5 source already uses
     /// `#pragma` markers for things the preprocessor doesn't care
     /// about, and future tools may add their own.
-    fn parse_pragma(&mut self, args: &str, line_no: usize) -> Result<(), C5Error> {
+    fn parse_pragma(&mut self, args: &str, line_no: usize, filename: &str) -> Result<(), C5Error> {
         let args = args.trim();
         if let Some(inner) = args
             .strip_prefix("dylib(")
             .and_then(|s| s.strip_suffix(')'))
         {
-            return self.parse_pragma_dylib(inner.trim(), line_no);
+            return self.parse_pragma_dylib(inner.trim(), line_no, filename);
         }
         if let Some(inner) = args
             .strip_prefix("binding(")
             .and_then(|s| s.strip_suffix(')'))
         {
-            return self.parse_pragma_binding(inner.trim(), line_no);
+            return self.parse_pragma_binding(inner.trim(), line_no, filename);
         }
         if let Some(inner) = args
             .strip_prefix("export(")
             .and_then(|s| s.strip_suffix(')'))
         {
-            return self.parse_pragma_export(inner.trim(), line_no);
+            return self.parse_pragma_export(inner.trim(), line_no, filename);
         }
         Ok(())
     }
@@ -970,12 +1097,21 @@ impl Preprocessor {
     /// (we'd need a syntax like `export(local_name, "real_name")`
     /// to follow the `#pragma binding(...)` shape, but the
     /// inverse direction; not needed for the initial cut).
-    fn parse_pragma_export(&mut self, inner: &str, line_no: usize) -> Result<(), C5Error> {
+    fn parse_pragma_export(
+        &mut self,
+        inner: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<(), C5Error> {
         let name = inner.trim();
         if !is_ident(name) {
-            return Err(C5Error::Compile(format!(
-                "preprocessor:{line_no}: `#pragma export({name})` -- name must be a \
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                &format!(
+                    "`#pragma export({name})` -- name must be a \
                  plain identifier"
+                ),
             )));
         }
         if !self.exports.iter().any(|e| e == name) {
@@ -988,24 +1124,37 @@ impl Preprocessor {
     /// the codegen can attach bindings to. `name` is an
     /// identifier-style c5-side handle (`libc`, `kernel32`, ...);
     /// `path` is the actual loader-search-name or filesystem path.
-    fn parse_pragma_dylib(&mut self, inner: &str, line_no: usize) -> Result<(), C5Error> {
+    fn parse_pragma_dylib(
+        &mut self,
+        inner: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<(), C5Error> {
         let Some((name, path)) = inner.split_once(',') else {
-            return Err(C5Error::Compile(format!(
-                "preprocessor:{line_no}: `#pragma dylib(...)` expects two args \
-                 (`name, \"path\"`)"
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                "`#pragma dylib(...)` expects two args \
+                 (`name, \"path\"`)",
             )));
         };
         let name = name.trim();
         let path = path.trim().trim_matches('"');
         if name.is_empty() || path.is_empty() {
-            return Err(C5Error::Compile(format!(
-                "preprocessor:{line_no}: `#pragma dylib(...)` arg is empty"
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                "`#pragma dylib(...)` arg is empty",
             )));
         }
         if !is_ident(name) {
-            return Err(C5Error::Compile(format!(
-                "preprocessor:{line_no}: `#pragma dylib({name}, ...)` -- name must be a \
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                &format!(
+                    "`#pragma dylib({name}, ...)` -- name must be a \
                  plain identifier"
+                ),
             )));
         }
         if let Some(existing) = self.dylibs.iter().find(|d| d.name == name) {
@@ -1015,9 +1164,13 @@ impl Preprocessor {
             // both will hit this twice. Different paths are still
             // a hard error since they'd silently shadow each other.
             if existing.path != path {
-                return Err(C5Error::Compile(format!(
-                    "preprocessor:{line_no}: `#pragma dylib({name}, {path:?})` -- already declared with different path {:?}",
-                    existing.path
+                return Err(C5Error::Compile(super::error::fmt_compile_err(
+                    filename,
+                    line_no,
+                    &format!(
+                        "`#pragma dylib({name}, {path:?})` -- already declared with different path {:?}",
+                        existing.path
+                    ),
                 )));
             }
             return Ok(());
@@ -1039,7 +1192,12 @@ impl Preprocessor {
     /// `#include` returns an error; repeat inclusion of a header
     /// that previously declared `#pragma once` returns an empty
     /// string.
-    fn process_include(&mut self, name: &str, line_no: usize) -> Result<String, C5Error> {
+    fn process_include(
+        &mut self,
+        name: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<String, C5Error> {
         if self.pragma_once_files.contains(name) {
             return Ok(String::new());
         }
@@ -1063,8 +1221,10 @@ impl Preprocessor {
         };
         if self.include_stack.iter().any(|f| f == name) {
             let chain = self.include_stack.join(" -> ");
-            return Err(C5Error::Compile(format!(
-                "preprocessor:{line_no}: cyclic `#include {name}` (chain: {chain} -> {name})"
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                &format!("cyclic `#include {name}` (chain: {chain} -> {name})"),
             )));
         }
         self.include_stack.push(name.to_string());
@@ -1097,32 +1257,49 @@ impl Preprocessor {
     /// `dylib`. The dylib must already have been declared by a
     /// `#pragma dylib(...)`; the directives can otherwise appear in
     /// any order.
-    fn parse_pragma_binding(&mut self, inner: &str, line_no: usize) -> Result<(), C5Error> {
+    fn parse_pragma_binding(
+        &mut self,
+        inner: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<(), C5Error> {
         let Some((qualified, real_symbol)) = inner.split_once(',') else {
-            return Err(C5Error::Compile(format!(
-                "preprocessor:{line_no}: `#pragma binding(...)` expects two args \
-                 (`dylib::local_name, \"real_symbol\"`)"
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                "`#pragma binding(...)` expects two args \
+                 (`dylib::local_name, \"real_symbol\"`)",
             )));
         };
         let qualified = qualified.trim();
         let real_symbol = real_symbol.trim().trim_matches('"');
         let Some((dylib_name, local_name)) = qualified.split_once("::") else {
-            return Err(C5Error::Compile(format!(
-                "preprocessor:{line_no}: `#pragma binding({qualified}, ...)` -- LHS must be \
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                &format!(
+                    "`#pragma binding({qualified}, ...)` -- LHS must be \
                  `dylib_name::local_name`"
+                ),
             )));
         };
         let dylib_name = dylib_name.trim();
         let local_name = local_name.trim();
         if dylib_name.is_empty() || local_name.is_empty() || real_symbol.is_empty() {
-            return Err(C5Error::Compile(format!(
-                "preprocessor:{line_no}: `#pragma binding(...)` arg is empty"
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                "`#pragma binding(...)` arg is empty",
             )));
         }
         let Some(dylib) = self.dylibs.iter_mut().find(|d| d.name == dylib_name) else {
-            return Err(C5Error::Compile(format!(
-                "preprocessor:{line_no}: `#pragma binding({dylib_name}::...)` -- no `#pragma \
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                &format!(
+                    "`#pragma binding({dylib_name}::...)` -- no `#pragma \
                  dylib({dylib_name}, ...)` declared"
+                ),
             )));
         };
         dylib.bindings.push(Binding {
@@ -1314,6 +1491,13 @@ enum Directive<'a> {
     Endif,
     Pragma(&'a str),
     Include(&'a str),
+    /// `#line N` or `#line N "file"` (C99 6.10.4). The filename
+    /// is optional -- bare `#line N` keeps the current file and
+    /// just retargets the line counter.
+    Line {
+        line: usize,
+        file: Option<&'a str>,
+    },
     /// `#error <message>` -- C99 sec 6.10.5. The diagnostic message is
     /// the literal text after `#error` up to the newline.
     Error(&'a str),
@@ -1328,6 +1512,26 @@ enum Directive<'a> {
 enum PragmaDirective {
     Once,
     Other,
+}
+
+/// Format a GNU-style line marker (`# N "file"\n`) for the lexer.
+/// Filenames get the minimum C-string escape (`\\` and `\"` are
+/// escaped, everything else passes through). The lexer's
+/// `parse_line_marker` decodes the same shape: it sets
+/// `self.line = N - 1` and `self.file = file`, so the very next
+/// `\n` consumed by the outer loop bumps `self.line` to `N` --
+/// which means the next source line in the buffer is attributed
+/// to `(file, N)`.
+fn format_line_marker(line: usize, file: &str) -> String {
+    let mut escaped = String::with_capacity(file.len());
+    for ch in file.chars() {
+        match ch {
+            '\\' => escaped.push_str("\\\\"),
+            '"' => escaped.push_str("\\\""),
+            other => escaped.push(other),
+        }
+    }
+    format!("# {line} \"{escaped}\"\n")
 }
 
 fn parse_pragma_directive(args: &str) -> PragmaDirective {
@@ -1443,6 +1647,25 @@ fn parse_directive(rest: &str) -> Directive<'_> {
         // expect to be able to write `#error "must be x86"`.
         if after.is_empty() || after.starts_with(char::is_whitespace) {
             return Directive::Error(after.trim_start());
+        }
+    }
+    if let Some(after) = rest.strip_prefix("line") {
+        let trimmed = after.trim();
+        // Line number is required.
+        let mut split = trimmed.splitn(2, char::is_whitespace);
+        if let Some(num) = split.next()
+            && let Ok(line) = num.parse::<usize>()
+        {
+            // Optional `"file"` -- strip surrounding quotes if
+            // present. Anything malformed (e.g. unclosed quote)
+            // falls through to `Other` and gets silently dropped,
+            // matching how every other malformed directive is
+            // handled.
+            let file = split.next().and_then(|tail| {
+                let t = tail.trim();
+                t.strip_prefix('"').and_then(|s| s.strip_suffix('"'))
+            });
+            return Directive::Line { line, file };
         }
     }
     if let Some(after) = rest.strip_prefix("include") {
@@ -2493,10 +2716,46 @@ mod tests {
     }
 
     #[test]
+    fn leading_marker_names_top_level_source() {
+        // gh #49: every preprocessed buffer opens with a GNU line
+        // marker so the lexer attributes the first source line to
+        // `(<source>, 1)` rather than letting its initial state
+        // decide. Without this, an `#include` later in the buffer
+        // would never have a "previous file" to return to.
+        let out = process("int x;\n");
+        assert!(out.starts_with("# 1 \"<source>\"\n"));
+    }
+
+    #[test]
+    fn line_directive_retargets_file_and_line() {
+        // gh #51: `#line N "file"` rewrites the lexer's
+        // `(file, line)` state so the next source line is
+        // attributed to `(file, N)`.
+        let out = process("#line 100 \"fakegen.c\"\nint x;\n");
+        // The `#line` line itself is consumed by the marker; the
+        // next non-blank output should be a `# 100 "fakegen.c"`
+        // marker followed (eventually) by `int x;`.
+        assert!(out.contains("# 100 \"fakegen.c\""));
+        assert!(out.contains("int x;"));
+    }
+
+    #[test]
+    fn line_directive_without_filename_keeps_current_file() {
+        // C99 6.10.4: bare `#line N` retargets the line counter
+        // but leaves the filename alone.
+        let out = process("#line 50\nint x;\n");
+        // The marker re-uses the current filename (`<source>`).
+        assert!(out.contains("# 50 \"<source>\""));
+    }
+
+    #[test]
     fn directives_become_blank_lines_for_line_alignment() {
+        // The preprocessor prepends a `# 1 "<source>"\n` GNU line
+        // marker so the lexer can attribute later tokens to a
+        // specific (file, line). Skip it before counting.
         let src = "#define X 1\nint a = X;\n";
         let out = process(src);
-        let lines: Vec<&str> = out.lines().collect();
+        let lines: Vec<&str> = out.lines().skip_while(|l| l.starts_with('#')).collect();
         assert_eq!(lines.len(), 2);
         assert_eq!(lines[0], "");
         assert!(lines[1].contains("int a = 1;"));

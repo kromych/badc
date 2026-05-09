@@ -1145,7 +1145,9 @@ pub(super) fn lower(
         bytecode_to_native[op_pc] = code.len();
         let raw = program.text[pc];
         let op = Op::from_i64(raw).ok_or_else(|| {
-            C5Error::Compile(format!("native codegen: bad opcode at PC {pc}: {raw}"))
+            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
+                "native codegen: bad opcode at PC {pc}: {raw}"
+            )))
         })?;
         pc += 1;
         if matches!(op, Op::Ent) {
@@ -1250,8 +1252,10 @@ pub(super) fn lower(
     let mut func_fixups: Vec<FuncFixup> = Vec::with_capacity(pending_func_fixups.len());
     for (adrp_offset, target_bc_pc) in pending_func_fixups {
         if target_bc_pc > program.text.len() {
-            return Err(C5Error::Compile(format!(
-                "native codegen: function pointer target {target_bc_pc} past end of bytecode"
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "native codegen: function pointer target {target_bc_pc} past end of bytecode"
+                ),
             )));
         }
         let target = match thunk_for_func.get(&target_bc_pc).copied() {
@@ -1259,8 +1263,10 @@ pub(super) fn lower(
             None => {
                 let t = bytecode_to_native[target_bc_pc];
                 if t == usize::MAX {
-                    return Err(C5Error::Compile(format!(
-                        "native codegen: function pointer target {target_bc_pc} did not land on an instruction"
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        &format!(
+                            "native codegen: function pointer target {target_bc_pc} did not land on an instruction"
+                        ),
                     )));
                 }
                 t
@@ -1276,15 +1282,17 @@ pub(super) fn lower(
         .get(program.entry_pc)
         .copied()
         .ok_or_else(|| {
-            C5Error::Compile(format!(
+            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
                 "native codegen: entry_pc {} is out of bytecode range",
                 program.entry_pc
-            ))
+            )))
         })?;
     if entry_offset == usize::MAX {
-        return Err(C5Error::Compile(format!(
-            "native codegen: entry_pc {} did not align with any instruction start",
-            program.entry_pc
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!(
+                "native codegen: entry_pc {} did not align with any instruction start",
+                program.entry_pc
+            ),
         )));
     }
 
@@ -1319,8 +1327,8 @@ pub(super) fn lower(
 /// Read the i64 operand following an opcode, advancing `pc` past it.
 fn read_operand(text: &[i64], pc: &mut usize, op_name: &str) -> Result<i64, C5Error> {
     if *pc >= text.len() {
-        return Err(C5Error::Compile(format!(
-            "native codegen: {op_name} missing operand at end of bytecode"
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!("native codegen: {op_name} missing operand at end of bytecode"),
         )));
     }
     let v = text[*pc];
@@ -1339,16 +1347,20 @@ fn apply_fixups(
 ) -> Result<(), C5Error> {
     for f in fixups {
         if f.target_bytecode_pc > bc_len {
-            return Err(C5Error::Compile(format!(
-                "native codegen: branch target {} past end of bytecode",
-                f.target_bytecode_pc
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "native codegen: branch target {} past end of bytecode",
+                    f.target_bytecode_pc
+                ),
             )));
         }
         let target = bc_to_native[f.target_bytecode_pc];
         if target == usize::MAX {
-            return Err(C5Error::Compile(format!(
-                "native codegen: branch target {} did not land on an instruction",
-                f.target_bytecode_pc
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "native codegen: branch target {} did not land on an instruction",
+                    f.target_bytecode_pc
+                ),
             )));
         }
         let pc_after = f.native_offset as isize;
@@ -1356,8 +1368,8 @@ fn apply_fixups(
         // All AArch64 branches measure the offset in instructions
         // (4 bytes each).
         if delta_bytes & 3 != 0 {
-            return Err(C5Error::Compile(format!(
-                "native codegen: branch delta {delta_bytes} not 4-byte aligned"
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("native codegen: branch delta {delta_bytes} not 4-byte aligned"),
             )));
         }
         let delta_insns = (delta_bytes / 4) as i32;
@@ -1799,10 +1811,10 @@ fn lower_op(
             // the regular GOT-call shape.
             let binding_idx = read_operand(text, pc, "TailExt")?;
             let import_index = imports.index_of_binding(binding_idx).ok_or_else(|| {
-                C5Error::Compile(alloc::format!(
+                C5Error::Compile(crate::c5::error::fmt_internal_err(&alloc::format!(
                     "native codegen (aarch64): no import slot for binding {binding_idx} -- \
                      the resolver should have placed it"
-                ))
+                )))
             })?;
             emit_got_tail_jump(code, got_fixups, import_index);
         }
@@ -1868,10 +1880,12 @@ fn lower_op(
                 Target::LinuxAarch64 => {
                     let imm = (offset + 16) as u32;
                     if imm >= 4096 {
-                        return Err(C5Error::Compile(format!(
-                            "_Thread_local offset {imm} doesn't fit in \
+                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                            &format!(
+                                "_Thread_local offset {imm} doesn't fit in \
                              `add` imm12; extend the lowering to emit \
                              movz/movk if you need larger TLS blocks"
+                            ),
                         )));
                     }
                     emit(code, enc_mrs_tpidr_el0(Reg::X19));
@@ -1879,10 +1893,12 @@ fn lower_op(
                 }
                 Target::WindowsAarch64 => {
                     if offset >= 4096 {
-                        return Err(C5Error::Compile(format!(
-                            "_Thread_local offset {offset} doesn't fit in \
+                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                            &format!(
+                                "_Thread_local offset {offset} doesn't fit in \
                              `add` imm12; extend the lowering to emit \
                              movz/movk if you need larger TLS blocks"
+                            ),
                         )));
                     }
                     // ldr x16, [x18, #0x58]
@@ -1947,10 +1963,12 @@ fn lower_op(
                     emit_mov_reg(code, Reg::X19, Reg::X0);
                 }
                 _ => {
-                    return Err(C5Error::Compile(format!(
-                        "{:?}: `_Thread_local` codegen is only implemented for \
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        &format!(
+                            "{:?}: `_Thread_local` codegen is only implemented for \
                          Linux/aarch64, Windows/aarch64, and macOS/aarch64",
-                        target
+                            target
+                        ),
                     )));
                 }
             }
@@ -2044,9 +2062,9 @@ fn emit_libc_call(
     target: super::Target,
 ) -> Result<(), C5Error> {
     let import_index = imports.index_of_binding(binding_idx).ok_or_else(|| {
-        C5Error::Compile(format!(
+        C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
             "native codegen: no import slot for binding {binding_idx} -- the resolver should have placed it"
-        ))
+        )))
     })?;
     let local_name: &str = imports.imports[import_index].local_name.as_str();
 
@@ -2109,11 +2127,13 @@ fn emit_libc_call(
                 // bindings (printf, sprintf, ...) don't fill the
                 // 8-reg int bank with fixed args, so this is a
                 // future-proofing branch -- diagnostic-only.
-                return Err(C5Error::Compile(format!(
-                    "macOS arm64 variadic call: fixed arg {i} \
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!(
+                        "macOS arm64 variadic call: fixed arg {i} \
                      exceeds register banks (int_idx={int_idx}, \
                      fp_idx={fp_idx}); stack-overflow for fixed \
                      args isn't wired up yet"
+                    ),
                 )));
             }
         }

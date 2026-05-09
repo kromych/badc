@@ -24,10 +24,10 @@ mod stmt;
 pub(crate) mod types;
 
 use types::{
-    UNSIGNED_BIT, fp_result_ty, is_decl_modifier, is_floating_scalar, is_pointer_ty,
-    is_scalar_load_op_val, is_struct_ty, is_type_start_token, is_unsigned_ty, load_op_for,
-    pointee_size_no_struct, reemit_scalar_load, store_op_for, struct_id_of, struct_ptr_depth,
-    struct_ty_for, usual_arith_common_ty,
+    UNSIGNED_BIT, format_signature, fp_result_ty, is_decl_modifier, is_floating_scalar,
+    is_pointer_ty, is_scalar_load_op_val, is_struct_ty, is_type_start_token, is_unsigned_ty,
+    load_op_for, pointee_size_no_struct, reemit_scalar_load, store_op_for, struct_id_of,
+    struct_ptr_depth, struct_ty_for, usual_arith_common_ty,
 };
 
 #[derive(Debug, Clone)]
@@ -322,6 +322,27 @@ pub struct Compiler {
     /// `text`. Empty string for top-level emit (data
     /// initializers, file-scope decls).
     source_functions: Vec<String>,
+    /// File-name table. Index 0 is the user's translation unit;
+    /// every distinct filename observed via the lexer's
+    /// `(file, line)` state (i.e. crossing a GNU line marker on
+    /// `#include` enter / a `#line N "file"` directive) gets a
+    /// fresh entry. The DWARF emitter (gh #50) writes one
+    /// `DW_LNE_define_file` per entry and switches with
+    /// `DW_LNS_set_file` when `source_file_indices` changes.
+    source_files: Vec<String>,
+    /// Per-bytecode-PC index into `source_files`, parallel to
+    /// `source_lines`. The two columns together pin a PC to a
+    /// specific (file, line). Without this column lldb would
+    /// claim every PC came from the user's translation unit even
+    /// when it actually originated inside a header.
+    source_file_indices: Vec<u16>,
+    /// Per-function locals + parameters captured at body close,
+    /// before the c5 shadow-symbol restore unwinds the binding.
+    /// gh #46 -- the DWARF emitter walks this list to attach
+    /// `DW_TAG_variable` / `DW_TAG_formal_parameter` DIEs to the
+    /// matching subprogram, which lets lldb's `frame variable` and
+    /// `watchpoint set variable foo` work for c5-emitted code.
+    variables: Vec<crate::c5::program::VariableInfo>,
     /// Name of the C function whose body is currently being
     /// emitted. Set on `Op::Ent` emit and cleared on `Op::Lev`.
     current_function_name: String,
@@ -413,6 +434,34 @@ impl Compiler {
         include_paths: &[String],
         force_includes: &[String],
     ) -> Self {
+        Self::with_full_options_and_label(
+            source,
+            target,
+            defines,
+            undefines,
+            include_paths,
+            force_includes,
+            "",
+        )
+    }
+
+    /// Same as [`Self::with_full_options`] plus a `source_label`
+    /// argument: the filename string used in compiler diagnostics
+    /// (`<file>:<line>: error: ...`) and the lexer's per-token file
+    /// attribution. The CLI passes the user's argv path so error
+    /// messages name the file the user opened; library / fixture
+    /// callers that don't have a path leave it empty and the
+    /// preprocessor falls back to the historical `<source>`
+    /// placeholder.
+    pub fn with_full_options_and_label(
+        source: String,
+        target: Target,
+        defines: &[(String, String)],
+        undefines: &[String],
+        include_paths: &[String],
+        force_includes: &[String],
+        source_label: &str,
+    ) -> Self {
         // Run the preprocessor first so we know the
         // `#pragma binding(...)` set before seeding the symbol
         // table. The bindings come from whichever standard headers
@@ -428,6 +477,7 @@ impl Compiler {
         // infallible so the `Compiler::new(src).compile()` shape
         // every existing caller uses keeps working.
         let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
+        pp.set_source_label(source_label);
         for path in include_paths {
             pp.add_search_path(path);
         }
@@ -509,6 +559,9 @@ impl Compiler {
             pending_index_stride: 0,
             source_lines: Vec::new(),
             source_functions: Vec::new(),
+            source_files: Vec::new(),
+            source_file_indices: Vec::new(),
+            variables: Vec::new(),
             current_function_name: String::new(),
             fn_call_fixups: Vec::new(),
             code_reloc_sym_idx: Vec::new(),
@@ -518,11 +571,48 @@ impl Compiler {
         }
     }
 
-    /// Append a type-checking warning. We never fail compilation on a
-    /// type mismatch -- it always lands here. Callers grab the list off
-    /// `Program.warnings` after `compile()`.
-    fn warn(&mut self, msg: alloc::string::String) {
-        self.warnings.push(msg);
+    /// Append a type-checking / signature-mismatch warning. We never
+    /// fail compilation on these -- the codegen has enough info to
+    /// keep going, and refusing every type squabble would be hostile
+    /// to amalgamated code that almost-but-not-quite agrees with
+    /// itself. Callers grab the list off `Program.warnings` after
+    /// `compile()`.
+    ///
+    /// The output shape mirrors gcc / clang:
+    ///   `<file>:<line>: warning: <message>`
+    /// so jump-to-error in editors works out of the box, and the CLI
+    /// can color the `warning:` word when stderr is a TTY.
+    fn warn_at(&mut self, line: usize, message: alloc::string::String) {
+        let file = &self.lex.file;
+        self.warnings
+            .push(alloc::format!("{file}:{line}: warning: {message}"));
+    }
+
+    /// Build a `C5Error::Compile` whose message follows the
+    /// gcc / clang-shape convention everything else in this codebase
+    /// uses for diagnostics:
+    ///   `<file>:<line>: error: <message>`
+    /// Pulls `<file>` / `<line>` out of `self.lex` so call sites
+    /// don't have to thread them through every `format!`.
+    fn compile_err(&self, message: impl AsRef<str>) -> super::error::C5Error {
+        super::error::C5Error::Compile(super::error::fmt_compile_err(
+            &self.lex.file,
+            self.lex.line,
+            message.as_ref(),
+        ))
+    }
+
+    /// Same shape as [`Self::compile_err`] but lets the caller pin
+    /// the line to a value that isn't the lexer's current one --
+    /// useful when a diagnostic refers back to where a structure /
+    /// function / argument *started*, not where the parser noticed
+    /// the problem.
+    fn compile_err_at(&self, line: usize, message: impl AsRef<str>) -> super::error::C5Error {
+        super::error::C5Error::Compile(super::error::fmt_compile_err(
+            &self.lex.file,
+            line,
+            message.as_ref(),
+        ))
     }
 
     /// Test whether `actual` is assignable / passable where `declared`
@@ -965,10 +1055,7 @@ impl Compiler {
             }
             self.next()?;
         }
-        Err(C5Error::Compile(format!(
-            "{}: unmatched parentheses",
-            self.lex.line
-        )))
+        Err(self.compile_err("unmatched parentheses"))
     }
 
     fn parse_decl_base_type(&mut self) -> Result<i64, C5Error> {
@@ -1090,10 +1177,7 @@ impl Compiler {
             } else if self.lex.tk == '{' as i64 {
                 format!("__anon_{kind}_{}", self.structs.len())
             } else {
-                return Err(C5Error::Compile(format!(
-                    "{}: {kind} name or `{{` expected",
-                    self.lex.line
-                )));
+                return Err(self.compile_err(format!("{kind} name or `{{` expected")));
             };
             let id = if self.lex.tk == '{' as i64 {
                 self.parse_aggregate_body(&name, is_union)?
@@ -1136,10 +1220,7 @@ impl Compiler {
                 base
             }
         } else {
-            return Err(C5Error::Compile(format!(
-                "{}: type expected",
-                self.lex.line
-            )));
+            return Err(self.compile_err("type expected"));
         };
 
         // Trailing qualifiers / modifiers: `int const`, `int long`,
@@ -1190,11 +1271,13 @@ impl Compiler {
         // CodeReloc-emitting site that forgot to record its
         // sym idx.
         if self.code_relocs.len() != self.code_reloc_sym_idx.len() {
-            return Err(C5Error::Compile(format!(
-                "internal: code_relocs ({}) and code_reloc_sym_idx ({}) length mismatch \
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "code_relocs ({}) and code_reloc_sym_idx ({}) length mismatch \
                  -- a CodeReloc emitter forgot to record its symbol idx",
-                self.code_relocs.len(),
-                self.code_reloc_sym_idx.len()
+                    self.code_relocs.len(),
+                    self.code_reloc_sym_idx.len()
+                ),
             )));
         }
         for (reloc, &sym_idx) in self
@@ -1393,7 +1476,7 @@ impl Compiler {
                 self.symbols[idx].val as usize
             }
             _ if !self.pending_exports.is_empty() || has_user_dllmain => 0,
-            _ => return Err(C5Error::Compile("main() not defined".to_string())),
+            _ => return Err(self.compile_err("main() not defined")),
         };
         // Resolve `#pragma export(<name>)` directives against
         // the now-finalised symbol table. Each name must
@@ -1405,13 +1488,13 @@ impl Compiler {
         let mut exports = Vec::with_capacity(self.pending_exports.len());
         for name in core::mem::take(&mut self.pending_exports) {
             let Some(idx) = lexer::find_symbol(&self.symbols, &self.symbol_index, &name) else {
-                return Err(C5Error::Compile(format!(
+                return Err(self.compile_err(format!(
                     "`#pragma export({name})` -- no such symbol; the name must \
                      refer to a function defined in this source"
                 )));
             };
             if self.symbols[idx].class != Token::Fun as i64 {
-                return Err(C5Error::Compile(format!(
+                return Err(self.compile_err(format!(
                     "`#pragma export({name})` -- expected a function, but `{name}` \
                      is class {} (only locally-defined functions are exportable today; \
                      globals would need data-export support that isn't wired up yet)",
@@ -1450,6 +1533,13 @@ impl Compiler {
             dllmain_pc,
             source_lines: self.source_lines,
             source_functions: self.source_functions,
+            source_files: self.source_files,
+            source_file_indices: self.source_file_indices,
+            // The compiler doesn't see the input path -- the CLI
+            // shim sets this on the returned `Program` before
+            // calling `emit_native_*` (gh #44).
+            source_path: String::new(),
+            variables: self.variables,
         })
     }
 
@@ -1471,18 +1561,44 @@ impl Compiler {
         self.fn_ptr_chain_depth = -1;
         self.text.push(op as i64);
         // Mirror text.len() one-for-one in source_lines /
-        // source_functions so a bc_pc lookup is a direct
-        // index. Operand slots inherit the op's source position.
+        // source_functions / source_file_indices so a bc_pc
+        // lookup is a direct index. Operand slots inherit the
+        // op's source position.
+        let file_idx = self.intern_source_file();
         self.source_lines.push(self.lex.line as u32);
         self.source_functions
             .push(self.current_function_name.clone());
+        self.source_file_indices.push(file_idx);
     }
 
     fn emit_val(&mut self, val: i64) {
         self.text.push(val);
+        let file_idx = self.intern_source_file();
         self.source_lines.push(self.lex.line as u32);
         self.source_functions
             .push(self.current_function_name.clone());
+        self.source_file_indices.push(file_idx);
+    }
+
+    /// Look up the lexer's current `(file)` in `source_files`,
+    /// pushing a fresh entry if this is the first time we see it.
+    /// Returns the resulting index. Index 0 is reserved for the
+    /// translation unit's filename so the file table is always
+    /// non-empty for the DWARF emitter (which uses index 0 as the
+    /// CU's primary file).
+    fn intern_source_file(&mut self) -> u16 {
+        let name = &self.lex.file;
+        if let Some(pos) = self.source_files.iter().position(|f| f == name) {
+            // Cap at u16::MAX to keep `source_file_indices` a tight
+            // column. A translation unit with > 65k distinct
+            // headers is well past anything we've seen; clamp
+            // rather than overflow so the codegen still produces
+            // *some* attribution.
+            return pos.min(u16::MAX as usize) as u16;
+        }
+        let idx = self.source_files.len();
+        self.source_files.push(name.clone());
+        idx.min(u16::MAX as usize) as u16
     }
 
     /// Emit a plain `Op::Imm <val>` -- a 2-word `[op, operand]`
@@ -1729,6 +1845,14 @@ impl Compiler {
     fn pop_trailing_scalar_load(&mut self) -> bool {
         if matches!(self.text.last(), Some(&op) if is_scalar_load_op_val(op)) {
             self.text.pop();
+            // Keep parallel debug arrays in sync with `text`
+            // (gh #48). Without these matching pops the
+            // source_functions / source_lines tail drifts past
+            // text.len() and every later emit_op lands in the
+            // wrong slot.
+            self.source_lines.pop();
+            self.source_functions.pop();
+            self.source_file_indices.pop();
             true
         } else {
             false
@@ -1794,10 +1918,7 @@ impl Compiler {
         let mut t: i64;
 
         if self.lex.tk == 0 {
-            return Err(C5Error::Compile(format!(
-                "{}: unexpected eof in expression",
-                self.lex.line
-            )));
+            return Err(self.compile_err("unexpected eof in expression"));
         } else if self.lex.tk == Token::Num as i64 {
             self.emit_imm(self.lex.ival);
             self.next()?;
@@ -1880,6 +2001,19 @@ impl Compiler {
                 let array_count = self.last_array_decay_size;
                 let expr_ty = self.ty;
                 self.text.truncate(saved_text_len);
+                // Keep `source_lines` / `source_functions` in
+                // sync with `text` (gh #48 root cause). Without
+                // these matching truncates the parallel arrays
+                // grow longer than `text`, and every subsequent
+                // `emit_op` lands its source-line / source-function
+                // entry at the wrong bytecode PC -- the visible
+                // symptom is that all functions parsed after the
+                // first array-size expression get attributed to the
+                // *previous* function's name in the DWARF
+                // subprogram DIEs.
+                self.source_lines.truncate(saved_text_len);
+                self.source_functions.truncate(saved_text_len);
+                self.source_file_indices.truncate(saved_text_len);
                 self.data_imm_positions.truncate(saved_data_imm_positions);
                 self.last_array_decay_size = 0;
                 if array_count > 0 {
@@ -1893,10 +2027,7 @@ impl Compiler {
                 if self.lex.tk == ')' as i64 {
                     self.next()?;
                 } else {
-                    return Err(C5Error::Compile(format!(
-                        "{}: close paren expected in sizeof",
-                        self.lex.line
-                    )));
+                    return Err(self.compile_err("close paren expected in sizeof"));
                 }
             }
             self.emit_imm(total_bytes);
@@ -1938,12 +2069,12 @@ impl Compiler {
                     && is_struct_ty(callee_ret_ty)
                     && struct_ptr_depth(callee_ret_ty) == 0
                 {
-                    return Err(C5Error::Compile(format!(
-                        "{}: `{}` returns a struct by value, but the \
+                    return Err(self.compile_err(format!(
+                        "`{}` returns a struct by value, but the \
                          platform-ABI struct-return convention isn't \
                          implemented for Token::Sys calls. Use a \
                          pointer-returning variant or pass an out-buffer.",
-                        self.lex.line, fn_name_for_warn
+                        fn_name_for_warn
                     )));
                 }
                 let mut nargs = 0;
@@ -2001,20 +2132,26 @@ impl Compiler {
                         if let Some(reason) =
                             Self::type_warning_with_flags(want, self.ty, zero, untyped)
                         {
-                            self.warn(format!(
-                                "{arg_line}: warning: {reason} in argument {} of `{}` (param={want}, arg={})",
-                                nargs + 1,
-                                fn_name_for_warn,
-                                self.ty
-                            ));
+                            self.warn_at(
+                                arg_line,
+                                format!(
+                                    "{reason} in argument {} of `{}` (param={want}, arg={})",
+                                    nargs + 1,
+                                    fn_name_for_warn,
+                                    self.ty
+                                ),
+                            );
                         }
                     } else if !expected_params.is_empty() && !is_variadic {
-                        self.warn(format!(
-                            "{arg_line}: warning: too many arguments to `{}` (expected {}, got at least {})",
-                            fn_name_for_warn,
-                            expected_params.len(),
-                            nargs + 1,
-                        ));
+                        self.warn_at(
+                            arg_line,
+                            format!(
+                                "too many arguments to `{}` (expected {}, got at least {})",
+                                fn_name_for_warn,
+                                expected_params.len(),
+                                nargs + 1,
+                            ),
+                        );
                     }
 
                     arg_is_fp.push(is_floating_scalar(self.ty));
@@ -2033,15 +2170,17 @@ impl Compiler {
                         && is_struct_ty(self.ty)
                         && struct_ptr_depth(self.ty) == 0
                     {
-                        return Err(C5Error::Compile(format!(
-                            "{}: argument {} of `{}` is a struct passed by value, \
-                             but the platform-ABI struct-arg convention isn't \
-                             implemented for Token::Sys calls. Pass `&s` (a \
-                             pointer to the struct) instead.",
+                        return Err(self.compile_err_at(
                             arg_line,
-                            nargs + 1,
-                            fn_name_for_warn
-                        )));
+                            format!(
+                                "argument {} of `{}` is a struct passed by value, \
+                                 but the platform-ABI struct-arg convention isn't \
+                                 implemented for Token::Sys calls. Pass `&s` (a \
+                                 pointer to the struct) instead.",
+                                nargs + 1,
+                                fn_name_for_warn
+                            ),
+                        ));
                     }
                     self.emit_op(Op::Si);
                     nargs += 1;
@@ -2084,13 +2223,16 @@ impl Compiler {
                     && !expected_params.is_empty()
                     && (nargs as usize) < expected_params.len()
                 {
-                    self.warn(format!(
-                        "{}: warning: too few arguments to `{}` (expected {}, got {})",
-                        self.lex.line,
-                        fn_name_for_warn,
-                        expected_params.len(),
-                        nargs,
-                    ));
+                    let line = self.lex.line;
+                    self.warn_at(
+                        line,
+                        format!(
+                            "too few arguments to `{}` (expected {}, got {})",
+                            fn_name_for_warn,
+                            expected_params.len(),
+                            nargs,
+                        ),
+                    );
                 }
                 self.next()?;
                 if self.symbols[id_idx].class == Token::Sys as i64 {
@@ -2149,10 +2291,7 @@ impl Compiler {
                         Some(h) => format!(" -- try `#include <{h}>`"),
                         None => String::new(),
                     };
-                    return Err(C5Error::Compile(format!(
-                        "{}: unknown function `{name}`{suggestion}",
-                        self.lex.line,
-                    )));
+                    return Err(self.compile_err(format!("unknown function `{name}`{suggestion}")));
                 }
                 let total_pushed = if callee_returns_struct {
                     nargs + 1
@@ -2247,10 +2386,8 @@ impl Compiler {
                 } else if self.symbols[id_idx].class == Token::Glo as i64 {
                     self.emit_data_imm(self.symbols[id_idx].val);
                 } else {
-                    return Err(C5Error::Compile(format!(
-                        "{}: undefined variable {}",
-                        self.lex.line, self.symbols[id_idx].name
-                    )));
+                    return Err(self
+                        .compile_err(format!("undefined variable {}", self.symbols[id_idx].name)));
                 }
                 self.ty = self.symbols[id_idx].type_;
                 let is_struct_value = is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
@@ -2371,7 +2508,7 @@ impl Compiler {
                 if self.lex.tk == ')' as i64 {
                     self.next()?;
                 } else {
-                    return Err(C5Error::Compile(format!("{}: bad cast", self.lex.line)));
+                    return Err(self.compile_err("bad cast"));
                 }
                 self.expr(Token::Inc as i64)?;
                 // FP-vs-int casts emit conversion ops so the bit
@@ -2465,10 +2602,7 @@ impl Compiler {
                 if self.lex.tk == ')' as i64 {
                     self.next()?;
                 } else {
-                    return Err(C5Error::Compile(format!(
-                        "{}: close paren expected",
-                        self.lex.line
-                    )));
+                    return Err(self.compile_err("close paren expected"));
                 }
             }
         } else if self.lex.tk == Token::MulOp as i64 {
@@ -2503,10 +2637,7 @@ impl Compiler {
                 if is_pointer_ty(self.ty) {
                     self.ty -= Ty::Ptr as i64;
                 } else {
-                    return Err(C5Error::Compile(format!(
-                        "{}: bad dereference",
-                        self.lex.line
-                    )));
+                    return Err(self.compile_err("bad dereference"));
                 }
                 // `*p` where `p` is a struct pointer yields a struct
                 // *value*. c5 represents struct values address-as-
@@ -2561,10 +2692,7 @@ impl Compiler {
                 // at the IR level; the type bump below tracks the
                 // extra pointer level.
             } else {
-                return Err(C5Error::Compile(format!(
-                    "{}: bad address-of",
-                    self.lex.line
-                )));
+                return Err(self.compile_err("bad address-of"));
             }
             self.ty += Ty::Ptr as i64;
             // gh #19: `&` adds one pointer level toward the fn-ptr
@@ -2611,15 +2739,12 @@ impl Compiler {
             t = self.lex.tk;
             self.next()?;
             self.expr(Token::Inc as i64)?;
-            let reload = self.rewrite_trailing_load_as_psh().ok_or_else(|| {
-                C5Error::Compile(format!("{}: bad lvalue in pre-increment", self.lex.line))
-            })?;
+            let reload = self
+                .rewrite_trailing_load_as_psh()
+                .ok_or_else(|| self.compile_err("bad lvalue in pre-increment"))?;
             self.emit_op(reload);
             if is_floating_scalar(self.ty) {
-                return Err(C5Error::Compile(format!(
-                    "{}: floating-point ++/-- not yet implemented",
-                    self.lex.line
-                )));
+                return Err(self.compile_err("floating-point ++/-- not yet implemented"));
             }
             self.emit_op(Op::Psh);
             self.emit_imm(self.pointee_step(self.ty));
@@ -2641,9 +2766,9 @@ impl Compiler {
             } else {
                 None
             };
-            return Err(C5Error::Compile(format!(
-                "{}: bad expression tk={} (in {func}, id={id_name:?})",
-                self.lex.line, self.lex.tk
+            return Err(self.compile_err(format!(
+                "bad expression tk={} (in {func}, id={id_name:?})",
+                self.lex.tk
             )));
         }
 
@@ -2698,6 +2823,7 @@ impl Compiler {
                         self.text.pop();
                         self.source_lines.pop();
                         self.source_functions.pop();
+                        self.source_file_indices.pop();
                         self.ty += Ty::Ptr as i64;
                     }
                 }
@@ -2778,16 +2904,13 @@ impl Compiler {
                     self.emit_op(Op::Psh);
                     self.expr(Token::Assign as i64)?;
                     if !is_struct_ty(self.ty) || struct_ptr_depth(self.ty) != 0 {
-                        return Err(C5Error::Compile(format!(
-                            "{}: cannot assign non-struct value to a struct",
-                            self.lex.line
-                        )));
+                        return Err(self.compile_err("cannot assign non-struct value to a struct"));
                     }
                     if t != self.ty {
-                        return Err(C5Error::Compile(format!(
-                            "{}: struct types differ on either side of `=` \
+                        return Err(self.compile_err(format!(
+                            "struct types differ on either side of `=` \
                              (lhs={t}, rhs={})",
-                            self.lex.line, self.ty
+                            self.ty
                         )));
                     }
                     let size = self.size_of_type(t);
@@ -2805,19 +2928,15 @@ impl Compiler {
                     if let Some(reason) =
                         Self::type_warning_with_flags(t, self.ty, rhs_is_zero, rhs_is_untyped)
                     {
-                        self.warn(format!(
-                            "{line}: warning: {reason} in assignment \
-                             (lhs={t}, rhs={})",
-                            self.ty
-                        ));
+                        self.warn_at(
+                            line,
+                            format!("{reason} in assignment (lhs={t}, rhs={})", self.ty),
+                        );
                     }
                     self.ty = t;
                     self.emit_op(store_op_for(self.ty, self.target));
                 } else {
-                    return Err(C5Error::Compile(format!(
-                        "{}: bad lvalue in assignment",
-                        self.lex.line
-                    )));
+                    return Err(self.compile_err("bad lvalue in assignment"));
                 }
             } else if self.lex.tk == Token::AssignOp as i64 {
                 // Compound assignment `a OP= b`. The lexer stuffed
@@ -2836,12 +2955,9 @@ impl Compiler {
                 // op; the helper hands back the matching reload op
                 // so we can put the current value back into `a`
                 // before pushing it for the binop's pop.
-                let reload = self.rewrite_trailing_load_as_psh().ok_or_else(|| {
-                    C5Error::Compile(format!(
-                        "{}: bad lvalue in compound assignment",
-                        self.lex.line
-                    ))
-                })?;
+                let reload = self
+                    .rewrite_trailing_load_as_psh()
+                    .ok_or_else(|| self.compile_err("bad lvalue in compound assignment"))?;
                 self.emit_op(reload);
                 // Push the current value so the binop can pop it.
                 self.emit_op(Op::Psh);
@@ -2912,10 +3028,7 @@ impl Compiler {
                         }
                     }
                     _ => {
-                        return Err(C5Error::Compile(format!(
-                            "{}: unknown compound-assign opcode",
-                            self.lex.line
-                        )));
+                        return Err(self.compile_err("unknown compound-assign opcode"));
                     }
                 };
                 self.emit_op(op);
@@ -2941,10 +3054,7 @@ impl Compiler {
                 if self.lex.tk == ':' as i64 {
                     self.next()?;
                 } else {
-                    return Err(C5Error::Compile(format!(
-                        "{}: conditional missing colon",
-                        self.lex.line
-                    )));
+                    return Err(self.compile_err("conditional missing colon"));
                 }
                 let b_end_val = (self.text.len() + 2) as i64;
                 self.text[b_else] = b_end_val;
@@ -3196,31 +3306,22 @@ impl Compiler {
             } else if self.lex.tk == Token::ModOp as i64 {
                 self.next()?;
                 if is_floating_scalar(t) {
-                    return Err(C5Error::Compile(format!(
-                        "{}: `%` is not defined on floating-point operands",
-                        self.lex.line
-                    )));
+                    return Err(self.compile_err("`%` is not defined on floating-point operands"));
                 }
                 self.emit_op(Op::Psh);
                 self.expr(Token::Inc as i64)?;
                 if is_floating_scalar(self.ty) {
-                    return Err(C5Error::Compile(format!(
-                        "{}: `%` is not defined on floating-point operands",
-                        self.lex.line
-                    )));
+                    return Err(self.compile_err("`%` is not defined on floating-point operands"));
                 }
                 self.emit_op(Op::Mod);
                 self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::Inc as i64 || self.lex.tk == Token::Dec as i64 {
-                let reload = self.rewrite_trailing_load_as_psh().ok_or_else(|| {
-                    C5Error::Compile(format!("{}: bad lvalue in post-increment", self.lex.line))
-                })?;
+                let reload = self
+                    .rewrite_trailing_load_as_psh()
+                    .ok_or_else(|| self.compile_err("bad lvalue in post-increment"))?;
                 self.emit_op(reload);
                 if is_floating_scalar(self.ty) {
-                    return Err(C5Error::Compile(format!(
-                        "{}: floating-point ++/-- not yet implemented",
-                        self.lex.line
-                    )));
+                    return Err(self.compile_err("floating-point ++/-- not yet implemented"));
                 }
                 self.emit_op(Op::Psh);
                 self.emit_imm(self.pointee_step(self.ty));
@@ -3253,16 +3354,10 @@ impl Compiler {
                 if self.lex.tk == ']' as i64 {
                     self.next()?;
                 } else {
-                    return Err(C5Error::Compile(format!(
-                        "{}: close bracket expected",
-                        self.lex.line
-                    )));
+                    return Err(self.compile_err("close bracket expected"));
                 }
                 if !is_pointer_ty(t) {
-                    return Err(C5Error::Compile(format!(
-                        "{}: pointer type expected",
-                        self.lex.line
-                    )));
+                    return Err(self.compile_err("pointer type expected"));
                 }
                 if two_d_stride > 0 {
                     self.emit_binop_with_imm(Op::Mul, two_d_stride);
@@ -3311,18 +3406,12 @@ impl Compiler {
                         "single-level struct pointer"
                     };
                     let op = if is_dot { "." } else { "->" };
-                    return Err(C5Error::Compile(format!(
-                        "{}: {op} requires a {want}",
-                        self.lex.line
-                    )));
+                    return Err(self.compile_err(format!("{op} requires a {want}")));
                 }
                 self.next()?;
                 if self.lex.tk != Token::Id as i64 {
                     let op = if is_dot { "." } else { "->" };
-                    return Err(C5Error::Compile(format!(
-                        "{}: field name expected after {op}",
-                        self.lex.line
-                    )));
+                    return Err(self.compile_err(format!("field name expected after {op}")));
                 }
                 let field_name = self.symbols[self.lex.curr_id_idx].name.clone();
                 self.next()?;
@@ -3333,9 +3422,9 @@ impl Compiler {
                     .iter()
                     .find(|f| f.name == field_name)
                     .ok_or_else(|| {
-                        C5Error::Compile(format!(
-                            "{}: struct {} has no field {}",
-                            self.lex.line, self.structs[sid].name, field_name
+                        self.compile_err(format!(
+                            "struct {} has no field {}",
+                            self.structs[sid].name, field_name
                         ))
                     })?
                     .clone();
@@ -3379,10 +3468,7 @@ impl Compiler {
                     }
                 }
             } else {
-                return Err(C5Error::Compile(format!(
-                    "{}: compiler error tk={}",
-                    self.lex.line, self.lex.tk
-                )));
+                return Err(self.compile_err(format!("compiler error tk={}", self.lex.tk)));
             }
         }
         Ok(())
@@ -3514,10 +3600,7 @@ impl Compiler {
                     // sees a struct type.
                     format!("__anon_{kind}_{}", self.structs.len())
                 } else {
-                    return Err(C5Error::Compile(format!(
-                        "{}: {kind} name or `{{` expected",
-                        self.lex.line
-                    )));
+                    return Err(self.compile_err(format!("{kind} name or `{{` expected")));
                 };
 
                 if self.lex.tk == '{' as i64 {
@@ -3602,15 +3685,15 @@ impl Compiler {
                     let prior_class = self.symbols[id_idx].class;
                     let prior_type = self.symbols[id_idx].type_;
                     if prior_class != 0 && prior_class != Token::Typedef as i64 {
-                        return Err(C5Error::Compile(format!(
-                            "{}: typedef name `{}` clashes with prior non-typedef declaration",
-                            self.lex.line, self.symbols[id_idx].name
+                        return Err(self.compile_err(format!(
+                            "typedef name `{}` clashes with prior non-typedef declaration",
+                            self.symbols[id_idx].name
                         )));
                     }
                     if prior_class == Token::Typedef as i64 && prior_type != ty {
-                        return Err(C5Error::Compile(format!(
-                            "{}: typedef `{}` redefined with a different type",
-                            self.lex.line, self.symbols[id_idx].name
+                        return Err(self.compile_err(format!(
+                            "typedef `{}` redefined with a different type",
+                            self.symbols[id_idx].name
                         )));
                     }
                     self.symbols[id_idx].class = Token::Typedef as i64;
@@ -3651,26 +3734,41 @@ impl Compiler {
                     && self.lex.tk != '(' as i64;
                 if self.symbols[id_idx].class != 0 && !was_sys && !was_fwd_fun && !was_tentative_glo
                 {
-                    return Err(C5Error::Compile(format!(
-                        "{}: duplicate global definition",
-                        self.lex.line
-                    )));
+                    return Err(self.compile_err("duplicate global definition"));
                 }
+                // Snapshot the prior signature before overwriting
+                // `type_` so the redeclaration-mismatch warnings
+                // below have something to compare against.
+                let prior_return_ty = self.symbols[id_idx].type_;
+                let prior_params = self.symbols[id_idx].params.clone();
+                let prior_is_variadic = self.symbols[id_idx].is_variadic;
                 self.symbols[id_idx].type_ = ty;
 
                 if self.lex.tk == '(' as i64 || preconsumed_params.is_some() {
                     if !was_sys {
                         self.symbols[id_idx].class = Token::Fun as i64;
-                        // Don't overwrite an already-bound Fun's
-                        // val (= bytecode pc) when this is just a
-                        // repeat prototype. The val will be
-                        // updated below if/when this is actually
-                        // a definition (the body is detected by
-                        // `tk == '{'` after the params).
-                        if self.symbols[id_idx].val == 0 {
-                            self.symbols[id_idx].val = self.text.len() as i64;
-                        }
+                        // Leave `val` untouched. For a first-time
+                        // prototype it stays at the Symbol default
+                        // (0); calls before the body see that 0 as
+                        // a placeholder, and `apply_fn_call_fixups`
+                        // rewrites them once the body sets `val =
+                        // ent_pc`. For a redeclaration after the
+                        // body has been emitted, `val` already
+                        // points at the real `ent_pc` and we must
+                        // *not* clobber it -- a previous version
+                        // of this code wrote `val = self.text.len()`
+                        // whenever val was 0, which silently broke
+                        // any function whose body legitimately
+                        // started at PC 0 (gh #52).
                     }
+                    // Only warn on user-vs-user redeclarations.
+                    // Sys symbols (the per-target header's libc
+                    // bindings) start out with stub signatures
+                    // that the user's `<stdio.h>` etc. is *expected*
+                    // to refine -- complaining about every printf
+                    // / memcpy / fcntl in the standard library
+                    // would drown real bugs.
+                    let prior_was_known = was_fwd_fun;
                     let params = if let Some(pp) = preconsumed_params {
                         pp
                     } else {
@@ -3683,6 +3781,52 @@ impl Compiler {
                     // both prototypes and bodied definitions.
                     self.symbols[id_idx].params = params.types.clone();
                     self.symbols[id_idx].is_variadic = params.is_variadic;
+
+                    // Warn if a redeclaration disagrees with the
+                    // prior signature. C99 6.7p4 requires
+                    // compatibility (same return type + same
+                    // parameter list, modulo unprototyped forms);
+                    // amalgamated translation units occasionally
+                    // disagree by accident (a header was edited
+                    // but one .c forgot to pick it up), which is
+                    // a real bug worth surfacing -- but not one
+                    // the c5 codegen is in a position to refuse,
+                    // since it only has the redeclaration in scope.
+                    // C99 6.7.5.3p14: an empty list in a non-defining
+                    // function declarator means "no information about
+                    // the number or types of the parameters is
+                    // supplied" -- not a claim about a particular
+                    // signature. Comparing such an unspecified-shape
+                    // prototype against a fully-specified one isn't a
+                    // mismatch under the standard, so we skip the
+                    // parameter-list check when either side is empty.
+                    // The `appendText` collision in the sqlite smoke
+                    // (two `static`-scope-but-amalgamated definitions
+                    // with different specified params) still warns,
+                    // because both sides specify their parameters.
+                    let either_unspecified = prior_params.is_empty() || params.types.is_empty();
+                    let return_differs = prior_return_ty != ty;
+                    let variadic_differs = prior_is_variadic != params.is_variadic;
+                    let params_differ = !either_unspecified && prior_params != params.types;
+                    if prior_was_known && (return_differs || variadic_differs || params_differ) {
+                        let name = self.symbols[id_idx].name.clone();
+                        let line = self.lex.line;
+                        let prior_sig = format_signature(
+                            prior_return_ty,
+                            &prior_params,
+                            prior_is_variadic,
+                            &self.structs,
+                        );
+                        let new_sig =
+                            format_signature(ty, &params.types, params.is_variadic, &self.structs);
+                        self.warn_at(
+                            line,
+                            format!(
+                                "redeclaration of `{name}` differs from the previous \
+                                 declaration\n  previous: {prior_sig}\n  now:      {new_sig}",
+                            ),
+                        );
+                    }
 
                     // For Sys symbols (header-bound libc functions),
                     // also fold the variadic flag onto the matching
@@ -3734,18 +3878,15 @@ impl Compiler {
                     }
 
                     if was_sys {
-                        return Err(C5Error::Compile(format!(
-                            "{}: cannot give a body to predefined library function `{}` \
+                        return Err(self.compile_err(format!(
+                            "cannot give a body to predefined library function `{}` \
                              (the per-target header's `#pragma binding` provides the \
                              implementation -- use a prototype only)",
-                            self.lex.line, self.symbols[id_idx].name
+                            self.symbols[id_idx].name
                         )));
                     }
                     if self.lex.tk != '{' as i64 {
-                        return Err(C5Error::Compile(format!(
-                            "{}: bad function definition",
-                            self.lex.line
-                        )));
+                        return Err(self.compile_err("bad function definition"));
                     }
                     self.next()?;
 
@@ -3854,14 +3995,40 @@ impl Compiler {
                         match self.labels.iter().find(|(n, _)| n == name) {
                             Some(&(_, target)) => self.text[*pc] = target as i64,
                             None => {
-                                return Err(C5Error::Compile(format!(
-                                    "unresolved label: {}",
-                                    name
-                                )));
+                                return Err(self.compile_err(format!("unresolved label: {}", name)));
                             }
                         }
                     }
 
+                    // gh #46 -- snapshot the function's locals +
+                    // formal parameters before `restore_shadowed_symbol`
+                    // unwinds the bindings. The DWARF emitter groups
+                    // these by `function_bc_pc` (the Ent's PC) and
+                    // emits `DW_TAG_formal_parameter` /
+                    // `DW_TAG_variable` DIEs as children of the
+                    // matching subprogram, with `DW_OP_fbreg` locations
+                    // derived from `fp_slot * 8`. Slots `0..2` cover
+                    // the saved-x29 / saved-x30 area and don't
+                    // correspond to a user-visible name; everything
+                    // else is either a parameter (val >= 2) or a
+                    // local (val < 0).
+                    let param_set: alloc::collections::BTreeSet<usize> =
+                        params.indices.iter().copied().collect();
+                    for (i, sym) in self.symbols.iter().enumerate() {
+                        if sym.class == Token::Loc as i64
+                            && sym.val != 0
+                            && sym.val != 1
+                            && !sym.name.is_empty()
+                        {
+                            self.variables.push(crate::c5::program::VariableInfo {
+                                function_bc_pc: ent_pc as u64,
+                                name: sym.name.clone(),
+                                type_tag: sym.type_,
+                                fp_slot: sym.val,
+                                is_parameter: param_set.contains(&i),
+                            });
+                        }
+                    }
                     for sym in self.symbols.iter_mut() {
                         if sym.class == Token::Loc as i64 {
                             Self::restore_shadowed_symbol(sym);
@@ -3879,16 +4046,15 @@ impl Compiler {
                     // needs design work.
                     if array_size == -1 {
                         if self.lex.tk != Token::Assign as i64 {
-                            return Err(C5Error::Compile(format!(
-                                "{}: array `{}` declared with empty brackets needs an initializer",
-                                self.lex.line, self.symbols[id_idx].name
+                            return Err(self.compile_err(format!(
+                                "array `{}` declared with empty brackets needs an initializer",
+                                self.symbols[id_idx].name
                             )));
                         }
                         if thread_local {
-                            return Err(C5Error::Compile(format!(
-                                "{}: deferred-size `_Thread_local` arrays are not supported",
-                                self.lex.line
-                            )));
+                            return Err(self.compile_err(
+                                "deferred-size `_Thread_local` arrays are not supported",
+                            ));
                         }
                         self.next()?;
                         if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
@@ -3901,10 +4067,9 @@ impl Compiler {
                             // elements to a non-contiguous offset.
                             let elem_size = self.size_of_type(ty);
                             if self.lex.tk != '{' as i64 {
-                                return Err(C5Error::Compile(format!(
-                                    "{}: array initializer must start with `{{`",
-                                    self.lex.line
-                                )));
+                                return Err(
+                                    self.compile_err("array initializer must start with `{{`")
+                                );
                             }
                             let count = self.lex.count_top_level_groups_in_array() as i64;
                             self.next()?;
@@ -3918,19 +4083,14 @@ impl Compiler {
                             let mut i: i64 = 0;
                             while self.lex.tk != '}' as i64 {
                                 if i >= count {
-                                    return Err(C5Error::Compile(format!(
-                                        "{}: struct array element count miscount (parser scanned {count}, parsed past)",
-                                        self.lex.line
-                                    )));
+                                    return Err(self.compile_err(format!("struct array element count miscount (parser scanned {count}, parsed past)")));
                                 }
                                 let here = off + i * elem_size as i64;
                                 if self.lex.tk == '{' as i64 {
                                     self.collect_struct_initializer(sid, here)?;
                                 } else {
-                                    return Err(C5Error::Compile(format!(
-                                        "{}: struct array element must be a brace list",
-                                        self.lex.line
-                                    )));
+                                    return Err(self
+                                        .compile_err("struct array element must be a brace list"));
                                 }
                                 i += 1;
                                 if self.lex.tk == ',' as i64 {
@@ -4020,10 +4180,9 @@ impl Compiler {
                             self.next()?;
                             if array_size > 0 && is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
                                 if thread_local {
-                                    return Err(C5Error::Compile(format!(
-                                        "{}: array `_Thread_local` initialisers are not supported",
-                                        self.lex.line
-                                    )));
+                                    return Err(self.compile_err(
+                                        "array `_Thread_local` initialisers are not supported",
+                                    ));
                                 }
                                 // Known-size struct array: write each
                                 // brace-list element into the pre-
@@ -4032,28 +4191,26 @@ impl Compiler {
                                 let elem_size = self.size_of_type(ty);
                                 let sid = struct_id_of(ty);
                                 if self.lex.tk != '{' as i64 {
-                                    return Err(C5Error::Compile(format!(
-                                        "{}: array initializer must start with `{{`",
-                                        self.lex.line
-                                    )));
+                                    return Err(
+                                        self.compile_err("array initializer must start with `{{`")
+                                    );
                                 }
                                 self.next()?;
                                 let mut idx: i64 = 0;
                                 while self.lex.tk != '}' as i64 {
                                     if idx >= array_size {
-                                        return Err(C5Error::Compile(format!(
-                                            "{}: too many initializers for `{}`",
-                                            self.lex.line, self.symbols[id_idx].name
+                                        return Err(self.compile_err(format!(
+                                            "too many initializers for `{}`",
+                                            self.symbols[id_idx].name
                                         )));
                                     }
                                     let here = var_offset + idx * elem_size as i64;
                                     if self.lex.tk == '{' as i64 {
                                         self.collect_struct_initializer(sid, here)?;
                                     } else {
-                                        return Err(C5Error::Compile(format!(
-                                            "{}: struct array element must be a brace list",
-                                            self.lex.line
-                                        )));
+                                        return Err(self.compile_err(
+                                            "struct array element must be a brace list",
+                                        ));
                                     }
                                     idx += 1;
                                     if self.lex.tk == ',' as i64 {
@@ -4063,16 +4220,14 @@ impl Compiler {
                                 self.next()?; // consume `}`
                             } else if array_size > 0 {
                                 if thread_local {
-                                    return Err(C5Error::Compile(format!(
-                                        "{}: array `_Thread_local` initialisers are not supported",
-                                        self.lex.line
-                                    )));
+                                    return Err(self.compile_err(
+                                        "array `_Thread_local` initialisers are not supported",
+                                    ));
                                 }
                                 let elements = self.collect_array_initializer(ty)?;
                                 if elements.len() > array_size as usize {
-                                    return Err(C5Error::Compile(format!(
-                                        "{}: too many initializers for array `{}` ({} > {})",
-                                        self.lex.line,
+                                    return Err(self.compile_err(format!(
+                                        "too many initializers for array `{}` ({} > {})",
                                         self.symbols[id_idx].name,
                                         elements.len(),
                                         array_size
@@ -4081,10 +4236,9 @@ impl Compiler {
                                 self.write_array_init_into_data(var_offset, ty, &elements);
                             } else if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
                                 if thread_local {
-                                    return Err(C5Error::Compile(format!(
-                                        "{}: struct `_Thread_local` initialisers are not supported",
-                                        self.lex.line
-                                    )));
+                                    return Err(self.compile_err(
+                                        "struct `_Thread_local` initialisers are not supported",
+                                    ));
                                 }
                                 let sid = struct_id_of(ty);
                                 self.collect_struct_initializer(sid, var_offset)?;

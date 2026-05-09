@@ -19,7 +19,6 @@
 //! declarator usize::MAX path, the duplicate-parameter check) in
 //! one self-contained place.
 
-use alloc::format;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
@@ -45,10 +44,7 @@ impl Compiler {
             if self.lex.tk == Token::Ellipsis as i64 {
                 self.next()?;
                 if self.lex.tk != ')' as i64 {
-                    return Err(C5Error::Compile(format!(
-                        "{}: `...` must be the last parameter",
-                        self.lex.line
-                    )));
+                    return Err(self.compile_err("`...` must be the last parameter"));
                 }
                 is_variadic = true;
                 break;
@@ -142,10 +138,7 @@ impl Compiler {
                 continue;
             }
             if self.symbols[param_idx].class == Token::Loc as i64 {
-                return Err(C5Error::Compile(format!(
-                    "{}: duplicate parameter definition",
-                    self.lex.line
-                )));
+                return Err(self.compile_err("duplicate parameter definition"));
             }
 
             self.shadow_symbol(param_idx);

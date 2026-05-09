@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import difflib
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -73,8 +72,16 @@ def resolve_badc() -> Path:
     sys.exit(2)
 
 
-def build_shell(badc: Path, combined: Path, out_path: Path, optimize: bool) -> None:
-    """Compile sqlite3.c+shell.c via badc, with or without -O.
+def build_shell(badc: Path, combined: bytes, out_path: Path, optimize: bool) -> None:
+    """Compile the amalgamated sqlite3+shell source via badc, with
+    or without -O. `combined` is the bytes blob produced by
+    scripts/amalgamate.py -- already carrying `#line` markers
+    so DWARF / lldb attribute each PC to its real source file.
+
+    We pass the source on stdin (`badc -`) instead of writing it
+    to disk; saves a few hundred milliseconds of fsync on slow
+    runners, and makes the pipeline match what users would type:
+    `amalgamate.py -o - a.c b.c | badc -`.
 
     `-include msvc_compat.h` opts the TU into the MSVC-shape
     predefines (`_MSC_VER=1900`, `__MINGW32__=1`, `__int64 ->
@@ -85,9 +92,9 @@ def build_shell(badc: Path, combined: Path, out_path: Path, optimize: bool) -> N
     cmd: list[str | os.PathLike[str]] = [str(badc)]
     if optimize:
         cmd.append("-O")
-    cmd += ["-include", "msvc_compat.h", str(combined), "-o", str(out_path)]
+    cmd += ["-include", "msvc_compat.h", "-", "-o", str(out_path)]
     cmd += [f"-D{d}" for d in BUILD_DEFINES]
-    subprocess.run(cmd, check=True)
+    subprocess.run(cmd, input=combined, check=True)
 
 
 def run_shell(shell_bin: Path, script: str) -> str:
@@ -241,10 +248,11 @@ STRJOIN_EXPECT = (
 #   * `.tables` / `.schema`: cli_printf -> sqlite3_vfprintf
 #     -> c5 vfprintf format-specifier handling.
 #
-# Only one WITH RECURSIVE per scenario: under -O a second
-# WITH RECURSIVE silently drops all subsequent queries
-# (gh #30). Restore the fib-shape recursion here once that
-# lands.
+# gh #30 regression: a follow-on `WITH RECURSIVE fib(a,b)`
+# exercises the integer-literal path that misclassified
+# `EP_IsFalse = 0x20000000` (= `CODE_BASE`) as a func-ptr at
+# -O. Keep both shapes -- the c(n) one and the two-column fib
+# one -- so future regressions on either side fail loudly.
 CTE_SQL = (
     "CREATE TABLE k(v INTEGER);\n"
     "INSERT INTO k VALUES(10),(20),(30),(40),(50);\n"
@@ -260,6 +268,9 @@ CTE_SQL = (
     ".tables\n"
     "CREATE TABLE meta(id INTEGER PRIMARY KEY, note TEXT);\n"
     ".schema meta\n"
+    "WITH RECURSIVE fib(a,b) AS "
+    "(SELECT 0,1 UNION ALL SELECT b,a+b FROM fib WHERE b<100) "
+    "SELECT a FROM fib;\n"
     ".quit\n"
 )
 CTE_EXPECT = (
@@ -281,6 +292,18 @@ CTE_EXPECT = (
     "2\n"
     "k\n"
     "CREATE TABLE meta(id INTEGER PRIMARY KEY, note TEXT);\n"
+    "0\n"
+    "1\n"
+    "1\n"
+    "2\n"
+    "3\n"
+    "5\n"
+    "8\n"
+    "13\n"
+    "21\n"
+    "34\n"
+    "55\n"
+    "89\n"
 )
 
 INMEM_SCENARIOS = (
@@ -365,13 +388,28 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory(prefix="sqlite3-smoke-") as work_str:
         work = Path(work_str)
-        # Concatenate -- badc takes a single translation unit,
-        # and we want both the library and the CLI in one binary.
-        combined = work / "sqlite3shell_combined.c"
-        with combined.open("wb") as out:
-            for src in ("sqlite3.c", "shell.c"):
-                with (SQLITE_DIR / src).open("rb") as f:
-                    shutil.copyfileobj(f, out)
+        # Run the amalgamator (scripts/amalgamate.py) once and
+        # reuse its output for both the no-O and -O builds.
+        # Unlike the previous `cat sqlite3.c shell.c > combined.c`
+        # this preserves per-file attribution: every `#line 1
+        # "sqlite3.c"` / `"shell.c"` boundary makes DWARF emit a
+        # `DW_LNS_set_file` so `b sqlite3ExprAffinity` resolves
+        # to `sqlite3.c:N` and `b main` to `shell.c:N`, instead
+        # of both being attributed to the amalgamated buffer.
+        amalg_script = REPO_ROOT / "scripts" / "amalgamate.py"
+        amalg_proc = subprocess.run(
+            [
+                sys.executable,
+                str(amalg_script),
+                "-o",
+                "-",
+                str(SQLITE_DIR / "sqlite3.c"),
+                str(SQLITE_DIR / "shell.c"),
+            ],
+            check=True,
+            capture_output=True,
+        )
+        combined = amalg_proc.stdout
 
         shell_noopt = work / f"sqlite3shell{EXE_SUFFIX}"
         shell_opt = work / f"sqlite3shell.opt{EXE_SUFFIX}"

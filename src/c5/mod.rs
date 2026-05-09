@@ -32,7 +32,7 @@ pub use {
     lexer::{PredefinedKind, PredefinedSymbol, predefined_symbols},
     op::Op,
     optimize::optimize,
-    program::Program,
+    program::{Program, VariableInfo},
     vm::{Trace, Vm},
 };
 

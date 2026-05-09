@@ -647,11 +647,11 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
     let entry_rva = match build.dllmain_pc {
         Some(pc) if is_dll => {
             let off = build.bytecode_to_native.get(pc).copied().ok_or_else(|| {
-                C5Error::Compile(format!(
+                C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
                     "PE writer: user-defined DllMain at bytecode PC {pc} \
                          has no entry in bytecode_to_native -- the lowering \
                          dropped the function?"
-                ))
+                )))
             })?;
             text_rva + text_prologue_len + off as u32
         }
@@ -762,9 +762,11 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
             let preferred_va = IMAGE_BASE + (data_rva + r.target_offset as u32) as u64;
             let off = r.data_offset as usize;
             if off + 8 > data_with_relocs.len() {
-                return Err(C5Error::Compile(format!(
-                    "PE: data reloc offset {off:#x} past end of .data ({})",
-                    data_with_relocs.len()
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!(
+                        "PE: data reloc offset {off:#x} past end of .data ({})",
+                        data_with_relocs.len()
+                    ),
                 )));
             }
             data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
@@ -794,17 +796,19 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
                 .or_else(|| build.bytecode_to_native.get(bc_pc).copied())
                 .unwrap_or(usize::MAX);
             if native_off == usize::MAX {
-                return Err(C5Error::Compile(format!(
-                    "PE: code reloc references missing bytecode pc {bc_pc}"
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!("PE: code reloc references missing bytecode pc {bc_pc}"),
                 )));
             }
             let preferred_va =
                 IMAGE_BASE + (text_rva + text_prologue_len + native_off as u32) as u64;
             let off = r.data_offset as usize;
             if off + 8 > data_with_relocs.len() {
-                return Err(C5Error::Compile(format!(
-                    "PE: code reloc offset {off:#x} past end of .data ({})",
-                    data_with_relocs.len()
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!(
+                        "PE: code reloc offset {off:#x} past end of .data ({})",
+                        data_with_relocs.len()
+                    ),
                 )));
             }
             data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
@@ -1004,10 +1008,12 @@ fn build_export_directory(
             .copied()
             .unwrap_or(usize::MAX);
         if native_off == usize::MAX {
-            return Err(C5Error::Compile(format!(
-                "PE: exported function `{}` (bc PC {}) doesn't \
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "PE: exported function `{}` (bc PC {}) doesn't \
                  align with any native instruction",
-                exp.name, exp.bytecode_pc
+                    exp.name, exp.bytecode_pc
+                ),
             )));
         }
         let rva = text_prologue_rva + native_off as u32;
@@ -1205,15 +1211,15 @@ fn patch_aarch64_adrp_ldr32(
     let target_page = (target_rva as u64) & !0xFFF;
     let page_diff = target_page as i64 - adrp_page as i64;
     if page_diff & 0xFFF != 0 {
-        return Err(C5Error::Compile(format!(
-            "PE: aarch64 TLS-index adrp page diff {page_diff} not 4 KiB aligned"
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!("PE: aarch64 TLS-index adrp page diff {page_diff} not 4 KiB aligned"),
         )));
     }
     let imm21 = (page_diff >> 12) as i32;
     let in_page = target_rva & 0xFFF;
     if !in_page.is_multiple_of(4) {
-        return Err(C5Error::Compile(format!(
-            "PE: aarch64 TLS-index ldr offset {in_page:#x} not 4-aligned"
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!("PE: aarch64 TLS-index ldr offset {in_page:#x} not 4-aligned"),
         )));
     }
     let off = adrp_offset_in_text as usize;
@@ -2188,8 +2194,8 @@ fn patch_direct_call(
             let after = call_offset_in_text + 5;
             let delta = target_offset_in_text as i64 - after as i64;
             if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
-                return Err(C5Error::Compile(format!(
-                    "PE: rel32 displacement {delta} doesn't fit in 32 bits"
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!("PE: rel32 displacement {delta} doesn't fit in 32 bits"),
                 )));
             }
             let disp32 = delta as i32;
@@ -2202,14 +2208,14 @@ fn patch_direct_call(
             // instructions, relative to the bl instruction itself.
             let delta_bytes = target_offset_in_text as i64 - call_offset_in_text as i64;
             if delta_bytes & 3 != 0 {
-                return Err(C5Error::Compile(format!(
-                    "PE: aarch64 bl delta {delta_bytes} not 4-byte aligned"
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!("PE: aarch64 bl delta {delta_bytes} not 4-byte aligned"),
                 )));
             }
             let delta_insns = delta_bytes / 4;
             if !(-(1i64 << 25)..(1i64 << 25)).contains(&delta_insns) {
-                return Err(C5Error::Compile(format!(
-                    "PE: aarch64 bl delta {delta_insns} insns out of 26-bit range"
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!("PE: aarch64 bl delta {delta_insns} insns out of 26-bit range"),
                 )));
             }
             let word = aarch64::enc_bl(delta_insns as i32);
@@ -2230,8 +2236,8 @@ fn patch_x86_64_disp32(
 ) -> Result<(), C5Error> {
     let delta = target_rva as i64 - after_rva as i64;
     if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
-        return Err(C5Error::Compile(format!(
-            "PE: disp32 {delta} doesn't fit in 32 bits"
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!("PE: disp32 {delta} doesn't fit in 32 bits"),
         )));
     }
     let disp32 = delta as i32;
@@ -2254,15 +2260,15 @@ fn patch_aarch64_adrp_ldr(
     let target_page = (target_rva as u64) & !0xFFF;
     let page_diff = target_page as i64 - adrp_page as i64;
     if page_diff & 0xFFF != 0 {
-        return Err(C5Error::Compile(format!(
-            "PE: aarch64 adrp page diff {page_diff} not 4 KiB aligned"
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!("PE: aarch64 adrp page diff {page_diff} not 4 KiB aligned"),
         )));
     }
     let imm21 = (page_diff >> 12) as i32;
     let in_page = target_rva & 0xFFF;
     if !in_page.is_multiple_of(8) {
-        return Err(C5Error::Compile(format!(
-            "PE: aarch64 ldr offset {in_page:#x} not 8-aligned"
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!("PE: aarch64 ldr offset {in_page:#x} not 8-aligned"),
         )));
     }
     let off = adrp_offset_in_text as usize;
@@ -2292,8 +2298,8 @@ fn patch_aarch64_adrp_add(
     let target_page = (target_rva as u64) & !0xFFF;
     let page_diff = target_page as i64 - adrp_page as i64;
     if page_diff & 0xFFF != 0 {
-        return Err(C5Error::Compile(format!(
-            "PE: aarch64 adrp page diff {page_diff} not 4 KiB aligned"
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!("PE: aarch64 adrp page diff {page_diff} not 4 KiB aligned"),
         )));
     }
     let imm21 = (page_diff >> 12) as i32;

@@ -40,6 +40,99 @@ enum PackDirective {
     Pop,
 }
 
+/// One parsed GNU-style line marker (`# N "file" [flags]`) or
+/// C99 `#line N "file"` directive. The `#` prefix is already
+/// stripped by the lexer's `#`-line handler, so we see the
+/// body bytes only.
+#[derive(Debug)]
+struct LineMarker {
+    /// 1-based line number to attribute to the *next* source
+    /// line. The lexer subtracts 1 (so the trailing `\n` of the
+    /// marker bumps the counter to exactly this value).
+    line: usize,
+    /// Filename, if the marker carries one. `None` for bare
+    /// `#line N` (C99 6.10.4 says: keep the existing file).
+    file: Option<alloc::string::String>,
+}
+
+/// Parse a `#`-prefix-stripped line as a GNU line marker
+/// (` N "file" [flags]` -- one or more spaces between fields)
+/// or a C99 `#line` directive (`line N "file"`). Returns the
+/// marker on a successful match, `None` for any other shape.
+///
+/// Recognises:
+///   * `#line N`               -> `LineMarker { line: N, file: None }`
+///   * `#line N "file"`        -> `LineMarker { line: N, file: Some("file") }`
+///   * `# N "file"`            -> same (GNU shape, no `line` keyword)
+///   * `# N "file" 1 2 3 4`    -> same; trailing flag digits are ignored
+///
+/// Filenames go through C99-style escape decoding (`\\` -> `\`,
+/// `\"` -> `"`, `\n` -> LF, `\t` -> tab) so a path with a
+/// space or quote round-trips. Anything malformed (missing
+/// digits, unterminated quote) returns `None` and falls
+/// through to the historical `#`-line skip.
+fn parse_line_marker(body: &[u8]) -> Option<LineMarker> {
+    let mut i = 0;
+    while i < body.len() && (body[i] == b' ' || body[i] == b'\t') {
+        i += 1;
+    }
+    // Optional `line` keyword (C99 #line). GNU markers go
+    // straight to the digit.
+    if body[i..].starts_with(b"line") {
+        i += 4;
+        while i < body.len() && (body[i] == b' ' || body[i] == b'\t') {
+            i += 1;
+        }
+    }
+    // Line number.
+    let digit_start = i;
+    while i < body.len() && body[i].is_ascii_digit() {
+        i += 1;
+    }
+    if i == digit_start {
+        return None;
+    }
+    let line_str = core::str::from_utf8(&body[digit_start..i]).ok()?;
+    let line: usize = line_str.parse().ok()?;
+    while i < body.len() && (body[i] == b' ' || body[i] == b'\t') {
+        i += 1;
+    }
+    // Optional `"file"` part.
+    let file = if i < body.len() && body[i] == b'"' {
+        i += 1;
+        let mut decoded = alloc::string::String::new();
+        while i < body.len() && body[i] != b'"' {
+            if body[i] == b'\\' && i + 1 < body.len() {
+                let esc = body[i + 1];
+                let ch = match esc {
+                    b'\\' => '\\',
+                    b'"' => '"',
+                    b'n' => '\n',
+                    b't' => '\t',
+                    b'r' => '\r',
+                    other => other as char,
+                };
+                decoded.push(ch);
+                i += 2;
+            } else {
+                decoded.push(body[i] as char);
+                i += 1;
+            }
+        }
+        // Unterminated string -- bail rather than partially update.
+        if i >= body.len() {
+            return None;
+        }
+        // Closing `"` consumed implicitly; trailing GNU flag digits
+        // (`1 2 3 4`) are ignored -- they tag enter/leave/system but
+        // the (file, line) state is what we care about.
+        Some(decoded)
+    } else {
+        None
+    };
+    Some(LineMarker { line, file })
+}
+
 /// Parse a single `#`-prefix-stripped line as `pragma pack(...)`.
 /// Returns the directive on a successful match, `None` for any
 /// other shape (including malformed-pack and non-pack pragmas)
@@ -79,6 +172,13 @@ pub(crate) struct Lexer {
     src: Vec<u8>,
     pos: usize,
     pub line: usize,
+    /// Name of the file `self.line` is counting within. Updated
+    /// when the lexer crosses a GNU-style line marker (`# N "file"
+    /// [flags]`) or a C99 `#line N "file"` directive emitted by
+    /// the preprocessor on `#include` entry/exit. Starts as
+    /// `"<source>"` for the top-level translation unit and gets
+    /// rewritten by the first marker the preprocessor emits.
+    pub file: String,
 
     // Output of the most recent next() call.
     pub tk: i64,
@@ -212,6 +312,7 @@ impl Lexer {
             src: source.into_bytes(),
             pos: 0,
             line: 1,
+            file: String::from("<source>"),
             tk: 0,
             ival: 0,
             curr_id_idx: 0,
@@ -390,7 +491,13 @@ impl Lexer {
             if c == '\n' {
                 self.line += 1;
             } else if c == '#' {
-                // Two `#`-line shapes survive into the lexer:
+                // Three `#`-line shapes survive into the lexer:
+                //   * GNU line markers `# N "file" [flags]` --
+                //     emitted by the preprocessor at every
+                //     `#include` boundary so the lexer can
+                //     attribute later tokens to the right
+                //     `(file, line)` pair. The body parses to
+                //     `LineMarker` and the lexer updates state.
                 //   * `#pragma pack(...)` -- the preprocessor passes
                 //     pack pragmas through verbatim (they're
                 //     source-position-dependent, unlike the binding
@@ -407,7 +514,15 @@ impl Lexer {
                     line_end += 1;
                 }
                 let body = &self.src[line_start..line_end];
-                if let Some(dir) = parse_pragma_pack_line(body) {
+                if let Some(marker) = parse_line_marker(body) {
+                    // Set self.line one short of the target so the
+                    // trailing `\n` (which the outer loop consumes
+                    // on its next pass) bumps it to exactly N.
+                    self.line = marker.line.saturating_sub(1);
+                    if let Some(file) = marker.file {
+                        self.file = file;
+                    }
+                } else if let Some(dir) = parse_pragma_pack_line(body) {
                     self.apply_pack_directive(dir);
                 }
                 self.pos = line_end;
@@ -572,16 +687,16 @@ impl Lexer {
                     }
                     let lit =
                         core::str::from_utf8(&self.src[int_start..body_end]).map_err(|e| {
-                            C5Error::Compile(format!(
+                            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
                                 "{}: float literal not valid utf-8: {e}",
                                 self.line
-                            ))
+                            )))
                         })?;
                     let f: f64 = lit.parse().map_err(|e| {
-                        C5Error::Compile(format!(
+                        C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
                             "{}: malformed float literal `{lit}`: {e}",
                             self.line
-                        ))
+                        )))
                     })?;
                     self.ival = f.to_bits() as i64;
                     self.tk = Token::FloatNum as i64;
@@ -661,10 +776,12 @@ impl Lexer {
                                     count += 1;
                                 }
                                 if count == 0 {
-                                    return Err(C5Error::Compile(format!(
-                                        "{}: \\x escape needs at least one hex digit",
-                                        self.line
-                                    )));
+                                    return Err(C5Error::Compile(
+                                        crate::c5::error::fmt_internal_err(&format!(
+                                            "{}: \\x escape needs at least one hex digit",
+                                            self.line
+                                        )),
+                                    ));
                                 }
                                 val = acc;
                             }

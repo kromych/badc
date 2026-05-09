@@ -44,13 +44,13 @@
 //! writer (the codegen is platform-agnostic; only the writer differs).
 
 use alloc::format;
-use alloc::string::ToString;
 use alloc::vec;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
+use super::super::program::Program;
 use super::{Abi, Build, Machine};
-use super::{aarch64, x86_64};
+use super::{aarch64, dwarf, x86_64};
 
 // ------------------------------------------------------------------
 // ELF constants. Names mirror `<elf.h>` so cross-checking is mechanical.
@@ -116,11 +116,23 @@ const SHN_UNDEF: u16 = 0;
 const R_AARCH64_GLOB_DAT: u64 = 1025;
 const R_X86_64_GLOB_DAT: u64 = 6;
 
-/// 4 KiB page alignment is the AArch64 minimum and what most Linuxes
-/// expect for ELF segment alignment. (Kernel page size on arm64 is
-/// configurable -- 4K, 16K, or 64K -- but ELF p_align of 0x1000 works
-/// across the board because the loader rounds up.)
-const PAGE_SIZE: u64 = 0x1000;
+/// Maximum supported page size, used both for `p_align` and for
+/// VA spacing between adjacent `PT_LOAD` segments. Distros build
+/// AArch64 Linux kernels with 4K, 16K, or **64K** pages, and the
+/// kernel can only enforce distinct permissions at page
+/// granularity. With a 64K-page kernel, two LOAD segments at e.g.
+/// `0x400000` (R+E) and `0x406000` (RW) collapse into the same
+/// kernel page; whichever permission the loader picks for that
+/// page, one of the segments ends up wrong -- and `.text` ending
+/// up non-executable manifests as `SIGSEGV (invalid permissions
+/// for mapped object)` on the first instruction.
+///
+/// `binutils ld` defaults to `-z max-page-size=0x10000` on
+/// AArch64 Linux for exactly this reason. We do the same, which
+/// trades ~60K of file-size padding (ET_EXEC binaries gain one
+/// 64K hole between the R+E and RW segments) for correctness on
+/// all three page-size configurations.
+const PAGE_SIZE: u64 = 0x10000;
 
 /// Default load address for non-PIE ET_EXEC binaries on Linux/aarch64.
 /// The kernel maps the binary at exactly this vmaddr (no slide); all
@@ -137,6 +149,21 @@ const N_BASE_PROGRAM_HEADERS: u64 = 6;
 const ELF64_SYM_SIZE: u64 = 24;
 const ELF64_RELA_SIZE: u64 = 24;
 const ELF64_DYN_SIZE: u64 = 16;
+const ELF64_SHDR_SIZE: u64 = 64;
+
+// Section header types we emit (Elf64_Shdr.sh_type).
+const SHT_NULL: u32 = 0;
+const SHT_PROGBITS: u32 = 1;
+const SHT_STRTAB: u32 = 3;
+const SHT_RELA: u32 = 4;
+const SHT_HASH: u32 = 5;
+const SHT_DYNAMIC: u32 = 6;
+const SHT_DYNSYM: u32 = 11;
+
+// Section header flags (Elf64_Shdr.sh_flags).
+const SHF_WRITE: u64 = 0x1;
+const SHF_ALLOC: u64 = 0x2;
+const SHF_EXECINSTR: u64 = 0x4;
 
 // ------------------------------------------------------------------
 // On-disk shapes. `#[repr(C)]` with explicit fields plus a
@@ -222,6 +249,28 @@ struct Elf64Dyn {
 }
 
 const _: () = assert!(core::mem::size_of::<Elf64Dyn>() == ELF64_DYN_SIZE as usize);
+
+/// Elf64_Shdr -- one entry in the section header table. We emit
+/// only enough to expose the four DWARF debug sections plus the
+/// `.shstrtab` to lldb / gdb (gh #41); the dynamic loader doesn't
+/// need section headers, and `objdump -h` falls back to the
+/// program-header view when none are present.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct Elf64Shdr {
+    sh_name: u32,
+    sh_type: u32,
+    sh_flags: u64,
+    sh_addr: u64,
+    sh_offset: u64,
+    sh_size: u64,
+    sh_link: u32,
+    sh_info: u32,
+    sh_addralign: u64,
+    sh_entsize: u64,
+}
+
+const _: () = assert!(core::mem::size_of::<Elf64Shdr>() == ELF64_SHDR_SIZE as usize);
 
 /// Append a `#[repr(C)]` struct's raw bytes to `out`. Same shape
 /// the PE writer uses; see that module for the safety argument.
@@ -623,15 +672,15 @@ fn patch_adrp_ldr(
     let target_page = target_vmaddr & !0xFFF;
     let page_diff = target_page as i64 - adrp_page as i64;
     if page_diff & 0xFFF != 0 {
-        return Err(C5Error::Compile(format!(
-            "ELF: {label} page diff {page_diff} not 4 KiB aligned"
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!("ELF: {label} page diff {page_diff} not 4 KiB aligned"),
         )));
     }
     let imm21 = (page_diff >> 12) as i32;
     let in_page = (target_vmaddr & 0xFFF) as u32;
     if !in_page.is_multiple_of(8) {
-        return Err(C5Error::Compile(format!(
-            "ELF: {label} slot offset {in_page:#x} not 8-aligned"
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!("ELF: {label} slot offset {in_page:#x} not 8-aligned"),
         )));
     }
 
@@ -726,8 +775,8 @@ fn patch_call_qword_rip32(
     let after = instr_vmaddr + call_len;
     let delta = target_vmaddr as i64 - after as i64;
     if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
-        return Err(C5Error::Compile(format!(
-            "ELF: {label} disp {delta} doesn't fit in 32 bits"
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!("ELF: {label} disp {delta} doesn't fit in 32 bits"),
         )));
     }
     let disp32 = delta as i32;
@@ -754,8 +803,8 @@ fn patch_lea_rip32(
     let after = instr_vmaddr + lea_len;
     let delta = target_vmaddr as i64 - after as i64;
     if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
-        return Err(C5Error::Compile(format!(
-            "ELF: {label} disp {delta} doesn't fit in 32 bits"
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!("ELF: {label} disp {delta} doesn't fit in 32 bits"),
         )));
     }
     let disp32 = delta as i32;
@@ -785,8 +834,8 @@ fn patch_adrp_add(
     let target_page = target_vmaddr & !0xFFF;
     let page_diff = target_page as i64 - adrp_page as i64;
     if page_diff & 0xFFF != 0 {
-        return Err(C5Error::Compile(format!(
-            "ELF: {label} page diff {page_diff} not 4 KiB aligned"
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!("ELF: {label} page diff {page_diff} not 4 KiB aligned"),
         )));
     }
     let imm21 = (page_diff >> 12) as i32;
@@ -803,7 +852,11 @@ fn patch_adrp_add(
 // Top-level writer.
 // ------------------------------------------------------------------
 
-pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error> {
+pub(super) fn write(
+    program: &Program,
+    build: &Build,
+    machine: Machine,
+) -> Result<Vec<u8>, C5Error> {
     let is_shared = build.output_kind == super::OutputKind::SharedLibrary;
     let n_imports = build.imports.imports.len();
     // Shared libraries don't have a `_start` stub -- dyld
@@ -926,8 +979,91 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
     let data_vmaddr = TEXT_VMADDR_BASE + data_off;
     let tdata_vmaddr = TEXT_VMADDR_BASE + tdata_off;
 
+    // ---- Layout pass 3: DWARF + section header table (gh #41). ----
+    //
+    // The DWARF debug sections aren't loaded (no PT_LOAD covers
+    // them, no SHF_ALLOC) -- they're metadata that lldb / gdb
+    // pick up by walking the section header table. We append:
+    //
+    //   <segment2_end aligned to PAGE_SIZE>
+    //   .debug_info | .debug_abbrev | .debug_line | .debug_str
+    //   .shstrtab (the section name string table)
+    //   <pad to 8>
+    //   section header table (6 * 64 bytes)
+    //
+    // The CU's `low_pc` references address into the loaded
+    // text segment, so dwarf::emit needs the runtime vmaddr of
+    // `build.text[0]` -- which is `code_vmaddr + stub_len` (the
+    // _start stub sits ahead of build.text in the code blob;
+    // shared libraries skip the stub so stub_len = 0 there).
+    let dwarf_text_vmaddr = code_vmaddr + stub_len;
+    let dwarf_sections = dwarf::emit(program, build, dwarf_text_vmaddr, &program.source_path);
+    let dwarf_off = segment2_end;
+    let dwarf_info_off = dwarf_off;
+    let dwarf_abbrev_off = dwarf_info_off + dwarf_sections.debug_info.len() as u64;
+    let dwarf_line_off = dwarf_abbrev_off + dwarf_sections.debug_abbrev.len() as u64;
+    let dwarf_str_off = dwarf_line_off + dwarf_sections.debug_line.len() as u64;
+    let shstrtab_off = dwarf_str_off + dwarf_sections.debug_str.len() as u64;
+    // .shstrtab content: NUL + section names. Index 0 is the
+    // empty name (SHT_NULL sentinel uses sh_name=0). Names cover
+    // the full set of sections in the section-header table:
+    // loaded segments (.interp, .dynsym, ..., .text, .data) plus
+    // the debug-only metadata sections.
+    let shstrtab_bytes: &[&str] = &[
+        "",              // 0
+        ".interp",       // 1
+        ".dynsym",       // 2
+        ".dynstr",       // 3
+        ".hash",         // 4
+        ".rela.dyn",     // 5
+        ".text",         // 6
+        ".tdata",        // 7  (only present when has_tls)
+        ".dynamic",      // 8
+        ".got",          // 9
+        ".data",         // 10
+        ".tbss",         // 11 (only present when has_tls)
+        ".debug_info",   // 12
+        ".debug_abbrev", // 13
+        ".debug_line",   // 14
+        ".debug_str",    // 15
+        ".shstrtab",     // 16
+    ];
+    let mut shstrtab: Vec<u8> = Vec::new();
+    let mut shstrtab_offsets: [u32; 17] = [0; 17];
+    for (i, s) in shstrtab_bytes.iter().enumerate() {
+        shstrtab_offsets[i] = shstrtab.len() as u32;
+        shstrtab.extend_from_slice(s.as_bytes());
+        shstrtab.push(0);
+    }
+    let shstrtab_size = shstrtab.len() as u64;
+    let shdr_off = round_up(shstrtab_off + shstrtab_size, 8);
+    // Section count: 1 NULL + .interp + .dynsym + .dynstr +
+    // .hash + .rela.dyn + .text + (optional .tdata) +
+    // .dynamic + .got + (optional .data) + (optional .tbss) +
+    // 4 .debug_* + .shstrtab. Counted dynamically.
+    let has_data = !build.data.is_empty();
+    let has_tdata = has_tls && tdata_size > 0;
+    let has_tbss = has_tls && tbss_size > 0;
+    let n_section_headers: u64 = 1 // NULL
+        + 1 // .interp
+        + 1 // .dynsym
+        + 1 // .dynstr
+        + 1 // .hash
+        + 1 // .rela.dyn
+        + 1 // .text
+        + (if has_tdata { 1 } else { 0 }) // .tdata
+        + 1 // .dynamic
+        + 1 // .got
+        + (if has_data { 1 } else { 0 }) // .data
+        + (if has_tbss { 1 } else { 0 }) // .tbss
+        + 4 // .debug_* x 4
+        + 1; // .shstrtab
+    let total_filesize = shdr_off + n_section_headers * ELF64_SHDR_SIZE;
+    // shstrtab is the last section in the table; its index is
+    // n_section_headers - 1.
+    let shstrtab_idx: u16 = (n_section_headers - 1) as u16;
+
     // ---- Build the bytes. ----
-    let total_filesize = segment2_end;
     let mut out: Vec<u8> = Vec::with_capacity(total_filesize as usize);
 
     // ELF header.
@@ -951,17 +1087,19 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
             // c5 currently produces.
             e_entry: if is_shared { 0 } else { code_vmaddr },
             e_phoff: phoff,
-            e_shoff: 0,
+            e_shoff: shdr_off,
             e_flags: 0,
             e_ehsize: ELF_HEADER_SIZE as u16,
             e_phentsize: PROGRAM_HEADER_SIZE as u16,
             e_phnum: n_program_headers as u16,
-            // No section headers in our images: the dynamic linker
-            // only looks at PT_DYNAMIC, and `objdump -h` falls back
-            // to deriving sections from the program-header view.
-            e_shentsize: 0,
-            e_shnum: 0,
-            e_shstrndx: 0,
+            // The dynamic linker doesn't read section headers
+            // (it walks PT_DYNAMIC); the only consumers are
+            // lldb / gdb, which use them to locate the
+            // `.debug_*` payload (gh #41). Six entries: SHT_NULL
+            // sentinel, four DWARF sections, .shstrtab.
+            e_shentsize: ELF64_SHDR_SIZE as u16,
+            e_shnum: n_section_headers as u16,
+            e_shstrndx: shstrtab_idx,
         },
     );
     debug_assert_eq!(out.len() as u64, ELF_HEADER_SIZE);
@@ -1139,9 +1277,11 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
         let absolute = data_vmaddr + r.target_offset;
         let off = r.data_offset as usize;
         if off + 8 > data_with_relocs.len() {
-            return Err(C5Error::Compile(format!(
-                "ELF: data reloc offset {off:#x} past end of .data ({})",
-                data_with_relocs.len()
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "ELF: data reloc offset {off:#x} past end of .data ({})",
+                    data_with_relocs.len()
+                ),
             )));
         }
         data_with_relocs[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
@@ -1168,16 +1308,18 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
             .or_else(|| build.bytecode_to_native.get(bc_pc).copied())
             .unwrap_or(usize::MAX);
         if native_off == usize::MAX {
-            return Err(C5Error::Compile(format!(
-                "ELF: code reloc references missing bytecode pc {bc_pc}"
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("ELF: code reloc references missing bytecode pc {bc_pc}"),
             )));
         }
         let absolute = code_vmaddr + stub_len + native_off as u64;
         let off = r.data_offset as usize;
         if off + 8 > data_with_relocs.len() {
-            return Err(C5Error::Compile(format!(
-                "ELF: code reloc offset {off:#x} past end of .data ({})",
-                data_with_relocs.len()
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "ELF: code reloc offset {off:#x} past end of .data ({})",
+                    data_with_relocs.len()
+                ),
             )));
         }
         data_with_relocs[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
@@ -1196,6 +1338,327 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
     while (out.len() as u64) < segment2_end {
         out.push(0);
     }
+    debug_assert_eq!(out.len() as u64, dwarf_off);
+
+    // ---- DWARF debug sections (gh #41) ----
+    out.extend_from_slice(&dwarf_sections.debug_info);
+    out.extend_from_slice(&dwarf_sections.debug_abbrev);
+    out.extend_from_slice(&dwarf_sections.debug_line);
+    out.extend_from_slice(&dwarf_sections.debug_str);
+    debug_assert_eq!(out.len() as u64, shstrtab_off);
+
+    // .shstrtab
+    out.extend_from_slice(&shstrtab);
+
+    // Pad to 8 so the section header table starts aligned.
+    while (out.len() as u64) < shdr_off {
+        out.push(0);
+    }
+    debug_assert_eq!(out.len() as u64, shdr_off);
+
+    // Section header table: a full table covering loaded
+    // segments (NULL sentinel, .interp, .dynsym, .dynstr, .hash,
+    // .rela.dyn, .text, optional .tdata, .dynamic, .got, optional
+    // .data, optional .tbss) plus the four DWARF sections and
+    // .shstrtab.
+    //
+    // Without entries for the loaded segments, gdb segfaults on
+    // `b main` (no section contains main's vmaddr) and `strip`
+    // collapses the binary to ~488 bytes (it interprets the
+    // missing section table as "no real content"). lldb on
+    // Linux similarly mis-resolves names. The bytes the headers
+    // describe are already on disk; we just describe them.
+    // Section indices are computed as we emit; .dynsym /
+    // .dynstr / .dynamic / etc. need to reference each other by
+    // index in `sh_link`, so capture each one's slot before
+    // emitting the next.
+    let null_shdr_idx: u16 = 0;
+    let _ = null_shdr_idx;
+    let interp_shdr_idx: u16 = 1;
+    let _ = interp_shdr_idx;
+    let dynsym_shdr_idx: u16 = 2;
+    let dynstr_shdr_idx: u16 = 3;
+    let _hash_shdr_idx: u16 = 4;
+    let _rela_shdr_idx: u16 = 5;
+    let _ = (dynsym_shdr_idx, dynstr_shdr_idx);
+
+    // [0] NULL sentinel.
+    write_struct(
+        &mut out,
+        &Elf64Shdr {
+            sh_name: shstrtab_offsets[0],
+            sh_type: SHT_NULL,
+            sh_flags: 0,
+            sh_addr: 0,
+            sh_offset: 0,
+            sh_size: 0,
+            sh_link: 0,
+            sh_info: 0,
+            sh_addralign: 0,
+            sh_entsize: 0,
+        },
+    );
+
+    // [1] .interp -- the dynamic linker path string.
+    write_struct(
+        &mut out,
+        &Elf64Shdr {
+            sh_name: shstrtab_offsets[1],
+            sh_type: SHT_PROGBITS,
+            sh_flags: SHF_ALLOC,
+            sh_addr: interp_vmaddr,
+            sh_offset: interp_off,
+            sh_size: interp_path_str.len() as u64 + 1,
+            sh_link: 0,
+            sh_info: 0,
+            sh_addralign: 1,
+            sh_entsize: 0,
+        },
+    );
+
+    // [2] .dynsym -- dynamic symbol table. sh_link = .dynstr,
+    // sh_info = index of first non-local symbol (we have only
+    // a NULL sentinel + globals, so 1).
+    let dynsym_link_pending: u16 = dynstr_shdr_idx;
+    write_struct(
+        &mut out,
+        &Elf64Shdr {
+            sh_name: shstrtab_offsets[2],
+            sh_type: SHT_DYNSYM,
+            sh_flags: SHF_ALLOC,
+            sh_addr: dynsym_vmaddr,
+            sh_offset: dynsym_off,
+            sh_size: dynsym.len() as u64,
+            sh_link: dynsym_link_pending as u32,
+            sh_info: 1,
+            sh_addralign: 8,
+            sh_entsize: ELF64_SYM_SIZE,
+        },
+    );
+
+    // [3] .dynstr -- string table for .dynsym.
+    write_struct(
+        &mut out,
+        &Elf64Shdr {
+            sh_name: shstrtab_offsets[3],
+            sh_type: SHT_STRTAB,
+            sh_flags: SHF_ALLOC,
+            sh_addr: dynstr_vmaddr,
+            sh_offset: dynstr_off,
+            sh_size: dynstr.len() as u64,
+            sh_link: 0,
+            sh_info: 0,
+            sh_addralign: 1,
+            sh_entsize: 0,
+        },
+    );
+
+    // [4] .hash -- DT_HASH bucket / chain table.
+    let dynsym_idx_for_hash = dynsym_shdr_idx;
+    write_struct(
+        &mut out,
+        &Elf64Shdr {
+            sh_name: shstrtab_offsets[4],
+            sh_type: SHT_HASH,
+            sh_flags: SHF_ALLOC,
+            sh_addr: hash_vmaddr,
+            sh_offset: hash_off,
+            sh_size: hash.len() as u64,
+            sh_link: dynsym_idx_for_hash as u32,
+            sh_info: 0,
+            sh_addralign: 8,
+            sh_entsize: 4,
+        },
+    );
+
+    // [5] .rela.dyn -- relocations resolved at load time.
+    write_struct(
+        &mut out,
+        &Elf64Shdr {
+            sh_name: shstrtab_offsets[5],
+            sh_type: SHT_RELA,
+            sh_flags: SHF_ALLOC,
+            sh_addr: rela_vmaddr,
+            sh_offset: rela_off,
+            sh_size: rela_size,
+            sh_link: dynsym_idx_for_hash as u32,
+            sh_info: 0,
+            sh_addralign: 8,
+            sh_entsize: ELF64_RELA_SIZE,
+        },
+    );
+
+    // [6] .text -- the executable code segment. The size covers
+    // the entry stub + build.text; the address is `code_vmaddr`.
+    write_struct(
+        &mut out,
+        &Elf64Shdr {
+            sh_name: shstrtab_offsets[6],
+            sh_type: SHT_PROGBITS,
+            sh_flags: SHF_ALLOC | SHF_EXECINSTR,
+            sh_addr: code_vmaddr,
+            sh_offset: code_off,
+            sh_size: code_size,
+            sh_link: 0,
+            sh_info: 0,
+            sh_addralign: 16,
+            sh_entsize: 0,
+        },
+    );
+
+    // [optional] .tdata -- TLS image template (when has_tdata).
+    if has_tdata {
+        write_struct(
+            &mut out,
+            &Elf64Shdr {
+                sh_name: shstrtab_offsets[7],
+                sh_type: SHT_PROGBITS,
+                sh_flags: SHF_ALLOC | SHF_WRITE | 0x400, // SHF_TLS
+                sh_addr: tdata_vmaddr,
+                sh_offset: tdata_off,
+                sh_size: tdata_size,
+                sh_link: 0,
+                sh_info: 0,
+                sh_addralign: 8,
+                sh_entsize: 0,
+            },
+        );
+    }
+
+    // [N] .dynamic -- dynamic linking info table.
+    write_struct(
+        &mut out,
+        &Elf64Shdr {
+            sh_name: shstrtab_offsets[8],
+            sh_type: SHT_DYNAMIC,
+            sh_flags: SHF_ALLOC | SHF_WRITE,
+            sh_addr: dynamic_vmaddr,
+            sh_offset: dynamic_off,
+            sh_size: dynamic_size,
+            sh_link: dynstr_shdr_idx as u32,
+            sh_info: 0,
+            sh_addralign: 8,
+            sh_entsize: ELF64_DYN_SIZE,
+        },
+    );
+
+    // [N+1] .got -- global offset table (one slot per import).
+    write_struct(
+        &mut out,
+        &Elf64Shdr {
+            sh_name: shstrtab_offsets[9],
+            sh_type: SHT_PROGBITS,
+            sh_flags: SHF_ALLOC | SHF_WRITE,
+            sh_addr: got_vmaddr,
+            sh_offset: got_off,
+            sh_size: got_size,
+            sh_link: 0,
+            sh_info: 0,
+            sh_addralign: 8,
+            sh_entsize: 8,
+        },
+    );
+
+    // [optional] .data -- the initialised data segment.
+    if has_data {
+        write_struct(
+            &mut out,
+            &Elf64Shdr {
+                sh_name: shstrtab_offsets[10],
+                sh_type: SHT_PROGBITS,
+                sh_flags: SHF_ALLOC | SHF_WRITE,
+                sh_addr: data_vmaddr,
+                sh_offset: data_off,
+                sh_size: data_size,
+                sh_link: 0,
+                sh_info: 0,
+                sh_addralign: 8,
+                sh_entsize: 0,
+            },
+        );
+    }
+
+    // [optional] .tbss -- TLS zero-fill (no file backing).
+    if has_tbss {
+        // .tbss has no file-resident bytes; sh_offset still
+        // points where the loader-zeroed region would conceptually
+        // start so tools can compute its boundaries.
+        write_struct(
+            &mut out,
+            &Elf64Shdr {
+                sh_name: shstrtab_offsets[11],
+                sh_type: 8,                              // SHT_NOBITS
+                sh_flags: SHF_ALLOC | SHF_WRITE | 0x400, // SHF_TLS
+                sh_addr: tdata_vmaddr + tdata_size,
+                sh_offset: tdata_off + tdata_size,
+                sh_size: tbss_size,
+                sh_link: 0,
+                sh_info: 0,
+                sh_addralign: 8,
+                sh_entsize: 0,
+            },
+        );
+    }
+
+    // [N+2..N+5] DWARF debug sections (file-only metadata, no
+    // SHF_ALLOC so the loader skips them).
+    let dwarf_section_specs: &[(u32, u64, u64)] = &[
+        (
+            shstrtab_offsets[12],
+            dwarf_info_off,
+            dwarf_sections.debug_info.len() as u64,
+        ),
+        (
+            shstrtab_offsets[13],
+            dwarf_abbrev_off,
+            dwarf_sections.debug_abbrev.len() as u64,
+        ),
+        (
+            shstrtab_offsets[14],
+            dwarf_line_off,
+            dwarf_sections.debug_line.len() as u64,
+        ),
+        (
+            shstrtab_offsets[15],
+            dwarf_str_off,
+            dwarf_sections.debug_str.len() as u64,
+        ),
+    ];
+    for &(name_off, off, sz) in dwarf_section_specs {
+        write_struct(
+            &mut out,
+            &Elf64Shdr {
+                sh_name: name_off,
+                sh_type: SHT_PROGBITS,
+                sh_flags: 0,
+                sh_addr: 0,
+                sh_offset: off,
+                sh_size: sz,
+                sh_link: 0,
+                sh_info: 0,
+                sh_addralign: 1,
+                sh_entsize: 0,
+            },
+        );
+    }
+
+    // [last] .shstrtab.
+    write_struct(
+        &mut out,
+        &Elf64Shdr {
+            sh_name: shstrtab_offsets[16],
+            sh_type: SHT_STRTAB,
+            sh_flags: 0,
+            sh_addr: 0,
+            sh_offset: shstrtab_off,
+            sh_size: shstrtab_size,
+            sh_link: 0,
+            sh_info: 0,
+            sh_addralign: 1,
+            sh_entsize: 0,
+        },
+    );
+
     debug_assert_eq!(out.len() as u64, total_filesize);
 
     // ---- Patch fixups. ----
@@ -1212,12 +1675,11 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
             .iter()
             .position(|i| i.local_name == "exit")
             .ok_or_else(|| {
-                C5Error::Compile(
+                C5Error::Compile(crate::c5::error::fmt_internal_err(
                     "ELF writer: _start stub needs `exit` in the import set, but the program \
                      didn't reach for it (and we don't auto-add it). \
-                     Did you `#include <stdlib.h>` and call `exit(...)` somewhere?"
-                        .to_string(),
-                )
+                     Did you `#include <stdlib.h>` and call `exit(...)` somewhere?",
+                ))
             })?;
         patch_got_call(
             machine,
@@ -1316,6 +1778,36 @@ mod tests {
     /// without that entry would error out before producing any bytes
     /// for the structural assertions to inspect. This mirrors what
     /// real programs get from `<stdlib.h>`.
+    /// Empty `Program` paired with `tiny_build`. The DWARF
+    /// emitter walks `Program::text` for `Op::Ent`s; an empty
+    /// vec produces an empty subprogram list and trivial
+    /// section bytes, which is enough for the structural
+    /// invariants the tests check.
+    fn tiny_program() -> Program {
+        Program {
+            text: Vec::new(),
+            data: Vec::new(),
+            entry_pc: 0,
+            warnings: Vec::new(),
+            data_imm_positions: Vec::new(),
+            code_imm_positions: Vec::new(),
+            call_fp_arg_masks: Vec::new(),
+            tls_data: Vec::new(),
+            tls_init_size: 0,
+            data_relocs: Vec::new(),
+            code_relocs: Vec::new(),
+            exports: Vec::new(),
+            dylibs: Vec::new(),
+            dllmain_pc: None,
+            source_lines: Vec::new(),
+            source_functions: Vec::new(),
+            source_files: Vec::new(),
+            source_file_indices: Vec::new(),
+            source_path: String::new(),
+            variables: Vec::new(),
+        }
+    }
+
     fn tiny_build() -> Build {
         use super::super::{ResolvedDylib, ResolvedImport, ResolvedImports};
         Build {
@@ -1365,27 +1857,27 @@ mod tests {
 
     #[test]
     fn writes_elf_magic() {
-        let bytes = write(&tiny_build(), Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
         assert_eq!(&bytes[0..4], &ELFMAG);
     }
 
     #[test]
     fn class_is_64_bit_le() {
-        let bytes = write(&tiny_build(), Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
         assert_eq!(bytes[4], ELFCLASS64);
         assert_eq!(bytes[5], ELFDATA2LSB);
     }
 
     #[test]
     fn machine_is_aarch64() {
-        let bytes = write(&tiny_build(), Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
         let e_machine = u16::from_le_bytes(bytes[18..20].try_into().unwrap());
         assert_eq!(e_machine, EM_AARCH64);
     }
 
     #[test]
     fn program_header_table_self_describes() {
-        let bytes = write(&tiny_build(), Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
         let phoff = read_u64(&bytes, 32);
         let phentsize = u16::from_le_bytes(bytes[54..56].try_into().unwrap()) as u64;
         let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
@@ -1408,7 +1900,7 @@ mod tests {
 
     #[test]
     fn pt_load_covers_entry_point() {
-        let bytes = write(&tiny_build(), Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
         let e_entry = read_u64(&bytes, 24);
         let phoff = read_u64(&bytes, 32);
         let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
@@ -1436,7 +1928,7 @@ mod tests {
 
     #[test]
     fn interp_string_is_correct() {
-        let bytes = write(&tiny_build(), Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
         let phoff = read_u64(&bytes, 32);
         let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
         for i in 0..phnum {
@@ -1455,7 +1947,7 @@ mod tests {
 
     #[test]
     fn dynamic_section_present_and_terminated() {
-        let bytes = write(&tiny_build(), Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
         let phoff = read_u64(&bytes, 32);
         let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
         let mut dyn_off = 0u64;
@@ -1491,7 +1983,7 @@ mod tests {
         // Each .rela.dyn entry must target a valid GOT slot. Walk
         // PT_DYNAMIC for DT_RELA / DT_RELASZ, then verify each entry's
         // r_offset lies inside the rw PT_LOAD segment.
-        let bytes = write(&tiny_build(), Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
         let phoff = read_u64(&bytes, 32);
         let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
 
@@ -1582,7 +2074,7 @@ mod tests {
         ] {
             let mut b = tiny_build();
             b.abi = target.abi();
-            let bytes = write(&b, machine).unwrap();
+            let bytes = write(&tiny_program(), &b, machine).unwrap();
             assert!(
                 find_phdr(&bytes, PT_TLS).is_none(),
                 "{machine:?}: unexpected PT_TLS phdr in TLS-free image"
@@ -1614,7 +2106,7 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        let bytes = write(&build, Machine::Aarch64).expect("write ELF");
+        let bytes = write(&tiny_program(), &build, Machine::Aarch64).expect("write ELF");
 
         let phdr_off = find_phdr(&bytes, PT_TLS).expect("expected PT_TLS phdr");
         let p_flags = read_u32(&bytes, phdr_off + 4);
@@ -1689,7 +2181,7 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        let bytes = write(&build, Machine::X86_64).expect("write ELF");
+        let bytes = write(&tiny_program(), &build, Machine::X86_64).expect("write ELF");
 
         let phdr_off = find_phdr(&bytes, PT_TLS).expect("expected PT_TLS phdr");
         let p_filesz = read_u64(&bytes, phdr_off + 32);
@@ -1738,7 +2230,7 @@ mod tests {
                 super::super::NativeOptions::new().with_shared_library(),
             )
             .expect("lower");
-            let bytes = write(&build, machine).expect("write ELF");
+            let bytes = write(&tiny_program(), &build, machine).expect("write ELF");
 
             // e_type = ET_DYN.
             let e_type = u16::from_le_bytes(bytes[16..18].try_into().unwrap());

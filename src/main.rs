@@ -338,13 +338,14 @@ fn main() {
     // predefines into the compiler. The bytecode itself is target-
     // independent; only the resolved binding map and the
     // preprocessor predefines vary.
-    let mut program = match Compiler::with_full_options(
+    let mut program = match Compiler::with_full_options_and_label(
         contents,
         target,
         &defines,
         &undefines,
         &include_paths,
         &force_includes,
+        &path,
     )
     .compile()
     {

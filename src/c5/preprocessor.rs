@@ -195,6 +195,14 @@ pub(crate) struct Preprocessor {
     /// had written that directive at the top of their source.
     /// Plumbed in from the CLI's `-include FILE` flag.
     force_includes: Vec<String>,
+    /// Filename label used for the top-level translation unit's
+    /// `#line 1 "..."` marker. Defaults to `"<source>"` -- the CLI
+    /// overrides it with the real argv path so error / warning
+    /// messages report `./hello.c:5: error: ...` instead of the
+    /// `<source>:5: ...` placeholder. The DWARF emitter still
+    /// uses `Program::source_path` separately; this is purely the
+    /// preprocessor / lexer / diagnostics view.
+    source_label: String,
 }
 
 impl Preprocessor {
@@ -293,6 +301,18 @@ impl Preprocessor {
             include_stack: Vec::new(),
             search_paths: Vec::new(),
             force_includes: Vec::new(),
+            source_label: "<source>".to_string(),
+        }
+    }
+
+    /// Override the filename label used for the top-level translation
+    /// unit's leading line marker. Default is `"<source>"`; the CLI
+    /// passes the argv path so error messages name the file the user
+    /// actually opened. No-op when the path is empty (stdin / fixture
+    /// paths leave the placeholder in place).
+    pub fn set_source_label(&mut self, label: &str) {
+        if !label.is_empty() {
+            self.source_label = label.to_string();
         }
     }
 
@@ -366,10 +386,12 @@ impl Preprocessor {
                 preamble.push_str(&format!("#include \"{name}\"\n"));
             }
             let mut combined = self.process_named(&preamble, "<force-include>")?;
-            combined.push_str(&self.process_named(source, "<source>")?);
+            let label = self.source_label.clone();
+            combined.push_str(&self.process_named(source, &label)?);
             return Ok(combined);
         }
-        self.process_named(source, "<source>")
+        let label = self.source_label.clone();
+        self.process_named(source, &label)
     }
 
     /// Recursive entry point. `filename` labels the buffer so error

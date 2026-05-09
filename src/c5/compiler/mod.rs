@@ -434,6 +434,34 @@ impl Compiler {
         include_paths: &[String],
         force_includes: &[String],
     ) -> Self {
+        Self::with_full_options_and_label(
+            source,
+            target,
+            defines,
+            undefines,
+            include_paths,
+            force_includes,
+            "",
+        )
+    }
+
+    /// Same as [`Self::with_full_options`] plus a `source_label`
+    /// argument: the filename string used in compiler diagnostics
+    /// (`<file>:<line>: error: ...`) and the lexer's per-token file
+    /// attribution. The CLI passes the user's argv path so error
+    /// messages name the file the user opened; library / fixture
+    /// callers that don't have a path leave it empty and the
+    /// preprocessor falls back to the historical `<source>`
+    /// placeholder.
+    pub fn with_full_options_and_label(
+        source: String,
+        target: Target,
+        defines: &[(String, String)],
+        undefines: &[String],
+        include_paths: &[String],
+        force_includes: &[String],
+        source_label: &str,
+    ) -> Self {
         // Run the preprocessor first so we know the
         // `#pragma binding(...)` set before seeding the symbol
         // table. The bindings come from whichever standard headers
@@ -449,6 +477,7 @@ impl Compiler {
         // infallible so the `Compiler::new(src).compile()` shape
         // every existing caller uses keeps working.
         let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
+        pp.set_source_label(source_label);
         for path in include_paths {
             pp.add_search_path(path);
         }

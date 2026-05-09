@@ -176,6 +176,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         source_file_indices: in_source_file_indices,
         source_path,
         variables: in_variables,
+        structs,
     } = program;
 
     let mut insns = decode(&text, &data_imm_positions, &in_code_imm_positions)?;
@@ -419,6 +420,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         source_file_indices: out_source_file_indices,
         source_path,
         variables: out_variables,
+        structs,
     })
 }
 
@@ -1232,6 +1234,7 @@ mod tests {
             source_file_indices: Vec::new(),
             source_path: String::new(),
             variables: Vec::new(),
+            structs: Vec::new(),
         }
     }
 
@@ -1536,6 +1539,7 @@ mod tests {
             source_file_indices: Vec::new(),
             source_path: String::new(),
             variables: Vec::new(),
+            structs: Vec::new(),
         };
         let opt = optimize(p).unwrap();
         // Main returns 5; if the ImmCode operand remapped wrong, the

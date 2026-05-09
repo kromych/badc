@@ -72,8 +72,10 @@ use alloc::vec::Vec;
 
 use super::super::error::C5Error;
 use super::aarch64;
+use super::dwarf;
 use super::x86_64;
 use super::{Build, Machine};
+use crate::c5::program::Program;
 
 // ----------------------------------------------------------------
 // PE constants. Names mirror `winnt.h` so cross-checking is easy.
@@ -160,6 +162,7 @@ fn num_sections(
     data_section_present: bool,
     reloc_section_present: bool,
     edata_section_present: bool,
+    dwarf_section_present: bool,
 ) -> usize {
     let mut n = 3; // .text, .pdata, .idata
     if data_section_present {
@@ -170,6 +173,14 @@ fn num_sections(
     }
     if edata_section_present {
         n += 1;
+    }
+    if dwarf_section_present {
+        // gh #42: five `__debug_*` sections (info / abbrev /
+        // line / str / frame). PE caps section names at 8 chars,
+        // so the leading dot is dropped (mingw-w64 convention) --
+        // dwarfdump / lldb / gdb all recognise the truncated
+        // names since they walk by content, not literal name.
+        n += 5;
     }
     n
 }
@@ -187,6 +198,7 @@ fn headers_raw_size(
     data_section_present: bool,
     reloc_section_present: bool,
     edata_section_present: bool,
+    dwarf_section_present: bool,
 ) -> usize {
     let unaligned = DOS_HEADER_AND_STUB
         + PE_SIG_SIZE
@@ -197,6 +209,7 @@ fn headers_raw_size(
                 data_section_present,
                 reloc_section_present,
                 edata_section_present,
+                dwarf_section_present,
             );
     (unaligned + FILE_ALIGNMENT as usize - 1) & !(FILE_ALIGNMENT as usize - 1)
 }
@@ -259,7 +272,12 @@ const STUB_IMPORT_EXIT: (&str, &str) = ("exit", "msvcrt.dll");
 // Top-level writer.
 // ----------------------------------------------------------------
 
-pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error> {
+pub(super) fn write(
+    program: &Program,
+    build: &Build,
+    machine: Machine,
+    target: super::Target,
+) -> Result<Vec<u8>, C5Error> {
     let is_dll = build.output_kind == super::OutputKind::SharedLibrary;
     // 1) Combined imports list. Index N becomes IAT slot N. The
     //    program's resolved imports occupy 0..n_program_imports;
@@ -355,10 +373,17 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
         || !build.data_relocs.is_empty()
         || !build.code_relocs.is_empty();
     let edata_section_present = is_dll && !build.exports.is_empty();
+    // gh #42: emit DWARF debug sections in PE images so lldb /
+    // gdb can resolve user-function names + types in PE
+    // backtraces. Always present today (the cost is a few KB of
+    // discardable bytes); future toggle could gate on whether
+    // the program has any user functions.
+    let dwarf_section_present = true;
     let headers_size = headers_raw_size(
         data_section_present,
         reloc_section_present,
         edata_section_present,
+        dwarf_section_present,
     ) as u32;
 
     let text_rva: u32 = SECTION_ALIGNMENT;
@@ -508,16 +533,152 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
         0
     };
 
-    let total_file_size = if edata_section_present {
-        (edata_file_off + edata_raw_size) as usize
+    // Compute the end of the last loaded / pre-DWARF section
+    // -- where DWARF sections start. The chain falls through
+    // from `.edata` -> `.reloc` -> `.data` -> `.idata` to the
+    // first one present.
+    let pre_dwarf_end_file_off: u32 = if edata_section_present {
+        edata_file_off + edata_raw_size
     } else if reloc_section_present {
-        (reloc_file_off + reloc_raw_size) as usize
+        reloc_file_off + reloc_raw_size
     } else if data_section_present {
-        (data_file_off + data_raw_size) as usize
+        data_file_off + data_raw_size
     } else {
-        (idata_file_off + idata_raw_size) as usize
+        idata_file_off + idata_raw_size
     };
-    let image_size = if edata_section_present {
+    let pre_dwarf_end_rva: u32 = if edata_section_present {
+        edata_rva + edata_size
+    } else if reloc_section_present {
+        reloc_rva + reloc_size
+    } else if data_section_present {
+        data_rva + data_size
+    } else {
+        idata_rva + idata_size
+    };
+
+    // gh #42: lay out the five DWARF debug sections after the
+    // existing ones. The mingw-w64 PE convention drops the leading
+    // dot to fit each name in PE's 8-char limit; lldb / gdb / `llvm-
+    // dwarfdump` all walk by section content rather than literal
+    // name and pick them up.
+    //
+    // Each section is `IMAGE_SCN_MEM_DISCARDABLE`, so the loader
+    // skips them at runtime even though they occupy RVA range --
+    // they only matter to the debugger walking the file image.
+    let dwarf_sections = if dwarf_section_present {
+        dwarf::emit(
+            program,
+            build,
+            target,
+            IMAGE_BASE + (text_rva + text_prologue_len) as u64,
+            &program.source_path,
+        )
+    } else {
+        dwarf::DwarfSections {
+            debug_info: Vec::new(),
+            debug_abbrev: Vec::new(),
+            debug_line: Vec::new(),
+            debug_str: Vec::new(),
+            debug_frame: Vec::new(),
+        }
+    };
+    /// One entry of the PE DWARF layout: section name (`/<offset>`
+    /// indirection into the COFF string table for the full
+    /// `.debug_*` name), the section's RVA + file offset, and the
+    /// raw byte payload.
+    struct DwarfPeSlot {
+        name: [u8; 8],
+        rva: u32,
+        file_off: u32,
+        bytes: Vec<u8>,
+    }
+    // PE/COFF caps section names at 8 bytes, so full DWARF
+    // section names (".debug_info" = 11 chars, ".debug_abbrev"
+    // = 13, etc.) don't fit literally. The standard PE
+    // workaround is `/N` indirection: the section's name field
+    // holds an ASCII slash followed by the byte offset (in
+    // decimal) of the real name in the COFF string table. The
+    // COFF string table begins at `CoffHeader.pointer_to_symbol_table`
+    // (with `number_of_symbols = 0` so consumers don't try to
+    // parse symbols ahead of the strings) and is laid out as a
+    // 4-byte size header followed by NUL-terminated names.
+    //
+    // mingw-w64's `x86_64-w64-mingw32-gcc -g` produces the same
+    // shape, which is why `llvm-dwarfdump` and `lldb` accept it.
+    const DWARF_LONG_NAMES: [&str; 5] = [
+        ".debug_info",
+        ".debug_abbrev",
+        ".debug_line",
+        ".debug_str",
+        ".debug_frame",
+    ];
+    let mut coff_strtab: Vec<u8> = Vec::new();
+    let mut dwarf_section_names: Vec<[u8; 8]> = Vec::with_capacity(5);
+    if dwarf_section_present {
+        // Reserve 4 bytes for the size header, written at the end.
+        coff_strtab.extend_from_slice(&0u32.to_le_bytes());
+        for long_name in DWARF_LONG_NAMES {
+            let strtab_offset = coff_strtab.len() as u32;
+            coff_strtab.extend_from_slice(long_name.as_bytes());
+            coff_strtab.push(0);
+            // Format `/N` padded to 8 bytes.
+            let mut name_field = [0u8; 8];
+            let formatted = format!("/{strtab_offset}");
+            let n = formatted.len().min(8);
+            name_field[..n].copy_from_slice(&formatted.as_bytes()[..n]);
+            dwarf_section_names.push(name_field);
+        }
+        let strtab_size = coff_strtab.len() as u32;
+        coff_strtab[..4].copy_from_slice(&strtab_size.to_le_bytes());
+    }
+    let mut dwarf_pe_sections: Vec<DwarfPeSlot> = Vec::new();
+    if dwarf_section_present {
+        let blobs: [Vec<u8>; 5] = [
+            dwarf_sections.debug_info.clone(),
+            dwarf_sections.debug_abbrev.clone(),
+            dwarf_sections.debug_line.clone(),
+            dwarf_sections.debug_str.clone(),
+            dwarf_sections.debug_frame.clone(),
+        ];
+        let mut next_rva = round_up(pre_dwarf_end_rva, SECTION_ALIGNMENT);
+        let mut next_file_off = pre_dwarf_end_file_off;
+        for (i, bytes) in blobs.into_iter().enumerate() {
+            let raw_size = round_up(bytes.len() as u32, FILE_ALIGNMENT);
+            dwarf_pe_sections.push(DwarfPeSlot {
+                name: dwarf_section_names[i],
+                rva: next_rva,
+                file_off: next_file_off,
+                bytes,
+            });
+            next_rva = round_up(next_rva + raw_size, SECTION_ALIGNMENT);
+            next_file_off += raw_size;
+        }
+    }
+    let dwarf_end_file_off = dwarf_pe_sections
+        .last()
+        .map(|s| s.file_off + round_up(s.bytes.len() as u32, FILE_ALIGNMENT))
+        .unwrap_or(pre_dwarf_end_file_off);
+    let dwarf_end_rva = dwarf_pe_sections
+        .last()
+        .map(|s| round_up(s.rva + s.bytes.len() as u32, SECTION_ALIGNMENT))
+        .unwrap_or(pre_dwarf_end_rva);
+
+    // The COFF string table sits at the very end of the file
+    // (after the DWARF section payloads), referenced by
+    // `CoffHeader.pointer_to_symbol_table` even though we keep
+    // `number_of_symbols = 0`. This is the canonical PE/COFF
+    // pattern -- consumers read `pointer_to_symbol_table + symbols
+    // * 18` to find the start of the string table; with no
+    // symbols, the string table starts exactly there.
+    let coff_strtab_file_off = if dwarf_section_present && !coff_strtab.is_empty() {
+        dwarf_end_file_off
+    } else {
+        0
+    };
+    let total_file_size = (dwarf_end_file_off + coff_strtab.len() as u32) as usize;
+    let image_size = if dwarf_section_present {
+        dwarf_end_rva
+    } else if edata_section_present {
         round_up(edata_rva + edata_size, SECTION_ALIGNMENT)
     } else if reloc_section_present {
         round_up(reloc_rva + reloc_size, SECTION_ALIGNMENT)
@@ -623,6 +784,8 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
         data_section_present,
         reloc_section_present,
         edata_section_present,
+        dwarf_section_present,
+        coff_strtab_file_off,
         is_dll,
     );
     let tls_present = !build.tls_data.is_empty();
@@ -684,6 +847,7 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
         data_section_present,
         reloc_section_present,
         edata_section_present,
+        dwarf_section_present,
     ));
     sections.push(SectionHeader {
         name: *b".text\0\0\0",
@@ -741,6 +905,22 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
             size_of_raw_data: edata_raw_size,
             pointer_to_raw_data: edata_file_off,
             characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ,
+        });
+    }
+    // gh #42: DWARF debug sections. DISCARDABLE so the loader
+    // skips them at runtime; lldb / gdb / llvm-dwarfdump read
+    // them from the file image.
+    for slot in &dwarf_pe_sections {
+        let raw_size = round_up(slot.bytes.len() as u32, FILE_ALIGNMENT);
+        sections.push(SectionHeader {
+            name: slot.name,
+            virtual_size: slot.bytes.len() as u32,
+            virtual_address: slot.rva,
+            size_of_raw_data: raw_size,
+            pointer_to_raw_data: slot.file_off,
+            characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA
+                | IMAGE_SCN_MEM_READ
+                | IMAGE_SCN_MEM_DISCARDABLE,
         });
     }
     write_section_headers(&mut out, &sections);
@@ -885,6 +1065,16 @@ pub(super) fn write(build: &Build, machine: Machine) -> Result<Vec<u8>, C5Error>
     if edata_section_present {
         pad_to(&mut out, edata_file_off as usize);
         out.extend_from_slice(&edata_bytes);
+    }
+    // gh #42: DWARF debug sections come last in the file image
+    // (before the COFF string table that names them).
+    for slot in &dwarf_pe_sections {
+        pad_to(&mut out, slot.file_off as usize);
+        out.extend_from_slice(&slot.bytes);
+    }
+    if !coff_strtab.is_empty() {
+        pad_to(&mut out, coff_strtab_file_off as usize);
+        out.extend_from_slice(&coff_strtab);
     }
     pad_to(&mut out, total_file_size);
     debug_assert_eq!(out.len(), total_file_size, "file size mismatch");
@@ -1386,6 +1576,8 @@ fn write_coff_header(
     data_section_present: bool,
     reloc_section_present: bool,
     edata_section_present: bool,
+    dwarf_section_present: bool,
+    coff_strtab_file_off: u32,
     is_dll: bool,
 ) {
     let machine_id = match machine {
@@ -1404,9 +1596,18 @@ fn write_coff_header(
                 data_section_present,
                 reloc_section_present,
                 edata_section_present,
+                dwarf_section_present,
             ) as u16,
             time_date_stamp: 0,
-            pointer_to_symbol_table: 0,
+            // gh #42: PE images don't have a symbol table, but
+            // we set `pointer_to_symbol_table` to the start of
+            // the COFF string table anyway -- consumers compute
+            // the string-table offset as
+            // `pointer_to_symbol_table + number_of_symbols * 18`,
+            // which equals our string table offset directly when
+            // symbols == 0. The `/N` references in DWARF section
+            // names then resolve to the full `.debug_*` strings.
+            pointer_to_symbol_table: coff_strtab_file_off,
             number_of_symbols: 0,
             size_of_optional_header: optional_header_size as u16,
             characteristics,
@@ -2416,7 +2617,13 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        let bytes = write(&build, Machine::X86_64).expect("write PE");
+        let bytes = write(
+            &program,
+            &build,
+            Machine::X86_64,
+            super::super::Target::WindowsX64,
+        )
+        .expect("write PE");
         let (rva, size) = read_data_directory(&bytes, DATA_DIRECTORY_TLS);
         assert_eq!(rva, 0, "TLS RVA must be 0 when no TLS present");
         assert_eq!(size, 0, "TLS size must be 0 when no TLS present");
@@ -2439,7 +2646,13 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        let bytes = write(&build, Machine::X86_64).expect("write PE");
+        let bytes = write(
+            &program,
+            &build,
+            Machine::X86_64,
+            super::super::Target::WindowsX64,
+        )
+        .expect("write PE");
         let (tls_rva, tls_size) = read_data_directory(&bytes, DATA_DIRECTORY_TLS);
         assert_ne!(tls_rva, 0, "expected non-zero TLS directory RVA");
         assert_eq!(
@@ -2541,7 +2754,13 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        let bytes = write(&build, Machine::Aarch64).expect("write PE");
+        let bytes = write(
+            &program,
+            &build,
+            Machine::Aarch64,
+            super::super::Target::WindowsAarch64,
+        )
+        .expect("write PE");
         let (tls_rva, tls_size) = read_data_directory(&bytes, DATA_DIRECTORY_TLS);
         assert_ne!(tls_rva, 0, "expected non-zero TLS directory RVA");
         assert_eq!(tls_size, IMAGE_TLS_DIRECTORY64_SIZE);
@@ -2595,7 +2814,7 @@ mod tests {
                     super::super::Target::WindowsAarch64 => Machine::Aarch64,
                     _ => unreachable!(),
                 };
-                let bytes = write(&build, machine).expect("write PE");
+                let bytes = write(&program, &build, machine, target).expect("write PE");
                 let dll_chars = read_dll_characteristics(&bytes);
                 assert_ne!(
                     dll_chars & IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE,
@@ -2643,7 +2862,7 @@ mod tests {
                 super::super::Target::WindowsAarch64 => Machine::Aarch64,
                 _ => unreachable!(),
             };
-            let bytes = write(&build, machine).expect("write PE");
+            let bytes = write(&program, &build, machine, target).expect("write PE");
 
             // DataDirectory[5] (BaseRelocation) must point at a
             // non-empty block.
@@ -2716,7 +2935,13 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        let bytes = write(&build, Machine::X86_64).expect("write PE");
+        let bytes = write(
+            &program,
+            &build,
+            Machine::X86_64,
+            super::super::Target::WindowsX64,
+        )
+        .expect("write PE");
         let (rva, size) = read_data_directory(&bytes, DATA_DIRECTORY_BASERELOC);
         assert_eq!(rva, 0, "TLS-free image must not advertise .reloc RVA");
         assert_eq!(size, 0, "TLS-free image must not advertise .reloc size");
@@ -2757,7 +2982,7 @@ mod tests {
                 super::super::NativeOptions::new().with_shared_library(),
             )
             .expect("lower");
-            let bytes = write(&build, machine).expect("write PE");
+            let bytes = write(&program, &build, machine, target).expect("write PE");
 
             let chars = read_coff_characteristics(&bytes);
             assert_ne!(
@@ -2900,7 +3125,13 @@ mod tests {
             super::super::NativeOptions::new().with_shared_library(),
         )
         .expect("lower");
-        let bytes = write(&build, Machine::X86_64).expect("write PE");
+        let bytes = write(
+            &program,
+            &build,
+            Machine::X86_64,
+            super::super::Target::WindowsX64,
+        )
+        .expect("write PE");
         let (entry, base) = read_entry_point_and_base_of_code(&bytes);
         assert_eq!(
             entry, base,
@@ -2945,7 +3176,13 @@ mod tests {
              should leave DllMain past offset 0 in build.text \
              (got {dllmain_native_off:#x})"
         );
-        let bytes = write(&build, Machine::X86_64).expect("write PE");
+        let bytes = write(
+            &program,
+            &build,
+            Machine::X86_64,
+            super::super::Target::WindowsX64,
+        )
+        .expect("write PE");
         let (entry, base) = read_entry_point_and_base_of_code(&bytes);
         assert_eq!(
             entry,
@@ -2970,7 +3207,13 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        let bytes = write(&build, Machine::X86_64).expect("write PE");
+        let bytes = write(
+            &program,
+            &build,
+            Machine::X86_64,
+            super::super::Target::WindowsX64,
+        )
+        .expect("write PE");
         let chars = read_coff_characteristics(&bytes);
         assert_eq!(
             chars & IMAGE_FILE_DLL,
@@ -2999,7 +3242,13 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        let bytes = write(&build, Machine::Aarch64).expect("write PE");
+        let bytes = write(
+            &program,
+            &build,
+            Machine::Aarch64,
+            super::super::Target::WindowsAarch64,
+        )
+        .expect("write PE");
 
         // DOS magic.
         assert_eq!(&bytes[0..2], b"MZ");

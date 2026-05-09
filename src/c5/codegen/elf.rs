@@ -103,12 +103,12 @@ const DF_BIND_NOW: u64 = 0x8;
 
 // nlist / Elf64_Sym fields.
 const STB_GLOBAL: u8 = 1;
-const STT_NOTYPE: u8 = 0;
-/// `STT_FUNC` symbol type -- `st_info` low nibble for an
-/// exported function. Used in shared-library output to mark
-/// each `#pragma export(...)` entry as a callable code
-/// symbol; dlsym surfaces only `STT_FUNC` and `STT_NOTYPE`
-/// non-undef entries.
+/// `STT_FUNC` symbol type -- `st_info` low nibble for both
+/// imported and exported functions. Imports use it so debuggers
+/// (`gdb`, `lldb`) treat the dynamic-symbol entry as a callable
+/// breakpoint target; exports use it so `dlsym` surfaces them as
+/// code (dlsym only resolves `STT_FUNC` / `STT_NOTYPE`-non-undef
+/// entries).
 const STT_FUNC: u8 = 2;
 const SHN_UNDEF: u16 = 0;
 
@@ -484,7 +484,22 @@ fn build_dynsym(
             &mut out,
             &Elf64Sym {
                 st_name: name_off,
-                st_info: (STB_GLOBAL << 4) | STT_NOTYPE,
+                // c5's only dynamic-import mechanism today is
+                // `#pragma binding(<lib>::<name>, "<sym>")`, and
+                // every binding is reached via `Op::JsrExt` (a
+                // call site) -- there's no path that imports a
+                // data symbol. So tagging every import `STT_FUNC`
+                // is correct in practice and gives `gdb` / `nm`
+                // the right hint about callability. If we ever
+                // grow an `extern int errno;`-style data import,
+                // `ResolvedImport` would need an `is_function`
+                // discriminator and this branch would pick
+                // `STT_OBJECT` for the data case. The dynamic
+                // linker doesn't care either way -- it resolves
+                // by name -- so the worst case for a future
+                // mis-tag is a confused debugger, not a broken
+                // load.
+                st_info: (STB_GLOBAL << 4) | STT_FUNC,
                 st_other: 0, // STV_DEFAULT
                 st_shndx: SHN_UNDEF,
                 st_value: 0,
@@ -997,13 +1012,24 @@ pub(super) fn write(
     // _start stub sits ahead of build.text in the code blob;
     // shared libraries skip the stub so stub_len = 0 there).
     let dwarf_text_vmaddr = code_vmaddr + stub_len;
-    let dwarf_sections = dwarf::emit(program, build, dwarf_text_vmaddr, &program.source_path);
+    let elf_target = match machine {
+        super::Machine::Aarch64 => super::Target::LinuxAarch64,
+        super::Machine::X86_64 => super::Target::LinuxX64,
+    };
+    let dwarf_sections = dwarf::emit(
+        program,
+        build,
+        elf_target,
+        dwarf_text_vmaddr,
+        &program.source_path,
+    );
     let dwarf_off = segment2_end;
     let dwarf_info_off = dwarf_off;
     let dwarf_abbrev_off = dwarf_info_off + dwarf_sections.debug_info.len() as u64;
     let dwarf_line_off = dwarf_abbrev_off + dwarf_sections.debug_abbrev.len() as u64;
     let dwarf_str_off = dwarf_line_off + dwarf_sections.debug_line.len() as u64;
-    let shstrtab_off = dwarf_str_off + dwarf_sections.debug_str.len() as u64;
+    let dwarf_frame_off = dwarf_str_off + dwarf_sections.debug_str.len() as u64;
+    let shstrtab_off = dwarf_frame_off + dwarf_sections.debug_frame.len() as u64;
     // .shstrtab content: NUL + section names. Index 0 is the
     // empty name (SHT_NULL sentinel uses sh_name=0). Names cover
     // the full set of sections in the section-header table:
@@ -1026,10 +1052,11 @@ pub(super) fn write(
         ".debug_abbrev", // 13
         ".debug_line",   // 14
         ".debug_str",    // 15
-        ".shstrtab",     // 16
+        ".debug_frame",  // 16
+        ".shstrtab",     // 17
     ];
     let mut shstrtab: Vec<u8> = Vec::new();
-    let mut shstrtab_offsets: [u32; 17] = [0; 17];
+    let mut shstrtab_offsets: [u32; 18] = [0; 18];
     for (i, s) in shstrtab_bytes.iter().enumerate() {
         shstrtab_offsets[i] = shstrtab.len() as u32;
         shstrtab.extend_from_slice(s.as_bytes());
@@ -1056,7 +1083,7 @@ pub(super) fn write(
         + 1 // .got
         + (if has_data { 1 } else { 0 }) // .data
         + (if has_tbss { 1 } else { 0 }) // .tbss
-        + 4 // .debug_* x 4
+        + 5 // .debug_* x 5 (info, abbrev, line, str, frame)
         + 1; // .shstrtab
     let total_filesize = shdr_off + n_section_headers * ELF64_SHDR_SIZE;
     // shstrtab is the last section in the table; its index is
@@ -1345,6 +1372,7 @@ pub(super) fn write(
     out.extend_from_slice(&dwarf_sections.debug_abbrev);
     out.extend_from_slice(&dwarf_sections.debug_line);
     out.extend_from_slice(&dwarf_sections.debug_str);
+    out.extend_from_slice(&dwarf_sections.debug_frame);
     debug_assert_eq!(out.len() as u64, shstrtab_off);
 
     // .shstrtab
@@ -1600,8 +1628,10 @@ pub(super) fn write(
         );
     }
 
-    // [N+2..N+5] DWARF debug sections (file-only metadata, no
-    // SHF_ALLOC so the loader skips them).
+    // [N+2..N+6] DWARF debug sections (file-only metadata, no
+    // SHF_ALLOC so the loader skips them). `.debug_frame` (gh #47)
+    // carries the CFI a debugger / unwinder reads to walk through
+    // optimised frames without prologue heuristics.
     let dwarf_section_specs: &[(u32, u64, u64)] = &[
         (
             shstrtab_offsets[12],
@@ -1622,6 +1652,11 @@ pub(super) fn write(
             shstrtab_offsets[15],
             dwarf_str_off,
             dwarf_sections.debug_str.len() as u64,
+        ),
+        (
+            shstrtab_offsets[16],
+            dwarf_frame_off,
+            dwarf_sections.debug_frame.len() as u64,
         ),
     ];
     for &(name_off, off, sz) in dwarf_section_specs {
@@ -1646,7 +1681,7 @@ pub(super) fn write(
     write_struct(
         &mut out,
         &Elf64Shdr {
-            sh_name: shstrtab_offsets[16],
+            sh_name: shstrtab_offsets[17],
             sh_type: SHT_STRTAB,
             sh_flags: 0,
             sh_addr: 0,
@@ -1805,6 +1840,7 @@ mod tests {
             source_file_indices: Vec::new(),
             source_path: String::new(),
             variables: Vec::new(),
+            structs: Vec::new(),
         }
     }
 

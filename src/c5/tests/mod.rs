@@ -20,6 +20,7 @@ use super::{C5Error, Compiler, Op, Program, Vm, optimize};
 
 mod codegen;
 mod deferred;
+mod dwarf;
 mod intrinsics;
 mod jit;
 mod lexer;

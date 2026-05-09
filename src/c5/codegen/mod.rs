@@ -988,8 +988,8 @@ fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>
         Target::MacOSAarch64 => mach_o::write(program, build),
         Target::LinuxAarch64 => elf::write(program, build, Machine::Aarch64),
         Target::LinuxX64 => elf::write(program, build, Machine::X86_64),
-        Target::WindowsX64 => pe::write(build, Machine::X86_64),
-        Target::WindowsAarch64 => pe::write(build, Machine::Aarch64),
+        Target::WindowsX64 => pe::write(program, build, Machine::X86_64, target),
+        Target::WindowsAarch64 => pe::write(program, build, Machine::Aarch64, target),
     }
 }
 

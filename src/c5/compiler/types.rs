@@ -37,7 +37,7 @@ use super::super::token::{Token, Ty};
 
 /// Base of the struct-tag namespace. Every primitive (including
 /// the long band at 300) sits below this.
-pub(super) const STRUCT_BASE: i64 = 1000;
+pub(crate) const STRUCT_BASE: i64 = 1000;
 /// Per-struct stride. Struct id `N` occupies `[STRUCT_BASE +
 /// N*STRIDE, STRUCT_BASE + (N+1)*STRIDE)`.
 pub(super) const STRUCT_STRIDE: i64 = 1000;
@@ -59,7 +59,7 @@ const FP_BAND_SIZE: i64 = 100;
 /// Bit chosen well above the band ranges: `STRUCT_BASE +
 /// N*STRIDE` for any plausible N stays under 1<<30, and the
 /// non-struct bands max out at 400.
-pub(super) const UNSIGNED_BIT: i64 = 1 << 30;
+pub(crate) const UNSIGNED_BIT: i64 = 1 << 30;
 
 /// `true` if `ty`'s underlying integer is tagged unsigned.
 pub(crate) fn is_unsigned_ty(ty: i64) -> bool {

@@ -1,18 +1,20 @@
-//! Phase 1 DWARF emitter (gh #39 / gh #40 / gh #41 / gh #42).
+//! DWARF emitter.
 //!
 //! Produces four byte vectors that the per-target writers can drop
 //! into their container's debug-section equivalents:
 //!
-//! * `.debug_str` -- deduplicated null-terminated strings
-//!   (function names + the source filename).
-//! * `.debug_abbrev` -- two abbreviation entries: one for the
-//!   compilation-unit DIE, one for each subprogram DIE.
-//! * `.debug_info` -- a single CU DIE with one subprogram-DIE
-//!   child per c5 user function. No types, no locals, no inlined
-//!   subroutines. That's enough for `lldb` / `gdb` to resolve
-//!   function names in backtraces, accept breakpoints by name,
-//!   and -- the part that unblocks gh #30 -- install hardware
-//!   watchpoints.
+//! * `.debug_str` -- null-terminated strings (function names, the
+//!   source filename, plus the c5 type-tag names referenced by the
+//!   type catalog).
+//! * `.debug_abbrev` -- five abbreviation entries: compile_unit,
+//!   subprogram, base_type, variable, formal_parameter.
+//! * `.debug_info` -- a single CU DIE with one base-type child per
+//!   distinct c5 scalar type tag actually referenced, plus one
+//!   subprogram-DIE child per c5 user function. Each subprogram
+//!   carries variable / formal_parameter children that reference
+//!   the right type DIE. Pointers and structs route through a
+//!   placeholder `void *` base DIE until gh #58 and gh #59 extend
+//!   the catalog with proper pointer-chain and struct DIEs.
 //! * `.debug_line` -- a line-number program mapping every emitted
 //!   native byte range to the C source line that produced it.
 //!   Read from `program.source_lines`, which the optimizer
@@ -24,28 +26,47 @@
 //! DWARF 5 adds split-unit / `.debug_loclists` machinery we
 //! don't need yet.
 //!
-//! Phase 2 work (separate issues) extends with `.debug_frame` /
-//! `__eh_frame` (call-stack unwinding without prologue heuristics),
-//! type DIEs, variable DIEs, and inlined-subroutine DIEs.
+//! ## Wire-format conventions
+//!
+//! Each fixed-layout DWARF header lives next to a `#[repr(C,
+//! packed)]` schema struct whose `write_le` body is the source of
+//! truth for the on-disk byte layout. The schemas are documentary
+//! -- we never transmute them to bytes (packed-struct field reads
+//! are unaligned and host-endian-dependent), so the per-field
+//! little-endian serialisation in `write_le` is what the consumer
+//! sees. Variable-length records (DIE bodies, ULEB / SLEB streams,
+//! per-attribute encodings) keep their hand-rolled byte writes;
+//! the schema treatment is reserved for the spec's fixed-layout
+//! tables.
+//!
+//! Phase 2 (gh #47): `.debug_frame` / `__eh_frame` for unwinding.
+//! Phase 3 (gh #42): wire DWARF into the PE writer.
 
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
 use alloc::vec::Vec;
 
-use super::Build;
+use super::{Build, Target};
+use crate::c5::compiler::{StructDef, types};
 use crate::c5::op::Op;
 use crate::c5::program::Program;
+use crate::c5::token::Ty;
 
-// ---- DWARF spec constants we use ----
+// ---- DWARF spec constants ----
 //
-// Names mirror the DWARF 4 standard's `DW_*` identifiers so
-// readers cross-referencing the spec or another emitter can
+// Names mirror the DWARF 4 standard's `DW_*` identifiers so a
+// reader cross-referencing the spec or another emitter can
 // match them at a glance.
 
 const DW_TAG_COMPILE_UNIT: u8 = 0x11;
 const DW_TAG_SUBPROGRAM: u8 = 0x2e;
 const DW_TAG_BASE_TYPE: u8 = 0x24;
+const DW_TAG_POINTER_TYPE: u8 = 0x0f;
 const DW_TAG_FORMAL_PARAMETER: u8 = 0x05;
 const DW_TAG_VARIABLE: u32 = 0x34;
+const DW_TAG_STRUCTURE_TYPE: u8 = 0x13;
+const DW_TAG_UNION_TYPE: u8 = 0x17;
+const DW_TAG_MEMBER: u8 = 0x0d;
 
 const DW_CHILDREN_NO: u8 = 0x00;
 const DW_CHILDREN_YES: u8 = 0x01;
@@ -63,13 +84,29 @@ const DW_AT_ENCODING: u32 = 0x3e;
 const DW_AT_TYPE: u32 = 0x49;
 const DW_AT_LOCATION: u32 = 0x02;
 const DW_AT_FRAME_BASE: u32 = 0x40;
+/// `DW_AT_data_member_location` (0x38) carries the byte offset of
+/// a member from the start of its containing struct / union.
+const DW_AT_DATA_MEMBER_LOCATION: u32 = 0x38;
+/// `DW_AT_bit_offset` (0x0c) is DWARF 3-style; deprecated in v4
+/// but every consumer we target still handles it. Encodes the
+/// distance from the MSB of the storage unit to the MSB of the
+/// bitfield (so on little-endian targets we transform c5's
+/// LSB-relative `bit_offset` into `storage_bits - lsb - width`
+/// at emit time).
+const DW_AT_BIT_OFFSET: u32 = 0x0c;
+const DW_AT_BIT_SIZE: u32 = 0x0d;
 
-// DW_ATE_* encodings for DW_TAG_base_type DW_AT_encoding.
-const DW_ATE_SIGNED: u8 = 0x05;
+// `DW_ATE_*` encodings for `DW_TAG_base_type`'s `DW_AT_encoding`.
 const DW_ATE_ADDRESS: u8 = 0x01;
+const DW_ATE_FLOAT: u8 = 0x04;
+const DW_ATE_SIGNED: u8 = 0x05;
+const DW_ATE_SIGNED_CHAR: u8 = 0x06;
+const DW_ATE_UNSIGNED: u8 = 0x07;
+const DW_ATE_UNSIGNED_CHAR: u8 = 0x08;
 
 const DW_FORM_ADDR: u32 = 0x01;
 const DW_FORM_DATA1: u32 = 0x0b;
+const DW_FORM_DATA4: u32 = 0x06;
 const DW_FORM_DATA8: u32 = 0x07;
 const DW_FORM_STRP: u32 = 0x0e;
 const DW_FORM_FLAG_PRESENT: u32 = 0x19;
@@ -77,10 +114,10 @@ const DW_FORM_SEC_OFFSET: u32 = 0x17;
 const DW_FORM_REF4: u32 = 0x13;
 const DW_FORM_EXPRLOC: u32 = 0x18;
 
-// DW_OP_* opcodes used in location / frame-base expressions.
+// `DW_OP_*` opcodes used in location / frame-base expressions.
 const DW_OP_FBREG: u8 = 0x91;
 /// `DW_OP_breg29 <sleb128>` (= 0x70 + 29) -- "frame base is the
-/// value of register x29 plus N". Used in DW_AT_frame_base so
+/// value of register x29 plus N". Used in `DW_AT_frame_base` so
 /// `DW_OP_fbreg` location expressions resolve against $x29.
 /// `DW_OP_reg29` (0x6d) is "the variable IS in register x29",
 /// which lldb interprets differently from "the frame base is
@@ -101,9 +138,143 @@ const DW_LNS_SET_FILE: u8 = 0x04;
 const DW_LNE_END_SEQUENCE: u8 = 0x01;
 const DW_LNE_SET_ADDRESS: u8 = 0x02;
 
+// Standard line-program tuning. Match DWARF 4's recommended
+// defaults: a special-opcode encodes
+// `(line += line_base + ((adj) % line_range);
+//   address += min_inst_len * (adj / line_range))`
+// where `adj = opcode - opcode_base`. With `line_base = -1`,
+// `line_range = 14`, an opcode covers line deltas in `[-1..12]`
+// before falling back to standard ops.
+const LINE_BASE: i8 = -1;
+const LINE_RANGE: u8 = 14;
+const OPCODE_BASE: u8 = 13;
+
+// ---- Call Frame Information opcodes (DWARF 4, table 7.23) ----
+
+/// `DW_CFA_advance_loc` is encoded as an opcode-with-operand: the
+/// top two bits are `0b01` (= 0x40) and the low six bits carry
+/// the factored delta. Used inline; broken out as a helper.
+const DW_CFA_ADVANCE_LOC_HI: u8 = 0x40;
+const DW_CFA_OFFSET_HI: u8 = 0x80;
+
+const DW_CFA_NOP: u8 = 0x00;
+const DW_CFA_ADVANCE_LOC1: u8 = 0x02;
+const DW_CFA_ADVANCE_LOC2: u8 = 0x03;
+const DW_CFA_ADVANCE_LOC4: u8 = 0x04;
+const DW_CFA_DEF_CFA: u8 = 0x0c;
+
+// Architecture-specific register codes used in CFI rules.
+//
+// AArch64 follows ABI table A.1: x0..x30 = 0..30, sp = 31.
+// x86_64 follows the SysV / DWARF 4 register numbering: rax=0,
+// rdx=1, rcx=2, rbx=3, rsi=4, rdi=5, rbp=6, rsp=7, r8..r15=8..15,
+// "Return Address" virtual column = 16 (i.e. RIP).
+
+const AARCH64_REG_X29: u8 = 29;
+const AARCH64_REG_X30: u8 = 30;
+const AARCH64_REG_SP: u8 = 31;
+
+const X86_64_REG_RBP: u8 = 6;
+const X86_64_REG_RSP: u8 = 7;
+const X86_64_REG_RA: u8 = 16;
+
+// ---- wire-format schemas ----
+
+/// Compilation-unit header for `.debug_info` (DWARF 4, 32-bit
+/// form). Follows the spec table exactly.
+#[repr(C, packed)]
+struct DebugInfoUnitHeader {
+    /// Bytes in this unit *not counting* this `u32` itself.
+    unit_length: u32,
+    version: u16,
+    debug_abbrev_offset: u32,
+    address_size: u8,
+}
+
+impl DebugInfoUnitHeader {
+    /// Bytes the header occupies on the wire. CU-relative offsets
+    /// (`DW_FORM_ref4` references) shift body offsets by this much.
+    const SIZE: u32 = 11;
+
+    fn write_le(&self, out: &mut Vec<u8>) {
+        // Destructure into Copy locals: borrowing fields off a
+        // packed struct directly trips `unaligned_references`.
+        let DebugInfoUnitHeader {
+            unit_length,
+            version,
+            debug_abbrev_offset,
+            address_size,
+        } = *self;
+        out.extend_from_slice(&unit_length.to_le_bytes());
+        out.extend_from_slice(&version.to_le_bytes());
+        out.extend_from_slice(&debug_abbrev_offset.to_le_bytes());
+        out.push(address_size);
+    }
+}
+
+/// Statement-program unit header for `.debug_line` (DWARF 4,
+/// 32-bit). The bytes that follow `header_length` belong to the
+/// program-header schema below + opcode_lengths + dir / file
+/// tables; the program itself trails after that block.
+#[repr(C, packed)]
+struct DebugLineUnitHeader {
+    /// Bytes in this unit *not counting* this `u32` itself.
+    unit_length: u32,
+    version: u16,
+    /// Bytes from the end of `header_length` (i.e. from
+    /// `minimum_instruction_length`) to the start of the
+    /// statement program.
+    header_length: u32,
+}
+
+impl DebugLineUnitHeader {
+    fn write_le(&self, out: &mut Vec<u8>) {
+        let DebugLineUnitHeader {
+            unit_length,
+            version,
+            header_length,
+        } = *self;
+        out.extend_from_slice(&unit_length.to_le_bytes());
+        out.extend_from_slice(&version.to_le_bytes());
+        out.extend_from_slice(&header_length.to_le_bytes());
+    }
+}
+
+/// Fixed prologue of the `.debug_line` statement-program header
+/// (everything up to but not including the variable-length
+/// `standard_opcode_lengths` table).
+#[repr(C, packed)]
+struct DebugLineProgramHeader {
+    minimum_instruction_length: u8,
+    maximum_operations_per_instruction: u8,
+    default_is_stmt: u8,
+    line_base: i8,
+    line_range: u8,
+    opcode_base: u8,
+}
+
+impl DebugLineProgramHeader {
+    fn write_le(&self, out: &mut Vec<u8>) {
+        let DebugLineProgramHeader {
+            minimum_instruction_length,
+            maximum_operations_per_instruction,
+            default_is_stmt,
+            line_base,
+            line_range,
+            opcode_base,
+        } = *self;
+        out.push(minimum_instruction_length);
+        out.push(maximum_operations_per_instruction);
+        out.push(default_is_stmt);
+        out.push(line_base as u8);
+        out.push(line_range);
+        out.push(opcode_base);
+    }
+}
+
 // ---- Emitter entry point ----
 
-/// The four byte vectors phase 1 produces. Per-target writers
+/// The byte vectors the emitter produces. Per-target writers
 /// (Mach-O / ELF / PE) wrap these into their format-specific
 /// debug-section containers.
 pub(crate) struct DwarfSections {
@@ -111,21 +282,30 @@ pub(crate) struct DwarfSections {
     pub debug_abbrev: Vec<u8>,
     pub debug_line: Vec<u8>,
     pub debug_str: Vec<u8>,
+    /// Call Frame Information (DWARF 4 `.debug_frame` form): one
+    /// CIE describing c5's standard prologue, plus one FDE per
+    /// user function. ELF wires this into `.debug_frame`, Mach-O
+    /// into `__debug_frame` of the `__DWARF` segment. Empty when
+    /// the build has no callable functions.
+    pub debug_frame: Vec<u8>,
 }
 
 /// Produce DWARF for `program` / `build`.
 ///
+/// `target` selects the data model used to size c5's `long`
+/// (LP64 = 8 bytes vs LLP64 = 4 bytes) so the emitted base-type
+/// DIEs match what the codegen actually loads / stores.
 /// `code_vmaddr` is the runtime virtual address that
 /// `Build::text[0]` will load at; we add it to every
 /// codegen-relative offset before writing it as a DWARF
-/// `DW_FORM_addr`. `source_path` becomes the CU's
-/// `DW_AT_name` and the line program's only file entry --
-/// best supplied as the original `.c` path the user passed
-/// to `badc`, falling back to `<unknown>` when no path is
-/// available (stdin pipe, etc.).
+/// `DW_FORM_addr`. `source_path` becomes the CU's `DW_AT_name`
+/// and the line program's only file entry -- best supplied as the
+/// original `.c` path the user passed to `badc`, falling back to
+/// `<unknown>` when no path is available (stdin pipe, etc.).
 pub(crate) fn emit(
     program: &Program,
     build: &Build,
+    target: Target,
     code_vmaddr: u64,
     source_path: &str,
 ) -> DwarfSections {
@@ -137,14 +317,18 @@ pub(crate) fn emit(
     } else {
         source_path
     });
-    // Names for the two phase-2 base type DIEs (gh #46).
-    let int_type_name_off = strs.intern("int");
-    let ptr_type_name_off = strs.intern("void *");
 
     // Walk the bytecode, collect one `Subprog` per `Op::Ent`.
     let subs = collect_subprograms(program, build, code_vmaddr, &mut strs);
 
-    let debug_str = strs.into_bytes();
+    // Build the type catalog. Walks captured variables, then
+    // transitively pulls in struct fields' types so a member
+    // declared `struct Foo *next` reaches a real `DW_TAG_pointer`
+    // -> `DW_TAG_structure_type` chain. String interning happens
+    // here so the strtab is finalised just before we write
+    // `.debug_str`.
+    let catalog = TypeCatalog::collect(&subs, &mut strs, target, &program.structs);
+
     let debug_abbrev = build_debug_abbrev();
     let (debug_line, line_unit_off) = build_debug_line(program, build, code_vmaddr, source_path);
     let debug_info = build_debug_info(
@@ -154,16 +338,20 @@ pub(crate) fn emit(
         line_unit_off,
         code_vmaddr,
         build.text.len() as u64,
-        int_type_name_off,
-        ptr_type_name_off,
+        &catalog,
         &subs,
+        target,
+        &program.structs,
     );
+    let debug_frame = build_debug_frame(target, &subs);
+    let debug_str = strs.into_bytes();
 
     DwarfSections {
         debug_info,
         debug_abbrev,
         debug_line,
         debug_str,
+        debug_frame,
     }
 }
 
@@ -173,6 +361,11 @@ struct Subprog {
     name_off: u32,
     low_pc: u64,
     high_pc: u64,
+    /// Native bytes from `low_pc` to the first byte of the
+    /// function body (after the standard prologue). Drives the
+    /// CFI FDE's `DW_CFA_advance_loc` so the post-prologue CFA
+    /// rule starts at the right PC.
+    prologue_size: u32,
     /// Locals + formal-parameters that c5 captured for this
     /// subprogram (see `Compiler::variables`). The DWARF emitter
     /// turns each into a `DW_TAG_variable` /
@@ -183,9 +376,34 @@ struct Subprog {
 struct SubprogVar {
     name_off: u32,
     is_parameter: bool,
-    is_pointer: bool,
+    /// Raw c5 type tag (`Ty` enum encoded as `i64`). Resolved
+    /// against the type catalog at `build_debug_info` time so the
+    /// DIE picks up the right `DW_AT_type` ref.
+    type_tag: i64,
     /// Frame-pointer-relative byte offset (c5's `fp_slot * 8`).
     fp_byte_offset: i64,
+}
+
+/// Native bytes from a function's `low_pc` to the first byte of
+/// its body -- i.e. the size of the standard prologue emitted by
+/// the arch lowerings. Used by the CFI emitter (gh #47) to
+/// `DW_CFA_advance_loc` past the prologue before installing the
+/// post-prologue CFA rule. Returns 0 for empty / DCE'd functions
+/// where the body's PC isn't recoverable; the unwinder then
+/// applies the post-prologue rule from PC = low_pc, which is
+/// wrong inside the prologue but the function never executes
+/// anyway.
+fn prologue_size_for(ent_pc: usize, low_pc: usize, build: &Build) -> u32 {
+    let body_start = build
+        .bytecode_to_native
+        .get(ent_pc + Op::Ent.word_size())
+        .copied()
+        .unwrap_or(low_pc);
+    if body_start == usize::MAX || body_start <= low_pc {
+        0
+    } else {
+        (body_start - low_pc) as u32
+    }
 }
 
 fn collect_subprograms(
@@ -230,8 +448,7 @@ fn collect_subprograms(
     // upstream c5 tracking is a separate fix (the suffixed names
     // still point at real bytecode, so backtraces inside the
     // mis-attributed regions are no worse than they were).
-    let mut name_seen: alloc::collections::BTreeMap<alloc::string::String, u32> =
-        alloc::collections::BTreeMap::new();
+    let mut name_seen: BTreeMap<alloc::string::String, u32> = BTreeMap::new();
     for (i, &ent_pc) in ent_pcs.iter().enumerate() {
         let raw_name = program
             .source_functions
@@ -270,9 +487,9 @@ fn collect_subprograms(
         }
 
         // Pull this subprogram's locals + parameters from
-        // `program.variables` (gh #46). Captured by the c5
-        // frontend at function-body close, indexed by the Ent's
-        // bytecode pc so a simple equality check groups them.
+        // `program.variables`. Captured by the c5 frontend at
+        // function-body close, indexed by the Ent's bytecode pc
+        // so a simple equality check groups them.
         let function_bc_pc = ent_pc as u64;
         let variables = program
             .variables
@@ -281,7 +498,7 @@ fn collect_subprograms(
             .map(|v| SubprogVar {
                 name_off: strs.intern(&v.name),
                 is_parameter: v.is_parameter,
-                is_pointer: crate::c5::compiler::types::is_pointer_ty(v.type_tag),
+                type_tag: v.type_tag,
                 // c5's slot -> byte conversion: positive (args)
                 // use 16-byte AAPCS64 slot stride starting at
                 // `(slot - 1) * 16` (so slot 2 -> +16, slot 3 ->
@@ -300,11 +517,409 @@ fn collect_subprograms(
             name_off,
             low_pc: code_vmaddr + lo as u64,
             high_pc: code_vmaddr + hi as u64,
+            prologue_size: prologue_size_for(ent_pc, lo, build),
             variables,
         });
     }
 
     out
+}
+
+// ---- Type catalog ----
+
+/// One distinct scalar base type in the DWARF type tree. The
+/// catalog dedupes by this key so two `int` locals share a single
+/// DIE.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct BaseTypeKey {
+    /// C source spelling -- "int", "unsigned long", "double", etc.
+    /// Becomes the DIE's `DW_AT_name`.
+    name: &'static str,
+    byte_size: u8,
+    /// `DW_ATE_*` encoding, drives the DIE's `DW_AT_encoding`.
+    encoding: u8,
+}
+
+/// One entry in the type catalog. Sort order (derived from the
+/// declaration order of the variants and the field order within
+/// each variant) puts base DIEs first, then pointer chains grouped
+/// by leaf and ordered by ascending depth, then struct DIEs by id,
+/// then struct-pointer chains, then the `void *` placeholder. That
+/// ordering matters for non-struct entries: a `Pointer` at depth
+/// `N` references depth `N - 1`, so the pointee must already be
+/// emitted. Struct member type-refs go through a precomputed
+/// offset table (the layout pass) so mutually-recursive struct
+/// fields work without a forward-decl pass.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum CatalogEntry {
+    /// Scalar base type. Direct DIE -- `DW_AT_name`, `DW_AT_byte_size`,
+    /// `DW_AT_encoding`.
+    Base(BaseTypeKey),
+    /// Pointer chain rooted at `leaf` with `depth >= 1`. The DIE
+    /// is a `DW_TAG_pointer_type` whose `DW_AT_type` points at
+    /// `Pointer { leaf, depth - 1 }` for `depth > 1`, or at
+    /// `Base(leaf)` for `depth == 1`.
+    Pointer { leaf: BaseTypeKey, depth: u8 },
+    /// Aggregate type by struct-registry id. The DIE is
+    /// `DW_TAG_structure_type` (or `DW_TAG_union_type` for unions),
+    /// with one `DW_TAG_member` child per `StructField`. Member
+    /// type-refs are resolved through the catalog so a
+    /// `struct A { struct B *b; }` works regardless of declaration
+    /// order.
+    Struct { id: u32 },
+    /// Pointer chain rooted at a struct. `depth >= 1`; same DIE
+    /// shape as `Pointer`, with `DW_AT_type` pointing at
+    /// `StructPointer { id, depth - 1 }` for depth > 1 or
+    /// `Struct { id }` for depth == 1.
+    StructPointer { id: u32, depth: u8 },
+    /// Placeholder `void *` for variables we can't classify (a
+    /// type tag the c5 frontend produced that doesn't fit any
+    /// band). Should be empty in well-formed programs but kept
+    /// as a safe fallback so an unknown tag never crashes the
+    /// emitter.
+    VoidStar,
+}
+
+impl CatalogEntry {
+    /// Bytes this entry's DIE consumes on the wire. The layout
+    /// pass walks `catalog.entries` once with `die_size` to build
+    /// a CU-relative offset for every entry, so mutually-recursive
+    /// struct fields can pick up a target offset for an entry
+    /// that hasn't been written yet. ULEB-encoded abbrev codes
+    /// fit in a single byte for codes 1..127; we have 10, so the
+    /// 1-byte assumption holds.
+    fn die_size(&self, structs: &[StructDef]) -> u32 {
+        match self {
+            // abbrev(1) + name(4 strp) + byte_size(1) + encoding(1)
+            CatalogEntry::Base(_) | CatalogEntry::VoidStar => 7,
+            // abbrev(1) + byte_size(1) + type(4 ref4)
+            CatalogEntry::Pointer { .. } | CatalogEntry::StructPointer { .. } => 6,
+            CatalogEntry::Struct { id } => {
+                // abbrev(1) + name(4) + byte_size(4 DATA4)
+                let mut size: u32 = 1 + 4 + 4;
+                if let Some(s) = structs.get(*id as usize) {
+                    for f in &s.fields {
+                        // member abbrev(1) + name(4) + type(4) + location(4)
+                        size += 13;
+                        if f.bit_width > 0 {
+                            // + byte_size(1) + bit_offset(1) + bit_size(1)
+                            size += 3;
+                        }
+                    }
+                }
+                // children-list terminator
+                size += 1;
+                size
+            }
+        }
+    }
+}
+
+struct TypeCatalog {
+    /// All entries in deterministic emission order. The `BTreeSet`
+    /// ordering doubles as the wire order (see `CatalogEntry`'s
+    /// docs); a flat `Vec` after collection lets us index by
+    /// emission order.
+    entries: Vec<CatalogEntry>,
+    /// Per-base interned `DW_AT_name` offset. Pointer DIEs don't
+    /// carry a name; the base they ultimately resolve to does.
+    base_names: BTreeMap<BaseTypeKey, u32>,
+    /// Per-struct interned `DW_AT_name` offset, keyed by struct
+    /// id. Anonymous structs (empty source name) get a synthesised
+    /// `struct@N` placeholder so DIE resolution still produces a
+    /// non-empty string.
+    struct_names: BTreeMap<u32, u32>,
+    /// Per-struct interned member `DW_AT_name` offsets, keyed by
+    /// struct id. The inner `Vec` aligns 1:1 with
+    /// `StructDef::fields`.
+    struct_member_names: BTreeMap<u32, Vec<u32>>,
+    /// `DW_AT_name` for the placeholder `void *` DIE. Zero when
+    /// the catalog has no `VoidStar` entry.
+    void_star_name_off: u32,
+}
+
+impl TypeCatalog {
+    fn collect(
+        subs: &[Subprog],
+        strs: &mut StrTable,
+        target: Target,
+        structs: &[StructDef],
+    ) -> Self {
+        let mut entries: BTreeSet<CatalogEntry> = BTreeSet::new();
+        // Walk every captured variable / parameter to seed the
+        // catalog with the types user code references directly.
+        for sub in subs {
+            for v in &sub.variables {
+                let entry = classify(v.type_tag, target);
+                Self::insert_with_chain(&mut entries, entry);
+            }
+        }
+
+        // Transitive expansion: every Struct entry pulls in its
+        // members' types, which can themselves pull in more
+        // structs. Worklist over distinct struct ids; cycles are
+        // broken by `visited`. Mutually-recursive structs (a
+        // common shape in real C codebases) are fine because the
+        // layout pass below resolves member type-refs against
+        // precomputed offsets, not write-time positions.
+        let mut visited: BTreeSet<u32> = BTreeSet::new();
+        let mut queue: Vec<u32> = entries
+            .iter()
+            .filter_map(|e| match e {
+                CatalogEntry::Struct { id } | CatalogEntry::StructPointer { id, .. } => Some(*id),
+                _ => None,
+            })
+            .collect();
+        while let Some(id) = queue.pop() {
+            if !visited.insert(id) {
+                continue;
+            }
+            let Some(s) = structs.get(id as usize) else {
+                continue;
+            };
+            for f in &s.fields {
+                let entry = classify(f.ty, target);
+                Self::insert_with_chain(&mut entries, entry);
+                if let CatalogEntry::Struct { id } | CatalogEntry::StructPointer { id, .. } = entry
+                {
+                    queue.push(id);
+                }
+            }
+        }
+
+        // Intern names. Bases first; then struct names + every
+        // struct's member names (BTreeMap iteration is sorted, so
+        // the strtab order is deterministic). Void* gets one if
+        // any variable resolved that way.
+        let mut base_names: BTreeMap<BaseTypeKey, u32> = BTreeMap::new();
+        let mut struct_names: BTreeMap<u32, u32> = BTreeMap::new();
+        let mut struct_member_names: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
+        let needs_void_star = entries.contains(&CatalogEntry::VoidStar);
+        for entry in &entries {
+            match entry {
+                CatalogEntry::Base(key) => {
+                    base_names
+                        .entry(*key)
+                        .or_insert_with(|| strs.intern(key.name));
+                }
+                CatalogEntry::Struct { id } => {
+                    if let Some(s) = structs.get(*id as usize) {
+                        let display = if s.name.is_empty() {
+                            format!("struct@{id}")
+                        } else {
+                            s.name.clone()
+                        };
+                        struct_names
+                            .entry(*id)
+                            .or_insert_with(|| strs.intern(&display));
+                        let members = s.fields.iter().map(|f| strs.intern(&f.name)).collect();
+                        struct_member_names.entry(*id).or_insert(members);
+                    }
+                }
+                _ => {}
+            }
+        }
+        let void_star_name_off = if needs_void_star {
+            strs.intern("void *")
+        } else {
+            0
+        };
+
+        TypeCatalog {
+            entries: entries.into_iter().collect(),
+            base_names,
+            struct_names,
+            struct_member_names,
+            void_star_name_off,
+        }
+    }
+
+    /// Insert `entry` and -- when it's a pointer chain -- every
+    /// shallower chain entry plus the rooting type DIE, so the
+    /// emission walk finds each level's pointee already present.
+    /// Struct-rooted chains follow the same shape with `Struct {
+    /// id }` as the eventual root.
+    fn insert_with_chain(entries: &mut BTreeSet<CatalogEntry>, entry: CatalogEntry) {
+        match entry {
+            CatalogEntry::Pointer { leaf, depth } => {
+                entries.insert(CatalogEntry::Base(leaf));
+                for d in 1..=depth {
+                    entries.insert(CatalogEntry::Pointer { leaf, depth: d });
+                }
+            }
+            CatalogEntry::StructPointer { id, depth } => {
+                entries.insert(CatalogEntry::Struct { id });
+                for d in 1..=depth {
+                    entries.insert(CatalogEntry::StructPointer { id, depth: d });
+                }
+            }
+            other => {
+                entries.insert(other);
+            }
+        }
+    }
+}
+
+/// Resolve a c5 type tag to its catalog entry. Scalars become
+/// `Base(...)`, pointer-to-scalar chains become `Pointer { leaf,
+/// depth }`, struct values become `Struct { id }`, struct-pointer
+/// chains become `StructPointer { id, depth }`. Anything we can't
+/// classify falls back to `VoidStar`.
+fn classify(ty: i64, target: Target) -> CatalogEntry {
+    let unsigned = types::is_unsigned_ty(ty);
+    let bare = types::strip_unsigned(ty);
+
+    // Struct band: separate id + pointer-depth via the helpers
+    // c5's frontend already uses (`struct_id_of`, `struct_ptr_depth`).
+    if bare >= types::STRUCT_BASE {
+        let id = ((bare - types::STRUCT_BASE) / 1000) as u32;
+        let depth_in_band = (bare - types::STRUCT_BASE) % 1000;
+        let depth = (depth_in_band / Ty::Ptr as i64) as u8;
+        return if depth == 0 {
+            CatalogEntry::Struct { id }
+        } else {
+            CatalogEntry::StructPointer { id, depth }
+        };
+    }
+
+    let ptr_step = Ty::Ptr as i64;
+    let band_size: i64 = 100;
+
+    // Compute (leaf-tag, pointer-depth) by detecting which band
+    // `bare` lives in. Each non-integer band sits at a fixed
+    // offset; the integer family shares chars (even bare) and
+    // ints (odd bare) in the [0, 100) range.
+    let (leaf_tag, depth) = if bare < band_size {
+        // Integer family: even = char, odd = int.
+        let depth = (bare / ptr_step) as u8;
+        let leaf = if bare % ptr_step == 0 {
+            Ty::Char as i64
+        } else {
+            Ty::Int as i64
+        };
+        (leaf, depth)
+    } else if (Ty::Float as i64..Ty::Float as i64 + band_size).contains(&bare) {
+        let depth = ((bare - Ty::Float as i64) / ptr_step) as u8;
+        (Ty::Float as i64, depth)
+    } else if (Ty::Double as i64..Ty::Double as i64 + band_size).contains(&bare) {
+        let depth = ((bare - Ty::Double as i64) / ptr_step) as u8;
+        (Ty::Double as i64, depth)
+    } else if (Ty::Long as i64..Ty::Long as i64 + band_size).contains(&bare) {
+        let depth = ((bare - Ty::Long as i64) / ptr_step) as u8;
+        (Ty::Long as i64, depth)
+    } else if (Ty::Short as i64..Ty::Short as i64 + band_size).contains(&bare) {
+        let depth = ((bare - Ty::Short as i64) / ptr_step) as u8;
+        (Ty::Short as i64, depth)
+    } else if (Ty::LongLong as i64..Ty::LongLong as i64 + band_size).contains(&bare) {
+        let depth = ((bare - Ty::LongLong as i64) / ptr_step) as u8;
+        (Ty::LongLong as i64, depth)
+    } else {
+        return CatalogEntry::VoidStar;
+    };
+
+    let leaf_signed = if unsigned {
+        leaf_tag | types::UNSIGNED_BIT
+    } else {
+        leaf_tag
+    };
+    let leaf_key = match base_key_for_leaf(leaf_signed, target) {
+        Some(k) => k,
+        None => return CatalogEntry::VoidStar,
+    };
+    if depth == 0 {
+        CatalogEntry::Base(leaf_key)
+    } else {
+        CatalogEntry::Pointer {
+            leaf: leaf_key,
+            depth,
+        }
+    }
+}
+
+/// Build a `BaseTypeKey` for a *bare* leaf scalar tag (no pointer
+/// depth). Caller handles the pointer extraction; this just maps
+/// the leaf-band tag to its DWARF wire-form attributes.
+fn base_key_for_leaf(leaf_tag: i64, target: Target) -> Option<BaseTypeKey> {
+    let unsigned = types::is_unsigned_ty(leaf_tag);
+    let bare = types::strip_unsigned(leaf_tag);
+
+    let key = if bare == Ty::Char as i64 {
+        BaseTypeKey {
+            name: if unsigned { "unsigned char" } else { "char" },
+            byte_size: 1,
+            encoding: if unsigned {
+                DW_ATE_UNSIGNED_CHAR
+            } else {
+                DW_ATE_SIGNED_CHAR
+            },
+        }
+    } else if bare == Ty::Short as i64 {
+        BaseTypeKey {
+            name: if unsigned { "unsigned short" } else { "short" },
+            byte_size: 2,
+            encoding: if unsigned {
+                DW_ATE_UNSIGNED
+            } else {
+                DW_ATE_SIGNED
+            },
+        }
+    } else if bare == Ty::Int as i64 {
+        BaseTypeKey {
+            name: if unsigned { "unsigned int" } else { "int" },
+            byte_size: 4,
+            encoding: if unsigned {
+                DW_ATE_UNSIGNED
+            } else {
+                DW_ATE_SIGNED
+            },
+        }
+    } else if bare == Ty::Long as i64 {
+        // LP64: 8 bytes; LLP64 (Windows): 4 bytes. Matches the
+        // c5 codegen's load/store width pick (`load_op_for`).
+        let byte_size = if target.is_windows() { 4 } else { 8 };
+        BaseTypeKey {
+            name: if unsigned { "unsigned long" } else { "long" },
+            byte_size,
+            encoding: if unsigned {
+                DW_ATE_UNSIGNED
+            } else {
+                DW_ATE_SIGNED
+            },
+        }
+    } else if bare == Ty::LongLong as i64 {
+        BaseTypeKey {
+            name: if unsigned {
+                "unsigned long long"
+            } else {
+                "long long"
+            },
+            byte_size: 8,
+            encoding: if unsigned {
+                DW_ATE_UNSIGNED
+            } else {
+                DW_ATE_SIGNED
+            },
+        }
+    } else if bare == Ty::Float as i64 {
+        // c5 keeps `float` at 8 bytes today (no f32 narrowing,
+        // see `pointee_size_no_struct`); the DIE's byte_size
+        // describes the wire layout, so 8 it is until the
+        // narrowing lands.
+        BaseTypeKey {
+            name: "float",
+            byte_size: 8,
+            encoding: DW_ATE_FLOAT,
+        }
+    } else if bare == Ty::Double as i64 {
+        BaseTypeKey {
+            name: "double",
+            byte_size: 8,
+            encoding: DW_ATE_FLOAT,
+        }
+    } else {
+        return None;
+    };
+    Some(key)
 }
 
 // ---- .debug_abbrev ----
@@ -327,9 +942,9 @@ fn build_debug_abbrev() -> Vec<u8> {
     write_uleb128(&mut buf, 0);
 
     // Abbrev 2: DW_TAG_subprogram, has children (formal_param,
-    // variable). Phase 2 (gh #46) added DW_AT_frame_base so
-    // `DW_OP_fbreg` location expressions in the children resolve
-    // against `$x29` (c5's frame pointer).
+    // variable). `DW_AT_frame_base` carries the location
+    // expression that resolves `DW_OP_fbreg` references against
+    // c5's frame pointer ($x29).
     write_uleb128(&mut buf, 2);
     write_uleb128(&mut buf, DW_TAG_SUBPROGRAM as u64);
     buf.push(DW_CHILDREN_YES);
@@ -343,12 +958,9 @@ fn build_debug_abbrev() -> Vec<u8> {
     write_uleb128(&mut buf, 0);
     write_uleb128(&mut buf, 0);
 
-    // Abbrev 3: DW_TAG_base_type. Two instances are emitted in
-    // .debug_info: a 4-byte signed `int` and an 8-byte `void *`.
-    // Variable / parameter DIEs reference whichever matches their
-    // c5 type tag (pointer => the address-encoded entry, all
-    // others => the int entry). Phase 3 will replace this with
-    // per-c5-type-tag base / pointer / struct DIEs.
+    // Abbrev 3: DW_TAG_base_type. Shared by every scalar base type
+    // DIE (one per distinct c5 tag) plus the placeholder void* DIE
+    // that pointer / struct variables fall back to in phase 1A.
     write_uleb128(&mut buf, 3);
     write_uleb128(&mut buf, DW_TAG_BASE_TYPE as u64);
     buf.push(DW_CHILDREN_NO);
@@ -372,14 +984,81 @@ fn build_debug_abbrev() -> Vec<u8> {
     write_uleb128(&mut buf, 0);
 
     // Abbrev 5: DW_TAG_formal_parameter. Same shape as the local
-    // variable abbrev; the tag itself is what tells lldb /
-    // gdb to render the entry as a parameter rather than a local.
+    // variable abbrev; the tag itself is what tells lldb / gdb to
+    // render the entry as a parameter rather than a local.
     write_uleb128(&mut buf, 5);
     write_uleb128(&mut buf, DW_TAG_FORMAL_PARAMETER as u64);
     buf.push(DW_CHILDREN_NO);
     write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
     write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
     write_attr(&mut buf, DW_AT_LOCATION, DW_FORM_EXPRLOC);
+    write_uleb128(&mut buf, 0);
+    write_uleb128(&mut buf, 0);
+
+    // Abbrev 6: DW_TAG_pointer_type. Used by every entry of a
+    // pointer-chain DIE (`int *`, `int **`, `unsigned long *`,
+    // `struct Foo *`, ...). DW_AT_byte_size is constant 8 across
+    // our supported targets; DW_AT_TYPE is a CU-relative ref4 to
+    // the pointee (the depth-1 pointer DIE for chains, or the
+    // base / struct DIE for the depth-1 entry).
+    write_uleb128(&mut buf, 6);
+    write_uleb128(&mut buf, DW_TAG_POINTER_TYPE as u64);
+    buf.push(DW_CHILDREN_NO);
+    write_attr(&mut buf, DW_AT_BYTE_SIZE, DW_FORM_DATA1);
+    write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
+    write_uleb128(&mut buf, 0);
+    write_uleb128(&mut buf, 0);
+
+    // Abbrev 7: DW_TAG_structure_type. Has children (one
+    // DW_TAG_member per c5 `StructField`). DW_AT_byte_size is
+    // DATA4 since real-world aggregates exceed 256 bytes
+    // routinely (sqlite's `Vdbe` runs to a few KB).
+    write_uleb128(&mut buf, 7);
+    write_uleb128(&mut buf, DW_TAG_STRUCTURE_TYPE as u64);
+    buf.push(DW_CHILDREN_YES);
+    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
+    write_attr(&mut buf, DW_AT_BYTE_SIZE, DW_FORM_DATA4);
+    write_uleb128(&mut buf, 0);
+    write_uleb128(&mut buf, 0);
+
+    // Abbrev 8: DW_TAG_union_type. Same shape as the structure
+    // abbrev; the tag is what tells lldb / gdb to render `s.x`
+    // and `s.y` as overlapping rather than sequential.
+    write_uleb128(&mut buf, 8);
+    write_uleb128(&mut buf, DW_TAG_UNION_TYPE as u64);
+    buf.push(DW_CHILDREN_YES);
+    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
+    write_attr(&mut buf, DW_AT_BYTE_SIZE, DW_FORM_DATA4);
+    write_uleb128(&mut buf, 0);
+    write_uleb128(&mut buf, 0);
+
+    // Abbrev 9: DW_TAG_member -- a regular (non-bitfield) struct
+    // / union field. DW_AT_data_member_location is the byte offset
+    // of the field from the start of its containing aggregate.
+    write_uleb128(&mut buf, 9);
+    write_uleb128(&mut buf, DW_TAG_MEMBER as u64);
+    buf.push(DW_CHILDREN_NO);
+    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
+    write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
+    write_attr(&mut buf, DW_AT_DATA_MEMBER_LOCATION, DW_FORM_DATA4);
+    write_uleb128(&mut buf, 0);
+    write_uleb128(&mut buf, 0);
+
+    // Abbrev 10: DW_TAG_member with bitfield extras
+    // (DWARF 3-style: byte_size + bit_offset + bit_size on top of
+    // the regular member triple). lldb / gdb both still handle
+    // this shape on DWARF 4 input; switching to DWARF 5's
+    // `DW_AT_data_bit_offset` is a follow-up if a consumer ever
+    // breaks.
+    write_uleb128(&mut buf, 10);
+    write_uleb128(&mut buf, DW_TAG_MEMBER as u64);
+    buf.push(DW_CHILDREN_NO);
+    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
+    write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
+    write_attr(&mut buf, DW_AT_DATA_MEMBER_LOCATION, DW_FORM_DATA4);
+    write_attr(&mut buf, DW_AT_BYTE_SIZE, DW_FORM_DATA1);
+    write_attr(&mut buf, DW_AT_BIT_OFFSET, DW_FORM_DATA1);
+    write_attr(&mut buf, DW_AT_BIT_SIZE, DW_FORM_DATA1);
     write_uleb128(&mut buf, 0);
     write_uleb128(&mut buf, 0);
 
@@ -403,26 +1082,14 @@ fn build_debug_info(
     line_unit_off: u32,
     cu_low_pc: u64,
     cu_size: u64,
-    int_type_name_off: u32,
-    ptr_type_name_off: u32,
+    catalog: &TypeCatalog,
     subs: &[Subprog],
+    target: Target,
+    structs: &[StructDef],
 ) -> Vec<u8> {
-    // DWARF 4 32-bit unit header is 11 bytes:
-    //   unit_length (4)  -- length of the unit *not counting* this field
-    //   version     (2)  -- 4
-    //   debug_abbrev_offset (4) -- offset into .debug_abbrev (we put
-    //                              everything in one CU, so 0)
-    //   address_size (1) -- 8 (every supported target is 64-bit)
-    //
-    // We can't write `unit_length` until we know the body size, so
-    // build the body first, then prepend the header.
-    //
-    // DW_FORM_ref4 references in this CU encode a CU-relative
-    // byte offset; the unit starts at .debug_info offset 0, so
-    // CU-relative == .debug_info-absolute. We track the
-    // `header_len`-shifted position of each type DIE so child
-    // DIEs can refer back to it.
-    const HEADER_LEN: usize = 11;
+    // Build the body first so we know its size before prepending
+    // the unit header. CU-relative `DW_FORM_ref4` offsets are
+    // body-position + `DebugInfoUnitHeader::SIZE`.
     let mut body: Vec<u8> = Vec::with_capacity(64 + subs.len() * 48);
 
     // CU DIE: abbrev 1.
@@ -435,21 +1102,34 @@ fn build_debug_info(
     body.extend_from_slice(&cu_size.to_le_bytes());
     body.extend_from_slice(&line_unit_off.to_le_bytes());
 
-    // Type DIEs (CU children, abbrev 3). Two entries cover phase
-    // 2's variable / parameter shapes: a 4-byte signed `int` and
-    // an 8-byte address-encoded `void *`. Variables / parameters
-    // pick whichever matches their c5 pointer-or-not status.
-    let int_type_off = (body.len() + HEADER_LEN) as u32;
-    write_uleb128(&mut body, 3);
-    body.extend_from_slice(&int_type_name_off.to_le_bytes());
-    body.push(4);
-    body.push(DW_ATE_SIGNED);
+    // Layout pass: precompute the CU-relative offset every
+    // catalog entry will land at, *before* writing any of them.
+    // Member type-refs in struct DIEs reach forward to other
+    // structs (linked-list nodes, mutually-recursive
+    // aggregates), so write-time positions aren't enough.
+    // `die_size` is deterministic, so the pass is exact.
+    let mut entry_offsets: BTreeMap<CatalogEntry, u32> = BTreeMap::new();
+    {
+        let mut cursor = (body.len() as u32) + DebugInfoUnitHeader::SIZE;
+        for entry in &catalog.entries {
+            entry_offsets.insert(*entry, cursor);
+            cursor += entry.die_size(structs);
+        }
+    }
 
-    let ptr_type_off = (body.len() + HEADER_LEN) as u32;
-    write_uleb128(&mut body, 3);
-    body.extend_from_slice(&ptr_type_name_off.to_le_bytes());
-    body.push(8);
-    body.push(DW_ATE_ADDRESS);
+    // Emit pass: walk entries in catalog order. Each write
+    // advances `body` by exactly `die_size` bytes; we sanity-check
+    // that against the precomputed offset to catch encoding
+    // drift (an attribute width that doesn't match the abbrev
+    // declaration would be silent corruption otherwise).
+    for entry in &catalog.entries {
+        let pre_pos = (body.len() as u32) + DebugInfoUnitHeader::SIZE;
+        debug_assert_eq!(
+            pre_pos, entry_offsets[entry],
+            "die_size disagreed with the emitter for {entry:?}",
+        );
+        emit_type_die(entry, &mut body, catalog, structs, &entry_offsets, target);
+    }
 
     // Subprogram children, each with its own variable /
     // formal_parameter children.
@@ -466,21 +1146,26 @@ fn build_debug_info(
         body.push(DW_OP_BREG29);
         body.push(0);
 
-        // Variable / formal_parameter children. Order: parameters
-        // first (lldb's frame-variable ordering matches the
-        // declaration order; we keep it close enough for c5's
-        // single-pass capture by sorting here).
+        // Variable / formal_parameter children. Order parameters
+        // first; lldb's frame-variable ordering matches
+        // declaration order, and c5's single-pass capture lands
+        // them sorted on `fp_byte_offset` after the split.
         let mut sorted: Vec<&SubprogVar> = s.variables.iter().collect();
         sorted.sort_by_key(|v| (!v.is_parameter, v.fp_byte_offset));
         for v in sorted {
             let abbrev = if v.is_parameter { 5 } else { 4 };
             write_uleb128(&mut body, abbrev);
             body.extend_from_slice(&v.name_off.to_le_bytes());
-            let type_off = if v.is_pointer {
-                ptr_type_off
-            } else {
-                int_type_off
-            };
+            // Resolve this variable's c5 type tag through the
+            // catalog: scalar -> Base DIE, pointer-chain ->
+            // Pointer DIE at the right depth, struct / unknown ->
+            // VoidStar placeholder. The catalog's collect() walks
+            // every captured variable, so a lookup miss is
+            // impossible.
+            let entry = classify(v.type_tag, target);
+            let type_off = *entry_offsets
+                .get(&entry)
+                .expect("catalog includes every entry produced by classify()");
             body.extend_from_slice(&type_off.to_le_bytes());
             // Location: DW_OP_fbreg <sleb128 offset-from-frame-base>.
             let mut loc: Vec<u8> = Vec::with_capacity(8);
@@ -496,14 +1181,450 @@ fn build_debug_info(
     // CU children list terminator.
     body.push(0);
 
-    // Header.
-    let mut out = Vec::with_capacity(HEADER_LEN + body.len());
-    let unit_length = (body.len() + 7) as u32; // version(2) + abbrev_off(4) + addr_size(1)
-    out.extend_from_slice(&unit_length.to_le_bytes());
-    out.extend_from_slice(&4u16.to_le_bytes()); // DWARF version 4
-    out.extend_from_slice(&0u32.to_le_bytes()); // debug_abbrev_offset
-    out.push(8); // address_size
+    // Prepend the unit header. `unit_length` covers everything
+    // after itself: version(2) + abbrev_off(4) + addr_size(1) +
+    // body.
+    let mut out = Vec::with_capacity(DebugInfoUnitHeader::SIZE as usize + body.len());
+    let header = DebugInfoUnitHeader {
+        unit_length: (body.len() + 7) as u32,
+        version: 4,
+        debug_abbrev_offset: 0,
+        address_size: 8,
+    };
+    header.write_le(&mut out);
     out.extend_from_slice(&body);
+    out
+}
+
+/// Emit one type DIE into `body`. Walks the entry's variant,
+/// pulling pointee / member references out of `entry_offsets`
+/// (built by the layout pass). The byte count this writes must
+/// match `entry.die_size(structs)` exactly -- the layout pass
+/// relied on it -- which is why the abbrev / form widths here
+/// mirror the abbrev table verbatim.
+fn emit_type_die(
+    entry: &CatalogEntry,
+    body: &mut Vec<u8>,
+    catalog: &TypeCatalog,
+    structs: &[StructDef],
+    entry_offsets: &BTreeMap<CatalogEntry, u32>,
+    target: Target,
+) {
+    match entry {
+        CatalogEntry::Base(key) => {
+            let name_off = catalog
+                .base_names
+                .get(key)
+                .copied()
+                .expect("collect() interned every base in base_names");
+            write_uleb128(body, 3);
+            body.extend_from_slice(&name_off.to_le_bytes());
+            body.push(key.byte_size);
+            body.push(key.encoding);
+        }
+        CatalogEntry::Pointer { leaf, depth } => {
+            let pointee = if *depth == 1 {
+                CatalogEntry::Base(*leaf)
+            } else {
+                CatalogEntry::Pointer {
+                    leaf: *leaf,
+                    depth: depth - 1,
+                }
+            };
+            let pointee_off = *entry_offsets
+                .get(&pointee)
+                .expect("chain insertion guarantees the pointee was placed");
+            write_uleb128(body, 6);
+            body.push(8);
+            body.extend_from_slice(&pointee_off.to_le_bytes());
+        }
+        CatalogEntry::StructPointer { id, depth } => {
+            let pointee = if *depth == 1 {
+                CatalogEntry::Struct { id: *id }
+            } else {
+                CatalogEntry::StructPointer {
+                    id: *id,
+                    depth: depth - 1,
+                }
+            };
+            let pointee_off = *entry_offsets
+                .get(&pointee)
+                .expect("chain insertion guarantees the pointee was placed");
+            write_uleb128(body, 6);
+            body.push(8);
+            body.extend_from_slice(&pointee_off.to_le_bytes());
+        }
+        CatalogEntry::Struct { id } => {
+            let s = structs
+                .get(*id as usize)
+                .expect("Struct entries only land in the catalog when the id is in-range");
+            let abbrev = if s.is_union { 8 } else { 7 };
+            let name_off = catalog
+                .struct_names
+                .get(id)
+                .copied()
+                .expect("collect() interned every struct name");
+            write_uleb128(body, abbrev);
+            body.extend_from_slice(&name_off.to_le_bytes());
+            // DW_AT_byte_size as DATA4 -- structs over 256 bytes
+            // happen all the time (sqlite's Vdbe runs to several
+            // KB).
+            body.extend_from_slice(&(s.size as u32).to_le_bytes());
+
+            let member_names = catalog
+                .struct_member_names
+                .get(id)
+                .expect("collect() interned every struct's member names alongside the name");
+            for (i, f) in s.fields.iter().enumerate() {
+                let member_name_off = member_names[i];
+                // Resolve member type. Arrays decay to the
+                // element type DIE today (see gh #59 follow-up:
+                // emit `DW_TAG_array_type` so `ptype` shows
+                // `T xs[N]` instead of just `T xs`); the offsets
+                // for subsequent fields are already correct
+                // because c5 baked the array stride into the
+                // member offsets at parse time.
+                let member_entry = classify(f.ty, target);
+                let member_type_off = *entry_offsets
+                    .get(&member_entry)
+                    .expect("collect() walked every struct field's type into the catalog");
+
+                if f.bit_width == 0 {
+                    // Regular member: abbrev 9.
+                    write_uleb128(body, 9);
+                    body.extend_from_slice(&member_name_off.to_le_bytes());
+                    body.extend_from_slice(&member_type_off.to_le_bytes());
+                    body.extend_from_slice(&(f.offset as u32).to_le_bytes());
+                } else {
+                    // Bitfield: abbrev 10. c5 packs bitfields
+                    // into 8-byte storage units; convert c5's
+                    // LSB-relative `bit_offset` to DWARF v4's
+                    // MSB-relative `DW_AT_bit_offset` on
+                    // little-endian targets:
+                    //   dwarf_bit_offset = 64 - lsb_offset - width
+                    write_uleb128(body, 10);
+                    body.extend_from_slice(&member_name_off.to_le_bytes());
+                    body.extend_from_slice(&member_type_off.to_le_bytes());
+                    body.extend_from_slice(&(f.offset as u32).to_le_bytes());
+                    body.push(8); // DW_AT_byte_size: storage unit is 8 bytes.
+                    let dwarf_bit_offset = 64u32
+                        .saturating_sub(f.bit_offset)
+                        .saturating_sub(f.bit_width);
+                    body.push(dwarf_bit_offset as u8);
+                    body.push(f.bit_width as u8);
+                }
+            }
+            // Children-list terminator for this struct.
+            body.push(0);
+        }
+        CatalogEntry::VoidStar => {
+            // 8-byte address-encoded base type. Effectively
+            // `void *` in user-facing rendering -- once unknown
+            // tags are extinct this entry can be removed
+            // entirely.
+            write_uleb128(body, 3);
+            body.extend_from_slice(&catalog.void_star_name_off.to_le_bytes());
+            body.push(8);
+            body.push(DW_ATE_ADDRESS);
+        }
+    }
+}
+
+// ---- .debug_frame (Call Frame Information) ----
+
+/// Coarse arch flavour the CFI emitter dispatches on. Matches
+/// `super::Arch` but is decoded directly from `Target` so the
+/// helpers can stay self-contained without pulling the full
+/// `Build`/`Abi` plumbing in.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CfiArch {
+    Aarch64,
+    X86_64,
+}
+
+impl CfiArch {
+    fn of(target: Target) -> Self {
+        match target {
+            Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
+                CfiArch::Aarch64
+            }
+            Target::LinuxX64 | Target::WindowsX64 => CfiArch::X86_64,
+        }
+    }
+}
+
+/// `code_alignment_factor` -- the multiplier applied to factored
+/// PC deltas in CIE / FDE instructions. AArch64 instructions are
+/// uniformly 4 bytes, so 4 minimises the byte cost of
+/// `DW_CFA_advance_loc`. x86_64 has variable-length instructions,
+/// so 1 is the only safe choice.
+fn cfi_code_alignment_factor(arch: CfiArch) -> u64 {
+    match arch {
+        CfiArch::Aarch64 => 4,
+        CfiArch::X86_64 => 1,
+    }
+}
+
+/// `data_alignment_factor` -- the multiplier applied to factored
+/// register-save offsets. We pick `-8` so a positive ULEB factor
+/// `N` lands `N * -8` bytes from CFA, which is what every saved
+/// register on a 64-bit target wants (caller frame above CFA,
+/// saves below).
+const CFI_DATA_ALIGNMENT_FACTOR: i64 = -8;
+
+/// DWARF return-address register column. AArch64 saves the link
+/// register in x30 at function entry. x86_64 uses the virtual
+/// "RA" column 16.
+fn cfi_return_address_register(arch: CfiArch) -> u64 {
+    match arch {
+        CfiArch::Aarch64 => AARCH64_REG_X30 as u64,
+        CfiArch::X86_64 => X86_64_REG_RA as u64,
+    }
+}
+
+/// Initial CFI rules effective at function entry. Encoded into
+/// the CIE so every FDE inherits them and only emits the deltas
+/// the prologue introduces.
+fn write_cie_initial_instructions(out: &mut Vec<u8>, arch: CfiArch) {
+    match arch {
+        CfiArch::Aarch64 => {
+            // CFA = sp + 0; the link register is in x30 (CIE's
+            // return-address register column already names it).
+            out.push(DW_CFA_DEF_CFA);
+            write_uleb128(out, AARCH64_REG_SP as u64);
+            write_uleb128(out, 0);
+        }
+        CfiArch::X86_64 => {
+            // `call` pushed the return address before transferring
+            // control, so CFA = rsp + 8 with the return address
+            // saved at CFA - 8 (factored 1 against -8).
+            out.push(DW_CFA_DEF_CFA);
+            write_uleb128(out, X86_64_REG_RSP as u64);
+            write_uleb128(out, 8);
+            out.push(DW_CFA_OFFSET_HI | X86_64_REG_RA);
+            write_uleb128(out, 1);
+        }
+    }
+}
+
+/// CFI rules effective from the first byte of the function body
+/// (i.e. after the prologue completes). Standard c5 prologue
+/// shape: fp/lr saved into a 16-byte slot at the top of the
+/// frame; on aarch64 x29 is then set to sp; on x86_64 rbp is set
+/// to rsp.
+fn write_post_prologue_instructions(out: &mut Vec<u8>, arch: CfiArch) {
+    match arch {
+        CfiArch::Aarch64 => {
+            // CFA = x29 + 16. x29 itself was saved at the new
+            // sp = x29 + 0 = CFA - 16; x30 was saved at sp + 8 =
+            // CFA - 8. Both factored against -8 (factor 2 / 1).
+            out.push(DW_CFA_DEF_CFA);
+            write_uleb128(out, AARCH64_REG_X29 as u64);
+            write_uleb128(out, 16);
+            out.push(DW_CFA_OFFSET_HI | AARCH64_REG_X29);
+            write_uleb128(out, 2);
+            out.push(DW_CFA_OFFSET_HI | AARCH64_REG_X30);
+            write_uleb128(out, 1);
+        }
+        CfiArch::X86_64 => {
+            // CFA = rbp + 16 (rbp covers ret-addr + saved-rbp
+            // slots). rbp itself saved at CFA - 16; the return
+            // address at CFA - 8 was already declared by the CIE
+            // and stays put.
+            out.push(DW_CFA_DEF_CFA);
+            write_uleb128(out, X86_64_REG_RBP as u64);
+            write_uleb128(out, 16);
+            out.push(DW_CFA_OFFSET_HI | X86_64_REG_RBP);
+            write_uleb128(out, 2);
+        }
+    }
+}
+
+/// Encode a `DW_CFA_advance_loc` covering `bytes` of native code,
+/// expanding into the smallest opcode form that fits the factored
+/// delta. AArch64 always factors evenly (instructions are 4
+/// bytes); x86_64 uses code_alignment_factor = 1 so the byte
+/// count goes through unchanged.
+fn write_advance_loc(out: &mut Vec<u8>, arch: CfiArch, bytes: u32) {
+    let factor = cfi_code_alignment_factor(arch) as u32;
+    debug_assert_eq!(
+        bytes % factor,
+        0,
+        "prologue size {bytes} not divisible by code_alignment_factor {factor}"
+    );
+    let units = bytes / factor;
+    if units == 0 {
+        return;
+    }
+    if units < 64 {
+        out.push(DW_CFA_ADVANCE_LOC_HI | units as u8);
+    } else if units < 256 {
+        out.push(DW_CFA_ADVANCE_LOC1);
+        out.push(units as u8);
+    } else if units < 65_536 {
+        out.push(DW_CFA_ADVANCE_LOC2);
+        out.extend_from_slice(&(units as u16).to_le_bytes());
+    } else {
+        out.push(DW_CFA_ADVANCE_LOC4);
+        out.extend_from_slice(&units.to_le_bytes());
+    }
+}
+
+/// Round `body.len()` up to a multiple of 8 (the CIE / FDE
+/// alignment for 64-bit DWARF) by appending `DW_CFA_nop` (0x00)
+/// padding.
+fn pad_to_alignment(body: &mut Vec<u8>, alignment: usize) {
+    while !body.len().is_multiple_of(alignment) {
+        body.push(DW_CFA_NOP);
+    }
+}
+
+/// Common-Information Entry header (`.debug_frame` form).
+/// `unit_length` covers everything after itself; `cie_id =
+/// 0xffffffff` distinguishes a CIE from an FDE in `.debug_frame`
+/// (FDEs carry a real offset there). DWARF 4 added the
+/// `address_size` / `segment_selector_size` bytes; before that,
+/// version 3 ran without them.
+#[repr(C, packed)]
+struct DebugFrameCieHeader {
+    unit_length: u32,
+    cie_id: u32,
+    version: u8,
+    /// First byte of the augmentation cstring (always `0` for
+    /// the empty augmentation we use). Splitting it out lets the
+    /// schema document the field even though the augmentation is
+    /// nominally variable-length.
+    augmentation_terminator: u8,
+    address_size: u8,
+    segment_selector_size: u8,
+}
+
+impl DebugFrameCieHeader {
+    fn write_le(&self, out: &mut Vec<u8>) {
+        let DebugFrameCieHeader {
+            unit_length,
+            cie_id,
+            version,
+            augmentation_terminator,
+            address_size,
+            segment_selector_size,
+        } = *self;
+        out.extend_from_slice(&unit_length.to_le_bytes());
+        out.extend_from_slice(&cie_id.to_le_bytes());
+        out.push(version);
+        out.push(augmentation_terminator);
+        out.push(address_size);
+        out.push(segment_selector_size);
+    }
+}
+
+/// Frame-Description Entry header (`.debug_frame` form).
+/// `cie_pointer` is an absolute offset from the start of
+/// `.debug_frame` to the matching CIE; we keep one CIE at offset
+/// 0 so every FDE here points at 0.
+#[repr(C, packed)]
+struct DebugFrameFdeHeader {
+    unit_length: u32,
+    cie_pointer: u32,
+    initial_location: u64,
+    address_range: u64,
+}
+
+impl DebugFrameFdeHeader {
+    fn write_le(&self, out: &mut Vec<u8>) {
+        let DebugFrameFdeHeader {
+            unit_length,
+            cie_pointer,
+            initial_location,
+            address_range,
+        } = *self;
+        out.extend_from_slice(&unit_length.to_le_bytes());
+        out.extend_from_slice(&cie_pointer.to_le_bytes());
+        out.extend_from_slice(&initial_location.to_le_bytes());
+        out.extend_from_slice(&address_range.to_le_bytes());
+    }
+}
+
+/// Build the `.debug_frame` section: one CIE at offset 0 plus one
+/// FDE per `Subprog`. Empty if there are no subs (no callable
+/// user functions). Returns the raw byte vector.
+fn build_debug_frame(target: Target, subs: &[Subprog]) -> Vec<u8> {
+    if subs.is_empty() {
+        return Vec::new();
+    }
+    let arch = CfiArch::of(target);
+    let mut out: Vec<u8> = Vec::with_capacity(64 + subs.len() * 32);
+
+    // ---- CIE ----
+    //
+    // Build the body (everything after `unit_length`) so we know
+    // its size before writing the prefix.
+    let mut cie_body: Vec<u8> = Vec::new();
+    write_uleb128(&mut cie_body, cfi_code_alignment_factor(arch));
+    write_sleb128(&mut cie_body, CFI_DATA_ALIGNMENT_FACTOR);
+    write_uleb128(&mut cie_body, cfi_return_address_register(arch));
+    write_cie_initial_instructions(&mut cie_body, arch);
+
+    // Header is 8 bytes for `unit_length + cie_id` plus 4 bytes
+    // for `version + augmentation_terminator + address_size +
+    // segment_selector_size` -- but we count `unit_length`'s 4
+    // bytes for the consumer-facing length, so subtract them.
+    // Pad the entire CIE record (header + body) to a multiple of
+    // 8 bytes so the FDE that follows starts on an 8-aligned
+    // offset (DWARF requires this for 64-bit address-size CFI).
+    let mut cie = Vec::with_capacity(16 + cie_body.len());
+    let cie_inner_len = (4 /* cie_id */ + 1 /* version */ + 1 /* aug NUL */
+        + 1 /* address_size */ + 1 /* segment_size */ + cie_body.len())
+        as u32;
+    let header = DebugFrameCieHeader {
+        unit_length: cie_inner_len,
+        cie_id: 0xffff_ffff,
+        version: 4,
+        augmentation_terminator: 0,
+        address_size: 8,
+        segment_selector_size: 0,
+    };
+    header.write_le(&mut cie);
+    cie.extend_from_slice(&cie_body);
+    pad_to_alignment(&mut cie, 8);
+    // Patch the unit_length to cover any DW_CFA_nop padding we
+    // added. The header wrote `cie_inner_len` not knowing about
+    // alignment; the actual length is `cie.len() - 4` (minus the
+    // unit_length field itself).
+    let actual_cie_unit_length = (cie.len() - 4) as u32;
+    cie[..4].copy_from_slice(&actual_cie_unit_length.to_le_bytes());
+    out.extend_from_slice(&cie);
+
+    // ---- FDEs ----
+
+    for sub in subs {
+        let mut fde_body: Vec<u8> = Vec::new();
+        // Skip past the prologue, then install the post-prologue
+        // CFA rule. Functions whose prologue size couldn't be
+        // recovered (DCE'd, etc.) pass `prologue_size == 0` and
+        // get the rule installed at the function's first byte.
+        if sub.prologue_size > 0 {
+            write_advance_loc(&mut fde_body, arch, sub.prologue_size);
+        }
+        write_post_prologue_instructions(&mut fde_body, arch);
+
+        let mut fde = Vec::with_capacity(24 + fde_body.len());
+        let fde_inner_len = (4 /* cie_pointer */ + 8 /* initial_location */
+            + 8 /* address_range */ + fde_body.len()) as u32;
+        let header = DebugFrameFdeHeader {
+            unit_length: fde_inner_len,
+            cie_pointer: 0,
+            initial_location: sub.low_pc,
+            address_range: sub.high_pc - sub.low_pc,
+        };
+        header.write_le(&mut fde);
+        fde.extend_from_slice(&fde_body);
+        pad_to_alignment(&mut fde, 8);
+        let actual_fde_unit_length = (fde.len() - 4) as u32;
+        fde[..4].copy_from_slice(&actual_fde_unit_length.to_le_bytes());
+        out.extend_from_slice(&fde);
+    }
+
     out
 }
 
@@ -521,34 +1642,23 @@ fn build_debug_line(
     code_vmaddr: u64,
     source_path: &str,
 ) -> (Vec<u8>, u32) {
-    // Header layout (DWARF 4, 32-bit):
-    //   unit_length              (4)
-    //   version                  (2) = 4
-    //   header_length            (4) -- bytes from end of this field to
-    //                                   the start of the program
-    //   minimum_instruction_length (1)
-    //   maximum_operations_per_instruction (1)
-    //   default_is_stmt          (1)
-    //   line_base                (1, signed)
-    //   line_range               (1)
-    //   opcode_base              (1)
-    //   standard_opcode_lengths  (opcode_base - 1 bytes)
-    //   include_directories      ([NUL] terminated path list, ends with NUL)
-    //   file_names               ([NUL] terminated entries; each:
-    //                              name<NUL> dir_idx<ULEB> mtime<ULEB> length<ULEB>;
-    //                              list ends with empty name <NUL>)
     let mut prog = Vec::with_capacity(256);
     write_line_program(&mut prog, program, build, code_vmaddr);
 
-    // Build the file/dir table sections separately so we can compute
-    // `header_length`.
+    // Build everything that follows the `header_length` field --
+    // statement-program prologue + opcode_lengths + dir / file
+    // tables -- so we can compute the prologue length before
+    // prepending the unit header.
     let mut hdr_after_len_field = Vec::with_capacity(32);
-    hdr_after_len_field.push(1); // minimum_instruction_length
-    hdr_after_len_field.push(1); // maximum_operations_per_instruction
-    hdr_after_len_field.push(1); // default_is_stmt = true
-    hdr_after_len_field.push(LINE_BASE as u8); // line_base = -1 (signed byte)
-    hdr_after_len_field.push(LINE_RANGE); // line_range = 14
-    hdr_after_len_field.push(OPCODE_BASE); // opcode_base = 13
+    let prog_header = DebugLineProgramHeader {
+        minimum_instruction_length: 1,
+        maximum_operations_per_instruction: 1,
+        default_is_stmt: 1,
+        line_base: LINE_BASE,
+        line_range: LINE_RANGE,
+        opcode_base: OPCODE_BASE,
+    };
+    prog_header.write_le(&mut hdr_after_len_field);
     // Standard-opcode lengths, indexed 1..opcode_base-1. Defaults
     // from the DWARF 4 spec table.
     for &n in &[0u8, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1] {
@@ -589,36 +1699,23 @@ fn build_debug_line(
     }
     hdr_after_len_field.push(0); // file_names terminator
 
-    // header_length = bytes from end of header_length field to
-    // start of program (i.e., minimum_instruction_length onward).
     let header_length = hdr_after_len_field.len() as u32;
-
-    let mut hdr = Vec::with_capacity(11 + hdr_after_len_field.len());
-    hdr.extend_from_slice(&4u16.to_le_bytes()); // version 4
-    hdr.extend_from_slice(&header_length.to_le_bytes());
-    hdr.extend_from_slice(&hdr_after_len_field);
-
     // unit_length covers everything after itself: version(2) +
     // header_length(4) + header_length-bytes + program.
-    let unit_length = (hdr.len() + prog.len()) as u32;
-    let mut out = Vec::with_capacity(4 + hdr.len() + prog.len());
-    out.extend_from_slice(&unit_length.to_le_bytes());
-    out.extend_from_slice(&hdr);
+    let unit_length = (2 + 4 + hdr_after_len_field.len() + prog.len()) as u32;
+
+    let mut out = Vec::with_capacity(4 + 2 + 4 + hdr_after_len_field.len() + prog.len());
+    let unit_header = DebugLineUnitHeader {
+        unit_length,
+        version: 4,
+        header_length,
+    };
+    unit_header.write_le(&mut out);
+    out.extend_from_slice(&hdr_after_len_field);
     out.extend_from_slice(&prog);
 
     (out, 0)
 }
-
-// Standard line-program tuning. Match DWARF 4's recommended
-// defaults: a special-opcode encodes
-// `(line += line_base + ((adj) % line_range);
-//   address += min_inst_len * (adj / line_range))`
-// where `adj = opcode - opcode_base`. With `line_base = -1`,
-// `line_range = 14`, an opcode covers line deltas in `[-1..12]`
-// before falling back to standard ops.
-const LINE_BASE: i8 = -1;
-const LINE_RANGE: u8 = 14;
-const OPCODE_BASE: u8 = 13;
 
 /// Walk the bytecode, emit one row per (live) op whose source line
 /// is known. The DWARF state machine starts at `(address=0,
@@ -655,7 +1752,6 @@ fn write_line_program(buf: &mut Vec<u8>, program: &Program, build: &Build, code_
     let mut state_addr: u64 = code_vmaddr;
     let mut state_line: i64 = 1;
     let mut state_file: u64 = 1;
-    let mut emitted_any = false;
 
     let mut bc_pc = 0usize;
     while bc_pc < program.text.len() {
@@ -702,7 +1798,6 @@ fn write_line_program(buf: &mut Vec<u8>, program: &Program, build: &Build, code_
         // here because the address+line deltas aren't bounded by
         // line_base / line_range in general.)
         buf.push(DW_LNS_COPY);
-        emitted_any = true;
         bc_pc += op.word_size();
     }
 
@@ -713,8 +1808,6 @@ fn write_line_program(buf: &mut Vec<u8>, program: &Program, build: &Build, code_
         advance_pc(buf, end_addr - state_addr);
     }
     write_extended(buf, DW_LNE_END_SEQUENCE, &[]);
-
-    let _ = emitted_any;
 }
 
 fn write_set_address(buf: &mut Vec<u8>, addr: u64) {
@@ -744,11 +1837,12 @@ fn advance_line(buf: &mut Vec<u8>, delta: i64) {
 
 struct StrTable {
     bytes: Vec<u8>,
-    // We don't bother deduplicating string contents in phase 1 --
-    // the table is small (one entry per user function, plus the
-    // CU name and producer) and the writer reads it sequentially.
-    // Phase 2 can add a hashmap-based dedup pass if it ever
-    // matters.
+    // Phase 1 didn't dedupe string contents; the table is small
+    // (one entry per user function plus the CU name and producer)
+    // and the writer reads it sequentially. The base-type names
+    // (gh #57) come from a small `&'static str` set, so dedup
+    // won't matter for them either. A dedup pass can land here if
+    // it ever shows up on a flame graph.
 }
 
 impl StrTable {
@@ -835,6 +1929,129 @@ mod tests {
         // the leading NUL).
         assert_eq!(off_a, 1);
         assert_eq!(off_b, 1 + b"hello\0".len() as u32);
+    }
+
+    #[test]
+    fn debug_info_unit_header_packs_to_11_bytes() {
+        let mut buf = Vec::new();
+        let h = DebugInfoUnitHeader {
+            unit_length: 0x0102_0304,
+            version: 4,
+            debug_abbrev_offset: 0,
+            address_size: 8,
+        };
+        h.write_le(&mut buf);
+        assert_eq!(buf.len(), DebugInfoUnitHeader::SIZE as usize);
+        assert_eq!(&buf[..4], &0x0102_0304u32.to_le_bytes());
+        assert_eq!(&buf[4..6], &4u16.to_le_bytes());
+        assert_eq!(&buf[6..10], &0u32.to_le_bytes());
+        assert_eq!(buf[10], 8);
+    }
+
+    #[test]
+    fn debug_line_program_header_packs_to_6_bytes() {
+        let mut buf = Vec::new();
+        let h = DebugLineProgramHeader {
+            minimum_instruction_length: 1,
+            maximum_operations_per_instruction: 1,
+            default_is_stmt: 1,
+            line_base: -1,
+            line_range: 14,
+            opcode_base: 13,
+        };
+        h.write_le(&mut buf);
+        assert_eq!(buf, [1u8, 1, 1, (-1i8) as u8, 14, 13]);
+    }
+
+    fn base_of(ty: i64, target: Target) -> BaseTypeKey {
+        match classify(ty, target) {
+            CatalogEntry::Base(k) => k,
+            other => panic!("expected Base, got {other:?} for ty={ty}"),
+        }
+    }
+
+    #[test]
+    fn classify_distinguishes_signed_unsigned() {
+        let signed = base_of(Ty::Int as i64, Target::LinuxX64);
+        let unsigned = base_of(Ty::Int as i64 | types::UNSIGNED_BIT, Target::LinuxX64);
+        assert_ne!(signed, unsigned);
+        assert_eq!(signed.byte_size, 4);
+        assert_eq!(signed.encoding, DW_ATE_SIGNED);
+        assert_eq!(unsigned.encoding, DW_ATE_UNSIGNED);
+    }
+
+    #[test]
+    fn classify_long_follows_data_model() {
+        let lp64 = base_of(Ty::Long as i64, Target::LinuxX64);
+        let llp64 = base_of(Ty::Long as i64, Target::WindowsX64);
+        assert_eq!(lp64.byte_size, 8);
+        assert_eq!(llp64.byte_size, 4);
+    }
+
+    #[test]
+    fn classify_char_uses_signed_char_encoding() {
+        let signed = base_of(Ty::Char as i64, Target::LinuxX64);
+        let unsigned = base_of(Ty::Char as i64 | types::UNSIGNED_BIT, Target::LinuxX64);
+        assert_eq!(signed.byte_size, 1);
+        assert_eq!(signed.encoding, DW_ATE_SIGNED_CHAR);
+        assert_eq!(unsigned.encoding, DW_ATE_UNSIGNED_CHAR);
+    }
+
+    #[test]
+    fn classify_pointer_returns_chain_entry() {
+        // `int*` -> Pointer{leaf=int, depth=1}; `int**` -> depth=2.
+        let int_ptr = (Ty::Int as i64) + (Ty::Ptr as i64);
+        let int_ptr_ptr = (Ty::Int as i64) + 2 * (Ty::Ptr as i64);
+        match classify(int_ptr, Target::LinuxX64) {
+            CatalogEntry::Pointer { leaf, depth } => {
+                assert_eq!(leaf.name, "int");
+                assert_eq!(depth, 1);
+            }
+            other => panic!("expected Pointer, got {other:?}"),
+        }
+        match classify(int_ptr_ptr, Target::LinuxX64) {
+            CatalogEntry::Pointer { leaf, depth } => {
+                assert_eq!(leaf.name, "int");
+                assert_eq!(depth, 2);
+            }
+            other => panic!("expected Pointer, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn classify_struct_value_routes_to_struct_entry() {
+        // Plain struct id 0 (no pointer level) lands on the
+        // dedicated `Struct` variant; phase 1C emits a real
+        // DW_TAG_structure_type.
+        let struct_ty = types::STRUCT_BASE;
+        assert_eq!(
+            classify(struct_ty, Target::LinuxX64),
+            CatalogEntry::Struct { id: 0 },
+        );
+    }
+
+    #[test]
+    fn classify_struct_pointer_returns_chain_entry() {
+        // `struct Foo *` -- id 0 at depth 1.
+        let s_ptr = types::STRUCT_BASE + Ty::Ptr as i64;
+        assert_eq!(
+            classify(s_ptr, Target::LinuxX64),
+            CatalogEntry::StructPointer { id: 0, depth: 1 },
+        );
+    }
+
+    #[test]
+    fn pointer_chain_insert_back_fills_shallower_levels() {
+        let mut entries: BTreeSet<CatalogEntry> = BTreeSet::new();
+        let leaf = base_of(Ty::Int as i64, Target::LinuxX64);
+        TypeCatalog::insert_with_chain(&mut entries, CatalogEntry::Pointer { leaf, depth: 3 });
+        // Should have: Base(int), Pointer{int, 1}, Pointer{int, 2},
+        // Pointer{int, 3}.
+        assert!(entries.contains(&CatalogEntry::Base(leaf)));
+        for d in 1..=3 {
+            assert!(entries.contains(&CatalogEntry::Pointer { leaf, depth: d }));
+        }
+        assert_eq!(entries.len(), 4);
     }
 
     fn decode_uleb128(buf: &[u8]) -> (u64, usize) {

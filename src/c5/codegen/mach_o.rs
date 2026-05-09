@@ -832,9 +832,9 @@ fn segment_data(
     out
 }
 
-/// `LC_SEGMENT_64` for `__DWARF` containing the four phase-1
-/// debug sections (`__debug_info`, `__debug_abbrev`,
-/// `__debug_line`, `__debug_str`).
+/// `LC_SEGMENT_64` for `__DWARF` containing the five debug
+/// sections we emit (`__debug_info`, `__debug_abbrev`,
+/// `__debug_line`, `__debug_str`, `__debug_frame`).
 ///
 /// Mach-O conventions for "DWARF embedded in a final-linked
 /// executable" -- the form lldb expects when it cracks the
@@ -881,8 +881,10 @@ fn segment_dwarf(
     line_size: u64,
     str_offset: u32,
     str_size: u64,
+    frame_offset: u32,
+    frame_size: u64,
 ) -> Vec<u8> {
-    const TOTAL: usize = SEGMENT_COMMAND_64_SIZE + 4 * SECTION_64_SIZE;
+    const TOTAL: usize = SEGMENT_COMMAND_64_SIZE + 5 * SECTION_64_SIZE;
     let mut out = Vec::with_capacity(TOTAL);
     write_struct(
         &mut out,
@@ -896,7 +898,7 @@ fn segment_dwarf(
             filesize,
             maxprot: 0,
             initprot: 0,
-            nsects: 4,
+            nsects: 5,
             flags: 0,
         },
     );
@@ -927,6 +929,7 @@ fn segment_dwarf(
     let abbrev_addr = info_addr + info_size;
     let line_addr = abbrev_addr + abbrev_size;
     let str_addr = line_addr + line_size;
+    let frame_addr = str_addr + str_size;
     let _ = vmaddr;
     write_struct(
         &mut out,
@@ -943,6 +946,10 @@ fn segment_dwarf(
     write_struct(
         &mut out,
         &dwarf_section("__debug_str", str_addr, str_offset, str_size),
+    );
+    write_struct(
+        &mut out,
+        &dwarf_section("__debug_frame", frame_addr, frame_offset, frame_size),
     );
     debug_assert_eq!(out.len(), TOTAL);
     out
@@ -1623,7 +1630,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // shadows the strtab against __DWARF.
     let emit_dwarf = true;
     let _ = is_dylib;
-    let dwarf_seg_size = (SEGMENT_COMMAND_64_SIZE + 4 * SECTION_64_SIZE) as u64;
+    let dwarf_seg_size = (SEGMENT_COMMAND_64_SIZE + 5 * SECTION_64_SIZE) as u64;
     let dyld_info_size = DYLD_INFO_COMMAND_SIZE as u64;
     let symtab_size = SYMTAB_COMMAND_SIZE as u64;
     let dysymtab_size = DYSYMTAB_COMMAND_SIZE as u64;
@@ -1889,26 +1896,35 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         dwarf_abbrev_offset,
         dwarf_line_offset,
         dwarf_str_offset,
+        dwarf_frame_offset,
         dwarf_filesize,
         dwarf_tail_pad,
     ) = if emit_dwarf {
-        let s = dwarf::emit(program, build, code_vmaddr_base, &program.source_path);
+        let s = dwarf::emit(
+            program,
+            build,
+            super::Target::MacOSAarch64,
+            code_vmaddr_base,
+            &program.source_path,
+        );
         let fileoff = data_fileoff + data_filesize;
         let info = fileoff;
         let abbrev = info + s.debug_info.len() as u64;
         let line = abbrev + s.debug_abbrev.len() as u64;
         let strs = line + s.debug_line.len() as u64;
+        let frame = strs + s.debug_str.len() as u64;
         let sections_size = s.debug_info.len() as u64
             + s.debug_abbrev.len() as u64
             + s.debug_line.len() as u64
-            + s.debug_str.len() as u64;
+            + s.debug_str.len() as u64
+            + s.debug_frame.len() as u64;
         // Pad up to a page so __LINKEDIT's fileoff lands on a
         // page boundary. dyld checks that every segment's
         // `fileoff % PAGE_SIZE == vmaddr % PAGE_SIZE`, and
         // __LINKEDIT sits on a page-aligned vmaddr.
         let filesize = round_up(sections_size, PAGE_SIZE);
         let pad = (filesize - sections_size) as usize;
-        (s, fileoff, info, abbrev, line, strs, filesize, pad)
+        (s, fileoff, info, abbrev, line, strs, frame, filesize, pad)
     } else {
         (
             dwarf::DwarfSections {
@@ -1916,8 +1932,10 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
                 debug_abbrev: Vec::new(),
                 debug_line: Vec::new(),
                 debug_str: Vec::new(),
+                debug_frame: Vec::new(),
             },
             data_fileoff + data_filesize,
+            0,
             0,
             0,
             0,
@@ -2018,6 +2036,8 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             dwarf_sections.debug_line.len() as u64,
             dwarf_str_offset as u32,
             dwarf_sections.debug_str.len() as u64,
+            dwarf_frame_offset as u32,
+            dwarf_sections.debug_frame.len() as u64,
         )
     } else {
         Vec::new()
@@ -2275,6 +2295,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         out.extend_from_slice(&dwarf_sections.debug_abbrev);
         out.extend_from_slice(&dwarf_sections.debug_line);
         out.extend_from_slice(&dwarf_sections.debug_str);
+        out.extend_from_slice(&dwarf_sections.debug_frame);
         out.resize(out.len() + dwarf_tail_pad, 0);
     }
 
@@ -2338,6 +2359,7 @@ mod tests {
             source_file_indices: Vec::new(),
             source_path: String::new(),
             variables: Vec::new(),
+            structs: Vec::new(),
         }
     }
 

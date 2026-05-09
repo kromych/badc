@@ -251,6 +251,14 @@ pub struct Program {
     /// or the program contains no functions. The VM / JIT /
     /// interpreter ignore this field.
     pub variables: Vec<VariableInfo>,
+    /// Struct / union registry, indexed by the struct id encoded
+    /// in c5 type tags (`STRUCT_BASE + id * STRUCT_STRIDE`).
+    /// Cloned out of `Compiler::structs` at `compile()` time so
+    /// the DWARF emitter (gh #59) can walk member offsets and
+    /// bitfield layouts to produce `DW_TAG_structure_type` /
+    /// `DW_TAG_union_type` DIEs. The VM / JIT / interpreter
+    /// ignore this field.
+    pub structs: Vec<crate::c5::compiler::StructDef>,
 }
 
 /// A single local variable or formal parameter belonging to a

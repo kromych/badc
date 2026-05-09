@@ -118,10 +118,10 @@ fn lldb_resolves_distinct_base_types() {
     };
     // Each lookup should report a real type, not "0 matches found".
     for needle in [
-        "byte-size = 4",  // int
-        "byte-size = 8",  // double / long long
-        "long long",      // explicit name match
-        "unsigned int",   // signedness rendering
+        "byte-size = 4", // int
+        "byte-size = 8", // double / long long
+        "long long",     // explicit name match
+        "unsigned int",  // signedness rendering
     ] {
         assert!(
             out.contains(needle),
@@ -198,14 +198,8 @@ fn lldb_resolves_struct_with_member_offsets() {
         out.contains("byte-size = 8"),
         "expected `byte-size = 8` in:\n{out}"
     );
-    assert!(
-        out.contains("int x"),
-        "expected `int x` member in:\n{out}"
-    );
-    assert!(
-        out.contains("int y"),
-        "expected `int y` member in:\n{out}"
-    );
+    assert!(out.contains("int x"), "expected `int x` member in:\n{out}");
+    assert!(out.contains("int y"), "expected `int y` member in:\n{out}");
     let _ = std::fs::remove_file(&path);
 }
 
@@ -302,10 +296,7 @@ fn lldb_resolves_bitfield_widths() {
     // that math would yield negative widths or swap field
     // positions.
     for needle in ["width : 5", "height : 6", "rest : 21"] {
-        assert!(
-            out.contains(needle),
-            "expected `{needle}` in:\n{out}"
-        );
+        assert!(out.contains(needle), "expected `{needle}` in:\n{out}");
     }
     let _ = std::fs::remove_file(&path);
 }

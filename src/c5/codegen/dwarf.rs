@@ -633,7 +633,9 @@ impl TypeCatalog {
         for entry in &entries {
             match entry {
                 CatalogEntry::Base(key) => {
-                    base_names.entry(*key).or_insert_with(|| strs.intern(key.name));
+                    base_names
+                        .entry(*key)
+                        .or_insert_with(|| strs.intern(key.name));
                 }
                 CatalogEntry::Struct { id } => {
                     if let Some(s) = structs.get(*id as usize) {
@@ -642,7 +644,9 @@ impl TypeCatalog {
                         } else {
                             s.name.clone()
                         };
-                        struct_names.entry(*id).or_insert_with(|| strs.intern(&display));
+                        struct_names
+                            .entry(*id)
+                            .or_insert_with(|| strs.intern(&display));
                         let members = s.fields.iter().map(|f| strs.intern(&f.name)).collect();
                         struct_member_names.entry(*id).or_insert(members);
                     }
@@ -788,13 +792,21 @@ fn base_key_for_leaf(leaf_tag: i64, target: Target) -> Option<BaseTypeKey> {
         BaseTypeKey {
             name: if unsigned { "unsigned short" } else { "short" },
             byte_size: 2,
-            encoding: if unsigned { DW_ATE_UNSIGNED } else { DW_ATE_SIGNED },
+            encoding: if unsigned {
+                DW_ATE_UNSIGNED
+            } else {
+                DW_ATE_SIGNED
+            },
         }
     } else if bare == Ty::Int as i64 {
         BaseTypeKey {
             name: if unsigned { "unsigned int" } else { "int" },
             byte_size: 4,
-            encoding: if unsigned { DW_ATE_UNSIGNED } else { DW_ATE_SIGNED },
+            encoding: if unsigned {
+                DW_ATE_UNSIGNED
+            } else {
+                DW_ATE_SIGNED
+            },
         }
     } else if bare == Ty::Long as i64 {
         // LP64: 8 bytes; LLP64 (Windows): 4 bytes. Matches the
@@ -803,7 +815,11 @@ fn base_key_for_leaf(leaf_tag: i64, target: Target) -> Option<BaseTypeKey> {
         BaseTypeKey {
             name: if unsigned { "unsigned long" } else { "long" },
             byte_size,
-            encoding: if unsigned { DW_ATE_UNSIGNED } else { DW_ATE_SIGNED },
+            encoding: if unsigned {
+                DW_ATE_UNSIGNED
+            } else {
+                DW_ATE_SIGNED
+            },
         }
     } else if bare == Ty::LongLong as i64 {
         BaseTypeKey {
@@ -813,7 +829,11 @@ fn base_key_for_leaf(leaf_tag: i64, target: Target) -> Option<BaseTypeKey> {
                 "long long"
             },
             byte_size: 8,
-            encoding: if unsigned { DW_ATE_UNSIGNED } else { DW_ATE_SIGNED },
+            encoding: if unsigned {
+                DW_ATE_UNSIGNED
+            } else {
+                DW_ATE_SIGNED
+            },
         }
     } else if bare == Ty::Float as i64 {
         // c5 keeps `float` at 8 bytes today (no f32 narrowing,
@@ -1040,8 +1060,7 @@ fn build_debug_info(
     for entry in &catalog.entries {
         let pre_pos = (body.len() as u32) + DebugInfoUnitHeader::SIZE;
         debug_assert_eq!(
-            pre_pos,
-            entry_offsets[entry],
+            pre_pos, entry_offsets[entry],
             "die_size disagreed with the emitter for {entry:?}",
         );
         emit_type_die(entry, &mut body, catalog, structs, &entry_offsets, target);
@@ -1662,10 +1681,7 @@ mod tests {
     fn pointer_chain_insert_back_fills_shallower_levels() {
         let mut entries: BTreeSet<CatalogEntry> = BTreeSet::new();
         let leaf = base_of(Ty::Int as i64, Target::LinuxX64);
-        TypeCatalog::insert_with_chain(
-            &mut entries,
-            CatalogEntry::Pointer { leaf, depth: 3 },
-        );
+        TypeCatalog::insert_with_chain(&mut entries, CatalogEntry::Pointer { leaf, depth: 3 });
         // Should have: Base(int), Pointer{int, 1}, Pointer{int, 2},
         // Pointer{int, 3}.
         assert!(entries.contains(&CatalogEntry::Base(leaf)));

@@ -24,10 +24,10 @@ mod stmt;
 pub(crate) mod types;
 
 use types::{
-    UNSIGNED_BIT, fp_result_ty, is_decl_modifier, is_floating_scalar, is_pointer_ty,
-    is_scalar_load_op_val, is_struct_ty, is_type_start_token, is_unsigned_ty, load_op_for,
-    pointee_size_no_struct, reemit_scalar_load, store_op_for, struct_id_of, struct_ptr_depth,
-    struct_ty_for, usual_arith_common_ty,
+    UNSIGNED_BIT, format_signature, fp_result_ty, is_decl_modifier, is_floating_scalar,
+    is_pointer_ty, is_scalar_load_op_val, is_struct_ty, is_type_start_token, is_unsigned_ty,
+    load_op_for, pointee_size_no_struct, reemit_scalar_load, store_op_for, struct_id_of,
+    struct_ptr_depth, struct_ty_for, usual_arith_common_ty,
 };
 
 #[derive(Debug, Clone)]
@@ -3809,36 +3809,35 @@ impl Compiler {
                     // a real bug worth surfacing -- but not one
                     // the c5 codegen is in a position to refuse,
                     // since it only has the redeclaration in scope.
-                    if prior_was_known {
+                    // C99 6.7.5.3p14: an empty list in a non-defining
+                    // function declarator means "no information about
+                    // the number or types of the parameters is
+                    // supplied" -- not a claim about a particular
+                    // signature. Comparing such an unspecified-shape
+                    // prototype against a fully-specified one isn't a
+                    // mismatch under the standard, so we skip the
+                    // parameter-list check when either side is empty.
+                    // The `appendText` collision in the sqlite smoke
+                    // (two `static`-scope-but-amalgamated definitions
+                    // with different specified params) still warns,
+                    // because both sides specify their parameters.
+                    let either_unspecified = prior_params.is_empty() || params.types.is_empty();
+                    let return_differs = prior_return_ty != ty;
+                    let variadic_differs = prior_is_variadic != params.is_variadic;
+                    let params_differ = !either_unspecified && prior_params != params.types;
+                    if prior_was_known && (return_differs || variadic_differs || params_differ) {
                         let name = self.symbols[id_idx].name.clone();
                         let line = self.lex.line;
-                        if prior_return_ty != ty {
-                            self.warn_at(
-                                line,
-                                format!(
-                                    "redeclaration of `{name}` has a different return type \
-                                     than the previous declaration",
-                                ),
-                            );
-                        }
-                        if prior_is_variadic != params.is_variadic {
-                            self.warn_at(
-                                line,
-                                format!(
-                                    "redeclaration of `{name}` differs in variadicity from \
-                                     the previous declaration",
-                                ),
-                            );
-                        }
-                        if !prior_params.is_empty() && prior_params != params.types {
-                            self.warn_at(
-                                line,
-                                format!(
-                                    "redeclaration of `{name}` has a different parameter \
-                                     list than the previous declaration",
-                                ),
-                            );
-                        }
+                        let prior_sig =
+                            format_signature(prior_return_ty, &prior_params, prior_is_variadic);
+                        let new_sig = format_signature(ty, &params.types, params.is_variadic);
+                        self.warn_at(
+                            line,
+                            format!(
+                                "redeclaration of `{name}` differs from the previous \
+                                 declaration\n  previous: {prior_sig}\n  now:      {new_sig}",
+                            ),
+                        );
                     }
 
                     // For Sys symbols (header-bound libc functions),

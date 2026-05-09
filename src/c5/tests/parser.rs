@@ -72,29 +72,39 @@ fn prototype_after_definition_at_pc_zero() {
 fn redeclaration_with_different_signature_warns() {
     // C99 6.7p4 requires redeclarations to be compatible. badc
     // doesn't refuse them (the codegen only sees one declaration
-    // at a time), but it surfaces the disagreement as a warning
-    // so amalgamated multi-TU builds don't silently end up with
-    // mismatched signatures across the boundary.
-    for (src, want) in &[
+    // at a time), but it surfaces the disagreement as a single
+    // warning that prints both shapes, so amalgamated multi-TU
+    // builds don't silently end up with mismatched signatures
+    // across the boundary. The shape is one line per redecl plus
+    // two indented `previous:` / `now:` lines.
+    for (src, prev_needle, now_needle) in &[
+        // Different return type.
         (
             "int f(int x) { return x; } char f(int x); int main() { return 0; }",
-            "different return type",
+            "previous: int (int)",
+            "now:      unsigned char (int)",
         ),
+        // Different parameter list.
         (
             "int f(int x); int f(int x, int y) { return x + y; } int main() { return 0; }",
-            "different parameter list",
+            "previous: int (int)",
+            "now:      int (int, int)",
         ),
+        // Differs in variadicity.
         (
             "int f(int x); int f(int x, ...) { return x; } int main() { return 0; }",
-            "differs in variadicity",
+            "previous: int (int)",
+            "now:      int (int, ...)",
         ),
     ] {
         let prog = crate::c5::Compiler::new((*src).to_string())
             .compile()
             .unwrap();
         assert!(
-            prog.warnings.iter().any(|w| w.contains(want)),
-            "no `{want}` warning for {src:?}; got {:?}",
+            prog.warnings
+                .iter()
+                .any(|w| w.contains(prev_needle) && w.contains(now_needle)),
+            "no warning containing `{prev_needle}` + `{now_needle}` for {src:?}; got {:?}",
             prog.warnings,
         );
     }

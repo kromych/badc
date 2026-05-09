@@ -632,10 +632,7 @@ impl Preprocessor {
                             // when the amalgamator started gluing
                             // sqlite3.c + shell.c through `#line`
                             // markers.
-                            out.push_str(&format_line_marker(
-                                source_line + 1,
-                                &current_file,
-                            ));
+                            out.push_str(&format_line_marker(source_line + 1, &current_file));
                             source_line += 1;
                             idx_iter += 1;
                             continue;

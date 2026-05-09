@@ -53,6 +53,71 @@ fn duplicate_global_definition() {
 }
 
 #[test]
+fn prototype_after_definition_at_pc_zero() {
+    // gh #52: a prototype following a function definition used to
+    // clobber the symbol's val (= bytecode pc) when val happened
+    // to be 0 -- which is exactly the case for the *first*
+    // function in the source. The reset would point every later
+    // call site at the buffer's current pc, sending the call
+    // into nowhere-land. Pin the fix.
+    let src = "int foo_fn(int x) { return x + 1; } \
+               int foo_fn(int x); \
+               int main() { return foo_fn(41); }";
+    let prog = crate::c5::Compiler::new(src.to_string()).compile().unwrap();
+    let vm_result = crate::c5::Vm::new(prog).run().unwrap();
+    assert_eq!(vm_result, 42);
+}
+
+#[test]
+fn redeclaration_with_different_signature_warns() {
+    // C99 6.7p4 requires redeclarations to be compatible. badc
+    // doesn't refuse them (the codegen only sees one declaration
+    // at a time), but it surfaces the disagreement as a warning
+    // so amalgamated multi-TU builds don't silently end up with
+    // mismatched signatures across the boundary.
+    for (src, want) in &[
+        (
+            "int f(int x) { return x; } char f(int x); int main() { return 0; }",
+            "different return type",
+        ),
+        (
+            "int f(int x); int f(int x, int y) { return x + y; } int main() { return 0; }",
+            "different parameter list",
+        ),
+        (
+            "int f(int x); int f(int x, ...) { return x; } int main() { return 0; }",
+            "differs in variadicity",
+        ),
+    ] {
+        let prog = crate::c5::Compiler::new((*src).to_string())
+            .compile()
+            .unwrap();
+        assert!(
+            prog.warnings.iter().any(|w| w.contains(want)),
+            "no `{want}` warning for {src:?}; got {:?}",
+            prog.warnings,
+        );
+    }
+}
+
+#[test]
+fn matching_redeclaration_is_silent() {
+    // The amalgamator (scripts/amalgamate.py) glues TUs that
+    // typically include the same prototype many times via shared
+    // headers. Repeats with identical signatures must not
+    // produce noise.
+    let src =
+        "int f(int x); int f(int x); int f(int x) { return x; } int main() { return f(7); }";
+    let prog = crate::c5::Compiler::new(src.to_string()).compile().unwrap();
+    assert!(
+        prog.warnings.is_empty(),
+        "matching redecl should be silent, got {:?}",
+        prog.warnings,
+    );
+    assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 7);
+}
+
+#[test]
 fn tentative_definition_merge() {
     // `int x;` + `int x = 5;` -- the prior declaration is tentative
     // (no initializer); the second one supplies the initializer.

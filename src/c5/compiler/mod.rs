@@ -3735,21 +3735,39 @@ impl Compiler {
                         self.lex.line
                     )));
                 }
+                // Snapshot the prior signature before overwriting
+                // `type_` so the redeclaration-mismatch warnings
+                // below have something to compare against.
+                let prior_return_ty = self.symbols[id_idx].type_;
+                let prior_params = self.symbols[id_idx].params.clone();
+                let prior_is_variadic = self.symbols[id_idx].is_variadic;
                 self.symbols[id_idx].type_ = ty;
 
                 if self.lex.tk == '(' as i64 || preconsumed_params.is_some() {
                     if !was_sys {
                         self.symbols[id_idx].class = Token::Fun as i64;
-                        // Don't overwrite an already-bound Fun's
-                        // val (= bytecode pc) when this is just a
-                        // repeat prototype. The val will be
-                        // updated below if/when this is actually
-                        // a definition (the body is detected by
-                        // `tk == '{'` after the params).
-                        if self.symbols[id_idx].val == 0 {
-                            self.symbols[id_idx].val = self.text.len() as i64;
-                        }
+                        // Leave `val` untouched. For a first-time
+                        // prototype it stays at the Symbol default
+                        // (0); calls before the body see that 0 as
+                        // a placeholder, and `apply_fn_call_fixups`
+                        // rewrites them once the body sets `val =
+                        // ent_pc`. For a redeclaration after the
+                        // body has been emitted, `val` already
+                        // points at the real `ent_pc` and we must
+                        // *not* clobber it -- a previous version
+                        // of this code wrote `val = self.text.len()`
+                        // whenever val was 0, which silently broke
+                        // any function whose body legitimately
+                        // started at PC 0 (gh #52).
                     }
+                    // Only warn on user-vs-user redeclarations.
+                    // Sys symbols (the per-target header's libc
+                    // bindings) start out with stub signatures
+                    // that the user's `<stdio.h>` etc. is *expected*
+                    // to refine -- complaining about every printf
+                    // / memcpy / fcntl in the standard library
+                    // would drown real bugs.
+                    let prior_was_known = was_fwd_fun;
                     let params = if let Some(pp) = preconsumed_params {
                         pp
                     } else {
@@ -3762,6 +3780,39 @@ impl Compiler {
                     // both prototypes and bodied definitions.
                     self.symbols[id_idx].params = params.types.clone();
                     self.symbols[id_idx].is_variadic = params.is_variadic;
+
+                    // Warn if a redeclaration disagrees with the
+                    // prior signature. C99 6.7p4 requires
+                    // compatibility (same return type + same
+                    // parameter list, modulo unprototyped forms);
+                    // amalgamated translation units occasionally
+                    // disagree by accident (a header was edited
+                    // but one .c forgot to pick it up), which is
+                    // a real bug worth surfacing -- but not one
+                    // the c5 codegen is in a position to refuse,
+                    // since it only has the redeclaration in scope.
+                    if prior_was_known {
+                        let name = self.symbols[id_idx].name.clone();
+                        let line = self.lex.line;
+                        if prior_return_ty != ty {
+                            self.warn(format!(
+                                "{line}: redeclaration of `{name}` has a different return type \
+                                 than the previous declaration",
+                            ));
+                        }
+                        if prior_is_variadic != params.is_variadic {
+                            self.warn(format!(
+                                "{line}: redeclaration of `{name}` differs in variadicity from \
+                                 the previous declaration",
+                            ));
+                        }
+                        if !prior_params.is_empty() && prior_params != params.types {
+                            self.warn(format!(
+                                "{line}: redeclaration of `{name}` has a different parameter \
+                                 list than the previous declaration",
+                            ));
+                        }
+                    }
 
                     // For Sys symbols (header-bound libc functions),
                     // also fold the variadic flag onto the matching

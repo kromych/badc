@@ -322,6 +322,20 @@ pub struct Compiler {
     /// `text`. Empty string for top-level emit (data
     /// initializers, file-scope decls).
     source_functions: Vec<String>,
+    /// File-name table. Index 0 is the user's translation unit;
+    /// every distinct filename observed via the lexer's
+    /// `(file, line)` state (i.e. crossing a GNU line marker on
+    /// `#include` enter / a `#line N "file"` directive) gets a
+    /// fresh entry. The DWARF emitter (gh #50) writes one
+    /// `DW_LNE_define_file` per entry and switches with
+    /// `DW_LNS_set_file` when `source_file_indices` changes.
+    source_files: Vec<String>,
+    /// Per-bytecode-PC index into `source_files`, parallel to
+    /// `source_lines`. The two columns together pin a PC to a
+    /// specific (file, line). Without this column lldb would
+    /// claim every PC came from the user's translation unit even
+    /// when it actually originated inside a header.
+    source_file_indices: Vec<u16>,
     /// Per-function locals + parameters captured at body close,
     /// before the c5 shadow-symbol restore unwinds the binding.
     /// gh #46 -- the DWARF emitter walks this list to attach
@@ -516,6 +530,8 @@ impl Compiler {
             pending_index_stride: 0,
             source_lines: Vec::new(),
             source_functions: Vec::new(),
+            source_files: Vec::new(),
+            source_file_indices: Vec::new(),
             variables: Vec::new(),
             current_function_name: String::new(),
             fn_call_fixups: Vec::new(),
@@ -1458,6 +1474,8 @@ impl Compiler {
             dllmain_pc,
             source_lines: self.source_lines,
             source_functions: self.source_functions,
+            source_files: self.source_files,
+            source_file_indices: self.source_file_indices,
             // The compiler doesn't see the input path -- the CLI
             // shim sets this on the returned `Program` before
             // calling `emit_native_*` (gh #44).
@@ -1484,18 +1502,44 @@ impl Compiler {
         self.fn_ptr_chain_depth = -1;
         self.text.push(op as i64);
         // Mirror text.len() one-for-one in source_lines /
-        // source_functions so a bc_pc lookup is a direct
-        // index. Operand slots inherit the op's source position.
+        // source_functions / source_file_indices so a bc_pc
+        // lookup is a direct index. Operand slots inherit the
+        // op's source position.
+        let file_idx = self.intern_source_file();
         self.source_lines.push(self.lex.line as u32);
         self.source_functions
             .push(self.current_function_name.clone());
+        self.source_file_indices.push(file_idx);
     }
 
     fn emit_val(&mut self, val: i64) {
         self.text.push(val);
+        let file_idx = self.intern_source_file();
         self.source_lines.push(self.lex.line as u32);
         self.source_functions
             .push(self.current_function_name.clone());
+        self.source_file_indices.push(file_idx);
+    }
+
+    /// Look up the lexer's current `(file)` in `source_files`,
+    /// pushing a fresh entry if this is the first time we see it.
+    /// Returns the resulting index. Index 0 is reserved for the
+    /// translation unit's filename so the file table is always
+    /// non-empty for the DWARF emitter (which uses index 0 as the
+    /// CU's primary file).
+    fn intern_source_file(&mut self) -> u16 {
+        let name = &self.lex.file;
+        if let Some(pos) = self.source_files.iter().position(|f| f == name) {
+            // Cap at u16::MAX to keep `source_file_indices` a tight
+            // column. A translation unit with > 65k distinct
+            // headers is well past anything we've seen; clamp
+            // rather than overflow so the codegen still produces
+            // *some* attribution.
+            return pos.min(u16::MAX as usize) as u16;
+        }
+        let idx = self.source_files.len();
+        self.source_files.push(name.clone());
+        idx.min(u16::MAX as usize) as u16
     }
 
     /// Emit a plain `Op::Imm <val>` -- a 2-word `[op, operand]`
@@ -1749,6 +1793,7 @@ impl Compiler {
             // wrong slot.
             self.source_lines.pop();
             self.source_functions.pop();
+            self.source_file_indices.pop();
             true
         } else {
             false
@@ -1912,6 +1957,7 @@ impl Compiler {
                 // subprogram DIEs.
                 self.source_lines.truncate(saved_text_len);
                 self.source_functions.truncate(saved_text_len);
+                self.source_file_indices.truncate(saved_text_len);
                 self.data_imm_positions.truncate(saved_data_imm_positions);
                 self.last_array_decay_size = 0;
                 if array_count > 0 {
@@ -2730,6 +2776,7 @@ impl Compiler {
                         self.text.pop();
                         self.source_lines.pop();
                         self.source_functions.pop();
+                        self.source_file_indices.pop();
                         self.ty += Ty::Ptr as i64;
                     }
                 }

@@ -274,6 +274,7 @@ impl Compiler {
                 // sister truncate (gh #48 root cause).
                 self.source_lines.truncate(saved_text_len);
                 self.source_functions.truncate(saved_text_len);
+                self.source_file_indices.truncate(saved_text_len);
                 self.data_imm_positions.truncate(saved_data_imm_positions);
                 self.ty = saved_ty;
                 self.last_array_decay_size = 0;

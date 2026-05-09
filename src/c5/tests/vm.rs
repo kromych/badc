@@ -21,6 +21,8 @@ fn run(text: Vec<i64>) -> i64 {
         dllmain_pc: None,
         source_lines: vec![],
         source_functions: vec![],
+        source_files: vec![],
+        source_file_indices: vec![],
         source_path: String::new(),
         variables: Vec::new(),
     };
@@ -124,6 +126,8 @@ fn invalid_opcode_is_a_runtime_error() {
         dllmain_pc: None,
         source_lines: vec![],
         source_functions: vec![],
+        source_files: vec![],
+        source_file_indices: vec![],
         source_path: String::new(),
         variables: Vec::new(),
     };
@@ -153,6 +157,8 @@ fn empty_program_errors_cleanly() {
         dllmain_pc: None,
         source_lines: vec![],
         source_functions: vec![],
+        source_files: vec![],
+        source_file_indices: vec![],
         source_path: String::new(),
         variables: Vec::new(),
     };

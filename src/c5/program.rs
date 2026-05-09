@@ -208,6 +208,19 @@ pub struct Program {
     /// each entry is the name of the C function whose body the op
     /// belongs to (empty string for top-level data emission).
     pub source_functions: Vec<String>,
+    /// Source-file table indexed by `source_file_indices`. Populated
+    /// by the lexer's GNU line-marker handling: each `#include`
+    /// boundary or `#line N "file"` directive interns a fresh
+    /// filename. Index 0 is the user's translation-unit source
+    /// (the `--source-path` CLI arg, falling back to the lexer's
+    /// initial `"<source>"` placeholder).
+    pub source_files: Vec<String>,
+    /// Per-PC index into `source_files`. Same indexing as
+    /// `source_lines`. The DWARF line program walks this to emit
+    /// `DW_LNS_set_file` at every transition so `lldb image lookup`
+    /// reports the *header*'s name when the PC came from a header,
+    /// not the user's translation-unit file.
+    pub source_file_indices: Vec<u16>,
     /// Filesystem path of the input `.c` file, when known. Set by
     /// the CLI shim from the user's argv before
     /// [`crate::emit_native`] runs; the c5 frontend itself doesn't

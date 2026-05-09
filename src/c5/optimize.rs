@@ -172,6 +172,8 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         dllmain_pc,
         source_lines: in_source_lines,
         source_functions: in_source_functions,
+        source_files: in_source_files,
+        source_file_indices: in_source_file_indices,
         source_path,
         variables: in_variables,
     } = program;
@@ -336,6 +338,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
     let mut out_source_lines: Vec<u32> = vec![0; text.len()];
     let mut out_source_functions: Vec<alloc::string::String> =
         vec![alloc::string::String::new(); text.len()];
+    let mut out_source_file_indices: Vec<u16> = vec![0; text.len()];
     for (i, ins) in insns.iter().enumerate() {
         if ins.is_removed() || new_pc[i] == usize::MAX {
             continue;
@@ -350,6 +353,11 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
             }
             if new_word_pc < out_source_functions.len() && old_word_pc < in_source_functions.len() {
                 out_source_functions[new_word_pc] = in_source_functions[old_word_pc].clone();
+            }
+            if new_word_pc < out_source_file_indices.len()
+                && old_word_pc < in_source_file_indices.len()
+            {
+                out_source_file_indices[new_word_pc] = in_source_file_indices[old_word_pc];
             }
         }
     }
@@ -403,6 +411,12 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         dllmain_pc,
         source_lines: out_source_lines,
         source_functions: out_source_functions,
+        // The source-file table is global -- the file table is
+        // a small set (one per `#include`d header) and the optimizer
+        // never invents new files. Carry it through verbatim and
+        // remap only the per-PC `source_file_indices` column above.
+        source_files: in_source_files,
+        source_file_indices: out_source_file_indices,
         source_path,
         variables: out_variables,
     })
@@ -1211,6 +1225,8 @@ mod tests {
             dllmain_pc: None,
             source_lines: Vec::new(),
             source_functions: Vec::new(),
+            source_files: Vec::new(),
+            source_file_indices: Vec::new(),
             source_path: String::new(),
             variables: Vec::new(),
         }
@@ -1513,6 +1529,8 @@ mod tests {
             dllmain_pc: None,
             source_lines: Vec::new(),
             source_functions: Vec::new(),
+            source_files: Vec::new(),
+            source_file_indices: Vec::new(),
             source_path: String::new(),
             variables: Vec::new(),
         };

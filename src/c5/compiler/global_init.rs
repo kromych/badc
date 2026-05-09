@@ -248,9 +248,10 @@ impl Compiler {
         // assignment path does.
         let init_ty = if value == 0 { 0 } else { Ty::Int as i64 };
         if let Some(reason) = Self::type_warning(var_ty, init_ty, value == 0) {
-            self.warn(format!(
-                "{line}: warning: {reason} in global initializer (var={var_ty}, value={init_ty})"
-            ));
+            self.warn_at(
+                line,
+                format!("{reason} in global initializer (var={var_ty}, value={init_ty})"),
+            );
         }
         Ok(())
     }

@@ -542,11 +542,21 @@ impl Compiler {
         }
     }
 
-    /// Append a type-checking warning. We never fail compilation on a
-    /// type mismatch -- it always lands here. Callers grab the list off
-    /// `Program.warnings` after `compile()`.
-    fn warn(&mut self, msg: alloc::string::String) {
-        self.warnings.push(msg);
+    /// Append a type-checking / signature-mismatch warning. We never
+    /// fail compilation on these -- the codegen has enough info to
+    /// keep going, and refusing every type squabble would be hostile
+    /// to amalgamated code that almost-but-not-quite agrees with
+    /// itself. Callers grab the list off `Program.warnings` after
+    /// `compile()`.
+    ///
+    /// The output shape mirrors gcc / clang:
+    ///   `<file>:<line>: warning: <message>`
+    /// so jump-to-error in editors works out of the box, and the CLI
+    /// can color the `warning:` word when stderr is a TTY.
+    fn warn_at(&mut self, line: usize, message: alloc::string::String) {
+        let file = &self.lex.file;
+        self.warnings
+            .push(alloc::format!("{file}:{line}: warning: {message}"));
     }
 
     /// Test whether `actual` is assignable / passable where `declared`
@@ -2079,20 +2089,26 @@ impl Compiler {
                         if let Some(reason) =
                             Self::type_warning_with_flags(want, self.ty, zero, untyped)
                         {
-                            self.warn(format!(
-                                "{arg_line}: warning: {reason} in argument {} of `{}` (param={want}, arg={})",
-                                nargs + 1,
-                                fn_name_for_warn,
-                                self.ty
-                            ));
+                            self.warn_at(
+                                arg_line,
+                                format!(
+                                    "{reason} in argument {} of `{}` (param={want}, arg={})",
+                                    nargs + 1,
+                                    fn_name_for_warn,
+                                    self.ty
+                                ),
+                            );
                         }
                     } else if !expected_params.is_empty() && !is_variadic {
-                        self.warn(format!(
-                            "{arg_line}: warning: too many arguments to `{}` (expected {}, got at least {})",
-                            fn_name_for_warn,
-                            expected_params.len(),
-                            nargs + 1,
-                        ));
+                        self.warn_at(
+                            arg_line,
+                            format!(
+                                "too many arguments to `{}` (expected {}, got at least {})",
+                                fn_name_for_warn,
+                                expected_params.len(),
+                                nargs + 1,
+                            ),
+                        );
                     }
 
                     arg_is_fp.push(is_floating_scalar(self.ty));
@@ -2162,13 +2178,16 @@ impl Compiler {
                     && !expected_params.is_empty()
                     && (nargs as usize) < expected_params.len()
                 {
-                    self.warn(format!(
-                        "{}: warning: too few arguments to `{}` (expected {}, got {})",
-                        self.lex.line,
-                        fn_name_for_warn,
-                        expected_params.len(),
-                        nargs,
-                    ));
+                    let line = self.lex.line;
+                    self.warn_at(
+                        line,
+                        format!(
+                            "too few arguments to `{}` (expected {}, got {})",
+                            fn_name_for_warn,
+                            expected_params.len(),
+                            nargs,
+                        ),
+                    );
                 }
                 self.next()?;
                 if self.symbols[id_idx].class == Token::Sys as i64 {
@@ -2884,11 +2903,10 @@ impl Compiler {
                     if let Some(reason) =
                         Self::type_warning_with_flags(t, self.ty, rhs_is_zero, rhs_is_untyped)
                     {
-                        self.warn(format!(
-                            "{line}: warning: {reason} in assignment \
-                             (lhs={t}, rhs={})",
-                            self.ty
-                        ));
+                        self.warn_at(
+                            line,
+                            format!("{reason} in assignment (lhs={t}, rhs={})", self.ty),
+                        );
                     }
                     self.ty = t;
                     self.emit_op(store_op_for(self.ty, self.target));
@@ -3795,22 +3813,31 @@ impl Compiler {
                         let name = self.symbols[id_idx].name.clone();
                         let line = self.lex.line;
                         if prior_return_ty != ty {
-                            self.warn(format!(
-                                "{line}: redeclaration of `{name}` has a different return type \
-                                 than the previous declaration",
-                            ));
+                            self.warn_at(
+                                line,
+                                format!(
+                                    "redeclaration of `{name}` has a different return type \
+                                     than the previous declaration",
+                                ),
+                            );
                         }
                         if prior_is_variadic != params.is_variadic {
-                            self.warn(format!(
-                                "{line}: redeclaration of `{name}` differs in variadicity from \
-                                 the previous declaration",
-                            ));
+                            self.warn_at(
+                                line,
+                                format!(
+                                    "redeclaration of `{name}` differs in variadicity from \
+                                     the previous declaration",
+                                ),
+                            );
                         }
                         if !prior_params.is_empty() && prior_params != params.types {
-                            self.warn(format!(
-                                "{line}: redeclaration of `{name}` has a different parameter \
-                                 list than the previous declaration",
-                            ));
+                            self.warn_at(
+                                line,
+                                format!(
+                                    "redeclaration of `{name}` has a different parameter \
+                                     list than the previous declaration",
+                                ),
+                            );
                         }
                     }
 

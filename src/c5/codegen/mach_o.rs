@@ -831,25 +831,28 @@ fn segment_data(
 /// executable" -- the form lldb expects when it cracks the
 /// image directly rather than via a `.dSYM` bundle:
 ///
-/// * `vmsize = 0`. dyld notices the zero vmsize and skips
-///   mapping the segment, so the debug bytes occupy file-only
-///   storage and never contribute to the runtime image's
-///   footprint or to `MH_PIE` slide arithmetic.
-/// * `vmaddr` set to the same value as `__LINKEDIT`'s vmaddr.
-///   A literal zero here trips dyld because vmaddr=0 falls
-///   inside `__PAGEZERO`'s `[0, 4GiB)` range; even with
-///   `vmsize = 0`, the kernel's image-load validator pattern-
-///   matches the segment-overlap check on vmaddr alone before
-///   considering vmsize. Reusing `__LINKEDIT.vmaddr` mirrors
-///   what Go's linker does (`go build` produces this exact
-///   layout for macOS arm64 images).
-/// * `initprot = maxprot = 0`. With `vmsize = 0` the prots are
-///   moot; we keep them at zero to match what `dsymutil` and
-///   `go build` emit for embedded-DWARF executables.
-/// * Each section's `addr` mirrors `vmaddr` (also harmless
-///   since the section never gets mapped) and `flags` is
-///   `S_REGULAR`. lldb reads sections via `(offset, size)`
-///   only.
+/// * `vmsize` rounds the debug filesize up to a page. Newer
+///   `dyld_info` (Xcode 15+) rejects any `vmsize < filesize`
+///   with "segment '...' filesize exceeds vmsize" -- which
+///   then aborts `dyld_info -imports` before it prints any
+///   bindings, breaking the structural Mach-O tests that pipe
+///   through it. Older Apple tools tolerated `vmsize = 0`,
+///   but we now mirror what ld64 emits when it keeps
+///   `__DWARF` in-binary: a real, page-sized vmsize.
+/// * `vmaddr` sits in its own page-aligned slot between
+///   `__DATA.vmaddr + __DATA.vmsize` and `__LINKEDIT.vmaddr`
+///   so the kernel's segment-overlap check stays clean.
+/// * `initprot = maxprot = 0`. The bytes get mapped (because
+///   vmsize > 0) but never accessed at runtime -- code only
+///   reads __TEXT and writes __DATA, lldb / dsymutil read the
+///   debug sections via the file image, and the kernel
+///   accepts `prot = 0` as "reserved address space, no
+///   permissions".
+/// * Each section's `addr` mirrors `vmaddr` so `nm`'s
+///   `addr >= segment.vmaddr` invariant holds; the
+///   `S_ATTR_DEBUG` flag tells lldb / dyld_info / the Apple
+///   symbolicator that the section is debug-only metadata so
+///   address-based breakpoints aren't shadowed by it.
 ///
 /// The four section file offsets and sizes are passed in by
 /// the caller, which has just laid out the slot for `__DWARF`
@@ -858,6 +861,7 @@ fn segment_data(
 #[allow(clippy::too_many_arguments)]
 fn segment_dwarf(
     vmaddr: u64,
+    vmsize: u64,
     fileoff: u64,
     filesize: u64,
     info_offset: u32,
@@ -878,7 +882,7 @@ fn segment_dwarf(
             cmdsize: TOTAL as u32,
             segname: pack_name16("__DWARF"),
             vmaddr,
-            vmsize: 0,
+            vmsize,
             fileoff,
             filesize,
             maxprot: 0,
@@ -1873,7 +1877,19 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     let stroff = symoff + symtab.len() as u64;
     let linkedit_payload = rebase_ops.len() + bind_ops.len() + symtab.len() + strtab.len();
     let linkedit_filesize = linkedit_payload as u64;
-    let linkedit_vmaddr = data_vmaddr + data_vmsize;
+    // __DWARF claims its own page-aligned vmaddr range between
+    // __DATA and __LINKEDIT (when emit_dwarf), so the
+    // segment-vmaddr ordering stays monotonic and dyld_info's
+    // "filesize <= vmsize" check holds. When emit_dwarf=false
+    // the slot collapses to zero and __LINKEDIT abuts __DATA
+    // directly, matching the pre-DWARF layout.
+    let dwarf_vmaddr = data_vmaddr + data_vmsize;
+    let dwarf_vmsize = if emit_dwarf {
+        round_up(dwarf_filesize, PAGE_SIZE)
+    } else {
+        0
+    };
+    let linkedit_vmaddr = dwarf_vmaddr + dwarf_vmsize;
     let linkedit_vmsize = round_up(linkedit_filesize.max(PAGE_SIZE), PAGE_SIZE);
 
     // ---- step 5: build the load commands ----
@@ -1933,7 +1949,8 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     );
     let dwarf_segment = if emit_dwarf {
         segment_dwarf(
-            linkedit_vmaddr,
+            dwarf_vmaddr,
+            dwarf_vmsize,
             dwarf_fileoff,
             dwarf_filesize,
             dwarf_info_offset as u32,

@@ -396,6 +396,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("enum_tag_types.c", 0),
     ("bitfields.c", 0),
     ("struct_layout.c", 0),
+    ("anonymous_aggregates.c", 0),
     ("static_locals.c", 0),
     ("large_stack_frame.c", 42),
     ("octal_literal.c", 42),

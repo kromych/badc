@@ -103,6 +103,15 @@ impl Compiler {
             let mut saw_unsigned = false;
             let mut long_count: u8 = 0;
             let mut saw_short = false;
+            // Set when the field-type prefix is an anonymous
+            // (no-tag) `struct { ... }` / `union { ... }` whose
+            // members should promote into the enclosing struct
+            // (C11 6.7.2.1p13). Stays `None` for named tags --
+            // those need an explicit declarator. Checked AFTER
+            // the type-prefix parse: if there's no declarator
+            // (`;` next), the promotion path runs; otherwise the
+            // synthesised tag stays a regular nested-struct type.
+            let mut anon_aggregate_inner_id: Option<usize> = None;
             while is_decl_modifier(self.lex.tk) {
                 if self.lex.tk == Token::IntMod as i64 {
                     saw_int_mod = true;
@@ -166,17 +175,26 @@ impl Compiler {
                 //                            synthesise a unique
                 //                            tag to register it
                 //                            in the struct table.
-                let inner_name = if self.lex.tk == Token::Id as i64 {
+                //                            If no declarator
+                //                            follows (next token
+                //                            is `;`), the inner
+                //                            fields PROMOTE into
+                //                            the enclosing scope
+                //                            -- C11 6.7.2.1p13.
+                let (inner_name, had_explicit_tag) = if self.lex.tk == Token::Id as i64 {
                     let name = self.symbols[self.lex.curr_id_idx].name.clone();
                     self.next()?;
-                    name
+                    (name, true)
                 } else if self.lex.tk == '{' as i64 {
                     let kind = if nested_is_union {
                         "anon_union"
                     } else {
                         "anon_struct"
                     };
-                    format!("__{kind}_{}_in_{}", self.structs.len(), name)
+                    (
+                        format!("__{kind}_{}_in_{}", self.structs.len(), name),
+                        false,
+                    )
                 } else {
                     return Err(C5Error::Compile(format!(
                         "{}: aggregate name or `{{` expected in field type",
@@ -187,6 +205,11 @@ impl Compiler {
                     self.parse_aggregate_body(&inner_name, nested_is_union)?
                 } else {
                     self.find_or_forward_declare_struct(&inner_name)
+                };
+                anon_aggregate_inner_id = if had_explicit_tag {
+                    None
+                } else {
+                    Some(inner_id)
                 };
                 struct_ty_for(inner_id)
             } else if self.is_lex_typedef_name() {
@@ -218,6 +241,76 @@ impl Compiler {
             // Trailing modifiers: `int long`, `unsigned long long`, etc.
             while is_decl_modifier(self.lex.tk) {
                 self.next()?;
+            }
+
+            // Anonymous struct/union member (C11 6.7.2.1p13). The
+            // type-prefix parse just registered an anon-tagged
+            // aggregate; if there's no declarator (`;` follows
+            // immediately), promote each inner field into the
+            // enclosing struct's namespace at the current cursor,
+            // adjusting offsets, and skip the regular declarator
+            // loop entirely. Real-Windows `LARGE_INTEGER` /
+            // `ULARGE_INTEGER` are the canonical use site --
+            // their `LowPart` / `HighPart` members live inside
+            // an unnamed `struct { ... }` and must be reachable
+            // as `li.LowPart` (not `li.<some-tag>.LowPart`).
+            if let Some(inner_id) = anon_aggregate_inner_id
+                && self.lex.tk == ';' as i64
+            {
+                {
+                    // Seal any pending bitfield run -- the
+                    // anonymous aggregate is a regular field
+                    // from the cursor's perspective.
+                    bf_active = false;
+
+                    let inner_size = self.structs[inner_id].size;
+                    let pack = self.lex.current_pack();
+                    let inner_align = self.structs[inner_id].align.min(pack);
+                    if inner_align > struct_align {
+                        struct_align = inner_align;
+                    }
+                    let base_offset = if is_union {
+                        0
+                    } else {
+                        offset = round_up(offset, inner_align);
+                        let off = offset;
+                        offset += inner_size;
+                        off
+                    };
+                    if is_union && inner_size > offset {
+                        offset = inner_size;
+                    }
+
+                    // Copy each inner field into the outer
+                    // struct's field list, rebased onto
+                    // `base_offset`. Cloning here (rather than
+                    // taking by reference) sidesteps the borrow
+                    // conflict between reading `self.structs[inner_id]`
+                    // and mutating `self.structs[struct_id]`.
+                    let inner_fields = self.structs[inner_id].fields.clone();
+                    for inner_field in inner_fields {
+                        // Reject name collisions early -- C11
+                        // says the merged namespace must be
+                        // unambiguous. Real MSVC silently picks
+                        // the FIRST one but warns; we mirror
+                        // that by silently shadowing here too.
+                        // The `LARGE_INTEGER` shape relies on
+                        // exactly this (anon-struct LowPart and
+                        // named-`u`-struct LowPart coexist
+                        // because the latter is qualified).
+                        self.structs[struct_id].fields.push(StructField {
+                            name: inner_field.name,
+                            offset: base_offset + inner_field.offset,
+                            ty: inner_field.ty,
+                            array_size: inner_field.array_size,
+                            bit_offset: inner_field.bit_offset,
+                            bit_width: inner_field.bit_width,
+                        });
+                    }
+
+                    self.next()?; // consume `;`
+                    continue;
+                }
             }
 
             // One or more comma-separated declarators sharing the prefix.

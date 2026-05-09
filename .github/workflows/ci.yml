@@ -67,6 +67,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        # Pin Python so `python` resolves consistently on every
+        # runner (Linux + macOS use `python3` by default; Windows
+        # ships `python` but no `python3` on PATH). The smoke
+        # script invokes `python demos/sqlite3/smoke.py` and
+        # expects the modern stdlib (urllib, zipfile, pathlib).
+        with:
+          python-version: '3.x'
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.os }}
@@ -155,23 +163,15 @@ jobs:
         # The no_std variant -- no StdHost adapter, alloc only. Library-
         # only because the binary needs std for argv / stdio.
         run: cargo build --locked --no-default-features --lib --verbose
-      - name: sqlite3 amalgamation smoke (unix)
+      - name: sqlite3 amalgamation smoke
         # Fetch upstream sqlite, compile `sqlite3.c + shell.c`
         # with the freshly-built badc, and round-trip the
         # in-memory and file-backed scenarios at both -O and noO.
-        if: matrix.os == 'macos-latest' || matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm'
+        # Same script across all five runners thanks to the
+        # `actions/setup-python` step above.
         run: |
           cargo build --release --locked
-          ./demos/sqlite3/smoke.sh
-
-      - name: sqlite3 amalgamation smoke (windows)
-        # Same script, run under Git Bash (preinstalled on every
-        # github-hosted Windows runner).
-        if: matrix.os == 'windows-latest' || matrix.os == 'windows-11-arm'
-        shell: bash
-        run: |
-          cargo build --release --locked
-          ./demos/sqlite3/smoke.sh
+          python demos/sqlite3/smoke.py
 
   features:
     name: feature combos

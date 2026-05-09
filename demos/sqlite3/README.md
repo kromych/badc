@@ -7,42 +7,47 @@ against in-memory and file-backed databases.
 
 The amalgamation itself is **not committed**: it's 9 MB of
 auto-generated C, and tracking it would balloon the repo on
-every upstream bump. Instead `setup.sh` fetches a pinned
+every upstream bump. Instead `setup.py` fetches a pinned
 release from `sqlite.org` and drops the four files in this
 directory, after which they behave like a regular vendored
-copy until the next `setup.sh`.
+copy until the next `setup.py`.
 
 ## Files
 
 | File             | Tracked? | Purpose                                                                              |
 |------------------|:--------:|--------------------------------------------------------------------------------------|
-| `setup.sh`       | yes      | Fetch + extract the amalgamation. Idempotent.                                        |
-| `smoke.sh`       | yes      | Build with badc + run the in-memory and file-backed scenarios. Returns 0 on success. |
-| `sqlite3.c`      | no       | Amalgamation. Produced by `setup.sh`.                                                |
+| `setup.py`       | yes      | Fetch + extract the amalgamation. Idempotent.                                        |
+| `smoke.py`       | yes      | Build with badc + run the in-memory and file-backed scenarios. Returns 0 on success. |
+| `sqlite3.c`      | no       | Amalgamation. Produced by `setup.py`.                                                |
 | `sqlite3.h`      | no       | Same.                                                                                |
 | `sqlite3ext.h`   | no       | Same.                                                                                |
-| `shell.c`        | no       | CLI source. Produced by `setup.sh`.                                                  |
+| `shell.c`        | no       | CLI source. Produced by `setup.py`.                                                  |
 | `.cache/`        | no       | Cached amalgamation tarball + extracted vanilla copy.                                |
 
 ## Workflow
 
 ```sh
-demos/sqlite3/setup.sh   # fetches into demos/sqlite3/
-demos/sqlite3/smoke.sh   # builds + runs in-memory + file-backed scenarios
+python demos/sqlite3/setup.py   # fetches into demos/sqlite3/
+python demos/sqlite3/smoke.py   # builds + runs in-memory + file-backed scenarios
 ```
 
-`smoke.sh` returns 0 with `smoke OK: in-memory + file-backed
+`smoke.py` returns 0 with `smoke OK: in-memory + file-backed
 both green` when everything passes; on a regression it prints a
-diff against the expected output and returns 1.
+unified diff against the expected output and returns 1.
+
+`smoke.py` honours `BADC=path/to/badc` if you want a debug or
+custom-built binary instead of `target/release/badc`.
 
 ## CI
 
 The same scripts run unchanged from `.github/workflows/ci.yml`
 on every supported runner (`ubuntu-latest`, `ubuntu-24.04-arm`,
 `macos-latest`, `windows-latest`, `windows-11-arm`) after the
-regular cargo test step.
+regular cargo test step. The workflow uses
+`actions/setup-python@v5` so `python` resolves to the same
+3.x interpreter on every lane.
 
 ## Bumping SQLite
 
-1. Update `VERSION` in `setup.sh` to the new release.
-2. Run `setup.sh -v` followed by `smoke.sh`.
+1. Update `VERSION` in `setup.py` to the new release.
+2. Run `python setup.py -v` followed by `python smoke.py`.

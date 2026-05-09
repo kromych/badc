@@ -319,7 +319,7 @@ in-process path the same way.
 CI runs the matrix on `ubuntu-latest`, `ubuntu-24.04-arm`,
 `macos-latest`, `windows-latest`, and `windows-11-arm`. The two
 Windows runners additionally run the sqlite3 amalgamation smoke
-(`demos/sqlite3/smoke.sh`) end-to-end. The PE-via-WINE lane is
+(`demos/sqlite3/smoke.py`) end-to-end. The PE-via-WINE lane is
 gated on `BADC_RUN_WINE=1`; a bare `cargo test` on a developer
 machine skips it, and CI doesn't currently set it (the native
 Windows runners cover the same surface directly).

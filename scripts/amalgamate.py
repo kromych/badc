@@ -22,13 +22,13 @@ not the markers themselves -- they're standard C99.
 
 Usage:
     amalgamate.py -o combined.c a.c b.c c.c
+    amalgamate.py -o - a.c b.c | badc -    # pipe straight into the compiler
 
-The `-o` flag is required (we won't dump to stdout because the
-output is usually large enough that you want to inspect it
-afterward). Files are emitted in the order given on the command
-line. Each input must end with a newline; if it doesn't, we add
-one before the next file's marker so the marker lands on its own
-line.
+`-o` is required; pass `-` to write the result to stdout (handy
+for pipelines that don't want a temp file). Files are emitted in
+the order given on the command line. Each input must end with a
+newline; if it doesn't, we add one before the next file's marker
+so the marker lands on its own line.
 """
 
 from __future__ import annotations
@@ -92,8 +92,7 @@ def main(argv: list[str]) -> int:
         "-o",
         "--output",
         required=True,
-        type=Path,
-        help="Path to write the amalgamated source.",
+        help="Path to write the amalgamated source. Use '-' for stdout.",
     )
     parser.add_argument(
         "--rel",
@@ -119,8 +118,9 @@ def main(argv: list[str]) -> int:
             print(f"amalgamate: not a file: {p}", file=sys.stderr)
             return 2
 
-    if args.rel:
-        out_parent = args.output.resolve().parent
+    write_to_stdout = args.output == "-"
+    if args.rel and not write_to_stdout:
+        out_parent = Path(args.output).resolve().parent
         display = []
         for p in inputs:
             try:
@@ -130,11 +130,25 @@ def main(argv: list[str]) -> int:
                 # to the user-supplied path string. Better an
                 # absolute path in the marker than a crash.
                 display.append(str(p))
+    elif args.rel:
+        # `--rel` against stdout doesn't have an "output parent"
+        # to anchor on; fall back to cwd-relative paths so the
+        # builder can still run amalgamator | badc - cleanly.
+        cwd = Path.cwd().resolve()
+        display = []
+        for p in inputs:
+            try:
+                display.append(str(p.resolve().relative_to(cwd)))
+            except ValueError:
+                display.append(str(p))
     else:
         display = [str(p) for p in inputs]
 
     combined = amalgamate(inputs, display)
-    args.output.write_text(combined, encoding="utf-8")
+    if write_to_stdout:
+        sys.stdout.write(combined)
+    else:
+        Path(args.output).write_text(combined, encoding="utf-8")
     return 0
 
 

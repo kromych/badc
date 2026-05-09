@@ -127,10 +127,7 @@ impl Compiler {
                 self.pending_fn_params = Some(params);
             }
             if self.lex.tk != ')' as i64 {
-                return Err(C5Error::Compile(format!(
-                    "{}: close paren expected in nested declarator",
-                    self.lex.line
-                )));
+                return Err(self.compile_err("close paren expected in nested declarator"));
             }
             self.next()?;
             // Trailing decorations on the parenthesised group.
@@ -168,9 +165,9 @@ impl Compiler {
         }
 
         if self.lex.tk != Token::Id as i64 {
-            return Err(C5Error::Compile(format!(
-                "{}: identifier expected in declaration (tk={})",
-                self.lex.line, self.lex.tk
+            return Err(self.compile_err(format!(
+                "identifier expected in declaration (tk={})",
+                self.lex.tk
             )));
         }
         let idx = self.lex.curr_id_idx;
@@ -199,16 +196,12 @@ impl Compiler {
                 // source token stream).
                 let n = self.parse_constant_int()?;
                 if n <= 0 {
-                    return Err(C5Error::Compile(format!(
-                        "{}: array dimension must be positive (got {n})",
-                        self.lex.line
-                    )));
+                    return Err(
+                        self.compile_err(format!("array dimension must be positive (got {n})"))
+                    );
                 }
                 if self.lex.tk != ']' as i64 {
-                    return Err(C5Error::Compile(format!(
-                        "{}: close bracket expected in array declarator",
-                        self.lex.line
-                    )));
+                    return Err(self.compile_err("close bracket expected in array declarator"));
                 }
                 self.next()?;
                 array_size = n;
@@ -229,16 +222,12 @@ impl Compiler {
                 }
                 let m = self.parse_constant_int()?;
                 if m <= 0 {
-                    return Err(C5Error::Compile(format!(
-                        "{}: array dimension must be positive (got {m})",
-                        self.lex.line
-                    )));
+                    return Err(
+                        self.compile_err(format!("array dimension must be positive (got {m})"))
+                    );
                 }
                 if self.lex.tk != ']' as i64 {
-                    return Err(C5Error::Compile(format!(
-                        "{}: close bracket expected in array declarator",
-                        self.lex.line
-                    )));
+                    return Err(self.compile_err("close bracket expected in array declarator"));
                 }
                 self.next()?;
                 if inner_dim == 0 {

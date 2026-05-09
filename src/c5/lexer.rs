@@ -687,16 +687,16 @@ impl Lexer {
                     }
                     let lit =
                         core::str::from_utf8(&self.src[int_start..body_end]).map_err(|e| {
-                            C5Error::Compile(format!(
+                            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
                                 "{}: float literal not valid utf-8: {e}",
                                 self.line
-                            ))
+                            )))
                         })?;
                     let f: f64 = lit.parse().map_err(|e| {
-                        C5Error::Compile(format!(
+                        C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
                             "{}: malformed float literal `{lit}`: {e}",
                             self.line
-                        ))
+                        )))
                     })?;
                     self.ival = f.to_bits() as i64;
                     self.tk = Token::FloatNum as i64;
@@ -776,10 +776,12 @@ impl Lexer {
                                     count += 1;
                                 }
                                 if count == 0 {
-                                    return Err(C5Error::Compile(format!(
-                                        "{}: \\x escape needs at least one hex digit",
-                                        self.line
-                                    )));
+                                    return Err(C5Error::Compile(
+                                        crate::c5::error::fmt_internal_err(&format!(
+                                            "{}: \\x escape needs at least one hex digit",
+                                            self.line
+                                        )),
+                                    ));
                                 }
                                 val = acc;
                             }

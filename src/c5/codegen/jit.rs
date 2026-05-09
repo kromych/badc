@@ -40,7 +40,7 @@
 //! Works with cargo's ad-hoc-signed binaries; a hardened-runtime
 //! binary would need `com.apple.security.cs.allow-jit`.
 
-use alloc::string::{String, ToString};
+use alloc::string::String;
 
 use super::super::error::C5Error;
 use super::super::program::Program;
@@ -82,11 +82,10 @@ pub fn jit_run_with_options(
     )))]
     {
         let _ = (program, args, options);
-        Err(C5Error::Compile(
+        Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
             "JIT: requires the `std` feature on Linux (any arch), \
-             macOS/aarch64, or Windows (x86_64 / aarch64)"
-                .to_string(),
-        ))
+             macOS/aarch64, or Windows (x86_64 / aarch64)",
+        )))
     }
 }
 
@@ -105,11 +104,10 @@ fn host_target() -> Result<Target, C5Error> {
     } else if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
         Ok(Target::WindowsX64)
     } else {
-        Err(C5Error::Compile(
+        Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
             "JIT: host OS/arch unsupported (need Linux/aarch64, Linux/x86_64, \
-             macOS/aarch64, Windows/aarch64, or Windows/x86_64)"
-                .to_string(),
-        ))
+             macOS/aarch64, Windows/aarch64, or Windows/x86_64)",
+        )))
     }
 }
 
@@ -132,7 +130,6 @@ mod jit_impl {
     // Only the POSIX bind_imports path uses `to_string` (for the
     // dlopen-NULL error); Windows reaches for `format!` instead.
     #[cfg(any(target_os = "linux", target_os = "macos"))]
-    use alloc::string::ToString;
     use alloc::vec::Vec;
     use std::ffi::CString;
     use std::os::raw::{c_char, c_int, c_void};
@@ -168,9 +165,11 @@ mod jit_impl {
                 let absolute = data_vmaddr + r.target_offset;
                 let off = r.data_offset as usize;
                 if off + 8 > bytes.len() {
-                    return Err(C5Error::Compile(format!(
-                        "JIT: data reloc offset {off:#x} past end of data region ({})",
-                        bytes.len()
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        &format!(
+                            "JIT: data reloc offset {off:#x} past end of data region ({})",
+                            bytes.len()
+                        ),
                     )));
                 }
                 bytes[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
@@ -221,16 +220,18 @@ mod jit_impl {
                     .or_else(|| build.bytecode_to_native.get(bc_pc).copied())
                     .unwrap_or(usize::MAX);
                 if native_off == usize::MAX {
-                    return Err(C5Error::Compile(format!(
-                        "JIT: code reloc references missing bytecode pc {bc_pc}"
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        &format!("JIT: code reloc references missing bytecode pc {bc_pc}"),
                     )));
                 }
                 let absolute = code_vmaddr + native_off as u64;
                 let off = r.data_offset as usize;
                 if off + 8 > bytes.len() {
-                    return Err(C5Error::Compile(format!(
-                        "JIT: code reloc offset {off:#x} past end of data region ({})",
-                        bytes.len()
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        &format!(
+                            "JIT: code reloc offset {off:#x} past end of data region ({})",
+                            bytes.len()
+                        ),
                     )));
                 }
                 bytes[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
@@ -386,9 +387,8 @@ mod jit_impl {
 
             let ptr = unsafe { mmap(std::ptr::null_mut(), len, prot, flags, -1, 0) };
             if ptr == map_failed() {
-                return Err(C5Error::Compile(format!(
-                    "JIT: mmap failed: {}",
-                    std::io::Error::last_os_error()
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!("JIT: mmap failed: {}", std::io::Error::last_os_error()),
                 )));
             }
 
@@ -428,9 +428,11 @@ mod jit_impl {
                 )
             };
             if ptr.is_null() {
-                return Err(C5Error::Compile(format!(
-                    "JIT: VirtualAlloc failed: {}",
-                    std::io::Error::last_os_error()
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!(
+                        "JIT: VirtualAlloc failed: {}",
+                        std::io::Error::last_os_error()
+                    ),
                 )));
             }
             unsafe {
@@ -451,9 +453,8 @@ mod jit_impl {
                 let r =
                     unsafe { mprotect(self.ptr as *mut c_void, self.len, PROT_READ | PROT_EXEC) };
                 if r != 0 {
-                    return Err(C5Error::Compile(format!(
-                        "JIT: mprotect failed: {}",
-                        std::io::Error::last_os_error()
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        &format!("JIT: mprotect failed: {}", std::io::Error::last_os_error()),
                     )));
                 }
             }
@@ -478,9 +479,11 @@ mod jit_impl {
                     )
                 };
                 if r == 0 {
-                    return Err(C5Error::Compile(format!(
-                        "JIT: VirtualProtect failed: {}",
-                        std::io::Error::last_os_error()
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        &format!(
+                            "JIT: VirtualProtect failed: {}",
+                            std::io::Error::last_os_error()
+                        ),
                     )));
                 }
             }
@@ -602,9 +605,8 @@ mod jit_impl {
                 )
             };
             if ptr == map_failed() {
-                return Err(C5Error::Compile(format!(
-                    "JIT: data mmap failed: {}",
-                    std::io::Error::last_os_error()
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!("JIT: data mmap failed: {}", std::io::Error::last_os_error()),
                 )));
             }
             unsafe {
@@ -628,9 +630,11 @@ mod jit_impl {
                 )
             };
             if ptr.is_null() {
-                return Err(C5Error::Compile(format!(
-                    "JIT: data VirtualAlloc failed: {}",
-                    std::io::Error::last_os_error()
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!(
+                        "JIT: data VirtualAlloc failed: {}",
+                        std::io::Error::last_os_error()
+                    ),
                 )));
             }
             unsafe {
@@ -742,9 +746,8 @@ mod jit_impl {
                 )
             };
             if ptr == map_failed() {
-                return Err(C5Error::Compile(format!(
-                    "JIT: GOT mmap failed: {}",
-                    std::io::Error::last_os_error()
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!("JIT: GOT mmap failed: {}", std::io::Error::last_os_error()),
                 )));
             }
             Ok(GotRegion {
@@ -766,9 +769,11 @@ mod jit_impl {
                 )
             };
             if ptr.is_null() {
-                return Err(C5Error::Compile(format!(
-                    "JIT: GOT VirtualAlloc failed: {}",
-                    std::io::Error::last_os_error()
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!(
+                        "JIT: GOT VirtualAlloc failed: {}",
+                        std::io::Error::last_os_error()
+                    ),
                 )));
             }
             Ok(GotRegion {
@@ -794,10 +799,9 @@ mod jit_impl {
             }
             let handle = unsafe { dlopen(std::ptr::null(), RTLD_NOW) };
             if handle.is_null() {
-                return Err(C5Error::Compile(
-                    "JIT: dlopen(NULL, RTLD_NOW) returned null -- can't resolve libc symbols"
-                        .to_string(),
-                ));
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    "JIT: dlopen(NULL, RTLD_NOW) returned null -- can't resolve libc symbols",
+                )));
             }
             self.lib_handles.push(handle);
 
@@ -841,10 +845,10 @@ mod jit_impl {
             let mut handles: Vec<*mut c_void> = Vec::with_capacity(imports.dylibs.len());
             for dylib in &imports.dylibs {
                 let cs = CString::new(dylib.path.as_str()).map_err(|_| {
-                    C5Error::Compile(format!(
+                    C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
                         "JIT: dylib path `{}` contained an interior NUL",
                         dylib.path
-                    ))
+                    )))
                 })?;
                 // GetModuleHandleA first -- doesn't increment the
                 // refcount on already-loaded modules (kernel32, the
@@ -855,10 +859,12 @@ mod jit_impl {
                 if h.is_null() {
                     h = unsafe { LoadLibraryA(cs.as_ptr()) };
                     if h.is_null() {
-                        return Err(C5Error::Compile(format!(
-                            "JIT: LoadLibraryA(\"{}\") failed: {}",
-                            dylib.path,
-                            std::io::Error::last_os_error()
+                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                            &format!(
+                                "JIT: LoadLibraryA(\"{}\") failed: {}",
+                                dylib.path,
+                                std::io::Error::last_os_error()
+                            ),
                         )));
                     }
                     owned = true;
@@ -1005,15 +1011,15 @@ mod jit_impl {
         let target_page = target_vmaddr & !0xFFF;
         let page_diff = target_page as i64 - adrp_page as i64;
         if page_diff & 0xFFF != 0 {
-            return Err(C5Error::Compile(format!(
-                "JIT: {label} page diff {page_diff} not 4 KiB aligned"
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("JIT: {label} page diff {page_diff} not 4 KiB aligned"),
             )));
         }
         let imm21 = (page_diff >> 12) as i32;
         let in_page = (target_vmaddr & 0xFFF) as u32;
         if !in_page.is_multiple_of(8) {
-            return Err(C5Error::Compile(format!(
-                "JIT: {label} slot offset {in_page:#x} not 8-aligned"
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("JIT: {label} slot offset {in_page:#x} not 8-aligned"),
             )));
         }
         let adrp_word = super::super::aarch64::enc_adrp(super::super::aarch64::Reg::X16, imm21);
@@ -1042,8 +1048,8 @@ mod jit_impl {
         let after = instr_vmaddr + CALL_LEN;
         let delta = target_vmaddr as i64 - after as i64;
         if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
-            return Err(C5Error::Compile(format!(
-                "JIT: {label} disp {delta} doesn't fit in 32 bits"
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("JIT: {label} disp {delta} doesn't fit in 32 bits"),
             )));
         }
         let disp32 = delta as i32;
@@ -1087,8 +1093,8 @@ mod jit_impl {
         let target_page = target_vmaddr & !0xFFF;
         let page_diff = target_page as i64 - adrp_page as i64;
         if page_diff & 0xFFF != 0 {
-            return Err(C5Error::Compile(format!(
-                "JIT: {label} page diff {page_diff} not 4 KiB aligned"
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("JIT: {label} page diff {page_diff} not 4 KiB aligned"),
             )));
         }
         let imm21 = (page_diff >> 12) as i32;
@@ -1117,8 +1123,8 @@ mod jit_impl {
         let after = instr_vmaddr + LEA_LEN;
         let delta = target_vmaddr as i64 - after as i64;
         if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
-            return Err(C5Error::Compile(format!(
-                "JIT: {label} disp {delta} doesn't fit in 32 bits"
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("JIT: {label} disp {delta} doesn't fit in 32 bits"),
             )));
         }
         let disp32 = delta as i32;

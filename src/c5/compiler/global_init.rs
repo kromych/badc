@@ -89,9 +89,10 @@ impl Compiler {
                 || self.symbols[self.lex.curr_id_idx].class == Token::Sys as i64)
         {
             if is_thread_local {
-                return Err(C5Error::Compile(format!(
-                    "{line}: function-pointer initializer for `_Thread_local` not supported"
-                )));
+                return Err(self.compile_err_at(
+                    line,
+                    "function-pointer initializer for `_Thread_local` not supported",
+                ));
             }
             let mut sym_idx = self.lex.curr_id_idx;
             if self.symbols[sym_idx].class == Token::Sys as i64 {
@@ -111,9 +112,10 @@ impl Compiler {
         // String literal in a `char *p` global initializer.
         if self.lex.tk == '"' as i64 && is_pointer_ty(var_ty) {
             if is_thread_local {
-                return Err(C5Error::Compile(format!(
-                    "{line}: string-literal initializer for `_Thread_local` not supported"
-                )));
+                return Err(self.compile_err_at(
+                    line,
+                    "string-literal initializer for `_Thread_local` not supported",
+                ));
             }
             let addr = self.lex.ival;
             self.next()?;
@@ -132,36 +134,43 @@ impl Compiler {
         // `&<global>` -- address-of-global pointer init.
         if self.lex.tk == Token::AndOp as i64 {
             if is_thread_local {
-                return Err(C5Error::Compile(format!(
-                    "{line}: address-of-global initializer for `_Thread_local` \
+                return Err(self.compile_err_at(
+                    line,
+                    "address-of-global initializer for `_Thread_local` \
                      not yet supported (the rebase / .reloc ordering against \
                      the TLS template needs design work; integer / NULL \
-                     initializers are fine)"
-                )));
+                     initializers are fine)",
+                ));
             }
             self.next()?;
             if self.lex.tk != Token::Id as i64 {
-                return Err(C5Error::Compile(format!(
-                    "{line}: identifier expected after `&` in initializer"
-                )));
+                return Err(
+                    self.compile_err_at(line, "identifier expected after `&` in initializer")
+                );
             }
             let target_idx = self.lex.curr_id_idx;
             let target_class = self.symbols[target_idx].class;
             if target_class != Token::Glo as i64 {
-                return Err(C5Error::Compile(format!(
-                    "{line}: `&{}` in a global initializer requires a \
+                return Err(self.compile_err_at(
+                    line,
+                    format!(
+                        "`&{}` in a global initializer requires a \
                      non-thread_local global; the right-hand side is \
                      class={target_class}",
-                    self.symbols[target_idx].name
-                )));
+                        self.symbols[target_idx].name
+                    ),
+                ));
             }
             if self.symbols[target_idx].is_thread_local {
-                return Err(C5Error::Compile(format!(
-                    "{line}: `&{}` -- can't take the address of a \
+                return Err(self.compile_err_at(
+                    line,
+                    format!(
+                        "`&{}` -- can't take the address of a \
                      `_Thread_local` global in a static initializer; the \
                      per-thread address isn't fixed at link time",
-                    self.symbols[target_idx].name
-                )));
+                        self.symbols[target_idx].name
+                    ),
+                ));
             }
             let mut target_offset = self.symbols[target_idx].val;
             // For an array global, scale subsequent `[N]` indexes
@@ -182,10 +191,13 @@ impl Compiler {
                 self.next()?;
                 let n = self.parse_constant_int()?;
                 if self.lex.tk != ']' as i64 {
-                    return Err(C5Error::Compile(format!(
-                        "{line}: close bracket expected in `&{}[...]`",
-                        self.symbols[target_idx].name
-                    )));
+                    return Err(self.compile_err_at(
+                        line,
+                        format!(
+                            "close bracket expected in `&{}[...]`",
+                            self.symbols[target_idx].name
+                        ),
+                    ));
                 }
                 self.next()?;
                 target_offset += n * elem_size;

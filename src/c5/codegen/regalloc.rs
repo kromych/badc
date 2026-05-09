@@ -197,8 +197,11 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C5E
     let mut pc = 0usize;
     while pc < text.len() {
         let raw = text[pc];
-        let op = Op::from_i64(raw)
-            .ok_or_else(|| C5Error::Compile(format!("regalloc: bad opcode at pc {pc}: {raw}")))?;
+        let op = Op::from_i64(raw).ok_or_else(|| {
+            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
+                "regalloc: bad opcode at pc {pc}: {raw}"
+            )))
+        })?;
         // Any call-shaped op observed while pushes are pending
         // taints them: they're live across a call. The taint sticks
         // even if subsequent pops happen before the eventual matching
@@ -214,10 +217,10 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C5E
                 // Function boundary -- c5 emits well-balanced
                 // bodies, so a pending Psh here is a bug in the
                 // producer.
-                return Err(C5Error::Compile(format!(
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
                     "regalloc: {n} pending Psh(es) at function entry pc {pc}",
                     n = pending.len(),
-                )));
+                ))));
             }
             Op::Ent => {}
             Op::Psh => {
@@ -227,7 +230,7 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C5E
                 let n = text[pc + 1] as usize;
                 for _ in 0..n {
                     let (psh_pc, _) = pending.pop().ok_or_else(|| {
-                        C5Error::Compile(format!("regalloc: Adj at pc {pc} pops past empty stack"))
+                        C5Error::Compile(crate::c5::error::fmt_internal_err(&format!("regalloc: Adj at pc {pc} pops past empty stack")))
                     })?;
                     push_kind[psh_pc] = Some(PushKind::Real);
                 }
@@ -274,7 +277,7 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C5E
             // other binary op consumes its LHS push.
             | Op::Mcpy => {
                 let (psh_pc, ac) = pending.pop().ok_or_else(|| {
-                    C5Error::Compile(format!("regalloc: pop op {op:?} at pc {pc} on empty stack"))
+                    C5Error::Compile(crate::c5::error::fmt_internal_err(&format!("regalloc: pop op {op:?} at pc {pc} on empty stack")))
                 })?;
                 // Bank + slot are filled in pass 2; placeholder for now.
                 push_kind[psh_pc] = Some(PushKind::Pseudo {
@@ -289,9 +292,11 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C5E
     }
 
     if !pending.is_empty() {
-        return Err(C5Error::Compile(format!(
-            "regalloc: {n} unconsumed Psh(es) at end of bytecode",
-            n = pending.len(),
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!(
+                "regalloc: {n} unconsumed Psh(es) at end of bytecode",
+                n = pending.len(),
+            ),
         )));
     }
 
@@ -375,9 +380,9 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C5E
                         PoolBank::Caller => caller_depth,
                     };
                     if slot_index >= u8::MAX as u32 {
-                        return Err(C5Error::Compile(
-                            "regalloc: pseudo-stack depth overflowed u8".into(),
-                        ));
+                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                            "regalloc: pseudo-stack depth overflowed u8",
+                        )));
                     }
                     push_kind[pc] = Some(PushKind::Pseudo {
                         slot: slot_index as u8,

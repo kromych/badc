@@ -156,10 +156,12 @@ impl Target {
             | Some("windows-aarch64")
             | Some("aarch64-pc-windows-gnullvm")
             | Some("aarch64-pc-windows-msvc") => Ok(Target::WindowsAarch64),
-            Some(other) => Err(C5Error::Compile(format!(
-                "unsupported native target: {other:?} \
+            Some(other) => Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "unsupported native target: {other:?} \
                  (try `macos-aarch64`, `linux-aarch64`, `linux-x64`, \
                  `windows-x64`, or `windows-arm64`)"
+                ),
             ))),
         }
     }
@@ -394,10 +396,12 @@ impl ResolvedImports {
         let Some((idx, dylib_name, dylib_path, real_symbol, is_variadic, fixed_args, return_ty)) =
             found
         else {
-            return Err(C5Error::Compile(format!(
-                "no `#pragma binding(<dylib>::{local_name}, ...)` is in scope -- the target's \
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "no `#pragma binding(<dylib>::{local_name}, ...)` is in scope -- the target's \
                  `_start` stub needs `{local_name}` and the codegen has nowhere to import it from. \
                  Did you forget to `#include <stdlib.h>`?"
+                ),
             )));
         };
         let dylib_index = match self.dylibs.iter().position(|d| d.name == dylib_name) {
@@ -472,9 +476,11 @@ impl ResolvedImports {
         let mut imports: Vec<ResolvedImport> = Vec::new();
         for binding_idx in used {
             let Some((spec, b)) = lookup_binding(program, binding_idx) else {
-                return Err(C5Error::Compile(format!(
-                    "Op::JsrExt operand {binding_idx} is out of range for the program's \
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!(
+                        "Op::JsrExt operand {binding_idx} is out of range for the program's \
                      `#pragma binding(...)` table"
+                    ),
                 )));
             };
             let dylib_index = match dylibs.iter().position(|d| d.name == spec.name) {

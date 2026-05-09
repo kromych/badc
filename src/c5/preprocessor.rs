@@ -525,13 +525,17 @@ impl Preprocessor {
                     }
                     Directive::Else => {
                         let frame = cond_stack.last_mut().ok_or_else(|| {
-                            C5Error::Compile(format!(
-                                "preprocessor:{line_no}: `#else` with no matching `#if`"
+                            C5Error::Compile(super::error::fmt_compile_err(
+                                filename,
+                                line_no,
+                                "`#else` with no matching `#if`",
                             ))
                         })?;
                         if frame.saw_else {
-                            return Err(C5Error::Compile(format!(
-                                "preprocessor:{line_no}: duplicate `#else` for the same `#if`"
+                            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                                filename,
+                                line_no,
+                                "duplicate `#else` for the same `#if`",
                             )));
                         }
                         frame.saw_else = true;
@@ -547,8 +551,10 @@ impl Preprocessor {
                         // and only then mutate the frame.
                         let parent_active =
                             cond_stack.last().map(|f| f.parent_active).ok_or_else(|| {
-                                C5Error::Compile(format!(
-                                    "preprocessor:{line_no}: `#elif` with no matching `#if`"
+                                C5Error::Compile(super::error::fmt_compile_err(
+                                    filename,
+                                    line_no,
+                                    "`#elif` with no matching `#if`",
                                 ))
                             })?;
                         let any_taken_so_far = cond_stack
@@ -563,8 +569,10 @@ impl Preprocessor {
                         };
                         let frame = cond_stack.last_mut().unwrap();
                         if frame.saw_else {
-                            return Err(C5Error::Compile(format!(
-                                "preprocessor:{line_no}: `#elif` after `#else` for the same `#if`"
+                            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                                filename,
+                                line_no,
+                                "`#elif` after `#else` for the same `#if`",
                             )));
                         }
                         frame.this_branch_taken = cond;
@@ -573,8 +581,10 @@ impl Preprocessor {
                     }
                     Directive::Endif => {
                         let frame = cond_stack.pop().ok_or_else(|| {
-                            C5Error::Compile(format!(
-                                "preprocessor:{line_no}: `#endif` with no matching `#if`"
+                            C5Error::Compile(super::error::fmt_compile_err(
+                                filename,
+                                line_no,
+                                "`#endif` with no matching `#if`",
                             ))
                         })?;
                         active = frame.parent_active;
@@ -607,14 +617,14 @@ impl Preprocessor {
                                         idx_iter += 1;
                                         continue;
                                     }
-                                    self.parse_pragma(args, line_no)?;
+                                    self.parse_pragma(args, line_no, filename)?;
                                 }
                             }
                         }
                     }
                     Directive::Include(name) => {
                         if active {
-                            let included = self.process_include(name, line_no)?;
+                            let included = self.process_include(name, line_no, filename)?;
                             out.push_str(&included);
                             // Closing marker uses `source_line + 1`
                             // (NOT `line_no + 1`) and `current_file`
@@ -676,9 +686,10 @@ impl Preprocessor {
                         // that reports lexer / parser failures handles
                         // it.
                         if active {
-                            return Err(C5Error::Compile(format!(
-                                "{filename}:{line_no}: #error {}",
-                                message.trim()
+                            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                                filename,
+                                line_no,
+                                &format!("#error {}", message.trim()),
                             )));
                         }
                     }
@@ -727,9 +738,9 @@ impl Preprocessor {
         }
 
         if !cond_stack.is_empty() {
-            return Err(C5Error::Compile(
-                "preprocessor: unterminated `#if` / `#ifdef` block".to_string(),
-            ));
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                "preprocessor: unterminated `#if` / `#ifdef` block",
+            )));
         }
 
         Ok(out)
@@ -1013,9 +1024,14 @@ impl Preprocessor {
         let v = p.parse_or()?;
         p.skip_ws();
         if !p.at_end() {
-            return Err(C5Error::Compile(alloc::format!(
-                "preprocessor:{line_no}: trailing junk in `#if` expression: {:?}",
-                p.tail()
+            // Note: `expand_if_expr` doesn't carry a `filename` --
+            // it operates on a single line of an expanded `#if` /
+            // `#elif` expression. Use `<unknown>` here; callers that
+            // hit this case usually have a filename one frame up.
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                "<unknown>",
+                line_no,
+                &alloc::format!("trailing junk in `#if` expression: {:?}", p.tail()),
             )));
         }
         Ok(v.truthy())
@@ -1025,25 +1041,25 @@ impl Preprocessor {
     /// are accepted silently -- the c5 source already uses
     /// `#pragma` markers for things the preprocessor doesn't care
     /// about, and future tools may add their own.
-    fn parse_pragma(&mut self, args: &str, line_no: usize) -> Result<(), C5Error> {
+    fn parse_pragma(&mut self, args: &str, line_no: usize, filename: &str) -> Result<(), C5Error> {
         let args = args.trim();
         if let Some(inner) = args
             .strip_prefix("dylib(")
             .and_then(|s| s.strip_suffix(')'))
         {
-            return self.parse_pragma_dylib(inner.trim(), line_no);
+            return self.parse_pragma_dylib(inner.trim(), line_no, filename);
         }
         if let Some(inner) = args
             .strip_prefix("binding(")
             .and_then(|s| s.strip_suffix(')'))
         {
-            return self.parse_pragma_binding(inner.trim(), line_no);
+            return self.parse_pragma_binding(inner.trim(), line_no, filename);
         }
         if let Some(inner) = args
             .strip_prefix("export(")
             .and_then(|s| s.strip_suffix(')'))
         {
-            return self.parse_pragma_export(inner.trim(), line_no);
+            return self.parse_pragma_export(inner.trim(), line_no, filename);
         }
         Ok(())
     }
@@ -1059,12 +1075,21 @@ impl Preprocessor {
     /// (we'd need a syntax like `export(local_name, "real_name")`
     /// to follow the `#pragma binding(...)` shape, but the
     /// inverse direction; not needed for the initial cut).
-    fn parse_pragma_export(&mut self, inner: &str, line_no: usize) -> Result<(), C5Error> {
+    fn parse_pragma_export(
+        &mut self,
+        inner: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<(), C5Error> {
         let name = inner.trim();
         if !is_ident(name) {
-            return Err(C5Error::Compile(format!(
-                "preprocessor:{line_no}: `#pragma export({name})` -- name must be a \
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                &format!(
+                    "`#pragma export({name})` -- name must be a \
                  plain identifier"
+                ),
             )));
         }
         if !self.exports.iter().any(|e| e == name) {
@@ -1077,24 +1102,37 @@ impl Preprocessor {
     /// the codegen can attach bindings to. `name` is an
     /// identifier-style c5-side handle (`libc`, `kernel32`, ...);
     /// `path` is the actual loader-search-name or filesystem path.
-    fn parse_pragma_dylib(&mut self, inner: &str, line_no: usize) -> Result<(), C5Error> {
+    fn parse_pragma_dylib(
+        &mut self,
+        inner: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<(), C5Error> {
         let Some((name, path)) = inner.split_once(',') else {
-            return Err(C5Error::Compile(format!(
-                "preprocessor:{line_no}: `#pragma dylib(...)` expects two args \
-                 (`name, \"path\"`)"
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                "`#pragma dylib(...)` expects two args \
+                 (`name, \"path\"`)",
             )));
         };
         let name = name.trim();
         let path = path.trim().trim_matches('"');
         if name.is_empty() || path.is_empty() {
-            return Err(C5Error::Compile(format!(
-                "preprocessor:{line_no}: `#pragma dylib(...)` arg is empty"
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                "`#pragma dylib(...)` arg is empty",
             )));
         }
         if !is_ident(name) {
-            return Err(C5Error::Compile(format!(
-                "preprocessor:{line_no}: `#pragma dylib({name}, ...)` -- name must be a \
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                &format!(
+                    "`#pragma dylib({name}, ...)` -- name must be a \
                  plain identifier"
+                ),
             )));
         }
         if let Some(existing) = self.dylibs.iter().find(|d| d.name == name) {
@@ -1104,9 +1142,13 @@ impl Preprocessor {
             // both will hit this twice. Different paths are still
             // a hard error since they'd silently shadow each other.
             if existing.path != path {
-                return Err(C5Error::Compile(format!(
-                    "preprocessor:{line_no}: `#pragma dylib({name}, {path:?})` -- already declared with different path {:?}",
-                    existing.path
+                return Err(C5Error::Compile(super::error::fmt_compile_err(
+                    filename,
+                    line_no,
+                    &format!(
+                        "`#pragma dylib({name}, {path:?})` -- already declared with different path {:?}",
+                        existing.path
+                    ),
                 )));
             }
             return Ok(());
@@ -1128,7 +1170,12 @@ impl Preprocessor {
     /// `#include` returns an error; repeat inclusion of a header
     /// that previously declared `#pragma once` returns an empty
     /// string.
-    fn process_include(&mut self, name: &str, line_no: usize) -> Result<String, C5Error> {
+    fn process_include(
+        &mut self,
+        name: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<String, C5Error> {
         if self.pragma_once_files.contains(name) {
             return Ok(String::new());
         }
@@ -1152,8 +1199,10 @@ impl Preprocessor {
         };
         if self.include_stack.iter().any(|f| f == name) {
             let chain = self.include_stack.join(" -> ");
-            return Err(C5Error::Compile(format!(
-                "preprocessor:{line_no}: cyclic `#include {name}` (chain: {chain} -> {name})"
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                &format!("cyclic `#include {name}` (chain: {chain} -> {name})"),
             )));
         }
         self.include_stack.push(name.to_string());
@@ -1186,32 +1235,49 @@ impl Preprocessor {
     /// `dylib`. The dylib must already have been declared by a
     /// `#pragma dylib(...)`; the directives can otherwise appear in
     /// any order.
-    fn parse_pragma_binding(&mut self, inner: &str, line_no: usize) -> Result<(), C5Error> {
+    fn parse_pragma_binding(
+        &mut self,
+        inner: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<(), C5Error> {
         let Some((qualified, real_symbol)) = inner.split_once(',') else {
-            return Err(C5Error::Compile(format!(
-                "preprocessor:{line_no}: `#pragma binding(...)` expects two args \
-                 (`dylib::local_name, \"real_symbol\"`)"
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                "`#pragma binding(...)` expects two args \
+                 (`dylib::local_name, \"real_symbol\"`)",
             )));
         };
         let qualified = qualified.trim();
         let real_symbol = real_symbol.trim().trim_matches('"');
         let Some((dylib_name, local_name)) = qualified.split_once("::") else {
-            return Err(C5Error::Compile(format!(
-                "preprocessor:{line_no}: `#pragma binding({qualified}, ...)` -- LHS must be \
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                &format!(
+                    "`#pragma binding({qualified}, ...)` -- LHS must be \
                  `dylib_name::local_name`"
+                ),
             )));
         };
         let dylib_name = dylib_name.trim();
         let local_name = local_name.trim();
         if dylib_name.is_empty() || local_name.is_empty() || real_symbol.is_empty() {
-            return Err(C5Error::Compile(format!(
-                "preprocessor:{line_no}: `#pragma binding(...)` arg is empty"
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                "`#pragma binding(...)` arg is empty",
             )));
         }
         let Some(dylib) = self.dylibs.iter_mut().find(|d| d.name == dylib_name) else {
-            return Err(C5Error::Compile(format!(
-                "preprocessor:{line_no}: `#pragma binding({dylib_name}::...)` -- no `#pragma \
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                &format!(
+                    "`#pragma binding({dylib_name}::...)` -- no `#pragma \
                  dylib({dylib_name}, ...)` declared"
+                ),
             )));
         };
         dylib.bindings.push(Binding {

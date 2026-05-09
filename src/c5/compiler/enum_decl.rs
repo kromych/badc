@@ -13,8 +13,6 @@
 //! moves together. The constants loop reuses
 //! `parse_const_expr_or` for explicit values like `B = 1 << 8`.
 
-use alloc::format;
-
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
@@ -45,10 +43,7 @@ impl Compiler {
         let mut i: i64 = 0;
         while self.lex.tk != '}' as i64 {
             if self.lex.tk != Token::Id as i64 {
-                return Err(C5Error::Compile(format!(
-                    "{}: bad enum identifier",
-                    self.lex.line
-                )));
+                return Err(self.compile_err("bad enum identifier"));
             }
             let idx = self.lex.curr_id_idx;
             self.next()?;

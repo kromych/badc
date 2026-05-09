@@ -44,7 +44,6 @@
 //! writer (the codegen is platform-agnostic; only the writer differs).
 
 use alloc::format;
-use alloc::string::ToString;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -673,15 +672,15 @@ fn patch_adrp_ldr(
     let target_page = target_vmaddr & !0xFFF;
     let page_diff = target_page as i64 - adrp_page as i64;
     if page_diff & 0xFFF != 0 {
-        return Err(C5Error::Compile(format!(
-            "ELF: {label} page diff {page_diff} not 4 KiB aligned"
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!("ELF: {label} page diff {page_diff} not 4 KiB aligned"),
         )));
     }
     let imm21 = (page_diff >> 12) as i32;
     let in_page = (target_vmaddr & 0xFFF) as u32;
     if !in_page.is_multiple_of(8) {
-        return Err(C5Error::Compile(format!(
-            "ELF: {label} slot offset {in_page:#x} not 8-aligned"
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!("ELF: {label} slot offset {in_page:#x} not 8-aligned"),
         )));
     }
 
@@ -776,8 +775,8 @@ fn patch_call_qword_rip32(
     let after = instr_vmaddr + call_len;
     let delta = target_vmaddr as i64 - after as i64;
     if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
-        return Err(C5Error::Compile(format!(
-            "ELF: {label} disp {delta} doesn't fit in 32 bits"
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!("ELF: {label} disp {delta} doesn't fit in 32 bits"),
         )));
     }
     let disp32 = delta as i32;
@@ -804,8 +803,8 @@ fn patch_lea_rip32(
     let after = instr_vmaddr + lea_len;
     let delta = target_vmaddr as i64 - after as i64;
     if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
-        return Err(C5Error::Compile(format!(
-            "ELF: {label} disp {delta} doesn't fit in 32 bits"
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!("ELF: {label} disp {delta} doesn't fit in 32 bits"),
         )));
     }
     let disp32 = delta as i32;
@@ -835,8 +834,8 @@ fn patch_adrp_add(
     let target_page = target_vmaddr & !0xFFF;
     let page_diff = target_page as i64 - adrp_page as i64;
     if page_diff & 0xFFF != 0 {
-        return Err(C5Error::Compile(format!(
-            "ELF: {label} page diff {page_diff} not 4 KiB aligned"
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!("ELF: {label} page diff {page_diff} not 4 KiB aligned"),
         )));
     }
     let imm21 = (page_diff >> 12) as i32;
@@ -1278,9 +1277,11 @@ pub(super) fn write(
         let absolute = data_vmaddr + r.target_offset;
         let off = r.data_offset as usize;
         if off + 8 > data_with_relocs.len() {
-            return Err(C5Error::Compile(format!(
-                "ELF: data reloc offset {off:#x} past end of .data ({})",
-                data_with_relocs.len()
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "ELF: data reloc offset {off:#x} past end of .data ({})",
+                    data_with_relocs.len()
+                ),
             )));
         }
         data_with_relocs[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
@@ -1307,16 +1308,18 @@ pub(super) fn write(
             .or_else(|| build.bytecode_to_native.get(bc_pc).copied())
             .unwrap_or(usize::MAX);
         if native_off == usize::MAX {
-            return Err(C5Error::Compile(format!(
-                "ELF: code reloc references missing bytecode pc {bc_pc}"
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("ELF: code reloc references missing bytecode pc {bc_pc}"),
             )));
         }
         let absolute = code_vmaddr + stub_len + native_off as u64;
         let off = r.data_offset as usize;
         if off + 8 > data_with_relocs.len() {
-            return Err(C5Error::Compile(format!(
-                "ELF: code reloc offset {off:#x} past end of .data ({})",
-                data_with_relocs.len()
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "ELF: code reloc offset {off:#x} past end of .data ({})",
+                    data_with_relocs.len()
+                ),
             )));
         }
         data_with_relocs[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
@@ -1672,12 +1675,11 @@ pub(super) fn write(
             .iter()
             .position(|i| i.local_name == "exit")
             .ok_or_else(|| {
-                C5Error::Compile(
+                C5Error::Compile(crate::c5::error::fmt_internal_err(
                     "ELF writer: _start stub needs `exit` in the import set, but the program \
                      didn't reach for it (and we don't auto-add it). \
-                     Did you `#include <stdlib.h>` and call `exit(...)` somewhere?"
-                        .to_string(),
-                )
+                     Did you `#include <stdlib.h>` and call `exit(...)` somewhere?",
+                ))
             })?;
         patch_got_call(
             machine,

@@ -88,10 +88,7 @@ impl Compiler {
             let fn_ptr_indirection = self.pending_fn_ptr_indirection.take().unwrap_or(0);
             self.ty = ty;
             if self.symbols[loc_idx].class == Token::Loc as i64 {
-                return Err(C5Error::Compile(format!(
-                    "{}: duplicate local definition",
-                    self.lex.line
-                )));
+                return Err(self.compile_err("duplicate local definition"));
             }
 
             self.shadow_symbol(loc_idx);
@@ -175,10 +172,7 @@ impl Compiler {
                     // `self.data`.
                     let elem_size = self.size_of_type(ty);
                     if self.lex.tk != '{' as i64 {
-                        return Err(C5Error::Compile(format!(
-                            "{}: array initializer must start with `{{`",
-                            self.lex.line
-                        )));
+                        return Err(self.compile_err("array initializer must start with `{{`"));
                     }
                     let count = self.lex.count_top_level_groups_in_array() as i64;
                     self.next()?;
@@ -195,10 +189,9 @@ impl Compiler {
                         if self.lex.tk == '{' as i64 {
                             self.collect_struct_initializer(sid, here)?;
                         } else {
-                            return Err(C5Error::Compile(format!(
-                                "{}: struct array element must be a brace list",
-                                self.lex.line
-                            )));
+                            return Err(
+                                self.compile_err("struct array element must be a brace list")
+                            );
                         }
                         i += 1;
                         if self.lex.tk == ',' as i64 {
@@ -264,9 +257,9 @@ impl Compiler {
     ) -> Result<(), C5Error> {
         if declared_array_size == -1 {
             if self.lex.tk != Token::Assign as i64 {
-                return Err(C5Error::Compile(format!(
-                    "{}: array `{}` declared with empty brackets needs an initializer",
-                    self.lex.line, self.symbols[loc_idx].name
+                return Err(self.compile_err(format!(
+                    "array `{}` declared with empty brackets needs an initializer",
+                    self.symbols[loc_idx].name
                 )));
             }
             self.next()?;
@@ -293,10 +286,7 @@ impl Compiler {
                     if self.lex.tk == '{' as i64 {
                         self.collect_struct_initializer(sid, here)?;
                     } else {
-                        return Err(C5Error::Compile(format!(
-                            "{}: struct array element must be a brace list",
-                            self.lex.line
-                        )));
+                        return Err(self.compile_err("struct array element must be a brace list"));
                     }
                     i += 1;
                     if self.lex.tk == ',' as i64 {
@@ -343,9 +333,9 @@ impl Compiler {
                 let init_count = elements.len();
                 let max = declared_array_size as usize;
                 if init_count > max {
-                    return Err(C5Error::Compile(format!(
-                        "{}: too many initializers for array `{}` ({} > {})",
-                        self.lex.line, self.symbols[loc_idx].name, init_count, max
+                    return Err(self.compile_err(format!(
+                        "too many initializers for array `{}` ({} > {})",
+                        self.symbols[loc_idx].name, init_count, max
                     )));
                 }
                 let (start_addr, total_bytes) = self.pack_initializer_into_data(ty, &elements);

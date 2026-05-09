@@ -1216,8 +1216,8 @@ fn apply_got_fixups(
         let target_page = target_vmaddr & !0xFFF;
         let page_diff = target_page as i64 - adrp_page as i64;
         if page_diff & 0xFFF != 0 {
-            return Err(C5Error::Compile(format!(
-                "Mach-O: GOT page diff {page_diff} not 4 KiB aligned"
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("Mach-O: GOT page diff {page_diff} not 4 KiB aligned"),
             )));
         }
         let imm21 = (page_diff >> 12) as i32;
@@ -1227,8 +1227,8 @@ fn apply_got_fixups(
         // 8-aligned.
         let in_page = (target_vmaddr & 0xFFF) as u32;
         if !in_page.is_multiple_of(8) {
-            return Err(C5Error::Compile(format!(
-                "Mach-O: GOT slot offset {in_page:#x} not 8-aligned"
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("Mach-O: GOT slot offset {in_page:#x} not 8-aligned"),
             )));
         }
 
@@ -1265,8 +1265,8 @@ fn patch_adrp_add(
     let target_page = target_vmaddr & !0xFFF;
     let page_diff = target_page as i64 - adrp_page as i64;
     if page_diff & 0xFFF != 0 {
-        return Err(C5Error::Compile(format!(
-            "Mach-O: {label} page diff {page_diff} not 4 KiB aligned"
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!("Mach-O: {label} page diff {page_diff} not 4 KiB aligned"),
         )));
     }
     let imm21 = (page_diff >> 12) as i32;
@@ -1330,8 +1330,8 @@ fn apply_macho_tlv_fixups(
         let target_page = descriptor_vmaddr & !0xFFF;
         let page_diff = target_page as i64 - adrp_page as i64;
         if page_diff & 0xFFF != 0 {
-            return Err(C5Error::Compile(format!(
-                "Mach-O: TLV adrp page diff {page_diff} not 4 KiB aligned"
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("Mach-O: TLV adrp page diff {page_diff} not 4 KiB aligned"),
             )));
         }
         let imm21 = (page_diff >> 12) as i32;
@@ -1829,10 +1829,12 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             .copied()
             .unwrap_or(usize::MAX);
         if native_off == usize::MAX {
-            return Err(C5Error::Compile(format!(
-                "Mach-O: exported function `{}` (bc PC {}) doesn't \
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "Mach-O: exported function `{}` (bc PC {}) doesn't \
                  align with any native instruction",
-                exp.name, exp.bytecode_pc
+                    exp.name, exp.bytecode_pc
+                ),
             )));
         }
         let n_value = code_vmaddr_base + native_off as u64;
@@ -2183,9 +2185,11 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         let preferred_va = data_section_vmaddr + r.target_offset;
         let off = r.data_offset as usize;
         if off + 8 > data_with_relocs.len() {
-            return Err(C5Error::Compile(format!(
-                "Mach-O: data reloc offset {off:#x} past end of __data ({})",
-                data_with_relocs.len()
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "Mach-O: data reloc offset {off:#x} past end of __data ({})",
+                    data_with_relocs.len()
+                ),
             )));
         }
         data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
@@ -2207,16 +2211,18 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
             .or_else(|| build.bytecode_to_native.get(bc_pc).copied())
             .unwrap_or(usize::MAX);
         if native_off == usize::MAX {
-            return Err(C5Error::Compile(format!(
-                "Mach-O: code reloc references missing bytecode pc {bc_pc}"
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("Mach-O: code reloc references missing bytecode pc {bc_pc}"),
             )));
         }
         let preferred_va = code_vmaddr_base + native_off as u64;
         let off = r.data_offset as usize;
         if off + 8 > data_with_relocs.len() {
-            return Err(C5Error::Compile(format!(
-                "Mach-O: code reloc offset {off:#x} past end of __data ({})",
-                data_with_relocs.len()
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "Mach-O: code reloc offset {off:#x} past end of __data ({})",
+                    data_with_relocs.len()
+                ),
             )));
         }
         data_with_relocs[off..off + 8].copy_from_slice(&preferred_va.to_le_bytes());
@@ -2284,9 +2290,8 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     debug_assert_eq!(out.len() as u64, total_filesize);
 
     if out.len() > u32::MAX as usize {
-        return Err(C5Error::Compile(format!(
-            "Mach-O writer: image too large ({} bytes)",
-            out.len()
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            &format!("Mach-O writer: image too large ({} bytes)", out.len()),
         )));
     }
     Ok(out)

@@ -454,13 +454,16 @@ fn decode(
     let mut pc = 0usize;
     while pc < text.len() {
         let op = Op::from_i64(text[pc]).ok_or_else(|| {
-            C5Error::Compile(format!("optimizer: bad opcode at PC {pc}: {}", text[pc]))
+            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
+                "optimizer: bad opcode at PC {pc}: {}",
+                text[pc]
+            )))
         })?;
         pc_to_idx[pc] = insns.len();
         pc += 1;
         if op.operand_count() > 0 && pc >= text.len() {
-            return Err(C5Error::Compile(format!(
-                "optimizer: truncated operand for {op:?} at end of text"
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("optimizer: truncated operand for {op:?} at end of text"),
             )));
         }
         let insn = match op {
@@ -576,9 +579,9 @@ fn decode(
         match ins {
             Insn::Branch(_, target) => {
                 let idx = lookup_idx(&pc_to_idx, *target).ok_or_else(|| {
-                    C5Error::Compile(format!(
+                    C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
                         "optimizer: branch target {target} is not an instruction start"
-                    ))
+                    )))
                 })?;
                 *target = idx;
             }
@@ -643,8 +646,8 @@ fn lookup_pc(
                 // Entry past end: empty-program edge case.
                 Ok(insns_len)
             } else {
-                Err(C5Error::Compile(format!(
-                    "optimizer: entry_pc {target_pc} is not an instruction start"
+                Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!("optimizer: entry_pc {target_pc} is not an instruction start"),
                 )))
             }
         }

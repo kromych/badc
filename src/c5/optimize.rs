@@ -175,7 +175,15 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
     } = program;
 
     let mut insns = decode(&text, &data_imm_positions)?;
-    let entry_idx = pc_to_index_in(&insns, &text, entry_pc)?;
+    // Build a single pc -> insn-index table by walking `insns`
+    // once. Sqlite's amalgamation produces ~1M instructions and a
+    // few hundred CodeReloc entries; the previous shape called
+    // `pc_to_index_in` once per reloc, each call walking `insns`
+    // linearly, which was O(N*K) and dominated `-O` wall time
+    // (~100ms / 400ms on sqlite3.c+shell.c). One O(N) build + K
+    // binary searches collapses it to O(N + K log N).
+    let pc_at_idx = build_pc_at_idx(&insns);
+    let entry_idx = lookup_pc(&pc_at_idx, entry_pc, insns.len(), text.len())?;
     // Snapshot the insn index of every CodeReloc target *before*
     // the peephole passes mutate the insn vector. Each target_bc_pc
     // points at a function's first instruction; the corresponding
@@ -183,7 +191,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
     // entries aren't removed.
     let code_reloc_indices: Vec<usize> = code_relocs
         .iter()
-        .map(|r| pc_to_index_in(&insns, &text, r.target_bc_pc as usize))
+        .map(|r| lookup_pc(&pc_at_idx, r.target_bc_pc as usize, insns.len(), text.len()))
         .collect::<Result<Vec<_>, _>>()?;
 
     // Run rewrites to a fixed point. Each pass returns true if it made
@@ -502,21 +510,46 @@ fn lookup_idx(pc_to_idx: &[usize], pc: usize) -> Option<usize> {
 /// Convert an old PC (into the original `text`) to its IR index by
 /// re-walking the IR. Only used once for `entry_pc` -- too rare to
 /// justify keeping the decode-time `pc_to_idx` table around.
-fn pc_to_index_in(insns: &[Insn], text: &[i64], target_pc: usize) -> Result<usize, C5Error> {
+/// Build a sorted (strictly monotonic) table where
+/// `pc_at_idx[i]` is the bytecode pc at which insn `i` starts.
+/// Length = `insns.len() + 1`; the trailing entry is the
+/// past-the-end pc, used only by the empty-program edge case in
+/// [`lookup_pc`].
+fn build_pc_at_idx(insns: &[Insn]) -> Vec<usize> {
+    let mut out = Vec::with_capacity(insns.len() + 1);
     let mut pc = 0usize;
-    for (i, ins) in insns.iter().enumerate() {
-        if pc == target_pc {
-            return Ok(i);
-        }
+    for ins in insns {
+        out.push(pc);
         pc += ins.word_size();
     }
-    if pc == target_pc && target_pc == text.len() {
-        // Entry past end: empty-program edge case. Caller deals.
-        return Ok(insns.len());
+    out.push(pc);
+    out
+}
+
+/// Resolve a bytecode pc back to the originating insn index. The
+/// pcs in `pc_at_idx` are strictly increasing (each `Insn` has
+/// `word_size() >= 1`), so a binary search lands on the exact
+/// match in O(log N). Returns `Ok(insns_len)` for the
+/// empty-program past-the-end case the caller tolerates.
+fn lookup_pc(
+    pc_at_idx: &[usize],
+    target_pc: usize,
+    insns_len: usize,
+    text_len: usize,
+) -> Result<usize, C5Error> {
+    match pc_at_idx.binary_search(&target_pc) {
+        Ok(idx) if idx <= insns_len => Ok(idx),
+        Ok(_) | Err(_) => {
+            if target_pc == text_len {
+                // Entry past end: empty-program edge case.
+                Ok(insns_len)
+            } else {
+                Err(C5Error::Compile(format!(
+                    "optimizer: entry_pc {target_pc} is not an instruction start"
+                )))
+            }
+        }
     }
-    Err(C5Error::Compile(format!(
-        "optimizer: entry_pc {target_pc} is not an instruction start"
-    )))
 }
 
 /// Re-encode the IR to a flat bytecode vector. Returns

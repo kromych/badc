@@ -10,22 +10,14 @@
 // fire -- the produced PE links msvcrt.dll, follows the MS x64
 // ABI, and is what real MSVC would have built.
 //
-// Earlier badc revisions baked this MSVC mimicry into the
-// preprocessor's built-in predefines (so `-target=windows-*`
-// implicitly defined `_MSC_VER` etc.). gh #34 moves it here:
-// build drivers opt in deliberately with
+// Build drivers opt in deliberately with
 //
 //     badc -include msvc_compat.h ... source.c
 //
-// -- mirroring gcc / clang's -include flag. That keeps
-// preprocessor.rs's predefine table to genuine target-detection
-// (_WIN32 / _WIN64 / __BADC_WINDOWS__) and surfaces the "is this
-// translation unit pretending to be MSVC?" question at the
-// command line where it belongs.
-//
-// Internally `#ifdef _WIN32` so dropping `-include msvc_compat.h`
-// on a non-Windows target is a no-op rather than a compile error
-// -- the same smoke.sh command line then works on every host.
+// -- mirroring gcc / clang's -include flag. The header is
+// internally `#ifdef _WIN32` so dropping `-include msvc_compat.h`
+// on a non-Windows target is a no-op, which keeps the same
+// command line working on every host.
 
 #pragma once
 

@@ -156,10 +156,9 @@ jobs:
         # only because the binary needs std for argv / stdio.
         run: cargo build --locked --no-default-features --lib --verbose
       - name: sqlite3 amalgamation smoke (unix)
-        # Fetch upstream sqlite, apply our patch series, compile
-        # `sqlite3.c + shell.c` with the freshly-built badc, and
-        # round-trip the in-memory and file-backed scenarios at
-        # both -O and noO.
+        # Fetch upstream sqlite, compile `sqlite3.c + shell.c`
+        # with the freshly-built badc, and round-trip the
+        # in-memory and file-backed scenarios at both -O and noO.
         if: matrix.os == 'macos-latest' || matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm'
         run: |
           cargo build --release --locked
@@ -167,22 +166,7 @@ jobs:
 
       - name: sqlite3 amalgamation smoke (windows)
         # Same script, run under Git Bash (preinstalled on every
-        # github-hosted Windows runner). Used to be marked
-        # `continue-on-error: true` while we worked through the
-        # series of root causes blocking shell-on-Windows:
-        # InterlockedCompareExchange (kernel32 doesn't export it
-        # any more -- compiler intrinsic on modern Windows; shimmed
-        # in `msvc_compat.h`), missing `atexit` binding (stdlib.h
-        # bound it for Linux but not Windows; c5 was lowering the
-        # call to address 0), CRLF translation in shell stdout
-        # (smoke now strips `\r` before diff), the LARGE_INTEGER
-        # struct shape (header used a flat 24-byte fallback;
-        # rewritten to the real anon-union shape after c5 learned
-        # to promote anonymous-aggregate members), and finally
-        # the smoke driver itself piping `/tmp/...` paths into the
-        # native PE shell (CreateFileA reads `/tmp/foo` as
-        # `<drive>:\tmp\foo`; smoke now translates via cygpath).
-        # All of those landed; the lane is now a real gate.
+        # github-hosted Windows runner).
         if: matrix.os == 'windows-latest' || matrix.os == 'windows-11-arm'
         shell: bash
         run: |

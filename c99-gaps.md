@@ -182,11 +182,9 @@ variable.
 ## Aggregate initializers
 
 - File-scope struct designated / positional / mixed init
-  (M28b) and array brace-list / string-literal init (M28a)
-  work. **Function-scope** struct designated init isn't
-  yet supported. Severity: 3.
-- Anonymous structs / unions inside another aggregate
-  (C11 feature) -- rejected. Severity: 4.
+  and array brace-list / string-literal init work.
+  **Function-scope** struct designated init isn't yet
+  supported. Severity: 3.
 
 ## Pointer arithmetic and structs
 
@@ -211,9 +209,6 @@ variable.
 - `__func__` -- not recognised. Severity: 4.
 - `__STDC_VERSION__`, `__STDC_HOSTED__` -- not predefined.
   Severity: 4.
-- Header search path: `badc` ships its own
-  `headers/include/` set; user `-I` paths aren't a CLI
-  option. Severity: 3.
 
 ## Preprocessor (sec 6.10)
 
@@ -242,7 +237,7 @@ C99 either; listed for completeness:
 - `_Generic`, `_Atomic`, `_Static_assert` -- rejected.
 - `_Thread_local` -- supported; init limited to scalars +
   NULL.
-- Anonymous struct / union members -- rejected.
+- Anonymous struct / union members -- supported (C11 6.7.2.1p13).
 
 ## c5-only features (not in C99)
 

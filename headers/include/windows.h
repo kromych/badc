@@ -646,9 +646,7 @@ int DeleteCriticalSection(char *cs);
 // name a Token::Sys symbol the static initializer can reference;
 // the matching `#pragma binding` puts the IAT slot in scope so the
 // codegen has a kernel32 import to point the function-pointer
-// initializer at. Runtime correctness for these comes once the
-// trampoline's arg-forwarding picks up the cast'd prototype, but
-// for now compile-time success is the goal of gh #66.
+// initializer at.
 #pragma binding(kernel32::AreFileApisANSI,         "AreFileApisANSI")
 #pragma binding(kernel32::CancelIo,                "CancelIo")
 #pragma binding(kernel32::CreateEventA,            "CreateEventA")

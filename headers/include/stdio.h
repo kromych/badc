@@ -577,8 +577,7 @@ static char *__c5_lazy_stream(int idx) {
     // returns a pointer into the CRT's per-process `_iob` array.
     // Older msvcrt (pre-UCRT) called the same helper `__iob_func`
     // -- bind both spellings and let the CRT pick whichever it
-    // exports. The trampoline side gh #66 already declared the
-    // bindings; here we only need the lazy-resolver arm.
+    // exports.
     // msvcrt's `__iob_func()` returns a pointer to its 3-entry
     // `_iob` array (stdin / stdout / stderr). On the legacy
     // (pre-UCRT) wine / Windows msvcrt, `sizeof(_iobuf)` is 48

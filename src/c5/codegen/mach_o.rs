@@ -1555,22 +1555,17 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     let is_dylib = build.output_kind == super::OutputKind::SharedLibrary;
     // __DWARF holds the four phase-1 debug sections
     // (__debug_info, __debug_abbrev, __debug_line, __debug_str)
-    // -- 72 + 4*80 = 392 bytes of LC.
-    //
-    // Phase 1 emits __DWARF for executables only. The dylib
-    // path interacts badly with `dlsym`'s symbol resolution
-    // when __DWARF shares __LINKEDIT's vmaddr (and putting
-    // __DWARF past __LINKEDIT trips dyld's "segment vm range
-    // overlaps" check once codesign extends __LINKEDIT). The
-    // ELF / PE writers (gh #41 / gh #42) emit DWARF for both
-    // EXE and SO output uniformly; revisiting Mach-O dylibs
-    // is phase 2 work for gh #40.
-    let emit_dwarf = !is_dylib;
-    let dwarf_seg_size = if emit_dwarf {
-        (SEGMENT_COMMAND_64_SIZE + 4 * SECTION_64_SIZE) as u64
-    } else {
-        0
-    };
+    // -- 72 + 4*80 = 392 bytes of LC. Emitted for both
+    // executables and dylibs (gh #45). The dylib coverage gate
+    // dropped after the layout reshuffle that gave __DWARF its
+    // own page-aligned vmaddr slot between __DATA and
+    // __LINKEDIT (commit "give __DWARF a real vmsize..."). With
+    // distinct vmaddrs, dyld's `vmsize > filesize` check passes
+    // and dyld 4's dlsym-by-symbol-table fallback no longer
+    // shadows the strtab against __DWARF.
+    let emit_dwarf = true;
+    let _ = is_dylib;
+    let dwarf_seg_size = (SEGMENT_COMMAND_64_SIZE + 4 * SECTION_64_SIZE) as u64;
     let dyld_info_size = DYLD_INFO_COMMAND_SIZE as u64;
     let symtab_size = SYMTAB_COMMAND_SIZE as u64;
     let dysymtab_size = DYSYMTAB_COMMAND_SIZE as u64;

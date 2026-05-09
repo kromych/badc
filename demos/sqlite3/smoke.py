@@ -241,10 +241,11 @@ STRJOIN_EXPECT = (
 #   * `.tables` / `.schema`: cli_printf -> sqlite3_vfprintf
 #     -> c5 vfprintf format-specifier handling.
 #
-# Only one WITH RECURSIVE per scenario: under -O a second
-# WITH RECURSIVE silently drops all subsequent queries
-# (gh #30). Restore the fib-shape recursion here once that
-# lands.
+# gh #30 regression: a follow-on `WITH RECURSIVE fib(a,b)`
+# exercises the integer-literal path that misclassified
+# `EP_IsFalse = 0x20000000` (= `CODE_BASE`) as a func-ptr at
+# -O. Keep both shapes -- the c(n) one and the two-column fib
+# one -- so future regressions on either side fail loudly.
 CTE_SQL = (
     "CREATE TABLE k(v INTEGER);\n"
     "INSERT INTO k VALUES(10),(20),(30),(40),(50);\n"
@@ -260,6 +261,9 @@ CTE_SQL = (
     ".tables\n"
     "CREATE TABLE meta(id INTEGER PRIMARY KEY, note TEXT);\n"
     ".schema meta\n"
+    "WITH RECURSIVE fib(a,b) AS "
+    "(SELECT 0,1 UNION ALL SELECT b,a+b FROM fib WHERE b<100) "
+    "SELECT a FROM fib;\n"
     ".quit\n"
 )
 CTE_EXPECT = (
@@ -281,6 +285,18 @@ CTE_EXPECT = (
     "2\n"
     "k\n"
     "CREATE TABLE meta(id INTEGER PRIMARY KEY, note TEXT);\n"
+    "0\n"
+    "1\n"
+    "1\n"
+    "2\n"
+    "3\n"
+    "5\n"
+    "8\n"
+    "13\n"
+    "21\n"
+    "34\n"
+    "55\n"
+    "89\n"
 )
 
 INMEM_SCENARIOS = (

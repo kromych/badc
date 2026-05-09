@@ -105,9 +105,13 @@ impl Compiler {
                 self.symbols[loc_idx].type_ = ty;
                 self.allocate_local_with_init(loc_idx, ty, array_size)?;
             }
-            if fn_ptr_indirection > 0 {
-                self.symbols[loc_idx].fn_ptr_indirection = fn_ptr_indirection;
-            }
+            // Unconditional write: a stale fn-ptr lineage from a
+            // prior binding of this name must not leak into a
+            // plain scalar/pointer rebind, or the unary `*` handler
+            // mistakes a `*p = ...` for a fn-ptr decay no-op (the
+            // `shadow_symbol` saved the prior value into
+            // `h_fn_ptr_indirection`, so block-exit will restore it).
+            self.symbols[loc_idx].fn_ptr_indirection = fn_ptr_indirection;
 
             if self.lex.tk == ',' as i64 {
                 self.next()?;

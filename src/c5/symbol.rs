@@ -76,4 +76,12 @@ pub(crate) struct Symbol {
     /// distinction in the type tag itself, so this side-channel
     /// is the only durable trace.
     pub fn_ptr_indirection: i64,
+    /// Shadow slot for `fn_ptr_indirection`, saved by
+    /// `shadow_symbol` and restored by `restore_shadowed_symbol`.
+    /// Without it, a parameter or local that re-uses an outer
+    /// fn-ptr name (or any name a previous binding tagged as
+    /// fn-ptr lineage) inherits the stale tag, and a plain
+    /// `*p = ...` against the rebound scalar pointer is treated
+    /// as a fn-ptr decay no-op.
+    pub h_fn_ptr_indirection: i64,
 }

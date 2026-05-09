@@ -127,6 +127,12 @@ impl Compiler {
             if array_size != 0 {
                 full_ty += Ty::Ptr as i64;
             }
+            // gh #19 lineage: pick up the side-channel that
+            // parse_declarator (or the typedef-of-fn-ptr base)
+            // populated. Cleared even if the declarator didn't
+            // set anything so it doesn't leak into the next
+            // parameter or expression.
+            let fn_ptr_indirection = self.pending_fn_ptr_indirection.take().unwrap_or(0);
             self.ty = full_ty;
             if param_idx == usize::MAX {
                 types.push(full_ty);
@@ -146,6 +152,13 @@ impl Compiler {
             self.symbols[param_idx].class = Token::Loc as i64;
             self.symbols[param_idx].type_ = full_ty;
             self.symbols[param_idx].array_size = 0;
+            // Unconditional write: a regular scalar/pointer
+            // parameter must not inherit a stale fn-ptr lineage
+            // from a prior binding of the same name (the
+            // `shadow_symbol` above saved the outer value), or
+            // `*p = ...` against the rebind looks like a fn-ptr
+            // decay no-op to the unary `*` handler.
+            self.symbols[param_idx].fn_ptr_indirection = fn_ptr_indirection;
 
             args.push(param_idx);
             types.push(full_ty);

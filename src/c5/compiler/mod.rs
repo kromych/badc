@@ -1661,6 +1661,7 @@ impl Compiler {
         s.h_class = s.class;
         s.h_type = s.type_;
         s.h_val = s.val;
+        s.h_fn_ptr_indirection = s.fn_ptr_indirection;
     }
 
     /// Inverse of [`shadow_symbol`]: restore the saved outer
@@ -1672,6 +1673,7 @@ impl Compiler {
         sym.class = sym.h_class;
         sym.type_ = sym.h_type;
         sym.val = sym.h_val;
+        sym.fn_ptr_indirection = sym.h_fn_ptr_indirection;
     }
 
     /// Emit `Op::Imm <data_offset>` and record the operand's bytecode

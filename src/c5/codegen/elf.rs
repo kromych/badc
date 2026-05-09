@@ -484,16 +484,21 @@ fn build_dynsym(
             &mut out,
             &Elf64Sym {
                 st_name: name_off,
-                // Every c5 import today is a function (libc's
-                // `malloc` / `printf` / `exit` and the kernel32
-                // entry stubs); marking them `STT_FUNC` gives
-                // tools the right hint without affecting how the
-                // dynamic linker resolves the relocation. The
-                // previous `STT_NOTYPE` made `gdb` and `nm` treat
-                // every import as untyped data, which masks the
-                // import as a viable breakpoint target and lets
-                // matchers fall through to inlined `malloc()` call
-                // sites in the dynamic linker's source.
+                // c5's only dynamic-import mechanism today is
+                // `#pragma binding(<lib>::<name>, "<sym>")`, and
+                // every binding is reached via `Op::JsrExt` (a
+                // call site) -- there's no path that imports a
+                // data symbol. So tagging every import `STT_FUNC`
+                // is correct in practice and gives `gdb` / `nm`
+                // the right hint about callability. If we ever
+                // grow an `extern int errno;`-style data import,
+                // `ResolvedImport` would need an `is_function`
+                // discriminator and this branch would pick
+                // `STT_OBJECT` for the data case. The dynamic
+                // linker doesn't care either way -- it resolves
+                // by name -- so the worst case for a future
+                // mis-tag is a confused debugger, not a broken
+                // load.
                 st_info: (STB_GLOBAL << 4) | STT_FUNC,
                 st_other: 0, // STV_DEFAULT
                 st_shndx: SHN_UNDEF,

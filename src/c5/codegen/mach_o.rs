@@ -195,6 +195,18 @@ const SECT_INDEX_TEXT: u8 = 1;
 /// commands. Bind opcodes refer to segments by this index.
 const SEG_INDEX_DATA: u8 = 2;
 
+/// `S_ATTR_DEBUG` -- set on every section inside `__DWARF`.
+/// Tells `nm`, `lldb`, `dyld_info`, and the Apple symbolicator
+/// that this section is debug-only metadata: no code, no data,
+/// don't try to install breakpoints into its vmaddr range, and
+/// don't fold its symbols into the executable's lookup table.
+/// Without this flag, lldb sees the section's `addr+size` as a
+/// loaded range that overlaps `__TEXT` / `__DATA`, prints
+/// "address ... maps to more than one section" warnings, and
+/// refuses to resolve breakpoints set inside what it (wrongly)
+/// thinks is a debug-overlapping region.
+const S_ATTR_DEBUG: u32 = 0x0200_0000;
+
 /// Mach-O section type bits used by the TLV layout. See
 /// `<mach-o/loader.h>` for the full set; we only need
 /// `__thread_bss` (zero-fill, the only flavour the c5 frontend
@@ -879,20 +891,20 @@ fn segment_dwarf(
         sectname: pack_name16(sectname),
         segname: pack_name16("__DWARF"),
         // `nm` rejects sections whose `addr < segment.vmaddr`,
-        // so the section address tracks the segment's. With
-        // the segment vmsize=0 the section never gets mapped
-        // and the matching vmaddr is harmless. Phase 1 emits
-        // __DWARF for executables only -- the dylib path
-        // doesn't reach here -- so the dlsym shadowing concern
-        // (`__DWARF` and `__LINKEDIT` both claiming the same
-        // address) doesn't apply.
+        // so the section address tracks the segment's. The
+        // `S_ATTR_DEBUG` flag tells lldb / `dyld_info` / Apple's
+        // symbolicator that this section is debug-only metadata
+        // -- without it, lldb treats `addr+size` as a loaded
+        // range that overlaps `__TEXT` / `__DATA` (since the
+        // segment reuses `__LINKEDIT.vmaddr`) and refuses to
+        // install breakpoints anywhere in the executable.
         addr: vmaddr,
         size,
         offset,
         align: 0,
         reloff: 0,
         nreloc: 0,
-        flags: 0,
+        flags: S_ATTR_DEBUG,
         reserved1: 0,
         reserved2: 0,
         reserved3: 0,

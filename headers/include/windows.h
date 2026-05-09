@@ -821,172 +821,274 @@ int DeleteCriticalSection(char *cs);
 #pragma binding(kernel32::UuidCreate,              "UuidCreate")
 #pragma binding(kernel32::UuidCreateSequential,    "UuidCreateSequential")
 
-int AreFileApisANSI();
-int CancelIo();
-int CreateEventA();
-int FlushViewOfFile();
-int GetModuleHandleW();
-int GetNativeSystemInfo();
-int GetProcessHeap();
-int GetProcAddressA();
-int CharLowerW();
-int CharUpperW();
-int CreateFileA();
-int CreateFileMappingA();
-int CreateFileMappingW();
-int CreateFileW();
-int CreateMutexW();
-int DeleteFileA();
-int DeleteFileW();
-int FileTimeToLocalFileTime();
-int FileTimeToSystemTime();
-int FlushFileBuffers();
-int FormatMessageA();
-int FormatMessageW();
-int GetCurrentProcessId();
-int GetDiskFreeSpaceA();
-int GetDiskFreeSpaceW();
-int GetFileAttributesA();
-int GetFileAttributesExW();
-int GetFileAttributesW();
-int GetFileSize();
-int GetFullPathNameA();
-int GetFullPathNameW();
-int GetSystemInfo();
-int GetSystemTime();
-int GetSystemTimeAsFileTime();
-int GetTempPathA();
-int GetTempPathW();
-int GetTickCount();
-int GetVersionExA();
-int GetVersionExW();
-int HeapAlloc();
-int HeapCompact();
-int HeapCreate();
-int HeapDestroy();
-int HeapFree();
-int HeapReAlloc();
-int HeapSize();
-int HeapValidate();
-int LoadLibraryW();
-int LocalFree();
-int LockFile();
-int LockFileEx();
-int MapViewOfFile();
-int MultiByteToWideChar();
-int OutputDebugStringA();
-int OutputDebugStringW();
-int QueryPerformanceCounter();
-int ReadFile();
-int SetEndOfFile();
-int SetFilePointer();
-int SystemTimeToFileTime();
-int UnlockFile();
-int UnlockFileEx();
-int UnmapViewOfFile();
-int WaitForSingleObjectEx();
-int WideCharToMultiByte();
-int WriteFile();
-HANDLE FindFirstFileA();
-HANDLE FindFirstFileW();
-int FindNextFileA();
-int FindNextFileW();
-int FindClose();
-int SetCurrentDirectoryA();
-int SetCurrentDirectoryW();
-int GetCurrentDirectoryA();
-int GetCurrentDirectoryW();
-int CreateDirectoryA();
-int CreateDirectoryW();
-int RemoveDirectoryA();
-int RemoveDirectoryW();
-int SetFileAttributesA();
-int SetFileAttributesW();
-int GetEnvironmentVariableA();
-int GetEnvironmentVariableW();
-int SetFileTime();
-int GetFileTime();
-int GetTempFileNameA();
-int GetTempFileNameW();
-HANDLE GetCurrentProcess();
-int DuplicateHandle();
-int SetFilePointerEx();
-int GetFileSizeEx();
-HANDLE CreateMutexA();
-HANDLE CreateEventW();
-int ReleaseMutex();
-int SetEvent();
-int ResetEvent();
-HANDLE OpenMutexA();
-HANDLE OpenMutexW();
-HANDLE OpenEventA();
-HANDLE OpenEventW();
-int RaiseException();
-int IsDebuggerPresent();
-int DebugBreak();
-int SetUnhandledExceptionFilter();
-int AddVectoredExceptionHandler();
-int RemoveVectoredExceptionHandler();
-int TerminateProcess();
-int GetSystemDirectoryA();
-int GetSystemDirectoryW();
-int GetWindowsDirectoryA();
-int GetWindowsDirectoryW();
-int ExpandEnvironmentStringsA();
-int ExpandEnvironmentStringsW();
-int SearchPathA();
-int SearchPathW();
-int CreateProcessA();
-int CreateProcessW();
-HANDLE GetStdHandle();
-int SetStdHandle();
-int GetConsoleMode();
-int SetConsoleMode();
-int GetConsoleOutputCP();
-int SetConsoleOutputCP();
-int GetConsoleCP();
-int SetConsoleCP();
-int WriteConsoleW();
-int WriteConsoleA();
-int ReadConsoleW();
-int ReadConsoleA();
-int FlushConsoleInputBuffer();
-int GetConsoleScreenBufferInfo();
-int SetConsoleScreenBufferSize();
-int SetConsoleCursorPosition();
-int SetConsoleTextAttribute();
-int FillConsoleOutputCharacterA();
-int FillConsoleOutputCharacterW();
-int FillConsoleOutputAttribute();
-int ScrollConsoleScreenBufferA();
-int ScrollConsoleScreenBufferW();
-int SetConsoleTitleA();
-int SetConsoleTitleW();
-int GetConsoleTitleA();
-int GetConsoleTitleW();
-int PeekConsoleInputA();
-int PeekConsoleInputW();
-int ReadConsoleInputA();
-int ReadConsoleInputW();
-int WriteConsoleInputA();
-int WriteConsoleInputW();
-int SetConsoleCtrlHandler();
-int GenerateConsoleCtrlEvent();
-int AllocConsole();
-int FreeConsole();
-int AttachConsole();
-int GetConsoleProcessList();
-HWND GetConsoleWindow();
-int GetSystemTimePreciseAsFileTime();
-int QueryPerformanceFrequency();
-unsigned long long GetTickCount64();
-int SwitchToThread();
-int SleepEx();
-int GetTimeZoneInformation();
-int SystemTimeToTzSpecificLocalTime();
-int TzSpecificLocalTimeToSystemTime();
-int GetLocalTime();
-int SetLastError();
-int UuidCreate();
-int UuidCreateSequential();
+// Prototypes mirror the Win32 API shapes documented on MSDN. Where
+// the real return type is `BOOL` (= int) we keep `int`; where it's
+// `HANDLE`, `HWND`, or `unsigned long long`, the user-facing type
+// is preserved. Pointer-style parameter types use the typedefs
+// declared earlier in this header (DWORD, HANDLE, LPSTR, ...);
+// struct-by-pointer parameters whose layout c5 doesn't model
+// (`STARTUPINFO`, `PROCESS_INFORMATION`, `TIME_ZONE_INFORMATION`,
+// `INPUT_RECORD`) come through as `void *` -- the kernel writes
+// the bytes back; sqlite + shell.c never look inside.
+int AreFileApisANSI(void);
+int CancelIo(HANDLE hFile);
+int CreateEventA(LPSECURITY_ATTRIBUTES lpEventAttributes, int bManualReset,
+                 int bInitialState, LPCSTR lpName);
+int FlushViewOfFile(LPCVOID lpBaseAddress, SIZE_T dwNumberOfBytesToFlush);
+int GetModuleHandleW(LPCWSTR lpModuleName);
+int GetNativeSystemInfo(LPSYSTEM_INFO lpSystemInfo);
+int GetProcessHeap(void);
+int GetProcAddressA(void *hModule, LPCSTR lpProcName);
+int CharLowerW(LPWSTR lpsz);
+int CharUpperW(LPWSTR lpsz);
+int CreateFileA(LPCSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
+                LPSECURITY_ATTRIBUTES lpSecurityAttributes,
+                DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes,
+                HANDLE hTemplateFile);
+int CreateFileMappingA(HANDLE hFile, LPSECURITY_ATTRIBUTES lpFileMappingAttributes,
+                       DWORD flProtect, DWORD dwMaximumSizeHigh,
+                       DWORD dwMaximumSizeLow, LPCSTR lpName);
+int CreateFileMappingW(HANDLE hFile, LPSECURITY_ATTRIBUTES lpFileMappingAttributes,
+                       DWORD flProtect, DWORD dwMaximumSizeHigh,
+                       DWORD dwMaximumSizeLow, LPCWSTR lpName);
+int CreateFileW(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
+                LPSECURITY_ATTRIBUTES lpSecurityAttributes,
+                DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes,
+                HANDLE hTemplateFile);
+int CreateMutexW(LPSECURITY_ATTRIBUTES lpMutexAttributes, int bInitialOwner,
+                 LPCWSTR lpName);
+int DeleteFileA(LPCSTR lpFileName);
+int DeleteFileW(LPCWSTR lpFileName);
+int FileTimeToLocalFileTime(FILETIME *lpFileTime, LPFILETIME lpLocalFileTime);
+int FileTimeToSystemTime(FILETIME *lpFileTime, SYSTEMTIME *lpSystemTime);
+int FlushFileBuffers(HANDLE hFile);
+int FormatMessageA(DWORD dwFlags, LPCVOID lpSource, DWORD dwMessageId,
+                   DWORD dwLanguageId, LPSTR lpBuffer, DWORD nSize, ...);
+int FormatMessageW(DWORD dwFlags, LPCVOID lpSource, DWORD dwMessageId,
+                   DWORD dwLanguageId, LPWSTR lpBuffer, DWORD nSize, ...);
+int GetCurrentProcessId(void);
+int GetDiskFreeSpaceA(LPCSTR lpRootPathName, LPDWORD lpSectorsPerCluster,
+                      LPDWORD lpBytesPerSector, LPDWORD lpNumberOfFreeClusters,
+                      LPDWORD lpTotalNumberOfClusters);
+int GetDiskFreeSpaceW(LPCWSTR lpRootPathName, LPDWORD lpSectorsPerCluster,
+                      LPDWORD lpBytesPerSector, LPDWORD lpNumberOfFreeClusters,
+                      LPDWORD lpTotalNumberOfClusters);
+int GetFileAttributesA(LPCSTR lpFileName);
+int GetFileAttributesExW(LPCWSTR lpFileName, GET_FILEEX_INFO_LEVELS fInfoLevelId,
+                         LPVOID lpFileInformation);
+int GetFileAttributesW(LPCWSTR lpFileName);
+int GetFileSize(HANDLE hFile, LPDWORD lpFileSizeHigh);
+int GetFullPathNameA(LPCSTR lpFileName, DWORD nBufferLength, LPSTR lpBuffer,
+                     char **lpFilePart);
+int GetFullPathNameW(LPCWSTR lpFileName, DWORD nBufferLength, LPWSTR lpBuffer,
+                     unsigned short **lpFilePart);
+int GetSystemInfo(LPSYSTEM_INFO lpSystemInfo);
+int GetSystemTime(SYSTEMTIME *lpSystemTime);
+int GetSystemTimeAsFileTime(LPFILETIME lpSystemTimeAsFileTime);
+int GetTempPathA(DWORD nBufferLength, LPSTR lpBuffer);
+int GetTempPathW(DWORD nBufferLength, LPWSTR lpBuffer);
+int GetTickCount(void);
+int GetVersionExA(LPOSVERSIONINFOA lpVersionInformation);
+int GetVersionExW(LPOSVERSIONINFOW lpVersionInformation);
+int HeapAlloc(HANDLE hHeap, DWORD dwFlags, SIZE_T dwBytes);
+int HeapCompact(HANDLE hHeap, DWORD dwFlags);
+int HeapCreate(DWORD flOptions, SIZE_T dwInitialSize, SIZE_T dwMaximumSize);
+int HeapDestroy(HANDLE hHeap);
+int HeapFree(HANDLE hHeap, DWORD dwFlags, LPVOID lpMem);
+int HeapReAlloc(HANDLE hHeap, DWORD dwFlags, LPVOID lpMem, SIZE_T dwBytes);
+int HeapSize(HANDLE hHeap, DWORD dwFlags, LPCVOID lpMem);
+int HeapValidate(HANDLE hHeap, DWORD dwFlags, LPCVOID lpMem);
+int LoadLibraryW(LPCWSTR lpLibFileName);
+int LocalFree(HLOCAL hMem);
+int LockFile(HANDLE hFile, DWORD dwFileOffsetLow, DWORD dwFileOffsetHigh,
+             DWORD nNumberOfBytesToLockLow, DWORD nNumberOfBytesToLockHigh);
+int LockFileEx(HANDLE hFile, DWORD dwFlags, DWORD dwReserved,
+               DWORD nNumberOfBytesToLockLow, DWORD nNumberOfBytesToLockHigh,
+               LPOVERLAPPED lpOverlapped);
+int MapViewOfFile(HANDLE hFileMappingObject, DWORD dwDesiredAccess,
+                  DWORD dwFileOffsetHigh, DWORD dwFileOffsetLow,
+                  SIZE_T dwNumberOfBytesToMap);
+int MultiByteToWideChar(UINT CodePage, DWORD dwFlags, LPCSTR lpMultiByteStr,
+                        int cbMultiByte, LPWSTR lpWideCharStr,
+                        int cchWideChar);
+int OutputDebugStringA(LPCSTR lpOutputString);
+int OutputDebugStringW(LPCWSTR lpOutputString);
+int QueryPerformanceCounter(PLARGE_INTEGER lpPerformanceCount);
+int ReadFile(HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBytesToRead,
+             LPDWORD lpNumberOfBytesRead, LPOVERLAPPED lpOverlapped);
+int SetEndOfFile(HANDLE hFile);
+int SetFilePointer(HANDLE hFile, LONG lDistanceToMove,
+                   LONG *lpDistanceToMoveHigh, DWORD dwMoveMethod);
+int SystemTimeToFileTime(SYSTEMTIME *lpSystemTime, LPFILETIME lpFileTime);
+int UnlockFile(HANDLE hFile, DWORD dwFileOffsetLow, DWORD dwFileOffsetHigh,
+               DWORD nNumberOfBytesToUnlockLow,
+               DWORD nNumberOfBytesToUnlockHigh);
+int UnlockFileEx(HANDLE hFile, DWORD dwReserved,
+                 DWORD nNumberOfBytesToUnlockLow,
+                 DWORD nNumberOfBytesToUnlockHigh, LPOVERLAPPED lpOverlapped);
+int UnmapViewOfFile(LPCVOID lpBaseAddress);
+int WaitForSingleObjectEx(HANDLE hHandle, DWORD dwMilliseconds, int bAlertable);
+int WideCharToMultiByte(UINT CodePage, DWORD dwFlags, LPCWSTR lpWideCharStr,
+                        int cchWideChar, LPSTR lpMultiByteStr, int cbMultiByte,
+                        LPCSTR lpDefaultChar, LPBOOL lpUsedDefaultChar);
+int WriteFile(HANDLE hFile, LPCVOID lpBuffer, DWORD nNumberOfBytesToWrite,
+              LPDWORD lpNumberOfBytesWritten, LPOVERLAPPED lpOverlapped);
+HANDLE FindFirstFileA(LPCSTR lpFileName, LPWIN32_FIND_DATAA lpFindFileData);
+HANDLE FindFirstFileW(LPCWSTR lpFileName, LPWIN32_FIND_DATAW lpFindFileData);
+int FindNextFileA(HANDLE hFindFile, LPWIN32_FIND_DATAA lpFindFileData);
+int FindNextFileW(HANDLE hFindFile, LPWIN32_FIND_DATAW lpFindFileData);
+int FindClose(HANDLE hFindFile);
+int SetCurrentDirectoryA(LPCSTR lpPathName);
+int SetCurrentDirectoryW(LPCWSTR lpPathName);
+int GetCurrentDirectoryA(DWORD nBufferLength, LPSTR lpBuffer);
+int GetCurrentDirectoryW(DWORD nBufferLength, LPWSTR lpBuffer);
+int CreateDirectoryA(LPCSTR lpPathName,
+                     LPSECURITY_ATTRIBUTES lpSecurityAttributes);
+int CreateDirectoryW(LPCWSTR lpPathName,
+                     LPSECURITY_ATTRIBUTES lpSecurityAttributes);
+int RemoveDirectoryA(LPCSTR lpPathName);
+int RemoveDirectoryW(LPCWSTR lpPathName);
+int SetFileAttributesA(LPCSTR lpFileName, DWORD dwFileAttributes);
+int SetFileAttributesW(LPCWSTR lpFileName, DWORD dwFileAttributes);
+int GetEnvironmentVariableA(LPCSTR lpName, LPSTR lpBuffer, DWORD nSize);
+int GetEnvironmentVariableW(LPCWSTR lpName, LPWSTR lpBuffer, DWORD nSize);
+int SetFileTime(HANDLE hFile, FILETIME *lpCreationTime,
+                FILETIME *lpLastAccessTime, FILETIME *lpLastWriteTime);
+int GetFileTime(HANDLE hFile, LPFILETIME lpCreationTime,
+                LPFILETIME lpLastAccessTime, LPFILETIME lpLastWriteTime);
+int GetTempFileNameA(LPCSTR lpPathName, LPCSTR lpPrefixString, UINT uUnique,
+                     LPSTR lpTempFileName);
+int GetTempFileNameW(LPCWSTR lpPathName, LPCWSTR lpPrefixString, UINT uUnique,
+                     LPWSTR lpTempFileName);
+HANDLE GetCurrentProcess(void);
+int DuplicateHandle(HANDLE hSourceProcessHandle, HANDLE hSourceHandle,
+                    HANDLE hTargetProcessHandle, LPHANDLE lpTargetHandle,
+                    DWORD dwDesiredAccess, int bInheritHandle, DWORD dwOptions);
+int SetFilePointerEx(HANDLE hFile, LARGE_INTEGER liDistanceToMove,
+                     PLARGE_INTEGER lpNewFilePointer, DWORD dwMoveMethod);
+int GetFileSizeEx(HANDLE hFile, PLARGE_INTEGER lpFileSize);
+HANDLE CreateMutexA(LPSECURITY_ATTRIBUTES lpMutexAttributes, int bInitialOwner,
+                    LPCSTR lpName);
+HANDLE CreateEventW(LPSECURITY_ATTRIBUTES lpEventAttributes, int bManualReset,
+                    int bInitialState, LPCWSTR lpName);
+int ReleaseMutex(HANDLE hMutex);
+int SetEvent(HANDLE hEvent);
+int ResetEvent(HANDLE hEvent);
+HANDLE OpenMutexA(DWORD dwDesiredAccess, int bInheritHandle, LPCSTR lpName);
+HANDLE OpenMutexW(DWORD dwDesiredAccess, int bInheritHandle, LPCWSTR lpName);
+HANDLE OpenEventA(DWORD dwDesiredAccess, int bInheritHandle, LPCSTR lpName);
+HANDLE OpenEventW(DWORD dwDesiredAccess, int bInheritHandle, LPCWSTR lpName);
+int RaiseException(DWORD dwExceptionCode, DWORD dwExceptionFlags,
+                   DWORD nNumberOfArguments, ULONG_PTR *lpArguments);
+int IsDebuggerPresent(void);
+int DebugBreak(void);
+int SetUnhandledExceptionFilter(void *lpTopLevelExceptionFilter);
+int AddVectoredExceptionHandler(ULONG First, void *Handler);
+int RemoveVectoredExceptionHandler(void *Handle);
+int TerminateProcess(HANDLE hProcess, UINT uExitCode);
+int GetSystemDirectoryA(LPSTR lpBuffer, UINT uSize);
+int GetSystemDirectoryW(LPWSTR lpBuffer, UINT uSize);
+int GetWindowsDirectoryA(LPSTR lpBuffer, UINT uSize);
+int GetWindowsDirectoryW(LPWSTR lpBuffer, UINT uSize);
+int ExpandEnvironmentStringsA(LPCSTR lpSrc, LPSTR lpDst, DWORD nSize);
+int ExpandEnvironmentStringsW(LPCWSTR lpSrc, LPWSTR lpDst, DWORD nSize);
+int SearchPathA(LPCSTR lpPath, LPCSTR lpFileName, LPCSTR lpExtension,
+                DWORD nBufferLength, LPSTR lpBuffer, char **lpFilePart);
+int SearchPathW(LPCWSTR lpPath, LPCWSTR lpFileName, LPCWSTR lpExtension,
+                DWORD nBufferLength, LPWSTR lpBuffer,
+                unsigned short **lpFilePart);
+int CreateProcessA(LPCSTR lpApplicationName, LPSTR lpCommandLine,
+                   LPSECURITY_ATTRIBUTES lpProcessAttributes,
+                   LPSECURITY_ATTRIBUTES lpThreadAttributes,
+                   int bInheritHandles, DWORD dwCreationFlags,
+                   LPVOID lpEnvironment, LPCSTR lpCurrentDirectory,
+                   void *lpStartupInfo, void *lpProcessInformation);
+int CreateProcessW(LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+                   LPSECURITY_ATTRIBUTES lpProcessAttributes,
+                   LPSECURITY_ATTRIBUTES lpThreadAttributes,
+                   int bInheritHandles, DWORD dwCreationFlags,
+                   LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+                   void *lpStartupInfo, void *lpProcessInformation);
+HANDLE GetStdHandle(DWORD nStdHandle);
+int SetStdHandle(DWORD nStdHandle, HANDLE hHandle);
+int GetConsoleMode(HANDLE hConsoleHandle, LPDWORD lpMode);
+int SetConsoleMode(HANDLE hConsoleHandle, DWORD dwMode);
+int GetConsoleOutputCP(void);
+int SetConsoleOutputCP(UINT wCodePageID);
+int GetConsoleCP(void);
+int SetConsoleCP(UINT wCodePageID);
+int WriteConsoleW(HANDLE hConsoleOutput, void *lpBuffer,
+                  DWORD nNumberOfCharsToWrite,
+                  LPDWORD lpNumberOfCharsWritten, LPVOID lpReserved);
+int WriteConsoleA(HANDLE hConsoleOutput, void *lpBuffer,
+                  DWORD nNumberOfCharsToWrite,
+                  LPDWORD lpNumberOfCharsWritten, LPVOID lpReserved);
+int ReadConsoleW(HANDLE hConsoleInput, LPVOID lpBuffer,
+                 DWORD nNumberOfCharsToRead,
+                 LPDWORD lpNumberOfCharsRead, LPVOID pInputControl);
+int ReadConsoleA(HANDLE hConsoleInput, LPVOID lpBuffer,
+                 DWORD nNumberOfCharsToRead,
+                 LPDWORD lpNumberOfCharsRead, LPVOID pInputControl);
+int FlushConsoleInputBuffer(HANDLE hConsoleInput);
+int GetConsoleScreenBufferInfo(HANDLE hConsoleOutput,
+                               PCONSOLE_SCREEN_BUFFER_INFO lpInfo);
+int SetConsoleScreenBufferSize(HANDLE hConsoleOutput, COORD dwSize);
+int SetConsoleCursorPosition(HANDLE hConsoleOutput, COORD dwCursorPosition);
+int SetConsoleTextAttribute(HANDLE hConsoleOutput, WORD wAttributes);
+int FillConsoleOutputCharacterA(HANDLE hConsoleOutput, char cCharacter,
+                                DWORD nLength, COORD dwWriteCoord,
+                                LPDWORD lpNumberOfCharsWritten);
+int FillConsoleOutputCharacterW(HANDLE hConsoleOutput, WCHAR cCharacter,
+                                DWORD nLength, COORD dwWriteCoord,
+                                LPDWORD lpNumberOfCharsWritten);
+int FillConsoleOutputAttribute(HANDLE hConsoleOutput, WORD wAttribute,
+                               DWORD nLength, COORD dwWriteCoord,
+                               LPDWORD lpNumberOfAttrsWritten);
+int ScrollConsoleScreenBufferA(HANDLE hConsoleOutput,
+                               SMALL_RECT *lpScrollRectangle,
+                               SMALL_RECT *lpClipRectangle,
+                               COORD dwDestinationOrigin, void *lpFill);
+int ScrollConsoleScreenBufferW(HANDLE hConsoleOutput,
+                               SMALL_RECT *lpScrollRectangle,
+                               SMALL_RECT *lpClipRectangle,
+                               COORD dwDestinationOrigin, void *lpFill);
+int SetConsoleTitleA(LPCSTR lpConsoleTitle);
+int SetConsoleTitleW(LPCWSTR lpConsoleTitle);
+int GetConsoleTitleA(LPSTR lpConsoleTitle, DWORD nSize);
+int GetConsoleTitleW(LPWSTR lpConsoleTitle, DWORD nSize);
+int PeekConsoleInputA(HANDLE hConsoleInput, void *lpBuffer, DWORD nLength,
+                      LPDWORD lpNumberOfEventsRead);
+int PeekConsoleInputW(HANDLE hConsoleInput, void *lpBuffer, DWORD nLength,
+                      LPDWORD lpNumberOfEventsRead);
+int ReadConsoleInputA(HANDLE hConsoleInput, void *lpBuffer, DWORD nLength,
+                      LPDWORD lpNumberOfEventsRead);
+int ReadConsoleInputW(HANDLE hConsoleInput, void *lpBuffer, DWORD nLength,
+                      LPDWORD lpNumberOfEventsRead);
+int WriteConsoleInputA(HANDLE hConsoleInput, void *lpBuffer, DWORD nLength,
+                       LPDWORD lpNumberOfEventsWritten);
+int WriteConsoleInputW(HANDLE hConsoleInput, void *lpBuffer, DWORD nLength,
+                       LPDWORD lpNumberOfEventsWritten);
+int SetConsoleCtrlHandler(void *HandlerRoutine, int Add);
+int GenerateConsoleCtrlEvent(DWORD dwCtrlEvent, DWORD dwProcessGroupId);
+int AllocConsole(void);
+int FreeConsole(void);
+int AttachConsole(DWORD dwProcessId);
+int GetConsoleProcessList(LPDWORD lpdwProcessList, DWORD dwProcessCount);
+HWND GetConsoleWindow(void);
+int GetSystemTimePreciseAsFileTime(LPFILETIME lpSystemTimeAsFileTime);
+int QueryPerformanceFrequency(PLARGE_INTEGER lpFrequency);
+unsigned long long GetTickCount64(void);
+int SwitchToThread(void);
+int SleepEx(DWORD dwMilliseconds, int bAlertable);
+int GetTimeZoneInformation(void *lpTimeZoneInformation);
+int SystemTimeToTzSpecificLocalTime(void *lpTimeZoneInformation,
+                                    SYSTEMTIME *lpUniversalTime,
+                                    SYSTEMTIME *lpLocalTime);
+int TzSpecificLocalTimeToSystemTime(void *lpTimeZoneInformation,
+                                    SYSTEMTIME *lpLocalTime,
+                                    SYSTEMTIME *lpUniversalTime);
+int GetLocalTime(SYSTEMTIME *lpSystemTime);
+int SetLastError(DWORD dwErrCode);
+int UuidCreate(void *Uuid);
+int UuidCreateSequential(void *Uuid);
 #endif

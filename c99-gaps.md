@@ -22,38 +22,30 @@ in modern source.
 
 ## Data-model picks (sec 6.2.5)
 
-c5 commits to a single fixed data model regardless of host:
+c5 follows the host platform's data model -- LP64 on
+Linux + macOS, LLP64 on Windows:
 
-| type             | bytes |
-|------------------|-------|
-| `char`           | 1     |
-| `short`          | 2     |
-| `int`            | 4     |
-| `long`           | 8     |
-| `long long`      | 8     |
-| pointer / `T *`  | 8     |
-| `float`          | 8 (stored as double) |
-| `double`         | 8     |
+| type             | macOS / Linux | Windows |
+|------------------|---------------|---------|
+| `char`           | 1             | 1       |
+| `short`          | 2             | 2       |
+| `int`            | 4             | 4       |
+| `long`           | 8             | 4       |
+| `long long`      | 8             | 8       |
+| pointer / `T *`  | 8             | 8       |
+| `float`          | 8 (stored as double) | 8 (stored as double) |
+| `double`         | 8             | 8       |
 
-That is **LP64** (long, pointer = 64 bits; int = 32). All
-five supported targets - macOS aarch64, Linux aarch64,
-Linux x86_64, Windows aarch64, Windows x86_64 - get the
-same widths.
+The `long` width is the only per-target divergence. The
+codegen drives `Op::Lw` / `Op::Sw` (4-byte) for `long`
+on Windows targets and `Op::Lwq` / `Op::Sq` (8-byte)
+elsewhere. `long long` is always 8 bytes.
 
 Implications:
-- On Linux + macOS this matches the platform ABI, so c5
-  structs line up with libc's `long`-typed fields and
-  `time_t` / `off_t` / `size_t` round-trip cleanly.
-- On **Windows** the platform ABI is **LLP64** (`long`
-  is 32 bits there; only `long long` is 64). c5 keeps
-  `long` at 8 bytes anyway, so any libc surface that
-  carries a `long` (`time(long *)`, `fwrite` returning
-  `unsigned long` which the platform actually returns
-  as 32 bits, ...) ends up with mismatched widths. The
-  bundled `headers/include/badc-windows-*.h` works around
-  this by typedef-ing through `long long` instead of
-  `long`; user code that uses `long` directly diverges.
-  Severity: 3 for Windows-targeted ports; 5 elsewhere.
+- On macOS + Linux + Windows this matches the platform
+  ABI, so c5 structs line up with libc's `long`-typed
+  fields and `time_t` / `off_t` / `size_t` round-trip
+  cleanly across each target.
 - The historical 32-bit (`ILP32`) and 16-bit
   (`I16LP32`) data models are not supported -- pointers
   are 8 bytes everywhere.

@@ -585,12 +585,19 @@ pub(super) fn write(
     // skips them at runtime even though they occupy RVA range --
     // they only matter to the debugger walking the file image.
     let dwarf_sections = if dwarf_section_present {
+        // gh #68: PE has its own entry stub, but the symptom
+        // (gdb's "Cannot find bounds of current function" after
+        // stepping past `return 0;` in main) was only verified
+        // on linux/aarch64. Pass `None` here -- the ELF writer
+        // wires up the stub range; PE can opt in when the
+        // symptom surfaces under windbg.
         dwarf::emit(
             program,
             build,
             target,
             IMAGE_BASE + (text_rva + text_prologue_len) as u64,
             &program.source_path,
+            None,
         )
     } else {
         dwarf::DwarfSections {

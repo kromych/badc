@@ -1104,6 +1104,18 @@ pub(super) fn write(
     // `shstrtab_off` lands right after, so the file body is
     // self-consistent without per-write conditionals.
     let emit_dwarf = build.debug_info;
+    // gh #68: tell the DWARF emitter where the `_start` stub
+    // lives so it can give it a `DW_TAG_subprogram` + a
+    // CFI-terminating FDE. The stub sits at
+    // `[code_vmaddr, code_vmaddr + stub_len)` -- ahead of
+    // `build.text` -- so its range is independent of any
+    // codegen-relative offset. Shared libraries skip the stub
+    // (`stub_len = 0`); pass `None` there.
+    let start_stub_range = if stub_len > 0 {
+        Some((code_vmaddr, code_vmaddr + stub_len))
+    } else {
+        None
+    };
     let dwarf_sections = if emit_dwarf {
         dwarf::emit(
             program,
@@ -1111,6 +1123,7 @@ pub(super) fn write(
             elf_target,
             dwarf_text_vmaddr,
             &program.source_path,
+            start_stub_range,
         )
     } else {
         dwarf::DwarfSections {

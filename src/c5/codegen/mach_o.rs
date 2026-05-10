@@ -1966,12 +1966,16 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         dwarf_filesize,
         dwarf_tail_pad,
     ) = if emit_dwarf {
+        // gh #68: Mach-O routes argc/argv through `LC_MAIN`,
+        // not an emitted stub, so there's no entry-stub range to
+        // describe.
         let s = dwarf::emit(
             program,
             build,
             super::Target::MacOSAarch64,
             code_vmaddr_base,
             &program.source_path,
+            None,
         );
         let fileoff = data_fileoff + data_filesize;
         let info = fileoff;

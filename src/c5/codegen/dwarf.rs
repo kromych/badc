@@ -173,6 +173,13 @@ const DW_CFA_ADVANCE_LOC1: u8 = 0x02;
 const DW_CFA_ADVANCE_LOC2: u8 = 0x03;
 const DW_CFA_ADVANCE_LOC4: u8 = 0x04;
 const DW_CFA_DEF_CFA: u8 = 0x0c;
+/// `DW_CFA_undefined <register>` -- mark a register as having
+/// no recoverable value in the previous frame. The unwinder
+/// uses this to recognise the bottom of the stack: when the
+/// return-address column is undefined, there's nothing to walk
+/// to. Used by gh #68 in the `_start` FDE so gdb stops
+/// gracefully instead of reading past the bottom-most frame.
+const DW_CFA_UNDEFINED: u8 = 0x07;
 
 // Architecture-specific register codes used in CFI rules.
 //
@@ -319,6 +326,7 @@ pub(crate) fn emit(
     target: Target,
     code_vmaddr: u64,
     source_path: &str,
+    start_stub_range: Option<(u64, u64)>,
 ) -> DwarfSections {
     let mut strs = StrTable::new();
     let producer_off = strs.intern(&format!("badc {}", env!("CARGO_PKG_VERSION")));
@@ -336,7 +344,24 @@ pub(crate) fn emit(
     // `bt` frame pointing at a PLT trampoline to a typed
     // signature like `malloc (size=...)` rather than bare
     // `in malloc ()`.
-    let plt_subs = collect_plt_subprograms(build, target, code_vmaddr, &mut strs);
+    let mut plt_subs = collect_plt_subprograms(build, target, code_vmaddr, &mut strs);
+
+    // gh #68: append a `_start` entry so gdb stops saying
+    // "Cannot find bounds of current function" the moment
+    // execution returns from main. Same DIE shape as a PLT stub
+    // -- name + range, no formal parameters (the c5 binding
+    // model doesn't describe argc/argv at this layer).
+    if let Some((lo, hi)) = start_stub_range {
+        plt_subs.push(PltSub {
+            name_off: strs.intern("_start"),
+            low_pc: lo,
+            high_pc: hi,
+            return_type_tag: 0,
+            param_types: Vec::new(),
+            param_name_offs: Vec::new(),
+            is_variadic: false,
+        });
+    }
 
     // Build the type catalog. Walks captured variables and PLT
     // signatures, then transitively pulls in struct fields' types
@@ -348,20 +373,36 @@ pub(crate) fn emit(
 
     let debug_abbrev = build_debug_abbrev();
     let (debug_line, line_unit_off) = build_debug_line(program, build, code_vmaddr, source_path);
+    // gh #68: extend the CU's [low_pc, low_pc + size) range
+    // backwards over the `_start` stub when present, so a PC
+    // inside the stub still falls inside the CU and gdb can
+    // resolve it to the `_start` subprogram DIE we emitted.
+    // Without this, the stub DIE is in the table but gdb's
+    // CU-keyed lookup misses it -- the symptom is `?? ()` after
+    // execution returns from main.
+    let (cu_low_pc, cu_size) = match start_stub_range {
+        Some((lo, _)) => (lo, build.text.len() as u64 + (code_vmaddr - lo)),
+        None => (code_vmaddr, build.text.len() as u64),
+    };
     let debug_info = build_debug_info(
         cu_name_off,
         comp_dir_off,
         producer_off,
         line_unit_off,
-        code_vmaddr,
-        build.text.len() as u64,
+        cu_low_pc,
+        cu_size,
         &catalog,
         &subs,
         &plt_subs,
         target,
         &program.structs,
     );
-    let debug_frame = build_debug_frame(target, &subs, plt_pool_range(build, code_vmaddr));
+    let debug_frame = build_debug_frame(
+        target,
+        &subs,
+        plt_pool_range(build, code_vmaddr),
+        start_stub_range,
+    );
     let debug_str = strs.into_bytes();
 
     DwarfSections {
@@ -1894,20 +1935,24 @@ fn plt_pool_range(build: &Build, code_vmaddr: u64) -> Option<(u64, u64)> {
 }
 
 /// Build the `.debug_frame` section: one CIE at offset 0, one FDE
-/// per `Subprog`, plus an optional final FDE covering the PLT
-/// trampoline pool when present (gh #65). Empty if there are no
-/// subs and no PLT pool.
+/// per `Subprog`, plus optional final FDEs covering the PLT
+/// trampoline pool (gh #65) and the ELF `_start` stub (gh #68).
+/// Empty if no callers contributed any range.
 ///
 /// The PLT FDE inherits the CIE's initial rules verbatim --
 /// trampolines never touch the stack or LR/RA, so the entry-state
 /// CFA description is exactly correct for every byte of every
-/// stub.
+/// stub. The `_start` FDE additionally marks the return-address
+/// column as `DW_CFA_undefined` so the unwinder terminates
+/// cleanly: there's no caller below `_start`, the kernel handed
+/// us the stack ready-to-go.
 fn build_debug_frame(
     target: Target,
     subs: &[Subprog],
     plt_pool: Option<(u64, u64)>,
+    start_stub: Option<(u64, u64)>,
 ) -> Vec<u8> {
-    if subs.is_empty() && plt_pool.is_none() {
+    if subs.is_empty() && plt_pool.is_none() && start_stub.is_none() {
         return Vec::new();
     }
     let arch = CfiArch::of(target);
@@ -1991,23 +2036,46 @@ fn build_debug_frame(
     // CFA-8) describes every byte of every stub. The FDE body
     // is therefore empty -- it inherits from the CIE alone.
     if let Some((start, end)) = plt_pool {
-        let mut fde = Vec::with_capacity(24);
-        let fde_inner_len = (4 /* cie_pointer */ + 8 /* initial_location */
-            + 8 /* address_range */) as u32;
-        let header = DebugFrameFdeHeader {
-            unit_length: fde_inner_len,
-            cie_pointer: 0,
-            initial_location: start,
-            address_range: end - start,
-        };
-        header.write_le(&mut fde);
-        pad_to_alignment(&mut fde, 8);
-        let actual_fde_unit_length = (fde.len() - 4) as u32;
-        fde[..4].copy_from_slice(&actual_fde_unit_length.to_le_bytes());
-        out.extend_from_slice(&fde);
+        out.extend_from_slice(&fde_with_body(start, end, &[]));
+    }
+
+    // gh #68: one FDE covering the ELF `_start` stub. The kernel
+    // arranges the initial stack and jumps directly to `_start`
+    // -- there's no caller frame to walk to. Mark the return-
+    // address column as `DW_CFA_undefined` so the unwinder
+    // recognises the bottom of the stack and stops with a clean
+    // "Backtrace stopped: at top of stack" instead of reading
+    // garbage.
+    if let Some((start, end)) = start_stub {
+        let ra_col = cfi_return_address_register(arch);
+        let mut body: Vec<u8> = Vec::with_capacity(4);
+        body.push(DW_CFA_UNDEFINED);
+        write_uleb128(&mut body, ra_col);
+        out.extend_from_slice(&fde_with_body(start, end, &body));
     }
 
     out
+}
+
+/// Build one `.debug_frame` FDE record with the given address
+/// range and body bytes (the inline CFI program). Pads to
+/// 8-byte alignment so the next FDE / record starts aligned.
+fn fde_with_body(start: u64, end: u64, body: &[u8]) -> Vec<u8> {
+    let mut fde = Vec::with_capacity(24 + body.len());
+    let fde_inner_len = (4 /* cie_pointer */ + 8 /* initial_location */
+        + 8 /* address_range */ + body.len()) as u32;
+    let header = DebugFrameFdeHeader {
+        unit_length: fde_inner_len,
+        cie_pointer: 0,
+        initial_location: start,
+        address_range: end - start,
+    };
+    header.write_le(&mut fde);
+    fde.extend_from_slice(body);
+    pad_to_alignment(&mut fde, 8);
+    let actual_fde_unit_length = (fde.len() - 4) as u32;
+    fde[..4].copy_from_slice(&actual_fde_unit_length.to_le_bytes());
+    fde
 }
 
 // ---- .debug_line ----
@@ -2445,8 +2513,9 @@ mod tests {
         // FDE inherits the CIE's initial CFA rule, which exactly
         // matches the trampoline's "no stack manipulation" shape.
         let subs: Vec<Subprog> = Vec::new(); // no user subs is fine
-        let with_pool = build_debug_frame(Target::LinuxAarch64, &subs, Some((0x1100, 0x1140)));
-        let without_pool = build_debug_frame(Target::LinuxAarch64, &subs, None);
+        let with_pool =
+            build_debug_frame(Target::LinuxAarch64, &subs, Some((0x1100, 0x1140)), None);
+        let without_pool = build_debug_frame(Target::LinuxAarch64, &subs, None, None);
         assert!(without_pool.is_empty(), "no subs + no pool -> empty");
         assert!(
             !with_pool.is_empty(),
@@ -2541,6 +2610,41 @@ mod tests {
             assert_eq!(dwarf_arg_reg(Target::WindowsX64, slot), Some(reg));
         }
         assert_eq!(dwarf_arg_reg(Target::WindowsX64, 4), None);
+    }
+
+    #[test]
+    fn debug_frame_emits_start_stub_fde_with_undefined_ra() {
+        // gh #68: the `_start` FDE must mark the return-address
+        // column as `DW_CFA_undefined` so the unwinder
+        // terminates cleanly. Without it the kernel-supplied
+        // initial stack reads as garbage and gdb prints
+        // "Backtrace stopped: not enough registers or memory
+        // available to unwind further".
+        let subs: Vec<Subprog> = Vec::new();
+        let bytes = build_debug_frame(
+            Target::LinuxAarch64,
+            &subs,
+            None,
+            Some((0x1000, 0x1018)), // 24-byte aarch64 _start stub
+        );
+        // Body bytes: DW_CFA_undefined (0x07) + ULEB(30) -- the
+        // RA column for aarch64 is x30. Both fit in 1 byte each.
+        // Inner length: 4 (cie_pointer) + 8 (initial_location)
+        // + 8 (address_range) + 2 (body) = 22. The full record
+        // is 4 (unit_length) + 22 = 26 bytes; pad to 8 -> 32.
+        // Verify the trailing record opens with unit_length =
+        // 28 (record minus its own 4-byte length field after
+        // the alignment pad rounded up the inner len).
+        let last_32 = &bytes[bytes.len() - 32..];
+        let unit_len = u32::from_le_bytes(last_32[..4].try_into().unwrap());
+        assert_eq!(unit_len as usize, 28);
+        // initial_location and address_range survive their move
+        // into the FDE header.
+        assert_eq!(&last_32[8..16], &0x1000u64.to_le_bytes());
+        assert_eq!(&last_32[16..24], &0x18u64.to_le_bytes());
+        // Body opens with DW_CFA_undefined + reg_id 30 (x30).
+        assert_eq!(last_32[24], DW_CFA_UNDEFINED);
+        assert_eq!(last_32[25], 30);
     }
 
     #[test]

@@ -805,10 +805,37 @@ mod jit_impl {
             }
             self.lib_handles.push(handle);
 
+            // On Linux every declared dylib is its own .so (libc.so.6,
+            // libm.so.6, libdl.so.2, ...) -- the Rust test binary
+            // pulls in some of them but not all (libm in particular
+            // is rarely needed by Rust itself, so `dlopen(NULL)`
+            // doesn't see `sqrt` / `cos` / `sin` / `pow`). On macOS
+            // every libSystem alias collapses to a single image, so
+            // the global handle covers everything anyway. Open each
+            // declared dylib path explicitly so symbols our program
+            // imports are guaranteed reachable through dlsym below.
+            // Failures fall through silently -- the matching dlsym
+            // will leave a 0 slot, which is the same "not reachable"
+            // failure mode the global-handle path produces.
+            #[cfg(target_os = "linux")]
+            {
+                for d in &imports.dylibs {
+                    if let Ok(cs) = CString::new(d.path.as_str()) {
+                        let h = unsafe { dlopen(cs.as_ptr(), RTLD_NOW) };
+                        if !h.is_null() {
+                            self.lib_handles.push(h);
+                        }
+                    }
+                }
+            }
+
             // Strip the leading underscore on macOS for `dlsym` --
             // the symbol stored in the binding is the Mach-O view
             // (`_printf`), but `dlsym` wants the C view (`printf`).
-            // On Linux the binding is already underscoreless.
+            // On Linux the binding is already underscoreless. The
+            // global handle covers libSystem on macOS and most of
+            // libc on Linux; the per-dylib handles above pick up
+            // libm / libdl on Linux.
             for (i, imp) in imports.imports.iter().enumerate() {
                 let lookup_name = if cfg!(target_os = "macos") {
                     imp.real_symbol
@@ -821,7 +848,14 @@ mod jit_impl {
                     Ok(cs) => cs,
                     Err(_) => continue, // unreachable: symbol names are static ASCII
                 };
-                let addr = unsafe { dlsym(handle, cs.as_ptr()) } as u64;
+                let mut addr: u64 = 0;
+                for h in &self.lib_handles {
+                    let a = unsafe { dlsym(*h, cs.as_ptr()) } as u64;
+                    if a != 0 {
+                        addr = a;
+                        break;
+                    }
+                }
                 let slot_off = i * 8;
                 unsafe {
                     let dst = self.ptr.add(slot_off) as *mut u64;

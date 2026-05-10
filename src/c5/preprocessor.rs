@@ -966,6 +966,56 @@ impl Preprocessor {
                     Some(expanded) => {
                         let mut nested: Vec<&str> = blocklist.to_vec();
                         nested.push(ident);
+                        // Token-stream rescan (C99 6.10.3.4): if the
+                        // expansion is a single identifier and the
+                        // *source* token immediately after the
+                        // original macro use is `(`, the rescan would
+                        // see `expanded_ident(args)` and trigger any
+                        // matching function-like macro. We don't have
+                        // a true token stream so emulate this here:
+                        // detect the shape and pull the args from the
+                        // source directly. Drives stb_rect_pack's
+                        // `#define STBRP_ASSERT assert` indirection
+                        // (object-like alias -> function-like assert).
+                        let trimmed = expanded.trim();
+                        if !trimmed.is_empty()
+                            && trimmed
+                                .bytes()
+                                .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                            && !trimmed.bytes().next().unwrap().is_ascii_digit()
+                            && let Some(macro_def) = self.fn_macros.get(trimmed)
+                            && !nested.contains(&trimmed)
+                        {
+                            let mut j = i;
+                            while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t') {
+                                j += 1;
+                            }
+                            if j < bytes.len()
+                                && bytes[j] == b'('
+                                && let Some((args, after)) = parse_macro_args(&line[j..])
+                            {
+                                let expanded_args: Vec<String> = args
+                                    .iter()
+                                    .map(|a| {
+                                        self.substitute_with_blocklist(
+                                            a, filename, line_no, &nested,
+                                        )
+                                    })
+                                    .collect();
+                                let body_expanded = expand_fn_macro(macro_def, &expanded_args);
+                                let mut deeper: Vec<&str> = nested.clone();
+                                deeper.push(trimmed);
+                                let recursed = self.substitute_with_blocklist(
+                                    &body_expanded,
+                                    filename,
+                                    line_no,
+                                    &deeper,
+                                );
+                                out.push_str(&recursed);
+                                i = j + after;
+                                continue;
+                            }
+                        }
                         out.push_str(
                             &self.substitute_with_blocklist(&expanded, filename, line_no, &nested),
                         );

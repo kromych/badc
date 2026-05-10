@@ -201,6 +201,20 @@ jobs:
         # both -O and noO. Different code shape from miniz's
         # deflate.
         run: python demos/bzip2/smoke.py
+      - name: stb header-only smoke
+        # The densest demo: a single TU pulls in six stb_*.h
+        # headers (stb_sprintf, stb_perlin, stb_image_write,
+        # stb_image, stb_ds, stb_rect_pack) with their
+        # `STB_*_IMPLEMENTATION` macros defined, then exercises
+        # one scenario per header (sprintf round-trip, Perlin
+        # noise range, PNG encode-decode, stretchy-array sums,
+        # skyline rect pack). Catches header-only-library
+        # idioms: heavy macro use, function-type typedefs,
+        # 2D-array params, local arrays with runtime
+        # initializers, float arithmetic in static initializers.
+        # PSD is skipped via STBI_NO_PSD pending an aarch64
+        # codegen-drift regression specific to that decoder.
+        run: python demos/stb/smoke.py
       - name: gui_hello build-only smoke
         # Three GUI demos -- Win32, X11, Cocoa via objc_msgSend --
         # cross-compiled to all five supported targets. Build-only

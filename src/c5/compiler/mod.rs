@@ -2582,6 +2582,23 @@ impl Compiler {
                     if fpi > 0 {
                         self.fn_ptr_chain_depth = fpi - 1;
                     }
+                    // 2D-array parameter decay: a parameter declared
+                    // as `T name[N][M]` carries `inner_array_size = M`
+                    // on its symbol but the function-param binder
+                    // wipes `array_size` to 0 (params don't own
+                    // storage). The next `[i]` postfix needs the row
+                    // stride so it scales by `M * sizeof(T)` and
+                    // keeps the type pointer-shaped for the inner
+                    // `[j]`. The loaded value is already a pointer
+                    // (one level less than the array would have
+                    // been), so the pointee type is the post-load
+                    // `self.ty`. stb_image_write's
+                    // `stbiw__jpg_processDU(const unsigned short
+                    // HTAC[256][2])` hits this on every JPEG block.
+                    let inner = self.symbols[id_idx].inner_array_size;
+                    if inner > 0 && is_pointer_ty(self.ty) {
+                        self.pending_index_stride = inner * self.pointee_size(self.ty);
+                    }
                 }
             }
         } else if self.lex.tk == '(' as i64 {
@@ -3705,6 +3722,19 @@ impl Compiler {
                 return Err(self.compile_err(format!("compiler error tk={}", self.lex.tk)));
             }
         }
+        // 2D-array stride hint: set by the id-load branch when a
+        // multi-dim array decays, consumed by the matching Brak
+        // postfix. If we leave this expr() without seeing the
+        // expected `[i]` -- e.g., the array was passed to a
+        // function as a bare argument with `foo(arr)` -- the
+        // hint must not leak to the next expression. Without
+        // this clear, stb_image_write's
+        //   stbiw__jpg_processDU(..., YDC_HT, YAC_HT)
+        // leaves `pending_index_stride` set to the row stride
+        // of YAC_HT; the very next `subU[pos]` then takes the
+        // 2D-stride branch in Brak, never loads, and the `=`
+        // that follows trips "bad lvalue in assignment".
+        self.pending_index_stride = 0;
         Ok(())
     }
 
@@ -3916,6 +3946,33 @@ impl Compiler {
                 // paths -- but a clashing redefinition or a clash with
                 // a non-typedef symbol is rejected.
                 if is_typedef {
+                    // C99 function-type typedef: `typedef RET NAME(args);`
+                    // (stb_sprintf's STBSP_SPRINTFCB and friends). The
+                    // declarator stopped at NAME; the `(args)` that
+                    // follows is the function's parameter list. Parse it
+                    // and bind NAME as a function-pointer alias (fpi=1,
+                    // type bumped by one Ptr) -- every real use is
+                    // through `NAME cb` (decays to fn-ptr) or `NAME *cb`
+                    // (already fn-ptr), so the two spellings collapse
+                    // to the same effective shape in c5's model.
+                    //
+                    // parse_function_params binds each named parameter
+                    // as a Loc symbol (it's shared with function-decl
+                    // parsing). For a typedef there's no body to put
+                    // those locals into scope for, so we restore each
+                    // param's shadowed binding right after.
+                    let (typedef_ty, typedef_fpi, typedef_params) =
+                        if self.lex.tk == '(' as i64 && preconsumed_params.is_none() {
+                            self.next()?; // consume `(`
+                            let pp = self.parse_function_params()?;
+                            for &p in &pp.indices {
+                                Self::restore_shadowed_symbol(&mut self.symbols[p]);
+                            }
+                            let fty = ty + Ty::Ptr as i64;
+                            (fty, 1i64, Some(pp))
+                        } else {
+                            (ty, fn_ptr_indirection, None)
+                        };
                     let prior_class = self.symbols[id_idx].class;
                     let prior_type = self.symbols[id_idx].type_;
                     if prior_class != 0 && prior_class != Token::Typedef as i64 {
@@ -3924,15 +3981,22 @@ impl Compiler {
                             self.symbols[id_idx].name
                         )));
                     }
-                    if prior_class == Token::Typedef as i64 && prior_type != ty {
+                    if prior_class == Token::Typedef as i64 && prior_type != typedef_ty {
                         return Err(self.compile_err(format!(
                             "typedef `{}` redefined with a different type",
                             self.symbols[id_idx].name
                         )));
                     }
                     self.symbols[id_idx].class = Token::Typedef as i64;
-                    self.symbols[id_idx].type_ = ty;
+                    self.symbols[id_idx].type_ = typedef_ty;
                     self.symbols[id_idx].val = 0;
+                    if typedef_fpi > 0 {
+                        self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
+                    }
+                    if let Some(pp) = typedef_params {
+                        self.symbols[id_idx].params = pp.types;
+                        self.symbols[id_idx].is_variadic = pp.is_variadic;
+                    }
                     if self.lex.tk == ',' as i64 {
                         self.next()?;
                     }

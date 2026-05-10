@@ -371,6 +371,17 @@ impl Compiler {
                 }
 
                 let (id_idx, field_ty, field_array_size) = self.parse_declarator(field_base)?;
+                // Struct fields don't carry the fn-pointer lineage
+                // tag on their own (the StructField record has no
+                // place for it), so consume the side-channel here.
+                // Without this, a struct containing a `int (*cb)(...)`
+                // field leaks fn_ptr_indirection = 1 into whatever
+                // declaration follows the closing `}` -- including
+                // the typedef name in `typedef struct { ... } T;`,
+                // which would then mistakenly treat `T *p` as a
+                // function-pointer-pointer and turn `*p` into a
+                // decay no-op.
+                self.pending_fn_ptr_indirection.take();
                 let is_aggregate_value = is_struct_ty(field_ty) && struct_ptr_depth(field_ty) == 0;
                 if is_aggregate_value
                     && field_array_size == 0

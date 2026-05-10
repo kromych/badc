@@ -168,6 +168,17 @@ fn parse_pragma_pack_line(body: &[u8]) -> Option<PackDirective> {
     inner.parse::<usize>().ok().map(PackDirective::Set)
 }
 
+/// Snapshot of the lexer's positional state. See
+/// [`Lexer::snapshot`] / [`Lexer::restore`].
+#[derive(Clone, Copy)]
+pub(crate) struct LexerSnapshot {
+    pos: usize,
+    line: usize,
+    tk: i64,
+    ival: i64,
+    curr_id_idx: usize,
+}
+
 pub(crate) struct Lexer {
     src: Vec<u8>,
     pos: usize,
@@ -392,6 +403,50 @@ impl Lexer {
             p += 1;
         }
         p < self.src.len() && (self.src[p].is_ascii_alphabetic() || self.src[p] == b'_')
+    }
+
+    /// Lightweight snapshot of the lexer's positional state so a
+    /// caller can speculatively advance and then rewind. Captures
+    /// just the fields the lexer mutates inside `next()`; identifier
+    /// table and pack stack don't change on read, so they're omitted.
+    pub fn snapshot(&self) -> LexerSnapshot {
+        LexerSnapshot {
+            pos: self.pos,
+            line: self.line,
+            tk: self.tk,
+            ival: self.ival,
+            curr_id_idx: self.curr_id_idx,
+        }
+    }
+
+    /// Restore a previously taken [`Self::snapshot`]. The lexer
+    /// returns to the exact state it had at the snapshot point.
+    pub fn restore(&mut self, s: LexerSnapshot) {
+        self.pos = s.pos;
+        self.line = s.line;
+        self.tk = s.tk;
+        self.ival = s.ival;
+        self.curr_id_idx = s.curr_id_idx;
+    }
+
+    /// True if the next non-whitespace byte is the start of a
+    /// numeric literal -- digit or a `.` immediately followed by
+    /// a digit (the `.5` form). Used by the constant-initializer
+    /// parser to recognise `-LITERAL` (where the next token will
+    /// be Num or FloatNum) without consuming the `-` until it
+    /// knows what shape follows. Saves a snapshot/restore dance.
+    pub fn peek_after_whitespace_starts_digit(&self) -> bool {
+        let mut p = self.pos;
+        while p < self.src.len() && self.src[p].is_ascii_whitespace() {
+            p += 1;
+        }
+        if p >= self.src.len() {
+            return false;
+        }
+        if self.src[p].is_ascii_digit() {
+            return true;
+        }
+        self.src[p] == b'.' && p + 1 < self.src.len() && self.src[p + 1].is_ascii_digit()
     }
 
     /// Count the number of comma-separated top-level groups

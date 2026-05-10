@@ -39,6 +39,14 @@ demos/bzip2/*
 !demos/bzip2/smoke.py
 !demos/bzip2/smoke_main.c
 !demos/bzip2/README.md
+# stb -- a collection of single-file public-domain headers.
+# `setup.py` pulls the upstream archive from the vendor-deps
+# release and drops a curated set of headers into `demos/stb/`;
+# only the runner scripts + driver source are committed.
+demos/stb/*
+!demos/stb/setup.py
+!demos/stb/smoke.py
+!demos/stb/smoke_main.c
 # gui_hello: per-target build outputs land in `.build/`.
 demos/gui_hello/.build/
 hello

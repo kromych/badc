@@ -21,7 +21,7 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::is_pointer_ty;
+use super::types::{UNSIGNED_BIT, is_pointer_ty};
 
 impl Compiler {
     /// Parse a global / TLS initializer's right-hand side and
@@ -219,6 +219,44 @@ impl Compiler {
                 data_offset: var_offset as u64,
                 target_offset: target_offset as u64,
             });
+            return Ok(());
+        }
+
+        // Float / double scalar global with a constant-foldable
+        // float expression: `static float gamma = 1.0f / 2.2f;` and
+        // similar. The integer constant evaluator can't see through
+        // `/`, `*`, etc. on float operands, so route through the
+        // f64 folder in initializer.rs. The result is stored as the
+        // full 8 bytes the slot was sized for; a future
+        // f32-narrow-storage path would shrink it for `float`.
+        let var_is_float = {
+            let stripped = var_ty & !UNSIGNED_BIT;
+            stripped == Ty::Float as i64 || stripped == Ty::Double as i64
+        };
+        if var_is_float
+            && (self.lex.tk == Token::FloatNum as i64
+                || (self.lex.tk == Token::SubOp as i64
+                    && self.lex.peek_after_whitespace_starts_digit())
+                || (self.lex.tk == '(' as i64
+                    && self.contents_until_close_paren_have_float_pub()?))
+        {
+            let bits = self.parse_const_float_expr()?;
+            let value = bits.to_bits() as i64;
+            let bytes = value.to_le_bytes();
+            let segment = if is_thread_local {
+                &mut self.tls_data
+            } else {
+                &mut self.data
+            };
+            let off = var_offset as usize;
+            debug_assert!(off + 8 <= segment.len());
+            segment[off..off + 8].copy_from_slice(&bytes);
+            if is_thread_local {
+                let end = off + 8;
+                if end > self.tls_init_size {
+                    self.tls_init_size = end;
+                }
+            }
             return Ok(());
         }
 

@@ -197,10 +197,53 @@ impl Compiler {
         // Float literal -- store the f64 bit pattern. The struct
         // field's declared type drives the runtime interpretation;
         // the on-disk image is just bytes.
+        //
+        // If a binary float operator follows (`+ - * /`), fold the
+        // whole expression in `f64` precision -- stb_image_write's
+        // `aasf[]` table declares each element as
+        // `1.387039845f * 2.828427125f` etc., which the integer
+        // const-expr evaluator can't traverse.
         if self.lex.tk == Token::FloatNum as i64 {
             let v = self.lex.ival;
             self.next()?;
+            if self.tk_is_float_arith_op() {
+                let bits = self.parse_const_float_add_from(f64::from_bits(v as u64))?;
+                return Ok((bits.to_bits() as i64, InitElemReloc::None));
+            }
             return Ok((v, InitElemReloc::None));
+        }
+        // Negative float / integer literal: `-1.5e+020` lexes as
+        // `-` followed by FloatNum, and `-42` as `-` followed by
+        // Num. The integer-only fallback at the tail of this
+        // function (`parse_constant_int`) handles `-(expr)` and
+        // `-IDENT_MACRO` via its own unary-minus path; here we
+        // only intercept when the byte after `-` is the start of
+        // a literal, so we don't disturb the existing routes.
+        // stb_sprintf's `stbsp__negboterr[]` array leads every row
+        // with `-d.dddd...e+NNN`; without this branch the whole
+        // TU rejects on the first negative element.
+        if self.lex.tk == Token::SubOp as i64 && self.lex.peek_after_whitespace_starts_digit() {
+            self.next()?; // consume `-`
+            if self.lex.tk == Token::FloatNum as i64 {
+                let bits = (self.lex.ival as u64) ^ (1u64 << 63);
+                self.next()?;
+                if self.tk_is_float_arith_op() {
+                    let folded = self.parse_const_float_add_from(f64::from_bits(bits))?;
+                    return Ok((folded.to_bits() as i64, InitElemReloc::None));
+                }
+                return Ok((bits as i64, InitElemReloc::None));
+            }
+            if self.lex.tk == Token::Num as i64 {
+                let v = -self.lex.ival;
+                self.next()?;
+                return Ok((v, InitElemReloc::None));
+            }
+            // peek said "digit next", so the lexer must have
+            // produced a numeric token. Anything else is a bug.
+            return Err(self.compile_err(format!(
+                "expected numeric literal after `-` in initializer (got tk={})",
+                self.lex.tk
+            )));
         }
         // `(type)expr` cast or `(expr)` parenthesized constant in a
         // static initializer. After consuming `(`, peek the next
@@ -245,6 +288,29 @@ impl Compiler {
                 }
                 self.next()?;
                 return self.parse_constant_init_value();
+            }
+            // Sub-expression in parens. Peek for any FloatNum
+            // token inside (up to the matching `)`); if present,
+            // fold the whole sub-expression in f64 precision so
+            // shapes like `(1.0f + 2.0f) * 4.0f` from
+            // stb_image_write's `aasf[]` round-trip exactly.
+            // Pure-integer parens stay on the existing
+            // parse_const_expr_or path.
+            if self.contents_until_close_paren_have_float()? {
+                let seed = self.parse_const_float_unary()?;
+                let v = self.parse_const_float_add_from(seed)?;
+                if self.lex.tk != ')' as i64 {
+                    return Err(self.compile_err("close paren expected in initializer"));
+                }
+                self.next()?;
+                // The result of the parens is itself a float
+                // value; any trailing `+ / - / * / /` continues
+                // the float expression chain.
+                if self.tk_is_float_arith_op() {
+                    let folded = self.parse_const_float_add_from(v)?;
+                    return Ok((folded.to_bits() as i64, InitElemReloc::None));
+                }
+                return Ok((v.to_bits() as i64, InitElemReloc::None));
             }
             let v = self.parse_const_expr_or()?;
             if self.lex.tk != ')' as i64 {
@@ -556,5 +622,186 @@ impl Compiler {
             self.emit_op(Op::Si);
         }
         Ok(())
+    }
+
+    /// Peek tokens from the current position (just past an
+    /// already-consumed `(`) up to the matching `)`; returns true
+    /// if any FloatNum literal appears inside. Used by the
+    /// initializer paren branch to decide between the integer
+    /// constant evaluator and the f64 folder. Snapshots /
+    /// restores the lexer so the caller's position is unchanged.
+    fn contents_until_close_paren_have_float(&mut self) -> Result<bool, C5Error> {
+        let snap = self.lex.snapshot();
+        let mut depth: i64 = 1;
+        let mut has_float = false;
+        while depth > 0 && self.lex.tk != 0 {
+            if self.lex.tk == '(' as i64 {
+                depth += 1;
+            } else if self.lex.tk == ')' as i64 {
+                depth -= 1;
+                if depth == 0 {
+                    break;
+                }
+            } else if self.lex.tk == Token::FloatNum as i64 {
+                has_float = true;
+                break;
+            }
+            self.next()?;
+        }
+        self.lex.restore(snap);
+        Ok(has_float)
+    }
+
+    /// True when `self.lex.tk` is `+ / - / * / /` -- the binary
+    /// float operators the constant-initializer evaluator
+    /// recognises. Whitespace-only check; doesn't consume.
+    fn tk_is_float_arith_op(&self) -> bool {
+        self.lex.tk == Token::AddOp as i64
+            || self.lex.tk == Token::SubOp as i64
+            || self.lex.tk == Token::MulOp as i64
+            || self.lex.tk == Token::DivOp as i64
+    }
+
+    /// Continue an in-flight float constant expression from a
+    /// seed `left` value. Used by `parse_constant_init_value`
+    /// after it consumed a leading `FloatNum` and noticed an
+    /// arithmetic operator next: the caller hands the already-
+    /// loaded value here and we drive the remaining `+ / - / *
+    /// / /` operators at the standard C precedences. Mixed
+    /// integer literals are widened to `f64`.
+    /// Entry point for callers that don't have an already-loaded
+    /// seed: read a float-typed constant expression starting from
+    /// the current token. Used by `parse_global_initializer` to
+    /// fold `static float x = 1.0f / 2.2f;` at parse time.
+    pub(super) fn parse_const_float_expr(&mut self) -> Result<f64, C5Error> {
+        let seed = self.parse_const_float_unary()?;
+        self.parse_const_float_add_from(seed)
+    }
+
+    /// Public wrapper around `contents_until_close_paren_have_float`
+    /// so `global_init.rs` can use the same peek when deciding
+    /// between integer and float constant evaluators for a
+    /// parenthesised initializer.
+    pub(super) fn contents_until_close_paren_have_float_pub(&mut self) -> Result<bool, C5Error> {
+        self.contents_until_close_paren_have_float()
+    }
+
+    fn parse_const_float_add_from(&mut self, left: f64) -> Result<f64, C5Error> {
+        let mut acc = self.parse_const_float_mul_from(left)?;
+        loop {
+            if self.lex.tk == Token::AddOp as i64 {
+                self.next()?;
+                let seed = self.parse_const_float_unary()?;
+                let r = self.parse_const_float_mul_from(seed)?;
+                acc += r;
+            } else if self.lex.tk == Token::SubOp as i64 {
+                self.next()?;
+                let seed = self.parse_const_float_unary()?;
+                let r = self.parse_const_float_mul_from(seed)?;
+                acc -= r;
+            } else {
+                break;
+            }
+        }
+        Ok(acc)
+    }
+
+    /// Continue a mul/div chain from a seed `left` value. Same
+    /// helper shape as `parse_const_float_add_from`; consumes
+    /// the current `* / /` operators and stops at the first
+    /// lower-precedence token.
+    fn parse_const_float_mul_from(&mut self, mut acc: f64) -> Result<f64, C5Error> {
+        loop {
+            if self.lex.tk == Token::MulOp as i64 {
+                self.next()?;
+                let r = self.parse_const_float_unary()?;
+                acc *= r;
+            } else if self.lex.tk == Token::DivOp as i64 {
+                self.next()?;
+                let r = self.parse_const_float_unary()?;
+                if r == 0.0 {
+                    return Err(self.compile_err("division by zero in constant float expression"));
+                }
+                acc /= r;
+            } else {
+                break;
+            }
+        }
+        Ok(acc)
+    }
+
+    fn parse_const_float_unary(&mut self) -> Result<f64, C5Error> {
+        if self.lex.tk == Token::SubOp as i64 {
+            self.next()?;
+            return Ok(-self.parse_const_float_unary()?);
+        }
+        if self.lex.tk == Token::AddOp as i64 {
+            self.next()?;
+            return self.parse_const_float_unary();
+        }
+        self.parse_const_float_primary()
+    }
+
+    fn parse_const_float_primary(&mut self) -> Result<f64, C5Error> {
+        if self.lex.tk == '(' as i64 {
+            self.next()?;
+            // C-style cast in a constant float expression:
+            // `(float)EXPR` / `(double)EXPR`. Recognised so
+            // stb sources that pin the result width explicitly
+            // still fold. Pointer / non-arithmetic types in
+            // this position would be a type error.
+            if self.lex_is_type_start() {
+                let _ = self.parse_decl_base_type()?;
+                while self.lex.tk == Token::MulOp as i64 || self.lex.tk == Token::TypeQual as i64 {
+                    self.next()?;
+                }
+                if self.lex.tk != ')' as i64 {
+                    return Err(self.compile_err(
+                        "close paren expected after cast in constant float expression",
+                    ));
+                }
+                self.next()?;
+                return self.parse_const_float_unary();
+            }
+            // Parenthesized sub-expression: recurse at the top of
+            // the precedence chain so a fully-nested `(a + b) * c`
+            // parses associativity-correctly.
+            let inner_left = self.parse_const_float_unary()?;
+            let v = self.parse_const_float_add_from(inner_left)?;
+            if self.lex.tk != ')' as i64 {
+                return Err(self.compile_err("close paren expected in constant float expression"));
+            }
+            self.next()?;
+            return Ok(v);
+        }
+        if self.lex.tk == Token::FloatNum as i64 {
+            let v = f64::from_bits(self.lex.ival as u64);
+            self.next()?;
+            return Ok(v);
+        }
+        if self.lex.tk == Token::Num as i64 {
+            // Integer literal in a float context -- promote to
+            // f64. The runtime conversion is exact for values
+            // that fit a double's mantissa (the only ones c5
+            // accepts as constant integers anyway).
+            let v = self.lex.ival as f64;
+            self.next()?;
+            return Ok(v);
+        }
+        if self.lex.tk == Token::Id as i64
+            && self.symbols[self.lex.curr_id_idx].class == Token::Num as i64
+        {
+            // `#define`d integer constants and enum values used
+            // inside a float initializer (rare but legal). C99
+            // 6.6 lets a constant expression include any value
+            // that's a compile-time constant of arithmetic type.
+            let v = self.symbols[self.lex.curr_id_idx].val as f64;
+            self.next()?;
+            return Ok(v);
+        }
+        Err(self.compile_err(format!(
+            "constant float expression expected (got tk={})",
+            self.lex.tk
+        )))
     }
 }

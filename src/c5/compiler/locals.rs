@@ -29,9 +29,10 @@
 use alloc::format;
 
 use super::super::error::C5Error;
-use super::super::token::Token;
+use super::super::op::Op;
+use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{is_struct_ty, struct_id_of, struct_ptr_depth};
+use super::types::{UNSIGNED_BIT, is_struct_ty, struct_id_of, struct_ptr_depth};
 
 impl Compiler {
     pub(super) fn parse_function_body_local_decl(&mut self) -> Result<(), C5Error> {
@@ -303,6 +304,37 @@ impl Compiler {
                 self.emit_local_array_init(local_val, staged_off, elem_size * count as usize);
                 return Ok(());
             }
+            // Deferred-size local scalar / pointer array. Pre-scan
+            // the brace list to learn the element count (so storage
+            // can be reserved before parsing each element) and
+            // whether any element is non-constant. The latter
+            // routes through the per-element runtime store path,
+            // which stb_image_write's `head1[]` (inside
+            // `stbi_write_jpg_to_func`) needs: that array's first
+            // bytes are literal magic numbers but later positions
+            // are runtime expressions like
+            // `(unsigned char)(height>>8)`.
+            if self.lex.tk == '{' as i64 {
+                let (final_size, needs_runtime) = self.scan_array_init()?;
+                if needs_runtime {
+                    self.symbols[loc_idx].array_size = final_size;
+                    self.loc_offs += self.local_storage_slots(ty, final_size);
+                    self.symbols[loc_idx].val = -self.loc_offs;
+                    if self.loc_offs > self.max_loc_offs {
+                        self.max_loc_offs = self.loc_offs;
+                    }
+                    let local_val = self.symbols[loc_idx].val;
+                    let var_name = self.symbols[loc_idx].name.clone();
+                    self.emit_local_array_init_runtime(local_val, ty, final_size, &var_name)?;
+                    return Ok(());
+                }
+                // Constant path: keep matching the legacy flow
+                // exactly -- allocate from the parsed element count
+                // (mirrors `let final_size = elements.len()` below)
+                // rather than the pre-scanned count, so behaviour is
+                // identical to before this fix when no runtime
+                // expressions are present.
+            }
             let elements = self.collect_array_initializer(ty)?;
             let final_size = elements.len() as i64;
             self.symbols[loc_idx].array_size = final_size;
@@ -328,13 +360,32 @@ impl Compiler {
             self.next()?;
             let local_val = self.symbols[loc_idx].val;
             if declared_array_size > 0 {
+                let var_name = self.symbols[loc_idx].name.clone();
+                // C99 6.7.8 lets auto-storage local arrays carry
+                // initializers with non-constant expressions
+                // ("dynamic initialization"). The pre-scan looks
+                // for any identifier referring to a Loc symbol or
+                // any indexed / called / address-taken shape that
+                // can't fold at compile time; if found, switch to
+                // the per-element runtime store path. Pure-constant
+                // initializers keep the Mcpy-from-data fast path
+                // and the staged on-disk image stays compact.
+                if self.lex.tk == '{' as i64 && self.array_init_needs_runtime()? {
+                    self.emit_local_array_init_runtime(
+                        local_val,
+                        ty,
+                        declared_array_size,
+                        &var_name,
+                    )?;
+                    return Ok(());
+                }
                 let elements = self.collect_array_initializer(ty)?;
                 let init_count = elements.len();
                 let max = declared_array_size as usize;
                 if init_count > max {
                     return Err(self.compile_err(format!(
                         "too many initializers for array `{}` ({} > {})",
-                        self.symbols[loc_idx].name, init_count, max
+                        var_name, init_count, max
                     )));
                 }
                 let (start_addr, total_bytes) = self.pack_initializer_into_data(ty, &elements);
@@ -371,5 +422,160 @@ impl Compiler {
         } else {
             self.slots_of_type(ty)
         }
+    }
+
+    /// Pre-scan an array initializer's brace list (current token
+    /// must be `{`) and return `(element_count, needs_runtime)`.
+    /// The count is the number of top-level (comma-separated)
+    /// elements, used by the deferred-size `T xs[] = {...}` path.
+    /// The runtime flag is true when any element involves a
+    /// non-constant value -- a Loc-class identifier, an indexed
+    /// read, a member access, or a function call.
+    pub(super) fn scan_array_init(&mut self) -> Result<(i64, bool), C5Error> {
+        debug_assert!(self.lex.tk == '{' as i64);
+        let snap = self.lex.snapshot();
+        self.next()?; // consume `{`
+        let mut depth: i64 = 1;
+        let mut needs_runtime = false;
+        let mut count: i64 = 0;
+        // Detect an empty list (`{}`) -- 0 elements rather than 1.
+        let mut saw_any = false;
+        while depth > 0 && self.lex.tk != 0 {
+            if self.lex.tk == '{' as i64 {
+                depth += 1;
+            } else if self.lex.tk == '}' as i64 {
+                depth -= 1;
+                if depth == 0 {
+                    if saw_any {
+                        count += 1;
+                    }
+                    break;
+                }
+            } else if self.lex.tk == ',' as i64 && depth == 1 {
+                if saw_any {
+                    count += 1;
+                }
+                saw_any = false;
+                self.next()?;
+                continue;
+            } else if self.lex.tk == Token::Id as i64 {
+                saw_any = true;
+                let class = self.symbols[self.lex.curr_id_idx].class;
+                if class == Token::Loc as i64 {
+                    needs_runtime = true;
+                }
+                if self.lex.peek_after_whitespace(b'[') || self.lex.peek_after_whitespace(b'(') {
+                    needs_runtime = true;
+                }
+            } else if self.lex.tk == Token::Dot as i64 || self.lex.tk == Token::Arrow as i64 {
+                needs_runtime = true;
+                saw_any = true;
+            } else {
+                saw_any = true;
+            }
+            self.next()?;
+        }
+        self.lex.restore(snap);
+        Ok((count, needs_runtime))
+    }
+
+    /// Pre-scan an array initializer's brace list (current token
+    /// must be `{`) for any element that isn't a compile-time
+    /// constant. Returns true if the initializer needs the
+    /// per-element runtime store path; false if the existing
+    /// pack-into-data + Mcpy path suffices. The scan snapshots /
+    /// restores the lexer so token position is unchanged on
+    /// return.
+    ///
+    /// Constants for this check: integer / float / string
+    /// literals, address-of-global (`&id`), enum / `#define`
+    /// constants (class == Num), bare globals / functions /
+    /// syscall stubs (class == Glo / Fun / Sys), and any cast or
+    /// paren expression composed of the same. Non-constants:
+    /// references to Loc-class symbols (parameters or locals),
+    /// indexed reads (`id[...]`), member access (`.` / `->`),
+    /// and function calls (`id(args)`).
+    pub(super) fn array_init_needs_runtime(&mut self) -> Result<bool, C5Error> {
+        Ok(self.scan_array_init()?.1)
+    }
+
+    /// Emit per-element store sequences for a local-array
+    /// initializer whose elements aren't all compile-time
+    /// constants. C99 6.7.8 paragraph 13 specifies that each
+    /// element is initialised as if by assignment in declaration
+    /// order. Elements past the brace list keep whatever the
+    /// stack frame had on entry (c5 doesn't zero-pad locals
+    /// today; matches the constant-init path's behaviour).
+    ///
+    /// `local_val` is the base slot offset (negative, from FP);
+    /// `ty` the element type; `max` the declared dimension. On
+    /// entry the current token is `{`; on return it's the token
+    /// after the matching `}`.
+    pub(super) fn emit_local_array_init_runtime(
+        &mut self,
+        local_val: i64,
+        ty: i64,
+        max: i64,
+        var_name: &str,
+    ) -> Result<(), C5Error> {
+        debug_assert!(self.lex.tk == '{' as i64);
+        self.next()?; // consume `{`
+        let elem_size = self.size_of_type(ty) as i64;
+        let store_op = match elem_size {
+            1 => Op::Sc,
+            2 => Op::Sh,
+            4 => Op::Sw,
+            _ => Op::Si,
+        };
+        let mut i: i64 = 0;
+        while self.lex.tk != '}' as i64 {
+            if i >= max {
+                return Err(self.compile_err(format!(
+                    "too many initializers for array `{}` (> {})",
+                    var_name, max
+                )));
+            }
+            // Compute &arr[i] = &arr[0] + i * elem_size.
+            self.emit_lea(local_val);
+            if i > 0 {
+                // Inline Psh + Imm + Add (the private
+                // emit_binop_with_imm helper) -- bumps the base
+                // address loaded by Lea by `i * elem_size` bytes.
+                self.emit_op(Op::Psh);
+                self.emit_imm(i * elem_size);
+                self.emit_op(Op::Add);
+            }
+            self.emit_op(Op::Psh);
+            // Parse the element expression at assignment
+            // precedence; the comma between elements is the
+            // delimiter, not a comma-expression operator.
+            self.expr(Token::Assign as i64)?;
+            // Float / double init into a non-float slot would
+            // need a conversion op here; today c5's only narrow
+            // FP storage is in struct fields (handled elsewhere),
+            // so the integer-store ops match the local slot
+            // width for every type we hit.
+            let unsigned = (ty & UNSIGNED_BIT) != 0;
+            let _ = unsigned; // bit kept for future narrowing-store dispatch
+            // Float / double element: the Si store widens to the
+            // full 8-byte slot and the FP bits survive intact
+            // because c5 holds doubles in 64-bit accumulator
+            // registers. A float (4-byte) element would still
+            // need an explicit cvt to single-precision; today no
+            // smoke target hits that shape.
+            let is_fp = (ty & !UNSIGNED_BIT) == Ty::Float as i64
+                || (ty & !UNSIGNED_BIT) == Ty::Double as i64;
+            if is_fp {
+                self.emit_op(Op::Si);
+            } else {
+                self.emit_op(store_op);
+            }
+            i += 1;
+            if self.lex.tk == ',' as i64 {
+                self.next()?;
+            }
+        }
+        self.next()?; // consume `}`
+        Ok(())
     }
 }

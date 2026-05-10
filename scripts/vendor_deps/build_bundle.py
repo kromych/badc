@@ -88,6 +88,18 @@ SOURCES = [
         upstream_sha="4525003a53a7fc63ca75c59b22c79608659ca12f0131f52c18637f829977f20b",
         sha_kind="fossil",
     ),
+    Source(
+        # stb is a collection of single-file public-domain headers
+        # with no versioned releases -- pin to a commit instead.
+        # Version uses the commit's author date so the asset name
+        # carries enough provenance to retrace a bump.
+        name="stb",
+        version="20260415",
+        url="https://github.com/nothings/stb/archive/31c1ad37456438565541f4919958214b6e762fb4.zip",
+        ext=".zip",
+        upstream_sha="31c1ad37456438565541f4919958214b6e762fb4",
+        sha_kind="git",
+    ),
 ]
 
 

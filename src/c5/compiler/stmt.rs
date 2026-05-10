@@ -26,7 +26,7 @@ use alloc::vec::Vec;
 
 use super::super::error::C5Error;
 use super::super::op::Op;
-use super::super::token::Token;
+use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{is_struct_ty, struct_ptr_depth};
 
@@ -185,6 +185,25 @@ impl Compiler {
             if id_idx == usize::MAX {
                 return Err(self.compile_err("typedef requires a name"));
             }
+            let fn_ptr_indirection = self.pending_fn_ptr_indirection.take().unwrap_or(0);
+            // C99 function-type typedef: `typedef RET NAME(args);`
+            // declared at block scope. Same handling as run_compile's
+            // file-scope branch -- parse the `(args)` and bind the
+            // typedef as a function-pointer alias. parse_function_params
+            // binds each named parameter as a Loc; with no body to put
+            // them into scope for, we restore the shadowed binding
+            // immediately.
+            let (typedef_ty, typedef_fpi, typedef_params) = if self.lex.tk == '(' as i64 {
+                self.next()?; // consume `(`
+                let pp = self.parse_function_params()?;
+                for &p in &pp.indices {
+                    Compiler::restore_shadowed_symbol(&mut self.symbols[p]);
+                }
+                let fty = ty + Ty::Ptr as i64;
+                (fty, 1i64, Some(pp))
+            } else {
+                (ty, fn_ptr_indirection, None)
+            };
             block_symbols.push((
                 id_idx,
                 self.symbols[id_idx].class,
@@ -192,8 +211,15 @@ impl Compiler {
                 self.symbols[id_idx].val,
             ));
             self.symbols[id_idx].class = Token::Typedef as i64;
-            self.symbols[id_idx].type_ = ty;
+            self.symbols[id_idx].type_ = typedef_ty;
             self.symbols[id_idx].val = 0;
+            if typedef_fpi > 0 {
+                self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
+            }
+            if let Some(pp) = typedef_params {
+                self.symbols[id_idx].params = pp.types;
+                self.symbols[id_idx].is_variadic = pp.is_variadic;
+            }
             if self.lex.tk == ',' as i64 {
                 self.next()?;
             }

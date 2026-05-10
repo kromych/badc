@@ -237,9 +237,25 @@ impl Compiler {
                     array_size *= m;
                 }
             }
-            if inner_dim > 0 && idx != usize::MAX {
+            if idx != usize::MAX {
+                // Always overwrite, even with 0, so a rebinding of a
+                // name that previously carried a 2D dimension (a
+                // struct field, an outer-scope local, etc.) doesn't
+                // inherit the stale row stride. Without this clear,
+                // stb_image's `stbi__build_fast_ac(stbi__int16
+                // *fast_ac, ...)` parameter inherits the `[1 <<
+                // FAST_BITS]` inner dimension from the matching
+                // `stbi__jpeg::fast_ac[4][1 << FAST_BITS]` field, and
+                // `fast_ac[i]` then takes the 2D-stride branch and
+                // emits no load.
                 self.symbols[idx].inner_array_size = inner_dim;
             }
+        } else if idx != usize::MAX {
+            // No `[` suffix at all -- the declarator is a scalar or
+            // pointer. Same rationale as above: scrub any stale
+            // inner_array_size carried over from an earlier binding
+            // of the same name.
+            self.symbols[idx].inner_array_size = 0;
         }
 
         Ok((idx, ty, array_size))

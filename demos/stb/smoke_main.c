@@ -46,6 +46,13 @@
  * non-MSVC branch uses. */
 #define _lrotl(x, n) (((x) << (n)) | ((x) >> (32 - (n))))
 
+/* msvc_compat.h also defines `__MINGW32__`, which makes
+ * stb_leakcheck's dumpmem reporter call `__mingw_fprintf` (the
+ * format-aware mingw printf wrapper). c5 binds the plain libc
+ * `fprintf` only -- alias the two so the leakcheck dumpmem
+ * path lowers cleanly on the Windows lanes. */
+#define __mingw_fprintf fprintf
+
 /* Cross-target SIMD opt-outs -- c5 doesn't model the SSE2 / NEON /
  * AVX intrinsic surface that stb_image's JPEG IDCT and
  * stb_image_resize2 reach for. The plain-C fallbacks are exactly

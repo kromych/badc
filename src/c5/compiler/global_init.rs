@@ -38,6 +38,28 @@ impl Compiler {
         is_thread_local: bool,
     ) -> Result<(), C5Error> {
         let line = self.lex.line;
+        // C99 6.7.8/11 allows a scalar initializer to be enclosed
+        // in a single pair of braces: `int x = { 42 };`. stb_voxel_render's
+        //   static const char *stbvox_vertex_program = { "..." "..." };
+        // uses this shape with a multi-piece adjacent-string-
+        // literal payload (which the lexer joins into one literal
+        // before we see it). Strip the wrapper and recurse.
+        if self.lex.tk == '{' as i64 {
+            self.next()?;
+            self.parse_global_initializer(var_ty, var_offset, is_thread_local)?;
+            // A trailing `,` before `}` is allowed in C99.
+            if self.lex.tk == ',' as i64 {
+                self.next()?;
+            }
+            if self.lex.tk != '}' as i64 {
+                return Err(self.compile_err_at(
+                    line,
+                    "scalar initializer wrapped in `{{ ... }}` must hold a single value",
+                ));
+            }
+            self.next()?; // consume `}`
+            return Ok(());
+        }
         // Optional `(TYPE)` cast prefix. const-init only cares about
         // the resulting value, not the cast type, so we skip the
         // type spec and re-enter from the post-cast token. Common

@@ -34,19 +34,37 @@ ASSET = f"stb-{VERSION}-{UPSTREAM_SHA[:8]}.zip"
 RELEASE_TAG = "vendor-deps-v1"
 SHA256 = "617266695cf191a45bec2405427207011a09b057133134594b0db6ccbf9ee0b2"
 
-# Curated subset of stb headers the smoke compiles against. Kept
-# in lock-step with smoke_main.c -- each entry here is a header
-# the driver `#include`s. Other stb headers (stb_vorbis,
-# stb_truetype, stb_image_resize2, stb_voxel_render,
-# stb_tilemap_editor, ...) hit c5 dialect gaps tracked in gh #77
-# and friends; this list is grown deliberately as fixes land.
+# Every stb_*.h header (plus stb_vorbis.c) the upstream archive
+# ships at top level. The smoke compiles a #include-everything TU
+# so each new compiler change gets cross-pressure from 21
+# independent header-only libraries; per-header scenarios drive
+# real APIs where the surface is testable without a display
+# server / audio device. Headers that can't compile yet are
+# gated off inline in smoke_main.c with their own
+# `/* TODO(stb-<name>): blocked on ... */` comment so the gap
+# stays visible.
 WANTED = (
-    "stb_sprintf.h",
-    "stb_perlin.h",
-    "stb_image_write.h",
-    "stb_image.h",
+    "stb_c_lexer.h",
+    "stb_connected_components.h",
+    "stb_divide.h",
     "stb_ds.h",
+    "stb_dxt.h",
+    "stb_easy_font.h",
+    "stb_herringbone_wang_tile.h",
+    "stb_hexwave.h",
+    "stb_image.h",
+    "stb_image_resize2.h",
+    "stb_image_write.h",
+    "stb_include.h",
+    "stb_leakcheck.h",
+    "stb_perlin.h",
     "stb_rect_pack.h",
+    "stb_sprintf.h",
+    "stb_textedit.h",
+    "stb_tilemap_editor.h",
+    "stb_truetype.h",
+    "stb_vorbis.c",
+    "stb_voxel_render.h",
 )
 
 

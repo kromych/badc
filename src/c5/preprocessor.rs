@@ -824,7 +824,8 @@ impl Preprocessor {
             if active {
                 let mut buffer = String::from(line);
                 let mut consumed = 1usize;
-                while macro_call_unclosed(&buffer, &self.fn_macros) && idx + consumed < lines.len()
+                while macro_call_unclosed(&buffer, &self.fn_macros, &self.macros)
+                    && idx + consumed < lines.len()
                 {
                     buffer.push('\n');
                     buffer.push_str(lines[idx + consumed]);
@@ -2075,7 +2076,19 @@ fn parse_macro_args(s: &str) -> Option<(Vec<String>, usize)> {
 /// next source line should be appended to the current logical
 /// line so a multi-line `assert(\n  expr\n)` call expands. Quotes
 /// and char literals are skipped so `"foo("` doesn't trigger.
-fn macro_call_unclosed(buffer: &str, fn_macros: &HashMap<String, FnMacro>) -> bool {
+///
+/// Also accepts an object-like macro whose expansion is a single
+/// identifier that *is* a function-like macro -- the C99
+/// 6.10.3.4 rescan turns `STB_C_LEX_CPP_COMMENTS(if (...) ...)`
+/// (where `#define STB_C_LEX_CPP_COMMENTS Y` and `#define Y(a)
+/// a`) into a call on `Y`; without joining the source lines
+/// here, the rescan in `substitute_with_blocklist` only sees the
+/// first line and can't find the matching `)`.
+fn macro_call_unclosed(
+    buffer: &str,
+    fn_macros: &HashMap<String, FnMacro>,
+    obj_macros: &HashMap<String, String>,
+) -> bool {
     let bytes = buffer.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
@@ -2102,7 +2115,25 @@ fn macro_call_unclosed(buffer: &str, fn_macros: &HashMap<String, FnMacro>) -> bo
                 i += 1;
             }
             let name = &buffer[start..i];
-            if fn_macros.contains_key(name) {
+            let direct_fn = fn_macros.contains_key(name);
+            // Object-like macro that resolves to a fn-like-macro
+            // identifier (single-word body). One level of
+            // indirection is enough for stb_c_lexer's
+            // `STB_C_LEX_CPP_COMMENTS = Y` shape; deeper chains
+            // are vanishingly rare in real headers.
+            let indirect_fn = !direct_fn && {
+                obj_macros
+                    .get(name)
+                    .map(|body| {
+                        let t = body.trim();
+                        !t.is_empty()
+                            && t.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                            && !t.bytes().next().unwrap().is_ascii_digit()
+                            && fn_macros.contains_key(t)
+                    })
+                    .unwrap_or(false)
+            };
+            if direct_fn || indirect_fn {
                 let mut j = i;
                 while j < bytes.len()
                     && (bytes[j] == b' ' || bytes[j] == b'\t' || bytes[j] == b'\n')

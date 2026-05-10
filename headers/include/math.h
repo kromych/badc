@@ -28,6 +28,11 @@
 #pragma binding(libc::tan,   "_tan")
 #pragma binding(libc::atan,  "_atan")
 #pragma binding(libc::atan2, "_atan2")
+#pragma binding(libc::asin,  "_asin")
+#pragma binding(libc::acos,  "_acos")
+#pragma binding(libc::sinh,  "_sinh")
+#pragma binding(libc::cosh,  "_cosh")
+#pragma binding(libc::tanh,  "_tanh")
 #pragma binding(libc::ldexp, "_ldexp")
 #pragma binding(libc::frexp, "_frexp")
 #pragma binding(libc::modf,  "_modf")
@@ -52,6 +57,11 @@
 #pragma binding(libm::tan,   "tan")
 #pragma binding(libm::atan,  "atan")
 #pragma binding(libm::atan2, "atan2")
+#pragma binding(libm::asin,  "asin")
+#pragma binding(libm::acos,  "acos")
+#pragma binding(libm::sinh,  "sinh")
+#pragma binding(libm::cosh,  "cosh")
+#pragma binding(libm::tanh,  "tanh")
 #pragma binding(libm::ldexp, "ldexp")
 #pragma binding(libm::frexp, "frexp")
 #pragma binding(libm::modf,  "modf")
@@ -75,6 +85,11 @@
 #pragma binding(msvcrt::tan,   "tan")
 #pragma binding(msvcrt::atan,  "atan")
 #pragma binding(msvcrt::atan2, "atan2")
+#pragma binding(msvcrt::asin,  "asin")
+#pragma binding(msvcrt::acos,  "acos")
+#pragma binding(msvcrt::sinh,  "sinh")
+#pragma binding(msvcrt::cosh,  "cosh")
+#pragma binding(msvcrt::tanh,  "tanh")
 #pragma binding(msvcrt::ldexp, "ldexp")
 #pragma binding(msvcrt::frexp, "frexp")
 #pragma binding(msvcrt::modf,  "modf")
@@ -126,6 +141,11 @@ double cos(double x);
 double tan(double x);
 double atan(double x);
 double atan2(double y, double x);
+double asin(double x);
+double acos(double x);
+double sinh(double x);
+double cosh(double x);
+double tanh(double x);
 // C99 7.12.6.6: ldexp(x, exp) = x * 2^exp.
 double ldexp(double x, int exp);
 // C99 7.12.6.4: frexp(x, *exp) splits x into a normalised

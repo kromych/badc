@@ -83,6 +83,16 @@ EXPECTED_PREFIXES = (
     "image OK:",
     "ds OK:",
     "rect_pack OK:",
+    "c_lexer OK:",
+    "connected_components OK:",
+    "divide OK:",
+    "dxt OK:",
+    "easy_font OK:",
+    "hexwave OK:",
+    "leakcheck OK:",
+    "truetype OK:",
+    "herringbone_wang OK:",
+    "include OK:",
     "stb smoke: all scenarios green",
 )
 

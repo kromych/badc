@@ -298,6 +298,15 @@ impl Compiler {
         // pointer casts no-ops). Otherwise it's a parenthesized
         // constant expression -- evaluate it and expect `)`.
         if self.lex.tk == '(' as i64 {
+            // Cast / float-content detection both need to look
+            // past the `(`. Snapshot so we can rewind for the
+            // integer-expression fall-through, which has to see
+            // `(` to absorb both the parenthesised sub-expression
+            // *and* any trailing operators -- stb_image_resize2's
+            //   static const stbir__FP32 minval = { (127-13) << 23 };
+            // needs `parse_const_expr_or` to start outside the
+            // parens so the `<< 23` after `)` joins the chain.
+            let snap = self.lex.snapshot();
             self.next()?;
             if self.lex_is_type_start() {
                 let _ = self.parse_decl_base_type()?;
@@ -340,8 +349,9 @@ impl Compiler {
             // fold the whole sub-expression in f64 precision so
             // shapes like `(1.0f + 2.0f) * 4.0f` from
             // stb_image_write's `aasf[]` round-trip exactly.
-            // Pure-integer parens stay on the existing
-            // parse_const_expr_or path.
+            // Pure-integer parens fall through to the integer
+            // expression evaluator below so trailing `<<`, `+`,
+            // ... operators after `)` are absorbed too.
             if self.contents_until_close_paren_have_float()? {
                 let seed = self.parse_const_float_unary()?;
                 let v = self.parse_const_float_add_from(seed)?;
@@ -358,11 +368,10 @@ impl Compiler {
                 }
                 return Ok((v.to_bits() as i64, InitElemReloc::Float64Bits));
             }
-            let v = self.parse_const_expr_or()?;
-            if self.lex.tk != ')' as i64 {
-                return Err(self.compile_err("close paren expected in initializer"));
-            }
-            self.next()?;
+            // Rewind so the integer evaluator below absorbs the
+            // whole `(expr) op rhs` chain as one expression.
+            self.lex.restore(snap);
+            let v = self.parse_constant_int()?;
             return Ok((v, InitElemReloc::None));
         }
         if self.lex.tk == '"' as i64 {
@@ -430,8 +439,64 @@ impl Compiler {
                 // "..."`) this is the array-decay rule: the value
                 // is the array's data-segment offset; a DataReloc
                 // patches it to the runtime address.
-                let off = self.symbols[idx].val;
+                let mut off = self.symbols[idx].val;
+                let array_size = self.symbols[idx].array_size;
+                let inner_dim = self.symbols[idx].inner_array_size;
+                let elem_ty = self.symbols[idx].type_;
                 self.next()?;
+                // Optional `[N]...` postfixes -- decay-to-address-
+                // of-element. `arr[N]` is equivalent to `&arr[N]`
+                // in a constant initializer (C99 6.3.2.1p3 array-
+                // to-pointer conversion). Used by
+                // stb_voxel_render's `stbvox_uniform_info[]` table
+                // to point at row 0 of 2D / 3D dummy arrays.
+                //
+                // c5 only tracks `inner_array_size` (the second
+                // dim of `T name[A][B]`), so for the third index
+                // of a 3D `T name[A][B][C]` we don't have a stride
+                // to multiply by. The common static-init shape is
+                // `arr[0][0]` which only matters as the base
+                // address; we accept further `[0]` postfixes
+                // without error and reject `[non-zero]` past the
+                // second index.
+                let mut depth: usize = 0;
+                while self.lex.tk == Token::Brak as i64 {
+                    self.next()?;
+                    let n = self.parse_constant_int()?;
+                    if self.lex.tk != ']' as i64 {
+                        return Err(self.compile_err(format!(
+                            "close bracket expected in `{}[...]` initializer",
+                            self.symbols[idx].name
+                        )));
+                    }
+                    self.next()?;
+                    let stride: i64 = if depth == 0 {
+                        if inner_dim > 0 {
+                            // 2D / 3D: first index strides over rows.
+                            inner_dim * self.size_of_type(elem_ty) as i64
+                        } else if array_size > 0 {
+                            self.size_of_type(elem_ty) as i64
+                        } else {
+                            1
+                        }
+                    } else if depth == 1 {
+                        // Second index: scalar element stride.
+                        self.size_of_type(elem_ty) as i64
+                    } else {
+                        // Beyond 2D, c5 has no per-dim stride.
+                        if n != 0 {
+                            return Err(self.compile_err(format!(
+                                "static initializer index past 2D for `{}` -- \
+                                 c5 only tracks two dimensions, only `[0]` is \
+                                 accepted beyond that",
+                                self.symbols[idx].name
+                            )));
+                        }
+                        0
+                    };
+                    off += n * stride;
+                    depth += 1;
+                }
                 return Ok((off, InitElemReloc::Data));
             }
             return Err(self.compile_err(format!(
@@ -561,6 +626,33 @@ impl Compiler {
                     }
                 }
                 self.next()?; // consume `}`
+            } else if field.array_size > 0 {
+                // C99 6.7.8p20 "implicit braces removed": a flat
+                // value list inside a struct initializer can fill
+                // an array field directly, without nested braces.
+                // Absorb up to `array_size` values from the
+                // surrounding brace list; the outer struct loop
+                // then advances to the next field on the
+                // following `,`. stb_easy_font's
+                //   stb_easy_font_color c = { 255,255,255,255 };
+                // (where the struct's sole field is `unsigned char
+                // c[4]`) lands here.
+                let elem_size = self.size_of_type(field.ty);
+                let mut idx: usize = 0;
+                while (idx as i64) < field.array_size && self.lex.tk != '}' as i64 {
+                    let (value, reloc) = self.parse_constant_init_value()?;
+                    let here = field_base + idx * elem_size;
+                    self.write_init_value(here, elem_size, value, reloc);
+                    idx += 1;
+                    if idx as i64 >= field.array_size {
+                        break;
+                    }
+                    if self.lex.tk == ',' as i64 {
+                        self.next()?;
+                    } else {
+                        break;
+                    }
+                }
             } else if is_struct_ty(field.ty)
                 && struct_ptr_depth(field.ty) == 0
                 && self.lex.tk == '{' as i64

@@ -46,6 +46,19 @@
  * JPG / TGA / BMP through this same TU; PSD will be re-enabled
  * once the regression is isolated. */
 #define STBI_NO_PSD
+/* No SIMD intrinsics: stb_image gates an SSE2 JPEG IDCT path on
+ * `__x86_64__` / `_M_X64`; c5 doesn't model `__m128i` /
+ * `<emmintrin.h>` and would reject `__m128i row0;` as an undefined
+ * type on every x86 / Windows lane. STBI_NO_SIMD swaps in the
+ * plain-C IDCT, which is the path c5 already compiles cleanly. */
+#define STBI_NO_SIMD
+/* `_lrotl` is an MSVC intrinsic. msvc_compat.h sets _MSC_VER on
+ * Windows targets, which makes stb_image take the
+ * `#define stbi_lrot(x,y) _lrotl(x,y)` branch; c5 has no
+ * `_lrotl` binding, so we shim it to the same plain-C rotate the
+ * non-MSVC branch uses. The shape matches the upstream fallback at
+ * stb_image.h:670. */
+#define _lrotl(x, n) (((x) << (n)) | ((x) >> (32 - (n))))
 #include "stb_image.h"
 
 #define STB_DS_IMPLEMENTATION

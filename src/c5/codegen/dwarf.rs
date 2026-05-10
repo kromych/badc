@@ -343,7 +343,7 @@ pub(crate) fn emit(
         target,
         &program.structs,
     );
-    let debug_frame = build_debug_frame(target, &subs);
+    let debug_frame = build_debug_frame(target, &subs, plt_pool_range(build, code_vmaddr));
     let debug_str = strs.into_bytes();
 
     DwarfSections {
@@ -1564,11 +1564,37 @@ impl DebugFrameFdeHeader {
     }
 }
 
-/// Build the `.debug_frame` section: one CIE at offset 0 plus one
-/// FDE per `Subprog`. Empty if there are no subs (no callable
-/// user functions). Returns the raw byte vector.
-fn build_debug_frame(target: Target, subs: &[Subprog]) -> Vec<u8> {
-    if subs.is_empty() {
+/// VMA range covered by the PLT trampoline pool, or `None` when
+/// the binary has no imports. Used by [`build_debug_frame`] to
+/// emit one extra FDE so unwinders can step through a stub
+/// (`adrp+ldr+br` on aarch64; `jmp [rip+disp]` on x86_64) without
+/// hitting "Cannot find bounds of current function" (gh #65).
+///
+/// The trampolines are emitted contiguously at the tail of
+/// `build.text` by `emit_plt_trampolines`, so the range is
+/// `[code_vmaddr + offsets[0], code_vmaddr + build.text.len())`.
+fn plt_pool_range(build: &Build, code_vmaddr: u64) -> Option<(u64, u64)> {
+    let first = build.plt_trampoline_offsets.first().copied()?;
+    let start = code_vmaddr + first as u64;
+    let end = code_vmaddr + build.text.len() as u64;
+    if end > start { Some((start, end)) } else { None }
+}
+
+/// Build the `.debug_frame` section: one CIE at offset 0, one FDE
+/// per `Subprog`, plus an optional final FDE covering the PLT
+/// trampoline pool when present (gh #65). Empty if there are no
+/// subs and no PLT pool.
+///
+/// The PLT FDE inherits the CIE's initial rules verbatim --
+/// trampolines never touch the stack or LR/RA, so the entry-state
+/// CFA description is exactly correct for every byte of every
+/// stub.
+fn build_debug_frame(
+    target: Target,
+    subs: &[Subprog],
+    plt_pool: Option<(u64, u64)>,
+) -> Vec<u8> {
+    if subs.is_empty() && plt_pool.is_none() {
         return Vec::new();
     }
     let arch = CfiArch::of(target);
@@ -1638,6 +1664,30 @@ fn build_debug_frame(target: Target, subs: &[Subprog]) -> Vec<u8> {
         };
         header.write_le(&mut fde);
         fde.extend_from_slice(&fde_body);
+        pad_to_alignment(&mut fde, 8);
+        let actual_fde_unit_length = (fde.len() - 4) as u32;
+        fde[..4].copy_from_slice(&actual_fde_unit_length.to_le_bytes());
+        out.extend_from_slice(&fde);
+    }
+
+    // gh #65: one FDE covering the entire PLT trampoline pool.
+    // Trampolines are stack-neutral leaves -- aarch64's
+    // `adrp+ldr+br` doesn't touch sp / x30, x86_64's `jmp [rip+
+    // disp]` doesn't touch rsp. So the CIE's entry-state rule
+    // (CFA = sp + 0 with RA in x30, or CFA = rsp + 8 with RA at
+    // CFA-8) describes every byte of every stub. The FDE body
+    // is therefore empty -- it inherits from the CIE alone.
+    if let Some((start, end)) = plt_pool {
+        let mut fde = Vec::with_capacity(24);
+        let fde_inner_len = (4 /* cie_pointer */ + 8 /* initial_location */
+            + 8 /* address_range */) as u32;
+        let header = DebugFrameFdeHeader {
+            unit_length: fde_inner_len,
+            cie_pointer: 0,
+            initial_location: start,
+            address_range: end - start,
+        };
+        header.write_le(&mut fde);
         pad_to_alignment(&mut fde, 8);
         let actual_fde_unit_length = (fde.len() - 4) as u32;
         fde[..4].copy_from_slice(&actual_fde_unit_length.to_le_bytes());
@@ -2061,6 +2111,44 @@ mod tests {
             classify(s_ptr, Target::LinuxX64),
             CatalogEntry::StructPointer { id: 0, depth: 1 },
         );
+    }
+
+    #[test]
+    fn plt_pool_range_skips_when_no_imports() {
+        let mut build = Build::default();
+        build.text = alloc::vec![0u8; 0x100];
+        assert_eq!(plt_pool_range(&build, 0x1000), None);
+        // Once a trampoline is recorded, the range covers from the
+        // first stub byte to the end of `build.text`.
+        build.plt_trampoline_offsets = alloc::vec![0xc0, 0xcc];
+        build.text.extend(alloc::vec![0u8; 0x40]); // pretend trampolines are appended
+        assert_eq!(plt_pool_range(&build, 0x1000), Some((0x10c0, 0x1140)));
+    }
+
+    #[test]
+    fn debug_frame_emits_plt_fde_when_pool_present() {
+        // gh #65: the PLT trampoline pool gets one extra FDE so
+        // unwinders can step through a stub. Body is empty -- the
+        // FDE inherits the CIE's initial CFA rule, which exactly
+        // matches the trampoline's "no stack manipulation" shape.
+        let subs: Vec<Subprog> = Vec::new(); // no user subs is fine
+        let with_pool = build_debug_frame(Target::LinuxAarch64, &subs, Some((0x1100, 0x1140)));
+        let without_pool = build_debug_frame(Target::LinuxAarch64, &subs, None);
+        assert!(without_pool.is_empty(), "no subs + no pool -> empty");
+        assert!(
+            !with_pool.is_empty(),
+            "no subs + pool -> CIE + PLT FDE bytes"
+        );
+        // With an empty FDE body the unit_length field is exactly
+        // the inner header size (cie_pointer + initial_location +
+        // address_range = 4 + 8 + 8 = 20 bytes), so the FDE record
+        // is 4 (unit_length) + 20 = 24 bytes -- already 8-aligned,
+        // no DW_CFA_nop padding required.
+        let last_24 = &with_pool[with_pool.len() - 24..];
+        assert_eq!(&last_24[..4], &20u32.to_le_bytes());
+        // initial_location = 0x1100, address_range = 0x40.
+        assert_eq!(&last_24[8..16], &0x1100u64.to_le_bytes());
+        assert_eq!(&last_24[16..24], &0x40u64.to_le_bytes());
     }
 
     #[test]

@@ -406,6 +406,19 @@ fn prologue_size_for(ent_pc: usize, low_pc: usize, build: &Build) -> u32 {
     }
 }
 
+/// One-past-the-last byte of user code in `build.text`. The PLT
+/// trampoline pool (gh #61) is appended after the last user
+/// function; both the line-table end_sequence and the last
+/// `Subprog`'s `high_pc` must stop at the boundary so PLT-stub
+/// addresses fall outside every DWARF range (gh #64).
+fn end_of_user_text(build: &Build) -> usize {
+    build
+        .plt_trampoline_offsets
+        .first()
+        .copied()
+        .unwrap_or(build.text.len())
+}
+
 fn collect_subprograms(
     program: &Program,
     build: &Build,
@@ -433,8 +446,14 @@ fn collect_subprograms(
         }
         bc_pc += op.word_size();
     }
-    // Sentinel for end-of-last-function range.
-    let total_native = build.text.len();
+    // Sentinel for end-of-last-function range. The PLT trampoline
+    // pool (gh #61) is appended to `build.text` after the last user
+    // function; addresses inside the pool must NOT fall inside any
+    // user `Subprog`'s [low_pc, high_pc) range, or else gdb / lldb
+    // attribute PLT-stub hits to the closing brace of the last
+    // function (gh #64). Stop the last range at the first
+    // trampoline byte when the pool exists.
+    let total_native = end_of_user_text(build);
 
     // c5's source-function tracking attributes some `Op::Ent`s to
     // the wrong containing C function -- in sqlite's amalgamation
@@ -1802,8 +1821,12 @@ fn write_line_program(buf: &mut Vec<u8>, program: &Program, build: &Build, code_
     }
 
     // Close the sequence with end_sequence at one past the last
-    // byte.
-    let end_addr = code_vmaddr + build.text.len() as u64;
+    // byte of *user* code. The PLT trampoline pool (gh #61) lives
+    // past that point; including it would extend the previous row's
+    // `[addr_N, addr_{N+1})` coverage over every stub and gdb would
+    // mis-attribute PLT-stub hits to the closing brace of the last
+    // function (gh #64).
+    let end_addr = code_vmaddr + end_of_user_text(build) as u64;
     if end_addr > state_addr {
         advance_pc(buf, end_addr - state_addr);
     }
@@ -2038,6 +2061,25 @@ mod tests {
             classify(s_ptr, Target::LinuxX64),
             CatalogEntry::StructPointer { id: 0, depth: 1 },
         );
+    }
+
+    #[test]
+    fn end_of_user_text_skips_plt_pool() {
+        // gh #64: when the PLT trampoline pool follows user code,
+        // the line-table end_sequence and last Subprog::high_pc
+        // must stop at the first trampoline byte. Otherwise gdb /
+        // lldb attribute PLT-stub hits to the closing brace of the
+        // last user function (e.g. `b malloc` -> `main:34`).
+        let mut build = Build::default();
+        build.text = alloc::vec![0u8; 0x200];
+        build.plt_trampoline_offsets = alloc::vec![0x180, 0x18c, 0x198];
+        assert_eq!(end_of_user_text(&build), 0x180);
+
+        // No PLT pool: fall back to the full text length (the
+        // pre-#61 behaviour, still hit by hosts without imports
+        // and by `Build::default()` test fixtures).
+        build.plt_trampoline_offsets.clear();
+        assert_eq!(end_of_user_text(&build), 0x200);
     }
 
     #[test]

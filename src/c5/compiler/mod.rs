@@ -67,6 +67,16 @@ pub(super) enum InitElemReloc {
     /// resolved bytecode PC and patch both the data bytes and
     /// the matching `Program::code_relocs` entry.
     Code(usize),
+    /// Value is an IEEE-754 f64 bit pattern produced by a float
+    /// literal or a constant-folded float arithmetic expression.
+    /// The writer narrows to f32 when the element type is
+    /// `float` (4 bytes) and stores the full pattern when it's
+    /// `double` (8 bytes). No on-image relocation; the marker
+    /// only flows through to disambiguate `static float a[] = {
+    /// 1.0f, ... }` (f64 bit pattern) from `static float a[] = {
+    /// 1, ... }` (raw int that still has to be converted to
+    /// f32 bits, since the storage slot is FP, not integer).
+    Float64Bits,
 }
 
 #[derive(Debug, Clone)]
@@ -305,6 +315,16 @@ pub struct Compiler {
     /// it before falling back to the regular pointer-arithmetic
     /// stride. Zero means "use the regular stride."
     pending_index_stride: i64,
+
+    /// Per-row element count for the next 2D-array initializer.
+    /// Set by callers of `collect_array_initializer` when the
+    /// declarator has a `[N][M]` shape so a nested `{ ... }`
+    /// row that lists fewer than M values can be zero-padded to
+    /// keep subsequent rows on the right stride. Zero means
+    /// "flatten without padding" (1D arrays, struct-array
+    /// initializers that own their layout). The collector
+    /// reads-and-clears this on entry.
+    pending_init_inner_dim: i64,
 
     /// Set whenever the most recent `expr()` step ended with an
     /// array-decay-to-pointer (a bare array variable, or a
@@ -639,6 +659,7 @@ impl Compiler {
             pending_fn_params: None,
             pending_fn_ptr_indirection: None,
             pending_index_stride: 0,
+            pending_init_inner_dim: 0,
             source_lines: Vec::new(),
             source_functions: Vec::new(),
             source_files: Vec::new(),
@@ -4414,6 +4435,7 @@ impl Compiler {
                             }
                             continue;
                         }
+                        self.pending_init_inner_dim = self.symbols[id_idx].inner_array_size;
                         let elements = self.collect_array_initializer(ty)?;
                         let final_size = elements.len() as i64;
                         self.symbols[id_idx].array_size = final_size;
@@ -4528,6 +4550,7 @@ impl Compiler {
                                         "array `_Thread_local` initialisers are not supported",
                                     ));
                                 }
+                                self.pending_init_inner_dim = self.symbols[id_idx].inner_array_size;
                                 let elements = self.collect_array_initializer(ty)?;
                                 if elements.len() > array_size as usize {
                                     return Err(self.compile_err(format!(

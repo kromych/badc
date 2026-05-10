@@ -52,7 +52,7 @@ impl Compiler {
     ///                      post-body fixup pass.
     fn push_init_reloc(&mut self, here: usize, value: i64, reloc: InitElemReloc) {
         match reloc {
-            InitElemReloc::None => {}
+            InitElemReloc::None | InitElemReloc::Float64Bits => {}
             InitElemReloc::Data => {
                 self.data_relocs.push(crate::c5::program::DataReloc {
                     data_offset: here as u64,
@@ -66,6 +66,34 @@ impl Compiler {
                 });
                 self.code_reloc_sym_idx.push(sym_idx);
             }
+        }
+    }
+
+    /// Convert an initializer element's `(value, reloc)` to the
+    /// bit pattern that should land in the data segment for an
+    /// element of type `elem_ty`. c5 models every FP slot as
+    /// `f64` bits in an 8-byte slot (sizeof(float) returns 8),
+    /// so:
+    ///   * `Float64Bits` value -- already f64 bits, pass through.
+    ///   * Plain integer constant in a float/double element --
+    ///     convert int -> f64 bits so e.g.
+    ///     `static float a[] = { 1 }` ends up as the bit pattern
+    ///     of `1.0`, not `0x0000000000000001`.
+    /// Non-FP elem types and FP values destined for pointer
+    /// slots (Data / Code relocs) pass through unchanged.
+    fn to_storage_bits(&self, value: i64, reloc: InitElemReloc, elem_ty: i64) -> i64 {
+        let stripped = elem_ty & !UNSIGNED_BIT;
+        let is_fp = stripped == Ty::Float as i64 || stripped == Ty::Double as i64;
+        if !is_fp {
+            return value;
+        }
+        match reloc {
+            InitElemReloc::Float64Bits => value,
+            InitElemReloc::None => (value as f64).to_bits() as i64,
+            // Data / Code relocs land in pointer-typed slots, not
+            // FP slots; the upstream paths reject the type mix
+            // before reaching here.
+            _ => value,
         }
     }
 
@@ -97,6 +125,15 @@ impl Compiler {
         &mut self,
         elem_ty: i64,
     ) -> Result<Vec<(i64, InitElemReloc)>, C5Error> {
+        // 2D inner-dim hint -- callers set this when the declarator
+        // shape is `T xs[N][M]` so a nested `{ row }` that lists
+        // fewer than M values gets zero-padded; without padding,
+        // subsequent rows shift into the previous row's tail and
+        // `xs[i][j]` reads garbage. stb_perlin's
+        //   static float basis[12][4] = { {1,1,0}, {-1,1,0}, ... };
+        // hit this. Read-and-clear so a recursive call into an
+        // inner brace doesn't inherit it.
+        let inner_dim = core::mem::take(&mut self.pending_init_inner_dim);
         if self.lex.tk == '"' as i64 && (elem_ty & !UNSIGNED_BIT) == Ty::Char as i64 {
             let start_addr = self.lex.ival as usize;
             self.next()?;
@@ -121,14 +158,22 @@ impl Compiler {
             // Nested brace list (multi-dim array): `{ {1,2}, {3,4}, ... }`.
             // c5's array-symbol storage carries a single flat
             // dimension, so we flatten the rows by recursing and
-            // concatenating element vectors. Indexing into the
-            // multi-dim shape isn't precise (only the outermost
-            // dimension scales), but the bytes laid out in `data`
-            // match the equivalent `T xs[N*M]` layout, which is
-            // what code that walks the array linearly expects.
+            // concatenating element vectors. When `inner_dim > 0`
+            // the caller has told us the row width, so a short
+            // inner list gets padded with zero-valued elements
+            // before the next row starts.
             if self.lex.tk == '{' as i64 {
+                let before = elements.len();
                 let mut inner = self.collect_array_initializer(elem_ty)?;
                 elements.append(&mut inner);
+                if inner_dim > 0 {
+                    let written = (elements.len() - before) as i64;
+                    if written < inner_dim {
+                        for _ in 0..(inner_dim - written) {
+                            elements.push((0, InitElemReloc::None));
+                        }
+                    }
+                }
                 if self.lex.tk == ',' as i64 {
                     self.next()?;
                 }
@@ -177,7 +222,8 @@ impl Compiler {
             self.data.resize(start_addr + elements.len() * elem_size, 0);
             for (idx, &(v, reloc)) in elements.iter().enumerate() {
                 let here = start_addr + idx * elem_size;
-                self.write_init_bytes(here, v, elem_size);
+                let bits = self.to_storage_bits(v, reloc, elem_ty);
+                self.write_init_bytes(here, bits, elem_size);
                 self.push_init_reloc(here, v, reloc);
             }
         }
@@ -208,9 +254,9 @@ impl Compiler {
             self.next()?;
             if self.tk_is_float_arith_op() {
                 let bits = self.parse_const_float_add_from(f64::from_bits(v as u64))?;
-                return Ok((bits.to_bits() as i64, InitElemReloc::None));
+                return Ok((bits.to_bits() as i64, InitElemReloc::Float64Bits));
             }
-            return Ok((v, InitElemReloc::None));
+            return Ok((v, InitElemReloc::Float64Bits));
         }
         // Negative float / integer literal: `-1.5e+020` lexes as
         // `-` followed by FloatNum, and `-42` as `-` followed by
@@ -229,9 +275,9 @@ impl Compiler {
                 self.next()?;
                 if self.tk_is_float_arith_op() {
                     let folded = self.parse_const_float_add_from(f64::from_bits(bits))?;
-                    return Ok((folded.to_bits() as i64, InitElemReloc::None));
+                    return Ok((folded.to_bits() as i64, InitElemReloc::Float64Bits));
                 }
-                return Ok((bits as i64, InitElemReloc::None));
+                return Ok((bits as i64, InitElemReloc::Float64Bits));
             }
             if self.lex.tk == Token::Num as i64 {
                 let v = -self.lex.ival;
@@ -308,9 +354,9 @@ impl Compiler {
                 // the float expression chain.
                 if self.tk_is_float_arith_op() {
                     let folded = self.parse_const_float_add_from(v)?;
-                    return Ok((folded.to_bits() as i64, InitElemReloc::None));
+                    return Ok((folded.to_bits() as i64, InitElemReloc::Float64Bits));
                 }
-                return Ok((v.to_bits() as i64, InitElemReloc::None));
+                return Ok((v.to_bits() as i64, InitElemReloc::Float64Bits));
             }
             let v = self.parse_const_expr_or()?;
             if self.lex.tk != ')' as i64 {
@@ -566,7 +612,8 @@ impl Compiler {
         let elem_size = self.size_of_type(elem_ty);
         let mut byte_off = var_offset as usize;
         for &(v, reloc) in elements {
-            self.write_init_bytes(byte_off, v, elem_size);
+            let bits = self.to_storage_bits(v, reloc, elem_ty);
+            self.write_init_bytes(byte_off, bits, elem_size);
             // char-element arrays never carry a relocation kind --
             // the elements are bare bytes from a string literal --
             // so the reloc-push helper's None branch is the only

@@ -89,6 +89,19 @@ static int scenario_perlin(void) {
      * instead. */
     float a = stb_perlin_noise3(1.5f, 2.5f, 0.5f, 0, 0, 0);
     float b = stb_perlin_noise3(7.25f, 0.125f, 4.0f, 0, 0, 0);
+    /* NaN guard first: `nan < -1.0` and `nan > 1.0` both evaluate
+     * to false on every platform, so without an `!=` self-check
+     * a NaN result would silently pass the bounds gate. The
+     * 2D-array `static float basis[12][4] = {{1,1,0},...}`
+     * init at the heart of Perlin's grad table needs row
+     * padding to land each row on the right stride; before
+     * the fix landed, basis decayed to junk floats and the
+     * gradient dot products produced NaN. */
+    if (a != a || b != b) {
+        fprintf(stderr, "stb smoke: perlin returned NaN: a=%f b=%f\n",
+                (double)a, (double)b);
+        return 1;
+    }
     if (a < -1.0f || a > 1.0f || b < -1.0f || b > 1.0f) {
         fprintf(stderr, "stb smoke: perlin out of [-1,1]: a=%f b=%f\n",
                 (double)a, (double)b);

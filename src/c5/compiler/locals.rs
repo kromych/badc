@@ -205,6 +205,7 @@ impl Compiler {
                     }
                     return Ok(());
                 }
+                self.pending_init_inner_dim = self.symbols[loc_idx].inner_array_size;
                 let elements = self.collect_array_initializer(ty)?;
                 let final_size = elements.len() as i64;
                 self.symbols[loc_idx].array_size = final_size;
@@ -220,6 +221,7 @@ impl Compiler {
                 }
                 self.write_array_init_into_data(off, ty, &elements);
             } else if array_size > 0 {
+                self.pending_init_inner_dim = self.symbols[loc_idx].inner_array_size;
                 let elements = self.collect_array_initializer(ty)?;
                 let var_offset = self.symbols[loc_idx].val;
                 self.write_array_init_into_data(var_offset, ty, &elements);
@@ -335,6 +337,7 @@ impl Compiler {
                 // identical to before this fix when no runtime
                 // expressions are present.
             }
+            self.pending_init_inner_dim = self.symbols[loc_idx].inner_array_size;
             let elements = self.collect_array_initializer(ty)?;
             let final_size = elements.len() as i64;
             self.symbols[loc_idx].array_size = final_size;
@@ -379,6 +382,7 @@ impl Compiler {
                     )?;
                     return Ok(());
                 }
+                self.pending_init_inner_dim = self.symbols[loc_idx].inner_array_size;
                 let elements = self.collect_array_initializer(ty)?;
                 let init_count = elements.len();
                 let max = declared_array_size as usize;

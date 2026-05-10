@@ -91,3 +91,10 @@ End-to-end of the upstream [KISS FFT](https://github.com/mborgerding/kissfft)
 amalgamation. First real FP exerciser: impulse FFT, forward+inverse
 round-trip, real-only `kiss_fftr` against a sine wave, all at -O
 and noO. See [`kissfft/README.md`](./kissfft/README.md).
+
+## bzip2/
+
+End-to-end of the upstream [bzip2](https://sourceware.org/bzip2/)
+1.0.8 library. Integer + bit-twiddle heavy (BWT, MTF, RLE, Huffman);
+exercises a different code shape from miniz's deflate. Aligns with
+gh #11. See [`bzip2/README.md`](./bzip2/README.md).

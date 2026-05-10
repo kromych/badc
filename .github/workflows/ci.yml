@@ -186,6 +186,14 @@ jobs:
         # regressions (xmm0 / d0 return value, FP arg masks
         # through the optimizer, ...).
         run: python demos/kissfft/smoke.py
+      - name: bzip2 amalgamation smoke
+        # Third non-trivial demo. Integer + bit-twiddle heavy:
+        # BWT, move-to-front, run-length encoding, and Huffman
+        # coding through a 128-bit bitstream packer. Compresses +
+        # decompresses a 600-byte buffer at blockSize 1 and 9 at
+        # both -O and noO. Different code shape from miniz's
+        # deflate.
+        run: python demos/bzip2/smoke.py
 
   features:
     name: feature combos

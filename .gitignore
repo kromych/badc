@@ -30,6 +30,15 @@ demos/kissfft/*
 !demos/kissfft/smoke.py
 !demos/kissfft/smoke_main.c
 !demos/kissfft/README.md
+# bzip2 release tarball -- same pattern. `setup.py` fetches
+# the upstream 1.0.8 .tar.gz and drops the library .c/.h files
+# in place; only the runner scripts + driver source are
+# committed.
+demos/bzip2/*
+!demos/bzip2/setup.py
+!demos/bzip2/smoke.py
+!demos/bzip2/smoke_main.c
+!demos/bzip2/README.md
 hello
 sqlite3_main
 # Local crash artefacts (kept out of git but useful while working on

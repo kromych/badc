@@ -348,34 +348,63 @@ fn round_up(n: u64, align: u64) -> u64 {
 // ------------------------------------------------------------------
 
 /// Stub byte length per machine. Used for layout calculations.
-fn start_stub_len(machine: Machine) -> u64 {
-    match machine {
-        Machine::Aarch64 => 6 * 4, // 6 aarch64 instructions
-        Machine::X86_64 => x86_64::START_STUB_LEN,
+///
+/// `use_libc_exit` selects the longer (libc-routed) tail when the
+/// program has a libc `exit` binding in scope; the syscall tail
+/// (gh #69) is shorter on aarch64 and one byte longer on x86_64.
+fn start_stub_len(machine: Machine, use_libc_exit: bool) -> u64 {
+    match (machine, use_libc_exit) {
+        // aarch64 libc tail: adrp + ldr + blr = 3 instructions.
+        // aarch64 syscall tail: movz w8, #94 + svc #0 = 2
+        // instructions. Saves 4 bytes.
+        (Machine::Aarch64, true) => 6 * 4,
+        (Machine::Aarch64, false) => 5 * 4,
+        // x86_64 libc tail: mov rdi, rax (3) + call qword
+        //   [rip+disp32] (6) = 9 bytes after the 14-byte prefix.
+        // x86_64 syscall tail: mov rdi, rax (3) + mov eax, imm32
+        //   (5) + syscall (2) = 10 bytes after the prefix --
+        //   one byte longer.
+        (Machine::X86_64, true) => x86_64::START_STUB_LEN,
+        (Machine::X86_64, false) => x86_64::START_STUB_LEN_SYSCALL,
     }
 }
 
-/// Emit the `_start` prologue for the given machine. Returns the
-/// byte offset of the libc-exit GOT call placeholder so the caller
-/// can register a `GotFixup` for it. Both arches route exit through
-/// libc so glibc flushes stdio before the process actually quits.
+/// Emit the `_start` prologue for the given machine. When
+/// `use_libc_exit` is `true` the stub tail is `adrp/ldr/blr`
+/// (aarch64) / `call qword [rip+disp32]` (x86_64) through the
+/// libc `exit` GOT slot, and we return `Some(byte_offset)` so
+/// the caller can register a `GotFixup` against it. When
+/// `false` (gh #69), the stub direct-syscalls
+/// `sys_exit_group` so the resulting binary has no libc
+/// dependency, and we return `None`. Routing through libc is
+/// preferred when available because glibc's `exit` flushes
+/// stdio buffers; the syscall tail is for binaries that
+/// neither include `<stdlib.h>` nor use stdio at all.
 fn emit_start_stub(
     machine: Machine,
     abi: Abi,
     code: &mut Vec<u8>,
     main_offset_in_code: u64,
-) -> usize {
+    use_libc_exit: bool,
+) -> Option<usize> {
     match machine {
-        Machine::Aarch64 => emit_start_stub_aarch64(abi, code, main_offset_in_code),
-        Machine::X86_64 => x86_64::emit_start_stub(code, abi, main_offset_in_code),
+        Machine::Aarch64 => emit_start_stub_aarch64(abi, code, main_offset_in_code, use_libc_exit),
+        Machine::X86_64 => {
+            x86_64::emit_start_stub(code, abi, main_offset_in_code, use_libc_exit)
+        }
     }
 }
 
-/// AArch64 `_start`: ldr argc; add argv; bl main; adrp/ldr/blr libc
-/// exit.
-fn emit_start_stub_aarch64(abi: Abi, code: &mut Vec<u8>, main_offset_in_code: u64) -> usize {
+/// AArch64 `_start`: ldr argc; add argv; bl main; then either
+/// `adrp/ldr/blr libc::exit` or `mov w8, #94; svc #0` (gh #69).
+fn emit_start_stub_aarch64(
+    abi: Abi,
+    code: &mut Vec<u8>,
+    main_offset_in_code: u64,
+    use_libc_exit: bool,
+) -> Option<usize> {
     use aarch64::Reg;
-    let stub_len = 6 * 4;
+    let stub_len = start_stub_len(Machine::Aarch64, use_libc_exit);
 
     // argc / argv land in the first two of the ABI's
     // int-arg-passing registers. AAPCS64's order is x0..x7 so
@@ -392,17 +421,31 @@ fn emit_start_stub_aarch64(abi: Abi, code: &mut Vec<u8>, main_offset_in_code: u6
     let delta_insns = ((main_pc - bl_pc) / 4) as i32;
     aarch64::emit(code, aarch64::enc_bl(delta_insns));
 
-    // Placeholder adrp + ldr + blr through the libc exit GOT slot.
-    // The caller appends a GotFixup with adrp_offset = current code
-    // length so the writer fills in imm21/imm12 once the GOT vmaddr
-    // is known.
-    let exit_adrp_offset = code.len();
-    aarch64::emit(code, aarch64::enc_adrp(Reg::X16, 0));
-    aarch64::emit(code, aarch64::enc_ldr_imm(Reg::X16, Reg::X16, 0));
-    aarch64::emit(code, aarch64::enc_blr(Reg::X16));
+    let result = if use_libc_exit {
+        // Placeholder adrp + ldr + blr through the libc exit GOT
+        // slot. The caller appends a GotFixup with adrp_offset =
+        // current code length so the writer fills in imm21/imm12
+        // once the GOT vmaddr is known.
+        let exit_adrp_offset = code.len();
+        aarch64::emit(code, aarch64::enc_adrp(Reg::X16, 0));
+        aarch64::emit(code, aarch64::enc_ldr_imm(Reg::X16, Reg::X16, 0));
+        aarch64::emit(code, aarch64::enc_blr(Reg::X16));
+        Some(exit_adrp_offset)
+    } else {
+        // gh #69: direct `sys_exit_group` (Linux aarch64 syscall
+        // 94). main's int return value is already in x0/w0, which
+        // is the syscall's first arg. svc #0 transfers control to
+        // the kernel and never returns.
+        // movz w8, #94 -- Linux aarch64 sys_exit_group number.
+        // The 16-bit shift amount (`hw`) is 0 since 94 fits in
+        // the low 16 bits.
+        aarch64::emit(code, aarch64::enc_movz(Reg::X8, 94, 0));
+        aarch64::emit(code, aarch64::enc_svc(0));
+        None
+    };
 
     debug_assert_eq!(code.len() as u64, stub_len);
-    exit_adrp_offset
+    result
 }
 
 // ------------------------------------------------------------------
@@ -956,14 +999,26 @@ pub(super) fn write(
 ) -> Result<Vec<u8>, C5Error> {
     let is_shared = build.output_kind == super::OutputKind::SharedLibrary;
     let n_imports = build.imports.imports.len();
+    // gh #69: pick the libc-exit tail when the user has any
+    // libc `exit` import (typically through `<stdlib.h>`),
+    // otherwise emit a direct sys_exit_group syscall and avoid
+    // pulling libc in just to terminate. Stays opt-in to libc so
+    // programs that print via stdio still get glibc's
+    // end-of-process flush.
+    let use_libc_exit = build
+        .imports
+        .imports
+        .iter()
+        .any(|i| i.local_name == "exit");
     // Shared libraries don't have a `_start` stub -- dyld
     // never jumps into them, callers reach exports via
     // `dlsym`. Executables keep the existing stub that
-    // tail-calls libc `exit`.
+    // tail-calls libc `exit` (when libc is available) or
+    // direct-syscalls (when it isn't).
     let stub_len = if is_shared {
         0
     } else {
-        start_stub_len(machine)
+        start_stub_len(machine, use_libc_exit)
     };
     let exports = if is_shared {
         &build.exports[..]
@@ -1033,10 +1088,20 @@ pub(super) fn write(
     // point), and emitting one would force a libc-exit
     // import that isn't otherwise needed.
     let mut code: Vec<u8> = Vec::with_capacity(stub_len as usize + build.text.len());
+    // `Some(byte_offset)` for the libc-exit GOT placeholder, or
+    // `None` when the stub direct-syscalls (gh #69) / for shared
+    // libraries that emit no stub at all. `None` short-circuits
+    // the writer's later GOT-fixup patch.
     let exit_adrp_offset = if is_shared {
-        usize::MAX
+        None
     } else {
-        emit_start_stub(machine, build.abi, &mut code, build.entry_offset as u64)
+        emit_start_stub(
+            machine,
+            build.abi,
+            &mut code,
+            build.entry_offset as u64,
+            use_libc_exit,
+        )
     };
     code.extend_from_slice(&build.text);
     let code_size = code.len() as u64;
@@ -1945,7 +2010,7 @@ pub(super) fn write(
     // entirely; the stub-len shift below collapses to zero
     // and the libc-exit GOT lookup never gets emitted in
     // the first place.
-    if !is_shared {
+    if let Some(exit_off) = exit_adrp_offset {
         let exit_idx = build
             .imports
             .imports
@@ -1953,9 +2018,9 @@ pub(super) fn write(
             .position(|i| i.local_name == "exit")
             .ok_or_else(|| {
                 C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    "ELF writer: _start stub needs `exit` in the import set, but the program \
-                     didn't reach for it (and we don't auto-add it). \
-                     Did you `#include <stdlib.h>` and call `exit(...)` somewhere?",
+                    "ELF writer: _start stub asked for the libc-exit tail but `exit` \
+                     isn't in the import set -- the codegen lower-pass and the writer \
+                     disagree on whether libc is in scope.",
                 ))
             })?;
         patch_got_call(
@@ -1963,11 +2028,15 @@ pub(super) fn write(
             &mut out,
             code_file_offset,
             code_vmaddr,
-            exit_adrp_offset as u64,
+            exit_off as u64,
             got_vmaddr + (exit_idx as u64) * 8,
             "_start exit fixup",
         )?;
     }
+    // gh #69: the syscall tail (`exit_adrp_offset == None`) needs
+    // no patch -- the `mov rax, 231; syscall` (x86_64) /
+    // `movz x8, #94; svc #0` (aarch64) bytes are absolute and
+    // self-contained.
 
     // GOT fixups for libc calls inside build.text. Same per-arch
     // dispatch as the _start exit call.

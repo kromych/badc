@@ -979,7 +979,23 @@ fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Resul
     // a "no `#pragma binding(libc::exit, ...)`" error on
     // sources that legitimately don't include `<stdlib.h>`.
     let is_shared = options.output_kind == OutputKind::SharedLibrary;
-    if !is_shared && matches!(target, Target::LinuxAarch64 | Target::LinuxX64) {
+    // gh #69: only force-include libc `exit` when the user
+    // already declared a binding for it (typically via
+    // `#include <stdlib.h>`). When no `exit` binding is in
+    // scope, the ELF `_start` stub falls back to a direct
+    // `sys_exit_group` syscall and the resulting binary has no
+    // libc dependency at all -- so trivial fixtures like
+    // `int main() { return argc; }` compile without any header
+    // include.
+    let exit_binding_in_scope = program
+        .dylibs
+        .iter()
+        .flat_map(|d| d.bindings.iter())
+        .any(|b| b.local_name == "exit");
+    if !is_shared
+        && matches!(target, Target::LinuxAarch64 | Target::LinuxX64)
+        && exit_binding_in_scope
+    {
         imports.force_include_by_name("exit", program)?;
     }
     // macOS arm64 with `_Thread_local` globals needs libSystem

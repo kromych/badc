@@ -5,60 +5,36 @@ After this runs, ``demos/sqlite3/{sqlite3.c, shell.c,
 sqlite3.h, sqlite3ext.h}`` exist and are ready for badc to
 compile against.
 
-The archive lives on a `kromych/badc` GitHub release rather than
-sqlite.org for CI stability. The filename embeds the upstream
-version and the upstream Fossil release hash short-prefix
-(SQLite uses Fossil rather than git, so the SHA matches
-`SQLITE_SOURCE_ID` in `sqlite3.c`); integrity is checked against
-a pinned sha256 before extraction.
+Pulls from the `kromych/badc` GitHub release rather than
+sqlite.org to avoid CI flakes. Filename embeds the upstream
+version + Fossil release hash short-prefix (SQLite uses Fossil
+rather than git, so the SHA matches `SQLITE_SOURCE_ID` in
+`sqlite3.c`); `_fetch` verifies a pinned sha256 before
+extraction. See ``scripts/vendor_deps/README.md`` for the auth
+model.
 
-Idempotent: re-running re-extracts the vanilla files. Safe to
-call from CI before each smoke run. Output is suppressed
-unless something fails -- pass ``-v`` to see every step.
+Idempotent: safe to call from CI before each smoke run. Output is
+suppressed unless something fails -- pass ``-v`` to see every step.
 """
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import shutil
 import sys
-import urllib.request
 import zipfile
 from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "scripts" / "vendor_deps"))
+import _fetch  # noqa: E402
 
 VERSION = "3530000"  # 3.53.0 (April 2026)
 UPSTREAM_SHA = "4525003a53a7fc63ca75c59b22c79608659ca12f0131f52c18637f829977f20b"  # SQLite Fossil release hash for 3.53.0
 ASSET = f"sqlite-amalgamation-{VERSION}-{UPSTREAM_SHA[:8]}.zip"
 RELEASE_TAG = "vendor-deps-v1"
-URL = f"https://github.com/kromych/badc/releases/download/{RELEASE_TAG}/{ASSET}"
 SHA256 = "bf3733d7c71b3ab0f6fd8a9ea0052ad87fa037d94333e14ce09878ba3492c3b0"
 WANTED = ("sqlite3.c", "sqlite3.h", "sqlite3ext.h", "shell.c")
-
-
-def sha256_of(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-def ensure_archive(dst: Path, log) -> None:
-    if dst.is_file() and sha256_of(dst) == SHA256:
-        return
-    if dst.is_file():
-        log(f"stale archive at {dst}, refetching")
-        dst.unlink()
-    log(f"fetching {URL}")
-    with urllib.request.urlopen(URL) as resp, dst.open("wb") as out:
-        shutil.copyfileobj(resp, out)
-    actual = sha256_of(dst)
-    if actual != SHA256:
-        dst.unlink(missing_ok=True)
-        sys.exit(
-            f"sha256 mismatch on {ASSET}: expected {SHA256}, got {actual}"
-        )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -76,7 +52,7 @@ def main(argv: list[str] | None = None) -> int:
     extract_root = cache_dir / f"sqlite-amalgamation-{VERSION}"
 
     cache_dir.mkdir(parents=True, exist_ok=True)
-    ensure_archive(zip_path, log)
+    _fetch.fetch_and_verify(RELEASE_TAG, ASSET, zip_path, SHA256, log)
 
     log("extracting amalgamation")
     if extract_root.exists():

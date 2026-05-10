@@ -57,3 +57,7 @@ trigger.sql
 *.lzma
 *.zip
 vendor-deps-bundle/
+
+# Python bytecode caches from `setup.py` importing `_fetch.py`.
+__pycache__/
+*.pyc

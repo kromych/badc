@@ -54,3 +54,35 @@ any reason):
 Local `setup.py` runs use the same code path: cached
 archives in `demos/<lib>/.cache/` are reused on a sha256
 hit, refetched on a miss.
+
+## Auth model (`_fetch.py`)
+
+Each demo's `setup.py` calls into `_fetch.py`, which has two
+download paths:
+
+* **`GITHUB_TOKEN` / `GH_TOKEN` set** -- look the asset up by
+  name on the tagged release via `api.github.com`, then GET its
+  asset URL with `Accept: application/octet-stream`. GitHub
+  redirects to a short-lived signed CDN URL; urllib follows.
+  Works for private and public repos.
+* **No token** -- hit the public
+  `https://github.com/<repo>/releases/download/<tag>/<name>`
+  URL anonymously. Works once the repo is public; while the
+  repo is private GitHub returns 404 to anyone unauthenticated
+  (it does not distinguish 401 from 404 to avoid leaking repo
+  existence).
+
+The token is only ever sent to `api.github.com` over TLS,
+never echoed in error messages, never persisted. CI's
+auto-provisioned `secrets.GITHUB_TOKEN` is mapped into env in
+`.github/workflows/ci.yml`; once the repo is public that
+mapping (and any local `export GITHUB_TOKEN=$(gh auth token)`)
+becomes unnecessary, and external contributors can run the
+smokes without ever touching a token.
+
+Local cheat-sheet for a private-repo run:
+
+```sh
+export GITHUB_TOKEN=$(gh auth token)
+python3 demos/sqlite3/smoke.py    # or any other demo's smoke
+```

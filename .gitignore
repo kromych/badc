@@ -51,3 +51,9 @@ shell.x64.test
 shell.aarch64.test
 trigger.sql
 .claude/
+
+*.gz
+*.bzip2
+*.lzma
+*.zip
+vendor-deps-bundle/

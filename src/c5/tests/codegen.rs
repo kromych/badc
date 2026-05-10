@@ -103,3 +103,95 @@ fn build_info_marker_appears_in_every_target() {
         );
     }
 }
+
+/// gh #62: `--no-debug` / `with_debug_info(false)` strips DWARF
+/// from the emitted image. The `debug_info` substring shows up
+/// in the section-name tables of every format we emit -- ELF
+/// has `.debug_info` in `.shstrtab`, PE has `.debug_info` in the
+/// COFF string table (8-char section-name field overflows to
+/// the strtab), Mach-O has `__debug_info` in its `Section64`
+/// table -- so its presence / absence is a single substring scan
+/// per target. Default options keep DWARF on; the toggle drops
+/// every byte of it.
+#[test]
+fn with_debug_info_false_strips_dwarf_for_every_target() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    let program = super::compile_str("int main() { return 0; }");
+    let needle = b"debug_info";
+    for target in [
+        Target::MacOSAarch64,
+        Target::LinuxAarch64,
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let on = emit_native_with_options(&program, target, NativeOptions::default())
+            .unwrap_or_else(|e| panic!("emit_native(on, {target:?}): {e}"));
+        assert!(
+            on.windows(needle.len()).any(|w| w == needle),
+            "{target:?}: expected `debug_info` section name in default (DWARF-on) image"
+        );
+        let off = emit_native_with_options(
+            &program,
+            target,
+            NativeOptions::new().with_debug_info(false),
+        )
+        .unwrap_or_else(|e| panic!("emit_native(off, {target:?}): {e}"));
+        assert!(
+            !off.windows(needle.len()).any(|w| w == needle),
+            "{target:?}: `debug_info` byte sequence leaked into the no-debug image \
+             (DWARF section name should be gone)"
+        );
+        assert!(
+            off.len() < on.len(),
+            "{target:?}: no-debug image ({} bytes) should be strictly smaller than \
+             default ({} bytes)",
+            off.len(),
+            on.len()
+        );
+    }
+}
+
+/// gh #61: every emitted target gets one PLT trampoline per
+/// import plus a matching local-name symbol table entry. The
+/// trampoline lets `gdb b malloc` resolve into our binary
+/// instead of getting lost in the dynamic linker; the local
+/// symbol gives the trampoline a real name (`nm` shows it,
+/// `objdump -d` annotates calls with `malloc@plt`-style
+/// labels).
+///
+/// Cross-target structural check: a tiny program that calls
+/// `printf` emits a binary whose bytes contain the import name
+/// at least twice -- once in the dynamic-import table and once
+/// in the static symtab (PE COFF symtab / ELF `.symtab` /
+/// Mach-O `__LINKEDIT` symbol entries). Pre-#61 the static
+/// occurrence didn't exist.
+#[test]
+fn plt_trampoline_local_names_appear_in_every_target() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    // Call `printf` so the resolver pulls it in as an import on
+    // every target (the test prelude `#include <stdio.h>` is
+    // already wired up via `compile_str`). With the import in
+    // hand, the assertions below check that the binary's bytes
+    // contain the import name at least twice -- once in the
+    // dynamic-import table and once in the static (PLT-trampoline)
+    // symbol table that gh #61 added.
+    let program = super::compile_str("int main() { printf(\"x\"); return 0; }");
+    let needle = b"printf";
+    for target in [
+        Target::MacOSAarch64,
+        Target::LinuxAarch64,
+        Target::LinuxX64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let bytes = emit_native_with_options(&program, target, NativeOptions::default())
+            .unwrap_or_else(|e| panic!("emit_native({target:?}): {e}"));
+        let occurrences = bytes.windows(needle.len()).filter(|w| *w == needle).count();
+        assert!(
+            occurrences >= 2,
+            "{target:?}: expected `printf` byte sequence at least twice (dynamic \
+             import + local PLT-trampoline symbol), found {occurrences}"
+        );
+    }
+}

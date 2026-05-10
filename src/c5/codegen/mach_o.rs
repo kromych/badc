@@ -1163,7 +1163,7 @@ fn symtab_command(symoff: u32, nsyms: u32, stroff: u32, strsize: u32) -> Vec<u8>
 /// entry, only present in shared-library output); the
 /// remaining `nundefsym` are `N_EXT | N_UNDF` imports (one
 /// per resolved libc binding).
-fn dysymtab_command(nextdefsym: u32, nundefsym: u32) -> Vec<u8> {
+fn dysymtab_command(nlocalsym: u32, nextdefsym: u32, nundefsym: u32) -> Vec<u8> {
     let mut out = Vec::with_capacity(DYSYMTAB_COMMAND_SIZE);
     write_struct(
         &mut out,
@@ -1171,10 +1171,10 @@ fn dysymtab_command(nextdefsym: u32, nundefsym: u32) -> Vec<u8> {
             cmd: LC_DYSYMTAB,
             cmdsize: DYSYMTAB_COMMAND_SIZE as u32,
             ilocalsym: 0,
-            nlocalsym: 0,
-            iextdefsym: 0,
+            nlocalsym,
+            iextdefsym: nlocalsym,
             nextdefsym,
-            iundefsym: nextdefsym,
+            iundefsym: nlocalsym + nextdefsym,
             nundefsym,
             tocoff: 0,
             ntoc: 0,
@@ -1535,6 +1535,26 @@ fn nlist_undef(n_strx: u32, ordinal: u8) -> Vec<u8> {
 /// in. The shared-library writer emits one of these per
 /// `Program::exports` entry, with `N_EXT | N_SECT` so dyld /
 /// `dlsym` will surface the symbol to other images.
+/// One `nlist_64` for a file-local symbol -- `N_SECT` *without*
+/// `N_EXT`, so dyld leaves it out of dlsym lookups but the host's
+/// debugger and `nm` still see the name. Used by gh #61 to label
+/// each PLT trampoline with its libc import name.
+fn nlist_local(n_strx: u32, n_value: u64, n_sect: u8) -> Vec<u8> {
+    let mut out = Vec::with_capacity(NLIST_64_SIZE);
+    write_struct(
+        &mut out,
+        &Nlist64 {
+            n_strx,
+            n_type: N_SECT,
+            n_sect,
+            n_desc: 0,
+            n_value,
+        },
+    );
+    debug_assert_eq!(out.len(), NLIST_64_SIZE);
+    out
+}
+
 fn nlist_defined(n_strx: u32, n_value: u64, n_sect: u8) -> Vec<u8> {
     let mut out = Vec::with_capacity(NLIST_64_SIZE);
     write_struct(
@@ -1628,9 +1648,13 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // distinct vmaddrs, dyld's `vmsize > filesize` check passes
     // and dyld 4's dlsym-by-symbol-table fallback no longer
     // shadows the strtab against __DWARF.
-    let emit_dwarf = true;
+    let emit_dwarf = build.debug_info;
     let _ = is_dylib;
-    let dwarf_seg_size = (SEGMENT_COMMAND_64_SIZE + 5 * SECTION_64_SIZE) as u64;
+    let dwarf_seg_size = if emit_dwarf {
+        (SEGMENT_COMMAND_64_SIZE + 5 * SECTION_64_SIZE) as u64
+    } else {
+        0
+    };
     let dyld_info_size = DYLD_INFO_COMMAND_SIZE as u64;
     let symtab_size = SYMTAB_COMMAND_SIZE as u64;
     let dysymtab_size = DYSYMTAB_COMMAND_SIZE as u64;
@@ -1812,8 +1836,35 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         .iter()
         .map(|e| format!("_{}", e.name))
         .collect();
-    let mut symbol_names: Vec<&str> = export_disk_names.iter().map(|s| s.as_str()).collect();
-    let n_exports = symbol_names.len();
+    // gh #61: per-PLT-trampoline local names go first in the
+    // symtab so the LC_DYSYMTAB ranges stay in canonical order
+    // (locals, then defined externals, then undefined). The
+    // bind opcodes carry symbol *names* inline, so re-ordering
+    // doesn't disturb dyld's binding logic.
+    //
+    // Use the c5-side `local_name` (e.g. "malloc") rather than
+    // `real_symbol` ("_malloc") so `nm`/`lldb` show the name
+    // the C source uses.
+    //
+    // Test fixtures sometimes hand us a `Build` with imports but
+    // no trampoline offsets (no per-arch lower() ran); in that
+    // case we skip the local section.
+    let emit_plt_locals = !build.plt_trampoline_offsets.is_empty();
+    let mut symbol_names: Vec<&str> = if emit_plt_locals {
+        build
+            .imports
+            .imports
+            .iter()
+            .map(|imp| imp.local_name.as_str())
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let n_locals = symbol_names.len();
+    for s in export_disk_names.iter() {
+        symbol_names.push(s.as_str());
+    }
+    let n_exports = symbol_names.len() - n_locals;
     for imp in &build.imports.imports {
         symbol_names.push(imp.real_symbol.as_str());
     }
@@ -1822,14 +1873,29 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     }
     let (strtab, str_indices) = build_strtab(&symbol_names);
     let mut symtab = Vec::with_capacity(NLIST_64_SIZE * symbol_names.len());
-    // Defined exports (N_EXT | N_SECT) -- first in the table
-    // so the LC_DYSYMTAB extdef range is `[0, n_exports)`.
-    // Each one's `n_value` is the runtime VA of the function:
-    // the code segment's vmaddr base plus the function's
-    // native-byte offset within `build.text`.
+
     let code_vmaddr_base = TEXT_VMADDR_BASE + entry_file_offset;
+
+    // [Locals] gh #61: one entry per PLT trampoline.
+    if emit_plt_locals {
+        debug_assert_eq!(
+            build.plt_trampoline_offsets.len(),
+            build.imports.imports.len(),
+            "trampoline-offset count must match import count"
+        );
+        for (i, _imp) in build.imports.imports.iter().enumerate() {
+            let n_strx = str_indices[i];
+            let n_value = code_vmaddr_base + build.plt_trampoline_offsets[i] as u64;
+            symtab.extend_from_slice(&nlist_local(n_strx, n_value, SECT_INDEX_TEXT));
+        }
+    }
+
+    // [Defined exports] (N_EXT | N_SECT). Each one's `n_value`
+    // is the runtime VA of the function: the code segment's
+    // vmaddr base plus the function's native-byte offset within
+    // `build.text`.
     for (i, exp) in build.exports.iter().enumerate() {
-        let n_strx = str_indices[i];
+        let n_strx = str_indices[n_locals + i];
         let native_off = build
             .bytecode_to_native
             .get(exp.bytecode_pc)
@@ -1847,10 +1913,10 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         let n_value = code_vmaddr_base + native_off as u64;
         symtab.extend_from_slice(&nlist_defined(n_strx, n_value, SECT_INDEX_TEXT));
     }
-    // Imports (N_EXT | N_UNDF) -- the existing path, just
-    // shifted by the export offset in `str_indices`.
+    // [Undefined imports] (N_EXT | N_UNDF). Indices in
+    // `str_indices` are shifted past the locals + exports.
     for (j, imp) in build.imports.imports.iter().enumerate() {
-        let n_strx = str_indices[n_exports + j];
+        let n_strx = str_indices[n_locals + n_exports + j];
         let ordinal = (imp.dylib_index + 1) as u8;
         symtab.extend_from_slice(&nlist_undef(n_strx, ordinal));
     }
@@ -1868,7 +1934,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         let bootstrap_strx = str_indices[symbol_names.len() - 1];
         symtab.extend_from_slice(&nlist_undef(bootstrap_strx, bootstrap_dylib_ordinal));
     }
-    let n_undef = symbol_names.len() - n_exports;
+    let n_undef = symbol_names.len() - n_locals - n_exports;
 
     // __LINKEDIT: rebase opcodes, then bind opcodes, then
     // symtab, then strtab. Rebase comes first because dyld
@@ -1900,12 +1966,16 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         dwarf_filesize,
         dwarf_tail_pad,
     ) = if emit_dwarf {
+        // gh #68: Mach-O routes argc/argv through `LC_MAIN`,
+        // not an emitted stub, so there's no entry-stub range to
+        // describe.
         let s = dwarf::emit(
             program,
             build,
             super::Target::MacOSAarch64,
             code_vmaddr_base,
             &program.source_path,
+            None,
         );
         let fileoff = data_fileoff + data_filesize;
         let info = fileoff;
@@ -2061,7 +2131,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         stroff as u32,
         strtab.len() as u32,
     );
-    let dysymtab_lc = dysymtab_command(n_exports as u32, n_undef as u32);
+    let dysymtab_lc = dysymtab_command(n_locals as u32, n_exports as u32, n_undef as u32);
     // For executables: LC_MAIN with the entry-point file
     // offset. For dylibs: no entry; LC_ID_DYLIB takes its
     // place (already constructed above).
@@ -2384,6 +2454,7 @@ mod tests {
                     is_variadic: false,
                     fixed_args: 3,
                     return_type_tag: 0,
+                    param_types: Vec::new(),
                 }],
                 dylibs: vec![ResolvedDylib {
                     name: "libc".into(),
@@ -2401,6 +2472,8 @@ mod tests {
             dllmain_pc: None,
             macho_tlv_fixups: Vec::new(),
             macho_tlv_descriptors: Vec::new(),
+            debug_info: true,
+            plt_trampoline_offsets: Vec::new(),
         }
     }
 

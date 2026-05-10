@@ -3857,6 +3857,13 @@ impl Compiler {
                                     binding.is_variadic = variadic;
                                     binding.fixed_args = fixed;
                                     binding.return_type_tag = ret_ty;
+                                    // gh #67: per-param types for the
+                                    // DWARF subprogram DIE the codegen
+                                    // emits over each PLT trampoline.
+                                    // Without these, gdb shows
+                                    // `in malloc ()` instead of
+                                    // `in malloc (size=...)`.
+                                    binding.param_types = params.types.clone();
                                 }
                             }
                         }

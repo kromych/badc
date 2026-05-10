@@ -121,6 +121,14 @@ pub(crate) struct Binding {
     /// the prototype hasn't been seen yet; the codegen treats
     /// that as "no extension needed".
     pub return_type_tag: i64,
+    /// Per-fixed-parameter type tags from the prototype (same
+    /// encoding as `return_type_tag`). Captured by the parser at
+    /// the same fold-site that fills `fixed_args` / `is_variadic`,
+    /// then carried into `ResolvedImport` so the DWARF emitter
+    /// can give each PLT trampoline a `DW_TAG_subprogram` with
+    /// `DW_TAG_formal_parameter` children typed accurately
+    /// (gh #67). Empty when the parser hasn't seen the prototype.
+    pub param_types: Vec<i64>,
     /// c5-side name the source uses (e.g. `printf`).
     pub local_name: String,
     /// Symbol name exported by the dylib. Differs from `local_name`
@@ -1306,6 +1314,7 @@ impl Preprocessor {
             is_variadic: false,
             fixed_args: 0,
             return_type_tag: 0,
+            param_types: Vec::new(),
             local_name: local_name.to_string(),
             real_symbol: real_symbol.to_string(),
         });

@@ -1002,14 +1002,29 @@ fn emit_modrm_mem(code: &mut Vec<u8>, reg: Reg, base: Reg, disp: i32) {
 // block-buffers non-tty stdout.
 // ------------------------------------------------------------------
 
-/// Length of the `_start` stub in bytes. Used by the ELF writer to
-/// compute branch offsets and segment sizes.
+/// Length of the libc-routed `_start` stub: 14 bytes of prefix
+/// (mov rdi, [rsp]; lea rsi, [rsp+8]; call rel32) + 3 bytes of
+/// `mov rdi, rax` + 6 bytes of `call qword [rip+disp32]`.
 pub(super) const START_STUB_LEN: u64 = 23;
+/// Length of the syscall-tail `_start` stub (gh #69). One byte
+/// longer than the libc tail because `mov eax, 231` (5 bytes) +
+/// `syscall` (2 bytes) totals 7 vs. the libc tail's `call
+/// qword [rip+disp32]` (6 bytes).
+pub(super) const START_STUB_LEN_SYSCALL: u64 = 24;
 
-/// Emit the `_start` prologue. Returns the byte offset (within the
-/// emitted code blob) of the `call qword [rip+...]` placeholder for
-/// libc `exit` -- the writer registers a GotFixup against it.
-pub(super) fn emit_start_stub(code: &mut Vec<u8>, abi: Abi, main_offset_in_code: u64) -> usize {
+/// Emit the `_start` prologue. When `use_libc_exit` is true, the
+/// stub's tail is `call qword [rip+disp32]` through the libc
+/// `exit` GOT slot, and we return `Some(byte_offset)` so the
+/// writer can register a GotFixup against it. When false (gh
+/// #69), the stub direct-syscalls `sys_exit_group` (Linux
+/// x86_64 syscall 231) and we return `None` -- the resulting
+/// binary has no libc dependency.
+pub(super) fn emit_start_stub(
+    code: &mut Vec<u8>,
+    abi: Abi,
+    main_offset_in_code: u64,
+    use_libc_exit: bool,
+) -> Option<usize> {
     let stub_start = code.len();
 
     // argc / argv go in the first two of the ABI's
@@ -1025,29 +1040,48 @@ pub(super) fn emit_start_stub(code: &mut Vec<u8>, abi: Abi, main_offset_in_code:
     emit_lea_r_mem(code, argv_reg, Reg::RSP, 8);
 
     // call main. Target byte offset (within the code blob) is
-    // START_STUB_LEN + main_offset_in_code; the rel32 for `call` is
-    // measured from the byte *after* the 5-byte `call` instruction.
+    // start_stub_len + main_offset_in_code; the rel32 for `call`
+    // is measured from the byte *after* the 5-byte `call`
+    // instruction. Syscall vs libc tails differ by 1 byte
+    // (gh #69), so the math has to track which we picked.
     let call_byte_off = (code.len() - stub_start) as i64;
     let after_call = call_byte_off + 5;
-    let main_byte = (START_STUB_LEN as i64) + main_offset_in_code as i64;
+    let stub_len = if use_libc_exit {
+        START_STUB_LEN
+    } else {
+        START_STUB_LEN_SYSCALL
+    };
+    let main_byte = (stub_len as i64) + main_offset_in_code as i64;
     let rel32 = (main_byte - after_call) as i32;
     emit_call_rel32(code, rel32);
 
     // Move main's return value into the ABI's first int-arg
-    // register (= libc `exit`'s 1st parameter).
+    // register (= libc `exit`'s / sys_exit_group's 1st parameter).
     emit_mov_rr(code, argc_reg, Reg::RAX);
 
-    // call qword [rip + disp32] -- placeholder, writer patches the
-    // disp32 to point at the libc `exit` GOT slot.
-    let exit_call_offset = code.len() - stub_start;
-    emit_call_qword_rip32(code, 0);
+    let result = if use_libc_exit {
+        // call qword [rip + disp32] -- placeholder, writer
+        // patches the disp32 to point at the libc `exit` GOT
+        // slot.
+        let exit_call_offset = code.len() - stub_start;
+        emit_call_qword_rip32(code, 0);
+        Some(stub_start + exit_call_offset)
+    } else {
+        // gh #69: Linux x86_64 sys_exit_group = 231. Status is
+        // already in rdi from the mov above.
+        // mov eax, 231 (5 bytes)
+        code.extend_from_slice(&[0xb8, 0xe7, 0x00, 0x00, 0x00]);
+        // syscall (2 bytes)
+        code.extend_from_slice(&[0x0f, 0x05]);
+        None
+    };
 
     debug_assert_eq!(
         (code.len() - stub_start) as u64,
-        START_STUB_LEN,
+        stub_len,
         "_start stub length mismatch"
     );
-    stub_start + exit_call_offset
+    result
 }
 
 // ------------------------------------------------------------------
@@ -1314,6 +1348,10 @@ pub(super) fn lower(
     let mut fixups: Vec<Fixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();
     let mut got_fixups: Vec<GotFixup> = Vec::new();
+    // gh #61: each `JsrExt` / `TailExt` site records a `CALL rel32`
+    // / `JMP rel32` placeholder; displacements get backfilled once
+    // trampolines are appended to `code`. Mirrors the aarch64 path.
+    let mut plt_call_fixups: Vec<PltCallFixup> = Vec::new();
     // Function-pointer Imms get their target resolved post-walk
     // against `bytecode_to_native`, mirroring aarch64::lower.
     let mut pending_func_fixups: Vec<(usize, usize)> = Vec::new();
@@ -1366,7 +1404,7 @@ pub(super) fn lower(
             &mut code,
             &mut fixups,
             &mut data_fixups,
-            &mut got_fixups,
+            &mut plt_call_fixups,
             &mut pending_func_fixups,
             &mut tls_index_fixups,
             data_imm_positions,
@@ -1385,6 +1423,15 @@ pub(super) fn lower(
     bytecode_to_native[program.text.len()] = code.len();
 
     apply_fixups(&mut code, &fixups, &bytecode_to_native, program.text.len())?;
+
+    // gh #61: append one PLT trampoline per import. CALL rel32 /
+    // JMP rel32 placeholders recorded in `plt_call_fixups` get
+    // their disp32 backfilled to the matching trampoline. The
+    // trampoline body is a single `JMP qword ptr [rip + disp32]`
+    // patched by the per-format writer via `GotFixup`.
+    let plt_trampoline_offsets =
+        emit_plt_trampolines(&mut code, &mut got_fixups, imports.imports.len());
+    apply_plt_call_fixups(&mut code, &plt_call_fixups, &plt_trampoline_offsets)?;
 
     // Emit per-function arg-shuffling thunks for any function whose
     // address is taken (`fp = worker_main`). The thunk lets pthread /
@@ -1500,6 +1547,9 @@ pub(super) fn lower(
         // is not in our target list.
         macho_tlv_fixups: Vec::new(),
         macho_tlv_descriptors: Vec::new(),
+        // Overwritten by `lower_for` from `NativeOptions::debug_info`.
+        debug_info: true,
+        plt_trampoline_offsets,
     })
 }
 
@@ -1553,7 +1603,7 @@ fn lower_op(
     code: &mut Vec<u8>,
     fixups: &mut Vec<Fixup>,
     data_fixups: &mut Vec<DataFixup>,
-    got_fixups: &mut Vec<GotFixup>,
+    plt_call_fixups: &mut Vec<PltCallFixup>,
     pending_func_fixups: &mut Vec<(usize, usize)>,
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     data_imm_positions: &[usize],
@@ -2005,7 +2055,7 @@ fn lower_op(
                 text,
                 *pc,
                 code,
-                got_fixups,
+                plt_call_fixups,
                 abi,
                 imports,
                 fp_mask,
@@ -2017,11 +2067,12 @@ fn lower_op(
             // lowering already loaded the c5-stack args into the
             // host ABI's argument registers / shadow-space slots,
             // so the libc fn sees exactly what the caller's `Adj N`
-            // declared; we just forward control through the IAT/GOT
-            // slot and let the libc fn's `ret` carry us back to the
-            // caller. No frame setup, no stack manipulation, no
-            // post-call accumulator copy -- the call site's Jsri
-            // lowering is responsible for the round-trip.
+            // declared; we just forward control through the PLT
+            // trampoline (gh #61) and let the libc fn's `ret`
+            // carry us back to the caller. No frame setup, no
+            // stack manipulation, no post-call accumulator copy
+            // -- the call site's Jsri lowering is responsible for
+            // the round-trip.
             let binding_idx = read_operand(text, pc, "TailExt")?;
             let import_index = imports.index_of_binding(binding_idx).ok_or_else(|| {
                 C5Error::Compile(crate::c5::error::fmt_internal_err(&alloc::format!(
@@ -2029,12 +2080,13 @@ fn lower_op(
                      the resolver should have placed it"
                 )))
             })?;
-            let instr_offset = code.len();
-            got_fixups.push(GotFixup {
-                adrp_offset: instr_offset,
+            plt_call_fixups.push(PltCallFixup {
+                instr_offset: code.len(),
                 import_index,
+                is_tail: true,
             });
-            emit_jmp_qword_rip32(code, 0);
+            // Placeholder displacement; resolved post-trampoline-emission.
+            emit_jmp_rel32(code, 0);
         }
 
         // ---- Floating-point ----
@@ -2209,7 +2261,7 @@ fn emit_libc_call(
     text: &[i64],
     pc_after_op: usize,
     code: &mut Vec<u8>,
-    got_fixups: &mut Vec<GotFixup>,
+    plt_call_fixups: &mut Vec<PltCallFixup>,
     abi: Abi,
     imports: &super::ResolvedImports,
     fp_arg_mask: u32,
@@ -2320,14 +2372,19 @@ fn emit_libc_call(
         }
     }
 
-    // call qword [rip + disp32] -- placeholder, writer patches
-    // disp32 to point at the right .got / IAT slot.
-    let instr_offset = code.len();
-    got_fixups.push(GotFixup {
-        adrp_offset: instr_offset,
+    // gh #61: emit a 5-byte CALL rel32 placeholder + record a
+    // PltCallFixup; the trampoline at `imports[import_index]`'s
+    // tail position will be patched in by `apply_plt_call_fixups`
+    // once trampolines are emitted at the end of `lower()`. The
+    // trampoline itself is a single 6-byte
+    // `JMP qword ptr [rip+disp32]` whose disp32 the per-format
+    // writer patches against the resolved GOT/IAT slot.
+    plt_call_fixups.push(PltCallFixup {
+        instr_offset: code.len(),
         import_index,
+        is_tail: false,
     });
-    emit_call_qword_rip32(code, 0);
+    emit_call_rel32(code, 0);
 
     if scratch > 0 {
         emit_add_rsp_imm32(code, scratch);
@@ -2352,6 +2409,83 @@ fn emit_libc_call(
         // don't return -- e.g. `exit` -- the call doesn't reach
         // this point at runtime, so the mov is harmless dead code.)
         emit_mov_rr(code, Reg::R13, Reg::RAX);
+    }
+    Ok(())
+}
+
+/// gh #61: per-call-site placeholder for the post-pass that
+/// patches `CALL rel32` / `JMP rel32` displacements once
+/// trampolines have been laid out at the tail of `code`. Mirror
+/// of the aarch64 type with the same name.
+#[derive(Debug, Clone, Copy)]
+struct PltCallFixup {
+    /// Byte offset within `code` of the CALL/JMP instruction
+    /// (the opcode byte, not the disp32 field).
+    instr_offset: usize,
+    /// Import slot the call should reach via its trampoline.
+    import_index: usize,
+    /// `true` -> emit `JMP rel32` (tail jump from `Op::TailExt`);
+    /// `false` -> emit `CALL rel32` (regular `Op::JsrExt` site).
+    /// Both are 5 bytes, both use the same disp32 measurement
+    /// origin (one byte past the instruction).
+    is_tail: bool,
+}
+
+/// Append one PLT trampoline per import. Each trampoline is a
+/// single 6-byte `JMP qword ptr [rip + disp32]` whose disp32 is
+/// patched by the per-format writer (via the recorded
+/// `GotFixup`) to point at the GOT/IAT slot. libc's `RET`
+/// returns directly to the original `CALL rel32` caller, so the
+/// trampoline costs one branch on the call path -- predicted
+/// after the first hit.
+fn emit_plt_trampolines(
+    code: &mut Vec<u8>,
+    got_fixups: &mut Vec<GotFixup>,
+    n_imports: usize,
+) -> Vec<usize> {
+    let mut offsets = Vec::with_capacity(n_imports);
+    for import_index in 0..n_imports {
+        let tramp_off = code.len();
+        offsets.push(tramp_off);
+        // Same `GotFixup` shape the inline indirect-call site used
+        // pre-#61. The writer reads `adrp_offset` as the byte
+        // position of the instruction whose disp32 needs the
+        // GOT-slot RVA; the JMP's encoding puts disp32 at byte 2.
+        got_fixups.push(GotFixup {
+            adrp_offset: tramp_off,
+            import_index,
+        });
+        emit_jmp_qword_rip32(code, 0);
+    }
+    offsets
+}
+
+/// Resolve every `PltCallFixup` against the trampoline byte
+/// offsets. CALL rel32 / JMP rel32 measure their displacement
+/// from the byte just past the instruction (5 bytes long).
+fn apply_plt_call_fixups(
+    code: &mut [u8],
+    fixups: &[PltCallFixup],
+    trampoline_offsets: &[usize],
+) -> Result<(), C5Error> {
+    const REL32_INSTR_LEN: usize = 5;
+    for fx in fixups {
+        let tramp_off = *trampoline_offsets.get(fx.import_index).ok_or_else(|| {
+            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
+                "PLT call fixup at offset {} references import {} but only \
+                 {} trampolines were emitted",
+                fx.instr_offset,
+                fx.import_index,
+                trampoline_offsets.len()
+            )))
+        })?;
+        let after = fx.instr_offset + REL32_INSTR_LEN;
+        let rel32 = (tramp_off as i64 - after as i64) as i32;
+        // Opcode byte at instr_offset: 0xE8 (CALL rel32) or
+        // 0xE9 (JMP rel32). The lower-pass already wrote the
+        // correct opcode; we only patch the disp32 field at
+        // `instr_offset + 1`.
+        code[fx.instr_offset + 1..fx.instr_offset + 1 + 4].copy_from_slice(&rel32.to_le_bytes());
     }
     Ok(())
 }
@@ -3018,7 +3152,7 @@ mod tests {
         //   mov rdi, rax                ; pass to libc exit
         //   call qword [rip + disp32]   ; libc exit slot
         let mut buf = Vec::new();
-        let exit_off = emit_start_stub(&mut buf, super::super::Target::LinuxX64.abi(), 0);
+        let exit_off = emit_start_stub(&mut buf, super::super::Target::LinuxX64.abi(), 0, true);
         assert_eq!(buf.len() as u64, START_STUB_LEN);
         // mov rdi, [rsp]              -> 48 8B 3C 24
         assert_eq!(&buf[0..4], &[0x48, 0x8B, 0x3C, 0x24]);
@@ -3029,11 +3163,33 @@ mod tests {
         // mov rdi, rax                -> 48 89 C7
         assert_eq!(&buf[14..17], &[0x48, 0x89, 0xC7]);
         // call qword [rip + 0]        -> FF 15 00 00 00 00
-        assert_eq!(exit_off, 17);
+        assert_eq!(exit_off, Some(17));
         assert_eq!(
             &buf[17..23],
             &[0xFF, 0x15, 0x00, 0x00, 0x00, 0x00],
             "call qword [rip+0] placeholder"
         );
+    }
+
+    #[test]
+    fn start_stub_syscall_tail_decodes_to_known_bytes() {
+        // gh #69: when no libc `exit` binding is in scope the
+        // stub's tail is a direct sys_exit_group syscall (231)
+        // instead of the libc-routed indirect call. Tail layout:
+        //   mov rdi, rax        (3 bytes, rax = main's return)
+        //   mov eax, 231        (5 bytes, sys_exit_group)
+        //   syscall             (2 bytes)
+        // Total stub length: 14 (prefix) + 10 (tail) = 24 bytes,
+        // one longer than the libc tail.
+        let mut buf = Vec::new();
+        let exit_off = emit_start_stub(&mut buf, super::super::Target::LinuxX64.abi(), 0, false);
+        assert_eq!(exit_off, None, "syscall tail returns no GotFixup offset");
+        assert_eq!(buf.len() as u64, START_STUB_LEN_SYSCALL);
+        // mov rdi, rax (= status from main's return value).
+        assert_eq!(&buf[14..17], &[0x48, 0x89, 0xC7]);
+        // mov eax, 231 (= sys_exit_group on Linux x86_64).
+        assert_eq!(&buf[17..22], &[0xb8, 0xe7, 0x00, 0x00, 0x00]);
+        // syscall.
+        assert_eq!(&buf[22..24], &[0x0f, 0x05]);
     }
 }

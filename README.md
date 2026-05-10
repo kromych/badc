@@ -4,7 +4,8 @@
 small compiler of a pretty large chunk of the C language. It produces
 real native binaries (macOs Mach-O, Linux ELF, or Windows PE32+),
 on any of five targets, from any host - macOS (ARM64), Linux (ARM64,
-x86_64), Windows (ARM64,x86_64) with full debug information.
+x86_64), Windows (ARM64,x86_64) with full debug information (can be
+omitted).
 
 It can also run the code JiT-ted in-process so no binary is written
 to the disk. That option might be useful for using `badc` to run the

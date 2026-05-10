@@ -102,6 +102,10 @@ const DT_FLAGS: u64 = 30;
 const DF_BIND_NOW: u64 = 0x8;
 
 // nlist / Elf64_Sym fields.
+/// `STB_LOCAL` -- file-local binding. Used by gh #61 for the
+/// per-PLT-trampoline static symbols so they don't shadow
+/// `.dynsym`'s loader-visible globals.
+const STB_LOCAL: u8 = 0;
 const STB_GLOBAL: u8 = 1;
 /// `STT_FUNC` symbol type -- `st_info` low nibble for both
 /// imported and exported functions. Imports use it so debuggers
@@ -154,6 +158,12 @@ const ELF64_SHDR_SIZE: u64 = 64;
 // Section header types we emit (Elf64_Shdr.sh_type).
 const SHT_NULL: u32 = 0;
 const SHT_PROGBITS: u32 = 1;
+/// Static symbol table -- the file-only `.symtab` paired with
+/// `.strtab`. Distinct from `SHT_DYNSYM` (the loader-side dynamic
+/// symbol table). gh #61 emits one local STT_FUNC per import via
+/// this section so debuggers (`gdb`, `lldb`) and `nm` resolve
+/// PLT trampoline addresses to a real name.
+const SHT_SYMTAB: u32 = 2;
 const SHT_STRTAB: u32 = 3;
 const SHT_RELA: u32 = 4;
 const SHT_HASH: u32 = 5;
@@ -338,34 +348,61 @@ fn round_up(n: u64, align: u64) -> u64 {
 // ------------------------------------------------------------------
 
 /// Stub byte length per machine. Used for layout calculations.
-fn start_stub_len(machine: Machine) -> u64 {
-    match machine {
-        Machine::Aarch64 => 6 * 4, // 6 aarch64 instructions
-        Machine::X86_64 => x86_64::START_STUB_LEN,
+///
+/// `use_libc_exit` selects the longer (libc-routed) tail when the
+/// program has a libc `exit` binding in scope; the syscall tail
+/// (gh #69) is shorter on aarch64 and one byte longer on x86_64.
+fn start_stub_len(machine: Machine, use_libc_exit: bool) -> u64 {
+    match (machine, use_libc_exit) {
+        // aarch64 libc tail: adrp + ldr + blr = 3 instructions.
+        // aarch64 syscall tail: movz w8, #94 + svc #0 = 2
+        // instructions. Saves 4 bytes.
+        (Machine::Aarch64, true) => 6 * 4,
+        (Machine::Aarch64, false) => 5 * 4,
+        // x86_64 libc tail: mov rdi, rax (3) + call qword
+        //   [rip+disp32] (6) = 9 bytes after the 14-byte prefix.
+        // x86_64 syscall tail: mov rdi, rax (3) + mov eax, imm32
+        //   (5) + syscall (2) = 10 bytes after the prefix --
+        //   one byte longer.
+        (Machine::X86_64, true) => x86_64::START_STUB_LEN,
+        (Machine::X86_64, false) => x86_64::START_STUB_LEN_SYSCALL,
     }
 }
 
-/// Emit the `_start` prologue for the given machine. Returns the
-/// byte offset of the libc-exit GOT call placeholder so the caller
-/// can register a `GotFixup` for it. Both arches route exit through
-/// libc so glibc flushes stdio before the process actually quits.
+/// Emit the `_start` prologue for the given machine. When
+/// `use_libc_exit` is `true` the stub tail is `adrp/ldr/blr`
+/// (aarch64) / `call qword [rip+disp32]` (x86_64) through the
+/// libc `exit` GOT slot, and we return `Some(byte_offset)` so
+/// the caller can register a `GotFixup` against it. When
+/// `false` (gh #69), the stub direct-syscalls
+/// `sys_exit_group` so the resulting binary has no libc
+/// dependency, and we return `None`. Routing through libc is
+/// preferred when available because glibc's `exit` flushes
+/// stdio buffers; the syscall tail is for binaries that
+/// neither include `<stdlib.h>` nor use stdio at all.
 fn emit_start_stub(
     machine: Machine,
     abi: Abi,
     code: &mut Vec<u8>,
     main_offset_in_code: u64,
-) -> usize {
+    use_libc_exit: bool,
+) -> Option<usize> {
     match machine {
-        Machine::Aarch64 => emit_start_stub_aarch64(abi, code, main_offset_in_code),
-        Machine::X86_64 => x86_64::emit_start_stub(code, abi, main_offset_in_code),
+        Machine::Aarch64 => emit_start_stub_aarch64(abi, code, main_offset_in_code, use_libc_exit),
+        Machine::X86_64 => x86_64::emit_start_stub(code, abi, main_offset_in_code, use_libc_exit),
     }
 }
 
-/// AArch64 `_start`: ldr argc; add argv; bl main; adrp/ldr/blr libc
-/// exit.
-fn emit_start_stub_aarch64(abi: Abi, code: &mut Vec<u8>, main_offset_in_code: u64) -> usize {
+/// AArch64 `_start`: ldr argc; add argv; bl main; then either
+/// `adrp/ldr/blr libc::exit` or `mov w8, #94; svc #0` (gh #69).
+fn emit_start_stub_aarch64(
+    abi: Abi,
+    code: &mut Vec<u8>,
+    main_offset_in_code: u64,
+    use_libc_exit: bool,
+) -> Option<usize> {
     use aarch64::Reg;
-    let stub_len = 6 * 4;
+    let stub_len = start_stub_len(Machine::Aarch64, use_libc_exit);
 
     // argc / argv land in the first two of the ABI's
     // int-arg-passing registers. AAPCS64's order is x0..x7 so
@@ -382,17 +419,31 @@ fn emit_start_stub_aarch64(abi: Abi, code: &mut Vec<u8>, main_offset_in_code: u6
     let delta_insns = ((main_pc - bl_pc) / 4) as i32;
     aarch64::emit(code, aarch64::enc_bl(delta_insns));
 
-    // Placeholder adrp + ldr + blr through the libc exit GOT slot.
-    // The caller appends a GotFixup with adrp_offset = current code
-    // length so the writer fills in imm21/imm12 once the GOT vmaddr
-    // is known.
-    let exit_adrp_offset = code.len();
-    aarch64::emit(code, aarch64::enc_adrp(Reg::X16, 0));
-    aarch64::emit(code, aarch64::enc_ldr_imm(Reg::X16, Reg::X16, 0));
-    aarch64::emit(code, aarch64::enc_blr(Reg::X16));
+    let result = if use_libc_exit {
+        // Placeholder adrp + ldr + blr through the libc exit GOT
+        // slot. The caller appends a GotFixup with adrp_offset =
+        // current code length so the writer fills in imm21/imm12
+        // once the GOT vmaddr is known.
+        let exit_adrp_offset = code.len();
+        aarch64::emit(code, aarch64::enc_adrp(Reg::X16, 0));
+        aarch64::emit(code, aarch64::enc_ldr_imm(Reg::X16, Reg::X16, 0));
+        aarch64::emit(code, aarch64::enc_blr(Reg::X16));
+        Some(exit_adrp_offset)
+    } else {
+        // gh #69: direct `sys_exit_group` (Linux aarch64 syscall
+        // 94). main's int return value is already in x0/w0, which
+        // is the syscall's first arg. svc #0 transfers control to
+        // the kernel and never returns.
+        // movz w8, #94 -- Linux aarch64 sys_exit_group number.
+        // The 16-bit shift amount (`hw`) is 0 since 94 fits in
+        // the low 16 bits.
+        aarch64::emit(code, aarch64::enc_movz(Reg::X8, 94, 0));
+        aarch64::emit(code, aarch64::enc_svc(0));
+        None
+    };
 
     debug_assert_eq!(code.len() as u64, stub_len);
-    exit_adrp_offset
+    result
 }
 
 // ------------------------------------------------------------------
@@ -443,6 +494,78 @@ fn build_dynstr(
     }
 
     (bytes, name_offsets, lib_offsets, export_offsets)
+}
+
+/// gh #61: build the static `.symtab` + `.strtab` for the
+/// PLT-trampoline pool. One local `STT_FUNC` per import, plus
+/// the SHT_SYMTAB sentinel at index 0. Returns
+/// `(symtab_bytes, strtab_bytes)`.
+///
+/// `text_vmaddr` is the runtime vmaddr of `build.text[0]` (i.e.
+/// `code_vmaddr + stub_len`), so each symbol's `st_value` resolves
+/// to the trampoline's actual instruction address.
+fn build_plt_symtab(
+    build: &super::Build,
+    text_vmaddr: u64,
+    trampoline_size: u64,
+) -> (Vec<u8>, Vec<u8>) {
+    let imports = &build.imports.imports;
+    debug_assert_eq!(
+        imports.len(),
+        build.plt_trampoline_offsets.len(),
+        "trampoline-offset count must match import count"
+    );
+
+    // .strtab: leading NUL (st_name=0 -> empty string sentinel)
+    // followed by NUL-separated import names.
+    let mut strtab = alloc::vec![0u8];
+    let mut name_offsets: Vec<u32> = Vec::with_capacity(imports.len());
+    for imp in imports {
+        name_offsets.push(strtab.len() as u32);
+        strtab.extend_from_slice(imp.local_name.as_bytes());
+        strtab.push(0);
+    }
+
+    // .symtab: SHT_SYMTAB sentinel at index 0, then one local
+    // STT_FUNC per trampoline. Local symbols come first by spec
+    // (the .symtab section header's `sh_info` field points one
+    // past the last local entry).
+    let mut symtab: Vec<u8> = Vec::with_capacity((1 + imports.len()) * ELF64_SYM_SIZE as usize);
+    write_struct(
+        &mut symtab,
+        &Elf64Sym {
+            st_name: 0,
+            st_info: 0,
+            st_other: 0,
+            st_shndx: 0,
+            st_value: 0,
+            st_size: 0,
+        },
+    );
+    for (i, imp) in imports.iter().enumerate() {
+        let _ = imp;
+        let st_value = text_vmaddr + build.plt_trampoline_offsets[i] as u64;
+        write_struct(
+            &mut symtab,
+            &Elf64Sym {
+                st_name: name_offsets[i],
+                // Local + STT_FUNC. Locals come before globals in
+                // the table; with no globals, the section header's
+                // `sh_info` is `n_locals + 1` -- past the last
+                // local (the SHT_SYMTAB rule).
+                st_info: (STB_LOCAL << 4) | STT_FUNC,
+                st_other: 0,
+                // .text section index. Hard-coded to match the
+                // section-header table: NULL=0, .interp=1,
+                // .dynsym=2, .dynstr=3, .hash=4, .rela.dyn=5,
+                // .text=6.
+                st_shndx: 6,
+                st_value,
+                st_size: trampoline_size,
+            },
+        );
+    }
+    (symtab, strtab)
 }
 
 /// Build .dynsym. Layout:
@@ -874,14 +997,22 @@ pub(super) fn write(
 ) -> Result<Vec<u8>, C5Error> {
     let is_shared = build.output_kind == super::OutputKind::SharedLibrary;
     let n_imports = build.imports.imports.len();
+    // gh #69: pick the libc-exit tail when the user has any
+    // libc `exit` import (typically through `<stdlib.h>`),
+    // otherwise emit a direct sys_exit_group syscall and avoid
+    // pulling libc in just to terminate. Stays opt-in to libc so
+    // programs that print via stdio still get glibc's
+    // end-of-process flush.
+    let use_libc_exit = build.imports.imports.iter().any(|i| i.local_name == "exit");
     // Shared libraries don't have a `_start` stub -- dyld
     // never jumps into them, callers reach exports via
     // `dlsym`. Executables keep the existing stub that
-    // tail-calls libc `exit`.
+    // tail-calls libc `exit` (when libc is available) or
+    // direct-syscalls (when it isn't).
     let stub_len = if is_shared {
         0
     } else {
-        start_stub_len(machine)
+        start_stub_len(machine, use_libc_exit)
     };
     let exports = if is_shared {
         &build.exports[..]
@@ -951,10 +1082,20 @@ pub(super) fn write(
     // point), and emitting one would force a libc-exit
     // import that isn't otherwise needed.
     let mut code: Vec<u8> = Vec::with_capacity(stub_len as usize + build.text.len());
+    // `Some(byte_offset)` for the libc-exit GOT placeholder, or
+    // `None` when the stub direct-syscalls (gh #69) / for shared
+    // libraries that emit no stub at all. `None` short-circuits
+    // the writer's later GOT-fixup patch.
     let exit_adrp_offset = if is_shared {
-        usize::MAX
+        None
     } else {
-        emit_start_stub(machine, build.abi, &mut code, build.entry_offset as u64)
+        emit_start_stub(
+            machine,
+            build.abi,
+            &mut code,
+            build.entry_offset as u64,
+            use_libc_exit,
+        )
     };
     code.extend_from_slice(&build.text);
     let code_size = code.len() as u64;
@@ -1016,49 +1157,139 @@ pub(super) fn write(
         super::Machine::Aarch64 => super::Target::LinuxAarch64,
         super::Machine::X86_64 => super::Target::LinuxX64,
     };
-    let dwarf_sections = dwarf::emit(
-        program,
-        build,
-        elf_target,
-        dwarf_text_vmaddr,
-        &program.source_path,
-    );
+    // gh #62: skip the type-catalog walk + line program entirely
+    // when the user passed `--no-debug`. Empty sections collapse
+    // every `dwarf_*_off` into `dwarf_off` (= `segment2_end`) and
+    // `shstrtab_off` lands right after, so the file body is
+    // self-consistent without per-write conditionals.
+    let emit_dwarf = build.debug_info;
+    // gh #68: tell the DWARF emitter where the `_start` stub
+    // lives so it can give it a `DW_TAG_subprogram` + a
+    // CFI-terminating FDE. The stub sits at
+    // `[code_vmaddr, code_vmaddr + stub_len)` -- ahead of
+    // `build.text` -- so its range is independent of any
+    // codegen-relative offset. Shared libraries skip the stub
+    // (`stub_len = 0`); pass `None` there.
+    let start_stub_range = if stub_len > 0 {
+        Some((code_vmaddr, code_vmaddr + stub_len))
+    } else {
+        None
+    };
+    let dwarf_sections = if emit_dwarf {
+        dwarf::emit(
+            program,
+            build,
+            elf_target,
+            dwarf_text_vmaddr,
+            &program.source_path,
+            start_stub_range,
+        )
+    } else {
+        dwarf::DwarfSections {
+            debug_info: Vec::new(),
+            debug_abbrev: Vec::new(),
+            debug_line: Vec::new(),
+            debug_str: Vec::new(),
+            debug_frame: Vec::new(),
+        }
+    };
     let dwarf_off = segment2_end;
     let dwarf_info_off = dwarf_off;
     let dwarf_abbrev_off = dwarf_info_off + dwarf_sections.debug_info.len() as u64;
     let dwarf_line_off = dwarf_abbrev_off + dwarf_sections.debug_abbrev.len() as u64;
     let dwarf_str_off = dwarf_line_off + dwarf_sections.debug_line.len() as u64;
     let dwarf_frame_off = dwarf_str_off + dwarf_sections.debug_str.len() as u64;
-    let shstrtab_off = dwarf_frame_off + dwarf_sections.debug_frame.len() as u64;
+
+    // gh #61: build the static `.symtab` + `.strtab` listing one
+    // local STT_FUNC per PLT trampoline. The trampolines live
+    // inside `.text` at `code_vmaddr + stub_len + tramp_off`; a
+    // debugger's `b malloc` on the produced binary now resolves
+    // to the trampoline rather than getting lost in the dynamic
+    // linker's macro-expansion sites.
+    //
+    // Empty when the program has no imports (a `void main(){}`
+    // that never calls libc -- rare). The two sections still get
+    // their headers in that case for layout symmetry, but their
+    // payloads degenerate to the SHT_SYMTAB sentinel + the empty
+    // string.
+    let emit_plt_symtab = !build.plt_trampoline_offsets.is_empty();
+    let trampoline_size: u64 = match machine {
+        super::Machine::Aarch64 => 12, // adrp + ldr + br
+        super::Machine::X86_64 => 6,   // jmp qword ptr [rip+disp32]
+    };
+    let (plt_symtab_bytes, plt_strtab_bytes) = if emit_plt_symtab {
+        build_plt_symtab(build, dwarf_text_vmaddr, trampoline_size)
+    } else {
+        (Vec::new(), alloc::vec![0u8])
+    };
+    let post_dwarf_off = dwarf_frame_off + dwarf_sections.debug_frame.len() as u64;
+    let (symtab_off, strtab_off, shstrtab_off) = if emit_plt_symtab {
+        // .symtab requires 8-byte alignment (each Elf64_Sym is 24
+        // bytes). The file body pads to `symtab_off` before
+        // emitting the bytes; .strtab and .shstrtab sit immediately
+        // after with no further padding.
+        let s = round_up(post_dwarf_off, 8);
+        let st = s + plt_symtab_bytes.len() as u64;
+        let sh = st + plt_strtab_bytes.len() as u64;
+        (s, st, sh)
+    } else {
+        // No PLT symtab -> .shstrtab abuts DWARF directly,
+        // matching the pre-#61 layout.
+        (post_dwarf_off, post_dwarf_off, post_dwarf_off)
+    };
     // .shstrtab content: NUL + section names. Index 0 is the
     // empty name (SHT_NULL sentinel uses sh_name=0). Names cover
     // the full set of sections in the section-header table:
     // loaded segments (.interp, .dynsym, ..., .text, .data) plus
     // the debug-only metadata sections.
-    let shstrtab_bytes: &[&str] = &[
-        "",              // 0
-        ".interp",       // 1
-        ".dynsym",       // 2
-        ".dynstr",       // 3
-        ".hash",         // 4
-        ".rela.dyn",     // 5
-        ".text",         // 6
-        ".tdata",        // 7  (only present when has_tls)
-        ".dynamic",      // 8
-        ".got",          // 9
-        ".data",         // 10
-        ".tbss",         // 11 (only present when has_tls)
-        ".debug_info",   // 12
-        ".debug_abbrev", // 13
-        ".debug_line",   // 14
-        ".debug_str",    // 15
-        ".debug_frame",  // 16
-        ".shstrtab",     // 17
-    ];
+    //
+    // Indices 0..=11 are stable; 12..=16 are the DWARF names,
+    // present only when `emit_dwarf` is true (gh #62 -- when the
+    // user passed `--no-debug`, these names don't go into the
+    // string table at all). The `.shstrtab` self-name is always
+    // last; callers reach it via `shstrtab_idx_self` rather than
+    // a fixed numeric index.
+    let mut shstrtab_names: Vec<&str> = Vec::with_capacity(18);
+    shstrtab_names.extend_from_slice(&[
+        "",          // 0
+        ".interp",   // 1
+        ".dynsym",   // 2
+        ".dynstr",   // 3
+        ".hash",     // 4
+        ".rela.dyn", // 5
+        ".text",     // 6
+        ".tdata",    // 7  (only present when has_tls)
+        ".dynamic",  // 8
+        ".got",      // 9
+        ".data",     // 10
+        ".tbss",     // 11 (only present when has_tls)
+    ]);
+    if emit_dwarf {
+        shstrtab_names.extend_from_slice(&[
+            ".debug_info",   // 12
+            ".debug_abbrev", // 13
+            ".debug_line",   // 14
+            ".debug_str",    // 15
+            ".debug_frame",  // 16
+        ]);
+    }
+    // gh #61: `.symtab` + `.strtab` for the PLT-trampoline pool.
+    // Always paired -- a SHT_SYMTAB section's `sh_link` must
+    // reference a real strtab. Only emitted when there are
+    // trampolines to name.
+    let plt_symtab_name_idx_in_shstrtab = if emit_plt_symtab {
+        shstrtab_names.push(".symtab");
+        shstrtab_names.push(".strtab");
+        Some(shstrtab_names.len() - 2)
+    } else {
+        None
+    };
+    let shstrtab_idx_self = shstrtab_names.len();
+    shstrtab_names.push(".shstrtab");
     let mut shstrtab: Vec<u8> = Vec::new();
-    let mut shstrtab_offsets: [u32; 18] = [0; 18];
-    for (i, s) in shstrtab_bytes.iter().enumerate() {
-        shstrtab_offsets[i] = shstrtab.len() as u32;
+    let mut shstrtab_offsets: Vec<u32> = Vec::with_capacity(shstrtab_names.len());
+    for s in &shstrtab_names {
+        shstrtab_offsets.push(shstrtab.len() as u32);
         shstrtab.extend_from_slice(s.as_bytes());
         shstrtab.push(0);
     }
@@ -1083,7 +1314,8 @@ pub(super) fn write(
         + 1 // .got
         + (if has_data { 1 } else { 0 }) // .data
         + (if has_tbss { 1 } else { 0 }) // .tbss
-        + 5 // .debug_* x 5 (info, abbrev, line, str, frame)
+        + (if emit_dwarf { 5 } else { 0 }) // .debug_* x 5 (info, abbrev, line, str, frame); gh #62
+        + (if emit_plt_symtab { 2 } else { 0 }) // .symtab + .strtab; gh #61
         + 1; // .shstrtab
     let total_filesize = shdr_off + n_section_headers * ELF64_SHDR_SIZE;
     // shstrtab is the last section in the table; its index is
@@ -1373,6 +1605,18 @@ pub(super) fn write(
     out.extend_from_slice(&dwarf_sections.debug_line);
     out.extend_from_slice(&dwarf_sections.debug_str);
     out.extend_from_slice(&dwarf_sections.debug_frame);
+
+    // ---- gh #61: PLT-trampoline static symbol table. ----
+    if emit_plt_symtab {
+        // Pad to 8 so each Elf64_Sym lands aligned.
+        while (out.len() as u64) < symtab_off {
+            out.push(0);
+        }
+        debug_assert_eq!(out.len() as u64, symtab_off);
+        out.extend_from_slice(&plt_symtab_bytes);
+        debug_assert_eq!(out.len() as u64, strtab_off);
+        out.extend_from_slice(&plt_strtab_bytes);
+    }
     debug_assert_eq!(out.len() as u64, shstrtab_off);
 
     // .shstrtab
@@ -1631,44 +1875,101 @@ pub(super) fn write(
     // [N+2..N+6] DWARF debug sections (file-only metadata, no
     // SHF_ALLOC so the loader skips them). `.debug_frame` (gh #47)
     // carries the CFI a debugger / unwinder reads to walk through
-    // optimised frames without prologue heuristics.
-    let dwarf_section_specs: &[(u32, u64, u64)] = &[
-        (
-            shstrtab_offsets[12],
-            dwarf_info_off,
-            dwarf_sections.debug_info.len() as u64,
-        ),
-        (
-            shstrtab_offsets[13],
-            dwarf_abbrev_off,
-            dwarf_sections.debug_abbrev.len() as u64,
-        ),
-        (
-            shstrtab_offsets[14],
-            dwarf_line_off,
-            dwarf_sections.debug_line.len() as u64,
-        ),
-        (
-            shstrtab_offsets[15],
-            dwarf_str_off,
-            dwarf_sections.debug_str.len() as u64,
-        ),
-        (
-            shstrtab_offsets[16],
-            dwarf_frame_off,
-            dwarf_sections.debug_frame.len() as u64,
-        ),
-    ];
-    for &(name_off, off, sz) in dwarf_section_specs {
+    // optimised frames without prologue heuristics. Suppressed
+    // when `--no-debug` was passed (gh #62) -- the section table
+    // simply omits these five entries; nothing else in the file
+    // image references them.
+    if emit_dwarf {
+        let dwarf_section_specs: &[(u32, u64, u64)] = &[
+            (
+                shstrtab_offsets[12],
+                dwarf_info_off,
+                dwarf_sections.debug_info.len() as u64,
+            ),
+            (
+                shstrtab_offsets[13],
+                dwarf_abbrev_off,
+                dwarf_sections.debug_abbrev.len() as u64,
+            ),
+            (
+                shstrtab_offsets[14],
+                dwarf_line_off,
+                dwarf_sections.debug_line.len() as u64,
+            ),
+            (
+                shstrtab_offsets[15],
+                dwarf_str_off,
+                dwarf_sections.debug_str.len() as u64,
+            ),
+            (
+                shstrtab_offsets[16],
+                dwarf_frame_off,
+                dwarf_sections.debug_frame.len() as u64,
+            ),
+        ];
+        for &(name_off, off, sz) in dwarf_section_specs {
+            write_struct(
+                &mut out,
+                &Elf64Shdr {
+                    sh_name: name_off,
+                    sh_type: SHT_PROGBITS,
+                    sh_flags: 0,
+                    sh_addr: 0,
+                    sh_offset: off,
+                    sh_size: sz,
+                    sh_link: 0,
+                    sh_info: 0,
+                    sh_addralign: 1,
+                    sh_entsize: 0,
+                },
+            );
+        }
+    }
+
+    // gh #61: PLT-trampoline static symbol table. `.symtab`'s
+    // `sh_info` field must point one past the last LOCAL symbol;
+    // we only emit locals, so it's `n_symbols` (sentinel + one
+    // per import). `sh_link` references the matching `.strtab`.
+    if let Some(name_idx) = plt_symtab_name_idx_in_shstrtab {
+        // Section-header indices for `.symtab` / `.strtab`. They
+        // sit just before `.shstrtab` (which is always at
+        // `n_section_headers - 1`), so they're at -3 / -2 from
+        // the end. These are independent of `shstrtab_names`
+        // ordering -- the names list and the shdr table use
+        // different indexing schemes (the former includes only
+        // names; the latter includes optional sections like
+        // `.tdata` / `.data` / `.tbss` whose names are at fixed
+        // shstrtab slots).
+        let symtab_shdr_idx = (n_section_headers - 3) as u32;
+        let strtab_shdr_idx = (n_section_headers - 2) as u32;
+        let _ = symtab_shdr_idx;
+        let n_sym = (plt_symtab_bytes.len() as u64) / ELF64_SYM_SIZE;
+        // [N] .symtab
         write_struct(
             &mut out,
             &Elf64Shdr {
-                sh_name: name_off,
-                sh_type: SHT_PROGBITS,
+                sh_name: shstrtab_offsets[name_idx],
+                sh_type: SHT_SYMTAB,
                 sh_flags: 0,
                 sh_addr: 0,
-                sh_offset: off,
-                sh_size: sz,
+                sh_offset: symtab_off,
+                sh_size: plt_symtab_bytes.len() as u64,
+                sh_link: strtab_shdr_idx,
+                sh_info: n_sym as u32, // one past last local
+                sh_addralign: 8,
+                sh_entsize: ELF64_SYM_SIZE,
+            },
+        );
+        // [N+1] .strtab
+        write_struct(
+            &mut out,
+            &Elf64Shdr {
+                sh_name: shstrtab_offsets[name_idx + 1],
+                sh_type: SHT_STRTAB,
+                sh_flags: 0,
+                sh_addr: 0,
+                sh_offset: strtab_off,
+                sh_size: plt_strtab_bytes.len() as u64,
                 sh_link: 0,
                 sh_info: 0,
                 sh_addralign: 1,
@@ -1681,7 +1982,7 @@ pub(super) fn write(
     write_struct(
         &mut out,
         &Elf64Shdr {
-            sh_name: shstrtab_offsets[17],
+            sh_name: shstrtab_offsets[shstrtab_idx_self],
             sh_type: SHT_STRTAB,
             sh_flags: 0,
             sh_addr: 0,
@@ -1703,7 +2004,7 @@ pub(super) fn write(
     // entirely; the stub-len shift below collapses to zero
     // and the libc-exit GOT lookup never gets emitted in
     // the first place.
-    if !is_shared {
+    if let Some(exit_off) = exit_adrp_offset {
         let exit_idx = build
             .imports
             .imports
@@ -1711,9 +2012,9 @@ pub(super) fn write(
             .position(|i| i.local_name == "exit")
             .ok_or_else(|| {
                 C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    "ELF writer: _start stub needs `exit` in the import set, but the program \
-                     didn't reach for it (and we don't auto-add it). \
-                     Did you `#include <stdlib.h>` and call `exit(...)` somewhere?",
+                    "ELF writer: _start stub asked for the libc-exit tail but `exit` \
+                     isn't in the import set -- the codegen lower-pass and the writer \
+                     disagree on whether libc is in scope.",
                 ))
             })?;
         patch_got_call(
@@ -1721,11 +2022,15 @@ pub(super) fn write(
             &mut out,
             code_file_offset,
             code_vmaddr,
-            exit_adrp_offset as u64,
+            exit_off as u64,
             got_vmaddr + (exit_idx as u64) * 8,
             "_start exit fixup",
         )?;
     }
+    // gh #69: the syscall tail (`exit_adrp_offset == None`) needs
+    // no patch -- the `mov rax, 231; syscall` (x86_64) /
+    // `movz x8, #94; svc #0` (aarch64) bytes are absolute and
+    // self-contained.
 
     // GOT fixups for libc calls inside build.text. Same per-arch
     // dispatch as the _start exit call.
@@ -1864,6 +2169,7 @@ mod tests {
                     is_variadic: false,
                     fixed_args: 1,
                     return_type_tag: 0,
+                    param_types: Vec::new(),
                 }],
                 dylibs: vec![ResolvedDylib {
                     name: "libc".into(),
@@ -1881,6 +2187,8 @@ mod tests {
             dllmain_pc: None,
             macho_tlv_fixups: Vec::new(),
             macho_tlv_descriptors: Vec::new(),
+            debug_info: true,
+            plt_trampoline_offsets: Vec::new(),
         }
     }
 

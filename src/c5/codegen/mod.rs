@@ -316,6 +316,14 @@ pub(crate) struct ResolvedImport {
     /// prototype seen") falls through with no extension; `void`
     /// also reduces to `Ty::Char` since the lexer aliases it.
     pub return_type_tag: i64,
+    /// Per-fixed-parameter type tags from the prototype. Carried
+    /// from `Binding::param_types`; the DWARF emitter (gh #67)
+    /// uses these to give every PLT trampoline a
+    /// `DW_TAG_subprogram` with `DW_TAG_formal_parameter`
+    /// children typed accurately so gdb / lldb show the
+    /// signature in `bt`. Empty when the parser hasn't seen the
+    /// prototype.
+    pub param_types: Vec<i64>,
 }
 
 /// One resolved dylib the program needs at load time. Distinct from
@@ -374,28 +382,22 @@ impl ResolvedImports {
         if self.imports.iter().any(|i| i.local_name == local_name) {
             return Ok(());
         }
-        let mut found: Option<(i64, &str, &str, &str, bool, usize, i64)> = None;
+        let mut found: Option<(
+            i64,
+            &super::preprocessor::DylibSpec,
+            &super::preprocessor::Binding,
+        )> = None;
         let mut binding_idx: i64 = 0;
         'outer: for spec in &program.dylibs {
             for b in &spec.bindings {
                 if b.local_name == local_name {
-                    found = Some((
-                        binding_idx,
-                        spec.name.as_str(),
-                        spec.path.as_str(),
-                        b.real_symbol.as_str(),
-                        b.is_variadic,
-                        b.fixed_args,
-                        b.return_type_tag,
-                    ));
+                    found = Some((binding_idx, spec, b));
                     break 'outer;
                 }
                 binding_idx += 1;
             }
         }
-        let Some((idx, dylib_name, dylib_path, real_symbol, is_variadic, fixed_args, return_ty)) =
-            found
-        else {
+        let Some((idx, spec, b)) = found else {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
                     "no `#pragma binding(<dylib>::{local_name}, ...)` is in scope -- the target's \
@@ -404,12 +406,12 @@ impl ResolvedImports {
                 ),
             )));
         };
-        let dylib_index = match self.dylibs.iter().position(|d| d.name == dylib_name) {
+        let dylib_index = match self.dylibs.iter().position(|d| d.name == spec.name) {
             Some(i) => i,
             None => {
                 self.dylibs.push(ResolvedDylib {
-                    name: dylib_name.to_string(),
-                    path: dylib_path.to_string(),
+                    name: spec.name.clone(),
+                    path: spec.path.clone(),
                 });
                 self.dylibs.len() - 1
             }
@@ -417,11 +419,12 @@ impl ResolvedImports {
         self.imports.push(ResolvedImport {
             binding_idx: idx,
             local_name: local_name.to_string(),
-            real_symbol: real_symbol.to_string(),
+            real_symbol: b.real_symbol.clone(),
             dylib_index,
-            is_variadic,
-            fixed_args,
-            return_type_tag: return_ty,
+            is_variadic: b.is_variadic,
+            fixed_args: b.fixed_args,
+            return_type_tag: b.return_type_tag,
+            param_types: b.param_types.clone(),
         });
         Ok(())
     }
@@ -501,6 +504,7 @@ impl ResolvedImports {
                 is_variadic: b.is_variadic,
                 fixed_args: b.fixed_args,
                 return_type_tag: b.return_type_tag,
+                param_types: b.param_types.clone(),
             });
         }
 
@@ -665,6 +669,28 @@ pub(crate) struct Build {
     /// `IMAGE_OPTIONAL_HEADER64::AddressOfEntryPoint` at the
     /// user's body via `bytecode_to_native[pc]`.
     pub dllmain_pc: Option<usize>,
+    /// Mirror of [`NativeOptions::debug_info`]. The per-format
+    /// writers gate DWARF section emission on this -- when
+    /// `false`, no `.debug_*` sections appear in the output
+    /// image (gh #62). Defaults to `true` for `Build::default()`
+    /// so existing tests that build a `Build` by hand keep the
+    /// pre-#62 behaviour.
+    pub debug_info: bool,
+    /// Byte offset within `Build::text` of each import's PLT
+    /// trampoline. Indexed by `ResolvedImports::imports` slot --
+    /// `plt_trampoline_offsets[i]` is the local code address the
+    /// per-format writer should expose as `imports[i].local_name`
+    /// in the static symbol table.
+    ///
+    /// Each trampoline is a tiny GOT/IAT-load + tail-jump (3
+    /// instructions on aarch64 / 1 instruction on x86_64) that
+    /// the per-arch lowering emits at the tail of the user code.
+    /// Every `Op::JsrExt` / `Op::TailExt` call site now branches
+    /// here via `bl` / `call rel32` instead of inlining the GOT
+    /// load -- so a debugger's `b malloc` resolves against this
+    /// in-image local symbol rather than getting lost in the
+    /// dynamic linker's macro-expansion sites. See gh #61.
+    pub plt_trampoline_offsets: Vec<usize>,
 }
 
 /// One macOS arm64 Thread-Local Variable. A 24-byte `__thread_vars`
@@ -795,7 +821,7 @@ pub(crate) struct FuncFixup {
 /// [`jit_run_with_options`]; the zero-arg public functions
 /// (`emit_native`, ...) construct `NativeOptions::default()` and
 /// delegate.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy)]
 pub struct NativeOptions {
     /// Run the per-function register allocator. The c5 bytecode
     /// pushes the left operand of every binary op onto the stack;
@@ -824,6 +850,19 @@ pub struct NativeOptions {
     /// entry-point machinery, and promotes
     /// `Program::exports` to externally visible symbols.
     pub output_kind: OutputKind,
+    /// Emit DWARF (`.debug_info` + `.debug_abbrev` + `.debug_line`
+    /// + `.debug_str` + `.debug_frame`) into the output binary.
+    ///
+    /// On by default, matching gcc / clang behaviour for an
+    /// implicit `-g` build. Turning it off via `--no-debug` /
+    /// `-g0` shrinks the artifact (~10-30% on sqlite-class
+    /// inputs), trims compile time (the type-catalog walk is
+    /// non-trivial on big amalgamations), and -- because the
+    /// only varying input across runs that differ in source
+    /// path is the DWARF blob -- gives byte-identical
+    /// production binaries useful for golden-hash bisection.
+    /// See gh #62.
+    pub debug_info: bool,
 }
 
 /// Distinguishes "produce an executable" from "produce a
@@ -849,12 +888,22 @@ pub enum OutputKind {
     SharedLibrary,
 }
 
+impl Default for NativeOptions {
+    /// Defaults: optimizer off, executable output, DWARF on.
+    /// Matches the implicit-`-g` behaviour of gcc / clang and
+    /// the pre-#62 codegen.
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NativeOptions {
     /// Convenience builder. `NativeOptions::new().with_optimize()`.
     pub const fn new() -> Self {
         Self {
             optimize: false,
             output_kind: OutputKind::Executable,
+            debug_info: true,
         }
     }
 
@@ -868,6 +917,14 @@ impl NativeOptions {
     /// and return self.
     pub const fn with_shared_library(mut self) -> Self {
         self.output_kind = OutputKind::SharedLibrary;
+        self
+    }
+
+    /// Set [`Self::debug_info`] and return self. Pass `false`
+    /// to skip DWARF emission (gh #62) -- the writer drops the
+    /// debug sections entirely from the output image.
+    pub const fn with_debug_info(mut self, on: bool) -> Self {
+        self.debug_info = on;
         self
     }
 }
@@ -925,7 +982,23 @@ fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Resul
     // a "no `#pragma binding(libc::exit, ...)`" error on
     // sources that legitimately don't include `<stdlib.h>`.
     let is_shared = options.output_kind == OutputKind::SharedLibrary;
-    if !is_shared && matches!(target, Target::LinuxAarch64 | Target::LinuxX64) {
+    // gh #69: only force-include libc `exit` when the user
+    // already declared a binding for it (typically via
+    // `#include <stdlib.h>`). When no `exit` binding is in
+    // scope, the ELF `_start` stub falls back to a direct
+    // `sys_exit_group` syscall and the resulting binary has no
+    // libc dependency at all -- so trivial fixtures like
+    // `int main() { return argc; }` compile without any header
+    // include.
+    let exit_binding_in_scope = program
+        .dylibs
+        .iter()
+        .flat_map(|d| d.bindings.iter())
+        .any(|b| b.local_name == "exit");
+    if !is_shared
+        && matches!(target, Target::LinuxAarch64 | Target::LinuxX64)
+        && exit_binding_in_scope
+    {
         imports.force_include_by_name("exit", program)?;
     }
     // macOS arm64 with `_Thread_local` globals needs libSystem
@@ -955,6 +1028,7 @@ fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Resul
     build.exports = program.exports.clone();
     build.output_kind = options.output_kind;
     build.dllmain_pc = program.dllmain_pc;
+    build.debug_info = options.debug_info;
     append_build_info(&mut build);
     Ok(build)
 }

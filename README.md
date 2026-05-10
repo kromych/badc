@@ -7,11 +7,20 @@ the C99 standard.
 `badc` produces real native binaries (macOs Mach-O, Linux ELF, or
 Windows PE32+), on any of five targets, from any host - macOS (ARM64),
 Linux (ARM64, x86_64), Windows (ARM64,x86_64) with full debug information
-(can be omitted).
+(can be omitted). Can also JIT into the machine code and recognize being
+used as `#!` so that C source code becomes a script.
 
-There are various demo's under [`demos`](./demos/).
+There are various demo's under [`demos`](./demos/):
 
-It can also run the code JiT-ted in-process so no binary is written
+* Few small-ish ones (`threads.c`, `coro_pool.c`, `hello_server.c`),
+* Maze builder and solver - TBD,
+* `sqlite3` - the most famous embedded database,
+* `miniz` - compression, CRC32, integers, bit twiddling,
+* `kissfft` - floating points, Fast Fourier Transform,
+* `bzip2` - compression, integers, bit twiddling,
+* `stb_vorbis` - TBD
+
+It can also run the code JIT-ted in-process so no binary is written
 to the disk. That option might be useful for using `badc` to run the
 C code as a script. Finally, there's an option to run the IR (intermediate
 representation) with tracking pointer access and bounds to catch
@@ -51,7 +60,7 @@ Now `badc` is available on the PATH.
 If you don't have Rust installed, download one of the binary release packages
 matching you hardware and the OS.
 
-## Hello, -world-, 123!
+## Hello, ~~world~~, 123!
 
 A first run:
 

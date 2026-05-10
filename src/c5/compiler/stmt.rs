@@ -161,8 +161,8 @@ impl Compiler {
 
     /// Parse a `typedef` at block scope. Same shape as the file-
     /// scope handler in run_compile, just routed here so block-
-    /// local typedefs (e.g. sqlite's `typedef void(*LOGFUNC_t)(...)`
-    /// inside a switch case) bind without bouncing through the
+    /// local typedefs (e.g. `typedef void(*LOGFUNC_t)(...)` inside
+    /// a switch case) bind without bouncing through the
     /// declaration parser.
     fn parse_block_typedef(
         &mut self,
@@ -394,8 +394,8 @@ impl Compiler {
             self.next()?;
             // Case label is a constant expression: integer literal,
             // negated literal, parenthesised literal, enum / `#define`d
-            // constant. parse_const_expr_or covers all of these and the
-            // `(-16)` / `0x10|0x20` shapes sqlite uses.
+            // constant. parse_const_expr_or covers all of these and
+            // shapes like `(-16)` / `0x10|0x20`.
             let val = self.parse_const_expr_or()?;
             self.consume(b':', "expected colon after case")?;
             let Some(cases) = self.switch_cases.last_mut() else {

@@ -416,12 +416,11 @@ impl Preprocessor {
         // c99 sec 5.1.1.2 phase 3: remove comments. Done before macro
         // substitution so a `#define X 0 /* note */` body doesn't
         // emit a stray `*/` into a surrounding source comment when
-        // X is referenced from inside that comment. SQLite is the
-        // canonical example: it has many such inline-commented
-        // numeric `#define`s and references them from doc-comment
-        // blocks. Without this pass the macro expansion's `*/`
-        // closes the surrounding `/* ... */` early and the lexer
-        // sees comment tail text as code.
+        // X is referenced from inside that comment. Inline-commented
+        // numeric `#define`s referenced from doc-comment blocks are
+        // a common pattern; without this pass the macro expansion's
+        // `*/` closes the surrounding `/* ... */` early and the
+        // lexer sees comment tail text as code.
         let stripped = strip_c_comments(&unfolded);
         let source = stripped.as_str();
         let mut out = String::with_capacity(source.len());
@@ -670,8 +669,8 @@ impl Preprocessor {
                             // misattribute every subsequent emit --
                             // the bug that gh #50 plumbing exposed
                             // when the amalgamator started gluing
-                            // sqlite3.c + shell.c through `#line`
-                            // markers.
+                            // multiple translation units together
+                            // via `#line` markers.
                             out.push_str(&format_line_marker(source_line + 1, &current_file));
                             source_line += 1;
                             idx_iter += 1;
@@ -793,8 +792,8 @@ impl Preprocessor {
     /// Like [`substitute`], but `blocklist` enumerates macro names
     /// currently being expanded -- the C99 "blue paint" rule says a
     /// macro doesn't re-expand inside its own replacement list.
-    /// SQLite-style self-shadowing (`static T name; #define name
-    /// GLOBAL(T, name)`) blows the stack without this guard.
+    /// Self-shadowing patterns (`static T name; #define name
+    /// GLOBAL(T, name)`) blow the stack without this guard.
     fn substitute_with_blocklist(
         &self,
         line: &str,
@@ -967,7 +966,7 @@ impl Preprocessor {
                 continue;
             }
             // Strip `/* ... */` block comments and `// ...` line
-            // comments. SQLite peppers them on `#if` lines.
+            // comments. They show up routinely on `#if` lines.
             if bytes[i] == b'/' && bytes.get(i + 1) == Some(&b'*') {
                 i += 2;
                 while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
@@ -1045,8 +1044,9 @@ impl Preprocessor {
         //
         // Pre-substitute the expression through the macro table so
         // function-like macros (`__has_attribute(x)`) and chained
-        // object-like macros (`SQLITE_VERSION_NUMBER`) expand before
-        // the parser sees them. `defined(X)` is protected by a
+        // object-like macros (a config-version constant defined
+        // via several layers of `#define`) expand before the
+        // parser sees them. `defined(X)` is protected by a
         // pre-pass that converts it to a literal 0/1 since
         // substitute would otherwise expand X away.
         let prepared = self.expand_for_if(expr);

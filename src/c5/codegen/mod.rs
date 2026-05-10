@@ -855,9 +855,9 @@ pub struct NativeOptions {
     ///
     /// On by default, matching gcc / clang behaviour for an
     /// implicit `-g` build. Turning it off via `--no-debug` /
-    /// `-g0` shrinks the artifact (~10-30% on sqlite-class
-    /// inputs), trims compile time (the type-catalog walk is
-    /// non-trivial on big amalgamations), and -- because the
+    /// `-g0` shrinks the artifact (~10-30% on a large
+    /// translation unit), trims compile time (the type-catalog
+    /// walk is non-trivial on big inputs), and -- because the
     /// only varying input across runs that differ in source
     /// path is the DWARF blob -- gives byte-identical
     /// production binaries useful for golden-hash bisection.

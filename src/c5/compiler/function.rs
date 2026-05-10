@@ -12,12 +12,12 @@
 //! variadic suffix.
 //!
 //! Lives next to `compiler/mod.rs` because the cluster only grew
-//! to its current size as the c5 dialect expanded to cover sqlite-
-//! shaped declarators -- splitting it out keeps the param-parser's
-//! handful of edge cases (the `void` lookahead, the unnamed-
-//! prototype detection, the `[N]` decay rule, the abstract-
-//! declarator usize::MAX path, the duplicate-parameter check) in
-//! one self-contained place.
+//! to its current size as the c5 dialect expanded to cover the
+//! full set of C declarator shapes -- splitting it out keeps the
+//! param-parser's handful of edge cases (the `void` lookahead,
+//! the unnamed-prototype detection, the `[N]` decay rule, the
+//! abstract-declarator usize::MAX path, the duplicate-parameter
+//! check) in one self-contained place.
 
 use alloc::vec::Vec;
 
@@ -117,8 +117,8 @@ impl Compiler {
             // pass it as the base. parse_declarator returns
             // `usize::MAX` for abstract declarators (the unnamed
             // function-pointer shape `int(*)(args)` shows up in
-            // sqlite-style prototypes); we record the type but
-            // don't bind any symbol.
+            // callback-registering prototypes); we record the
+            // type but don't bind any symbol.
             let (param_idx, mut full_ty, array_size) = self.parse_declarator(ty)?;
             if array_size != 0 {
                 full_ty += Ty::Ptr as i64;

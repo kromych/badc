@@ -130,7 +130,9 @@ fn matching_redeclaration_is_silent() {
 fn tentative_definition_merge() {
     // `int x;` + `int x = 5;` -- the prior declaration is tentative
     // (no initializer); the second one supplies the initializer.
-    // Allowed by C11 6.9.2; sqlite3 amalgamation relies on this.
+    // Allowed by C11 6.9.2; amalgamated translation units rely
+    // on this when each `#include`-ed unit re-emits the same
+    // tentative-then-defined globals.
     let src = "int x; int x = 5; int main() { return x; }";
     let prog = crate::c5::Compiler::new(src.to_string()).compile().unwrap();
     let vm_result = crate::c5::Vm::new(prog).run().unwrap();
@@ -241,9 +243,9 @@ fn struct_to_struct_assignment_type_mismatch_rejected() {
 fn forward_declared_struct_pointer_compiles() {
     // A `struct Foo *p` mention before any body is a forward
     // declaration -- the struct stays opaque (size 0, no fields)
-    // but pointer types and typedefs can refer to it.
-    // This is the C standard's behaviour and a hard requirement
-    // for sqlite-style `typedef struct sqlite3 sqlite3;`-before-body.
+    // but pointer types and typedefs can refer to it. This is
+    // the C standard's behaviour and a hard requirement for
+    // common `typedef struct Foo Foo;`-before-body shapes.
     use super::run_str;
     let exit = run_str("int main() { struct Forward *p; p = 0; return 7; }");
     assert_eq!(exit, 7);

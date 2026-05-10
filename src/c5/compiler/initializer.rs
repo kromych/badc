@@ -304,9 +304,10 @@ impl Compiler {
                 // `.val` holds the trampoline's `bc_pc` once
                 // [`Compiler::emit_sys_trampolines`] runs in the
                 // post-parse fixup pass. From the call site's view
-                // -- e.g., sqlite reading `aSyscall[7].pCurrent`
-                // through an `(int(*)(...))` cast and invoking it --
-                // it's an ordinary function pointer.
+                // -- e.g., a vtable consumer reading
+                // `dispatch_table[7].pCurrent` through an
+                // `(int(*)(...))` cast and invoking it -- it's an
+                // ordinary function pointer.
                 let tr_idx = self.ensure_sys_trampoline_sym(idx);
                 self.next()?;
                 return Ok((0, InitElemReloc::Code(tr_idx)));
@@ -399,8 +400,7 @@ impl Compiler {
                 // Without this branch the parser falls into the
                 // single-value path and writes the *pointer* to the
                 // string's data-segment slot into the field's first
-                // 8 bytes -- bug surfaced by sqlite's `sqlite3DigitPairs`
-                // union, where the all-string init produced garbage.
+                // 8 bytes, which produces garbage at read time.
                 let start_addr = self.lex.ival as usize;
                 self.next()?;
                 while self.lex.tk == '"' as i64 {

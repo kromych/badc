@@ -166,12 +166,11 @@ pub(crate) enum Token {
     /// because c5 needs to know specifically when `signed` was
     /// applied to a `char` base. A bare `char` collapses to a
     /// 1-byte unsigned slot, but `signed char` is a real signed
-    /// 8-bit type the C standard guarantees holds -128..127, and
-    /// LEMON-generated tables in sqlite use it for negative rule
-    /// sizes. We promote `signed char` to `int` so the values
-    /// load sign-extended; otherwise yyRuleInfoNRhs[i] = -1 reads
-    /// as 255 and the parser stack indexing goes off into wild
-    /// memory.
+    /// 8-bit type the C standard guarantees holds -128..127. We
+    /// promote `signed char` to `int` so the values load sign-
+    /// extended; otherwise a `signed char` field set to `-1`
+    /// reads back as `255` and any consumer that uses it as an
+    /// array index (or a length, or a flag) walks into garbage.
     Signed,
     /// `unsigned` modifier -- separated from [`IntMod`] so the
     /// parser can mark the resulting integer type as unsigned.
@@ -179,10 +178,10 @@ pub(crate) enum Token {
     /// unsigned int u32;` all flow through `parse_decl_base_type`
     /// where the `saw_unsigned` flag ORs `UNSIGNED_BIT` into the
     /// chosen base type. Comparisons later check the bit and
-    /// pick `Op::Ult/Ugt/Ule/Uge` over their signed twins -- the
-    /// motivating bug was sqlite's `Pgno` (typedef u32) compared
-    /// against `SQLITE_MAX_PAGE_COUNT = 0xfffffffe`, which read as
-    /// signed -2 and turned every page-1 fetch into SQLITE_FULL.
+    /// pick `Op::Ult/Ugt/Ule/Uge` over their signed twins.
+    /// Without it, an unsigned 32-bit value compared against a
+    /// high-bit-set constant like `0xFFFFFFFE` reads as signed
+    /// `-2` and the comparison's sign goes the wrong way.
     Unsigned,
     /// `long` modifier -- separated from [`IntMod`] because seeing
     /// `long` on a declaration's base type drives the 64-bit

@@ -620,17 +620,17 @@ fn collect_subprograms(
     // trampoline byte when the pool exists.
     let total_native = end_of_user_text(build);
 
-    // c5's source-function tracking attributes some `Op::Ent`s to
-    // the wrong containing C function -- in sqlite's amalgamation
-    // there are 15 Ents that c5 calls "yy_reduce" but whose source
-    // lines + actual code belong to setupLookaside,
-    // sqlite3_db_release_memory, etc. (gh #48). Without
-    // disambiguation, lldb's `b yy_reduce` returns 15 matches and
-    // the user can't tell which is the real one. Suffix duplicates
-    // with `.<N>` so the legitimate first-occurrence keeps the
-    // bare name and `b yy_reduce` resolves to one location. The
-    // upstream c5 tracking is a separate fix (the suffixed names
-    // still point at real bytecode, so backtraces inside the
+    // c5's source-function tracking sometimes attributes
+    // `Op::Ent`s to the wrong containing C function -- in a
+    // large translation unit dozens of Ents may carry the same
+    // source-name even though their actual code belongs to
+    // unrelated functions (gh #48). Without disambiguation,
+    // lldb's `b name` returns N matches and the user can't tell
+    // which is the real one. Suffix duplicates with `.<N>` so
+    // the legitimate first-occurrence keeps the bare name and
+    // `b name` resolves to one location. The upstream c5
+    // tracking is a separate fix (the suffixed names still
+    // point at real bytecode, so backtraces inside the
     // mis-attributed regions are no worse than they were).
     let mut name_seen: BTreeMap<alloc::string::String, u32> = BTreeMap::new();
     for (i, &ent_pc) in ent_pcs.iter().enumerate() {
@@ -1225,7 +1225,7 @@ fn build_debug_abbrev() -> Vec<u8> {
     // Abbrev 7: DW_TAG_structure_type. Has children (one
     // DW_TAG_member per c5 `StructField`). DW_AT_byte_size is
     // DATA4 since real-world aggregates exceed 256 bytes
-    // routinely (sqlite's `Vdbe` runs to a few KB).
+    // routinely (multi-KB struct sizes are not unusual).
     write_uleb128(&mut buf, 7);
     write_uleb128(&mut buf, DW_TAG_STRUCTURE_TYPE as u64);
     buf.push(DW_CHILDREN_YES);
@@ -1642,8 +1642,8 @@ fn emit_type_die(
             write_uleb128(body, abbrev);
             body.extend_from_slice(&name_off.to_le_bytes());
             // DW_AT_byte_size as DATA4 -- structs over 256 bytes
-            // happen all the time (sqlite's Vdbe runs to several
-            // KB).
+            // happen routinely; multi-KB aggregates aren't
+            // unusual.
             body.extend_from_slice(&(s.size as u32).to_le_bytes());
 
             let member_names = catalog

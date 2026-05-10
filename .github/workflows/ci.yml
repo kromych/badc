@@ -172,6 +172,12 @@ jobs:
         run: |
           cargo build --release --locked
           python demos/sqlite3/smoke.py
+      - name: miniz amalgamation smoke
+        # Same shape as the sqlite step but smaller: ~9k LOC of
+        # integer + bit-twiddle deflate code. Compresses + uncompresses
+        # a known buffer at both -O and noO and checks CRC32 / Adler32
+        # against RFC 1950 / 3309 reference values.
+        run: python demos/miniz/smoke.py
 
   features:
     name: feature combos

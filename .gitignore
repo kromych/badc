@@ -14,6 +14,14 @@ demos/sqlite3/*
 !demos/sqlite3/setup.py
 !demos/sqlite3/smoke.py
 !demos/sqlite3/README.md
+# miniz amalgamation -- same pattern. `setup.py` fetches the
+# upstream release zip and drops `miniz.c` / `miniz.h` in
+# place; only the runner scripts + driver source are committed.
+demos/miniz/*
+!demos/miniz/setup.py
+!demos/miniz/smoke.py
+!demos/miniz/smoke_main.c
+!demos/miniz/README.md
 hello
 sqlite3_main
 # Local crash artefacts (kept out of git but useful while working on

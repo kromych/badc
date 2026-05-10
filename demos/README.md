@@ -70,3 +70,17 @@ wrapper that copies the host's first int-arg register (rdi / x0 /
 rcx) into the c5 stack slot the callee reads from. Each worker's
 logical id rides through that channel; everything bigger (the
 task queue, the result table) still goes through globals.
+
+## sqlite3/
+
+End-to-end of the upstream SQLite amalgamation. Pinned release,
+fetched on demand by `demos/sqlite3/setup.py`; in-memory and
+file-backed scenarios at both -O and noO. See
+[`sqlite3/README.md`](./sqlite3/README.md).
+
+## miniz/
+
+End-to-end of the upstream [miniz](https://github.com/richgel999/miniz)
+deflate / inflate / CRC32 / Adler32 amalgamation. Smaller and
+integer-heavier than sqlite -- the second non-trivial demo. See
+[`miniz/README.md`](./miniz/README.md).

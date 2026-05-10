@@ -69,6 +69,13 @@ Compile knobs:
                            shape predefines via
                            `-include msvc_compat.h` when
                            targeting Windows.
+  -H, --show-includes      Print the resolved path of every
+                           #include directive to stderr while
+                           preprocessing -- gcc-style, with
+                           leading dots marking nesting depth.
+                           Missing headers (which produce a
+                           warning rather than failing the
+                           compile) print as `! <name> (missing)`.
 
 VM-only knobs (require --interp):
   --track-pointers         Allocation tracking + use-after-free guard.
@@ -140,6 +147,13 @@ fn main() {
     let mut undefines: Vec<String> = Vec::new();
     let mut include_paths: Vec<String> = Vec::new();
     let mut force_includes: Vec<String> = Vec::new();
+    // gcc `-H`-shape include tracing. When on, the preprocessor
+    // records one line per `#include` resolve (with leading-dot
+    // depth) and the CLI flushes the list to stderr after
+    // compilation. Useful for diagnosing "why did this header land
+    // here" or "why didn't this header resolve" without poking the
+    // amalgamated `__BADC_DUMP_PP` output.
+    let mut show_includes = false;
 
     let mut iter = raw.into_iter();
     let prog0 = iter.next().unwrap_or_default();
@@ -231,6 +245,11 @@ fn main() {
                     std::process::exit(1);
                 }
             },
+            // gcc / clang `-H` -- print the resolved include path
+            // for every `#include` directive, with leading dots
+            // marking nesting depth. `--show-includes` is the
+            // descriptive long form (also matches MSVC's spelling).
+            "-H" | "--show-includes" => show_includes = true,
             s if s.starts_with("--target=") => {
                 target_spec = Some(s["--target=".len()..].to_string());
             }
@@ -342,7 +361,7 @@ fn main() {
     // predefines into the compiler. The bytecode itself is target-
     // independent; only the resolved binding map and the
     // preprocessor predefines vary.
-    let mut program = match Compiler::with_full_options_and_label(
+    let mut compiler = Compiler::with_full_options_and_label_with_trace(
         contents,
         target,
         &defines,
@@ -350,9 +369,27 @@ fn main() {
         &include_paths,
         &force_includes,
         &path,
-    )
-    .compile()
-    {
+        show_includes,
+    );
+    // Pull the include trace out *before* the borrow `compile`
+    // takes -- the trace is fully populated by the preprocessor
+    // step that runs in the constructor, so we don't need the
+    // post-compile state for it.
+    let include_trace_lines = if show_includes {
+        compiler.take_include_trace()
+    } else {
+        Vec::new()
+    };
+    if show_includes {
+        // Match gcc's `-H`: dump immediately, before any compile
+        // diagnostic, so a missing header surfaces in the trace
+        // even if the parser then errors out on the empty body
+        // that resulted.
+        for line in &include_trace_lines {
+            eprintln!("{line}");
+        }
+    }
+    let mut program = match compiler.compile() {
         Ok(p) => p,
         Err(e) => {
             eprint_diagnostic(e);

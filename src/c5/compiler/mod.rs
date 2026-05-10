@@ -159,6 +159,13 @@ pub struct Compiler {
     /// would otherwise drown the output.
     warnings: Vec<String>,
 
+    /// gcc `-H`-shape include trace produced by the preprocessor when
+    /// `with_full_options_and_label_with_trace(.., show_includes =
+    /// true)` was used. Empty otherwise. The CLI flushes this list
+    /// to stderr after the compile finishes; library callers can
+    /// drain it via [`Self::take_include_trace`].
+    include_trace: Vec<String>,
+
     /// Bytecode positions (indices into `text`) of `Op::Imm` operands
     /// that hold an offset into the data segment. Recorded at emit time
     /// because the native backend can't rediscover them from the
@@ -413,6 +420,15 @@ impl Compiler {
         Self::with_options(source, target, &[], &[])
     }
 
+    /// Drain the gcc `-H`-shape include trace produced by the
+    /// preprocessor. Empty when constructed without
+    /// `with_full_options_and_label_with_trace(.., show_includes =
+    /// true)`. The CLI calls this after `compile()` and dumps the
+    /// list to stderr; library callers can do the same.
+    pub fn take_include_trace(&mut self) -> Vec<String> {
+        core::mem::take(&mut self.include_trace)
+    }
+
     /// Construct a compiler with explicit `-D` / `-U` predefines
     /// from the CLI driver. Each `defines` entry is a
     /// `(name, body)` pair installed before the source runs through
@@ -470,6 +486,42 @@ impl Compiler {
         force_includes: &[String],
         source_label: &str,
     ) -> Self {
+        Self::with_full_options_and_label_with_trace(
+            source,
+            target,
+            defines,
+            undefines,
+            include_paths,
+            force_includes,
+            source_label,
+            false,
+        )
+    }
+
+    /// Variant of [`Self::with_full_options_and_label`] that also
+    /// flips on the gcc `-H`-shape include trace. The preprocessor
+    /// pushes one line per `#include` resolve into a `Vec<String>`
+    /// available via [`Self::take_include_trace`] after construction.
+    /// Wired in by the CLI's `-H` / `--show-includes` flag; library
+    /// callers that don't want tracing keep the flag at `false` and
+    /// the trace stays empty.
+    //
+    // Long arg list reflects the family of `with_*` constructors
+    // the CLI grew alongside the preprocessor surface (predefines,
+    // search paths, force-includes, label, trace). A future
+    // refactor will collapse the lot into a single `CompileOptions`
+    // struct -- new flags should land there rather than here.
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_full_options_and_label_with_trace(
+        source: String,
+        target: Target,
+        defines: &[(String, String)],
+        undefines: &[String],
+        include_paths: &[String],
+        force_includes: &[String],
+        source_label: &str,
+        show_includes: bool,
+    ) -> Self {
         // Run the preprocessor first so we know the
         // `#pragma binding(...)` set before seeding the symbol
         // table. The bindings come from whichever standard headers
@@ -486,6 +538,7 @@ impl Compiler {
         // every existing caller uses keeps working.
         let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
         pp.set_source_label(source_label);
+        pp.set_show_includes(show_includes);
         for path in include_paths {
             pp.add_search_path(path);
         }
@@ -513,6 +566,12 @@ impl Compiler {
         }
         let dylibs = pp.dylibs;
         let pending_exports = pp.exports;
+        // Drain the preprocessor's diagnostic list -- missing-include
+        // and unknown-directive warnings ride the same Program.warnings
+        // pipeline as the parser's type-warning output, so a build
+        // driver sees one unified list.
+        let pp_warnings = pp.warnings;
+        let pp_include_trace = pp.include_trace;
 
         let mut symbols = Vec::new();
         let mut symbol_index = lexer::SymbolIndex::new();
@@ -552,7 +611,8 @@ impl Compiler {
             switch_cases: Vec::new(),
             switch_defaults: Vec::new(),
             structs: Vec::new(),
-            warnings: Vec::new(),
+            warnings: pp_warnings,
+            include_trace: pp_include_trace,
             data_imm_positions: Vec::new(),
             code_imm_positions: Vec::new(),
             tls_data: Vec::new(),

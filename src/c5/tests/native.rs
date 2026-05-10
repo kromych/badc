@@ -629,8 +629,8 @@ fn fixture_parity() {
 /// post-call extension and the bug surfaces differently per
 /// platform-libc combination.
 #[test]
-fn deferred_atoi_negative_sign_extends() {
-    let outcome = build_and_run_fixture("deferred_atoi_negative.c");
+fn atoi_negative_sign_extends() {
+    let outcome = build_and_run_fixture("atoi_negative.c");
     assert!(
         matches!(outcome, RunOutcome::Exit(0)),
         "atoi('-17') should sign-extend to -1 in i64, got {outcome:?}"

@@ -463,15 +463,15 @@ fn fixture_parity_native_optimized() {
 /// native lane (Mach-O, ELF, PE) -- this is the PE/AArch64
 /// instance.
 #[test]
-fn deferred_atoi_negative_sign_extends() {
+fn atoi_negative_sign_extends() {
     if !host_can_run_pe() {
-        eprintln!("skip deferred_atoi_negative_sign_extends: no PE runner on this host");
+        eprintln!("skip atoi_negative_sign_extends: no PE runner on this host");
         return;
     }
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("fixtures");
     path.push("c");
-    path.push("deferred_atoi_negative.c");
+    path.push("atoi_negative.c");
     let src = std::fs::read_to_string(&path).expect("read fixture");
     let outcome = build_and_run(&src, "atoi-negative", &[]);
     match outcome {

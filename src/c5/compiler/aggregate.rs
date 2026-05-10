@@ -208,6 +208,22 @@ impl Compiler {
                     Some(inner_id)
                 };
                 struct_ty_for(inner_id)
+            } else if self.lex.tk == Token::Enum as i64 {
+                // C99 6.7.2.2: an `enum X` field collapses to plain
+                // `int` in c5's type system the same way every other
+                // enum reference does. Consume any tag name and the
+                // optional body; the field width / alignment is the
+                // 4-byte `int` fallback. Mirrors the
+                // `parse_decl_base_type` enum branch so the same
+                // shape works at file scope and inside a struct.
+                self.next()?;
+                if self.lex.tk == Token::Id as i64 {
+                    self.next()?;
+                }
+                if self.lex.tk == '{' as i64 {
+                    self.parse_enum_body()?;
+                }
+                Ty::Int as i64
             } else if self.is_lex_typedef_name() {
                 let aliased = self.symbols[self.lex.curr_id_idx].type_;
                 self.next()?;

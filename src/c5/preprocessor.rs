@@ -230,6 +230,34 @@ pub(crate) struct Preprocessor {
     /// `include_trace` per `#include` resolve attempt and nothing
     /// else.
     show_includes: bool,
+    /// Source-declared entry-point name (`#pragma entrypoint(<id>)`,
+    /// gh #55). `None` means the default `main` is used; set via
+    /// the pragma to opt the translation unit into a non-`main`
+    /// entry like `WinMain` (Win32 `--gui`) or a custom `_start`.
+    /// The compile pass reads this when resolving `entry_pc`; the
+    /// PE writer reads it for the optional-header AddressOfEntryPoint.
+    pub entrypoint: Option<String>,
+    /// Source-declared Windows subsystem (`#pragma subsystem(<kind>)`,
+    /// gh #32). `None` means the default `console`. Recognised
+    /// kinds today: `console` (IMAGE_SUBSYSTEM_WINDOWS_CUI = 3) and
+    /// `windows` (IMAGE_SUBSYSTEM_WINDOWS_GUI = 2). The PE writer
+    /// reads this to set the optional header's Subsystem field;
+    /// non-PE targets keep the field at `None` and ignore it.
+    pub subsystem: Option<Subsystem>,
+}
+
+/// Windows PE subsystem selector. Mirrors the `IMAGE_SUBSYSTEM_*`
+/// constants from `<winnt.h>`: `Console` is the default for badc-
+/// produced PEs (CRT-style stdio works, but the loader allocates
+/// a console window when one isn't already attached); `Windows`
+/// is the GUI flavour the loader uses for apps that own their
+/// own window message loop.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Subsystem {
+    /// `IMAGE_SUBSYSTEM_WINDOWS_CUI` (3) -- console subsystem.
+    Console,
+    /// `IMAGE_SUBSYSTEM_WINDOWS_GUI` (2) -- windowed subsystem.
+    Windows,
 }
 
 impl Preprocessor {
@@ -332,6 +360,8 @@ impl Preprocessor {
             warnings: Vec::new(),
             include_trace: Vec::new(),
             show_includes: false,
+            entrypoint: None,
+            subsystem: None,
         }
     }
 
@@ -1142,6 +1172,111 @@ impl Preprocessor {
         {
             return self.parse_pragma_export(inner.trim(), line_no, filename);
         }
+        if let Some(inner) = args
+            .strip_prefix("entrypoint(")
+            .and_then(|s| s.strip_suffix(')'))
+        {
+            return self.parse_pragma_entrypoint(inner.trim(), line_no, filename);
+        }
+        if let Some(inner) = args
+            .strip_prefix("subsystem(")
+            .and_then(|s| s.strip_suffix(')'))
+        {
+            return self.parse_pragma_subsystem(inner.trim(), line_no, filename);
+        }
+        Ok(())
+    }
+
+    /// `#pragma entrypoint(<name>)` -- override the function the
+    /// loader / `--jit` handoff jumps to. Default is `main`. The
+    /// only constraint here is that `<name>` is a plain
+    /// identifier; the compile pass validates the name resolves
+    /// to a `Token::Fun` symbol after the parse pass, the same
+    /// way `#pragma export(...)` is checked.
+    ///
+    /// Use cases:
+    ///   * Win32 GUI apps -- `#pragma entrypoint(WinMain)` with
+    ///     `#pragma subsystem(windows)` produces a PE the
+    ///     Windows loader resolves to `WinMain` and the loader
+    ///     skips the console-attach step.
+    ///   * Custom `_start` shapes that bypass the libc CRT.
+    ///   * DLL-style entry points where `DllMain` is the only
+    ///     callable name (rare; today the `#pragma export`
+    ///     surface covers DLLs).
+    fn parse_pragma_entrypoint(
+        &mut self,
+        inner: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<(), C5Error> {
+        let name = inner.trim();
+        if !is_ident(name) {
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                &format!(
+                    "`#pragma entrypoint({name})` -- name must be a \
+                     plain identifier"
+                ),
+            )));
+        }
+        if let Some(prev) = &self.entrypoint
+            && prev != name
+        {
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                &format!(
+                    "`#pragma entrypoint({name})` conflicts with prior \
+                     `#pragma entrypoint({prev})`; pick one"
+                ),
+            )));
+        }
+        self.entrypoint = Some(name.to_string());
+        Ok(())
+    }
+
+    /// `#pragma subsystem(<kind>)` -- pick the Windows PE
+    /// subsystem header value. Recognised today: `console`
+    /// (default; `IMAGE_SUBSYSTEM_WINDOWS_CUI`) and `windows`
+    /// (`IMAGE_SUBSYSTEM_WINDOWS_GUI`). Quietly accepted on
+    /// non-PE targets so the same source can compile for
+    /// multiple OSes; the PE writer is the only consumer that
+    /// looks at the value.
+    fn parse_pragma_subsystem(
+        &mut self,
+        inner: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<(), C5Error> {
+        let kind = inner.trim();
+        let parsed = match kind {
+            "console" | "CUI" | "cui" => Subsystem::Console,
+            "windows" | "GUI" | "gui" => Subsystem::Windows,
+            _ => {
+                return Err(C5Error::Compile(super::error::fmt_compile_err(
+                    filename,
+                    line_no,
+                    &format!(
+                        "`#pragma subsystem({kind})` -- expected \
+                         `console` or `windows`"
+                    ),
+                )));
+            }
+        };
+        if let Some(prev) = self.subsystem
+            && prev != parsed
+        {
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                &format!(
+                    "`#pragma subsystem({kind})` conflicts with prior \
+                     `#pragma subsystem({prev:?})`; pick one"
+                ),
+            )));
+        }
+        self.subsystem = Some(parsed);
         Ok(())
     }
 

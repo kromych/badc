@@ -166,6 +166,16 @@ pub struct Compiler {
     /// drain it via [`Self::take_include_trace`].
     include_trace: Vec<String>,
 
+    /// `#pragma entrypoint(<name>)` value drained from the
+    /// preprocessor (gh #55). Default `None` means "use `main`".
+    /// Read in `compile()` to compute `entry_pc` and threaded onto
+    /// `Program::entry_name`.
+    pp_entrypoint: Option<String>,
+    /// `#pragma subsystem(<kind>)` value drained from the
+    /// preprocessor (gh #32). Default `None` means "PE writer
+    /// picks `Console`". Read only by the PE writers.
+    pp_subsystem: Option<crate::c5::preprocessor::Subsystem>,
+
     /// Bytecode positions (indices into `text`) of `Op::Imm` operands
     /// that hold an offset into the data segment. Recorded at emit time
     /// because the native backend can't rediscover them from the
@@ -572,6 +582,8 @@ impl Compiler {
         // driver sees one unified list.
         let pp_warnings = pp.warnings;
         let pp_include_trace = pp.include_trace;
+        let pp_entrypoint = pp.entrypoint;
+        let pp_subsystem = pp.subsystem;
 
         let mut symbols = Vec::new();
         let mut symbol_index = lexer::SymbolIndex::new();
@@ -613,6 +625,8 @@ impl Compiler {
             structs: Vec::new(),
             warnings: pp_warnings,
             include_trace: pp_include_trace,
+            pp_entrypoint,
+            pp_subsystem,
             data_imm_positions: Vec::new(),
             code_imm_positions: Vec::new(),
             tls_data: Vec::new(),
@@ -1537,16 +1551,23 @@ impl Compiler {
         // a user-defined `DllMain` is present we still refuse,
         // since the result would be an image with no callable
         // entries at all.
-        let main_idx = lexer::find_symbol(&self.symbols, &self.symbol_index, "main");
+        // gh #55: `#pragma entrypoint(<name>)` overrides the
+        // canonical `main`. The override goes through the same
+        // symbol-table lookup so the diagnostic is uniform: a
+        // missing entrypoint always reads `<name>() not defined`.
+        let entry_name_str: &str = self.pp_entrypoint.as_deref().unwrap_or("main");
+        let entry_idx = lexer::find_symbol(&self.symbols, &self.symbol_index, entry_name_str);
         let dllmain_idx = lexer::find_symbol(&self.symbols, &self.symbol_index, "DllMain");
         let has_user_dllmain =
             dllmain_idx.is_some_and(|idx| self.symbols[idx].class == Token::Fun as i64);
-        let entry_pc = match main_idx {
+        let entry_pc = match entry_idx {
             Some(idx) if self.symbols[idx].class == Token::Fun as i64 => {
                 self.symbols[idx].val as usize
             }
             _ if !self.pending_exports.is_empty() || has_user_dllmain => 0,
-            _ => return Err(self.compile_err("main() not defined")),
+            _ => {
+                return Err(self.compile_err(alloc::format!("{entry_name_str}() not defined")));
+            }
         };
         // Resolve `#pragma export(<name>)` directives against
         // the now-finalised symbol table. Each name must
@@ -1615,6 +1636,12 @@ impl Compiler {
             // `DW_TAG_structure_type` DIEs (gh #59). The VM /
             // JIT / interpreter ignore this field.
             structs: self.structs,
+            // gh #55 / gh #32: source-driven entry-name and
+            // Windows subsystem flags drained from the
+            // preprocessor. Both default to None (image writers
+            // pick `main` / `Console` respectively).
+            entry_name: self.pp_entrypoint,
+            subsystem: self.pp_subsystem,
         })
     }
 

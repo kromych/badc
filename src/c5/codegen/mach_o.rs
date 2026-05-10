@@ -2430,6 +2430,8 @@ mod tests {
             source_path: String::new(),
             variables: Vec::new(),
             structs: Vec::new(),
+            entry_name: None,
+            subsystem: None,
         }
     }
 

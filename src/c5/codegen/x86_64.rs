@@ -2402,24 +2402,39 @@ fn emit_libc_call(
     }
 
     {
-        // Sign- or zero-extend a sub-word return into a full
-        // 64-bit value before it becomes the c5 accumulator.
-        // Required on Win64: msvcrt's `int`-typed entry points
-        // (atoi, isatty, fclose, ...) leave the upper 32 bits of
-        // RAX undefined, so a downstream `r13 != -17` comparison
-        // would see garbage. Linux glibc happens to leave the
-        // upper bits zeroed out, but the ABI doesn't promise it,
-        // and the extension is a no-op when `return_type_tag` is
-        // already 64-bit-wide (pointer, `long long`, LP64
-        // `long`, ...) so emitting it on every target is the
-        // simpler choice.
-        let ext = super::return_extension(imports.imports[import_index].return_type_tag, target);
-        emit_extend_rax_for_return(code, ext);
-        // Move the libc return value into r13 so the c5 caller
-        // sees it as the new accumulator. (For functions that
-        // don't return -- e.g. `exit` -- the call doesn't reach
-        // this point at runtime, so the mov is harmless dead code.)
-        emit_mov_rr(code, Reg::R13, Reg::RAX);
+        use crate::c5::compiler::types as ty_helpers;
+        let return_type_tag = imports.imports[import_index].return_type_tag;
+        let bare = ty_helpers::strip_unsigned(return_type_tag);
+        // FP-returning libc fns (sin, cos, sqrt, ...) hand the
+        // result back in xmm0 on both SysV x86_64 and Win64. The
+        // integer-return path below routes RAX -> R13 and would
+        // leave the c5 accumulator holding whatever junk RAX had
+        // (typically 0, since FP return is independent of the
+        // integer return register). Move xmm0 -> R13 instead so
+        // the bit pattern of the f64 lands in c5's accumulator
+        // ready for downstream `Op::Sf` / `Op::Fadd` / etc.
+        if ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare) {
+            emit_movq_r_xmm(code, Reg::R13, Reg::XMM0);
+        } else {
+            // Sign- or zero-extend a sub-word return into a full
+            // 64-bit value before it becomes the c5 accumulator.
+            // Required on Win64: msvcrt's `int`-typed entry points
+            // (atoi, isatty, fclose, ...) leave the upper 32 bits of
+            // RAX undefined, so a downstream `r13 != -17` comparison
+            // would see garbage. Linux glibc happens to leave the
+            // upper bits zeroed out, but the ABI doesn't promise it,
+            // and the extension is a no-op when `return_type_tag` is
+            // already 64-bit-wide (pointer, `long long`, LP64
+            // `long`, ...) so emitting it on every target is the
+            // simpler choice.
+            let ext = super::return_extension(return_type_tag, target);
+            emit_extend_rax_for_return(code, ext);
+            // Move the libc return value into r13 so the c5 caller
+            // sees it as the new accumulator. (For functions that
+            // don't return -- e.g. `exit` -- the call doesn't reach
+            // this point at runtime, so the mov is harmless dead code.)
+            emit_mov_rr(code, Reg::R13, Reg::RAX);
+        }
     }
     Ok(())
 }

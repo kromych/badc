@@ -2256,22 +2256,39 @@ fn emit_libc_call(
         }
     }
 
-    // Sign- or zero-extend a sub-word return into the full 64-bit
-    // accumulator before downstream consumers read it. AAPCS64
-    // doesn't promise the upper bits of X0 for an `int` return, so
-    // a downstream `x19 != -17` comparison would see junk above
-    // EAX otherwise. Emitted on every aarch64 target -- the
-    // extension is a no-op when the prototype is already 64-bit
-    // (pointer, `long long`, LP64 `long`).
-    let ext = super::return_extension(imports.imports[import_index].return_type_tag, target);
-    emit_extend_x19_for_return(code, ext);
-    if matches!(ext, super::ReturnExt::None) {
-        // Move the libc return value into x19 so the caller sees it
-        // as the new accumulator. (For functions that don't return
-        // -- e.g. `exit` -- the call doesn't reach this point at
-        // runtime, so the mov is harmless dead code.) The extension
-        // emitter above already wrote x19 for non-None cases.
-        emit_mov_reg(code, Reg::X19, Reg::X0);
+    {
+        use crate::c5::compiler::types as ty_helpers;
+        let return_type_tag = imports.imports[import_index].return_type_tag;
+        let bare = ty_helpers::strip_unsigned(return_type_tag);
+        // FP-returning libc fns hand the result back in d0 on
+        // AAPCS64. The integer path below routes x0 -> x19 and
+        // would leave the c5 accumulator holding whatever junk
+        // x0 had. `fmov x19, d0` copies the f64 bit pattern into
+        // c5's accumulator, ready for downstream `Op::Sf` /
+        // `Op::Fmul` / etc.
+        if ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare) {
+            emit(code, enc_fmov_d_to_x(Reg::X19, 0));
+        } else {
+            // Sign- or zero-extend a sub-word return into the full
+            // 64-bit accumulator before downstream consumers read
+            // it. AAPCS64 doesn't promise the upper bits of X0
+            // for an `int` return, so a downstream `x19 != -17`
+            // comparison would see junk above EAX otherwise.
+            // Emitted on every aarch64 target -- the extension is
+            // a no-op when the prototype is already 64-bit
+            // (pointer, `long long`, LP64 `long`).
+            let ext = super::return_extension(return_type_tag, target);
+            emit_extend_x19_for_return(code, ext);
+            if matches!(ext, super::ReturnExt::None) {
+                // Move the libc return value into x19 so the caller
+                // sees it as the new accumulator. (For functions
+                // that don't return -- e.g. `exit` -- the call
+                // doesn't reach this point at runtime, so the mov
+                // is harmless dead code.) The extension emitter
+                // above already wrote x19 for non-None cases.
+                emit_mov_reg(code, Reg::X19, Reg::X0);
+            }
+        }
     }
     Ok(())
 }

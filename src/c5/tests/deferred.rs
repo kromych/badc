@@ -160,24 +160,6 @@ fn linux_elf_tls_layout_with_static_locals() {
     );
 }
 
-// ---- Optimizer regression on sqlite3 aggregates (#46) ----
-//
-// The current placeholder fixture exits 0 -- a minimal repro
-// hasn't been bisected out of sqlite3 yet. The test panics under
-// `--ignored` so the issue keeps surfacing in the deferred-test
-// failure list until someone replaces the placeholder with a
-// real bisected repro.
-#[test]
-#[ignore = "deferred (gh #23): optimizer SIGSEGVs on sqlite3 aggregate codegen; minimal repro not yet extracted"]
-fn optimizer_aggregates_minimal_repro_pending() {
-    // Once a real repro is in place this test should compile via
-    // `jit_run_with_options(..., NativeOptions::new().with_optimize())`
-    // and assert that the program exits cleanly. The current
-    // panic keeps the deferred issue visible.
-    let _ = jit_fixture_exit("deferred_optimizer_aggregates.c");
-    panic!("(#46) placeholder fixture: bisect minimal repro from sqlite3 aggregate codegen");
-}
-
 // ---- size_t / ssize_t / time_t typedef widths (#52) ----
 //
 // `typedef int size_t;` etc. left over from before M31 made

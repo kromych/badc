@@ -22,6 +22,13 @@ env:
   # Non-wine runners ignore these.
   WINEDEBUG: "-all"
   WINEDLLOVERRIDES: "winemenubuilder.exe=d;mscoree=d;mshtml=d"
+  # The demo smokes' `setup.py` files download archives from the
+  # `vendor-deps-v1` release on this repo. While the repo is
+  # private, anonymous GitHub release downloads return 404 -- the
+  # auto-provisioned token authenticates the api.github.com path
+  # in `scripts/vendor_deps/_fetch.py`. Once the repo is public
+  # this can be dropped (the no-token path will work).
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
   lint:

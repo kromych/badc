@@ -170,9 +170,24 @@ C11+ features showing up in modern code:
 - `#pragma dylib` / `#pragma binding` / `#pragma export` --
   per-target loader symbol resolution and shared-library
   export.
+- `#pragma entrypoint(<name>)` -- override the default `main`
+  entry point. Used for `WinMain` (Win32 GUI) or any
+  custom non-`main` entry. (gh #55.)
+- `#pragma subsystem(console | windows)` -- pick the Windows
+  PE optional-header `Subsystem` field. Quietly ignored on
+  non-PE targets so the same source builds for every OS.
+  (gh #32.)
 - `#pragma once`.
 - `--interp` (bytecode VM with pointer tracking),
   `--jit` (in-process), `--dump-asm`.
+- `-H` / `--show-includes` -- gcc-`-H`-shape `#include`
+  resolution trace on stderr. Missing headers print as
+  `! name (missing)`.
+- Missing `#include` files and unknown preprocessor
+  directives produce a *warning* rather than a fatal error,
+  so legacy sources sprinkled with `#include <fcntl.h>` for
+  documentation keep compiling. clang / gcc treat both as
+  fatal; c5 chooses the permissive shape.
 - `__BADC_VERSION__`, `__BADC_TARGET__`, `__BADC_WINDOWS__`.
 
 ## Roadmap

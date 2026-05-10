@@ -93,8 +93,12 @@ The three execution modes:
 | `--interp` | Run the bytecode under a watchful VM (pointer tracking, traces).   |
 
 Flags (`--target=<spec>`, `--optimize` / `-O`, `--dump-asm`,
-`--list-symbols`, plus the VM-only `--track-pointers` / `--trace`)
-can appear anywhere before the source.
+`--list-symbols`, `-H` / `--show-includes`, plus the VM-only
+`--track-pointers` / `--trace`) can appear anywhere before the
+source. `-D NAME[=VALUE]`, `-U NAME`, `-I path`, and `-include
+FILE` work the same way they do on gcc / clang. Source-driven
+build flags ride on `#pragma`s -- see "Headers and bindings"
+below.
 
 A `.c` file may start with a shebang. With `badc` on `PATH`,
 `chmod +x script.c` makes the file directly executable -- in
@@ -145,8 +149,8 @@ anonymous struct/union members, `#pragma pack(N)`, ...) on the
 host platform's data model (LP64 on macOS / Linux, LLP64 on
 Windows). The doc enumerates rejected idioms, divergent
 behaviour, and the c5-only extensions (`#pragma dylib` /
-`binding` / `export`, `#pragma once`, the bytecode VM, the
-in-process JIT).
+`binding` / `export` / `entrypoint` / `subsystem`,
+`#pragma once`, the bytecode VM, the in-process JIT).
 
 One implementation choice worth flagging up front: **bare `char`
 is unsigned** on every target (a 1-byte zero-extending load),
@@ -202,6 +206,43 @@ Validation runs at codegen entry: every intrinsic the program
 *references* must have a matching binding for the chosen target.
 Unused bindings cost nothing -- they describe the surface without
 forcing you to pull in everything they name.
+
+#### Source-driven build flags via `#pragma`
+
+c5 follows a "source picks, compiler honours" pattern for
+build-time choices that historically lived on the build
+driver's command line. The same shape covers dylib bindings,
+exports, alignment, the entry-point name, and the Windows
+subsystem -- every knob lives next to the code it configures
+so the source carries enough context to build with a bare
+`badc <file>`.
+
+```c
+#pragma once                       // single-inclusion guard for headers.
+#pragma dylib(libc, "libc.so.6")   // declare a dylib c5 can bind into.
+#pragma binding(libc::sin, "sin")  // map a portable name to its dylib symbol.
+#pragma export(my_api)             // promote a function to a shared-object export.
+#pragma pack(N) / pop / push       // override the default 8-byte struct alignment.
+#pragma entrypoint(WinMain)        // override the default `main` entry point.
+#pragma subsystem(windows)         // pick the Windows PE subsystem (windows | console).
+```
+
+`#pragma entrypoint(<name>)` (gh #55) lets the source declare
+a non-`main` entry without a build-driver flag; the compiler
+resolves the name through the same symbol-table lookup it uses
+for `main`. `#pragma subsystem(<kind>)` (gh #32) drives the
+PE optional-header `Subsystem` byte -- `console` (default,
+`IMAGE_SUBSYSTEM_WINDOWS_CUI = 3`) or `windows`
+(`IMAGE_SUBSYSTEM_WINDOWS_GUI = 2`); together with
+`entrypoint(WinMain)` the pair is what a Win32 GUI app needs
+to skip the loader's auto-attach to a console window. Non-PE
+targets keep the default and ignore the directive, so the
+same source builds for every OS.
+
+Unknown directives (and `#include`s that don't resolve through
+the search-path / embedded-header chain) emit a warning rather
+than failing the build; pass `-H` / `--show-includes` to see
+the gcc-`-H`-shape resolution trace on stderr.
 
 ### Reaching beyond the predefined set
 
@@ -366,12 +407,15 @@ backend and exec it under the host kernel. `jit` covers the
 in-process path the same way.
 
 CI runs the matrix on `ubuntu-latest`, `ubuntu-24.04-arm`,
-`macos-latest`, `windows-latest`, and `windows-11-arm`. The two
-Windows runners additionally run the sqlite3 amalgamation smoke
-(`demos/sqlite3/smoke.py`) end-to-end. The PE-via-WINE lane is
-gated on `BADC_RUN_WINE=1`; a bare `cargo test` on a developer
-machine skips it, and CI doesn't currently set it (the native
-Windows runners cover the same surface directly).
+`macos-latest`, `windows-latest`, and `windows-11-arm`. Every
+runner additionally runs the demo smokes -- sqlite, miniz,
+kissfft, bzip2, gui_hello -- end-to-end (or build-only for
+the GUI demos, which need a display). See
+[`demos/`](./demos/) for what each exercises. The PE-via-
+WINE lane is gated on `BADC_RUN_WINE=1`; a bare `cargo test`
+on a developer machine skips it, and CI doesn't currently
+set it (the native Windows runners cover the same surface
+directly).
 
 ## Tools
 

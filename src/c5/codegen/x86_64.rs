@@ -2543,7 +2543,7 @@ fn pop_lhs_reg(code: &mut Vec<u8>, reg_state: &mut RegState<'_>) -> Reg {
 /// when the env var is set, with `up_levels = 0` for "check our own
 /// saved rbp" and `up_levels = 1` for "check the caller's saved rbp"
 /// (= the slot the caller's prologue pushed when it was called -- which
-/// is the slot the leaf bug clobbers in the #46 sqlite3 crash).
+/// is the slot the gh #46 leaf bug clobbers).
 ///
 /// Skipped under `is_main` because the libc startup stub leaves rbp = 0
 /// when calling main, which would always trip a 0-level check.

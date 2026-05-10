@@ -202,12 +202,13 @@ fn width_typedefs_are_pointer_wide() {
 // ---- Address-of-libc-fn in static initializer ----
 //
 // Static-init paths emit `Imm 0` plus a runtime-patch warning
-// when the right-hand side names a libc symbol. sqlite3's
-// UnixOSData VFS dispatch table relies on a runtime callback
-// to fill the slots; any code path that reads one of those
-// slots before the runtime patch fires sees a NULL function
-// pointer. Affects every target -- the right fix is a
-// GOT/IAT-trampoline pipeline that resolves at load time.
+// when the right-hand side names a libc symbol. Dispatch
+// tables that name libc callbacks (e.g. a VFS-style table of
+// `&open`, `&read`, `&close`, ...) rely on the address being
+// real at first read; any code path that reads a slot before
+// the runtime patch fires sees a NULL function pointer.
+// Affects every target -- the right fix is a GOT/IAT-trampoline
+// pipeline that resolves at load time.
 #[test]
 fn libc_address_in_static_init() {
     // #54 fixed: each `&libc_fn` in a static initializer now
@@ -230,11 +231,9 @@ fn libc_address_in_static_init() {
 // the platform's libc vfprintf expects its own struct-shaped
 // va_list. Forwarding `vfprintf(out, fmt, ap)` from a c5
 // function corrupts the formatter -- the second `%d` reads
-// garbage. Same shape blocked sqlite3 shell.c's `cli_printf`
-// chain; the workaround there was to route through
-// `sqlite3_vmprintf` (c5-compiled). The general fix is either
-// to match c5's va_list to the platform's, or to ship c5-side
-// wrappers around every libc function that takes a va_list.
+// garbage. The general fix is either to match c5's va_list to
+// the platform's, or to ship c5-side wrappers around every
+// libc function that takes a va_list.
 #[test]
 #[ignore = "deferred (gh #18): c5 va_list incompatible with libc vfprintf / vsnprintf et al."]
 fn libc_vfprintf_with_c5_va_list() {

@@ -181,12 +181,12 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
 
     let mut insns = decode(&text, &data_imm_positions, &in_code_imm_positions)?;
     // Build a single pc -> insn-index table by walking `insns`
-    // once. Sqlite's amalgamation produces ~1M instructions and a
-    // few hundred CodeReloc entries; the previous shape called
-    // `pc_to_index_in` once per reloc, each call walking `insns`
-    // linearly, which was O(N*K) and dominated `-O` wall time
-    // (~100ms / 400ms on sqlite3.c+shell.c). One O(N) build + K
-    // binary searches collapses it to O(N + K log N).
+    // once. A large amalgamated translation unit can produce
+    // ~1M instructions and a few hundred CodeReloc entries; the
+    // previous shape called `pc_to_index_in` once per reloc,
+    // each call walking `insns` linearly, which was O(N*K) and
+    // dominated `-O` wall time. One O(N) build + K binary
+    // searches collapses it to O(N + K log N).
     let pc_at_idx = build_pc_at_idx(&insns);
     let entry_idx = lookup_pc(&pc_at_idx, entry_pc, insns.len(), text.len())?;
     // Snapshot the insn index of every CodeReloc target *before*
@@ -398,9 +398,9 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         // entries. Leaving this empty and relying on the value-range
         // heuristic in codegen (`v >= CODE_BASE && v - CODE_BASE <
         // text.len()`) misclassifies user constants that happen to
-        // land in that range -- sqlite's `EP_IsFalse` is `0x20000000`,
-        // exactly `CODE_BASE`, which is how gh #30 turned an integer
-        // flag into a func-ptr ADRP+ADD and corrupted `Expr.flags`.
+        // land in that range -- e.g. an integer flag with value
+        // `0x20000000` (gh #30) gets emitted as a func-ptr
+        // ADRP+ADD pair and corrupts the user's bit field.
         code_imm_positions,
         tls_data,
         tls_init_size,
@@ -436,8 +436,9 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
 /// we use it to upgrade only those `Imm`s to `Insn::ImmCode` (the
 /// alternative -- the value-range heuristic alone -- misclassifies
 /// any user constant in `[CODE_BASE, CODE_BASE + text.len())` as a
-/// func-ptr and corrupts integer literals like sqlite's `EP_IsFalse
-/// = 0x20000000`, which is exactly `CODE_BASE`; cf. gh #30).
+/// func-ptr and corrupts integer flag values that happen to land in
+/// that range, like a flag with literal value `0x20000000` matching
+/// `CODE_BASE`; cf. gh #30).
 fn decode(
     text: &[i64],
     data_imm_positions: &[usize],
@@ -665,10 +666,10 @@ fn lookup_pc(
 /// slot whose word holds a `CODE_BASE + pc` function-pointer literal
 /// (i.e., came from an `Insn::ImmCode`). The codegen uses this to
 /// disambiguate user constants that happen to land in the
-/// `[CODE_BASE, CODE_BASE + text.len())` range -- sqlite's
-/// `EP_IsFalse` is `0x20000000` and collides with `CODE_BASE`
-/// exactly, so the previous "fall back to range heuristic at -O"
-/// shape misclassified that integer as a func ptr (gh #30).
+/// `[CODE_BASE, CODE_BASE + text.len())` range. A flag literal
+/// `0x20000000` is exactly `CODE_BASE`, so the previous "fall back
+/// to range heuristic at -O" shape misclassified the integer as a
+/// func ptr (gh #30).
 fn encode(
     insns: &[Insn],
     entry_idx: usize,
@@ -1253,8 +1254,8 @@ mod tests {
     #[test]
     fn imm_equal_to_code_base_is_not_promoted() {
         // gh #30: a user constant whose value happens to land in
-        // `[CODE_BASE, CODE_BASE + text.len())` (sqlite's
-        // `EP_IsFalse` is `0x20000000`, exactly `CODE_BASE`) must
+        // `[CODE_BASE, CODE_BASE + text.len())` (e.g. an integer
+        // flag literal `0x20000000`, exactly `CODE_BASE`) must
         // survive the optimizer as a plain integer. The empty
         // `code_imm_positions` here means "no compiler-tagged
         // func-ptr literals" -- the only func-ptr-shaped thing in

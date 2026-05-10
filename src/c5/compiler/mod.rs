@@ -352,24 +352,25 @@ pub struct Compiler {
     /// hasn't seen its body yet (`Symbol::val == 0`); when the
     /// body finally lands and `val` updates to the new `ent_pc`,
     /// we walk this list and rewrite the placeholders. Without
-    /// this fixup pass, sqlite3 (and any C codebase that calls a
-    /// function declared in a header but defined further down)
-    /// jumps to PC 0 -- the binary's `main` entry -- and
-    /// recurses into garbage.
+    /// this fixup pass any code that calls a function declared
+    /// in a header but defined further down jumps to PC 0 --
+    /// the binary's `main` entry -- and recurses into garbage.
     fn_call_fixups: Vec<(usize, usize)>,
     /// Parallel symbol index for each entry in `code_relocs`.
     /// `parse_constant_init_value` records a CodeReloc with the
     /// callee's `Symbol::val` at parse time -- which is `0` for
-    /// any function whose body hasn't been emitted yet (sqlite's
-    /// VFS dispatch tables and friends). The
-    /// `apply_fn_call_fixups` pass uses this index to rewrite
-    /// each CodeReloc's `target_bc_pc` and the matching
-    /// data-segment bytes once every body has been parsed.
+    /// any function whose body hasn't been emitted yet (e.g. a
+    /// dispatch table that names every callback before any
+    /// callback's body lands). The `apply_fn_call_fixups` pass
+    /// uses this index to rewrite each CodeReloc's
+    /// `target_bc_pc` and the matching data-segment bytes once
+    /// every body has been parsed.
     code_reloc_sym_idx: Vec<usize>,
     /// Per-libc-symbol trampoline registry. When source code
     /// reaches for the *address* of a `Token::Sys` binding --
     /// either bare (`fp = lstat;`) or in a static initializer
-    /// (sqlite's `aSyscall[]` vtable) -- c5 has no compile-time
+    /// (a function-pointer dispatch table referencing libc) --
+    /// c5 has no compile-time
     /// libc address to fold in. Instead we synthesize a tiny
     /// c5 function that re-pushes its parameters and re-dispatches
     /// through `Op::JsrExt`. Each entry maps `sys_sym_idx` to a
@@ -682,10 +683,10 @@ impl Compiler {
         // its `void *`) is freely interconvertible with any other
         // pointer type. The dialect's headers declare libc functions
         // like `memset(char *, int, int)` and `malloc -> char *`;
-        // sqlite3 passes struct pointers to memset and assigns
-        // malloc's result to struct* variables. Without this rule
-        // every such site fires "incompatible struct types" /
-        // "pointer assigned to integer" noise.
+        // real-world C routinely passes struct pointers to memset
+        // and assigns malloc's result to struct* variables. Without
+        // this rule every such site fires "incompatible struct
+        // types" / "pointer assigned to integer" noise.
         let char_ptr = (Ty::Char as i64) + (Ty::Ptr as i64);
         // Strip UNSIGNED_BIT before comparing: `char *` (which c5
         // treats as unsigned), `signed char *`, and `unsigned char *`
@@ -848,9 +849,9 @@ impl Compiler {
     /// Find an existing struct tag by name or register a fresh
     /// forward declaration (size 0, no fields) and return that.
     /// Used by every type-position that mentions `struct Foo`
-    /// before the struct's body has been seen -- sqlite-style
-    /// `typedef struct Foo Foo;` and `struct Foo *p;` patterns
-    /// rely on this.
+    /// before the struct's body has been seen -- common idioms
+    /// like `typedef struct Foo Foo;` and `struct Foo *p;` rely
+    /// on this.
     fn find_or_forward_declare_struct(&mut self, name: &str) -> usize {
         if let Some(id) = self.find_struct_id(name) {
             return id;
@@ -869,8 +870,9 @@ impl Compiler {
     /// function `is_type_start_token` covers the keyword tokens
     /// (`int`, `char`, `const`, ...); this method extends it by
     /// recognising any identifier whose symbol carries
-    /// `class == Token::Typedef` -- sqlite's `typedef struct X X;
-    /// X *p;` shape would otherwise misparse as `Int p;`.
+    /// `class == Token::Typedef` -- shapes like
+    /// `typedef struct X X; X *p;` would otherwise misparse as
+    /// `Int p;`.
     fn lex_is_type_start(&self) -> bool {
         is_type_start_token(self.lex.tk) || self.is_lex_typedef_name()
     }
@@ -1257,9 +1259,10 @@ impl Compiler {
                 self.text[operand_pc] = target;
             }
         }
-        // Static-initializer function-pointer entries (sqlite's
-        // vtable / function-pointer struct fields). Each
-        // `CodeReloc` was recorded at parse time with the
+        // Static-initializer function-pointer entries (vtables /
+        // function-pointer struct fields, e.g. dispatch tables of
+        // libc callbacks). Each `CodeReloc` was recorded at parse
+        // time with the
         // symbol's prototype-time `val` (often 0); the parallel
         // `code_reloc_sym_idx` tracks the originating symbol so
         // we can read its post-body `val` here. We rewrite both
@@ -1301,7 +1304,7 @@ impl Compiler {
     /// reach for this:
     ///
     /// * Static initializers that take the address of a libc fn
-    ///   (sqlite's `aSyscall[7].pCurrent = fcntl`-style table).
+    ///   (a `dispatch_table[7].pCurrent = fcntl`-style table).
     /// * Bare expression-position references (`fp = readlink;`).
     ///
     /// Both want a callable c5 function-pointer value with the
@@ -1360,8 +1363,8 @@ impl Compiler {
     ///
     /// Variadic libc fns lose anything beyond their declared
     /// fixed prefix -- a trampoline can only forward what its
-    /// signature tells it to push. The two in-the-wild callers
-    /// (sqlite's `aSyscall[]` slots for `fcntl` and `ioctl`) work
+    /// signature tells it to push. The known callers (e.g.
+    /// dispatch-table slots for `fcntl` and `ioctl`) work
     /// because the cast at the use site lines up with the fixed
     /// prefix the trampoline does forward.
     fn emit_sys_trampolines(&mut self) {
@@ -1389,17 +1392,17 @@ impl Compiler {
             //   stay in scope.
             //
             // * Bindings with *no* declared params (just
-            //   `int Name();`) -- e.g. the kernel32 surface that
-            //   sqlite's `aSyscall[]` table casts back to the
+            //   `int Name();`) -- e.g. kernel32 entries that
+            //   real-world dispatch tables cast back to the
             //   right arity at the call site -- get the
             //   single-op `Op::TailExt` body. The trampoline is
             //   `jmp [rip+iat]` and the caller's `Op::Jsri`
             //   lowering owns the host-ABI arg setup, return-
             //   register copy, and stack adjustment. Sub-word
-            //   extension is left to the caller (sqlite casts
-            //   the result to the right type explicitly), which
-            //   matches what real-world dispatch-table consumers
-            //   already do.
+            //   extension is left to the caller (the call site
+            //   casts the result to the right type explicitly),
+            //   which matches what real-world dispatch-table
+            //   consumers already do.
             if fixed_nargs == 0 && !is_variadic {
                 self.emit_op(Op::TailExt);
                 self.emit_val(binding_idx);
@@ -1407,19 +1410,19 @@ impl Compiler {
             }
 
             // For variadic libc fns the binding-declared param
-            // count is only the fixed prefix; sqlite's
-            // `aSyscall[]` table (open/fcntl/ioctl) wants the
-            // trampoline to forward *one* of the variadic args
-            // so the caller's 3-argument cast lines up with what
-            // `JsrExt` packs onto the macOS arm64 variadic-args
-            // stack region. Callers that pass strictly the fixed
-            // prefix end up reading one junk slot from above
-            // their own pushes, but no in-the-wild caller does
-            // -- they all add at least one extra arg precisely
-            // to feed the variadic. The general case (forward N
-            // variadic args where N is unknown at compile time)
-            // needs a real va_args bridge -- tracked separately
-            // with the `c5 va_list` work.
+            // count is only the fixed prefix; common dispatch
+            // tables (open/fcntl/ioctl) want the trampoline to
+            // forward *one* of the variadic args so the caller's
+            // 3-argument cast lines up with what `JsrExt` packs
+            // onto the macOS arm64 variadic-args stack region.
+            // Callers that pass strictly the fixed prefix end up
+            // reading one junk slot from above their own pushes,
+            // but no in-the-wild caller does -- they all add at
+            // least one extra arg precisely to feed the variadic.
+            // The general case (forward N variadic args where N
+            // is unknown at compile time) needs a real va_args
+            // bridge -- tracked separately with the `c5 va_list`
+            // work.
             let nargs = if is_variadic {
                 fixed_nargs + 1
             } else {
@@ -2631,9 +2634,9 @@ impl Compiler {
                 self.ty = t;
                 // gh #19: re-seed the fn-ptr chain depth from the
                 // cast destination so a unary `*` chain that
-                // follows a `(fn_t*)expr` cast (sqlite's
-                // `(**(finder_type*)pVfs->pAppData)(...)` shape)
-                // can recognise the decay. The cast result lives
+                // follows a `(fn_t*)expr` cast (e.g.
+                // `(**(finder_type*)pVfs->pAppData)(...)`) can
+                // recognise the decay. The cast result lives
                 // in `a`, so the depth is `cast_fpi - 1`.
                 if let Some(fpi) = cast_fpi
                     && fpi > 0
@@ -2676,8 +2679,8 @@ impl Compiler {
             // SIGBUSes when called. The conservative pop in the
             // call-site path catches this only when the result
             // type drops to a non-pointer; if the function's
-            // return type is itself a pointer (sqlite's
-            // `finder_type` returning `sqlite3_io_methods *`,
+            // return type is itself a pointer (e.g. an
+            // `io_methods *`-returning fn-ptr typedef as in
             // gh #19) the pop is short-circuited and the
             // garbage call target slips through.
             if self.fn_ptr_chain_depth == 0 {
@@ -2832,9 +2835,9 @@ impl Compiler {
         } else {
             // The parse-error message includes the enclosing function
             // name and (for `Token::Id`) the identifier name -- those
-            // two facts are what made bisecting sqlite3.c's `_IOWR`
-            // expansion tractable, and a generic "bad expression
-            // tk=174" is otherwise opaque.
+            // two facts make a parse error like a stuck macro
+            // expansion tractable, vs. a generic "bad expression
+            // tk=174" which is otherwise opaque.
             let func = self.current_function_name.clone();
             let id_name = if self.lex.tk == Token::Id as i64 {
                 Some(self.symbols[self.lex.curr_id_idx].name.clone())
@@ -2863,8 +2866,6 @@ impl Compiler {
                 //   `(*fp)(args)` -- explicit dereference shape
                 //   `(**fpp)(args)` -- dereference through a pointer
                 //                       to a function-pointer variable
-                //                       (sqlite's posixIoFinder
-                //                       chain inside `unixOpen`)
                 // Direct identifier calls (`name(args)`) take the
                 // dedicated path higher up that knows the symbol's
                 // class and signature; that path consumes `(`
@@ -3056,10 +3057,8 @@ impl Compiler {
                 // the FP variant of the binop, not the integer one.
                 // Without this, `x *= y` lowered to `Op::Mul` which
                 // multiplied the bit patterns of the two doubles as
-                // signed integers, producing a useless result. Surfaced
-                // as sqlite's `vdbe.c` `rB *= rA` (and `+=` / `-=`)
-                // returning 0 / Inf for any `INTEGER * REAL` expression
-                // -- which is why `avg(int_col * 1.0)` was wrong.
+                // signed integers, producing a useless result. Same
+                // shape applies to `+=` / `-=` / `/=` on doubles.
                 let lhs_is_fp = is_floating_scalar(lhs_ty);
                 let op = match binop {
                     x if x == Token::AddOp as i64 => {
@@ -3796,10 +3795,10 @@ impl Compiler {
                 // typedef branch: register a type alias and skip the
                 // function / global storage path entirely. Re-declaring
                 // an existing typedef with the same underlying type is
-                // tolerated -- sqlite's amalgamation re-emits identical
-                // typedefs through several `#include` paths -- but a
-                // clashing redefinition or a clash with a non-typedef
-                // symbol is rejected.
+                // tolerated -- amalgamated translation units routinely
+                // re-emit identical typedefs through several `#include`
+                // paths -- but a clashing redefinition or a clash with
+                // a non-typedef symbol is rejected.
                 if is_typedef {
                     let prior_class = self.symbols[id_idx].class;
                     let prior_type = self.symbols[id_idx].type_;
@@ -3831,9 +3830,9 @@ impl Compiler {
                 // without overriding the function's binding-driven
                 // class/val. Function symbols with no body yet
                 // (Token::Fun, val == 0) can also be re-declared
-                // (sqlite-style amalgamations include the same
-                // prototype many times). A second body for the
-                // same Fun is still a real duplicate.
+                // -- amalgamated translation units include the
+                // same prototype many times. A second body for
+                // the same Fun is still a real duplicate.
                 let was_sys = self.symbols[id_idx].class == Token::Sys as i64;
                 // Forward / repeat function declarations: allowed
                 // either when the next token is `(` (the regular
@@ -3919,10 +3918,9 @@ impl Compiler {
                     // prototype against a fully-specified one isn't a
                     // mismatch under the standard, so we skip the
                     // parameter-list check when either side is empty.
-                    // The `appendText` collision in the sqlite smoke
-                    // (two `static`-scope-but-amalgamated definitions
-                    // with different specified params) still warns,
-                    // because both sides specify their parameters.
+                    // Two `static`-scope-but-amalgamated definitions
+                    // that fully specify different parameters still
+                    // warn, because both sides specify them.
                     let either_unspecified = prior_params.is_empty() || params.types.is_empty();
                     let return_differs = prior_return_ty != ty;
                     let variadic_differs = prior_is_variadic != params.is_variadic;

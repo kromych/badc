@@ -2772,12 +2772,10 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool, callee_pool_dep
         let bytes = (locals as u32) * 8;
         let aligned = (bytes + 15) & !15;
         // SUB (immediate) only takes 12 bits unshifted, so for
-        // functions with more than ~511 locals (e.g. sqlite3's
-        // do_meta_command, which holds ~1500 locals across its
-        // many dot-command branches) we need the two-instruction
-        // shifted-12 split. Without this the immediate silently
-        // overflows into the shift bits and the prologue traps
-        // with SIGILL on first call.
+        // functions with more than ~511 locals we need the two-
+        // instruction shifted-12 split. Without this the
+        // immediate silently overflows into the shift bits and
+        // the prologue traps with SIGILL on first call.
         emit_sub_sp_imm(code, aligned);
     }
     emit(code, enc_str_pre(Reg::X19, Reg::SP, -16));

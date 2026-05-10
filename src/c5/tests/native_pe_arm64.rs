@@ -454,34 +454,30 @@ fn fixture_parity_native_optimized() {
     );
 }
 
-/// Deferred (#48): atoi("-17") returns the wrong value on
-/// PE/AArch64 when run through wine on Linux aarch64. Other libc
-/// surface (strcmp, isspace, ...) all pass; only the
-/// signed-negative `int` return through wine's arm64 libc
-/// translation is wrong. JIT and native macOS / Linux ELF lanes
-/// pass.
+/// Regression marker (gh #48): `atoi("-17")` on PE/AArch64 -- the
+/// libc return-register sign-extension contract on Win64 / wine
+/// arm64 leaves the upper bits of X0 unspecified, and c5's 64-bit
+/// accumulator needs the `sxtw` after the call so a downstream
+/// `acc != -17` compare matches. `emit_extend_x19_for_return`
+/// emits that based on the binding's declared return type.
+/// `libc_basic.c` in NATIVE_PE_ARM64_FIXTURES is the original
+/// repro; this isolated fixture is the structural marker.
 #[test]
-#[ignore = "deferred (gh #13): wine arm64 atoi('-17') sign bug; other lanes pass"]
-fn deferred_atoi_negative() {
+fn atoi_negative_sign_extends() {
     if !host_can_run_pe() {
-        eprintln!("skip deferred_atoi_negative: no PE runner on this host");
+        eprintln!("skip atoi_negative_sign_extends: no PE runner on this host");
         return;
     }
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("fixtures");
     path.push("c");
-    path.push("deferred_atoi_negative_pe_arm64.c");
-    let src = std::fs::read_to_string(&path).expect("read deferred fixture");
-    let outcome = build_and_run(&src, "deferred-atoi-negative", &[]);
+    path.push("atoi_negative_pe_arm64.c");
+    let src = std::fs::read_to_string(&path).expect("read fixture");
+    let outcome = build_and_run(&src, "atoi-negative", &[]);
     match outcome {
-        RunOutcome::Exit(c) => {
-            assert_eq!(
-                c, 0,
-                "fixture should exit 0 once wine arm64 atoi sign is fixed"
-            )
-        }
-        RunOutcome::Signal(s) => panic!("deferred-atoi-negative killed by signal {s}"),
-        RunOutcome::BuildError(e) => panic!("deferred-atoi-negative build error: {e}"),
+        RunOutcome::Exit(c) => assert_eq!(c, 0, "atoi('-17') should sign-extend to -1 in i64"),
+        RunOutcome::Signal(s) => panic!("atoi-negative killed by signal {s}"),
+        RunOutcome::BuildError(e) => panic!("atoi-negative build error: {e}"),
         RunOutcome::HostCannotRun => {}
     }
 }

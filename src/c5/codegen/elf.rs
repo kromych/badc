@@ -102,6 +102,10 @@ const DT_FLAGS: u64 = 30;
 const DF_BIND_NOW: u64 = 0x8;
 
 // nlist / Elf64_Sym fields.
+/// `STB_LOCAL` -- file-local binding. Used by gh #61 for the
+/// per-PLT-trampoline static symbols so they don't shadow
+/// `.dynsym`'s loader-visible globals.
+const STB_LOCAL: u8 = 0;
 const STB_GLOBAL: u8 = 1;
 /// `STT_FUNC` symbol type -- `st_info` low nibble for both
 /// imported and exported functions. Imports use it so debuggers
@@ -154,6 +158,12 @@ const ELF64_SHDR_SIZE: u64 = 64;
 // Section header types we emit (Elf64_Shdr.sh_type).
 const SHT_NULL: u32 = 0;
 const SHT_PROGBITS: u32 = 1;
+/// Static symbol table -- the file-only `.symtab` paired with
+/// `.strtab`. Distinct from `SHT_DYNSYM` (the loader-side dynamic
+/// symbol table). gh #61 emits one local STT_FUNC per import via
+/// this section so debuggers (`gdb`, `lldb`) and `nm` resolve
+/// PLT trampoline addresses to a real name.
+const SHT_SYMTAB: u32 = 2;
 const SHT_STRTAB: u32 = 3;
 const SHT_RELA: u32 = 4;
 const SHT_HASH: u32 = 5;
@@ -443,6 +453,78 @@ fn build_dynstr(
     }
 
     (bytes, name_offsets, lib_offsets, export_offsets)
+}
+
+/// gh #61: build the static `.symtab` + `.strtab` for the
+/// PLT-trampoline pool. One local `STT_FUNC` per import, plus
+/// the SHT_SYMTAB sentinel at index 0. Returns
+/// `(symtab_bytes, strtab_bytes)`.
+///
+/// `text_vmaddr` is the runtime vmaddr of `build.text[0]` (i.e.
+/// `code_vmaddr + stub_len`), so each symbol's `st_value` resolves
+/// to the trampoline's actual instruction address.
+fn build_plt_symtab(
+    build: &super::Build,
+    text_vmaddr: u64,
+    trampoline_size: u64,
+) -> (Vec<u8>, Vec<u8>) {
+    let imports = &build.imports.imports;
+    debug_assert_eq!(
+        imports.len(),
+        build.plt_trampoline_offsets.len(),
+        "trampoline-offset count must match import count"
+    );
+
+    // .strtab: leading NUL (st_name=0 -> empty string sentinel)
+    // followed by NUL-separated import names.
+    let mut strtab = alloc::vec![0u8];
+    let mut name_offsets: Vec<u32> = Vec::with_capacity(imports.len());
+    for imp in imports {
+        name_offsets.push(strtab.len() as u32);
+        strtab.extend_from_slice(imp.local_name.as_bytes());
+        strtab.push(0);
+    }
+
+    // .symtab: SHT_SYMTAB sentinel at index 0, then one local
+    // STT_FUNC per trampoline. Local symbols come first by spec
+    // (the .symtab section header's `sh_info` field points one
+    // past the last local entry).
+    let mut symtab: Vec<u8> = Vec::with_capacity((1 + imports.len()) * ELF64_SYM_SIZE as usize);
+    write_struct(
+        &mut symtab,
+        &Elf64Sym {
+            st_name: 0,
+            st_info: 0,
+            st_other: 0,
+            st_shndx: 0,
+            st_value: 0,
+            st_size: 0,
+        },
+    );
+    for (i, imp) in imports.iter().enumerate() {
+        let _ = imp;
+        let st_value = text_vmaddr + build.plt_trampoline_offsets[i] as u64;
+        write_struct(
+            &mut symtab,
+            &Elf64Sym {
+                st_name: name_offsets[i],
+                // Local + STT_FUNC. Locals come before globals in
+                // the table; with no globals, the section header's
+                // `sh_info` is `n_locals + 1` -- past the last
+                // local (the SHT_SYMTAB rule).
+                st_info: (STB_LOCAL << 4) | STT_FUNC,
+                st_other: 0,
+                // .text section index. Hard-coded to match the
+                // section-header table: NULL=0, .interp=1,
+                // .dynsym=2, .dynstr=3, .hash=4, .rela.dyn=5,
+                // .text=6.
+                st_shndx: 6,
+                st_value,
+                st_size: trampoline_size,
+            },
+        );
+    }
+    (symtab, strtab)
 }
 
 /// Build .dynsym. Layout:
@@ -1045,7 +1127,44 @@ pub(super) fn write(
     let dwarf_line_off = dwarf_abbrev_off + dwarf_sections.debug_abbrev.len() as u64;
     let dwarf_str_off = dwarf_line_off + dwarf_sections.debug_line.len() as u64;
     let dwarf_frame_off = dwarf_str_off + dwarf_sections.debug_str.len() as u64;
-    let shstrtab_off = dwarf_frame_off + dwarf_sections.debug_frame.len() as u64;
+
+    // gh #61: build the static `.symtab` + `.strtab` listing one
+    // local STT_FUNC per PLT trampoline. The trampolines live
+    // inside `.text` at `code_vmaddr + stub_len + tramp_off`; a
+    // debugger's `b malloc` on the produced binary now resolves
+    // to the trampoline rather than getting lost in the dynamic
+    // linker's macro-expansion sites.
+    //
+    // Empty when the program has no imports (a `void main(){}`
+    // that never calls libc -- rare). The two sections still get
+    // their headers in that case for layout symmetry, but their
+    // payloads degenerate to the SHT_SYMTAB sentinel + the empty
+    // string.
+    let emit_plt_symtab = !build.plt_trampoline_offsets.is_empty();
+    let trampoline_size: u64 = match machine {
+        super::Machine::Aarch64 => 12, // adrp + ldr + br
+        super::Machine::X86_64 => 6,   // jmp qword ptr [rip+disp32]
+    };
+    let (plt_symtab_bytes, plt_strtab_bytes) = if emit_plt_symtab {
+        build_plt_symtab(build, dwarf_text_vmaddr, trampoline_size)
+    } else {
+        (Vec::new(), alloc::vec![0u8])
+    };
+    let post_dwarf_off = dwarf_frame_off + dwarf_sections.debug_frame.len() as u64;
+    let (symtab_off, strtab_off, shstrtab_off) = if emit_plt_symtab {
+        // .symtab requires 8-byte alignment (each Elf64_Sym is 24
+        // bytes). The file body pads to `symtab_off` before
+        // emitting the bytes; .strtab and .shstrtab sit immediately
+        // after with no further padding.
+        let s = round_up(post_dwarf_off, 8);
+        let st = s + plt_symtab_bytes.len() as u64;
+        let sh = st + plt_strtab_bytes.len() as u64;
+        (s, st, sh)
+    } else {
+        // No PLT symtab -> .shstrtab abuts DWARF directly,
+        // matching the pre-#61 layout.
+        (post_dwarf_off, post_dwarf_off, post_dwarf_off)
+    };
     // .shstrtab content: NUL + section names. Index 0 is the
     // empty name (SHT_NULL sentinel uses sh_name=0). Names cover
     // the full set of sections in the section-header table:
@@ -1082,6 +1201,17 @@ pub(super) fn write(
             ".debug_frame",  // 16
         ]);
     }
+    // gh #61: `.symtab` + `.strtab` for the PLT-trampoline pool.
+    // Always paired -- a SHT_SYMTAB section's `sh_link` must
+    // reference a real strtab. Only emitted when there are
+    // trampolines to name.
+    let plt_symtab_name_idx_in_shstrtab = if emit_plt_symtab {
+        shstrtab_names.push(".symtab");
+        shstrtab_names.push(".strtab");
+        Some(shstrtab_names.len() - 2)
+    } else {
+        None
+    };
     let shstrtab_idx_self = shstrtab_names.len();
     shstrtab_names.push(".shstrtab");
     let mut shstrtab: Vec<u8> = Vec::new();
@@ -1113,6 +1243,7 @@ pub(super) fn write(
         + (if has_data { 1 } else { 0 }) // .data
         + (if has_tbss { 1 } else { 0 }) // .tbss
         + (if emit_dwarf { 5 } else { 0 }) // .debug_* x 5 (info, abbrev, line, str, frame); gh #62
+        + (if emit_plt_symtab { 2 } else { 0 }) // .symtab + .strtab; gh #61
         + 1; // .shstrtab
     let total_filesize = shdr_off + n_section_headers * ELF64_SHDR_SIZE;
     // shstrtab is the last section in the table; its index is
@@ -1402,6 +1533,18 @@ pub(super) fn write(
     out.extend_from_slice(&dwarf_sections.debug_line);
     out.extend_from_slice(&dwarf_sections.debug_str);
     out.extend_from_slice(&dwarf_sections.debug_frame);
+
+    // ---- gh #61: PLT-trampoline static symbol table. ----
+    if emit_plt_symtab {
+        // Pad to 8 so each Elf64_Sym lands aligned.
+        while (out.len() as u64) < symtab_off {
+            out.push(0);
+        }
+        debug_assert_eq!(out.len() as u64, symtab_off);
+        out.extend_from_slice(&plt_symtab_bytes);
+        debug_assert_eq!(out.len() as u64, strtab_off);
+        out.extend_from_slice(&plt_strtab_bytes);
+    }
     debug_assert_eq!(out.len() as u64, shstrtab_off);
 
     // .shstrtab
@@ -1711,6 +1854,58 @@ pub(super) fn write(
         }
     }
 
+    // gh #61: PLT-trampoline static symbol table. `.symtab`'s
+    // `sh_info` field must point one past the last LOCAL symbol;
+    // we only emit locals, so it's `n_symbols` (sentinel + one
+    // per import). `sh_link` references the matching `.strtab`.
+    if let Some(name_idx) = plt_symtab_name_idx_in_shstrtab {
+        // Section-header indices for `.symtab` / `.strtab`. They
+        // sit just before `.shstrtab` (which is always at
+        // `n_section_headers - 1`), so they're at -3 / -2 from
+        // the end. These are independent of `shstrtab_names`
+        // ordering -- the names list and the shdr table use
+        // different indexing schemes (the former includes only
+        // names; the latter includes optional sections like
+        // `.tdata` / `.data` / `.tbss` whose names are at fixed
+        // shstrtab slots).
+        let symtab_shdr_idx = (n_section_headers - 3) as u32;
+        let strtab_shdr_idx = (n_section_headers - 2) as u32;
+        let _ = symtab_shdr_idx;
+        let n_sym = (plt_symtab_bytes.len() as u64) / ELF64_SYM_SIZE;
+        // [N] .symtab
+        write_struct(
+            &mut out,
+            &Elf64Shdr {
+                sh_name: shstrtab_offsets[name_idx],
+                sh_type: SHT_SYMTAB,
+                sh_flags: 0,
+                sh_addr: 0,
+                sh_offset: symtab_off,
+                sh_size: plt_symtab_bytes.len() as u64,
+                sh_link: strtab_shdr_idx,
+                sh_info: n_sym as u32, // one past last local
+                sh_addralign: 8,
+                sh_entsize: ELF64_SYM_SIZE,
+            },
+        );
+        // [N+1] .strtab
+        write_struct(
+            &mut out,
+            &Elf64Shdr {
+                sh_name: shstrtab_offsets[name_idx + 1],
+                sh_type: SHT_STRTAB,
+                sh_flags: 0,
+                sh_addr: 0,
+                sh_offset: strtab_off,
+                sh_size: plt_strtab_bytes.len() as u64,
+                sh_link: 0,
+                sh_info: 0,
+                sh_addralign: 1,
+                sh_entsize: 0,
+            },
+        );
+    }
+
     // [last] .shstrtab.
     write_struct(
         &mut out,
@@ -1916,6 +2111,7 @@ mod tests {
             macho_tlv_fixups: Vec::new(),
             macho_tlv_descriptors: Vec::new(),
             debug_info: true,
+            plt_trampoline_offsets: Vec::new(),
         }
     }
 

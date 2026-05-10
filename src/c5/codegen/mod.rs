@@ -672,6 +672,21 @@ pub(crate) struct Build {
     /// so existing tests that build a `Build` by hand keep the
     /// pre-#62 behaviour.
     pub debug_info: bool,
+    /// Byte offset within `Build::text` of each import's PLT
+    /// trampoline. Indexed by `ResolvedImports::imports` slot --
+    /// `plt_trampoline_offsets[i]` is the local code address the
+    /// per-format writer should expose as `imports[i].local_name`
+    /// in the static symbol table.
+    ///
+    /// Each trampoline is a tiny GOT/IAT-load + tail-jump (3
+    /// instructions on aarch64 / 1 instruction on x86_64) that
+    /// the per-arch lowering emits at the tail of the user code.
+    /// Every `Op::JsrExt` / `Op::TailExt` call site now branches
+    /// here via `bl` / `call rel32` instead of inlining the GOT
+    /// load -- so a debugger's `b malloc` resolves against this
+    /// in-image local symbol rather than getting lost in the
+    /// dynamic linker's macro-expansion sites. See gh #61.
+    pub plt_trampoline_offsets: Vec<usize>,
 }
 
 /// One macOS arm64 Thread-Local Variable. A 24-byte `__thread_vars`

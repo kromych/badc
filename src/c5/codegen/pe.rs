@@ -105,6 +105,24 @@ const IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE: u16 = 0x0040;
 const IMAGE_DLLCHARACTERISTICS_NX_COMPAT: u16 = 0x0100;
 const IMAGE_DLLCHARACTERISTICS_NO_SEH: u16 = 0x0400;
 
+/// COFF storage classes (`IMAGE_SYMBOL.StorageClass`). gh #61
+/// uses `IMAGE_SYM_CLASS_EXTERNAL` for the per-trampoline names
+/// so debuggers (`gdb`, `lldb`, `windbg`) resolve `b malloc`
+/// against the local trampoline rather than chasing it through
+/// msvcrt's dispatcher tables. `IMAGE_SYM_CLASS_STATIC` would
+/// be the file-local equivalent but tools tend to filter it out
+/// of name lookups.
+const IMAGE_SYM_CLASS_EXTERNAL: u8 = 2;
+/// Function-typed symbol -- `IMAGE_SYMBOL.Type` high byte set to
+/// `DT_FUNCTION` (0x20). Tells consumers the value is a code
+/// address.
+const IMAGE_SYM_TYPE_FUNCTION: u16 = 0x20;
+/// Each `IMAGE_SYMBOL` is exactly 18 bytes (8-byte name + 4-byte
+/// value + 2-byte section number + 2-byte type + 1-byte storage
+/// class + 1-byte aux count). Hard-coded as a const so callers
+/// can pre-size the symbol-table buffer.
+const IMAGE_SYMBOL_SIZE: u32 = 18;
+
 const IMAGE_SCN_CNT_CODE: u32 = 0x0000_0020;
 const IMAGE_SCN_CNT_INITIALIZED_DATA: u32 = 0x0000_0040;
 /// `IMAGE_SCN_MEM_DISCARDABLE` -- the loader may unmap the
@@ -615,9 +633,25 @@ pub(super) fn write(
     ];
     let mut coff_strtab: Vec<u8> = Vec::new();
     let mut dwarf_section_names: Vec<[u8; 8]> = Vec::with_capacity(5);
-    if dwarf_section_present {
-        // Reserve 4 bytes for the size header, written at the end.
+    // gh #61: build a per-trampoline COFF symbol table so a
+    // debugger's `b malloc` resolves to the local PLT trampoline
+    // rather than getting lost in msvcrt's macro expansions. The
+    // symbol table sits at `pointer_to_symbol_table` (= start of
+    // the post-DWARF area); the COFF string table follows
+    // immediately after, exactly the layout consumers expect
+    // (`strtab_off = pointer_to_symbol_table + n_symbols * 18`).
+    //
+    // We emit when there are trampolines, even on `--no-debug`
+    // builds, so the COFF strtab may now be present without DWARF.
+    // The 4-byte size prefix is reserved up-front and patched at
+    // the end.
+    let emit_plt_coff_symbols = !build.plt_trampoline_offsets.is_empty();
+    let need_coff_strtab = dwarf_section_present || emit_plt_coff_symbols;
+    if need_coff_strtab {
+        // 4-byte size header, patched at the end.
         coff_strtab.extend_from_slice(&0u32.to_le_bytes());
+    }
+    if dwarf_section_present {
         for long_name in DWARF_LONG_NAMES {
             let strtab_offset = coff_strtab.len() as u32;
             coff_strtab.extend_from_slice(long_name.as_bytes());
@@ -629,8 +663,6 @@ pub(super) fn write(
             name_field[..n].copy_from_slice(&formatted.as_bytes()[..n]);
             dwarf_section_names.push(name_field);
         }
-        let strtab_size = coff_strtab.len() as u32;
-        coff_strtab[..4].copy_from_slice(&strtab_size.to_le_bytes());
     }
     let mut dwarf_pe_sections: Vec<DwarfPeSlot> = Vec::new();
     if dwarf_section_present {
@@ -664,19 +696,69 @@ pub(super) fn write(
         .map(|s| round_up(s.rva + s.bytes.len() as u32, SECTION_ALIGNMENT))
         .unwrap_or(pre_dwarf_end_rva);
 
-    // The COFF string table sits at the very end of the file
-    // (after the DWARF section payloads), referenced by
-    // `CoffHeader.pointer_to_symbol_table` even though we keep
-    // `number_of_symbols = 0`. This is the canonical PE/COFF
-    // pattern -- consumers read `pointer_to_symbol_table + symbols
-    // * 18` to find the start of the string table; with no
-    // symbols, the string table starts exactly there.
-    let coff_strtab_file_off = if dwarf_section_present && !coff_strtab.is_empty() {
+    // gh #61: build the COFF symbol-table payload now that the
+    // long-name strtab offsets are stable. Each trampoline gets
+    // one IMAGE_SYMBOL whose Value is the trampoline's RVA and
+    // whose SectionNumber is 1 (.text). Names <= 8 bytes inline
+    // into the ShortName field; longer ones land in the strtab
+    // and the symbol references them by 4-byte zero + offset.
+    //
+    // Using `IMAGE_SYM_CLASS_EXTERNAL` keeps the names visible to
+    // gdb / lldb / windbg name-lookup; STATIC gets filtered out
+    // of `b malloc` resolution by some tool versions.
+    let mut coff_symbols: Vec<u8> = Vec::new();
+    if emit_plt_coff_symbols {
+        for (i, imp) in build.imports.imports.iter().enumerate() {
+            let trampoline_rva =
+                text_rva + text_prologue_len + build.plt_trampoline_offsets[i] as u32;
+            let mut name_field = [0u8; 8];
+            let name_bytes = imp.local_name.as_bytes();
+            if name_bytes.len() <= 8 {
+                name_field[..name_bytes.len()].copy_from_slice(name_bytes);
+            } else {
+                // Long-name form: 4-byte zero + 4-byte strtab offset.
+                let strtab_offset = coff_strtab.len() as u32;
+                coff_strtab.extend_from_slice(name_bytes);
+                coff_strtab.push(0);
+                name_field[0..4].copy_from_slice(&0u32.to_le_bytes());
+                name_field[4..8].copy_from_slice(&strtab_offset.to_le_bytes());
+            }
+            // 18 bytes: name(8) + value(4) + sectnum(2) + type(2)
+            //         + class(1) + naux(1).
+            coff_symbols.extend_from_slice(&name_field);
+            coff_symbols.extend_from_slice(&trampoline_rva.to_le_bytes());
+            coff_symbols.extend_from_slice(&1u16.to_le_bytes()); // .text = section 1
+            coff_symbols.extend_from_slice(&IMAGE_SYM_TYPE_FUNCTION.to_le_bytes());
+            coff_symbols.push(IMAGE_SYM_CLASS_EXTERNAL);
+            coff_symbols.push(0); // no aux entries
+        }
+    }
+    let n_coff_symbols = (coff_symbols.len() as u32) / IMAGE_SYMBOL_SIZE;
+
+    // Patch the COFF strtab's leading 4-byte size (it's the total
+    // strtab length including the size header itself).
+    if need_coff_strtab {
+        let strtab_size = coff_strtab.len() as u32;
+        coff_strtab[..4].copy_from_slice(&strtab_size.to_le_bytes());
+    }
+
+    // The COFF symbol table + string table sit at the very end
+    // of the file (after the DWARF section payloads). Consumers
+    // read `pointer_to_symbol_table` to find symbols, then
+    // `pointer_to_symbol_table + n_symbols * 18` to find the
+    // string table.
+    let coff_symtab_file_off = if need_coff_strtab {
         dwarf_end_file_off
     } else {
         0
     };
-    let total_file_size = (dwarf_end_file_off + coff_strtab.len() as u32) as usize;
+    let coff_strtab_file_off = if need_coff_strtab {
+        coff_symtab_file_off + coff_symbols.len() as u32
+    } else {
+        0
+    };
+    let total_file_size =
+        (dwarf_end_file_off + coff_symbols.len() as u32 + coff_strtab.len() as u32) as usize;
     let image_size = if dwarf_section_present {
         dwarf_end_rva
     } else if edata_section_present {
@@ -786,6 +868,8 @@ pub(super) fn write(
         reloc_section_present,
         edata_section_present,
         dwarf_section_present,
+        coff_symtab_file_off,
+        n_coff_symbols,
         coff_strtab_file_off,
         is_dll,
     );
@@ -1072,6 +1156,13 @@ pub(super) fn write(
     for slot in &dwarf_pe_sections {
         pad_to(&mut out, slot.file_off as usize);
         out.extend_from_slice(&slot.bytes);
+    }
+    // gh #61: COFF symbol table immediately before its string
+    // table. Both live at the file tail (post-DWARF). Emitted
+    // when there are PLT trampolines; absent otherwise.
+    if !coff_symbols.is_empty() {
+        pad_to(&mut out, coff_symtab_file_off as usize);
+        out.extend_from_slice(&coff_symbols);
     }
     if !coff_strtab.is_empty() {
         pad_to(&mut out, coff_strtab_file_off as usize);
@@ -1578,9 +1669,12 @@ fn write_coff_header(
     reloc_section_present: bool,
     edata_section_present: bool,
     dwarf_section_present: bool,
+    coff_symtab_file_off: u32,
+    n_coff_symbols: u32,
     coff_strtab_file_off: u32,
     is_dll: bool,
 ) {
+    let _ = coff_strtab_file_off;
     let machine_id = match machine {
         Machine::X86_64 => IMAGE_FILE_MACHINE_AMD64,
         Machine::Aarch64 => IMAGE_FILE_MACHINE_ARM64,
@@ -1600,16 +1694,19 @@ fn write_coff_header(
                 dwarf_section_present,
             ) as u16,
             time_date_stamp: 0,
-            // gh #42: PE images don't have a symbol table, but
-            // we set `pointer_to_symbol_table` to the start of
-            // the COFF string table anyway -- consumers compute
-            // the string-table offset as
-            // `pointer_to_symbol_table + number_of_symbols * 18`,
-            // which equals our string table offset directly when
-            // symbols == 0. The `/N` references in DWARF section
-            // names then resolve to the full `.debug_*` strings.
-            pointer_to_symbol_table: coff_strtab_file_off,
-            number_of_symbols: 0,
+            // gh #42: PE images carry a COFF strtab at the file
+            // tail so the long DWARF section names ("/<offset>")
+            // resolve. gh #61: with PLT trampolines we now also
+            // emit a real COFF symbol table -- one local-name
+            // entry per import -- right before the strtab.
+            //
+            // Layout: `pointer_to_symbol_table` -> symbols, then
+            // strtab at `pointer_to_symbol_table + n_symbols * 18`.
+            // Pre-#61 default with no trampolines: the symbol
+            // count is 0 and the pointer lands directly on the
+            // strtab.
+            pointer_to_symbol_table: coff_symtab_file_off,
+            number_of_symbols: n_coff_symbols,
             size_of_optional_header: optional_header_size as u16,
             characteristics,
         },

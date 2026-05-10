@@ -1109,6 +1109,10 @@ pub(super) fn lower(
     let mut bytecode_to_native: Vec<usize> = vec![usize::MAX; program.text.len() + 1];
     let mut fixups: Vec<Fixup> = Vec::new();
     let mut got_fixups: Vec<GotFixup> = Vec::new();
+    // gh #61: each `JsrExt` / `TailExt` site emits a placeholder
+    // BL/B; the displacement gets backfilled once trampolines are
+    // laid out at the tail of `code`.
+    let mut plt_call_fixups: Vec<PltCallFixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();
     // Function-pointer Imms get their target resolved post-walk against
     // `bytecode_to_native`, so we record (adrp_offset, target_bytecode_pc)
@@ -1181,7 +1185,7 @@ pub(super) fn lower(
             &mut pc,
             &mut code,
             &mut fixups,
-            &mut got_fixups,
+            &mut plt_call_fixups,
             &mut data_fixups,
             &mut pending_func_fixups,
             &mut tls_index_fixups,
@@ -1202,6 +1206,16 @@ pub(super) fn lower(
     bytecode_to_native[program.text.len()] = code.len();
 
     apply_fixups(&mut code, &fixups, &bytecode_to_native, program.text.len())?;
+
+    // gh #61: append one PLT trampoline per import. Every BL/B
+    // placeholder recorded in `plt_call_fixups` now gets its imm26
+    // backfilled to the matching trampoline's byte offset. The
+    // trampoline body's adrp+ldr pair is patched by the per-format
+    // writer through the same `GotFixup` shape the inline call
+    // sequence used pre-#61.
+    let plt_trampoline_offsets =
+        emit_plt_trampolines(&mut code, &mut got_fixups, imports.imports.len());
+    apply_plt_call_fixups(&mut code, &plt_call_fixups, &plt_trampoline_offsets)?;
 
     // Emit per-function arg-shuffling thunks for any function whose
     // address is taken (`fp = worker_main`). The thunk lets pthread /
@@ -1323,6 +1337,7 @@ pub(super) fn lower(
         macho_tlv_descriptors,
         // Overwritten by `lower_for` from `NativeOptions::debug_info`.
         debug_info: true,
+        plt_trampoline_offsets,
     })
 }
 
@@ -1396,7 +1411,7 @@ fn lower_op(
     pc: &mut usize,
     code: &mut Vec<u8>,
     fixups: &mut Vec<Fixup>,
-    got_fixups: &mut Vec<GotFixup>,
+    plt_call_fixups: &mut Vec<PltCallFixup>,
     data_fixups: &mut Vec<DataFixup>,
     pending_func_fixups: &mut Vec<(usize, usize)>,
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
@@ -1797,7 +1812,7 @@ fn lower_op(
                 text,
                 *pc,
                 code,
-                got_fixups,
+                plt_call_fixups,
                 abi,
                 imports,
                 fp_mask,
@@ -1818,7 +1833,7 @@ fn lower_op(
                      the resolver should have placed it"
                 )))
             })?;
-            emit_got_tail_jump(code, got_fixups, import_index);
+            emit_got_tail_jump(code, plt_call_fixups, import_index);
         }
 
         // ---- Floating-point arithmetic ----
@@ -2057,7 +2072,7 @@ fn emit_libc_call(
     text: &[i64],
     pc_after_op: usize,
     code: &mut Vec<u8>,
-    got_fixups: &mut Vec<GotFixup>,
+    plt_call_fixups: &mut Vec<PltCallFixup>,
     abi: Abi,
     imports: &super::ResolvedImports,
     fp_arg_mask: u32,
@@ -2158,10 +2173,10 @@ fn emit_libc_call(
                 emit(code, enc_ldr_imm(Reg::X16, Reg::SP, src));
                 emit(code, enc_str_imm(Reg::X16, Reg::SP, (i * 8) as u32));
             }
-            emit_got_call(code, got_fixups, import_index);
+            emit_got_call(code, plt_call_fixups, import_index);
             emit(code, enc_add_imm(Reg::SP, Reg::SP, scratch_bytes));
         } else {
-            emit_got_call(code, got_fixups, import_index);
+            emit_got_call(code, plt_call_fixups, import_index);
         }
     } else {
         // Non-variadic AAPCS64 (Linux/aarch64 takes this path for
@@ -2217,7 +2232,7 @@ fn emit_libc_call(
                 stack_idx += 1;
             }
         }
-        emit_got_call(code, got_fixups, import_index);
+        emit_got_call(code, plt_call_fixups, import_index);
         if scratch > 0 {
             emit(code, enc_add_imm(Reg::SP, Reg::SP, scratch));
         }
@@ -2294,36 +2309,129 @@ fn emit_adrp_add_placeholder(code: &mut Vec<u8>) {
 
 /// Emit `adrp x16, GOT_PAGE; ldr x16, [x16, #GOT_OFF]; blr x16` --
 /// the standard macOS PC-relative GOT call sequence. Both the adrp
-/// and the ldr are placeholders; the writer patches them once the
-/// data segment vmaddr is known.
-fn emit_got_call(code: &mut Vec<u8>, got_fixups: &mut Vec<GotFixup>, import_index: usize) {
-    let adrp_offset = code.len();
-    got_fixups.push(GotFixup {
-        adrp_offset,
-        import_index,
-    });
-    // adrp + ldr placeholder -- patched later. We still emit valid
-    // skeleton bytes (with rd = x16) so an unpatched binary at least
-    // reads as adrp+ldr in disassembly.
-    emit(code, enc_adrp(Reg::X16, 0));
-    emit(code, enc_ldr_imm(Reg::X16, Reg::X16, 0));
-    emit(code, enc_blr(Reg::X16));
+/// gh #61: a single 4-byte `BL <plt_trampoline>` placeholder at
+/// every libc call site, plus a per-import trampoline appended at
+/// the tail of `Build::text`. The trampoline holds the pre-#61
+/// `adrp + ldr + br` sequence (with `BR x16` -- libc's RET returns
+/// directly to the call's BL site).
+///
+/// Why this shape:
+/// * `b malloc` in gdb / lldb resolves against a real local
+///   STT_FUNC symbol on the trampoline, not against macro-expansion
+///   sites in the dynamic linker.
+/// * `objdump -d ./bin` annotates each call site with `malloc@plt`
+///   (when the per-format writer wires the symbol).
+/// * The branch predictor catches the trampoline tail-jump after
+///   the first call, so the extra hop is free in practice.
+///
+/// Resolved by `lower()` once trampoline byte offsets are known --
+/// the call instruction's `imm26` is rewritten in place.
+#[derive(Debug, Clone, Copy)]
+struct PltCallFixup {
+    /// Byte offset within the lower-pass `code` of the BL/B
+    /// instruction whose `imm26` we need to backfill.
+    instr_offset: usize,
+    /// Import slot the call should reach via its trampoline.
+    import_index: usize,
+    /// `true` -> emit `B <tramp>` (tail jump); `false` -> emit
+    /// `BL <tramp>` (call). Both share the same imm26 encoding;
+    /// only the link bit at 0x80000000 differs.
+    is_tail: bool,
 }
 
-/// Tail-jump variant of [`emit_got_call`]: same `adrp+ldr`
-/// patch-bookkeeping the writer recognises, but with a final
-/// `BR x16` instead of `BLR x16`. The libc fn's `RET` returns
-/// directly to the c5 caller of the trampoline, skipping the
-/// trampoline entirely on the way back. Used by `Op::TailExt`.
-fn emit_got_tail_jump(code: &mut Vec<u8>, got_fixups: &mut Vec<GotFixup>, import_index: usize) {
-    let adrp_offset = code.len();
-    got_fixups.push(GotFixup {
-        adrp_offset,
+/// Emit a 4-byte `BL <plt_trampoline>` placeholder + record a
+/// `PltCallFixup` for the post-pass to patch. Replaces the pre-#61
+/// inline `adrp + ldr + blr` sequence.
+fn emit_got_call(code: &mut Vec<u8>, plt_call_fixups: &mut Vec<PltCallFixup>, import_index: usize) {
+    plt_call_fixups.push(PltCallFixup {
+        instr_offset: code.len(),
         import_index,
+        is_tail: false,
     });
-    emit(code, enc_adrp(Reg::X16, 0));
-    emit(code, enc_ldr_imm(Reg::X16, Reg::X16, 0));
-    emit(code, enc_br(Reg::X16));
+    // Placeholder displacement; rewritten in `apply_plt_call_fixups`
+    // once trampolines have been laid out.
+    emit(code, enc_bl(0));
+}
+
+/// Tail-jump variant of [`emit_got_call`]: emits a 4-byte
+/// `B <plt_trampoline>` placeholder. libc's `RET` returns
+/// directly to the c5 caller of the trampoline, skipping
+/// both this `B` and the trampoline entirely on the way back.
+/// Used by `Op::TailExt`.
+fn emit_got_tail_jump(
+    code: &mut Vec<u8>,
+    plt_call_fixups: &mut Vec<PltCallFixup>,
+    import_index: usize,
+) {
+    plt_call_fixups.push(PltCallFixup {
+        instr_offset: code.len(),
+        import_index,
+        is_tail: true,
+    });
+    emit(code, enc_b(0));
+}
+
+/// Emit one PLT trampoline per import at the tail of `code`,
+/// returning the byte-offset map. Each trampoline is a 12-byte
+/// `adrp + ldr + br` sequence; the writer patches its adrp/ldr
+/// pair via the `GotFixup` we record here, identical to the
+/// pre-#61 inline pattern.
+fn emit_plt_trampolines(
+    code: &mut Vec<u8>,
+    got_fixups: &mut Vec<GotFixup>,
+    n_imports: usize,
+) -> Vec<usize> {
+    let mut offsets = Vec::with_capacity(n_imports);
+    for import_index in 0..n_imports {
+        let tramp_off = code.len();
+        offsets.push(tramp_off);
+        got_fixups.push(GotFixup {
+            adrp_offset: tramp_off,
+            import_index,
+        });
+        emit(code, enc_adrp(Reg::X16, 0));
+        emit(code, enc_ldr_imm(Reg::X16, Reg::X16, 0));
+        // BR (not BLR): libc's RET unwinds to the original BL
+        // caller in user code rather than bouncing back here.
+        emit(code, enc_br(Reg::X16));
+    }
+    offsets
+}
+
+/// Resolve every `PltCallFixup` against the trampoline byte
+/// offsets. Each call's `imm26` is rewritten in place; out-of-
+/// range deltas surface as a debug_assert in `enc_bl` / `enc_b`.
+fn apply_plt_call_fixups(
+    code: &mut [u8],
+    fixups: &[PltCallFixup],
+    trampoline_offsets: &[usize],
+) -> Result<(), C5Error> {
+    for fx in fixups {
+        let tramp_off = *trampoline_offsets.get(fx.import_index).ok_or_else(|| {
+            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
+                "PLT call fixup at offset {} references import {} but only \
+                 {} trampolines were emitted",
+                fx.instr_offset,
+                fx.import_index,
+                trampoline_offsets.len()
+            )))
+        })?;
+        let delta_bytes = tramp_off as i64 - fx.instr_offset as i64;
+        if delta_bytes % 4 != 0 {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("PLT call fixup: trampoline byte delta {delta_bytes} not 4-byte aligned"),
+            )));
+        }
+        let delta_insns = (delta_bytes / 4) as i32;
+        let word = if fx.is_tail {
+            enc_b(delta_insns)
+        } else {
+            enc_bl(delta_insns)
+        };
+        let bytes = word.to_le_bytes();
+        code[fx.instr_offset..fx.instr_offset + 4].copy_from_slice(&bytes);
+    }
+    Ok(())
 }
 
 /// Pop the top of the VM push-stack -- either a pool register `xN`

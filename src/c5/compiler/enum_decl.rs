@@ -11,7 +11,7 @@
 //! Lives next to `compiler/mod.rs` because the cluster is
 //! self-contained and the pair (`parse_enum_decl` -> `parse_enum_body`)
 //! moves together. The constants loop reuses
-//! `parse_const_expr_or` for explicit values like `B = 1 << 8`.
+//! `parse_constant_int` for explicit values like `B = 1 << 8`.
 
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
@@ -50,10 +50,11 @@ impl Compiler {
             if self.lex.tk == Token::Assign as i64 {
                 self.next()?;
                 // Constant expression -- handles literals, unary
-                // signs, parens, casts, shifts (`1 << 8`), and
-                // identifiers bound to prior `Token::Num` enum
-                // entries / `#define`d constants.
-                i = self.parse_const_expr_or()?;
+                // signs, parens, casts, shifts (`1 << 8`), the
+                // conditional operator, and identifiers bound to
+                // prior `Token::Num` enum entries / `#define`d
+                // constants.
+                i = self.parse_constant_int()?;
             }
             self.symbols[idx].class = Token::Num as i64;
             self.symbols[idx].type_ = Ty::Int as i64;

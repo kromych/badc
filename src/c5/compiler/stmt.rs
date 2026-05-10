@@ -394,9 +394,9 @@ impl Compiler {
             self.next()?;
             // Case label is a constant expression: integer literal,
             // negated literal, parenthesised literal, enum / `#define`d
-            // constant. parse_const_expr_or covers all of these and
-            // shapes like `(-16)` / `0x10|0x20`.
-            let val = self.parse_const_expr_or()?;
+            // constant. The C99 grammar allows the full conditional-
+            // expression chain (`a ? b : c`), so we go in at the top.
+            let val = self.parse_constant_int()?;
             self.consume(b':', "expected colon after case")?;
             let Some(cases) = self.switch_cases.last_mut() else {
                 return Err(self.compile_err("case outside switch"));

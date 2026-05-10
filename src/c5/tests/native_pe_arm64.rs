@@ -349,6 +349,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("const_expr_conditional.c", 27),
     ("comma_operator_in_loops.c", 3),
     ("size_t_via_stdio.c", 3),
+    ("leading_dot_float_literal.c", 7),
     ("struct_2d_array_field.c", 27),
     ("anonymous_aggregates.c", 0),
     ("static_locals.c", 0),

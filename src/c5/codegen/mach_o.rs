@@ -2450,6 +2450,7 @@ mod tests {
                     is_variadic: false,
                     fixed_args: 3,
                     return_type_tag: 0,
+                    param_types: Vec::new(),
                 }],
                 dylibs: vec![ResolvedDylib {
                     name: "libc".into(),

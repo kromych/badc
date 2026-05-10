@@ -316,6 +316,14 @@ pub(crate) struct ResolvedImport {
     /// prototype seen") falls through with no extension; `void`
     /// also reduces to `Ty::Char` since the lexer aliases it.
     pub return_type_tag: i64,
+    /// Per-fixed-parameter type tags from the prototype. Carried
+    /// from `Binding::param_types`; the DWARF emitter (gh #67)
+    /// uses these to give every PLT trampoline a
+    /// `DW_TAG_subprogram` with `DW_TAG_formal_parameter`
+    /// children typed accurately so gdb / lldb show the
+    /// signature in `bt`. Empty when the parser hasn't seen the
+    /// prototype.
+    pub param_types: Vec<i64>,
 }
 
 /// One resolved dylib the program needs at load time. Distinct from
@@ -374,28 +382,19 @@ impl ResolvedImports {
         if self.imports.iter().any(|i| i.local_name == local_name) {
             return Ok(());
         }
-        let mut found: Option<(i64, &str, &str, &str, bool, usize, i64)> = None;
+        let mut found: Option<(i64, &super::preprocessor::DylibSpec, &super::preprocessor::Binding)> =
+            None;
         let mut binding_idx: i64 = 0;
         'outer: for spec in &program.dylibs {
             for b in &spec.bindings {
                 if b.local_name == local_name {
-                    found = Some((
-                        binding_idx,
-                        spec.name.as_str(),
-                        spec.path.as_str(),
-                        b.real_symbol.as_str(),
-                        b.is_variadic,
-                        b.fixed_args,
-                        b.return_type_tag,
-                    ));
+                    found = Some((binding_idx, spec, b));
                     break 'outer;
                 }
                 binding_idx += 1;
             }
         }
-        let Some((idx, dylib_name, dylib_path, real_symbol, is_variadic, fixed_args, return_ty)) =
-            found
-        else {
+        let Some((idx, spec, b)) = found else {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
                     "no `#pragma binding(<dylib>::{local_name}, ...)` is in scope -- the target's \
@@ -404,12 +403,12 @@ impl ResolvedImports {
                 ),
             )));
         };
-        let dylib_index = match self.dylibs.iter().position(|d| d.name == dylib_name) {
+        let dylib_index = match self.dylibs.iter().position(|d| d.name == spec.name) {
             Some(i) => i,
             None => {
                 self.dylibs.push(ResolvedDylib {
-                    name: dylib_name.to_string(),
-                    path: dylib_path.to_string(),
+                    name: spec.name.clone(),
+                    path: spec.path.clone(),
                 });
                 self.dylibs.len() - 1
             }
@@ -417,11 +416,12 @@ impl ResolvedImports {
         self.imports.push(ResolvedImport {
             binding_idx: idx,
             local_name: local_name.to_string(),
-            real_symbol: real_symbol.to_string(),
+            real_symbol: b.real_symbol.clone(),
             dylib_index,
-            is_variadic,
-            fixed_args,
-            return_type_tag: return_ty,
+            is_variadic: b.is_variadic,
+            fixed_args: b.fixed_args,
+            return_type_tag: b.return_type_tag,
+            param_types: b.param_types.clone(),
         });
         Ok(())
     }
@@ -501,6 +501,7 @@ impl ResolvedImports {
                 is_variadic: b.is_variadic,
                 fixed_args: b.fixed_args,
                 return_type_tag: b.return_type_tag,
+                param_types: b.param_types.clone(),
             });
         }
 

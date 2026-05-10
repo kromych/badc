@@ -67,6 +67,11 @@ const DW_TAG_VARIABLE: u32 = 0x34;
 const DW_TAG_STRUCTURE_TYPE: u8 = 0x13;
 const DW_TAG_UNION_TYPE: u8 = 0x17;
 const DW_TAG_MEMBER: u8 = 0x0d;
+/// DWARF 5 §3.4.2 -- the `, ...` of a variadic prototype. We
+/// emit one as a child of every PLT subprogram whose
+/// `is_variadic` flag is set so gdb / lldb render the signature
+/// with an ellipsis (`printf (fmt, ...)`).
+const DW_TAG_UNSPECIFIED_PARAMETERS: u8 = 0x18;
 
 const DW_CHILDREN_NO: u8 = 0x00;
 const DW_CHILDREN_YES: u8 = 0x01;
@@ -124,6 +129,12 @@ const DW_OP_FBREG: u8 = 0x91;
 /// stored at x29's address" -- breg gets the right semantics
 /// for c5's stack-frame layout.
 const DW_OP_BREG29: u8 = 0x8d;
+/// `DW_OP_reg0..reg31` -- "this variable IS in register N".
+/// Used by gh #67's PLT formal_parameter DIEs so gdb can
+/// evaluate the value of e.g. malloc's `size` arg directly out
+/// of the AAPCS64 / SysV calling-convention register at the
+/// moment of the call.
+const DW_OP_REG_BASE: u8 = 0x50;
 
 const DW_LANG_C99: u8 = 0x0c;
 
@@ -321,13 +332,19 @@ pub(crate) fn emit(
     // Walk the bytecode, collect one `Subprog` per `Op::Ent`.
     let subs = collect_subprograms(program, build, code_vmaddr, &mut strs);
 
-    // Build the type catalog. Walks captured variables, then
-    // transitively pulls in struct fields' types so a member
-    // declared `struct Foo *next` reaches a real `DW_TAG_pointer`
-    // -> `DW_TAG_structure_type` chain. String interning happens
-    // here so the strtab is finalised just before we write
-    // `.debug_str`.
-    let catalog = TypeCatalog::collect(&subs, &mut strs, target, &program.structs);
+    // gh #67: one `PltSub` per import. Lets gdb / lldb resolve a
+    // `bt` frame pointing at a PLT trampoline to a typed
+    // signature like `malloc (size=...)` rather than bare
+    // `in malloc ()`.
+    let plt_subs = collect_plt_subprograms(build, target, code_vmaddr, &mut strs);
+
+    // Build the type catalog. Walks captured variables and PLT
+    // signatures, then transitively pulls in struct fields' types
+    // so a member declared `struct Foo *next` reaches a real
+    // `DW_TAG_pointer` -> `DW_TAG_structure_type` chain. String
+    // interning happens here so the strtab is finalised just
+    // before we write `.debug_str`.
+    let catalog = TypeCatalog::collect(&subs, &plt_subs, &mut strs, target, &program.structs);
 
     let debug_abbrev = build_debug_abbrev();
     let (debug_line, line_unit_off) = build_debug_line(program, build, code_vmaddr, source_path);
@@ -340,6 +357,7 @@ pub(crate) fn emit(
         build.text.len() as u64,
         &catalog,
         &subs,
+        &plt_subs,
         target,
         &program.structs,
     );
@@ -371,6 +389,36 @@ struct Subprog {
     /// turns each into a `DW_TAG_variable` /
     /// `DW_TAG_formal_parameter` child of the subprogram DIE.
     variables: Vec<SubprogVar>,
+}
+
+/// One PLT-trampoline subprogram (gh #67). Mirrors `Subprog` but
+/// drops the c5-frame machinery: a stub has no locals, no
+/// prologue, no frame_base. It carries an explicit return type
+/// (`Subprog` doesn't, since user-fn return types aren't tracked
+/// by the c5 frontend yet) and per-fixed-parameter types so the
+/// emitter can write `DW_TAG_formal_parameter` children with
+/// proper `DW_AT_type` refs.
+struct PltSub {
+    name_off: u32,
+    low_pc: u64,
+    high_pc: u64,
+    /// Return type tag (c5 `Symbol::type_` encoding). `0` when
+    /// the parser hasn't seen a prototype for this binding;
+    /// classified through the same TypeCatalog used for user
+    /// variables.
+    return_type_tag: i64,
+    /// Per-fixed-parameter type tags. One DIE per entry. Empty
+    /// when the parser hasn't seen the prototype.
+    param_types: Vec<i64>,
+    /// Strtab offset of the synthetic name (`arg0`, `arg1`,
+    /// ...) we hand each formal_parameter so gdb's `info args`
+    /// and `bt` actually print the param. Same length as
+    /// `param_types`.
+    param_name_offs: Vec<u32>,
+    /// `true` if the binding's prototype ended with `, ...)`.
+    /// The emitter appends a `DW_TAG_unspecified_parameters`
+    /// child after the typed parameters when set.
+    is_variadic: bool,
 }
 
 struct SubprogVar {
@@ -417,6 +465,82 @@ fn end_of_user_text(build: &Build) -> usize {
         .first()
         .copied()
         .unwrap_or(build.text.len())
+}
+
+/// One [`PltSub`] per import in declaration order. Each
+/// trampoline gets its own `DW_TAG_subprogram` DIE so debuggers
+/// resolve a `bt` frame at the stub to a typed signature
+/// (`malloc (size, ...)`) rather than just the symbol name. The
+/// trampolines are emitted contiguously by
+/// [`super::aarch64::emit_plt_trampolines`] /
+/// [`super::x86_64::emit_plt_trampolines`], so their per-stub
+/// size is the constant arithmetic mean -- which we derive from
+/// the recorded offsets so the dwarf module stays free of
+/// per-arch constants.
+fn collect_plt_subprograms(
+    build: &Build,
+    target: Target,
+    code_vmaddr: u64,
+    strs: &mut StrTable,
+) -> Vec<PltSub> {
+    let imports = &build.imports.imports;
+    if imports.is_empty() || build.plt_trampoline_offsets.is_empty() {
+        return Vec::new();
+    }
+    debug_assert_eq!(
+        imports.len(),
+        build.plt_trampoline_offsets.len(),
+        "trampoline-offset count must match import count"
+    );
+    let n = imports.len();
+    // Per-stub size. Trampolines are emitted contiguously and
+    // are uniform-sized per arch, so the delta between two
+    // consecutive offsets is exact. The last-stub-to-text-end
+    // delta would also work in isolation, but
+    // `append_build_info` appends a NUL-terminated marker string
+    // *after* the PLT pool to `build.text` -- so
+    // `build.text.len() - offsets.last()` overshoots by the
+    // marker bytes (the overshoot was visible as DW_AT_high_pc
+    // = 0x1f instead of 0xc on the linked_list fixture).
+    let stub_size = if n >= 2 {
+        (build.plt_trampoline_offsets[1] - build.plt_trampoline_offsets[0]) as u64
+    } else {
+        // Single import: fall back to the per-arch constant. Has
+        // to match `super::aarch64::emit_plt_trampolines`
+        // (3 instructions = 12 bytes) /
+        // `super::x86_64::emit_plt_trampolines` (1 jmp = 6
+        // bytes).
+        match target {
+            Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => 12,
+            Target::LinuxX64 | Target::WindowsX64 => 6,
+        }
+    };
+
+    imports
+        .iter()
+        .enumerate()
+        .map(|(i, imp)| {
+            let off = build.plt_trampoline_offsets[i];
+            // Synthetic per-param names: `arg0`, `arg1`, ... The
+            // c5 binding doesn't track parameter names, but
+            // gdb's `info args` and `bt` skip name-less entries
+            // entirely. Synthetic names are interned once per
+            // (import, slot) pair; the tiny duplication keeps
+            // the writer side simple.
+            let param_name_offs = (0..imp.param_types.len())
+                .map(|slot| strs.intern(&format!("arg{slot}")))
+                .collect();
+            PltSub {
+                name_off: strs.intern(&imp.local_name),
+                low_pc: code_vmaddr + off as u64,
+                high_pc: code_vmaddr + off as u64 + stub_size,
+                return_type_tag: imp.return_type_tag,
+                param_types: imp.param_types.clone(),
+                param_name_offs,
+                is_variadic: imp.is_variadic,
+            }
+        })
+        .collect()
 }
 
 fn collect_subprograms(
@@ -660,6 +784,7 @@ struct TypeCatalog {
 impl TypeCatalog {
     fn collect(
         subs: &[Subprog],
+        plt_subs: &[PltSub],
         strs: &mut StrTable,
         target: Target,
         structs: &[StructDef],
@@ -671,6 +796,32 @@ impl TypeCatalog {
             for v in &sub.variables {
                 let entry = classify(v.type_tag, target);
                 Self::insert_with_chain(&mut entries, entry);
+            }
+        }
+        // gh #67: seed types from PLT signatures too -- both the
+        // return type and each fixed parameter -- so the per-stub
+        // `DW_TAG_subprogram` / `DW_TAG_formal_parameter` DIEs
+        // can resolve their `DW_AT_type` refs through the same
+        // catalog the user variables use. We need to coerce
+        // Struct entries whose id isn't actually declared in
+        // `structs` to `VoidStar`: bindings can name opaque
+        // forward-declared aggregates (`FILE *`, `DIR *`) the
+        // compiler never assigned a real id to, and the existing
+        // emit path asserts on out-of-range ids.
+        let plt_seed = |ty: i64| -> CatalogEntry {
+            let raw = classify(ty, target);
+            match raw {
+                CatalogEntry::Struct { id }
+                    if (id as usize) >= structs.len() => CatalogEntry::VoidStar,
+                CatalogEntry::StructPointer { id, .. }
+                    if (id as usize) >= structs.len() => CatalogEntry::VoidStar,
+                other => other,
+            }
+        };
+        for plt in plt_subs {
+            Self::insert_with_chain(&mut entries, plt_seed(plt.return_type_tag));
+            for &ty in &plt.param_types {
+                Self::insert_with_chain(&mut entries, plt_seed(ty));
             }
         }
 
@@ -1081,9 +1232,90 @@ fn build_debug_abbrev() -> Vec<u8> {
     write_uleb128(&mut buf, 0);
     write_uleb128(&mut buf, 0);
 
+    // Abbrev 11: DW_TAG_subprogram for PLT trampolines (gh #67).
+    // Same shape as abbrev 2 but adds DW_AT_type for the return,
+    // drops DW_AT_frame_base (the trampoline never builds a c5
+    // frame), and is allowed children for the
+    // formal_parameter / unspecified_parameters DIEs the emitter
+    // appends.
+    write_uleb128(&mut buf, 11);
+    write_uleb128(&mut buf, DW_TAG_SUBPROGRAM as u64);
+    buf.push(DW_CHILDREN_YES);
+    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
+    write_attr(&mut buf, DW_AT_LOW_PC, DW_FORM_ADDR);
+    write_attr(&mut buf, DW_AT_HIGH_PC, DW_FORM_DATA8);
+    write_attr(&mut buf, DW_AT_EXTERNAL, DW_FORM_FLAG_PRESENT);
+    write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
+    write_uleb128(&mut buf, 0);
+    write_uleb128(&mut buf, 0);
+
+    // Abbrev 12: DW_TAG_formal_parameter for PLT trampolines
+    // whose arg spilled past the ABI's register window. Carries
+    // a synthetic `arg<N>` name (the c5 binding doesn't track
+    // parameter names, but gdb's `info args` and `bt` skip
+    // name-less entries entirely) plus the type, no location.
+    write_uleb128(&mut buf, 12);
+    write_uleb128(&mut buf, DW_TAG_FORMAL_PARAMETER as u64);
+    buf.push(DW_CHILDREN_NO);
+    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
+    write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
+    write_uleb128(&mut buf, 0);
+    write_uleb128(&mut buf, 0);
+
+    // Abbrev 13: DW_TAG_unspecified_parameters -- the `...` of a
+    // variadic prototype. No attributes; the tag itself signals
+    // the ellipsis to gdb / lldb.
+    write_uleb128(&mut buf, 13);
+    write_uleb128(&mut buf, DW_TAG_UNSPECIFIED_PARAMETERS as u64);
+    buf.push(DW_CHILDREN_NO);
+    write_uleb128(&mut buf, 0);
+    write_uleb128(&mut buf, 0);
+
+    // Abbrev 14: DW_TAG_formal_parameter for PLT params with a
+    // known register location (gh #67 phase 2). Mirrors abbrev 12
+    // but adds DW_AT_location so gdb's `bt` can read the value
+    // out of the AAPCS64 / SysV register the calling convention
+    // pinned the arg to. Only the first N fixed args (one per
+    // ABI int_arg_reg slot) get this abbrev; later ones spill to
+    // stack at locations we can't reconstruct from outside libc,
+    // so they fall back to abbrev 12.
+    write_uleb128(&mut buf, 14);
+    write_uleb128(&mut buf, DW_TAG_FORMAL_PARAMETER as u64);
+    buf.push(DW_CHILDREN_NO);
+    write_attr(&mut buf, DW_AT_NAME, DW_FORM_STRP);
+    write_attr(&mut buf, DW_AT_TYPE, DW_FORM_REF4);
+    write_attr(&mut buf, DW_AT_LOCATION, DW_FORM_EXPRLOC);
+    write_uleb128(&mut buf, 0);
+    write_uleb128(&mut buf, 0);
+
     // End of abbreviation table.
     write_uleb128(&mut buf, 0);
     buf
+}
+
+/// DWARF register number for the `slot`-th integer / pointer arg
+/// in `target`'s calling convention, or `None` if the slot
+/// overflows the ABI's register window (and thus spills to stack
+/// at libc-side offsets we can't describe).
+///
+/// Mappings:
+///
+/// * AAPCS64 (every aarch64 OS): args 0..7 in DWARF regs 0..7
+///   (= x0..x7).
+/// * SysV x86_64 (Linux): args 0..5 in DWARF regs
+///   `[5, 4, 1, 2, 8, 9]` (RDI, RSI, RDX, RCX, R8, R9). DWARF
+///   x86_64 numbering puts RDX at 1 and RCX at 2 -- swapped
+///   relative to the c5 codegen's internal register codes.
+/// * Win64 x86_64 (Windows): args 0..3 in DWARF regs
+///   `[2, 1, 8, 9]` (RCX, RDX, R8, R9).
+fn dwarf_arg_reg(target: Target, slot: usize) -> Option<u8> {
+    match target {
+        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
+            (slot < 8).then_some(slot as u8)
+        }
+        Target::LinuxX64 => [5u8, 4, 1, 2, 8, 9].get(slot).copied(),
+        Target::WindowsX64 => [2u8, 1, 8, 9].get(slot).copied(),
+    }
 }
 
 fn write_attr(buf: &mut Vec<u8>, attr: u32, form: u32) {
@@ -1103,6 +1335,7 @@ fn build_debug_info(
     cu_size: u64,
     catalog: &TypeCatalog,
     subs: &[Subprog],
+    plt_subs: &[PltSub],
     target: Target,
     structs: &[StructDef],
 ) -> Vec<u8> {
@@ -1194,6 +1427,86 @@ fn build_debug_info(
             body.extend_from_slice(&loc);
         }
         // Children-list terminator for this subprogram.
+        body.push(0);
+    }
+
+    // gh #67: one DW_TAG_subprogram per PLT trampoline. Lets
+    // gdb / lldb show typed signatures (`malloc (size, ...)`)
+    // when a `bt` frame points into the stub.
+    //
+    // Bindings can name opaque forward-declared aggregates
+    // (`FILE *`, `DIR *`) the compiler never assigned a real
+    // struct id to. Coerce those to `VoidStar` so the lookup
+    // hits an entry the catalog actually placed -- mirrors the
+    // seeding rule in `TypeCatalog::collect`.
+    let plt_classify = |ty: i64| -> CatalogEntry {
+        let raw = classify(ty, target);
+        match raw {
+            CatalogEntry::Struct { id } if (id as usize) >= structs.len() => CatalogEntry::VoidStar,
+            CatalogEntry::StructPointer { id, .. } if (id as usize) >= structs.len() => {
+                CatalogEntry::VoidStar
+            }
+            other => other,
+        }
+    };
+    for plt in plt_subs {
+        // Abbrev 11: name, low_pc, high_pc, external, type.
+        write_uleb128(&mut body, 11);
+        body.extend_from_slice(&plt.name_off.to_le_bytes());
+        body.extend_from_slice(&plt.low_pc.to_le_bytes());
+        body.extend_from_slice(&(plt.high_pc - plt.low_pc).to_le_bytes());
+        // DW_AT_external = flag_present, no bytes.
+        // DW_AT_type -> CU-relative ref4. classify(0) returns
+        // `Base(char)` -- a usable fallback when the parser hasn't
+        // seen the prototype (return_type_tag stays 0). Imperfect
+        // for `void` returns (we'd render them as `char`), but no
+        // worse than the pre-#67 "in malloc ()" with no signature.
+        let ret_entry = plt_classify(plt.return_type_tag);
+        let ret_off = *entry_offsets
+            .get(&ret_entry)
+            .expect("catalog includes every entry produced by plt_classify()");
+        body.extend_from_slice(&ret_off.to_le_bytes());
+
+        // One DW_TAG_formal_parameter per fixed param. Args that
+        // fit in the ABI's int_arg_reg window get abbrev 14 with
+        // a `DW_OP_regN` location so gdb's `bt` reads the value
+        // out of the right calling-convention register at the
+        // moment of the call. Args beyond the window spill to
+        // stack at libc-side offsets we can't describe -- they
+        // fall back to abbrev 12 (type-only). A binding with no
+        // prototype seen has `param_types` empty; the subprogram
+        // still gets the name + return type, just no parameters.
+        for (slot, &ty) in plt.param_types.iter().enumerate() {
+            let entry = plt_classify(ty);
+            let type_off = *entry_offsets
+                .get(&entry)
+                .expect("catalog includes every entry produced by plt_classify()");
+            let name_off = plt.param_name_offs[slot];
+            match dwarf_arg_reg(target, slot) {
+                Some(reg) => {
+                    write_uleb128(&mut body, 14);
+                    body.extend_from_slice(&name_off.to_le_bytes());
+                    body.extend_from_slice(&type_off.to_le_bytes());
+                    // DW_OP_reg<N> is one byte for N <= 31; every
+                    // calling convention we support fits in that
+                    // range (max is x86_64's R9 = DWARF 9).
+                    body.push(1);
+                    body.push(DW_OP_REG_BASE + reg);
+                }
+                None => {
+                    write_uleb128(&mut body, 12);
+                    body.extend_from_slice(&name_off.to_le_bytes());
+                    body.extend_from_slice(&type_off.to_le_bytes());
+                }
+            }
+        }
+        // Abbrev 13: variadic ellipsis. `printf` and friends
+        // surface as `printf(char *, ...)` rather than just
+        // `printf(char *)`.
+        if plt.is_variadic {
+            write_uleb128(&mut body, 13);
+        }
+        // Children-list terminator for this PLT subprogram.
         body.push(0);
     }
 
@@ -2149,6 +2462,85 @@ mod tests {
         // initial_location = 0x1100, address_range = 0x40.
         assert_eq!(&last_24[8..16], &0x1100u64.to_le_bytes());
         assert_eq!(&last_24[16..24], &0x40u64.to_le_bytes());
+    }
+
+    #[test]
+    fn collect_plt_subprograms_uses_offset_delta_not_text_len() {
+        // gh #67: per-stub size must come from the offset delta
+        // between consecutive trampolines, NOT from
+        // `build.text.len() - first_offset`. The latter
+        // overshoots because `append_build_info` tacks a
+        // NUL-terminated marker onto the tail of `build.text`
+        // after the PLT pool. Without this fix the DIE's
+        // DW_AT_high_pc claimed each stub was 31 bytes (visible
+        // in `readelf --debug-dump=info` on hello.c) instead of
+        // the actual 12.
+        let mut build = Build::default();
+        // Two 12-byte aarch64 trampolines at offsets 0xc0, 0xcc.
+        build.text = alloc::vec![0u8; 0xd8];
+        // Tack 16 trailing bytes on so we'd overshoot if we
+        // measured stub_size as `(text.len() - first) / n`.
+        build.text.extend(alloc::vec![0u8; 16]);
+        build.plt_trampoline_offsets = alloc::vec![0xc0, 0xcc];
+        build.imports.imports = alloc::vec![
+            super::super::ResolvedImport {
+                binding_idx: 0,
+                local_name: "malloc".into(),
+                real_symbol: "malloc".into(),
+                dylib_index: 0,
+                is_variadic: false,
+                fixed_args: 1,
+                return_type_tag: 0,
+                param_types: alloc::vec![1], // int
+            },
+            super::super::ResolvedImport {
+                binding_idx: 1,
+                local_name: "free".into(),
+                real_symbol: "free".into(),
+                dylib_index: 0,
+                is_variadic: false,
+                fixed_args: 1,
+                return_type_tag: 0,
+                param_types: alloc::vec![1],
+            },
+        ];
+        let mut strs = StrTable::new();
+        let plt_subs =
+            collect_plt_subprograms(&build, Target::LinuxAarch64, 0x1000, &mut strs);
+        assert_eq!(plt_subs.len(), 2);
+        // 0xcc - 0xc0 = 12 bytes per stub. high_pc - low_pc must
+        // match -- if it overshoots, gdb's DIE lookup for
+        // "address near printf" lands on the wrong subprogram and
+        // we lose the symbol-resolution win from gh #66.
+        assert_eq!(plt_subs[0].high_pc - plt_subs[0].low_pc, 12);
+        assert_eq!(plt_subs[1].high_pc - plt_subs[1].low_pc, 12);
+        assert_eq!(plt_subs[0].low_pc, 0x10c0);
+        assert_eq!(plt_subs[1].low_pc, 0x10cc);
+    }
+
+    #[test]
+    fn dwarf_arg_reg_maps_per_abi() {
+        // gh #67 phase 2: AAPCS64 passes args 0..7 in x0..x7
+        // (DWARF regs 0..7 -- direct mapping). x86_64 SysV uses
+        // RDI/RSI/RDX/RCX/R8/R9 = DWARF 5/4/1/2/8/9. Win64 uses
+        // RCX/RDX/R8/R9 = DWARF 2/1/8/9. Slots past the window
+        // return None and fall back to a no-location DIE.
+        for slot in 0..8 {
+            assert_eq!(dwarf_arg_reg(Target::LinuxAarch64, slot), Some(slot as u8));
+        }
+        assert_eq!(dwarf_arg_reg(Target::LinuxAarch64, 8), None);
+
+        let sysv = [5u8, 4, 1, 2, 8, 9];
+        for (slot, &reg) in sysv.iter().enumerate() {
+            assert_eq!(dwarf_arg_reg(Target::LinuxX64, slot), Some(reg));
+        }
+        assert_eq!(dwarf_arg_reg(Target::LinuxX64, 6), None);
+
+        let win64 = [2u8, 1, 8, 9];
+        for (slot, &reg) in win64.iter().enumerate() {
+            assert_eq!(dwarf_arg_reg(Target::WindowsX64, slot), Some(reg));
+        }
+        assert_eq!(dwarf_arg_reg(Target::WindowsX64, 4), None);
     }
 
     #[test]

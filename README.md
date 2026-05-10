@@ -9,6 +9,8 @@ Windows PE32+), on any of five targets, from any host - macOS (ARM64),
 Linux (ARM64, x86_64), Windows (ARM64,x86_64) with full debug information
 (can be omitted).
 
+There are various demo's under [`demos`](./demos/).
+
 It can also run the code JiT-ted in-process so no binary is written
 to the disk. That option might be useful for using `badc` to run the
 C code as a script. Finally, there's an option to run the IR (intermediate

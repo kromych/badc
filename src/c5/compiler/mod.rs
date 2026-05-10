@@ -3067,6 +3067,19 @@ impl Compiler {
                 // signed integers, producing a useless result. Same
                 // shape applies to `+=` / `-=` / `/=` on doubles.
                 let lhs_is_fp = is_floating_scalar(lhs_ty);
+                // C99 6.5.16.2: a compound assignment is equivalent
+                // to `E1 = (E1) OP (E2)` with E1 evaluated once. The
+                // OP step is the same arithmetic step as the binary
+                // operator, so when one side is FP we have to apply
+                // the same int->FP lift the binary path uses --
+                // otherwise `x *= -1` (FP lvalue, int rvalue) hands
+                // the FP op a 64-bit signed `-1` and produces NaN
+                // straight away. Surfaced compiling kissfft (the
+                // `phase *= -1;` line that flips the inverse-FFT
+                // twiddle factor sign).
+                if lhs_is_fp || is_floating_scalar(self.ty) {
+                    self.require_both_float(lhs_ty, "compound assign")?;
+                }
                 let op = match binop {
                     x if x == Token::AddOp as i64 => {
                         if lhs_is_fp {

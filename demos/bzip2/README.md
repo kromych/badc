@@ -38,14 +38,24 @@ The library source isn't committed: `setup.py` fetches the
 
 ```sh
 python demos/bzip2/setup.py    # fetches into demos/bzip2/
-python demos/bzip2/smoke.py    # builds + runs blockSize=1 and blockSize=9 round-trips
+python demos/bzip2/smoke.py    # builds + runs four scenarios at -O and noO
 ```
 
-`smoke.py` returns 0 with `smoke OK [no-O]: roundtrip OK
-[block=1]: ... ; roundtrip OK [block=9]: ...` / `smoke OK
-[-O]: ...` when both -O and noO builds round-trip the input
-buffer at both block sizes. Anything else returns 1 with a
-diagnostic on stderr.
+`smoke.py` returns 0 with `smoke OK [no-O]: 4 scenarios green`
+/ `smoke OK [-O]: 4 scenarios green` when both -O and noO
+builds pass every scenario:
+
+* **mixed (64 KiB)**     -- text + binary sweep, modest ratio.
+* **zeros (64 KiB)**     -- low entropy; cmp_len must crush to < 2%.
+* **random (64 KiB)**    -- xorshift64 stream; cmp_len ~= src_len.
+* **reference**          -- decompress a hand-baked bzip2 stream
+                            (Python `bz2.compress` of a fixed
+                            plaintext, base64 in the driver) and
+                            verify byte-equality. Catches any
+                            decompress-side regression independent
+                            of the encoder path.
+
+Anything else returns 1 with a diagnostic on stderr.
 
 `smoke.py` honours `BADC=path/to/badc`.
 

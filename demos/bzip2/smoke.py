@@ -94,8 +94,10 @@ def build_smoke(badc: Path, combined: bytes, out_path: Path, optimize: bool) -> 
 # the round-trip line embeds the cmp_len which can shift across
 # bzip2 releases, so we check only the leading prefix.
 EXPECTED_PREFIXES = (
-    "roundtrip OK [block=1]:",
-    "roundtrip OK [block=9]:",
+    "roundtrip OK [mixed-block9]:",
+    "roundtrip OK [zeros-block1]:",
+    "roundtrip OK [random-block9]:",
+    "reference OK:",
     "bzip2 smoke: all scenarios green",
 )
 
@@ -129,7 +131,7 @@ def run_and_check(label: str, smoke_bin: Path) -> bool:
                 file=sys.stderr,
             )
             return False
-    print(f"smoke OK [{label}]: {lines[0]} ; {lines[1]}")
+    print(f"smoke OK [{label}]: {len(EXPECTED_PREFIXES) - 1} scenarios green")
     return True
 
 

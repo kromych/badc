@@ -1769,7 +1769,7 @@ struct OptionalHeaderInputs {
     /// shape is what every existing demo / fixture builds
     /// against; the GUI shape skips the loader's auto-attach
     /// to a console window so a `WinMain`-shaped program
-    /// doesn't flash a black box on launch.
+    /// doesn't show a console.
     subsystem: u16,
 }
 

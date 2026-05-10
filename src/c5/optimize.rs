@@ -396,7 +396,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
     // then loads every arg through the integer-arg register set,
     // sending the FP bit pattern into x0 / rdi instead of d0 /
     // xmm0 and feeding `sin(0.5)` an interpretation of 0.5's
-    // bit pattern as an integer (4602678819172646912 → which
+    // bit pattern as an integer (4602678819172646912 -- which
     // libm reads as a vast double, returning sin(huge)=junk or
     // 0). Surfaced compiling kissfft at -O.
     let remapped_call_fp_arg_masks: Vec<(usize, u32)> = call_fp_arg_masks

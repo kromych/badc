@@ -296,6 +296,7 @@ impl Compiler {
                             offset: base_offset + inner_field.offset,
                             ty: inner_field.ty,
                             array_size: inner_field.array_size,
+                            inner_array_size: inner_field.inner_array_size,
                             bit_offset: inner_field.bit_offset,
                             bit_width: inner_field.bit_width,
                         });
@@ -447,11 +448,13 @@ impl Compiler {
                     }
                 }
 
+                let field_inner_array_size = self.symbols[id_idx].inner_array_size;
                 self.structs[struct_id].fields.push(StructField {
                     name: field_name,
                     offset: field_offset,
                     ty: field_ty,
                     array_size: field_array_size,
+                    inner_array_size: field_inner_array_size,
                     bit_offset,
                     bit_width,
                 });

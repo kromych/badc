@@ -80,9 +80,16 @@ pub struct StructField {
     pub ty: i64,
     /// Array dimension if the field was declared as `T xs[N]`;
     /// 0 when the field is a scalar / pointer / struct value.
-    /// `s.xs` decays to a pointer-to-element the same way a
-    /// local array does.
+    /// For a 2D field `T xs[N][M]` this stores the total element
+    /// count (`N * M`) and `inner_array_size = M`. `s.xs` decays
+    /// to a pointer-to-element the same way a local array does.
     pub array_size: i64,
+    /// Inner dimension for a 2D array field (`T xs[N][M]` -> `M`).
+    /// Mirrors `Symbol::inner_array_size`: with this set, the
+    /// `s.xs[i]` postfix scales `i` by `M * sizeof(T)` and stays
+    /// at pointer type so the next `[j]` decays to an element.
+    /// 0 for 1D / scalar fields.
+    pub inner_array_size: i64,
     /// Bit offset within the 8-byte storage unit. Meaningful only
     /// when `bit_width > 0`.
     pub bit_offset: u32,
@@ -3581,6 +3588,15 @@ impl Compiler {
                         // `T field[N]` returns 8 (decayed pointer)
                         // instead of `N * sizeof(T)`.
                         self.last_array_decay_size = field.array_size;
+                        // 2D-array decay: mirror the Id-path so
+                        // `s.xs[i][j]` scales the first index by
+                        // the row stride (`M * sizeof(T)`) and the
+                        // second by the element size. The Brak
+                        // handler reads-and-clears the stride.
+                        if field.inner_array_size > 0 {
+                            self.pending_index_stride =
+                                field.inner_array_size * self.size_of_type(field.ty) as i64;
+                        }
                     } else if !field_is_struct_value {
                         self.emit_op(load_op_for(self.ty, self.target));
                     }

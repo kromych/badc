@@ -17,6 +17,10 @@ C code as a script. Finally, there's an option to run the IR (intermediate
 representation) with tracking pointer access and bounds to catch
 memory issues.
 
+## How to install
+
+TBD
+
 It started out as a Rust port of Robert Swierczek's
 [c4](https://github.com/rswier/c4) and grew from there. There has been
 enough divergence from the original to call the dialect **c5**. Due to
@@ -34,7 +38,7 @@ or you can really crank the fun up with something like
 
 to run it quadro-nested :)
 
-## Build and run
+## Build and run from the source code
 
     cargo build --release
     ./target/release/badc path/to/file.c [-o <out>]

@@ -187,6 +187,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("bitfields.c", 0),
     ("struct_layout.c", 0),
     ("const_expr_conditional.c", 27),
+    ("struct_2d_array_field.c", 27),
     ("anonymous_aggregates.c", 0),
     ("static_locals.c", 0),
     ("large_stack_frame.c", 42),

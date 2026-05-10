@@ -108,11 +108,19 @@ diverges from C99, lives in [`c99-gaps.md`](c99-gaps.md). Short
 version: c5 covers most of the language (full preprocessor, the
 integer + float arithmetic surface, structs / unions / bitfields
 / enums / typedef, function pointers, varargs, `_Thread_local`,
-anonymous struct/union members, `#pragma pack(N)`, ...) on a
-fixed LP64 data model. The doc enumerates rejected idioms,
-divergent behaviour, and the c5-only extensions (`#pragma
-dylib` / `binding` / `export`, `#pragma once`, the bytecode VM,
-the in-process JIT).
+anonymous struct/union members, `#pragma pack(N)`, ...) on the
+host platform's data model (LP64 on macOS / Linux, LLP64 on
+Windows). The doc enumerates rejected idioms, divergent
+behaviour, and the c5-only extensions (`#pragma dylib` /
+`binding` / `export`, `#pragma once`, the bytecode VM, the
+in-process JIT).
+
+One implementation choice worth flagging up front: **bare `char`
+is unsigned** on every target (a 1-byte zero-extending load),
+matching the AArch64 platform-ABI default. Use `signed char`
+where the sign matters; gcc and clang differ on this per host
+architecture, so portable code that walks bytes by sign already
+spells `signed char` explicitly.
 
 #### From the pre-processor side
 

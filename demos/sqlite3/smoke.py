@@ -314,6 +314,55 @@ INMEM_SCENARIOS = (
     ("WITH RECURSIVE + txn + introspection", CTE_SQL, CTE_EXPECT),
 )
 
+# Numeric-edge probes adapted from upstream test/expr.test +
+# test/cast.test SQL snippets. These exercise dialect corners
+# that surfaced compiler bugs in the past or are likely to:
+#
+#   * `round()` -- `(double)((long)(r + (r<0?-0.5:+0.5)))` lowering.
+#     A regression where unary `+` clobbered the operand type to
+#     `int` made the whole expression compute on FP bit patterns
+#     and `round(1.5)` returned 4.6e+18. See
+#     `fixtures/c/unary_plus_preserves_float.c`.
+#   * 64-bit integer boundaries via shifts and bitwise ops.
+#   * INT64 overflow on `+` promotes to REAL (sqlite's per-spec
+#     behaviour).
+#   * `printf` SQL function: `%d` / `%u` / `%x` / `%X` widths,
+#     trailing-zero formatting on `%f`.
+#   * Cast round-trips between INTEGER, REAL, and TEXT.
+NUMERIC_SQL = (
+    "SELECT round(0.5), round(-0.5), round(1.5), round(-1.5);\n"
+    "SELECT round(2.4), round(2.6), round(-2.4), round(-2.6);\n"
+    "SELECT round(1.25, 1), round(1.5, 0);\n"
+    "SELECT 9223372036854775807, -9223372036854775807-1;\n"
+    "SELECT abs(-9223372036854775807);\n"
+    "SELECT 0xFFFFFFFFFFFFFFFF >> 0;\n"
+    "SELECT 0x7FFFFFFFFFFFFFFF & ~0x0F;\n"
+    "SELECT 1 << 62, typeof(1 << 62);\n"
+    "SELECT cast(1.5 as integer), cast(1.5 as real), cast('-7' as integer);\n"
+    "SELECT cast(255 as integer), cast(255.7 as integer);\n"
+    "SELECT printf('%d %x %X', -1, -1, -1);\n"
+    "SELECT printf('%.6f %.0f', 1.5, 1.5);\n"
+    ".quit\n"
+)
+NUMERIC_EXPECT = (
+    "1.0|-1.0|2.0|-2.0\n"
+    "2.0|3.0|-2.0|-3.0\n"
+    "1.3|2.0\n"
+    "9223372036854775807|-9223372036854775808\n"
+    "9223372036854775807\n"
+    "-1\n"
+    "9223372036854775792\n"
+    "4611686018427387904|integer\n"
+    "1|1.5|-7\n"
+    "255|255\n"
+    "-1 ffffffffffffffff FFFFFFFFFFFFFFFF\n"
+    "1.500000 2\n"
+)
+
+INMEM_SCENARIOS = INMEM_SCENARIOS + (
+    ("numeric edges + round + cast + printf", NUMERIC_SQL, NUMERIC_EXPECT),
+)
+
 
 def run_scenarios(label: str, shell_bin: Path, work: Path) -> bool:
     """Run all scenarios against `shell_bin`. Returns True on

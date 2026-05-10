@@ -10,6 +10,11 @@
 
 #pragma once
 
+// C99 7.19: `<stdio.h>` exposes `size_t`. Pull `<stddef.h>`
+// so callers don't have to learn that `<stddef.h>` is the
+// underlying definition site.
+#include <stddef.h>
+
 #ifndef NULL
 #define NULL 0
 #endif

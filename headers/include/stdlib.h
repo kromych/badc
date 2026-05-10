@@ -16,6 +16,13 @@
 
 #pragma once
 
+// C99 7.20: `<stdlib.h>` exposes `size_t` (and the canonical
+// `NULL`). Pull `<stddef.h>` so any code that reaches for
+// `size_t` after `#include <stdlib.h>` sees it without having
+// to know `<stddef.h>` is the underlying source. Re-include is
+// guarded by `<stddef.h>`'s own `#pragma once`.
+#include <stddef.h>
+
 #ifndef NULL
 #define NULL 0
 #endif

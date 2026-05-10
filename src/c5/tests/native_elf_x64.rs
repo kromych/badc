@@ -252,6 +252,7 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("struct_layout.c", 0),
     ("const_expr_conditional.c", 27),
     ("comma_operator_in_loops.c", 3),
+    ("size_t_via_stdio.c", 3),
     ("struct_2d_array_field.c", 27),
     ("anonymous_aggregates.c", 0),
     ("static_locals.c", 0),

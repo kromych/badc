@@ -1,11 +1,13 @@
 # `badc`
 
 `badc` (other name ideas were `betsy` and `badseed`) is a rather
-small compiler of a pretty large chunk of the C language. It produces
-real native binaries (macOs Mach-O, Linux ELF, or Windows PE32+),
-on any of five targets, from any host - macOS (ARM64), Linux (ARM64,
-x86_64), Windows (ARM64,x86_64) with full debug information (can be
-omitted).
+small compiler of a pretty large chunk of the C language as defined in
+the C99 standard.
+
+`badc` produces real native binaries (macOs Mach-O, Linux ELF, or
+Windows PE32+), on any of five targets, from any host - macOS (ARM64),
+Linux (ARM64, x86_64), Windows (ARM64,x86_64) with full debug information
+(can be omitted).
 
 It can also run the code JiT-ted in-process so no binary is written
 to the disk. That option might be useful for using `badc` to run the
@@ -106,11 +108,19 @@ diverges from C99, lives in [`c99-gaps.md`](c99-gaps.md). Short
 version: c5 covers most of the language (full preprocessor, the
 integer + float arithmetic surface, structs / unions / bitfields
 / enums / typedef, function pointers, varargs, `_Thread_local`,
-anonymous struct/union members, `#pragma pack(N)`, ...) on a
-fixed LP64 data model. The doc enumerates rejected idioms,
-divergent behaviour, and the c5-only extensions (`#pragma
-dylib` / `binding` / `export`, `#pragma once`, the bytecode VM,
-the in-process JIT).
+anonymous struct/union members, `#pragma pack(N)`, ...) on the
+host platform's data model (LP64 on macOS / Linux, LLP64 on
+Windows). The doc enumerates rejected idioms, divergent
+behaviour, and the c5-only extensions (`#pragma dylib` /
+`binding` / `export`, `#pragma once`, the bytecode VM, the
+in-process JIT).
+
+One implementation choice worth flagging up front: **bare `char`
+is unsigned** on every target (a 1-byte zero-extending load),
+matching the AArch64 platform-ABI default. Use `signed char`
+where the sign matters; gcc and clang differ on this per host
+architecture, so portable code that walks bytes by sign already
+spells `signed char` explicitly.
 
 #### From the pre-processor side
 

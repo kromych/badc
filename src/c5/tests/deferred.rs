@@ -53,18 +53,18 @@ fn jit_fixture_exit(name: &str) -> i32 {
     jit_run(&program, &argv).expect("jit_run failed")
 }
 
-// ---- Unsigned-arithmetic gaps from c99-gaps.md ----
+// ---- Unsigned-arithmetic regressions ----
 
 #[test]
-#[ignore = "deferred (gh #20): unsigned arithmetic high-half not masked through registers"]
-fn unsigned_arith_high_half_not_masked() {
-    // Today this fixture exits 1 (the very first check fires)
-    // because `~u` carries the sign-extended high half across
-    // the comparison. Fix: mask the result of unsigned bitwise
-    // / shift / arithmetic ops to the slot width before the
-    // comparison observes it, or store-and-reload.
-    let exit = jit_fixture_exit("deferred_unsigned_arith_high_half.c");
-    assert_eq!(exit, 0, "fixture should exit 0 once gh #20 lands");
+fn unsigned_arith_high_half_masked() {
+    // C99 6.5: unsigned bitwise / shift / arithmetic results at
+    // the type's storage width. The 64-bit accumulator carries
+    // sign-extended bits past the operand width after `~`, `<<`,
+    // `+`/`-`/`*`; the post-op mask in the compiler discards
+    // them so register-resident comparisons agree with C99.
+    // Was deferred (#20); fixture is now a regression marker.
+    let exit = jit_fixture_exit("unsigned_arith_high_half.c");
+    assert_eq!(exit, 0, "fixture should exit 0");
 }
 
 #[test]
@@ -79,44 +79,41 @@ fn unsigned_right_shift_is_logical() {
 }
 
 #[test]
-#[ignore = "deferred (gh #21): unsigned divide / modulo use signed ops"]
-fn unsigned_divide_and_modulo_are_signed() {
-    // `Op::Div` / `Op::Mod` lower to SDIV (ARM64) / IDIV
-    // (x86_64). Unsigned operands with the high bit set come
-    // out wrong (or fault on overflow). Fix: dedicated
-    // `Op::Divu` / `Op::Modu` routed when either operand is
-    // unsigned.
-    let exit = jit_fixture_exit("deferred_unsigned_div_mod.c");
-    assert_eq!(exit, 0, "fixture should exit 0 once gh #21 lands");
+fn unsigned_divide_and_modulo_use_unsigned_ops() {
+    // C99 6.3.1.8: when either operand of `/` or `%` is unsigned,
+    // both operands convert to the unsigned common type and the
+    // operation is unsigned. `Op::Divu` / `Op::Modu` (UDIV on
+    // ARM64, `DIV` with `xor edx, edx` on x86_64) are routed
+    // when the C99 common type is unsigned. Was deferred (#21);
+    // fixture is now a regression marker.
+    let exit = jit_fixture_exit("unsigned_div_mod.c");
+    assert_eq!(exit, 0, "fixture should exit 0");
 }
 
 #[test]
-#[ignore = "deferred (gh #22): signed -> unsigned promotion in mixed expressions"]
-fn mixed_signed_unsigned_no_promotion() {
-    // C99 sec 6.3.1.8 promotes the signed operand to the unsigned
-    // common type. Today the dialect picks the op based on the
-    // operator (signed for arithmetic; mixed-sensitive for
-    // compares) without converting.
-    let exit = jit_fixture_exit("deferred_mixed_signed_unsigned.c");
-    assert_eq!(exit, 0, "fixture should exit 0 once gh #22 lands");
+fn mixed_signed_unsigned_div_mod() {
+    // C99 6.3.1.8: a mixed signed/unsigned `/` or `%` converts
+    // the signed operand to the unsigned common type by adding
+    // 2^N (per 6.3.1.3). The pre-divide pass masks each operand
+    // to the common-unsigned width when one of them is signed,
+    // so `(int)-1 / (uint)2` lands as `0xFFFFFFFFu / 2u =
+    // 0x7FFFFFFFu` instead of the sign-extended-i64 udiv result.
+    // Was deferred (#22 div/mod arm); fixture is now a
+    // regression marker.
+    let exit = jit_fixture_exit("mixed_signed_unsigned_div.c");
+    assert_eq!(exit, 0, "fixture should exit 0");
 }
 
 #[test]
-#[ignore = "deferred (gh #22): arithmetic results not masked to common-type width when mixed signed/unsigned"]
-fn c99_arith_common_width() {
-    // After Add / Sub / Mul, c5 keeps the 64-bit accumulator
-    // value. C99 6.3.1.8 / 6.5 say the result lives at the
-    // common type's width, wrap-modulo-2^N for unsigned. Today
-    // c5 only masks when *both* operands are unsigned (the
-    // canonical `uint + uint` wrap case); mixed signed/unsigned
-    // (e.g. `(uint)0xFFFFFFFF + 1` where 1 is a bare int
-    // literal) keeps the wider value. Tracked by exit-code
-    // numbers in the fixture; today only code 5 (signed-overflow
-    // truncate-to-int convention from clang) fires from the
-    // failure list, the rest of the gaps surface only when
-    // results bypass typed storage (which sqlite happens not
-    // to do).
-    let exit = jit_fixture_exit("deferred_c99_arith_common_width.c");
+fn c99_arith_common_width_full() {
+    // After Add / Sub / Mul, c5 truncates the 64-bit accumulator
+    // to the C99 6.3.1.8 common type's storage width:
+    //   * unsigned common -> mask `(1 << N) - 1` (wrap-modulo-2^N).
+    //   * signed common (UB per C99 6.5p5) -> match clang / gcc
+    //     and truncate-and-sign-extend via `Shl K; Shr K`.
+    // Was deferred (#22 signed-overflow arm); fixture is now a
+    // regression marker.
+    let exit = jit_fixture_exit("c99_arith_common_width.c");
     assert_eq!(exit, 0, "C99 arith common-type width regression");
 }
 
@@ -163,24 +160,6 @@ fn linux_elf_tls_layout_with_static_locals() {
     );
 }
 
-// ---- Optimizer regression on sqlite3 aggregates (#46) ----
-//
-// The current placeholder fixture exits 0 -- a minimal repro
-// hasn't been bisected out of sqlite3 yet. The test panics under
-// `--ignored` so the issue keeps surfacing in the deferred-test
-// failure list until someone replaces the placeholder with a
-// real bisected repro.
-#[test]
-#[ignore = "deferred (gh #23): optimizer SIGSEGVs on sqlite3 aggregate codegen; minimal repro not yet extracted"]
-fn optimizer_aggregates_minimal_repro_pending() {
-    // Once a real repro is in place this test should compile via
-    // `jit_run_with_options(..., NativeOptions::new().with_optimize())`
-    // and assert that the program exits cleanly. The current
-    // panic keeps the deferred issue visible.
-    let _ = jit_fixture_exit("deferred_optimizer_aggregates.c");
-    panic!("(#46) placeholder fixture: bisect minimal repro from sqlite3 aggregate codegen");
-}
-
 // ---- size_t / ssize_t / time_t typedef widths (#52) ----
 //
 // `typedef int size_t;` etc. left over from before M31 made
@@ -205,12 +184,13 @@ fn width_typedefs_are_pointer_wide() {
 // ---- Address-of-libc-fn in static initializer ----
 //
 // Static-init paths emit `Imm 0` plus a runtime-patch warning
-// when the right-hand side names a libc symbol. sqlite3's
-// UnixOSData VFS dispatch table relies on a runtime callback
-// to fill the slots; any code path that reads one of those
-// slots before the runtime patch fires sees a NULL function
-// pointer. Affects every target -- the right fix is a
-// GOT/IAT-trampoline pipeline that resolves at load time.
+// when the right-hand side names a libc symbol. Dispatch
+// tables that name libc callbacks (e.g. a VFS-style table of
+// `&open`, `&read`, `&close`, ...) rely on the address being
+// real at first read; any code path that reads a slot before
+// the runtime patch fires sees a NULL function pointer.
+// Affects every target -- the right fix is a GOT/IAT-trampoline
+// pipeline that resolves at load time.
 #[test]
 fn libc_address_in_static_init() {
     // #54 fixed: each `&libc_fn` in a static initializer now
@@ -233,11 +213,9 @@ fn libc_address_in_static_init() {
 // the platform's libc vfprintf expects its own struct-shaped
 // va_list. Forwarding `vfprintf(out, fmt, ap)` from a c5
 // function corrupts the formatter -- the second `%d` reads
-// garbage. Same shape blocked sqlite3 shell.c's `cli_printf`
-// chain; the workaround there was to route through
-// `sqlite3_vmprintf` (c5-compiled). The general fix is either
-// to match c5's va_list to the platform's, or to ship c5-side
-// wrappers around every libc function that takes a va_list.
+// garbage. The general fix is either to match c5's va_list to
+// the platform's, or to ship c5-side wrappers around every
+// libc function that takes a va_list.
 #[test]
 #[ignore = "deferred (gh #18): c5 va_list incompatible with libc vfprintf / vsnprintf et al."]
 fn libc_vfprintf_with_c5_va_list() {

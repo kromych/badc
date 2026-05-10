@@ -352,24 +352,25 @@ pub struct Compiler {
     /// hasn't seen its body yet (`Symbol::val == 0`); when the
     /// body finally lands and `val` updates to the new `ent_pc`,
     /// we walk this list and rewrite the placeholders. Without
-    /// this fixup pass, sqlite3 (and any C codebase that calls a
-    /// function declared in a header but defined further down)
-    /// jumps to PC 0 -- the binary's `main` entry -- and
-    /// recurses into garbage.
+    /// this fixup pass any code that calls a function declared
+    /// in a header but defined further down jumps to PC 0 --
+    /// the binary's `main` entry -- and recurses into garbage.
     fn_call_fixups: Vec<(usize, usize)>,
     /// Parallel symbol index for each entry in `code_relocs`.
     /// `parse_constant_init_value` records a CodeReloc with the
     /// callee's `Symbol::val` at parse time -- which is `0` for
-    /// any function whose body hasn't been emitted yet (sqlite's
-    /// VFS dispatch tables and friends). The
-    /// `apply_fn_call_fixups` pass uses this index to rewrite
-    /// each CodeReloc's `target_bc_pc` and the matching
-    /// data-segment bytes once every body has been parsed.
+    /// any function whose body hasn't been emitted yet (e.g. a
+    /// dispatch table that names every callback before any
+    /// callback's body lands). The `apply_fn_call_fixups` pass
+    /// uses this index to rewrite each CodeReloc's
+    /// `target_bc_pc` and the matching data-segment bytes once
+    /// every body has been parsed.
     code_reloc_sym_idx: Vec<usize>,
     /// Per-libc-symbol trampoline registry. When source code
     /// reaches for the *address* of a `Token::Sys` binding --
     /// either bare (`fp = lstat;`) or in a static initializer
-    /// (sqlite's `aSyscall[]` vtable) -- c5 has no compile-time
+    /// (a function-pointer dispatch table referencing libc) --
+    /// c5 has no compile-time
     /// libc address to fold in. Instead we synthesize a tiny
     /// c5 function that re-pushes its parameters and re-dispatches
     /// through `Op::JsrExt`. Each entry maps `sys_sym_idx` to a
@@ -682,10 +683,10 @@ impl Compiler {
         // its `void *`) is freely interconvertible with any other
         // pointer type. The dialect's headers declare libc functions
         // like `memset(char *, int, int)` and `malloc -> char *`;
-        // sqlite3 passes struct pointers to memset and assigns
-        // malloc's result to struct* variables. Without this rule
-        // every such site fires "incompatible struct types" /
-        // "pointer assigned to integer" noise.
+        // real-world C routinely passes struct pointers to memset
+        // and assigns malloc's result to struct* variables. Without
+        // this rule every such site fires "incompatible struct
+        // types" / "pointer assigned to integer" noise.
         let char_ptr = (Ty::Char as i64) + (Ty::Ptr as i64);
         // Strip UNSIGNED_BIT before comparing: `char *` (which c5
         // treats as unsigned), `signed char *`, and `unsigned char *`
@@ -848,9 +849,9 @@ impl Compiler {
     /// Find an existing struct tag by name or register a fresh
     /// forward declaration (size 0, no fields) and return that.
     /// Used by every type-position that mentions `struct Foo`
-    /// before the struct's body has been seen -- sqlite-style
-    /// `typedef struct Foo Foo;` and `struct Foo *p;` patterns
-    /// rely on this.
+    /// before the struct's body has been seen -- common idioms
+    /// like `typedef struct Foo Foo;` and `struct Foo *p;` rely
+    /// on this.
     fn find_or_forward_declare_struct(&mut self, name: &str) -> usize {
         if let Some(id) = self.find_struct_id(name) {
             return id;
@@ -869,8 +870,9 @@ impl Compiler {
     /// function `is_type_start_token` covers the keyword tokens
     /// (`int`, `char`, `const`, ...); this method extends it by
     /// recognising any identifier whose symbol carries
-    /// `class == Token::Typedef` -- sqlite's `typedef struct X X;
-    /// X *p;` shape would otherwise misparse as `Int p;`.
+    /// `class == Token::Typedef` -- shapes like
+    /// `typedef struct X X; X *p;` would otherwise misparse as
+    /// `Int p;`.
     fn lex_is_type_start(&self) -> bool {
         is_type_start_token(self.lex.tk) || self.is_lex_typedef_name()
     }
@@ -1257,9 +1259,10 @@ impl Compiler {
                 self.text[operand_pc] = target;
             }
         }
-        // Static-initializer function-pointer entries (sqlite's
-        // vtable / function-pointer struct fields). Each
-        // `CodeReloc` was recorded at parse time with the
+        // Static-initializer function-pointer entries (vtables /
+        // function-pointer struct fields, e.g. dispatch tables of
+        // libc callbacks). Each `CodeReloc` was recorded at parse
+        // time with the
         // symbol's prototype-time `val` (often 0); the parallel
         // `code_reloc_sym_idx` tracks the originating symbol so
         // we can read its post-body `val` here. We rewrite both
@@ -1301,7 +1304,7 @@ impl Compiler {
     /// reach for this:
     ///
     /// * Static initializers that take the address of a libc fn
-    ///   (sqlite's `aSyscall[7].pCurrent = fcntl`-style table).
+    ///   (a `dispatch_table[7].pCurrent = fcntl`-style table).
     /// * Bare expression-position references (`fp = readlink;`).
     ///
     /// Both want a callable c5 function-pointer value with the
@@ -1360,8 +1363,8 @@ impl Compiler {
     ///
     /// Variadic libc fns lose anything beyond their declared
     /// fixed prefix -- a trampoline can only forward what its
-    /// signature tells it to push. The two in-the-wild callers
-    /// (sqlite's `aSyscall[]` slots for `fcntl` and `ioctl`) work
+    /// signature tells it to push. The known callers (e.g.
+    /// dispatch-table slots for `fcntl` and `ioctl`) work
     /// because the cast at the use site lines up with the fixed
     /// prefix the trampoline does forward.
     fn emit_sys_trampolines(&mut self) {
@@ -1389,17 +1392,17 @@ impl Compiler {
             //   stay in scope.
             //
             // * Bindings with *no* declared params (just
-            //   `int Name();`) -- e.g. the kernel32 surface that
-            //   sqlite's `aSyscall[]` table casts back to the
+            //   `int Name();`) -- e.g. kernel32 entries that
+            //   real-world dispatch tables cast back to the
             //   right arity at the call site -- get the
             //   single-op `Op::TailExt` body. The trampoline is
             //   `jmp [rip+iat]` and the caller's `Op::Jsri`
             //   lowering owns the host-ABI arg setup, return-
             //   register copy, and stack adjustment. Sub-word
-            //   extension is left to the caller (sqlite casts
-            //   the result to the right type explicitly), which
-            //   matches what real-world dispatch-table consumers
-            //   already do.
+            //   extension is left to the caller (the call site
+            //   casts the result to the right type explicitly),
+            //   which matches what real-world dispatch-table
+            //   consumers already do.
             if fixed_nargs == 0 && !is_variadic {
                 self.emit_op(Op::TailExt);
                 self.emit_val(binding_idx);
@@ -1407,19 +1410,19 @@ impl Compiler {
             }
 
             // For variadic libc fns the binding-declared param
-            // count is only the fixed prefix; sqlite's
-            // `aSyscall[]` table (open/fcntl/ioctl) wants the
-            // trampoline to forward *one* of the variadic args
-            // so the caller's 3-argument cast lines up with what
-            // `JsrExt` packs onto the macOS arm64 variadic-args
-            // stack region. Callers that pass strictly the fixed
-            // prefix end up reading one junk slot from above
-            // their own pushes, but no in-the-wild caller does
-            // -- they all add at least one extra arg precisely
-            // to feed the variadic. The general case (forward N
-            // variadic args where N is unknown at compile time)
-            // needs a real va_args bridge -- tracked separately
-            // with the `c5 va_list` work.
+            // count is only the fixed prefix; common dispatch
+            // tables (open/fcntl/ioctl) want the trampoline to
+            // forward *one* of the variadic args so the caller's
+            // 3-argument cast lines up with what `JsrExt` packs
+            // onto the macOS arm64 variadic-args stack region.
+            // Callers that pass strictly the fixed prefix end up
+            // reading one junk slot from above their own pushes,
+            // but no in-the-wild caller does -- they all add at
+            // least one extra arg precisely to feed the variadic.
+            // The general case (forward N variadic args where N
+            // is unknown at compile time) needs a real va_args
+            // bridge -- tracked separately with the `c5 va_list`
+            // work.
             let nargs = if is_variadic {
                 fixed_nargs + 1
             } else {
@@ -1648,22 +1651,66 @@ impl Compiler {
         self.emit_op(op);
     }
 
-    /// Mask the accumulator to the common-type storage width
-    /// when **both** operands are unsigned and the common type
-    /// is narrower than 8 bytes. This is the canonical
-    /// wrap-modulo-2^N case (`uint + uint`, `ushort - ushort`
-    /// after promotion-to-uint, etc.) where C99 mandates a
-    /// well-defined wrap.
+    /// Pre-divide / pre-modulo C99 6.3.1.3 conversion to the unsigned
+    /// common type. When one operand is signed and the common type is
+    /// unsigned narrower than 8 bytes, the signed operand carries
+    /// sign-extended high bits in the 64-bit accumulator
+    /// (`(int)-1` is `0xFFFFFFFFFFFFFFFF`); the unsigned-divide op
+    /// would treat that as a huge positive instead of the 32-bit
+    /// `0xFFFFFFFF` C99 prescribes. Mask both operands to the common
+    /// width before the divide.
     ///
-    /// Mixed signed/unsigned and signed/signed are deliberately
-    /// left alone. Real code (sqlite included) routinely relies
-    /// on c5's wide-register behavior in these cases -- e.g.
-    /// `int n; long bytes = n * K;` expects the 64-bit register
-    /// to keep the wider product so the long-typed slot gets the
-    /// full value. Masking those would technically be more C99-
-    /// strict (clang truncates) but breaks the existing real-
-    /// world consumers. Tracked as a remaining gap in
-    /// `fixtures/c/deferred_c99_arith_common_width.c`.
+    /// Layout going in: stack-top = LHS, accumulator = RHS.
+    /// Layout going out: same shape, but each masked to `common`.
+    fn maybe_mask_operands_to_unsigned_common(&mut self, lhs_ty: i64, rhs_ty: i64) {
+        let common = usual_arith_common_ty(lhs_ty, rhs_ty, self.target);
+        if !is_unsigned_ty(common) {
+            return;
+        }
+        let mask: i64 = match self.size_of_type(common) {
+            1 => 0xff,
+            2 => 0xffff,
+            4 => 0xffff_ffff,
+            _ => return,
+        };
+        // Stash RHS to a scratch local so we can pop the LHS off the
+        // c5 stack into the accumulator, mask it, push it back, and
+        // reload RHS for the divide.
+        self.loc_offs += 1;
+        if self.loc_offs > self.max_loc_offs {
+            self.max_loc_offs = self.loc_offs;
+        }
+        let temp = -self.loc_offs;
+        self.emit_op(Op::StLocI);
+        self.emit_val(temp);
+        // Pop LHS off the c5 stack into accumulator: `Imm 0; Or` pops
+        // stack-top into acc by virtue of `Op::Or` ORing acc with the
+        // popped stack-top (acc was set to 0 a moment ago).
+        self.emit_imm(0);
+        self.emit_op(Op::Or);
+        self.emit_binop_with_imm(Op::And, mask);
+        self.emit_op(Op::Psh);
+        self.emit_lea(temp);
+        self.emit_op(Op::Li);
+        self.emit_binop_with_imm(Op::And, mask);
+    }
+
+    /// After an Add / Sub / Mul, normalize the 64-bit accumulator
+    /// to the C99 6.3.1.8 common type's storage width.
+    ///
+    /// Unsigned common type: mask with `(1 << N) - 1`. C99 mandates
+    /// wrap-modulo-2^N; without this `(uint)0xFFFFFFFF + 1u` leaves
+    /// 0x100000000 in the 64-bit register, and any consumer that
+    /// widens the result before it reaches a typed slot
+    /// (a long-typed slot, a variadic FP boundary, an
+    /// immediately-following cast) reads the wider value.
+    ///
+    /// Signed common type: signed-int overflow is undefined behavior
+    /// per C99 6.5p5, but clang and gcc both consistently truncate
+    /// the result to the type's width and sign-extend back. c5
+    /// matches that convention via `Shl K; Shr K` where `K = 64 -
+    /// width_bits`. So `(int)50000 * (int)50000` becomes
+    /// 0x9502F900 sign-extended = -1794967296.
     fn maybe_mask_to_unsigned_width(&mut self, lhs_ty: i64, rhs_ty: i64) {
         if is_pointer_ty(lhs_ty) || is_pointer_ty(rhs_ty) {
             return;
@@ -1671,27 +1718,31 @@ impl Compiler {
         if is_floating_scalar(lhs_ty) || is_floating_scalar(rhs_ty) {
             return;
         }
-        // Conservative: only mask when *both* operands are unsigned.
-        // The mixed signed-unsigned case (e.g. `u + 1` where 1 is
-        // a bare int literal) technically also has an unsigned
-        // common type per C99, but masking those broke real-world
-        // code (sqlite's REAL aggregate path) that relies on the
-        // wider 64-bit register surviving across mixed-arith
-        // operations. The both-unsigned case covers the canonical
-        // `uint + uint`, `ushort - ushort`, etc. wrap-modulo-2^N
-        // behaviour.
-        if !is_unsigned_ty(lhs_ty) || !is_unsigned_ty(rhs_ty) {
-            return;
-        }
         let common = usual_arith_common_ty(lhs_ty, rhs_ty, self.target);
         let common_size = self.size_of_type(common);
-        let mask: i64 = match common_size {
-            1 => 0xff,
-            2 => 0xffff,
-            4 => 0xffff_ffff,
-            _ => return,
-        };
-        self.emit_binop_with_imm(Op::And, mask);
+        if is_unsigned_ty(common) {
+            let mask: i64 = match common_size {
+                1 => 0xff,
+                2 => 0xffff,
+                4 => 0xffff_ffff,
+                _ => return,
+            };
+            self.emit_binop_with_imm(Op::And, mask);
+        } else {
+            // Signed: integer promotion already widens char / short
+            // to int, so the only narrow signed common type that
+            // reaches here is `int` (size 4), or `long` on LLP64
+            // (also size 4). Width-8 signed types fill the
+            // accumulator and need no normalization.
+            let shift_bits: i64 = match common_size {
+                1 => 56,
+                2 => 48,
+                4 => 32,
+                _ => return,
+            };
+            self.emit_binop_with_imm(Op::Shl, shift_bits);
+            self.emit_binop_with_imm(Op::Shr, shift_bits);
+        }
     }
 
     /// Emit `==` (or `!=` if `invert`) accounting for C99 6.3.1.8
@@ -2583,9 +2634,9 @@ impl Compiler {
                 self.ty = t;
                 // gh #19: re-seed the fn-ptr chain depth from the
                 // cast destination so a unary `*` chain that
-                // follows a `(fn_t*)expr` cast (sqlite's
-                // `(**(finder_type*)pVfs->pAppData)(...)` shape)
-                // can recognise the decay. The cast result lives
+                // follows a `(fn_t*)expr` cast (e.g.
+                // `(**(finder_type*)pVfs->pAppData)(...)`) can
+                // recognise the decay. The cast result lives
                 // in `a`, so the depth is `cast_fpi - 1`.
                 if let Some(fpi) = cast_fpi
                     && fpi > 0
@@ -2628,8 +2679,8 @@ impl Compiler {
             // SIGBUSes when called. The conservative pop in the
             // call-site path catches this only when the result
             // type drops to a non-pointer; if the function's
-            // return type is itself a pointer (sqlite's
-            // `finder_type` returning `sqlite3_io_methods *`,
+            // return type is itself a pointer (e.g. an
+            // `io_methods *`-returning fn-ptr typedef as in
             // gh #19) the pop is short-circuited and the
             // garbage call target slips through.
             if self.fn_ptr_chain_depth == 0 {
@@ -2715,11 +2766,33 @@ impl Compiler {
             self.next()?;
             self.expr(Token::Inc as i64)?;
             self.emit_binop_with_imm(Op::Xor, -1);
-            self.ty = Ty::Int as i64;
+            // C99 6.5.3.3: `~` applies integer promotions; the result
+            // has the promoted operand's type. `unsigned char` /
+            // `unsigned short` promote to signed `int`, so no mask.
+            // `unsigned int` (size 4 unsigned that doesn't promote
+            // down) stays unsigned int -- mask the high half back to
+            // 32 bits so the register doesn't carry the
+            // 0xFFFFFFFF.... high pattern from `XOR -1`.
+            let operand_ty = self.ty;
+            if is_unsigned_ty(operand_ty) && self.size_of_type(operand_ty) == 4 {
+                self.emit_binop_with_imm(Op::And, 0xffff_ffff);
+                self.ty = operand_ty;
+            } else {
+                self.ty = Ty::Int as i64;
+            }
         } else if self.lex.tk == Token::AddOp as i64 {
+            // Unary `+`: a no-op per C99 6.5.3.3p2. The operand's
+            // type is preserved (subject to integer promotion for
+            // sub-int integer operands -- a `(unsigned char)c`
+            // promotes to `int`, which the `+` doesn't undo).
+            // Critically, FP operands must keep their FP type --
+            // otherwise `+0.5` poses as an integer and a later
+            // `r + (+0.5)` lowers to `Op::Add` instead of `Op::Fadd`.
             self.next()?;
             self.expr(Token::Inc as i64)?;
-            self.ty = Ty::Int as i64;
+            if !is_floating_scalar(self.ty) {
+                self.ty = Ty::Int as i64;
+            }
         } else if self.lex.tk == Token::SubOp as i64 {
             self.next()?;
             // Constant-fold `-<int-literal>` into `Imm -N`. Float
@@ -2762,9 +2835,9 @@ impl Compiler {
         } else {
             // The parse-error message includes the enclosing function
             // name and (for `Token::Id`) the identifier name -- those
-            // two facts are what made bisecting sqlite3.c's `_IOWR`
-            // expansion tractable, and a generic "bad expression
-            // tk=174" is otherwise opaque.
+            // two facts make a parse error like a stuck macro
+            // expansion tractable, vs. a generic "bad expression
+            // tk=174" which is otherwise opaque.
             let func = self.current_function_name.clone();
             let id_name = if self.lex.tk == Token::Id as i64 {
                 Some(self.symbols[self.lex.curr_id_idx].name.clone())
@@ -2793,8 +2866,6 @@ impl Compiler {
                 //   `(*fp)(args)` -- explicit dereference shape
                 //   `(**fpp)(args)` -- dereference through a pointer
                 //                       to a function-pointer variable
-                //                       (sqlite's posixIoFinder
-                //                       chain inside `unixOpen`)
                 // Direct identifier calls (`name(args)`) take the
                 // dedicated path higher up that knows the symbol's
                 // class and signature; that path consumes `(`
@@ -2986,10 +3057,8 @@ impl Compiler {
                 // the FP variant of the binop, not the integer one.
                 // Without this, `x *= y` lowered to `Op::Mul` which
                 // multiplied the bit patterns of the two doubles as
-                // signed integers, producing a useless result. Surfaced
-                // as sqlite's `vdbe.c` `rB *= rA` (and `+=` / `-=`)
-                // returning 0 / Inf for any `INTEGER * REAL` expression
-                // -- which is why `avg(int_col * 1.0)` was wrong.
+                // signed integers, producing a useless result. Same
+                // shape applies to `+=` / `-=` / `/=` on doubles.
                 let lhs_is_fp = is_floating_scalar(lhs_ty);
                 let op = match binop {
                     x if x == Token::AddOp as i64 => {
@@ -3016,11 +3085,19 @@ impl Compiler {
                     x if x == Token::DivOp as i64 => {
                         if lhs_is_fp {
                             Op::Fdiv
+                        } else if is_unsigned_ty(lhs_ty) {
+                            Op::Divu
                         } else {
                             Op::Div
                         }
                     }
-                    x if x == Token::ModOp as i64 => Op::Mod,
+                    x if x == Token::ModOp as i64 => {
+                        if is_unsigned_ty(lhs_ty) {
+                            Op::Modu
+                        } else {
+                            Op::Mod
+                        }
+                    }
                     x if x == Token::AndOp as i64 => Op::And,
                     x if x == Token::OrOp as i64 => Op::Or,
                     x if x == Token::XorOp as i64 => Op::Xor,
@@ -3181,7 +3258,22 @@ impl Compiler {
                 self.emit_op(Op::Psh);
                 self.expr(Token::AddOp as i64)?;
                 self.emit_op(Op::Shl);
-                self.ty = Ty::Int as i64;
+                // C99 6.5.7: `E1 << E2` has the type of `E1` after
+                // integer promotion. `char` / `short` (signed or
+                // unsigned, size 1 or 2) promote to signed `int`.
+                // Wider operands keep their type. For an unsigned
+                // size-4 LHS the result needs a mask back to 32 bits
+                // because bits shifted past bit 31 survive in the
+                // 64-bit accumulator.
+                let lhs_size = self.size_of_type(t);
+                if lhs_size <= 2 {
+                    self.ty = Ty::Int as i64;
+                } else {
+                    if is_unsigned_ty(t) && lhs_size == 4 {
+                        self.emit_binop_with_imm(Op::And, 0xffff_ffff);
+                    }
+                    self.ty = t;
+                }
             } else if self.lex.tk == Token::ShrOp as i64 {
                 self.next()?;
                 self.emit_op(Op::Psh);
@@ -3305,8 +3397,23 @@ impl Compiler {
                     self.emit_op(Op::Fdiv);
                     self.ty = fp_result_ty(t, self.ty);
                 } else {
-                    self.emit_op(Op::Div);
-                    self.ty = Ty::Int as i64;
+                    // C99 6.3.1.8: when either operand is unsigned, the
+                    // common type is unsigned, so the divide is unsigned
+                    // too. Route to Op::Divu (UDIV / DIV instead of
+                    // SDIV / IDIV). When the common type is narrower
+                    // than the 8-byte register, mix-of-signed-and-
+                    // unsigned operands need C99 conversion to the
+                    // unsigned width applied first -- otherwise a
+                    // sign-extended `-1` enters the udiv as
+                    // 0xFFFFFFFFFFFFFFFF instead of 0xFFFFFFFF.
+                    let common = usual_arith_common_ty(t, self.ty, self.target);
+                    if is_unsigned_ty(common) {
+                        self.maybe_mask_operands_to_unsigned_common(t, self.ty);
+                        self.emit_op(Op::Divu);
+                    } else {
+                        self.emit_op(Op::Div);
+                    }
+                    self.ty = common;
                 }
             } else if self.lex.tk == Token::ModOp as i64 {
                 self.next()?;
@@ -3318,8 +3425,14 @@ impl Compiler {
                 if is_floating_scalar(self.ty) {
                     return Err(self.compile_err("`%` is not defined on floating-point operands"));
                 }
-                self.emit_op(Op::Mod);
-                self.ty = Ty::Int as i64;
+                let common = usual_arith_common_ty(t, self.ty, self.target);
+                if is_unsigned_ty(common) {
+                    self.maybe_mask_operands_to_unsigned_common(t, self.ty);
+                    self.emit_op(Op::Modu);
+                } else {
+                    self.emit_op(Op::Mod);
+                }
+                self.ty = common;
             } else if self.lex.tk == Token::Inc as i64 || self.lex.tk == Token::Dec as i64 {
                 let reload = self
                     .rewrite_trailing_load_as_psh()
@@ -3682,10 +3795,10 @@ impl Compiler {
                 // typedef branch: register a type alias and skip the
                 // function / global storage path entirely. Re-declaring
                 // an existing typedef with the same underlying type is
-                // tolerated -- sqlite's amalgamation re-emits identical
-                // typedefs through several `#include` paths -- but a
-                // clashing redefinition or a clash with a non-typedef
-                // symbol is rejected.
+                // tolerated -- amalgamated translation units routinely
+                // re-emit identical typedefs through several `#include`
+                // paths -- but a clashing redefinition or a clash with
+                // a non-typedef symbol is rejected.
                 if is_typedef {
                     let prior_class = self.symbols[id_idx].class;
                     let prior_type = self.symbols[id_idx].type_;
@@ -3717,9 +3830,9 @@ impl Compiler {
                 // without overriding the function's binding-driven
                 // class/val. Function symbols with no body yet
                 // (Token::Fun, val == 0) can also be re-declared
-                // (sqlite-style amalgamations include the same
-                // prototype many times). A second body for the
-                // same Fun is still a real duplicate.
+                // -- amalgamated translation units include the
+                // same prototype many times. A second body for
+                // the same Fun is still a real duplicate.
                 let was_sys = self.symbols[id_idx].class == Token::Sys as i64;
                 // Forward / repeat function declarations: allowed
                 // either when the next token is `(` (the regular
@@ -3805,10 +3918,9 @@ impl Compiler {
                     // prototype against a fully-specified one isn't a
                     // mismatch under the standard, so we skip the
                     // parameter-list check when either side is empty.
-                    // The `appendText` collision in the sqlite smoke
-                    // (two `static`-scope-but-amalgamated definitions
-                    // with different specified params) still warns,
-                    // because both sides specify their parameters.
+                    // Two `static`-scope-but-amalgamated definitions
+                    // that fully specify different parameters still
+                    // warn, because both sides specify them.
                     let either_unspecified = prior_params.is_empty() || params.types.is_empty();
                     let return_differs = prior_return_ty != ty;
                     let variadic_differs = prior_is_variadic != params.is_variadic;

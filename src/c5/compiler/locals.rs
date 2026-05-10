@@ -130,8 +130,7 @@ impl Compiler {
     /// arrays. Function-pointer init values aren't yet supported
     /// for static locals (the file-scope path handles them, but
     /// the routing through `parse_global_initializer` here only
-    /// covers scalars; sqlite's static locals are mostly scalar
-    /// flags so this is acceptable).
+    /// covers scalars).
     pub(super) fn allocate_static_local(
         &mut self,
         loc_idx: usize,

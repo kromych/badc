@@ -361,6 +361,20 @@ fn fixture_parity() {
     );
 }
 
+/// Regression marker (gh #48): post-call sub-word extension on
+/// the libc return register. See the matching test in
+/// `super::native::atoi_negative_sign_extends`. The
+/// x86_64 ELF backend uses `movsxd` for `Sign32`; glibc happens
+/// to zero the upper bits today but the contract isn't binding.
+#[test]
+fn atoi_negative_sign_extends() {
+    let outcome = build_and_run_fixture("atoi_negative.c");
+    assert!(
+        matches!(outcome, RunOutcome::Exit(0)),
+        "atoi('-17') should sign-extend to -1 in i64, got {outcome:?}"
+    );
+}
+
 #[test]
 fn fixture_parity_native_optimized() {
     let opts = NativeOptions::new().with_optimize();

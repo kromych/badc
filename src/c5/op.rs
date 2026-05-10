@@ -63,9 +63,9 @@ pub enum Op {
     Lh,
     /// Load Half Unsigned: Loads a 16-bit value from the address in
     /// the accumulator, zero-extending into the 64-bit accumulator.
-    /// Used for `unsigned short` / `u16` reads, and for the
-    /// `*(u16*)p` pattern that appears in sqlite's number rendering.
-    /// ARM64 `LDRH`, x86_64 `MOVZX r64, m16`.
+    /// Used for `unsigned short` / `u16` reads and for explicit
+    /// `*(u16*)p` packed-buffer reads. ARM64 `LDRH`, x86_64
+    /// `MOVZX r64, m16`.
     Lhu,
     /// Store Half: Stores the low 16 bits of the accumulator into
     /// the address on top of stack. Companion to [`Op::Lh`] /
@@ -131,10 +131,19 @@ pub enum Op {
     Sub,
     /// Multiplication `*`
     Mul,
-    /// Division `/`
+    /// Division `/` (signed). Emitted when both operands are signed.
+    /// ARM64 `SDIV`, x86_64 `IDIV`.
     Div,
-    /// Modulo `%`
+    /// Modulo `%` (signed). Emitted when both operands are signed.
     Mod,
+    /// Division `/` (unsigned). Emitted when at least one operand has
+    /// an unsigned integer type, per C99 6.3.1.8 common-type rules.
+    /// Treats both operands as u64 -- the high-bit-set bit pattern is
+    /// interpreted as a large positive, not a negative. ARM64 `UDIV`,
+    /// x86_64 `DIV` (with `xor edx, edx` instead of `CQO`).
+    Divu,
+    /// Modulo `%` (unsigned). See [`Op::Divu`].
+    Modu,
 
     // --- Immediate-form arithmetic / comparison ---
     //
@@ -284,17 +293,17 @@ pub enum Op {
     /// (`Ent / Lea / Li / Psh / JsrExt / Adj / Lev`) for libc
     /// symbols whose address gets taken; the old shape forwarded
     /// only as many args as the binding's prototype declared,
-    /// which broke when sqlite's `aSyscall[]` table cast a
-    /// kernel32 fn to a different-arity function-pointer type
-    /// at the call site. The tail-jump shape is independent of
-    /// the binding's declared arity. Placed at the end of the
-    /// enum so the `OPS[]` lookup table's tail entry matches the
-    /// enum discriminant -- adding new ops elsewhere requires
-    /// keeping the two in lockstep.
+    /// which broke when a dispatch-table entry cast a libc fn to
+    /// a different-arity function-pointer type at the call site.
+    /// The tail-jump shape is independent of the binding's
+    /// declared arity. Placed at the end of the enum so the
+    /// `OPS[]` lookup table's tail entry matches the enum
+    /// discriminant -- adding new ops elsewhere requires keeping
+    /// the two in lockstep.
     TailExt,
 }
 
-const OPS: [Op; 82] = [
+const OPS: [Op; 84] = [
     Op::Lea,
     Op::Imm,
     Op::Jmp,
@@ -339,6 +348,8 @@ const OPS: [Op; 82] = [
     Op::Mul,
     Op::Div,
     Op::Mod,
+    Op::Divu,
+    Op::Modu,
     // Immediate-form ops (optimizer-emitted).
     Op::AddI,
     Op::SubI,

@@ -90,8 +90,8 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     // Opt-in MSVC-shape predefines (gh #34): no `#pragma binding`
     // here, just `#define _MSC_VER 1900`, `#define __int64 long
     // long`, the `__declspec(x)` family of empty-decorator
-    // macros, etc. Build drivers that need to compile sqlite /
-    // raylib / etc. against the Windows backend opt in via
+    // macros, etc. Build drivers that need to compile MSVC-
+    // shaped C against the Windows backend opt in via
     // `badc -include msvc_compat.h ...`. Internally guarded by
     // `#ifdef _WIN32` so the same command line stays valid on
     // every host.

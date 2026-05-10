@@ -40,8 +40,9 @@ impl Compiler {
         let line = self.lex.line;
         // Optional `(TYPE)` cast prefix. const-init only cares about
         // the resulting value, not the cast type, so we skip the
-        // type spec and re-enter from the post-cast token. Used by
-        // sqlite's Windows VFS dispatch table (`(SYSCALL)funcname`).
+        // type spec and re-enter from the post-cast token. Common
+        // in dispatch tables that cast each entry to a stub type
+        // (`(SYSCALL)funcname`).
         // Detection is the same `lex_is_type_start` predicate the
         // runtime cast handler in `expr()` uses; if the inner token
         // isn't a type start, this is a parenthesised expression --

@@ -1,37 +1,15 @@
-// DEFERRED: C99 6.3.1.8 usual-arithmetic-conversions width truncation.
+// C99 6.3.1.8 usual-arithmetic-conversions width truncation.
 //
-// After Add / Sub / Mul / Div / Mod the result should be at the
-// common type's storage width. c5 does the right thing for the
-// signed common-type case (the 64-bit accumulator's sign-ext
-// value matches what a signed slot expects), but does NOT mask /
-// sign-extend after the op when the common type is narrower than
-// 8 bytes. Visible bit patterns diverge from clang/gcc whenever
-// the intermediate value falls outside the type's representable
-// range -- specifically:
-//
-//   1. `uint + uint` overflow (`0xFFFFFFFFu + 1`): c5 keeps
-//      0x100000000 in the 64-bit register; C99 says wrap to 0.
-//   2. `int + uint` mixed (common = uint per C99): c5 leaves
-//      the signed-extended high half of the int operand;
-//      `(int)-1 - (uint)1` reads back as -2 (sign-extended)
-//      instead of 0xFFFFFFFE.
-//   3. `signed-int * signed-int` overflow (e.g. `ushort * ushort`
-//      after promotion -> `int * int` overflows): clang truncates
-//      to int width and sign-extends back; c5 keeps the wider
-//      i64 value. C99 calls this UB so both are technically
-//      conforming; matching clang is the more useful behavior.
-//
-// The fix is to emit a post-op mask (Op::And for unsigned narrow
-// common types) and a sign-extending shift-pair (Op::Shl /
-// Op::Shr for signed narrow common types) after Add / Sub / Mul.
-// First attempt regressed sqlite's REAL aggregate path -- some
-// internal sqlite arithmetic relied on c5's wide-register
-// behavior. Tracked here so the fix can be revisited with
-// targeted bisection of the sqlite code path.
+// After Add / Sub / Mul the result lives at the C99 common
+// type's storage width:
+//   * unsigned common -> mask `(1 << N) - 1` (wrap-modulo-2^N
+//     per C99 6.5).
+//   * signed common (overflow is UB per C99 6.5p5) -> match
+//     clang / gcc and truncate-and-sign-extend via `Shl K; Shr K`.
 //
 // This fixture asserts the C99-strict result for each operation;
 // each CHECK has a unique exit code so a regression pinpoints
-// the failing case. Today five codes (1, 2, 3, 4, 5) fire.
+// the failing case.
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -73,7 +51,7 @@ int main() {
 
     // 5. signed int * signed int overflow truncates to int width
     //    (matches clang's "truncate + sign-extend" convention; UB
-    //    per C99, but useful to be consistent).
+    //    per C99, but c5 picks the same convention).
     {
         unsigned short us = 50000;
         // After integer promotion, both us are int. 50000*50000 =

@@ -76,7 +76,7 @@ impl Compiler {
         // Function-pointer declarator: `RET (*Name)(args)`, possibly
         // nested as `RET (*(*Name)(args1))(args2)`, or abstract as
         // `RET (*)(args)` (an unnamed parameter type, e.g.
-        // `int sqlite3_busy_handler(sqlite3*, int(*)(void*,int))`).
+        // `int register_cb(void *ctx, int(*)(void*,int))`).
         // Detected by peeking past the open paren: `*` opens the
         // pointer-cum-declarator, `(` starts a nested parens group.
         if self.lex.tk == '(' as i64

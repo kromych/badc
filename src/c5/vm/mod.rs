@@ -891,6 +891,18 @@ impl<H: Host> Vm<H> {
                     a = self.load_i64(sp)? % a;
                     sp += 8;
                 }
+                Op::Divu => {
+                    let lhs = self.load_i64(sp)? as u64;
+                    let rhs = a as u64;
+                    a = (lhs / rhs) as i64;
+                    sp += 8;
+                }
+                Op::Modu => {
+                    let lhs = self.load_i64(sp)? as u64;
+                    let rhs = a as u64;
+                    a = (lhs % rhs) as i64;
+                    sp += 8;
+                }
                 // Immediate-form arithmetic / comparison: `a = a <op> N`.
                 // Folded by the optimizer from `Psh; Imm N; <op>`. Saves
                 // one stack push and two dispatches per call site.

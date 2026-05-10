@@ -399,6 +399,13 @@ pub(super) fn enc_sdiv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     0x9AC0_0C00 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+/// `UDIV <Xd>, <Xn>, <Xm>` -- unsigned integer division. Differs from
+/// SDIV only in the opcode2 field (bit 10 cleared). Pairs with
+/// [`enc_msub`] when computing unsigned modulo.
+pub(super) fn enc_udiv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    0x9AC0_0800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
 /// `MSUB <Xd>, <Xn>, <Xm>, <Xa>` -- `Xd = Xa - (Xn * Xm)`. The
 /// AArch64 idiom for `mod` is `sdiv q, a, b ; msub r, q, b, a`,
 /// which yields `r = a - (a/b)*b`.
@@ -1634,6 +1641,17 @@ fn lower_op(
             // pop lhs; x17 = lhs / x19; x19 = lhs - x17 * x19.
             let lhs = pop_lhs_reg(code, reg_state);
             emit(code, enc_sdiv(Reg::X17, lhs, Reg::X19));
+            emit(code, enc_msub(Reg::X19, Reg::X17, Reg::X19, lhs));
+        }
+        Op::Divu => binop_with_pop(code, reg_state, enc_udiv),
+        Op::Modu => {
+            // Same shape as Op::Mod but with UDIV instead of SDIV.
+            // The MSUB stays as-is: subtraction is sign-agnostic at the
+            // 64-bit register level since both operands fit in u64
+            // (the divisor and dividend are both <= 2^63 here, and
+            // wrap-around modulo 2^64 yields the same low bits).
+            let lhs = pop_lhs_reg(code, reg_state);
+            emit(code, enc_udiv(Reg::X17, lhs, Reg::X19));
             emit(code, enc_msub(Reg::X19, Reg::X17, Reg::X19, lhs));
         }
 

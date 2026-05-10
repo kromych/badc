@@ -542,6 +542,15 @@ pub(super) fn emit_idiv_r(code: &mut Vec<u8>, divisor: Reg) {
     emit_byte(code, modrm(0b11, 7, divisor.lo()));
 }
 
+/// `DIV r/m64` -- unsigned divide `rdx:rax / r`. Quotient -> rax,
+/// remainder -> rdx. The caller must zero rdx (e.g. `xor edx, edx`)
+/// instead of sign-extending with [`emit_cqo`].
+pub(super) fn emit_div_r(code: &mut Vec<u8>, divisor: Reg) {
+    emit_byte(code, rex(true, false, false, divisor.high()));
+    emit_byte(code, 0xF7);
+    emit_byte(code, modrm(0b11, 6, divisor.lo()));
+}
+
 // ---- SSE2 floating-point. ----
 //
 // XMM registers share the 0..15 register-id field with GPRs; the
@@ -1825,6 +1834,8 @@ fn lower_op(
 
         Op::Div => div_or_mod_with_pop(code, reg_state, /*want_remainder=*/ false),
         Op::Mod => div_or_mod_with_pop(code, reg_state, /*want_remainder=*/ true),
+        Op::Divu => divu_or_modu_with_pop(code, reg_state, /*want_remainder=*/ false),
+        Op::Modu => divu_or_modu_with_pop(code, reg_state, /*want_remainder=*/ true),
 
         // ---- Control flow ----
         Op::Jmp => {
@@ -2743,6 +2754,31 @@ fn div_or_mod_with_pop(code: &mut Vec<u8>, reg_state: &mut RegState<'_>, want_re
     }
     emit_cqo(code); // rdx:rax = sign-extend rax
     emit_idiv_r(code, Reg::R10);
+    if want_remainder {
+        emit_mov_rr(code, Reg::R13, Reg::RDX);
+    } else {
+        emit_mov_rr(code, Reg::R13, Reg::RAX);
+    }
+}
+
+/// Unsigned divide. Same shape as [`div_or_mod_with_pop`] but uses
+/// `DIV` (modrm.reg = 6) instead of `IDIV` (modrm.reg = 7), and zeroes
+/// rdx with `xor edx, edx` instead of sign-extending rax with `CQO`.
+fn divu_or_modu_with_pop(code: &mut Vec<u8>, reg_state: &mut RegState<'_>, want_remainder: bool) {
+    emit_mov_rr(code, Reg::R10, Reg::R13); // r10 = divisor
+    match reg_state.pseudo_stack.pop() {
+        Some(Some((slot, bank))) => {
+            emit_mov_rr(code, Reg::RAX, pool_reg(slot, bank));
+        }
+        Some(None) | None => {
+            pop_into(code, Reg::RAX);
+        }
+    }
+    // Zero rdx for the unsigned dividend's high half. `xor edx, edx`
+    // is the canonical 2-byte way (the 32-bit form clears the upper
+    // 32 bits of rdx by AMD64's zero-extend rule).
+    emit_xor_rr(code, Reg::RDX, Reg::RDX);
+    emit_div_r(code, Reg::R10);
     if want_remainder {
         emit_mov_rr(code, Reg::R13, Reg::RDX);
     } else {

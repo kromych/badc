@@ -131,10 +131,19 @@ pub enum Op {
     Sub,
     /// Multiplication `*`
     Mul,
-    /// Division `/`
+    /// Division `/` (signed). Emitted when both operands are signed.
+    /// ARM64 `SDIV`, x86_64 `IDIV`.
     Div,
-    /// Modulo `%`
+    /// Modulo `%` (signed). Emitted when both operands are signed.
     Mod,
+    /// Division `/` (unsigned). Emitted when at least one operand has
+    /// an unsigned integer type, per C99 6.3.1.8 common-type rules.
+    /// Treats both operands as u64 -- the high-bit-set bit pattern is
+    /// interpreted as a large positive, not a negative. ARM64 `UDIV`,
+    /// x86_64 `DIV` (with `xor edx, edx` instead of `CQO`).
+    Divu,
+    /// Modulo `%` (unsigned). See [`Op::Divu`].
+    Modu,
 
     // --- Immediate-form arithmetic / comparison ---
     //
@@ -294,7 +303,7 @@ pub enum Op {
     TailExt,
 }
 
-const OPS: [Op; 82] = [
+const OPS: [Op; 84] = [
     Op::Lea,
     Op::Imm,
     Op::Jmp,
@@ -339,6 +348,8 @@ const OPS: [Op; 82] = [
     Op::Mul,
     Op::Div,
     Op::Mod,
+    Op::Divu,
+    Op::Modu,
     // Immediate-form ops (optimizer-emitted).
     Op::AddI,
     Op::SubI,

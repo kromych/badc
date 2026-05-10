@@ -53,18 +53,18 @@ fn jit_fixture_exit(name: &str) -> i32 {
     jit_run(&program, &argv).expect("jit_run failed")
 }
 
-// ---- Unsigned-arithmetic gaps from c99-gaps.md ----
+// ---- Unsigned-arithmetic regressions ----
 
 #[test]
-#[ignore = "deferred (gh #20): unsigned arithmetic high-half not masked through registers"]
-fn unsigned_arith_high_half_not_masked() {
-    // Today this fixture exits 1 (the very first check fires)
-    // because `~u` carries the sign-extended high half across
-    // the comparison. Fix: mask the result of unsigned bitwise
-    // / shift / arithmetic ops to the slot width before the
-    // comparison observes it, or store-and-reload.
-    let exit = jit_fixture_exit("deferred_unsigned_arith_high_half.c");
-    assert_eq!(exit, 0, "fixture should exit 0 once gh #20 lands");
+fn unsigned_arith_high_half_masked() {
+    // C99 6.5: unsigned bitwise / shift / arithmetic results at
+    // the type's storage width. The 64-bit accumulator carries
+    // sign-extended bits past the operand width after `~`, `<<`,
+    // `+`/`-`/`*`; the post-op mask in the compiler discards
+    // them so register-resident comparisons agree with C99.
+    // Was deferred (#20); fixture is now a regression marker.
+    let exit = jit_fixture_exit("unsigned_arith_high_half.c");
+    assert_eq!(exit, 0, "fixture should exit 0");
 }
 
 #[test]
@@ -79,44 +79,41 @@ fn unsigned_right_shift_is_logical() {
 }
 
 #[test]
-#[ignore = "deferred (gh #21): unsigned divide / modulo use signed ops"]
-fn unsigned_divide_and_modulo_are_signed() {
-    // `Op::Div` / `Op::Mod` lower to SDIV (ARM64) / IDIV
-    // (x86_64). Unsigned operands with the high bit set come
-    // out wrong (or fault on overflow). Fix: dedicated
-    // `Op::Divu` / `Op::Modu` routed when either operand is
-    // unsigned.
-    let exit = jit_fixture_exit("deferred_unsigned_div_mod.c");
-    assert_eq!(exit, 0, "fixture should exit 0 once gh #21 lands");
+fn unsigned_divide_and_modulo_use_unsigned_ops() {
+    // C99 6.3.1.8: when either operand of `/` or `%` is unsigned,
+    // both operands convert to the unsigned common type and the
+    // operation is unsigned. `Op::Divu` / `Op::Modu` (UDIV on
+    // ARM64, `DIV` with `xor edx, edx` on x86_64) are routed
+    // when the C99 common type is unsigned. Was deferred (#21);
+    // fixture is now a regression marker.
+    let exit = jit_fixture_exit("unsigned_div_mod.c");
+    assert_eq!(exit, 0, "fixture should exit 0");
 }
 
 #[test]
-#[ignore = "deferred (gh #22): signed -> unsigned promotion in mixed expressions"]
-fn mixed_signed_unsigned_no_promotion() {
-    // C99 sec 6.3.1.8 promotes the signed operand to the unsigned
-    // common type. Today the dialect picks the op based on the
-    // operator (signed for arithmetic; mixed-sensitive for
-    // compares) without converting.
-    let exit = jit_fixture_exit("deferred_mixed_signed_unsigned.c");
-    assert_eq!(exit, 0, "fixture should exit 0 once gh #22 lands");
+fn mixed_signed_unsigned_div_mod() {
+    // C99 6.3.1.8: a mixed signed/unsigned `/` or `%` converts
+    // the signed operand to the unsigned common type by adding
+    // 2^N (per 6.3.1.3). The pre-divide pass masks each operand
+    // to the common-unsigned width when one of them is signed,
+    // so `(int)-1 / (uint)2` lands as `0xFFFFFFFFu / 2u =
+    // 0x7FFFFFFFu` instead of the sign-extended-i64 udiv result.
+    // Was deferred (#22 div/mod arm); fixture is now a
+    // regression marker.
+    let exit = jit_fixture_exit("mixed_signed_unsigned_div.c");
+    assert_eq!(exit, 0, "fixture should exit 0");
 }
 
 #[test]
-#[ignore = "deferred (gh #22): arithmetic results not masked to common-type width when mixed signed/unsigned"]
-fn c99_arith_common_width() {
-    // After Add / Sub / Mul, c5 keeps the 64-bit accumulator
-    // value. C99 6.3.1.8 / 6.5 say the result lives at the
-    // common type's width, wrap-modulo-2^N for unsigned. Today
-    // c5 only masks when *both* operands are unsigned (the
-    // canonical `uint + uint` wrap case); mixed signed/unsigned
-    // (e.g. `(uint)0xFFFFFFFF + 1` where 1 is a bare int
-    // literal) keeps the wider value. Tracked by exit-code
-    // numbers in the fixture; today only code 5 (signed-overflow
-    // truncate-to-int convention from clang) fires from the
-    // failure list, the rest of the gaps surface only when
-    // results bypass typed storage (which sqlite happens not
-    // to do).
-    let exit = jit_fixture_exit("deferred_c99_arith_common_width.c");
+fn c99_arith_common_width_full() {
+    // After Add / Sub / Mul, c5 truncates the 64-bit accumulator
+    // to the C99 6.3.1.8 common type's storage width:
+    //   * unsigned common -> mask `(1 << N) - 1` (wrap-modulo-2^N).
+    //   * signed common (UB per C99 6.5p5) -> match clang / gcc
+    //     and truncate-and-sign-extend via `Shl K; Shr K`.
+    // Was deferred (#22 signed-overflow arm); fixture is now a
+    // regression marker.
+    let exit = jit_fixture_exit("c99_arith_common_width.c");
     assert_eq!(exit, 0, "C99 arith common-type width regression");
 }
 

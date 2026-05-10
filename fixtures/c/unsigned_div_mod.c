@@ -1,17 +1,10 @@
-// DEFERRED: unsigned division / modulo use signed ops.
+// Unsigned division / modulo.
 //
-// `Op::Div` and `Op::Mod` lower to ARM64 `SDIV` / x86_64 `IDIV`
-// (signed-int division). For `unsigned int / unsigned int` where
-// the dividend has the high bit set, the value is interpreted as
-// negative under signed division and the quotient comes out
-// wrong (or signal-divides on overflow).
-//
-// Same as the right-shift gap: storing into an `unsigned int`
-// slot doesn't help -- the division happens in a register before
-// the store, and the operand interpretations are signed there.
-//
-// Fix is to add `Op::Divu` / `Op::Modu` (UDIV on ARM64, DIV on
-// x86_64) and route to them when either operand is unsigned.
+// C99 6.5.5: when either operand of `/` or `%` is unsigned, both
+// operands convert to the unsigned common type and the operation
+// is unsigned. Closed by `Op::Divu` / `Op::Modu` (UDIV on ARM64,
+// `DIV` with `xor edx, edx` on x86_64), routed when the C99
+// common type is unsigned.
 #include <stdio.h>
 
 int main() {

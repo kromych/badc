@@ -878,6 +878,18 @@ fn fold_arith(op: Op, a: i64, b: i64) -> Option<i64> {
             }
             a.wrapping_rem(b)
         }
+        Op::Divu => {
+            if b == 0 {
+                return None;
+            }
+            ((a as u64).wrapping_div(b as u64)) as i64
+        }
+        Op::Modu => {
+            if b == 0 {
+                return None;
+            }
+            ((a as u64).wrapping_rem(b as u64)) as i64
+        }
         Op::And => a & b,
         Op::Or => a | b,
         Op::Xor => a ^ b,

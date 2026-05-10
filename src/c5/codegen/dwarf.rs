@@ -67,7 +67,7 @@ const DW_TAG_VARIABLE: u32 = 0x34;
 const DW_TAG_STRUCTURE_TYPE: u8 = 0x13;
 const DW_TAG_UNION_TYPE: u8 = 0x17;
 const DW_TAG_MEMBER: u8 = 0x0d;
-/// DWARF 5 §3.4.2 -- the `, ...` of a variadic prototype. We
+/// DWARF 5 sec. 3.4.2 -- the `, ...` of a variadic prototype. We
 /// emit one as a child of every PLT subprogram whose
 /// `is_variadic` flag is set so gdb / lldb render the signature
 /// with an ellipsis (`printf (fmt, ...)`).

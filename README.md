@@ -19,12 +19,14 @@ used as `#!` so that C source code becomes a script.
 There are various demo's under [`demos`](./demos/):
 
 * Few small-ish ones (`threads.c`, `coro_pool.c`, `hello_server.c`),
+* GUI demos for macOS, Linux and Windows (`gui_hello`),
 * Maze builder and solver - TBD,
 * `sqlite3` - the most famous embedded database,
 * `miniz` - compression, CRC32, integers, bit twiddling,
 * `kissfft` - floating points, Fast Fourier Transform,
 * `bzip2` - compression, integers, bit twiddling,
-* `stb_vorbis` - TBD
+* `stb` - header-only C library with lots of incredible features,
+  really stresses many parts of the compiler.
 
 It can also run the code JIT-ted in-process so no binary is written
 to the disk. That option might be useful for using `badc` to run the

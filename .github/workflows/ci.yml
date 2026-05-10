@@ -178,6 +178,14 @@ jobs:
         # a known buffer at both -O and noO and checks CRC32 / Adler32
         # against RFC 1950 / 3309 reference values.
         run: python demos/miniz/smoke.py
+      - name: kissfft amalgamation smoke
+        # First real FP exerciser. Builds KISS FFT + a real-only
+        # add-on through badc and runs an impulse FFT, a forward
+        # +inverse round-trip, and a single-frequency sine real
+        # FFT at both -O and noO. Catches FP libm boundary
+        # regressions (xmm0 / d0 return value, FP arg masks
+        # through the optimizer, ...).
+        run: python demos/kissfft/smoke.py
 
   features:
     name: feature combos

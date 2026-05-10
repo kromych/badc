@@ -22,6 +22,14 @@ demos/miniz/*
 !demos/miniz/smoke.py
 !demos/miniz/smoke_main.c
 !demos/miniz/README.md
+# kissfft amalgamation -- same pattern. `setup.py` fetches the
+# release zip and drops the six files in place; only the
+# runner scripts + driver source are committed.
+demos/kissfft/*
+!demos/kissfft/setup.py
+!demos/kissfft/smoke.py
+!demos/kissfft/smoke_main.c
+!demos/kissfft/README.md
 hello
 sqlite3_main
 # Local crash artefacts (kept out of git but useful while working on

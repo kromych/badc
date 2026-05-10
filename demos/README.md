@@ -84,3 +84,10 @@ End-to-end of the upstream [miniz](https://github.com/richgel999/miniz)
 deflate / inflate / CRC32 / Adler32 amalgamation. Smaller and
 integer-heavier than sqlite -- the second non-trivial demo. See
 [`miniz/README.md`](./miniz/README.md).
+
+## kissfft/
+
+End-to-end of the upstream [KISS FFT](https://github.com/mborgerding/kissfft)
+amalgamation. First real FP exerciser: impulse FFT, forward+inverse
+round-trip, real-only `kiss_fftr` against a sine wave, all at -O
+and noO. See [`kissfft/README.md`](./kissfft/README.md).

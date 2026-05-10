@@ -147,6 +147,7 @@ fn malloc_memset_memcmp_roundtrip() {
 
 fn jit_fixture(name: &str) -> i32 {
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests");
     path.push("fixtures");
     path.push("c");
     path.push(name);
@@ -320,6 +321,7 @@ fn fixture_parity() {
 #[test]
 fn fixture_parity_native_optimized() {
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests");
     path.push("fixtures");
     path.push("c");
     let mut failures: Vec<String> = Vec::new();
@@ -356,6 +358,7 @@ fn original_c4_compiles_and_runs_hello_jit() {
     // compile-and-run; we hand it hello.c via JIT argv and expect
     // the resulting c4-VM run to print "Hello 123" and exit 0.
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests");
     path.push("fixtures");
     path.push("c");
     path.push("c4.c");
@@ -372,6 +375,7 @@ fn original_c4_compiles_and_runs_hello_jit_native_optimized() {
     // register-pool lowering or cmp+branch fusion breaks under
     // heavy bytecode load, this is the test that catches it first.
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests");
     path.push("fixtures");
     path.push("c");
     path.push("c4.c");

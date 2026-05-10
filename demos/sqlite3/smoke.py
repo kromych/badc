@@ -322,7 +322,7 @@ INMEM_SCENARIOS = (
 #     A regression where unary `+` clobbered the operand type to
 #     `int` made the whole expression compute on FP bit patterns
 #     and `round(1.5)` returned 4.6e+18. See
-#     `fixtures/c/unary_plus_preserves_float.c`.
+#     `tests/fixtures/c/unary_plus_preserves_float.c`.
 #   * 64-bit integer boundaries via shifts and bitwise ops.
 #   * INT64 overflow on `+` promotes to REAL (sqlite's per-spec
 #     behaviour).

@@ -351,6 +351,7 @@ fn build_and_run_fixture(name: &str) -> RunOutcome {
 
 fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &str) -> RunOutcome {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests");
     path.push("fixtures");
     path.push("c");
     path.push(name);
@@ -535,6 +536,7 @@ fn original_c4_compiles_and_runs_hello_pe() {
         return;
     }
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests");
     path.push("fixtures");
     path.push("c");
     path.push("c4.c");

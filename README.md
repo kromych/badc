@@ -25,12 +25,12 @@ and `C5Error` type.
 
 The original `c4.c` compiler ships as a test fixture and self-hosts:
 
-    badc fixtures/c/c4.c -o c4         # compile c4 to a native binary
+    badc tests/fixtures/c/c4.c -o c4         # compile c4 to a native binary
     ./c4 hello.c                       # which then runs hello.c
 
 or you can really crank the fun up with something like
 
-    badc --jit fixtures/c/c4.c fixtures/c/c4.c fixtures/c/c4.c fixtures/c/c4.c
+    badc --jit tests/fixtures/c/c4.c tests/fixtures/c/c4.c tests/fixtures/c/c4.c tests/fixtures/c/c4.c
 
 to run it quadro-nested :)
 
@@ -84,20 +84,20 @@ Five targets, cross-compile from any host to any of them:
 | `windows-x64`             | PE32+         | `msvcrt.dll`, `kernel32.dll`        |
 | `windows-arm64`           | PE32+         | same                                |
 
-    badc fixtures/c/c4.c -o c4-native              # macOS host -> Mach-O
+    badc tests/fixtures/c/c4.c -o c4-native              # macOS host -> Mach-O
     ./c4-native hello.c
 
-    badc --target=linux-aarch64 fixtures/c/c4.c -o c4-arm
+    badc --target=linux-aarch64 tests/fixtures/c/c4.c -o c4-arm
     docker run --platform linux/arm64 -v $PWD:/w debian:stable-slim /w/c4-arm /w/hello.c
 
-    badc --target=windows-x64 fixtures/c/c4.c -o c4.exe
+    badc --target=windows-x64 tests/fixtures/c/c4.c -o c4.exe
     wine c4.exe hello.c
 
 The Windows targets produce a PE that runs on a real Windows (x86_64, ARM64) box
 or under WINE on Linux (x86_64, ARM64).
 
 What the native backend executes faithfully: every fixture in
-`fixtures/c/` that runs under the VM and isn't a deliberate
+`tests/fixtures/c/` that runs under the VM and isn't a deliberate
 safety-net check. The Mach-O, ELF, and PE paths are mirrored
 test-for-test. What native mode doesn't have: the VM's runtime
 safety net (`--track-pointers`, code-vs-data separation checks).
@@ -217,7 +217,7 @@ calls `main` directly via a transmuted function pointer. No
 subprocess, no on-disk binary -- parse, lower, exec all happen
 inside the badc process:
 
-    badc --jit fixtures/c/c4.c hello.c       # JIT'd c4 self-hosts hello.c
+    badc --jit tests/fixtures/c/c4.c hello.c       # JIT'd c4 self-hosts hello.c
 
 Five hosts ship today:
 
@@ -320,7 +320,7 @@ The CLI binary always builds with the default `std` feature.
 
 Tests are split by what they exercise. `lexer`, `parser`, `codegen`,
 `vm` drive each phase directly. `programs` and `intrinsics` load
-real C sources from `fixtures/c/` and check the exit code under
+real C sources from `tests/fixtures/c/` and check the exit code under
 the VM. `types` checks the warning-not-error behaviour.
 `pointer_tracking` exercises the opt-in safety net. `optimizer`
 re-runs every fixture under `-O` and asserts the exit code didn't

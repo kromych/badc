@@ -34,9 +34,9 @@ unsigned wrap-modulo-2^N, signed-overflow truncate-and-sign-
 extend (matching clang/gcc), unsigned divide / modulo,
 mixed signed/unsigned through the C99 common type, and
 zero-extending vs sign-extending loads for unsigned and
-signed narrow types. See `fixtures/c/integer_boundary_c99.c`,
-`fixtures/c/c99_arith_common_width.c`, and
-`fixtures/c/zero_sign_extension_32bit.c` for the regression
+signed narrow types. See `tests/fixtures/c/integer_boundary_c99.c`,
+`tests/fixtures/c/c99_arith_common_width.c`, and
+`tests/fixtures/c/zero_sign_extension_32bit.c` for the regression
 markers.
 
 ## Impl-defined choices (sec 6.2.5, 6.7.2)

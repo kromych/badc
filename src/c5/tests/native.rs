@@ -284,6 +284,7 @@ fn build_and_run_fixture(name: &str) -> RunOutcome {
 
 fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &str) -> RunOutcome {
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests");
     path.push("fixtures");
     path.push("c");
     path.push(name);
@@ -487,6 +488,7 @@ where
     S: AsRef<str>,
 {
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests");
     path.push("fixtures");
     path.push("c");
     path.push(name);
@@ -536,6 +538,7 @@ fn file_io_natively() {
     let dummy_path = std::env::temp_dir().join("test_dummy.txt");
     std::fs::write(&dummy_path, "1234567890").unwrap();
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests");
     path.push("fixtures");
     path.push("c");
     path.push("file_io.c");
@@ -562,6 +565,7 @@ fn getenv_value_natively() {
     // returns the first byte of the value, so 'V' (86) confirms the
     // libc getenv path threads through correctly.
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests");
     path.push("fixtures");
     path.push("c");
     path.push("getenv_value.c");

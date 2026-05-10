@@ -210,6 +210,7 @@ fn build_and_run_fixture(name: &str) -> RunOutcome {
 
 fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &str) -> RunOutcome {
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests");
     path.push("fixtures");
     path.push("c");
     path.push(name);
@@ -405,6 +406,7 @@ fn file_io_natively() {
     std::fs::write(&dummy_path, "1234567890").unwrap();
 
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests");
     path.push("fixtures");
     path.push("c");
     path.push("file_io.c");
@@ -427,6 +429,7 @@ fn file_io_natively() {
 #[test]
 fn getenv_value_natively() {
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests");
     path.push("fixtures");
     path.push("c");
     path.push("getenv_value.c");
@@ -450,6 +453,7 @@ fn getenv_value_natively() {
 #[test]
 fn original_c4_compiles_and_runs_hello_natively() {
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests");
     path.push("fixtures");
     path.push("c");
     path.push("c4.c");

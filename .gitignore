@@ -39,6 +39,8 @@ demos/bzip2/*
 !demos/bzip2/smoke.py
 !demos/bzip2/smoke_main.c
 !demos/bzip2/README.md
+# gui_hello: per-target build outputs land in `.build/`.
+demos/gui_hello/.build/
 hello
 sqlite3_main
 # Local crash artefacts (kept out of git but useful while working on

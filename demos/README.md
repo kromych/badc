@@ -98,3 +98,12 @@ End-to-end of the upstream [bzip2](https://sourceware.org/bzip2/)
 1.0.8 library. Integer + bit-twiddle heavy (BWT, MTF, RLE, Huffman);
 exercises a different code shape from miniz's deflate. Aligns with
 gh #11. See [`bzip2/README.md`](./bzip2/README.md).
+
+## gui_hello/
+
+Three "show a window with a label" demos -- Win32 (using the
+new `#pragma subsystem(windows)` + `#pragma entrypoint(WinMain)`),
+Linux X11, macOS Cocoa via raw `objc_msgSend`. Cross-builds
+to all five supported targets; CI runs the smoke build-only
+since runners have no display server. See
+[`gui_hello/README.md`](./gui_hello/README.md).

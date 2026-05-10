@@ -194,6 +194,13 @@ jobs:
         # both -O and noO. Different code shape from miniz's
         # deflate.
         run: python demos/bzip2/smoke.py
+      - name: gui_hello build-only smoke
+        # Three GUI demos -- Win32, X11, Cocoa via objc_msgSend --
+        # cross-compiled to all five supported targets. Build-only
+        # because CI runners don't have display servers / Window
+        # Stations / XQuartz; a developer runs the produced
+        # binary locally to see the actual window.
+        run: python demos/gui_hello/smoke.py
 
   features:
     name: feature combos

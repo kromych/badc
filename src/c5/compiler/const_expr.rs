@@ -32,7 +32,29 @@ impl Compiler {
     /// the preprocessor expanded), parenthesised sub-expressions,
     /// and the standard operator hierarchy.
     pub(super) fn parse_constant_int(&mut self) -> Result<i64, C5Error> {
-        self.parse_const_expr_or()
+        self.parse_const_expr_cond()
+    }
+
+    /// C99 6.5.15 conditional operator at the top of the constant-
+    /// expression chain. Both arms are evaluated (the parser still
+    /// has to consume their tokens) but only the selected one
+    /// contributes to the resulting value, matching clang/gcc.
+    /// The `:` arm recurses back into `parse_const_expr_cond` so
+    /// `a ? b : c ? d : e` parses right-associatively.
+    pub(super) fn parse_const_expr_cond(&mut self) -> Result<i64, C5Error> {
+        let cond = self.parse_const_expr_or()?;
+        if self.lex.tk == Token::Cond as i64 {
+            self.next()?;
+            let then_val = self.parse_const_expr_or()?;
+            if self.lex.tk != ':' as i64 {
+                return Err(self.compile_err("`:` expected in conditional constant expression"));
+            }
+            self.next()?;
+            let else_val = self.parse_const_expr_cond()?;
+            Ok(if cond != 0 { then_val } else { else_val })
+        } else {
+            Ok(cond)
+        }
     }
 
     pub(super) fn parse_const_expr_or(&mut self) -> Result<i64, C5Error> {
@@ -371,7 +393,7 @@ impl Compiler {
         //     like `&((char*)0)[7]` in static initializers.
         if self.lex.tk == Token::Brak as i64 {
             self.next()?;
-            let n = self.parse_const_expr_or()?;
+            let n = self.parse_const_expr_cond()?;
             if self.lex.tk != ']' as i64 {
                 return Err(self.compile_err_at(line, "close bracket expected in offsetof index"));
             }
@@ -424,7 +446,7 @@ impl Compiler {
             // size of the field's array type.
             if self.lex.tk == Token::Brak as i64 {
                 self.next()?;
-                let n = self.parse_const_expr_or()?;
+                let n = self.parse_const_expr_cond()?;
                 if self.lex.tk != ']' as i64 {
                     return Err(
                         self.compile_err_at(line, "close bracket expected in offsetof index")
@@ -461,7 +483,7 @@ impl Compiler {
                 self.next()?;
                 return self.parse_const_expr_unary();
             }
-            let v = self.parse_const_expr_or()?;
+            let v = self.parse_const_expr_cond()?;
             if self.lex.tk != ')' as i64 {
                 return Err(self.compile_err("close paren expected in constant expression"));
             }

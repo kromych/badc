@@ -806,8 +806,8 @@ mod tests {
     #[test]
     fn analyzer_runs_clean_on_quicksort_fixture() {
         use crate::Compiler;
-        let path =
-            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/c/quicksort.c");
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/c/quicksort.c");
         let src = std::fs::read_to_string(&path).expect("read quicksort.c");
         let program = Compiler::new(src).compile().expect("compile");
         let plan = analyze(&program.text, POOL).expect("analyze");
@@ -824,7 +824,8 @@ mod tests {
     #[test]
     fn analyzer_runs_clean_on_c4_self_host() {
         use crate::Compiler;
-        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/c/c4.c");
+        let path =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/c/c4.c");
         let src = std::fs::read_to_string(&path).expect("read c4.c");
         let program = Compiler::new(src).compile().expect("compile");
         let plan = analyze(&program.text, POOL).expect("analyze");

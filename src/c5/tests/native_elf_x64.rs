@@ -210,6 +210,7 @@ fn build_and_run_fixture(name: &str) -> RunOutcome {
 
 fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &str) -> RunOutcome {
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests");
     path.push("fixtures");
     path.push("c");
     path.push(name);
@@ -249,6 +250,16 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("enum_tag_types.c", 0),
     ("bitfields.c", 0),
     ("struct_layout.c", 0),
+    ("const_expr_conditional.c", 27),
+    ("comma_operator_in_loops.c", 3),
+    ("size_t_via_stdio.c", 3),
+    ("leading_dot_float_literal.c", 7),
+    ("libc_fp_return_value.c", 11),
+    ("pragma_entrypoint.c", 23),
+    ("struct_field_enum_type.c", 13),
+    ("compound_assign_fp_int_rhs.c", 17),
+    ("optimizer_fp_arg_mask_remap.c", 19),
+    ("struct_2d_array_field.c", 27),
     ("anonymous_aggregates.c", 0),
     ("static_locals.c", 0),
     ("large_stack_frame.c", 42),
@@ -405,6 +416,7 @@ fn file_io_natively() {
     std::fs::write(&dummy_path, "1234567890").unwrap();
 
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests");
     path.push("fixtures");
     path.push("c");
     path.push("file_io.c");
@@ -427,6 +439,7 @@ fn file_io_natively() {
 #[test]
 fn getenv_value_natively() {
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests");
     path.push("fixtures");
     path.push("c");
     path.push("getenv_value.c");
@@ -450,6 +463,7 @@ fn getenv_value_natively() {
 #[test]
 fn original_c4_compiles_and_runs_hello_natively() {
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests");
     path.push("fixtures");
     path.push("c");
     path.push("c4.c");

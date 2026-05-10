@@ -100,6 +100,7 @@ const IMAGE_FILE_LARGE_ADDRESS_AWARE: u16 = 0x0020;
 
 const PE32_PLUS_MAGIC: u16 = 0x20B;
 const IMAGE_SUBSYSTEM_WINDOWS_CUI: u16 = 3;
+const IMAGE_SUBSYSTEM_WINDOWS_GUI: u16 = 2;
 const IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA: u16 = 0x0020;
 const IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE: u16 = 0x0040;
 const IMAGE_DLLCHARACTERISTICS_NX_COMPAT: u16 = 0x0100;
@@ -932,6 +933,15 @@ pub(super) fn write(
             tls_table_size,
             export_table_rva: edata_rva,
             export_table_size: edata_size,
+            // gh #32: source-driven subsystem flag. Default
+            // (`None`) keeps the historical console-subsystem
+            // PE; `windows` opts in to GUI mode for `WinMain`-
+            // shaped programs (the loader skips the auto-
+            // attach-to-console step).
+            subsystem: match program.subsystem {
+                Some(crate::c5::preprocessor::Subsystem::Windows) => IMAGE_SUBSYSTEM_WINDOWS_GUI,
+                _ => IMAGE_SUBSYSTEM_WINDOWS_CUI,
+            },
         },
     );
     let mut sections: Vec<SectionHeader> = Vec::with_capacity(num_sections(
@@ -1752,6 +1762,15 @@ struct OptionalHeaderInputs {
     /// DLLs that don't declare any `#pragma export`.
     export_table_rva: u32,
     export_table_size: u32,
+    /// PE optional-header `Subsystem` field. Driven by
+    /// `#pragma subsystem(<kind>)` (gh #32) -- `console` ->
+    /// `IMAGE_SUBSYSTEM_WINDOWS_CUI` (3, default), `windows`
+    /// -> `IMAGE_SUBSYSTEM_WINDOWS_GUI` (2). The console
+    /// shape is what every existing demo / fixture builds
+    /// against; the GUI shape skips the loader's auto-attach
+    /// to a console window so a `WinMain`-shaped program
+    /// doesn't show a console.
+    subsystem: u16,
 }
 
 fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
@@ -1827,7 +1846,7 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
             size_of_image: inp.size_of_image,
             size_of_headers: inp.size_of_headers,
             checksum: 0,
-            subsystem: IMAGE_SUBSYSTEM_WINDOWS_CUI,
+            subsystem: inp.subsystem,
             dll_characteristics: dll_chars,
             size_of_stack_reserve: 0x10_0000, // 1 MiB
             size_of_stack_commit: 0x1000,

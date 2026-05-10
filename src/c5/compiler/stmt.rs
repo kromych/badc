@@ -35,24 +35,38 @@ impl Compiler {
     /// condition (which falls through to it) and the step (which the
     /// body's tail jumps back to). `continue` patches into the step
     /// position; `break` patches past the loop end.
+    /// Parse a C99 6.5.17 `expression` -- a possibly comma-chained
+    /// chain of assignment-expressions evaluated for side effects,
+    /// yielding the value of the last. `expr(Assign)` stops at `,`
+    /// because c5 also uses `,` as an argument / declarator
+    /// separator; every statement-level expression context resumes
+    /// the chain through this helper.
+    pub(super) fn parse_full_expr(&mut self) -> Result<(), C5Error> {
+        self.expr(Token::Assign as i64)?;
+        while self.lex.tk == ',' as i64 {
+            self.next()?;
+            self.expr(Token::Assign as i64)?;
+        }
+        Ok(())
+    }
+
     pub(super) fn parse_for_stmt(&mut self) -> Result<(), C5Error> {
         self.next()?;
         self.consume(b'(', "open paren expected")?;
 
         // Initialization (optional). Comma operator: `for(i=0,j=0; ...)`.
         if self.lex.tk != ';' as i64 {
-            self.expr(Token::Assign as i64)?;
-            while self.lex.tk == ',' as i64 {
-                self.next()?;
-                self.expr(Token::Assign as i64)?;
-            }
+            self.parse_full_expr()?;
         }
         self.consume(b';', "semicolon expected after for-init")?;
 
-        // Condition (optional -- empty means `1`).
+        // Condition (optional -- empty means `1`). The C99 grammar
+        // makes the condition a full `expression`, so a comma chain
+        // is legal here too -- the value of the last subexpression
+        // becomes the loop predicate.
         let cond_pc = self.text.len();
         if self.lex.tk != ';' as i64 {
-            self.expr(Token::Assign as i64)?;
+            self.parse_full_expr()?;
         } else {
             self.emit_imm(1);
         }
@@ -71,11 +85,7 @@ impl Compiler {
         // patched a few lines below. Comma operator: `i++, k--`.
         let step_pc = self.text.len();
         if self.lex.tk != ')' as i64 {
-            self.expr(Token::Assign as i64)?;
-            while self.lex.tk == ',' as i64 {
-                self.next()?;
-                self.expr(Token::Assign as i64)?;
-            }
+            self.parse_full_expr()?;
         }
         self.emit_jmp(cond_pc as i64);
 
@@ -110,7 +120,7 @@ impl Compiler {
         self.emit_lea(switch_val_offset);
         self.emit_op(Op::Psh);
 
-        self.expr(Token::Assign as i64)?;
+        self.parse_full_expr()?;
         self.consume(b')', "close paren expected")?;
 
         self.emit_op(Op::Si);
@@ -323,7 +333,7 @@ impl Compiler {
         if self.lex.tk == Token::If as i64 {
             self.next()?;
             self.consume(b'(', "open paren expected")?;
-            self.expr(Token::Assign as i64)?;
+            self.parse_full_expr()?;
             self.consume(b')', "close paren expected")?;
             self.emit_op(Op::Bz);
             let b = self.text.len();
@@ -344,7 +354,7 @@ impl Compiler {
             self.next()?;
             let cond_pc = self.text.len();
             self.consume(b'(', "open paren expected")?;
-            self.expr(Token::Assign as i64)?;
+            self.parse_full_expr()?;
             self.consume(b')', "close paren expected")?;
             self.emit_op(Op::Bz);
             let bz_pc = self.text.len();
@@ -376,7 +386,7 @@ impl Compiler {
             self.patch_loop_continues(cond_pc);
 
             self.consume(b'(', "open paren expected")?;
-            self.expr(Token::Assign as i64)?;
+            self.parse_full_expr()?;
             self.consume(b')', "close paren expected")?;
 
             self.emit_op(Op::Bnz);
@@ -394,9 +404,9 @@ impl Compiler {
             self.next()?;
             // Case label is a constant expression: integer literal,
             // negated literal, parenthesised literal, enum / `#define`d
-            // constant. parse_const_expr_or covers all of these and
-            // shapes like `(-16)` / `0x10|0x20`.
-            let val = self.parse_const_expr_or()?;
+            // constant. The C99 grammar allows the full conditional-
+            // expression chain (`a ? b : c`), so we go in at the top.
+            let val = self.parse_constant_int()?;
             self.consume(b':', "expected colon after case")?;
             let Some(cases) = self.switch_cases.last_mut() else {
                 return Err(self.compile_err("case outside switch"));
@@ -478,7 +488,7 @@ impl Compiler {
                     self.emit_op(Op::Mcpy);
                     self.emit_val(size as i64);
                 } else {
-                    self.expr(Token::Assign as i64)?;
+                    self.parse_full_expr()?;
                 }
             }
             self.emit_op(Op::Lev);
@@ -488,17 +498,7 @@ impl Compiler {
         } else if self.lex.tk == ';' as i64 {
             self.next()?;
         } else {
-            self.expr(Token::Assign as i64)?;
-            // Comma operator at expression-statement level:
-            // `(void)x, (void)y;`. Each expression evaluates for
-            // its side effects; the value of the chain is the
-            // last subexpression. expr(Assign) deliberately stops
-            // at `,` because c5's argument parser uses `,` as a
-            // separator -- we resume the chain here.
-            while self.lex.tk == ',' as i64 {
-                self.next()?;
-                self.expr(Token::Assign as i64)?;
-            }
+            self.parse_full_expr()?;
             self.consume(b';', "semicolon expected")?;
         }
         Ok(())

@@ -1,4 +1,4 @@
-//! End-to-end tests: load a C source from `fixtures/c/`, compile, run, and
+//! End-to-end tests: load a C source from `tests/fixtures/c/`, compile, run, and
 //! check the exit code. These exercise the whole pipeline.
 
 use super::run_fixture;

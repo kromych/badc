@@ -975,15 +975,66 @@ impl Lexer {
                     '?' => self.tk = Token::Cond as i64,
                     '.' => {
                         // Three consecutive dots -> variadic ellipsis;
-                        // a single dot is the struct-value field access
-                        // operator. Float literals starting with `.`
-                        // (e.g. `.5`) aren't supported -- write `0.5`.
+                        // `.<digit>` is a C99 6.4.4.2 fractional
+                        // floating-constant with an empty integer
+                        // part (`.5` == `0.5`); a bare `.` is the
+                        // struct-value field-access operator.
                         if self.pos + 1 < self.src.len()
                             && self.src[self.pos] == b'.'
                             && self.src[self.pos + 1] == b'.'
                         {
                             self.pos += 2;
                             self.tk = Token::Ellipsis as i64;
+                        } else if self.pos < self.src.len()
+                            && (self.src[self.pos] as char).is_ascii_digit()
+                        {
+                            // Float-literal start: rewind one byte so
+                            // `int_start` (set below) covers the leading
+                            // `.`, then consume the digit run +
+                            // optional exponent + optional suffix the
+                            // same way the digit-led path does.
+                            let int_start = self.pos - 1;
+                            while self.pos < self.src.len()
+                                && (self.src[self.pos] as char).is_ascii_digit()
+                            {
+                                self.pos += 1;
+                            }
+                            if self.pos < self.src.len()
+                                && (self.src[self.pos] == b'e' || self.src[self.pos] == b'E')
+                            {
+                                self.pos += 1;
+                                if self.pos < self.src.len()
+                                    && (self.src[self.pos] == b'+' || self.src[self.pos] == b'-')
+                                {
+                                    self.pos += 1;
+                                }
+                                while self.pos < self.src.len()
+                                    && (self.src[self.pos] as char).is_ascii_digit()
+                                {
+                                    self.pos += 1;
+                                }
+                            }
+                            let body_end = self.pos;
+                            if self.pos < self.src.len()
+                                && (self.src[self.pos] == b'f' || self.src[self.pos] == b'F')
+                            {
+                                self.pos += 1;
+                            }
+                            let lit = core::str::from_utf8(&self.src[int_start..body_end])
+                                .map_err(|e| {
+                                    C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
+                                        "{}: float literal not valid utf-8: {e}",
+                                        self.line
+                                    )))
+                                })?;
+                            let f: f64 = lit.parse().map_err(|e| {
+                                C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
+                                    "{}: malformed float literal `{lit}`: {e}",
+                                    self.line
+                                )))
+                            })?;
+                            self.ival = f.to_bits() as i64;
+                            self.tk = Token::FloatNum as i64;
                         } else {
                             self.tk = Token::Dot as i64;
                         }

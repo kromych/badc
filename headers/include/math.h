@@ -28,6 +28,9 @@
 #pragma binding(libc::tan,   "_tan")
 #pragma binding(libc::atan,  "_atan")
 #pragma binding(libc::atan2, "_atan2")
+#pragma binding(libc::ldexp, "_ldexp")
+#pragma binding(libc::frexp, "_frexp")
+#pragma binding(libc::modf,  "_modf")
 #endif
 
 #ifdef __linux__
@@ -49,6 +52,9 @@
 #pragma binding(libm::tan,   "tan")
 #pragma binding(libm::atan,  "atan")
 #pragma binding(libm::atan2, "atan2")
+#pragma binding(libm::ldexp, "ldexp")
+#pragma binding(libm::frexp, "frexp")
+#pragma binding(libm::modf,  "modf")
 #endif
 
 #ifdef _WIN32
@@ -69,6 +75,9 @@
 #pragma binding(msvcrt::tan,   "tan")
 #pragma binding(msvcrt::atan,  "atan")
 #pragma binding(msvcrt::atan2, "atan2")
+#pragma binding(msvcrt::ldexp, "ldexp")
+#pragma binding(msvcrt::frexp, "frexp")
+#pragma binding(msvcrt::modf,  "modf")
 #endif
 
 // IEEE-754 sentinel values. The c5 lexer accepts the typical
@@ -117,3 +126,11 @@ double cos(double x);
 double tan(double x);
 double atan(double x);
 double atan2(double y, double x);
+// C99 7.12.6.6: ldexp(x, exp) = x * 2^exp.
+double ldexp(double x, int exp);
+// C99 7.12.6.4: frexp(x, *exp) splits x into a normalised
+// significand in [0.5, 1.0) and an integer exponent.
+double frexp(double x, int *exp);
+// C99 7.12.6.12: modf(x, *iptr) splits x into integer + fractional
+// parts.
+double modf(double x, double *iptr);

@@ -11,7 +11,7 @@
 //! `JIT_FIXTURES` / `NATIVE_FIXTURES` lists, and close the
 //! tracking GitHub issue.
 //!
-//! The fixtures themselves live in `fixtures/c/deferred_*.c`. The
+//! The fixtures themselves live in `tests/fixtures/c/deferred_*.c`. The
 //! prefix makes them easy to grep for and skips the normal
 //! fixture-parity tables (which only pick up unprefixed names).
 //!
@@ -41,6 +41,7 @@ use crate::{Compiler, jit_run};
 /// "still broken in the documented way".
 fn jit_fixture_exit(name: &str) -> i32 {
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests");
     path.push("fixtures");
     path.push("c");
     path.push(name);

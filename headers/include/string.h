@@ -12,6 +12,11 @@
 
 #pragma once
 
+// C99 7.21: `<string.h>` exposes `size_t`. Pull `<stddef.h>`
+// so `size_t` reaches every TU that includes `<string.h>`,
+// matching glibc / clang / MSVC.
+#include <stddef.h>
+
 #ifndef NULL
 #define NULL 0
 #endif

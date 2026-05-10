@@ -6,7 +6,7 @@
 //! - [`vm`]       -- builds `Program` literals by hand and runs them.
 //! - [`programs`] -- end-to-end: load a `.c` fixture, compile, run, assert exit code.
 //!
-//! Tests that contain meaningful C source load it from `fixtures/c/<name>.c`
+//! Tests that contain meaningful C source load it from `tests/fixtures/c/<name>.c`
 //! via [`load_fixture`] / [`run_fixture`] / [`compile_fixture`]. Lexer- and
 //! parser-error tests use small inline strings since the snippets are tiny
 //! and tightly coupled to the assertion.
@@ -36,16 +36,17 @@ mod programs;
 mod types;
 mod vm;
 
-/// Absolute path of `fixtures/c/<name>` relative to the crate root.
+/// Absolute path of `tests/fixtures/c/<name>` relative to the crate root.
 fn fixture_path(name: &str) -> PathBuf {
     let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    p.push("tests");
     p.push("fixtures");
     p.push("c");
     p.push(name);
     p
 }
 
-/// Read a C source fixture from `fixtures/c/<name>`.
+/// Read a C source fixture from `tests/fixtures/c/<name>`.
 pub fn load_fixture(name: &str) -> String {
     let path = fixture_path(name);
     std::fs::read_to_string(&path)

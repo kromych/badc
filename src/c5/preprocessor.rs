@@ -211,6 +211,53 @@ pub(crate) struct Preprocessor {
     /// uses `Program::source_path` separately; this is purely the
     /// preprocessor / lexer / diagnostics view.
     source_label: String,
+    /// Diagnostics accumulated during preprocessing. Drained into
+    /// `Compiler::warnings` so a single `Program::warnings` list
+    /// surfaces every `<file>:<line>: warning: ...` line the
+    /// front end produced -- preprocessor and parser alike. Mirrors
+    /// gcc / clang shape so editors' jump-to-error works out of
+    /// the box.
+    pub warnings: Vec<String>,
+    /// Include-resolution trace. Populated only when
+    /// [`Self::set_show_includes`] is on; matches gcc `-H`'s shape:
+    /// one `". stdio.h"` / `".. stddef.h"` line per `#include`,
+    /// where the leading dots mark nesting depth. The CLI's `-H` /
+    /// `--show-includes` flag flushes this list to stderr after
+    /// preprocessing finishes.
+    pub include_trace: Vec<String>,
+    /// `true` when the build driver asked for include tracing.
+    /// Defaults to `false`; flipping it on costs one push to
+    /// `include_trace` per `#include` resolve attempt and nothing
+    /// else.
+    show_includes: bool,
+    /// Source-declared entry-point name (`#pragma entrypoint(<id>)`,
+    /// gh #55). `None` means the default `main` is used; set via
+    /// the pragma to opt the translation unit into a non-`main`
+    /// entry like `WinMain` (Win32 `--gui`) or a custom `_start`.
+    /// The compile pass reads this when resolving `entry_pc`; the
+    /// PE writer reads it for the optional-header AddressOfEntryPoint.
+    pub entrypoint: Option<String>,
+    /// Source-declared Windows subsystem (`#pragma subsystem(<kind>)`,
+    /// gh #32). `None` means the default `console`. Recognised
+    /// kinds today: `console` (IMAGE_SUBSYSTEM_WINDOWS_CUI = 3) and
+    /// `windows` (IMAGE_SUBSYSTEM_WINDOWS_GUI = 2). The PE writer
+    /// reads this to set the optional header's Subsystem field;
+    /// non-PE targets keep the field at `None` and ignore it.
+    pub subsystem: Option<Subsystem>,
+}
+
+/// Windows PE subsystem selector. Mirrors the `IMAGE_SUBSYSTEM_*`
+/// constants from `<winnt.h>`: `Console` is the default for badc-
+/// produced PEs (CRT-style stdio works, but the loader allocates
+/// a console window when one isn't already attached); `Windows`
+/// is the GUI flavour the loader uses for apps that own their
+/// own window message loop.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Subsystem {
+    /// `IMAGE_SUBSYSTEM_WINDOWS_CUI` (3) -- console subsystem.
+    Console,
+    /// `IMAGE_SUBSYSTEM_WINDOWS_GUI` (2) -- windowed subsystem.
+    Windows,
 }
 
 impl Preprocessor {
@@ -310,7 +357,21 @@ impl Preprocessor {
             search_paths: Vec::new(),
             force_includes: Vec::new(),
             source_label: "<source>".to_string(),
+            warnings: Vec::new(),
+            include_trace: Vec::new(),
+            show_includes: false,
+            entrypoint: None,
+            subsystem: None,
         }
+    }
+
+    /// Enable / disable gcc-`-H`-style include tracing. When on,
+    /// every `#include` resolution -- successful or missing --
+    /// emits a line into `include_trace`; the CLI's `-H` /
+    /// `--show-includes` flag flushes the list to stderr after
+    /// preprocessing.
+    pub fn set_show_includes(&mut self, enabled: bool) {
+        self.show_includes = enabled;
     }
 
     /// Override the filename label used for the top-level translation
@@ -723,11 +784,31 @@ impl Preprocessor {
                         }
                     }
                     Directive::Other => {
-                        // Unknown directive -- mirror the historical
-                        // lexer behaviour and skip silently. Anything
-                        // a user is likely to misspell (`#defin` etc.)
-                        // would be caught by the lexer downstream as
-                        // a stray identifier.
+                        // Unknown directive. C99 6.10.6 reserves
+                        // every non-directive form for the
+                        // implementation; gcc / clang surface
+                        // unrecognised names as a warning and skip
+                        // the line. c5 follows that shape: pull the
+                        // first identifier out of the directive
+                        // body so the warning names what was
+                        // dropped, and let the empty-line emit
+                        // below pad the line counter.
+                        if active {
+                            let kw = directive
+                                .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+                                .next()
+                                .unwrap_or("")
+                                .to_string();
+                            let label = if kw.is_empty() {
+                                "(empty)".to_string()
+                            } else {
+                                format!("`#{kw}`")
+                            };
+                            self.warnings.push(format!(
+                                "{filename}:{line_no}: warning: \
+                                 unknown preprocessor directive {label} -- ignoring"
+                            ));
+                        }
                     }
                     Directive::Shebang => {
                         // First-line `#!/usr/bin/env badc` shebangs --
@@ -1091,6 +1172,111 @@ impl Preprocessor {
         {
             return self.parse_pragma_export(inner.trim(), line_no, filename);
         }
+        if let Some(inner) = args
+            .strip_prefix("entrypoint(")
+            .and_then(|s| s.strip_suffix(')'))
+        {
+            return self.parse_pragma_entrypoint(inner.trim(), line_no, filename);
+        }
+        if let Some(inner) = args
+            .strip_prefix("subsystem(")
+            .and_then(|s| s.strip_suffix(')'))
+        {
+            return self.parse_pragma_subsystem(inner.trim(), line_no, filename);
+        }
+        Ok(())
+    }
+
+    /// `#pragma entrypoint(<name>)` -- override the function the
+    /// loader / `--jit` handoff jumps to. Default is `main`. The
+    /// only constraint here is that `<name>` is a plain
+    /// identifier; the compile pass validates the name resolves
+    /// to a `Token::Fun` symbol after the parse pass, the same
+    /// way `#pragma export(...)` is checked.
+    ///
+    /// Use cases:
+    ///   * Win32 GUI apps -- `#pragma entrypoint(WinMain)` with
+    ///     `#pragma subsystem(windows)` produces a PE the
+    ///     Windows loader resolves to `WinMain` and the loader
+    ///     skips the console-attach step.
+    ///   * Custom `_start` shapes that bypass the libc CRT.
+    ///   * DLL-style entry points where `DllMain` is the only
+    ///     callable name (rare; today the `#pragma export`
+    ///     surface covers DLLs).
+    fn parse_pragma_entrypoint(
+        &mut self,
+        inner: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<(), C5Error> {
+        let name = inner.trim();
+        if !is_ident(name) {
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                &format!(
+                    "`#pragma entrypoint({name})` -- name must be a \
+                     plain identifier"
+                ),
+            )));
+        }
+        if let Some(prev) = &self.entrypoint
+            && prev != name
+        {
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                &format!(
+                    "`#pragma entrypoint({name})` conflicts with prior \
+                     `#pragma entrypoint({prev})`; pick one"
+                ),
+            )));
+        }
+        self.entrypoint = Some(name.to_string());
+        Ok(())
+    }
+
+    /// `#pragma subsystem(<kind>)` -- pick the Windows PE
+    /// subsystem header value. Recognised today: `console`
+    /// (default; `IMAGE_SUBSYSTEM_WINDOWS_CUI`) and `windows`
+    /// (`IMAGE_SUBSYSTEM_WINDOWS_GUI`). Quietly accepted on
+    /// non-PE targets so the same source can compile for
+    /// multiple OSes; the PE writer is the only consumer that
+    /// looks at the value.
+    fn parse_pragma_subsystem(
+        &mut self,
+        inner: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<(), C5Error> {
+        let kind = inner.trim();
+        let parsed = match kind {
+            "console" | "CUI" | "cui" => Subsystem::Console,
+            "windows" | "GUI" | "gui" => Subsystem::Windows,
+            _ => {
+                return Err(C5Error::Compile(super::error::fmt_compile_err(
+                    filename,
+                    line_no,
+                    &format!(
+                        "`#pragma subsystem({kind})` -- expected \
+                         `console` or `windows`"
+                    ),
+                )));
+            }
+        };
+        if let Some(prev) = self.subsystem
+            && prev != parsed
+        {
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                &format!(
+                    "`#pragma subsystem({kind})` conflicts with prior \
+                     `#pragma subsystem({prev:?})`; pick one"
+                ),
+            )));
+        }
+        self.subsystem = Some(parsed);
         Ok(())
     }
 
@@ -1195,11 +1381,17 @@ impl Preprocessor {
     /// header's processed contents into the output.
     ///
     /// The header is looked up in [`super::headers::embedded_header`].
-    /// Unknown names silently no-op so legacy sources sprinkled with
-    /// `#include <fcntl.h>` for documentation don't break. Cyclic
-    /// `#include` returns an error; repeat inclusion of a header
-    /// that previously declared `#pragma once` returns an empty
-    /// string.
+    /// Unknown names emit a warning (matching gcc / clang's
+    /// "fatal error: 'X': No such file or directory" diagnostic
+    /// at warning severity rather than fatal -- c5 chooses the
+    /// permissive shape so legacy fixtures with cosmetic
+    /// `#include`s don't break) and resolve to an empty body.
+    /// Cyclic `#include` returns an error; repeat inclusion of a
+    /// header that previously declared `#pragma once` returns an
+    /// empty string. With [`Self::set_show_includes`] on the
+    /// resolution path is appended to `include_trace` in the
+    /// gcc-`-H` shape (`. file`, `.. nested`, `! missing` for
+    /// the warning case).
     fn process_include(
         &mut self,
         name: &str,
@@ -1207,6 +1399,11 @@ impl Preprocessor {
         filename: &str,
     ) -> Result<String, C5Error> {
         if self.pragma_once_files.contains(name) {
+            if self.show_includes {
+                let depth = self.include_stack.len() + 1;
+                self.include_trace
+                    .push(format!("{} {} (cached)", ".".repeat(depth), name));
+            }
             return Ok(String::new());
         }
         // Resolution order:
@@ -1217,16 +1414,36 @@ impl Preprocessor {
         //      rebuilding badc.
         //   2. Bundled in-binary header (the include_str! set in
         //      `headers.rs`).
-        //   3. Silent miss -- preserve the historical "drop the
-        //      include on the floor" behaviour so legacy fixtures
-        //      with cosmetic `#include`s don't fail.
+        //   3. Missed -- emit a warning and resolve to "". The
+        //      compile keeps going so a header that exists at
+        //      runtime but wasn't bundled in the test binary
+        //      isn't a hard failure; the user sees the warning
+        //      and can decide whether the missing surface
+        //      matters.
         // The result is owned `String` because filesystem-loaded
         // bodies don't have static lifetime; the embedded path
         // copies its `&'static str` into one to share the type.
         let resolved: Option<String> = self.find_include(name);
         let Some(content) = resolved else {
+            // Missing header. Push a warning into the same list
+            // the parser uses; the caller drains it through to
+            // `Program::warnings` after the compile finishes.
+            self.warnings.push(format!(
+                "{filename}:{line_no}: warning: include `{name}` not found, \
+                 dropping (no header search path or embedded header matched)"
+            ));
+            if self.show_includes {
+                let depth = self.include_stack.len() + 1;
+                self.include_trace
+                    .push(format!("{} {} (missing)", "!".repeat(depth), name));
+            }
             return Ok(String::new());
         };
+        if self.show_includes {
+            let depth = self.include_stack.len() + 1;
+            self.include_trace
+                .push(format!("{} {}", ".".repeat(depth), name));
+        }
         if self.include_stack.iter().any(|f| f == name) {
             let chain = self.include_stack.join(" -> ");
             return Err(C5Error::Compile(super::error::fmt_compile_err(
@@ -1692,6 +1909,31 @@ fn parse_directive(rest: &str) -> Directive<'_> {
     }
     if rest.starts_with('!') {
         return Directive::Shebang;
+    }
+    // GNU-style line marker: `# N "file" [flags]` -- the C99 form
+    // is `#line N "file"` (handled above), but the amalgamator
+    // and historic gcc preprocessors emit the keyword-less variant
+    // too. Recognise it as `Directive::Line` so it doesn't trip
+    // the unknown-directive warning. Trailing flag digits (1 2 3
+    // 4) are GNU's enter / leave / system / extern markers; we
+    // ignore them since c5 only tracks (file, line).
+    let trimmed = rest.trim();
+    if trimmed.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+        let mut split = trimmed.splitn(2, char::is_whitespace);
+        if let Some(num) = split.next()
+            && let Ok(line) = num.parse::<usize>()
+        {
+            let file = split.next().and_then(|tail| {
+                let t = tail.trim_start();
+                t.strip_prefix('"').and_then(|s| {
+                    // Trailing flags after the closing quote are
+                    // optional -- match up to the next quote and
+                    // discard the rest.
+                    s.find('"').map(|end| &s[..end])
+                })
+            });
+            return Directive::Line { line, file };
+        }
     }
     Directive::Other
 }
@@ -2786,11 +3028,57 @@ mod tests {
 
     #[test]
     fn unknown_include_is_silently_dropped() {
-        // Headers not in the embedded registry should no-op so legacy
+        // Headers not in the embedded registry no-op so legacy
         // sources sprinkled with `#include <fcntl.h>` keep building
-        // until a real header takes that slot.
-        let out = process("#include <not-a-real-header.h>\nint main() { return 0; }\n");
+        // until a real header takes that slot. The compile keeps
+        // going; the warning surfaces separately via
+        // `pp.warnings`.
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let out = pp
+            .process("#include <not-a-real-header.h>\nint main() { return 0; }\n")
+            .expect("preprocessor failed");
         assert!(out.contains("int main()"));
+        assert_eq!(pp.warnings.len(), 1);
+        assert!(
+            pp.warnings[0].contains("not found"),
+            "missing-include warning shape: {}",
+            pp.warnings[0]
+        );
+    }
+
+    #[test]
+    fn unknown_directive_warns() {
+        // C99 6.10.6 reserves non-directive forms for the
+        // implementation; gcc / clang warn rather than fail.
+        // c5 follows that shape.
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let _ = pp
+            .process("#frobnicate args\nint main() { return 0; }\n")
+            .expect("preprocessor failed");
+        assert!(
+            pp.warnings.iter().any(|w| w.contains("`#frobnicate`")),
+            "expected a warning naming `#frobnicate`; got {:?}",
+            pp.warnings
+        );
+    }
+
+    #[test]
+    fn show_includes_records_resolution_trace() {
+        // gcc `-H`-shape trace -- one line per `#include`, with
+        // leading dots marking nesting depth. A missing header
+        // emits a `! name (missing)` line in the same trace.
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.set_show_includes(true);
+        let _ = pp
+            .process("#include <not-a-real-header.h>\nint main() { return 0; }\n")
+            .expect("preprocessor failed");
+        assert!(
+            pp.include_trace
+                .iter()
+                .any(|l| l.starts_with("!") && l.contains("not-a-real-header.h")),
+            "trace should mark missing header: {:?}",
+            pp.include_trace
+        );
     }
 
     #[test]

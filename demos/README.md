@@ -70,3 +70,40 @@ wrapper that copies the host's first int-arg register (rdi / x0 /
 rcx) into the c5 stack slot the callee reads from. Each worker's
 logical id rides through that channel; everything bigger (the
 task queue, the result table) still goes through globals.
+
+## sqlite3/
+
+End-to-end of the upstream SQLite amalgamation. Pinned release,
+fetched on demand by `demos/sqlite3/setup.py`; in-memory and
+file-backed scenarios at both -O and noO. See
+[`sqlite3/README.md`](./sqlite3/README.md).
+
+## miniz/
+
+End-to-end of the upstream [miniz](https://github.com/richgel999/miniz)
+deflate / inflate / CRC32 / Adler32 amalgamation. Smaller and
+integer-heavier than sqlite -- the second non-trivial demo. See
+[`miniz/README.md`](./miniz/README.md).
+
+## kissfft/
+
+End-to-end of the upstream [KISS FFT](https://github.com/mborgerding/kissfft)
+amalgamation. First real FP exerciser: impulse FFT, forward+inverse
+round-trip, real-only `kiss_fftr` against a sine wave, all at -O
+and noO. See [`kissfft/README.md`](./kissfft/README.md).
+
+## bzip2/
+
+End-to-end of the upstream [bzip2](https://sourceware.org/bzip2/)
+1.0.8 library. Integer + bit-twiddle heavy (BWT, MTF, RLE, Huffman);
+exercises a different code shape from miniz's deflate. Aligns with
+gh #11. See [`bzip2/README.md`](./bzip2/README.md).
+
+## gui_hello/
+
+Three "show a window with a label" demos -- Win32 (using the
+new `#pragma subsystem(windows)` + `#pragma entrypoint(WinMain)`),
+Linux X11, macOS Cocoa via raw `objc_msgSend`. Cross-builds
+to all five supported targets; CI runs the smoke build-only
+since runners have no display server. See
+[`gui_hello/README.md`](./gui_hello/README.md).

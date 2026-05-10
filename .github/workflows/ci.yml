@@ -172,6 +172,35 @@ jobs:
         run: |
           cargo build --release --locked
           python demos/sqlite3/smoke.py
+      - name: miniz amalgamation smoke
+        # Same shape as the sqlite step but smaller: ~9k LOC of
+        # integer + bit-twiddle deflate code. Compresses + uncompresses
+        # a known buffer at both -O and noO and checks CRC32 / Adler32
+        # against RFC 1950 / 3309 reference values.
+        run: python demos/miniz/smoke.py
+      - name: kissfft amalgamation smoke
+        # First real FP exerciser. Builds KISS FFT + a real-only
+        # add-on through badc and runs an impulse FFT, a forward
+        # +inverse round-trip, and a single-frequency sine real
+        # FFT at both -O and noO. Catches FP libm boundary
+        # regressions (xmm0 / d0 return value, FP arg masks
+        # through the optimizer, ...).
+        run: python demos/kissfft/smoke.py
+      - name: bzip2 amalgamation smoke
+        # Third non-trivial demo. Integer + bit-twiddle heavy:
+        # BWT, move-to-front, run-length encoding, and Huffman
+        # coding through a 128-bit bitstream packer. Compresses +
+        # decompresses a 600-byte buffer at blockSize 1 and 9 at
+        # both -O and noO. Different code shape from miniz's
+        # deflate.
+        run: python demos/bzip2/smoke.py
+      - name: gui_hello build-only smoke
+        # Three GUI demos -- Win32, X11, Cocoa via objc_msgSend --
+        # cross-compiled to all five supported targets. Build-only
+        # because CI runners don't have display servers / Window
+        # Stations / XQuartz; a developer runs the produced
+        # binary locally to see the actual window.
+        run: python demos/gui_hello/smoke.py
 
   features:
     name: feature combos

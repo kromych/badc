@@ -42,9 +42,12 @@ const COMPILE_SKIPLIST: &[&str] = &[
 fn every_fixture_compiles_standalone_for_linux() {
     let badc = env!("CARGO_BIN_EXE_badc");
     let manifest = env!("CARGO_MANIFEST_DIR");
-    let fixtures_dir = PathBuf::from(manifest).join("fixtures").join("c");
+    let fixtures_dir = PathBuf::from(manifest)
+        .join("tests")
+        .join("fixtures")
+        .join("c");
     let mut entries: Vec<PathBuf> = std::fs::read_dir(&fixtures_dir)
-        .expect("read fixtures/c")
+        .expect("read tests/fixtures/c")
         .filter_map(|e| e.ok().map(|e| e.path()))
         .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("c"))
         .collect();

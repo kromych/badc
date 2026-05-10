@@ -14,6 +14,33 @@ demos/sqlite3/*
 !demos/sqlite3/setup.py
 !demos/sqlite3/smoke.py
 !demos/sqlite3/README.md
+# miniz amalgamation -- same pattern. `setup.py` fetches the
+# upstream release zip and drops `miniz.c` / `miniz.h` in
+# place; only the runner scripts + driver source are committed.
+demos/miniz/*
+!demos/miniz/setup.py
+!demos/miniz/smoke.py
+!demos/miniz/smoke_main.c
+!demos/miniz/README.md
+# kissfft amalgamation -- same pattern. `setup.py` fetches the
+# release zip and drops the six files in place; only the
+# runner scripts + driver source are committed.
+demos/kissfft/*
+!demos/kissfft/setup.py
+!demos/kissfft/smoke.py
+!demos/kissfft/smoke_main.c
+!demos/kissfft/README.md
+# bzip2 release tarball -- same pattern. `setup.py` fetches
+# the upstream 1.0.8 .tar.gz and drops the library .c/.h files
+# in place; only the runner scripts + driver source are
+# committed.
+demos/bzip2/*
+!demos/bzip2/setup.py
+!demos/bzip2/smoke.py
+!demos/bzip2/smoke_main.c
+!demos/bzip2/README.md
+# gui_hello: per-target build outputs land in `.build/`.
+demos/gui_hello/.build/
 hello
 sqlite3_main
 # Local crash artefacts (kept out of git but useful while working on

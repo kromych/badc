@@ -177,6 +177,8 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         source_path,
         variables: in_variables,
         structs,
+        entry_name,
+        subsystem,
     } = program;
 
     let mut insns = decode(&text, &data_imm_positions, &in_code_imm_positions)?;
@@ -388,6 +390,29 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
             Some(v)
         })
         .collect();
+
+    // Remap each `(JsrExt pc, fp_arg_mask)` tuple from the
+    // pre-opt PC space to the post-opt PC space. Without this,
+    // the codegen's `fp_arg_mask_at(jsrext_pc, ...)` lookup at
+    // the new (post-opt) JsrExt PC returns 0 -- the call site
+    // then loads every arg through the integer-arg register set,
+    // sending the FP bit pattern into x0 / rdi instead of d0 /
+    // xmm0 and feeding `sin(0.5)` an interpretation of 0.5's
+    // bit pattern as an integer (4602678819172646912 -- which
+    // libm reads as a vast double, returning sin(huge)=junk or
+    // 0). Surfaced compiling kissfft at -O.
+    let remapped_call_fp_arg_masks: Vec<(usize, u32)> = call_fp_arg_masks
+        .iter()
+        .filter_map(|&(old_pc, mask)| {
+            let idx = *pc_at_idx_for_pc.get(&(old_pc as u64))?;
+            let new_bc_pc = new_pc.get(idx).copied()?;
+            if new_bc_pc == usize::MAX {
+                return None;
+            }
+            Some((new_bc_pc, mask))
+        })
+        .collect();
+
     Ok(Program {
         text,
         data,
@@ -404,7 +429,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         code_imm_positions,
         tls_data,
         tls_init_size,
-        call_fp_arg_masks,
+        call_fp_arg_masks: remapped_call_fp_arg_masks,
         data_relocs,
         code_relocs: remapped_code_relocs,
         exports,
@@ -421,6 +446,8 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         source_path,
         variables: out_variables,
         structs,
+        entry_name,
+        subsystem,
     })
 }
 
@@ -1248,6 +1275,8 @@ mod tests {
             source_path: String::new(),
             variables: Vec::new(),
             structs: Vec::new(),
+            entry_name: None,
+            subsystem: None,
         }
     }
 
@@ -1553,6 +1582,8 @@ mod tests {
             source_path: String::new(),
             variables: Vec::new(),
             structs: Vec::new(),
+            entry_name: None,
+            subsystem: None,
         };
         let opt = optimize(p).unwrap();
         // Main returns 5; if the ImmCode operand remapped wrong, the

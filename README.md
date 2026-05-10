@@ -7,9 +7,20 @@ the C99 standard.
 `badc` produces real native binaries (macOs Mach-O, Linux ELF, or
 Windows PE32+), on any of five targets, from any host - macOS (ARM64),
 Linux (ARM64, x86_64), Windows (ARM64,x86_64) with full debug information
-(can be omitted).
+(can be omitted). Can also JIT into the machine code and recognize being
+used as `#!` so that C source code becomes a script.
 
-It can also run the code JiT-ted in-process so no binary is written
+There are various demo's under [`demos`](./demos/):
+
+* Few small-ish ones (`threads.c`, `coro_pool.c`, `hello_server.c`),
+* Maze builder and solver - TBD,
+* `sqlite3` - the most famous embedded database,
+* `miniz` - compression, CRC32, integers, bit twiddling,
+* `kissfft` - floating points, Fast Fourier Transform,
+* `bzip2` - compression, integers, bit twiddling,
+* `stb_vorbis` - TBD
+
+It can also run the code JIT-ted in-process so no binary is written
 to the disk. That option might be useful for using `badc` to run the
 C code as a script. Finally, there's an option to run the IR (intermediate
 representation) with tracking pointer access and bounds to catch
@@ -23,30 +34,50 @@ and `C5Error` type.
 
 The original `c4.c` compiler ships as a test fixture and self-hosts:
 
-    badc fixtures/c/c4.c -o c4         # compile c4 to a native binary
-    ./c4 hello.c                       # which then runs hello.c
+```sh
+badc tests/fixtures/c/c4.c -o c4         # compile c4 to a native binary
+./c4 hello.c                       # which then runs hello.c
+```
 
 or you can really crank the fun up with something like
 
-    badc --jit fixtures/c/c4.c fixtures/c/c4.c fixtures/c/c4.c fixtures/c/c4.c
+```sh
+    badc --jit tests/fixtures/c/c4.c tests/fixtures/c/c4.c tests/fixtures/c/c4.c tests/fixtures/c/c4.c
+```
 
 to run it quadro-nested :)
 
-## Build and run
+## How to install
 
-    cargo build --release
-    ./target/release/badc path/to/file.c [-o <out>]
+If you have Rust installed, clone the repo install it with
+
+```sh
+cargo install --path .
+```
+
+Now `badc` is available on the PATH.
+
+If you don't have Rust installed, download one of the binary release packages
+matching you hardware and the OS.
+
+## Hello, ~~world~~, 123!
 
 A first run:
 
-    $ cargo run --quiet -- --jit hello.c # runs native code in-process
-    Hello 123
+```sh
+$ cargo run --quiet -- --jit hello.c # runs native code in-process
+
+Hello 123
+```
 
 or
 
-    $ cargo run --quiet -- hello.c     # Produces native binary
-    $ ./hello                          # produced by the previous line
-    Hello 123
+```sh
+cargo run --quiet -- hello.c     # Produces native binary
+./hello                          # produced by the previous line
+
+Hello 123
+```
 
 The first non-flag argument is the source file. By default `badc`
 lowers it to a native binary at the obvious path next to the
@@ -62,8 +93,12 @@ The three execution modes:
 | `--interp` | Run the bytecode under a watchful VM (pointer tracking, traces).   |
 
 Flags (`--target=<spec>`, `--optimize` / `-O`, `--dump-asm`,
-`--list-symbols`, plus the VM-only `--track-pointers` / `--trace`)
-can appear anywhere before the source.
+`--list-symbols`, `-H` / `--show-includes`, plus the VM-only
+`--track-pointers` / `--trace`) can appear anywhere before the
+source. `-D NAME[=VALUE]`, `-U NAME`, `-I path`, and `-include
+FILE` work the same way they do on gcc / clang. Source-driven
+build flags ride on `#pragma`s -- see "Headers and bindings"
+below.
 
 A `.c` file may start with a shebang. With `badc` on `PATH`,
 `chmod +x script.c` makes the file directly executable -- in
@@ -82,20 +117,22 @@ Five targets, cross-compile from any host to any of them:
 | `windows-x64`             | PE32+         | `msvcrt.dll`, `kernel32.dll`        |
 | `windows-arm64`           | PE32+         | same                                |
 
-    badc fixtures/c/c4.c -o c4-native              # macOS host -> Mach-O
-    ./c4-native hello.c
+```sh
+badc tests/fixtures/c/c4.c -o c4-native              # macOS host -> Mach-O
+./c4-native hello.c
 
-    badc --target=linux-aarch64 fixtures/c/c4.c -o c4-arm
-    docker run --platform linux/arm64 -v $PWD:/w debian:stable-slim /w/c4-arm /w/hello.c
+badc --target=linux-aarch64 tests/fixtures/c/c4.c -o c4-arm
+docker run --platform linux/arm64 -v $PWD:/w debian:stable-slim /w/c4-arm /w/hello.c
 
-    badc --target=windows-x64 fixtures/c/c4.c -o c4.exe
-    wine c4.exe hello.c
+badc --target=windows-x64 tests/fixtures/c/c4.c -o c4.exe
+wine c4.exe hello.c
+```
 
 The Windows targets produce a PE that runs on a real Windows (x86_64, ARM64) box
 or under WINE on Linux (x86_64, ARM64).
 
 What the native backend executes faithfully: every fixture in
-`fixtures/c/` that runs under the VM and isn't a deliberate
+`tests/fixtures/c/` that runs under the VM and isn't a deliberate
 safety-net check. The Mach-O, ELF, and PE paths are mirrored
 test-for-test. What native mode doesn't have: the VM's runtime
 safety net (`--track-pointers`, code-vs-data separation checks).
@@ -112,8 +149,8 @@ anonymous struct/union members, `#pragma pack(N)`, ...) on the
 host platform's data model (LP64 on macOS / Linux, LLP64 on
 Windows). The doc enumerates rejected idioms, divergent
 behaviour, and the c5-only extensions (`#pragma dylib` /
-`binding` / `export`, `#pragma once`, the bytecode VM, the
-in-process JIT).
+`binding` / `export` / `entrypoint` / `subsystem`,
+`#pragma once`, the bytecode VM, the in-process JIT).
 
 One implementation choice worth flagging up front: **bare `char`
 is unsigned** on every target (a 1-byte zero-extending load),
@@ -128,30 +165,34 @@ The preprocessor pre-defines a small standard set, double-underscore
 wrapped in the gcc / clang / msvc convention so they don't collide
 with user identifiers:
 
-    __BADC_VERSION__   "0.0.6"           crate version (string literal)
-    __BADC_TARGET__    "macos-aarch64"   canonical target id (string literal)
-    __aarch64__ / __arm64__              AArch64 targets
-    __x86_64__ / __amd64__               x86_64 targets
-    _WIN32 / _WIN64                      Windows targets only
-    __BADC_WINDOWS__                     Windows targets only
-    __APPLE__                            macOS target only
-    __linux__                            Linux targets only
+```c
+    __BADC_VERSION__   "0.0.6"           // crate version (string literal)
+    __BADC_TARGET__    "macos-aarch64"   // canonical target id (string literal)
+    __aarch64__ / __arm64__              // AArch64 targets
+    __x86_64__ / __amd64__               // x86_64 targets
+    _WIN32 / _WIN64                      // Windows targets only
+    __BADC_WINDOWS__                     // Windows targets only
+    __APPLE__                            // macOS target only
+    __linux__                            // Linux targets only
+```
 
 The MSVC mimicry surface (`_MSC_VER` / `__MINGW32__` / `__int64`
 / `__declspec` / etc.) lives in `headers/include/msvc_compat.h`
 and is opted into per translation unit with
 `-include msvc_compat.h`.
 
-### Per-target headers and bindings
+### Headers and bindings
 
-Every native build auto-prepends `headers/badc-{target}.h` to the
-source before the lexer sees it. The header tells the preprocessor
-which dylibs the target offers and which local names resolve to
-which exported symbols. A snippet:
+The header tells the compiler which dylib's/so's/dll's the target
+offers and which local names resolve to which exported symbols.
+A snippet:
 
-    #pragma dylib(libsystem, "/usr/lib/libSystem.B.dylib")
-    #pragma binding(libsystem::printf, "_printf")
-    int printf(char *fmt, ...);
+```c
+#pragma dylib(libsystem, "/usr/lib/libSystem.B.dylib")
+#pragma binding(libsystem::printf, "_printf")
+
+int printf(char *fmt, ...);
+```
 
 The codegen drives its IAT / `.got` / `DT_NEEDED` records from
 these declarations. When the source calls `printf`, the parser
@@ -166,33 +207,60 @@ Validation runs at codegen entry: every intrinsic the program
 Unused bindings cost nothing -- they describe the surface without
 forcing you to pull in everything they name.
 
+#### Source-driven build flags via `#pragma`
+
+c5 follows a "source picks, compiler honours" pattern for
+build-time choices that historically lived on the build
+driver's command line. The same shape covers dylib bindings,
+exports, alignment, the entry-point name, and the Windows
+subsystem -- every knob lives next to the code it configures
+so the source carries enough context to build with a bare
+`badc <file>`.
+
+```c
+#pragma once                       // single-inclusion guard for headers.
+#pragma dylib(libc, "libc.so.6")   // declare a dylib c5 can bind into.
+#pragma binding(libc::sin, "sin")  // map a portable name to its dylib symbol.
+#pragma export(my_api)             // promote a function to a shared-object export.
+#pragma pack(N) / pop / push       // override the default 8-byte struct alignment.
+#pragma entrypoint(WinMain)        // override the default `main` entry point.
+#pragma subsystem(windows)         // pick the Windows PE subsystem (windows | console).
+```
+
+`#pragma entrypoint(<name>)` (gh #55) lets the source declare
+a non-`main` entry without a build-driver flag; the compiler
+resolves the name through the same symbol-table lookup it uses
+for `main`. `#pragma subsystem(<kind>)` (gh #32) drives the
+PE optional-header `Subsystem` byte -- `console` (default,
+`IMAGE_SUBSYSTEM_WINDOWS_CUI = 3`) or `windows`
+(`IMAGE_SUBSYSTEM_WINDOWS_GUI = 2`); together with
+`entrypoint(WinMain)` the pair is what a Win32 GUI app needs
+to skip the loader's auto-attach to a console window. Non-PE
+targets keep the default and ignore the directive, so the
+same source builds for every OS.
+
+Unknown directives (and `#include`s that don't resolve through
+the search-path / embedded-header chain) emit a warning rather
+than failing the build; pass `-H` / `--show-includes` to see
+the gcc-`-H`-shape resolution trace on stderr.
+
 ### Reaching beyond the predefined set
 
-The compiler ships a fixed set of intrinsic ops it knows how to
-lower directly (`printf`, `malloc`, the rest of the historical c4
-list). For anything else -- `strlen`, `qsort`, `fopen`, `socket`,
-the entire Win32 API, libobjc -- the door is `dlopen` / `dlsym`:
+If something is not available, define it yourself for a
+quick fix, open an issue or use runtime linking with `dlopen` / `dlsym`
+or `LoadLibrary/GetProcAddress`:
 
-    int main() {
-        int *h, *fn;
-        h = dlopen(0, 2);                  // RTLD_NOW
-        fn = dlsym(h, "strlen");
-        return fn("hello, world!");        // exits 13
-    }
+```c
+int main() {
+    int *h, *fn;
+    h = dlopen(0, 2);                  // RTLD_NOW
+    fn = dlsym(h, "strlen");
+    return fn("hello, world!");        // exits 13
+}
+```
 
 `dlopen(NULL, RTLD_NOW)` returns the calling process's symbol
-scope -- libc on POSIX, the loaded set on Windows. Whatever you
-look up by name with `dlsym` comes back as a callable function
-pointer, and `Op::Jsri` (the indirect-call op) puts the c5 stack
-args into the host ABI's argument registers before jumping.
-
-The same shape works for `atoi`, `strchr`, `strstr`, `getenv`,
-`fopen`, ... anything libc exports. Whichever target you build for,
-the right symbol resolves -- macOS finds `_strlen` in
-`libSystem.B.dylib`, Linux finds bare `strlen` in `libc.so.6`,
-Windows reaches `strlen` in `msvcrt.dll` via
-`LoadLibraryA` / `GetProcAddress` (`dlopen` and `dlsym` map to
-those on Windows).
+scope -- libc on POSIX, the loaded set on Windows.
 
 For a flavour of what's reachable from each system:
 
@@ -215,7 +283,9 @@ calls `main` directly via a transmuted function pointer. No
 subprocess, no on-disk binary -- parse, lower, exec all happen
 inside the badc process:
 
-    badc --jit fixtures/c/c4.c hello.c       # JIT'd c4 self-hosts hello.c
+```sh
+badc --jit tests/fixtures/c/c4.c hello.c       # JIT'd c4 self-hosts hello.c
+```
 
 Five hosts ship today:
 
@@ -229,8 +299,8 @@ Five hosts ship today:
 
 libc is bound at JIT time: a writable "fake GOT" gets one entry
 per resolved import, and the codegen's existing GOT relocations
-are patched against this region. POSIX uses `dlopen(NULL,
-RTLD_NOW)` + `dlsym` to find each symbol in the loaded process;
+are patched against this region. POSIX uses `dlopen(NULL, RTLD_NOW)` + `dlsym`
+to find each symbol in the loaded process;
 Windows uses `LoadLibraryA` per declared dylib (kernel32, msvcrt,
 ws2_32, ...) + `GetProcAddress`. macOS uses Apple's `MAP_JIT` +
 per-thread W^X toggle for the hardware-enforced W^X on Apple
@@ -238,6 +308,8 @@ Silicon.
 
 `--dump-asm` produces a textual listing of the lowered code grouped
 by the c5 op that produced each region.
+
+For more, one can use `objdump`, `readelf`, etc.
 
 ### Optimizations
 
@@ -278,9 +350,12 @@ the same workloads.
 `--interp` runs the program through the bytecode interpreter
 instead of compiling to native:
 
-    $ cargo run --quiet -- --interp hello.c
-    Hello 123
-    exit(0)
+```sh
+$ cargo run --quiet -- --interp hello.c
+
+Hello 123
+exit(0)
+```
 
 The VM keeps code, stack, and data in three distinct address ranges
 and refuses to mix them. Function pointers carry a `CODE_BASE`
@@ -302,7 +377,9 @@ debugging memory-shape issues.
 
 The library compiles under `--no-default-features`:
 
-    cargo build --no-default-features --lib
+```sh
+cargo build --no-default-features --lib
+```
 
 In that mode the `StdHost` adapter (file IO, env vars, real
 stdin/stdout) is gone. Consumers supply their own `Host` impl and
@@ -314,11 +391,13 @@ The CLI binary always builds with the default `std` feature.
 
 ## Tests
 
-    cargo test
+```sh
+cargo test
+```
 
 Tests are split by what they exercise. `lexer`, `parser`, `codegen`,
 `vm` drive each phase directly. `programs` and `intrinsics` load
-real C sources from `fixtures/c/` and check the exit code under
+real C sources from `tests/fixtures/c/` and check the exit code under
 the VM. `types` checks the warning-not-error behaviour.
 `pointer_tracking` exercises the opt-in safety net. `optimizer`
 re-runs every fixture under `-O` and asserts the exit code didn't
@@ -328,12 +407,15 @@ backend and exec it under the host kernel. `jit` covers the
 in-process path the same way.
 
 CI runs the matrix on `ubuntu-latest`, `ubuntu-24.04-arm`,
-`macos-latest`, `windows-latest`, and `windows-11-arm`. The two
-Windows runners additionally run the sqlite3 amalgamation smoke
-(`demos/sqlite3/smoke.py`) end-to-end. The PE-via-WINE lane is
-gated on `BADC_RUN_WINE=1`; a bare `cargo test` on a developer
-machine skips it, and CI doesn't currently set it (the native
-Windows runners cover the same surface directly).
+`macos-latest`, `windows-latest`, and `windows-11-arm`. Every
+runner additionally runs the demo smokes -- sqlite, miniz,
+kissfft, bzip2, gui_hello -- end-to-end (or build-only for
+the GUI demos, which need a display). See
+[`demos/`](./demos/) for what each exercises. The PE-via-
+WINE lane is gated on `BADC_RUN_WINE=1`; a bare `cargo test`
+on a developer machine skips it, and CI doesn't currently
+set it (the native Windows runners cover the same surface
+directly).
 
 ## Tools
 

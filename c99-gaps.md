@@ -34,9 +34,9 @@ unsigned wrap-modulo-2^N, signed-overflow truncate-and-sign-
 extend (matching clang/gcc), unsigned divide / modulo,
 mixed signed/unsigned through the C99 common type, and
 zero-extending vs sign-extending loads for unsigned and
-signed narrow types. See `fixtures/c/integer_boundary_c99.c`,
-`fixtures/c/c99_arith_common_width.c`, and
-`fixtures/c/zero_sign_extension_32bit.c` for the regression
+signed narrow types. See `tests/fixtures/c/integer_boundary_c99.c`,
+`tests/fixtures/c/c99_arith_common_width.c`, and
+`tests/fixtures/c/zero_sign_extension_32bit.c` for the regression
 markers.
 
 ## Impl-defined choices (sec 6.2.5, 6.7.2)
@@ -170,9 +170,24 @@ C11+ features showing up in modern code:
 - `#pragma dylib` / `#pragma binding` / `#pragma export` --
   per-target loader symbol resolution and shared-library
   export.
+- `#pragma entrypoint(<name>)` -- override the default `main`
+  entry point. Used for `WinMain` (Win32 GUI) or any
+  custom non-`main` entry. (gh #55.)
+- `#pragma subsystem(console | windows)` -- pick the Windows
+  PE optional-header `Subsystem` field. Quietly ignored on
+  non-PE targets so the same source builds for every OS.
+  (gh #32.)
 - `#pragma once`.
 - `--interp` (bytecode VM with pointer tracking),
   `--jit` (in-process), `--dump-asm`.
+- `-H` / `--show-includes` -- gcc-`-H`-shape `#include`
+  resolution trace on stderr. Missing headers print as
+  `! name (missing)`.
+- Missing `#include` files and unknown preprocessor
+  directives produce a *warning* rather than a fatal error,
+  so legacy sources sprinkled with `#include <fcntl.h>` for
+  documentation keep compiling. clang / gcc treat both as
+  fatal; c5 chooses the permissive shape.
 - `__BADC_VERSION__`, `__BADC_TARGET__`, `__BADC_WINDOWS__`.
 
 ## Roadmap

@@ -80,9 +80,16 @@ pub struct StructField {
     pub ty: i64,
     /// Array dimension if the field was declared as `T xs[N]`;
     /// 0 when the field is a scalar / pointer / struct value.
-    /// `s.xs` decays to a pointer-to-element the same way a
-    /// local array does.
+    /// For a 2D field `T xs[N][M]` this stores the total element
+    /// count (`N * M`) and `inner_array_size = M`. `s.xs` decays
+    /// to a pointer-to-element the same way a local array does.
     pub array_size: i64,
+    /// Inner dimension for a 2D array field (`T xs[N][M]` -> `M`).
+    /// Mirrors `Symbol::inner_array_size`: with this set, the
+    /// `s.xs[i]` postfix scales `i` by `M * sizeof(T)` and stays
+    /// at pointer type so the next `[j]` decays to an element.
+    /// 0 for 1D / scalar fields.
+    pub inner_array_size: i64,
     /// Bit offset within the 8-byte storage unit. Meaningful only
     /// when `bit_width > 0`.
     pub bit_offset: u32,
@@ -151,6 +158,23 @@ pub struct Compiler {
     /// c4 was permissive by design and many idioms (NULL=0, void*~char*)
     /// would otherwise drown the output.
     warnings: Vec<String>,
+
+    /// gcc `-H`-shape include trace produced by the preprocessor when
+    /// `with_full_options_and_label_with_trace(.., show_includes =
+    /// true)` was used. Empty otherwise. The CLI flushes this list
+    /// to stderr after the compile finishes; library callers can
+    /// drain it via [`Self::take_include_trace`].
+    include_trace: Vec<String>,
+
+    /// `#pragma entrypoint(<name>)` value drained from the
+    /// preprocessor (gh #55). Default `None` means "use `main`".
+    /// Read in `compile()` to compute `entry_pc` and threaded onto
+    /// `Program::entry_name`.
+    pp_entrypoint: Option<String>,
+    /// `#pragma subsystem(<kind>)` value drained from the
+    /// preprocessor (gh #32). Default `None` means "PE writer
+    /// picks `Console`". Read only by the PE writers.
+    pp_subsystem: Option<crate::c5::preprocessor::Subsystem>,
 
     /// Bytecode positions (indices into `text`) of `Op::Imm` operands
     /// that hold an offset into the data segment. Recorded at emit time
@@ -406,6 +430,15 @@ impl Compiler {
         Self::with_options(source, target, &[], &[])
     }
 
+    /// Drain the gcc `-H`-shape include trace produced by the
+    /// preprocessor. Empty when constructed without
+    /// `with_full_options_and_label_with_trace(.., show_includes =
+    /// true)`. The CLI calls this after `compile()` and dumps the
+    /// list to stderr; library callers can do the same.
+    pub fn take_include_trace(&mut self) -> Vec<String> {
+        core::mem::take(&mut self.include_trace)
+    }
+
     /// Construct a compiler with explicit `-D` / `-U` predefines
     /// from the CLI driver. Each `defines` entry is a
     /// `(name, body)` pair installed before the source runs through
@@ -463,6 +496,42 @@ impl Compiler {
         force_includes: &[String],
         source_label: &str,
     ) -> Self {
+        Self::with_full_options_and_label_with_trace(
+            source,
+            target,
+            defines,
+            undefines,
+            include_paths,
+            force_includes,
+            source_label,
+            false,
+        )
+    }
+
+    /// Variant of [`Self::with_full_options_and_label`] that also
+    /// flips on the gcc `-H`-shape include trace. The preprocessor
+    /// pushes one line per `#include` resolve into a `Vec<String>`
+    /// available via [`Self::take_include_trace`] after construction.
+    /// Wired in by the CLI's `-H` / `--show-includes` flag; library
+    /// callers that don't want tracing keep the flag at `false` and
+    /// the trace stays empty.
+    //
+    // Long arg list reflects the family of `with_*` constructors
+    // the CLI grew alongside the preprocessor surface (predefines,
+    // search paths, force-includes, label, trace). A future
+    // refactor will collapse the lot into a single `CompileOptions`
+    // struct -- new flags should land there rather than here.
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_full_options_and_label_with_trace(
+        source: String,
+        target: Target,
+        defines: &[(String, String)],
+        undefines: &[String],
+        include_paths: &[String],
+        force_includes: &[String],
+        source_label: &str,
+        show_includes: bool,
+    ) -> Self {
         // Run the preprocessor first so we know the
         // `#pragma binding(...)` set before seeding the symbol
         // table. The bindings come from whichever standard headers
@@ -479,6 +548,7 @@ impl Compiler {
         // every existing caller uses keeps working.
         let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
         pp.set_source_label(source_label);
+        pp.set_show_includes(show_includes);
         for path in include_paths {
             pp.add_search_path(path);
         }
@@ -506,6 +576,14 @@ impl Compiler {
         }
         let dylibs = pp.dylibs;
         let pending_exports = pp.exports;
+        // Drain the preprocessor's diagnostic list -- missing-include
+        // and unknown-directive warnings ride the same Program.warnings
+        // pipeline as the parser's type-warning output, so a build
+        // driver sees one unified list.
+        let pp_warnings = pp.warnings;
+        let pp_include_trace = pp.include_trace;
+        let pp_entrypoint = pp.entrypoint;
+        let pp_subsystem = pp.subsystem;
 
         let mut symbols = Vec::new();
         let mut symbol_index = lexer::SymbolIndex::new();
@@ -545,7 +623,10 @@ impl Compiler {
             switch_cases: Vec::new(),
             switch_defaults: Vec::new(),
             structs: Vec::new(),
-            warnings: Vec::new(),
+            warnings: pp_warnings,
+            include_trace: pp_include_trace,
+            pp_entrypoint,
+            pp_subsystem,
             data_imm_positions: Vec::new(),
             code_imm_positions: Vec::new(),
             tls_data: Vec::new(),
@@ -1470,16 +1551,23 @@ impl Compiler {
         // a user-defined `DllMain` is present we still refuse,
         // since the result would be an image with no callable
         // entries at all.
-        let main_idx = lexer::find_symbol(&self.symbols, &self.symbol_index, "main");
+        // gh #55: `#pragma entrypoint(<name>)` overrides the
+        // canonical `main`. The override goes through the same
+        // symbol-table lookup so the diagnostic is uniform: a
+        // missing entrypoint always reads `<name>() not defined`.
+        let entry_name_str: &str = self.pp_entrypoint.as_deref().unwrap_or("main");
+        let entry_idx = lexer::find_symbol(&self.symbols, &self.symbol_index, entry_name_str);
         let dllmain_idx = lexer::find_symbol(&self.symbols, &self.symbol_index, "DllMain");
         let has_user_dllmain =
             dllmain_idx.is_some_and(|idx| self.symbols[idx].class == Token::Fun as i64);
-        let entry_pc = match main_idx {
+        let entry_pc = match entry_idx {
             Some(idx) if self.symbols[idx].class == Token::Fun as i64 => {
                 self.symbols[idx].val as usize
             }
             _ if !self.pending_exports.is_empty() || has_user_dllmain => 0,
-            _ => return Err(self.compile_err("main() not defined")),
+            _ => {
+                return Err(self.compile_err(alloc::format!("{entry_name_str}() not defined")));
+            }
         };
         // Resolve `#pragma export(<name>)` directives against
         // the now-finalised symbol table. Each name must
@@ -1548,6 +1636,12 @@ impl Compiler {
             // `DW_TAG_structure_type` DIEs (gh #59). The VM /
             // JIT / interpreter ignore this field.
             structs: self.structs,
+            // gh #55 / gh #32: source-driven entry-name and
+            // Windows subsystem flags drained from the
+            // preprocessor. Both default to None (image writers
+            // pick `main` / `Console` respectively).
+            entry_name: self.pp_entrypoint,
+            subsystem: self.pp_subsystem,
         })
     }
 
@@ -3060,6 +3154,19 @@ impl Compiler {
                 // signed integers, producing a useless result. Same
                 // shape applies to `+=` / `-=` / `/=` on doubles.
                 let lhs_is_fp = is_floating_scalar(lhs_ty);
+                // C99 6.5.16.2: a compound assignment is equivalent
+                // to `E1 = (E1) OP (E2)` with E1 evaluated once. The
+                // OP step is the same arithmetic step as the binary
+                // operator, so when one side is FP we have to apply
+                // the same int->FP lift the binary path uses --
+                // otherwise `x *= -1` (FP lvalue, int rvalue) hands
+                // the FP op a 64-bit signed `-1` and produces NaN
+                // straight away. Surfaced compiling kissfft (the
+                // `phase *= -1;` line that flips the inverse-FFT
+                // twiddle factor sign).
+                if lhs_is_fp || is_floating_scalar(self.ty) {
+                    self.require_both_float(lhs_ty, "compound assign")?;
+                }
                 let op = match binop {
                     x if x == Token::AddOp as i64 => {
                         if lhs_is_fp {
@@ -3581,6 +3688,15 @@ impl Compiler {
                         // `T field[N]` returns 8 (decayed pointer)
                         // instead of `N * sizeof(T)`.
                         self.last_array_decay_size = field.array_size;
+                        // 2D-array decay: mirror the Id-path so
+                        // `s.xs[i][j]` scales the first index by
+                        // the row stride (`M * sizeof(T)`) and the
+                        // second by the element size. The Brak
+                        // handler reads-and-clears the stride.
+                        if field.inner_array_size > 0 {
+                            self.pending_index_stride =
+                                field.inner_array_size * self.size_of_type(field.ty) as i64;
+                        }
                     } else if !field_is_struct_value {
                         self.emit_op(load_op_for(self.ty, self.target));
                     }

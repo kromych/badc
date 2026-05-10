@@ -486,6 +486,25 @@ fn fixture_parity() {
     );
 }
 
+/// Regression marker (gh #48): post-call sub-word extension on
+/// the libc return register. See the matching test in
+/// `super::native::deferred_atoi_negative_sign_extends`. PE/x86_64
+/// against msvcrt is the original repro -- msvcrt leaves the upper
+/// 32 bits of RAX unspecified for `int` returns, and without the
+/// post-call `movsxd` the c5 accumulator sees garbage above EAX.
+#[test]
+fn deferred_atoi_negative_sign_extends() {
+    if !host_can_run_pe() {
+        eprintln!("skip deferred_atoi_negative_sign_extends: no PE runner on this host");
+        return;
+    }
+    let outcome = build_and_run_fixture("deferred_atoi_negative.c");
+    assert!(
+        matches!(outcome, RunOutcome::Exit(0)),
+        "atoi('-17') should sign-extend to -1 in i64, got {outcome:?}"
+    );
+}
+
 #[test]
 fn fixture_parity_native_optimized() {
     if !host_can_run_pe() {

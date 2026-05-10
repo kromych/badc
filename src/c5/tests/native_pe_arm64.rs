@@ -454,24 +454,24 @@ fn fixture_parity_native_optimized() {
     );
 }
 
-/// Regression marker (gh #48): `atoi("-17")` on PE/AArch64 -- the
-/// libc return-register sign-extension contract on Win64 / wine
-/// arm64 leaves the upper bits of X0 unspecified, and c5's 64-bit
-/// accumulator needs the `sxtw` after the call so a downstream
-/// `acc != -17` compare matches. `emit_extend_x19_for_return`
-/// emits that based on the binding's declared return type.
-/// `libc_basic.c` in NATIVE_PE_ARM64_FIXTURES is the original
-/// repro; this isolated fixture is the structural marker.
+/// Regression marker (gh #48): `atoi("-17")` -- the libc return-
+/// register sign-extension contract on AAPCS64 / Win64 leaves the
+/// upper bits of X0 (or RAX) unspecified for sub-word returns, and
+/// c5's 64-bit accumulator needs the post-call `sxtw` / `movsxd`
+/// emitted by `emit_extend_x19_for_return` so a downstream
+/// `acc != -17` compare matches. The same fixture runs on every
+/// native lane (Mach-O, ELF, PE) -- this is the PE/AArch64
+/// instance.
 #[test]
-fn atoi_negative_sign_extends() {
+fn deferred_atoi_negative_sign_extends() {
     if !host_can_run_pe() {
-        eprintln!("skip atoi_negative_sign_extends: no PE runner on this host");
+        eprintln!("skip deferred_atoi_negative_sign_extends: no PE runner on this host");
         return;
     }
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("fixtures");
     path.push("c");
-    path.push("atoi_negative_pe_arm64.c");
+    path.push("deferred_atoi_negative.c");
     let src = std::fs::read_to_string(&path).expect("read fixture");
     let outcome = build_and_run(&src, "atoi-negative", &[]);
     match outcome {

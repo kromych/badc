@@ -852,10 +852,12 @@ impl TypeCatalog {
         let plt_seed = |ty: i64| -> CatalogEntry {
             let raw = classify(ty, target);
             match raw {
-                CatalogEntry::Struct { id }
-                    if (id as usize) >= structs.len() => CatalogEntry::VoidStar,
-                CatalogEntry::StructPointer { id, .. }
-                    if (id as usize) >= structs.len() => CatalogEntry::VoidStar,
+                CatalogEntry::Struct { id } if (id as usize) >= structs.len() => {
+                    CatalogEntry::VoidStar
+                }
+                CatalogEntry::StructPointer { id, .. } if (id as usize) >= structs.len() => {
+                    CatalogEntry::VoidStar
+                }
                 other => other,
             }
         };
@@ -1931,7 +1933,11 @@ fn plt_pool_range(build: &Build, code_vmaddr: u64) -> Option<(u64, u64)> {
     let first = build.plt_trampoline_offsets.first().copied()?;
     let start = code_vmaddr + first as u64;
     let end = code_vmaddr + build.text.len() as u64;
-    if end > start { Some((start, end)) } else { None }
+    if end > start {
+        Some((start, end))
+    } else {
+        None
+    }
 }
 
 /// Build the `.debug_frame` section: one CIE at offset 0, one FDE
@@ -2496,8 +2502,10 @@ mod tests {
 
     #[test]
     fn plt_pool_range_skips_when_no_imports() {
-        let mut build = Build::default();
-        build.text = alloc::vec![0u8; 0x100];
+        let mut build = Build {
+            text: alloc::vec![0u8; 0x100],
+            ..Build::default()
+        };
         assert_eq!(plt_pool_range(&build, 0x1000), None);
         // Once a trampoline is recorded, the range covers from the
         // first stub byte to the end of `build.text`.
@@ -2544,38 +2552,45 @@ mod tests {
         // DW_AT_high_pc claimed each stub was 31 bytes (visible
         // in `readelf --debug-dump=info` on hello.c) instead of
         // the actual 12.
-        let mut build = Build::default();
         // Two 12-byte aarch64 trampolines at offsets 0xc0, 0xcc.
-        build.text = alloc::vec![0u8; 0xd8];
-        // Tack 16 trailing bytes on so we'd overshoot if we
-        // measured stub_size as `(text.len() - first) / n`.
-        build.text.extend(alloc::vec![0u8; 16]);
-        build.plt_trampoline_offsets = alloc::vec![0xc0, 0xcc];
-        build.imports.imports = alloc::vec![
-            super::super::ResolvedImport {
-                binding_idx: 0,
-                local_name: "malloc".into(),
-                real_symbol: "malloc".into(),
-                dylib_index: 0,
-                is_variadic: false,
-                fixed_args: 1,
-                return_type_tag: 0,
-                param_types: alloc::vec![1], // int
-            },
-            super::super::ResolvedImport {
-                binding_idx: 1,
-                local_name: "free".into(),
-                real_symbol: "free".into(),
-                dylib_index: 0,
-                is_variadic: false,
-                fixed_args: 1,
-                return_type_tag: 0,
-                param_types: alloc::vec![1],
-            },
-        ];
+        // The trailing 16 bytes simulate `append_build_info`'s
+        // marker so we'd overshoot if we measured stub_size as
+        // `(text.len() - first) / n`.
+        let mut text = alloc::vec![0u8; 0xd8];
+        text.extend(alloc::vec![0u8; 16]);
+        let imports = super::super::ResolvedImports {
+            imports: alloc::vec![
+                super::super::ResolvedImport {
+                    binding_idx: 0,
+                    local_name: "malloc".into(),
+                    real_symbol: "malloc".into(),
+                    dylib_index: 0,
+                    is_variadic: false,
+                    fixed_args: 1,
+                    return_type_tag: 0,
+                    param_types: alloc::vec![1], // int
+                },
+                super::super::ResolvedImport {
+                    binding_idx: 1,
+                    local_name: "free".into(),
+                    real_symbol: "free".into(),
+                    dylib_index: 0,
+                    is_variadic: false,
+                    fixed_args: 1,
+                    return_type_tag: 0,
+                    param_types: alloc::vec![1],
+                },
+            ],
+            ..Default::default()
+        };
+        let build = Build {
+            text,
+            plt_trampoline_offsets: alloc::vec![0xc0, 0xcc],
+            imports,
+            ..Build::default()
+        };
         let mut strs = StrTable::new();
-        let plt_subs =
-            collect_plt_subprograms(&build, Target::LinuxAarch64, 0x1000, &mut strs);
+        let plt_subs = collect_plt_subprograms(&build, Target::LinuxAarch64, 0x1000, &mut strs);
         assert_eq!(plt_subs.len(), 2);
         // 0xcc - 0xc0 = 12 bytes per stub. high_pc - low_pc must
         // match -- if it overshoots, gdb's DIE lookup for
@@ -2654,9 +2669,11 @@ mod tests {
         // must stop at the first trampoline byte. Otherwise gdb /
         // lldb attribute PLT-stub hits to the closing brace of the
         // last user function (e.g. `b malloc` -> `main:34`).
-        let mut build = Build::default();
-        build.text = alloc::vec![0u8; 0x200];
-        build.plt_trampoline_offsets = alloc::vec![0x180, 0x18c, 0x198];
+        let mut build = Build {
+            text: alloc::vec![0u8; 0x200],
+            plt_trampoline_offsets: alloc::vec![0x180, 0x18c, 0x198],
+            ..Build::default()
+        };
         assert_eq!(end_of_user_text(&build), 0x180);
 
         // No PLT pool: fall back to the full text length (the

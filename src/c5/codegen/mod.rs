@@ -382,8 +382,11 @@ impl ResolvedImports {
         if self.imports.iter().any(|i| i.local_name == local_name) {
             return Ok(());
         }
-        let mut found: Option<(i64, &super::preprocessor::DylibSpec, &super::preprocessor::Binding)> =
-            None;
+        let mut found: Option<(
+            i64,
+            &super::preprocessor::DylibSpec,
+            &super::preprocessor::Binding,
+        )> = None;
         let mut binding_idx: i64 = 0;
         'outer: for spec in &program.dylibs {
             for b in &spec.bindings {

@@ -3152,8 +3152,7 @@ mod tests {
         //   mov rdi, rax                ; pass to libc exit
         //   call qword [rip + disp32]   ; libc exit slot
         let mut buf = Vec::new();
-        let exit_off =
-            emit_start_stub(&mut buf, super::super::Target::LinuxX64.abi(), 0, true);
+        let exit_off = emit_start_stub(&mut buf, super::super::Target::LinuxX64.abi(), 0, true);
         assert_eq!(buf.len() as u64, START_STUB_LEN);
         // mov rdi, [rsp]              -> 48 8B 3C 24
         assert_eq!(&buf[0..4], &[0x48, 0x8B, 0x3C, 0x24]);
@@ -3183,8 +3182,7 @@ mod tests {
         // Total stub length: 14 (prefix) + 10 (tail) = 24 bytes,
         // one longer than the libc tail.
         let mut buf = Vec::new();
-        let exit_off =
-            emit_start_stub(&mut buf, super::super::Target::LinuxX64.abi(), 0, false);
+        let exit_off = emit_start_stub(&mut buf, super::super::Target::LinuxX64.abi(), 0, false);
         assert_eq!(exit_off, None, "syscall tail returns no GotFixup offset");
         assert_eq!(buf.len() as u64, START_STUB_LEN_SYSCALL);
         // mov rdi, rax (= status from main's return value).

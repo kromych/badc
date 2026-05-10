@@ -389,9 +389,7 @@ fn emit_start_stub(
 ) -> Option<usize> {
     match machine {
         Machine::Aarch64 => emit_start_stub_aarch64(abi, code, main_offset_in_code, use_libc_exit),
-        Machine::X86_64 => {
-            x86_64::emit_start_stub(code, abi, main_offset_in_code, use_libc_exit)
-        }
+        Machine::X86_64 => x86_64::emit_start_stub(code, abi, main_offset_in_code, use_libc_exit),
     }
 }
 
@@ -1005,11 +1003,7 @@ pub(super) fn write(
     // pulling libc in just to terminate. Stays opt-in to libc so
     // programs that print via stdio still get glibc's
     // end-of-process flush.
-    let use_libc_exit = build
-        .imports
-        .imports
-        .iter()
-        .any(|i| i.local_name == "exit");
+    let use_libc_exit = build.imports.imports.iter().any(|i| i.local_name == "exit");
     // Shared libraries don't have a `_start` stub -- dyld
     // never jumps into them, callers reach exports via
     // `dlsym`. Executables keep the existing stub that

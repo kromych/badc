@@ -1156,9 +1156,13 @@ pub(super) fn lower(
         bytecode_to_native[op_pc] = code.len();
         let raw = program.text[pc];
         let op = Op::from_i64(raw).ok_or_else(|| {
-            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-                "native codegen: bad opcode at PC {pc}: {raw}"
-            )))
+            C5Error::Compile(crate::c5::error::fmt_ice_bytecode(
+                "aarch64 codegen: bad opcode -- the bytecode scanner \
+                 drifted off the op/operand boundary or the op enum \
+                 changed without updating from_i64",
+                program,
+                pc,
+            ))
         })?;
         pc += 1;
         if matches!(op, Op::Ent) {

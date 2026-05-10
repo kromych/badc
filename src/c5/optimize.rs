@@ -484,16 +484,21 @@ fn decode(
     let mut pc = 0usize;
     while pc < text.len() {
         let op = Op::from_i64(text[pc]).ok_or_else(|| {
-            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-                "optimizer: bad opcode at PC {pc}: {}",
-                text[pc]
-            )))
+            C5Error::Compile(crate::c5::error::fmt_ice_text(
+                "optimizer: bad opcode -- the decoder drifted off the \
+                 op/operand boundary or the op enum changed without \
+                 updating from_i64",
+                text,
+                pc,
+            ))
         })?;
         pc_to_idx[pc] = insns.len();
         pc += 1;
         if op.operand_count() > 0 && pc >= text.len() {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            return Err(C5Error::Compile(crate::c5::error::fmt_ice_text(
                 &format!("optimizer: truncated operand for {op:?} at end of text"),
+                text,
+                pc.saturating_sub(1),
             )));
         }
         let insn = match op {

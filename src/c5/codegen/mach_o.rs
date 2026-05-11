@@ -1537,7 +1537,7 @@ fn nlist_undef(n_strx: u32, ordinal: u8) -> Vec<u8> {
 /// `dlsym` will surface the symbol to other images.
 /// One `nlist_64` for a file-local symbol -- `N_SECT` *without*
 /// `N_EXT`, so dyld leaves it out of dlsym lookups but the host's
-/// debugger and `nm` still see the name. Used by to label
+/// debugger and `nm` still see the name. Used to label
 /// each PLT trampoline with its libc import name.
 fn nlist_local(n_strx: u32, n_value: u64, n_sect: u8) -> Vec<u8> {
     let mut out = Vec::with_capacity(NLIST_64_SIZE);

@@ -230,15 +230,15 @@ pub(crate) struct Preprocessor {
     /// `include_trace` per `#include` resolve attempt and nothing
     /// else.
     show_includes: bool,
-    /// Source-declared entry-point name (`#pragma entrypoint(<id>)`,
-    /// ). `None` means the default `main` is used; set via
+    /// Source-declared entry-point name (`#pragma entrypoint(<id>)`).
+    /// `None` means the default `main` is used; set via
     /// the pragma to opt the translation unit into a non-`main`
     /// entry like `WinMain` (Win32 `--gui`) or a custom `_start`.
     /// The compile pass reads this when resolving `entry_pc`; the
     /// PE writer reads it for the optional-header AddressOfEntryPoint.
     pub entrypoint: Option<String>,
-    /// Source-declared Windows subsystem (`#pragma subsystem(<kind>)`,
-    /// ). `None` means the default `console`. Recognised
+    /// Source-declared Windows subsystem (`#pragma subsystem(<kind>)`).
+    /// `None` means the default `console`. Recognised
     /// kinds today: `console` (IMAGE_SUBSYSTEM_WINDOWS_CUI = 3) and
     /// `windows` (IMAGE_SUBSYSTEM_WINDOWS_GUI = 2). The PE writer
     /// reads this to set the optional header's Subsystem field;
@@ -337,7 +337,7 @@ impl Preprocessor {
                 // family, etc.) lives in the bundled
                 // `msvc_compat.h` header and is opted into per
                 // translation unit via `badc -include
-                // msvc_compat.h ...` Keeping the
+                // msvc_compat.h ...`. Keeping the
                 // predefine table to genuine target-detection
                 // surfaces the "is this TU pretending to be MSVC?"
                 // question at the command line, where the build
@@ -763,7 +763,7 @@ impl Preprocessor {
                             // here would snap the lexer back to
                             // physical-buffer coordinates and
                             // misattribute every subsequent emit --
-                            // the bug that plumbing exposed
+                            // the bug that appears
                             // when the amalgamator started gluing
                             // multiple translation units together
                             // via `#line` markers.

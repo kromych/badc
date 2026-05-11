@@ -11,13 +11,11 @@
 // Likewise, `u16 v = *(u16*)p;` reads 4 bytes and the high half
 // is whatever happened to be at p+2.
 //
-// This bites an SQL engine's vdbeMemRenderNum. The "%g"-of-double
-// rendering uses a `sqlite3DigitPairs.a[]` lookup with `*(u16*)`
-// 2-byte writes to fill a 21-byte digit buffer two digits at a
-// time. With c5's 4-byte stores, every iteration smashes the
-// buffer's tail field (`sign`), and the resulting string is
-// empty -- avg(x) and any other floating-point aggregate
-// returns "" instead of the formatted value.
+// This bites any code that uses `*(u16*)` 2-byte writes to
+// pack pairs of digits into a buffer (a common technique for
+// fast number-to-string rendering). With c5's 4-byte stores,
+// every iteration smashes the byte after the intended target
+// and the rendered string ends up empty or truncated.
 //
 // Fix: add Op::Sh / Op::Lh / Op::Lhu and route them via
 // store_op_for(`unsigned short`) / load_op_for(`unsigned short`)

@@ -1,5 +1,5 @@
 // function-pointer typedefs and function-pointer
-// declarators. The fixture pins the typical an SQL engine shapes:
+// declarators. The fixture pins the common shapes:
 //   - `typedef RET (*Name)(args);`
 //   - struct fields holding function pointers
 //   - parameters of function-pointer type

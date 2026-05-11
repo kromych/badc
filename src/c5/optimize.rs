@@ -369,7 +369,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
     // PC table. Compiler captured each Loc symbol with the *pre-
     // optimizer* Ent position; the optimizer can shift Ents to
     // new positions (DCE never removes them, but earlier
-    // instructions may collapse). -- without this remap
+    // instructions may collapse). Without this remap
     // the DWARF emitter's `function_bc_pc == ent_pc` filter
     // misses every function under -O, so `frame variable` works
     // at noO but goes silent at -O.
@@ -467,7 +467,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
 /// any user constant in `[CODE_BASE, CODE_BASE + text.len())` as a
 /// func-ptr and corrupts integer flag values that happen to land in
 /// that range, like a flag with literal value `0x20000000` matching
-/// `CODE_BASE`; cf. ).
+/// `CODE_BASE`).
 fn decode(
     text: &[i64],
     data_imm_positions: &[usize],
@@ -703,7 +703,7 @@ fn lookup_pc(
 /// `[CODE_BASE, CODE_BASE + text.len())` range. A flag literal
 /// `0x20000000` is exactly `CODE_BASE`, so the previous "fall back
 /// to range heuristic at -O" shape misclassified the integer as a
-/// func ptr
+/// func ptr.
 fn encode(
     insns: &[Insn],
     entry_idx: usize,
@@ -1289,7 +1289,7 @@ mod tests {
 
     #[test]
     fn imm_equal_to_code_base_is_not_promoted() {
-        // a user constant whose value happens to land in
+        // A user constant whose value happens to land in
         // `[CODE_BASE, CODE_BASE + text.len())` (e.g. an integer
         // flag literal `0x20000000`, exactly `CODE_BASE`) must
         // survive the optimizer as a plain integer. The empty

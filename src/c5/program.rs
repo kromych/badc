@@ -259,7 +259,7 @@ pub struct Program {
     /// `DW_TAG_union_type` DIEs. The VM / JIT / interpreter
     /// ignore this field.
     pub structs: Vec<crate::c5::compiler::StructDef>,
-    /// Source-declared entry-point name Set by
+    /// Source-declared entry-point name. Set by
     /// `#pragma entrypoint(<name>)`; `None` falls back to the
     /// canonical `main`. The compile pass already used the
     /// override to compute `entry_pc`; this field carries the
@@ -269,7 +269,7 @@ pub struct Program {
     /// resolve through `entry_pc` directly and ignore this
     /// field.
     pub entry_name: Option<String>,
-    /// Source-declared Windows subsystem Set by
+    /// Source-declared Windows subsystem. Set by
     /// `#pragma subsystem(<kind>)`; `None` falls back to the
     /// PE writer's default (`Console`). Read only by the PE
     /// writers; non-PE targets (Mach-O / ELF) ignore this
@@ -278,7 +278,7 @@ pub struct Program {
 }
 
 /// A single local variable or formal parameter belonging to a
-/// specific c5-emitted function, captured for DWARF emission
+/// specific c5-emitted function, captured for DWARF emission.
 /// The function is identified by `function_bc_pc` --
 /// the bytecode PC of its `Op::Ent`, which the DWARF emitter
 /// already uses to find the matching subprogram DIE.

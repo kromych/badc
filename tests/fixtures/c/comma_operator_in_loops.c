@@ -3,10 +3,9 @@
 // the `for` condition, and `return`. Each context is a full
 // `expression`, so the comma chain is legal -- evaluate every
 // subexpression for side effects, value of the last drives the
-// statement. Surfaced compiling a deflate library on Windows: with
-// `_MSC_VER` defined, `MZ_MACRO_END` expands to `while (0,
-// 0)`, which dropped at "close paren expected" before this
-// fix. clang/gcc accept all six forms below.
+// statement. Real-world MSVC-compat macros expand to shapes
+// like `while (0, 0)`, which dropped at "close paren expected"
+// before this fix. clang/gcc accept all six forms below.
 #include <stdio.h>
 #include <stdlib.h>
 

@@ -1116,7 +1116,7 @@ pub(super) fn lower(
     let mut bytecode_to_native: Vec<usize> = vec![usize::MAX; program.text.len() + 1];
     let mut fixups: Vec<Fixup> = Vec::new();
     let mut got_fixups: Vec<GotFixup> = Vec::new();
-    // each `JsrExt` / `TailExt` site emits a placeholder
+    // Each `JsrExt` / `TailExt` site emits a placeholder
     // BL/B; the displacement gets backfilled once trampolines are
     // laid out at the tail of `code`.
     let mut plt_call_fixups: Vec<PltCallFixup> = Vec::new();
@@ -1218,12 +1218,12 @@ pub(super) fn lower(
 
     apply_fixups(&mut code, &fixups, &bytecode_to_native, program.text.len())?;
 
-    // append one PLT trampoline per import. Every BL/B
+    // Append one PLT trampoline per import. Every BL/B
     // placeholder recorded in `plt_call_fixups` now gets its imm26
     // backfilled to the matching trampoline's byte offset. The
     // trampoline body's adrp+ldr pair is patched by the per-format
     // writer through the same `GotFixup` shape the inline call
-    // sequence used pre-#61.
+    // sequence used before PLT trampolines existed.
     let plt_trampoline_offsets =
         emit_plt_trampolines(&mut code, &mut got_fixups, imports.imports.len());
     apply_plt_call_fixups(&mut code, &plt_call_fixups, &plt_trampoline_offsets)?;
@@ -2346,11 +2346,9 @@ fn emit_adrp_add_placeholder(code: &mut Vec<u8>) {
     emit(code, enc_add_imm(Reg::X19, Reg::X19, 0));
 }
 
-/// Emit `adrp x16, GOT_PAGE; ldr x16, [x16, #GOT_OFF]; blr x16` --
-/// the standard macOS PC-relative GOT call sequence. Both the adrp
-/// a single 4-byte `BL <plt_trampoline>` placeholder at
+/// A single 4-byte `BL <plt_trampoline>` placeholder at
 /// every libc call site, plus a per-import trampoline appended at
-/// the tail of `Build::text`. The trampoline holds the pre-#61
+/// the tail of `Build::text`. The trampoline holds the
 /// `adrp + ldr + br` sequence (with `BR x16` -- libc's RET returns
 /// directly to the call's BL site).
 ///

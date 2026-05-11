@@ -123,7 +123,7 @@ impl Compiler {
             if array_size != 0 {
                 full_ty += Ty::Ptr as i64;
             }
-            // lineage: pick up the side-channel that
+            // Fn-pointer lineage: pick up the side-channel that
             // parse_declarator (or the typedef-of-fn-ptr base)
             // populated. Cleared even if the declarator didn't
             // set anything so it doesn't leak into the next

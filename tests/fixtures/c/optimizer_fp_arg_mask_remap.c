@@ -9,7 +9,7 @@
 // 4602678819172646912 (the bit pattern of 0.5), libm's `sin`
 // read it as a vast double and either returned 0 or junk.
 //
-// Surfaced compiling a libm-heavy library through -O -O. Pinning a -O round-trip on
+// Pinning a -O round-trip on
 // `sin` / `cos` / `sqrt` here so a regression on the remap
 // fails loudly on every native lane.
 #include <math.h>

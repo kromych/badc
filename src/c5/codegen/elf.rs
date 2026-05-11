@@ -102,7 +102,7 @@ const DT_FLAGS: u64 = 30;
 const DF_BIND_NOW: u64 = 0x8;
 
 // nlist / Elf64_Sym fields.
-/// `STB_LOCAL` -- file-local binding. Used by for the
+/// `STB_LOCAL` -- file-local binding. Used by the
 /// per-PLT-trampoline static symbols so they don't shadow
 /// `.dynsym`'s loader-visible globals.
 const STB_LOCAL: u8 = 0;
@@ -160,7 +160,7 @@ const SHT_NULL: u32 = 0;
 const SHT_PROGBITS: u32 = 1;
 /// Static symbol table -- the file-only `.symtab` paired with
 /// `.strtab`. Distinct from `SHT_DYNSYM` (the loader-side dynamic
-/// symbol table). emits one local STT_FUNC per import via
+/// symbol table). One local STT_FUNC per import is emitted via
 /// this section so debuggers (`gdb`, `lldb`) and `nm` resolve
 /// PLT trampoline addresses to a real name.
 const SHT_SYMTAB: u32 = 2;
@@ -394,7 +394,7 @@ fn emit_start_stub(
 }
 
 /// AArch64 `_start`: ldr argc; add argv; bl main; then either
-/// `adrp/ldr/blr libc::exit` or `mov w8, #94; svc #0`
+/// `adrp/ldr/blr libc::exit` or `mov w8, #94; svc #0`.
 fn emit_start_stub_aarch64(
     abi: Abi,
     code: &mut Vec<u8>,
@@ -496,7 +496,7 @@ fn build_dynstr(
     (bytes, name_offsets, lib_offsets, export_offsets)
 }
 
-/// build the static `.symtab` + `.strtab` for the
+/// Build the static `.symtab` + `.strtab` for the
 /// PLT-trampoline pool. One local `STT_FUNC` per import, plus
 /// the SHT_SYMTAB sentinel at index 0. Returns
 /// `(symtab_bytes, strtab_bytes)`.
@@ -997,7 +997,7 @@ pub(super) fn write(
 ) -> Result<Vec<u8>, C5Error> {
     let is_shared = build.output_kind == super::OutputKind::SharedLibrary;
     let n_imports = build.imports.imports.len();
-    // pick the libc-exit tail when the user has any
+    // Pick the libc-exit tail when the user has any
     // libc `exit` import (typically through `<stdlib.h>`),
     // otherwise emit a direct sys_exit_group syscall and avoid
     // pulling libc in just to terminate. Stays opt-in to libc so
@@ -1157,13 +1157,13 @@ pub(super) fn write(
         super::Machine::Aarch64 => super::Target::LinuxAarch64,
         super::Machine::X86_64 => super::Target::LinuxX64,
     };
-    // skip the type-catalog walk + line program entirely
+    // Skip the type-catalog walk + line program entirely
     // when the user passed `--no-debug`. Empty sections collapse
     // every `dwarf_*_off` into `dwarf_off` (= `segment2_end`) and
     // `shstrtab_off` lands right after, so the file body is
     // self-consistent without per-write conditionals.
     let emit_dwarf = build.debug_info;
-    // tell the DWARF emitter where the `_start` stub
+    // Tell the DWARF emitter where the `_start` stub
     // lives so it can give it a `DW_TAG_subprogram` + a
     // CFI-terminating FDE. The stub sits at
     // `[code_vmaddr, code_vmaddr + stub_len)` -- ahead of
@@ -1200,7 +1200,7 @@ pub(super) fn write(
     let dwarf_str_off = dwarf_line_off + dwarf_sections.debug_line.len() as u64;
     let dwarf_frame_off = dwarf_str_off + dwarf_sections.debug_str.len() as u64;
 
-    // build the static `.symtab` + `.strtab` listing one
+    // Build the static `.symtab` + `.strtab` listing one
     // local STT_FUNC per PLT trampoline. The trampolines live
     // inside `.text` at `code_vmaddr + stub_len + tramp_off`; a
     // debugger's `b malloc` on the produced binary now resolves
@@ -1244,7 +1244,7 @@ pub(super) fn write(
     // the debug-only metadata sections.
     //
     // Indices 0..=11 are stable; 12..=16 are the DWARF names,
-    // present only when `emit_dwarf` is true (-- when the
+    // present only when `emit_dwarf` is true (when the
     // user passed `--no-debug`, these names don't go into the
     // string table at all). The `.shstrtab` self-name is always
     // last; callers reach it via `shstrtab_idx_self` rather than
@@ -1354,7 +1354,7 @@ pub(super) fn write(
             // The dynamic linker doesn't read section headers
             // (it walks PT_DYNAMIC); the only consumers are
             // lldb / gdb, which use them to locate the
-            // `.debug_*` payload Six entries: SHT_NULL
+            // `.debug_*` payload. Six entries: SHT_NULL
             // sentinel, four DWARF sections, .shstrtab.
             e_shentsize: ELF64_SHDR_SIZE as u16,
             e_shnum: n_section_headers as u16,
@@ -2027,7 +2027,7 @@ pub(super) fn write(
             "_start exit fixup",
         )?;
     }
-    // the syscall tail (`exit_adrp_offset == None`) needs
+    // The syscall tail (`exit_adrp_offset == None`) needs
     // no patch -- the `mov rax, 231; syscall` (x86_64) /
     // `movz x8, #94; svc #0` (aarch64) bytes are absolute and
     // self-contained.

@@ -3,7 +3,7 @@
 // floating constant equal to `0.5`. clang/gcc accept it; c5
 // used to drop it as a struct-field-access `.` followed by a
 // number, killing every `0.5`-spelt-as-`.5` literal that
-// shows up in `a libm-heavy library`'s `HALF_OF` macro and similar
+// shows up in macros like `#define HALF .5` and similar
 // places. This fixture pins the recovery: bare `.5`,
 // `.5f`, `.25e2`, and a cast-shape `((float).5)` all hit the
 // new lexer path and round-trip to the expected double bit

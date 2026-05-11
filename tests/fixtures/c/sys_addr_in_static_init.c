@@ -1,15 +1,15 @@
 // Address of a libc binding inside a static struct
-// initializer. an SQL engine's `aSyscall[]` table is the in-the-wild
-// shape: a static array of `{ name, fn-ptr, default-fn-ptr }`
-// where each `fn-ptr` is the address of a libc symbol (open,
-// close, read, lstat, ...). Until #58's per-Sys trampoline
-// fix, c5 wrote `0` into every `sqlite3_syscall_ptr` slot --
-// any `osOpen(...)` / `osClose(...)` macro then dispatched
-// through a NULL function pointer and SIGSEGV'd on first use.
+// initializer. The in-the-wild shape is a static array of
+// `{ name, fn-ptr, default-fn-ptr }` where each `fn-ptr` is
+// the address of a libc symbol (open, close, read, lstat,
+// ...). Before the per-Sys trampoline fix, c5 wrote `0`
+// into every fn-ptr slot, so any indirect call through the
+// table dispatched through a NULL function pointer and
+// SIGSEGV'd on first use.
 //
 // The fixture mimics the structure: a 3-field struct with a
-// NULL slot in the middle (matches an SQL engine's
-// `posix_fallocate`-not-available conditional). Calls each
+// NULL slot in the middle (matches the "syscall not available"
+// conditional pattern). Calls each
 // non-NULL slot through a function-pointer cast and validates
 // the result. The trailing /etc/hosts read confirms the
 // trampoline forwards args + return values correctly through

@@ -1,5 +1,5 @@
-//: `#pragma entrypoint(<name>)` overrides the default
-// `main` entry. Used for `WinMain` GUI subsystem),
+// `#pragma entrypoint(<name>)` overrides the default
+// `main` entry. Used for `WinMain` (GUI subsystem),
 // custom `_start`, or DLL-style entries. The pragma redirects
 // the compiler's entry-point lookup; the named symbol must
 // resolve to a function in this translation unit (same rule as

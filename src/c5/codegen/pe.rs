@@ -194,7 +194,7 @@ fn num_sections(
         n += 1;
     }
     if dwarf_section_present {
-        // five `__debug_*` sections (info / abbrev /
+        // Five `__debug_*` sections (info / abbrev /
         // line / str / frame). PE caps section names at 8 chars,
         // so the leading dot is dropped (mingw-w64 convention) --
         // dwarfdump / lldb / gdb all recognise the truncated
@@ -391,7 +391,7 @@ pub(super) fn write(
         || !build.data_relocs.is_empty()
         || !build.code_relocs.is_empty();
     let edata_section_present = is_dll && !build.exports.is_empty();
-    // emit DWARF debug sections in PE images so lldb /
+    // Emit DWARF debug sections in PE images so lldb /
     // gdb can resolve user-function names + types in PE
     // backtraces. Suppressed when the user passed `--no-debug` /
     // `-g0` -- the section headers + payload + COFF
@@ -575,7 +575,7 @@ pub(super) fn write(
         idata_rva + idata_size
     };
 
-    // lay out the five DWARF debug sections after the
+    // Lay out the five DWARF debug sections after the
     // existing ones. The mingw-w64 PE convention drops the leading
     // dot to fit each name in PE's 8-char limit; lldb / gdb / `llvm-
     // dwarfdump` all walk by section content rather than literal
@@ -640,7 +640,7 @@ pub(super) fn write(
     ];
     let mut coff_strtab: Vec<u8> = Vec::new();
     let mut dwarf_section_names: Vec<[u8; 8]> = Vec::with_capacity(5);
-    // build a per-trampoline COFF symbol table so a
+    // Build a per-trampoline COFF symbol table so a
     // debugger's `b malloc` resolves to the local PLT trampoline
     // rather than getting lost in msvcrt's macro expansions. The
     // symbol table sits at `pointer_to_symbol_table` (= start of
@@ -703,7 +703,7 @@ pub(super) fn write(
         .map(|s| round_up(s.rva + s.bytes.len() as u32, SECTION_ALIGNMENT))
         .unwrap_or(pre_dwarf_end_rva);
 
-    // build the COFF symbol-table payload now that the
+    // Build the COFF symbol-table payload now that the
     // long-name strtab offsets are stable. Each trampoline gets
     // one IMAGE_SYMBOL whose Value is the trampoline's RVA and
     // whose SectionNumber is 1 (.text). Names <= 8 bytes inline
@@ -933,7 +933,7 @@ pub(super) fn write(
             tls_table_size,
             export_table_rva: edata_rva,
             export_table_size: edata_size,
-            // source-driven subsystem flag. Default
+            // Source-driven subsystem flag. Default
             // (`None`) keeps the historical console-subsystem
             // PE; `windows` opts in to GUI mode for `WinMain`-
             // shaped programs (the loader skips the auto-
@@ -1712,7 +1712,7 @@ fn write_coff_header(
             time_date_stamp: 0,
             // PE images carry a COFF strtab at the file
             // tail so the long DWARF section names ("/<offset>")
-            // resolve. with PLT trampolines we now also
+            // resolve. With PLT trampolines we now also
             // emit a real COFF symbol table -- one local-name
             // entry per import -- right before the strtab.
             //

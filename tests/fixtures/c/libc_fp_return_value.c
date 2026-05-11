@@ -4,12 +4,9 @@
 // the c5 accumulator unconditionally, dropping the xmm0 / d0
 // payload on the floor. Every FP-returning libc call thus
 // returned 0.0, which silently broke every numerics-heavy
-// codebase (a libm-heavy library butterflies returned NaN, an SQL engine's
-// avg-via-Kahan worked only because it stayed inside c5).
-//
-// Surfaced building a libm-heavy library. Pinning a handful of widely-used
-// libm fns here so a future regression on either backend
-// fails loudly.
+// codebase that depended on libm return values. Pinning a
+// handful of widely-used libm fns here so a future regression
+// on either backend fails loudly.
 #include <stdio.h>
 #include <math.h>
 

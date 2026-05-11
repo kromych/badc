@@ -13,8 +13,8 @@
 //!   subprogram-DIE child per c5 user function. Each subprogram
 //!   carries variable / formal_parameter children that reference
 //!   the right type DIE. Pointers and structs route through a
-//!   placeholder `void *` base DIE until and extend
-//!   the catalog with proper pointer-chain and struct DIEs.
+//!   placeholder `void *` base DIE; a future pass extends the
+//!   catalog with proper pointer-chain and struct DIEs.
 //! * `.debug_line` -- a line-number program mapping every emitted
 //!   native byte range to the C source line that produced it.
 //!   Read from `program.source_lines`, which the optimizer
@@ -130,10 +130,10 @@ const DW_OP_FBREG: u8 = 0x91;
 /// for c5's stack-frame layout.
 const DW_OP_BREG29: u8 = 0x8d;
 /// `DW_OP_reg0..reg31` -- "this variable IS in register N".
-/// Used by 's PLT formal_parameter DIEs so gdb can
-/// evaluate the value of e.g. malloc's `size` arg directly out
-/// of the AAPCS64 / SysV calling-convention register at the
-/// moment of the call.
+/// Used by PLT formal_parameter DIEs so gdb can evaluate the
+/// value of e.g. malloc's `size` arg directly out of the
+/// AAPCS64 / SysV calling-convention register at the moment of
+/// the call.
 const DW_OP_REG_BASE: u8 = 0x50;
 
 const DW_LANG_C99: u8 = 0x0c;
@@ -177,8 +177,8 @@ const DW_CFA_DEF_CFA: u8 = 0x0c;
 /// no recoverable value in the previous frame. The unwinder
 /// uses this to recognise the bottom of the stack: when the
 /// return-address column is undefined, there's nothing to walk
-/// to. Used by in the `_start` FDE so gdb stops
-/// gracefully instead of reading past the bottom-most frame.
+/// to. Used in the `_start` FDE so gdb stops gracefully
+/// instead of reading past the bottom-most frame.
 const DW_CFA_UNDEFINED: u8 = 0x07;
 
 // Architecture-specific register codes used in CFI rules.
@@ -340,13 +340,13 @@ pub(crate) fn emit(
     // Walk the bytecode, collect one `Subprog` per `Op::Ent`.
     let subs = collect_subprograms(program, build, code_vmaddr, &mut strs);
 
-    // one `PltSub` per import. Lets gdb / lldb resolve a
+    // Emit one `PltSub` per import. Lets gdb / lldb resolve a
     // `bt` frame pointing at a PLT trampoline to a typed
     // signature like `malloc (size=...)` rather than bare
     // `in malloc ()`.
     let mut plt_subs = collect_plt_subprograms(build, target, code_vmaddr, &mut strs);
 
-    // append a `_start` entry so gdb stops saying
+    // Append a `_start` entry so gdb stops saying
     // "Cannot find bounds of current function" the moment
     // execution returns from main. Same DIE shape as a PLT stub
     // -- name + range, no formal parameters (the c5 binding
@@ -373,7 +373,7 @@ pub(crate) fn emit(
 
     let debug_abbrev = build_debug_abbrev();
     let (debug_line, line_unit_off) = build_debug_line(program, build, code_vmaddr, source_path);
-    // extend the CU's [low_pc, low_pc + size) range
+    // Extend the CU's [low_pc, low_pc + size) range
     // backwards over the `_start` stub when present, so a PC
     // inside the stub still falls inside the CU and gdb can
     // resolve it to the `_start` subprogram DIE we emitted.
@@ -432,7 +432,7 @@ struct Subprog {
     variables: Vec<SubprogVar>,
 }
 
-/// One PLT-trampoline subprogram Mirrors `Subprog` but
+/// One PLT-trampoline subprogram. Mirrors `Subprog` but
 /// drops the c5-frame machinery: a stub has no locals, no
 /// prologue, no frame_base. It carries an explicit return type
 /// (`Subprog` doesn't, since user-fn return types aren't tracked
@@ -496,10 +496,10 @@ fn prologue_size_for(ent_pc: usize, low_pc: usize, build: &Build) -> u32 {
 }
 
 /// One-past-the-last byte of user code in `build.text`. The PLT
-/// trampoline pool is appended after the last user
-/// function; both the line-table end_sequence and the last
-/// `Subprog`'s `high_pc` must stop at the boundary so PLT-stub
-/// addresses fall outside every DWARF range
+/// trampoline pool is appended after the last user function;
+/// both the line-table end_sequence and the last `Subprog`'s
+/// `high_pc` must stop at the boundary so PLT-stub addresses
+/// fall outside every DWARF range.
 fn end_of_user_text(build: &Build) -> usize {
     build
         .plt_trampoline_offsets
@@ -616,15 +616,15 @@ fn collect_subprograms(
     // function; addresses inside the pool must NOT fall inside any
     // user `Subprog`'s [low_pc, high_pc) range, or else gdb / lldb
     // attribute PLT-stub hits to the closing brace of the last
-    // function Stop the last range at the first
-    // trampoline byte when the pool exists.
+    // function. Stop the last range at the first trampoline byte
+    // when the pool exists.
     let total_native = end_of_user_text(build);
 
     // c5's source-function tracking sometimes attributes
     // `Op::Ent`s to the wrong containing C function -- in a
     // large translation unit dozens of Ents may carry the same
     // source-name even though their actual code belongs to
-    // unrelated functions Without disambiguation,
+    // unrelated functions. Without disambiguation,
     // lldb's `b name` returns N matches and the user can't tell
     // which is the real one. Suffix duplicates with `.<N>` so
     // the legitimate first-occurrence keeps the bare name and
@@ -839,7 +839,7 @@ impl TypeCatalog {
                 Self::insert_with_chain(&mut entries, entry);
             }
         }
-        // seed types from PLT signatures too -- both the
+        // Seed types from PLT signatures too -- both the
         // return type and each fixed parameter -- so the per-stub
         // `DW_TAG_subprogram` / `DW_TAG_formal_parameter` DIEs
         // can resolve their `DW_AT_type` refs through the same
@@ -1315,8 +1315,8 @@ fn build_debug_abbrev() -> Vec<u8> {
     write_uleb128(&mut buf, 0);
 
     // Abbrev 14: DW_TAG_formal_parameter for PLT params with a
-    // known register location (phase 2). Mirrors abbrev 12
-    // but adds DW_AT_location so gdb's `bt` can read the value
+    // known register location. Mirrors abbrev 12 but adds
+    // DW_AT_location so gdb's `bt` can read the value
     // out of the AAPCS64 / SysV register the calling convention
     // pinned the arg to. Only the first N fixed args (one per
     // ABI int_arg_reg slot) get this abbrev; later ones spill to
@@ -1473,7 +1473,7 @@ fn build_debug_info(
         body.push(0);
     }
 
-    // one DW_TAG_subprogram per PLT trampoline. Lets
+    // Emit one DW_TAG_subprogram per PLT trampoline. Lets
     // gdb / lldb show typed signatures (`malloc (size, ...)`)
     // when a `bt` frame points into the stub.
     //
@@ -1653,9 +1653,9 @@ fn emit_type_die(
             for (i, f) in s.fields.iter().enumerate() {
                 let member_name_off = member_names[i];
                 // Resolve member type. Arrays decay to the
-                // element type DIE today (see follow-up:
-                // emit `DW_TAG_array_type` so `ptype` shows
-                // `T xs[N]` instead of just `T xs`); the offsets
+                // element type DIE today; a follow-up can emit
+                // `DW_TAG_array_type` so `ptype` shows
+                // `T xs[N]` instead of just `T xs`. The offsets
                 // for subsequent fields are already correct
                 // because c5 baked the array stride into the
                 // member offsets at parse time.
@@ -1924,7 +1924,7 @@ impl DebugFrameFdeHeader {
 /// the binary has no imports. Used by [`build_debug_frame`] to
 /// emit one extra FDE so unwinders can step through a stub
 /// (`adrp+ldr+br` on aarch64; `jmp [rip+disp]` on x86_64) without
-/// hitting "Cannot find bounds of current function"
+/// hitting "Cannot find bounds of current function".
 ///
 /// The trampolines are emitted contiguously at the tail of
 /// `build.text` by `emit_plt_trampolines`, so the range is
@@ -1942,7 +1942,7 @@ fn plt_pool_range(build: &Build, code_vmaddr: u64) -> Option<(u64, u64)> {
 
 /// Build the `.debug_frame` section: one CIE at offset 0, one FDE
 /// per `Subprog`, plus optional final FDEs covering the PLT
-/// trampoline pool and the ELF `_start` stub
+/// trampoline pool and the ELF `_start` stub.
 /// Empty if no callers contributed any range.
 ///
 /// The PLT FDE inherits the CIE's initial rules verbatim --
@@ -2034,7 +2034,7 @@ fn build_debug_frame(
         out.extend_from_slice(&fde);
     }
 
-    // one FDE covering the entire PLT trampoline pool.
+    // Emit one FDE covering the entire PLT trampoline pool.
     // Trampolines are stack-neutral leaves -- aarch64's
     // `adrp+ldr+br` doesn't touch sp / x30, x86_64's `jmp [rip+
     // disp]` doesn't touch rsp. So the CIE's entry-state rule
@@ -2045,7 +2045,7 @@ fn build_debug_frame(
         out.extend_from_slice(&fde_with_body(start, end, &[]));
     }
 
-    // one FDE covering the ELF `_start` stub. The kernel
+    // Emit one FDE covering the ELF `_start` stub. The kernel
     // arranges the initial stack and jumps directly to `_start`
     // -- there's no caller frame to walk to. Mark the return-
     // address column as `DW_CFA_undefined` so the unwinder
@@ -2262,7 +2262,7 @@ fn write_line_program(buf: &mut Vec<u8>, program: &Program, build: &Build, code_
     // past that point; including it would extend the previous row's
     // `[addr_N, addr_{N+1})` coverage over every stub and gdb would
     // mis-attribute PLT-stub hits to the closing brace of the last
-    // function
+    // function.
     let end_addr = code_vmaddr + end_of_user_text(build) as u64;
     if end_addr > state_addr {
         advance_pc(buf, end_addr - state_addr);
@@ -2516,7 +2516,7 @@ mod tests {
 
     #[test]
     fn debug_frame_emits_plt_fde_when_pool_present() {
-        // the PLT trampoline pool gets one extra FDE so
+        // The PLT trampoline pool gets one extra FDE so
         // unwinders can step through a stub. Body is empty -- the
         // FDE inherits the CIE's initial CFA rule, which exactly
         // matches the trampoline's "no stack manipulation" shape.
@@ -2543,7 +2543,7 @@ mod tests {
 
     #[test]
     fn collect_plt_subprograms_uses_offset_delta_not_text_len() {
-        // per-stub size must come from the offset delta
+        // Per-stub size must come from the offset delta
         // between consecutive trampolines, NOT from
         // `build.text.len() - first_offset`. The latter
         // overshoots because `append_build_info` tacks a
@@ -2595,7 +2595,7 @@ mod tests {
         // 0xcc - 0xc0 = 12 bytes per stub. high_pc - low_pc must
         // match -- if it overshoots, gdb's DIE lookup for
         // "address near printf" lands on the wrong subprogram and
-        // we lose the symbol-resolution win from .
+        // typed PLT signatures fail to resolve.
         assert_eq!(plt_subs[0].high_pc - plt_subs[0].low_pc, 12);
         assert_eq!(plt_subs[1].high_pc - plt_subs[1].low_pc, 12);
         assert_eq!(plt_subs[0].low_pc, 0x10c0);
@@ -2604,8 +2604,8 @@ mod tests {
 
     #[test]
     fn dwarf_arg_reg_maps_per_abi() {
-        // phase 2: AAPCS64 passes args 0..7 in x0..x7
-        // (DWARF regs 0..7 -- direct mapping). x86_64 SysV uses
+        // AAPCS64 passes args 0..7 in x0..x7 (DWARF regs 0..7 --
+        // direct mapping). x86_64 SysV uses
         // RDI/RSI/RDX/RCX/R8/R9 = DWARF 5/4/1/2/8/9. Win64 uses
         // RCX/RDX/R8/R9 = DWARF 2/1/8/9. Slots past the window
         // return None and fall back to a no-location DIE.
@@ -2629,7 +2629,7 @@ mod tests {
 
     #[test]
     fn debug_frame_emits_start_stub_fde_with_undefined_ra() {
-        // the `_start` FDE must mark the return-address
+        // The `_start` FDE must mark the return-address
         // column as `DW_CFA_undefined` so the unwinder
         // terminates cleanly. Without it the kernel-supplied
         // initial stack reads as garbage and gdb prints
@@ -2664,7 +2664,7 @@ mod tests {
 
     #[test]
     fn end_of_user_text_skips_plt_pool() {
-        // when the PLT trampoline pool follows user code,
+        // When the PLT trampoline pool follows user code,
         // the line-table end_sequence and last Subprog::high_pc
         // must stop at the first trampoline byte. Otherwise gdb /
         // lldb attribute PLT-stub hits to the closing brace of the

@@ -1,13 +1,13 @@
-// typedef. The fixture exercises the typedef shapes an SQL engine
-// uses heavily: primitive aliases, pointer aliases, forward struct
-// + typedef of the same name, and struct definition + typedef in a
+// typedef. The fixture exercises the common typedef shapes:
+// primitive aliases, pointer aliases, forward struct + typedef
+// of the same name, and struct definition + typedef in a
 // single declaration.
 //
 // Function-pointer typedefs (`typedef int (*fn)(int)`) are punted to
 // a future milestone -- the parser doesn't yet handle the
 // `(*name)(...)` declarator shape.
 
-// Primitive aliases. Under  the underlying widths matter:
+// Primitive aliases. The underlying widths matter:
 // `int` is 32-bit (so `u32` lands in a 4-byte slot), `long long`
 // is 64-bit (so `u64` keeps its full range), and `char` is 1 byte.
 // The test pins that each alias name is accepted at every type
@@ -19,9 +19,9 @@ typedef unsigned long long u64;
 // Pointer alias.
 typedef char *str;
 
-// Forward struct + typedef of the same name -- an SQL engine's
-// `typedef struct sqlite3 sqlite3;` shape. The struct body shows up
-// later.
+// Forward struct + typedef of the same name -- the
+// `typedef struct Node Node;` shape, where the struct body
+// shows up later.
 typedef struct Node Node;
 
 // Now define the struct after the typedef.

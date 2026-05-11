@@ -24,10 +24,10 @@ mod stmt;
 pub(crate) mod types;
 
 use types::{
-    UNSIGNED_BIT, format_signature, fp_result_ty, is_decl_modifier, is_floating_scalar,
-    is_pointer_ty, is_scalar_load_op_val, is_struct_ty, is_type_start_token, is_unsigned_ty,
-    load_op_for, pointee_size_no_struct, reemit_scalar_load, store_op_for, struct_id_of,
-    struct_ptr_depth, struct_ty_for, usual_arith_common_ty,
+    UNSIGNED_BIT, format_signature, format_type, fp_result_ty, is_decl_modifier,
+    is_floating_scalar, is_pointer_ty, is_scalar_load_op_val, is_struct_ty, is_type_start_token,
+    is_unsigned_ty, load_op_for, pointee_size_no_struct, reemit_scalar_load, store_op_for,
+    struct_id_of, struct_ptr_depth, struct_ty_for, usual_arith_common_ty,
 };
 
 #[derive(Debug, Clone)]
@@ -2303,13 +2303,15 @@ impl Compiler {
                         if let Some(reason) =
                             Self::type_warning_with_flags(want, self.ty, zero, untyped)
                         {
+                            let got = self.ty;
+                            let want_s = format_type(want, &self.structs);
+                            let got_s = format_type(got, &self.structs);
                             self.warn_at(
                                 arg_line,
                                 format!(
-                                    "{reason} in argument {} of `{}` (param={want}, arg={})",
+                                    "{reason} in argument {} of `{}` (param={want_s}, arg={got_s})",
                                     nargs + 1,
                                     fn_name_for_warn,
-                                    self.ty
                                 ),
                             );
                         }
@@ -3133,10 +3135,11 @@ impl Compiler {
                         return Err(self.compile_err("cannot assign non-struct value to a struct"));
                     }
                     if t != self.ty {
+                        let lhs_s = format_type(t, &self.structs);
+                        let rhs_s = format_type(self.ty, &self.structs);
                         return Err(self.compile_err(format!(
                             "struct types differ on either side of `=` \
-                             (lhs={t}, rhs={})",
-                            self.ty
+                             (lhs={lhs_s}, rhs={rhs_s})"
                         )));
                     }
                     let size = self.size_of_type(t);
@@ -3154,9 +3157,11 @@ impl Compiler {
                     if let Some(reason) =
                         Self::type_warning_with_flags(t, self.ty, rhs_is_zero, rhs_is_untyped)
                     {
+                        let lhs_s = format_type(t, &self.structs);
+                        let rhs_s = format_type(self.ty, &self.structs);
                         self.warn_at(
                             line,
-                            format!("{reason} in assignment (lhs={t}, rhs={})", self.ty),
+                            format!("{reason} in assignment (lhs={lhs_s}, rhs={rhs_s})"),
                         );
                     }
                     self.ty = t;

@@ -2353,6 +2353,18 @@ impl Compiler {
                                 ),
                             );
                         }
+                        // C99 6.5.2.2p7: declared-parameter call
+                        // arguments undergo the same assignment
+                        // conversion as the `= expr` rule. If the
+                        // prototype expects `double` and the
+                        // actual is an integer, lift via
+                        // `Op::Fcvtif` so the IEEE-754 bit pattern
+                        // reaches the FP-arg register the codegen
+                        // routes through (xmm_N / d_N). Without
+                        // this, the integer bit pattern lands in
+                        // the GPR-arg register and libm reads
+                        // garbage out of the FP register.
+                        self.convert_assign_rhs(want);
                     } else if !expected_params.is_empty() && !is_variadic {
                         self.warn_at(
                             arg_line,
@@ -3824,6 +3836,23 @@ impl Compiler {
                         self.seed_multi_dim_strides(&dims, elem_size);
                     } else if !field_is_struct_value {
                         self.emit_op(load_op_for(self.ty, self.target));
+                        // Pointer-to-array field (`T (*field)[M]`):
+                        // declarator stashed dims as `[0, M, ...]`
+                        // with a leading-0 sentinel. Peel one Ptr
+                        // from `self.ty` so the indexing logic sees
+                        // the decayed-array shape `T*`, then seed
+                        // the stride queue from the rest of dims.
+                        // The sentinel distinguishes from a
+                        // decayed multi-dim array (dims[0] > 0).
+                        if field.array_dims.len() >= 2
+                            && field.array_dims[0] == 0
+                            && is_pointer_ty(self.ty)
+                        {
+                            self.ty -= Ty::Ptr as i64;
+                            let elem_size = self.pointee_size(self.ty);
+                            let dims = field.array_dims.clone();
+                            self.seed_multi_dim_strides(&dims, elem_size);
+                        }
                     }
                 }
             } else {

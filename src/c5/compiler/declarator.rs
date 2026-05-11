@@ -131,7 +131,13 @@ impl Compiler {
             }
             self.next()?;
             // Trailing decorations on the parenthesised group.
-            // Multiple are legal: `(*pp)[N](args)` etc.
+            // Multiple are legal: `(*pp)[N](args)` etc. Each
+            // `[N]` adds a pointer level to `inner_ty` and a
+            // dimension to the symbol's `array_dims` so the
+            // indexing path can stride correctly through a
+            // `T (*p)[N]` shape (`p[i]` strides by
+            // `N * sizeof(T)`, not `sizeof(T*)`).
+            let mut pointee_dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
             loop {
                 if self.lex.tk == '(' as i64 {
                     self.next()?;
@@ -141,7 +147,10 @@ impl Compiler {
                     if self.lex.tk == ']' as i64 {
                         self.next()?;
                     } else {
-                        let _ = self.parse_constant_int()?;
+                        let m = self.parse_constant_int()?;
+                        if m > 0 {
+                            pointee_dims.push(m);
+                        }
                         if self.lex.tk == ']' as i64 {
                             self.next()?;
                         }
@@ -150,6 +159,19 @@ impl Compiler {
                 } else {
                     break;
                 }
+            }
+            if idx != usize::MAX && !pointee_dims.is_empty() {
+                // Pointer-to-array shape: `T (*p)[M1][M2]...[Mn]`.
+                // Store dims with a leading 0 sentinel so the
+                // indexing paths can disambiguate from a decayed
+                // array (which has dims[0] > 0). The peel-one-Ptr
+                // step at use-time recovers the decayed-array
+                // encoding so the existing multi-dim stride
+                // logic applies unchanged.
+                let mut dims = alloc::vec::Vec::with_capacity(pointee_dims.len() + 1);
+                dims.push(0);
+                dims.extend(pointee_dims);
+                self.symbols[idx].array_dims = dims;
             }
             return Ok((idx, inner_ty, inner_array_size));
         }

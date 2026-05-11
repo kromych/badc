@@ -894,6 +894,27 @@ impl Compiler {
         Ok(())
     }
 
+    /// Apply the C99 6.5.16.1p2 assignment conversion: when the
+    /// destination is a floating type and `a` holds an integer-
+    /// typed value, lift via `Op::Fcvtif`; when the destination
+    /// is an integer / pointer and `a` holds a float / double,
+    /// drop via `Op::Fcvtfi`. Same-class assignments leave the
+    /// bit pattern alone. Called from every scalar store path
+    /// so an `unsigned char` initializer of a `float` local /
+    /// global / struct field round-trips through the IEEE-754
+    /// representation rather than the raw integer bit pattern.
+    pub(super) fn convert_assign_rhs(&mut self, dest_ty: i64) {
+        let dest_is_fp = is_floating_scalar(dest_ty);
+        let src_is_fp = is_floating_scalar(self.ty);
+        if dest_is_fp && !src_is_fp && !is_pointer_ty(self.ty) {
+            self.emit_op(Op::Fcvtif);
+            self.ty = dest_ty;
+        } else if !dest_is_fp && src_is_fp && !is_pointer_ty(dest_ty) {
+            self.emit_op(Op::Fcvtfi);
+            self.ty = dest_ty;
+        }
+    }
+
     /// True when the most recently emitted instruction is `Imm 0` --
     /// i.e. the expression that just finished compiling was the literal
     /// `0`. Used by [`Compiler::type_warning`] to suppress the NULL
@@ -3183,6 +3204,13 @@ impl Compiler {
                             format!("{reason} in assignment (lhs={lhs_s}, rhs={rhs_s})"),
                         );
                     }
+                    // C99 6.5.16.1p2 assignment conversion: when
+                    // the lvalue is float / double and the rvalue
+                    // is integer (or vice versa), bit-cast through
+                    // the IEEE-754 conversion ops so the stored
+                    // value matches the destination type's
+                    // representation rather than the source's.
+                    self.convert_assign_rhs(t);
                     self.ty = t;
                     self.emit_op(store_op_for(self.ty, self.target));
                 } else {

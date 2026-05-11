@@ -218,10 +218,13 @@ static void te_deletechars(struct te_str *s, int pos, int num) {
  * When the caller supplies an `alloc_buffer`, the alloca branch is
  * dead at runtime but the compiler still has to parse the symbol.
  * Shim it to a NULL expression so c5 type-checks the conditional
- * without needing a real stack-bumping alloca intrinsic. The
- * scenario below always passes an alloc_buffer, so this is never
- * executed. */
+ * without needing a real stack-bumping alloca intrinsic. On the
+ * Windows lanes msvc_compat.h sets `__MINGW32__`, which makes the
+ * vorbis source re-`#define alloca __builtin_alloca`; shim that
+ * spelling too. The scenario below always passes an alloc_buffer,
+ * so this is never executed. */
 #define alloca(n) ((void *)0)
+#define __builtin_alloca(n) ((void *)0)
 
 /* c5's slot model reports `sizeof(float)` as 8 (one VM slot)
  * rather than the on-disk 4 bytes. stb_vorbis's
@@ -354,6 +357,68 @@ static int scenario_image_roundtrip(void) {
     return 0;
 }
 
+static int scenario_jpg_roundtrip(void) {
+    /* JPEG round-trip. JPEG is lossy (DCT + quantization), so
+     * we can't check exact pixel equality, but we can verify
+     * the encoder produces a structurally valid stream, the
+     * decoder reads it back at the right dimensions, and the
+     * average error stays within a sane bound. The DCT path
+     * exercises the full float-arithmetic pipeline that other
+     * scenarios only touch through perlin/hexwave.
+     */
+    enum { W = 8, H = 8, C = 3 };
+    unsigned char src[W * H * C];
+    int i;
+    for (i = 0; i < W * H; i++) {
+        src[i * 3 + 0] = (unsigned char)(i * 7 + 13);
+        src[i * 3 + 1] = (unsigned char)(i * 11 + 5);
+        src[i * 3 + 2] = (unsigned char)(i * 5 + 23);
+    }
+
+    struct write_ctx ctx;
+    ctx.buf = NULL; ctx.len = 0; ctx.cap = 0;
+    int wrc = stbi_write_jpg_to_func(write_cb, &ctx, W, H, C, src, 90);
+    if (!wrc || ctx.len == 0) {
+        fprintf(stderr, "stb smoke: stbi_write_jpg_to_func failed\n");
+        free(ctx.buf);
+        return 1;
+    }
+
+    int dw = 0, dh = 0, dc = 0;
+    unsigned char *dec = stbi_load_from_memory(ctx.buf, (int)ctx.len,
+                                               &dw, &dh, &dc, 0);
+    if (!dec) {
+        fprintf(stderr, "stb smoke: jpg load_from_memory failed: %s\n",
+                stbi_failure_reason());
+        free(ctx.buf);
+        return 1;
+    }
+    if (dw != W || dh != H || dc != C) {
+        fprintf(stderr, "stb smoke: jpg decoded %dx%dx%d, want %dx%dx%d\n",
+                dw, dh, dc, W, H, C);
+        free(ctx.buf); stbi_image_free(dec);
+        return 1;
+    }
+    /* A quality-90 JPEG of a smooth gradient should round-trip
+     * to within ~16/channel on average. Empty (zero) pixel
+     * data would show ~127/channel error vs the ramp source. */
+    long sum_err = 0;
+    for (i = 0; i < W * H * C; i++) {
+        int d = (int)src[i] - (int)dec[i];
+        sum_err += (d < 0 ? -d : d);
+    }
+    long avg_err = sum_err / (W * H * C);
+    if (avg_err > 32) {
+        fprintf(stderr, "stb smoke: jpg avg pixel error %ld too high\n",
+                avg_err);
+        free(ctx.buf); stbi_image_free(dec);
+        return 1;
+    }
+    printf("jpg OK: %d bytes, avg err=%ld\n", (int)ctx.len, avg_err);
+    free(ctx.buf); stbi_image_free(dec);
+    return 0;
+}
+
 static int scenario_bmp_roundtrip(void) {
     /* BMP round-trip. BMP is a lossless integer-pixel format
      * (no DCT, no float math), so the round-trip is a
@@ -361,11 +426,6 @@ static int scenario_bmp_roundtrip(void) {
      * encoder code path than the PNG case: BMP writes BGR
      * rows bottom-up with a 4-byte alignment pad, so the
      * row-reordering / padding loop is what we're stressing.
-     * The JPEG encoder is currently a separate follow-up --
-     * c5 produces a structurally valid JPEG but the encoded
-     * pixel payload comes back as zeros through the decoder,
-     * pointing at an FP-arithmetic regression in the DCT
-     * path that needs its own investigation.
      */
     enum { W = 6, H = 5, C = 3 };
     unsigned char src[W * H * C];
@@ -771,6 +831,7 @@ int main(int argc, char **argv) {
     if (scenario_sprintf() != 0) return 1;
     if (scenario_perlin() != 0) return 1;
     if (scenario_image_roundtrip() != 0) return 1;
+    if (scenario_jpg_roundtrip() != 0) return 1;
     if (scenario_bmp_roundtrip() != 0) return 1;
     if (scenario_ds() != 0) return 1;
     if (scenario_rect_pack() != 0) return 1;

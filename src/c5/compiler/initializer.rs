@@ -763,6 +763,15 @@ impl Compiler {
         self.emit_lea(local_val);
         self.emit_op(Op::Psh);
         self.expr(Token::Assign as i64)?;
+        // C99 6.5.16.1p2: the RHS of an assignment is converted
+        // to the unqualified LHS type. For a float / double
+        // destination with an integer-typed initializer (a
+        // common case: `float r = data[i];` where `data[i]` is
+        // `unsigned char`), the bit pattern in `a` is an int
+        // that has to be lifted to an IEEE-754 f64 before the
+        // store lands. Mirror logic for the reverse direction
+        // (int destination, float source).
+        self.convert_assign_rhs(ty);
         if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
             self.emit_op(Op::Mcpy);
             self.emit_val(self.size_of_type(ty) as i64);

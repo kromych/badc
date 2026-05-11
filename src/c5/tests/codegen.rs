@@ -10,8 +10,13 @@ use super::{Op, compile_fixture_bare};
 #[test]
 fn simple_return() {
     let program = compile_fixture_bare("ir_translation_simple.c");
+    // Every function header is `Ent <locals> AllocaInit <slot>`.
+    // For a function that doesn't use alloca, AllocaInit's operand
+    // is 0 and the native codegen treats it as a no-op.
     let expected = vec![
         Op::Ent as i64,
+        0,
+        Op::AllocaInit as i64,
         0,
         Op::Imm as i64,
         42,
@@ -24,10 +29,12 @@ fn simple_return() {
 #[test]
 fn if_else() {
     let program = compile_fixture_bare("ir_translation_if.c");
-    let bz_target = 11;
-    let jmp_target = 14;
+    let bz_target = 13;
+    let jmp_target = 16;
     let expected = vec![
         Op::Ent as i64,
+        0,
+        Op::AllocaInit as i64,
         0,
         Op::Imm as i64,
         1,
@@ -49,10 +56,12 @@ fn if_else() {
 #[test]
 fn while_loop() {
     let program = compile_fixture_bare("ir_translation_while.c");
-    let bz_target = 11;
-    let jmp_target = 2;
+    let bz_target = 13;
+    let jmp_target = 4;
     let expected = vec![
         Op::Ent as i64,
+        0,
+        Op::AllocaInit as i64,
         0,
         Op::Imm as i64,
         0,

@@ -1,33 +1,31 @@
 // alloca.h -- variable-size stack allocation.
 //
-// Real `alloca` allocates on the *caller's* stack frame. c5's
-// native codegen uses a single unified stack pointer for both
-// pushed-arg slots (`Op::Psh`) and function locals, so bumping
-// SP from inside an expression (between a `Psh` and the matching
-// `Si`) would shift the c5 push slots out from under the
-// later pop and corrupt the assignment shape. Until the codegen
-// grows a separate "c5 push" register so an `Op::Intrinsic
-// <Alloca>` can safely subtract from SP between an `Lea/Psh`
-// and the matching `Si`, the header exposes `alloca` as a
-// preprocessor macro that funnels through `malloc`. The memory
-// leaks per call (no per-function release), which is bounded
-// for the smoke's stb_vorbis path and a deliberate choice over
-// silently mis-compiling the SP-bump shape.
+// `alloca(n)` carves `n` bytes out of the current function's
+// frame and returns a pointer. The memory is reclaimed when the
+// function returns; no per-call `free` is needed.
+//
+// c5 lowers it via `Op::Intrinsic(Alloca)`: every function that
+// uses alloca reserves a fixed-size per-frame arena at `Op::Ent`
+// time (the compiler patches Ent's local count on first
+// `Op::Intrinsic(Alloca)` emit), and the intrinsic decrements an
+// FP-resident "alloca-top" pointer per call. The unified-SP
+// stack-discipline conflict that would arise from a runtime
+// `sub sp, n` is sidestepped entirely -- SP doesn't move, so
+// outstanding `Op::Psh` values stay where they are.
 //
 // Both `alloca` and the gcc / clang spelling `__builtin_alloca`
-// are tagged via `#pragma intrinsic("name")` so the
-// `Op::Intrinsic` / `Intrinsic::Alloca` plumbing is exercised
-// (and ready for atomics / cpuid / vector builtins that don't
-// touch SP). The macro substitution happens at preprocessor
-// time, so today the parser never actually sees the alloca
-// identifier; once the codegen is ready to lower
-// `Op::Intrinsic(Alloca)` in place, removing the `#define`s
-// flips on real alloca semantics.
+// are tagged via `#pragma intrinsic`; call-site lowering then
+// emits `Op::Intrinsic <Alloca>` instead of a regular call. The
+// declarations below give the compiler a one-arg `size_t -> void *`
+// signature so the call-site type-checker fires the usual
+// conversion path for non-`size_t` arguments.
 
 #pragma once
 
 #include <stddef.h>
-#include <stdlib.h>
 
-#define alloca(n)            ((void *)0)
-#define __builtin_alloca(n)  ((void *)0)
+#pragma intrinsic("alloca")
+#pragma intrinsic("__builtin_alloca")
+
+extern void *alloca(size_t size);
+extern void *__builtin_alloca(size_t size);

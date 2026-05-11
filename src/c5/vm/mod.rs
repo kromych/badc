@@ -643,6 +643,10 @@ impl<H: Host> Vm<H> {
         let mut pc = self.entry_pc;
         let mut _cycle = 0;
         let mut a: i64 = 0;
+        // Address of the current frame's alloca-top bookkeeping
+        // slot, or 0 if the current function doesn't use alloca.
+        // Set by `Op::AllocaInit`; read by `Op::Intrinsic(Alloca)`.
+        let mut alloca_top_addr: usize = 0;
 
         loop {
             _cycle += 1;
@@ -721,6 +725,10 @@ impl<H: Host> Vm<H> {
                     bp = sp;
                     sp -= (self.text[pc] as usize) * 8;
                     pc += 1;
+                    // Reset alloca state -- AllocaInit (emitted
+                    // right after Ent by the compiler) sets it
+                    // back if this function uses alloca.
+                    alloca_top_addr = 0;
                 }
                 Op::Adj => {
                     sp += (self.text[pc] as usize) * 8;
@@ -1213,20 +1221,40 @@ impl<H: Host> Vm<H> {
                     let intrinsic = crate::c5::op::Intrinsic::from_i64(id).ok_or_else(|| {
                         C5Error::Runtime(alloc::format!("VM: unknown intrinsic id {id}"))
                     })?;
+                    pc += 1;
                     match intrinsic {
                         crate::c5::op::Intrinsic::Alloca => {
-                            // Reserved: see the aarch64 / x86_64
-                            // mirrors. The frontend currently
-                            // routes `alloca` through the
-                            // <alloca.h> macro, so this op should
-                            // never reach the VM.
-                            return Err(C5Error::Runtime(
-                                "VM: Op::Intrinsic(Alloca) is reserved but the \
-                                 lowering is parked; the frontend should have \
-                                 funneled alloca through the <alloca.h> macro"
-                                    .to_string(),
-                            ));
+                            // alloca(n): decrement the per-frame
+                            // arena's top pointer and return the
+                            // new value. The arena lives at a
+                            // fixed bp-relative offset reserved
+                            // by `Op::Ent`; the bookkeeping slot
+                            // address sits in
+                            // `alloca_top_addr` (set by the
+                            // matching `Op::AllocaInit`).
+                            if alloca_top_addr == 0 {
+                                return Err(C5Error::Runtime(
+                                    "VM: Op::Intrinsic(Alloca) emitted without a \
+                                     preceding AllocaInit; the compiler should have \
+                                     patched both at function-end"
+                                        .to_string(),
+                                ));
+                            }
+                            let rounded = (a + 15) & !15;
+                            let cur = self.load_i64(alloca_top_addr)?;
+                            let new_top = cur - rounded;
+                            self.store_i64(alloca_top_addr, new_top)?;
+                            a = new_top;
                         }
+                    }
+                }
+                Op::AllocaInit => {
+                    let slot_idx = self.text[pc];
+                    pc += 1;
+                    if slot_idx > 0 {
+                        let slot_addr = (bp as i64) - slot_idx * 8;
+                        alloca_top_addr = slot_addr as usize;
+                        self.store_i64(alloca_top_addr, slot_addr)?;
                     }
                 }
             }

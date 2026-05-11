@@ -102,6 +102,11 @@ struct RegState<'a> {
     /// RSP to `RBP - (locals + 16 + pool*16)` at epilogue start
     /// recovers the prologue's end-of-setup RSP.
     current_locals_bytes: u32,
+    /// FP-slot byte offset (positive) of the alloca-top bookkeeping
+    /// slot for the current function, or 0 if the function doesn't
+    /// use alloca. Set by `Op::AllocaInit` and read by the
+    /// matching `Op::Intrinsic(Alloca)`.
+    current_alloca_top_offset: u32,
     pseudo_stack: Vec<Option<(u8, PoolBank)>>,
     /// cmp+branch fusion peephole, mirror of the aarch64 field.
     /// When a compare op (`Lt`/`Eq`/...) elides its `setcc + movzx`
@@ -121,6 +126,7 @@ impl<'a> RegState<'a> {
             use_pool: false,
             current_callee_depth: 0,
             current_locals_bytes: 0,
+            current_alloca_top_offset: 0,
             pseudo_stack: Vec::new(),
             pending_cmp_cond: None,
         }
@@ -1646,6 +1652,10 @@ fn lower_op(
             let locals = read_operand(text, pc, "Ent")?;
             let aligned_locals = (((locals as u32) * 8) + 15) & !15;
             reg_state.current_locals_bytes = aligned_locals;
+            // Reset alloca state -- AllocaInit (emitted right
+            // after Ent by the compiler) restores it for
+            // functions that use alloca.
+            reg_state.current_alloca_top_offset = 0;
             emit_prologue(code, locals, in_main, abi, reg_state.current_callee_depth);
             // BADC_SAVED_RBP_CHECK at function entry: trap if our own
             // saved-rbp slot (= what our caller pushed) is below the
@@ -2128,19 +2138,58 @@ fn lower_op(
             })?;
             match intrinsic {
                 crate::c5::op::Intrinsic::Alloca => {
-                    // See the aarch64 mirror: c5's unified RSP
-                    // stack discipline conflicts with a mid-
-                    // expression `sub rsp, n`. The frontend
-                    // funnels `alloca` through the <alloca.h>
-                    // macro instead; reaching this lowering is an
-                    // ICE.
-                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                        "native codegen (x86_64): Op::Intrinsic(Alloca) is reserved \
-                         but its lowering is parked until c5 grows a separate \
-                         c5-push register; the frontend should have funneled \
-                         alloca through the <alloca.h> macro",
-                    )));
+                    // alloca(n): bump the per-frame arena's top
+                    // pointer down by n (rounded up to 16), store
+                    // it back, and return the new top in r13.
+                    // The arena lives at a fixed RBP-relative
+                    // offset reserved by `Op::Ent`; the
+                    // bookkeeping slot's RBP offset comes from
+                    // `current_alloca_top_offset` (filled in by
+                    // the matching `Op::AllocaInit`). RSP stays
+                    // put so outstanding `Op::Psh` values are
+                    // unaffected.
+                    let top_offset = reg_state.current_alloca_top_offset;
+                    if top_offset == 0 {
+                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                            "native codegen (x86_64): Op::Intrinsic(Alloca) emitted \
+                             without a preceding AllocaInit; the compiler should have \
+                             patched both at function-end",
+                        )));
+                    }
+                    let disp = -(top_offset as i32);
+                    // Round the requested size up to a 16-byte
+                    // multiple so each returned pointer is
+                    // naturally aligned. `add r13, 15; and r13, ~15`.
+                    emit_add_r_imm32(code, Reg::R13, 15);
+                    emit_and_r_imm32(code, Reg::R13, -16);
+                    // r10 = address of alloca-top slot.
+                    emit_lea_r_mem(code, Reg::R10, Reg::RBP, disp);
+                    // r11 = current alloca-top.
+                    emit_mov_r_mem(code, Reg::R11, Reg::R10, 0);
+                    // r11 -= r13 (new alloca-top).
+                    emit_sub_rr(code, Reg::R11, Reg::R13);
+                    // Store new alloca-top back.
+                    emit_mov_mem_r(code, Reg::R10, 0, Reg::R11);
+                    // Return value in r13.
+                    emit_mov_rr(code, Reg::R13, Reg::R11);
                 }
+            }
+        }
+        Op::AllocaInit => {
+            // Per-function alloca arena setup. Operand: FP-slot
+            // index of the bookkeeping slot (in 8-byte units),
+            // or 0 for "this function doesn't use alloca".
+            let slot_idx = read_operand(text, pc, "AllocaInit")?;
+            if slot_idx > 0 {
+                let top_offset = (slot_idx as u32) * 8;
+                reg_state.current_alloca_top_offset = top_offset;
+                let disp = -(top_offset as i32);
+                // r10 = &alloca_top_slot = rbp + disp. The slot's
+                // address is also the initial alloca-top value
+                // (one byte past the top of the arena), so we
+                // store r10 into the slot it points at.
+                emit_lea_r_mem(code, Reg::R10, Reg::RBP, disp);
+                emit_mov_mem_r(code, Reg::R10, 0, Reg::R10);
             }
         }
 

@@ -120,6 +120,15 @@ enum Insn {
     /// touch the operand; the variant exists so the decode/encode
     /// pair stays in sync with the bytecode.
     TlsLea(i64),
+    /// `Op::Intrinsic <id>` -- compiler-builtin (`alloca` today).
+    /// Passthrough: the optimizer doesn't fold or rewrite it,
+    /// but the variant has to exist so the decode pass advances
+    /// past the operand instead of treating the id as a fresh
+    /// op.
+    Intrinsic(i64),
+    /// `Op::AllocaInit <slot_idx>` -- alloca arena bookkeeping
+    /// slot setup. Passthrough, same role as `Intrinsic`.
+    AllocaInit(i64),
     /// Tombstone left in place by a pass that removed an instruction.
     /// The encoder skips these; targets continue to refer to indices,
     /// so leaving holes keeps everything stable across passes.
@@ -146,7 +155,9 @@ impl Insn {
             | Insn::Branch(_, _)
             | Insn::ArithI(_, _)
             | Insn::Mcpy(_)
-            | Insn::TlsLea(_) => 2,
+            | Insn::TlsLea(_)
+            | Insn::Intrinsic(_)
+            | Insn::AllocaInit(_) => 2,
             Insn::Removed => 0,
         }
     }
@@ -557,6 +568,16 @@ fn decode(
                 pc += 1;
                 Insn::Mcpy(v)
             }
+            Op::Intrinsic => {
+                let v = text[pc];
+                pc += 1;
+                Insn::Intrinsic(v)
+            }
+            Op::AllocaInit => {
+                let v = text[pc];
+                pc += 1;
+                Insn::AllocaInit(v)
+            }
             Op::TlsLea => {
                 // Op::TlsLea: byte offset within `tls_data` of the
                 // _Thread_local global being addressed. The
@@ -794,6 +815,14 @@ fn encode(
             }
             Insn::TlsLea(v) => {
                 text.push(Op::TlsLea as i64);
+                text.push(*v);
+            }
+            Insn::Intrinsic(v) => {
+                text.push(Op::Intrinsic as i64);
+                text.push(*v);
+            }
+            Insn::AllocaInit(v) => {
+                text.push(Op::AllocaInit as i64);
                 text.push(*v);
             }
             Insn::Removed => {}

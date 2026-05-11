@@ -317,9 +317,27 @@ pub enum Op {
     /// emits this op instead of the regular push/jsr/adj
     /// sequence.
     Intrinsic,
+
+    /// Companion to `Op::Intrinsic(Alloca)` -- initialises the
+    /// per-frame alloca arena's top pointer at function entry.
+    /// Operand: the FP-slot index of the alloca-top slot
+    /// (positive, in 8-byte units). Zero means "this function
+    /// doesn't use alloca" and codegen emits nothing.
+    ///
+    /// The compiler emits an `AllocaInit 0` placeholder right
+    /// after every `Op::Ent`. If the function body later emits
+    /// an `Op::Intrinsic(Alloca)`, the compiler backpatches both
+    /// the Ent's local count (to reserve the arena) and this
+    /// AllocaInit's operand (to point at the bookkeeping slot
+    /// just below the regular locals). The arena sits below the
+    /// slot at slots `[idx+1, idx+ARENA_SLOTS]`; alloca calls
+    /// bump the slot's stored value down per call and return
+    /// the new value. The whole arena is freed implicitly when
+    /// the function's epilogue tears down the frame.
+    AllocaInit,
 }
 
-const OPS: [Op; 85] = [
+const OPS: [Op; 86] = [
     Op::Lea,
     Op::Imm,
     Op::Jmp,
@@ -407,7 +425,17 @@ const OPS: [Op; 85] = [
     Op::TlsLea,
     Op::TailExt,
     Op::Intrinsic,
+    Op::AllocaInit,
 ];
+
+/// Per-function alloca arena size, in 8-byte slots. Chosen
+/// large enough to cover stb_vorbis's `inverse_mdct` (~4 KB
+/// of float scratch) and the smaller `decode_residue` block-array
+/// temporaries with headroom, without bloating every alloca-using
+/// frame by a megabyte. Functions that need more than this end
+/// up corrupting the saved-x19 / pool area below the arena --
+/// bounds-checking is a future-work item.
+pub const ALLOCA_ARENA_SLOTS: i64 = 1024;
 
 /// Compiler-builtin intrinsic discriminant. Each lowering target
 /// dispatches on this value to emit the per-arch sequence.
@@ -466,7 +494,7 @@ impl Op {
             Lea | Imm | Jmp | Jsr | Bz | Bnz | Ent | Adj | JsrExt | TailExt | AddI | SubI
             | MulI | AndI | OrI | XorI | ShlI | ShrI | ShruI | EqI | NeI | LtI | GtI | LeI
             | GeI | UltI | UgtI | UleI | UgeI | LdLocI | LdLocC | StLocI | Mcpy | TlsLea
-            | Intrinsic => 1,
+            | Intrinsic | AllocaInit => 1,
             // Everything else -- arithmetic, loads/stores, push,
             // indirect-jump, return, etc. -- is encoded in a
             // single word with no operand.

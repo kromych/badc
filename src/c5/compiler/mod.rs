@@ -154,6 +154,21 @@ pub struct Compiler {
     /// every nested-call temp the function ever needs.
     max_loc_offs: i64,
 
+    /// True once the current function has emitted at least one
+    /// `Op::Intrinsic(Alloca)` call. Drives the function-end
+    /// backpatch that grows `Op::Ent`'s local count to include the
+    /// alloca arena and sets the matching `Op::AllocaInit`'s
+    /// operand to the alloca-top slot index. Reset on each new
+    /// function definition.
+    uses_alloca_in_current_fn: bool,
+
+    /// PC of the `Op::AllocaInit` placeholder emitted right after
+    /// each function's `Op::Ent`. The function-end fixup pass
+    /// writes the alloca-top slot index here when the function
+    /// turned out to use alloca; otherwise the placeholder
+    /// stays at 0 and the codegen treats AllocaInit as a no-op.
+    alloca_init_operand_pc: usize,
+
     // --- Patch lists ---
     loop_breaks: Vec<Vec<usize>>,
     loop_continues: Vec<Vec<usize>>,
@@ -681,6 +696,8 @@ impl Compiler {
             ty: 0,
             loc_offs: 0,
             max_loc_offs: 0,
+            uses_alloca_in_current_fn: false,
+            alloca_init_operand_pc: 0,
             loop_breaks: Vec::new(),
             loop_continues: Vec::new(),
             labels: Vec::new(),
@@ -2235,6 +2252,16 @@ impl Compiler {
                     self.next()?;
                     self.emit_op(Op::Intrinsic);
                     self.emit_val(intrinsic_id);
+                    // Flag the function for the alloca-arena
+                    // patch-up at function-end. We don't reserve
+                    // the alloca-top slot here -- the function
+                    // might still grow more regular locals after
+                    // this point, and the slot must sit just
+                    // below them so the arena ends up at the
+                    // deepest part of the frame.
+                    if intrinsic_id == (crate::c5::op::Intrinsic::Alloca as i64) {
+                        self.uses_alloca_in_current_fn = true;
+                    }
                     // Result is a `void *` -- bump the return type
                     // to a pointer so downstream uses (assigning to
                     // a `T *`, casting via `(T *)alloca(n)`) see the
@@ -4490,6 +4517,7 @@ impl Compiler {
                     self.max_loc_offs = 0;
                     self.labels.clear();
                     self.unresolved_gotos.clear();
+                    self.uses_alloca_in_current_fn = false;
 
                     let ent_pc = self.text.len();
                     // Now that the body is being emitted, point the
@@ -4501,6 +4529,14 @@ impl Compiler {
                     self.symbols[id_idx].val = ent_pc as i64;
                     self.emit_op(Op::Ent);
                     self.emit_val(0); // patched below
+                    // Placeholder AllocaInit. If the function body
+                    // emits any `Op::Intrinsic(Alloca)`, the
+                    // function-end fixup pass writes the
+                    // alloca-top slot index here. Otherwise the 0
+                    // stays and codegen treats the op as a no-op.
+                    self.emit_op(Op::AllocaInit);
+                    self.alloca_init_operand_pc = self.text.len();
+                    self.emit_val(0);
 
                     // Struct-value parameters: the caller pushed
                     // the struct's *address* into the param slot
@@ -4564,7 +4600,23 @@ impl Compiler {
                     self.emit_op(Op::Lev);
                     self.current_function_name.clear();
 
-                    self.text[ent_pc + 1] = self.max_loc_offs.max(self.loc_offs);
+                    // Patch Ent's local-slot count. With alloca,
+                    // bump it by 1 (the alloca-top bookkeeping
+                    // slot) plus the fixed arena slot count so the
+                    // prologue reserves the arena alongside the
+                    // regular locals. The alloca-top slot sits at
+                    // index `max_loc_offs + 1` (just below all
+                    // regular locals); the arena occupies indices
+                    // `[max_loc_offs + 2, max_loc_offs + 1 + ARENA_SLOTS]`.
+                    let regular_locals = self.max_loc_offs.max(self.loc_offs);
+                    if self.uses_alloca_in_current_fn {
+                        let alloca_top_slot = regular_locals + 1;
+                        self.text[ent_pc + 1] =
+                            regular_locals + 1 + crate::c5::op::ALLOCA_ARENA_SLOTS;
+                        self.text[self.alloca_init_operand_pc] = alloca_top_slot;
+                    } else {
+                        self.text[ent_pc + 1] = regular_locals;
+                    }
 
                     for (name, pc) in &self.unresolved_gotos {
                         match self.labels.iter().find(|(n, _)| n == name) {

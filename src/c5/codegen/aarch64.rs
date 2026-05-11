@@ -99,6 +99,11 @@ struct RegState<'a> {
     /// below the pool and the epilogue's pop sequence would read
     /// alloca scratch as register state.
     current_locals_bytes: u32,
+    /// FP-slot byte offset of the alloca-top pointer for the
+    /// current function, or 0 if the function doesn't use
+    /// alloca. Set by `Op::AllocaInit` and read by the
+    /// `Op::Intrinsic(Alloca)` handler.
+    current_alloca_top_offset: u32,
     /// Runtime mirror of the c4 push-stack: each Psh appends an
     /// entry, each pop op pops one. `Some((slot, bank))` means the
     /// value is live in the bank/slot pool register; `None` means
@@ -124,6 +129,7 @@ impl<'a> RegState<'a> {
             use_pool: false,
             current_callee_depth: 0,
             current_locals_bytes: 0,
+            current_alloca_top_offset: 0,
             pseudo_stack: Vec::new(),
             pending_cmp_cond: None,
         }
@@ -384,6 +390,16 @@ pub(super) fn enc_sub_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
 /// `AND <Xd>, <Xn>, <Xm>` -- bitwise and.
 pub(super) fn enc_and_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     0x8A00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `AND <Xd>, <Xn>, #~15` -- mask off the low four bits so the
+/// result is a multiple of 16. Used by the alloca lowering to
+/// round the requested size up to the platform's stack-alignment
+/// before bumping the per-frame arena top. AArch64 logical-
+/// immediate encoding for the 64-bit mask `0xFFFFFFFFFFFFFFF0`:
+/// `sf=1`, `N=1`, `immr=0`, `imms=59` (sixty ones, no rotation).
+pub(super) fn enc_and_imm_neg16(rd: Reg, rn: Reg) -> u32 {
+    0x9240_EC00 | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
 /// `ORR <Xd>, <Xn>, <Xm>` -- bitwise or.
@@ -1454,6 +1470,10 @@ fn lower_op(
             let locals = read_operand(text, pc, "Ent")?;
             let aligned_locals = (((locals as u32) * 8) + 15) & !15;
             reg_state.current_locals_bytes = aligned_locals;
+            // Reset alloca state -- AllocaInit (emitted by the
+            // compiler right after Ent) sets it back if this
+            // function uses alloca.
+            reg_state.current_alloca_top_offset = 0;
             emit_prologue(code, locals, in_main, reg_state.current_callee_depth);
         }
         Op::Lev => emit_epilogue(
@@ -1882,25 +1902,83 @@ fn lower_op(
             })?;
             match intrinsic {
                 crate::c5::op::Intrinsic::Alloca => {
-                    // Reserved: c5's unified-SP stack discipline
-                    // (`Op::Psh` / `Op::Si` / `Op::Adj` all walk
-                    // the same SP that locals / pool slots sit
-                    // above) means a mid-expression `sub sp, sp,
-                    // n` would shift the pending push slots out
-                    // from under the matching pop. The frontend
-                    // therefore routes `alloca` through the
-                    // header-side `#define alloca(n) malloc(n)`
-                    // macro today and never emits this op for
-                    // the alloca intrinsic; if it does, that's an
-                    // ICE so the malformed bytecode is caught at
-                    // emit time rather than at runtime.
-                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                        "native codegen (aarch64): Op::Intrinsic(Alloca) is reserved \
-                         but its lowering is parked until c5 grows a separate \
-                         c5-push register; the frontend should have funneled \
-                         alloca through the <alloca.h> macro",
-                    )));
+                    // alloca(n): bump the per-frame arena's top
+                    // pointer down by n (rounded up to 16), store
+                    // the new top back into the bookkeeping slot,
+                    // and return the new top in x19. The arena
+                    // lives at a fixed FP-relative offset
+                    // reserved by `Op::Ent` and pointed at by
+                    // `current_alloca_top_offset`, which an
+                    // earlier `Op::AllocaInit` filled in. SP is
+                    // untouched, so outstanding `Op::Psh` values
+                    // stay where they are and matching pops still
+                    // resolve correctly -- the design trade-off
+                    // is a fixed per-function arena size rather
+                    // than the unlimited runtime SP bump that a
+                    // native alloca would do.
+                    let top_offset = reg_state.current_alloca_top_offset;
+                    if top_offset == 0 {
+                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                            "native codegen (aarch64): Op::Intrinsic(Alloca) emitted \
+                             without a preceding AllocaInit; the compiler should have \
+                             patched both at function-end",
+                        )));
+                    }
+                    // x19 holds the requested size. Round up to a
+                    // 16-byte multiple so each returned pointer is
+                    // aligned for any scalar type.
+                    emit(code, enc_add_imm(Reg::X19, Reg::X19, 15));
+                    // and x19, x19, #~15 -- bit pattern is the
+                    // logical-imm encoding for the 64-bit mask
+                    // 0xFFFF_FFFF_FFFF_FFF0 (4 zero low bits).
+                    emit(code, enc_and_imm_neg16(Reg::X19, Reg::X19));
+                    // Load current alloca-top from `[fp, -top_offset]`.
+                    // Compute the slot's address in x16 to sidestep
+                    // ldr/str's signed-9-bit and unsigned-12-bit
+                    // immediate ranges for deep frames.
+                    if top_offset < 4096 {
+                        emit(code, enc_sub_imm(Reg::X16, Reg::X29, top_offset));
+                    } else {
+                        let high = top_offset & !0xfff;
+                        let low = top_offset & 0xfff;
+                        emit(code, enc_sub_imm_lsl12(Reg::X16, Reg::X29, high >> 12));
+                        if low != 0 {
+                            emit(code, enc_sub_imm(Reg::X16, Reg::X16, low));
+                        }
+                    }
+                    emit(code, enc_ldr_imm(Reg::X17, Reg::X16, 0));
+                    emit(code, enc_sub_reg(Reg::X17, Reg::X17, Reg::X19));
+                    emit(code, enc_str_imm(Reg::X17, Reg::X16, 0));
+                    // Result (the new alloca-top) goes back into
+                    // x19, the c5 accumulator.
+                    emit_mov_reg(code, Reg::X19, Reg::X17);
                 }
+            }
+        }
+        Op::AllocaInit => {
+            // operand = FP-slot index of the alloca-top pointer
+            // (positive, in 8-byte units). Zero means the
+            // function doesn't use alloca -- emit nothing.
+            let slot_idx = read_operand(text, pc, "AllocaInit")?;
+            if slot_idx > 0 {
+                let top_offset = (slot_idx as u32) * 8;
+                reg_state.current_alloca_top_offset = top_offset;
+                // Initial alloca-top points at the bookkeeping
+                // slot itself, i.e. the address one byte past the
+                // top of the arena. The first alloca(n) subtracts
+                // n from this and lands inside the arena
+                // (slot_idx + 1 .. slot_idx + ARENA_SLOTS).
+                if top_offset < 4096 {
+                    emit(code, enc_sub_imm(Reg::X16, Reg::X29, top_offset));
+                } else {
+                    let high = top_offset & !0xfff;
+                    let low = top_offset & 0xfff;
+                    emit(code, enc_sub_imm_lsl12(Reg::X16, Reg::X29, high >> 12));
+                    if low != 0 {
+                        emit(code, enc_sub_imm(Reg::X16, Reg::X16, low));
+                    }
+                }
+                emit(code, enc_str_imm(Reg::X16, Reg::X16, 0));
             }
         }
 

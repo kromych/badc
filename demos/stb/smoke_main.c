@@ -215,15 +215,13 @@ static void te_deletechars(struct te_str *s, int pos, int num) {
 #define STB_VOXEL_RENDER_IMPLEMENTATION
 #include "stb_voxel_render.h"
 
-/* Pull in c5's `<alloca.h>` shim. It exposes `alloca` and
- * `__builtin_alloca` as macros that funnel through `malloc`
- * (leaking per call, bounded for the smoke run) so stb_vorbis
- * can take the `alloca` branch of its `temp_alloc` gate when
- * the caller passes a NULL alloc_buffer. Including this BEFORE
- * stb_vorbis.c is important because the source's `#ifdef
- * __MINGW32__` re-defines `alloca` to `__builtin_alloca`, and
- * the macro substitution wins over the re-#define only if our
- * #defines are already in place when stb_vorbis is parsed. */
+/* `<alloca.h>` declares `alloca` and `__builtin_alloca` as
+ * compiler intrinsics tagged with `#pragma intrinsic`. The c5
+ * frontend lowers their call sites to `Op::Intrinsic(Alloca)`,
+ * which decrements a per-frame arena pointer reserved by
+ * `Op::Ent` and returns the new top -- no runtime SP bump, so
+ * outstanding `Op::Psh` values stay where they are. stb_vorbis
+ * uses this when the caller passes NULL alloc_buffer. */
 #include <alloca.h>
 
 /* c5's slot model reports `sizeof(float)` as 8 (one VM slot)
@@ -722,9 +720,10 @@ static int scenario_vorbis(void) {
      *     expected channel / rate / sample-count properties,
      *     and decode every frame to completion.
      *
-     * The `alloc_buffer` path through `temp_alloc` is taken
-     * (we pass a non-NULL `alloc`), so the dead `alloca`
-     * branch shimmed in this driver is never executed. */
+     * The smoke passes a non-NULL `alloc_buffer`, so `temp_alloc`
+     * runs against the scratch arena rather than the per-frame
+     * `alloca` intrinsic. The alloca path itself is exercised
+     * separately by `tests/fixtures/c/alloca_basic.c`. */
     static char scratch[1024 * 1024];
     stb_vorbis_alloc alloc;
     int err = 0;

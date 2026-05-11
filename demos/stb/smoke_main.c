@@ -7,21 +7,18 @@
  * Headers currently blocked on c5 dialect gaps are gated off
  * with a TODO line naming the specific follow-up to track.
  *
- * Headers covered today (16/21):
+ * Headers covered today (17/21):
  *   stb_c_lexer.h, stb_connected_components.h, stb_divide.h,
  *   stb_ds.h, stb_dxt.h, stb_easy_font.h,
  *   stb_herringbone_wang_tile.h, stb_hexwave.h, stb_image.h,
  *   stb_image_write.h, stb_include.h, stb_leakcheck.h,
- *   stb_perlin.h, stb_rect_pack.h, stb_sprintf.h, stb_truetype.h
+ *   stb_perlin.h, stb_rect_pack.h, stb_sprintf.h, stb_textedit.h,
+ *   stb_truetype.h
  *
  * Headers gated off (rationale + tracking issue):
  *   stb_image_resize2.h -- forward-referenced function pointers
  *     in a static dispatch table; needs a deferred-resolution
  *     CodeReloc path for initializer slots.
- *   stb_textedit.h -- needs an extensive caller-supplied stub
- *     surface (STB_TEXTEDIT_STRINGLEN, ...LAYOUTROW,
- *     ...K_<keys>, ...). Compile-test only after a fixture
- *     header is in place.
  *   stb_tilemap_editor.h -- 3D array indexing
  *     (`tm->data[0][i][0]`) on a struct field; needs full
  *     multi-dim shape tracking on Symbol/StructField.
@@ -135,6 +132,83 @@
 
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
+
+/* stb_textedit caller-supplied stub. The header describes
+ * an embedder-supplied surface for the buffer type, length /
+ * get / insert / delete hooks, per-character layout and width
+ * queries, and the keyboard-input constants. The smoke wires
+ * up a minimal single-line text buffer with one-pixel-wide
+ * ASCII characters so the scenario exercises insert / cursor-
+ * motion / backspace / delete and an undo round-trip. */
+struct te_str {
+    char chars[256];
+    int  len;
+};
+
+#define STB_TEXTEDIT_STRING               struct te_str
+#define STB_TEXTEDIT_CHARTYPE             char
+#define STB_TEXTEDIT_KEYTYPE              int
+#define STB_TEXTEDIT_POSITIONTYPE         int
+
+/* First include with no IMPLEMENTATION: brings in the
+ * `StbTexteditRow` / `STB_TexteditState` typedefs the hook
+ * helpers below reference. The implementation include comes
+ * after the hooks are defined. */
+#include "stb_textedit.h"
+
+#define STB_TEXTEDIT_STRINGLEN(s)         ((s)->len)
+#define STB_TEXTEDIT_GETCHAR(s, i)        ((s)->chars[(i)])
+#define STB_TEXTEDIT_GETWIDTH(s, n, i)    (1.0f)
+#define STB_TEXTEDIT_KEYTOTEXT(k)         (((k) >= 0x20 && (k) < 0x7f) ? (k) : -1)
+#define STB_TEXTEDIT_NEWLINE              '\n'
+#define STB_TEXTEDIT_GETWIDTH_NEWLINE     (-1.0f)
+
+/* High-bit keys so they don't collide with printable ASCII the
+ * KEYTOTEXT branch funnels into INSERTCHARS. SHIFT is OR'd in. */
+#define STB_TEXTEDIT_K_SHIFT      0x40000000
+#define STB_TEXTEDIT_K_LEFT       0x10000
+#define STB_TEXTEDIT_K_RIGHT      0x10001
+#define STB_TEXTEDIT_K_UP         0x10002
+#define STB_TEXTEDIT_K_DOWN       0x10003
+#define STB_TEXTEDIT_K_LINESTART  0x10004
+#define STB_TEXTEDIT_K_LINEEND    0x10005
+#define STB_TEXTEDIT_K_TEXTSTART  0x10006
+#define STB_TEXTEDIT_K_TEXTEND    0x10007
+#define STB_TEXTEDIT_K_DELETE     0x10008
+#define STB_TEXTEDIT_K_BACKSPACE  0x10009
+#define STB_TEXTEDIT_K_UNDO       0x1000a
+#define STB_TEXTEDIT_K_REDO       0x1000b
+#define STB_TEXTEDIT_K_PGUP       0x1000c
+#define STB_TEXTEDIT_K_PGDOWN     0x1000d
+
+static void te_layout_row(StbTexteditRow *row, struct te_str *s, int n) {
+    int remaining = s->len - n;
+    row->x0 = 0.0f;
+    row->x1 = (float)remaining;
+    row->baseline_y_delta = 1.0f;
+    row->ymin = 0.0f;
+    row->ymax = 1.0f;
+    row->num_chars = remaining;
+}
+#define STB_TEXTEDIT_LAYOUTROW(r, s, n)   te_layout_row((r), (s), (n))
+
+static int te_insertchars(struct te_str *s, int pos, char *newtext, int num) {
+    if (s->len + num > (int)sizeof(s->chars)) return 0;
+    memmove(s->chars + pos + num, s->chars + pos, (size_t)(s->len - pos));
+    memmove(s->chars + pos, newtext, (size_t)num);
+    s->len += num;
+    return 1;
+}
+#define STB_TEXTEDIT_INSERTCHARS(s, p, t, n) te_insertchars((s), (p), (t), (n))
+
+static void te_deletechars(struct te_str *s, int pos, int num) {
+    memmove(s->chars + pos, s->chars + pos + num, (size_t)(s->len - pos - num));
+    s->len -= num;
+}
+#define STB_TEXTEDIT_DELETECHARS(s, p, n) te_deletechars((s), (p), (n))
+
+#define STB_TEXTEDIT_IMPLEMENTATION
+#include "stb_textedit.h"
 
 /* TODO(stb-voxel-render): blocked on 3D array indexing.
  * `stbvox_face_up_normal_012[ht[2]][ht[1]][ht[0]]` (line 2847)
@@ -535,6 +609,68 @@ static int scenario_wang_tile(void) {
     return 0;
 }
 
+static int scenario_textedit(void) {
+    struct te_str s;
+    STB_TexteditState state;
+    int i;
+
+    s.len = 0;
+    stb_textedit_initialize_state(&state, 1);
+
+    /* Insert "hello" one char at a time through stb_textedit_key. */
+    stb_textedit_key(&s, &state, 'h');
+    stb_textedit_key(&s, &state, 'e');
+    stb_textedit_key(&s, &state, 'l');
+    stb_textedit_key(&s, &state, 'l');
+    stb_textedit_key(&s, &state, 'o');
+    if (s.len != 5 || memcmp(s.chars, "hello", 5) != 0) {
+        fprintf(stderr, "stb smoke: textedit insert got len=%d\n", s.len);
+        return 1;
+    }
+    if (state.cursor != 5) {
+        fprintf(stderr, "stb smoke: textedit cursor=%d, want 5\n", state.cursor);
+        return 1;
+    }
+
+    /* Cursor back 2 (between 'l' and 'l'), insert 'X' -> "helXlo". */
+    stb_textedit_key(&s, &state, STB_TEXTEDIT_K_LEFT);
+    stb_textedit_key(&s, &state, STB_TEXTEDIT_K_LEFT);
+    stb_textedit_key(&s, &state, 'X');
+    if (s.len != 6 || memcmp(s.chars, "helXlo", 6) != 0) {
+        fprintf(stderr, "stb smoke: textedit insert-mid got len=%d [%c%c%c%c%c%c]\n",
+                s.len, s.chars[0], s.chars[1], s.chars[2],
+                s.chars[3], s.chars[4], s.chars[5]);
+        return 1;
+    }
+
+    /* Backspace from cursor=4 deletes the 'X'. */
+    stb_textedit_key(&s, &state, STB_TEXTEDIT_K_BACKSPACE);
+    if (s.len != 5 || memcmp(s.chars, "hello", 5) != 0) {
+        fprintf(stderr, "stb smoke: textedit backspace got len=%d\n", s.len);
+        return 1;
+    }
+
+    /* Undo restores the 'X'. */
+    stb_textedit_key(&s, &state, STB_TEXTEDIT_K_UNDO);
+    if (s.len != 6 || memcmp(s.chars, "helXlo", 6) != 0) {
+        fprintf(stderr, "stb smoke: textedit undo got len=%d\n", s.len);
+        return 1;
+    }
+
+    /* Jump to start, delete forward 3 -> "Xlo". */
+    stb_textedit_key(&s, &state, STB_TEXTEDIT_K_TEXTSTART);
+    for (i = 0; i < 3; i++) {
+        stb_textedit_key(&s, &state, STB_TEXTEDIT_K_DELETE);
+    }
+    if (s.len != 3 || memcmp(s.chars, "Xlo", 3) != 0) {
+        fprintf(stderr, "stb smoke: textedit delete-forward got len=%d\n", s.len);
+        return 1;
+    }
+
+    printf("textedit OK: insert/move/delete/undo\n");
+    return 0;
+}
+
 static int scenario_include(void) {
     /* stb_include is a build helper -- it scans source for
      * `##include` directives and inlines them. Compile-test only
@@ -572,6 +708,7 @@ int main(int argc, char **argv) {
     if (scenario_leakcheck() != 0) return 1;
     if (scenario_truetype() != 0) return 1;
     if (scenario_wang_tile() != 0) return 1;
+    if (scenario_textedit() != 0) return 1;
     if (scenario_include() != 0) return 1;
     /* voxel_render gated off above */
     printf("stb smoke: all scenarios green\n");

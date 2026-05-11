@@ -54,11 +54,22 @@ impl Compiler {
         self.next()?;
         self.consume(b'(', "open paren expected")?;
 
-        // Initialization (optional). Comma operator: `for(i=0,j=0; ...)`.
-        if self.lex.tk != ';' {
+        // C99 6.8.5.3 for-init is either an expression or a
+        // declaration. The declared identifier's scope is the
+        // entire for statement, so a fresh `block_symbols`
+        // vector lets us shadow and restore in the same shape
+        // as `parse_block_stmt`. `parse_block_local_decl`
+        // consumes its own trailing `;`; the expression branch
+        // does it explicitly.
+        let mut for_init_symbols: Vec<(usize, i64, i64, i64)> = Vec::new();
+        if self.lex.tk == ';' {
+            self.next()?;
+        } else if self.lex_is_type_start() {
+            self.parse_block_local_decl(&mut for_init_symbols)?;
+        } else {
             self.parse_full_expr()?;
+            self.consume(b';', "semicolon expected after for-init")?;
         }
-        self.consume(b';', "semicolon expected after for-init")?;
 
         // Condition (optional -- empty means `1`). The C99 grammar
         // makes the condition a full `expression`, so a comma chain
@@ -102,6 +113,16 @@ impl Compiler {
         self.text[end_jmp_pc] = self.text.len() as i64;
         let end_pc = self.text.len();
         self.patch_loop_breaks(end_pc);
+
+        // Restore symbols shadowed by the for-init declaration so
+        // the binding's scope ends with the for statement
+        // (C99 6.8.5.3 / 6.8p3). Restore in reverse order to
+        // unwind multiple shadows in declaration order.
+        for (idx, class, ty, val) in for_init_symbols.into_iter().rev() {
+            self.symbols[idx].class = class;
+            self.symbols[idx].type_ = ty;
+            self.symbols[idx].val = val;
+        }
         Ok(())
     }
 

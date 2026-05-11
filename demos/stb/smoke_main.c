@@ -752,22 +752,53 @@ static int scenario_vorbis(void) {
         return 1;
     }
 
-    /* Positive path through `alarm_ogg`. The aarch64 Mcpy fix
-     * (switching `ldur/stur` to the scaled `ldr/str` form) lets
-     * `*f = p` -- the ~1.9 KB stb_vorbis struct copy inside
-     * `stb_vorbis_open_memory` -- copy `next_seg` correctly, so
-     * the first frame's `vorbis_decode_initial` no longer bails
-     * out and the full 46028-sample stream decodes. The smoke
-     * still flips between exit 0 and exit 139 from one run to
-     * the next, though: a separate intermittent crash fires
-     * after the last scenario's `stb smoke: all scenarios green`
-     * line prints (likely in stb_vorbis's close-time setup_free
-     * walk or the static-buffer teardown). Track that down
-     * separately before flipping this assertion hard. */
-    (void)v;
-    (void)alarm_ogg;
-    printf("vorbis OK: rejected bogus (alarm_ogg %d bytes; positive decode under investigation)\n",
-           alarm_ogg_len);
+    /* Positive path through `alarm_ogg`. Two c5 fixes drive
+     * this end-to-end:
+     *   - aarch64 Mcpy now uses scaled-12-bit `ldr/str` instead
+     *     of the 9-bit `ldur/stur`, so `*f = p` -- the ~1.9 KB
+     *     stb_vorbis struct copy inside `stb_vorbis_open_memory`
+     *     -- carries every field past byte offset 256 correctly
+     *     (notably `next_seg`).
+     *   - The Brak postfix handler now surfaces the inner row
+     *     length when a `T (*p)[N]` field is subscripted once,
+     *     so `sizeof(r->residue_books[0])` returns `N*sizeof(T)`
+     *     instead of `sizeof(pointer)`. Previously the residue
+     *     setup_malloc was half-sized; the writes overran into
+     *     adjacent codebook structs and `codebook_decode_start`
+     *     dereferenced a corrupted pointer.
+     * The .ogg is a real ~12 KB mono 48 kHz clip; both info
+     * properties and total sample count are pinned. */
+    v = stb_vorbis_open_memory(alarm_ogg, alarm_ogg_len, &err, &alloc);
+    if (v == NULL) {
+        fprintf(stderr, "stb smoke: vorbis_open_memory(alarm) failed err=%d\n", err);
+        return 1;
+    }
+    {
+        stb_vorbis_info info = stb_vorbis_get_info(v);
+        short buf[4096];
+        int total = 0;
+        int n;
+        if (info.channels != 1 || info.sample_rate != 48000) {
+            fprintf(stderr, "stb smoke: vorbis info channels=%d rate=%d\n",
+                    info.channels, info.sample_rate);
+            stb_vorbis_close(v);
+            return 1;
+        }
+        for (;;) {
+            n = stb_vorbis_get_samples_short_interleaved(
+                v, info.channels, buf, (int)(sizeof(buf) / sizeof(buf[0])));
+            if (n <= 0) break;
+            total += n;
+        }
+        if (total != 46028) {
+            fprintf(stderr, "stb smoke: vorbis decoded %d samples, want 46028\n", total);
+            stb_vorbis_close(v);
+            return 1;
+        }
+        stb_vorbis_close(v);
+        printf("vorbis OK: rejected bogus + decoded alarm_ogg %d samples @ %d Hz\n",
+               total, info.sample_rate);
+    }
     return 0;
 }
 

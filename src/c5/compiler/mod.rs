@@ -2756,8 +2756,8 @@ impl Compiler {
                             // the n-1 trailing Ptrs (one per Mi
                             // after the `*` itself) get peeled.
                             let array_ptrs = (dims.len() as i64) - 1;
-                            let scalar_ty = self.symbols[id_idx].type_
-                                - (dims.len() as i64) * (Ty::Ptr as i64);
+                            let scalar_ty =
+                                self.symbols[id_idx].type_ - (dims.len() as i64) * (Ty::Ptr as i64);
                             self.ty -= array_ptrs * (Ty::Ptr as i64);
                             let elem_size = self.size_of_type(scalar_ty) as i64;
                             self.seed_multi_dim_strides(&dims, elem_size);
@@ -3963,8 +3963,7 @@ impl Compiler {
                         {
                             let dims = field.array_dims.clone();
                             let array_ptrs = (dims.len() as i64) - 1;
-                            let scalar_ty =
-                                field.ty - (dims.len() as i64) * (Ty::Ptr as i64);
+                            let scalar_ty = field.ty - (dims.len() as i64) * (Ty::Ptr as i64);
                             self.ty -= array_ptrs * (Ty::Ptr as i64);
                             let elem_size = self.size_of_type(scalar_ty) as i64;
                             self.seed_multi_dim_strides(&dims, elem_size);

@@ -310,6 +310,21 @@ pub(crate) enum Token {
     /// is surfaced through the standard compile-error path,
     /// otherwise the construct is a parse-time no-op.
     StaticAssert,
+    /// `void` keyword. A distinct lexeme so a bare `void` return
+    /// type or `(void)` parameter list can be told apart from a
+    /// `char` of the same width. The type encoding stays
+    /// `Ty::Char | UNSIGNED_BIT` for both spellings (so `void *`
+    /// arithmetic, sizeof, struct-field layout, and function-
+    /// pointer encoding behave identically to a previous `void
+    /// = char` desugaring); the void-vs-char distinction is
+    /// carried out-of-band by
+    /// [`super::compiler::Compiler::pending_base_was_void`] and
+    /// [`super::symbol::Symbol::returns_void`]. The earlier
+    /// attempt to add a `Ty::Void` band collided with
+    /// function-pointer encoding in sqlite3 dispatch tables
+    /// (`void (*xFunc)(...)`); keeping the encoding untouched and
+    /// carrying void-ness on the side avoids that trap.
+    Void,
 }
 
 /// Map a token-id (the value stored in `lex.tk` as i64) back to a
@@ -400,6 +415,7 @@ pub(crate) fn describe(tk: Tok) -> alloc::string::String {
         x if x == Token::Double as i64 => "`double`",
         x if x == Token::FloatNum as i64 => "floating-point literal",
         x if x == Token::StaticAssert as i64 => "`static_assert` / `_Static_assert`",
+        x if x == Token::Void as i64 => "`void`",
         _ => return format!("token id {tk}"),
     };
     name.to_string()

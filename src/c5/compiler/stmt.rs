@@ -514,7 +514,19 @@ impl Compiler {
             self.next()?;
             let ret_ty = self.current_func_return_ty;
             let returns_struct = is_struct_ty(ret_ty) && struct_ptr_depth(ret_ty) == 0;
+            let returns_void = self.current_func_returns_void;
             if self.lex.tk != ';' {
+                if returns_void {
+                    // C99 6.8.6.4p1: `return <expr>;` in a function
+                    // returning `void` is a constraint violation.
+                    // Reject here rather than silently dropping
+                    // the value -- gcc and clang both diagnose this
+                    // at the strict level.
+                    return Err(self.compile_err(
+                        "`return` with a value in a function returning `void` \
+                         (C99 6.8.6.4p1)",
+                    ));
+                }
                 if returns_struct {
                     // Push the hidden out-pointer (loaded from
                     // val=2 -- the slot the caller pushed before
@@ -541,6 +553,13 @@ impl Compiler {
                 } else {
                     self.parse_full_expr()?;
                 }
+            } else if returns_void {
+                // Bare `return;` in a void function. Zero the
+                // accumulator so the matching `Op::Lev` leaves a
+                // predictable value, matching the synthetic
+                // function-end Lev in run_compile.
+                self.emit_op(Op::Imm);
+                self.emit_val(0);
             }
             self.emit_op(Op::Lev);
             self.consume(b';', "semicolon expected")?;

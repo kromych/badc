@@ -292,6 +292,37 @@ pub struct Compiler {
     /// declared params as starting at val=3.
     current_func_return_ty: i64,
 
+    /// True while parsing the body of a function whose declared
+    /// return type was bare `void`. Drives two emit decisions:
+    ///   * the trailing synthetic `Op::Lev` prepends `Op::Imm 0`
+    ///     so a caller that misclassifies the prototype reads
+    ///     `0` rather than stale accumulator bits (C99 6.8.6.4p3
+    ///     -- a `void` callee produces no value).
+    ///   * a `return;` statement emits the same `Imm 0` prefix
+    ///     before `Op::Lev`; a `return <expr>;` is rejected
+    ///     (C99 6.8.6.4p1 constraint violation).
+    /// Set at function-body entry from the function's symbol
+    /// (`Symbol::returns_void`), cleared at exit.
+    current_func_returns_void: bool,
+
+    /// Side channel from the base-type parsers
+    /// (`parse_decl_base_type`, the inline base-type loop in
+    /// `run_compile`, and `parse_aggregate_body`) to the
+    /// function-decl path: set to `true` when the just-consumed
+    /// base spelled bare `void`, `false` otherwise. The type
+    /// encoding itself collapses both `void` and `char` to
+    /// `Ty::Char | UNSIGNED_BIT` (so `void *` arithmetic,
+    /// sizeof, struct-field layout, and function-pointer
+    /// encoding stay byte-identical to the legacy void-as-char
+    /// behavior); the void-ness is carried out-of-band here.
+    /// Cleared at the start of every base-type parse and
+    /// consumed by the function-decl path right after
+    /// `parse_declarator` returns -- `returns_void` on the
+    /// function's symbol is set when the flag is true *and* the
+    /// declarator added no leading `*`s (so `void (*fp)(...)`
+    /// and `void *p` don't trip the void-return path).
+    pending_base_was_void: bool,
+
     /// Preprocessor failure (e.g. unterminated `#if`) deferred from
     /// `with_target` until `compile` runs, so the construction API
     /// stays infallible (matches all the `Compiler::new(src).compile()`
@@ -719,6 +750,8 @@ impl Compiler {
             pending_exports,
             call_fp_arg_masks: Vec::new(),
             current_func_return_ty: 0,
+            current_func_returns_void: false,
+            pending_base_was_void: false,
             pending_fn_params: None,
             pending_fn_ptr_indirection: None,
             pending_index_stride: 0,
@@ -1264,6 +1297,9 @@ impl Compiler {
         //     target). The first-vs-second distinction matters on
         //     LLP64 (Windows): `long` is 32 bits there, `long long`
         //     stays 64.
+        // Reset the void side channel up front so a previous
+        // declaration's bare-void base doesn't leak into this one.
+        self.pending_base_was_void = false;
         let mut saw_int_mod = false;
         let mut saw_signed = false;
         let mut saw_unsigned = false;
@@ -1327,6 +1363,25 @@ impl Compiler {
                 // had. The store path is the same (`Op::Sc`).
                 Ty::Char as i64 | UNSIGNED_BIT
             }
+        } else if self.lex.tk == Token::Void {
+            self.next()?;
+            // `void` collapses to the same type encoding as
+            // `unsigned char` so the existing void-pointer
+            // arithmetic (`void *p; p + 1` strides one byte),
+            // sizeof, struct-field layout, and function-pointer
+            // call-table encoding stay byte-for-byte identical to
+            // the legacy void-as-char desugaring. The void-vs-char
+            // distinction is carried out-of-band via
+            // `pending_base_was_void`: the function-decl path
+            // reads it after the declarator runs to mark the
+            // function symbol's `returns_void`. The earlier
+            // attempt to give `void` its own band collided with
+            // sqlite3's `void (*xFunc)(...)` dispatch tables (the
+            // band number leaked into the call-through-fn-ptr type
+            // comparison) -- keeping the encoding here untouched
+            // sidesteps that trap.
+            self.pending_base_was_void = true;
+            Ty::Char as i64 | UNSIGNED_BIT
         } else if self.lex.tk == Token::Float {
             self.next()?;
             Ty::Float as i64
@@ -4036,6 +4091,11 @@ impl Compiler {
                 continue;
             }
             let mut bt = Ty::Int as i64;
+            // Reset the bare-`void` side channel for this
+            // declaration. Set further down if the base-type loop
+            // matches `Token::Void`; consumed by the function-decl
+            // path to mark `Symbol::returns_void`.
+            self.pending_base_was_void = false;
             // Storage-class prefixes -- can appear in any order
             // and any combination before the type. C lets you
             // mix `static extern` (silly but legal in some
@@ -4125,6 +4185,17 @@ impl Compiler {
                 } else {
                     Ty::Char as i64 | UNSIGNED_BIT
                 };
+            } else if self.lex.tk == Token::Void {
+                self.next()?;
+                // Bare `void` shares the `unsigned char` encoding
+                // (so void-pointer arithmetic / sizeof / fn-ptr
+                // tables stay identical to the legacy
+                // void-as-char path). The void-ness is captured
+                // out-of-band via `pending_base_was_void`, which
+                // the function-decl path consumes below to set
+                // `Symbol::returns_void`.
+                self.pending_base_was_void = true;
+                bt = Ty::Char as i64 | UNSIGNED_BIT;
             } else if self.lex.tk == Token::Float {
                 self.next()?;
                 bt = Ty::Float as i64;
@@ -4220,6 +4291,23 @@ impl Compiler {
                 if fn_ptr_indirection > 0 {
                     self.symbols[id_idx].fn_ptr_indirection = fn_ptr_indirection;
                 }
+                // Carry the bare-`void` side channel onto the
+                // declarator. `pending_base_was_void` was set if
+                // the base type spelled `void`; it stays valid
+                // for the FIRST declarator in a comma-separated
+                // group only -- subsequent ones see the flag
+                // and would mis-fire if the declarator added
+                // pointer levels in between. Gate on
+                // "no leading `*` added" by checking that the
+                // declarator's returned `ty` still equals the
+                // bare-void encoding. Any declarator that bumped
+                // `ty` by `Ty::Ptr` falls out.
+                let declarator_is_bare_void =
+                    self.pending_base_was_void && ty == (Ty::Char as i64 | UNSIGNED_BIT);
+                // Consume the flag so the next iteration of the
+                // declarator loop (`void *a, b;`) doesn't
+                // re-trigger on a different declarator's shape.
+                self.pending_base_was_void = false;
                 // Function-returning-FP shape: parse_declarator
                 // already consumed the outer function's params.
                 // Synthesize the function-definition path: bind the
@@ -4370,6 +4458,18 @@ impl Compiler {
                     // both prototypes and bodied definitions.
                     self.symbols[id_idx].params = params.types.clone();
                     self.symbols[id_idx].is_variadic = params.is_variadic;
+                    // Carry the bare-`void` return marker onto the
+                    // symbol so the body-emit path zeroes the
+                    // accumulator before `Op::Lev`, and so a
+                    // future call-site check can reject value-
+                    // context use of a void callee. Prototypes
+                    // pick it up too -- a later body that
+                    // re-declares with a different bare-void-ness
+                    // is itself a C99 6.7p4 redecl violation
+                    // covered by the parameter-list check above.
+                    if declarator_is_bare_void {
+                        self.symbols[id_idx].returns_void = true;
+                    }
 
                     // Warn if a redeclaration disagrees with the
                     // prior signature. C99 6.7p4 requires
@@ -4491,6 +4591,7 @@ impl Compiler {
                     // out-pointer.
                     let return_ty = self.symbols[id_idx].type_;
                     self.current_func_return_ty = return_ty;
+                    self.current_func_returns_void = self.symbols[id_idx].returns_void;
                     self.current_function_name = self.symbols[id_idx].name.clone();
                     let returns_struct =
                         is_struct_ty(return_ty) && struct_ptr_depth(return_ty) == 0;
@@ -4597,8 +4698,22 @@ impl Compiler {
                             self.stmt()?;
                         }
                     }
+                    // C99 6.8.6.4p3: a `void`-returning function
+                    // doesn't produce a value. Zero the accumulator
+                    // before the trailing synthetic `Op::Lev` so a
+                    // caller that misclassifies the prototype (or
+                    // invokes the function through a typed
+                    // function-pointer table whose slot was set
+                    // from a value-returning cast) reads `0`
+                    // instead of whatever the function body
+                    // happened to leave in the accumulator.
+                    if self.current_func_returns_void {
+                        self.emit_op(Op::Imm);
+                        self.emit_val(0);
+                    }
                     self.emit_op(Op::Lev);
                     self.current_function_name.clear();
+                    self.current_func_returns_void = false;
 
                     // Patch Ent's local-slot count. With alloca,
                     // bump it by 1 (the alloca-top bookkeeping

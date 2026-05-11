@@ -505,6 +505,7 @@ pub(super) fn is_decl_modifier(tk: Tok) -> bool {
 pub(super) fn is_type_start_token(tk: Tok) -> bool {
     tk == Token::Int
         || tk == Token::Char
+        || tk == Token::Void
         || tk == Token::Float
         || tk == Token::Double
         || tk == Token::Struct

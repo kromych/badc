@@ -30,12 +30,14 @@ impl Compiler {
         let mut args = Vec::new();
         let mut types = Vec::new();
         let mut is_variadic = false;
-        // `(void)` -- C's "no parameters" sigil. The lexer maps
-        // `void` to `Token::Char` (legacy alias), so detect the
-        // shape via lookahead: a `void` token immediately
-        // followed by `)` and not by an identifier (which would
-        // make this a real `char` parameter).
-        if self.lex.tk == Token::Char && self.lex.peek_after_whitespace(b')') {
+        // `(void)` -- C's "no parameters" sigil. With `void` now
+        // its own lexeme (`Token::Void`), the early-match below
+        // unambiguously fires only for the void-sigil shape; an
+        // unnamed `char` parameter (`int f(char)`) flows through
+        // the regular declarator path instead of being silently
+        // dropped as a "no params" decl, which the prior
+        // `Token::Char` + peek-`)` check did mistakenly.
+        if self.lex.tk == Token::Void && self.lex.peek_after_whitespace(b')') {
             self.next()?; // consume `void`
             // tk is now `)`; the outer loop sees it and exits.
         }

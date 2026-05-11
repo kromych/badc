@@ -157,6 +157,21 @@ impl Compiler {
                 } else {
                     Ty::Char as i64 | UNSIGNED_BIT
                 }
+            } else if self.lex.tk == Token::Void {
+                self.next()?;
+                // `void *p;` / `void (*fp)(...);` fields: routed
+                // through the `unsigned char` encoding so the
+                // pointer-arithmetic + sizeof match the
+                // legacy void-as-char path. Bare `void m;` is
+                // a constraint violation (incomplete type), but
+                // c5 doesn't reject it here -- the declarator
+                // would have to add a `*` for a real use, and
+                // a hypothetical bare field would just allocate
+                // 1 byte like the prior behavior did. Promoting
+                // this to an error needs a separate
+                // declarator-aware check; the bytecode
+                // generation works either way.
+                Ty::Char as i64 | UNSIGNED_BIT
             } else if self.lex.tk == Token::Float {
                 self.next()?;
                 Ty::Float as i64

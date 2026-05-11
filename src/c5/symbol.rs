@@ -97,4 +97,20 @@ pub(crate) struct Symbol {
     /// `*p = ...` against the rebound scalar pointer is treated
     /// as a fn-ptr decay no-op.
     pub h_fn_ptr_indirection: i64,
+
+    /// Set on a `Token::Fun` symbol whose declared return type
+    /// was bare `void`. The type encoding (`type_`) still records
+    /// `Ty::Char | UNSIGNED_BIT` -- a side-channel rather than
+    /// a separate `Ty::Void` band, because a real band collides
+    /// with the function-pointer call-table encoding sqlite3
+    /// uses (`void (*xFunc)(...)`). Consumed by:
+    ///   * the function-body emit path: prepends `Op::Imm 0`
+    ///     before the trailing synthetic `Op::Lev` so a caller
+    ///     that misclassifies the prototype reads `0` rather
+    ///     than stale accumulator state (C99 6.8.6.4p3).
+    ///   * the `return` statement: bare `return;` in a void
+    ///     function emits the same `Imm 0` prefix; a `return
+    ///     <expr>;` is rejected as a constraint violation
+    ///     (C99 6.8.6.4p1).
+    pub returns_void: bool,
 }

@@ -353,9 +353,11 @@ impl Compiler {
                 let saved_ty = self.ty;
                 let saved_data_imm_positions = self.data_imm_positions.len();
                 self.last_array_decay_size = 0;
+                self.last_array_decay_bytes = 0;
                 self.expr(Token::Assign as i64)?;
                 let expr_ty = self.ty;
                 let array_count = self.last_array_decay_size;
+                let array_bytes = self.last_array_decay_bytes;
                 self.text.truncate(saved_text_len);
                 // Keep parallel debug arrays in sync with `text`;
                 // see compiler/mod.rs's matching comment on the
@@ -366,7 +368,13 @@ impl Compiler {
                 self.data_imm_positions.truncate(saved_data_imm_positions);
                 self.ty = saved_ty;
                 self.last_array_decay_size = 0;
-                if array_count > 0 {
+                self.last_array_decay_bytes = 0;
+                if array_bytes > 0 {
+                    // Multi-dim pointer-to-array subscript: the row's
+                    // byte size is known directly; see the matching
+                    // branch in compiler/mod.rs's sizeof handler.
+                    array_bytes
+                } else if array_count > 0 {
                     // Recover the array's real size: the expr
                     // ended in an array-decay-to-pointer (bare
                     // array variable or `s.field` for a

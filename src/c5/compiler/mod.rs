@@ -359,6 +359,16 @@ pub struct Compiler {
     /// unrelated sizeof.
     last_array_decay_size: i64,
 
+    /// Companion to `last_array_decay_size` for cases where the
+    /// row's byte size is known directly but its shape can't be
+    /// reduced to a single `count * sizeof(elem_ty)` pair --
+    /// concretely, multi-dim subscripts of a pointer-to-array
+    /// like `T (*p)[A][B]; sizeof(p[0])`. The Brak postfix
+    /// handler stashes the consumed `multi_dim_stride` here so
+    /// `sizeof` can return the whole row size. Cleared the same
+    /// way as `last_array_decay_size` so it doesn't leak.
+    last_array_decay_bytes: i64,
+
     /// Depth from the value currently in the accumulator down to
     /// a function-pointer rvalue, or -1 if the running expression
     /// has no function-pointer lineage. Concretely:
@@ -696,6 +706,7 @@ impl Compiler {
             code_reloc_sym_idx: Vec::new(),
             sys_trampoline_sym: alloc::collections::BTreeMap::new(),
             last_array_decay_size: 0,
+            last_array_decay_bytes: 0,
             fn_ptr_chain_depth: -1,
         }
     }
@@ -2215,8 +2226,10 @@ impl Compiler {
                     Token::Inc as i64
                 };
                 self.last_array_decay_size = 0;
+                self.last_array_decay_bytes = 0;
                 self.expr(lev)?;
                 let array_count = self.last_array_decay_size;
+                let array_bytes = self.last_array_decay_bytes;
                 let expr_ty = self.ty;
                 self.text.truncate(saved_text_len);
                 // Keep `source_lines` / `source_functions` in
@@ -2234,7 +2247,16 @@ impl Compiler {
                 self.source_file_indices.truncate(saved_text_len);
                 self.data_imm_positions.truncate(saved_data_imm_positions);
                 self.last_array_decay_size = 0;
-                if array_count > 0 {
+                self.last_array_decay_bytes = 0;
+                if array_bytes > 0 {
+                    // The subscript path knows the exact row byte
+                    // size (e.g., a multi-dim `T (*p)[A][B]` row
+                    // can't be summarised as `count * sizeof(elem)`
+                    // with c5's current type encoding -- the row's
+                    // shape is itself multi-dim). Trust the byte
+                    // count directly.
+                    array_bytes
+                } else if array_count > 0 {
                     let elem_ty = expr_ty - Ty::Ptr as i64;
                     array_count * self.size_of_type(elem_ty) as i64
                 } else {
@@ -2722,8 +2744,27 @@ impl Compiler {
                     // queue.
                     let dims = self.symbols[id_idx].array_dims.clone();
                     if !dims.is_empty() && is_pointer_ty(self.ty) {
-                        let elem_size = self.pointee_size(self.ty);
-                        self.seed_multi_dim_strides(&dims, elem_size);
+                        if dims[0] == 0 {
+                            // Pointer-to-array variable
+                            // (`T (*p)[M1][Mn]`): the declarator
+                            // baked one Ptr per `Mi` into the
+                            // symbol's type. Collapse those Ptrs so
+                            // the surviving level is the single
+                            // decayed-array pointer to the scalar
+                            // element. Element size comes from the
+                            // type at the bottom of the array Ptrs;
+                            // the n-1 trailing Ptrs (one per Mi
+                            // after the `*` itself) get peeled.
+                            let array_ptrs = (dims.len() as i64) - 1;
+                            let scalar_ty = self.symbols[id_idx].type_
+                                - (dims.len() as i64) * (Ty::Ptr as i64);
+                            self.ty -= array_ptrs * (Ty::Ptr as i64);
+                            let elem_size = self.size_of_type(scalar_ty) as i64;
+                            self.seed_multi_dim_strides(&dims, elem_size);
+                        } else {
+                            let elem_size = self.pointee_size(self.ty);
+                            self.seed_multi_dim_strides(&dims, elem_size);
+                        }
                     }
                 }
             }
@@ -3113,6 +3154,7 @@ impl Compiler {
             // consumed -- clear the flag so the decay doesn't
             // leak into a sizeof of an unrelated subexpression.
             self.last_array_decay_size = 0;
+            self.last_array_decay_bytes = 0;
             if self.lex.tk == '(' as i64 {
                 // Postfix indirect call: the expression so far put a
                 // function-pointer value in `a`. Examples:
@@ -3781,6 +3823,20 @@ impl Compiler {
                     // pointer level; the innermost `[k]` decays it
                     // the regular way to a scalar element.
                     self.ty = t;
+                    // The subscript just produced one row of the
+                    // remaining shape -- exactly `multi_dim_stride`
+                    // bytes wide (the stride was computed as
+                    // `elem_size * product(remaining_dims)`).
+                    // Surface that byte count so an enclosing
+                    // `sizeof` recovers the full row size instead
+                    // of the decayed-pointer `sizeof(T*) = 8`. The
+                    // size flows in raw bytes because the row may
+                    // itself be multi-dim, which c5's type encoding
+                    // can't represent as `count * sizeof(elem_ty)`.
+                    // The next postfix iteration clears this flag
+                    // at its top so it doesn't leak past the
+                    // subscript.
+                    self.last_array_decay_bytes = multi_dim_stride;
                 } else {
                     if self.is_ptr_scaling_nontrivial(t) {
                         let scale = self.pointee_size(t);
@@ -3887,21 +3943,30 @@ impl Compiler {
                         self.seed_multi_dim_strides(&dims, elem_size);
                     } else if !field_is_struct_value {
                         self.emit_op(load_op_for(self.ty, self.target));
-                        // Pointer-to-array field (`T (*field)[M]`):
-                        // declarator stashed dims as `[0, M, ...]`
-                        // with a leading-0 sentinel. Peel one Ptr
-                        // from `self.ty` so the indexing logic sees
-                        // the decayed-array shape `T*`, then seed
-                        // the stride queue from the rest of dims.
-                        // The sentinel distinguishes from a
-                        // decayed multi-dim array (dims[0] > 0).
+                        // Pointer-to-array field (`T (*field)[M1]...[Mn]`):
+                        // declarator stashed dims as `[0, M1, ...]`
+                        // with a leading-0 sentinel, and bumped
+                        // `field.ty` by one Ptr for the `*` plus
+                        // one per trailing `[Mi]`. The Mi Ptrs are
+                        // a positional record of the array shape,
+                        // not real indirections -- collapse them
+                        // here so the surviving Ptr is the single
+                        // "decayed array pointer to scalar element"
+                        // level. Without this, each subscript past
+                        // the seeded multi-dim queue routes through
+                        // `pointee_size` on a multi-level pointer
+                        // and falls into the default-8 branch,
+                        // mis-striding (and mis-sizing) by `8/elem`.
                         if field.array_dims.len() >= 2
                             && field.array_dims[0] == 0
                             && is_pointer_ty(self.ty)
                         {
-                            self.ty -= Ty::Ptr as i64;
-                            let elem_size = self.pointee_size(self.ty);
                             let dims = field.array_dims.clone();
+                            let array_ptrs = (dims.len() as i64) - 1;
+                            let scalar_ty =
+                                field.ty - (dims.len() as i64) * (Ty::Ptr as i64);
+                            self.ty -= array_ptrs * (Ty::Ptr as i64);
+                            let elem_size = self.size_of_type(scalar_ty) as i64;
                             self.seed_multi_dim_strides(&dims, elem_size);
                         }
                     }

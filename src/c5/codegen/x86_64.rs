@@ -94,6 +94,14 @@ struct RegState<'a> {
     plan: Option<&'a RegStackPlan>,
     use_pool: bool,
     current_callee_depth: u8,
+    /// Local-byte reservation for the current function, captured on
+    /// `Op::Ent` and read on `Op::Lev`. The epilogue's pool /
+    /// saved-r13 restore pops from the current RSP, so a function
+    /// that ran `Op::Intrinsic(Alloca)` and left RSP further down
+    /// would re-read alloca scratch as register state. Resetting
+    /// RSP to `RBP - (locals + 16 + pool*16)` at epilogue start
+    /// recovers the prologue's end-of-setup RSP.
+    current_locals_bytes: u32,
     pseudo_stack: Vec<Option<(u8, PoolBank)>>,
     /// cmp+branch fusion peephole, mirror of the aarch64 field.
     /// When a compare op (`Lt`/`Eq`/...) elides its `setcc + movzx`
@@ -112,6 +120,7 @@ impl<'a> RegState<'a> {
             plan,
             use_pool: false,
             current_callee_depth: 0,
+            current_locals_bytes: 0,
             pseudo_stack: Vec::new(),
             pending_cmp_cond: None,
         }
@@ -1635,6 +1644,8 @@ fn lower_op(
         // ---- Function frame ----
         Op::Ent => {
             let locals = read_operand(text, pc, "Ent")?;
+            let aligned_locals = (((locals as u32) * 8) + 15) & !15;
+            reg_state.current_locals_bytes = aligned_locals;
             emit_prologue(code, locals, in_main, abi, reg_state.current_callee_depth);
             // BADC_SAVED_RBP_CHECK at function entry: trap if our own
             // saved-rbp slot (= what our caller pushed) is below the
@@ -1657,7 +1668,12 @@ fn lower_op(
                 emit_saved_rbp_check(code, op_pc, 0);
                 emit_saved_rbp_check(code, op_pc, 1);
             }
-            emit_epilogue(code, in_main, reg_state.current_callee_depth);
+            emit_epilogue(
+                code,
+                in_main,
+                reg_state.current_callee_depth,
+                reg_state.current_locals_bytes,
+            );
         }
         Op::Adj => {
             // Drop N pushed slots (16 bytes each, matching Op::Psh).
@@ -2102,6 +2118,30 @@ fn lower_op(
             });
             // Placeholder displacement; resolved post-trampoline-emission.
             emit_jmp_rel32(code, 0);
+        }
+        Op::Intrinsic => {
+            let id = read_operand(text, pc, "Intrinsic")?;
+            let intrinsic = crate::c5::op::Intrinsic::from_i64(id).ok_or_else(|| {
+                C5Error::Compile(crate::c5::error::fmt_internal_err(&alloc::format!(
+                    "native codegen (x86_64): unknown intrinsic id {id}"
+                )))
+            })?;
+            match intrinsic {
+                crate::c5::op::Intrinsic::Alloca => {
+                    // See the aarch64 mirror: c5's unified RSP
+                    // stack discipline conflicts with a mid-
+                    // expression `sub rsp, n`. The frontend
+                    // funnels `alloca` through the <alloca.h>
+                    // macro instead; reaching this lowering is an
+                    // ICE.
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        "native codegen (x86_64): Op::Intrinsic(Alloca) is reserved \
+                         but its lowering is parked until c5 grows a separate \
+                         c5-push register; the frontend should have funneled \
+                         alloca through the <alloca.h> macro",
+                    )));
+                }
+            }
         }
 
         // ---- Floating-point ----
@@ -2917,7 +2957,7 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool, abi: Abi, pool_
 /// slots inserted by the prologue -- they sit between the saved rbp
 /// and the return address, so we pop the ret addr into a temp, drop
 /// the slots, then push it back before `ret` consumes it.
-fn emit_epilogue(code: &mut Vec<u8>, is_main: bool, pool_depth: u8) {
+fn emit_epilogue(code: &mut Vec<u8>, is_main: bool, pool_depth: u8, locals_bytes: u32) {
     // STACK-CHECK INSTRUMENT (#46 bisection). When BADC_RSP_CHECK is
     // set in the env, emit a runtime check at the start of every
     // epilogue: rsp must equal rbp minus the prologue's reservation.
@@ -2942,6 +2982,7 @@ fn emit_epilogue(code: &mut Vec<u8>, is_main: bool, pool_depth: u8) {
     // value the trap writes to stderr identifies the corrupting
     // function.)
     emit_mov_rr(code, Reg::RAX, Reg::R13);
+    let _ = locals_bytes; // see commentary below
     // Restore the pool first (it sits on top of saved-r13).
     emit_restore_pool(code, pool_depth);
     // Restore r13 from its 16-byte slot at [rsp]. We then drop both

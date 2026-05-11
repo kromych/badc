@@ -192,6 +192,13 @@ pub struct Compiler {
     /// picks `Console`". Read only by the PE writers.
     pp_subsystem: Option<crate::c5::preprocessor::Subsystem>,
 
+    /// `#pragma intrinsic("name")` map drained from the
+    /// preprocessor. Used at declaration time to stamp
+    /// `Symbol::intrinsic` on matching callables so the
+    /// call-site lowering can substitute `Op::Intrinsic <id>`
+    /// for the regular Psh/Jsr/JsrExt + Adj sequence.
+    pp_intrinsics: alloc::collections::BTreeMap<String, i64>,
+
     /// Bytecode positions (indices into `text`) of `Op::Imm` operands
     /// that hold an offset into the data segment. Recorded at emit time
     /// because the native backend can't rediscover them from the
@@ -620,6 +627,7 @@ impl Compiler {
         let pp_include_trace = pp.include_trace;
         let pp_entrypoint = pp.entrypoint;
         let pp_subsystem = pp.subsystem;
+        let pp_intrinsics = pp.intrinsics;
 
         let mut symbols = Vec::new();
         let mut symbol_index = lexer::SymbolIndex::new();
@@ -663,6 +671,7 @@ impl Compiler {
             include_trace: pp_include_trace,
             pp_entrypoint,
             pp_subsystem,
+            pp_intrinsics,
             data_imm_positions: Vec::new(),
             code_imm_positions: Vec::new(),
             tls_data: Vec::new(),
@@ -2246,105 +2255,144 @@ impl Compiler {
             self.next()?;
             if self.lex.tk == '(' as i64 {
                 self.next()?;
-                // Snapshot the declared signature up front: the per-arg
-                // type checks read from `expected_params` and `is_variadic`,
-                // and we don't want a recursive call to clobber them via
-                // self-mutation. Cloning the Vec is cheap (typically 1-3
-                // i64s) compared to the cost of the type check itself.
-                let expected_params = self.symbols[id_idx].params.clone();
-                let is_variadic = self.symbols[id_idx].is_variadic;
-                let fn_name_for_warn = self.symbols[id_idx].name.clone();
-                // Struct-returning callees use a hidden out-pointer
-                // arg at val=2: the caller pre-allocates a temp for
-                // the result and passes its address as arg 0; the
-                // callee's `return s` writes to *(out_pointer)
-                // before Lev. The result expression's value (in
-                // `a`) becomes the temp's address so an enclosing
-                // `lhs = call(...)` Mcpy reads from there.
-                let callee_ret_ty = self.symbols[id_idx].type_;
-                let callee_returns_struct = self.symbols[id_idx].class == Token::Fun as i64
-                    && is_struct_ty(callee_ret_ty)
-                    && struct_ptr_depth(callee_ret_ty) == 0;
-                // Token::Sys (libc) calls returning a struct by
-                // value would need real platform-ABI register
-                // packing -- SysV's two-register split for
-                // 8 < size <= 16, Win64's hidden out-pointer for
-                // size > 8, AAPCS64's HFA / two-GPR split, and so
-                // on. The c5-internal "address-as-value, hidden
-                // out-pointer at val=2" convention only works for
-                // c5-to-c5 calls. Refuse the call up front rather
-                // than emit a silently-broken sequence.
-                if self.symbols[id_idx].class == Token::Sys as i64
-                    && is_struct_ty(callee_ret_ty)
-                    && struct_ptr_depth(callee_ret_ty) == 0
-                {
-                    return Err(self.compile_err(format!(
-                        "`{}` returns a struct by value, but the \
+                // Compiler-builtin intrinsic call (`alloca`, future
+                // atomics / cpuid / ...). The frontend stamped the
+                // symbol's `intrinsic` field at declaration time
+                // from `#pragma intrinsic("name")`. Skip the usual
+                // staging-slot dance and per-arg FP-mask shenanigans
+                // -- intrinsics today take exactly one integer
+                // argument and leave the result in the accumulator,
+                // so we just evaluate the arg expression and emit
+                // `Op::Intrinsic <id>`. Multi-arg / FP-arg intrinsics
+                // can grow this branch as needed.
+                if let Some(&intrinsic_id) = self.pp_intrinsics.get(&self.symbols[id_idx].name) {
+                    let fn_name = self.symbols[id_idx].name.clone();
+                    if self.lex.tk == ')' as i64 {
+                        return Err(self
+                            .compile_err(format!("intrinsic `{fn_name}` requires one argument")));
+                    }
+                    self.expr(Token::Assign as i64)?;
+                    // Coerce a float argument to int when the
+                    // intrinsic expects an integer size (the only
+                    // shape we have today). Mirrors the assignment
+                    // conversion in `convert_assign_rhs`.
+                    if is_floating_scalar(self.ty) {
+                        self.emit_op(Op::Fcvtfi);
+                        self.ty = Ty::Int as i64;
+                    }
+                    if self.lex.tk != ')' as i64 {
+                        return Err(self.compile_err(format!(
+                            "intrinsic `{fn_name}` takes exactly one argument"
+                        )));
+                    }
+                    self.next()?;
+                    self.emit_op(Op::Intrinsic);
+                    self.emit_val(intrinsic_id);
+                    // Result is a `void *` -- bump the return type
+                    // to a pointer so downstream uses (assigning to
+                    // a `T *`, casting via `(T *)alloca(n)`) see the
+                    // right shape.
+                    self.ty = (Ty::Char as i64) + (Ty::Ptr as i64);
+                } else {
+                    // Snapshot the declared signature up front: the per-arg
+                    // type checks read from `expected_params` and `is_variadic`,
+                    // and we don't want a recursive call to clobber them via
+                    // self-mutation. Cloning the Vec is cheap (typically 1-3
+                    // i64s) compared to the cost of the type check itself.
+                    let expected_params = self.symbols[id_idx].params.clone();
+                    let is_variadic = self.symbols[id_idx].is_variadic;
+                    let fn_name_for_warn = self.symbols[id_idx].name.clone();
+                    // Struct-returning callees use a hidden out-pointer
+                    // arg at val=2: the caller pre-allocates a temp for
+                    // the result and passes its address as arg 0; the
+                    // callee's `return s` writes to *(out_pointer)
+                    // before Lev. The result expression's value (in
+                    // `a`) becomes the temp's address so an enclosing
+                    // `lhs = call(...)` Mcpy reads from there.
+                    let callee_ret_ty = self.symbols[id_idx].type_;
+                    let callee_returns_struct = self.symbols[id_idx].class == Token::Fun as i64
+                        && is_struct_ty(callee_ret_ty)
+                        && struct_ptr_depth(callee_ret_ty) == 0;
+                    // Token::Sys (libc) calls returning a struct by
+                    // value would need real platform-ABI register
+                    // packing -- SysV's two-register split for
+                    // 8 < size <= 16, Win64's hidden out-pointer for
+                    // size > 8, AAPCS64's HFA / two-GPR split, and so
+                    // on. The c5-internal "address-as-value, hidden
+                    // out-pointer at val=2" convention only works for
+                    // c5-to-c5 calls. Refuse the call up front rather
+                    // than emit a silently-broken sequence.
+                    if self.symbols[id_idx].class == Token::Sys as i64
+                        && is_struct_ty(callee_ret_ty)
+                        && struct_ptr_depth(callee_ret_ty) == 0
+                    {
+                        return Err(self.compile_err(format!(
+                            "`{}` returns a struct by value, but the \
                          platform-ABI struct-return convention isn't \
                          implemented for Token::Sys calls. Use a \
                          pointer-returning variant or pass an out-buffer.",
-                        fn_name_for_warn
-                    )));
-                }
-                let mut nargs = 0;
-                // For struct returns, allocate a result temp now
-                // so its address can be pushed before the
-                // declared-arg pushes.
-                let saved_loc_offs_for_result = self.loc_offs;
-                let result_temp_off: i64 = if callee_returns_struct {
-                    let slots = self.slots_of_type(callee_ret_ty);
-                    self.loc_offs += slots;
-                    if self.loc_offs > self.max_loc_offs {
-                        self.max_loc_offs = self.loc_offs;
+                            fn_name_for_warn
+                        )));
                     }
-                    -self.loc_offs
-                } else {
-                    0
-                };
-                // c5 uses cdecl-style arg passing: args are pushed
-                // right-to-left so the i'th declared param sits at
-                // `[bp + 16*(i+1)]`. The parser still has to evaluate
-                // args left-to-right (so observable side effects
-                // happen in source order), so each arg gets parked in
-                // a transient temp local and we re-emit the pushes in
-                // reverse once they're all evaluated.
-                let saved_loc_offs = self.loc_offs;
-                let mut temp_offsets: Vec<i64> = Vec::new();
-                // Per-arg FP flag, captured at evaluation time. Used
-                // below when the call is `Token::Sys` to build a bit
-                // mask the codegen reads for variadic FP packing
-                // (`printf("%f", x)` etc.). Order matches
-                // `temp_offsets`: index 0 = first declared arg.
-                let mut arg_is_fp: Vec<bool> = Vec::new();
-                while self.lex.tk != ')' as i64 {
-                    let arg_line = self.lex.line;
-                    // Allocate a temp slot for this arg.
-                    self.loc_offs += 1;
-                    if self.loc_offs > self.max_loc_offs {
-                        self.max_loc_offs = self.loc_offs;
-                    }
-                    let temp_off = -self.loc_offs;
-                    temp_offsets.push(temp_off);
+                    let mut nargs = 0;
+                    // For struct returns, allocate a result temp now
+                    // so its address can be pushed before the
+                    // declared-arg pushes.
+                    let saved_loc_offs_for_result = self.loc_offs;
+                    let result_temp_off: i64 = if callee_returns_struct {
+                        let slots = self.slots_of_type(callee_ret_ty);
+                        self.loc_offs += slots;
+                        if self.loc_offs > self.max_loc_offs {
+                            self.max_loc_offs = self.loc_offs;
+                        }
+                        -self.loc_offs
+                    } else {
+                        0
+                    };
+                    // c5 uses cdecl-style arg passing: args are pushed
+                    // right-to-left so the i'th declared param sits at
+                    // `[bp + 16*(i+1)]`. The parser still has to evaluate
+                    // args left-to-right (so observable side effects
+                    // happen in source order), so each arg gets parked in
+                    // a transient temp local and we re-emit the pushes in
+                    // reverse once they're all evaluated.
+                    let saved_loc_offs = self.loc_offs;
+                    let mut temp_offsets: Vec<i64> = Vec::new();
+                    // Per-arg FP flag, captured at evaluation time. Used
+                    // below when the call is `Token::Sys` to build a bit
+                    // mask the codegen reads for variadic FP packing
+                    // (`printf("%f", x)` etc.). Order matches
+                    // `temp_offsets`: index 0 = first declared arg.
+                    let mut arg_is_fp: Vec<bool> = Vec::new();
+                    while self.lex.tk != ')' as i64 {
+                        let arg_line = self.lex.line;
+                        // Allocate a temp slot for this arg.
+                        self.loc_offs += 1;
+                        if self.loc_offs > self.max_loc_offs {
+                            self.max_loc_offs = self.loc_offs;
+                        }
+                        let temp_off = -self.loc_offs;
+                        temp_offsets.push(temp_off);
 
-                    // Emit the `*temp = expr;` shape that c5's
-                    // assignment path already supports: address
-                    // first, push, then RHS, then Si.
-                    self.emit_lea(temp_off);
-                    self.emit_op(Op::Psh);
-                    self.expr(Token::Assign as i64)?;
+                        // Emit the `*temp = expr;` shape that c5's
+                        // assignment path already supports: address
+                        // first, push, then RHS, then Si.
+                        self.emit_lea(temp_off);
+                        self.emit_op(Op::Psh);
+                        self.expr(Token::Assign as i64)?;
 
-                    // Type-check before the Si overwrites self.ty.
-                    if (nargs as usize) < expected_params.len() {
-                        let want = expected_params[nargs as usize];
-                        let zero = self.last_emit_is_zero();
-                        let untyped = self.last_emit_was_indirect_call();
-                        if let Some(reason) =
-                            Self::type_warning_with_flags(want, self.ty, zero, untyped)
-                        {
-                            let got = self.ty;
-                            let want_s = format_type(want, &self.structs);
-                            let got_s = format_type(got, &self.structs);
-                            self.warn_at(
+                        // Type-check before the Si overwrites self.ty.
+                        if (nargs as usize) < expected_params.len() {
+                            let want = expected_params[nargs as usize];
+                            let zero = self.last_emit_is_zero();
+                            let untyped = self.last_emit_was_indirect_call();
+                            if let Some(reason) =
+                                Self::type_warning_with_flags(want, self.ty, zero, untyped)
+                            {
+                                let got = self.ty;
+                                let want_s = format_type(want, &self.structs);
+                                let got_s = format_type(got, &self.structs);
+                                self.warn_at(
                                 arg_line,
                                 format!(
                                     "{reason} in argument {} of `{}` (param={want_s}, arg={got_s})",
@@ -2352,204 +2400,207 @@ impl Compiler {
                                     fn_name_for_warn,
                                 ),
                             );
+                            }
+                            // C99 6.5.2.2p7: declared-parameter call
+                            // arguments undergo the same assignment
+                            // conversion as the `= expr` rule. If the
+                            // prototype expects `double` and the
+                            // actual is an integer, lift via
+                            // `Op::Fcvtif` so the IEEE-754 bit pattern
+                            // reaches the FP-arg register the codegen
+                            // routes through (xmm_N / d_N). Without
+                            // this, the integer bit pattern lands in
+                            // the GPR-arg register and libm reads
+                            // garbage out of the FP register.
+                            self.convert_assign_rhs(want);
+                        } else if !expected_params.is_empty() && !is_variadic {
+                            self.warn_at(
+                                arg_line,
+                                format!(
+                                    "too many arguments to `{}` (expected {}, got at least {})",
+                                    fn_name_for_warn,
+                                    expected_params.len(),
+                                    nargs + 1,
+                                ),
+                            );
                         }
-                        // C99 6.5.2.2p7: declared-parameter call
-                        // arguments undergo the same assignment
-                        // conversion as the `= expr` rule. If the
-                        // prototype expects `double` and the
-                        // actual is an integer, lift via
-                        // `Op::Fcvtif` so the IEEE-754 bit pattern
-                        // reaches the FP-arg register the codegen
-                        // routes through (xmm_N / d_N). Without
-                        // this, the integer bit pattern lands in
-                        // the GPR-arg register and libm reads
-                        // garbage out of the FP register.
-                        self.convert_assign_rhs(want);
-                    } else if !expected_params.is_empty() && !is_variadic {
-                        self.warn_at(
-                            arg_line,
-                            format!(
-                                "too many arguments to `{}` (expected {}, got at least {})",
-                                fn_name_for_warn,
-                                expected_params.len(),
-                                nargs + 1,
-                            ),
-                        );
-                    }
 
-                    arg_is_fp.push(is_floating_scalar(self.ty));
-                    // Refuse passing a struct by value to a
-                    // Token::Sys callee. The c5-internal "push
-                    // the address" convention works for c5-to-c5
-                    // calls (the callee copies into a fresh local
-                    // on entry); platform ABIs for libc instead
-                    // expect the bytes packed into argument
-                    // registers (SysV/AAPCS64: 1-2 GPRs for
-                    // structs <= 16 bytes; Win64: a single GPR
-                    // for <= 8 bytes, hidden pointer otherwise).
-                    // Implementing those splits is future work;
-                    // for now flag the mismatch loudly.
-                    if self.symbols[id_idx].class == Token::Sys as i64
-                        && is_struct_ty(self.ty)
-                        && struct_ptr_depth(self.ty) == 0
-                    {
-                        return Err(self.compile_err_at(
-                            arg_line,
-                            format!(
-                                "argument {} of `{}` is a struct passed by value, \
+                        arg_is_fp.push(is_floating_scalar(self.ty));
+                        // Refuse passing a struct by value to a
+                        // Token::Sys callee. The c5-internal "push
+                        // the address" convention works for c5-to-c5
+                        // calls (the callee copies into a fresh local
+                        // on entry); platform ABIs for libc instead
+                        // expect the bytes packed into argument
+                        // registers (SysV/AAPCS64: 1-2 GPRs for
+                        // structs <= 16 bytes; Win64: a single GPR
+                        // for <= 8 bytes, hidden pointer otherwise).
+                        // Implementing those splits is future work;
+                        // for now flag the mismatch loudly.
+                        if self.symbols[id_idx].class == Token::Sys as i64
+                            && is_struct_ty(self.ty)
+                            && struct_ptr_depth(self.ty) == 0
+                        {
+                            return Err(self.compile_err_at(
+                                arg_line,
+                                format!(
+                                    "argument {} of `{}` is a struct passed by value, \
                                  but the platform-ABI struct-arg convention isn't \
                                  implemented for Token::Sys calls. Pass `&s` (a \
                                  pointer to the struct) instead.",
-                                nargs + 1,
-                                fn_name_for_warn
-                            ),
-                        ));
-                    }
-                    self.emit_op(Op::Si);
-                    nargs += 1;
-                    if self.lex.tk == ',' as i64 {
-                        self.next()?;
-                    }
-                }
-                // Push from temp slots right-to-left so the first
-                // declared param ends up on top of the c5 stack.
-                for &temp_off in temp_offsets.iter().rev() {
-                    self.emit_lea(temp_off);
-                    self.emit_op(Op::Li);
-                    self.emit_op(Op::Psh);
-                }
-                // For struct-returning callees, push the hidden
-                // out-pointer (address of the result temp) so it
-                // lands at val=2 -- ahead of the first declared
-                // arg in the c5 stack walk. The callee's `return
-                // s` writes through it; on return we set `a` to
-                // the temp's address so the enclosing assignment
-                // can Mcpy from it.
-                if callee_returns_struct {
-                    self.emit_lea(result_temp_off);
-                    self.emit_op(Op::Psh);
-                }
-                // Release the staging slots; they'll be reused by
-                // the next call in this function. The result-temp
-                // slot stays alive (loc_offs not reset to it) until
-                // the enclosing expression consumes it.
-                let target_loc_offs = if callee_returns_struct {
-                    saved_loc_offs_for_result + self.slots_of_type(callee_ret_ty)
-                } else {
-                    saved_loc_offs
-                };
-                self.loc_offs = target_loc_offs;
-                // Arity underflow check (after the loop, when nargs is
-                // final). Only fires for non-variadic functions with a
-                // recorded signature.
-                if !is_variadic
-                    && !expected_params.is_empty()
-                    && (nargs as usize) < expected_params.len()
-                {
-                    let line = self.lex.line;
-                    self.warn_at(
-                        line,
-                        format!(
-                            "too few arguments to `{}` (expected {}, got {})",
-                            fn_name_for_warn,
-                            expected_params.len(),
-                            nargs,
-                        ),
-                    );
-                }
-                self.next()?;
-                if self.symbols[id_idx].class == Token::Sys as i64 {
-                    // External library call. The symbol's `val` is
-                    // the binding's flat index across all
-                    // `#pragma binding(...)` directives the
-                    // preprocessor parsed; the codegen / VM use it
-                    // as the GOT slot lookup key (native) or the
-                    // dispatch-table key (VM).
-                    let jsrext_pc = self.text.len();
-                    self.emit_op(Op::JsrExt);
-                    self.emit_val(self.symbols[id_idx].val);
-                    // Capture per-arg FP-ness for the codegen. Only
-                    // needed when at least one arg is FP; an
-                    // all-integer call rides the existing path.
-                    let mut mask: u32 = 0;
-                    for (i, &is_fp) in arg_is_fp.iter().enumerate() {
-                        if is_fp && i < 32 {
-                            mask |= 1u32 << i;
+                                    nargs + 1,
+                                    fn_name_for_warn
+                                ),
+                            ));
+                        }
+                        self.emit_op(Op::Si);
+                        nargs += 1;
+                        if self.lex.tk == ',' as i64 {
+                            self.next()?;
                         }
                     }
-                    if mask != 0 {
-                        self.call_fp_arg_masks.push((jsrext_pc, mask));
+                    // Push from temp slots right-to-left so the first
+                    // declared param ends up on top of the c5 stack.
+                    for &temp_off in temp_offsets.iter().rev() {
+                        self.emit_lea(temp_off);
+                        self.emit_op(Op::Li);
+                        self.emit_op(Op::Psh);
                     }
-                } else if self.symbols[id_idx].class == Token::Fun as i64 {
-                    self.emit_op(Op::Jsr);
-                    // Record a fixup so the operand gets re-resolved
-                    // after the callee's body lands. `val == 0`
-                    // means the body hasn't been parsed yet (the
-                    // symbol is from a forward declaration); the
-                    // value we emit now is a placeholder. After
-                    // every function body is parsed we walk this
-                    // list and rewrite each operand to the
-                    // post-body `ent_pc` of its callee. Calls that
-                    // already see a non-zero `val` (the callee's
-                    // body lands before the call, the common case)
-                    // still record an entry but the post-body walk
-                    // re-emits the same value -- a no-op rather
-                    // than a bug.
-                    let operand_pc = self.text.len();
-                    self.fn_call_fixups.push((operand_pc, id_idx));
-                    self.emit_val(self.symbols[id_idx].val);
-                } else if self.symbols[id_idx].class == Token::Loc as i64
-                    || self.symbols[id_idx].class == Token::Glo as i64
-                {
-                    if self.symbols[id_idx].class == Token::Loc as i64 {
-                        self.emit_lea(self.symbols[id_idx].val);
+                    // For struct-returning callees, push the hidden
+                    // out-pointer (address of the result temp) so it
+                    // lands at val=2 -- ahead of the first declared
+                    // arg in the c5 stack walk. The callee's `return
+                    // s` writes through it; on return we set `a` to
+                    // the temp's address so the enclosing assignment
+                    // can Mcpy from it.
+                    if callee_returns_struct {
+                        self.emit_lea(result_temp_off);
+                        self.emit_op(Op::Psh);
+                    }
+                    // Release the staging slots; they'll be reused by
+                    // the next call in this function. The result-temp
+                    // slot stays alive (loc_offs not reset to it) until
+                    // the enclosing expression consumes it.
+                    let target_loc_offs = if callee_returns_struct {
+                        saved_loc_offs_for_result + self.slots_of_type(callee_ret_ty)
                     } else {
-                        self.emit_data_imm(self.symbols[id_idx].val);
-                    }
-                    self.emit_op(Op::Li);
-                    self.emit_op(Op::Jsri);
-                } else {
-                    let name = self.symbols[id_idx].name.clone();
-                    let suggestion = match super::headers::header_declaring(&name) {
-                        Some(h) => format!(" -- try `#include <{h}>`"),
-                        None => String::new(),
+                        saved_loc_offs
                     };
-                    return Err(self.compile_err(format!("unknown function `{name}`{suggestion}")));
-                }
-                let total_pushed = if callee_returns_struct {
-                    nargs + 1
-                } else {
-                    nargs
-                };
-                if total_pushed > 0 {
-                    self.emit_op(Op::Adj);
-                    self.emit_val(total_pushed);
-                }
-                // For struct-returning callees, the result lives
-                // in the caller-allocated temp. After the call,
-                // load the temp's address into `a` so the
-                // expression's value (struct-rvalue semantics:
-                // address-as-value) flows into the enclosing
-                // assignment / `.field` access.
-                if callee_returns_struct {
-                    self.emit_lea(result_temp_off);
-                }
-                // For direct calls (Jsr/JsrExt) the symbol's `type_`
-                // is the declared return type. For indirect calls
-                // through a variable (Jsri), `type_` is the *variable*
-                // type (e.g. `int *` for a function pointer), not the
-                // return type -- the dialect has no place to record
-                // a function pointer's return type. Default to `int`
-                // for the result; the actual register value carries
-                // the full 8-byte return regardless of the tag, so
-                // assigning to a wider lvalue still preserves bits.
-                self.ty = if self.symbols[id_idx].class == Token::Loc as i64
-                    || self.symbols[id_idx].class == Token::Glo as i64
-                {
-                    Ty::Int as i64
-                } else {
-                    self.symbols[id_idx].type_
-                };
+                    self.loc_offs = target_loc_offs;
+                    // Arity underflow check (after the loop, when nargs is
+                    // final). Only fires for non-variadic functions with a
+                    // recorded signature.
+                    if !is_variadic
+                        && !expected_params.is_empty()
+                        && (nargs as usize) < expected_params.len()
+                    {
+                        let line = self.lex.line;
+                        self.warn_at(
+                            line,
+                            format!(
+                                "too few arguments to `{}` (expected {}, got {})",
+                                fn_name_for_warn,
+                                expected_params.len(),
+                                nargs,
+                            ),
+                        );
+                    }
+                    self.next()?;
+                    if self.symbols[id_idx].class == Token::Sys as i64 {
+                        // External library call. The symbol's `val` is
+                        // the binding's flat index across all
+                        // `#pragma binding(...)` directives the
+                        // preprocessor parsed; the codegen / VM use it
+                        // as the GOT slot lookup key (native) or the
+                        // dispatch-table key (VM).
+                        let jsrext_pc = self.text.len();
+                        self.emit_op(Op::JsrExt);
+                        self.emit_val(self.symbols[id_idx].val);
+                        // Capture per-arg FP-ness for the codegen. Only
+                        // needed when at least one arg is FP; an
+                        // all-integer call rides the existing path.
+                        let mut mask: u32 = 0;
+                        for (i, &is_fp) in arg_is_fp.iter().enumerate() {
+                            if is_fp && i < 32 {
+                                mask |= 1u32 << i;
+                            }
+                        }
+                        if mask != 0 {
+                            self.call_fp_arg_masks.push((jsrext_pc, mask));
+                        }
+                    } else if self.symbols[id_idx].class == Token::Fun as i64 {
+                        self.emit_op(Op::Jsr);
+                        // Record a fixup so the operand gets re-resolved
+                        // after the callee's body lands. `val == 0`
+                        // means the body hasn't been parsed yet (the
+                        // symbol is from a forward declaration); the
+                        // value we emit now is a placeholder. After
+                        // every function body is parsed we walk this
+                        // list and rewrite each operand to the
+                        // post-body `ent_pc` of its callee. Calls that
+                        // already see a non-zero `val` (the callee's
+                        // body lands before the call, the common case)
+                        // still record an entry but the post-body walk
+                        // re-emits the same value -- a no-op rather
+                        // than a bug.
+                        let operand_pc = self.text.len();
+                        self.fn_call_fixups.push((operand_pc, id_idx));
+                        self.emit_val(self.symbols[id_idx].val);
+                    } else if self.symbols[id_idx].class == Token::Loc as i64
+                        || self.symbols[id_idx].class == Token::Glo as i64
+                    {
+                        if self.symbols[id_idx].class == Token::Loc as i64 {
+                            self.emit_lea(self.symbols[id_idx].val);
+                        } else {
+                            self.emit_data_imm(self.symbols[id_idx].val);
+                        }
+                        self.emit_op(Op::Li);
+                        self.emit_op(Op::Jsri);
+                    } else {
+                        let name = self.symbols[id_idx].name.clone();
+                        let suggestion = match super::headers::header_declaring(&name) {
+                            Some(h) => format!(" -- try `#include <{h}>`"),
+                            None => String::new(),
+                        };
+                        return Err(
+                            self.compile_err(format!("unknown function `{name}`{suggestion}"))
+                        );
+                    }
+                    let total_pushed = if callee_returns_struct {
+                        nargs + 1
+                    } else {
+                        nargs
+                    };
+                    if total_pushed > 0 {
+                        self.emit_op(Op::Adj);
+                        self.emit_val(total_pushed);
+                    }
+                    // For struct-returning callees, the result lives
+                    // in the caller-allocated temp. After the call,
+                    // load the temp's address into `a` so the
+                    // expression's value (struct-rvalue semantics:
+                    // address-as-value) flows into the enclosing
+                    // assignment / `.field` access.
+                    if callee_returns_struct {
+                        self.emit_lea(result_temp_off);
+                    }
+                    // For direct calls (Jsr/JsrExt) the symbol's `type_`
+                    // is the declared return type. For indirect calls
+                    // through a variable (Jsri), `type_` is the *variable*
+                    // type (e.g. `int *` for a function pointer), not the
+                    // return type -- the dialect has no place to record
+                    // a function pointer's return type. Default to `int`
+                    // for the result; the actual register value carries
+                    // the full 8-byte return regardless of the tag, so
+                    // assigning to a wider lvalue still preserves bits.
+                    self.ty = if self.symbols[id_idx].class == Token::Loc as i64
+                        || self.symbols[id_idx].class == Token::Glo as i64
+                    {
+                        Ty::Int as i64
+                    } else {
+                        self.symbols[id_idx].type_
+                    };
+                } // close intrinsic-vs-normal-call else branch
             } else if self.symbols[id_idx].class == Token::Num as i64 {
                 self.emit_imm(self.symbols[id_idx].val);
                 self.ty = Ty::Int as i64;

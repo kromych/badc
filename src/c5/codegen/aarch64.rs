@@ -91,6 +91,14 @@ struct RegState<'a> {
     /// the epilogue must restore the same number. Caller-saved
     /// slots don't enter into this count (they're not saved).
     current_callee_depth: u8,
+    /// Local-byte reservation for the current function, captured on
+    /// `Op::Ent` and read on `Op::Lev`. The epilogue reverses the
+    /// prologue's `sub sp, sp, locals` and adjacent saved-x19 +
+    /// pool slot pushes off of FP; without the saved value
+    /// `Op::Intrinsic(Alloca)`'s `sub sp, sp, n` would leave SP
+    /// below the pool and the epilogue's pop sequence would read
+    /// alloca scratch as register state.
+    current_locals_bytes: u32,
     /// Runtime mirror of the c4 push-stack: each Psh appends an
     /// entry, each pop op pops one. `Some((slot, bank))` means the
     /// value is live in the bank/slot pool register; `None` means
@@ -115,6 +123,7 @@ impl<'a> RegState<'a> {
             plan,
             use_pool: false,
             current_callee_depth: 0,
+            current_locals_bytes: 0,
             pseudo_stack: Vec::new(),
             pending_cmp_cond: None,
         }
@@ -1443,9 +1452,16 @@ fn lower_op(
         // ---- Function frame ----
         Op::Ent => {
             let locals = read_operand(text, pc, "Ent")?;
+            let aligned_locals = (((locals as u32) * 8) + 15) & !15;
+            reg_state.current_locals_bytes = aligned_locals;
             emit_prologue(code, locals, in_main, reg_state.current_callee_depth);
         }
-        Op::Lev => emit_epilogue(code, in_main, reg_state.current_callee_depth),
+        Op::Lev => emit_epilogue(
+            code,
+            in_main,
+            reg_state.current_callee_depth,
+            reg_state.current_locals_bytes,
+        ),
         Op::Adj => {
             // Adj N drops N pushed slots (each slot is 16 bytes on
             // our native stack -- see Op::Psh below for why). With
@@ -1856,6 +1872,36 @@ fn lower_op(
                 )))
             })?;
             emit_got_tail_jump(code, plt_call_fixups, import_index);
+        }
+        Op::Intrinsic => {
+            let id = read_operand(text, pc, "Intrinsic")?;
+            let intrinsic = crate::c5::op::Intrinsic::from_i64(id).ok_or_else(|| {
+                C5Error::Compile(crate::c5::error::fmt_internal_err(&alloc::format!(
+                    "native codegen (aarch64): unknown intrinsic id {id}"
+                )))
+            })?;
+            match intrinsic {
+                crate::c5::op::Intrinsic::Alloca => {
+                    // Reserved: c5's unified-SP stack discipline
+                    // (`Op::Psh` / `Op::Si` / `Op::Adj` all walk
+                    // the same SP that locals / pool slots sit
+                    // above) means a mid-expression `sub sp, sp,
+                    // n` would shift the pending push slots out
+                    // from under the matching pop. The frontend
+                    // therefore routes `alloca` through the
+                    // header-side `#define alloca(n) malloc(n)`
+                    // macro today and never emits this op for
+                    // the alloca intrinsic; if it does, that's an
+                    // ICE so the malformed bytecode is caught at
+                    // emit time rather than at runtime.
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        "native codegen (aarch64): Op::Intrinsic(Alloca) is reserved \
+                         but its lowering is parked until c5 grows a separate \
+                         c5-push register; the frontend should have funneled \
+                         alloca through the <alloca.h> macro",
+                    )));
+                }
+            }
         }
 
         // ---- Floating-point arithmetic ----
@@ -2806,8 +2852,9 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool, callee_pool_dep
 /// saved x19, tear down the frame, return. For main we also drop
 /// the two 16-byte argc/argv slots so the stack pointer is back to
 /// what the kernel / Rust caller handed us.
-fn emit_epilogue(code: &mut Vec<u8>, is_main: bool, callee_pool_depth: u8) {
+fn emit_epilogue(code: &mut Vec<u8>, is_main: bool, callee_pool_depth: u8, locals_bytes: u32) {
     emit_mov_reg(code, Reg::X0, Reg::X19);
+    let _ = locals_bytes; // see commentary below
     // Stack layout below this point (top-down):
     //   callee pool regs (`callee_pool_depth` of them, 16 bytes per slot)
     //   saved x19

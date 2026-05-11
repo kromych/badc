@@ -301,9 +301,25 @@ pub enum Op {
     /// discriminant -- adding new ops elsewhere requires keeping
     /// the two in lockstep.
     TailExt,
+
+    /// Compiler-builtin intrinsic. Operand: the [`Intrinsic`]
+    /// discriminant cast to `i64`. The accumulator carries the
+    /// single integer argument on entry; the lowered sequence
+    /// leaves the result in the accumulator. Used for
+    /// architecture-specific shapes (`alloca`, future atomics
+    /// / cpuid / vector-builtin surface) that can't sit behind a
+    /// regular dynamic-binding `Op::JsrExt` call -- e.g.
+    /// `alloca` has to bump the *caller's* stack pointer and
+    /// return a pointer into the same frame, which a normal
+    /// function call can't do. The frontend tags an intrinsic
+    /// callee by setting `Symbol::intrinsic` (driven by
+    /// `#pragma intrinsic("name")`); call-site lowering then
+    /// emits this op instead of the regular push/jsr/adj
+    /// sequence.
+    Intrinsic,
 }
 
-const OPS: [Op; 84] = [
+const OPS: [Op; 85] = [
     Op::Lea,
     Op::Imm,
     Op::Jmp,
@@ -390,7 +406,36 @@ const OPS: [Op; 84] = [
     Op::Mcpy,
     Op::TlsLea,
     Op::TailExt,
+    Op::Intrinsic,
 ];
+
+/// Compiler-builtin intrinsic discriminant. Each lowering target
+/// dispatches on this value to emit the per-arch sequence.
+/// Keep the discriminants stable -- bytecode produced under an
+/// older c5 may live in a vendor-deps archive and re-running it
+/// would mis-decode the operand if these reshuffle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i64)]
+pub enum Intrinsic {
+    /// `alloca(n)` / `__builtin_alloca(n)` -- bumps the caller's
+    /// native stack pointer down by `n` (rounded up to the
+    /// platform's stack-alignment, typically 16) and returns
+    /// the new SP as a `void *`. The memory is reclaimed when
+    /// the caller's function returns. The VM runs this through
+    /// a per-call-frame leak list -- malloc + remember to free
+    /// at the matching `Op::Lev` -- because the VM doesn't
+    /// have a real native stack to bump.
+    Alloca = 1,
+}
+
+impl Intrinsic {
+    pub fn from_i64(v: i64) -> Option<Self> {
+        match v {
+            1 => Some(Intrinsic::Alloca),
+            _ => None,
+        }
+    }
+}
 
 impl Op {
     pub fn from_i64(val: i64) -> Option<Self> {
@@ -420,7 +465,8 @@ impl Op {
             // arithmetic / comparison ops.
             Lea | Imm | Jmp | Jsr | Bz | Bnz | Ent | Adj | JsrExt | TailExt | AddI | SubI
             | MulI | AndI | OrI | XorI | ShlI | ShrI | ShruI | EqI | NeI | LtI | GtI | LeI
-            | GeI | UltI | UgtI | UleI | UgeI | LdLocI | LdLocC | StLocI | Mcpy | TlsLea => 1,
+            | GeI | UltI | UgtI | UleI | UgeI | LdLocI | LdLocC | StLocI | Mcpy | TlsLea
+            | Intrinsic => 1,
             // Everything else -- arithmetic, loads/stores, push,
             // indirect-jump, return, etc. -- is encoded in a
             // single word with no operand.

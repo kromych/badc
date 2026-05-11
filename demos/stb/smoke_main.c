@@ -219,19 +219,16 @@ static void te_deletechars(struct te_str *s, int pos, int num) {
 #define STB_VOXEL_RENDER_IMPLEMENTATION
 #include "stb_voxel_render.h"
 
-/* stb_vorbis uses `alloca()` inside a gated macro:
- *   #define temp_alloc(f,size) \
- *     (f->alloc.alloc_buffer ? setup_temp_malloc(f,size) : alloca(size))
- * When the caller supplies an `alloc_buffer`, the alloca branch is
- * dead at runtime but the compiler still has to parse the symbol.
- * Shim it to a NULL expression so c5 type-checks the conditional
- * without needing a real stack-bumping alloca intrinsic. On the
- * Windows lanes msvc_compat.h sets `__MINGW32__`, which makes the
- * vorbis source re-`#define alloca __builtin_alloca`; shim that
- * spelling too. The scenario below always passes an alloc_buffer,
- * so this is never executed. */
-#define alloca(n) ((void *)0)
-#define __builtin_alloca(n) ((void *)0)
+/* Pull in c5's `<alloca.h>` shim. It exposes `alloca` and
+ * `__builtin_alloca` as macros that funnel through `malloc`
+ * (leaking per call, bounded for the smoke run) so stb_vorbis
+ * can take the `alloca` branch of its `temp_alloc` gate when
+ * the caller passes a NULL alloc_buffer. Including this BEFORE
+ * stb_vorbis.c is important because the source's `#ifdef
+ * __MINGW32__` re-defines `alloca` to `__builtin_alloca`, and
+ * the macro substitution wins over the re-#define only if our
+ * #defines are already in place when stb_vorbis is parsed. */
+#include <alloca.h>
 
 /* c5's slot model reports `sizeof(float)` as 8 (one VM slot)
  * rather than the on-disk 4 bytes. stb_vorbis's

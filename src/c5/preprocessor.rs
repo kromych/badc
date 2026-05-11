@@ -244,6 +244,15 @@ pub(crate) struct Preprocessor {
     /// reads this to set the optional header's Subsystem field;
     /// non-PE targets keep the field at `None` and ignore it.
     pub subsystem: Option<Subsystem>,
+    /// `#pragma intrinsic("name")` declarations -- a map from
+    /// callable identifier to the `Intrinsic` discriminant the
+    /// frontend should stamp on the matching `Symbol::intrinsic`
+    /// at declaration time. Today's surface is small (`alloca`
+    /// / `__builtin_alloca`); future atomics / cpuid / vector
+    /// builtins plug in by adding a new `Intrinsic` enum
+    /// variant in `op.rs` and a one-line entry in
+    /// [`Self::parse_pragma_intrinsic`].
+    pub intrinsics: alloc::collections::BTreeMap<String, i64>,
 }
 
 /// Windows PE subsystem selector. Mirrors the `IMAGE_SUBSYSTEM_*`
@@ -362,6 +371,7 @@ impl Preprocessor {
             show_includes: false,
             entrypoint: None,
             subsystem: None,
+            intrinsics: alloc::collections::BTreeMap::new(),
         }
     }
 
@@ -1279,6 +1289,12 @@ impl Preprocessor {
             return self.parse_pragma_export(inner.trim(), line_no, filename);
         }
         if let Some(inner) = args
+            .strip_prefix("intrinsic(")
+            .and_then(|s| s.strip_suffix(')'))
+        {
+            return self.parse_pragma_intrinsic(inner.trim(), line_no, filename);
+        }
+        if let Some(inner) = args
             .strip_prefix("entrypoint(")
             .and_then(|s| s.strip_suffix(')'))
         {
@@ -1339,6 +1355,63 @@ impl Preprocessor {
             )));
         }
         self.entrypoint = Some(name.to_string());
+        Ok(())
+    }
+
+    /// `#pragma intrinsic("name")` -- tag the named callable
+    /// symbol as a compiler-builtin intrinsic. At
+    /// declaration time the frontend stamps the matching
+    /// `Symbol::intrinsic` field with the [`Intrinsic`]
+    /// discriminant from `op.rs`, and the call-site lowering
+    /// emits `Op::Intrinsic <id>` instead of a regular
+    /// Psh/Jsr/JsrExt + Adj sequence. The arg list is
+    /// expected to be a quoted string so future intrinsics
+    /// whose spellings collide with c5 keywords don't trip
+    /// the identifier parser; the body uses `is_ident` to
+    /// stay strict.
+    fn parse_pragma_intrinsic(
+        &mut self,
+        inner: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<(), C5Error> {
+        let raw = inner.trim();
+        let name = raw.strip_prefix('"').and_then(|s| s.strip_suffix('"'));
+        let Some(name) = name else {
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                &format!(
+                    "`#pragma intrinsic({raw})` -- expected a quoted \
+                     identifier, e.g. `#pragma intrinsic(\"alloca\")`"
+                ),
+            )));
+        };
+        if !is_ident(name) {
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                &format!(
+                    "`#pragma intrinsic(\"{name}\")` -- name must be a \
+                     plain identifier"
+                ),
+            )));
+        }
+        let id = match name {
+            "alloca" | "__builtin_alloca" => super::op::Intrinsic::Alloca as i64,
+            _ => {
+                return Err(C5Error::Compile(super::error::fmt_compile_err(
+                    filename,
+                    line_no,
+                    &format!(
+                        "`#pragma intrinsic(\"{name}\")` -- unknown \
+                         intrinsic; supported today: alloca, \
+                         __builtin_alloca"
+                    ),
+                )));
+            }
+        };
+        self.intrinsics.insert(name.to_string(), id);
         Ok(())
     }
 

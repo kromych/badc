@@ -1208,6 +1208,27 @@ impl<H: Host> Vm<H> {
                     pc = self.decode_pc(raw)?;
                     sp += 8;
                 }
+                Op::Intrinsic => {
+                    let id = self.text[pc];
+                    let intrinsic = crate::c5::op::Intrinsic::from_i64(id).ok_or_else(|| {
+                        C5Error::Runtime(alloc::format!("VM: unknown intrinsic id {id}"))
+                    })?;
+                    match intrinsic {
+                        crate::c5::op::Intrinsic::Alloca => {
+                            // Reserved: see the aarch64 / x86_64
+                            // mirrors. The frontend currently
+                            // routes `alloca` through the
+                            // <alloca.h> macro, so this op should
+                            // never reach the VM.
+                            return Err(C5Error::Runtime(
+                                "VM: Op::Intrinsic(Alloca) is reserved but the \
+                                 lowering is parked; the frontend should have \
+                                 funneled alloca through the <alloca.h> macro"
+                                    .to_string(),
+                            ));
+                        }
+                    }
+                }
             }
         }
     }

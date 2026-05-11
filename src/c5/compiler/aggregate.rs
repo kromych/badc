@@ -313,6 +313,7 @@ impl Compiler {
                             ty: inner_field.ty,
                             array_size: inner_field.array_size,
                             inner_array_size: inner_field.inner_array_size,
+                            array_dims: inner_field.array_dims,
                             bit_offset: inner_field.bit_offset,
                             bit_width: inner_field.bit_width,
                         });
@@ -476,12 +477,14 @@ impl Compiler {
                 }
 
                 let field_inner_array_size = self.symbols[id_idx].inner_array_size;
+                let field_array_dims = core::mem::take(&mut self.symbols[id_idx].array_dims);
                 self.structs[struct_id].fields.push(StructField {
                     name: field_name,
                     offset: field_offset,
                     ty: field_ty,
                     array_size: field_array_size,
                     inner_array_size: field_inner_array_size,
+                    array_dims: field_array_dims,
                     bit_offset,
                     bit_width,
                 });

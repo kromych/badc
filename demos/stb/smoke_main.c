@@ -7,26 +7,26 @@
  * Headers currently blocked on c5 dialect gaps are gated off
  * with a TODO line naming the specific follow-up to track.
  *
- * Headers covered today (17/21):
+ * Headers covered today (18/21):
  *   stb_c_lexer.h, stb_connected_components.h, stb_divide.h,
  *   stb_ds.h, stb_dxt.h, stb_easy_font.h,
  *   stb_herringbone_wang_tile.h, stb_hexwave.h, stb_image.h,
  *   stb_image_write.h, stb_include.h, stb_leakcheck.h,
  *   stb_perlin.h, stb_rect_pack.h, stb_sprintf.h, stb_textedit.h,
- *   stb_truetype.h
+ *   stb_truetype.h, stb_voxel_render.h
  *
  * Headers gated off (rationale + tracking issue):
  *   stb_image_resize2.h -- forward-referenced function pointers
  *     in a static dispatch table; needs a deferred-resolution
  *     CodeReloc path for initializer slots.
- *   stb_tilemap_editor.h -- 3D array indexing
- *     (`tm->data[0][i][0]`) on a struct field; needs full
- *     multi-dim shape tracking on Symbol/StructField.
+ *   stb_tilemap_editor.h -- non-constant local struct
+ *     initializers (`stbte__colorrect r = { x0, y0, ... };`
+ *     mixes runtime arguments into a brace-list at block scope).
+ *     C99 6.7.8p13 admits these for automatic-storage
+ *     aggregates; c5's local-struct-init path currently only
+ *     accepts compile-time constants.
  *   stb_vorbis.c -- `alloca` intrinsic + pointer-to-array casts
  *     (`(short (*)[8]) p`); both gaps tracked in gh #77.
- *   stb_voxel_render.h -- 3D static-table indexing
- *     (`stbvox_face_up_normal_012[ht[2]][ht[1]][ht[0]]`); same
- *     underlying gap as stb_tilemap_editor.
  */
 
 #include <stdint.h>
@@ -210,18 +210,17 @@ static void te_deletechars(struct te_str *s, int pos, int num) {
 #define STB_TEXTEDIT_IMPLEMENTATION
 #include "stb_textedit.h"
 
-/* TODO(stb-voxel-render): blocked on 3D array indexing.
- * `stbvox_face_up_normal_012[ht[2]][ht[1]][ht[0]]` (line 2847)
- * and similar expressions read a single scalar from a 3D
- * static table. c5 only tracks the inner-most dim
- * (`inner_array_size`), so the third index loses its stride
- * and the codegen rejects with "pointer type expected".
- * Re-enable once Symbol carries a Vec<i64> of dimensions. */
-/*
 #define STBVOX_CONFIG_MODE 0
 #define STB_VOXEL_RENDER_IMPLEMENTATION
 #include "stb_voxel_render.h"
-*/
+
+/* TODO(stb-tilemap-editor): blocked on non-constant local
+ * struct initializers. The header writes shapes like
+ * `stbte__colorrect r = { x0,y0,x1,y1,color };` inside
+ * functions, where the brace-list mixes runtime parameter
+ * values. c5's local-struct-init path currently only accepts
+ * compile-time constants (C99 6.7.8p13 admits non-constant
+ * initializers for automatic-storage aggregates). */
 
 /* ============================================================ */
 /*  Per-header smoke scenarios. Each returns 0 on success and
@@ -609,6 +608,19 @@ static int scenario_wang_tile(void) {
     return 0;
 }
 
+static int scenario_voxel_render(void) {
+    /* stb_voxel_render runs a heavy mesh-construction pipeline
+     * that needs real input buffers + a GL-style backing store
+     * to validate end-to-end. Here we just confirm the
+     * `stbvox_init_mesh_maker` symbol resolves and the
+     * implementation TU compiled cleanly through c5; further
+     * exercise would need a non-trivial test rig. */
+    void (*entry)(stbvox_mesh_maker *) = stbvox_init_mesh_maker;
+    if (entry == NULL) return 1;
+    printf("voxel_render OK: symbol resolves\n");
+    return 0;
+}
+
 static int scenario_textedit(void) {
     struct te_str s;
     STB_TexteditState state;
@@ -708,9 +720,9 @@ int main(int argc, char **argv) {
     if (scenario_leakcheck() != 0) return 1;
     if (scenario_truetype() != 0) return 1;
     if (scenario_wang_tile() != 0) return 1;
+    if (scenario_voxel_render() != 0) return 1;
     if (scenario_textedit() != 0) return 1;
     if (scenario_include() != 0) return 1;
-    /* voxel_render gated off above */
     printf("stb smoke: all scenarios green\n");
     return 0;
 }

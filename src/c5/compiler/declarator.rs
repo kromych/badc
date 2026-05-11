@@ -206,14 +206,16 @@ impl Compiler {
                 self.next()?;
                 array_size = n;
             }
-            // Trailing `[M]` dimension for 2D arrays. c5 stores
-            // `array_size = N*M` (total element count) and
-            // `inner_array_size = M` on the symbol so the indexing
-            // path can scale the first index by `M * sizeof(T)`.
-            // Higher-dimensional arrays are flattened: their inner
-            // strides aren't tracked, but the byte storage is
-            // correct.
-            let mut inner_dim: i64 = 0;
+            // Trailing dimensions for N-dim arrays. c5 stores
+            // `array_size = product(dims)` (total element count),
+            // `inner_array_size = dims[1]` for the 2D-init padding
+            // path, and `array_dims = [dims..]` for the indexing
+            // path so 3D / 4D / ... arrays compute strides at
+            // every level.
+            let mut dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
+            if array_size > 0 {
+                dims.push(array_size);
+            }
             while self.lex.tk == Token::Brak as i64 {
                 self.next()?;
                 if self.lex.tk == ']' as i64 {
@@ -230,29 +232,34 @@ impl Compiler {
                     return Err(self.compile_err("close bracket expected in array declarator"));
                 }
                 self.next()?;
-                if inner_dim == 0 {
-                    inner_dim = m;
-                }
+                dims.push(m);
                 if array_size > 0 {
                     array_size *= m;
                 }
             }
+            let inner_dim: i64 = if dims.len() >= 2 { dims[1] } else { 0 };
             if idx != usize::MAX {
                 // Always overwrite, even with 0, so a rebinding of a
-                // name that previously carried a 2D dimension (a
+                // name that previously carried a multi-dim shape (a
                 // struct field, an outer-scope local, etc.) doesn't
-                // inherit the stale row stride. C99 6.2.1
-                // identifier scopes: each new binding starts fresh,
-                // so any per-symbol shape metadata must be cleared
-                // when the binding's scope begins.
+                // inherit the stale strides. C99 6.2.1 identifier
+                // scopes: each new binding starts fresh, so any
+                // per-symbol shape metadata must be cleared when the
+                // binding's scope begins.
                 self.symbols[idx].inner_array_size = inner_dim;
+                self.symbols[idx].array_dims = if dims.len() >= 2 {
+                    dims
+                } else {
+                    alloc::vec::Vec::new()
+                };
             }
         } else if idx != usize::MAX {
             // No `[` suffix at all -- the declarator is a scalar or
             // pointer. Same rationale as above: scrub any stale
-            // inner_array_size carried over from an earlier binding
-            // of the same name.
+            // multi-dim metadata carried over from an earlier
+            // binding of the same name.
             self.symbols[idx].inner_array_size = 0;
+            self.symbols[idx].array_dims = alloc::vec::Vec::new();
         }
 
         Ok((idx, ty, array_size))

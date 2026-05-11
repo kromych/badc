@@ -94,12 +94,18 @@ pub struct StructField {
     /// count (`N * M`) and `inner_array_size = M`. `s.xs` decays
     /// to a pointer-to-element the same way a local array does.
     pub array_size: i64,
-    /// Inner dimension for a 2D array field (`T xs[N][M]` -> `M`).
-    /// Mirrors `Symbol::inner_array_size`: with this set, the
-    /// `s.xs[i]` postfix scales `i` by `M * sizeof(T)` and stays
-    /// at pointer type so the next `[j]` decays to an element.
-    /// 0 for 1D / scalar fields.
+    /// Inner dimension for a 2D-or-greater array field
+    /// (`T xs[N][M]` -> `M`). Mirrors `Symbol::inner_array_size`:
+    /// with this set, the `s.xs[i]` postfix scales `i` by
+    /// `M * sizeof(T)` and stays at pointer type so the next
+    /// `[j]` decays to an element. Used by the 2D-init padding
+    /// path. 0 for 1D / scalar fields.
     pub inner_array_size: i64,
+    /// Full dimension list for an N-dim array field, outermost
+    /// first. Mirrors `Symbol::array_dims`. Empty for non-array
+    /// or 1D-array fields. The field-access decay path reads
+    /// this to compute the per-level strides for `s.xs[i][j][k]`.
+    pub array_dims: Vec<i64>,
     /// Bit offset within the 8-byte storage unit. Meaningful only
     /// when `bit_width > 0`.
     pub bit_offset: u32,
@@ -315,6 +321,16 @@ pub struct Compiler {
     /// it before falling back to the regular pointer-arithmetic
     /// stride. Zero means "use the regular stride."
     pending_index_stride: i64,
+
+    /// Strides for the *remaining* subscript levels of an N-dim
+    /// array (N >= 3), beyond the first one held in
+    /// `pending_index_stride`. For `T xs[A][B][C]` after the
+    /// `xs` decay the levels are: first = `B*C*sizeof(T)`
+    /// (in `pending_index_stride`), then `C*sizeof(T)` (in this
+    /// vec), then the regular `sizeof(T)` fall-through. Each
+    /// Brak postfix consumes one stride and shifts the rest
+    /// down. Empty means "no further multi-dim strides queued."
+    pending_index_strides_tail: Vec<i64>,
 
     /// Per-row element count for the next 2D-array initializer.
     /// Set by callers of `collect_array_initializer` when the
@@ -659,6 +675,7 @@ impl Compiler {
             pending_fn_params: None,
             pending_fn_ptr_indirection: None,
             pending_index_stride: 0,
+            pending_index_strides_tail: Vec::new(),
             pending_init_inner_dim: 0,
             source_lines: Vec::new(),
             source_functions: Vec::new(),
@@ -2580,15 +2597,16 @@ impl Compiler {
                     // `count * sizeof(elem)` instead of the
                     // decayed pointer's `sizeof(T*) = 8`.
                     self.last_array_decay_size = self.symbols[id_idx].array_size;
-                    // 2D-array decay: stash the row stride so the
-                    // next `[i]` postfix scales by the inner
-                    // dimension instead of the element size. The
-                    // Brak handler reads-and-clears it.
-                    let inner = self.symbols[id_idx].inner_array_size;
-                    if inner > 0 {
-                        let elem_ty = self.symbols[id_idx].type_;
-                        self.pending_index_stride = inner * self.size_of_type(elem_ty) as i64;
-                    }
+                    // N-dim-array decay: seed strides for each of
+                    // the N-1 levels of multi-dim subscript. The
+                    // first stride goes into `pending_index_stride`
+                    // (consumed by the next Brak); the rest queue
+                    // in `pending_index_strides_tail` and shift
+                    // down per Brak.
+                    let elem_ty = self.symbols[id_idx].type_;
+                    let elem_size = self.size_of_type(elem_ty) as i64;
+                    let dims = self.symbols[id_idx].array_dims.clone();
+                    self.seed_multi_dim_strides(&dims, elem_size);
                 } else if !is_struct_value {
                     // Pointers to structs and every scalar type go
                     // through the normal load_op_for path.
@@ -2605,22 +2623,23 @@ impl Compiler {
                     if fpi > 0 {
                         self.fn_ptr_chain_depth = fpi - 1;
                     }
-                    // 2D-array parameter decay: a parameter declared
-                    // as `T name[N][M]` carries `inner_array_size = M`
-                    // on its symbol but the function-param binder
-                    // wipes `array_size` to 0 (per C99 6.7.5.3p7
-                    // the outermost dimension decays to a pointer,
-                    // and params don't own storage). The next
-                    // `[i]` postfix needs the row stride so it
-                    // scales by `M * sizeof(T)` and keeps the type
-                    // pointer-shaped for the inner `[j]`. The
-                    // loaded value is already a pointer (one
-                    // level less than the array would have been),
-                    // so the pointee type is the post-load
-                    // `self.ty`.
-                    let inner = self.symbols[id_idx].inner_array_size;
-                    if inner > 0 && is_pointer_ty(self.ty) {
-                        self.pending_index_stride = inner * self.pointee_size(self.ty);
+                    // N-dim-array parameter decay: a parameter
+                    // declared as `T name[A][B][C]` carries
+                    // `array_dims = [A, B, C]` on its symbol but
+                    // the function-param binder wiped `array_size`
+                    // to 0 (per C99 6.7.5.3p7 the outermost
+                    // dimension decays to a pointer, and params
+                    // don't own storage). The loaded value is
+                    // already a pointer (one level less than the
+                    // array would have been), so the pointee size
+                    // is `pointee_size(self.ty)` rather than the
+                    // element size; the strides for `[i]`, `[j]`,
+                    // ... `[N-1]` are seeded into the pending
+                    // queue.
+                    let dims = self.symbols[id_idx].array_dims.clone();
+                    if !dims.is_empty() && is_pointer_ty(self.ty) {
+                        let elem_size = self.pointee_size(self.ty);
+                        self.seed_multi_dim_strides(&dims, elem_size);
                     }
                 }
             }
@@ -3629,16 +3648,35 @@ impl Compiler {
                 self.next()?;
             } else if self.lex.tk == Token::Brak as i64 {
                 self.next()?;
-                // Read-and-clear the 2D-array stride override. The
-                // identifier branch sets it on the array decay; if
-                // present, the first `[i]` scales by the row stride
-                // (M * sizeof(T)) instead of the element size and
-                // the result type stays a pointer so the next `[j]`
-                // scales by sizeof(T) the regular way.
-                let two_d_stride = self.pending_index_stride;
+                // Read-and-park the multi-dim stride queue. The
+                // identifier / param / field-decay branches seed
+                // strides for each of the N-1 multi-dim subscript
+                // levels of an N-dim array. The inner expr() that
+                // parses the index expression clears the pending
+                // state at its exit, so save the head + tail
+                // locally, hand the inner parse a clean slate, and
+                // shift the queue back after it returns.
+                let multi_dim_stride = self.pending_index_stride;
+                let saved_tail =
+                    core::mem::take(&mut self.pending_index_strides_tail);
                 self.pending_index_stride = 0;
                 self.emit_op(Op::Psh);
                 self.expr(Token::Assign as i64)?;
+                // Restore the queue and shift one level down so
+                // the next `[i]` sees the stride for that level
+                // in `pending_index_stride` and the rest in the
+                // tail. While we still have strides queued, the
+                // result type stays at pointer level so multi-dim
+                // shape carries forward; the innermost subscript
+                // (queue empty) falls through to the regular
+                // sizeof + decay path.
+                self.pending_index_strides_tail = saved_tail;
+                self.pending_index_stride =
+                    if self.pending_index_strides_tail.is_empty() {
+                        0
+                    } else {
+                        self.pending_index_strides_tail.remove(0)
+                    };
                 if self.lex.tk == ']' as i64 {
                     self.next()?;
                 } else {
@@ -3647,12 +3685,12 @@ impl Compiler {
                 if !is_pointer_ty(t) {
                     return Err(self.compile_err("pointer type expected"));
                 }
-                if two_d_stride > 0 {
-                    self.emit_binop_with_imm(Op::Mul, two_d_stride);
+                if multi_dim_stride > 0 {
+                    self.emit_binop_with_imm(Op::Mul, multi_dim_stride);
                     self.emit_op(Op::Add);
-                    // 2D row pointer -- ty stays at the same pointer
-                    // level; the next `[j]` decays it the regular
-                    // way to a scalar element.
+                    // Multi-dim row pointer -- ty stays at the same
+                    // pointer level; the innermost `[k]` decays it
+                    // the regular way to a scalar element.
                     self.ty = t;
                 } else {
                     if self.is_ptr_scaling_nontrivial(t) {
@@ -3751,15 +3789,13 @@ impl Compiler {
                         // `T field[N]` returns 8 (decayed pointer)
                         // instead of `N * sizeof(T)`.
                         self.last_array_decay_size = field.array_size;
-                        // 2D-array decay: mirror the Id-path so
-                        // `s.xs[i][j]` scales the first index by
-                        // the row stride (`M * sizeof(T)`) and the
-                        // second by the element size. The Brak
-                        // handler reads-and-clears the stride.
-                        if field.inner_array_size > 0 {
-                            self.pending_index_stride =
-                                field.inner_array_size * self.size_of_type(field.ty) as i64;
-                        }
+                        // N-dim-array decay: mirror the Id-path so
+                        // `s.xs[i][j][k]` scales each level by its
+                        // row stride and only the innermost
+                        // subscript decays to a scalar.
+                        let dims = field.array_dims.clone();
+                        let elem_size = self.size_of_type(field.ty) as i64;
+                        self.seed_multi_dim_strides(&dims, elem_size);
                     } else if !field_is_struct_value {
                         self.emit_op(load_op_for(self.ty, self.target));
                     }
@@ -3771,17 +3807,49 @@ impl Compiler {
                 )));
             }
         }
-        // 2D-array stride hint: set by the id-load branch when a
-        // multi-dim array decays, consumed by the matching Brak
-        // postfix. If we leave this expr() without seeing the
-        // expected `[i]` -- e.g., the array was passed to a
-        // function as a bare argument with `foo(arr)` -- the
-        // hint must not leak to the next expression. Otherwise
-        // the next array access in a fresh expression would
-        // inherit the stale row stride and skip its scalar
+        // Multi-dim stride queue: set by the id-load / param /
+        // field-decay branches when an N-dim array decays,
+        // consumed by the Brak postfix. If we leave this expr()
+        // without seeing every `[i]` -- e.g., the array was
+        // passed to a function as a bare argument with `foo(arr)`
+        // -- the queue must not leak to the next expression.
+        // Otherwise the next array access in a fresh expression
+        // would inherit a stale row stride and skip its scalar
         // load, leaving no lvalue for a following `=`.
         self.pending_index_stride = 0;
+        self.pending_index_strides_tail.clear();
         Ok(())
+    }
+
+    /// Seed the multi-dim subscript stride queue for an N-dim
+    /// array with element size `elem_size`. The first N-1
+    /// dimensions each get a stride; the innermost subscript
+    /// falls through to the regular `sizeof(elem)` path. For
+    /// `T[A][B][C]` the strides are `[B*C*s, C*s]`. The head
+    /// goes into `pending_index_stride`; the rest queue in
+    /// `pending_index_strides_tail`. Empty `dims` or a 1D shape
+    /// produces no stride hint at all.
+    fn seed_multi_dim_strides(&mut self, dims: &[i64], elem_size: i64) {
+        self.pending_index_stride = 0;
+        self.pending_index_strides_tail.clear();
+        if dims.len() < 2 || elem_size <= 0 {
+            return;
+        }
+        // strides[k] = elem_size * product(dims[k+1..]) for k in 0..N-1.
+        let n = dims.len();
+        let mut strides: Vec<i64> = Vec::with_capacity(n - 1);
+        let mut running: i64 = elem_size;
+        // Build right-to-left: stride[N-2] = elem*dims[N-1],
+        // stride[N-3] = stride[N-2]*dims[N-2], etc.
+        for k in (0..n - 1).rev() {
+            running = running.saturating_mul(dims[k + 1]);
+            strides.push(running);
+        }
+        strides.reverse();
+        if let Some((&head, tail)) = strides.split_first() {
+            self.pending_index_stride = head;
+            self.pending_index_strides_tail.extend_from_slice(tail);
+        }
     }
 
     // The statement family (parse_for_stmt, parse_switch_stmt,

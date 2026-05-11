@@ -93,6 +93,7 @@ EXPECTED_PREFIXES = (
     "leakcheck OK:",
     "truetype OK:",
     "herringbone_wang OK:",
+    "voxel_render OK:",
     "textedit OK:",
     "include OK:",
     "stb smoke: all scenarios green",

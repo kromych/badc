@@ -8,7 +8,13 @@
 
 `badc` (other name ideas were `betsy` and `badseed`) is a rather
 small compiler of a pretty large chunk of the C language as defined in
-the C99 standard.
+the C99 standard. Its small footprint and embedded headers (which
+you can override) give a fun one-executable experience. Its codebase
+of moderate size can be a good pedagogical material. It doesn't
+use AST, SSA, graph coloring algorithms and lots of exquisite optimization
+passes which (chances are) might not bother you much. All told,
+to stay slim, it'll never surpass the ability of multi-gigabyte compiler
+suites to squeeze the last drop of perf from the machine, and that's fine.
 
 `badc` produces real native binaries (macOs Mach-O, Linux ELF, or
 Windows PE32+), on any of five targets, from any host - macOS (ARM64),

@@ -7,13 +7,13 @@
  * Headers currently blocked on c5 dialect gaps are gated off
  * with a TODO line naming the specific follow-up to track.
  *
- * Headers covered today (18/21):
+ * Headers covered today (19/21):
  *   stb_c_lexer.h, stb_connected_components.h, stb_divide.h,
  *   stb_ds.h, stb_dxt.h, stb_easy_font.h,
  *   stb_herringbone_wang_tile.h, stb_hexwave.h, stb_image.h,
  *   stb_image_write.h, stb_include.h, stb_leakcheck.h,
  *   stb_perlin.h, stb_rect_pack.h, stb_sprintf.h, stb_textedit.h,
- *   stb_truetype.h, stb_voxel_render.h
+ *   stb_truetype.h, stb_vorbis.c, stb_voxel_render.h
  *
  * Headers gated off (rationale + tracking issue):
  *   stb_image_resize2.h -- forward-referenced function pointers
@@ -25,8 +25,6 @@
  *     C99 6.7.8p13 admits these for automatic-storage
  *     aggregates; c5's local-struct-init path currently only
  *     accepts compile-time constants.
- *   stb_vorbis.c -- `alloca` intrinsic + pointer-to-array casts
- *     (`(short (*)[8]) p`); both gaps tracked in gh #77.
  */
 
 #include <stdint.h>
@@ -213,6 +211,37 @@ static void te_deletechars(struct te_str *s, int pos, int num) {
 #define STBVOX_CONFIG_MODE 0
 #define STB_VOXEL_RENDER_IMPLEMENTATION
 #include "stb_voxel_render.h"
+
+/* stb_vorbis uses `alloca()` inside a gated macro:
+ *   #define temp_alloc(f,size) \
+ *     (f->alloc.alloc_buffer ? setup_temp_malloc(f,size) : alloca(size))
+ * When the caller supplies an `alloc_buffer`, the alloca branch is
+ * dead at runtime but the compiler still has to parse the symbol.
+ * Shim it to a NULL expression so c5 type-checks the conditional
+ * without needing a real stack-bumping alloca intrinsic. The
+ * scenario below always passes an alloc_buffer, so this is never
+ * executed. */
+#define alloca(n) ((void *)0)
+
+/* c5's slot model reports `sizeof(float)` as 8 (one VM slot)
+ * rather than the on-disk 4 bytes. stb_vorbis's
+ * FAST_SCALED_FLOAT_TO_INT path bit-casts a `float` through a
+ * union and depends on the 4-byte representation. The macro
+ * surface below disables that path and falls back to the
+ * portable `(int)(x * (1<<s))` form, which c5 lowers fine. */
+#define STB_VORBIS_NO_FAST_SCALED_FLOAT 1
+
+/* stb_vorbis lives in `stb_vorbis.c` (not `.h`) -- it's a single-
+ * translation-unit library. Pull the full source: PUSHDATA +
+ * PULLDATA + STDIO surface come along. */
+#include "stb_vorbis.c"
+/* stb_vorbis leaks a handful of short macros (`C`, `M`, `R`, ...)
+ * from its FAST_SCALED_FLOAT block + decoder tables. Undef them
+ * so the smoke driver's own `enum { W, H, C }` scenarios below
+ * aren't shadowed. */
+#undef C
+#undef M
+#undef R
 
 /* TODO(stb-tilemap-editor): blocked on non-constant local
  * struct initializers. The header writes shapes like
@@ -608,6 +637,40 @@ static int scenario_wang_tile(void) {
     return 0;
 }
 
+static int scenario_vorbis(void) {
+    /* stb_vorbis is a full Ogg-Vorbis decoder; the smoke can't
+     * bundle a real .ogg payload, so we open a deliberately
+     * malformed buffer and verify the decoder rejects it
+     * cleanly via the `error` out-pointer. The alloc_buffer
+     * path through `temp_alloc` is taken (we pass a non-NULL
+     * `alloc`), so the dead `alloca` branch shimmed in this
+     * driver is never executed. */
+    static char scratch[64 * 1024];
+    stb_vorbis_alloc alloc;
+    int err = 0;
+    unsigned char bogus[16];
+    int i;
+    stb_vorbis *v;
+
+    alloc.alloc_buffer = scratch;
+    alloc.alloc_buffer_length_in_bytes = (int)sizeof(scratch);
+    for (i = 0; i < (int)sizeof(bogus); i++) bogus[i] = (unsigned char)i;
+
+    v = stb_vorbis_open_memory(bogus, (int)sizeof(bogus), &err, &alloc);
+    if (v != NULL) {
+        /* Unexpected: random bytes decoded as a valid stream. */
+        stb_vorbis_close(v);
+        fprintf(stderr, "stb smoke: vorbis accepted bogus input\n");
+        return 1;
+    }
+    if (err == 0) {
+        fprintf(stderr, "stb smoke: vorbis returned NULL but err=0\n");
+        return 1;
+    }
+    printf("vorbis OK: rejected bogus input (err=%d)\n", err);
+    return 0;
+}
+
 static int scenario_voxel_render(void) {
     /* stb_voxel_render runs a heavy mesh-construction pipeline
      * that needs real input buffers + a GL-style backing store
@@ -720,6 +783,7 @@ int main(int argc, char **argv) {
     if (scenario_leakcheck() != 0) return 1;
     if (scenario_truetype() != 0) return 1;
     if (scenario_wang_tile() != 0) return 1;
+    if (scenario_vorbis() != 0) return 1;
     if (scenario_voxel_render() != 0) return 1;
     if (scenario_textedit() != 0) return 1;
     if (scenario_include() != 0) return 1;

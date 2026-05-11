@@ -3657,8 +3657,7 @@ impl Compiler {
                 // locally, hand the inner parse a clean slate, and
                 // shift the queue back after it returns.
                 let multi_dim_stride = self.pending_index_stride;
-                let saved_tail =
-                    core::mem::take(&mut self.pending_index_strides_tail);
+                let saved_tail = core::mem::take(&mut self.pending_index_strides_tail);
                 self.pending_index_stride = 0;
                 self.emit_op(Op::Psh);
                 self.expr(Token::Assign as i64)?;
@@ -3671,12 +3670,11 @@ impl Compiler {
                 // (queue empty) falls through to the regular
                 // sizeof + decay path.
                 self.pending_index_strides_tail = saved_tail;
-                self.pending_index_stride =
-                    if self.pending_index_strides_tail.is_empty() {
-                        0
-                    } else {
-                        self.pending_index_strides_tail.remove(0)
-                    };
+                self.pending_index_stride = if self.pending_index_strides_tail.is_empty() {
+                    0
+                } else {
+                    self.pending_index_strides_tail.remove(0)
+                };
                 if self.lex.tk == ']' as i64 {
                     self.next()?;
                 } else {

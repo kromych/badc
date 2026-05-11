@@ -36,6 +36,15 @@ pub(crate) fn fmt_compile_err(file: &str, line: usize, message: &str) -> String 
     format!("{file}:{line}: error: {message}")
 }
 
+/// Sibling of [`fmt_compile_err`] for warning-severity diagnostics.
+/// Same `<file>:<line>: warning: ...` shape gcc / clang use so the
+/// CLI's TTY colorizer and any downstream log scrapers handle
+/// errors and warnings uniformly.
+pub(crate) fn fmt_compile_warn(file: &str, line: usize, message: &str) -> String {
+    use alloc::format;
+    format!("{file}:{line}: warning: {message}")
+}
+
 /// Helper: produce an `error: internal compiler error: <message>`
 /// string for compile errors without a meaningful (file, line) --
 /// internal-consistency violations, codegen-side asserts, post-

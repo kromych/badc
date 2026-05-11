@@ -221,6 +221,13 @@ pub(crate) enum Token {
     /// The lexer stores the parsed `f64` bit pattern in `ival`; the
     /// parser plucks it back out via `f64::from_bits(ival as u64)`.
     FloatNum,
+    /// `_Static_assert` keyword (C11 6.7.10) and the C23 alias
+    /// `static_assert`. Followed by `( <const-int-expr>,
+    /// "<string-literal>" )` at declaration position. The parser
+    /// folds the constant expression; if it's zero, the message
+    /// is surfaced through the standard compile-error path,
+    /// otherwise the construct is a parse-time no-op.
+    StaticAssert,
 }
 
 /// Primitive Types

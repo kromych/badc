@@ -35,6 +35,72 @@ impl Compiler {
         self.parse_const_expr_cond()
     }
 
+    /// Parse a C11 6.7.10 `_Static_assert(<const-int-expr>,
+    /// "<string-literal>");` (or its C23 `static_assert` alias).
+    /// On entry the current token is `Token::StaticAssert`. The
+    /// constant expression must fold to non-zero; if it folds
+    /// to zero, the string-literal message is surfaced through
+    /// the standard compile-error path. The construct itself
+    /// emits no code -- the assertion is fully parse-time.
+    pub(super) fn parse_static_assert(&mut self) -> Result<(), C5Error> {
+        let line = self.lex.line;
+        self.next()?; // consume `static_assert` / `_Static_assert`
+        if self.lex.tk != '(' as i64 {
+            return Err(self.compile_err_at(
+                line,
+                "`static_assert` requires `(<const-expr>, \"<message>\")`",
+            ));
+        }
+        self.next()?;
+        let value = self.parse_const_expr_cond()?;
+        // The message argument is optional in C23 but required in
+        // C11. Accept both shapes: a trailing `, "msg"` is the
+        // canonical form; a bare `(expr)` falls back to a generic
+        // message constructed from the source token.
+        let mut message: alloc::string::String = alloc::string::String::new();
+        if self.lex.tk == ',' as i64 {
+            self.next()?;
+            if self.lex.tk != '"' as i64 {
+                return Err(
+                    self.compile_err_at(line, "string-literal message expected in `static_assert`")
+                );
+            }
+            // The lexer stores the staged string's data-segment
+            // offset in `lex.ival`. Read the bytes back so we can
+            // surface the message inline; adjacent literals are
+            // already glued by the lexer's `"a" "b"` rule.
+            let addr = self.lex.ival as usize;
+            self.next()?;
+            while self.lex.tk == '"' as i64 {
+                self.next()?;
+            }
+            // Walk the staged bytes up to the first NUL.
+            let mut p = addr;
+            while p < self.data.len() && self.data[p] != 0 {
+                message.push(self.data[p] as char);
+                p += 1;
+            }
+        }
+        if self.lex.tk != ')' as i64 {
+            return Err(self.compile_err_at(line, "`)` expected after `static_assert(...)`"));
+        }
+        self.next()?;
+        // The trailing `;` is mandatory at file / block scope in
+        // C11; we accept it and step past.
+        if self.lex.tk == ';' as i64 {
+            self.next()?;
+        }
+        if value == 0 {
+            let body = if message.is_empty() {
+                "static_assert failed".into()
+            } else {
+                format!("static_assert: {message}")
+            };
+            return Err(self.compile_err_at(line, &body));
+        }
+        Ok(())
+    }
+
     /// C99 6.5.15 conditional operator at the top of the constant-
     /// expression chain. Both arms are evaluated (the parser still
     /// has to consume their tokens) but only the selected one

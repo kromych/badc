@@ -712,6 +712,41 @@ impl Preprocessor {
                             }
                         }
                     }
+                    Directive::IncludeMacro(args) => {
+                        if active {
+                            // C99 6.10.2p4: expand the operand and
+                            // reparse the result as a `<...>` /
+                            // `"..."` literal include. Anything
+                            // else is malformed; surface a
+                            // warning and skip, matching how
+                            // other unrecognised directives are
+                            // handled.
+                            let expanded = self.substitute(args, filename, line_no);
+                            let trimmed = expanded.trim();
+                            let name = trimmed
+                                .strip_prefix('<')
+                                .and_then(|s| s.strip_suffix('>'))
+                                .or_else(|| {
+                                    trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"'))
+                                });
+                            if let Some(n) = name {
+                                let included = self.process_include(n.trim(), line_no, filename)?;
+                                out.push_str(&included);
+                                out.push_str(&format_line_marker(source_line + 1, &current_file));
+                                source_line += 1;
+                                idx_iter += 1;
+                                continue;
+                            }
+                            self.warnings.push(super::error::fmt_compile_warn(
+                                filename,
+                                line_no,
+                                &format!(
+                                    "#include `{args}` expands to `{trimmed}`, \
+                                     which is not a `<header>` or `\"header\"` literal"
+                                ),
+                            ));
+                        }
+                    }
                     Directive::Include(name) => {
                         if active {
                             let included = self.process_include(name, line_no, filename)?;
@@ -781,6 +816,22 @@ impl Preprocessor {
                                 line_no,
                                 &format!("#error {}", message.trim()),
                             )));
+                        }
+                    }
+                    Directive::Warning(message) => {
+                        // gcc/clang extension; standardised in C23.
+                        // Same shape as `#error` but emits a
+                        // `warning:` diagnostic and lets compilation
+                        // continue. Goes into the preprocessor's
+                        // warning bag so the CLI surfaces it through
+                        // the same TTY-colorising path as
+                        // type-mismatch and tentative-decl warnings.
+                        if active {
+                            self.warnings.push(super::error::fmt_compile_warn(
+                                filename,
+                                line_no,
+                                &format!("#warning {}", message.trim()),
+                            ));
                         }
                     }
                     Directive::Other => {
@@ -1775,9 +1826,21 @@ enum Directive<'a> {
         line: usize,
         file: Option<&'a str>,
     },
+    /// `#include <pp-tokens>` -- C99 6.10.2p4. The operand isn't
+    /// already in `<...>` or `"..."` form, so the preprocessor
+    /// has to macro-substitute the tokens before reparsing the
+    /// result as one of the two literal include forms. The raw
+    /// text is carried verbatim; substitution happens in the
+    /// handler.
+    IncludeMacro(&'a str),
     /// `#error <message>` -- C99 sec 6.10.5. The diagnostic message is
     /// the literal text after `#error` up to the newline.
     Error(&'a str),
+    /// `#warning <message>` -- gcc/clang extension, standardised in
+    /// C23. Emits a `warning:` diagnostic but, unlike `#error`,
+    /// compilation continues. Matches the diagnostic format every
+    /// other warning site uses, so downstream tooling can scrape it.
+    Warning(&'a str),
     Shebang,
     Other,
 }
@@ -1926,6 +1989,14 @@ fn parse_directive(rest: &str) -> Directive<'_> {
             return Directive::Error(after.trim_start());
         }
     }
+    if let Some(after) = rest.strip_prefix("warning") {
+        // `#warning <message>` -- emits a warning and continues.
+        // gcc/clang extension; standardised by C23. Same shape as
+        // `#error`, just a different severity.
+        if after.is_empty() || after.starts_with(char::is_whitespace) {
+            return Directive::Warning(after.trim_start());
+        }
+    }
     if let Some(after) = rest.strip_prefix("line") {
         let trimmed = after.trim();
         // Line number is required.
@@ -1947,15 +2018,23 @@ fn parse_directive(rest: &str) -> Directive<'_> {
     }
     if let Some(after) = rest.strip_prefix("include") {
         let trimmed = after.trim();
-        // Strip the `<...>` or `"..."` wrapping. Anything else falls
-        // through to `Directive::Other` and is silently dropped, the
-        // same as malformed `#define` lines.
+        // Strip the `<...>` or `"..."` wrapping when the operand
+        // is already in one of the two literal forms.
         if let Some(name) = trimmed
             .strip_prefix('<')
             .and_then(|s| s.strip_suffix('>'))
             .or_else(|| trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"')))
         {
             return Directive::Include(name.trim());
+        }
+        // C99 6.10.2p4: `#include <pp-tokens>` -- when the operand
+        // isn't already a `<...>` or `"..."` literal, the
+        // preprocessor expands the tokens and re-parses the
+        // result as one of the two literal forms. Defer the
+        // expansion to the include handler so the caller's
+        // macro table is available.
+        if !trimmed.is_empty() {
+            return Directive::IncludeMacro(trimmed);
         }
     }
     if rest.starts_with('!') {

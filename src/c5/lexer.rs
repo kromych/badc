@@ -1179,6 +1179,13 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("extern", Token::Extern),
     ("static", Token::Static),
     ("void", Token::Char),
+    // C11 6.7.10 `_Static_assert` and its C23 alias
+    // `static_assert`. Both spellings map to the same parser
+    // path -- the parser checks the constant-expression argument
+    // and surfaces the string-literal as a compile error when
+    // the expression is zero.
+    ("_Static_assert", Token::StaticAssert),
+    ("static_assert", Token::StaticAssert),
     // Type qualifiers -- consumed everywhere a type qualifier
     // may appear; no semantic effect.
     ("const", Token::TypeQual),

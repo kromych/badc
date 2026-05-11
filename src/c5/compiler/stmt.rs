@@ -329,6 +329,10 @@ impl Compiler {
         while self.lex.tk != '}' as i64 {
             if self.lex.tk == Token::Typedef as i64 {
                 self.parse_block_typedef(&mut block_symbols)?;
+            } else if self.lex.tk == Token::StaticAssert as i64 {
+                // C11 6.7.10 allows `static_assert` anywhere a
+                // declaration may appear -- including block scope.
+                self.parse_static_assert()?;
             } else if self.lex_is_type_start() {
                 self.parse_block_local_decl(&mut block_symbols)?;
             } else {

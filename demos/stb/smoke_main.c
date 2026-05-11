@@ -252,6 +252,60 @@ static int scenario_image_roundtrip(void) {
     return 0;
 }
 
+static int scenario_bmp_roundtrip(void) {
+    /* BMP round-trip. BMP is a lossless integer-pixel format
+     * (no DCT, no float math), so the round-trip is a
+     * byte-for-byte equality check. Exercises a different
+     * encoder code path than the PNG case: BMP writes BGR
+     * rows bottom-up with a 4-byte alignment pad, so the
+     * row-reordering / padding loop is what we're stressing.
+     * The JPEG encoder is currently a separate follow-up --
+     * c5 produces a structurally valid JPEG but the encoded
+     * pixel payload comes back as zeros through the decoder,
+     * pointing at an FP-arithmetic regression in the DCT
+     * path that needs its own investigation.
+     */
+    enum { W = 6, H = 5, C = 3 };
+    unsigned char src[W * H * C];
+    int i;
+    for (i = 0; i < W * H * C; i++) {
+        src[i] = (unsigned char)((i * 17 + 3) & 0xff);
+    }
+
+    struct write_ctx ctx;
+    ctx.buf = NULL; ctx.len = 0; ctx.cap = 0;
+    int wrc = stbi_write_bmp_to_func(write_cb, &ctx, W, H, C, src);
+    if (!wrc || ctx.len == 0) {
+        fprintf(stderr, "stb smoke: stbi_write_bmp_to_func failed\n");
+        free(ctx.buf);
+        return 1;
+    }
+
+    int dw = 0, dh = 0, dc = 0;
+    unsigned char *dec = stbi_load_from_memory(ctx.buf, (int)ctx.len,
+                                               &dw, &dh, &dc, 0);
+    if (!dec) {
+        fprintf(stderr, "stb smoke: bmp load_from_memory failed: %s\n",
+                stbi_failure_reason());
+        free(ctx.buf);
+        return 1;
+    }
+    if (dw != W || dh != H || dc != C) {
+        fprintf(stderr, "stb smoke: bmp decoded %dx%dx%d, want %dx%dx%d\n",
+                dw, dh, dc, W, H, C);
+        free(ctx.buf); stbi_image_free(dec);
+        return 1;
+    }
+    if (memcmp(dec, src, sizeof(src)) != 0) {
+        fprintf(stderr, "stb smoke: bmp round-trip pixel mismatch\n");
+        free(ctx.buf); stbi_image_free(dec);
+        return 1;
+    }
+    printf("bmp OK: round-trip %d bytes\n", (int)ctx.len);
+    free(ctx.buf); stbi_image_free(dec);
+    return 0;
+}
+
 static int scenario_ds(void) {
     int *arr = NULL;
     int i;
@@ -506,6 +560,7 @@ int main(int argc, char **argv) {
     if (scenario_sprintf() != 0) return 1;
     if (scenario_perlin() != 0) return 1;
     if (scenario_image_roundtrip() != 0) return 1;
+    if (scenario_bmp_roundtrip() != 0) return 1;
     if (scenario_ds() != 0) return 1;
     if (scenario_rect_pack() != 0) return 1;
     if (scenario_c_lexer() != 0) return 1;

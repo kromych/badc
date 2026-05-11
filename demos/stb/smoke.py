@@ -81,6 +81,7 @@ EXPECTED_PREFIXES = (
     "sprintf OK:",
     "perlin OK:",
     "image OK:",
+    "bmp OK:",
     "ds OK:",
     "rect_pack OK:",
     "c_lexer OK:",

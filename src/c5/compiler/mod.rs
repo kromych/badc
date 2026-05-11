@@ -2676,13 +2676,31 @@ impl Compiler {
                         }
                         self.next()?;
                     }
-                    // Consume any further `(args)` decoration that
-                    // follows the inner declarator (`(args)` after
-                    // the inner `)`). Common in function-returning-
-                    // fp casts.
+                    // C99 6.7.6 abstract declarators after the
+                    // inner `)`: a `(args)` arg-list for the
+                    // function-returning-fn shape OR a `[N]` /
+                    // `[]` array suffix for the
+                    // pointer-to-array shape (`T (*)[N]`). Both
+                    // are no-ops at c5's type-tag granularity --
+                    // the resulting type is the pointer level
+                    // already accumulated. Multiple `[N]`
+                    // suffixes (`T (*)[N][M]`) are absorbed too;
+                    // they don't change the result type beyond
+                    // what `nested_ptrs` already encodes.
                     if self.lex.tk == '(' as i64 {
                         self.next()?;
                         self.skip_balanced_parens_after_open()?;
+                    }
+                    while self.lex.tk == Token::Brak as i64 {
+                        self.next()?;
+                        if self.lex.tk == ']' as i64 {
+                            self.next()?;
+                        } else {
+                            let _ = self.parse_constant_int()?;
+                            if self.lex.tk == ']' as i64 {
+                                self.next()?;
+                            }
+                        }
                     }
                     t += nested_ptrs * (Ty::Ptr as i64);
                     // Abstract fn-ptr declarator: the inner `*`
@@ -3766,6 +3784,14 @@ impl Compiler {
     fn run_compile(&mut self) -> Result<(), C5Error> {
         self.next()?;
         while self.lex.tk != 0 {
+            // C11 6.7.10 `_Static_assert(<expr>, "<msg>");` at
+            // file scope -- consume the construct as a parse-time
+            // assertion. Zero expression aborts compilation with
+            // the message verbatim through the standard error path.
+            if self.lex.tk == Token::StaticAssert as i64 {
+                self.parse_static_assert()?;
+                continue;
+            }
             let mut bt = Ty::Int as i64;
             // Storage-class prefixes -- can appear in any order
             // and any combination before the type. C lets you
@@ -4305,7 +4331,14 @@ impl Compiler {
                     // initializer) into the function's symbol
                     // frame, or parses a statement.
                     while self.lex.tk != '}' as i64 {
-                        if self.lex_is_type_start() {
+                        if self.lex.tk == Token::StaticAssert as i64 {
+                            // C11 6.7.10 lets static_assert sit
+                            // anywhere a declaration may appear,
+                            // including the function-body top
+                            // level (and the inner blocks reached
+                            // through parse_block_stmt).
+                            self.parse_static_assert()?;
+                        } else if self.lex_is_type_start() {
                             self.parse_function_body_local_decl()?;
                         } else {
                             self.stmt()?;

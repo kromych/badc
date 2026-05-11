@@ -1,4 +1,4 @@
-// typedef. The fixture exercises the typedef shapes sqlite
+// typedef. The fixture exercises the typedef shapes an SQL engine
 // uses heavily: primitive aliases, pointer aliases, forward struct
 // + typedef of the same name, and struct definition + typedef in a
 // single declaration.
@@ -19,7 +19,7 @@ typedef unsigned long long u64;
 // Pointer alias.
 typedef char *str;
 
-// Forward struct + typedef of the same name -- sqlite's
+// Forward struct + typedef of the same name -- an SQL engine's
 // `typedef struct sqlite3 sqlite3;` shape. The struct body shows up
 // later.
 typedef struct Node Node;

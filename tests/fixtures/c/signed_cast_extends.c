@@ -66,7 +66,7 @@ int main() {
     int r11 = (signed char)sc;
     if (r11 != -42) return 11;
 
-    // sqlite ONE_BYTE_INT shape: `(i8)(arr[0])` where arr is
+    // an SQL engine ONE_BYTE_INT shape: `(i8)(arr[0])` where arr is
     // unsigned char[].
     unsigned char arr[3];
     arr[0] = 0xFF;

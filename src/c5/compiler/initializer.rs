@@ -127,11 +127,11 @@ impl Compiler {
     ) -> Result<Vec<(i64, InitElemReloc)>, C5Error> {
         // 2D inner-dim hint -- callers set this when the declarator
         // shape is `T xs[N][M]` so a nested `{ row }` that lists
-        // fewer than M values gets zero-padded; without padding,
-        // subsequent rows shift into the previous row's tail and
-        // `xs[i][j]` reads garbage. stb_perlin's
-        //   static float basis[12][4] = { {1,1,0}, {-1,1,0}, ... };
-        // hit this. Read-and-clear so a recursive call into an
+        // fewer than M values gets zero-padded per C99 6.7.8p21
+        // (the remaining elements of an aggregate are initialised
+        // implicitly to zero). Without padding, subsequent rows
+        // shift into the previous row's tail and `xs[i][j]` reads
+        // garbage. Read-and-clear so a recursive call into an
         // inner brace doesn't inherit it.
         let inner_dim = core::mem::take(&mut self.pending_init_inner_dim);
         if self.lex.tk == '"' as i64 && (elem_ty & !UNSIGNED_BIT) == Ty::Char as i64 {
@@ -240,15 +240,15 @@ impl Compiler {
     ///     (enum value, `#define`d constant), use its `val`
     ///   * `0` is special -- a NULL pointer / zero scalar, no reloc.
     pub(super) fn parse_constant_init_value(&mut self) -> Result<(i64, InitElemReloc), C5Error> {
-        // Float literal -- store the f64 bit pattern. The struct
-        // field's declared type drives the runtime interpretation;
-        // the on-disk image is just bytes.
+        // Float literal -- store the f64 bit pattern. The element
+        // type drives the runtime interpretation; the on-disk
+        // image is just bytes.
         //
-        // If a binary float operator follows (`+ - * /`), fold the
-        // whole expression in `f64` precision -- stb_image_write's
-        // `aasf[]` table declares each element as
-        // `1.387039845f * 2.828427125f` etc., which the integer
-        // const-expr evaluator can't traverse.
+        // C99 6.6 defines arithmetic constant expressions over
+        // floating-point operands. A trailing `+ - * /` after the
+        // literal continues the chain; fold it in `f64`
+        // precision since the integer const-expr evaluator can't
+        // see through float operands.
         if self.lex.tk == Token::FloatNum as i64 {
             let v = self.lex.ival;
             self.next()?;
@@ -265,9 +265,9 @@ impl Compiler {
         // `-IDENT_MACRO` via its own unary-minus path; here we
         // only intercept when the byte after `-` is the start of
         // a literal, so we don't disturb the existing routes.
-        // stb_sprintf's `stbsp__negboterr[]` array leads every row
-        // with `-d.dddd...e+NNN`; without this branch the whole
-        // TU rejects on the first negative element.
+        // C99 6.6 admits unary `-` on a numeric literal as a
+        // constant expression -- the float case has to flip the
+        // IEEE-754 sign bit rather than negate an integer value.
         if self.lex.tk == Token::SubOp as i64 && self.lex.peek_after_whitespace_starts_digit() {
             self.next()?; // consume `-`
             if self.lex.tk == Token::FloatNum as i64 {
@@ -302,10 +302,10 @@ impl Compiler {
             // past the `(`. Snapshot so we can rewind for the
             // integer-expression fall-through, which has to see
             // `(` to absorb both the parenthesised sub-expression
-            // *and* any trailing operators -- stb_image_resize2's
-            //   static const stbir__FP32 minval = { (127-13) << 23 };
-            // needs `parse_const_expr_or` to start outside the
-            // parens so the `<< 23` after `)` joins the chain.
+            // *and* any trailing operators -- a struct initialiser
+            // entry like `{ (127-13) << 23 }` needs the integer
+            // const-expr evaluator to start outside the parens so
+            // the `<< 23` after `)` joins the chain.
             let snap = self.lex.snapshot();
             self.next()?;
             if self.lex_is_type_start() {
@@ -347,11 +347,10 @@ impl Compiler {
             // Sub-expression in parens. Peek for any FloatNum
             // token inside (up to the matching `)`); if present,
             // fold the whole sub-expression in f64 precision so
-            // shapes like `(1.0f + 2.0f) * 4.0f` from
-            // stb_image_write's `aasf[]` round-trip exactly.
-            // Pure-integer parens fall through to the integer
-            // expression evaluator below so trailing `<<`, `+`,
-            // ... operators after `)` are absorbed too.
+            // shapes like `(1.0f + 2.0f) * 4.0f` round-trip
+            // exactly. Pure-integer parens fall through to the
+            // integer expression evaluator below so trailing
+            // `<<`, `+`, ... operators after `)` are absorbed too.
             if self.contents_until_close_paren_have_float()? {
                 let seed = self.parse_const_float_unary()?;
                 let v = self.parse_const_float_add_from(seed)?;
@@ -468,18 +467,18 @@ impl Compiler {
                 // Optional `[N]...` postfixes -- decay-to-address-
                 // of-element. `arr[N]` is equivalent to `&arr[N]`
                 // in a constant initializer (C99 6.3.2.1p3 array-
-                // to-pointer conversion). Used by
-                // stb_voxel_render's `stbvox_uniform_info[]` table
-                // to point at row 0 of 2D / 3D dummy arrays.
+                // to-pointer conversion); a chain of `[N]`s
+                // navigates further into a multi-dim array
+                // before taking its address.
                 //
                 // c5 only tracks `inner_array_size` (the second
                 // dim of `T name[A][B]`), so for the third index
                 // of a 3D `T name[A][B][C]` we don't have a stride
                 // to multiply by. The common static-init shape is
-                // `arr[0][0]` which only matters as the base
-                // address; we accept further `[0]` postfixes
-                // without error and reject `[non-zero]` past the
-                // second index.
+                // `arr[0][0]` (a row pointer through a 2D or 3D
+                // table) which only matters as the base address;
+                // we accept further `[0]` postfixes without error
+                // and reject `[non-zero]` past the second index.
                 let mut depth: usize = 0;
                 while self.lex.tk == Token::Brak as i64 {
                     self.next()?;
@@ -654,10 +653,9 @@ impl Compiler {
                 // Absorb up to `array_size` values from the
                 // surrounding brace list; the outer struct loop
                 // then advances to the next field on the
-                // following `,`. stb_easy_font's
-                //   stb_easy_font_color c = { 255,255,255,255 };
-                // (where the struct's sole field is `unsigned char
-                // c[4]`) lands here.
+                // following `,`. A canonical instance is
+                //   struct { unsigned char c[4]; } v = { 1,2,3,4 };
+                // where the inner array's brace pair is elided.
                 let elem_size = self.size_of_type(field.ty);
                 let mut idx: usize = 0;
                 while (idx as i64) < field.array_size && self.lex.tk != '}' as i64 {

@@ -1,13 +1,10 @@
 // Regression: negative float literals in global / static array
-// initializers. stb_sprintf's `stbsp__negboterr[22]` (an array
-// of error-correction doubles) and `stbsp__toperr[13]` both lead
-// with negative entries; c5 used to route a leading `-` through
-// the parse_constant_int fallback, which then errored because
-// the next token was a FloatNum, not a Num/Id.
-//
-// Fix: detect `-` followed by FloatNum in parse_constant_init_value
-// and negate the IEEE-754 sign bit, mirroring how the expression-
-// level negation handles literal floats.
+// initializers. C99 6.6 admits a unary `-` on a numeric literal
+// inside a constant expression; the float case has to flip the
+// IEEE-754 sign bit on the f64 bit pattern rather than negate
+// an integer value. c5 used to route a leading `-` through the
+// parse_constant_int fallback, which then errored because the
+// next token was a FloatNum, not a Num/Id.
 
 #include <stdio.h>
 

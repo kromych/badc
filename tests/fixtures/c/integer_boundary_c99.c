@@ -8,7 +8,7 @@
 // non-zero exit pinpoints the bug):
 //   * code 100: sizeof(signed char) == 1 fails because c5 promotes
 //     `signed char` -> int (it has to, otherwise lemon-generated
-//     tables in sqlite read negative rule sizes as 255 and walk
+//     tables in an SQL engine read negative rule sizes as 255 and walk
 //     off into wild memory).
 //   * codes 150 / 151: (i8)(int)-300 == -44 fails for the same
 //     reason -- signed char is int, so the narrowing cast is a

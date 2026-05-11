@@ -83,9 +83,12 @@ impl Compiler {
         }
         while self.lex.tk != ';' as i64 {
             let (loc_idx, ty, array_size) = self.parse_declarator(lbt)?;
-            // gh #19 fn-pointer lineage carries through to local
+            // Function-pointer lineage carries through to local
             // bindings -- pick up the side-channel parse_declarator
-            // (or the typedef base type) populated.
+            // (or the typedef base type) populated. Used by the
+            // unary `*` handler to recognise function-pointer
+            // decay (C99 6.3.2.1p4) as a no-op rather than a
+            // through-pointer load.
             let fn_ptr_indirection = self.pending_fn_ptr_indirection.take().unwrap_or(0);
             self.ty = ty;
             if self.symbols[loc_idx].class == Token::Loc as i64 {
@@ -310,12 +313,11 @@ impl Compiler {
             // the brace list to learn the element count (so storage
             // can be reserved before parsing each element) and
             // whether any element is non-constant. The latter
-            // routes through the per-element runtime store path,
-            // which stb_image_write's `head1[]` (inside
-            // `stbi_write_jpg_to_func`) needs: that array's first
-            // bytes are literal magic numbers but later positions
-            // are runtime expressions like
-            // `(unsigned char)(height>>8)`.
+            // routes through the per-element runtime store path
+            // required by C99 6.7.8p13 -- automatic-storage
+            // arrays may carry non-constant initializers, with
+            // each element initialised as if by assignment in
+            // declaration order.
             if self.lex.tk == '{' as i64 {
                 let (final_size, needs_runtime) = self.scan_array_init()?;
                 if needs_runtime {

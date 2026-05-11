@@ -177,12 +177,12 @@ pub struct Compiler {
     include_trace: Vec<String>,
 
     /// `#pragma entrypoint(<name>)` value drained from the
-    /// preprocessor (gh #55). Default `None` means "use `main`".
+    /// preprocessor Default `None` means "use `main`".
     /// Read in `compile()` to compute `entry_pc` and threaded onto
     /// `Program::entry_name`.
     pp_entrypoint: Option<String>,
     /// `#pragma subsystem(<kind>)` value drained from the
-    /// preprocessor (gh #32). Default `None` means "PE writer
+    /// preprocessor Default `None` means "PE writer
     /// picks `Console`". Read only by the PE writers.
     pp_subsystem: Option<crate::c5::preprocessor::Subsystem>,
 
@@ -341,7 +341,7 @@ pub struct Compiler {
     /// has no function-pointer lineage. Concretely:
     ///
     ///   * 0  -- value IS a fn pointer; one more unary `*` is the
-    ///           C function-pointer-decay no-op (gh #19).
+    ///           C function-pointer-decay no-op
     ///   * N>0 -- N more derefs to reach the fn pointer.
     ///   * -1 -- not in a fn-ptr-tracked chain; existing behavior.
     ///
@@ -370,7 +370,7 @@ pub struct Compiler {
     /// every distinct filename observed via the lexer's
     /// `(file, line)` state (i.e. crossing a GNU line marker on
     /// `#include` enter / a `#line N "file"` directive) gets a
-    /// fresh entry. The DWARF emitter (gh #50) writes one
+    /// fresh entry. The DWARF emitter writes one
     /// `DW_LNE_define_file` per entry and switches with
     /// `DW_LNS_set_file` when `source_file_indices` changes.
     source_files: Vec<String>,
@@ -382,7 +382,7 @@ pub struct Compiler {
     source_file_indices: Vec<u16>,
     /// Per-function locals + parameters captured at body close,
     /// before the c5 shadow-symbol restore unwinds the binding.
-    /// gh #46 -- the DWARF emitter walks this list to attach
+    /// -- the DWARF emitter walks this list to attach
     /// `DW_TAG_variable` / `DW_TAG_formal_parameter` DIEs to the
     /// matching subprogram, which lets lldb's `frame variable` and
     /// `watchpoint set variable foo` work for c5-emitted code.
@@ -1572,7 +1572,7 @@ impl Compiler {
         // a user-defined `DllMain` is present we still refuse,
         // since the result would be an image with no callable
         // entries at all.
-        // gh #55: `#pragma entrypoint(<name>)` overrides the
+        // `#pragma entrypoint(<name>)` overrides the
         // canonical `main`. The override goes through the same
         // symbol-table lookup so the diagnostic is uniform: a
         // missing entrypoint always reads `<name>() not defined`.
@@ -1649,15 +1649,15 @@ impl Compiler {
             source_file_indices: self.source_file_indices,
             // The compiler doesn't see the input path -- the CLI
             // shim sets this on the returned `Program` before
-            // calling `emit_native_*` (gh #44).
+            // calling `emit_native_*`
             source_path: String::new(),
             variables: self.variables,
             // Struct registry, exposed so the DWARF emitter can
             // walk member offsets / bitfield layouts and produce
-            // `DW_TAG_structure_type` DIEs (gh #59). The VM /
+            // `DW_TAG_structure_type` DIEs The VM /
             // JIT / interpreter ignore this field.
             structs: self.structs,
-            // gh #55 / gh #32: source-driven entry-name and
+            // source-driven entry-name and
             // Windows subsystem flags drained from the
             // preprocessor. Both default to None (image writers
             // pick `main` / `Console` respectively).
@@ -2017,7 +2017,7 @@ impl Compiler {
         if matches!(self.text.last(), Some(&op) if is_scalar_load_op_val(op)) {
             self.text.pop();
             // Keep parallel debug arrays in sync with `text`
-            // (gh #48). Without these matching pops the
+            // Without these matching pops the
             // source_functions / source_lines tail drifts past
             // text.len() and every later emit_op lands in the
             // wrong slot.
@@ -2173,7 +2173,7 @@ impl Compiler {
                 let expr_ty = self.ty;
                 self.text.truncate(saved_text_len);
                 // Keep `source_lines` / `source_functions` in
-                // sync with `text` (gh #48 root cause). Without
+                // sync with `text` Without
                 // these matching truncates the parallel arrays
                 // grow longer than `text`, and every subsequent
                 // `emit_op` lands its source-line / source-function
@@ -2591,7 +2591,7 @@ impl Compiler {
                     // Pointers to structs and every scalar type go
                     // through the normal load_op_for path.
                     self.emit_op(load_op_for(self.ty, self.target));
-                    // gh #19: seed the fn-pointer chain depth from
+                    // seed the fn-pointer chain depth from
                     // the symbol's recorded indirection. emit_op
                     // just cleared the field; re-set it now so the
                     // surrounding unary-`*` chain can recognise
@@ -2606,16 +2606,16 @@ impl Compiler {
                     // 2D-array parameter decay: a parameter declared
                     // as `T name[N][M]` carries `inner_array_size = M`
                     // on its symbol but the function-param binder
-                    // wipes `array_size` to 0 (params don't own
-                    // storage). The next `[i]` postfix needs the row
-                    // stride so it scales by `M * sizeof(T)` and
-                    // keeps the type pointer-shaped for the inner
-                    // `[j]`. The loaded value is already a pointer
-                    // (one level less than the array would have
-                    // been), so the pointee type is the post-load
-                    // `self.ty`. stb_image_write's
-                    // `stbiw__jpg_processDU(const unsigned short
-                    // HTAC[256][2])` hits this on every JPEG block.
+                    // wipes `array_size` to 0 (per C99 6.7.5.3p7
+                    // the outermost dimension decays to a pointer,
+                    // and params don't own storage). The next
+                    // `[i]` postfix needs the row stride so it
+                    // scales by `M * sizeof(T)` and keeps the type
+                    // pointer-shaped for the inner `[j]`. The
+                    // loaded value is already a pointer (one
+                    // level less than the array would have been),
+                    // so the pointee type is the post-load
+                    // `self.ty`.
                     let inner = self.symbols[id_idx].inner_array_size;
                     if inner > 0 && is_pointer_ty(self.ty) {
                         self.pending_index_stride = inner * self.pointee_size(self.ty);
@@ -2629,7 +2629,7 @@ impl Compiler {
                 // float, double, or struct base, with any number of
                 // `*` markers and pointer-level qualifiers.
                 t = self.parse_decl_base_type()?;
-                // gh #19 lineage: if the base type came from a
+                // lineage: if the base type came from a
                 // typedef-of-fn-pointer, parse_decl_base_type seeded
                 // `pending_fn_ptr_indirection`; the leading `*`s
                 // below add directly to that count. The abstract
@@ -2782,7 +2782,7 @@ impl Compiler {
                     }
                 }
                 self.ty = t;
-                // gh #19: re-seed the fn-ptr chain depth from the
+                // re-seed the fn-ptr chain depth from the
                 // cast destination so a unary `*` chain that
                 // follows a `(fn_t*)expr` cast (e.g.
                 // `(**(finder_type*)pVfs->pAppData)(...)`) can
@@ -2831,7 +2831,7 @@ impl Compiler {
             // type drops to a non-pointer; if the function's
             // return type is itself a pointer (e.g. an
             // `io_methods *`-returning fn-ptr typedef as in
-            // gh #19) the pop is short-circuited and the
+            // ) the pop is short-circuited and the
             // garbage call target slips through.
             if self.fn_ptr_chain_depth == 0 {
                 // Decay no-op. Keep depth at 0: the decayed
@@ -2901,7 +2901,7 @@ impl Compiler {
                 return Err(self.compile_err("bad address-of"));
             }
             self.ty += Ty::Ptr as i64;
-            // gh #19: `&` adds one pointer level toward the fn-ptr
+            // `&` adds one pointer level toward the fn-ptr
             // for any chain we were tracking. -1 (untracked) stays
             // -1.
             if self.fn_ptr_chain_depth >= 0 {
@@ -3217,9 +3217,11 @@ impl Compiler {
                 // the same int->FP lift the binary path uses --
                 // otherwise `x *= -1` (FP lvalue, int rvalue) hands
                 // the FP op a 64-bit signed `-1` and produces NaN
-                // straight away. Surfaced compiling kissfft (the
-                // `phase *= -1;` line that flips the inverse-FFT
-                // twiddle factor sign).
+                // straight away. C99 6.5.16.2 specifies that the
+                // arithmetic is performed in the type of `E1 op
+                // E2` and the result is converted back to E1's
+                // type, so an integer RHS must be widened to
+                // double before the FP op runs.
                 if lhs_is_fp || is_floating_scalar(self.ty) {
                     self.require_both_float(lhs_ty, "compound assign")?;
                 }
@@ -3766,13 +3768,10 @@ impl Compiler {
         // postfix. If we leave this expr() without seeing the
         // expected `[i]` -- e.g., the array was passed to a
         // function as a bare argument with `foo(arr)` -- the
-        // hint must not leak to the next expression. Without
-        // this clear, stb_image_write's
-        //   stbiw__jpg_processDU(..., YDC_HT, YAC_HT)
-        // leaves `pending_index_stride` set to the row stride
-        // of YAC_HT; the very next `subU[pos]` then takes the
-        // 2D-stride branch in Brak, never loads, and the `=`
-        // that follows trips "bad lvalue in assignment".
+        // hint must not leak to the next expression. Otherwise
+        // the next array access in a fresh expression would
+        // inherit the stale row stride and skip its scalar
+        // load, leaving no lvalue for a following `=`.
         self.pending_index_stride = 0;
         Ok(())
     }
@@ -3967,7 +3966,7 @@ impl Compiler {
 
             while self.lex.tk != ';' as i64 && self.lex.tk != '}' as i64 {
                 let (id_idx, ty, array_size) = self.parse_declarator(bt)?;
-                // gh #19: pick up the fn-pointer indirection
+                // pick up the fn-pointer indirection
                 // count the declarator (or its typedef base type)
                 // recorded, and store it on the symbol so a later
                 // identifier load can seed the chain-depth tracker.
@@ -3993,15 +3992,16 @@ impl Compiler {
                 // paths -- but a clashing redefinition or a clash with
                 // a non-typedef symbol is rejected.
                 if is_typedef {
-                    // C99 function-type typedef: `typedef RET NAME(args);`
-                    // (stb_sprintf's STBSP_SPRINTFCB and friends). The
-                    // declarator stopped at NAME; the `(args)` that
-                    // follows is the function's parameter list. Parse it
-                    // and bind NAME as a function-pointer alias (fpi=1,
-                    // type bumped by one Ptr) -- every real use is
-                    // through `NAME cb` (decays to fn-ptr) or `NAME *cb`
-                    // (already fn-ptr), so the two spellings collapse
-                    // to the same effective shape in c5's model.
+                    // C99 function-type typedef: `typedef RET NAME(args);`.
+                    // The declarator stopped at NAME; the `(args)`
+                    // that follows is the function's parameter
+                    // list. Parse it and bind NAME as a function-
+                    // pointer alias (fpi=1, type bumped by one
+                    // Ptr) -- every real use is through `NAME cb`
+                    // (decays to fn-ptr per C99 6.3.2.1p4) or
+                    // `NAME *cb` (already fn-ptr), so the two
+                    // spellings collapse to the same effective
+                    // shape in c5's model.
                     //
                     // parse_function_params binds each named parameter
                     // as a Loc symbol (it's shared with function-decl
@@ -4104,7 +4104,7 @@ impl Compiler {
                         // of this code wrote `val = self.text.len()`
                         // whenever val was 0, which silently broke
                         // any function whose body legitimately
-                        // started at PC 0 (gh #52).
+                        // started at PC 0
                     }
                     // Only warn on user-vs-user redeclarations.
                     // Sys symbols (the per-target header's libc
@@ -4196,7 +4196,7 @@ impl Compiler {
                                     binding.is_variadic = variadic;
                                     binding.fixed_args = fixed;
                                     binding.return_type_tag = ret_ty;
-                                    // gh #67: per-param types for the
+                                    // per-param types for the
                                     // DWARF subprogram DIE the codegen
                                     // emits over each PLT trampoline.
                                     // Without these, gdb shows
@@ -4358,7 +4358,7 @@ impl Compiler {
                         }
                     }
 
-                    // gh #46 -- snapshot the function's locals +
+                    // -- snapshot the function's locals +
                     // formal parameters before `restore_shadowed_symbol`
                     // unwinds the bindings. The DWARF emitter groups
                     // these by `function_bc_pc` (the Ent's PC) and

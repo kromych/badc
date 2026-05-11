@@ -227,7 +227,7 @@ pub struct Program {
     /// know the path, so it leaves this empty for the
     /// `compile_str` / stdin / fixture paths.
     ///
-    /// The DWARF emitter (gh #44) uses this as the CU's
+    /// The DWARF emitter uses this as the CU's
     /// `DW_AT_name` and the line program's only file entry, so
     /// `lldb image lookup -n foo` reports `foo at /path/to/src.c:N`
     /// instead of `<unknown>:N`. Empty falls back to `<unknown>`.
@@ -236,7 +236,7 @@ pub struct Program {
     /// Per-function local + formal-parameter records, captured at
     /// function-body close (just before the c5 `Token::Loc`
     /// shadowing is unwound). Indexed by lookup -- consumers
-    /// (gh #46 DWARF emitter) filter by `function_bc_pc` to gather
+    /// (DWARF emitter) filter by `function_bc_pc` to gather
     /// the variables that belong to each subprogram.
     ///
     /// `fp_slot` is the c5 frame-relative slot the symbol resolves
@@ -254,12 +254,12 @@ pub struct Program {
     /// Struct / union registry, indexed by the struct id encoded
     /// in c5 type tags (`STRUCT_BASE + id * STRUCT_STRIDE`).
     /// Cloned out of `Compiler::structs` at `compile()` time so
-    /// the DWARF emitter (gh #59) can walk member offsets and
+    /// the DWARF emitter can walk member offsets and
     /// bitfield layouts to produce `DW_TAG_structure_type` /
     /// `DW_TAG_union_type` DIEs. The VM / JIT / interpreter
     /// ignore this field.
     pub structs: Vec<crate::c5::compiler::StructDef>,
-    /// Source-declared entry-point name (gh #55). Set by
+    /// Source-declared entry-point name Set by
     /// `#pragma entrypoint(<name>)`; `None` falls back to the
     /// canonical `main`. The compile pass already used the
     /// override to compute `entry_pc`; this field carries the
@@ -269,7 +269,7 @@ pub struct Program {
     /// resolve through `entry_pc` directly and ignore this
     /// field.
     pub entry_name: Option<String>,
-    /// Source-declared Windows subsystem (gh #32). Set by
+    /// Source-declared Windows subsystem Set by
     /// `#pragma subsystem(<kind>)`; `None` falls back to the
     /// PE writer's default (`Console`). Read only by the PE
     /// writers; non-PE targets (Mach-O / ELF) ignore this
@@ -279,7 +279,7 @@ pub struct Program {
 
 /// A single local variable or formal parameter belonging to a
 /// specific c5-emitted function, captured for DWARF emission
-/// (gh #46). The function is identified by `function_bc_pc` --
+/// The function is identified by `function_bc_pc` --
 /// the bytecode PC of its `Op::Ent`, which the DWARF emitter
 /// already uses to find the matching subprogram DIE.
 #[derive(Debug, Clone)]

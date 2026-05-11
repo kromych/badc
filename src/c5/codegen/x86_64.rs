@@ -1015,7 +1015,7 @@ fn emit_modrm_mem(code: &mut Vec<u8>, reg: Reg, base: Reg, disp: i32) {
 /// (mov rdi, [rsp]; lea rsi, [rsp+8]; call rel32) + 3 bytes of
 /// `mov rdi, rax` + 6 bytes of `call qword [rip+disp32]`.
 pub(super) const START_STUB_LEN: u64 = 23;
-/// Length of the syscall-tail `_start` stub (gh #69). One byte
+/// Length of the syscall-tail `_start` stub One byte
 /// longer than the libc tail because `mov eax, 231` (5 bytes) +
 /// `syscall` (2 bytes) totals 7 vs. the libc tail's `call
 /// qword [rip+disp32]` (6 bytes).
@@ -1052,7 +1052,7 @@ pub(super) fn emit_start_stub(
     // start_stub_len + main_offset_in_code; the rel32 for `call`
     // is measured from the byte *after* the 5-byte `call`
     // instruction. Syscall vs libc tails differ by 1 byte
-    // (gh #69), so the math has to track which we picked.
+    //, so the math has to track which we picked.
     let call_byte_off = (code.len() - stub_start) as i64;
     let after_call = call_byte_off + 5;
     let stub_len = if use_libc_exit {
@@ -1076,7 +1076,7 @@ pub(super) fn emit_start_stub(
         emit_call_qword_rip32(code, 0);
         Some(stub_start + exit_call_offset)
     } else {
-        // gh #69: Linux x86_64 sys_exit_group = 231. Status is
+        // Linux x86_64 sys_exit_group = 231. Status is
         // already in rdi from the mov above.
         // mov eax, 231 (5 bytes)
         code.extend_from_slice(&[0xb8, 0xe7, 0x00, 0x00, 0x00]);
@@ -1357,7 +1357,7 @@ pub(super) fn lower(
     let mut fixups: Vec<Fixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();
     let mut got_fixups: Vec<GotFixup> = Vec::new();
-    // gh #61: each `JsrExt` / `TailExt` site records a `CALL rel32`
+    // each `JsrExt` / `TailExt` site records a `CALL rel32`
     // / `JMP rel32` placeholder; displacements get backfilled once
     // trampolines are appended to `code`. Mirrors the aarch64 path.
     let mut plt_call_fixups: Vec<PltCallFixup> = Vec::new();
@@ -1437,7 +1437,7 @@ pub(super) fn lower(
 
     apply_fixups(&mut code, &fixups, &bytecode_to_native, program.text.len())?;
 
-    // gh #61: append one PLT trampoline per import. CALL rel32 /
+    // append one PLT trampoline per import. CALL rel32 /
     // JMP rel32 placeholders recorded in `plt_call_fixups` get
     // their disp32 backfilled to the matching trampoline. The
     // trampoline body is a single `JMP qword ptr [rip + disp32]`
@@ -2083,7 +2083,7 @@ fn lower_op(
             // host ABI's argument registers / shadow-space slots,
             // so the libc fn sees exactly what the caller's `Adj N`
             // declared; we just forward control through the PLT
-            // trampoline (gh #61) and let the libc fn's `ret`
+            // trampoline and let the libc fn's `ret`
             // carry us back to the caller. No frame setup, no
             // stack manipulation, no post-call accumulator copy
             // -- the call site's Jsri lowering is responsible for
@@ -2387,7 +2387,7 @@ fn emit_libc_call(
         }
     }
 
-    // gh #61: emit a 5-byte CALL rel32 placeholder + record a
+    // emit a 5-byte CALL rel32 placeholder + record a
     // PltCallFixup; the trampoline at `imports[import_index]`'s
     // tail position will be patched in by `apply_plt_call_fixups`
     // once trampolines are emitted at the end of `lower()`. The
@@ -2443,7 +2443,7 @@ fn emit_libc_call(
     Ok(())
 }
 
-/// gh #61: per-call-site placeholder for the post-pass that
+/// per-call-site placeholder for the post-pass that
 /// patches `CALL rel32` / `JMP rel32` displacements once
 /// trampolines have been laid out at the tail of `code`. Mirror
 /// of the aarch64 type with the same name.
@@ -2562,7 +2562,7 @@ fn pop_lhs_reg(code: &mut Vec<u8>, reg_state: &mut RegState<'_>) -> Reg {
 /// when the env var is set, with `up_levels = 0` for "check our own
 /// saved rbp" and `up_levels = 1` for "check the caller's saved rbp"
 /// (= the slot the caller's prologue pushed when it was called -- which
-/// is the slot the gh #46 leaf bug clobbers).
+/// is the slot the leaf bug clobbers).
 ///
 /// Skipped under `is_main` because the libc startup stub leaves rbp = 0
 /// when calling main, which would always trip a 0-level check.
@@ -3228,7 +3228,7 @@ mod tests {
 
     #[test]
     fn start_stub_syscall_tail_decodes_to_known_bytes() {
-        // gh #69: when no libc `exit` binding is in scope the
+        // when no libc `exit` binding is in scope the
         // stub's tail is a direct sys_exit_group syscall (231)
         // instead of the libc-routed indirect call. Tail layout:
         //   mov rdi, rax        (3 bytes, rax = main's return)

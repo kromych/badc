@@ -38,12 +38,11 @@ impl Compiler {
         is_thread_local: bool,
     ) -> Result<(), C5Error> {
         let line = self.lex.line;
-        // C99 6.7.8/11 allows a scalar initializer to be enclosed
-        // in a single pair of braces: `int x = { 42 };`. stb_voxel_render's
-        //   static const char *stbvox_vertex_program = { "..." "..." };
-        // uses this shape with a multi-piece adjacent-string-
-        // literal payload (which the lexer joins into one literal
-        // before we see it). Strip the wrapper and recurse.
+        // C99 6.7.8p11 allows a scalar initializer to be enclosed
+        // in a single pair of braces: `int x = { 42 };`. Adjacent
+        // string-literal concatenation may produce a multi-piece
+        // RHS the lexer joins before this parser sees it. Strip
+        // the wrapper and recurse.
         if self.lex.tk == '{' as i64 {
             self.next()?;
             self.parse_global_initializer(var_ty, var_offset, is_thread_local)?;

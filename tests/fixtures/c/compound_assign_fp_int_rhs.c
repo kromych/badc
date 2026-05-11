@@ -6,7 +6,7 @@
 // hands `Op::Fmul` the 64-bit signed `-1` bit pattern and
 // produces NaN.
 //
-// Surfaced compiling kissfft, where `phase *= -1;` flips the
+// Surfaced compiling a libm-heavy library through -O, where `phase *= -1;` flips the
 // inverse-FFT twiddle factor sign. clang/gcc already do this
 // promotion via the regular usual-arith path; c5 used to skip
 // it for compound-assign even though the binary `*` did the

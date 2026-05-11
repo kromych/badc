@@ -127,7 +127,7 @@ pub(crate) struct Binding {
     /// then carried into `ResolvedImport` so the DWARF emitter
     /// can give each PLT trampoline a `DW_TAG_subprogram` with
     /// `DW_TAG_formal_parameter` children typed accurately
-    /// (gh #67). Empty when the parser hasn't seen the prototype.
+    /// Empty when the parser hasn't seen the prototype.
     pub param_types: Vec<i64>,
     /// c5-side name the source uses (e.g. `printf`).
     pub local_name: String,
@@ -231,14 +231,14 @@ pub(crate) struct Preprocessor {
     /// else.
     show_includes: bool,
     /// Source-declared entry-point name (`#pragma entrypoint(<id>)`,
-    /// gh #55). `None` means the default `main` is used; set via
+    /// ). `None` means the default `main` is used; set via
     /// the pragma to opt the translation unit into a non-`main`
     /// entry like `WinMain` (Win32 `--gui`) or a custom `_start`.
     /// The compile pass reads this when resolving `entry_pc`; the
     /// PE writer reads it for the optional-header AddressOfEntryPoint.
     pub entrypoint: Option<String>,
     /// Source-declared Windows subsystem (`#pragma subsystem(<kind>)`,
-    /// gh #32). `None` means the default `console`. Recognised
+    /// ). `None` means the default `console`. Recognised
     /// kinds today: `console` (IMAGE_SUBSYSTEM_WINDOWS_CUI = 3) and
     /// `windows` (IMAGE_SUBSYSTEM_WINDOWS_GUI = 2). The PE writer
     /// reads this to set the optional header's Subsystem field;
@@ -337,7 +337,7 @@ impl Preprocessor {
                 // family, etc.) lives in the bundled
                 // `msvc_compat.h` header and is opted into per
                 // translation unit via `badc -include
-                // msvc_compat.h ...` (gh #34). Keeping the
+                // msvc_compat.h ...` Keeping the
                 // predefine table to genuine target-detection
                 // surfaces the "is this TU pretending to be MSVC?"
                 // question at the command line, where the build
@@ -763,7 +763,7 @@ impl Preprocessor {
                             // here would snap the lexer back to
                             // physical-buffer coordinates and
                             // misattribute every subsequent emit --
-                            // the bug that gh #50 plumbing exposed
+                            // the bug that plumbing exposed
                             // when the amalgamator started gluing
                             // multiple translation units together
                             // via `#line` markers.
@@ -1026,9 +1026,13 @@ impl Preprocessor {
                         // matching function-like macro. We don't have
                         // a true token stream so emulate this here:
                         // detect the shape and pull the args from the
-                        // source directly. Drives stb_rect_pack's
-                        // `#define STBRP_ASSERT assert` indirection
-                        // (object-like alias -> function-like assert).
+                        // source directly. Drives the canonical
+                        // C99 6.10.3.4 rescan shape where an
+                        // object-like alias resolves to a
+                        // function-like macro name -- e.g.
+                        // `#define ALIAS f` followed by `ALIAS(x)`
+                        // must expand to `f(x)` and then through
+                        // any function-like `f` definition.
                         let trimmed = expanded.trim();
                         if !trimmed.is_empty()
                             && trimmed
@@ -2197,9 +2201,9 @@ fn macro_call_unclosed(
             let direct_fn = fn_macros.contains_key(name);
             // Object-like macro that resolves to a fn-like-macro
             // identifier (single-word body). One level of
-            // indirection is enough for stb_c_lexer's
-            // `STB_C_LEX_CPP_COMMENTS = Y` shape; deeper chains
-            // are vanishingly rare in real headers.
+            // indirection is enough for the canonical
+            // `#define ALIAS Y` followed by `Y(args)` shape;
+            // deeper chains are vanishingly rare in real headers.
             let indirect_fn = !direct_fn && {
                 obj_macros
                     .get(name)
@@ -3128,7 +3132,7 @@ mod tests {
 
     #[test]
     fn leading_marker_names_top_level_source() {
-        // gh #49: every preprocessed buffer opens with a GNU line
+        // every preprocessed buffer opens with a GNU line
         // marker so the lexer attributes the first source line to
         // `(<source>, 1)` rather than letting its initial state
         // decide. Without this, an `#include` later in the buffer
@@ -3139,7 +3143,7 @@ mod tests {
 
     #[test]
     fn line_directive_retargets_file_and_line() {
-        // gh #51: `#line N "file"` rewrites the lexer's
+        // `#line N "file"` rewrites the lexer's
         // `(file, line)` state so the next source line is
         // attributed to `(file, N)`.
         let out = process("#line 100 \"fakegen.c\"\nint x;\n");

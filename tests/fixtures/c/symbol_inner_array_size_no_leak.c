@@ -7,10 +7,11 @@
 // emitting a scalar load -- so `arr[i] = 0` fails as
 // "bad lvalue in assignment".
 //
-// stb_image's `stbi__build_fast_ac(stbi__int16 *fast_ac, ...)`
-// re-uses a name that's also a field of the `stbi__jpeg`
-// struct (`fast_ac[4][1 << FAST_BITS]`). With the leak,
-// `fast_ac[i] = 0;` rejected.
+// C99 6.2.1 identifier scopes: each new binding starts fresh,
+// so any per-symbol shape metadata must be cleared when the
+// binding's scope begins. The fixture shadows a struct field
+// of a 2D-array type with a pointer parameter of the same name
+// and confirms the parameter behaves as a plain 1D pointer.
 
 typedef short i16;
 

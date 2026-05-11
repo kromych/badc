@@ -4,10 +4,10 @@
 // the c5 accumulator unconditionally, dropping the xmm0 / d0
 // payload on the floor. Every FP-returning libc call thus
 // returned 0.0, which silently broke every numerics-heavy
-// codebase (kissfft butterflies returned NaN, sqlite's
+// codebase (a libm-heavy library butterflies returned NaN, an SQL engine's
 // avg-via-Kahan worked only because it stayed inside c5).
 //
-// Surfaced building kissfft. Pinning a handful of widely-used
+// Surfaced building a libm-heavy library. Pinning a handful of widely-used
 // libm fns here so a future regression on either backend
 // fails loudly.
 #include <stdio.h>

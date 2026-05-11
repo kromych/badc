@@ -58,7 +58,7 @@ impl Compiler {
                 self.next()?;
             }
         }
-        // gh #19 lineage propagation: if the caller pre-seeded
+        // lineage propagation: if the caller pre-seeded
         // `pending_fn_ptr_indirection` from a typedef-of-fn-ptr
         // base type, the leading `*`s here add directly to the
         // indirection count: `fn_t fp` -> 1, `fn_t *pp` -> 2,
@@ -87,7 +87,7 @@ impl Compiler {
             self.next()?; // consume the outer `(`
             let outer_ty_before_inner = ty;
             let (idx, mut inner_ty, inner_array_size) = self.parse_declarator(ty)?;
-            // Function-pointer lineage trace (gh #19): the inner
+            // Function-pointer lineage trace: the inner
             // declarator's leading `*`s plus the fn-pointer's own
             // pointer level give the indirection count from the
             // variable's loaded value down to the fn-pointer
@@ -241,13 +241,10 @@ impl Compiler {
                 // Always overwrite, even with 0, so a rebinding of a
                 // name that previously carried a 2D dimension (a
                 // struct field, an outer-scope local, etc.) doesn't
-                // inherit the stale row stride. Without this clear,
-                // stb_image's `stbi__build_fast_ac(stbi__int16
-                // *fast_ac, ...)` parameter inherits the `[1 <<
-                // FAST_BITS]` inner dimension from the matching
-                // `stbi__jpeg::fast_ac[4][1 << FAST_BITS]` field, and
-                // `fast_ac[i]` then takes the 2D-stride branch and
-                // emits no load.
+                // inherit the stale row stride. C99 6.2.1
+                // identifier scopes: each new binding starts fresh,
+                // so any per-symbol shape metadata must be cleared
+                // when the binding's scope begins.
                 self.symbols[idx].inner_array_size = inner_dim;
             }
         } else if idx != usize::MAX {

@@ -1,5 +1,5 @@
 // struct initializers, both designated and positional. The
-// fixture covers the sqlite-style vtable shape: a const struct with
+// fixture covers the an SQL engine-style vtable shape: a const struct with
 // integer, string, and function-pointer fields, populated via a
 // brace-list at file scope.
 //

@@ -1,24 +1,20 @@
 // Regression: floating-point arithmetic in a static / global
 // array initializer.
 //
-// stb_image_write.h's `stbi_write_jpg_to_func` declares
-//   static const float aasf[] = {
-//     1.0f * 2.828427125f,
-//     1.387039845f * 2.828427125f,
-//     ...
-//   };
-// Each element is a constant-foldable float expression. c5 used
+// C99 6.6 defines arithmetic constant expressions over
+// floating-point operands; `*`, `/`, `+`, `-` and parens are
+// all allowed alongside literals and named constants. c5 used
 // to route every element through the integer constant evaluator
-// (`parse_const_expr_*`), which has no float arithmetic path
+// (`parse_const_expr_*`), which has no float-arithmetic path
 // and rejected the `*` between literals as "constant integer
-// expected (got tk=161)" (tk=161 is MulOp).
+// expected".
 //
 // Fix: when an initializer element starts with a float literal
 // followed by `+` / `-` / `*` / `/`, fold the whole expression
 // in `f64` precision and store the resulting bit pattern. Mixed
-// integer-and-float operands work too -- the integer side is
-// promoted to f64 first, matching C's usual arithmetic
-// conversions for constant float expressions.
+// integer-and-float operands work too -- per C99 6.3.1.8 usual
+// arithmetic conversions, the integer side is promoted to
+// `double` before the operation.
 
 #include <stdio.h>
 

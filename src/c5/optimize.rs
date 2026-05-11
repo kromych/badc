@@ -329,7 +329,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         .collect();
 
     // Remap source-line / source-function debug info through the
-    // optimizer so dump-asm and DWARF (gh #39) keep their names and
+    // optimizer so dump-asm and DWARF keep their names and
     // line numbers at -O. For each pre-opt insn index `i`: its OLD
     // bc-pc was `pc_at_idx[i]` and its NEW bc-pc is `new_pc[i]`.
     // Each insn occupies `word_size()` text words; copy the
@@ -369,7 +369,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
     // PC table. Compiler captured each Loc symbol with the *pre-
     // optimizer* Ent position; the optimizer can shift Ents to
     // new positions (DCE never removes them, but earlier
-    // instructions may collapse). gh #46 -- without this remap
+    // instructions may collapse). -- without this remap
     // the DWARF emitter's `function_bc_pc == ent_pc` filter
     // misses every function under -O, so `frame variable` works
     // at noO but goes silent at -O.
@@ -400,7 +400,9 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
     // xmm0 and feeding `sin(0.5)` an interpretation of 0.5's
     // bit pattern as an integer (4602678819172646912 -- which
     // libm reads as a vast double, returning sin(huge)=junk or
-    // 0). Surfaced compiling kissfft at -O.
+    // 0). Standard ABI surface: any FP argument in a libc call
+    // through the optimizer has to keep its argument-register
+    // mask intact across the PC remap.
     let remapped_call_fp_arg_masks: Vec<(usize, u32)> = call_fp_arg_masks
         .iter()
         .filter_map(|&(old_pc, mask)| {
@@ -424,7 +426,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         // heuristic in codegen (`v >= CODE_BASE && v - CODE_BASE <
         // text.len()`) misclassifies user constants that happen to
         // land in that range -- e.g. an integer flag with value
-        // `0x20000000` (gh #30) gets emitted as a func-ptr
+        // `0x20000000` gets emitted as a func-ptr
         // ADRP+ADD pair and corrupts the user's bit field.
         code_imm_positions,
         tls_data,
@@ -465,7 +467,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
 /// any user constant in `[CODE_BASE, CODE_BASE + text.len())` as a
 /// func-ptr and corrupts integer flag values that happen to land in
 /// that range, like a flag with literal value `0x20000000` matching
-/// `CODE_BASE`; cf. gh #30).
+/// `CODE_BASE`; cf. ).
 fn decode(
     text: &[i64],
     data_imm_positions: &[usize],
@@ -701,7 +703,7 @@ fn lookup_pc(
 /// `[CODE_BASE, CODE_BASE + text.len())` range. A flag literal
 /// `0x20000000` is exactly `CODE_BASE`, so the previous "fall back
 /// to range heuristic at -O" shape misclassified the integer as a
-/// func ptr (gh #30).
+/// func ptr
 fn encode(
     insns: &[Insn],
     entry_idx: usize,
@@ -1287,7 +1289,7 @@ mod tests {
 
     #[test]
     fn imm_equal_to_code_base_is_not_promoted() {
-        // gh #30: a user constant whose value happens to land in
+        // a user constant whose value happens to land in
         // `[CODE_BASE, CODE_BASE + text.len())` (e.g. an integer
         // flag literal `0x20000000`, exactly `CODE_BASE`) must
         // survive the optimizer as a plain integer. The empty

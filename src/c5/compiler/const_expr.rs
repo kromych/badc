@@ -359,7 +359,7 @@ impl Compiler {
                 self.text.truncate(saved_text_len);
                 // Keep parallel debug arrays in sync with `text`;
                 // see compiler/mod.rs's matching comment on the
-                // sister truncate (gh #48 root cause).
+                // sister truncate
                 self.source_lines.truncate(saved_text_len);
                 self.source_functions.truncate(saved_text_len);
                 self.source_file_indices.truncate(saved_text_len);

@@ -72,7 +72,7 @@ pub(crate) struct Symbol {
     /// otherwise also be zero). Read by the identifier-load path
     /// to seed `Compiler::fn_ptr_chain_depth` and ultimately
     /// decide whether a unary `*` is a real deref or a C decay
-    /// no-op (gh #19). c5 doesn't carry function-pointer
+    /// no-op c5 doesn't carry function-pointer
     /// distinction in the type tag itself, so this side-channel
     /// is the only durable trace.
     pub fn_ptr_indirection: i64,

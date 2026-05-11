@@ -18,7 +18,7 @@
 // lineage through identifier loads, casts, and `*` / `&`, so
 // the unary `*` handler suppresses the spurious load.
 //
-// In the wild this fires on sqlite's
+// In the wild this fires on an SQL engine's
 // `(**(finder_type*)pVfs->pAppData)(zFilename, pNew)` inside
 // unixOpen -- vfp's return type is `const sqlite3_io_methods *`,
 // the same struct-pointer-return pattern the fixture pins.
@@ -55,7 +55,7 @@ int main(void) {
     // Double-deref through a fn-ptr lvalue: still the fn ptr.
     if ((**fp)(0) == 0) return 5;
 
-    // Cast-through-finder-shape: sqlite's exact pattern. Take a
+    // Cast-through-finder-shape: an SQL engine's exact pattern. Take a
     // void pointer that *actually* points at a fn_t variable,
     // cast to `fn_t *`, then `**` to call.
     void *opaque = &the_fn;

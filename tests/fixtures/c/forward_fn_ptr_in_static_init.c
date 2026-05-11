@@ -1,17 +1,12 @@
 /* Regression: a static array of function pointers whose
  * referenced functions are defined *after* the table itself.
- * C99 6.7.4 allows a function declaration / definition to be
- * forward-referenced when its identifier is taken (decayed to
- * a pointer); the initializer must record the target's code
- * address even though the body's bytecode PC isn't known yet.
- * The fix routes through the existing post-parse fixup pass:
- * bind the forward identifier as a function symbol, push a
- * CodeReloc with val=0, then patch the data bytes and the
- * relocation once the body lands.
- *
- * The smoke-driving file (stb_image_resize2's
- * `stbir__vertical_gathers[]` dispatch table) sits behind
- * this same shape.
+ * C99 6.7p7 lets a prior prototype satisfy the identifier's
+ * type before the definition lands; the initializer
+ * records the function's code address even though the body's
+ * bytecode PC isn't known yet. The fix routes through the
+ * existing post-parse fixup pass: bind the forward identifier
+ * as a function symbol, push a CodeReloc with val=0, then
+ * patch the data bytes and the relocation once the body lands.
  */
 
 #include <stdio.h>

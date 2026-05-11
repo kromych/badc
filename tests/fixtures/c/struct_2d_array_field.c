@@ -1,7 +1,7 @@
 // 2D array fields inside a struct -- `T xs[N][M]` reachable via
 // `s.xs[i][j]` / `p->xs[i][j]`. Mirrors the `inner_array_size`
 // shadow tracking the symbol table already does for local 2D
-// arrays. miniz / sqlite / kissfft all use this shape for huff
+// arrays. compression / SQL / FFT libraries all use this shape for huff
 // tables, parsing tables, twiddle factors. c5 used to stop at
 // "pointer type expected" because StructField didn't carry the
 // inner dimension; the row stride couldn't be recovered, so

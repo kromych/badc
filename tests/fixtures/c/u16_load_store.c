@@ -11,7 +11,7 @@
 // Likewise, `u16 v = *(u16*)p;` reads 4 bytes and the high half
 // is whatever happened to be at p+2.
 //
-// This bites sqlite's vdbeMemRenderNum. The "%g"-of-double
+// This bites an SQL engine's vdbeMemRenderNum. The "%g"-of-double
 // rendering uses a `sqlite3DigitPairs.a[]` lookup with `*(u16*)`
 // 2-byte writes to fill a 21-byte digit buffer two digits at a
 // time. With c5's 4-byte stores, every iteration smashes the

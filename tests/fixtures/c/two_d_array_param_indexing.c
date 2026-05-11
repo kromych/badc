@@ -1,18 +1,14 @@
 // Regression: indexing a 2D-array parameter (`T name[N][M]`).
 // C99 6.7.5.3p7 decays the outer dimension to a pointer, leaving
-// `name` with type `T (*)[M]`. The inner dimension is what makes
-// `name[i][j]` reach the right element: the first index has to
-// scale by `M * sizeof(T)` (a row stride), not `sizeof(T)`.
-//
-// stb_image_write.h's `stbiw__jpg_processDU` takes
-//   const unsigned short HTDC[256][2], HTAC[256][2]
-// and immediately reads `HTAC[0x00][0]`. c5 used to wipe the
-// 2D-stride hint on the parameter symbol (binding the param
-// also cleared the `array_size` field but the `pending_index_stride`
-// setup was gated only on the "real array variable" path,
-// missing the param-load branch), so the inner `[j]` saw a
-// scalar `unsigned short` and rejected with "pointer type
-// expected."
+// `name` with type `T (*)[M]`. The inner dimension is what
+// makes `name[i][j]` reach the right element: the first index
+// has to scale by `M * sizeof(T)` (a row stride), not
+// `sizeof(T)`. c5 used to wipe the 2D-stride hint on the
+// parameter symbol (binding the param also cleared the
+// `array_size` field but the `pending_index_stride` setup was
+// gated only on the "real array variable" path, missing the
+// param-load branch), so the inner `[j]` saw a scalar
+// element and rejected with "pointer type expected."
 //
 // Fix: in the identifier-load path, when a parameter symbol
 // has `inner_array_size > 0` and the loaded value is a

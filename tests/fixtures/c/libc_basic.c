@@ -1,5 +1,5 @@
 // libc surface smoke test. Exercises the binding entries in
-// string.h, stdio.h, stdlib.h, and ctype.h that sqlite-shaped code
+// string.h, stdio.h, stdlib.h, and ctype.h that an SQL engine-shaped code
 // reaches for. The fixture deliberately avoids:
 //   * libc functions returning a 32-bit `int` in a way that the
 //     return value's sign bit matters (strcmp's negative result,

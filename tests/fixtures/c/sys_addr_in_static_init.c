@@ -1,5 +1,5 @@
 // Address of a libc binding inside a static struct
-// initializer. sqlite's `aSyscall[]` table is the in-the-wild
+// initializer. an SQL engine's `aSyscall[]` table is the in-the-wild
 // shape: a static array of `{ name, fn-ptr, default-fn-ptr }`
 // where each `fn-ptr` is the address of a libc symbol (open,
 // close, read, lstat, ...). Until #58's per-Sys trampoline
@@ -8,7 +8,7 @@
 // through a NULL function pointer and SIGSEGV'd on first use.
 //
 // The fixture mimics the structure: a 3-field struct with a
-// NULL slot in the middle (matches sqlite's
+// NULL slot in the middle (matches an SQL engine's
 // `posix_fallocate`-not-available conditional). Calls each
 // non-NULL slot through a function-pointer cast and validates
 // the result. The trailing /etc/hosts read confirms the

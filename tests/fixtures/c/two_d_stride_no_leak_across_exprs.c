@@ -2,15 +2,16 @@
 // hint c5 sets at an array decay to make `arr[i][j]` index by
 // the right stride) must not leak across expressions.
 //
-// stb_image_write.h's `stbi_write_jpg_core` passes the 2D
-// Huffman tables as function arguments
-//   stbiw__jpg_processDU(..., YDC_HT, YAC_HT)
-// where the decay sets the stride but no `[i]` postfix consumes
-// it; later that same function does `subU[pos] = (U[j+0] + ...) *
-// 0.25f` and the stale stride steered the Brak handler into
-// the 2D-stride branch, which keeps `ty` pointer-shaped and
-// emits no load. The trailing `=` then has no scalar load to
-// rewrite-to-Psh and rejects with "bad lvalue in assignment".
+// When a 2D array decays in a context that doesn't immediately
+// take a subscript -- e.g. it's passed as a function argument
+// per C99 6.3.2.1p3 array-to-pointer conversion -- the decay
+// sets the stride but no `[i]` postfix consumes it. Without
+// clearing the hint at the end of the expression, the next
+// array assignment in a fresh expression takes the 2D-stride
+// branch in the Brak handler, keeps the type pointer-shaped,
+// and emits no scalar load -- the trailing `=` then has no
+// load to rewrite-to-Psh and rejects with "bad lvalue in
+// assignment".
 //
 // Fix: clear `pending_index_stride` at the end of every `expr()`
 // call so the hint stays scoped to the single id-load -> Brak

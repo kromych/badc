@@ -3,9 +3,9 @@
 // Octal integer literals (`0644` is octal `420`, not decimal
 // `644`). Until #58's lexer fix, c5 read every leading-zero
 // number as decimal and silently passed wrong file modes /
-// permission bits / sqlite-flag constants. sqlite's own VFS
+// permission bits / an SQL engine-flag constants. an SQL engine's own VFS
 // uses `osOpen(zPath, flags, 0644)` to create database files,
-// so this regression made every newly-created sqlite db come
+// so this regression made every newly-created an SQL engine db come
 // out with mode `1204` (decimal `644` re-encoded as octal)
 // instead of `0644`.
 //

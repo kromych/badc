@@ -1,15 +1,12 @@
 // Regression: local arrays initialized with non-constant values.
-// C99 6.7.8 allows initializers for non-static auto storage to
-// contain non-constant expressions; the array is initialized
+// C99 6.7.8p13 allows initializers for non-static auto storage
+// to contain non-constant expressions; the array is initialized
 // element-by-element in declaration order, as if by assignment.
-//
-// stb_image_write.h's `stbiw__jpg_processDU` does this with
-//   const unsigned short EOB[2] = { HTAC[0x00][0], HTAC[0x00][1] };
-// where `HTAC` is a function parameter. Before this fix c5
-// routed every element through `parse_constant_init_value`,
-// which only accepts constants and rejected the parameter
-// reference with "identifier ... is not a constant-expression
-// value".
+// Before this fix c5 routed every element through
+// `parse_constant_init_value`, which only accepts constants and
+// rejected references to function parameters (and other
+// non-constant identifiers) with "identifier ... is not a
+// constant-expression value".
 //
 // The runtime path emits per-element stores: Lea + Add offset
 // + Psh + <expr> + Sh/Sw/Si/Sc. The constant fast path (Mcpy

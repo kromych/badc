@@ -508,6 +508,27 @@ impl ResolvedImports {
             });
         }
 
+        // A `#pragma dylib(name, "path")` that the source declared
+        // but never bound any symbol from still has to flow through
+        // as a LOAD_DYLIB / DT_NEEDED entry: a typical use is
+        // forcing a framework's runtime-init code to fire (e.g.,
+        // AppKit registering the NSApplication class with the
+        // Objective-C runtime so `objc_getClass("NSApplication")`
+        // resolves). The bytecode walk above only collects dylibs
+        // that owned at least one `Op::JsrExt` binding; declared-
+        // but-unused dylibs were silently dropped here, with the
+        // visible symptom that the program's dynamic-init hook
+        // never ran. Append them in source-declared order so the
+        // load-command sequence matches the user's intent.
+        for spec in &program.dylibs {
+            if !dylibs.iter().any(|d| d.name == spec.name) {
+                dylibs.push(ResolvedDylib {
+                    name: spec.name.clone(),
+                    path: spec.path.clone(),
+                });
+            }
+        }
+
         Ok(ResolvedImports { imports, dylibs })
     }
 }

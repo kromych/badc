@@ -25,8 +25,9 @@ There are various demo's under [`demos`](./demos/):
 * `miniz` - compression, CRC32, integers, bit twiddling,
 * `kissfft` - floating points, Fast Fourier Transform,
 * `bzip2` - compression, integers, bit twiddling,
-* `stb` - header-only C library with lots of incredible features,
-  really stresses many parts of the compiler.
+* `stb` - header-only C library with lots of incredible features (math
+  noise generation, sound, JPEG, PNG, BMP, PSD support to name a few).
+  It really stresses all of the compiler.
 
 It can also run the code JIT-ted in-process so no binary is written
 to the disk. That option might be useful for using `badc` to run the

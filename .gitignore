@@ -69,3 +69,9 @@ vendor-deps-bundle/
 # Python bytecode caches from `setup.py` importing `_fetch.py`.
 __pycache__/
 *.pyc
+
+*.ogg
+*.mp3
+*.bmp
+*.png
+*.jpg

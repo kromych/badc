@@ -30,11 +30,10 @@ impl Compiler {
         let mut args = Vec::new();
         let mut types = Vec::new();
         let mut is_variadic = false;
-        // `(void)` -- C's "no parameters" sigil. The lexer maps
-        // `void` to `Token::Char`, so detect the shape via lookahead:
-        // a `Char`/`void` token immediately followed by `)` and not
-        // by an identifier (which would make this a real parameter).
-        if self.lex.tk == Token::Char && self.lex.peek_after_whitespace(b')') {
+        // `(void)` -- C's "no parameters" sigil. With `void` lexed
+        // as `Token::Void`, the shape is unambiguous: a `void`
+        // token immediately followed by `)`.
+        if self.lex.tk == Token::Void && self.lex.peek_after_whitespace(b')') {
             self.next()?; // consume `void`
             // tk is now `)`; the outer loop sees it and exits.
         }

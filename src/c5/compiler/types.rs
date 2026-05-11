@@ -111,6 +111,9 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
             .unwrap_or_else(|| format!("@{id}"));
         return format!("{prefix}struct {name}{}", "*".repeat(depth));
     }
+    if bare == Ty::Void as i64 {
+        return "void".to_string();
+    }
     let (base, leaf) = if (Ty::Float as i64..Ty::Float as i64 + FP_BAND_SIZE).contains(&bare) {
         (Ty::Float as i64, "float")
     } else if (Ty::Double as i64..Ty::Double as i64 + FP_BAND_SIZE).contains(&bare) {
@@ -505,6 +508,7 @@ pub(super) fn is_decl_modifier(tk: Tok) -> bool {
 pub(super) fn is_type_start_token(tk: Tok) -> bool {
     tk == Token::Int
         || tk == Token::Char
+        || tk == Token::Void
         || tk == Token::Float
         || tk == Token::Double
         || tk == Token::Struct

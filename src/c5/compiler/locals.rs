@@ -398,17 +398,28 @@ impl Compiler {
                 self.emit_local_array_init(local_val, start_addr, total_bytes);
             } else if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 && self.lex.tk == '{' {
                 // Local struct value with brace-list initializer.
-                // Stage the bytes in `self.data` (so the bit
-                // pattern is shared across calls), then emit a
-                // Mcpy from the staged buffer to the local slot.
+                // C99 6.7.8p13: every entry may be a non-constant
+                // expression. Pre-scan the brace list; if all
+                // entries fold to compile-time constants, stage
+                // the bytes in `self.data` and Mcpy them into the
+                // local slot (fast, single transfer). Otherwise
+                // first Mcpy zeros into the slot to implement the
+                // "omitted fields are zero" rule (6.7.8p19), then
+                // emit per-field runtime stores for each entry.
+                let sid = struct_id_of(ty);
+                let needs_runtime = self.struct_init_needs_runtime()?;
                 let elem_size = self.size_of_type(ty);
                 let staged_off = self.data.len();
                 for _ in 0..elem_size {
                     self.data.push(0);
                 }
-                let sid = struct_id_of(ty);
-                self.collect_struct_initializer(sid, staged_off as i64)?;
-                self.emit_local_array_init(local_val, staged_off, elem_size);
+                if needs_runtime {
+                    self.emit_local_array_init(local_val, staged_off, elem_size);
+                    self.emit_struct_local_init_runtime(local_val, sid)?;
+                } else {
+                    self.collect_struct_initializer(sid, staged_off as i64)?;
+                    self.emit_local_array_init(local_val, staged_off, elem_size);
+                }
             } else {
                 self.emit_local_init_store(local_val, ty)?;
             }
@@ -583,5 +594,205 @@ impl Compiler {
         }
         self.next()?; // consume `}`
         Ok(())
+    }
+
+    /// Emit per-field store sequences for a local-struct
+    /// initializer whose entries aren't all compile-time
+    /// constants. C99 6.7.8p17 specifies that designated and
+    /// positional entries interleave; the cursor moves to one
+    /// past the last-written field after each entry. The local
+    /// slot is assumed already zeroed by the caller's Mcpy-from-
+    /// staged-zeroes prelude, so omitted fields stay at the
+    /// implicit `= 0` per 6.7.8p19.
+    ///
+    /// Nested array fields, nested struct values, bitfields, and
+    /// string-literal char-array fields aren't supported yet --
+    /// the constant-staging path already handles them and this
+    /// helper only fires when at least one entry is non-constant.
+    /// A caller that hits one of those shapes in a non-constant
+    /// init gets a parse error.
+    pub(super) fn emit_struct_local_init_runtime(
+        &mut self,
+        local_val: i64,
+        sid: usize,
+    ) -> Result<(), C5Error> {
+        debug_assert!(self.lex.tk == '{');
+        self.next()?; // consume `{`
+        let mut pos: usize = 0;
+        while self.lex.tk != '}' {
+            let field_idx = if self.lex.tk == Token::Dot {
+                self.next()?;
+                if self.lex.tk != Token::Id {
+                    return Err(self.compile_err("field name expected after `.`"));
+                }
+                let field_name = self.symbols[self.lex.curr_id_idx].name.clone();
+                self.next()?;
+                if self.lex.tk != Token::Assign {
+                    return Err(
+                        self.compile_err(format!("`=` expected after `.{field_name}` designator"))
+                    );
+                }
+                self.next()?;
+                self.structs[sid]
+                    .fields
+                    .iter()
+                    .position(|f| f.name == field_name)
+                    .ok_or_else(|| {
+                        self.compile_err(format!(
+                            "struct {} has no field {}",
+                            self.structs[sid].name, field_name
+                        ))
+                    })?
+            } else {
+                pos
+            };
+            if field_idx >= self.structs[sid].fields.len() {
+                return Err(self.compile_err(format!(
+                    "too many initializers for struct {}",
+                    self.structs[sid].name
+                )));
+            }
+            let field = self.structs[sid].fields[field_idx].clone();
+            if field.bit_width > 0 {
+                return Err(self.compile_err("non-constant bitfield initializer not yet supported"));
+            }
+            if field.array_size > 0 {
+                return Err(
+                    self.compile_err("non-constant array-field initializer not yet supported")
+                );
+            }
+            if is_struct_ty(field.ty) && struct_ptr_depth(field.ty) == 0 && self.lex.tk == '{' {
+                return Err(self.compile_err(
+                    "non-constant nested-struct-field initializer not yet supported",
+                ));
+            }
+            // Scalar / pointer field. Address = &local + field.offset;
+            // push, evaluate the init expression, store with the
+            // field's natural width.
+            self.emit_lea(local_val);
+            if field.offset > 0 {
+                self.emit_op(Op::Psh);
+                self.emit_imm(field.offset as i64);
+                self.emit_op(Op::Add);
+            }
+            self.emit_op(Op::Psh);
+            self.expr(Token::Assign as i64)?;
+            let elem_size = self.size_of_type(field.ty);
+            let store_op = match elem_size {
+                1 => Op::Sc,
+                2 => Op::Sh,
+                4 => Op::Sw,
+                _ => Op::Si,
+            };
+            self.emit_op(store_op);
+            pos = field_idx + 1;
+            if self.lex.tk == ',' {
+                self.next()?;
+            }
+        }
+        self.next()?; // consume `}`
+        Ok(())
+    }
+
+    /// Pre-scan a struct initializer's brace list (current token
+    /// must be `{`) for any field whose value isn't a compile-
+    /// time constant. Returns true if the initializer needs the
+    /// per-field runtime store path; false if the existing
+    /// stage-into-data + Mcpy path suffices. The scan snapshots
+    /// / restores the lexer so token position is unchanged on
+    /// return.
+    ///
+    /// Designators (`.field = ...` and `[N] = ...`) at the top
+    /// of an entry are skipped before checking the value -- they
+    /// don't make the initializer non-constant on their own.
+    /// Non-constants for this check mirror the array scanner:
+    /// references to Loc-class symbols, function calls, indexed
+    /// reads, and member access through a non-designator dot /
+    /// arrow.
+    pub(super) fn struct_init_needs_runtime(&mut self) -> Result<bool, C5Error> {
+        debug_assert!(self.lex.tk == '{');
+        let snap = self.lex.snapshot();
+        self.next()?; // consume `{`
+        let mut depth: i64 = 1;
+        let mut needs_runtime = false;
+        // At the start of each entry (just after `{` or `,`),
+        // skip an optional designator chain so the value-side
+        // tokens are the ones inspected for non-constants.
+        // Multiple chained designators (`.outer.inner = ...`,
+        // `[5][2] = ...`) are skipped in order.
+        let mut at_entry_start = true;
+        while depth > 0 && self.lex.tk != 0 {
+            // Designator skip works at any depth: nested
+            // `.inner = { .x = ... }` carries its own
+            // entry-start-aligned designators that must be
+            // peeled off before checking the value tokens.
+            if at_entry_start && (self.lex.tk == Token::Dot || self.lex.tk == Token::Brak) {
+                while self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
+                    if self.lex.tk == Token::Dot {
+                        self.next()?; // .
+                        if self.lex.tk == Token::Id {
+                            self.next()?; // field name
+                        }
+                    } else {
+                        // `[N]` -- skip the constant integer
+                        // through the matching `]`.
+                        self.next()?; // [
+                        let mut br_depth = 1;
+                        while br_depth > 0 && self.lex.tk != 0 {
+                            if self.lex.tk == Token::Brak {
+                                br_depth += 1;
+                            } else if self.lex.tk == ']' {
+                                br_depth -= 1;
+                                if br_depth == 0 {
+                                    self.next()?; // consume `]`
+                                    break;
+                                }
+                            }
+                            self.next()?;
+                        }
+                    }
+                }
+                if self.lex.tk == Token::Assign {
+                    self.next()?; // `=`
+                }
+                at_entry_start = false;
+                continue;
+            }
+            if self.lex.tk == '{' {
+                depth += 1;
+                at_entry_start = true;
+            } else if self.lex.tk == '}' {
+                depth -= 1;
+                if depth == 0 {
+                    break;
+                }
+            } else if self.lex.tk == ',' {
+                // `,` separator -- the next token begins a new
+                // entry (positional or designator). At any
+                // depth.
+                at_entry_start = true;
+                self.next()?;
+                continue;
+            } else if self.lex.tk == Token::Id {
+                let class = self.symbols[self.lex.curr_id_idx].class;
+                if class == Token::Loc as i64 {
+                    needs_runtime = true;
+                }
+                if self.lex.peek_after_whitespace(b'[') || self.lex.peek_after_whitespace(b'(') {
+                    needs_runtime = true;
+                }
+                at_entry_start = false;
+            } else if self.lex.tk == Token::Dot || self.lex.tk == Token::Arrow {
+                // Member access on a value -- non-constant.
+                // Designator dots were consumed at entry start.
+                needs_runtime = true;
+                at_entry_start = false;
+            } else {
+                at_entry_start = false;
+            }
+            self.next()?;
+        }
+        self.lex.restore(snap);
+        Ok(needs_runtime)
     }
 }

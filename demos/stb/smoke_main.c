@@ -70,19 +70,15 @@
 #define STBI_NO_HDR
 #define STBI_NO_LINEAR
 #define STBI_NO_THREAD_LOCALS
-/* PSD load path is currently disabled: stbi__psd_is16 (and the
- * neighbouring code) lower into a bytecode stream where the
- * codegen scanner drifts off the op/operand boundary mid-
- * function (ICE: "bad opcode -- raw=5219 ... ctx: Imm 4 Psh
- * Imm 255 And Imm 4 Psh Imm 255 And"). The pattern is the
- * same on both aarch64 and x86_64 lanes, which means the
- * malformed bytecode is the parser / emit path rather than
- * an arch-specific codegen quirk. Re-enabling PSD needs a
- * proper bisect; multi-dim shape + Fcvtif assignment
- * conversion both went in this branch without dislodging
- * the regression. The smoke still covers PNG / JPG / TGA /
- * BMP through this same TU. */
-#define STBI_NO_PSD
+/* PSD path is included. `STBI_NOTUSED(v)` expands to
+ * `(void)sizeof(v)`, and `stbi__psd_is16` uses that with
+ * function-call operands -- which c5 used to drop emitted
+ * bytecode for without rewinding `fn_call_fixups`, so the
+ * stale fixup later corrupted the bytecode stream and ICE'd
+ * codegen with "bad opcode". The sizeof-truncation fix
+ * (rewinding fn_call_fixups + code_reloc_sym_idx alongside
+ * text / data_imm_positions / source_lines) unblocked this
+ * path. */
 #include "stb_image.h"
 
 #define STB_DS_IMPLEMENTATION

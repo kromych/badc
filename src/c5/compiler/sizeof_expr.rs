@@ -74,8 +74,22 @@ impl Compiler {
             // `last_array_decay_*` side-channel surfaces shape
             // info the array-decay paths set so a decayed array
             // recovers its real size instead of the pointer's 8.
+            //
+            // Anything the parser appended to `self` that points
+            // into `text` by PC has to be rewound in lockstep --
+            // otherwise the stale entry references a dead PC and
+            // later passes (the call-fixup walker, the source-
+            // attribution table, etc.) corrupt unrelated code
+            // when they fire. The canonical example is
+            // `(void)sizeof(some_func(args))` -- without rewinding
+            // `fn_call_fixups`, `apply_fn_call_fixups` writes the
+            // call's target into whatever bytecode word later
+            // landed at the recorded operand PC, drifting the
+            // op/operand alignment for the rest of the function.
             let saved_text_len = self.text.len();
             let saved_data_imm_positions = self.data_imm_positions.len();
+            let saved_fn_call_fixups = self.fn_call_fixups.len();
+            let saved_code_reloc_sym_idx = self.code_reloc_sym_idx.len();
             let lev = if had_paren {
                 Token::Assign as i64
             } else {
@@ -99,6 +113,8 @@ impl Compiler {
             self.source_functions.truncate(saved_text_len);
             self.source_file_indices.truncate(saved_text_len);
             self.data_imm_positions.truncate(saved_data_imm_positions);
+            self.fn_call_fixups.truncate(saved_fn_call_fixups);
+            self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);
             self.last_array_decay_size = 0;
             self.last_array_decay_bytes = 0;
             if array_bytes > 0 {

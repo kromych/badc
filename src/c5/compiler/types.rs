@@ -97,6 +97,7 @@ pub(super) fn round_up(x: usize, alignment: usize) -> usize {
 /// (e.g. unit tests that build types by hand).
 pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::string::String {
     use alloc::format;
+    use alloc::string::ToString;
     let unsigned = (ty & UNSIGNED_BIT) != 0;
     let bare = strip_unsigned(ty);
     let prefix = if unsigned { "unsigned " } else { "" };

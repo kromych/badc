@@ -2888,8 +2888,7 @@ impl Compiler {
                 // consumed one dim, the `[k]` should pick up the
                 // next). Without this transfer the inner expr's
                 // defensive clear strands the remaining strides.
-                self.pending_index_stride =
-                    core::mem::take(&mut self.end_of_expr_stride);
+                self.pending_index_stride = core::mem::take(&mut self.end_of_expr_stride);
                 self.pending_index_strides_tail =
                     core::mem::take(&mut self.end_of_expr_strides_tail);
             }
@@ -2904,12 +2903,10 @@ impl Compiler {
             // row deref. The outer snapshot is restored afterwards
             // so a containing operator's view isn't disturbed.
             let saved_eos_stride = core::mem::take(&mut self.end_of_expr_stride);
-            let saved_eos_tail =
-                core::mem::take(&mut self.end_of_expr_strides_tail);
+            let saved_eos_tail = core::mem::take(&mut self.end_of_expr_strides_tail);
             self.expr(Token::Inc as i64)?;
             let leftover_stride = core::mem::take(&mut self.end_of_expr_stride);
-            let leftover_tail =
-                core::mem::take(&mut self.end_of_expr_strides_tail);
+            let leftover_tail = core::mem::take(&mut self.end_of_expr_strides_tail);
             self.end_of_expr_stride = saved_eos_stride;
             self.end_of_expr_strides_tail = saved_eos_tail;
             // C function-pointer decay (6.3.2.1 / 6.3.4): `*` on
@@ -2949,11 +2946,7 @@ impl Compiler {
                 // enclosing `sizeof` recovers it.
                 self.last_array_decay_bytes = leftover_stride;
                 let mut tail = leftover_tail;
-                self.pending_index_stride = if tail.is_empty() {
-                    0
-                } else {
-                    tail.remove(0)
-                };
+                self.pending_index_stride = if tail.is_empty() { 0 } else { tail.remove(0) };
                 self.pending_index_strides_tail = tail;
             } else {
                 if is_pointer_ty(self.ty) {
@@ -3964,8 +3957,7 @@ impl Compiler {
         // The snapshot is one operator deep: the next `expr()`
         // exit overwrites it.
         self.end_of_expr_stride = self.pending_index_stride;
-        self.end_of_expr_strides_tail =
-            core::mem::take(&mut self.pending_index_strides_tail);
+        self.end_of_expr_strides_tail = core::mem::take(&mut self.pending_index_strides_tail);
         self.pending_index_stride = 0;
         Ok(())
     }

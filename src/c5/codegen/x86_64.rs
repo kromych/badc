@@ -2942,6 +2942,32 @@ fn read_operand(text: &[i64], pc: &mut usize, op_name: &str) -> Result<i64, C5Er
 /// push argc / argv as 16-byte slots in caller-style, then re-push
 /// the ret addr; the resulting layout matches what
 /// [`lea_offset_bytes`] expects.
+/// Walk RSP down `frame_bytes` in `page_size` chunks, touching
+/// each page before sliding past it so the kernel's stack-guard
+/// page fires on overflow rather than silently mapping in a
+/// neighbouring region. Used by `emit_prologue` whenever the
+/// frame alone would cross a guard page. Clobbers r11 (caller-
+/// saved on both System V and Win64, so safe at prologue start
+/// before any arg-reg consumption). Touching writes the running
+/// counter into the page; the value doesn't matter since the
+/// caller's locals will overwrite it later.
+fn emit_stack_probe(code: &mut Vec<u8>, frame_bytes: u32, page_size: u32) {
+    let pages = frame_bytes / page_size;
+    let remainder = frame_bytes - pages * page_size;
+    emit_mov_r_imm64(code, Reg::R11, pages as i64);
+    let loop_start = code.len();
+    emit_sub_rsp_imm32(code, page_size);
+    emit_mov_mem_r(code, Reg::RSP, 0, Reg::R11);
+    emit_sub_r_imm32(code, Reg::R11, 1);
+    // 6-byte Jcc; rel32 is measured from the byte after it.
+    let jcc_end = code.len() as i32 + 6;
+    let delta = loop_start as i32 - jcc_end;
+    emit_jcc_rel32(code, Cc::Ne, delta);
+    if remainder != 0 {
+        emit_sub_rsp_imm32(code, remainder);
+    }
+}
+
 fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool, abi: Abi, pool_depth: u8) {
     if is_main {
         // The entry stub passed argc / argv via the platform's first
@@ -2972,7 +2998,15 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool, abi: Abi, pool_
         // 8 bytes) and `push rbp` (8 more) rsp is at -16 mod 16
         // again. Round local space up to 16 to preserve that.
         let aligned = (bytes + 15) & !15;
-        emit_sub_rsp_imm32(code, aligned);
+        // Probe each guard page if the frame would otherwise
+        // skip one in a single SUB. x86_64 guard pages are 4 KB
+        // on Linux, macOS, and Windows alike.
+        const PAGE_SIZE: u32 = 4096;
+        if aligned > PAGE_SIZE {
+            emit_stack_probe(code, aligned, PAGE_SIZE);
+        } else {
+            emit_sub_rsp_imm32(code, aligned);
+        }
     }
     // Save r13 (the VM accumulator) below the locals. r13 is
     // callee-saved per System V x86_64 ABI -- self-hosted c4-to-c4

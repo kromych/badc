@@ -307,6 +307,15 @@ pub(super) fn enc_sub_imm(rd: Reg, rn: Reg, imm12: u32) -> u32 {
     0xD100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+/// `SUBS <Xd>, <Xn|SP>, #imm12` -- like `SUB` but sets NZCV.
+/// Used by the stack-probe loop's counter decrement so the
+/// trailing `b.ne` can read the flags. Top 8 bits flip from
+/// `1101_0001` (SUB) to `1111_0001` (SUBS).
+pub(super) fn enc_subs_imm(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+    debug_assert!(imm12 < 4096, "subs imm: {imm12} > 12-bit max");
+    0xF100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
 /// `SUB <Xd>, <Xn|SP>, #imm12, LSL #12`. The shifted-12 form
 /// extends the reach of the immediate to multiples of 4096 up
 /// to ~16 MiB, used together with the unshifted form to cover
@@ -1474,7 +1483,7 @@ fn lower_op(
             // compiler right after Ent) sets it back if this
             // function uses alloca.
             reg_state.current_alloca_top_offset = 0;
-            emit_prologue(code, locals, in_main, reg_state.current_callee_depth);
+            emit_prologue(code, locals, in_main, reg_state.current_callee_depth, target);
         }
         Op::Lev => emit_epilogue(
             code,
@@ -2893,7 +2902,13 @@ fn emit_local_load(code: &mut Vec<u8>, offset: i64, byte: bool) {
 ///   bp + 16: argc  (top arg, c5 val=2 -- first declared)
 ///   bp + 24: argv  (next slot, c5 val=3 -- second declared)
 /// matching [`lea_offset_bytes`] under c5's cdecl push order.
-fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool, callee_pool_depth: u8) {
+fn emit_prologue(
+    code: &mut Vec<u8>,
+    locals: i64,
+    is_main: bool,
+    callee_pool_depth: u8,
+    target: Target,
+) {
     if is_main {
         // Push argv first (deeper), then argc (shallower). 16-byte
         // slots so the layout matches c5's cdecl push convention.
@@ -2925,15 +2940,84 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool, callee_pool_dep
     if locals > 0 {
         let bytes = (locals as u32) * 8;
         let aligned = (bytes + 15) & !15;
-        // SUB (immediate) only takes 12 bits unshifted, so for
-        // functions with more than ~511 locals we need the two-
-        // instruction shifted-12 split. Without this the
-        // immediate silently overflows into the shift bits and
-        // the prologue traps with SIGILL on first call.
-        emit_sub_sp_imm(code, aligned);
+        // For frames that cross a stack guard page, walk SP down
+        // page-by-page touching each page so the OS's guard
+        // mechanism fires on overflow instead of silently
+        // mapping unrelated memory. Threshold is the target's
+        // page size (16 KB on Apple Silicon, 4 KB elsewhere).
+        // Below the threshold the single SUB is fine -- the
+        // first real local access touches the (sole) crossed
+        // page before any later access wanders further.
+        let page_size = stack_probe_page_size(target);
+        if aligned > page_size {
+            emit_stack_probe(code, aligned, page_size);
+        } else {
+            // SUB (immediate) only takes 12 bits unshifted, so
+            // for frames > ~4 KB we need the two-instruction
+            // shifted-12 split. Without it the immediate silently
+            // overflows into the shift bits and the prologue
+            // traps with SIGILL on first call.
+            emit_sub_sp_imm(code, aligned);
+        }
     }
     emit(code, enc_str_pre(Reg::X19, Reg::SP, -16));
     emit_save_pool(code, callee_pool_depth);
+}
+
+/// Stack-guard page size used by the prologue's probe decision.
+/// The host kernel's page size is what really matters; we
+/// hard-code the value the target's OS uses by default rather
+/// than querying at runtime. Apple Silicon defaults to 16 KB;
+/// every other lane (Linux x86_64, Linux aarch64, Windows on
+/// either ISA) uses 4 KB. Over-probing on a system configured
+/// with larger pages is harmless; under-probing risks jumping
+/// past the guard without touching it.
+fn stack_probe_page_size(target: Target) -> u32 {
+    match target {
+        Target::MacOSAarch64 => 16384,
+        _ => 4096,
+    }
+}
+
+/// Walk SP down `frame_bytes` in `page_size` steps, touching
+/// each page before sliding past it so the OS's stack-guard
+/// page fires on overflow. Used by `emit_prologue` when the
+/// frame would otherwise skip a guard page in a single SUB.
+/// `frame_bytes` is the 16-byte-aligned local reservation
+/// (caller's responsibility); the loop emits exactly
+/// `frame_bytes / page_size` iterations and a single trailing
+/// `sub sp, sp, #remainder` for the leftover bytes.
+fn emit_stack_probe(code: &mut Vec<u8>, frame_bytes: u32, page_size: u32) {
+    let pages = frame_bytes / page_size;
+    let remainder = frame_bytes - pages * page_size;
+    // x16 = page counter. The probe scratches x16 only -- AAPCS64
+    // marks x16/x17 as IP0/IP1, intra-procedure-call scratch, so
+    // clobbering them in the prologue is safe.
+    load_imm64(code, Reg::X16, pages as u64);
+    let loop_start = code.len();
+    // sub sp, sp, #page_size  -- single instruction since
+    // page_size is 4096 (immediate) or 16384 (LSL12 form).
+    if page_size == 4096 {
+        emit(code, enc_sub_imm_lsl12(Reg::SP, Reg::SP, 1));
+    } else if page_size == 16384 {
+        emit(code, enc_sub_imm_lsl12(Reg::SP, Reg::SP, 4));
+    } else {
+        emit_sub_sp_imm(code, page_size);
+    }
+    // str xzr, [sp]  -- touch the page so the guard maps it (or
+    // faults on overflow). Reg(31) is XZR in store-rt position
+    // (the same encoding doubles as SP in base-rn position).
+    emit(code, enc_str_imm(Reg(31), Reg::SP, 0));
+    // subs x16, x16, #1; b.ne loop_start.
+    emit(code, enc_subs_imm(Reg::X16, Reg::X16, 1));
+    let loop_pc = code.len() as i64;
+    let target_pc = loop_start as i64;
+    let imm19 = ((target_pc - loop_pc) / 4) as i32;
+    emit(code, enc_b_cond(Cond::Ne, imm19));
+    // Finally drop the partial-page remainder.
+    if remainder != 0 {
+        emit_sub_sp_imm(code, remainder);
+    }
 }
 
 /// Mirror of [`emit_prologue`]. Move the VM accumulator into `x0`

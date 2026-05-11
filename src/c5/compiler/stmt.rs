@@ -540,15 +540,14 @@ impl Compiler {
             self.next()?;
             Ok(())
         } else {
+            let id_suffix = if self.lex.tk == Token::Id as i64 {
+                format!(" `{}`", self.symbols[self.lex.curr_id_idx].name)
+            } else {
+                alloc::string::String::new()
+            };
             Err(self.compile_err(format!(
-                "{} (got tk={}, id={:?})",
-                msg,
-                self.lex.tk,
-                if self.lex.tk == Token::Id as i64 {
-                    Some(self.symbols[self.lex.curr_id_idx].name.clone())
-                } else {
-                    None
-                }
+                "{msg} (got {}{id_suffix})",
+                super::super::token::describe(self.lex.tk),
             )))
         }
     }

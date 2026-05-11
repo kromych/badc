@@ -177,12 +177,12 @@ pub struct Compiler {
     include_trace: Vec<String>,
 
     /// `#pragma entrypoint(<name>)` value drained from the
-    /// preprocessor Default `None` means "use `main`".
+    /// preprocessor. Default `None` means "use `main`".
     /// Read in `compile()` to compute `entry_pc` and threaded onto
     /// `Program::entry_name`.
     pp_entrypoint: Option<String>,
     /// `#pragma subsystem(<kind>)` value drained from the
-    /// preprocessor Default `None` means "PE writer
+    /// preprocessor. Default `None` means "PE writer
     /// picks `Console`". Read only by the PE writers.
     pp_subsystem: Option<crate::c5::preprocessor::Subsystem>,
 
@@ -341,7 +341,7 @@ pub struct Compiler {
     /// has no function-pointer lineage. Concretely:
     ///
     ///   * 0  -- value IS a fn pointer; one more unary `*` is the
-    ///           C function-pointer-decay no-op
+    ///           C function-pointer-decay no-op.
     ///   * N>0 -- N more derefs to reach the fn pointer.
     ///   * -1 -- not in a fn-ptr-tracked chain; existing behavior.
     ///
@@ -369,8 +369,8 @@ pub struct Compiler {
     /// File-name table. Index 0 is the user's translation unit;
     /// every distinct filename observed via the lexer's
     /// `(file, line)` state (i.e. crossing a GNU line marker on
-    /// `#include` enter / a `#line N "file"` directive) gets a
-    /// fresh entry. The DWARF emitter writes one
+    /// `#include` enter / a `#line N "file"` directive) gets
+    /// a fresh entry. The DWARF emitter writes one
     /// `DW_LNE_define_file` per entry and switches with
     /// `DW_LNS_set_file` when `source_file_indices` changes.
     source_files: Vec<String>,
@@ -382,7 +382,7 @@ pub struct Compiler {
     source_file_indices: Vec<u16>,
     /// Per-function locals + parameters captured at body close,
     /// before the c5 shadow-symbol restore unwinds the binding.
-    /// -- the DWARF emitter walks this list to attach
+    /// The DWARF emitter walks this list to attach
     /// `DW_TAG_variable` / `DW_TAG_formal_parameter` DIEs to the
     /// matching subprogram, which lets lldb's `frame variable` and
     /// `watchpoint set variable foo` work for c5-emitted code.
@@ -1649,15 +1649,15 @@ impl Compiler {
             source_file_indices: self.source_file_indices,
             // The compiler doesn't see the input path -- the CLI
             // shim sets this on the returned `Program` before
-            // calling `emit_native_*`
+            // calling `emit_native_*`.
             source_path: String::new(),
             variables: self.variables,
             // Struct registry, exposed so the DWARF emitter can
             // walk member offsets / bitfield layouts and produce
-            // `DW_TAG_structure_type` DIEs The VM /
+            // `DW_TAG_structure_type` DIEs. The VM /
             // JIT / interpreter ignore this field.
             structs: self.structs,
-            // source-driven entry-name and
+            // Source-driven entry-name and
             // Windows subsystem flags drained from the
             // preprocessor. Both default to None (image writers
             // pick `main` / `Console` respectively).
@@ -2016,7 +2016,7 @@ impl Compiler {
     fn pop_trailing_scalar_load(&mut self) -> bool {
         if matches!(self.text.last(), Some(&op) if is_scalar_load_op_val(op)) {
             self.text.pop();
-            // Keep parallel debug arrays in sync with `text`
+            // Keep parallel debug arrays in sync with `text`.
             // Without these matching pops the
             // source_functions / source_lines tail drifts past
             // text.len() and every later emit_op lands in the
@@ -2173,7 +2173,7 @@ impl Compiler {
                 let expr_ty = self.ty;
                 self.text.truncate(saved_text_len);
                 // Keep `source_lines` / `source_functions` in
-                // sync with `text` Without
+                // sync with `text`. Without
                 // these matching truncates the parallel arrays
                 // grow longer than `text`, and every subsequent
                 // `emit_op` lands its source-line / source-function
@@ -2593,7 +2593,7 @@ impl Compiler {
                     // Pointers to structs and every scalar type go
                     // through the normal load_op_for path.
                     self.emit_op(load_op_for(self.ty, self.target));
-                    // seed the fn-pointer chain depth from
+                    // Seed the fn-pointer chain depth from
                     // the symbol's recorded indirection. emit_op
                     // just cleared the field; re-set it now so the
                     // surrounding unary-`*` chain can recognise
@@ -2631,7 +2631,7 @@ impl Compiler {
                 // float, double, or struct base, with any number of
                 // `*` markers and pointer-level qualifiers.
                 t = self.parse_decl_base_type()?;
-                // lineage: if the base type came from a
+                // Fn-pointer lineage: if the base type came from a
                 // typedef-of-fn-pointer, parse_decl_base_type seeded
                 // `pending_fn_ptr_indirection`; the leading `*`s
                 // below add directly to that count. The abstract
@@ -2784,7 +2784,7 @@ impl Compiler {
                     }
                 }
                 self.ty = t;
-                // re-seed the fn-ptr chain depth from the
+                // Re-seed the fn-ptr chain depth from the
                 // cast destination so a unary `*` chain that
                 // follows a `(fn_t*)expr` cast (e.g.
                 // `(**(finder_type*)pVfs->pAppData)(...)`) can
@@ -2832,8 +2832,8 @@ impl Compiler {
             // call-site path catches this only when the result
             // type drops to a non-pointer; if the function's
             // return type is itself a pointer (e.g. an
-            // `io_methods *`-returning fn-ptr typedef as in
-            // ) the pop is short-circuited and the
+            // `io_methods *`-returning fn-ptr typedef)
+            // the pop is short-circuited and the
             // garbage call target slips through.
             if self.fn_ptr_chain_depth == 0 {
                 // Decay no-op. Keep depth at 0: the decayed
@@ -2988,17 +2988,17 @@ impl Compiler {
             // The parse-error message includes the enclosing function
             // name and (for `Token::Id`) the identifier name -- those
             // two facts make a parse error like a stuck macro
-            // expansion tractable, vs. a generic "bad expression
-            // tk=174" which is otherwise opaque.
+            // expansion tractable, vs. a generic "bad expression"
+            // which is otherwise opaque.
             let func = self.current_function_name.clone();
-            let id_name = if self.lex.tk == Token::Id as i64 {
-                Some(self.symbols[self.lex.curr_id_idx].name.clone())
+            let id_suffix = if self.lex.tk == Token::Id as i64 {
+                format!(" `{}`", self.symbols[self.lex.curr_id_idx].name)
             } else {
-                None
+                String::new()
             };
             return Err(self.compile_err(format!(
-                "bad expression tk={} (in {func}, id={id_name:?})",
-                self.lex.tk
+                "bad expression: got {}{id_suffix} (in {func})",
+                super::token::describe(self.lex.tk),
             )));
         }
 
@@ -3765,7 +3765,10 @@ impl Compiler {
                     }
                 }
             } else {
-                return Err(self.compile_err(format!("compiler error tk={}", self.lex.tk)));
+                return Err(self.compile_err(format!(
+                    "compiler error: unexpected {}",
+                    super::token::describe(self.lex.tk)
+                )));
             }
         }
         // 2D-array stride hint: set by the id-load branch when a
@@ -3971,8 +3974,8 @@ impl Compiler {
 
             while self.lex.tk != ';' as i64 && self.lex.tk != '}' as i64 {
                 let (id_idx, ty, array_size) = self.parse_declarator(bt)?;
-                // pick up the fn-pointer indirection
-                // count the declarator (or its typedef base type)
+                // Pick up the fn-pointer indirection count
+                // the declarator (or its typedef base type)
                 // recorded, and store it on the symbol so a later
                 // identifier load can seed the chain-depth tracker.
                 let fn_ptr_indirection = self.pending_fn_ptr_indirection.take().unwrap_or(0);
@@ -4109,7 +4112,7 @@ impl Compiler {
                         // of this code wrote `val = self.text.len()`
                         // whenever val was 0, which silently broke
                         // any function whose body legitimately
-                        // started at PC 0
+                        // started at PC 0.
                     }
                     // Only warn on user-vs-user redeclarations.
                     // Sys symbols (the per-target header's libc
@@ -4201,7 +4204,7 @@ impl Compiler {
                                     binding.is_variadic = variadic;
                                     binding.fixed_args = fixed;
                                     binding.return_type_tag = ret_ty;
-                                    // per-param types for the
+                                    // Per-param types for the
                                     // DWARF subprogram DIE the codegen
                                     // emits over each PLT trampoline.
                                     // Without these, gdb shows
@@ -4363,7 +4366,7 @@ impl Compiler {
                         }
                     }
 
-                    // -- snapshot the function's locals +
+                    // Snapshot the function's locals +
                     // formal parameters before `restore_shadowed_symbol`
                     // unwinds the bindings. The DWARF emitter groups
                     // these by `function_bc_pc` (the Ent's PC) and

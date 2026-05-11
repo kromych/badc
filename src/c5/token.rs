@@ -230,6 +230,98 @@ pub(crate) enum Token {
     StaticAssert,
 }
 
+/// Map a token-id (the value stored in `lex.tk` as i64) back to a
+/// human-readable spelling for diagnostics. ASCII tokens (`(`,
+/// `;`, `{` etc.) render as a quoted single character; the
+/// keyword / operator / classifier tokens render under the
+/// canonical name. Returns an owned `String` so callers don't
+/// have to worry about the storage of the ASCII branch's
+/// formatted glyph.
+pub(crate) fn describe(tk: i64) -> alloc::string::String {
+    use alloc::format;
+    use alloc::string::ToString;
+    if tk == 0 {
+        return "end of file".to_string();
+    }
+    if (0..128).contains(&tk) {
+        let c = tk as u8 as char;
+        if c.is_ascii_graphic() || c == ' ' {
+            return format!("`{}`", c);
+        }
+        return format!("byte {tk:#x}");
+    }
+    let name = match tk {
+        x if x == Token::Num as i64 => "integer literal",
+        x if x == Token::Fun as i64 => "function identifier",
+        x if x == Token::Sys as i64 => "libc binding",
+        x if x == Token::Glo as i64 => "global identifier",
+        x if x == Token::Loc as i64 => "local identifier",
+        x if x == Token::Id as i64 => "identifier",
+        x if x == Token::Char as i64 => "`char`",
+        x if x == Token::Else as i64 => "`else`",
+        x if x == Token::Enum as i64 => "`enum`",
+        x if x == Token::For as i64 => "`for`",
+        x if x == Token::If as i64 => "`if`",
+        x if x == Token::Int as i64 => "`int`",
+        x if x == Token::Return as i64 => "`return`",
+        x if x == Token::Sizeof as i64 => "`sizeof`",
+        x if x == Token::While as i64 => "`while`",
+        x if x == Token::Assign as i64 => "`=`",
+        x if x == Token::AssignOp as i64 => "compound-assign (`+=` / `-=` / ...)",
+        x if x == Token::Cond as i64 => "`?`",
+        x if x == Token::Lor as i64 => "`||`",
+        x if x == Token::Lan as i64 => "`&&`",
+        x if x == Token::OrOp as i64 => "`|`",
+        x if x == Token::XorOp as i64 => "`^`",
+        x if x == Token::AndOp as i64 => "`&`",
+        x if x == Token::EqOp as i64 => "`==`",
+        x if x == Token::NeOp as i64 => "`!=`",
+        x if x == Token::LtOp as i64 => "`<`",
+        x if x == Token::GtOp as i64 => "`>`",
+        x if x == Token::LeOp as i64 => "`<=`",
+        x if x == Token::GeOp as i64 => "`>=`",
+        x if x == Token::ShlOp as i64 => "`<<`",
+        x if x == Token::ShrOp as i64 => "`>>`",
+        x if x == Token::AddOp as i64 => "`+`",
+        x if x == Token::SubOp as i64 => "`-`",
+        x if x == Token::MulOp as i64 => "`*`",
+        x if x == Token::DivOp as i64 => "`/`",
+        x if x == Token::ModOp as i64 => "`%`",
+        x if x == Token::Inc as i64 => "`++`",
+        x if x == Token::Dec as i64 => "`--`",
+        x if x == Token::Brak as i64 => "`[`",
+        x if x == Token::Do as i64 => "`do`",
+        x if x == Token::Break as i64 => "`break`",
+        x if x == Token::Continue as i64 => "`continue`",
+        x if x == Token::Goto as i64 => "`goto`",
+        x if x == Token::Switch as i64 => "`switch`",
+        x if x == Token::Case as i64 => "`case`",
+        x if x == Token::Default as i64 => "`default`",
+        x if x == Token::Struct as i64 => "`struct`",
+        x if x == Token::Arrow as i64 => "`->`",
+        x if x == Token::Ellipsis as i64 => "`...`",
+        x if x == Token::Dot as i64 => "`.`",
+        x if x == Token::ThreadLocal as i64 => "`_Thread_local`",
+        x if x == Token::Extern as i64 => "`extern`",
+        x if x == Token::Static as i64 => "`static`",
+        x if x == Token::TypeQual as i64 => "type qualifier (`const` / `volatile` / `restrict`)",
+        x if x == Token::IntMod as i64 => "integer-type modifier",
+        x if x == Token::Short as i64 => "`short`",
+        x if x == Token::Signed as i64 => "`signed`",
+        x if x == Token::Unsigned as i64 => "`unsigned`",
+        x if x == Token::Long as i64 => "`long`",
+        x if x == Token::FuncSpec as i64 => "function specifier (`inline` / `register` / `auto`)",
+        x if x == Token::Typedef as i64 => "`typedef`",
+        x if x == Token::Union as i64 => "`union`",
+        x if x == Token::Float as i64 => "`float`",
+        x if x == Token::Double as i64 => "`double`",
+        x if x == Token::FloatNum as i64 => "floating-point literal",
+        x if x == Token::StaticAssert as i64 => "`static_assert` / `_Static_assert`",
+        _ => return format!("token id {tk}"),
+    };
+    name.to_string()
+}
+
 /// Primitive Types
 ///
 /// The integer-family encoding is:

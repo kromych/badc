@@ -58,7 +58,7 @@ impl Compiler {
                 self.next()?;
             }
         }
-        // lineage propagation: if the caller pre-seeded
+        // Fn-pointer lineage propagation: if the caller pre-seeded
         // `pending_fn_ptr_indirection` from a typedef-of-fn-ptr
         // base type, the leading `*`s here add directly to the
         // indirection count: `fn_t fp` -> 1, `fn_t *pp` -> 2,
@@ -166,8 +166,8 @@ impl Compiler {
 
         if self.lex.tk != Token::Id as i64 {
             return Err(self.compile_err(format!(
-                "identifier expected in declaration (tk={})",
-                self.lex.tk
+                "identifier expected in declaration (got {})",
+                super::super::token::describe(self.lex.tk)
             )));
         }
         let idx = self.lex.curr_id_idx;

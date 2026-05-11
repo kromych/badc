@@ -287,8 +287,8 @@ impl Compiler {
             // peek said "digit next", so the lexer must have
             // produced a numeric token. Anything else is a bug.
             return Err(self.compile_err(format!(
-                "expected numeric literal after `-` in initializer (got tk={})",
-                self.lex.tk
+                "expected numeric literal after `-` in initializer (got {})",
+                super::super::token::describe(self.lex.tk)
             )));
         }
         // `(type)expr` cast or `(expr)` parenthesized constant in a
@@ -958,8 +958,8 @@ impl Compiler {
             return Ok(v);
         }
         Err(self.compile_err(format!(
-            "constant float expression expected (got tk={})",
-            self.lex.tk
+            "constant float expression expected (got {})",
+            super::super::token::describe(self.lex.tk)
         )))
     }
 }

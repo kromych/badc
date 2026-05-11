@@ -403,8 +403,8 @@ impl Compiler {
                 line,
                 format!(
                     "`&` in a constant expression must open the offsetof shape \
-                 `&((T*)expr)->field` (got tk={})",
-                    self.lex.tk
+                 `&((T*)expr)->field` (got {})",
+                    super::super::token::describe(self.lex.tk)
                 ),
             ));
         }
@@ -413,8 +413,8 @@ impl Compiler {
             return Err(self.compile_err_at(
                 line,
                 format!(
-                    "expected `((T*)...` in offsetof shape (got tk={})",
-                    self.lex.tk
+                    "expected `((T*)...` in offsetof shape (got {})",
+                    super::super::token::describe(self.lex.tk)
                 ),
             ));
         }
@@ -423,8 +423,8 @@ impl Compiler {
             return Err(self.compile_err_at(
                 line,
                 format!(
-                    "expected struct type in offsetof cast (got tk={})",
-                    self.lex.tk
+                    "expected struct type in offsetof cast (got {})",
+                    super::super::token::describe(self.lex.tk)
                 ),
             ));
         }
@@ -472,7 +472,10 @@ impl Compiler {
         if self.lex.tk != Token::Arrow as i64 {
             return Err(self.compile_err_at(
                 line,
-                format!("`->` expected in offsetof shape (got tk={})", self.lex.tk),
+                format!(
+                    "`->` expected in offsetof shape (got {})",
+                    super::super::token::describe(self.lex.tk)
+                ),
             ));
         }
         self.next()?;
@@ -568,14 +571,14 @@ impl Compiler {
             self.next()?;
             return Ok(v);
         }
+        let id_suffix = if self.lex.tk == Token::Id as i64 {
+            format!(" `{}`", self.symbols[self.lex.curr_id_idx].name)
+        } else {
+            alloc::string::String::new()
+        };
         Err(self.compile_err(format!(
-            "constant integer expected (got tk={}, id={:?})",
-            self.lex.tk,
-            if self.lex.tk == Token::Id as i64 {
-                Some(self.symbols[self.lex.curr_id_idx].name.clone())
-            } else {
-                None
-            }
+            "constant integer expected (got {}{id_suffix})",
+            super::super::token::describe(self.lex.tk),
         )))
     }
 }

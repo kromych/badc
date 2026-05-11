@@ -1098,13 +1098,6 @@ impl Compiler {
             }
         } else if ty == Ty::Char as i64 {
             1
-        } else if ty == Ty::Void as i64 {
-            // C99 6.5.3.4 forbids `sizeof(void)`. Returning 0
-            // here means a stray `sizeof((void)expr)` produces
-            // a 0 -- a constraint-violation diagnostic at the
-            // call site is the proper fix, but 0 is harmless
-            // and matches GCC's `-Wpointer-arith` behavior.
-            0
         } else if ty == Ty::Short as i64 {
             2
         } else if ty == Ty::Int as i64 {
@@ -1139,11 +1132,7 @@ impl Compiler {
                 // walk every nested struct on each call.
                 self.structs[struct_id_of(ty)].align.max(1)
             }
-        } else if ty == Ty::Char as i64 || ty == Ty::Void as i64 {
-            // `void` aligns like `char` -- 1-byte. Bare `void`
-            // shouldn't appear as a value in practice, but
-            // align_of_type is consulted for `void *` field
-            // alignment computations in some paths.
+        } else if ty == Ty::Char as i64 {
             1
         } else if ty == Ty::Short as i64 {
             2
@@ -1320,24 +1309,6 @@ impl Compiler {
                 base | UNSIGNED_BIT
             } else {
                 base
-            }
-        } else if self.lex.tk == Token::Void {
-            self.next()?;
-            // C99 6.2.5: `void` is a distinct type with no values.
-            // `void *` is the implicit "any pointer" type per
-            // 6.3.2.3; the historical c5 encoding treats it as
-            // `Ty::Char | UNSIGNED + Ptr` (so existing void-pointer
-            // code keeps working without explicit casts).
-            // Peeking past `void` for `*` switches the base to
-            // `unsigned char` so the trailing `*`-loop in
-            // `parse_declarator` builds the right family;
-            // otherwise we return `Ty::Void` so the caller can
-            // diagnose value-context uses and zero the
-            // accumulator at the matching `Op::Lev`.
-            if self.lex.tk == Token::MulOp {
-                Ty::Char as i64 | UNSIGNED_BIT
-            } else {
-                Ty::Void as i64
             }
         } else if self.lex.tk == Token::Char {
             self.next()?;
@@ -4144,19 +4115,6 @@ impl Compiler {
                 } else {
                     base
                 };
-            } else if self.lex.tk == Token::Void {
-                self.next()?;
-                // `void *foo` is the implicit "any pointer" type --
-                // route through the char-pointer encoding so the
-                // existing void-pointer arithmetic / conversions
-                // keep working. Bare `void f();` carries
-                // `Ty::Void` so the function-end emit knows to
-                // zero the accumulator before `Op::Lev`.
-                bt = if self.lex.tk == Token::MulOp {
-                    Ty::Char as i64 | UNSIGNED_BIT
-                } else {
-                    Ty::Void as i64
-                };
             } else if self.lex.tk == Token::Char {
                 self.next()?;
                 // `signed char` is a real 1-byte signed type; bare
@@ -4638,17 +4596,6 @@ impl Compiler {
                         } else {
                             self.stmt()?;
                         }
-                    }
-                    // C99 6.8.6.4p3: a `void`-returning function's
-                    // expression value is not a value. Zero the
-                    // accumulator before the trailing synthetic
-                    // `Op::Lev` so a caller that ignores the
-                    // prototype sees `0` instead of stale register
-                    // state. The matching `return;` statement
-                    // emits the same prefix.
-                    if self.current_func_return_ty == Ty::Void as i64 {
-                        self.emit_op(Op::Imm);
-                        self.emit_val(0);
                     }
                     self.emit_op(Op::Lev);
                     self.current_function_name.clear();

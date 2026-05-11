@@ -310,16 +310,6 @@ pub(crate) enum Token {
     /// is surfaced through the standard compile-error path,
     /// otherwise the construct is a parse-time no-op.
     StaticAssert,
-    /// `void` keyword. Distinct from `char` so C99 6.8.6.4's
-    /// "a `void` function's return is not a value" rule can be
-    /// enforced at the call site (the codegen zeros the
-    /// accumulator before the matching `Op::Lev`, so a caller
-    /// that ignores its prototype sees `0` instead of stale
-    /// register state). `void *` parses back to the historical
-    /// `Ty::Char | UNSIGNED` so existing void-pointer code keeps
-    /// working without explicit casts; only the bare `void` (in
-    /// return / parameter position) carries `Ty::Void`.
-    Void,
 }
 
 /// Map a token-id (the value stored in `lex.tk` as i64) back to a
@@ -470,13 +460,4 @@ pub(crate) enum Ty {
     /// integer" in real C, and c5 keeps the same guarantee.
     /// `long long*` = 502, `long long**` = 504, etc.
     LongLong = 500,
-    /// `void` -- the explicit "no return value / no params"
-    /// type. Bare `Ty::Void` is illegal in any value context
-    /// (assignment RHS, expression statement that observes the
-    /// result, etc.) per C99 6.3.2.2; the parser only accepts
-    /// it as a function return type or as the sole `(void)`
-    /// parameter shape. `void *` is NOT in this band -- it
-    /// reuses `Ty::Char | UNSIGNED + Ptr` so the historical
-    /// "any-pointer" implicit conversions keep working.
-    Void = 600,
 }

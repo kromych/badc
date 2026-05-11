@@ -514,13 +514,7 @@ impl Compiler {
             self.next()?;
             let ret_ty = self.current_func_return_ty;
             let returns_struct = is_struct_ty(ret_ty) && struct_ptr_depth(ret_ty) == 0;
-            let returns_void = ret_ty == Ty::Void as i64;
             if self.lex.tk != ';' {
-                if returns_void {
-                    // C99 6.8.6.4p1: a `return` expression in a
-                    // `void` function is a constraint violation.
-                    return Err(self.compile_err("`return` with a value in a `void` function"));
-                }
                 if returns_struct {
                     // Push the hidden out-pointer (loaded from
                     // val=2 -- the slot the caller pushed before
@@ -547,13 +541,6 @@ impl Compiler {
                 } else {
                     self.parse_full_expr()?;
                 }
-            } else if returns_void {
-                // C99 6.8.6.4p3: a `void` function's return is
-                // not a value. Zero the accumulator so a caller
-                // that ignores the prototype sees `0` instead of
-                // stale register state.
-                self.emit_op(Op::Imm);
-                self.emit_val(0);
             }
             self.emit_op(Op::Lev);
             self.consume(b';', "semicolon expected")?;

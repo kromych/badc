@@ -1178,7 +1178,7 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("_Thread_local", Token::ThreadLocal),
     ("extern", Token::Extern),
     ("static", Token::Static),
-    ("void", Token::Void),
+    ("void", Token::Char),
     // C11 6.7.10 `_Static_assert` and its C23 alias
     // `static_assert`. Both spellings map to the same parser
     // path -- the parser checks the constant-expression argument

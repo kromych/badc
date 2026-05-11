@@ -147,34 +147,6 @@ impl Compiler {
                 } else {
                     base
                 }
-            } else if self.lex.tk == Token::Void {
-                self.next()?;
-                // C99 6.7.2.1p10: struct fields can't be of type
-                // `void`. Accept the keyword here for the two
-                // shapes where the base does NOT survive as the
-                // field type:
-                //   * `void *p;`    -- pointer; route through the
-                //                     historical char-pointer
-                //                     encoding so the existing
-                //                     alignment / arithmetic keep
-                //                     working.
-                //   * `void (*fp)(...)` -- function pointer with a
-                //                         void return type; the
-                //                         declarator builds the fn-ptr
-                //                         and the base is the pointee
-                //                         return type.
-                // Reject bare `void name;` as a constraint violation
-                // (downstream "type expected" diagnostics catch this
-                // less cleanly).
-                if self.lex.tk == Token::MulOp || self.lex.tk == '(' {
-                    if self.lex.tk == Token::MulOp {
-                        Ty::Char as i64 | UNSIGNED_BIT
-                    } else {
-                        Ty::Void as i64
-                    }
-                } else {
-                    return Err(self.compile_err("struct field cannot have type `void`"));
-                }
             } else if self.lex.tk == Token::Char {
                 self.next()?;
                 // Mirror parse_decl_base_type: `signed char` is a

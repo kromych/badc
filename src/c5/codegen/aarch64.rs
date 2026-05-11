@@ -1483,7 +1483,13 @@ fn lower_op(
             // compiler right after Ent) sets it back if this
             // function uses alloca.
             reg_state.current_alloca_top_offset = 0;
-            emit_prologue(code, locals, in_main, reg_state.current_callee_depth, target);
+            emit_prologue(
+                code,
+                locals,
+                in_main,
+                reg_state.current_callee_depth,
+                target,
+            );
         }
         Op::Lev => emit_epilogue(
             code,

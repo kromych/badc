@@ -153,8 +153,37 @@ impl Compiler {
             );
         }
         self.next()?;
-        let mut elements = Vec::new();
+        let mut elements: Vec<(i64, InitElemReloc)> = Vec::new();
+        // C99 6.7.8 designated initializers: a `[N] = ...` clause
+        // sets the write position to N; subsequent positional
+        // entries (and chained `[K] = ...` clauses) continue
+        // from there. Track the cursor here so designated and
+        // positional entries can interleave per 6.7.8p17.
+        let mut cursor: usize = 0;
         while self.lex.tk != '}' {
+            // Array designator `[N] = ...`. Single-level only --
+            // nested designators (`[N].field = ...`) aren't
+            // supported yet; a constraint violation falls through
+            // to `parse_constant_init_value` and surfaces as a
+            // parse error.
+            if self.lex.tk == Token::Brak {
+                self.next()?;
+                let n = self.parse_constant_int()?;
+                if n < 0 {
+                    return Err(self.compile_err(format!(
+                        "array designator index must be non-negative (got {n})"
+                    )));
+                }
+                if self.lex.tk != ']' {
+                    return Err(self.compile_err("`]` expected after array designator index"));
+                }
+                self.next()?;
+                if self.lex.tk != Token::Assign {
+                    return Err(self.compile_err("`=` expected after `[N]` designator"));
+                }
+                self.next()?;
+                cursor = n as usize;
+            }
             // Nested brace list (multi-dim array): `{ {1,2}, {3,4}, ... }`.
             // c5's array-symbol storage carries a single flat
             // dimension, so we flatten the rows by recursing and
@@ -163,15 +192,23 @@ impl Compiler {
             // inner list gets padded with zero-valued elements
             // before the next row starts.
             if self.lex.tk == '{' {
-                let before = elements.len();
-                let mut inner = self.collect_array_initializer(elem_ty)?;
-                elements.append(&mut inner);
+                let before = cursor;
+                let inner = self.collect_array_initializer(elem_ty)?;
+                let written = inner.len();
+                if elements.len() < before + written {
+                    elements.resize(before + written, (0, InitElemReloc::None));
+                }
+                for (i, entry) in inner.into_iter().enumerate() {
+                    elements[before + i] = entry;
+                }
+                cursor = before + written;
                 if inner_dim > 0 {
-                    let written = (elements.len() - before) as i64;
-                    if written < inner_dim {
-                        for _ in 0..(inner_dim - written) {
-                            elements.push((0, InitElemReloc::None));
+                    let pad = (inner_dim as usize).saturating_sub(written);
+                    if pad > 0 {
+                        if elements.len() < cursor + pad {
+                            elements.resize(cursor + pad, (0, InitElemReloc::None));
                         }
+                        cursor += pad;
                     }
                 }
                 if self.lex.tk == ',' {
@@ -187,7 +224,11 @@ impl Compiler {
             // both `Data` (string / `&global`) and `Code` (function
             // pointer) get a true reloc; integer constants don't.
             let (value, reloc) = self.parse_constant_init_value()?;
-            elements.push((value, reloc));
+            if elements.len() <= cursor {
+                elements.resize(cursor + 1, (0, InitElemReloc::None));
+            }
+            elements[cursor] = (value, reloc);
+            cursor += 1;
             if self.lex.tk == ',' {
                 self.next()?;
             }

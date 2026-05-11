@@ -79,3 +79,9 @@ __pycache__/
 *.bmp
 *.png
 *.jpg
+
+# Working area for the stb_vorbis divergence-detection harness
+# (`tools/diff_vorbis/diff_run.sh`). Holds the instrumented
+# source copy, the per-compiler driver binaries, and the trace
+# diffs. Regenerated on demand; not source of truth.
+/.diff_vorbis/

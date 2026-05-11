@@ -2072,14 +2072,25 @@ fn lower_op(
             // overwriting `dst`.
             let size = read_operand(text, pc, "Mcpy")?;
             let dst = pop_lhs_reg(code, reg_state);
-            // Copy whole 8-byte words first.
+            // Copy whole 8-byte words via the scaled 12-bit
+            // unsigned-offset `LDR/STR` form (byte offsets
+            // 0..32760, multiples of 8). The earlier shape used
+            // `ldur/stur`, whose 9-bit signed offset silently
+            // wrapped for any byte offset >= 256, mis-copying
+            // every word past the 32nd; struct-copy of types
+            // > 256 bytes (sqlite's internal handles, stb_vorbis's
+            // ~1.9 KB stb_vorbis struct, ...) produced zeroed
+            // or shifted regions and downstream "the field I
+            // just wrote reads back as 0" mysteries.
             let words = size / 8;
             for w in 0..words {
-                let off = (w * 8) as i32;
-                emit(code, enc_ldur(Reg::X17, Reg::X19, off));
-                emit(code, enc_stur(Reg::X17, dst, off));
+                let off = (w * 8) as u32;
+                emit(code, enc_ldr_imm(Reg::X17, Reg::X19, off));
+                emit(code, enc_str_imm(Reg::X17, dst, off));
             }
-            // Byte tail.
+            // Byte tail. `ldrb`/`strb` (immediate, unscaled) take
+            // a 12-bit unsigned offset (range 0..4095), so any
+            // sub-word tail fits without the wrap-around risk.
             let tail_start = words * 8;
             for i in 0..(size - tail_start) {
                 let off = (tail_start + i) as u32;

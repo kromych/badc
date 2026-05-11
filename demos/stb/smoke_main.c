@@ -752,25 +752,21 @@ static int scenario_vorbis(void) {
         return 1;
     }
 
-    /* Positive path through `alarm_ogg` (embedded ~12KB mono
-     * 48kHz file) is currently parked behind `VORBIS_RUN_POSITIVE`.
-     *
-     * KNOWN GAP: the open call surfaces an arch-divergent c5
-     * codegen bug. On aarch64 the open + setup phase succeeds
-     * cleanly through c5 and the info fields match (channels=1,
-     * sample_rate=48000, total_samples=46028) but per-packet
-     * decode returns 0 on the first call. On x86_64 the same TU
-     * crashes mid-open with SIGSEGV. Enabling
-     * `VORBIS_TRACE_ERRORS` in stb_vorbis.c makes the x86_64
-     * path decode end-to-end -- i.e. wrapping every
-     * `error(f, e)` site in a `(fprintf(...), error((f), (e)))`
-     * comma-expression dodges the codegen bug. The
-     * `alarm_ogg[]` byte array is committed so that, once the
-     * underlying c5 issue is bisected and fixed, this scenario
-     * flips on with a hard assertion. */
+    /* Positive path through `alarm_ogg`. The aarch64 Mcpy fix
+     * (switching `ldur/stur` to the scaled `ldr/str` form) lets
+     * `*f = p` -- the ~1.9 KB stb_vorbis struct copy inside
+     * `stb_vorbis_open_memory` -- copy `next_seg` correctly, so
+     * the first frame's `vorbis_decode_initial` no longer bails
+     * out and the full 46028-sample stream decodes. The smoke
+     * still flips between exit 0 and exit 139 from one run to
+     * the next, though: a separate intermittent crash fires
+     * after the last scenario's `stb smoke: all scenarios green`
+     * line prints (likely in stb_vorbis's close-time setup_free
+     * walk or the static-buffer teardown). Track that down
+     * separately before flipping this assertion hard. */
     (void)v;
     (void)alarm_ogg;
-    printf("vorbis OK: rejected bogus (alarm_ogg %d bytes; positive decode TODO)\n",
+    printf("vorbis OK: rejected bogus (alarm_ogg %d bytes; positive decode under investigation)\n",
            alarm_ogg_len);
     return 0;
 }

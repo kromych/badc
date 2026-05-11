@@ -1,3 +1,85 @@
+/// Runtime token identity as stored by the lexer.
+///
+/// C lexing has to mix two namespaces in the same scalar slot:
+///   * ASCII punctuation (`(`, `;`, `{`, ...) is its own byte
+///     value -- enumerating each of the 128 ASCII bytes inside
+///     [`Token`] would dwarf the meaningful keyword / operator
+///     variants.
+///   * Multi-character keywords and operators get explicit
+///     discriminants starting at 128 (just past ASCII), encoded
+///     in the [`Token`] enum.
+///
+/// `Tok` wraps the underlying `i64` so that call sites can write
+/// `lex.tk == Token::MulOp` (without an `as i64`) and
+/// `lex.tk == '('` (without an `as i64`) -- the `PartialEq`
+/// impls below route both shapes through a single integer
+/// comparison. `lex.tk.raw()` recovers the i64 for diagnostics
+/// and the few places that need the bit pattern directly
+/// (token-id tables, the describe() pretty-printer).
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, Default)]
+pub(crate) struct Tok(pub i64);
+
+impl Tok {
+    /// Sentinel for end-of-input. The lexer sets this when the
+    /// source is exhausted; comparisons against `Tok::EOF` mirror
+    /// `lex.tk == 0` but read more clearly.
+    pub const EOF: Tok = Tok(0);
+
+    /// Raw i64 for callers that genuinely need the bit pattern
+    /// (the diagnostic pretty-printer, hash-table keys, etc.).
+    pub const fn raw(self) -> i64 {
+        self.0
+    }
+}
+
+impl From<Token> for Tok {
+    fn from(t: Token) -> Self {
+        Tok(t as i64)
+    }
+}
+
+impl PartialEq<Token> for Tok {
+    fn eq(&self, other: &Token) -> bool {
+        self.0 == *other as i64
+    }
+}
+
+impl PartialEq<char> for Tok {
+    fn eq(&self, other: &char) -> bool {
+        self.0 == *other as i64
+    }
+}
+
+impl PartialEq<u8> for Tok {
+    fn eq(&self, other: &u8) -> bool {
+        self.0 == *other as i64
+    }
+}
+
+impl PartialEq<i64> for Tok {
+    fn eq(&self, other: &i64) -> bool {
+        self.0 == *other
+    }
+}
+
+impl PartialEq<i32> for Tok {
+    fn eq(&self, other: &i32) -> bool {
+        self.0 == *other as i64
+    }
+}
+
+impl PartialOrd<i64> for Tok {
+    fn partial_cmp(&self, other: &i64) -> Option<core::cmp::Ordering> {
+        self.0.partial_cmp(other)
+    }
+}
+
+impl core::fmt::Display for Tok {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 /// Lexical Tokens
 #[repr(i64)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -237,9 +319,10 @@ pub(crate) enum Token {
 /// canonical name. Returns an owned `String` so callers don't
 /// have to worry about the storage of the ASCII branch's
 /// formatted glyph.
-pub(crate) fn describe(tk: i64) -> alloc::string::String {
+pub(crate) fn describe(tk: Tok) -> alloc::string::String {
     use alloc::format;
     use alloc::string::ToString;
+    let tk = tk.raw();
     if tk == 0 {
         return "end of file".to_string();
     }

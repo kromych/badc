@@ -1072,7 +1072,7 @@ impl Compiler {
     /// typedef case (e.g. `parse_decl_base_type`) can check without
     /// also matching keyword type-starts.
     fn is_lex_typedef_name(&self) -> bool {
-        self.lex.tk == Token::Id as i64
+        self.lex.tk == Token::Id
             && self.symbols[self.lex.curr_id_idx].class == Token::Typedef as i64
     }
 
@@ -1180,7 +1180,7 @@ impl Compiler {
         } else {
             (1i64 << bit_width) - 1
         };
-        if self.lex.tk == Token::Assign as i64 {
+        if self.lex.tk == Token::Assign {
             // Bitfield write: `s.f = expr`. The c5 stack discipline
             // is delicate here -- we need the storage address
             // available for the final Si, so push it now and reload
@@ -1236,9 +1236,9 @@ impl Compiler {
     fn skip_balanced_parens_after_open(&mut self) -> Result<(), C5Error> {
         let mut depth: i64 = 1;
         while depth > 0 && self.lex.tk != 0 {
-            if self.lex.tk == '(' as i64 {
+            if self.lex.tk == '(' {
                 depth += 1;
-            } else if self.lex.tk == ')' as i64 {
+            } else if self.lex.tk == ')' {
                 depth -= 1;
                 if depth == 0 {
                     self.next()?;
@@ -1270,18 +1270,18 @@ impl Compiler {
         let mut long_count: u8 = 0;
         let mut saw_short = false;
         while is_decl_modifier(self.lex.tk) {
-            if self.lex.tk == Token::IntMod as i64 {
+            if self.lex.tk == Token::IntMod {
                 saw_int_mod = true;
-            } else if self.lex.tk == Token::Signed as i64 {
+            } else if self.lex.tk == Token::Signed {
                 saw_signed = true;
                 saw_int_mod = true;
-            } else if self.lex.tk == Token::Unsigned as i64 {
+            } else if self.lex.tk == Token::Unsigned {
                 saw_unsigned = true;
                 saw_int_mod = true;
-            } else if self.lex.tk == Token::Long as i64 {
+            } else if self.lex.tk == Token::Long {
                 long_count = long_count.saturating_add(1);
                 saw_int_mod = true;
-            } else if self.lex.tk == Token::Short as i64 {
+            } else if self.lex.tk == Token::Short {
                 saw_short = true;
                 saw_int_mod = true;
             }
@@ -1290,7 +1290,7 @@ impl Compiler {
         let saw_long = long_count >= 1;
         let saw_long_long = long_count >= 2;
 
-        let bt = if self.lex.tk == Token::Int as i64 {
+        let bt = if self.lex.tk == Token::Int {
             self.next()?;
             // `long long int` -> Ty::LongLong (always 64-bit);
             // `long int` -> Ty::Long (LP64 = 64-bit, LLP64 =
@@ -1310,7 +1310,7 @@ impl Compiler {
             } else {
                 base
             }
-        } else if self.lex.tk == Token::Char as i64 {
+        } else if self.lex.tk == Token::Char {
             self.next()?;
             // `signed char` is a real 1-byte signed type; loads via
             // `Op::Lcs` so the high bit propagates. Plain `char` is
@@ -1327,31 +1327,31 @@ impl Compiler {
                 // had. The store path is the same (`Op::Sc`).
                 Ty::Char as i64 | UNSIGNED_BIT
             }
-        } else if self.lex.tk == Token::Float as i64 {
+        } else if self.lex.tk == Token::Float {
             self.next()?;
             Ty::Float as i64
-        } else if self.lex.tk == Token::Double as i64 {
+        } else if self.lex.tk == Token::Double {
             self.next()?;
             // `long double` is only as wide as `double` here -- c5
             // has no 80- or 128-bit FP type. The trailing-modifier
             // loop already silently consumes any extra `long`.
             Ty::Double as i64
-        } else if self.lex.tk == Token::Enum as i64 {
+        } else if self.lex.tk == Token::Enum {
             // `enum [Tag] [{ ... }]` -- in c5 every enum collapses
             // to plain `int`. Consume any tag name and any optional
             // body; return Int as the underlying type.
             self.next()?;
-            if self.lex.tk == Token::Id as i64 {
+            if self.lex.tk == Token::Id {
                 self.next()?;
             }
-            if self.lex.tk == '{' as i64 {
+            if self.lex.tk == '{' {
                 // Re-parse the body via the same constants-loop the
                 // file-scope path uses. Save and restore the line
                 // since parse_enum_decl_body emits no other state.
                 self.parse_enum_body()?;
             }
             Ty::Int as i64
-        } else if self.lex.tk == Token::Struct as i64 || self.lex.tk == Token::Union as i64 {
+        } else if self.lex.tk == Token::Struct || self.lex.tk == Token::Union {
             // Struct and union share the same tag table and the same
             // "find or forward-declare" rule. The aggregate's
             // is_union flag is set when the body lands; until then
@@ -1359,19 +1359,19 @@ impl Compiler {
             // and typedefs. Anonymous form (`typedef struct { ... }
             // Name;`) gets a synthesised tag so it can register
             // properly.
-            let is_union = self.lex.tk == Token::Union as i64;
+            let is_union = self.lex.tk == Token::Union;
             let kind = if is_union { "union" } else { "struct" };
             self.next()?;
-            let name = if self.lex.tk == Token::Id as i64 {
+            let name = if self.lex.tk == Token::Id {
                 let n = self.symbols[self.lex.curr_id_idx].name.clone();
                 self.next()?;
                 n
-            } else if self.lex.tk == '{' as i64 {
+            } else if self.lex.tk == '{' {
                 format!("__anon_{kind}_{}", self.structs.len())
             } else {
                 return Err(self.compile_err(format!("{kind} name or `{{` expected")));
             };
-            let id = if self.lex.tk == '{' as i64 {
+            let id = if self.lex.tk == '{' {
                 self.parse_aggregate_body(&name, is_union)?
             } else {
                 self.find_or_forward_declare_struct(&name)
@@ -2178,11 +2178,11 @@ impl Compiler {
 
         if self.lex.tk == 0 {
             return Err(self.compile_err("unexpected eof in expression"));
-        } else if self.lex.tk == Token::Num as i64 {
+        } else if self.lex.tk == Token::Num {
             self.emit_imm(self.lex.ival);
             self.next()?;
             self.ty = Ty::Int as i64;
-        } else if self.lex.tk == Token::FloatNum as i64 {
+        } else if self.lex.tk == Token::FloatNum {
             // The lexer parsed `1.5` etc. into f64 and stored
             // `f64::to_bits()` cast to i64 in `ival`. The byte
             // pattern flows through Op::Imm unmodified -- a future
@@ -2193,18 +2193,18 @@ impl Compiler {
             self.emit_imm(self.lex.ival);
             self.next()?;
             self.ty = Ty::Double as i64;
-        } else if self.lex.tk == '"' as i64 {
+        } else if self.lex.tk == '"' {
             self.emit_data_imm(self.lex.ival);
             self.next()?;
             // C concatenates adjacent string literals -- `"a" "b"` is one
             // string. The lexer leaves the NUL off so the bytes flow
             // straight together; we add the single trailing NUL here.
-            while self.lex.tk == '"' as i64 {
+            while self.lex.tk == '"' {
                 self.next()?;
             }
             self.data.push(0);
             self.ty = Ty::Ptr as i64;
-        } else if self.lex.tk == Token::Sizeof as i64 {
+        } else if self.lex.tk == Token::Sizeof {
             // C99 6.5.3.4: `sizeof(<type>)`, `sizeof(<expr>)`, or
             // `sizeof <unary-expr>`. The shared helper handles
             // all three shapes; this site just emits the result
@@ -2214,10 +2214,10 @@ impl Compiler {
             let total_bytes = self.sizeof_operand_bytes()?;
             self.emit_imm(total_bytes);
             self.ty = Ty::Int as i64;
-        } else if self.lex.tk == Token::Id as i64 {
+        } else if self.lex.tk == Token::Id {
             let id_idx = self.lex.curr_id_idx;
             self.next()?;
-            if self.lex.tk == '(' as i64 {
+            if self.lex.tk == '(' {
                 self.next()?;
                 // Compiler-builtin intrinsic call (`alloca`, future
                 // atomics / cpuid / ...). The frontend stamped the
@@ -2231,7 +2231,7 @@ impl Compiler {
                 // can grow this branch as needed.
                 if let Some(&intrinsic_id) = self.pp_intrinsics.get(&self.symbols[id_idx].name) {
                     let fn_name = self.symbols[id_idx].name.clone();
-                    if self.lex.tk == ')' as i64 {
+                    if self.lex.tk == ')' {
                         return Err(self
                             .compile_err(format!("intrinsic `{fn_name}` requires one argument")));
                     }
@@ -2244,7 +2244,7 @@ impl Compiler {
                         self.emit_op(Op::Fcvtfi);
                         self.ty = Ty::Int as i64;
                     }
-                    if self.lex.tk != ')' as i64 {
+                    if self.lex.tk != ')' {
                         return Err(self.compile_err(format!(
                             "intrinsic `{fn_name}` takes exactly one argument"
                         )));
@@ -2338,7 +2338,7 @@ impl Compiler {
                     // (`printf("%f", x)` etc.). Order matches
                     // `temp_offsets`: index 0 = first declared arg.
                     let mut arg_is_fp: Vec<bool> = Vec::new();
-                    while self.lex.tk != ')' as i64 {
+                    while self.lex.tk != ')' {
                         let arg_line = self.lex.line;
                         // Allocate a temp slot for this arg.
                         self.loc_offs += 1;
@@ -2429,7 +2429,7 @@ impl Compiler {
                         }
                         self.emit_op(Op::Si);
                         nargs += 1;
-                        if self.lex.tk == ',' as i64 {
+                        if self.lex.tk == ',' {
                             self.next()?;
                         }
                     }
@@ -2720,7 +2720,7 @@ impl Compiler {
                     }
                 }
             }
-        } else if self.lex.tk == '(' as i64 {
+        } else if self.lex.tk == '(' {
             self.next()?;
             if self.lex_is_type_start() {
                 // C-style cast: `(<type>)expr`. Accepts int, char,
@@ -2734,13 +2734,13 @@ impl Compiler {
                 // fn-ptr branch further down overrides this when a
                 // `(*)(args)` shape is present in the cast.
                 let mut cast_fpi = self.pending_fn_ptr_indirection.take();
-                while self.lex.tk == Token::MulOp as i64 {
+                while self.lex.tk == Token::MulOp {
                     self.next()?;
                     t += Ty::Ptr as i64;
                     if let Some(fpi) = cast_fpi {
                         cast_fpi = Some(fpi + 1);
                     }
-                    while self.lex.tk == Token::TypeQual as i64 {
+                    while self.lex.tk == Token::TypeQual {
                         self.next()?;
                     }
                 }
@@ -2756,20 +2756,20 @@ impl Compiler {
                 // as a no-op pointer level. Counted-parens scan
                 // until the cast's outer `)` so even nested fp
                 // shapes consume cleanly.
-                if self.lex.tk == '(' as i64 {
+                if self.lex.tk == '(' {
                     let mut depth: i64 = 1;
                     self.next()?;
                     let mut nested_ptrs: i64 = 0;
                     while depth > 0 && self.lex.tk != 0 {
-                        if self.lex.tk == '(' as i64 {
+                        if self.lex.tk == '(' {
                             depth += 1;
-                        } else if self.lex.tk == ')' as i64 {
+                        } else if self.lex.tk == ')' {
                             depth -= 1;
                             if depth == 0 {
                                 self.next()?;
                                 break;
                             }
-                        } else if self.lex.tk == Token::MulOp as i64 && depth == 1 {
+                        } else if self.lex.tk == Token::MulOp && depth == 1 {
                             nested_ptrs += 1;
                         }
                         self.next()?;
@@ -2785,17 +2785,17 @@ impl Compiler {
                     // suffixes (`T (*)[N][M]`) are absorbed too;
                     // they don't change the result type beyond
                     // what `nested_ptrs` already encodes.
-                    if self.lex.tk == '(' as i64 {
+                    if self.lex.tk == '(' {
                         self.next()?;
                         self.skip_balanced_parens_after_open()?;
                     }
-                    while self.lex.tk == Token::Brak as i64 {
+                    while self.lex.tk == Token::Brak {
                         self.next()?;
-                        if self.lex.tk == ']' as i64 {
+                        if self.lex.tk == ']' {
                             self.next()?;
                         } else {
                             let _ = self.parse_constant_int()?;
-                            if self.lex.tk == ']' as i64 {
+                            if self.lex.tk == ']' {
                                 self.next()?;
                             }
                         }
@@ -2809,7 +2809,7 @@ impl Compiler {
                         cast_fpi = Some(nested_ptrs);
                     }
                 }
-                if self.lex.tk == ')' as i64 {
+                if self.lex.tk == ')' {
                     self.next()?;
                 } else {
                     return Err(self.compile_err("bad cast"));
@@ -2899,11 +2899,11 @@ impl Compiler {
                 // (function args, declarators) -- this branch only
                 // fires inside `(...)` because expr(Assign) doesn't
                 // consume `,`.
-                while self.lex.tk == ',' as i64 {
+                while self.lex.tk == ',' {
                     self.next()?;
                     self.expr(Token::Assign as i64)?;
                 }
-                if self.lex.tk == ')' as i64 {
+                if self.lex.tk == ')' {
                     self.next()?;
                 } else {
                     return Err(self.compile_err("close paren expected"));
@@ -2919,7 +2919,7 @@ impl Compiler {
                 self.pending_index_strides_tail =
                     core::mem::take(&mut self.end_of_expr_strides_tail);
             }
-        } else if self.lex.tk == Token::MulOp as i64 {
+        } else if self.lex.tk == Token::MulOp {
             self.next()?;
             // Stash whatever the surrounding scope had in the
             // "end-of-expr" capture slots so the recursive expr()
@@ -3000,7 +3000,7 @@ impl Compiler {
                     }
                 }
             }
-        } else if self.lex.tk == Token::AndOp as i64 {
+        } else if self.lex.tk == Token::AndOp {
             self.next()?;
             self.expr(Token::Inc as i64)?;
             // Order matters here: a struct-value rvalue (`p->mutex`
@@ -3043,12 +3043,12 @@ impl Compiler {
             if self.fn_ptr_chain_depth >= 0 {
                 self.fn_ptr_chain_depth += 1;
             }
-        } else if self.lex.tk == '!' as i64 {
+        } else if self.lex.tk == '!' {
             self.next()?;
             self.expr(Token::Inc as i64)?;
             self.emit_binop_with_imm(Op::Eq, 0);
             self.ty = Ty::Int as i64;
-        } else if self.lex.tk == '~' as i64 {
+        } else if self.lex.tk == '~' {
             self.next()?;
             self.expr(Token::Inc as i64)?;
             self.emit_binop_with_imm(Op::Xor, -1);
@@ -3066,7 +3066,7 @@ impl Compiler {
             } else {
                 self.ty = Ty::Int as i64;
             }
-        } else if self.lex.tk == Token::AddOp as i64 {
+        } else if self.lex.tk == Token::AddOp {
             // Unary `+`: a no-op per C99 6.5.3.3p2. The operand's
             // type is preserved (subject to integer promotion for
             // sub-int integer operands -- a `(unsigned char)c`
@@ -3079,13 +3079,13 @@ impl Compiler {
             if !is_floating_scalar(self.ty) {
                 self.ty = Ty::Int as i64;
             }
-        } else if self.lex.tk == Token::SubOp as i64 {
+        } else if self.lex.tk == Token::SubOp {
             self.next()?;
             // Constant-fold `-<int-literal>` into `Imm -N`. Float
             // literals don't qualify -- we want Op::Fneg to apply
             // to the parsed f64 bit pattern, not a sign flip on the
             // integer-shaped operand.
-            if self.lex.tk == Token::Num as i64 {
+            if self.lex.tk == Token::Num {
                 self.emit_imm(-self.lex.ival);
                 self.next()?;
                 self.ty = Ty::Int as i64;
@@ -3099,8 +3099,8 @@ impl Compiler {
                     self.ty = Ty::Int as i64;
                 }
             }
-        } else if self.lex.tk == Token::Inc as i64 || self.lex.tk == Token::Dec as i64 {
-            t = self.lex.tk;
+        } else if self.lex.tk == Token::Inc || self.lex.tk == Token::Dec {
+            t = self.lex.tk.raw();
             self.next()?;
             self.expr(Token::Inc as i64)?;
             let reload = self
@@ -3125,7 +3125,7 @@ impl Compiler {
             // expansion tractable, vs. a generic "bad expression"
             // which is otherwise opaque.
             let func = self.current_function_name.clone();
-            let id_suffix = if self.lex.tk == Token::Id as i64 {
+            let id_suffix = if self.lex.tk == Token::Id {
                 format!(" `{}`", self.symbols[self.lex.curr_id_idx].name)
             } else {
                 String::new()
@@ -3136,7 +3136,7 @@ impl Compiler {
             )));
         }
 
-        while self.lex.tk >= lev || self.lex.tk == '(' as i64 {
+        while self.lex.tk >= lev || self.lex.tk == '(' {
             t = self.ty;
             // The array-decay flag tracks the *trailing* decay so
             // `sizeof(arr)` recovers the real array size. Once
@@ -3145,7 +3145,7 @@ impl Compiler {
             // leak into a sizeof of an unrelated subexpression.
             self.last_array_decay_size = 0;
             self.last_array_decay_bytes = 0;
-            if self.lex.tk == '(' as i64 {
+            if self.lex.tk == '(' {
                 // Postfix indirect call: the expression so far put a
                 // function-pointer value in `a`. Examples:
                 //   `s.fp(args)` -- function-pointer struct field
@@ -3209,7 +3209,7 @@ impl Compiler {
                 // the c5 stack.
                 let mut temp_offsets: Vec<i64> = Vec::new();
                 let mut nargs: i64 = 0;
-                while self.lex.tk != ')' as i64 {
+                while self.lex.tk != ')' {
                     self.loc_offs += 1;
                     if self.loc_offs > self.max_loc_offs {
                         self.max_loc_offs = self.loc_offs;
@@ -3221,7 +3221,7 @@ impl Compiler {
                     self.expr(Token::Assign as i64)?;
                     self.emit_op(Op::Si);
                     nargs += 1;
-                    if self.lex.tk == ',' as i64 {
+                    if self.lex.tk == ',' {
                         self.next()?;
                     }
                 }
@@ -3243,7 +3243,7 @@ impl Compiler {
                 // register value carries the full 8-byte return
                 // regardless of the tag.
                 self.ty = Ty::Int as i64;
-            } else if self.lex.tk == Token::Assign as i64 {
+            } else if self.lex.tk == Token::Assign {
                 self.next()?;
                 let lhs_is_struct_value = is_struct_ty(t) && struct_ptr_depth(t) == 0;
                 if lhs_is_struct_value {
@@ -3311,7 +3311,7 @@ impl Compiler {
                 } else {
                     return Err(self.compile_err("bad lvalue in assignment"));
                 }
-            } else if self.lex.tk == Token::AssignOp as i64 {
+            } else if self.lex.tk == Token::AssignOp {
                 // Compound assignment `a OP= b`. The lexer stuffed
                 // the underlying binop's Token into `lex.ival`. The
                 // shape mirrors plain `=`: rewrite the trailing
@@ -3428,7 +3428,7 @@ impl Compiler {
                 self.emit_op(op);
                 self.ty = lhs_ty;
                 self.emit_op(store_op_for(self.ty, self.target));
-            } else if self.lex.tk == Token::Cond as i64 {
+            } else if self.lex.tk == Token::Cond {
                 self.next()?;
                 self.emit_op(Op::Bz);
                 let b_else = self.text.len();
@@ -3441,11 +3441,11 @@ impl Compiler {
                 // an assignment-expression. expr(Assign) stops at
                 // `,`; resume the chain here so the colon search
                 // finds its match.
-                while self.lex.tk == ',' as i64 {
+                while self.lex.tk == ',' {
                     self.next()?;
                     self.expr(Token::Assign as i64)?;
                 }
-                if self.lex.tk == ':' as i64 {
+                if self.lex.tk == ':' {
                     self.next()?;
                 } else {
                     return Err(self.compile_err("conditional missing colon"));
@@ -3457,7 +3457,7 @@ impl Compiler {
                 self.emit_val(0);
                 self.expr(Token::Cond as i64)?;
                 self.text[b_end] = self.text.len() as i64;
-            } else if self.lex.tk == Token::Lor as i64 {
+            } else if self.lex.tk == Token::Lor {
                 self.next()?;
                 self.emit_op(Op::Bnz);
                 let b = self.text.len();
@@ -3465,7 +3465,7 @@ impl Compiler {
                 self.expr(Token::Lan as i64)?;
                 self.text[b] = self.text.len() as i64;
                 self.ty = Ty::Int as i64;
-            } else if self.lex.tk == Token::Lan as i64 {
+            } else if self.lex.tk == Token::Lan {
                 self.next()?;
                 self.emit_op(Op::Bz);
                 let b = self.text.len();
@@ -3473,25 +3473,25 @@ impl Compiler {
                 self.expr(Token::OrOp as i64)?;
                 self.text[b] = self.text.len() as i64;
                 self.ty = Ty::Int as i64;
-            } else if self.lex.tk == Token::OrOp as i64 {
+            } else if self.lex.tk == Token::OrOp {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::XorOp as i64)?;
                 self.emit_op(Op::Or);
                 self.ty = Ty::Int as i64;
-            } else if self.lex.tk == Token::XorOp as i64 {
+            } else if self.lex.tk == Token::XorOp {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::AndOp as i64)?;
                 self.emit_op(Op::Xor);
                 self.ty = Ty::Int as i64;
-            } else if self.lex.tk == Token::AndOp as i64 {
+            } else if self.lex.tk == Token::AndOp {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::EqOp as i64)?;
                 self.emit_op(Op::And);
                 self.ty = Ty::Int as i64;
-            } else if self.lex.tk == Token::EqOp as i64 {
+            } else if self.lex.tk == Token::EqOp {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::LtOp as i64)?;
@@ -3502,7 +3502,7 @@ impl Compiler {
                     self.emit_eq_with_common_width(t, /*invert=*/ false);
                 }
                 self.ty = Ty::Int as i64;
-            } else if self.lex.tk == Token::NeOp as i64 {
+            } else if self.lex.tk == Token::NeOp {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::LtOp as i64)?;
@@ -3513,7 +3513,7 @@ impl Compiler {
                     self.emit_eq_with_common_width(t, /*invert=*/ true);
                 }
                 self.ty = Ty::Int as i64;
-            } else if self.lex.tk == Token::LtOp as i64 {
+            } else if self.lex.tk == Token::LtOp {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::ShlOp as i64)?;
@@ -3526,7 +3526,7 @@ impl Compiler {
                     self.emit_op(Op::Lt);
                 }
                 self.ty = Ty::Int as i64;
-            } else if self.lex.tk == Token::GtOp as i64 {
+            } else if self.lex.tk == Token::GtOp {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::ShlOp as i64)?;
@@ -3539,7 +3539,7 @@ impl Compiler {
                     self.emit_op(Op::Gt);
                 }
                 self.ty = Ty::Int as i64;
-            } else if self.lex.tk == Token::LeOp as i64 {
+            } else if self.lex.tk == Token::LeOp {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::ShlOp as i64)?;
@@ -3552,7 +3552,7 @@ impl Compiler {
                     self.emit_op(Op::Le);
                 }
                 self.ty = Ty::Int as i64;
-            } else if self.lex.tk == Token::GeOp as i64 {
+            } else if self.lex.tk == Token::GeOp {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::ShlOp as i64)?;
@@ -3565,7 +3565,7 @@ impl Compiler {
                     self.emit_op(Op::Ge);
                 }
                 self.ty = Ty::Int as i64;
-            } else if self.lex.tk == Token::ShlOp as i64 {
+            } else if self.lex.tk == Token::ShlOp {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::AddOp as i64)?;
@@ -3586,7 +3586,7 @@ impl Compiler {
                     }
                     self.ty = t;
                 }
-            } else if self.lex.tk == Token::ShrOp as i64 {
+            } else if self.lex.tk == Token::ShrOp {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::AddOp as i64)?;
@@ -3600,7 +3600,7 @@ impl Compiler {
                     self.emit_op(Op::Shr);
                     self.ty = Ty::Int as i64;
                 }
-            } else if self.lex.tk == Token::AddOp as i64 {
+            } else if self.lex.tk == Token::AddOp {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::MulOp as i64)?;
@@ -3652,7 +3652,7 @@ impl Compiler {
                         self.ty = usual_arith_common_ty(t, rhs_ty, self.target);
                     }
                 }
-            } else if self.lex.tk == Token::SubOp as i64 {
+            } else if self.lex.tk == Token::SubOp {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::MulOp as i64)?;
@@ -3686,7 +3686,7 @@ impl Compiler {
                         self.ty = usual_arith_common_ty(t, rhs_ty, self.target);
                     }
                 }
-            } else if self.lex.tk == Token::MulOp as i64 {
+            } else if self.lex.tk == Token::MulOp {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::Inc as i64)?;
@@ -3700,7 +3700,7 @@ impl Compiler {
                     self.maybe_mask_to_unsigned_width(t, rhs_ty);
                     self.ty = usual_arith_common_ty(t, rhs_ty, self.target);
                 }
-            } else if self.lex.tk == Token::DivOp as i64 {
+            } else if self.lex.tk == Token::DivOp {
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::Inc as i64)?;
@@ -3727,7 +3727,7 @@ impl Compiler {
                     }
                     self.ty = common;
                 }
-            } else if self.lex.tk == Token::ModOp as i64 {
+            } else if self.lex.tk == Token::ModOp {
                 self.next()?;
                 if is_floating_scalar(t) {
                     return Err(self.compile_err("`%` is not defined on floating-point operands"));
@@ -3745,7 +3745,7 @@ impl Compiler {
                     self.emit_op(Op::Mod);
                 }
                 self.ty = common;
-            } else if self.lex.tk == Token::Inc as i64 || self.lex.tk == Token::Dec as i64 {
+            } else if self.lex.tk == Token::Inc || self.lex.tk == Token::Dec {
                 let reload = self
                     .rewrite_trailing_load_as_psh()
                     .ok_or_else(|| self.compile_err("bad lvalue in post-increment"))?;
@@ -3755,7 +3755,7 @@ impl Compiler {
                 }
                 self.emit_op(Op::Psh);
                 self.emit_imm(self.pointee_step(self.ty));
-                self.emit_op(if self.lex.tk == Token::Inc as i64 {
+                self.emit_op(if self.lex.tk == Token::Inc {
                     Op::Add
                 } else {
                     Op::Sub
@@ -3763,13 +3763,13 @@ impl Compiler {
                 self.emit_op(store_op_for(self.ty, self.target));
                 self.emit_op(Op::Psh);
                 self.emit_imm(self.pointee_step(self.ty));
-                self.emit_op(if self.lex.tk == Token::Inc as i64 {
+                self.emit_op(if self.lex.tk == Token::Inc {
                     Op::Sub
                 } else {
                     Op::Add
                 });
                 self.next()?;
-            } else if self.lex.tk == Token::Brak as i64 {
+            } else if self.lex.tk == Token::Brak {
                 self.next()?;
                 // Read-and-park the multi-dim stride queue. The
                 // identifier / param / field-decay branches seed
@@ -3798,7 +3798,7 @@ impl Compiler {
                 } else {
                     self.pending_index_strides_tail.remove(0)
                 };
-                if self.lex.tk == ']' as i64 {
+                if self.lex.tk == ']' {
                     self.next()?;
                 } else {
                     return Err(self.compile_err("close bracket expected"));
@@ -3846,7 +3846,7 @@ impl Compiler {
                         self.emit_op(load_op_for(self.ty, self.target));
                     }
                 }
-            } else if self.lex.tk == Token::Arrow as i64 || self.lex.tk == Token::Dot as i64 {
+            } else if self.lex.tk == Token::Arrow || self.lex.tk == Token::Dot {
                 // p->field / s.field. Both shapes resolve a struct
                 // field offset and load the field. The difference is
                 // upstream: `->` runs on a struct pointer (which the
@@ -3854,7 +3854,7 @@ impl Compiler {
                 // while `.` runs on a struct value, where the parser
                 // suppressed the load and `a` already holds the
                 // struct's address.
-                let is_dot = self.lex.tk == Token::Dot as i64;
+                let is_dot = self.lex.tk == Token::Dot;
                 let valid = if is_dot {
                     is_struct_ty(t) && struct_ptr_depth(t) == 0
                 } else {
@@ -3870,7 +3870,7 @@ impl Compiler {
                     return Err(self.compile_err(format!("{op} requires a {want}")));
                 }
                 self.next()?;
-                if self.lex.tk != Token::Id as i64 {
+                if self.lex.tk != Token::Id {
                     let op = if is_dot { "." } else { "->" };
                     return Err(self.compile_err(format!("field name expected after {op}")));
                 }
@@ -4031,7 +4031,7 @@ impl Compiler {
             // file scope -- consume the construct as a parse-time
             // assertion. Zero expression aborts compilation with
             // the message verbatim through the standard error path.
-            if self.lex.tk == Token::StaticAssert as i64 {
+            if self.lex.tk == Token::StaticAssert {
                 self.parse_static_assert()?;
                 continue;
             }
@@ -4059,33 +4059,33 @@ impl Compiler {
             let mut saw_short = false;
             let mut saw_int_mod = false;
             loop {
-                if self.lex.tk == Token::ThreadLocal as i64 {
+                if self.lex.tk == Token::ThreadLocal {
                     thread_local = true;
                     self.next()?;
-                } else if self.lex.tk == Token::Typedef as i64 {
+                } else if self.lex.tk == Token::Typedef {
                     is_typedef = true;
                     self.next()?;
-                } else if self.lex.tk == Token::Signed as i64 {
+                } else if self.lex.tk == Token::Signed {
                     saw_signed = true;
                     saw_int_mod = true;
                     self.next()?;
-                } else if self.lex.tk == Token::Unsigned as i64 {
+                } else if self.lex.tk == Token::Unsigned {
                     saw_unsigned = true;
                     saw_int_mod = true;
                     self.next()?;
-                } else if self.lex.tk == Token::Long as i64 {
+                } else if self.lex.tk == Token::Long {
                     long_count = long_count.saturating_add(1);
                     saw_int_mod = true;
                     self.next()?;
-                } else if self.lex.tk == Token::Short as i64 {
+                } else if self.lex.tk == Token::Short {
                     saw_short = true;
                     saw_int_mod = true;
                     self.next()?;
-                } else if self.lex.tk == Token::IntMod as i64 {
+                } else if self.lex.tk == Token::IntMod {
                     saw_int_mod = true;
                     self.next()?;
-                } else if self.lex.tk == Token::Extern as i64
-                    || self.lex.tk == Token::Static as i64
+                } else if self.lex.tk == Token::Extern
+                    || self.lex.tk == Token::Static
                     || is_decl_modifier(self.lex.tk)
                 {
                     self.next()?;
@@ -4095,7 +4095,7 @@ impl Compiler {
             }
             let saw_long = long_count >= 1;
             let saw_long_long = long_count >= 2;
-            if self.lex.tk == Token::Int as i64 {
+            if self.lex.tk == Token::Int {
                 self.next()?;
                 // `long long int` -> Ty::LongLong; `long int` ->
                 // Ty::Long; `short int` -> Ty::Short; bare `int`
@@ -4115,7 +4115,7 @@ impl Compiler {
                 } else {
                     base
                 };
-            } else if self.lex.tk == Token::Char as i64 {
+            } else if self.lex.tk == Token::Char {
                 self.next()?;
                 // `signed char` is a real 1-byte signed type; bare
                 // `char` and `unsigned char` are unsigned. Mirror
@@ -4125,29 +4125,29 @@ impl Compiler {
                 } else {
                     Ty::Char as i64 | UNSIGNED_BIT
                 };
-            } else if self.lex.tk == Token::Float as i64 {
+            } else if self.lex.tk == Token::Float {
                 self.next()?;
                 bt = Ty::Float as i64;
-            } else if self.lex.tk == Token::Double as i64 {
+            } else if self.lex.tk == Token::Double {
                 self.next()?;
                 bt = Ty::Double as i64;
-            } else if self.lex.tk == Token::Enum as i64 {
+            } else if self.lex.tk == Token::Enum {
                 self.parse_enum_decl()?;
-            } else if self.lex.tk == Token::Struct as i64 || self.lex.tk == Token::Union as i64 {
+            } else if self.lex.tk == Token::Struct || self.lex.tk == Token::Union {
                 // Aggregate (struct or union) declaration. Three
                 // shapes:
                 //   <kw> Name { ... };           -- definition only
                 //   <kw> Name;                   -- forward declaration
                 //   <kw> Name *p;                -- type use, declarators follow
                 //   typedef <kw> Name {...} Name; -- definition + typedef alias
-                let is_union = self.lex.tk == Token::Union as i64;
+                let is_union = self.lex.tk == Token::Union;
                 let kind = if is_union { "union" } else { "struct" };
                 self.next()?;
-                let name = if self.lex.tk == Token::Id as i64 {
+                let name = if self.lex.tk == Token::Id {
                     let n = self.symbols[self.lex.curr_id_idx].name.clone();
                     self.next()?;
                     n
-                } else if self.lex.tk == '{' as i64 {
+                } else if self.lex.tk == '{' {
                     // Anonymous: `typedef struct { ... } Foo;`. Synth
                     // a tag so the inner body can register and so
                     // the typedef-side declarator that follows still
@@ -4157,7 +4157,7 @@ impl Compiler {
                     return Err(self.compile_err(format!("{kind} name or `{{` expected")));
                 };
 
-                if self.lex.tk == '{' as i64 {
+                if self.lex.tk == '{' {
                     let id = self.parse_aggregate_body(&name, is_union)?;
                     bt = struct_ty_for(id);
                 } else {
@@ -4208,7 +4208,7 @@ impl Compiler {
                 self.next()?;
             }
 
-            while self.lex.tk != ';' as i64 && self.lex.tk != '}' as i64 {
+            while self.lex.tk != ';' && self.lex.tk != '}' {
                 let (id_idx, ty, array_size) = self.parse_declarator(bt)?;
                 // Pick up the fn-pointer indirection count
                 // the declarator (or its typedef base type)
@@ -4253,7 +4253,7 @@ impl Compiler {
                     // those locals into scope for, so we restore each
                     // param's shadowed binding right after.
                     let (typedef_ty, typedef_fpi, typedef_params) =
-                        if self.lex.tk == '(' as i64 && preconsumed_params.is_none() {
+                        if self.lex.tk == '(' && preconsumed_params.is_none() {
                             self.next()?; // consume `(`
                             let pp = self.parse_function_params()?;
                             for &p in &pp.indices {
@@ -4288,7 +4288,7 @@ impl Compiler {
                         self.symbols[id_idx].params = pp.types;
                         self.symbols[id_idx].is_variadic = pp.is_variadic;
                     }
-                    if self.lex.tk == ',' as i64 {
+                    if self.lex.tk == ',' {
                         self.next()?;
                     }
                     continue;
@@ -4312,7 +4312,7 @@ impl Compiler {
                 // function-returning-FP shape (tk is `;` or `{`
                 // depending on prototype-vs-definition).
                 let was_fwd_fun = self.symbols[id_idx].class == Token::Fun as i64
-                    && (self.lex.tk == '(' as i64 || preconsumed_params.is_some());
+                    && (self.lex.tk == '(' || preconsumed_params.is_some());
                 // Tentative-definition merge (C11 6.9.2): a prior
                 // `static T x;` (no `=`) becomes the defining
                 // declaration when re-declared, optionally with an
@@ -4320,7 +4320,7 @@ impl Compiler {
                 // never go through this path.
                 let was_tentative_glo = self.symbols[id_idx].class == Token::Glo as i64
                     && !self.symbols[id_idx].has_initializer
-                    && self.lex.tk != '(' as i64;
+                    && self.lex.tk != '(';
                 if self.symbols[id_idx].class != 0 && !was_sys && !was_fwd_fun && !was_tentative_glo
                 {
                     return Err(self.compile_err("duplicate global definition"));
@@ -4333,7 +4333,7 @@ impl Compiler {
                 let prior_is_variadic = self.symbols[id_idx].is_variadic;
                 self.symbols[id_idx].type_ = ty;
 
-                if self.lex.tk == '(' as i64 || preconsumed_params.is_some() {
+                if self.lex.tk == '(' || preconsumed_params.is_some() {
                     if !was_sys {
                         self.symbols[id_idx].class = Token::Fun as i64;
                         // Leave `val` untouched. For a first-time
@@ -4452,7 +4452,7 @@ impl Compiler {
                         }
                     }
 
-                    if self.lex.tk == ';' as i64 {
+                    if self.lex.tk == ';' {
                         // Forward declaration / prototype --
                         // `int foo(int a, ...);`. Restore the param
                         // symbols' outer class (parse_function_params
@@ -4466,7 +4466,7 @@ impl Compiler {
                         }
                         // Outer loop sees `;` and exits; `self.next()`
                         // after the loop consumes it.
-                        if self.lex.tk == ',' as i64 {
+                        if self.lex.tk == ',' {
                             self.next()?;
                         }
                         continue;
@@ -4480,7 +4480,7 @@ impl Compiler {
                             self.symbols[id_idx].name
                         )));
                     }
-                    if self.lex.tk != '{' as i64 {
+                    if self.lex.tk != '{' {
                         return Err(self.compile_err("bad function definition"));
                     }
                     self.next()?;
@@ -4583,8 +4583,8 @@ impl Compiler {
                     // either parses a local decl (with optional
                     // initializer) into the function's symbol
                     // frame, or parses a statement.
-                    while self.lex.tk != '}' as i64 {
-                        if self.lex.tk == Token::StaticAssert as i64 {
+                    while self.lex.tk != '}' {
+                        if self.lex.tk == Token::StaticAssert {
                             // C11 6.7.10 lets static_assert sit
                             // anywhere a declaration may appear,
                             // including the function-body top
@@ -4672,7 +4672,7 @@ impl Compiler {
                     // globals -- the per-target rebase ordering
                     // needs design work.
                     if array_size == -1 {
-                        if self.lex.tk != Token::Assign as i64 {
+                        if self.lex.tk != Token::Assign {
                             return Err(self.compile_err(format!(
                                 "array `{}` declared with empty brackets needs an initializer",
                                 self.symbols[id_idx].name
@@ -4693,7 +4693,7 @@ impl Compiler {
                             // `self.data` and pushes subsequent
                             // elements to a non-contiguous offset.
                             let elem_size = self.size_of_type(ty);
-                            if self.lex.tk != '{' as i64 {
+                            if self.lex.tk != '{' {
                                 return Err(
                                     self.compile_err("array initializer must start with `{{`")
                                 );
@@ -4708,19 +4708,19 @@ impl Compiler {
                             }
                             let sid = struct_id_of(ty);
                             let mut i: i64 = 0;
-                            while self.lex.tk != '}' as i64 {
+                            while self.lex.tk != '}' {
                                 if i >= count {
                                     return Err(self.compile_err(format!("struct array element count miscount (parser scanned {count}, parsed past)")));
                                 }
                                 let here = off + i * elem_size as i64;
-                                if self.lex.tk == '{' as i64 {
+                                if self.lex.tk == '{' {
                                     self.collect_struct_initializer(sid, here)?;
                                 } else {
                                     return Err(self
                                         .compile_err("struct array element must be a brace list"));
                                 }
                                 i += 1;
-                                if self.lex.tk == ',' as i64 {
+                                if self.lex.tk == ',' {
                                     self.next()?;
                                 }
                             }
@@ -4732,7 +4732,7 @@ impl Compiler {
                                 self.data.push(0);
                             }
                             self.symbols[id_idx].has_initializer = true;
-                            if self.lex.tk == ',' as i64 {
+                            if self.lex.tk == ',' {
                                 self.next()?;
                             }
                             continue;
@@ -4804,7 +4804,7 @@ impl Compiler {
                         // designators or positional entries
                         // populates per-field; unspecified fields
                         // stay zero.
-                        if self.lex.tk == Token::Assign as i64 {
+                        if self.lex.tk == Token::Assign {
                             self.next()?;
                             if array_size > 0 && is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
                                 if thread_local {
@@ -4818,14 +4818,14 @@ impl Compiler {
                                 // entries stay zero-init.
                                 let elem_size = self.size_of_type(ty);
                                 let sid = struct_id_of(ty);
-                                if self.lex.tk != '{' as i64 {
+                                if self.lex.tk != '{' {
                                     return Err(
                                         self.compile_err("array initializer must start with `{{`")
                                     );
                                 }
                                 self.next()?;
                                 let mut idx: i64 = 0;
-                                while self.lex.tk != '}' as i64 {
+                                while self.lex.tk != '}' {
                                     if idx >= array_size {
                                         return Err(self.compile_err(format!(
                                             "too many initializers for `{}`",
@@ -4833,7 +4833,7 @@ impl Compiler {
                                         )));
                                     }
                                     let here = var_offset + idx * elem_size as i64;
-                                    if self.lex.tk == '{' as i64 {
+                                    if self.lex.tk == '{' {
                                         self.collect_struct_initializer(sid, here)?;
                                     } else {
                                         return Err(self.compile_err(
@@ -4841,7 +4841,7 @@ impl Compiler {
                                         ));
                                     }
                                     idx += 1;
-                                    if self.lex.tk == ',' as i64 {
+                                    if self.lex.tk == ',' {
                                         self.next()?;
                                     }
                                 }
@@ -4878,7 +4878,7 @@ impl Compiler {
                         }
                     }
                 }
-                if self.lex.tk == ',' as i64 {
+                if self.lex.tk == ',' {
                     self.next()?;
                 }
             }

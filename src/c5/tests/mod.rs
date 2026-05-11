@@ -190,12 +190,12 @@ impl LexHarness {
         }
     }
 
-    /// Advance one token and return `tk`.
+    /// Advance one token and return `tk` as a raw i64.
     pub fn next(&mut self) -> i64 {
         self.lex
             .next(&mut self.symbols, &mut self.symbol_index, &mut self.data)
             .expect("lexer error");
-        self.lex.tk
+        self.lex.tk.raw()
     }
 
     pub fn ival(&self) -> i64 {

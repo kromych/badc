@@ -23,10 +23,10 @@ impl Compiler {
         // Optional tag name. c5 enums collapse to int regardless,
         // so the tag is consumed without registration today (it's
         // remembered implicitly through the matched constants).
-        if self.lex.tk == Token::Id as i64 {
+        if self.lex.tk == Token::Id {
             self.next()?;
         }
-        if self.lex.tk == '{' as i64 {
+        if self.lex.tk == '{' {
             self.parse_enum_body()?;
         }
         Ok(())
@@ -41,13 +41,13 @@ impl Compiler {
     pub(super) fn parse_enum_body(&mut self) -> Result<(), C5Error> {
         self.next()?; // consume `{`
         let mut i: i64 = 0;
-        while self.lex.tk != '}' as i64 {
-            if self.lex.tk != Token::Id as i64 {
+        while self.lex.tk != '}' {
+            if self.lex.tk != Token::Id {
                 return Err(self.compile_err("bad enum identifier"));
             }
             let idx = self.lex.curr_id_idx;
             self.next()?;
-            if self.lex.tk == Token::Assign as i64 {
+            if self.lex.tk == Token::Assign {
                 self.next()?;
                 // Constant expression -- handles literals, unary
                 // signs, parens, casts, shifts (`1 << 8`), the
@@ -60,7 +60,7 @@ impl Compiler {
             self.symbols[idx].type_ = Ty::Int as i64;
             self.symbols[idx].val = i;
             i += 1;
-            if self.lex.tk == ',' as i64 {
+            if self.lex.tk == ',' {
                 self.next()?;
             }
         }

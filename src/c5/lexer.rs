@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 
 use super::error::C5Error;
 use super::symbol::Symbol;
-use super::token::{Token, Ty};
+use super::token::{Tok, Token, Ty};
 
 /// Default struct-alignment cap when no `#pragma pack(N)` is
 /// active. Mirrors the existing aggregate-layout cap at 8 bytes
@@ -174,7 +174,7 @@ fn parse_pragma_pack_line(body: &[u8]) -> Option<PackDirective> {
 pub(crate) struct LexerSnapshot {
     pos: usize,
     line: usize,
-    tk: i64,
+    tk: Tok,
     ival: i64,
     curr_id_idx: usize,
 }
@@ -192,7 +192,7 @@ pub(crate) struct Lexer {
     pub file: String,
 
     // Output of the most recent next() call.
-    pub tk: i64,
+    pub tk: Tok,
     pub ival: i64,
     pub curr_id_idx: usize,
 
@@ -324,7 +324,7 @@ impl Lexer {
             pos: 0,
             line: 1,
             file: String::from("<source>"),
-            tk: 0,
+            tk: Tok::EOF,
             ival: 0,
             curr_id_idx: 0,
             // Bottom of the stack is the default pack -- c5 already
@@ -536,7 +536,7 @@ impl Lexer {
     ) -> Result<(), C5Error> {
         loop {
             if self.pos >= self.src.len() {
-                self.tk = 0;
+                self.tk = Tok::EOF;
                 return Ok(());
             }
 
@@ -594,7 +594,7 @@ impl Lexer {
                 }
                 let name_slice = &self.src[start..self.pos];
                 self.curr_id_idx = resolve_symbol(symbols, index, name_slice, hash);
-                self.tk = symbols[self.curr_id_idx].token;
+                self.tk = Tok(symbols[self.curr_id_idx].token);
                 return Ok(());
             } else if c.is_ascii_digit() {
                 let int_start = self.pos - 1;
@@ -617,7 +617,7 @@ impl Lexer {
                         self.pos += 1;
                     }
                     self.ival = val;
-                    self.tk = Token::Num as i64;
+                    self.tk = Tok(Token::Num as i64);
                     return Ok(());
                 }
                 if val == 0
@@ -658,7 +658,7 @@ impl Lexer {
                         self.pos += 1;
                     }
                     self.ival = val;
-                    self.tk = Token::Num as i64;
+                    self.tk = Tok(Token::Num as i64);
                     return Ok(());
                 }
 
@@ -693,7 +693,7 @@ impl Lexer {
                         self.pos += 1;
                     }
                     self.ival = val;
-                    self.tk = Token::Num as i64;
+                    self.tk = Tok(Token::Num as i64);
                     return Ok(());
                 }
 
@@ -754,12 +754,12 @@ impl Lexer {
                         )))
                     })?;
                     self.ival = f.to_bits() as i64;
-                    self.tk = Token::FloatNum as i64;
+                    self.tk = Tok(Token::FloatNum as i64);
                     return Ok(());
                 }
 
                 self.ival = val;
-                self.tk = Token::Num as i64;
+                self.tk = Tok(Token::Num as i64);
                 return Ok(());
             } else if c == '/' {
                 if self.pos < self.src.len() && self.src[self.pos] as char == '/' {
@@ -784,11 +784,11 @@ impl Lexer {
                     }
                 } else if self.pos < self.src.len() && self.src[self.pos] as char == '=' {
                     self.pos += 1;
-                    self.tk = Token::AssignOp as i64;
+                    self.tk = Tok(Token::AssignOp as i64);
                     self.ival = Token::DivOp as i64;
                     return Ok(());
                 } else {
-                    self.tk = Token::DivOp as i64;
+                    self.tk = Tok(Token::DivOp as i64);
                     return Ok(());
                 }
             } else if c == '\'' || c == '"' {
@@ -878,9 +878,9 @@ impl Lexer {
                     // parser is the right place to add the single
                     // trailing NUL once all the parts have been read.
                     self.ival = start_data;
-                    self.tk = '"' as i64;
+                    self.tk = Tok('"' as i64);
                 } else {
-                    self.tk = Token::Num as i64;
+                    self.tk = Tok(Token::Num as i64);
                 }
                 return Ok(());
             } else {
@@ -893,55 +893,55 @@ impl Lexer {
                     '=' => {
                         if next_char == '=' {
                             self.pos += 1;
-                            self.tk = Token::EqOp as i64;
+                            self.tk = Tok(Token::EqOp as i64);
                         } else {
-                            self.tk = Token::Assign as i64;
+                            self.tk = Tok(Token::Assign as i64);
                         }
                     }
                     '+' => {
                         if next_char == '+' {
                             self.pos += 1;
-                            self.tk = Token::Inc as i64;
+                            self.tk = Tok(Token::Inc as i64);
                         } else if next_char == '=' {
                             self.pos += 1;
-                            self.tk = Token::AssignOp as i64;
+                            self.tk = Tok(Token::AssignOp as i64);
                             self.ival = Token::AddOp as i64;
                         } else {
-                            self.tk = Token::AddOp as i64;
+                            self.tk = Tok(Token::AddOp as i64);
                         }
                     }
                     '-' => {
                         if next_char == '-' {
                             self.pos += 1;
-                            self.tk = Token::Dec as i64;
+                            self.tk = Tok(Token::Dec as i64);
                         } else if next_char == '>' {
                             self.pos += 1;
-                            self.tk = Token::Arrow as i64;
+                            self.tk = Tok(Token::Arrow as i64);
                         } else if next_char == '=' {
                             self.pos += 1;
-                            self.tk = Token::AssignOp as i64;
+                            self.tk = Tok(Token::AssignOp as i64);
                             self.ival = Token::SubOp as i64;
                         } else {
-                            self.tk = Token::SubOp as i64;
+                            self.tk = Tok(Token::SubOp as i64);
                         }
                     }
                     '!' => {
                         if next_char == '=' {
                             self.pos += 1;
-                            self.tk = Token::NeOp as i64;
+                            self.tk = Tok(Token::NeOp as i64);
                         } else {
                             // Standalone `!` (logical NOT). Falling
                             // through to tk=0 here used to silently
                             // signal EOF, breaking any expression like
                             // `!x` -- the parser would then complain
                             // about an unexpected eof.
-                            self.tk = '!' as i64;
+                            self.tk = Tok('!' as i64);
                         }
                     }
                     '<' => {
                         if next_char == '=' {
                             self.pos += 1;
-                            self.tk = Token::LeOp as i64;
+                            self.tk = Tok(Token::LeOp as i64);
                         } else if next_char == '<' {
                             // `<<` then optional `=` -- `<<=` is a
                             // compound shift-assign; `<<` alone is
@@ -949,85 +949,85 @@ impl Lexer {
                             self.pos += 1;
                             if self.pos < self.src.len() && self.src[self.pos] == b'=' {
                                 self.pos += 1;
-                                self.tk = Token::AssignOp as i64;
+                                self.tk = Tok(Token::AssignOp as i64);
                                 self.ival = Token::ShlOp as i64;
                             } else {
-                                self.tk = Token::ShlOp as i64;
+                                self.tk = Tok(Token::ShlOp as i64);
                             }
                         } else {
-                            self.tk = Token::LtOp as i64;
+                            self.tk = Tok(Token::LtOp as i64);
                         }
                     }
                     '>' => {
                         if next_char == '=' {
                             self.pos += 1;
-                            self.tk = Token::GeOp as i64;
+                            self.tk = Tok(Token::GeOp as i64);
                         } else if next_char == '>' {
                             self.pos += 1;
                             if self.pos < self.src.len() && self.src[self.pos] == b'=' {
                                 self.pos += 1;
-                                self.tk = Token::AssignOp as i64;
+                                self.tk = Tok(Token::AssignOp as i64);
                                 self.ival = Token::ShrOp as i64;
                             } else {
-                                self.tk = Token::ShrOp as i64;
+                                self.tk = Tok(Token::ShrOp as i64);
                             }
                         } else {
-                            self.tk = Token::GtOp as i64;
+                            self.tk = Tok(Token::GtOp as i64);
                         }
                     }
                     '|' => {
                         if next_char == '|' {
                             self.pos += 1;
-                            self.tk = Token::Lor as i64;
+                            self.tk = Tok(Token::Lor as i64);
                         } else if next_char == '=' {
                             self.pos += 1;
-                            self.tk = Token::AssignOp as i64;
+                            self.tk = Tok(Token::AssignOp as i64);
                             self.ival = Token::OrOp as i64;
                         } else {
-                            self.tk = Token::OrOp as i64;
+                            self.tk = Tok(Token::OrOp as i64);
                         }
                     }
                     '&' => {
                         if next_char == '&' {
                             self.pos += 1;
-                            self.tk = Token::Lan as i64;
+                            self.tk = Tok(Token::Lan as i64);
                         } else if next_char == '=' {
                             self.pos += 1;
-                            self.tk = Token::AssignOp as i64;
+                            self.tk = Tok(Token::AssignOp as i64);
                             self.ival = Token::AndOp as i64;
                         } else {
-                            self.tk = Token::AndOp as i64;
+                            self.tk = Tok(Token::AndOp as i64);
                         }
                     }
                     '^' => {
                         if next_char == '=' {
                             self.pos += 1;
-                            self.tk = Token::AssignOp as i64;
+                            self.tk = Tok(Token::AssignOp as i64);
                             self.ival = Token::XorOp as i64;
                         } else {
-                            self.tk = Token::XorOp as i64;
+                            self.tk = Tok(Token::XorOp as i64);
                         }
                     }
                     '%' => {
                         if next_char == '=' {
                             self.pos += 1;
-                            self.tk = Token::AssignOp as i64;
+                            self.tk = Tok(Token::AssignOp as i64);
                             self.ival = Token::ModOp as i64;
                         } else {
-                            self.tk = Token::ModOp as i64;
+                            self.tk = Tok(Token::ModOp as i64);
                         }
                     }
                     '*' => {
                         if next_char == '=' {
                             self.pos += 1;
-                            self.tk = Token::AssignOp as i64;
+                            self.tk = Tok(Token::AssignOp as i64);
                             self.ival = Token::MulOp as i64;
                         } else {
-                            self.tk = Token::MulOp as i64;
+                            self.tk = Tok(Token::MulOp as i64);
                         }
                     }
-                    '[' => self.tk = Token::Brak as i64,
-                    '?' => self.tk = Token::Cond as i64,
+                    '[' => self.tk = Tok(Token::Brak as i64),
+                    '?' => self.tk = Tok(Token::Cond as i64),
                     '.' => {
                         // Three consecutive dots -> variadic ellipsis;
                         // `.<digit>` is a C99 6.4.4.2 fractional
@@ -1039,7 +1039,7 @@ impl Lexer {
                             && self.src[self.pos + 1] == b'.'
                         {
                             self.pos += 2;
-                            self.tk = Token::Ellipsis as i64;
+                            self.tk = Tok(Token::Ellipsis as i64);
                         } else if self.pos < self.src.len()
                             && (self.src[self.pos] as char).is_ascii_digit()
                         {
@@ -1089,14 +1089,14 @@ impl Lexer {
                                 )))
                             })?;
                             self.ival = f.to_bits() as i64;
-                            self.tk = Token::FloatNum as i64;
+                            self.tk = Tok(Token::FloatNum as i64);
                         } else {
-                            self.tk = Token::Dot as i64;
+                            self.tk = Tok(Token::Dot as i64);
                         }
                     }
                     _ => {
                         if "!~;{}()],:".contains(c) {
-                            self.tk = c as i64;
+                            self.tk = Tok(c as i64);
                         } else {
                             continue;
                         }

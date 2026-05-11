@@ -43,14 +43,14 @@ impl Compiler {
         // string-literal concatenation may produce a multi-piece
         // RHS the lexer joins before this parser sees it. Strip
         // the wrapper and recurse.
-        if self.lex.tk == '{' as i64 {
+        if self.lex.tk == '{' {
             self.next()?;
             self.parse_global_initializer(var_ty, var_offset, is_thread_local)?;
             // A trailing `,` before `}` is allowed in C99.
-            if self.lex.tk == ',' as i64 {
+            if self.lex.tk == ',' {
                 self.next()?;
             }
-            if self.lex.tk != '}' as i64 {
+            if self.lex.tk != '}' {
                 return Err(self.compile_err_at(
                     line,
                     "scalar initializer wrapped in `{{ ... }}` must hold a single value",
@@ -68,7 +68,7 @@ impl Compiler {
         // runtime cast handler in `expr()` uses; if the inner token
         // isn't a type start, this is a parenthesised expression --
         // recurse on the inner and require the closing `)`.
-        if self.lex.tk == '(' as i64 {
+        if self.lex.tk == '(' {
             self.next()?;
             if self.lex_is_type_start() {
                 // Discard the cast destination type. Counted-paren
@@ -77,9 +77,9 @@ impl Compiler {
                 // having to model the declarator grammar twice.
                 let mut depth: i64 = 1;
                 while depth > 0 && self.lex.tk != 0 {
-                    if self.lex.tk == '(' as i64 {
+                    if self.lex.tk == '(' {
                         depth += 1;
-                    } else if self.lex.tk == ')' as i64 {
+                    } else if self.lex.tk == ')' {
                         depth -= 1;
                         if depth == 0 {
                             self.next()?;
@@ -93,7 +93,7 @@ impl Compiler {
             // Parenthesised expression: recurse on the inner and
             // consume the matching `)`.
             self.parse_global_initializer(var_ty, var_offset, is_thread_local)?;
-            if self.lex.tk == ')' as i64 {
+            if self.lex.tk == ')' {
                 self.next()?;
             }
             return Ok(());
@@ -106,7 +106,7 @@ impl Compiler {
         // synthetic Token::Fun whose val is filled in later by
         // `emit_sys_trampolines`; from that point on it follows the
         // same CodeReloc path as a user-defined function.
-        if self.lex.tk == Token::Id as i64
+        if self.lex.tk == Token::Id
             && (self.symbols[self.lex.curr_id_idx].class == Token::Fun as i64
                 || self.symbols[self.lex.curr_id_idx].class == Token::Sys as i64)
         {
@@ -132,7 +132,7 @@ impl Compiler {
             return Ok(());
         }
         // String literal in a `char *p` global initializer.
-        if self.lex.tk == '"' as i64 && is_pointer_ty(var_ty) {
+        if self.lex.tk == '"' && is_pointer_ty(var_ty) {
             if is_thread_local {
                 return Err(self.compile_err_at(
                     line,
@@ -141,7 +141,7 @@ impl Compiler {
             }
             let addr = self.lex.ival;
             self.next()?;
-            while self.lex.tk == '"' as i64 {
+            while self.lex.tk == '"' {
                 self.next()?;
             }
             self.data.push(0);
@@ -154,7 +154,7 @@ impl Compiler {
             return Ok(());
         }
         // `&<global>` -- address-of-global pointer init.
-        if self.lex.tk == Token::AndOp as i64 {
+        if self.lex.tk == Token::AndOp {
             if is_thread_local {
                 return Err(self.compile_err_at(
                     line,
@@ -165,7 +165,7 @@ impl Compiler {
                 ));
             }
             self.next()?;
-            if self.lex.tk != Token::Id as i64 {
+            if self.lex.tk != Token::Id {
                 return Err(
                     self.compile_err_at(line, "identifier expected after `&` in initializer")
                 );
@@ -209,10 +209,10 @@ impl Compiler {
             // `&array[N+M]` etc. The constant-expression evaluator
             // handles `+`, `-`, `*`, parens, `Token::Num`-class
             // identifiers (enum / `#define`d constants).
-            if self.lex.tk == Token::Brak as i64 {
+            if self.lex.tk == Token::Brak {
                 self.next()?;
                 let n = self.parse_constant_int()?;
-                if self.lex.tk != ']' as i64 {
+                if self.lex.tk != ']' {
                     return Err(self.compile_err_at(
                         line,
                         format!(
@@ -255,11 +255,9 @@ impl Compiler {
             stripped == Ty::Float as i64 || stripped == Ty::Double as i64
         };
         if var_is_float
-            && (self.lex.tk == Token::FloatNum as i64
-                || (self.lex.tk == Token::SubOp as i64
-                    && self.lex.peek_after_whitespace_starts_digit())
-                || (self.lex.tk == '(' as i64
-                    && self.contents_until_close_paren_have_float_pub()?))
+            && (self.lex.tk == Token::FloatNum
+                || (self.lex.tk == Token::SubOp && self.lex.peek_after_whitespace_starts_digit())
+                || (self.lex.tk == '(' && self.contents_until_close_paren_have_float_pub()?))
         {
             let bits = self.parse_const_float_expr()?;
             let value = bits.to_bits() as i64;

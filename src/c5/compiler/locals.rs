@@ -37,8 +37,8 @@ use super::types::{UNSIGNED_BIT, is_struct_ty, struct_id_of, struct_ptr_depth};
 impl Compiler {
     pub(super) fn parse_function_body_local_decl(&mut self) -> Result<(), C5Error> {
         let mut is_static = false;
-        while self.lex.tk == Token::Extern as i64 || self.lex.tk == Token::Static as i64 {
-            if self.lex.tk == Token::Static as i64 {
+        while self.lex.tk == Token::Extern || self.lex.tk == Token::Static {
+            if self.lex.tk == Token::Static {
                 is_static = true;
             }
             self.next()?;
@@ -53,14 +53,14 @@ impl Compiler {
         // Mirrors the matching branch in `parse_block_local_decl`
         // for `{` blocks nested below the function body's top
         // level.
-        if self.lex.tk == Token::Id as i64 && self.lex.peek_after_whitespace(b'(') {
+        if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b'(') {
             self.next()?; // consume name
             self.next()?; // consume `(`
             let mut depth: i64 = 1;
             while depth > 0 && self.lex.tk != 0 {
-                if self.lex.tk == '(' as i64 {
+                if self.lex.tk == '(' {
                     depth += 1;
-                } else if self.lex.tk == ')' as i64 {
+                } else if self.lex.tk == ')' {
                     depth -= 1;
                     if depth == 0 {
                         self.next()?;
@@ -69,7 +69,7 @@ impl Compiler {
                 }
                 self.next()?;
             }
-            while self.lex.tk != ';' as i64 && self.lex.tk != 0 {
+            while self.lex.tk != ';' && self.lex.tk != 0 {
                 self.next()?;
             }
             self.next()?;
@@ -81,7 +81,7 @@ impl Compiler {
             let _ = lbt;
             return Ok(());
         }
-        while self.lex.tk != ';' as i64 {
+        while self.lex.tk != ';' {
             let (loc_idx, ty, array_size) = self.parse_declarator(lbt)?;
             // Function-pointer lineage carries through to local
             // bindings -- pick up the side-channel parse_declarator
@@ -114,7 +114,7 @@ impl Compiler {
             // `h_fn_ptr_indirection`, so block-exit will restore it).
             self.symbols[loc_idx].fn_ptr_indirection = fn_ptr_indirection;
 
-            if self.lex.tk == ',' as i64 {
+            if self.lex.tk == ',' {
                 self.next()?;
             }
         }
@@ -163,7 +163,7 @@ impl Compiler {
             }
         }
 
-        if self.lex.tk == Token::Assign as i64 {
+        if self.lex.tk == Token::Assign {
             self.next()?;
             if array_size == -1 {
                 if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
@@ -174,7 +174,7 @@ impl Compiler {
                     // an element's parse appends a string literal to
                     // `self.data`.
                     let elem_size = self.size_of_type(ty);
-                    if self.lex.tk != '{' as i64 {
+                    if self.lex.tk != '{' {
                         return Err(self.compile_err("array initializer must start with `{{`"));
                     }
                     let count = self.lex.count_top_level_groups_in_array() as i64;
@@ -187,9 +187,9 @@ impl Compiler {
                     }
                     let sid = struct_id_of(ty);
                     let mut i: i64 = 0;
-                    while self.lex.tk != '}' as i64 {
+                    while self.lex.tk != '}' {
                         let here = off + i * elem_size as i64;
-                        if self.lex.tk == '{' as i64 {
+                        if self.lex.tk == '{' {
                             self.collect_struct_initializer(sid, here)?;
                         } else {
                             return Err(
@@ -197,7 +197,7 @@ impl Compiler {
                             );
                         }
                         i += 1;
-                        if self.lex.tk == ',' as i64 {
+                        if self.lex.tk == ',' {
                             self.next()?;
                         }
                     }
@@ -261,7 +261,7 @@ impl Compiler {
         declared_array_size: i64,
     ) -> Result<(), C5Error> {
         if declared_array_size == -1 {
-            if self.lex.tk != Token::Assign as i64 {
+            if self.lex.tk != Token::Assign {
                 return Err(self.compile_err(format!(
                     "array `{}` declared with empty brackets needs an initializer",
                     self.symbols[loc_idx].name
@@ -272,7 +272,7 @@ impl Compiler {
             // Stage each element in self.data, count them, then
             // reserve one stack frame slot block and Mcpy the
             // staged bytes into it.
-            if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 && self.lex.tk == '{' as i64 {
+            if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 && self.lex.tk == '{' {
                 // Local deferred-size struct array. Same scan-then-
                 // pre-allocate dance as the file-scope path so an
                 // element's string-literal field doesn't shift the
@@ -286,15 +286,15 @@ impl Compiler {
                 }
                 let sid = struct_id_of(ty);
                 let mut i: i64 = 0;
-                while self.lex.tk != '}' as i64 {
+                while self.lex.tk != '}' {
                     let here = staged_off as i64 + i * elem_size as i64;
-                    if self.lex.tk == '{' as i64 {
+                    if self.lex.tk == '{' {
                         self.collect_struct_initializer(sid, here)?;
                     } else {
                         return Err(self.compile_err("struct array element must be a brace list"));
                     }
                     i += 1;
-                    if self.lex.tk == ',' as i64 {
+                    if self.lex.tk == ',' {
                         self.next()?;
                     }
                 }
@@ -318,7 +318,7 @@ impl Compiler {
             // arrays may carry non-constant initializers, with
             // each element initialised as if by assignment in
             // declaration order.
-            if self.lex.tk == '{' as i64 {
+            if self.lex.tk == '{' {
                 let (final_size, needs_runtime) = self.scan_array_init()?;
                 if needs_runtime {
                     self.symbols[loc_idx].array_size = final_size;
@@ -361,7 +361,7 @@ impl Compiler {
             self.max_loc_offs = self.loc_offs;
         }
 
-        if self.lex.tk == Token::Assign as i64 {
+        if self.lex.tk == Token::Assign {
             self.next()?;
             let local_val = self.symbols[loc_idx].val;
             if declared_array_size > 0 {
@@ -375,7 +375,7 @@ impl Compiler {
                 // the per-element runtime store path. Pure-constant
                 // initializers keep the Mcpy-from-data fast path
                 // and the staged on-disk image stays compact.
-                if self.lex.tk == '{' as i64 && self.array_init_needs_runtime()? {
+                if self.lex.tk == '{' && self.array_init_needs_runtime()? {
                     self.emit_local_array_init_runtime(
                         local_val,
                         ty,
@@ -396,7 +396,7 @@ impl Compiler {
                 }
                 let (start_addr, total_bytes) = self.pack_initializer_into_data(ty, &elements);
                 self.emit_local_array_init(local_val, start_addr, total_bytes);
-            } else if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 && self.lex.tk == '{' as i64 {
+            } else if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 && self.lex.tk == '{' {
                 // Local struct value with brace-list initializer.
                 // Stage the bytes in `self.data` (so the bit
                 // pattern is shared across calls), then emit a
@@ -438,7 +438,7 @@ impl Compiler {
     /// non-constant value -- a Loc-class identifier, an indexed
     /// read, a member access, or a function call.
     pub(super) fn scan_array_init(&mut self) -> Result<(i64, bool), C5Error> {
-        debug_assert!(self.lex.tk == '{' as i64);
+        debug_assert!(self.lex.tk == '{');
         let snap = self.lex.snapshot();
         self.next()?; // consume `{`
         let mut depth: i64 = 1;
@@ -447,9 +447,9 @@ impl Compiler {
         // Detect an empty list (`{}`) -- 0 elements rather than 1.
         let mut saw_any = false;
         while depth > 0 && self.lex.tk != 0 {
-            if self.lex.tk == '{' as i64 {
+            if self.lex.tk == '{' {
                 depth += 1;
-            } else if self.lex.tk == '}' as i64 {
+            } else if self.lex.tk == '}' {
                 depth -= 1;
                 if depth == 0 {
                     if saw_any {
@@ -457,14 +457,14 @@ impl Compiler {
                     }
                     break;
                 }
-            } else if self.lex.tk == ',' as i64 && depth == 1 {
+            } else if self.lex.tk == ',' && depth == 1 {
                 if saw_any {
                     count += 1;
                 }
                 saw_any = false;
                 self.next()?;
                 continue;
-            } else if self.lex.tk == Token::Id as i64 {
+            } else if self.lex.tk == Token::Id {
                 saw_any = true;
                 let class = self.symbols[self.lex.curr_id_idx].class;
                 if class == Token::Loc as i64 {
@@ -473,7 +473,7 @@ impl Compiler {
                 if self.lex.peek_after_whitespace(b'[') || self.lex.peek_after_whitespace(b'(') {
                     needs_runtime = true;
                 }
-            } else if self.lex.tk == Token::Dot as i64 || self.lex.tk == Token::Arrow as i64 {
+            } else if self.lex.tk == Token::Dot || self.lex.tk == Token::Arrow {
                 needs_runtime = true;
                 saw_any = true;
             } else {
@@ -524,7 +524,7 @@ impl Compiler {
         max: i64,
         var_name: &str,
     ) -> Result<(), C5Error> {
-        debug_assert!(self.lex.tk == '{' as i64);
+        debug_assert!(self.lex.tk == '{');
         self.next()?; // consume `{`
         let elem_size = self.size_of_type(ty) as i64;
         let store_op = match elem_size {
@@ -534,7 +534,7 @@ impl Compiler {
             _ => Op::Si,
         };
         let mut i: i64 = 0;
-        while self.lex.tk != '}' as i64 {
+        while self.lex.tk != '}' {
             if i >= max {
                 return Err(self.compile_err(format!(
                     "too many initializers for array `{}` (> {})",
@@ -577,7 +577,7 @@ impl Compiler {
                 self.emit_op(store_op);
             }
             i += 1;
-            if self.lex.tk == ',' as i64 {
+            if self.lex.tk == ',' {
                 self.next()?;
             }
         }

@@ -33,7 +33,7 @@
 //! with the next struct id.
 
 use super::super::op::Op;
-use super::super::token::{Token, Ty};
+use super::super::token::{Tok, Token, Ty};
 
 /// Base of the struct-tag namespace. Every primitive (including
 /// the long band at 300) sits below this.
@@ -487,14 +487,14 @@ pub(super) fn fp_result_ty(lhs: i64, rhs: i64) -> i64 {
 /// *modifier-loop* level they're still consumed by
 /// `parse_decl_base_type` -- they drive flag bits rather than
 /// producing a separate token stream.
-pub(super) fn is_decl_modifier(tk: i64) -> bool {
-    tk == Token::TypeQual as i64
-        || tk == Token::IntMod as i64
-        || tk == Token::Signed as i64
-        || tk == Token::Unsigned as i64
-        || tk == Token::Long as i64
-        || tk == Token::Short as i64
-        || tk == Token::FuncSpec as i64
+pub(super) fn is_decl_modifier(tk: Tok) -> bool {
+    tk == Token::TypeQual
+        || tk == Token::IntMod
+        || tk == Token::Signed
+        || tk == Token::Unsigned
+        || tk == Token::Long
+        || tk == Token::Short
+        || tk == Token::FuncSpec
 }
 
 /// True for any token that may start a c5 declaration -- a base-type
@@ -502,16 +502,16 @@ pub(super) fn is_decl_modifier(tk: i64) -> bool {
 /// no-op modifiers above. Used by the parser to decide whether the
 /// next statement at block/file scope is a declaration or an
 /// expression / control-flow statement.
-pub(super) fn is_type_start_token(tk: i64) -> bool {
-    tk == Token::Int as i64
-        || tk == Token::Char as i64
-        || tk == Token::Float as i64
-        || tk == Token::Double as i64
-        || tk == Token::Struct as i64
-        || tk == Token::Union as i64
-        || tk == Token::Enum as i64
-        || tk == Token::Extern as i64
-        || tk == Token::Static as i64
+pub(super) fn is_type_start_token(tk: Tok) -> bool {
+    tk == Token::Int
+        || tk == Token::Char
+        || tk == Token::Float
+        || tk == Token::Double
+        || tk == Token::Struct
+        || tk == Token::Union
+        || tk == Token::Enum
+        || tk == Token::Extern
+        || tk == Token::Static
         || is_decl_modifier(tk)
 }
 

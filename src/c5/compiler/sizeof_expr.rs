@@ -29,7 +29,7 @@ impl Compiler {
     /// Parse the operand of a `sizeof` and return its byte
     /// count. The `sizeof` keyword has already been consumed.
     pub(super) fn sizeof_operand_bytes(&mut self) -> Result<i64, C5Error> {
-        let had_paren = self.lex.tk == '(' as i64;
+        let had_paren = self.lex.tk == '(';
         if had_paren {
             self.next()?;
         }
@@ -38,15 +38,15 @@ impl Compiler {
             // sizeof(<type>): parse a type name with optional
             // pointer decoration and return its size.
             self.ty = self.parse_decl_base_type()?;
-            while self.lex.tk == Token::MulOp as i64 {
+            while self.lex.tk == Token::MulOp {
                 self.next()?;
                 self.ty += Ty::Ptr as i64;
-                while self.lex.tk == Token::TypeQual as i64 {
+                while self.lex.tk == Token::TypeQual {
                     self.next()?;
                 }
             }
             self.size_of_type(self.ty) as i64
-        } else if self.lex.tk == Token::Id as i64
+        } else if self.lex.tk == Token::Id
             && !self.lex.peek_after_whitespace(b'-')
             && !self.lex.peek_after_whitespace(b'.')
             && !self.lex.peek_after_whitespace(b'[')
@@ -135,7 +135,7 @@ impl Compiler {
             }
         };
         if had_paren {
-            if self.lex.tk == ')' as i64 {
+            if self.lex.tk == ')' {
                 self.next()?;
             } else {
                 return Err(self.compile_err("close paren expected in sizeof"));

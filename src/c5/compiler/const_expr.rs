@@ -45,7 +45,7 @@ impl Compiler {
     pub(super) fn parse_static_assert(&mut self) -> Result<(), C5Error> {
         let line = self.lex.line;
         self.next()?; // consume `static_assert` / `_Static_assert`
-        if self.lex.tk != '(' as i64 {
+        if self.lex.tk != '(' {
             return Err(self.compile_err_at(
                 line,
                 "`static_assert` requires `(<const-expr>, \"<message>\")`",
@@ -58,9 +58,9 @@ impl Compiler {
         // canonical form; a bare `(expr)` falls back to a generic
         // message constructed from the source token.
         let mut message: alloc::string::String = alloc::string::String::new();
-        if self.lex.tk == ',' as i64 {
+        if self.lex.tk == ',' {
             self.next()?;
-            if self.lex.tk != '"' as i64 {
+            if self.lex.tk != '"' {
                 return Err(
                     self.compile_err_at(line, "string-literal message expected in `static_assert`")
                 );
@@ -71,7 +71,7 @@ impl Compiler {
             // already glued by the lexer's `"a" "b"` rule.
             let addr = self.lex.ival as usize;
             self.next()?;
-            while self.lex.tk == '"' as i64 {
+            while self.lex.tk == '"' {
                 self.next()?;
             }
             // Walk the staged bytes up to the first NUL.
@@ -81,13 +81,13 @@ impl Compiler {
                 p += 1;
             }
         }
-        if self.lex.tk != ')' as i64 {
+        if self.lex.tk != ')' {
             return Err(self.compile_err_at(line, "`)` expected after `static_assert(...)`"));
         }
         self.next()?;
         // The trailing `;` is mandatory at file / block scope in
         // C11; we accept it and step past.
-        if self.lex.tk == ';' as i64 {
+        if self.lex.tk == ';' {
             self.next()?;
         }
         if value == 0 {
@@ -109,10 +109,10 @@ impl Compiler {
     /// `a ? b : c ? d : e` parses right-associatively.
     pub(super) fn parse_const_expr_cond(&mut self) -> Result<i64, C5Error> {
         let cond = self.parse_const_expr_or()?;
-        if self.lex.tk == Token::Cond as i64 {
+        if self.lex.tk == Token::Cond {
             self.next()?;
             let then_val = self.parse_const_expr_or()?;
-            if self.lex.tk != ':' as i64 {
+            if self.lex.tk != ':' {
                 return Err(self.compile_err("`:` expected in conditional constant expression"));
             }
             self.next()?;
@@ -125,7 +125,7 @@ impl Compiler {
 
     pub(super) fn parse_const_expr_or(&mut self) -> Result<i64, C5Error> {
         let mut left = self.parse_const_expr_and()?;
-        while self.lex.tk == Token::Lor as i64 {
+        while self.lex.tk == Token::Lor {
             self.next()?;
             let right = self.parse_const_expr_and()?;
             left = if (left != 0) || (right != 0) { 1 } else { 0 };
@@ -135,7 +135,7 @@ impl Compiler {
 
     fn parse_const_expr_and(&mut self) -> Result<i64, C5Error> {
         let mut left = self.parse_const_expr_bitor()?;
-        while self.lex.tk == Token::Lan as i64 {
+        while self.lex.tk == Token::Lan {
             self.next()?;
             let right = self.parse_const_expr_bitor()?;
             left = if (left != 0) && (right != 0) { 1 } else { 0 };
@@ -145,7 +145,7 @@ impl Compiler {
 
     fn parse_const_expr_bitor(&mut self) -> Result<i64, C5Error> {
         let mut left = self.parse_const_expr_xor()?;
-        while self.lex.tk == Token::OrOp as i64 {
+        while self.lex.tk == Token::OrOp {
             self.next()?;
             let right = self.parse_const_expr_xor()?;
             left |= right;
@@ -155,7 +155,7 @@ impl Compiler {
 
     fn parse_const_expr_xor(&mut self) -> Result<i64, C5Error> {
         let mut left = self.parse_const_expr_bitand()?;
-        while self.lex.tk == Token::XorOp as i64 {
+        while self.lex.tk == Token::XorOp {
             self.next()?;
             let right = self.parse_const_expr_bitand()?;
             left ^= right;
@@ -165,7 +165,7 @@ impl Compiler {
 
     fn parse_const_expr_bitand(&mut self) -> Result<i64, C5Error> {
         let mut left = self.parse_const_expr_eq()?;
-        while self.lex.tk == Token::AndOp as i64 {
+        while self.lex.tk == Token::AndOp {
             self.next()?;
             let right = self.parse_const_expr_eq()?;
             left &= right;
@@ -176,11 +176,11 @@ impl Compiler {
     fn parse_const_expr_eq(&mut self) -> Result<i64, C5Error> {
         let mut left = self.parse_const_expr_rel()?;
         loop {
-            if self.lex.tk == Token::EqOp as i64 {
+            if self.lex.tk == Token::EqOp {
                 self.next()?;
                 let r = self.parse_const_expr_rel()?;
                 left = (left == r) as i64;
-            } else if self.lex.tk == Token::NeOp as i64 {
+            } else if self.lex.tk == Token::NeOp {
                 self.next()?;
                 let r = self.parse_const_expr_rel()?;
                 left = (left != r) as i64;
@@ -194,19 +194,19 @@ impl Compiler {
     fn parse_const_expr_rel(&mut self) -> Result<i64, C5Error> {
         let mut left = self.parse_const_expr_shift()?;
         loop {
-            if self.lex.tk == Token::LtOp as i64 {
+            if self.lex.tk == Token::LtOp {
                 self.next()?;
                 let r = self.parse_const_expr_shift()?;
                 left = (left < r) as i64;
-            } else if self.lex.tk == Token::LeOp as i64 {
+            } else if self.lex.tk == Token::LeOp {
                 self.next()?;
                 let r = self.parse_const_expr_shift()?;
                 left = (left <= r) as i64;
-            } else if self.lex.tk == Token::GtOp as i64 {
+            } else if self.lex.tk == Token::GtOp {
                 self.next()?;
                 let r = self.parse_const_expr_shift()?;
                 left = (left > r) as i64;
-            } else if self.lex.tk == Token::GeOp as i64 {
+            } else if self.lex.tk == Token::GeOp {
                 self.next()?;
                 let r = self.parse_const_expr_shift()?;
                 left = (left >= r) as i64;
@@ -220,11 +220,11 @@ impl Compiler {
     fn parse_const_expr_shift(&mut self) -> Result<i64, C5Error> {
         let mut left = self.parse_const_expr_add()?;
         loop {
-            if self.lex.tk == Token::ShlOp as i64 {
+            if self.lex.tk == Token::ShlOp {
                 self.next()?;
                 let r = self.parse_const_expr_add()?;
                 left <<= r;
-            } else if self.lex.tk == Token::ShrOp as i64 {
+            } else if self.lex.tk == Token::ShrOp {
                 self.next()?;
                 let r = self.parse_const_expr_add()?;
                 left >>= r;
@@ -238,11 +238,11 @@ impl Compiler {
     fn parse_const_expr_add(&mut self) -> Result<i64, C5Error> {
         let mut left = self.parse_const_expr_mul()?;
         loop {
-            if self.lex.tk == Token::AddOp as i64 {
+            if self.lex.tk == Token::AddOp {
                 self.next()?;
                 let r = self.parse_const_expr_mul()?;
                 left = left.wrapping_add(r);
-            } else if self.lex.tk == Token::SubOp as i64 {
+            } else if self.lex.tk == Token::SubOp {
                 self.next()?;
                 let r = self.parse_const_expr_mul()?;
                 left = left.wrapping_sub(r);
@@ -256,15 +256,15 @@ impl Compiler {
     fn parse_const_expr_mul(&mut self) -> Result<i64, C5Error> {
         let mut left = self.parse_const_expr_unary()?;
         loop {
-            if self.lex.tk == Token::MulOp as i64 {
+            if self.lex.tk == Token::MulOp {
                 self.next()?;
                 let r = self.parse_const_expr_unary()?;
                 left = left.wrapping_mul(r);
-            } else if self.lex.tk == Token::DivOp as i64 {
+            } else if self.lex.tk == Token::DivOp {
                 self.next()?;
                 let r = self.parse_const_expr_unary()?;
                 left = if r == 0 { 0 } else { left / r };
-            } else if self.lex.tk == Token::ModOp as i64 {
+            } else if self.lex.tk == Token::ModOp {
                 self.next()?;
                 let r = self.parse_const_expr_unary()?;
                 left = if r == 0 { 0 } else { left % r };
@@ -276,27 +276,27 @@ impl Compiler {
     }
 
     fn parse_const_expr_unary(&mut self) -> Result<i64, C5Error> {
-        if self.lex.tk == Token::SubOp as i64 {
+        if self.lex.tk == Token::SubOp {
             self.next()?;
             return Ok(-self.parse_const_expr_unary()?);
         }
-        if self.lex.tk == Token::AddOp as i64 {
+        if self.lex.tk == Token::AddOp {
             self.next()?;
             return self.parse_const_expr_unary();
         }
-        if self.lex.tk == '!' as i64 {
+        if self.lex.tk == '!' {
             self.next()?;
             let v = self.parse_const_expr_unary()?;
             return Ok(if v == 0 { 1 } else { 0 });
         }
-        if self.lex.tk == '~' as i64 {
+        if self.lex.tk == '~' {
             self.next()?;
             return Ok(!self.parse_const_expr_unary()?);
         }
-        if self.lex.tk == Token::AndOp as i64 {
+        if self.lex.tk == Token::AndOp {
             return self.parse_const_offsetof();
         }
-        if self.lex.tk == Token::Sizeof as i64 {
+        if self.lex.tk == Token::Sizeof {
             // Shared sizeof operand parser handles all three
             // shapes (type-name, bare identifier, general
             // expression). Constant-expression context just
@@ -319,7 +319,7 @@ impl Compiler {
         let line = self.lex.line;
         // Consume `&`.
         self.next()?;
-        if self.lex.tk != '(' as i64 {
+        if self.lex.tk != '(' {
             return Err(self.compile_err_at(
                 line,
                 format!(
@@ -330,7 +330,7 @@ impl Compiler {
             ));
         }
         self.next()?;
-        if self.lex.tk != '(' as i64 {
+        if self.lex.tk != '(' {
             return Err(self.compile_err_at(
                 line,
                 format!(
@@ -350,14 +350,14 @@ impl Compiler {
             ));
         }
         let mut t = self.parse_decl_base_type()?;
-        while self.lex.tk == Token::MulOp as i64 {
+        while self.lex.tk == Token::MulOp {
             self.next()?;
             t += Ty::Ptr as i64;
-            while self.lex.tk == Token::TypeQual as i64 {
+            while self.lex.tk == Token::TypeQual {
                 self.next()?;
             }
         }
-        if self.lex.tk != ')' as i64 {
+        if self.lex.tk != ')' {
             return Err(
                 self.compile_err_at(line, "close paren expected after type in offsetof cast")
             );
@@ -365,7 +365,7 @@ impl Compiler {
         self.next()?;
         // Base address (typically `0`).
         let base = self.parse_const_expr_unary()?;
-        if self.lex.tk != ')' as i64 {
+        if self.lex.tk != ')' {
             return Err(
                 self.compile_err_at(line, "close paren expected after base in offsetof shape")
             );
@@ -378,10 +378,10 @@ impl Compiler {
         //   * `[const_expr]` -- pointer indexing into a typed
         //     base, used for constant-time pointer arithmetic
         //     like `&((char*)0)[7]` in static initializers.
-        if self.lex.tk == Token::Brak as i64 {
+        if self.lex.tk == Token::Brak {
             self.next()?;
             let n = self.parse_const_expr_cond()?;
-            if self.lex.tk != ']' as i64 {
+            if self.lex.tk != ']' {
                 return Err(self.compile_err_at(line, "close bracket expected in offsetof index"));
             }
             self.next()?;
@@ -390,7 +390,7 @@ impl Compiler {
             let pointee_ty = t - Ty::Ptr as i64;
             return Ok(base + n * self.size_of_type(pointee_ty) as i64);
         }
-        if self.lex.tk != Token::Arrow as i64 {
+        if self.lex.tk != Token::Arrow {
             return Err(self.compile_err_at(
                 line,
                 format!(
@@ -412,7 +412,7 @@ impl Compiler {
                     self.compile_err_at(line, "offsetof field chain reaches a non-struct value")
                 );
             }
-            if self.lex.tk != Token::Id as i64 {
+            if self.lex.tk != Token::Id {
                 return Err(self.compile_err_at(line, "field name expected in offsetof chain"));
             }
             let sid = struct_id_of(current_ty);
@@ -434,10 +434,10 @@ impl Compiler {
             // Optional `[N]` -- subscript inside the offsetof field
             // chain. Multiplies the constant index by the element
             // size of the field's array type.
-            if self.lex.tk == Token::Brak as i64 {
+            if self.lex.tk == Token::Brak {
                 self.next()?;
                 let n = self.parse_const_expr_cond()?;
-                if self.lex.tk != ']' as i64 {
+                if self.lex.tk != ']' {
                     return Err(
                         self.compile_err_at(line, "close bracket expected in offsetof index")
                     );
@@ -446,7 +446,7 @@ impl Compiler {
                 let _ = field_array_size;
                 total += n * self.size_of_type(current_ty) as i64;
             }
-            if self.lex.tk == Token::Dot as i64 {
+            if self.lex.tk == Token::Dot {
                 self.next()?;
                 continue;
             }
@@ -456,7 +456,7 @@ impl Compiler {
     }
 
     fn parse_const_expr_primary(&mut self) -> Result<i64, C5Error> {
-        if self.lex.tk == '(' as i64 {
+        if self.lex.tk == '(' {
             self.next()?;
             // C-style cast in a constant expression --
             // `(size_t)expr`, `(char*)0`, etc. c5's i64-shaped
@@ -464,35 +464,34 @@ impl Compiler {
             // no-ops; consume the type and recurse.
             if self.lex_is_type_start() {
                 let _ = self.parse_decl_base_type()?;
-                while self.lex.tk == Token::MulOp as i64 || self.lex.tk == Token::TypeQual as i64 {
+                while self.lex.tk == Token::MulOp || self.lex.tk == Token::TypeQual {
                     self.next()?;
                 }
-                if self.lex.tk != ')' as i64 {
+                if self.lex.tk != ')' {
                     return Err(self.compile_err("close paren expected after cast"));
                 }
                 self.next()?;
                 return self.parse_const_expr_unary();
             }
             let v = self.parse_const_expr_cond()?;
-            if self.lex.tk != ')' as i64 {
+            if self.lex.tk != ')' {
                 return Err(self.compile_err("close paren expected in constant expression"));
             }
             self.next()?;
             return Ok(v);
         }
-        if self.lex.tk == Token::Num as i64 {
+        if self.lex.tk == Token::Num {
             let v = self.lex.ival;
             self.next()?;
             return Ok(v);
         }
-        if self.lex.tk == Token::Id as i64
-            && self.symbols[self.lex.curr_id_idx].class == Token::Num as i64
+        if self.lex.tk == Token::Id && self.symbols[self.lex.curr_id_idx].class == Token::Num as i64
         {
             let v = self.symbols[self.lex.curr_id_idx].val;
             self.next()?;
             return Ok(v);
         }
-        let id_suffix = if self.lex.tk == Token::Id as i64 {
+        let id_suffix = if self.lex.tk == Token::Id {
             format!(" `{}`", self.symbols[self.lex.curr_id_idx].name)
         } else {
             alloc::string::String::new()

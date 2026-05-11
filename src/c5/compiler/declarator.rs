@@ -48,13 +48,13 @@ impl Compiler {
     pub(super) fn parse_declarator(&mut self, base: i64) -> Result<(usize, i64, i64), C5Error> {
         let mut ty = base;
         let mut leading_ptr_count: i64 = 0;
-        while self.lex.tk == Token::MulOp as i64 {
+        while self.lex.tk == Token::MulOp {
             self.next()?;
             ty += Ty::Ptr as i64;
             leading_ptr_count += 1;
             // Pointer-level qualifiers: `int *const p`, `int *volatile p`,
             // `char *restrict s`. Consumed; no semantic effect.
-            while self.lex.tk == Token::TypeQual as i64 {
+            while self.lex.tk == Token::TypeQual {
                 self.next()?;
             }
         }
@@ -79,7 +79,7 @@ impl Compiler {
         // `int register_cb(void *ctx, int(*)(void*,int))`).
         // Detected by peeking past the open paren: `*` opens the
         // pointer-cum-declarator, `(` starts a nested parens group.
-        if self.lex.tk == '(' as i64
+        if self.lex.tk == '('
             && (self.lex.peek_after_whitespace(b'*')
                 || self.lex.peek_after_whitespace(b'(')
                 || self.lex.peek_after_whitespace_starts_ident())
@@ -120,7 +120,7 @@ impl Compiler {
             // though the next token will be `{` (not `(` -- the
             // params are already consumed).
             let mut saw_fn_signature = false;
-            if self.lex.tk == '(' as i64 {
+            if self.lex.tk == '(' {
                 self.next()?;
                 // parse_function_params consumes the matching `)`,
                 // so on return we're already past the inner args1.
@@ -128,7 +128,7 @@ impl Compiler {
                 self.pending_fn_params = Some(params);
                 saw_fn_signature = true;
             }
-            if self.lex.tk != ')' as i64 {
+            if self.lex.tk != ')' {
                 return Err(self.compile_err("close paren expected in nested declarator"));
             }
             self.next()?;
@@ -141,20 +141,20 @@ impl Compiler {
             // `N * sizeof(T)`, not `sizeof(T*)`).
             let mut pointee_dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
             loop {
-                if self.lex.tk == '(' as i64 {
+                if self.lex.tk == '(' {
                     self.next()?;
                     self.skip_balanced_parens_after_open()?;
                     saw_fn_signature = true;
-                } else if self.lex.tk == Token::Brak as i64 {
+                } else if self.lex.tk == Token::Brak {
                     self.next()?;
-                    if self.lex.tk == ']' as i64 {
+                    if self.lex.tk == ']' {
                         self.next()?;
                     } else {
                         let m = self.parse_constant_int()?;
                         if m > 0 {
                             pointee_dims.push(m);
                         }
-                        if self.lex.tk == ']' as i64 {
+                        if self.lex.tk == ']' {
                             self.next()?;
                         }
                     }
@@ -200,11 +200,11 @@ impl Compiler {
         // closing-out (`,` / `)`). Return `usize::MAX` so callers
         // recognise "no symbol to bind"; only `parse_function_params`
         // is in a context that should accept this.
-        if self.lex.tk == ')' as i64 || self.lex.tk == ',' as i64 {
+        if self.lex.tk == ')' || self.lex.tk == ',' {
             return Ok((usize::MAX, ty, 0));
         }
 
-        if self.lex.tk != Token::Id as i64 {
+        if self.lex.tk != Token::Id {
             return Err(self.compile_err(format!(
                 "identifier expected in declaration (got {})",
                 super::super::token::describe(self.lex.tk)
@@ -214,9 +214,9 @@ impl Compiler {
         self.next()?;
 
         let mut array_size: i64 = 0;
-        if self.lex.tk == Token::Brak as i64 {
+        if self.lex.tk == Token::Brak {
             self.next()?;
-            if self.lex.tk == ']' as i64 {
+            if self.lex.tk == ']' {
                 // `int xs[]` -- empty brackets. The dimension is
                 // deferred: in parameter position the caller decays
                 // to a pointer; at file or block scope with an
@@ -240,7 +240,7 @@ impl Compiler {
                         self.compile_err(format!("array dimension must be positive (got {n})"))
                     );
                 }
-                if self.lex.tk != ']' as i64 {
+                if self.lex.tk != ']' {
                     return Err(self.compile_err("close bracket expected in array declarator"));
                 }
                 self.next()?;
@@ -256,9 +256,9 @@ impl Compiler {
             if array_size > 0 {
                 dims.push(array_size);
             }
-            while self.lex.tk == Token::Brak as i64 {
+            while self.lex.tk == Token::Brak {
                 self.next()?;
-                if self.lex.tk == ']' as i64 {
+                if self.lex.tk == ']' {
                     self.next()?;
                     continue;
                 }
@@ -268,7 +268,7 @@ impl Compiler {
                         self.compile_err(format!("array dimension must be positive (got {m})"))
                     );
                 }
-                if self.lex.tk != ']' as i64 {
+                if self.lex.tk != ']' {
                     return Err(self.compile_err("close bracket expected in array declarator"));
                 }
                 self.next()?;

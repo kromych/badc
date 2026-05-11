@@ -297,99 +297,12 @@ impl Compiler {
             return self.parse_const_offsetof();
         }
         if self.lex.tk == Token::Sizeof as i64 {
-            // sizeof in a constant expression. Three shapes:
-            //   * sizeof(<type>)        -- size of the type.
-            //   * sizeof(<array-var>)   -- total array bytes.
-            //   * sizeof(<scalar-var>)  -- size of the variable's
-            //                              declared type (ignoring
-            //                              the array-decay rule
-            //                              that applies when the
-            //                              name is read as an
-            //                              expression).
+            // Shared sizeof operand parser handles all three
+            // shapes (type-name, bare identifier, general
+            // expression). Constant-expression context just
+            // returns the byte count directly.
             self.next()?;
-            let had_paren = self.lex.tk == '(' as i64;
-            if had_paren {
-                self.next()?;
-            }
-            let total = if self.lex_is_type_start() {
-                let mut t = self.parse_decl_base_type()?;
-                while self.lex.tk == Token::MulOp as i64 {
-                    self.next()?;
-                    t += Ty::Ptr as i64;
-                }
-                self.size_of_type(t) as i64
-            } else if self.lex.tk == Token::Id as i64
-                && !self.lex.peek_after_whitespace(b'-')
-                && !self.lex.peek_after_whitespace(b'.')
-                && !self.lex.peek_after_whitespace(b'[')
-            {
-                // Bare identifier: `sizeof(name)`. Direct lookup so
-                // arrays use their array_size; postfix shapes
-                // (`name->field`, `name.field`, `name[i]`) drop
-                // through to the expr-based path below where the
-                // computed type drives sizeof.
-                let idx = self.lex.curr_id_idx;
-                let var_ty = self.symbols[idx].type_;
-                let arr = self.symbols[idx].array_size;
-                self.next()?;
-                if arr > 0 {
-                    arr * self.size_of_type(var_ty) as i64
-                } else {
-                    self.size_of_type(var_ty) as i64
-                }
-            } else {
-                // sizeof(<expr>) -- compile-time. Run the regular
-                // expression parser to learn the type, then drop
-                // the emitted bytecode (sizeof never evaluates its
-                // operand). Used for `sizeof(p->field)`, `sizeof(arr[i])`,
-                // and other postfix shapes where the type isn't a
-                // simple base + pointer level. Also drop any
-                // `data_imm_positions` entries the expr produced --
-                // otherwise the saved positions alias the next
-                // Imm we emit (the size constant) and the native
-                // lowering treats it as a data offset, producing
-                // `adrp+add` instead of a plain mov-imm.
-                let saved_text_len = self.text.len();
-                let saved_ty = self.ty;
-                let saved_data_imm_positions = self.data_imm_positions.len();
-                self.last_array_decay_size = 0;
-                self.last_array_decay_bytes = 0;
-                self.expr(Token::Assign as i64)?;
-                let expr_ty = self.ty;
-                let array_count = self.last_array_decay_size;
-                let array_bytes = self.last_array_decay_bytes;
-                self.text.truncate(saved_text_len);
-                // Keep parallel debug arrays in sync with `text`;
-                // see compiler/mod.rs's matching comment on the
-                // sister truncate
-                self.source_lines.truncate(saved_text_len);
-                self.source_functions.truncate(saved_text_len);
-                self.source_file_indices.truncate(saved_text_len);
-                self.data_imm_positions.truncate(saved_data_imm_positions);
-                self.ty = saved_ty;
-                self.last_array_decay_size = 0;
-                self.last_array_decay_bytes = 0;
-                if array_bytes > 0 {
-                    // Multi-dim pointer-to-array subscript: the row's
-                    // byte size is known directly; see the matching
-                    // branch in compiler/mod.rs's sizeof handler.
-                    array_bytes
-                } else if array_count > 0 {
-                    // Recover the array's real size: the expr
-                    // ended in an array-decay-to-pointer (bare
-                    // array variable or `s.field` for a
-                    // `T field[N]`), so `expr_ty` is `T*` but
-                    // `sizeof(<expr>)` should be `N * sizeof(T)`.
-                    let elem_ty = expr_ty - Ty::Ptr as i64;
-                    array_count * self.size_of_type(elem_ty) as i64
-                } else {
-                    self.size_of_type(expr_ty) as i64
-                }
-            };
-            if had_paren && self.lex.tk == ')' as i64 {
-                self.next()?;
-            }
-            return Ok(total);
+            return self.sizeof_operand_bytes();
         }
         self.parse_const_expr_primary()
     }

@@ -96,16 +96,16 @@ impl Compiler {
             // matching Symbol::fn_ptr_indirection's "value IS fn
             // ptr" convention. For `T (**name)(args)` the inner
             // added two Ptrs, depth = 2 (one more deref needed).
+            //
+            // The "is this actually a function pointer" check
+            // happens after the trailing decorations are scanned
+            // -- only then do we know whether the parenthesised
+            // declarator was followed by `(args)` (fn-ptr) or by
+            // `[N]` (pointer-to-array, NOT a fn-ptr). Set the
+            // indirection unconditionally for now and clear it
+            // back to None if the shape resolves to an array.
             let ty_delta = inner_ty - outer_ty_before_inner;
             let inner_ptr_levels = ty_delta / (Ty::Ptr as i64);
-            if inner_ptr_levels > 0 {
-                // Only set the side-channel for the OUTERMOST
-                // fn-ptr declarator: the inner recursive call may
-                // itself have set it for a nested fn-ptr declarator
-                // (function-returning-fp shape), and the outer
-                // call's value is the right one to expose.
-                self.pending_fn_ptr_indirection = Some(inner_ptr_levels);
-            }
             // The inner declarator may have stopped on `(` if it
             // was a function-returning-fp shape like
             // `void (*foo(args1))(args2)`. In that case `foo` is
@@ -119,12 +119,14 @@ impl Compiler {
             // bind `foo` as `Token::Fun` and parse the body even
             // though the next token will be `{` (not `(` -- the
             // params are already consumed).
+            let mut saw_fn_signature = false;
             if self.lex.tk == '(' as i64 {
                 self.next()?;
                 // parse_function_params consumes the matching `)`,
                 // so on return we're already past the inner args1.
                 let params = self.parse_function_params()?;
                 self.pending_fn_params = Some(params);
+                saw_fn_signature = true;
             }
             if self.lex.tk != ')' as i64 {
                 return Err(self.compile_err("close paren expected in nested declarator"));
@@ -142,6 +144,7 @@ impl Compiler {
                 if self.lex.tk == '(' as i64 {
                     self.next()?;
                     self.skip_balanced_parens_after_open()?;
+                    saw_fn_signature = true;
                 } else if self.lex.tk == Token::Brak as i64 {
                     self.next()?;
                     if self.lex.tk == ']' as i64 {
@@ -159,6 +162,21 @@ impl Compiler {
                 } else {
                     break;
                 }
+            }
+            // Now the shape is fully known. Only expose the
+            // fn-pointer lineage if a function signature actually
+            // appeared in the declarator; pointer-to-array shapes
+            // share the parenthesised form but must NOT be
+            // tagged as fn-ptr lineage (otherwise the unary `*`
+            // handler treats `*p` on `T (*p)[N]` as the fn-ptr
+            // decay no-op and the row deref never fires).
+            if saw_fn_signature && inner_ptr_levels > 0 {
+                // Only set the side-channel for the OUTERMOST
+                // fn-ptr declarator: the inner recursive call may
+                // itself have set it for a nested fn-ptr declarator
+                // (function-returning-fp shape), and the outer
+                // call's value is the right one to expose.
+                self.pending_fn_ptr_indirection = Some(inner_ptr_levels);
             }
             if idx != usize::MAX && !pointee_dims.is_empty() {
                 // Pointer-to-array shape: `T (*p)[M1][M2]...[Mn]`.

@@ -30,7 +30,7 @@ struct S {
     int    arr2d[3][5];          /* declared array, untouched path */
 };
 
-/* === Field path: T (*)[N] === */
+/* === Field path: T (*)[N] -- subscript form === */
 _Static_assert(sizeof(((struct S *)0)->pa1_c[0]) == 8,
                "1D pointer-to-array<char[8]>: sizeof(p[0]) == 8");
 _Static_assert(sizeof(((struct S *)0)->pa1_s[0]) == 16,
@@ -40,22 +40,39 @@ _Static_assert(sizeof(((struct S *)0)->pa1_i[0]) == 32,
 _Static_assert(sizeof(((struct S *)0)->pa1_l[0]) == 64,
                "1D pointer-to-array<long[8]>: sizeof(p[0]) == 64");
 
+/* === Field path: T (*)[N] -- deref form (*p == p[0]) === */
+_Static_assert(sizeof(*((struct S *)0)->pa1_c) == 8,  "char  (*)[8]: *p row");
+_Static_assert(sizeof(*((struct S *)0)->pa1_s) == 16, "short (*)[8]: *p row");
+_Static_assert(sizeof(*((struct S *)0)->pa1_i) == 32, "int   (*)[8]: *p row");
+_Static_assert(sizeof(*((struct S *)0)->pa1_l) == 64, "long  (*)[8]: *p row");
+
 /* The next level down is the scalar element -- once for each. */
-_Static_assert(sizeof(((struct S *)0)->pa1_c[0][0]) == 1, "char elem");
-_Static_assert(sizeof(((struct S *)0)->pa1_s[0][0]) == 2, "short elem");
-_Static_assert(sizeof(((struct S *)0)->pa1_i[0][0]) == 4, "int elem");
-_Static_assert(sizeof(((struct S *)0)->pa1_l[0][0]) == 8, "long elem");
+_Static_assert(sizeof(((struct S *)0)->pa1_c[0][0]) == 1, "char elem via [0][0]");
+_Static_assert(sizeof(((struct S *)0)->pa1_s[0][0]) == 2, "short elem via [0][0]");
+_Static_assert(sizeof(((struct S *)0)->pa1_i[0][0]) == 4, "int elem via [0][0]");
+_Static_assert(sizeof(((struct S *)0)->pa1_l[0][0]) == 8, "long elem via [0][0]");
+_Static_assert(sizeof((*((struct S *)0)->pa1_c)[0]) == 1, "char elem via (*p)[0]");
+_Static_assert(sizeof((*((struct S *)0)->pa1_s)[0]) == 2, "short elem via (*p)[0]");
+_Static_assert(sizeof((*((struct S *)0)->pa1_i)[0]) == 4, "int elem via (*p)[0]");
+_Static_assert(sizeof((*((struct S *)0)->pa1_l)[0]) == 8, "long elem via (*p)[0]");
 
 /* === Field path: T (*)[A][B] === */
 _Static_assert(sizeof(((struct S *)0)->pa2[0])    == 60, "int (*)[3][5]: p[0] is int[3][5]");
 _Static_assert(sizeof(((struct S *)0)->pa2[0][0]) == 20, "int (*)[3][5]: p[0][0] is int[5]");
 _Static_assert(sizeof(((struct S *)0)->pa2[0][0][0]) == 4, "int (*)[3][5]: scalar is int");
+_Static_assert(sizeof(*((struct S *)0)->pa2)         == 60, "int (*)[3][5]: *p row");
+_Static_assert(sizeof((*((struct S *)0)->pa2)[0])    == 20, "int (*)[3][5]: (*p)[0] is int[5]");
+_Static_assert(sizeof((*((struct S *)0)->pa2)[0][0]) == 4,  "int (*)[3][5]: (*p)[0][0] scalar");
 
 /* === Field path: T (*)[A][B][C] === */
-_Static_assert(sizeof(((struct S *)0)->pa3[0])       == 24, "char (*)[2][3][4]: p[0] is char[2][3][4]");
-_Static_assert(sizeof(((struct S *)0)->pa3[0][0])    == 12, "char (*)[2][3][4]: p[0][0] is char[3][4]");
-_Static_assert(sizeof(((struct S *)0)->pa3[0][0][0]) ==  4, "char (*)[2][3][4]: p[0][0][0] is char[4]");
-_Static_assert(sizeof(((struct S *)0)->pa3[0][0][0][0]) == 1, "char (*)[2][3][4]: scalar is char");
+_Static_assert(sizeof(((struct S *)0)->pa3[0])       == 24, "char (*)[2][3][4]: p[0]");
+_Static_assert(sizeof(((struct S *)0)->pa3[0][0])    == 12, "char (*)[2][3][4]: p[0][0]");
+_Static_assert(sizeof(((struct S *)0)->pa3[0][0][0]) ==  4, "char (*)[2][3][4]: p[0][0][0]");
+_Static_assert(sizeof(((struct S *)0)->pa3[0][0][0][0]) == 1, "char (*)[2][3][4]: scalar");
+_Static_assert(sizeof(*((struct S *)0)->pa3)            == 24, "char (*)[2][3][4]: *p");
+_Static_assert(sizeof((*((struct S *)0)->pa3)[0])       == 12, "char (*)[2][3][4]: (*p)[0]");
+_Static_assert(sizeof((*((struct S *)0)->pa3)[0][0])    ==  4, "char (*)[2][3][4]: (*p)[0][0]");
+_Static_assert(sizeof((*((struct S *)0)->pa3)[0][0][0]) ==  1, "char (*)[2][3][4]: (*p)[0][0][0]");
 
 /* === Declared multi-dim array still works (no regression). === */
 _Static_assert(sizeof(((struct S *)0)->arr2d)       == 60, "int[3][5] full size");
@@ -69,10 +86,15 @@ static void check_local(void) {
     (void)p;
     (void)p2;
     _Static_assert(sizeof(p[0])    == 16, "local short (*)[8]: p[0]");
-    _Static_assert(sizeof(p[0][0]) ==  2, "local short (*)[8]: scalar");
+    _Static_assert(sizeof(*p)      == 16, "local short (*)[8]: *p");
+    _Static_assert(sizeof(p[0][0]) ==  2, "local short (*)[8]: p[0][0]");
+    _Static_assert(sizeof((*p)[0]) ==  2, "local short (*)[8]: (*p)[0]");
     _Static_assert(sizeof(p2[0])       == 60, "local int (*)[3][5]: p[0]");
+    _Static_assert(sizeof(*p2)         == 60, "local int (*)[3][5]: *p");
     _Static_assert(sizeof(p2[0][0])    == 20, "local int (*)[3][5]: p[0][0]");
+    _Static_assert(sizeof((*p2)[0])    == 20, "local int (*)[3][5]: (*p)[0]");
     _Static_assert(sizeof(p2[0][0][0]) ==  4, "local int (*)[3][5]: scalar");
+    _Static_assert(sizeof((*p2)[0][0]) ==  4, "local int (*)[3][5]: (*p)[0][0]");
 }
 
 /* === Runtime side: confirm the pointer arithmetic also strides
@@ -118,12 +140,21 @@ int main(void) {
     for (i = 0; i < 8; i++) {
         if (s.pa1_s[0][i] != (short)(1000 + i)) return 20 + i;
     }
+    /* Re-read through the deref form -- the unary `*` row deref
+     * must land at the same address as `[0]`. */
+    for (i = 0; i < 8; i++) {
+        if ((*s.pa1_s)[i] != (short)(1000 + i)) return 28 + i;
+    }
     for (i = 0; i < 3; i++)
         for (j = 0; j < 5; j++)
             s.pa2[0][i][j] = i * 100 + j;
     for (i = 0; i < 3; i++)
         for (j = 0; j < 5; j++)
-            if (s.pa2[0][i][j] != i * 100 + j) return 30 + i * 5 + j;
+            if (s.pa2[0][i][j] != i * 100 + j) return 40 + i * 5 + j;
+    /* Deref form for the 2D case. */
+    for (i = 0; i < 3; i++)
+        for (j = 0; j < 5; j++)
+            if ((*s.pa2)[i][j] != i * 100 + j) return 60 + i * 5 + j;
     for (i = 0; i < 2; i++)
         for (j = 0; j < 3; j++)
             for (k = 0; k < 4; k++)
@@ -132,7 +163,13 @@ int main(void) {
         for (j = 0; j < 3; j++)
             for (k = 0; k < 4; k++)
                 if (s.pa3[0][i][j][k] != (char)(i * 12 + j * 4 + k))
-                    return 50 + i * 12 + j * 4 + k;
+                    return 80 + i * 12 + j * 4 + k;
+    /* Deref form for the 3D case. */
+    for (i = 0; i < 2; i++)
+        for (j = 0; j < 3; j++)
+            for (k = 0; k < 4; k++)
+                if ((*s.pa3)[i][j][k] != (char)(i * 12 + j * 4 + k))
+                    return 110 + i * 12 + j * 4 + k;
 
     return 0;
 }

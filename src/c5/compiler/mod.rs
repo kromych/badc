@@ -20,6 +20,7 @@ mod function;
 mod global_init;
 mod initializer;
 mod locals;
+mod sizeof_expr;
 mod stmt;
 pub(crate) mod types;
 
@@ -338,6 +339,16 @@ pub struct Compiler {
     /// Brak postfix consumes one stride and shifts the rest
     /// down. Empty means "no further multi-dim strides queued."
     pending_index_strides_tail: Vec<i64>,
+
+    /// Snapshot of the multi-dim stride queue taken at the bottom
+    /// of every `expr()` -- just before the defensive clear
+    /// runs. Lets an outer operator that ran a recursive `expr()`
+    /// (notably unary `*` on a pointer-to-array operand)
+    /// recover what the inner parse seeded but nothing
+    /// consumed. Reset to zero on the next `expr()` exit, so
+    /// the inspector window is one operator deep.
+    end_of_expr_stride: i64,
+    end_of_expr_strides_tail: Vec<i64>,
 
     /// Per-row element count for the next 2D-array initializer.
     /// Set by callers of `collect_array_initializer` when the
@@ -695,6 +706,8 @@ impl Compiler {
             pending_fn_ptr_indirection: None,
             pending_index_stride: 0,
             pending_index_strides_tail: Vec::new(),
+            end_of_expr_stride: 0,
+            end_of_expr_strides_tail: Vec::new(),
             pending_init_inner_dim: 0,
             source_lines: Vec::new(),
             source_functions: Vec::new(),
@@ -2175,101 +2188,13 @@ impl Compiler {
             self.data.push(0);
             self.ty = Ty::Ptr as i64;
         } else if self.lex.tk == Token::Sizeof as i64 {
+            // C99 6.5.3.4: `sizeof(<type>)`, `sizeof(<expr>)`, or
+            // `sizeof <unary-expr>`. The shared helper handles
+            // all three shapes; this site just emits the result
+            // as a runtime immediate and pins the expression
+            // type at `int`.
             self.next()?;
-            // C99 sec 6.5.3.4: sizeof has two forms.
-            //   sizeof(<type>) -- parens required, parses a type name.
-            //   sizeof <unary-expr> -- parens optional, parses an expr.
-            // We disambiguate by peeking past `(` for a type-start
-            // token; everything else falls through to the
-            // unary-expression path. Either form is compile-time;
-            // emitted bytecode for the operand is discarded.
-            let had_paren = self.lex.tk == '(' as i64;
-            if had_paren {
-                self.next()?;
-            }
-            let total_bytes: i64 = if had_paren && self.lex_is_type_start() {
-                self.ty = self.parse_decl_base_type()?;
-                while self.lex.tk == Token::MulOp as i64 {
-                    self.next()?;
-                    self.ty += Ty::Ptr as i64;
-                    while self.lex.tk == Token::TypeQual as i64 {
-                        self.next()?;
-                    }
-                }
-                self.size_of_type(self.ty) as i64
-            } else if had_paren
-                && self.lex.tk == Token::Id as i64
-                && self.lex.peek_after_whitespace(b')')
-                && self.symbols[self.lex.curr_id_idx].array_size > 0
-            {
-                let arr_size = self.symbols[self.lex.curr_id_idx].array_size;
-                let elem_ty = self.symbols[self.lex.curr_id_idx].type_;
-                self.next()?;
-                self.ty = elem_ty + Ty::Ptr as i64;
-                arr_size * self.size_of_type(elem_ty) as i64
-            } else if !had_paren
-                && self.lex.tk == Token::Id as i64
-                && self.symbols[self.lex.curr_id_idx].array_size > 0
-            {
-                // `sizeof xs` (no parens) on a 1D array variable.
-                let arr_size = self.symbols[self.lex.curr_id_idx].array_size;
-                let elem_ty = self.symbols[self.lex.curr_id_idx].type_;
-                self.next()?;
-                self.ty = elem_ty + Ty::Ptr as i64;
-                arr_size * self.size_of_type(elem_ty) as i64
-            } else {
-                let saved_text_len = self.text.len();
-                let saved_data_imm_positions = self.data_imm_positions.len();
-                let lev = if had_paren {
-                    Token::Assign as i64
-                } else {
-                    Token::Inc as i64
-                };
-                self.last_array_decay_size = 0;
-                self.last_array_decay_bytes = 0;
-                self.expr(lev)?;
-                let array_count = self.last_array_decay_size;
-                let array_bytes = self.last_array_decay_bytes;
-                let expr_ty = self.ty;
-                self.text.truncate(saved_text_len);
-                // Keep `source_lines` / `source_functions` in
-                // sync with `text`. Without
-                // these matching truncates the parallel arrays
-                // grow longer than `text`, and every subsequent
-                // `emit_op` lands its source-line / source-function
-                // entry at the wrong bytecode PC -- the visible
-                // symptom is that all functions parsed after the
-                // first array-size expression get attributed to the
-                // *previous* function's name in the DWARF
-                // subprogram DIEs.
-                self.source_lines.truncate(saved_text_len);
-                self.source_functions.truncate(saved_text_len);
-                self.source_file_indices.truncate(saved_text_len);
-                self.data_imm_positions.truncate(saved_data_imm_positions);
-                self.last_array_decay_size = 0;
-                self.last_array_decay_bytes = 0;
-                if array_bytes > 0 {
-                    // The subscript path knows the exact row byte
-                    // size (e.g., a multi-dim `T (*p)[A][B]` row
-                    // can't be summarised as `count * sizeof(elem)`
-                    // with c5's current type encoding -- the row's
-                    // shape is itself multi-dim). Trust the byte
-                    // count directly.
-                    array_bytes
-                } else if array_count > 0 {
-                    let elem_ty = expr_ty - Ty::Ptr as i64;
-                    array_count * self.size_of_type(elem_ty) as i64
-                } else {
-                    self.size_of_type(expr_ty) as i64
-                }
-            };
-            if had_paren {
-                if self.lex.tk == ')' as i64 {
-                    self.next()?;
-                } else {
-                    return Err(self.compile_err("close paren expected in sizeof"));
-                }
-            }
+            let total_bytes = self.sizeof_operand_bytes()?;
             self.emit_imm(total_bytes);
             self.ty = Ty::Int as i64;
         } else if self.lex.tk == Token::Id as i64 {
@@ -2956,10 +2881,37 @@ impl Compiler {
                 } else {
                     return Err(self.compile_err("close paren expected"));
                 }
+                // Forward the inner expr's exit snapshot into the
+                // active multi-dim queue so the outer expression's
+                // postfix can keep striding through, e.g.,
+                // `(*p)[k]` on a pointer-to-array (the unary `*`
+                // consumed one dim, the `[k]` should pick up the
+                // next). Without this transfer the inner expr's
+                // defensive clear strands the remaining strides.
+                self.pending_index_stride =
+                    core::mem::take(&mut self.end_of_expr_stride);
+                self.pending_index_strides_tail =
+                    core::mem::take(&mut self.end_of_expr_strides_tail);
             }
         } else if self.lex.tk == Token::MulOp as i64 {
             self.next()?;
+            // Stash whatever the surrounding scope had in the
+            // "end-of-expr" capture slots so the recursive expr()
+            // that parses our operand can populate them fresh.
+            // After the parse, the new values tell us what
+            // strides the operand left unconsumed -- the signal
+            // we use to decide whether `*p` is a pointer-to-array
+            // row deref. The outer snapshot is restored afterwards
+            // so a containing operator's view isn't disturbed.
+            let saved_eos_stride = core::mem::take(&mut self.end_of_expr_stride);
+            let saved_eos_tail =
+                core::mem::take(&mut self.end_of_expr_strides_tail);
             self.expr(Token::Inc as i64)?;
+            let leftover_stride = core::mem::take(&mut self.end_of_expr_stride);
+            let leftover_tail =
+                core::mem::take(&mut self.end_of_expr_strides_tail);
+            self.end_of_expr_stride = saved_eos_stride;
+            self.end_of_expr_strides_tail = saved_eos_tail;
             // C function-pointer decay (6.3.2.1 / 6.3.4): `*` on
             // a function-pointer rvalue is a no-op -- it yields
             // back the same function pointer. The chain-depth
@@ -2985,6 +2937,24 @@ impl Compiler {
                 // further `*`s also decay.
                 // Note: emit_op was not called, so the chain
                 // depth is preserved (no clear happened).
+            } else if leftover_stride > 0 {
+                // Pointer-to-array operand: `*p` is the row
+                // deref, equivalent to `p[0]`. The row's address
+                // is already in `a` -- no load, no Ptr peel.
+                // Consume the head stride (we just stepped over
+                // one dim at index 0) and shift the rest into
+                // the active queue so a following postfix `[k]`
+                // strides correctly. Surface the row's byte
+                // size via `last_array_decay_bytes` so an
+                // enclosing `sizeof` recovers it.
+                self.last_array_decay_bytes = leftover_stride;
+                let mut tail = leftover_tail;
+                self.pending_index_stride = if tail.is_empty() {
+                    0
+                } else {
+                    tail.remove(0)
+                };
+                self.pending_index_strides_tail = tail;
             } else {
                 if is_pointer_ty(self.ty) {
                     self.ty -= Ty::Ptr as i64;
@@ -3986,8 +3956,17 @@ impl Compiler {
         // Otherwise the next array access in a fresh expression
         // would inherit a stale row stride and skip its scalar
         // load, leaving no lvalue for a following `=`.
+        //
+        // Snapshot what was still in the queue here so an outer
+        // unary `*` -- which runs a recursive `expr()` to parse
+        // its operand -- can tell whether that operand was a
+        // pointer-to-array decay whose strides nothing consumed.
+        // The snapshot is one operator deep: the next `expr()`
+        // exit overwrites it.
+        self.end_of_expr_stride = self.pending_index_stride;
+        self.end_of_expr_strides_tail =
+            core::mem::take(&mut self.pending_index_strides_tail);
         self.pending_index_stride = 0;
-        self.pending_index_strides_tail.clear();
         Ok(())
     }
 

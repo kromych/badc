@@ -70,11 +70,18 @@
 #define STBI_NO_HDR
 #define STBI_NO_LINEAR
 #define STBI_NO_THREAD_LOCALS
-/* PSD support is currently disabled: the PSD load path mis-codegens
- * on aarch64 (the codegen scanner drifts off the bytecode stream
- * and reports "bad opcode" mid-function). The smoke covers PNG /
- * JPG / TGA / BMP through this same TU; PSD will be re-enabled
- * once the regression is isolated. */
+/* PSD load path is currently disabled: stbi__psd_is16 (and the
+ * neighbouring code) lower into a bytecode stream where the
+ * codegen scanner drifts off the op/operand boundary mid-
+ * function (ICE: "bad opcode -- raw=5219 ... ctx: Imm 4 Psh
+ * Imm 255 And Imm 4 Psh Imm 255 And"). The pattern is the
+ * same on both aarch64 and x86_64 lanes, which means the
+ * malformed bytecode is the parser / emit path rather than
+ * an arch-specific codegen quirk. Re-enabling PSD needs a
+ * proper bisect; multi-dim shape + Fcvtif assignment
+ * conversion both went in this branch without dislodging
+ * the regression. The smoke still covers PNG / JPG / TGA /
+ * BMP through this same TU. */
 #define STBI_NO_PSD
 #include "stb_image.h"
 

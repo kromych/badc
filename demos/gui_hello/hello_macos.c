@@ -38,14 +38,46 @@
 #pragma binding(libobjc::objc_getClass,    "_objc_getClass")
 #pragma binding(libobjc::sel_registerName, "_sel_registerName")
 #pragma binding(libobjc::objc_msgSend,     "_objc_msgSend")
+/* objc_msgSend's *underlying* ABI follows the receiver method's
+ * declared signature, not a variadic register layout. Apple's
+ * runtime is happy to be called with any argument shape that
+ * matches the method's selector, but each call site has to
+ * pick the right register / stack assignment for that
+ * signature. c5 picks one calling convention per binding, so
+ * we declare each shape we use as a *separate*, non-variadic
+ * binding pointing at the same `_objc_msgSend` symbol. The
+ * non-variadic prototype below lets c5 emit standard AAPCS64
+ * register-passing (first 4 doubles in d0..d3, first few
+ * integers in x0..x7), which matches what AppKit expects of
+ * the method we're dispatching to. */
+#pragma binding(libobjc::objc_msgSend_rect, "_objc_msgSend")
+#pragma binding(libobjc::objc_msgSend_b,    "_objc_msgSend")
+#pragma binding(libobjc::objc_msgSend_p,    "_objc_msgSend")
 
 void *objc_getClass(char *name);
 void *sel_registerName(char *name);
-/* `objc_msgSend(id self, SEL op, ...)` -- variadic trampoline.
- * c5 doesn't have an ObjC syntax layer, so we call it like
- * any other variadic C function. The runtime's job is to
- * pick the right stub for the receiver's argument list. */
+/* `objc_msgSend(id self, SEL op, ...)` -- variadic trampoline
+ * for the call sites that match Apple's "two-arg-and-no-FP"
+ * shape (alloc, run, ...). */
 void *objc_msgSend(void *recv, void *sel, ...);
+/* Non-variadic specialisation for the NSWindow initWithContentRect
+ * shape: receiver + selector + four NSRect doubles + three
+ * integer arguments. With a non-variadic prototype, c5 emits the
+ * standard AAPCS64 register layout (d0..d3 for the NSRect
+ * doubles; x2..x4 for the styleMask / backing / defer), which is
+ * what AppKit's selector implementation reads on macOS arm64. */
+void *objc_msgSend_rect(void *recv, void *sel,
+                        double x, double y, double w, double h,
+                        long long mask, long long backing, long long defer);
+/* Non-variadic specialisation for selectors that take a single
+ * `long long`-shaped argument (BOOL / NSUInteger). Examples:
+ * `activateIgnoringOtherApps:`. */
+void *objc_msgSend_b(void *recv, void *sel, long long arg);
+/* Non-variadic specialisation for selectors that take a single
+ * pointer (`id` / `NSString *` / `char *`). Examples:
+ * `setTitle:`, `makeKeyAndOrderFront:`,
+ * `stringWithUTF8String:`. */
+void *objc_msgSend_p(void *recv, void *sel, void *arg);
 
 /* Cocoa lives in AppKit.framework; pulling
  * `_NSApp` etc. would normally happen through AppKit's
@@ -102,7 +134,7 @@ int main(int argc, char **argv) {
     void *init     = sel_registerName(
         "initWithContentRect:styleMask:backing:defer:");
     void *winAlloc = objc_msgSend(NSWindow, alloc);
-    void *window = objc_msgSend(
+    void *window = objc_msgSend_rect(
         winAlloc, init,
         100.0, 100.0, 480.0, 240.0,
         (long long)(NS_TITLED | NS_CLOSABLE | NS_RESIZABLE),
@@ -119,17 +151,17 @@ int main(int argc, char **argv) {
      * NSString class method `stringWithUTF8String:`. */
     void *NSString = objc_getClass("NSString");
     void *swus     = sel_registerName("stringWithUTF8String:");
-    void *title    = objc_msgSend(NSString, swus, "badc Cocoa hello");
+    void *title    = objc_msgSend_p(NSString, swus, "badc Cocoa hello");
     void *setTitle = sel_registerName("setTitle:");
-    objc_msgSend(window, setTitle, title);
+    objc_msgSend_p(window, setTitle, title);
 
     /* [window makeKeyAndOrderFront:nil] + [NSApp run]. The
      * activate / run pair gives the window focus and starts
      * the modal AppKit event loop. */
     void *makeKey = sel_registerName("makeKeyAndOrderFront:");
-    objc_msgSend(window, makeKey, (void *)0);
+    objc_msgSend_p(window, makeKey, (void *)0);
     void *activate = sel_registerName("activateIgnoringOtherApps:");
-    objc_msgSend(app, activate, (long long)1);
+    objc_msgSend_b(app, activate, (long long)1);
     void *run = sel_registerName("run");
     objc_msgSend(app, run);
     return 0;

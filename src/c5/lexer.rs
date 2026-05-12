@@ -1325,7 +1325,13 @@ pub(crate) fn init_symbols(
     }
 
     // Make sure `main` is registered so the compiler's later lookup sees it.
-    let _ = find_symbol(symbols, index, "main").unwrap();
+    // This is an internal invariant of `init_symbols` itself; if it ever
+    // fires we want it to surface loudly, but a debug_assert is enough --
+    // release builds don't pay the lookup cost.
+    debug_assert!(
+        find_symbol(symbols, index, "main").is_some(),
+        "init_symbols must register `main`"
+    );
 }
 
 #[cfg(test)]

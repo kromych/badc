@@ -264,14 +264,29 @@ const ARM64_PACKED_FUNCTION_MAX_BYTES: u32 = 2048 * 4;
 
 // ----------------------------------------------------------------
 // Stub-only imports the entry-stub always needs, on top of the
-// resolved program imports. msvcrt's `__getmainargs` is the
-// canonical way to populate argc/argv on a Windows host: it fills
-// out the int / char** out-pointers we hand it. WINE's msvcrt
-// doesn't export the alternative `__p___argc` / `__p___argv`
-// thunks, so this is the portable shape. ExitProcess routes the
-// exit through the kernel32 thunk so the CRT atexit chain runs
-// (without it, printf to a pipe loses its tail line because msvcrt
-// block-buffers stdout).
+// resolved program imports.
+//
+// Console-subsystem stub:
+//   * msvcrt!__getmainargs -- canonical way to populate argc/argv
+//     on a Windows host: it fills out the int / char** out-pointers
+//     we hand it. WINE's msvcrt doesn't export the alternative
+//     `__p___argc` / `__p___argv` thunks, so this is the portable
+//     shape.
+//   * msvcrt!exit -- routes the program's return value through the
+//     CRT atexit chain (and flushes stdout/stderr). Using raw
+//     `kernel32!ExitProcess` loses a program's tail output when
+//     stdout is a pipe because msvcrt block-buffers stdout.
+//
+// GUI-subsystem stub (`#pragma subsystem(windows)`) supplies a
+// Win32-shaped argv to the entry point instead of argc/argv:
+//   * kernel32!GetModuleHandleA -- to supply `HINSTANCE hInstance`.
+//   * kernel32!GetCommandLineA  -- to supply `LPSTR lpCmdLine`.
+//   * msvcrt!exit               -- same as console; routes the
+//     entry's return value.
+//
+// `hPrevInstance` is always `NULL` (16-bit legacy) and `nShowCmd`
+// is `SW_SHOWDEFAULT` (10), which is the value the Win32 loader
+// would pass to a real CRT-supplied `WinMainCRTStartup`.
 //
 // These ride alongside whatever the program asked for via
 // `#pragma binding(...)`. They have no c5-side name, so they live
@@ -280,11 +295,15 @@ const ARM64_PACKED_FUNCTION_MAX_BYTES: u32 = 2048 * 4;
 // ----------------------------------------------------------------
 
 const STUB_IMPORT_GETMAINARGS: (&str, &str) = ("__getmainargs", "msvcrt.dll");
-// `msvcrt!exit`, not `kernel32!ExitProcess` -- the CRT version
-// runs the atexit chain, calls `_fcloseall`, and flushes stdout
-// / stderr before terminating. With raw `ExitProcess` a program
-// loses its last line of output when stdout is a pipe.
 const STUB_IMPORT_EXIT: (&str, &str) = ("exit", "msvcrt.dll");
+const STUB_IMPORT_GETMODULEHANDLEA: (&str, &str) = ("GetModuleHandleA", "kernel32.dll");
+const STUB_IMPORT_GETCOMMANDLINEA: (&str, &str) = ("GetCommandLineA", "kernel32.dll");
+
+/// `SW_SHOWDEFAULT` -- the `nShowCmd` value the Win32 loader would
+/// pass to `WinMainCRTStartup`. Hardcoded into the GUI entry stub
+/// so windows actually appear when `ShowWindow(hwnd, nShowCmd)` is
+/// called.
+const SW_SHOWDEFAULT: u32 = 10;
 
 // ----------------------------------------------------------------
 // Top-level writer.
@@ -297,75 +316,65 @@ pub(super) fn write(
     target: super::Target,
 ) -> Result<Vec<u8>, C5Error> {
     let is_dll = build.output_kind == super::OutputKind::SharedLibrary;
-    // 1) Combined imports list. Index N becomes IAT slot N. The
-    //    program's resolved imports occupy 0..n_program_imports;
-    //    the entry stub's two additional imports come after, with
-    //    indices the stub builder pulls back via `stub_*_idx`.
-    //
-    //    `(symbol_name, dll_name)` -- the symbol name is whatever
-    //    the dylib actually exports (`printf`, `_open`, etc.); the
-    //    dll_name is the resolved dylib path (`msvcrt.dll`,
-    //    `kernel32.dll`).
-    let n_program_imports = build.imports.imports.len();
-    let mut imports: Vec<(String, String)> = Vec::with_capacity(n_program_imports + 2);
-    for imp in &build.imports.imports {
-        let dll = build.imports.dylibs[imp.dylib_index].path.clone();
-        imports.push((imp.real_symbol.clone(), dll));
-    }
-    // The executable entry stub calls msvcrt's `__getmainargs`
-    // and kernel32's `ExitProcess`; pull those imports in
-    // unconditionally for executable output. DLLs use a
-    // self-contained `mov eax, 1; ret` DllMain that doesn't
-    // touch either, so we skip both -- otherwise the
-    // image would link in unused IAT slots and (worse) drag
-    // msvcrt.dll into the import table just to satisfy the
-    // stub's bind opcodes.
-    let (stub_getmainargs_idx, stub_exit_idx) = if is_dll {
-        (usize::MAX, usize::MAX)
-    } else {
-        let g = imports.len();
-        imports.push((
-            STUB_IMPORT_GETMAINARGS.0.to_string(),
-            STUB_IMPORT_GETMAINARGS.1.to_string(),
-        ));
-        let e = imports.len();
-        imports.push((
-            STUB_IMPORT_EXIT.0.to_string(),
-            STUB_IMPORT_EXIT.1.to_string(),
-        ));
-        (g, e)
+    // PE optional-header Subsystem -- determined here once so the
+    // entry-stub builder and the optional-header writer agree on
+    // the shape (`Subsystem::Windows` -> WinMain-shaped stub).
+    let subsystem = match program.subsystem {
+        Some(crate::c5::preprocessor::Subsystem::Windows) => IMAGE_SUBSYSTEM_WINDOWS_GUI,
+        _ => IMAGE_SUBSYSTEM_WINDOWS_CUI,
     };
 
-    // 2) Group imports by DLL while preserving each one's IAT index.
-    //    `dlls` holds (dll_name, [import_index, ...]); the IAT is
-    //    laid out DLL-by-DLL so we keep the per-DLL slot offsets to
-    //    recover the global IAT slot of each import.
-    let dlls = group_imports_by_dll(&imports);
-
-    // 3) Build the entry stub. POSIX-only intrinsics (mprotect, ...)
-    //    aren't auto-translated to the Windows equivalent; cross-
-    //    platform sources gate those on `#if __BADC_TARGET__` and
-    //    call the target-native API (`VirtualProtect`, etc.) directly.
+    // 1) Build the entry stub before laying out the imports. The
+    //    stub declares the imports *it* needs (msvcrt!__getmainargs
+    //    + msvcrt!exit for console; kernel32!GetModuleHandleA +
+    //    kernel32!GetCommandLineA + msvcrt!exit for GUI; nothing
+    //    for the DllMain case), which we splice onto the user's
+    //    `#pragma binding(...)` imports below.
+    //
+    //    POSIX-only intrinsics (mprotect, ...) aren't auto-
+    //    translated to the Windows equivalent; cross-platform
+    //    sources gate those on `#if __BADC_TARGET__` and call the
+    //    target-native API (`VirtualProtect`, etc.) directly.
     //
     //    For `--shared` output with a user-defined `DllMain` we
     //    skip the stub entirely: `AddressOfEntryPoint` will point
     //    at the user's body inside `build.text`, and emitting the
     //    boilerplate `mov eax, 1; ret` ahead of it would just
     //    shift every fixup by 6-8 bytes for code the loader never
-    //    branches to. The `is_dll` branch above already pruned
-    //    the stub-only msvcrt / kernel32 imports, so suppressing
-    //    the stub bytes here is purely about the code prologue.
+    //    branches to.
     let user_dllmain = is_dll && build.dllmain_pc.is_some();
     let stub = if user_dllmain {
-        EntryStub {
-            bytes: Vec::new(),
-            iat_getmainargs_offset: None,
-            iat_exit_offset: None,
-            direct_call_main_offset: None,
-        }
+        EntryStub::empty()
     } else {
-        build_entry_stub(machine, is_dll)
+        build_entry_stub(machine, is_dll, subsystem)
     };
+
+    // 2) Combined imports list. Index N becomes IAT slot N. The
+    //    program's resolved imports occupy `0..n_program_imports`;
+    //    the entry stub's additional imports follow, at offsets
+    //    `stub_imports_base + stub_import_idx`.
+    //
+    //    `(symbol_name, dll_name)` -- the symbol name is whatever
+    //    the dylib actually exports (`printf`, `_open`, etc.); the
+    //    dll_name is the resolved dylib path (`msvcrt.dll`,
+    //    `kernel32.dll`).
+    let n_program_imports = build.imports.imports.len();
+    let mut imports: Vec<(String, String)> =
+        Vec::with_capacity(n_program_imports + stub.stub_imports.len());
+    for imp in &build.imports.imports {
+        let dll = build.imports.dylibs[imp.dylib_index].path.clone();
+        imports.push((imp.real_symbol.clone(), dll));
+    }
+    let stub_imports_base = imports.len();
+    for &(sym, dll) in &stub.stub_imports {
+        imports.push((sym.to_string(), dll.to_string()));
+    }
+
+    // 3) Group imports by DLL while preserving each one's IAT index.
+    //    `dlls` holds (dll_name, [import_index, ...]); the IAT is
+    //    laid out DLL-by-DLL so we keep the per-DLL slot offsets to
+    //    recover the global IAT slot of each import.
+    let dlls = group_imports_by_dll(&imports);
 
     // 4) Compute layout. Combined .text is `entry stub |
     //    build.text`; the program's `Op::Mpro` calls go through
@@ -796,26 +805,18 @@ pub(super) fn write(
         )?;
     }
 
-    // Stub-emitted IAT calls (one for `__getmainargs`, one
-    // for `ExitProcess`). Both `None` for DLL output, where
-    // the stub returns `TRUE` immediately and never reaches
-    // for msvcrt.
-    if let Some(off) = stub.iat_getmainargs_offset {
+    // Stub-emitted IAT calls. Empty for the DllMain stub (which
+    // is a self-contained `mov eax, 1; ret`); two patches for the
+    // console stub (`__getmainargs`, `exit`); three for the
+    // GUI stub (`GetModuleHandleA`, `GetCommandLineA`, `exit`).
+    for patch in &stub.iat_patches {
+        let global_idx = stub_imports_base + patch.stub_import_idx;
         patch_iat_lookup(
             machine,
             &mut text_bytes,
-            off,
+            patch.byte_offset,
             text_rva,
-            idata_layout.iat_rva_for_import[stub_getmainargs_idx],
-        )?;
-    }
-    if let Some(off) = stub.iat_exit_offset {
-        patch_iat_lookup(
-            machine,
-            &mut text_bytes,
-            off,
-            text_rva,
-            idata_layout.iat_rva_for_import[stub_exit_idx],
+            idata_layout.iat_rva_for_import[global_idx],
         )?;
     }
 
@@ -2084,35 +2085,80 @@ fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) ->
 // ----------------------------------------------------------------
 // Entry stub.
 //
-// Both backends emit a stub that calls `__getmainargs` to populate
-// argc/argv, then `bl main` (or `call main`), then `ExitProcess`.
+// The stub bridges what the PE loader hands us at
+// `AddressOfEntryPoint` (an entry with no parameters) and the
+// signature the user wrote in source. The shape branches on the
+// PE optional-header `Subsystem`:
+//
+//   * Console (`IMAGE_SUBSYSTEM_WINDOWS_CUI`, default): the stub
+//     calls `__getmainargs` to populate argc/argv, then `bl main`
+//     (or `call main`), then `exit`. The user's entry is treated
+//     as `int main(int argc, char **argv)`.
+//
+//   * Windows GUI (`IMAGE_SUBSYSTEM_WINDOWS_GUI`, opt-in via
+//     `#pragma subsystem(windows)`): the stub calls
+//     `GetModuleHandleA(NULL)` and `GetCommandLineA()`, loads
+//     `SW_SHOWDEFAULT` into the 4th-arg register, then `call
+//     WinMain` and `exit`. The user's entry is treated as
+//     `int WinMain(HINSTANCE, HINSTANCE, LPSTR, int)` -- the
+//     canonical Win32 GUI signature.
+//
 // The stub layout differs per arch in instruction selection but
-// produces the same overall flow. `EntryStub` carries arch-neutral
-// offsets back to the writer, which dispatches to the per-arch
-// patcher to fill in the final immediate fields.
+// the import set + patch shape is uniform: `EntryStub` carries an
+// arch-neutral list of (byte-offset, stub-import-index) IAT
+// patches, plus the direct-call-main offset, back to the writer.
+// The writer appends `stub_imports` to the global import table and
+// resolves each patch's IAT slot from the resulting layout.
 // ----------------------------------------------------------------
+
+/// A single IAT-lookup patch site in the entry stub. `byte_offset`
+/// is the offset within `EntryStub::bytes` of the first byte of
+/// the `call qword [rip+disp32]` (x86_64) or the `adrp` of the
+/// `adrp; ldr; blr` triple (aarch64). `stub_import_idx` indexes
+/// into `EntryStub::stub_imports` -- the writer turns that into
+/// a global import-table index by adding the base offset at which
+/// it splices `stub_imports` onto the program's resolved imports.
+struct StubIatPatch {
+    byte_offset: u32,
+    stub_import_idx: usize,
+}
 
 struct EntryStub {
     bytes: Vec<u8>,
-    /// Offset within [`Self::bytes`] of the IAT-lookup
-    /// sequence for `__getmainargs`. `None` for DLL output
-    /// (the DllMain stub doesn't call out to msvcrt).
-    iat_getmainargs_offset: Option<u32>,
-    /// Offset of the IAT-lookup for `ExitProcess`. `None`
-    /// for DLL output.
-    iat_exit_offset: Option<u32>,
+    /// `(symbol, dll)` pairs the stub references via IAT lookups.
+    /// Empty for the DLL stub (which is a self-contained `mov eax,
+    /// 1; ret`). The writer appends these onto the global imports
+    /// table after the user's `#pragma binding(...)` imports.
+    stub_imports: Vec<(&'static str, &'static str)>,
+    /// IAT-lookup patch sites -- one per `call qword [rip+...]` /
+    /// `adrp;ldr;blr` triple the stub emits.
+    iat_patches: Vec<StubIatPatch>,
     /// Offset of the direct `bl main` / `call main`
     /// instruction. `None` for DLL output -- DllMain is
     /// invoked directly by the loader, not from the stub.
     direct_call_main_offset: Option<u32>,
 }
 
-fn build_entry_stub(machine: Machine, is_dll: bool) -> EntryStub {
+impl EntryStub {
+    fn empty() -> Self {
+        Self {
+            bytes: Vec::new(),
+            stub_imports: Vec::new(),
+            iat_patches: Vec::new(),
+            direct_call_main_offset: None,
+        }
+    }
+}
+
+fn build_entry_stub(machine: Machine, is_dll: bool, subsystem: u16) -> EntryStub {
     if is_dll {
         return build_dllmain_stub(machine);
     }
+    let gui = subsystem == IMAGE_SUBSYSTEM_WINDOWS_GUI;
     match machine {
+        Machine::X86_64 if gui => build_x86_64_winmain_stub(),
         Machine::X86_64 => build_x86_64_entry_stub(),
+        Machine::Aarch64 if gui => build_aarch64_winmain_stub(),
         Machine::Aarch64 => build_aarch64_entry_stub(),
     }
 }
@@ -2145,8 +2191,8 @@ fn build_dllmain_stub(machine: Machine) -> EntryStub {
     };
     EntryStub {
         bytes,
-        iat_getmainargs_offset: None,
-        iat_exit_offset: None,
+        stub_imports: Vec::new(),
+        iat_patches: Vec::new(),
         direct_call_main_offset: None,
     }
 }
@@ -2217,13 +2263,111 @@ fn build_x86_64_entry_stub() -> EntryStub {
     let call_exit_off = bytes.len() as u32;
     bytes.extend_from_slice(&[0xFF, 0x15, 0, 0, 0, 0]);
 
+    // Stub-only imports, in patch order: __getmainargs first, exit
+    // second. The IAT-lookup is the start of the `call qword`
+    // instruction itself (not the disp32 byte); the patcher
+    // computes `disp32 = target - (call + 6)` from this offset.
     EntryStub {
         bytes,
-        // x86_64: the IAT-lookup is the start of the `call qword`
-        // instruction itself (not the disp32 byte). The patcher
-        // computes `disp32 = target - (call + 6)` from this offset.
-        iat_getmainargs_offset: Some(call_gma_off),
-        iat_exit_offset: Some(call_exit_off),
+        stub_imports: vec![STUB_IMPORT_GETMAINARGS, STUB_IMPORT_EXIT],
+        iat_patches: vec![
+            StubIatPatch {
+                byte_offset: call_gma_off,
+                stub_import_idx: 0,
+            },
+            StubIatPatch {
+                byte_offset: call_exit_off,
+                stub_import_idx: 1,
+            },
+        ],
+        direct_call_main_offset: Some(call_main_off),
+    }
+}
+
+/// x86_64 GUI-subsystem entry stub. Bridges the no-arg
+/// `AddressOfEntryPoint` calling convention to the canonical Win32
+/// `int WinMain(HINSTANCE, HINSTANCE, LPSTR, int)` shape:
+///
+///   rcx = GetModuleHandleA(NULL)   -- hInstance
+///   rdx = 0                        -- hPrevInstance
+///   r8  = GetCommandLineA()        -- lpCmdLine
+///   r9  = SW_SHOWDEFAULT (10)      -- nShowCmd
+///   call WinMain
+///   mov  ecx, eax
+///   call exit
+fn build_x86_64_winmain_stub() -> EntryStub {
+    // Stack frame: we need a 32-byte shadow area for our callees
+    // (Win64 ABI) plus an 8-byte spill slot for `hInstance` across
+    // the `GetCommandLineA` call. Pick `sub rsp, 0x28` (40 bytes)
+    // so post-sub `rsp` is 16-aligned for the calls below:
+    //   * entry rsp is 8 mod 16 (OS pushed the return address)
+    //   * subtract 0x28 (40) -> 16N - 48 = 16M  -> 16-aligned
+    //
+    // Frame layout after the SUB:
+    //   [rsp + 0x00..0x08]  spill: hInstance saved across
+    //                                GetCommandLineA
+    //   [rsp + 0x08..0x20]  unused (part of shadow space)
+    //   [rsp + 0x20..0x28]  return-addr (pushed by the OS); not
+    //                                touched by us
+    let mut bytes: Vec<u8> = Vec::with_capacity(64);
+
+    // sub rsp, 0x28                          (4 bytes)
+    bytes.extend_from_slice(&[0x48, 0x83, 0xEC, 0x28]);
+
+    // xor ecx, ecx                           (2 bytes) -- arg1 = NULL
+    bytes.extend_from_slice(&[0x31, 0xC9]);
+    // call qword [rip+0]  GetModuleHandleA   (6 bytes)
+    let call_gmh_off = bytes.len() as u32;
+    bytes.extend_from_slice(&[0xFF, 0x15, 0, 0, 0, 0]);
+    // mov [rsp], rax                         (4 bytes) -- spill hInstance
+    bytes.extend_from_slice(&[0x48, 0x89, 0x04, 0x24]);
+
+    // call qword [rip+0]  GetCommandLineA    (6 bytes)
+    let call_gcl_off = bytes.len() as u32;
+    bytes.extend_from_slice(&[0xFF, 0x15, 0, 0, 0, 0]);
+
+    // mov r8, rax                            (3 bytes) -- arg3 = lpCmdLine
+    bytes.extend_from_slice(&[0x49, 0x89, 0xC0]);
+    // mov rcx, [rsp]                         (4 bytes) -- arg1 = hInstance
+    bytes.extend_from_slice(&[0x48, 0x8B, 0x0C, 0x24]);
+    // xor edx, edx                           (2 bytes) -- arg2 = NULL
+    bytes.extend_from_slice(&[0x31, 0xD2]);
+    // mov r9d, SW_SHOWDEFAULT                (6 bytes) -- arg4 = 10
+    bytes.push(0x41);
+    bytes.push(0xB9);
+    bytes.extend_from_slice(&SW_SHOWDEFAULT.to_le_bytes());
+
+    // call WinMain rel32 (placeholder, 5 bytes)
+    let call_main_off = bytes.len() as u32;
+    bytes.extend_from_slice(&[0xE8, 0, 0, 0, 0]);
+
+    // mov ecx, eax                           (2 bytes) -- exit code
+    bytes.extend_from_slice(&[0x89, 0xC1]);
+    // call qword [rip+0]  exit               (6 bytes)
+    let call_exit_off = bytes.len() as u32;
+    bytes.extend_from_slice(&[0xFF, 0x15, 0, 0, 0, 0]);
+
+    EntryStub {
+        bytes,
+        stub_imports: vec![
+            STUB_IMPORT_GETMODULEHANDLEA,
+            STUB_IMPORT_GETCOMMANDLINEA,
+            STUB_IMPORT_EXIT,
+        ],
+        iat_patches: vec![
+            StubIatPatch {
+                byte_offset: call_gmh_off,
+                stub_import_idx: 0,
+            },
+            StubIatPatch {
+                byte_offset: call_gcl_off,
+                stub_import_idx: 1,
+            },
+            StubIatPatch {
+                byte_offset: call_exit_off,
+                stub_import_idx: 2,
+            },
+        ],
         direct_call_main_offset: Some(call_main_off),
     }
 }
@@ -2302,8 +2446,108 @@ fn build_aarch64_entry_stub() -> EntryStub {
 
     EntryStub {
         bytes,
-        iat_getmainargs_offset: Some(iat_gma_off),
-        iat_exit_offset: Some(iat_exit_off),
+        stub_imports: vec![STUB_IMPORT_GETMAINARGS, STUB_IMPORT_EXIT],
+        iat_patches: vec![
+            StubIatPatch {
+                byte_offset: iat_gma_off,
+                stub_import_idx: 0,
+            },
+            StubIatPatch {
+                byte_offset: iat_exit_off,
+                stub_import_idx: 1,
+            },
+        ],
+        direct_call_main_offset: Some(bl_main_off),
+    }
+}
+
+/// AArch64 GUI-subsystem entry stub. Bridges the no-arg
+/// `AddressOfEntryPoint` calling convention to the Win32
+/// `int WinMain(HINSTANCE, HINSTANCE, LPSTR, int)` shape, using
+/// AAPCS64 (Windows on ARM) register-passing:
+///
+///   x0 = GetModuleHandleA(NULL)   -- hInstance
+///   x1 = 0                        -- hPrevInstance
+///   x2 = GetCommandLineA()        -- lpCmdLine
+///   w3 = SW_SHOWDEFAULT (10)      -- nShowCmd
+///   bl WinMain
+///   bl exit
+fn build_aarch64_winmain_stub() -> EntryStub {
+    use super::aarch64 as a;
+    let mut bytes: Vec<u8> = Vec::with_capacity(64);
+
+    // Save fp/lr and carve 16 bytes for the hInstance spill.
+    // Total stack delta = 32 bytes; sp stays 16-aligned.
+    // stp x29, x30, [sp, #-16]!
+    a::emit(
+        &mut bytes,
+        a::enc_stp_pre(a::Reg::X29, a::Reg::X30, a::Reg::SP, -16),
+    );
+    a::emit(&mut bytes, a::enc_add_imm(a::Reg::X29, a::Reg::SP, 0));
+    // sub sp, sp, #0x10  -- 1 spill slot, kept 16-aligned
+    a::emit(&mut bytes, a::enc_sub_imm(a::Reg::SP, a::Reg::SP, 0x10));
+
+    // mov w0, #0  -- arg1 (NULL) to GetModuleHandleA
+    a::emit(&mut bytes, a::enc_movz(a::Reg::X0, 0, 0));
+
+    // adrp x16, IAT_PAGE; ldr x16, [x16, #IAT_OFF]; blr x16
+    let iat_gmh_off = bytes.len() as u32;
+    a::emit(&mut bytes, a::enc_adrp(a::Reg::X16, 0));
+    a::emit(&mut bytes, a::enc_ldr_imm(a::Reg::X16, a::Reg::X16, 0));
+    a::emit(&mut bytes, a::enc_blr(a::Reg::X16));
+
+    // str x0, [sp]  -- spill hInstance across the next call
+    a::emit(&mut bytes, a::enc_str_imm(a::Reg::X0, a::Reg::SP, 0x00));
+
+    // adrp x16, IAT_PAGE; ldr x16, [x16, #IAT_OFF]; blr x16
+    let iat_gcl_off = bytes.len() as u32;
+    a::emit(&mut bytes, a::enc_adrp(a::Reg::X16, 0));
+    a::emit(&mut bytes, a::enc_ldr_imm(a::Reg::X16, a::Reg::X16, 0));
+    a::emit(&mut bytes, a::enc_blr(a::Reg::X16));
+
+    // Set up WinMain args. lpCmdLine is currently in x0 from
+    // GetCommandLineA -- park it in x2 before reloading x0.
+    // mov x2, x0
+    a::emit(&mut bytes, a::enc_mov_reg(a::Reg::X2, a::Reg::X0));
+    // ldr x0, [sp]   -- reload hInstance
+    a::emit(&mut bytes, a::enc_ldr_imm(a::Reg::X0, a::Reg::SP, 0x00));
+    // mov x1, #0
+    a::emit(&mut bytes, a::enc_movz(a::Reg::X1, 0, 0));
+    // mov w3, #SW_SHOWDEFAULT (10) -- a 16-bit imm fits in one movz.
+    a::emit(&mut bytes, a::enc_movz(a::Reg(3), SW_SHOWDEFAULT as u16, 0));
+
+    // bl WinMain (rel26 placeholder)
+    let bl_main_off = bytes.len() as u32;
+    a::emit(&mut bytes, a::enc_bl(0));
+
+    // WinMain's return is in w0/x0 -- first arg to exit. Tail-call
+    // via the IAT; exit() doesn't return so no epilogue needed.
+    let iat_exit_off = bytes.len() as u32;
+    a::emit(&mut bytes, a::enc_adrp(a::Reg::X16, 0));
+    a::emit(&mut bytes, a::enc_ldr_imm(a::Reg::X16, a::Reg::X16, 0));
+    a::emit(&mut bytes, a::enc_blr(a::Reg::X16));
+
+    EntryStub {
+        bytes,
+        stub_imports: vec![
+            STUB_IMPORT_GETMODULEHANDLEA,
+            STUB_IMPORT_GETCOMMANDLINEA,
+            STUB_IMPORT_EXIT,
+        ],
+        iat_patches: vec![
+            StubIatPatch {
+                byte_offset: iat_gmh_off,
+                stub_import_idx: 0,
+            },
+            StubIatPatch {
+                byte_offset: iat_gcl_off,
+                stub_import_idx: 1,
+            },
+            StubIatPatch {
+                byte_offset: iat_exit_off,
+                stub_import_idx: 2,
+            },
+        ],
         direct_call_main_offset: Some(bl_main_off),
     }
 }
@@ -2672,34 +2916,109 @@ mod tests {
     }
 
     #[test]
-    fn x86_64_entry_stub_layout_matches_expected_size() {
-        let s = build_entry_stub(Machine::X86_64, false);
+    fn x86_64_console_entry_stub_layout_matches_expected_size() {
+        let s = build_entry_stub(Machine::X86_64, false, IMAGE_SUBSYSTEM_WINDOWS_CUI);
         // 4 + 2 + 4 + 5 + 5 + 5 + 5 + 5 + 3 + 6 + 5 + 5 + 5 + 3 + 6 = 68 bytes.
         assert_eq!(s.bytes.len(), 68);
         // The stub has three patch sites: two IAT lookups (start of
         // the `call qword [rip+disp32]` instructions) and one
         // direct call to main.
-        assert_eq!(s.iat_getmainargs_offset, Some(38));
+        assert_eq!(s.stub_imports, vec![STUB_IMPORT_GETMAINARGS, STUB_IMPORT_EXIT]);
+        assert_eq!(s.iat_patches.len(), 2);
+        // __getmainargs is the first patch, exit is the second.
+        assert_eq!(s.iat_patches[0].byte_offset, 38);
+        assert_eq!(s.iat_patches[0].stub_import_idx, 0);
+        assert_eq!(s.iat_patches[1].byte_offset, 62);
+        assert_eq!(s.iat_patches[1].stub_import_idx, 1);
         assert_eq!(s.direct_call_main_offset, Some(54));
-        assert_eq!(s.iat_exit_offset, Some(62));
     }
 
     #[test]
-    fn aarch64_entry_stub_is_one_word_per_instruction() {
-        let s = build_entry_stub(Machine::Aarch64, false);
+    fn aarch64_console_entry_stub_is_one_word_per_instruction() {
+        let s = build_entry_stub(Machine::Aarch64, false, IMAGE_SUBSYSTEM_WINDOWS_CUI);
         // 19 instructions * 4 bytes = 76 bytes.
         assert_eq!(s.bytes.len(), 76);
         // Patch sites point at adrp instructions / the bl. Each is
         // 4 bytes.
-        let gma = s.iat_getmainargs_offset.unwrap();
-        let exit = s.iat_exit_offset.unwrap();
+        assert_eq!(s.stub_imports, vec![STUB_IMPORT_GETMAINARGS, STUB_IMPORT_EXIT]);
+        assert_eq!(s.iat_patches.len(), 2);
+        let gma = s.iat_patches[0].byte_offset;
+        let exit = s.iat_patches[1].byte_offset;
         let main = s.direct_call_main_offset.unwrap();
         assert!(gma.is_multiple_of(4));
         assert!(exit.is_multiple_of(4));
         assert!(main.is_multiple_of(4));
         // Order in the stub: __getmainargs (mid), bl main
-        // (later), ExitProcess (last).
+        // (later), exit (last).
         assert!(gma < main);
+        assert!(main < exit);
+    }
+
+    #[test]
+    fn x86_64_gui_entry_stub_pulls_in_kernel32_imports() {
+        let s = build_entry_stub(Machine::X86_64, false, IMAGE_SUBSYSTEM_WINDOWS_GUI);
+        // Three IAT lookups + one direct bl WinMain. No
+        // `__getmainargs` -- the GUI stub doesn't synthesize argv.
+        assert_eq!(
+            s.stub_imports,
+            vec![
+                STUB_IMPORT_GETMODULEHANDLEA,
+                STUB_IMPORT_GETCOMMANDLINEA,
+                STUB_IMPORT_EXIT,
+            ]
+        );
+        assert_eq!(s.iat_patches.len(), 3);
+        // Patches are in source-order: GetModuleHandleA, then
+        // GetCommandLineA, then exit. The direct call to WinMain
+        // sits between GetCommandLineA and exit.
+        let gmh = s.iat_patches[0].byte_offset;
+        let gcl = s.iat_patches[1].byte_offset;
+        let main = s.direct_call_main_offset.unwrap();
+        let exit = s.iat_patches[2].byte_offset;
+        assert_eq!(s.iat_patches[0].stub_import_idx, 0);
+        assert_eq!(s.iat_patches[1].stub_import_idx, 1);
+        assert_eq!(s.iat_patches[2].stub_import_idx, 2);
+        assert!(gmh < gcl);
+        assert!(gcl < main);
+        assert!(main < exit);
+        // SW_SHOWDEFAULT immediate must land in the stub bytes -- a
+        // simple search verifies the `mov r9d, 10` instruction is
+        // present (41 B9 0A 00 00 00).
+        let needle: &[u8] = &[0x41, 0xB9, 0x0A, 0x00, 0x00, 0x00];
+        assert!(
+            s.bytes.windows(needle.len()).any(|w| w == needle),
+            "GUI stub missing `mov r9d, SW_SHOWDEFAULT`: bytes = {:02X?}",
+            s.bytes
+        );
+    }
+
+    #[test]
+    fn aarch64_gui_entry_stub_pulls_in_kernel32_imports() {
+        let s = build_entry_stub(Machine::Aarch64, false, IMAGE_SUBSYSTEM_WINDOWS_GUI);
+        assert_eq!(
+            s.stub_imports,
+            vec![
+                STUB_IMPORT_GETMODULEHANDLEA,
+                STUB_IMPORT_GETCOMMANDLINEA,
+                STUB_IMPORT_EXIT,
+            ]
+        );
+        assert_eq!(s.iat_patches.len(), 3);
+        // Stub is one instruction word per emitted op -- every
+        // patch site must be 4-byte aligned (adrp / bl alignment).
+        for p in &s.iat_patches {
+            assert!(p.byte_offset.is_multiple_of(4));
+        }
+        assert!(s.direct_call_main_offset.unwrap().is_multiple_of(4));
+        // Source order survives: GetModuleHandleA (0), then
+        // GetCommandLineA (1), then exit (2). bl WinMain falls
+        // between (1) and (2).
+        let gmh = s.iat_patches[0].byte_offset;
+        let gcl = s.iat_patches[1].byte_offset;
+        let main = s.direct_call_main_offset.unwrap();
+        let exit = s.iat_patches[2].byte_offset;
+        assert!(gmh < gcl);
+        assert!(gcl < main);
         assert!(main < exit);
     }
 
@@ -3173,17 +3492,20 @@ mod tests {
     /// produces the right shape.
     #[test]
     fn dllmain_stub_returns_true() {
-        let s_x64 = build_entry_stub(Machine::X86_64, true);
+        // DLL stubs don't depend on subsystem -- they're consumed
+        // by the loader's `DllMain` entry path, not `WinMain` /
+        // `main`. Pass console as the canonical default.
+        let s_x64 = build_entry_stub(Machine::X86_64, true, IMAGE_SUBSYSTEM_WINDOWS_CUI);
         assert_eq!(
             s_x64.bytes,
             vec![0xB8, 0x01, 0x00, 0x00, 0x00, 0xC3],
             "x64 DllMain must be `mov eax, 1; ret`"
         );
-        assert!(s_x64.iat_getmainargs_offset.is_none());
-        assert!(s_x64.iat_exit_offset.is_none());
+        assert!(s_x64.stub_imports.is_empty());
+        assert!(s_x64.iat_patches.is_empty());
         assert!(s_x64.direct_call_main_offset.is_none());
 
-        let s_arm = build_entry_stub(Machine::Aarch64, true);
+        let s_arm = build_entry_stub(Machine::Aarch64, true, IMAGE_SUBSYSTEM_WINDOWS_CUI);
         // 2 instructions x 4 bytes.
         assert_eq!(s_arm.bytes.len(), 8);
         // First word: movz w0, #1 => 0x52800020 (movz is the
@@ -3312,6 +3634,75 @@ mod tests {
             base + dllmain_native_off,
             "AddressOfEntryPoint must target the user's DllMain at \
              BaseOfCode + bytecode_to_native[dllmain_pc]"
+        );
+    }
+
+    /// `#pragma subsystem(windows)` flips the optional-header
+    /// Subsystem field to `IMAGE_SUBSYSTEM_WINDOWS_GUI` *and*
+    /// routes the entry through the WinMain-shaped stub, so the
+    /// import table must carry `kernel32!GetModuleHandleA` +
+    /// `kernel32!GetCommandLineA` even though the user source
+    /// doesn't `#pragma binding` either of them. Without this
+    /// path the demo at `demos/gui_hello/hello_win32.c` would
+    /// receive `nShowCmd = 0` (SW_HIDE) -- the bug this commit
+    /// fixes -- because the console stub leaves `r9` zeroed
+    /// across the call to the entry function.
+    #[test]
+    fn gui_subsystem_emits_winmain_stub_imports() {
+        use crate::Compiler;
+        let src = "
+            #pragma subsystem(windows)
+            #pragma entrypoint(WinMain)
+            int WinMain(long hinst, long prev, char *cmd, int show) {
+                (void)hinst; (void)prev; (void)cmd;
+                return show;
+            }
+        ";
+        let program = Compiler::new(src.to_string()).compile().expect("compile");
+        let build = super::super::lower_for(
+            &program,
+            super::super::Target::WindowsX64,
+            super::super::NativeOptions::default(),
+        )
+        .expect("lower");
+        let bytes = write(
+            &program,
+            &build,
+            Machine::X86_64,
+            super::super::Target::WindowsX64,
+        )
+        .expect("write PE");
+
+        // 1) Subsystem field. OptionalHeader64.Subsystem lives at
+        //    offset 68 within the optional header.
+        let pe_off = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
+        let optional_off = pe_off + 4 + COFF_HEADER_SIZE;
+        let subsystem = u16::from_le_bytes([bytes[optional_off + 68], bytes[optional_off + 69]]);
+        assert_eq!(
+            subsystem, IMAGE_SUBSYSTEM_WINDOWS_GUI,
+            "`#pragma subsystem(windows)` must set Subsystem to WINDOWS_GUI"
+        );
+
+        // 2) GUI-stub imports must appear as ASCII strings in the
+        //    image (the import-name table writes them verbatim).
+        //    msvcrt!__getmainargs must not appear -- the GUI stub
+        //    doesn't synthesize argv.
+        let contains = |needle: &str| -> bool {
+            bytes
+                .windows(needle.len())
+                .any(|w| w == needle.as_bytes())
+        };
+        assert!(
+            contains("GetModuleHandleA"),
+            "GUI subsystem must import kernel32!GetModuleHandleA"
+        );
+        assert!(
+            contains("GetCommandLineA"),
+            "GUI subsystem must import kernel32!GetCommandLineA"
+        );
+        assert!(
+            !contains("__getmainargs"),
+            "GUI subsystem must NOT pull in msvcrt!__getmainargs (no argc/argv needed)"
         );
     }
 

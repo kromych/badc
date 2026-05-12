@@ -361,15 +361,16 @@ fn main() {
     // predefines into the compiler. The bytecode itself is target-
     // independent; only the resolved binding map and the
     // preprocessor predefines vary.
-    let mut compiler = Compiler::with_full_options_and_label_with_trace(
+    let mut compiler = Compiler::with_options(
         contents,
         target,
-        &defines,
-        &undefines,
-        &include_paths,
-        &force_includes,
-        &path,
-        show_includes,
+        badc::CompileOptions::default()
+            .with_defines(defines)
+            .with_undefines(undefines)
+            .with_include_paths(include_paths)
+            .with_force_includes(force_includes)
+            .with_source_label(path.clone())
+            .with_show_includes(show_includes),
     );
     // Pull the include trace out *before* the borrow `compile`
     // takes -- the trace is fully populated by the preprocessor

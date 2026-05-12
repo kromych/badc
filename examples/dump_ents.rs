@@ -4,7 +4,7 @@ use std::fs;
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let src = fs::read_to_string(&args[1]).unwrap();
-    let program = Compiler::with_full_options(src, Target::MacOSAarch64, &[], &[], &[], &[])
+    let program = Compiler::with_target(src, Target::MacOSAarch64)
         .compile()
         .unwrap();
     println!("# program.text.len() = {}", program.text.len());

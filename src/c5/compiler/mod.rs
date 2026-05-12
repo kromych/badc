@@ -131,6 +131,72 @@ pub(super) struct ParsedParams {
     pub(super) is_variadic: bool,
 }
 
+/// Optional preprocessor / driver knobs threaded through compiler
+/// construction. Everything here has a sensible default (empty
+/// vectors, empty label, tracing off); only callers that need to
+/// pass `-D` / `-I` / `-include` / `-H` flags or a real source
+/// filename for diagnostics have to fill any of these in.
+///
+/// Builder-style methods (`with_defines`, `with_undefines`,
+/// `with_include_paths`, `with_force_includes`, `with_source_label`,
+/// `with_show_includes`) return `self` so the typical CLI shape is
+/// `CompileOptions::default().with_defines(d).with_include_paths(p)`.
+#[derive(Default, Debug, Clone)]
+pub struct CompileOptions {
+    /// `-D name[=body]` predefines installed before the source
+    /// runs through the preprocessor.
+    pub defines: Vec<(String, String)>,
+    /// `-U name` -- names removed from the predefines table.
+    pub undefines: Vec<String>,
+    /// `-I path` -- filesystem search paths probed before the
+    /// bundled in-binary headers on `#include`.
+    pub include_paths: Vec<String>,
+    /// `-include FILE` -- headers force-included before the source.
+    pub force_includes: Vec<String>,
+    /// Filename string used in compiler diagnostics
+    /// (`<file>:<line>: error: ...`). Empty for library / fixture
+    /// callers; the preprocessor then falls back to the historical
+    /// `<source>` placeholder.
+    pub source_label: String,
+    /// `-H` / `--show-includes` -- when true the preprocessor
+    /// pushes one line per `#include` resolve into the include
+    /// trace, drainable via [`Compiler::take_include_trace`].
+    pub show_includes: bool,
+}
+
+impl CompileOptions {
+    /// Replace the `-D` predefine list.
+    pub fn with_defines(mut self, defines: Vec<(String, String)>) -> Self {
+        self.defines = defines;
+        self
+    }
+    /// Replace the `-U` undefine list.
+    pub fn with_undefines(mut self, undefines: Vec<String>) -> Self {
+        self.undefines = undefines;
+        self
+    }
+    /// Replace the `-I` include-search-path list.
+    pub fn with_include_paths(mut self, include_paths: Vec<String>) -> Self {
+        self.include_paths = include_paths;
+        self
+    }
+    /// Replace the `-include FILE` force-include list.
+    pub fn with_force_includes(mut self, force_includes: Vec<String>) -> Self {
+        self.force_includes = force_includes;
+        self
+    }
+    /// Set the source-file label used in diagnostics.
+    pub fn with_source_label(mut self, label: impl Into<String>) -> Self {
+        self.source_label = label.into();
+        self
+    }
+    /// Flip the gcc-style `-H` include trace on or off.
+    pub fn with_show_includes(mut self, on: bool) -> Self {
+        self.show_includes = on;
+        self
+    }
+}
+
 /// Single-pass C compiler. Holds the lexer, the symbol table, and the
 /// codegen scaffolding. `compile(self)` consumes the compiler and produces
 /// a [`Program`] ready for the VM.
@@ -532,120 +598,34 @@ impl Compiler {
         Self::with_target(source, Target::default_target())
     }
 
-    /// Construct a compiler for a specific native target. Runs the
-    /// preprocessor (with the target predefines: `__APPLE__` /
-    /// `__linux__` / `_WIN32`, plus arch macros) over `source`, then
-    /// feeds the substituted text to the lexer. The target choice
-    /// drives the predefines -- `#include`d headers (`<stdio.h>`,
-    /// `<string.h>`, ...) gate their `#pragma binding(...)` blocks
-    /// off them so the right libc / libSystem / msvcrt symbols get
-    /// bound for this target.
+    /// Construct a compiler for a specific native target with all
+    /// driver options left at their defaults.
     pub fn with_target(source: String, target: Target) -> Self {
-        Self::with_options(source, target, &[], &[])
+        Self::with_options(source, target, CompileOptions::default())
     }
 
     /// Drain the gcc `-H`-shape include trace produced by the
     /// preprocessor. Empty when constructed without
-    /// `with_full_options_and_label_with_trace(.., show_includes =
-    /// true)`. The CLI calls this after `compile()` and dumps the
-    /// list to stderr; library callers can do the same.
+    /// `CompileOptions::with_show_includes(true)`. The CLI calls
+    /// this after `compile()` and dumps the list to stderr;
+    /// library callers can do the same.
     pub fn take_include_trace(&mut self) -> Vec<String> {
         core::mem::take(&mut self.include_trace)
     }
 
-    /// Construct a compiler with explicit `-D` / `-U` predefines
-    /// from the CLI driver. Each `defines` entry is a
-    /// `(name, body)` pair installed before the source runs through
-    /// the preprocessor; `undefines` lists names to remove from
-    /// the predefines table. Source-level `#define` / `#undef`
-    /// still win the last-writer fight in the normal way.
-    pub fn with_options(
-        source: String,
-        target: Target,
-        defines: &[(String, String)],
-        undefines: &[String],
-    ) -> Self {
-        Self::with_full_options(source, target, defines, undefines, &[], &[])
-    }
-
-    /// Same as [`Self::with_options`] but also takes a list of
-    /// filesystem search paths probed before the bundled in-binary
-    /// headers on `#include`, plus a list of headers to force-
-    /// include before the source. Plumbed in from the CLI's
-    /// `-I path` flag (auto-detected defaults `./include`,
-    /// `./headers/include`) and `-include FILE` flag.
-    pub fn with_full_options(
-        source: String,
-        target: Target,
-        defines: &[(String, String)],
-        undefines: &[String],
-        include_paths: &[String],
-        force_includes: &[String],
-    ) -> Self {
-        Self::with_full_options_and_label(
-            source,
-            target,
-            defines,
-            undefines,
-            include_paths,
-            force_includes,
-            "",
-        )
-    }
-
-    /// Same as [`Self::with_full_options`] plus a `source_label`
-    /// argument: the filename string used in compiler diagnostics
-    /// (`<file>:<line>: error: ...`) and the lexer's per-token file
-    /// attribution. The CLI passes the user's argv path so error
-    /// messages name the file the user opened; library / fixture
-    /// callers that don't have a path leave it empty and the
-    /// preprocessor falls back to the historical `<source>`
-    /// placeholder.
-    pub fn with_full_options_and_label(
-        source: String,
-        target: Target,
-        defines: &[(String, String)],
-        undefines: &[String],
-        include_paths: &[String],
-        force_includes: &[String],
-        source_label: &str,
-    ) -> Self {
-        Self::with_full_options_and_label_with_trace(
-            source,
-            target,
-            defines,
-            undefines,
-            include_paths,
-            force_includes,
-            source_label,
-            false,
-        )
-    }
-
-    /// Variant of [`Self::with_full_options_and_label`] that also
-    /// flips on the gcc `-H`-shape include trace. The preprocessor
-    /// pushes one line per `#include` resolve into a `Vec<String>`
-    /// available via [`Self::take_include_trace`] after construction.
-    /// Wired in by the CLI's `-H` / `--show-includes` flag; library
-    /// callers that don't want tracing keep the flag at `false` and
-    /// the trace stays empty.
-    //
-    // Long arg list reflects the family of `with_*` constructors
-    // the CLI grew alongside the preprocessor surface (predefines,
-    // search paths, force-includes, label, trace). A future
-    // refactor will collapse the lot into a single `CompileOptions`
-    // struct -- new flags should land there rather than here.
-    #[allow(clippy::too_many_arguments)]
-    pub fn with_full_options_and_label_with_trace(
-        source: String,
-        target: Target,
-        defines: &[(String, String)],
-        undefines: &[String],
-        include_paths: &[String],
-        force_includes: &[String],
-        source_label: &str,
-        show_includes: bool,
-    ) -> Self {
+    /// Construct a compiler with the full set of preprocessor /
+    /// driver knobs bundled into a [`CompileOptions`] struct.
+    /// This is the single shared implementation behind every
+    /// `Compiler::new` and `Compiler::with_target` callable;
+    /// callers that need `-D` / `-I` / `-include` / source-label
+    /// / `-H` flags reach for this directly.
+    ///
+    /// Preprocessor failures (unterminated `#if`, duplicate
+    /// `#else`, ...) are stored on the struct and surfaced when
+    /// [`Self::compile`] runs -- this keeps the construction API
+    /// infallible so the `Compiler::new(src).compile()` shape
+    /// every existing caller uses keeps working.
+    pub fn with_options(source: String, target: Target, opts: CompileOptions) -> Self {
         // Run the preprocessor first so we know the
         // `#pragma binding(...)` set before seeding the symbol
         // table. The bindings come from whichever standard headers
@@ -654,25 +634,19 @@ impl Compiler {
         // "no `#pragma binding(... ::printf, ...)` is in scope"
         // error out of the codegen's import resolver, not a
         // mysterious link-time mismatch.
-        //
-        // Preprocessor failures (unterminated `#if`, duplicate
-        // `#else`, ...) are stored on the struct and surfaced when
-        // `compile()` runs -- this keeps the construction API
-        // infallible so the `Compiler::new(src).compile()` shape
-        // every existing caller uses keeps working.
         let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
-        pp.set_source_label(source_label);
-        pp.set_show_includes(show_includes);
-        for path in include_paths {
+        pp.set_source_label(&opts.source_label);
+        pp.set_show_includes(opts.show_includes);
+        for path in &opts.include_paths {
             pp.add_search_path(path);
         }
-        for name in force_includes {
+        for name in &opts.force_includes {
             pp.add_force_include(name);
         }
-        for (name, body) in defines {
+        for (name, body) in &opts.defines {
             pp.define(name, body);
         }
-        for name in undefines {
+        for name in &opts.undefines {
             pp.undef(name);
         }
         let (preprocessed, deferred_error) = match pp.process(&source) {

@@ -33,6 +33,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 /* libobjc.A.dylib -- the ObjC runtime. */
 #pragma dylib(libobjc, "/usr/lib/libobjc.A.dylib")
@@ -178,13 +179,28 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    /* [NSApplication sharedApplication] -- the singleton
-     * NSApp instance that owns the run loop. */
+    /* Suppress AppKit's "Connection Invalid" / XPC chatter.
+     * Unbundled executables can't authenticate against macOS's
+     * HIServices XPC backbone, so AppKit logs a handful of
+     * `+[NSXPCSharedListener ...]: an error occurred ...`
+     * messages on the way up. They're informational -- the
+     * window still opens and the run loop still pumps events --
+     * but they spam the terminal. NSLog writes to fd 2, so
+     * `dup2`'ing /dev/null over fd 2 silences the lot. Our own
+     * error diagnostics (the `printf` paths below) deliberately
+     * use stdout for the same reason; they're for genuine
+     * setup failures and the user wants to see them on the
+     * console. */
+    int devnull = open("/dev/null", O_WRONLY);
+    if (devnull >= 0) {
+        dup2(devnull, 2);
+        close(devnull);
+    }
     void *NSApplication = objc_getClass("NSApplication");
     void *sharedApp     = sel_registerName("sharedApplication");
     void *app = objc_msgSend(NSApplication, sharedApp);
     if (!app) {
-        fprintf(stderr, "hello-macos: NSApplication sharedApplication failed\n");
+        printf("hello-macos: NSApplication sharedApplication failed\n");
         return 1;
     }
 
@@ -240,7 +256,7 @@ int main(int argc, char **argv) {
         (long long)NS_BACKING_BUF,
         (long long)0);
     if (!window) {
-        fprintf(stderr, "hello-macos: NSWindow alloc / init failed\n");
+        printf("hello-macos: NSWindow alloc / init failed\n");
         return 1;
     }
 

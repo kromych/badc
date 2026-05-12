@@ -17,6 +17,7 @@ mod call_fixups;
 mod const_expr;
 mod control_flow;
 mod convert;
+mod decl_base;
 mod declarator;
 mod diag;
 mod emit;
@@ -33,7 +34,7 @@ pub(crate) mod types;
 use types::{
     UNSIGNED_BIT, format_signature, format_type, fp_result_ty, is_decl_modifier,
     is_floating_scalar, is_pointer_ty, is_struct_ty, is_unsigned_ty, load_op_for, store_op_for,
-    struct_id_of, struct_ptr_depth, struct_ty_for, usual_arith_common_ty,
+    struct_id_of, struct_ptr_depth, usual_arith_common_ty,
 };
 
 #[derive(Debug, Clone)]
@@ -821,203 +822,6 @@ impl Compiler {
             self.next()?;
         }
         Err(self.compile_err("unmatched parentheses"))
-    }
-
-    fn parse_decl_base_type(&mut self) -> Result<i64, C5Error> {
-        // Leading qualifiers / modifiers / specifiers. Most are
-        // no-ops in c5; the ones that carry semantic weight:
-        //   * `IntMod` (`_Bool`): trips the implicit-int rule.
-        //   * `Signed`: a `signed char` base loads sign-extending
-        //     via `Op::Lcs` (instead of bare-`char`'s zero-ext).
-        //   * `Unsigned`: ORs `UNSIGNED_BIT` into the type tag.
-        //   * `Short`: selects the 16-bit `Ty::Short` storage class.
-        //   * `Long`: first occurrence selects `Ty::Long`. Second
-        //     occurrence promotes to `Ty::LongLong` (the C99 / C11
-        //     `long long` type, always 64 bits regardless of
-        //     target). The first-vs-second distinction matters on
-        //     LLP64 (Windows): `long` is 32 bits there, `long long`
-        //     stays 64.
-        // Reset the void side channel up front so a previous
-        // declaration's bare-void base doesn't leak into this one.
-        self.pending_base_was_void = false;
-        let mut saw_int_mod = false;
-        let mut saw_signed = false;
-        let mut saw_unsigned = false;
-        let mut long_count: u8 = 0;
-        let mut saw_short = false;
-        while is_decl_modifier(self.lex.tk) {
-            if self.lex.tk == Token::IntMod {
-                saw_int_mod = true;
-            } else if self.lex.tk == Token::Signed {
-                saw_signed = true;
-                saw_int_mod = true;
-            } else if self.lex.tk == Token::Unsigned {
-                saw_unsigned = true;
-                saw_int_mod = true;
-            } else if self.lex.tk == Token::Long {
-                long_count = long_count.saturating_add(1);
-                saw_int_mod = true;
-            } else if self.lex.tk == Token::Short {
-                saw_short = true;
-                saw_int_mod = true;
-            }
-            self.next()?;
-        }
-        let saw_long = long_count >= 1;
-        let saw_long_long = long_count >= 2;
-
-        let bt = if self.lex.tk == Token::Int {
-            self.next()?;
-            // `long long int` -> Ty::LongLong (always 64-bit);
-            // `long int` -> Ty::Long (LP64 = 64-bit, LLP64 =
-            // 32-bit); `short int` -> Ty::Short (2 bytes);
-            // bare `int` -> Ty::Int (4 bytes).
-            let base = if saw_long_long {
-                Ty::LongLong as i64
-            } else if saw_long {
-                Ty::Long as i64
-            } else if saw_short {
-                Ty::Short as i64
-            } else {
-                Ty::Int as i64
-            };
-            if saw_unsigned {
-                base | UNSIGNED_BIT
-            } else {
-                base
-            }
-        } else if self.lex.tk == Token::Char {
-            self.next()?;
-            // `signed char` is a real 1-byte signed type; loads via
-            // `Op::Lcs` so the high bit propagates. Plain `char` is
-            // treated as unsigned in c5 (loads via `Op::Lc`,
-            // zero-extending), the same as `unsigned char`. The
-            // type tag distinguishes the two via `UNSIGNED_BIT`:
-            // bare and unsigned char carry it; signed char doesn't.
-            if saw_signed {
-                Ty::Char as i64
-            } else {
-                // Both bare `char` and `unsigned char` -- c5 picks
-                // the unsigned tag so existing code that loads byte
-                // values gets the zero-ext behavior it has always
-                // had. The store path is the same (`Op::Sc`).
-                Ty::Char as i64 | UNSIGNED_BIT
-            }
-        } else if self.lex.tk == Token::Void {
-            self.next()?;
-            // `void` collapses to the same type encoding as
-            // `unsigned char` so the existing void-pointer
-            // arithmetic (`void *p; p + 1` strides one byte),
-            // sizeof, struct-field layout, and function-pointer
-            // call-table encoding stay byte-for-byte identical to
-            // the legacy void-as-char desugaring. The void-vs-char
-            // distinction is carried out-of-band via
-            // `pending_base_was_void`: the function-decl path
-            // reads it after the declarator runs to mark the
-            // function symbol's `returns_void`. The earlier
-            // attempt to give `void` its own band collided with
-            // sqlite3's `void (*xFunc)(...)` dispatch tables (the
-            // band number leaked into the call-through-fn-ptr type
-            // comparison) -- keeping the encoding here untouched
-            // sidesteps that trap.
-            self.pending_base_was_void = true;
-            Ty::Char as i64 | UNSIGNED_BIT
-        } else if self.lex.tk == Token::Float {
-            self.next()?;
-            Ty::Float as i64
-        } else if self.lex.tk == Token::Double {
-            self.next()?;
-            // `long double` is only as wide as `double` here -- c5
-            // has no 80- or 128-bit FP type. The trailing-modifier
-            // loop already silently consumes any extra `long`.
-            Ty::Double as i64
-        } else if self.lex.tk == Token::Enum {
-            // `enum [Tag] [{ ... }]` -- in c5 every enum collapses
-            // to plain `int`. Consume any tag name and any optional
-            // body; return Int as the underlying type.
-            self.next()?;
-            if self.lex.tk == Token::Id {
-                self.next()?;
-            }
-            if self.lex.tk == '{' {
-                // Re-parse the body via the same constants-loop the
-                // file-scope path uses. Save and restore the line
-                // since parse_enum_decl_body emits no other state.
-                self.parse_enum_body()?;
-            }
-            Ty::Int as i64
-        } else if self.lex.tk == Token::Struct || self.lex.tk == Token::Union {
-            // Struct and union share the same tag table and the same
-            // "find or forward-declare" rule. The aggregate's
-            // is_union flag is set when the body lands; until then
-            // an opaque tag works for both shapes through pointers
-            // and typedefs. Anonymous form (`typedef struct { ... }
-            // Name;`) gets a synthesised tag so it can register
-            // properly.
-            let is_union = self.lex.tk == Token::Union;
-            let kind = if is_union { "union" } else { "struct" };
-            self.next()?;
-            let name = if self.lex.tk == Token::Id {
-                let n = self.symbols[self.lex.curr_id_idx].name.clone();
-                self.next()?;
-                n
-            } else if self.lex.tk == '{' {
-                format!("__anon_{kind}_{}", self.structs.len())
-            } else {
-                return Err(self.compile_err(format!("{kind} name or `{{` expected")));
-            };
-            let id = if self.lex.tk == '{' {
-                self.parse_aggregate_body(&name, is_union)?
-            } else {
-                self.find_or_forward_declare_struct(&name)
-            };
-            struct_ty_for(id)
-        } else if self.is_lex_typedef_name() {
-            // Typedef-name as base type. Resolve to the aliased
-            // type and consume the identifier.
-            let aliased = self.symbols[self.lex.curr_id_idx].type_;
-            // Carry the typedef's fn-pointer lineage forward (gh
-            // #19) so a later `fn_t fp` declaration ends up with
-            // the right indirection count.
-            let typedef_fpi = self.symbols[self.lex.curr_id_idx].fn_ptr_indirection;
-            if typedef_fpi > 0 {
-                self.pending_fn_ptr_indirection = Some(typedef_fpi);
-            }
-            self.next()?;
-            aliased
-        } else if saw_int_mod {
-            // Bare `unsigned x;` / `long x;` / `long long x;` /
-            // `short x;` / `_Bool x;` -- the C implicit-int rule
-            // applies for int-modifier-only decls. `long long`
-            // selects `Ty::LongLong` (always 64-bit); `long`
-            // selects `Ty::Long` (LP64 -> 64-bit, LLP64 ->
-            // 32-bit); `short` selects `Ty::Short` (16-bit).
-            let base = if saw_long_long {
-                Ty::LongLong as i64
-            } else if saw_long {
-                Ty::Long as i64
-            } else if saw_short {
-                Ty::Short as i64
-            } else {
-                Ty::Int as i64
-            };
-            if saw_unsigned {
-                base | UNSIGNED_BIT
-            } else {
-                base
-            }
-        } else {
-            return Err(self.compile_err("type expected"));
-        };
-
-        // Trailing qualifiers / modifiers: `int const`, `int long`,
-        // `unsigned int long long`, etc. all collapse to the base type
-        // already chosen.
-        while is_decl_modifier(self.lex.tk) {
-            self.next()?;
-        }
-
-        Ok(bt)
     }
 
     /// Compile the source. On success, the returned `Program` contains the
@@ -3012,20 +2816,14 @@ impl Compiler {
             // are no-ops in c5 (every symbol already has
             // internal linkage and there's no separate
             // translation-unit story); `_Thread_local` flips
-            // the per-thread storage flag.
+            // the per-thread storage flag. The int-modifier
+            // soup (`signed`, `unsigned`, `short`, `long*`,
+            // `_Bool`) flows through the shared `IntModifiers`
+            // accumulator so `parse_decl_base_type` and the
+            // file-scope path interpret it identically.
             let mut thread_local = false;
             let mut is_typedef = false;
-            let mut saw_signed = false;
-            let mut saw_unsigned = false;
-            // Track `long` count and `short` separately from the
-            // other int-modifiers so `typedef long long int u64;`
-            // picks the 8-byte `Ty::LongLong`, `typedef long int
-            // l;` picks `Ty::Long` (LP64 -> 8 bytes, LLP64 -> 4),
-            // and `typedef short int s16;` picks `Ty::Short`,
-            // instead of all falling through as 4-byte `Ty::Int`.
-            let mut long_count: u8 = 0;
-            let mut saw_short = false;
-            let mut saw_int_mod = false;
+            let mut m = decl_base::IntModifiers::default();
             loop {
                 if self.lex.tk == Token::ThreadLocal {
                     thread_local = true;
@@ -3033,25 +2831,9 @@ impl Compiler {
                 } else if self.lex.tk == Token::Typedef {
                     is_typedef = true;
                     self.next()?;
-                } else if self.lex.tk == Token::Signed {
-                    saw_signed = true;
-                    saw_int_mod = true;
-                    self.next()?;
-                } else if self.lex.tk == Token::Unsigned {
-                    saw_unsigned = true;
-                    saw_int_mod = true;
-                    self.next()?;
-                } else if self.lex.tk == Token::Long {
-                    long_count = long_count.saturating_add(1);
-                    saw_int_mod = true;
-                    self.next()?;
-                } else if self.lex.tk == Token::Short {
-                    saw_short = true;
-                    saw_int_mod = true;
-                    self.next()?;
-                } else if self.lex.tk == Token::IntMod {
-                    saw_int_mod = true;
-                    self.next()?;
+                } else if self.try_consume_int_modifier(&mut m)? {
+                    // Consumed an int modifier; the helper already
+                    // advanced the lexer.
                 } else if self.lex.tk == Token::Extern
                     || self.lex.tk == Token::Static
                     || is_decl_modifier(self.lex.tk)
@@ -3061,38 +2843,12 @@ impl Compiler {
                     break;
                 }
             }
-            let saw_long = long_count >= 1;
-            let saw_long_long = long_count >= 2;
             if self.lex.tk == Token::Int {
                 self.next()?;
-                // `long long int` -> Ty::LongLong; `long int` ->
-                // Ty::Long; `short int` -> Ty::Short; bare `int`
-                // -> Ty::Int. Mirror the dispatch in
-                // `parse_decl_base_type`.
-                let base = if saw_long_long {
-                    Ty::LongLong as i64
-                } else if saw_long {
-                    Ty::Long as i64
-                } else if saw_short {
-                    Ty::Short as i64
-                } else {
-                    Ty::Int as i64
-                };
-                bt = if saw_unsigned {
-                    base | UNSIGNED_BIT
-                } else {
-                    base
-                };
+                bt = m.int_base();
             } else if self.lex.tk == Token::Char {
                 self.next()?;
-                // `signed char` is a real 1-byte signed type; bare
-                // `char` and `unsigned char` are unsigned. Mirror
-                // parse_decl_base_type.
-                bt = if saw_signed {
-                    Ty::Char as i64
-                } else {
-                    Ty::Char as i64 | UNSIGNED_BIT
-                };
+                bt = m.char_tag();
             } else if self.lex.tk == Token::Void {
                 self.next()?;
                 // Bare `void` shares the `unsigned char` encoding
@@ -3119,30 +2875,7 @@ impl Compiler {
                 //   <kw> Name;                   -- forward declaration
                 //   <kw> Name *p;                -- type use, declarators follow
                 //   typedef <kw> Name {...} Name; -- definition + typedef alias
-                let is_union = self.lex.tk == Token::Union;
-                let kind = if is_union { "union" } else { "struct" };
-                self.next()?;
-                let name = if self.lex.tk == Token::Id {
-                    let n = self.symbols[self.lex.curr_id_idx].name.clone();
-                    self.next()?;
-                    n
-                } else if self.lex.tk == '{' {
-                    // Anonymous: `typedef struct { ... } Foo;`. Synth
-                    // a tag so the inner body can register and so
-                    // the typedef-side declarator that follows still
-                    // sees a struct type.
-                    format!("__anon_{kind}_{}", self.structs.len())
-                } else {
-                    return Err(self.compile_err(format!("{kind} name or `{{` expected")));
-                };
-
-                if self.lex.tk == '{' {
-                    let id = self.parse_aggregate_body(&name, is_union)?;
-                    bt = struct_ty_for(id);
-                } else {
-                    let id = self.find_or_forward_declare_struct(&name);
-                    bt = struct_ty_for(id);
-                }
+                bt = self.parse_aggregate_base_type()?;
             } else if self.is_lex_typedef_name() {
                 // Typedef-name as base type at file scope: `Foo bar;`
                 // where `Foo` was bound by a prior `typedef`.
@@ -3157,27 +2890,11 @@ impl Compiler {
                     self.pending_fn_ptr_indirection = Some(typedef_fpi);
                 }
                 self.next()?;
-            } else if saw_int_mod {
+            } else if m.saw_int_mod {
                 // Bare modifier(s) without an explicit type keyword:
                 // `unsigned x;` / `short x;` / `long x;` /
-                // `long long x;` (the implicit-int rule). Mirror
-                // parse_decl_base_type's tail: `long long` ->
-                // Ty::LongLong, `long` -> Ty::Long, `short` ->
-                // Ty::Short.
-                let base = if saw_long_long {
-                    Ty::LongLong as i64
-                } else if saw_long {
-                    Ty::Long as i64
-                } else if saw_short {
-                    Ty::Short as i64
-                } else {
-                    Ty::Int as i64
-                };
-                bt = if saw_unsigned {
-                    base | UNSIGNED_BIT
-                } else {
-                    base
-                };
+                // `long long x;` (the implicit-int rule).
+                bt = m.int_base();
             }
             // Trailing qualifiers / int modifiers between the base
             // type and the declarators -- `Foo const *p`, `int long

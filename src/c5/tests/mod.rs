@@ -15,7 +15,7 @@ use std::path::PathBuf;
 
 use super::lexer::{self as lex_helpers, Lexer};
 use super::symbol::Symbol;
-use super::token::Token;
+use super::token::{Tok, Token};
 use super::{C5Error, Compiler, Op, Program, Vm, optimize};
 
 mod codegen;
@@ -190,12 +190,15 @@ impl LexHarness {
         }
     }
 
-    /// Advance one token and return `tk` as a raw i64.
-    pub fn next(&mut self) -> i64 {
+    /// Advance one token and return it as a [`Tok`]. Callers compare
+    /// directly against `Token::X`, ASCII byte literals (`'('`,
+    /// `';'`, ...), or bare `i64` thanks to the `PartialEq` impls on
+    /// [`Tok`] -- no `as i64` cast at the call site.
+    pub fn next(&mut self) -> Tok {
         self.lex
             .next(&mut self.symbols, &mut self.symbol_index, &mut self.data)
             .expect("lexer error");
-        self.lex.tk.raw()
+        self.lex.tk
     }
 
     pub fn ival(&self) -> i64 {

@@ -99,8 +99,33 @@ const IMAGE_FILE_DLL: u16 = 0x2000;
 const IMAGE_FILE_LARGE_ADDRESS_AWARE: u16 = 0x0020;
 
 const PE32_PLUS_MAGIC: u16 = 0x20B;
-const IMAGE_SUBSYSTEM_WINDOWS_CUI: u16 = 3;
+const IMAGE_SUBSYSTEM_NATIVE: u16 = 1;
 const IMAGE_SUBSYSTEM_WINDOWS_GUI: u16 = 2;
+const IMAGE_SUBSYSTEM_WINDOWS_CUI: u16 = 3;
+const IMAGE_SUBSYSTEM_EFI_APPLICATION: u16 = 10;
+const IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER: u16 = 11;
+const IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER: u16 = 12;
+const IMAGE_SUBSYSTEM_EFI_ROM: u16 = 13;
+
+/// Subsystems whose entry point is invoked directly by a non-CRT
+/// loader (the NT loader hands `NtProcessStartup` a PEB pointer;
+/// UEFI firmware hands the entry an `(EFI_HANDLE, EFI_SYSTEM_TABLE *)`
+/// pair). For these we suppress the CRT-flavoured entry stub
+/// entirely -- `AddressOfEntryPoint` is wired straight at the
+/// user's entry function inside `build.text`, and no
+/// `msvcrt!__getmainargs` / `msvcrt!exit` imports are pulled in
+/// (which would be a hard link error for a pre-CRT environment
+/// anyway).
+fn subsystem_uses_passthrough_entry(subsystem: u16) -> bool {
+    matches!(
+        subsystem,
+        IMAGE_SUBSYSTEM_NATIVE
+            | IMAGE_SUBSYSTEM_EFI_APPLICATION
+            | IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER
+            | IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER
+            | IMAGE_SUBSYSTEM_EFI_ROM
+    )
+}
 const IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA: u16 = 0x0020;
 const IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE: u16 = 0x0040;
 const IMAGE_DLLCHARACTERISTICS_NX_COMPAT: u16 = 0x0100;
@@ -318,10 +343,19 @@ pub(super) fn write(
     let is_dll = build.output_kind == super::OutputKind::SharedLibrary;
     // PE optional-header Subsystem -- determined here once so the
     // entry-stub builder and the optional-header writer agree on
-    // the shape (`Subsystem::Windows` -> WinMain-shaped stub).
+    // the shape. The mapping mirrors `<winnt.h>`'s
+    // `IMAGE_SUBSYSTEM_*` constants; `Console` is the historical
+    // default for `None`, matching today's behavior for programs
+    // that don't carry `#pragma subsystem(...)`.
+    use crate::c5::preprocessor::Subsystem;
     let subsystem = match program.subsystem {
-        Some(crate::c5::preprocessor::Subsystem::Windows) => IMAGE_SUBSYSTEM_WINDOWS_GUI,
-        _ => IMAGE_SUBSYSTEM_WINDOWS_CUI,
+        Some(Subsystem::Windows) => IMAGE_SUBSYSTEM_WINDOWS_GUI,
+        Some(Subsystem::Native) => IMAGE_SUBSYSTEM_NATIVE,
+        Some(Subsystem::EfiApplication) => IMAGE_SUBSYSTEM_EFI_APPLICATION,
+        Some(Subsystem::EfiBootServiceDriver) => IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER,
+        Some(Subsystem::EfiRuntimeDriver) => IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER,
+        Some(Subsystem::EfiRom) => IMAGE_SUBSYSTEM_EFI_ROM,
+        Some(Subsystem::Console) | None => IMAGE_SUBSYSTEM_WINDOWS_CUI,
     };
 
     // 1) Build the entry stub before laying out the imports. The
@@ -336,14 +370,29 @@ pub(super) fn write(
     //    sources gate those on `#if __BADC_TARGET__` and call the
     //    target-native API (`VirtualProtect`, etc.) directly.
     //
-    //    For `--shared` output with a user-defined `DllMain` we
-    //    skip the stub entirely: `AddressOfEntryPoint` will point
-    //    at the user's body inside `build.text`, and emitting the
-    //    boilerplate `mov eax, 1; ret` ahead of it would just
-    //    shift every fixup by 6-8 bytes for code the loader never
-    //    branches to.
+    //    The stub is suppressed in three cases:
+    //
+    //    a) `--shared` output with a user-defined `DllMain`:
+    //       `AddressOfEntryPoint` points at the user's body inside
+    //       `build.text` and the boilerplate `mov eax, 1; ret`
+    //       stub would just shift every fixup by 6-8 bytes for
+    //       code the loader never branches to.
+    //
+    //    b) Passthrough subsystems (NT-native + UEFI flavours):
+    //       the firmware / NT loader calls the user's entry
+    //       directly with its native signature (PEB pointer for
+    //       NT, `(EFI_HANDLE, EFI_SYSTEM_TABLE *)` for UEFI),
+    //       so a CRT-flavoured stub would be both wrong and a
+    //       link-time hazard (no msvcrt available pre-CRT).
+    //
+    //    c) `--shared` output without a user `DllMain`: the
+    //       writer still emits a tiny `mov eax, 1; ret` DllMain
+    //       stub (handled inside `build_entry_stub` via the
+    //       `is_dll` flag), so that case stays on the regular
+    //       stub path.
     let user_dllmain = is_dll && build.dllmain_pc.is_some();
-    let stub = if user_dllmain {
+    let passthrough_entry = subsystem_uses_passthrough_entry(subsystem) && !is_dll;
+    let stub = if user_dllmain || passthrough_entry {
         EntryStub::empty()
     } else {
         build_entry_stub(machine, is_dll, subsystem)
@@ -900,18 +949,40 @@ pub(super) fn write(
     // the user-DllMain branch above, so adding it is a no-op
     // there but keeps the formula symmetric with the other
     // text-relative computations in this writer.
-    let entry_rva = match build.dllmain_pc {
-        Some(pc) if is_dll => {
-            let off = build.bytecode_to_native.get(pc).copied().ok_or_else(|| {
-                C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-                    "PE writer: user-defined DllMain at bytecode PC {pc} \
-                         has no entry in bytecode_to_native -- the lowering \
-                         dropped the function?"
-                )))
-            })?;
-            text_rva + text_prologue_len + off as u32
-        }
-        _ => text_rva,
+    // Entry point: by default the stub sits at the start of
+    // `.text` (covers regular executables and DLLs without a user
+    // DllMain), so `text_rva` is right. Two cases bypass the stub
+    // entirely and we point `AddressOfEntryPoint` at the user's
+    // body inside `build.text`:
+    //
+    //   * `--shared` output with a user-defined `DllMain` -- the
+    //     loader's `DLL_PROCESS_ATTACH` callback lands directly on
+    //     the user's body.
+    //   * Passthrough subsystems (NT-native + UEFI flavours) --
+    //     the loader / firmware calls the user's entry directly,
+    //     handing it the platform-native arg shape.
+    //
+    // `bytecode_to_native[pc]` is a byte offset within
+    // `build.text`; `text_prologue_len` is 0 whenever we take
+    // either bypass, so adding it is a no-op there but keeps the
+    // formula symmetric with the other text-relative computations.
+    let entry_rva = if let Some(pc) = build.dllmain_pc.filter(|_| is_dll) {
+        let off = build.bytecode_to_native.get(pc).copied().ok_or_else(|| {
+            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
+                "PE writer: user-defined DllMain at bytecode PC {pc} \
+                     has no entry in bytecode_to_native -- the lowering \
+                     dropped the function?"
+            )))
+        })?;
+        text_rva + text_prologue_len + off as u32
+    } else if passthrough_entry {
+        // The user's source must define a function the
+        // preprocessor's `#pragma entrypoint(<name>)` (or the
+        // implicit `main`) resolved to -- `build.entry_offset`
+        // is that function's native offset within `build.text`.
+        text_rva + text_prologue_len + build.entry_offset as u32
+    } else {
+        text_rva
     };
     write_optional_header(
         &mut out,
@@ -934,15 +1005,10 @@ pub(super) fn write(
             tls_table_size,
             export_table_rva: edata_rva,
             export_table_size: edata_size,
-            // Source-driven subsystem flag. Default
-            // (`None`) keeps the historical console-subsystem
-            // PE; `windows` opts in to GUI mode for `WinMain`-
-            // shaped programs (the loader skips the auto-
-            // attach-to-console step).
-            subsystem: match program.subsystem {
-                Some(crate::c5::preprocessor::Subsystem::Windows) => IMAGE_SUBSYSTEM_WINDOWS_GUI,
-                _ => IMAGE_SUBSYSTEM_WINDOWS_CUI,
-            },
+            // Source-driven subsystem flag. Already resolved at
+            // the top of `write` so the stub-shape decision and
+            // the optional-header value cannot drift apart.
+            subsystem,
         },
     );
     let mut sections: Vec<SectionHeader> = Vec::with_capacity(num_sections(
@@ -3703,6 +3769,144 @@ mod tests {
         assert!(
             !contains("__getmainargs"),
             "GUI subsystem must NOT pull in msvcrt!__getmainargs (no argc/argv needed)"
+        );
+    }
+
+    /// Passthrough subsystems (NT-native + UEFI flavours) skip
+    /// the entry stub entirely. The optional-header Subsystem
+    /// field reflects the source pragma, `AddressOfEntryPoint`
+    /// points at the user's entry function in `build.text`
+    /// (offset `bytecode_to_native[entry_pc]` past `BaseOfCode`),
+    /// and the writer does not pull in any CRT shim imports
+    /// (`__getmainargs`, `exit`, `GetModuleHandleA`,
+    /// `GetCommandLineA`) -- those would be wrong (no CRT in the
+    /// environment) and would block a real freestanding link.
+    fn passthrough_subsystem_skips_stub(
+        pragma: &str,
+        expected_subsystem: u16,
+    ) {
+        use crate::Compiler;
+        let src = format!(
+            "
+            #pragma subsystem({pragma})
+            #pragma entrypoint(Entry)
+            long Entry(long a, long b) {{ (void)a; (void)b; return 0; }}
+            "
+        );
+        let program = Compiler::new(src).compile().expect("compile");
+        let build = super::super::lower_for(
+            &program,
+            super::super::Target::WindowsX64,
+            super::super::NativeOptions::default(),
+        )
+        .expect("lower");
+        let entry_native_off = build.entry_offset as u32;
+        let bytes = write(
+            &program,
+            &build,
+            Machine::X86_64,
+            super::super::Target::WindowsX64,
+        )
+        .expect("write PE");
+
+        // 1) Subsystem byte in the optional header.
+        let pe_off = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
+        let optional_off = pe_off + 4 + COFF_HEADER_SIZE;
+        let subsystem = u16::from_le_bytes([bytes[optional_off + 68], bytes[optional_off + 69]]);
+        assert_eq!(
+            subsystem, expected_subsystem,
+            "`#pragma subsystem({pragma})` must set Subsystem to {expected_subsystem}"
+        );
+
+        // 2) AddressOfEntryPoint must target the user's `Entry`
+        //    directly -- BaseOfCode + the lowering's native
+        //    offset, with no stub prologue in between.
+        let (entry_rva, base) = read_entry_point_and_base_of_code(&bytes);
+        assert_eq!(
+            entry_rva,
+            base + entry_native_off,
+            "passthrough subsystem must point AddressOfEntryPoint at the user's entry \
+             (BaseOfCode {base:#x} + entry_offset {entry_native_off:#x}) -- got {entry_rva:#x}"
+        );
+
+        // 3) No CRT shim imports. Each name appears as an ASCII
+        //    string in the import-name table when present.
+        for needle in &["__getmainargs", "exit", "GetModuleHandleA", "GetCommandLineA"] {
+            assert!(
+                !bytes.windows(needle.len()).any(|w| w == needle.as_bytes()),
+                "passthrough subsystem `{pragma}` must NOT import {needle}"
+            );
+        }
+    }
+
+    #[test]
+    fn native_subsystem_skips_stub() {
+        passthrough_subsystem_skips_stub("native", IMAGE_SUBSYSTEM_NATIVE);
+    }
+
+    #[test]
+    fn driver_pragma_aliases_native_subsystem() {
+        // `driver` is documented as an alias of `native` -- both
+        // map to IMAGE_SUBSYSTEM_NATIVE because the kernel loader
+        // distinguishes drivers from native usermode programs by
+        // file extension / service config, not by the PE header.
+        passthrough_subsystem_skips_stub("driver", IMAGE_SUBSYSTEM_NATIVE);
+    }
+
+    #[test]
+    fn efi_application_subsystem_skips_stub() {
+        passthrough_subsystem_skips_stub("efi_application", IMAGE_SUBSYSTEM_EFI_APPLICATION);
+    }
+
+    #[test]
+    fn efi_boot_service_driver_subsystem_skips_stub() {
+        passthrough_subsystem_skips_stub(
+            "efi_boot_service_driver",
+            IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER,
+        );
+    }
+
+    #[test]
+    fn efi_runtime_driver_subsystem_skips_stub() {
+        passthrough_subsystem_skips_stub("efi_runtime_driver", IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER);
+    }
+
+    #[test]
+    fn efi_rom_subsystem_skips_stub() {
+        passthrough_subsystem_skips_stub("efi_rom", IMAGE_SUBSYSTEM_EFI_ROM);
+    }
+
+    /// AArch64 round-trip for the NT-native passthrough case --
+    /// confirms the entry-RVA math is correct on the other PE
+    /// arch too.
+    #[test]
+    fn native_subsystem_skips_stub_on_aarch64() {
+        use crate::Compiler;
+        let src = "
+            #pragma subsystem(native)
+            #pragma entrypoint(NtProcessStartup)
+            long NtProcessStartup(long peb) { (void)peb; return 0; }
+        ";
+        let program = Compiler::new(src.to_string()).compile().expect("compile");
+        let build = super::super::lower_for(
+            &program,
+            super::super::Target::WindowsAarch64,
+            super::super::NativeOptions::default(),
+        )
+        .expect("lower");
+        let entry_native_off = build.entry_offset as u32;
+        let bytes = write(
+            &program,
+            &build,
+            Machine::Aarch64,
+            super::super::Target::WindowsAarch64,
+        )
+        .expect("write PE");
+        let (entry_rva, base) = read_entry_point_and_base_of_code(&bytes);
+        assert_eq!(
+            entry_rva,
+            base + entry_native_off,
+            "AArch64 native passthrough must direct-target the user's entry"
         );
     }
 

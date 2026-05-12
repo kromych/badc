@@ -274,17 +274,48 @@ pub(crate) struct Preprocessor {
 }
 
 /// Windows PE subsystem selector. Mirrors the `IMAGE_SUBSYSTEM_*`
-/// constants from `<winnt.h>`: `Console` is the default for badc-
-/// produced PEs (CRT-style stdio works, but the loader allocates
-/// a console window when one isn't already attached); `Windows`
-/// is the GUI flavour the loader uses for apps that own their
-/// own window message loop.
+/// constants from `<winnt.h>`. The PE writer uses this to set
+/// the optional-header `Subsystem` field *and* to pick the
+/// shape of the entry stub:
+///
+/// * `Console` / `Windows` -- hosted Win32 programs. The writer
+///   emits a CRT-flavoured entry stub that pulls in
+///   `msvcrt!__getmainargs` / `msvcrt!exit` and routes the user's
+///   entry through `main(argc, argv)` (console) or `WinMain(...)`
+///   (windows).
+///
+/// * `Native` (alias `driver`) -- NT-native usermode programs and
+///   kernel-mode drivers. No CRT: the loader calls the user's
+///   entry directly with its native signature
+///   (`NtProcessStartup(PPEB)` for usermode native;
+///   `DriverEntry(PDRIVER_OBJECT, PUNICODE_STRING)` for drivers).
+///   The PE writer skips the entry stub and points
+///   `AddressOfEntryPoint` straight at the user's entry function.
+///
+/// * `EfiApplication` / `EfiBootServiceDriver` /
+///   `EfiRuntimeDriver` / `EfiRom` -- UEFI binaries. The firmware
+///   loader calls the user's entry with the canonical
+///   `(EFI_HANDLE, EFI_SYSTEM_TABLE *)` pair. Like `Native`,
+///   no CRT and no stub: the writer just sets the Subsystem
+///   field and direct-points the entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Subsystem {
     /// `IMAGE_SUBSYSTEM_WINDOWS_CUI` (3) -- console subsystem.
     Console,
     /// `IMAGE_SUBSYSTEM_WINDOWS_GUI` (2) -- windowed subsystem.
     Windows,
+    /// `IMAGE_SUBSYSTEM_NATIVE` (1) -- NT-native usermode programs
+    /// and kernel-mode drivers (.sys files). `#pragma
+    /// subsystem(driver)` is an alias for this variant.
+    Native,
+    /// `IMAGE_SUBSYSTEM_EFI_APPLICATION` (10).
+    EfiApplication,
+    /// `IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER` (11).
+    EfiBootServiceDriver,
+    /// `IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER` (12).
+    EfiRuntimeDriver,
+    /// `IMAGE_SUBSYSTEM_EFI_ROM` (13).
+    EfiRom,
 }
 
 impl Preprocessor {
@@ -1595,12 +1626,27 @@ impl Preprocessor {
     }
 
     /// `#pragma subsystem(<kind>)` -- pick the Windows PE
-    /// subsystem header value. Recognised today: `console`
-    /// (default; `IMAGE_SUBSYSTEM_WINDOWS_CUI`) and `windows`
-    /// (`IMAGE_SUBSYSTEM_WINDOWS_GUI`). Quietly accepted on
-    /// non-PE targets so the same source can compile for
-    /// multiple OSes; the PE writer is the only consumer that
-    /// looks at the value.
+    /// subsystem header value. Recognised kinds:
+    ///
+    ///   * `console` / `cui` -- `IMAGE_SUBSYSTEM_WINDOWS_CUI` (3,
+    ///     default). CRT-style `main(argc, argv)`.
+    ///   * `windows` / `gui` -- `IMAGE_SUBSYSTEM_WINDOWS_GUI` (2).
+    ///     Win32 `WinMain(hinst, prev, cmdline, show)`.
+    ///   * `native` / `nt` / `driver` -- `IMAGE_SUBSYSTEM_NATIVE`
+    ///     (1). NT-native usermode programs and kernel drivers
+    ///     (the loader picks the entry-point shape from the file
+    ///     extension / boot config, not from the PE header).
+    ///   * `efi_application` -- `IMAGE_SUBSYSTEM_EFI_APPLICATION`
+    ///     (10).
+    ///   * `efi_boot_service_driver` --
+    ///     `IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER` (11).
+    ///   * `efi_runtime_driver` --
+    ///     `IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER` (12).
+    ///   * `efi_rom` -- `IMAGE_SUBSYSTEM_EFI_ROM` (13).
+    ///
+    /// Quietly accepted on non-PE targets so the same source can
+    /// compile for multiple OSes; the PE writer is the only
+    /// consumer that looks at the value.
     fn parse_pragma_subsystem(
         &mut self,
         inner: &str,
@@ -1611,13 +1657,26 @@ impl Preprocessor {
         let parsed = match kind {
             "console" | "CUI" | "cui" => Subsystem::Console,
             "windows" | "GUI" | "gui" => Subsystem::Windows,
+            "native" | "NATIVE" | "nt" | "NT" | "driver" | "DRIVER" => Subsystem::Native,
+            "efi_application" | "efi-application" | "EFI_APPLICATION" => {
+                Subsystem::EfiApplication
+            }
+            "efi_boot_service_driver"
+            | "efi-boot-service-driver"
+            | "EFI_BOOT_SERVICE_DRIVER" => Subsystem::EfiBootServiceDriver,
+            "efi_runtime_driver" | "efi-runtime-driver" | "EFI_RUNTIME_DRIVER" => {
+                Subsystem::EfiRuntimeDriver
+            }
+            "efi_rom" | "efi-rom" | "EFI_ROM" => Subsystem::EfiRom,
             _ => {
                 return Err(C5Error::Compile(super::error::fmt_compile_err(
                     filename,
                     line_no,
                     &format!(
-                        "`#pragma subsystem({kind})` -- expected \
-                         `console` or `windows`"
+                        "`#pragma subsystem({kind})` -- expected one of \
+                         `console`, `windows`, `native` (alias `driver`), \
+                         `efi_application`, `efi_boot_service_driver`, \
+                         `efi_runtime_driver`, `efi_rom`"
                     ),
                 )));
             }

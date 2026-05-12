@@ -60,7 +60,7 @@ impl Compiler {
         // re-seed it after their own emits when the symbol /
         // result is in fn-ptr lineage (see
         // `fn_ptr_chain_depth`).
-        self.fn_ptr_chain_depth = -1;
+        self.pending.fn_ptr_chain_depth = -1;
         self.text.push(op as i64);
         // Mirror text.len() one-for-one in source_lines /
         // source_functions / source_file_indices so a bc_pc

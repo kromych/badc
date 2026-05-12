@@ -175,7 +175,7 @@ impl Compiler {
     pub(super) fn parse_decl_base_type(&mut self) -> Result<i64, C5Error> {
         // Reset the void side channel up front so a previous
         // declaration's bare-void base doesn't leak into this one.
-        self.pending_base_was_void = false;
+        self.pending.base_was_void = false;
         // Leading modifier soup -- the order doesn't matter; we
         // collect everything we see, then look at the next token
         // for the type keyword.
@@ -211,7 +211,7 @@ impl Compiler {
             // band number leaked into the call-through-fn-ptr type
             // comparison) -- keeping the encoding here untouched
             // sidesteps that trap.
-            self.pending_base_was_void = true;
+            self.pending.base_was_void = true;
             Ty::Char as i64 | UNSIGNED_BIT
         } else if self.lex.tk == Token::Float {
             self.next()?;
@@ -247,7 +247,7 @@ impl Compiler {
             // the right indirection count.
             let typedef_fpi = self.symbols[self.lex.curr_id_idx].fn_ptr_indirection;
             if typedef_fpi > 0 {
-                self.pending_fn_ptr_indirection = Some(typedef_fpi);
+                self.pending.fn_ptr_indirection = Some(typedef_fpi);
             }
             self.next()?;
             aliased

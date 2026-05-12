@@ -176,7 +176,7 @@ impl Compiler {
         // shift into the previous row's tail and `xs[i][j]` reads
         // garbage. Read-and-clear so a recursive call into an
         // inner brace doesn't inherit it.
-        let inner_dim = core::mem::take(&mut self.pending_init_inner_dim);
+        let inner_dim = core::mem::take(&mut self.pending.init_inner_dim);
         if self.lex.tk == '"' && (elem_ty & !UNSIGNED_BIT) == Ty::Char as i64 {
             let start_addr = self.lex.ival as usize;
             self.next()?;

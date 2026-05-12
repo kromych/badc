@@ -44,7 +44,7 @@ impl Compiler {
             // declaration. Set further down if the base-type loop
             // matches `Token::Void`; consumed by the function-decl
             // path to mark `Symbol::returns_void`.
-            self.pending_base_was_void = false;
+            self.pending.base_was_void = false;
             // Storage-class prefixes -- can appear in any order
             // and any combination before the type. C lets you
             // mix `static extern` (silly but legal in some
@@ -95,7 +95,7 @@ impl Compiler {
                 // out-of-band via `pending_base_was_void`, which
                 // the function-decl path consumes below to set
                 // `Symbol::returns_void`.
-                self.pending_base_was_void = true;
+                self.pending.base_was_void = true;
                 bt = Ty::Char as i64 | UNSIGNED_BIT;
             } else if self.lex.tk == Token::Float {
                 self.next()?;
@@ -124,7 +124,7 @@ impl Compiler {
                 // bump this further before the symbol is bound.
                 let typedef_fpi = self.symbols[self.lex.curr_id_idx].fn_ptr_indirection;
                 if typedef_fpi > 0 {
-                    self.pending_fn_ptr_indirection = Some(typedef_fpi);
+                    self.pending.fn_ptr_indirection = Some(typedef_fpi);
                 }
                 self.next()?;
             } else if m.saw_int_mod {
@@ -147,7 +147,7 @@ impl Compiler {
                 // the declarator (or its typedef base type)
                 // recorded, and store it on the symbol so a later
                 // identifier load can seed the chain-depth tracker.
-                let fn_ptr_indirection = self.pending_fn_ptr_indirection.take().unwrap_or(0);
+                let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
                 self.ty = ty;
                 self.symbols[id_idx].array_size = array_size;
                 if fn_ptr_indirection > 0 {
@@ -165,18 +165,18 @@ impl Compiler {
                 // bare-void encoding. Any declarator that bumped
                 // `ty` by `Ty::Ptr` falls out.
                 let declarator_is_bare_void =
-                    self.pending_base_was_void && ty == (Ty::Char as i64 | UNSIGNED_BIT);
+                    self.pending.base_was_void && ty == (Ty::Char as i64 | UNSIGNED_BIT);
                 // Consume the flag so the next iteration of the
                 // declarator loop (`void *a, b;`) doesn't
                 // re-trigger on a different declarator's shape.
-                self.pending_base_was_void = false;
+                self.pending.base_was_void = false;
                 // Function-returning-FP shape: parse_declarator
                 // already consumed the outer function's params.
                 // Synthesize the function-definition path: bind the
                 // symbol as Fun, install the captured params, then
                 // proceed straight into the body (the next token is
                 // `{`, not `(`).
-                let preconsumed_params = self.pending_fn_params.take();
+                let preconsumed_params = self.pending.fn_params.take();
 
                 // typedef branch: register a type alias and skip the
                 // function / global storage path entirely. Re-declaring
@@ -766,7 +766,7 @@ impl Compiler {
                             }
                             continue;
                         }
-                        self.pending_init_inner_dim = self.symbols[id_idx].inner_array_size;
+                        self.pending.init_inner_dim = self.symbols[id_idx].inner_array_size;
                         let elements = self.collect_array_initializer(ty)?;
                         let final_size = elements.len() as i64;
                         self.symbols[id_idx].array_size = final_size;
@@ -881,7 +881,7 @@ impl Compiler {
                                         "array `_Thread_local` initialisers are not supported",
                                     ));
                                 }
-                                self.pending_init_inner_dim = self.symbols[id_idx].inner_array_size;
+                                self.pending.init_inner_dim = self.symbols[id_idx].inner_array_size;
                                 let elements = self.collect_array_initializer(ty)?;
                                 if elements.len() > array_size as usize {
                                     return Err(self.compile_err(format!(

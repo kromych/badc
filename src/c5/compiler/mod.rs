@@ -157,6 +157,155 @@ impl CompileOptions {
     }
 }
 
+/// Ephemeral side-channel state passed between parser layers --
+/// the "stuff a deeper parse needs to relay back to its caller
+/// without bloating its return type." Groups the
+/// declarator-handoff flags, the multi-dim subscript stride
+/// queue, the array-decay sizeof recovery channel, and the
+/// function-pointer chain-depth tracker into one carrier so the
+/// `Compiler` field list reads as "lexer + symbols + codegen
+/// output + transient state" instead of eleven loose fields.
+#[derive(Debug)]
+pub(in crate::c5::compiler) struct Pending {
+    /// Side channel from the base-type parsers
+    /// (`parse_decl_base_type`, the inline base-type loop in
+    /// `run_compile`, and `parse_aggregate_body`) to the
+    /// function-decl path: set to `true` when the just-consumed
+    /// base spelled bare `void`, `false` otherwise. The type
+    /// encoding itself collapses both `void` and `char` to
+    /// `Ty::Char | UNSIGNED_BIT` (so `void *` arithmetic,
+    /// sizeof, struct-field layout, and function-pointer
+    /// encoding stay byte-identical to the legacy void-as-char
+    /// behavior); the void-ness is carried out-of-band here.
+    /// Cleared at the start of every base-type parse and
+    /// consumed by the function-decl path right after
+    /// `parse_declarator` returns -- `returns_void` on the
+    /// function's symbol is set when the flag is true *and* the
+    /// declarator added no leading `*`s.
+    pub base_was_void: bool,
+
+    /// Side channel from `parse_declarator` to `run_compile`: when
+    /// the declarator's nested-paren branch encounters a "function
+    /// returning function pointer" shape (`T (*name(args1))(args2)`),
+    /// it parses `args1` via `parse_function_params` and stashes
+    /// them here so the caller can bind `name` as a function and
+    /// continue with the body. `args2` is consumed as a no-op via
+    /// the trailing-decoration loop. None when the declarator
+    /// wasn't this shape.
+    pub fn_params: Option<function::ParsedParams>,
+
+    /// Side channel from `parse_declarator` to its caller: when
+    /// the declarator was function-pointer-shaped, this is the
+    /// number of pointer levels between the resulting variable's
+    /// loaded value and the underlying fn-pointer rvalue, plus 1
+    /// (matching `Symbol::fn_ptr_indirection`'s convention).
+    /// `None` when the declarator wasn't fn-pointer-shaped, so
+    /// the caller doesn't have to clear a stale value before
+    /// each parse. The caller takes() the value when binding the
+    /// symbol.
+    pub fn_ptr_indirection: Option<i64>,
+
+    /// Override stride for the next `[i]` postfix index. When we
+    /// load the address of a 2D-array variable (`T xs[N][M]`),
+    /// the first subscript should scale the index by
+    /// `M * sizeof(T)`, not `sizeof(T)`. The expr() identifier
+    /// branch sets this to `inner_array_size * sizeof(elem)` on a
+    /// 2D-array decay; the Brak postfix handler reads-and-clears
+    /// it before falling back to the regular pointer-arithmetic
+    /// stride. Zero means "use the regular stride."
+    pub index_stride: i64,
+
+    /// Strides for the *remaining* subscript levels of an N-dim
+    /// array (N >= 3), beyond the first one held in
+    /// `index_stride`. For `T xs[A][B][C]` after the
+    /// `xs` decay the levels are: first = `B*C*sizeof(T)`
+    /// (in `index_stride`), then `C*sizeof(T)` (in this
+    /// vec), then the regular `sizeof(T)` fall-through. Each
+    /// Brak postfix consumes one stride and shifts the rest
+    /// down. Empty means "no further multi-dim strides queued."
+    pub index_strides_tail: Vec<i64>,
+
+    /// Snapshot of the multi-dim stride queue taken at the bottom
+    /// of every `expr()` -- just before the defensive clear
+    /// runs. Lets an outer operator that ran a recursive `expr()`
+    /// (notably unary `*` on a pointer-to-array operand)
+    /// recover what the inner parse seeded but nothing
+    /// consumed. Reset to zero on the next `expr()` exit, so
+    /// the inspector window is one operator deep.
+    pub end_of_expr_stride: i64,
+    pub end_of_expr_strides_tail: Vec<i64>,
+
+    /// Per-row element count for the next 2D-array initializer.
+    /// Set by callers of `collect_array_initializer` when the
+    /// declarator has a `[N][M]` shape so a nested `{ ... }`
+    /// row that lists fewer than M values can be zero-padded to
+    /// keep subsequent rows on the right stride. Zero means
+    /// "flatten without padding" (1D arrays, struct-array
+    /// initializers that own their layout). The collector
+    /// reads-and-clears this on entry.
+    pub init_inner_dim: i64,
+
+    /// Set whenever the most recent `expr()` step ended with an
+    /// array-decay-to-pointer (a bare array variable, or a
+    /// struct field whose declared shape is `T xs[N]`). Carries
+    /// the array's element count so `sizeof(<expr>)` can return
+    /// `array_size * sizeof(elem)` instead of the decayed
+    /// pointer's `sizeof(T*) = 8`. Cleared at the top of every
+    /// `expr()` call so a previous decay doesn't leak into an
+    /// unrelated sizeof.
+    pub last_array_decay_size: i64,
+
+    /// Companion to `last_array_decay_size` for cases where the
+    /// row's byte size is known directly but its shape can't be
+    /// reduced to a single `count * sizeof(elem_ty)` pair --
+    /// concretely, multi-dim subscripts of a pointer-to-array
+    /// like `T (*p)[A][B]; sizeof(p[0])`. The Brak postfix
+    /// handler stashes the consumed `multi_dim_stride` here so
+    /// `sizeof` can return the whole row size. Cleared the same
+    /// way as `last_array_decay_size` so it doesn't leak.
+    pub last_array_decay_bytes: i64,
+
+    /// Depth from the value currently in the accumulator down to
+    /// a function-pointer rvalue, or -1 if the running expression
+    /// has no function-pointer lineage. Concretely:
+    ///
+    ///   * 0  -- value IS a fn pointer; one more unary `*` is the
+    ///           C function-pointer-decay no-op.
+    ///   * N>0 -- N more derefs to reach the fn pointer.
+    ///   * -1 -- not in a fn-ptr-tracked chain; existing behavior.
+    ///
+    /// Seeded by the identifier-load path from
+    /// `Symbol::fn_ptr_indirection` and updated by unary `*` /
+    /// `&`. Cleared by `emit_op` so any unrelated emit
+    /// invalidates the trace; identifier loads and `*` re-set it
+    /// when applicable. Used to suppress the spurious `Li` that
+    /// the existing unary `*` handler would emit when chasing a
+    /// function pointer whose return type is itself a pointer
+    /// (so the post-`*` type still satisfies `is_pointer_ty` and
+    /// the call-site fallback can't fire).
+    pub fn_ptr_chain_depth: i64,
+}
+
+impl Default for Pending {
+    fn default() -> Self {
+        Self {
+            base_was_void: false,
+            fn_params: None,
+            fn_ptr_indirection: None,
+            index_stride: 0,
+            index_strides_tail: Vec::new(),
+            end_of_expr_stride: 0,
+            end_of_expr_strides_tail: Vec::new(),
+            init_inner_dim: 0,
+            last_array_decay_size: 0,
+            last_array_decay_bytes: 0,
+            // `-1` means "not in a fn-ptr-tracked chain"; see field
+            // docs above.
+            fn_ptr_chain_depth: -1,
+        }
+    }
+}
+
 /// Single-pass C compiler. Holds the lexer, the symbol table, and the
 /// codegen scaffolding. `compile(self)` consumes the compiler and produces
 /// a [`Program`] ready for the VM.
@@ -335,24 +484,6 @@ pub struct Compiler {
     /// (`Symbol::returns_void`), cleared at exit.
     current_func_returns_void: bool,
 
-    /// Side channel from the base-type parsers
-    /// (`parse_decl_base_type`, the inline base-type loop in
-    /// `run_compile`, and `parse_aggregate_body`) to the
-    /// function-decl path: set to `true` when the just-consumed
-    /// base spelled bare `void`, `false` otherwise. The type
-    /// encoding itself collapses both `void` and `char` to
-    /// `Ty::Char | UNSIGNED_BIT` (so `void *` arithmetic,
-    /// sizeof, struct-field layout, and function-pointer
-    /// encoding stay byte-identical to the legacy void-as-char
-    /// behavior); the void-ness is carried out-of-band here.
-    /// Cleared at the start of every base-type parse and
-    /// consumed by the function-decl path right after
-    /// `parse_declarator` returns -- `returns_void` on the
-    /// function's symbol is set when the flag is true *and* the
-    /// declarator added no leading `*`s (so `void (*fp)(...)`
-    /// and `void *p` don't trip the void-return path).
-    pending_base_was_void: bool,
-
     /// Preprocessor failure (e.g. unterminated `#if`) deferred from
     /// `with_target` until `compile` runs, so the construction API
     /// stays infallible (matches all the `Compiler::new(src).compile()`
@@ -375,106 +506,12 @@ pub struct Compiler {
     /// without threading the target through every call site.
     target: Target,
 
-    /// Side channel from `parse_declarator` to `run_compile`: when
-    /// the declarator's nested-paren branch encounters a "function
-    /// returning function pointer" shape (`T (*name(args1))(args2)`),
-    /// it parses `args1` via `parse_function_params` and stashes
-    /// them here so the caller can bind `name` as a function and
-    /// continue with the body. `args2` is consumed as a no-op via
-    /// the trailing-decoration loop. None when the declarator
-    /// wasn't this shape.
-    pending_fn_params: Option<function::ParsedParams>,
-
-    /// Side channel from `parse_declarator` to its caller: when
-    /// the declarator was function-pointer-shaped, this is the
-    /// number of pointer levels between the resulting variable's
-    /// loaded value and the underlying fn-pointer rvalue, plus 1
-    /// (matching `Symbol::fn_ptr_indirection`'s convention).
-    /// `None` when the declarator wasn't fn-pointer-shaped, so
-    /// the caller doesn't have to clear a stale value before
-    /// each parse. The caller takes() the value when binding the
-    /// symbol.
-    pending_fn_ptr_indirection: Option<i64>,
-
-    /// Override stride for the next `[i]` postfix index. When we
-    /// load the address of a 2D-array variable (`T xs[N][M]`),
-    /// the first subscript should scale the index by
-    /// `M * sizeof(T)`, not `sizeof(T)`. The expr() identifier
-    /// branch sets this to `inner_array_size * sizeof(elem)` on a
-    /// 2D-array decay; the Brak postfix handler reads-and-clears
-    /// it before falling back to the regular pointer-arithmetic
-    /// stride. Zero means "use the regular stride."
-    pending_index_stride: i64,
-
-    /// Strides for the *remaining* subscript levels of an N-dim
-    /// array (N >= 3), beyond the first one held in
-    /// `pending_index_stride`. For `T xs[A][B][C]` after the
-    /// `xs` decay the levels are: first = `B*C*sizeof(T)`
-    /// (in `pending_index_stride`), then `C*sizeof(T)` (in this
-    /// vec), then the regular `sizeof(T)` fall-through. Each
-    /// Brak postfix consumes one stride and shifts the rest
-    /// down. Empty means "no further multi-dim strides queued."
-    pending_index_strides_tail: Vec<i64>,
-
-    /// Snapshot of the multi-dim stride queue taken at the bottom
-    /// of every `expr()` -- just before the defensive clear
-    /// runs. Lets an outer operator that ran a recursive `expr()`
-    /// (notably unary `*` on a pointer-to-array operand)
-    /// recover what the inner parse seeded but nothing
-    /// consumed. Reset to zero on the next `expr()` exit, so
-    /// the inspector window is one operator deep.
-    end_of_expr_stride: i64,
-    end_of_expr_strides_tail: Vec<i64>,
-
-    /// Per-row element count for the next 2D-array initializer.
-    /// Set by callers of `collect_array_initializer` when the
-    /// declarator has a `[N][M]` shape so a nested `{ ... }`
-    /// row that lists fewer than M values can be zero-padded to
-    /// keep subsequent rows on the right stride. Zero means
-    /// "flatten without padding" (1D arrays, struct-array
-    /// initializers that own their layout). The collector
-    /// reads-and-clears this on entry.
-    pending_init_inner_dim: i64,
-
-    /// Set whenever the most recent `expr()` step ended with an
-    /// array-decay-to-pointer (a bare array variable, or a
-    /// struct field whose declared shape is `T xs[N]`). Carries
-    /// the array's element count so `sizeof(<expr>)` can return
-    /// `array_size * sizeof(elem)` instead of the decayed
-    /// pointer's `sizeof(T*) = 8`. Cleared at the top of every
-    /// `expr()` call so a previous decay doesn't leak into an
-    /// unrelated sizeof.
-    last_array_decay_size: i64,
-
-    /// Companion to `last_array_decay_size` for cases where the
-    /// row's byte size is known directly but its shape can't be
-    /// reduced to a single `count * sizeof(elem_ty)` pair --
-    /// concretely, multi-dim subscripts of a pointer-to-array
-    /// like `T (*p)[A][B]; sizeof(p[0])`. The Brak postfix
-    /// handler stashes the consumed `multi_dim_stride` here so
-    /// `sizeof` can return the whole row size. Cleared the same
-    /// way as `last_array_decay_size` so it doesn't leak.
-    last_array_decay_bytes: i64,
-
-    /// Depth from the value currently in the accumulator down to
-    /// a function-pointer rvalue, or -1 if the running expression
-    /// has no function-pointer lineage. Concretely:
-    ///
-    ///   * 0  -- value IS a fn pointer; one more unary `*` is the
-    ///           C function-pointer-decay no-op.
-    ///   * N>0 -- N more derefs to reach the fn pointer.
-    ///   * -1 -- not in a fn-ptr-tracked chain; existing behavior.
-    ///
-    /// Seeded by the identifier-load path from
-    /// `Symbol::fn_ptr_indirection` and updated by unary `*` /
-    /// `&`. Cleared by `emit_op` so any unrelated emit
-    /// invalidates the trace; identifier loads and `*` re-set it
-    /// when applicable. Used to suppress the spurious `Li` that
-    /// the existing unary `*` handler would emit when chasing a
-    /// function pointer whose return type is itself a pointer
-    /// (so the post-`*` type still satisfies `is_pointer_ty` and
-    /// the call-site fallback can't fire).
-    fn_ptr_chain_depth: i64,
+    /// Side-channel state shared between parser layers -- the
+    /// 11 transient flags / stride queues / chain-depth counters
+    /// the recursive descent reaches for. Grouped into one
+    /// carrier so `Compiler` doesn't grow per parser-feature.
+    /// Reset to `Pending::default()` at compiler construction.
+    pending: Pending,
 
     /// Per-bytecode-PC source line, parallel to `text`. Updated
     /// on every emit_op / emit_val / emit_data_imm so each
@@ -689,14 +726,7 @@ impl Compiler {
             call_fp_arg_masks: Vec::new(),
             current_func_return_ty: 0,
             current_func_returns_void: false,
-            pending_base_was_void: false,
-            pending_fn_params: None,
-            pending_fn_ptr_indirection: None,
-            pending_index_stride: 0,
-            pending_index_strides_tail: Vec::new(),
-            end_of_expr_stride: 0,
-            end_of_expr_strides_tail: Vec::new(),
-            pending_init_inner_dim: 0,
+            pending: Pending::default(),
             source_lines: Vec::new(),
             source_functions: Vec::new(),
             source_files: Vec::new(),
@@ -706,9 +736,6 @@ impl Compiler {
             fn_call_fixups: Vec::new(),
             code_reloc_sym_idx: Vec::new(),
             sys_trampoline_sym: alloc::collections::BTreeMap::new(),
-            last_array_decay_size: 0,
-            last_array_decay_bytes: 0,
-            fn_ptr_chain_depth: -1,
         }
     }
 

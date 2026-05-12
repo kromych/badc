@@ -206,7 +206,7 @@ impl Compiler {
             if id_idx == usize::MAX {
                 return Err(self.compile_err("typedef requires a name"));
             }
-            let fn_ptr_indirection = self.pending_fn_ptr_indirection.take().unwrap_or(0);
+            let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             // C99 function-type typedef: `typedef RET NAME(args);`
             // declared at block scope. Same handling as run_compile's
             // file-scope branch -- parse the `(args)` and bind the

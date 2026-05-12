@@ -572,7 +572,7 @@ impl Compiler {
                     // surrounding `sizeof(<arr>)` can compute
                     // `count * sizeof(elem)` instead of the
                     // decayed pointer's `sizeof(T*) = 8`.
-                    self.last_array_decay_size = self.symbols[id_idx].array_size;
+                    self.pending.last_array_decay_size = self.symbols[id_idx].array_size;
                     // N-dim-array decay: seed strides for each of
                     // the N-1 levels of multi-dim subscript. The
                     // first stride goes into `pending_index_stride`
@@ -597,7 +597,7 @@ impl Compiler {
                     // consumed one indirection level).
                     let fpi = self.symbols[id_idx].fn_ptr_indirection;
                     if fpi > 0 {
-                        self.fn_ptr_chain_depth = fpi - 1;
+                        self.pending.fn_ptr_chain_depth = fpi - 1;
                     }
                     // N-dim-array parameter decay: a parameter
                     // declared as `T name[A][B][C]` carries
@@ -651,7 +651,7 @@ impl Compiler {
                 // below add directly to that count. The abstract
                 // fn-ptr branch further down overrides this when a
                 // `(*)(args)` shape is present in the cast.
-                let mut cast_fpi = self.pending_fn_ptr_indirection.take();
+                let mut cast_fpi = self.pending.fn_ptr_indirection.take();
                 while self.lex.tk == Token::MulOp {
                     self.next()?;
                     t += Ty::Ptr as i64;
@@ -807,7 +807,7 @@ impl Compiler {
                 if let Some(fpi) = cast_fpi
                     && fpi > 0
                 {
-                    self.fn_ptr_chain_depth = fpi - 1;
+                    self.pending.fn_ptr_chain_depth = fpi - 1;
                 }
             } else {
                 self.expr(Token::Assign as i64)?;
@@ -833,9 +833,9 @@ impl Compiler {
                 // consumed one dim, the `[k]` should pick up the
                 // next). Without this transfer the inner expr's
                 // defensive clear strands the remaining strides.
-                self.pending_index_stride = core::mem::take(&mut self.end_of_expr_stride);
-                self.pending_index_strides_tail =
-                    core::mem::take(&mut self.end_of_expr_strides_tail);
+                self.pending.index_stride = core::mem::take(&mut self.pending.end_of_expr_stride);
+                self.pending.index_strides_tail =
+                    core::mem::take(&mut self.pending.end_of_expr_strides_tail);
             }
         } else if self.lex.tk == Token::MulOp {
             self.next()?;
@@ -847,13 +847,13 @@ impl Compiler {
             // we use to decide whether `*p` is a pointer-to-array
             // row deref. The outer snapshot is restored afterwards
             // so a containing operator's view isn't disturbed.
-            let saved_eos_stride = core::mem::take(&mut self.end_of_expr_stride);
-            let saved_eos_tail = core::mem::take(&mut self.end_of_expr_strides_tail);
+            let saved_eos_stride = core::mem::take(&mut self.pending.end_of_expr_stride);
+            let saved_eos_tail = core::mem::take(&mut self.pending.end_of_expr_strides_tail);
             self.expr(Token::Inc as i64)?;
-            let leftover_stride = core::mem::take(&mut self.end_of_expr_stride);
-            let leftover_tail = core::mem::take(&mut self.end_of_expr_strides_tail);
-            self.end_of_expr_stride = saved_eos_stride;
-            self.end_of_expr_strides_tail = saved_eos_tail;
+            let leftover_stride = core::mem::take(&mut self.pending.end_of_expr_stride);
+            let leftover_tail = core::mem::take(&mut self.pending.end_of_expr_strides_tail);
+            self.pending.end_of_expr_stride = saved_eos_stride;
+            self.pending.end_of_expr_strides_tail = saved_eos_tail;
             // C function-pointer decay (6.3.2.1 / 6.3.4): `*` on
             // a function-pointer rvalue is a no-op -- it yields
             // back the same function pointer. The chain-depth
@@ -873,7 +873,7 @@ impl Compiler {
             // `io_methods *`-returning fn-ptr typedef)
             // the pop is short-circuited and the
             // garbage call target slips through.
-            if self.fn_ptr_chain_depth == 0 {
+            if self.pending.fn_ptr_chain_depth == 0 {
                 // Decay no-op. Keep depth at 0: the decayed
                 // result is itself a fn-ptr rvalue, so any
                 // further `*`s also decay.
@@ -889,10 +889,10 @@ impl Compiler {
                 // strides correctly. Surface the row's byte
                 // size via `last_array_decay_bytes` so an
                 // enclosing `sizeof` recovers it.
-                self.last_array_decay_bytes = leftover_stride;
+                self.pending.last_array_decay_bytes = leftover_stride;
                 let mut tail = leftover_tail;
-                self.pending_index_stride = if tail.is_empty() { 0 } else { tail.remove(0) };
-                self.pending_index_strides_tail = tail;
+                self.pending.index_stride = if tail.is_empty() { 0 } else { tail.remove(0) };
+                self.pending.index_strides_tail = tail;
             } else {
                 if is_pointer_ty(self.ty) {
                     self.ty -= Ty::Ptr as i64;
@@ -907,14 +907,14 @@ impl Compiler {
                 let result_is_struct_value =
                     is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
                 if !result_is_struct_value {
-                    let prior_depth = self.fn_ptr_chain_depth;
+                    let prior_depth = self.pending.fn_ptr_chain_depth;
                     self.emit_op(load_op_for(self.ty, self.target));
                     // emit_op cleared the chain depth. Restore it
                     // one level deeper if the operand was tracked:
                     // a real deref consumes one level of indirection
                     // toward the fn-ptr. (-1 stays -1.)
                     if prior_depth > 0 {
-                        self.fn_ptr_chain_depth = prior_depth - 1;
+                        self.pending.fn_ptr_chain_depth = prior_depth - 1;
                     }
                 }
             }
@@ -958,8 +958,8 @@ impl Compiler {
             // `&` adds one pointer level toward the fn-ptr
             // for any chain we were tracking. -1 (untracked) stays
             // -1.
-            if self.fn_ptr_chain_depth >= 0 {
-                self.fn_ptr_chain_depth += 1;
+            if self.pending.fn_ptr_chain_depth >= 0 {
+                self.pending.fn_ptr_chain_depth += 1;
             }
         } else if self.lex.tk == '!' {
             self.next()?;
@@ -1061,8 +1061,8 @@ impl Compiler {
             // any further postfix / binop runs, the value is
             // consumed -- clear the flag so the decay doesn't
             // leak into a sizeof of an unrelated subexpression.
-            self.last_array_decay_size = 0;
-            self.last_array_decay_bytes = 0;
+            self.pending.last_array_decay_size = 0;
+            self.pending.last_array_decay_bytes = 0;
             if self.lex.tk == '(' {
                 // Postfix indirect call: the expression so far put a
                 // function-pointer value in `a`. Examples:
@@ -1659,9 +1659,9 @@ impl Compiler {
                 // state at its exit, so save the head + tail
                 // locally, hand the inner parse a clean slate, and
                 // shift the queue back after it returns.
-                let multi_dim_stride = self.pending_index_stride;
-                let saved_tail = core::mem::take(&mut self.pending_index_strides_tail);
-                self.pending_index_stride = 0;
+                let multi_dim_stride = self.pending.index_stride;
+                let saved_tail = core::mem::take(&mut self.pending.index_strides_tail);
+                self.pending.index_stride = 0;
                 self.emit_op(Op::Psh);
                 self.expr(Token::Assign as i64)?;
                 // Restore the queue and shift one level down so
@@ -1672,11 +1672,11 @@ impl Compiler {
                 // shape carries forward; the innermost subscript
                 // (queue empty) falls through to the regular
                 // sizeof + decay path.
-                self.pending_index_strides_tail = saved_tail;
-                self.pending_index_stride = if self.pending_index_strides_tail.is_empty() {
+                self.pending.index_strides_tail = saved_tail;
+                self.pending.index_stride = if self.pending.index_strides_tail.is_empty() {
                     0
                 } else {
-                    self.pending_index_strides_tail.remove(0)
+                    self.pending.index_strides_tail.remove(0)
                 };
                 if self.lex.tk == ']' {
                     self.next()?;
@@ -1706,7 +1706,7 @@ impl Compiler {
                     // The next postfix iteration clears this flag
                     // at its top so it doesn't leak past the
                     // subscript.
-                    self.last_array_decay_bytes = multi_dim_stride;
+                    self.pending.last_array_decay_bytes = multi_dim_stride;
                 } else {
                     if self.is_ptr_scaling_nontrivial(t) {
                         let scale = self.pointee_size(t);
@@ -1803,7 +1803,7 @@ impl Compiler {
                         // size; otherwise `sizeof(s.field)` for a
                         // `T field[N]` returns 8 (decayed pointer)
                         // instead of `N * sizeof(T)`.
-                        self.last_array_decay_size = field.array_size;
+                        self.pending.last_array_decay_size = field.array_size;
                         // N-dim-array decay: mirror the Id-path so
                         // `s.xs[i][j][k]` scales each level by its
                         // row stride and only the innermost
@@ -1863,9 +1863,9 @@ impl Compiler {
         // pointer-to-array decay whose strides nothing consumed.
         // The snapshot is one operator deep: the next `expr()`
         // exit overwrites it.
-        self.end_of_expr_stride = self.pending_index_stride;
-        self.end_of_expr_strides_tail = core::mem::take(&mut self.pending_index_strides_tail);
-        self.pending_index_stride = 0;
+        self.pending.end_of_expr_stride = self.pending.index_stride;
+        self.pending.end_of_expr_strides_tail = core::mem::take(&mut self.pending.index_strides_tail);
+        self.pending.index_stride = 0;
         Ok(())
     }
 
@@ -1878,8 +1878,8 @@ impl Compiler {
     /// `pending_index_strides_tail`. Empty `dims` or a 1D shape
     /// produces no stride hint at all.
     pub(super) fn seed_multi_dim_strides(&mut self, dims: &[i64], elem_size: i64) {
-        self.pending_index_stride = 0;
-        self.pending_index_strides_tail.clear();
+        self.pending.index_stride = 0;
+        self.pending.index_strides_tail.clear();
         if dims.len() < 2 || elem_size <= 0 {
             return;
         }
@@ -1895,8 +1895,8 @@ impl Compiler {
         }
         strides.reverse();
         if let Some((&head, tail)) = strides.split_first() {
-            self.pending_index_stride = head;
-            self.pending_index_strides_tail.extend_from_slice(tail);
+            self.pending.index_stride = head;
+            self.pending.index_strides_tail.extend_from_slice(tail);
         }
     }
 }

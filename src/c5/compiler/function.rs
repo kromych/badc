@@ -29,6 +29,7 @@ use super::super::token::{Token, Ty};
 /// symbol indices (needed by the function-body binding step) together
 /// with the declared types and the variadic flag (needed by the type
 /// checker at every call site).
+#[derive(Debug)]
 pub(super) struct ParsedParams {
     pub(super) indices: Vec<usize>,
     pub(super) types: Vec<i64>,
@@ -138,7 +139,7 @@ impl Compiler {
             // populated. Cleared even if the declarator didn't
             // set anything so it doesn't leak into the next
             // parameter or expression.
-            let fn_ptr_indirection = self.pending_fn_ptr_indirection.take().unwrap_or(0);
+            let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             self.ty = full_ty;
             if param_idx == usize::MAX {
                 types.push(full_ty);

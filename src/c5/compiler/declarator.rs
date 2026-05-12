@@ -68,9 +68,9 @@ impl Compiler {
         // than inheriting from the base type), so we update
         // pending only when leading `*`s actually accumulated.
         if leading_ptr_count > 0
-            && let Some(fpi) = self.pending_fn_ptr_indirection
+            && let Some(fpi) = self.pending.fn_ptr_indirection
         {
-            self.pending_fn_ptr_indirection = Some(fpi + leading_ptr_count);
+            self.pending.fn_ptr_indirection = Some(fpi + leading_ptr_count);
         }
 
         // Function-pointer declarator: `RET (*Name)(args)`, possibly
@@ -115,7 +115,7 @@ impl Compiler {
             // signature, which c5 doesn't track.
             //
             // When this branch fires we stash the parsed params
-            // on `self.pending_fn_params` so `run_compile` can
+            // on `self.pending.fn_params` so `run_compile` can
             // bind `foo` as `Token::Fun` and parse the body even
             // though the next token will be `{` (not `(` -- the
             // params are already consumed).
@@ -125,7 +125,7 @@ impl Compiler {
                 // parse_function_params consumes the matching `)`,
                 // so on return we're already past the inner args1.
                 let params = self.parse_function_params()?;
-                self.pending_fn_params = Some(params);
+                self.pending.fn_params = Some(params);
                 saw_fn_signature = true;
             }
             if self.lex.tk != ')' {
@@ -176,7 +176,7 @@ impl Compiler {
                 // itself have set it for a nested fn-ptr declarator
                 // (function-returning-fp shape), and the outer
                 // call's value is the right one to expose.
-                self.pending_fn_ptr_indirection = Some(inner_ptr_levels);
+                self.pending.fn_ptr_indirection = Some(inner_ptr_levels);
             }
             if idx != usize::MAX && !pointee_dims.is_empty() {
                 // Pointer-to-array shape: `T (*p)[M1][M2]...[Mn]`.

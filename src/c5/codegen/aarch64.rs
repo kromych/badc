@@ -1216,11 +1216,29 @@ pub(super) fn lower(
     let code_imm_positions: &[usize] = &program.code_imm_positions;
 
     // Track which function we're currently inside so the prologue
-    // and epilogue agree on whether to push/pop the argc/argv pair.
-    // c4 doesn't mark function boundaries explicitly -- we assume
-    // every Ent starts a new function and we're "in" that function
-    // until the next Ent.
+    // and epilogue agree on whether to push/pop the entry's
+    // host-passed arg pair. c4 doesn't mark function boundaries
+    // explicitly -- we assume every Ent starts a new function and
+    // we're "in" that function until the next Ent.
     let mut in_main = false;
+
+    // Param count of the entry function. The main-style prologue
+    // spills `min(n, 8)` host int-arg regs (x0..x7 on AAPCS64)
+    // into the c5 frame and the epilogue drops the matching
+    // slots; using `param_count_for_func` lets `WinMain` (4
+    // params) and EFI entries (2 params) get all their arguments
+    // properly staged, not just the first two like the historical
+    // `main(argc, argv)` shape. Returns 0 when `entry_pc` doesn't
+    // land on an `Op::Ent` (DLL/exports-only builds); the in_main
+    // gate inside the loop keeps every function on the regular
+    // path then.
+    let entry_n_params = if program.entry_pc < program.text.len()
+        && Op::from_i64(program.text[program.entry_pc]) == Some(Op::Ent)
+    {
+        param_count_for_func(&program.text, program.entry_pc)
+    } else {
+        0
+    };
 
     let mut pc = 0usize;
     while pc < program.text.len() {
@@ -1277,6 +1295,7 @@ pub(super) fn lower(
             data_imm_positions,
             code_imm_positions,
             in_main,
+            entry_n_params,
             abi,
             &mut reg_state,
             op_pc,
@@ -1503,6 +1522,7 @@ fn lower_op(
     data_imm_positions: &[usize],
     code_imm_positions: &[usize],
     in_main: bool,
+    entry_n_params: usize,
     abi: Abi,
     reg_state: &mut RegState<'_>,
     op_pc: usize,
@@ -1524,16 +1544,18 @@ fn lower_op(
             emit_prologue(
                 code,
                 locals,
-                in_main,
+                in_main.then_some(entry_n_params),
                 reg_state.current_callee_depth,
                 target,
+                abi,
             );
         }
         Op::Lev => emit_epilogue(
             code,
-            in_main,
+            in_main.then_some(entry_n_params),
             reg_state.current_callee_depth,
             reg_state.current_locals_bytes,
+            abi,
         ),
         Op::Adj => {
             // Adj N drops N pushed slots (each slot is 16 bytes on
@@ -2971,15 +2993,29 @@ fn emit_local_load(code: &mut Vec<u8>, offset: i64, byte: bool) {
 fn emit_prologue(
     code: &mut Vec<u8>,
     locals: i64,
-    is_main: bool,
+    entry_n_params: Option<usize>,
     callee_pool_depth: u8,
     target: Target,
+    abi: super::Abi,
 ) {
-    if is_main {
-        // Push argv first (deeper), then argc (shallower). 16-byte
-        // slots so the layout matches c5's cdecl push convention.
-        emit(code, enc_str_pre(Reg::X1, Reg::SP, -16));
-        emit(code, enc_str_pre(Reg::X0, Reg::SP, -16));
+    if let Some(n_params) = entry_n_params {
+        // Spill the host-passed entry args into c5's cdecl
+        // 16-byte-stride slots. The PE / Mach-O / ELF loader
+        // hands us the user's declared parameters in AAPCS64's
+        // x0..x7 (we cap at the int-arg-reg count); the c5
+        // function body then reads param `i` at `[fp + 16*(i+1)]`.
+        // Pushing in REVERSE order means the deepest param ends
+        // up at the highest offset (matching `param_count_for_func`
+        // / `lea_offset_bytes`).
+        //
+        // For console `main(int argc, char **argv)` this matches
+        // the historical 2-slot layout; for `int WinMain(...)`
+        // (4 params) it ensures `nShowCmd` -- the 4th declared
+        // param -- lands at `[fp + 64]` where the body reads it.
+        let n_reg = n_params.min(abi.int_arg_regs.len());
+        for i in (0..n_reg).rev() {
+            emit(code, enc_str_pre(Reg(abi.int_arg_regs[i]), Reg::SP, -16));
+        }
     }
     // Save fp/lr; set up the new frame; reserve local storage; save
     // x19 below the locals; save the callee-saved pool registers
@@ -3088,10 +3124,17 @@ fn emit_stack_probe(code: &mut Vec<u8>, frame_bytes: u32, page_size: u32) {
 
 /// Mirror of [`emit_prologue`]. Move the VM accumulator into `x0`
 /// (the return register), restore the pool registers, restore the
-/// saved x19, tear down the frame, return. For main we also drop
-/// the two 16-byte argc/argv slots so the stack pointer is back to
-/// what the kernel / Rust caller handed us.
-fn emit_epilogue(code: &mut Vec<u8>, is_main: bool, callee_pool_depth: u8, locals_bytes: u32) {
+/// saved x19, tear down the frame, return. For the entry function
+/// we also drop the 16-byte slots the prologue inserted -- one
+/// per declared host-passed parameter -- so the stack pointer is
+/// back to what the kernel / firmware / Rust caller handed us.
+fn emit_epilogue(
+    code: &mut Vec<u8>,
+    entry_n_params: Option<usize>,
+    callee_pool_depth: u8,
+    locals_bytes: u32,
+    abi: super::Abi,
+) {
     emit_mov_reg(code, Reg::X0, Reg::X19);
     let _ = locals_bytes; // see commentary below
     // Stack layout below this point (top-down):
@@ -3105,8 +3148,11 @@ fn emit_epilogue(code: &mut Vec<u8>, is_main: bool, callee_pool_depth: u8, local
     emit(code, enc_ldr_post(Reg::X19, Reg::SP, 16));
     emit(code, enc_add_imm(Reg::SP, Reg::X29, 0));
     emit(code, enc_ldp_post(Reg::X29, Reg::X30, Reg::SP, 16));
-    if is_main {
-        emit(code, enc_add_imm(Reg::SP, Reg::SP, 32));
+    if let Some(n_params) = entry_n_params {
+        let n_reg = n_params.min(abi.int_arg_regs.len());
+        if n_reg > 0 {
+            emit(code, enc_add_imm(Reg::SP, Reg::SP, (16 * n_reg) as u32));
+        }
     }
     emit(code, enc_ret(Reg::X30));
 }

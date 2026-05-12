@@ -1864,7 +1864,8 @@ impl Compiler {
         // The snapshot is one operator deep: the next `expr()`
         // exit overwrites it.
         self.pending.end_of_expr_stride = self.pending.index_stride;
-        self.pending.end_of_expr_strides_tail = core::mem::take(&mut self.pending.index_strides_tail);
+        self.pending.end_of_expr_strides_tail =
+            core::mem::take(&mut self.pending.index_strides_tail);
         self.pending.index_stride = 0;
         Ok(())
     }

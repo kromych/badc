@@ -21,9 +21,9 @@
 
 use alloc::vec::Vec;
 
-use super::Compiler;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
+use super::Compiler;
 
 /// Bundle returned from `parse_function_params` -- keeps the per-param
 /// symbol indices (needed by the function-body binding step) together

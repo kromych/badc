@@ -34,10 +34,10 @@
 use alloc::format;
 use alloc::vec::Vec;
 
-use super::Compiler;
 use super::super::error::C5Error;
 use super::super::op::Op;
 use super::super::token::{Token, Ty};
+use super::Compiler;
 use super::types::{UNSIGNED_BIT, is_struct_ty, struct_id_of, struct_ptr_depth};
 
 /// Relocation kind for one initializer-element value. Tracks

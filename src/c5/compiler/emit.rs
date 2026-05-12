@@ -208,12 +208,17 @@ impl Compiler {
     /// `last() / last_mut() / Op::Psh` triple keeps the four
     /// call sites in sync when new load-op variants are added.
     pub(super) fn rewrite_trailing_load_as_psh(&mut self) -> Option<Op> {
-        let last = *self.text.last()?;
-        if !is_scalar_load_op_val(last) {
+        // Single `last_mut()?` recovers the trailing op as a
+        // mutable slot; if `is_scalar_load_op_val` rejects it we
+        // bail without touching anything, otherwise we capture the
+        // reload op and overwrite the slot in place.
+        let slot = self.text.last_mut()?;
+        if !is_scalar_load_op_val(*slot) {
             return None;
         }
-        *self.text.last_mut().unwrap() = Op::Psh as i64;
-        Some(reemit_scalar_load(last))
+        let reload_op = reemit_scalar_load(*slot);
+        *slot = Op::Psh as i64;
+        Some(reload_op)
     }
 
     /// If the most recently emitted op is a scalar load (`Op::Lc`

@@ -572,6 +572,44 @@ pub(super) fn enc_ldr_d_imm(dt: u8, rn: Reg, imm: u32) -> u32 {
     0xFD40_0000 | ((imm / 8) << 10) | ((rn.0 as u32) << 5) | (dt as u32)
 }
 
+/// `LDR <St>, [<Xn|SP>, #imm]` -- 32-bit unsigned-offset FP/SIMD
+/// load. The offset is byte-addressed but encoded as `imm/4`;
+/// caller passes raw bytes (must be multiple of 4 in 0..16380).
+/// Used by [`Op::Lf`] to load a `float`-typed lvalue's storage
+/// directly into the `sN` half of `dN` before the widening fcvt.
+pub(super) fn enc_ldr_s_imm(st: u8, rn: Reg, imm: u32) -> u32 {
+    debug_assert!(st < 32);
+    debug_assert!(imm.is_multiple_of(4) && imm < 16380);
+    0xBD40_0000 | ((imm / 4) << 10) | ((rn.0 as u32) << 5) | (st as u32)
+}
+
+/// `STR <St>, [<Xn|SP>, #imm]` -- 32-bit unsigned-offset FP/SIMD
+/// store. Same encoding family as [`enc_ldr_s_imm`]; companion to
+/// [`Op::Sf`].
+pub(super) fn enc_str_s_imm(st: u8, rn: Reg, imm: u32) -> u32 {
+    debug_assert!(st < 32);
+    debug_assert!(imm.is_multiple_of(4) && imm < 16380);
+    0xBD00_0000 | ((imm / 4) << 10) | ((rn.0 as u32) << 5) | (st as u32)
+}
+
+/// `FCVT <Dd>, <Sn>` -- widen single-precision to double-precision
+/// (bit-exact for any finite single value, matching the IEEE
+/// short-to-long conversion). Used by [`Op::Lf`] after the
+/// single-precision load.
+pub(super) fn enc_fcvt_d_s(dd: u8, sn: u8) -> u32 {
+    debug_assert!(dd < 32 && sn < 32);
+    0x1E22_C000 | ((sn as u32) << 5) | (dd as u32)
+}
+
+/// `FCVT <Sd>, <Dn>` -- narrow double-precision to single-precision
+/// with round-to-nearest-ties-to-even (matching IEEE 754 and the
+/// VM's `f64 as f32` semantics). Used by [`Op::Sf`] before the
+/// single-precision store.
+pub(super) fn enc_fcvt_s_d(sd: u8, dn: u8) -> u32 {
+    debug_assert!(sd < 32 && dn < 32);
+    0x1E62_4000 | ((dn as u32) << 5) | (sd as u32)
+}
+
 // ---- Comparisons + condition-set. ----
 
 /// `CMP <Xn>, <Xm>` = `SUBS XZR, <Xn>, <Xm>` -- compare two registers,
@@ -1621,6 +1659,28 @@ fn lower_op(
         Op::Sh => {
             let lhs = pop_lhs_reg(code, reg_state);
             emit(code, enc_strh_imm(Reg::X19, lhs, 0));
+        }
+        Op::Lf => {
+            // Single-precision load + widen-to-double:
+            //   ldr  s0, [x19]   ; load 4 bytes through `s0`'s half of `d0`
+            //   fcvt d0, s0      ; widen to double
+            //   fmov x19, d0     ; deliver `f64::to_bits()` to the accumulator
+            // The conversion is bit-exact for any finite single value
+            // (the C standard's promotion from `float` to `double`).
+            emit(code, enc_ldr_s_imm(0, Reg::X19, 0));
+            emit(code, enc_fcvt_d_s(0, 0));
+            emit(code, enc_fmov_d_to_x(Reg::X19, 0));
+        }
+        Op::Sf => {
+            // Narrow f64 -> f32 and store 4 bytes:
+            //   fmov d0, x19     ; stage the accumulator as a double
+            //   fcvt s0, d0      ; narrow with round-to-nearest-ties-to-even
+            //   ldr  lhs, [sp]   ; (via pop_lhs_reg) destination address
+            //   str  s0, [lhs]   ; write 4 bytes
+            emit(code, enc_fmov_x_to_d(0, Reg::X19));
+            emit(code, enc_fcvt_s_d(0, 0));
+            let lhs = pop_lhs_reg(code, reg_state);
+            emit(code, enc_str_s_imm(0, lhs, 0));
         }
         Op::Psh => {
             // With the native optimizer on AND a Pseudo classification

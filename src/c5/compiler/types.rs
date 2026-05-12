@@ -455,6 +455,12 @@ pub(super) fn pointee_size_no_struct(ty: i64) -> i64 {
     } else if ty == (Ty::Short as i64) + (Ty::Ptr as i64) {
         // Bare `short*` -- pointee is a 2-byte short.
         2
+    } else if ty == (Ty::Float as i64) + (Ty::Ptr as i64) {
+        // Bare `float*` -- pointee is a 4-byte single-precision
+        // float; `(float *)p + 1` strides four bytes, and the
+        // single-precision narrow-load `Op::Lf` reads the same
+        // 4 bytes.
+        4
     } else {
         8
     }
@@ -538,7 +544,9 @@ pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> Op {
     if is_pointer_ty(ty) {
         // Pointers are always 8 bytes (slot + native register
         // width). The Long-vs-LongLong distinction here would
-        // wrongly route `long *` through Lw on Windows.
+        // wrongly route `long *` through Lw on Windows; the
+        // Float-vs-Double distinction would wrongly route
+        // `float *` through Op::Lf.
         return Op::Li;
     }
     if stripped == Ty::Char as i64 {
@@ -547,6 +555,12 @@ pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> Op {
         if unsigned { Op::Lhu } else { Op::Lh }
     } else if stripped == Ty::Int as i64 {
         if unsigned { Op::Lwu } else { Op::Lw }
+    } else if stripped == Ty::Float as i64 {
+        // 4-byte single-precision load that widens to f64 in the
+        // accumulator. `double` falls through to `Op::Li` since
+        // c5's f64 arithmetic ops carry the bit pattern verbatim
+        // and the 8-byte slot needs no narrowing.
+        Op::Lf
     } else if stripped == Ty::Long as i64 && target.is_windows() {
         // LLP64: `long` is 32 bits, same load path as int.
         if unsigned { Op::Lwu } else { Op::Lw }
@@ -567,6 +581,12 @@ pub(super) fn store_op_for(ty: i64, target: super::super::Target) -> Op {
         Op::Sh
     } else if stripped == Ty::Int as i64 {
         Op::Sw
+    } else if stripped == Ty::Float as i64 {
+        // 4-byte single-precision store that narrows the
+        // accumulator's f64 bits via round-to-nearest-ties-to-even.
+        // `double` falls through to `Op::Si` since the 8-byte slot
+        // holds the bit pattern verbatim.
+        Op::Sf
     } else if stripped == Ty::Long as i64 && target.is_windows() {
         // LLP64: `long` stores as 4 bytes, same as int.
         Op::Sw
@@ -591,6 +611,13 @@ pub(super) fn is_scalar_load_op_val(op_val: i64) -> bool {
         || op_val == Op::Lw as i64
         || op_val == Op::Lwu as i64
         || op_val == Op::Li as i64
+        // Single-precision narrow load behaves like the other
+        // scalar-load ops at every lvalue / address-of / inc-dec
+        // / compound-assign rewrite site: the parser drops the
+        // trailing load to recover the address, then re-emits
+        // the matching load (`reemit_scalar_load`) after the
+        // address-side rewrites are in place.
+        || op_val == Op::Lf as i64
 }
 
 /// Re-emit the same scalar load op that produced `op_val`. Caller
@@ -610,6 +637,8 @@ pub(super) fn reemit_scalar_load(op_val: i64) -> Op {
         Op::Lw
     } else if op_val == Op::Lwu as i64 {
         Op::Lwu
+    } else if op_val == Op::Lf as i64 {
+        Op::Lf
     } else {
         Op::Li
     }

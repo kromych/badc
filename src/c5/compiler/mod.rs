@@ -1112,11 +1112,15 @@ impl Compiler {
     /// Size in bytes of a value of the given `ty`.
     ///   * pointers (any base type)  -> 8
     ///   * scalar `char`             -> 1
+    ///   * scalar `short`            -> 2
     ///   * scalar `int`              -> 4 (32-bit signed)
-    ///   * scalar `long`             -> 8
-    ///   * scalar `float` / `double` -> 8 (c5 stores every FP value
-    ///     through an 8-byte slot; IEEE 754 single-precision
-    ///     narrowing is future work)
+    ///   * scalar `long`             -> 4 on Windows (LLP64), 8 on Unix (LP64)
+    ///   * scalar `long long`        -> 8
+    ///   * scalar `float`            -> 4 (IEEE 754 single-precision; the
+    ///     accumulator widens to f64 across the `Op::Lf` load and
+    ///     narrows back across `Op::Sf`, so c5-internal arithmetic
+    ///     keeps using the existing f64 op set without re-tagging)
+    ///   * scalar `double`           -> 8
     ///   * struct values             -> recorded in the struct table
     fn size_of_type(&self, ty: i64) -> usize {
         // Unsigned bit is orthogonal to width: `unsigned char` is
@@ -1135,15 +1139,21 @@ impl Compiler {
             2
         } else if ty == Ty::Int as i64 {
             4
+        } else if ty == Ty::Float as i64 {
+            // C99 says `sizeof(float)` is implementation-defined but
+            // every mainstream target picks IEEE 754 single (4 bytes).
+            // `float *` (and any deeper pointer-to-float) stays at 8
+            // bytes -- that's the pointer's width, not the pointee's
+            // -- and falls through to the catch-all at the end.
+            4
         } else if ty == Ty::Long as i64 {
             // Per-target: LP64 (Linux / macOS) -> 8; LLP64
             // (Windows) -> 4. The `long long` spelling stays at
             // 8 bytes everywhere via `Ty::LongLong`.
             if self.target.is_windows() { 4 } else { 8 }
         } else {
-            // `long long`, `float`, `double`, all pointers
-            // (long long*, long*, int*, char*, short*, float*,
-            // ...) -- 8 bytes each.
+            // `long long`, `double`, all pointers (long long*, long*,
+            // int*, char*, short*, float*, double*, ...) -- 8 bytes each.
             8
         }
     }
@@ -1156,6 +1166,12 @@ impl Compiler {
     /// alignment at 8 to match the rest of the IR's slot model.
     fn align_of_type(&self, ty: i64) -> usize {
         let ty = ty & !UNSIGNED_BIT;
+        if ty == Ty::Float as i64 {
+            // `float` is 4 bytes; its natural alignment matches.
+            // Same rule the rest of the integer / pointer family
+            // follows: alignment = sizeof for the scalar variant.
+            return 4;
+        }
         if is_struct_ty(ty) {
             if struct_ptr_depth(ty) > 0 {
                 8
@@ -4676,6 +4692,58 @@ impl Compiler {
                         self.emit_op(Op::Mcpy);
                         self.emit_val(size as i64);
                         // The symbol now points at the local copy.
+                        self.symbols[idx].val = local_val;
+                    }
+
+                    // `float` parameters get the same "rebind to a
+                    // freshly allocated local" treatment as struct
+                    // by-value params, but for a different reason:
+                    // c5's call ABI passes every arg as an 8-byte
+                    // c5-stack slot holding the value's `f64::to_bits`
+                    // (the caller's `expr` left an `f64` in the
+                    // accumulator and `Si` wrote all 8 bytes). With
+                    // `sizeof(float) == 4`, the matching `Op::Lf`
+                    // load that the body would emit reads only the
+                    // *low* 4 bytes of the slot, which for a typical
+                    // `double`-shaped bit pattern is the *low* half
+                    // of the mantissa -- garbage, not the f32 of the
+                    // passed value. The fix: at function entry,
+                    // narrow each `float`-typed param through the
+                    // `Op::Sf` store path (`Li` reads the caller's
+                    // 8-byte f64 bits, `Sf` narrows to f32 and
+                    // writes 4 bytes into a fresh local slot). The
+                    // symbol is repointed to that local; every
+                    // subsequent body access goes through the
+                    // narrow-storage path the rest of the
+                    // float-typed code expects, and the load/store
+                    // semantics stay consistent.
+                    for &idx in params.indices.iter() {
+                        let pty = self.symbols[idx].type_ & !UNSIGNED_BIT;
+                        if pty != Ty::Float as i64 {
+                            continue;
+                        }
+                        let param_val = self.symbols[idx].val;
+                        self.loc_offs += 1; // float local takes 1 slot
+                        let local_val = -self.loc_offs;
+                        if self.loc_offs > self.max_loc_offs {
+                            self.max_loc_offs = self.loc_offs;
+                        }
+                        // dst = &local
+                        self.emit_lea(local_val);
+                        self.emit_op(Op::Psh);
+                        // Load the caller-pushed f64::to_bits from
+                        // the param slot. The full 8-byte load is
+                        // intentional -- the caller pushed 8 bytes
+                        // and the f32 information lives across all
+                        // 8 of them (as an f64).
+                        self.emit_lea(param_val);
+                        self.emit_op(Op::Li);
+                        // Narrow to f32 + write 4 bytes to the local.
+                        // The rounding is round-to-nearest-ties-to-
+                        // even, matching `f64 as f32` in Rust and
+                        // `cvtsd2ss` / `fcvt s, d` on the JIT path.
+                        self.emit_op(Op::Sf);
+                        // Symbol now points at the f32-storage local.
                         self.symbols[idx].val = local_val;
                     }
 

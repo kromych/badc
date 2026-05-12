@@ -700,6 +700,67 @@ pub(super) fn emit_cvttsd2si(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
 }
 
+/// `MOVSS xmm, [base+disp32]` -- load 4 bytes (single-precision) into
+/// the low dword of an XMM register, zeroing the rest. Encoding:
+/// `F3 0F 10 /r`. Used by [`Op::Lf`] to pull a `float`-typed lvalue
+/// out of its 4-byte storage before the widening `cvtss2sd`.
+pub(super) fn emit_movss_xmm_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: i32) {
+    emit_byte(code, 0xF3);
+    if xmm.high() || base.high() {
+        emit_byte(code, rex(false, xmm.high(), false, base.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x10);
+    // SIB-driven mod=10/disp32 form, matching emit_movq_xmm_r_mem so
+    // rsp/r12 base registers stay correct.
+    emit_byte(code, modrm(0b10, xmm.lo(), 0b100));
+    emit_byte(code, sib(0, 0b100, base.lo()));
+    emit_i32(code, disp);
+}
+
+/// `MOVSS [base+disp32], xmm` -- store 4 bytes from the low dword of
+/// an XMM register. Encoding: `F3 0F 11 /r`. Companion to
+/// [`emit_movss_xmm_mem`]; the [`Op::Sf`] handler uses this for the
+/// final narrowed store.
+pub(super) fn emit_movss_mem_xmm(code: &mut Vec<u8>, base: Reg, disp: i32, xmm: Reg) {
+    emit_byte(code, 0xF3);
+    if xmm.high() || base.high() {
+        emit_byte(code, rex(false, xmm.high(), false, base.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x11);
+    emit_byte(code, modrm(0b10, xmm.lo(), 0b100));
+    emit_byte(code, sib(0, 0b100, base.lo()));
+    emit_i32(code, disp);
+}
+
+/// `CVTSS2SD xmm, xmm` -- widen single-precision to double-precision.
+/// Encoding: `F3 0F 5A /r`. The widening is bit-exact for any finite
+/// single value (the C standard's `float`-to-`double` promotion).
+pub(super) fn emit_cvtss2sd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_byte(code, 0xF3);
+    if dst.high() || src.high() {
+        emit_byte(code, rex(false, dst.high(), false, src.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x5A);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
+/// `CVTSD2SS xmm, xmm` -- narrow double-precision to single-precision
+/// with round-to-nearest-ties-to-even (matching IEEE 754 and the
+/// VM's `f64 as f32` semantics). Encoding: `F2 0F 5A /r`. Used by
+/// [`Op::Sf`] before the single-precision store.
+pub(super) fn emit_cvtsd2ss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_byte(code, 0xF2);
+    if dst.high() || src.high() {
+        emit_byte(code, rex(false, dst.high(), false, src.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x5A);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
 /// `CQO` (`CDQE` for 32-bit; we want the 64-bit form) -- sign-extend
 /// rax into rdx:rax. Encoding: `REX.W + 99`.
 pub(super) fn emit_cqo(code: &mut Vec<u8>) {
@@ -1792,6 +1853,26 @@ fn lower_op(
             // *(i16*)addr = r13[15:0]
             let lhs = pop_lhs_reg(code, reg_state);
             emit_mov_mem16_r(code, lhs, 0, Reg::R13);
+        }
+        Op::Lf => {
+            // Single-precision load + widen-to-double:
+            //   movss   xmm0, [r13]   ; load 4 bytes through XMM0's low dword
+            //   cvtss2sd xmm0, xmm0   ; widen to f64
+            //   movq    r13, xmm0     ; deliver f64::to_bits() to the accumulator
+            emit_movss_xmm_mem(code, Reg::XMM0, Reg::R13, 0);
+            emit_cvtss2sd(code, Reg::XMM0, Reg::XMM0);
+            emit_movq_r_xmm(code, Reg::R13, Reg::XMM0);
+        }
+        Op::Sf => {
+            // Narrow f64 -> f32 and store 4 bytes:
+            //   movq    xmm0, r13     ; stage the accumulator's bits as a double
+            //   cvtsd2ss xmm0, xmm0   ; narrow with round-to-nearest-ties-to-even
+            //   pop     lhs           ; destination address
+            //   movss   [lhs], xmm0   ; write 4 bytes
+            emit_movq_xmm_r(code, Reg::XMM0, Reg::R13);
+            emit_cvtsd2ss(code, Reg::XMM0, Reg::XMM0);
+            let lhs = pop_lhs_reg(code, reg_state);
+            emit_movss_mem_xmm(code, lhs, 0, Reg::XMM0);
         }
         Op::Psh => {
             // With the native optimizer on AND a Pseudo classification,

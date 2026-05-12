@@ -246,6 +246,27 @@ pub enum Op {
     /// by `(float)i` / `(double)i` and by integer-side operands of
     /// a mixed FP expression.
     Fcvtif,
+    /// Load Float: reads a 32-bit IEEE-754 single-precision value
+    /// from the address in the accumulator, widens it to f64, and
+    /// leaves `f64::to_bits()` in `a`. Used for scalar `float`
+    /// lvalue reads where the field / variable storage is 4 bytes
+    /// (`sizeof(float) == 4` post-fix). Companion to [`Op::Sf`].
+    /// The c5 arithmetic ops (`Op::Fadd`, ...) still operate in
+    /// f64 land; the widening here is the only narrowing crossing
+    /// at the load boundary. ARM64 sequence is
+    /// `ldr s0, [x19]; fcvt d0, s0; fmov x19, d0`; x86_64 is
+    /// `mov eax, [rbx]; movd xmm0, eax; cvtss2sd xmm0, xmm0;
+    /// movq rbx, xmm0`.
+    Lf,
+    /// Store Float: takes the accumulator (`f64::to_bits()`),
+    /// narrows the bit pattern to single-precision, and stores
+    /// the resulting 4 bytes at the address on top of stack.
+    /// Companion to [`Op::Lf`] for 4-byte float writes. The
+    /// narrow-then-widen-back rounding is a single-precision
+    /// `fcvt s, d` on ARM64 (`cvtsd2ss` on x86_64); subsequent
+    /// loads through `Op::Lf` reproduce the same f64 bit pattern
+    /// as long as the stored value fit single-precision exactly.
+    Sf,
 
     /// Memory copy. Operand: size in bytes (compile-time constant).
     /// Stack top: destination address. Accumulator: source address
@@ -337,7 +358,7 @@ pub enum Op {
     AllocaInit,
 }
 
-const OPS: [Op; 86] = [
+const OPS: [Op; 88] = [
     Op::Lea,
     Op::Imm,
     Op::Jmp,
@@ -421,6 +442,8 @@ const OPS: [Op; 86] = [
     Op::Fge,
     Op::Fcvtfi,
     Op::Fcvtif,
+    Op::Lf,
+    Op::Sf,
     Op::Mcpy,
     Op::TlsLea,
     Op::TailExt,

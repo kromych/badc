@@ -262,6 +262,9 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C5E
             | Op::Sc
             | Op::Sw
             | Op::Sh
+            // Op::Sf is the float store that pops a destination
+            // address the same way Op::Si / Op::Sw do.
+            | Op::Sf
             // Floating-point binary ops and comparisons consume one
             // pseudo push the same way their integer counterparts do
             // -- the FP value travels through the same c5 stack slot.
@@ -440,6 +443,9 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C5E
             | Op::Sc
             | Op::Sw
             | Op::Sh
+            // Op::Sf is the float store that pops a destination
+            // address the same way Op::Si / Op::Sw do.
+            | Op::Sf
             | Op::Fadd
             | Op::Fsub
             | Op::Fmul

@@ -1091,6 +1091,29 @@ impl<H: Host> Vm<H> {
                     let i = a;
                     a = (i as f64).to_bits() as i64;
                 }
+                Op::Lf => {
+                    // 4-byte single-precision load from address in `a`,
+                    // widened to f64 in `a` (as `to_bits`). The
+                    // single-precision-to-double conversion is
+                    // bit-exact for any finite single value the C
+                    // standard prescribes for `float`.
+                    let bits = self.load_i32(a as usize)? as u32;
+                    let f32_val = f32::from_bits(bits);
+                    a = (f32_val as f64).to_bits() as i64;
+                }
+                Op::Sf => {
+                    // Narrow the accumulator (as `f64::to_bits`) to
+                    // single-precision and write 4 bytes at the
+                    // address on top of stack. The narrowing rounds
+                    // to-nearest-even per IEEE 754, matching the
+                    // hardware `cvtsd2ss` / `fcvt s, d` semantics
+                    // the JIT lowering uses.
+                    let addr = self.load_i64(sp)? as usize;
+                    sp += 8;
+                    let f64_val = f64::from_bits(a as u64);
+                    let bits = (f64_val as f32).to_bits() as i32;
+                    self.store_i32(addr, bits)?;
+                }
                 Op::TlsLea => {
                     // Single-threaded VM: TLS is just a region
                     // appended to `data`. Resolve the operand to

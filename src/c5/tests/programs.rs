@@ -463,3 +463,14 @@ fn const_expr_arithmetic() {
     // array sizes (global + local), and nested combinations.
     assert_eq!(run_fixture("const_expr_arithmetic.c"), 0);
 }
+
+#[test]
+fn float_is_four_bytes() {
+    // C99 6.2.5 + the real-IEEE-single refactor: `sizeof(float) == 4`,
+    // struct fields pack at 4-byte stride, static `float` initializers
+    // narrow f64 -> f32 bits at the storage boundary, and function
+    // parameters of `float` type get rebound to a fresh local at
+    // entry so the body's narrow load/store stays consistent with
+    // the f64-shaped call ABI.
+    assert_eq!(run_fixture("float_is_four_bytes.c"), 0);
+}

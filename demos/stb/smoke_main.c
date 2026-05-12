@@ -224,13 +224,11 @@ static void te_deletechars(struct te_str *s, int pos, int num) {
  * uses this when the caller passes NULL alloc_buffer. */
 #include <alloca.h>
 
-/* c5's slot model reports `sizeof(float)` as 8 (one VM slot)
- * rather than the on-disk 4 bytes. stb_vorbis's
- * FAST_SCALED_FLOAT_TO_INT path bit-casts a `float` through a
- * union and depends on the 4-byte representation. The macro
- * surface below disables that path and falls back to the
- * portable `(int)(x * (1<<s))` form, which c5 lowers fine. */
-#define STB_VORBIS_NO_FAST_SCALED_FLOAT 1
+/* c5 now reports `sizeof(float) == 4` (issue #29: real IEEE 754
+ * single-precision). stb_vorbis's `FAST_SCALED_FLOAT_TO_INT`
+ * path bit-casts a `float` through a union and reads its
+ * 4-byte exponent + mantissa layout, so the fast path is safe
+ * and the macro surface stays out of the way. */
 
 /* One-shot debugging aid for the c5-vs-gcc divergence in
  * stb_vorbis's setup phase: when defined, every

@@ -83,18 +83,34 @@ impl Compiler {
     /// slots (Data / Code relocs) pass through unchanged.
     fn to_storage_bits(&self, value: i64, reloc: InitElemReloc, elem_ty: i64) -> i64 {
         let stripped = elem_ty & !UNSIGNED_BIT;
-        let is_fp = stripped == Ty::Float as i64 || stripped == Ty::Double as i64;
-        if !is_fp {
+        let is_float = stripped == Ty::Float as i64;
+        let is_double = stripped == Ty::Double as i64;
+        if !is_float && !is_double {
             return value;
         }
-        match reloc {
+        // Compute the canonical f64 bit pattern from the source
+        // value first, then narrow to f32 for the `Ty::Float` case.
+        // The 4-byte single-precision storage slot can only hold the
+        // narrowed bits -- a direct truncation of the f64 pattern
+        // (the bug this branch fixes) would zero out the entire low
+        // mantissa for any non-tiny value, e.g. `1.0` ->
+        // `0x3FF0_0000_0000_0000` -> low 4 bytes = `0x0000_0000` =
+        // `+0.0f`, which made every entry of `static float
+        // basis[12][4] = { {1, 1, 0}, ... }` in stb_perlin collapse
+        // to zero.
+        let f64_bits = match reloc {
             InitElemReloc::Float64Bits => value,
             InitElemReloc::None => (value as f64).to_bits() as i64,
             // Data / Code relocs land in pointer-typed slots, not
             // FP slots; the upstream paths reject the type mix
             // before reaching here.
-            _ => value,
+            _ => return value,
+        };
+        if is_float {
+            let f = f64::from_bits(f64_bits as u64) as f32;
+            return f.to_bits() as i64;
         }
+        f64_bits
     }
 
     /// Write `n_bytes` little-endian bytes of `value` into
@@ -818,6 +834,15 @@ impl Compiler {
             self.emit_val(self.size_of_type(ty) as i64);
         } else if (ty & !UNSIGNED_BIT) == Ty::Char as i64 {
             self.emit_op(Op::Sc);
+        } else if (ty & !UNSIGNED_BIT) == Ty::Float as i64 {
+            // `float`-typed local: narrow the accumulator (an f64
+            // bit pattern from the RHS) to single-precision and
+            // store 4 bytes. The slot reserved by
+            // `local_storage_slots` is still an 8-byte c5 stack
+            // word, so the upper 4 bytes stay whatever they were;
+            // the matching `Op::Lf` reads only the low 4 and
+            // widens them back to f64.
+            self.emit_op(Op::Sf);
         } else {
             // Local int / long / pointer: the slot is a full c5
             // stack word (8 bytes), so a single `Si` writes the

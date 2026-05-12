@@ -773,30 +773,32 @@ impl Compiler {
         }
     }
 
-    /// Compile the source. On success, the returned `Program` contains the
-    /// bytecode, the static data segment, and the PC of `main`.
-    pub fn compile(mut self) -> Result<Program, C5Error> {
-        if let Some(e) = self.deferred_error.take() {
-            return Err(e);
-        }
-        self.run_compile()?;
-        // Trampolines must land before fixups so their bc_pcs are
-        // resolved when `apply_fn_call_fixups` walks the recorded
-        // operands and `target_bc_pc` slots.
-        self.emit_sys_trampolines();
-        self.apply_fn_call_fixups()?;
-        // `main` is optional today: shared-library output
-        // (`OutputKind::SharedLibrary`) doesn't need an entry
-        // point, and the executable-output writer surfaces a
-        // clear error if `entry_pc` doesn't land on real code.
-        // When neither `main`, any `#pragma export(...)`, nor
-        // a user-defined `DllMain` is present we still refuse,
-        // since the result would be an image with no callable
-        // entries at all.
-        // `#pragma entrypoint(<name>)` overrides the
-        // canonical `main`. The override goes through the same
-        // symbol-table lookup so the diagnostic is uniform: a
-        // missing entrypoint always reads `<name>() not defined`.
+    /// Resolve the bytecode PCs for the program entry point
+    /// (`main` or the `#pragma entrypoint(<name>)` override) and
+    /// for an optional user-defined `DllMain`.
+    ///
+    /// `main` is optional today: shared-library output
+    /// (`OutputKind::SharedLibrary`) doesn't need an entry point,
+    /// and the executable-output writer surfaces a clear error if
+    /// `entry_pc` doesn't land on real code. When neither `main`,
+    /// any `#pragma export(...)`, nor a user-defined `DllMain` is
+    /// present we still refuse, since the result would be an
+    /// image with no callable entries at all.
+    ///
+    /// `#pragma entrypoint(<name>)` overrides the canonical
+    /// `main`. The override goes through the same symbol-table
+    /// lookup so the diagnostic is uniform: a missing entrypoint
+    /// always reads `<name>() not defined`.
+    ///
+    /// A user-defined `DllMain` (any source-level function with
+    /// that exact name) overrides the boilerplate `mov eax, 1;
+    /// ret` DllMain stub the PE shared-library writer otherwise
+    /// emits. We record the bytecode PC here unconditionally --
+    /// the VM / JIT / non-PE writers ignore it, and the PE writer
+    /// only consults it for `--shared` builds. No signature
+    /// validation: c5 trusts user `main` the same way and DllMain
+    /// is just a different ABI.
+    fn resolve_entry_and_dllmain_pcs(&self) -> Result<(usize, Option<usize>), C5Error> {
         let entry_name_str: &str = self.pp_entrypoint.as_deref().unwrap_or("main");
         let entry_idx = lexer::find_symbol(&self.symbols, &self.symbol_index, entry_name_str);
         let dllmain_idx = lexer::find_symbol(&self.symbols, &self.symbol_index, "DllMain");
@@ -808,16 +810,24 @@ impl Compiler {
             }
             _ if !self.pending_exports.is_empty() || has_user_dllmain => 0,
             _ => {
-                return Err(self.compile_err(alloc::format!("{entry_name_str}() not defined")));
+                return Err(self.compile_err(format!("{entry_name_str}() not defined")));
             }
         };
-        // Resolve `#pragma export(<name>)` directives against
-        // the now-finalised symbol table. Each name must
-        // resolve to a `Token::Fun` (a function defined in
-        // this translation unit); anything else gets a clear
-        // diagnostic so a misspelled export doesn't silently
-        // produce a shared object missing the symbol the user
-        // expected.
+        let dllmain_pc =
+            dllmain_idx.and_then(|idx| has_user_dllmain.then(|| self.symbols[idx].val as usize));
+        Ok((entry_pc, dllmain_pc))
+    }
+
+    /// Resolve `#pragma export(<name>)` directives against the
+    /// now-finalised symbol table. Each name must resolve to a
+    /// `Token::Fun` (a function defined in this translation
+    /// unit); anything else gets a clear diagnostic so a
+    /// misspelled export doesn't silently produce a shared object
+    /// missing the symbol the user expected.
+    ///
+    /// Drains `self.pending_exports` -- callers should only invoke
+    /// once on the way out of `compile()`.
+    fn resolve_exports(&mut self) -> Result<Vec<crate::c5::program::ExportedFunction>, C5Error> {
         let mut exports = Vec::with_capacity(self.pending_exports.len());
         for name in core::mem::take(&mut self.pending_exports) {
             let Some(idx) = lexer::find_symbol(&self.symbols, &self.symbol_index, &name) else {
@@ -839,16 +849,23 @@ impl Compiler {
                 bytecode_pc: self.symbols[idx].val as usize,
             });
         }
-        // A user-defined `DllMain` (any source-level function with
-        // that exact name) overrides the boilerplate
-        // `mov eax, 1; ret` DllMain stub the PE shared-library
-        // writer otherwise emits. We record the bytecode PC here
-        // unconditionally -- the VM / JIT / non-PE writers ignore
-        // it, and the PE writer only consults it for `--shared`
-        // builds. No signature validation: c5 trusts user `main`
-        // the same way and DllMain is just a different ABI.
-        let dllmain_pc =
-            dllmain_idx.and_then(|idx| has_user_dllmain.then(|| self.symbols[idx].val as usize));
+        Ok(exports)
+    }
+
+    /// Compile the source. On success, the returned `Program` contains the
+    /// bytecode, the static data segment, and the PC of `main`.
+    pub fn compile(mut self) -> Result<Program, C5Error> {
+        if let Some(e) = self.deferred_error.take() {
+            return Err(e);
+        }
+        self.run_compile()?;
+        // Trampolines must land before fixups so their bc_pcs are
+        // resolved when `apply_fn_call_fixups` walks the recorded
+        // operands and `target_bc_pc` slots.
+        self.emit_sys_trampolines();
+        self.apply_fn_call_fixups()?;
+        let (entry_pc, dllmain_pc) = self.resolve_entry_and_dllmain_pcs()?;
+        let exports = self.resolve_exports()?;
         Ok(Program {
             text: self.text,
             data: self.data,

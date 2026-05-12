@@ -21,9 +21,19 @@
 
 use alloc::vec::Vec;
 
+use super::Compiler;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
-use super::{Compiler, ParsedParams};
+
+/// Bundle returned from `parse_function_params` -- keeps the per-param
+/// symbol indices (needed by the function-body binding step) together
+/// with the declared types and the variadic flag (needed by the type
+/// checker at every call site).
+pub(super) struct ParsedParams {
+    pub(super) indices: Vec<usize>,
+    pub(super) types: Vec<i64>,
+    pub(super) is_variadic: bool,
+}
 
 impl Compiler {
     pub(super) fn parse_function_params(&mut self) -> Result<ParsedParams, C5Error> {

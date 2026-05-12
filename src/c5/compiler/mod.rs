@@ -6,7 +6,6 @@ use super::CODE_BASE;
 use super::codegen::Target;
 use super::error::C5Error;
 use super::lexer::{self, Lexer};
-use super::op::Op;
 use super::preprocessor::{DylibSpec, Preprocessor};
 use super::program::Program;
 use super::symbol::Symbol;
@@ -33,8 +32,6 @@ mod stmt;
 mod type_layout;
 pub(crate) mod types;
 
-use types::{is_floating_scalar, is_pointer_ty};
-
 #[derive(Debug, Clone)]
 pub struct StructDef {
     pub name: String,
@@ -55,33 +52,6 @@ pub struct StructDef {
     /// size is `max(field size)` instead of the sum. Member
     /// access otherwise reuses the struct path verbatim.
     pub is_union: bool,
-}
-
-/// Relocation kind for one initializer-element value. Tracks
-/// whether the bytes need to be patched at link / load time so
-/// the per-format writer can emit the right rebase entry.
-#[derive(Debug, Clone, Copy)]
-pub(super) enum InitElemReloc {
-    /// Plain integer constant; bytes are final.
-    None,
-    /// Value is a data-segment offset; needs a DataReloc.
-    Data,
-    /// Value is a function bytecode PC; needs a CodeReloc. The
-    /// payload is the function's symbol index, captured at parse
-    /// time so the post-body fixup pass can look up the
-    /// resolved bytecode PC and patch both the data bytes and
-    /// the matching `Program::code_relocs` entry.
-    Code(usize),
-    /// Value is an IEEE-754 f64 bit pattern produced by a float
-    /// literal or a constant-folded float arithmetic expression.
-    /// The writer narrows to f32 when the element type is
-    /// `float` (4 bytes) and stores the full pattern when it's
-    /// `double` (8 bytes). No on-image relocation; the marker
-    /// only flows through to disambiguate `static float a[] = {
-    /// 1.0f, ... }` (f64 bit pattern) from `static float a[] = {
-    /// 1, ... }` (raw int that still has to be converted to
-    /// f32 bits, since the storage slot is FP, not integer).
-    Float64Bits,
 }
 
 #[derive(Debug, Clone)]
@@ -119,16 +89,6 @@ pub struct StructField {
     /// `Li; Imm bit_offset; Shr; Imm mask; And` and writes emit a
     /// load-clear-shift-or-store sequence.
     pub bit_width: u32,
-}
-
-/// Bundle returned from `parse_function_params` -- keeps the per-param
-/// symbol indices (needed by the function-body binding step) together
-/// with the declared types and the variadic flag (needed by the type
-/// checker at every call site).
-pub(super) struct ParsedParams {
-    pub(super) indices: Vec<usize>,
-    pub(super) types: Vec<i64>,
-    pub(super) is_variadic: bool,
 }
 
 /// Optional preprocessor / driver knobs threaded through compiler
@@ -423,7 +383,7 @@ pub struct Compiler {
     /// continue with the body. `args2` is consumed as a no-op via
     /// the trailing-decoration loop. None when the declarator
     /// wasn't this shape.
-    pending_fn_params: Option<ParsedParams>,
+    pending_fn_params: Option<function::ParsedParams>,
 
     /// Side channel from `parse_declarator` to its caller: when
     /// the declarator was function-pointer-shaped, this is the
@@ -749,27 +709,6 @@ impl Compiler {
             last_array_decay_size: 0,
             last_array_decay_bytes: 0,
             fn_ptr_chain_depth: -1,
-        }
-    }
-
-    /// Apply the C99 6.5.16.1p2 assignment conversion: when the
-    /// destination is a floating type and `a` holds an integer-
-    /// typed value, lift via `Op::Fcvtif`; when the destination
-    /// is an integer / pointer and `a` holds a float / double,
-    /// drop via `Op::Fcvtfi`. Same-class assignments leave the
-    /// bit pattern alone. Called from every scalar store path
-    /// so an `unsigned char` initializer of a `float` local /
-    /// global / struct field round-trips through the IEEE-754
-    /// representation rather than the raw integer bit pattern.
-    pub(super) fn convert_assign_rhs(&mut self, dest_ty: i64) {
-        let dest_is_fp = is_floating_scalar(dest_ty);
-        let src_is_fp = is_floating_scalar(self.ty);
-        if dest_is_fp && !src_is_fp && !is_pointer_ty(self.ty) {
-            self.emit_op(Op::Fcvtif);
-            self.ty = dest_ty;
-        } else if !dest_is_fp && src_is_fp && !is_pointer_ty(dest_ty) {
-            self.emit_op(Op::Fcvtfi);
-            self.ty = dest_ty;
         }
     }
 

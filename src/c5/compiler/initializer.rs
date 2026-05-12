@@ -34,11 +34,38 @@
 use alloc::format;
 use alloc::vec::Vec;
 
+use super::Compiler;
 use super::super::error::C5Error;
 use super::super::op::Op;
 use super::super::token::{Token, Ty};
 use super::types::{UNSIGNED_BIT, is_struct_ty, struct_id_of, struct_ptr_depth};
-use super::{Compiler, InitElemReloc};
+
+/// Relocation kind for one initializer-element value. Tracks
+/// whether the bytes need to be patched at link / load time so
+/// the per-format writer can emit the right rebase entry.
+#[derive(Debug, Clone, Copy)]
+pub(super) enum InitElemReloc {
+    /// Plain integer constant; bytes are final.
+    None,
+    /// Value is a data-segment offset; needs a DataReloc.
+    Data,
+    /// Value is a function bytecode PC; needs a CodeReloc. The
+    /// payload is the function's symbol index, captured at parse
+    /// time so the post-body fixup pass can look up the
+    /// resolved bytecode PC and patch both the data bytes and
+    /// the matching `Program::code_relocs` entry.
+    Code(usize),
+    /// Value is an IEEE-754 f64 bit pattern produced by a float
+    /// literal or a constant-folded float arithmetic expression.
+    /// The writer narrows to f32 when the element type is
+    /// `float` (4 bytes) and stores the full pattern when it's
+    /// `double` (8 bytes). No on-image relocation; the marker
+    /// only flows through to disambiguate `static float a[] = {
+    /// 1.0f, ... }` (f64 bit pattern) from `static float a[] = {
+    /// 1, ... }` (raw int that still has to be converted to
+    /// f32 bits, since the storage slot is FP, not integer).
+    Float64Bits,
+}
 
 impl Compiler {
     /// Push the relocation entry that an initializer element needs

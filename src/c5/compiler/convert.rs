@@ -26,6 +26,27 @@ use super::Compiler;
 use super::types::{is_floating_scalar, is_pointer_ty, is_unsigned_ty, usual_arith_common_ty};
 
 impl Compiler {
+    /// Apply the C99 6.5.16.1p2 assignment conversion: when the
+    /// destination is a floating type and `a` holds an integer-
+    /// typed value, lift via `Op::Fcvtif`; when the destination
+    /// is an integer / pointer and `a` holds a float / double,
+    /// drop via `Op::Fcvtfi`. Same-class assignments leave the
+    /// bit pattern alone. Called from every scalar store path
+    /// so an `unsigned char` initializer of a `float` local /
+    /// global / struct field round-trips through the IEEE-754
+    /// representation rather than the raw integer bit pattern.
+    pub(super) fn convert_assign_rhs(&mut self, dest_ty: i64) {
+        let dest_is_fp = is_floating_scalar(dest_ty);
+        let src_is_fp = is_floating_scalar(self.ty);
+        if dest_is_fp && !src_is_fp && !is_pointer_ty(self.ty) {
+            self.emit_op(Op::Fcvtif);
+            self.ty = dest_ty;
+        } else if !dest_is_fp && src_is_fp && !is_pointer_ty(dest_ty) {
+            self.emit_op(Op::Fcvtfi);
+            self.ty = dest_ty;
+        }
+    }
+
     /// Pre-divide / pre-modulo C99 6.3.1.3 conversion to the unsigned
     /// common type. When one operand is signed and the common type is
     /// unsigned narrower than 8 bytes, the signed operand carries

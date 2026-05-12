@@ -124,6 +124,16 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    /* `[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular]`
+     * -- an unbundled executable defaults to `BackgroundOnly`
+     * (no Dock icon, no visible windows). Without this call,
+     * the window we create later is still constructed correctly
+     * and the run loop spins, but macOS keeps the process out
+     * of the foreground UI session so nothing appears on
+     * screen. `NSApplicationActivationPolicyRegular = 0`. */
+    void *setPolicy = sel_registerName("setActivationPolicy:");
+    objc_msgSend_b(app, setPolicy, (long long)0);
+
     /* NSWindow alloc + init with content rect, style mask,
      * backing store, defer flag. The four NSRect doubles
      * land in d0..d3 of the variadic call, the integer

@@ -16,18 +16,30 @@ macros, stringification, token paste, varargs `__VA_ARGS__`,
 `#pragma once`); the integer + float arithmetic surface with
 C99 6.3.1.8 usual-arithmetic-conversions and 6.3.1.1 integer
 promotions; signed and unsigned `char` / `short` / `int` /
-`long` / `long long`; pointers, arrays, multi-dim arrays,
-function pointers and chains thereof; `struct` / `union` /
-`enum` / `typedef`, bitfields, `#pragma pack(N)`, anonymous
-struct/union members; `static` / `extern` / `_Thread_local`;
-varargs at the c5-internal calling convention; switch with
-`case` / `default` / fall-through; full set of compound
+`long` / `long long`; `void`-returning functions (with the
+6.8.6.4p1 constraint on `return <expr>;` diagnosed and
+6.8.6.4p3 "no value" enforced); IEEE 754 single-precision
+`float` (4-byte storage) and double-precision `double`
+(8-byte); pointers, arrays, multi-dim arrays, function
+pointers and chains thereof; `struct` / `union` / `enum` /
+`typedef`, bitfields, `#pragma pack(N)`, anonymous
+struct/union members; struct designated initializers
+(`{.x = 1}`) at file and function scope, including
+non-constant runtime values; array designated initializers
+(`[N] = ...`); `static` / `extern` / `_Thread_local`;
+varargs at the c5-internal calling convention; the C99
+for-init declaration (`for (int i = 0; ...; ...)`); switch
+with `case` / `default` / fall-through; full set of compound
 assignment and increment/decrement operators; pointer
 arithmetic, ordered pointer compares (against zero and
-exhaustive equality); the `<stdio.h>` / `<stdlib.h>` /
-`<string.h>` / `<math.h>` / `<time.h>` / `<dlfcn.h>` /
-`<pthread.h>` / `<windows.h>` surfaces documented in
-`headers/include/`.
+exhaustive equality); the full C99 6.6 constant-expression
+grammar with FP folding (`int xs[(int)(1.5 * 2.0)];`,
+arithmetic / comparisons / conditional / sizeof / bitwise /
+logical operators) in array sizes, bitfield widths, enum
+initializers, `_Static_assert`, and scalar global integer
+initializers; the `<stdio.h>` / `<stdlib.h>` / `<string.h>`
+/ `<math.h>` / `<time.h>` / `<dlfcn.h>` / `<pthread.h>` /
+`<windows.h>` surfaces documented in `headers/include/`.
 
 The integer-arithmetic surface is C99-correct end-to-end:
 unsigned wrap-modulo-2^N, signed-overflow truncate-and-sign-
@@ -49,11 +61,14 @@ markers.
 | `long`           | 8             | 4       |
 | `long long`      | 8             | 8       |
 | pointer / `T *`  | 8             | 8       |
-| `float`          | 8 (stored as `double`) | 8 (stored as `double`) |
+| `float`          | 4             | 4       |
 | `double`         | 8             | 8       |
 
 LP64 on macOS / Linux, LLP64 on Windows -- both match the
-host platform ABI.
+host platform ABI. `float` is real IEEE 754 single-precision
+storage (4 bytes); the c5 arithmetic pipeline still carries
+f64 bits in the accumulator and narrows / widens at the
+load / store boundary.
 
 **Bare `char` is unsigned** on every target (1-byte zero-
 extending load). gcc and clang differ on this per host
@@ -61,12 +76,6 @@ architecture; portable code that walks bytes by sign already
 spells `signed char` explicitly. `signed char` is recognised
 as a distinct type and integer-promotes to signed `int` for
 arithmetic. Severity: 4.
-
-**`float` storage** is 8 bytes (alias of `double`). Within
-c5-to-c5 arithmetic this is C99-conforming (the spec permits
-`float` to be an alias for `double`); at the variadic-call
-boundary the host ABI's `float -> double` default-argument
-promotion may diverge. Severity: 3.
 
 ## Divergences
 
@@ -86,10 +95,14 @@ time. The c5-internal struct ABI doesn't match SysV / Win64
 
 AArch64 macOS variadic FP spills differ from Linux / x86_64;
 programs that pass more than a couple of FP variadic args
-may see garbage.
+may see garbage. The `objc_msgSend` shape in
+`demos/gui_hello/hello_macos.c` works around this by binding
+separate non-variadic prototypes per selector signature
+(`objc_msgSend_rect`, `objc_msgSend_b`, `objc_msgSend_p`)
+that route through the standard AAPCS64 register-passing
+path.
 
-### libc `int`-returning calls used as register-resident
-rvalue, severity 3
+### libc `int`-returning calls used as register-resident rvalue, severity 3
 
 `strcmp`, `atoi`, etc. leave only the low 32 bits defined
 per ABI; not every libc sign-extends. Storing through an
@@ -101,21 +114,6 @@ high-half garbage.
 
 `_Bool` tokenizes and stores; loads don't mask to 0/1.
 
-### `void`-returning function still produces a value, severity 3
-
-The unused accumulator. Doesn't break valid C99 -- just
-means a `void` callee can be (mis)read by a caller that
-ignores its prototype.
-
-### Constant expressions, severity 3
-
-Array sizes and static initializers accept integer literals
-(with optional unary `-`), `&global`, function names, string
-literals, and identifiers bound to compile-time integer
-constants (`enum` values, `#define`d numeric macros).
-General arithmetic in `int xs[N + 1]` or `(int)(1.5 * 2)`
-is rejected.
-
 ### Compound literals (`(struct Foo){.x=1}`), severity 3
 
 Rejected.
@@ -124,14 +122,6 @@ Rejected.
 
 `(int(*)(int))ptr` in `sizeof` / cast position is rejected.
 Works inside typedef / parameter / struct-field declarators.
-
-### `for (int i = 0; ...)` C99 for-init declaration, severity 4
-
-Rejected; hoist the declaration.
-
-### Function-scope struct designated init, severity 3
-
-File-scope works; function-scope is rejected.
 
 ### Field access on opaque forward-declared struct, severity 4
 
@@ -159,7 +149,11 @@ the no-op qualifier set, silently dropped). Severity 4-5.
 
 C11+ features showing up in modern code:
 
-- `_Generic`, `_Atomic`, `_Static_assert` -- rejected.
+- `_Generic`, `_Atomic` -- rejected.
+- `_Static_assert` (and the C23 `static_assert` alias) --
+  supported at file and block scope; the const-expression
+  operand flows through the full C99 6.6 grammar so float
+  casts and arithmetic work in the condition.
 - `_Thread_local` -- supported; init limited to scalars +
   NULL.
 - Anonymous struct / union members -- supported
@@ -194,7 +188,6 @@ C11+ features showing up in modern code:
 
 1. Multiple translation units (sec 6.9).
 2. libc `struct`-by-value ABI bridge.
-3. Constant-expression evaluator (general arithmetic in array sizes / static initializers).
-4. Function-scope struct designated init.
-5. `_Bool` 0/1 normalisation.
-6. Real IEEE-754 single-precision `float` (`double` is used behind the curtains).
+3. `_Bool` 0/1 normalisation.
+4. Compound literals (`(struct Foo){.x = 1}`).
+5. Standalone abstract function-pointer declarators in `sizeof` / cast position.

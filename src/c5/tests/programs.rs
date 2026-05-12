@@ -444,13 +444,13 @@ fn nonconst_local_struct_init() {
 }
 
 #[test]
-fn void_return_zeros_accumulator() {
+fn void_function_produces_no_value() {
     // C99 6.8.6.4p3: a void-returning function produces no value.
-    // The fix zeroes the accumulator before the trailing Lev so a
-    // caller that mistypes the prototype (or invokes via a
-    // value-returning function-pointer cast) reads 0 rather than
-    // whatever the function body last computed.
-    assert_eq!(run_fixture("void_return_zeros_accumulator.c"), 0);
+    // A caller that observes the return value via a mistyped
+    // function-pointer cast reads 0 (matching gcc / clang),
+    // both for the function-end exit path and an explicit
+    // `return;` statement.
+    assert_eq!(run_fixture("void_function_produces_no_value.c"), 0);
 }
 
 #[test]

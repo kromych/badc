@@ -40,14 +40,27 @@ pub(crate) struct Symbol {
     /// case lands.
     pub array_size: i64,
 
-    /// Inner dimension of a 2D array variable. For `T xs[N][M]`
-    /// we record `array_size = N*M` (total element count) and
+    /// Inner dimension of a 2D-or-greater array variable. For
+    /// `T xs[N][M]` we record `array_size = N*M` and
     /// `inner_array_size = M` so subscripting `xs[i]` scales by
     /// `M * sizeof(T)` instead of `sizeof(T)` -- the first index
-    /// strides over rows, the second over elements. Zero for 1D
-    /// arrays. c5 doesn't express "array of M T" as a type, so
-    /// the symbol carries the dimension separately.
+    /// strides over rows, the second over elements. For 3D
+    /// `T xs[N][M][K]` this stays `M` (the size immediately
+    /// below the outermost dim). Used by the 2D-init-padding
+    /// path, which only needs the row size. Higher-dim indexing
+    /// uses `array_dims` (below) for the full stride ladder. Zero
+    /// for 1D arrays.
     pub inner_array_size: i64,
+
+    /// Full dimension list, outermost first. For `T xs[N][M][K]`
+    /// this is `[N, M, K]`. Empty for non-array or 1D-array
+    /// symbols (the 1D case is fully described by `array_size`).
+    /// The indexing path reads this to compute strides for each
+    /// `[i]` subscript level: stride at level `k` is
+    /// `product(array_dims[k+1..]) * sizeof(elem)`, with the
+    /// final innermost subscript falling through to the regular
+    /// `sizeof(elem)` + decay path.
+    pub array_dims: Vec<i64>,
 
     /// True once a `Token::Glo` symbol has been seen with an
     /// explicit initializer (`= ...`). Tentative-definition
@@ -72,7 +85,7 @@ pub(crate) struct Symbol {
     /// otherwise also be zero). Read by the identifier-load path
     /// to seed `Compiler::fn_ptr_chain_depth` and ultimately
     /// decide whether a unary `*` is a real deref or a C decay
-    /// no-op (gh #19). c5 doesn't carry function-pointer
+    /// no-op. c5 doesn't carry the function-pointer
     /// distinction in the type tag itself, so this side-channel
     /// is the only durable trace.
     pub fn_ptr_indirection: i64,
@@ -84,4 +97,20 @@ pub(crate) struct Symbol {
     /// `*p = ...` against the rebound scalar pointer is treated
     /// as a fn-ptr decay no-op.
     pub h_fn_ptr_indirection: i64,
+
+    /// Set on a `Token::Fun` symbol whose declared return type
+    /// was bare `void`. The type encoding (`type_`) still records
+    /// `Ty::Char | UNSIGNED_BIT` -- a side-channel rather than
+    /// a separate `Ty::Void` band, because a real band collides
+    /// with the function-pointer call-table encoding sqlite3
+    /// uses (`void (*xFunc)(...)`). Consumed by:
+    ///   * the function-body emit path: prepends `Op::Imm 0`
+    ///     before the trailing synthetic `Op::Lev` so a caller
+    ///     that misclassifies the prototype reads `0` rather
+    ///     than stale accumulator state (C99 6.8.6.4p3).
+    ///   * the `return` statement: bare `return;` in a void
+    ///     function emits the same `Imm 0` prefix; a `return
+    ///     <expr>;` is rejected as a constraint violation
+    ///     (C99 6.8.6.4p1).
+    pub returns_void: bool,
 }

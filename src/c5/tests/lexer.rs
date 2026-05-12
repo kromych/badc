@@ -1,35 +1,33 @@
 //! Token-stream tests that exercise `Lexer::next` in isolation.
 
-use super::{LexHarness, Token};
-
-const NUM: i64 = Token::Num as i64;
+use super::{LexHarness, Tok, Token};
 
 #[test]
 fn empty_source_yields_eof() {
     let mut h = LexHarness::new("");
-    assert_eq!(h.next(), 0);
+    assert_eq!(h.next(), Tok::EOF);
 }
 
 #[test]
 fn whitespace_only_yields_eof() {
     let mut h = LexHarness::new("   \t\n   ");
-    assert_eq!(h.next(), 0);
+    assert_eq!(h.next(), Tok::EOF);
 }
 
 #[test]
 fn integer_literal() {
     let mut h = LexHarness::new("42");
-    assert_eq!(h.next(), NUM);
+    assert_eq!(h.next(), Token::Num);
     assert_eq!(h.ival(), 42);
-    assert_eq!(h.next(), 0);
+    assert_eq!(h.next(), Tok::EOF);
 }
 
 #[test]
 fn hex_literal_lower_and_upper() {
     let mut h = LexHarness::new("0xff 0xABCD");
-    assert_eq!(h.next(), NUM);
+    assert_eq!(h.next(), Token::Num);
     assert_eq!(h.ival(), 0xff);
-    assert_eq!(h.next(), NUM);
+    assert_eq!(h.next(), Token::Num);
     assert_eq!(h.ival(), 0xABCD);
 }
 
@@ -46,25 +44,25 @@ fn keywords_resolve_to_their_tokens() {
         Token::Sizeof,
     ];
     for tok in expected {
-        assert_eq!(h.next(), tok as i64);
+        assert_eq!(h.next(), tok);
     }
-    assert_eq!(h.next(), 0);
+    assert_eq!(h.next(), Tok::EOF);
 }
 
 #[test]
 fn identifier_interned_in_symbol_table() {
     let mut h = LexHarness::new("foo bar foo");
-    assert_eq!(h.next(), Token::Id as i64);
+    assert_eq!(h.next(), Token::Id);
     assert_eq!(h.name(), "foo");
     let foo_idx = h.symbols.len() - 1;
 
-    assert_eq!(h.next(), Token::Id as i64);
+    assert_eq!(h.next(), Token::Id);
     assert_eq!(h.name(), "bar");
     assert_ne!(h.symbols.len() - 1, foo_idx);
 
     // The second `foo` reuses the existing symbol.
     let prev_len = h.symbols.len();
-    assert_eq!(h.next(), Token::Id as i64);
+    assert_eq!(h.next(), Token::Id);
     assert_eq!(h.name(), "foo");
     assert_eq!(h.symbols.len(), prev_len);
 }
@@ -75,7 +73,7 @@ fn string_literal_lands_in_data_segment() {
     // literals can concatenate; the parser adds it back. So in raw
     // lexer output we only see the bytes themselves.
     let mut h = LexHarness::new(r#""abc""#);
-    assert_eq!(h.next(), '"' as i64);
+    assert_eq!(h.next(), '"');
     let addr = h.ival() as usize;
     assert_eq!(&h.data[addr..addr + 3], b"abc");
 }
@@ -84,7 +82,7 @@ fn string_literal_lands_in_data_segment() {
 fn string_literal_escape_sequences() {
     // Lexer alone -- no trailing NUL (parser adds it).
     let mut h = LexHarness::new(r#""a\nb""#);
-    assert_eq!(h.next(), '"' as i64);
+    assert_eq!(h.next(), '"');
     let addr = h.ival() as usize;
     assert_eq!(&h.data[addr..addr + 3], b"a\nb");
 }
@@ -92,14 +90,14 @@ fn string_literal_escape_sequences() {
 #[test]
 fn char_literal_returns_num_token() {
     let mut h = LexHarness::new("'A'");
-    assert_eq!(h.next(), NUM);
+    assert_eq!(h.next(), Token::Num);
     assert_eq!(h.ival(), 'A' as i64);
 }
 
 #[test]
 fn char_literal_newline_escape() {
     let mut h = LexHarness::new(r"'\n'");
-    assert_eq!(h.next(), NUM);
+    assert_eq!(h.next(), Token::Num);
     assert_eq!(h.ival(), '\n' as i64);
 }
 
@@ -109,8 +107,8 @@ fn standalone_bang_is_not_eof() {
     // by `=`, which broke unary NOT and made `!1` look like an empty
     // expression to the parser.
     let mut h = LexHarness::new("!1");
-    assert_eq!(h.next(), '!' as i64);
-    assert_eq!(h.next(), NUM);
+    assert_eq!(h.next(), '!');
+    assert_eq!(h.next(), Token::Num);
     assert_eq!(h.ival(), 1);
 }
 
@@ -130,7 +128,7 @@ fn compound_operators_disambiguated() {
         Token::Dec,
     ];
     for tok in expected {
-        assert_eq!(h.next(), tok as i64);
+        assert_eq!(h.next(), tok);
     }
 }
 
@@ -151,7 +149,7 @@ fn single_char_operators() {
         Token::XorOp,
     ];
     for tok in expected {
-        assert_eq!(h.next(), tok as i64);
+        assert_eq!(h.next(), tok);
     }
 }
 
@@ -161,29 +159,29 @@ fn punctuation_tokens_are_their_byte_values() {
     // back as its raw byte value.
     let mut h = LexHarness::new("(){};,:]");
     for c in "(){};,:]".chars() {
-        assert_eq!(h.next(), c as i64);
+        assert_eq!(h.next(), c);
     }
 }
 
 #[test]
 fn open_bracket_maps_to_brak_token() {
     let mut h = LexHarness::new("[");
-    assert_eq!(h.next(), Token::Brak as i64);
+    assert_eq!(h.next(), Token::Brak);
 }
 
 #[test]
 fn line_comments_are_skipped() {
     let mut h = LexHarness::new("1 // ignored\n 2");
-    assert_eq!(h.next(), NUM);
+    assert_eq!(h.next(), Token::Num);
     assert_eq!(h.ival(), 1);
-    assert_eq!(h.next(), NUM);
+    assert_eq!(h.next(), Token::Num);
     assert_eq!(h.ival(), 2);
 }
 
 #[test]
 fn preprocessor_lines_are_skipped() {
     let mut h = LexHarness::new("#include <stdio.h>\n42");
-    assert_eq!(h.next(), NUM);
+    assert_eq!(h.next(), Token::Num);
     assert_eq!(h.ival(), 42);
 }
 
@@ -194,7 +192,7 @@ fn shebang_line_is_skipped_and_line_counter_advances() {
     // following newline still bumps the line counter so error messages
     // point at the right line in the user's source.
     let mut h = LexHarness::new("#!/usr/bin/env badc\n42");
-    assert_eq!(h.next(), NUM);
+    assert_eq!(h.next(), Token::Num);
     assert_eq!(h.ival(), 42);
     assert_eq!(h.line(), 2);
 }
@@ -203,11 +201,11 @@ fn shebang_line_is_skipped_and_line_counter_advances() {
 fn line_counter_advances_with_newlines() {
     let mut h = LexHarness::new("1\n\n2\n3");
     assert_eq!(h.line(), 1);
-    assert_eq!(h.next(), NUM);
+    assert_eq!(h.next(), Token::Num);
     assert_eq!(h.line(), 1);
-    assert_eq!(h.next(), NUM);
+    assert_eq!(h.next(), Token::Num);
     assert_eq!(h.line(), 3);
-    assert_eq!(h.next(), NUM);
+    assert_eq!(h.next(), Token::Num);
     assert_eq!(h.line(), 4);
 }
 
@@ -242,7 +240,7 @@ fn binding_names_seed_token_sys_when_dylibs_provided() {
     let mut data = Vec::new();
     lex.next(&mut symbols, &mut symbol_index, &mut data)
         .expect("lex");
-    assert_eq!(lex.tk, Token::Id as i64);
+    assert_eq!(lex.tk, Token::Id);
 
     let sym = symbols
         .iter()

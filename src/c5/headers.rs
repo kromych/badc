@@ -53,6 +53,7 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("string.h", include_str!("../../headers/include/string.h")),
     ("stdio.h", include_str!("../../headers/include/stdio.h")),
     ("stdlib.h", include_str!("../../headers/include/stdlib.h")),
+    ("alloca.h", include_str!("../../headers/include/alloca.h")),
     ("stdarg.h", include_str!("../../headers/include/stdarg.h")),
     ("ctype.h", include_str!("../../headers/include/ctype.h")),
     ("math.h", include_str!("../../headers/include/math.h")),
@@ -87,7 +88,7 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("pthread.h", include_str!("../../headers/include/pthread.h")),
     ("dlfcn.h", include_str!("../../headers/include/dlfcn.h")),
     ("windows.h", include_str!("../../headers/include/windows.h")),
-    // Opt-in MSVC-shape predefines (gh #34): no `#pragma binding`
+    // Opt-in MSVC-shape predefines: no `#pragma binding`
     // here, just `#define _MSC_VER 1900`, `#define __int64 long
     // long`, the `__declspec(x)` family of empty-decorator
     // macros, etc. Build drivers that need to compile MSVC-

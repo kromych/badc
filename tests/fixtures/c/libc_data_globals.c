@@ -2,7 +2,7 @@
 // non-null FILE * pointers, and a write through them reaches the
 // host's stdio.
 //
-// Was the regression marker for gh #53: the
+// Was the regression marker for: the
 // `__c5_lazy_stream` resolver in `stdio.h` had `__APPLE__` and
 // `__linux__` arms but fell through on Windows -- msvcrt doesn't
 // export `stdin` / `stdout` / `stderr` as data symbols, so any

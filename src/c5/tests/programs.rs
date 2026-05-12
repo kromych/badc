@@ -414,3 +414,63 @@ fn bst_free() {
 fn double_pointers() {
     assert_eq!(run_fixture("double_pointers.c"), 0);
 }
+
+#[test]
+fn for_init_declaration() {
+    // C99 6.8.5.3: `for (int i = 0; ...; ...)` -- the init clause
+    // is a declaration whose scope is the loop body. The fixture
+    // covers single + multi-declarator, shadowing of an outer
+    // name, adjacent loops re-using the loop variable, and a
+    // struct-pointer init.
+    assert_eq!(run_fixture("for_init_declaration.c"), 0);
+}
+
+#[test]
+fn designated_initializers() {
+    // C99 6.7.8p6: `.field = ...` for structs and `[N] = ...` for
+    // arrays, both supported in any order and intermixable with
+    // positional initializers.
+    assert_eq!(run_fixture("designated_initializers.c"), 0);
+}
+
+#[test]
+fn nonconst_local_struct_init() {
+    // C99 6.7.8p13: a local struct initializer may contain
+    // non-constant expressions (function calls, runtime values).
+    // The fix pre-scans the brace list, falls through to
+    // per-field stores when any entry isn't a constant, and
+    // zero-fills the gaps the scan didn't visit.
+    assert_eq!(run_fixture("nonconst_local_struct_init.c"), 0);
+}
+
+#[test]
+fn void_function_produces_no_value() {
+    // C99 6.8.6.4p3: a void-returning function produces no value.
+    // A caller that observes the return value via a mistyped
+    // function-pointer cast reads 0 (matching gcc / clang),
+    // both for the function-end exit path and an explicit
+    // `return;` statement.
+    assert_eq!(run_fixture("void_function_produces_no_value.c"), 0);
+}
+
+#[test]
+fn const_expr_arithmetic() {
+    // C99 6.6: integer constant expressions accept the full
+    // constant-expression grammar -- arithmetic, casts, comparisons,
+    // conditionals, sizeof, bitwise / logical operators, and FP
+    // operands as casts (folded at parse time and truncated at the
+    // integer boundary). Exercises enum initialisers, _Static_assert,
+    // array sizes (global + local), and nested combinations.
+    assert_eq!(run_fixture("const_expr_arithmetic.c"), 0);
+}
+
+#[test]
+fn float_is_four_bytes() {
+    // C99 6.2.5 + the real-IEEE-single refactor: `sizeof(float) == 4`,
+    // struct fields pack at 4-byte stride, static `float` initializers
+    // narrow f64 -> f32 bits at the storage boundary, and function
+    // parameters of `float` type get rebound to a fresh local at
+    // entry so the body's narrow load/store stays consistent with
+    // the f64-shaped call ABI.
+    assert_eq!(run_fixture("float_is_four_bytes.c"), 0);
+}

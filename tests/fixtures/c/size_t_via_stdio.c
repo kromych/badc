@@ -1,7 +1,6 @@
 // C99 7.19/7.20/7.21 specify that <stdio.h>, <stdlib.h>, and
-// <string.h> each expose `size_t`. Real-world code (kissfft,
-// miniz, sqlite, every libpng-using project) routinely takes
-// `size_t` parameters after `#include <stdlib.h>` without
+// <string.h> each expose `size_t`. Real-world C code routinely
+// takes `size_t` parameters after `#include <stdlib.h>` without
 // pulling `<stddef.h>` itself; before this fix c5 hid `size_t`
 // behind `<stddef.h>` alone, so `void f(const size_t n)` died
 // at "type expected" the moment it landed in a parameter list.

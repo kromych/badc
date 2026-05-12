@@ -1537,7 +1537,7 @@ fn nlist_undef(n_strx: u32, ordinal: u8) -> Vec<u8> {
 /// `dlsym` will surface the symbol to other images.
 /// One `nlist_64` for a file-local symbol -- `N_SECT` *without*
 /// `N_EXT`, so dyld leaves it out of dlsym lookups but the host's
-/// debugger and `nm` still see the name. Used by gh #61 to label
+/// debugger and `nm` still see the name. Used to label
 /// each PLT trampoline with its libc import name.
 fn nlist_local(n_strx: u32, n_value: u64, n_sect: u8) -> Vec<u8> {
     let mut out = Vec::with_capacity(NLIST_64_SIZE);
@@ -1641,7 +1641,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // __DWARF holds the four phase-1 debug sections
     // (__debug_info, __debug_abbrev, __debug_line, __debug_str)
     // -- 72 + 4*80 = 392 bytes of LC. Emitted for both
-    // executables and dylibs (gh #45). The dylib coverage gate
+    // executables and dylibs The dylib coverage gate
     // dropped after the layout reshuffle that gave __DWARF its
     // own page-aligned vmaddr slot between __DATA and
     // __LINKEDIT (commit "give __DWARF a real vmsize..."). With
@@ -1836,7 +1836,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         .iter()
         .map(|e| format!("_{}", e.name))
         .collect();
-    // gh #61: per-PLT-trampoline local names go first in the
+    // per-PLT-trampoline local names go first in the
     // symtab so the LC_DYSYMTAB ranges stay in canonical order
     // (locals, then defined externals, then undefined). The
     // bind opcodes carry symbol *names* inline, so re-ordering
@@ -1876,7 +1876,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
 
     let code_vmaddr_base = TEXT_VMADDR_BASE + entry_file_offset;
 
-    // [Locals] gh #61: one entry per PLT trampoline.
+    // [Locals] one entry per PLT trampoline.
     if emit_plt_locals {
         debug_assert_eq!(
             build.plt_trampoline_offsets.len(),
@@ -1943,7 +1943,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     // independently.
     // ---- __DWARF layout ----
     //
-    // Phase 1 DWARF (gh #39 / gh #40) sits between __DATA and
+    // Phase 1 DWARF sits between __DATA and
     // __LINKEDIT in *both* LC order and file order. __LINKEDIT
     // has to remain the last file-resident segment because
     // `codesign --sign -` appends `LC_CODE_SIGNATURE` and grows
@@ -1966,7 +1966,7 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         dwarf_filesize,
         dwarf_tail_pad,
     ) = if emit_dwarf {
-        // gh #68: Mach-O routes argc/argv through `LC_MAIN`,
+        // Mach-O routes argc/argv through `LC_MAIN`,
         // not an emitted stub, so there's no entry-stub range to
         // describe.
         let s = dwarf::emit(

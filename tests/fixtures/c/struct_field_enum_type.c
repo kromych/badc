@@ -3,9 +3,7 @@
 // already collapses every enum to plain `int`, but
 // `parse_aggregate_body` used to skip the Enum branch and
 // fell through to "type expected in struct field" the moment
-// a struct member referenced an enumerated type. Surfaced
-// compiling stb_vorbis 1.22 (`enum STBVorbisError error;` in
-// the per-decoder state struct).
+// a struct member referenced an enumerated type.
 #include <stdio.h>
 
 enum Phase {

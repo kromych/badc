@@ -1,12 +1,13 @@
 // libc surface smoke test. Exercises the binding entries in
-// string.h, stdio.h, stdlib.h, and ctype.h that sqlite-shaped code
-// reaches for. The fixture deliberately avoids:
+// string.h, stdio.h, stdlib.h, and ctype.h that typical C
+// applications reach for. The fixture deliberately avoids:
 //   * libc functions returning a 32-bit `int` in a way that the
 //     return value's sign bit matters (strcmp's negative result,
 //     for instance) -- c5's calling convention reads the return
 //     register as a 64-bit value, and not every libc on every
 //     target sign-extends. For sign-sensitive checks the user
-//     should mask or re-sign-extend explicitly until  lands.
+//     should mask or re-sign-extend explicitly until a return-
+//     value sign-extension pass lands.
 //   * math.h FP returns -- aarch64 macOS variadic-FP and the
 //     existing FP-return convention cross-cut differently.
 // Both of those work for the *common* cases (strcmp == 0, sqrt

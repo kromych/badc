@@ -30,20 +30,23 @@ impl Compiler {
         let mut args = Vec::new();
         let mut types = Vec::new();
         let mut is_variadic = false;
-        // `(void)` -- C's "no parameters" sigil. The lexer maps
-        // `void` to `Token::Char`, so detect the shape via lookahead:
-        // a `Char`/`void` token immediately followed by `)` and not
-        // by an identifier (which would make this a real parameter).
-        if self.lex.tk == Token::Char as i64 && self.lex.peek_after_whitespace(b')') {
+        // `(void)` -- C's "no parameters" sigil. With `void` now
+        // its own lexeme (`Token::Void`), the early-match below
+        // unambiguously fires only for the void-sigil shape; an
+        // unnamed `char` parameter (`int f(char)`) flows through
+        // the regular declarator path instead of being silently
+        // dropped as a "no params" decl, which the prior
+        // `Token::Char` + peek-`)` check did mistakenly.
+        if self.lex.tk == Token::Void && self.lex.peek_after_whitespace(b')') {
             self.next()?; // consume `void`
             // tk is now `)`; the outer loop sees it and exits.
         }
-        while self.lex.tk != ')' as i64 {
+        while self.lex.tk != ')' {
             // `...` ends the typed-parameter list and marks the function
             // variadic. Anything after is a syntax error.
-            if self.lex.tk == Token::Ellipsis as i64 {
+            if self.lex.tk == Token::Ellipsis {
                 self.next()?;
-                if self.lex.tk != ')' as i64 {
+                if self.lex.tk != ')' {
                     return Err(self.compile_err("`...` must be the last parameter"));
                 }
                 is_variadic = true;
@@ -54,7 +57,7 @@ impl Compiler {
             // (it's diagnosed in some compilers but legal in
             // others) and `register` belongs here too. No
             // semantic effect.
-            while self.lex.tk == Token::Extern as i64 || self.lex.tk == Token::Static as i64 {
+            while self.lex.tk == Token::Extern || self.lex.tk == Token::Static {
                 self.next()?;
             }
             let base = if self.lex_is_type_start() {
@@ -74,10 +77,10 @@ impl Compiler {
             // Detect unnamed by counting `*` markers and then
             // peeking for `,` or `)`.
             let mut ty = base;
-            while self.lex.tk == Token::MulOp as i64 {
+            while self.lex.tk == Token::MulOp {
                 self.next()?;
                 ty += Ty::Ptr as i64;
-                while self.lex.tk == Token::TypeQual as i64 {
+                while self.lex.tk == Token::TypeQual {
                     self.next()?;
                 }
             }
@@ -85,18 +88,15 @@ impl Compiler {
             // type ('int []' / 'char [16]'). Per C the array
             // dimension decays to a pointer; we just bump the
             // pointer level once and discard the size.
-            if self.lex.tk == ',' as i64
-                || self.lex.tk == ')' as i64
-                || self.lex.tk == Token::Brak as i64
-            {
-                if self.lex.tk == Token::Brak as i64 {
+            if self.lex.tk == ',' || self.lex.tk == ')' || self.lex.tk == Token::Brak {
+                if self.lex.tk == Token::Brak {
                     self.next()?;
-                    if self.lex.tk == ']' as i64 {
+                    if self.lex.tk == ']' {
                         self.next()?;
                     } else {
                         // Eat the constant int + `]`.
                         let _ = self.parse_constant_int()?;
-                        if self.lex.tk == ']' as i64 {
+                        if self.lex.tk == ']' {
                             self.next()?;
                         }
                     }
@@ -104,7 +104,7 @@ impl Compiler {
                 }
                 self.ty = ty;
                 types.push(ty);
-                if self.lex.tk == ',' as i64 {
+                if self.lex.tk == ',' {
                     self.next()?;
                 }
                 continue;
@@ -123,7 +123,7 @@ impl Compiler {
             if array_size != 0 {
                 full_ty += Ty::Ptr as i64;
             }
-            // gh #19 lineage: pick up the side-channel that
+            // Fn-pointer lineage: pick up the side-channel that
             // parse_declarator (or the typedef-of-fn-ptr base)
             // populated. Cleared even if the declarator didn't
             // set anything so it doesn't leak into the next
@@ -132,7 +132,7 @@ impl Compiler {
             self.ty = full_ty;
             if param_idx == usize::MAX {
                 types.push(full_ty);
-                if self.lex.tk == ',' as i64 {
+                if self.lex.tk == ',' {
                     self.next()?;
                 }
                 continue;
@@ -156,7 +156,7 @@ impl Compiler {
             args.push(param_idx);
             types.push(full_ty);
 
-            if self.lex.tk == ',' as i64 {
+            if self.lex.tk == ',' {
                 self.next()?;
             }
         }

@@ -8,7 +8,13 @@
 
 `badc` (other name ideas were `betsy` and `badseed`) is a rather
 small compiler of a pretty large chunk of the C language as defined in
-the C99 standard.
+the C99 standard. Its small footprint and embedded headers (which
+you can override) give a fun one-executable experience. Its codebase
+of moderate size can be a good pedagogical material. It doesn't
+use AST, SSA, graph coloring algorithms and lots of exquisite optimization
+passes which (chances are) might not bother you much. All told,
+to stay slim, it'll never surpass the ability of multi-gigabyte compiler
+suites to squeeze the last drop of perf from the machine, and that's fine.
 
 `badc` produces real native binaries (macOs Mach-O, Linux ELF, or
 Windows PE32+), on any of five targets, from any host - macOS (ARM64),
@@ -19,12 +25,15 @@ used as `#!` so that C source code becomes a script.
 There are various demo's under [`demos`](./demos/):
 
 * Few small-ish ones (`threads.c`, `coro_pool.c`, `hello_server.c`),
+* GUI demos for macOS, Linux and Windows (`gui_hello`),
 * Maze builder and solver - TBD,
 * `sqlite3` - the most famous embedded database,
 * `miniz` - compression, CRC32, integers, bit twiddling,
 * `kissfft` - floating points, Fast Fourier Transform,
 * `bzip2` - compression, integers, bit twiddling,
-* `stb_vorbis` - TBD
+* `stb` - header-only C library with lots of incredible features (math
+  noise generation, sound, JPEG, PNG, BMP, PSD support to name a few).
+  It really stresses all of the compiler.
 
 It can also run the code JIT-ted in-process so no binary is written
 to the disk. That option might be useful for using `badc` to run the

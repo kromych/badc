@@ -246,6 +246,27 @@ pub enum Op {
     /// by `(float)i` / `(double)i` and by integer-side operands of
     /// a mixed FP expression.
     Fcvtif,
+    /// Load Float: reads a 32-bit IEEE-754 single-precision value
+    /// from the address in the accumulator, widens it to f64, and
+    /// leaves `f64::to_bits()` in `a`. Used for scalar `float`
+    /// lvalue reads where the field / variable storage is 4 bytes
+    /// (`sizeof(float) == 4` post-fix). Companion to [`Op::Sf`].
+    /// The c5 arithmetic ops (`Op::Fadd`, ...) still operate in
+    /// f64 land; the widening here is the only narrowing crossing
+    /// at the load boundary. ARM64 sequence is
+    /// `ldr s0, [x19]; fcvt d0, s0; fmov x19, d0`; x86_64 is
+    /// `mov eax, [rbx]; movd xmm0, eax; cvtss2sd xmm0, xmm0;
+    /// movq rbx, xmm0`.
+    Lf,
+    /// Store Float: takes the accumulator (`f64::to_bits()`),
+    /// narrows the bit pattern to single-precision, and stores
+    /// the resulting 4 bytes at the address on top of stack.
+    /// Companion to [`Op::Lf`] for 4-byte float writes. The
+    /// narrow-then-widen-back rounding is a single-precision
+    /// `fcvt s, d` on ARM64 (`cvtsd2ss` on x86_64); subsequent
+    /// loads through `Op::Lf` reproduce the same f64 bit pattern
+    /// as long as the stored value fit single-precision exactly.
+    Sf,
 
     /// Memory copy. Operand: size in bytes (compile-time constant).
     /// Stack top: destination address. Accumulator: source address
@@ -301,9 +322,43 @@ pub enum Op {
     /// discriminant -- adding new ops elsewhere requires keeping
     /// the two in lockstep.
     TailExt,
+
+    /// Compiler-builtin intrinsic. Operand: the [`Intrinsic`]
+    /// discriminant cast to `i64`. The accumulator carries the
+    /// single integer argument on entry; the lowered sequence
+    /// leaves the result in the accumulator. Used for
+    /// architecture-specific shapes (`alloca`, future atomics
+    /// / cpuid / vector-builtin surface) that can't sit behind a
+    /// regular dynamic-binding `Op::JsrExt` call -- e.g.
+    /// `alloca` has to bump the *caller's* stack pointer and
+    /// return a pointer into the same frame, which a normal
+    /// function call can't do. The frontend tags an intrinsic
+    /// callee by setting `Symbol::intrinsic` (driven by
+    /// `#pragma intrinsic("name")`); call-site lowering then
+    /// emits this op instead of the regular push/jsr/adj
+    /// sequence.
+    Intrinsic,
+
+    /// Companion to `Op::Intrinsic(Alloca)` -- initialises the
+    /// per-frame alloca arena's top pointer at function entry.
+    /// Operand: the FP-slot index of the alloca-top slot
+    /// (positive, in 8-byte units). Zero means "this function
+    /// doesn't use alloca" and codegen emits nothing.
+    ///
+    /// The compiler emits an `AllocaInit 0` placeholder right
+    /// after every `Op::Ent`. If the function body later emits
+    /// an `Op::Intrinsic(Alloca)`, the compiler backpatches both
+    /// the Ent's local count (to reserve the arena) and this
+    /// AllocaInit's operand (to point at the bookkeeping slot
+    /// just below the regular locals). The arena sits below the
+    /// slot at slots `[idx+1, idx+ARENA_SLOTS]`; alloca calls
+    /// bump the slot's stored value down per call and return
+    /// the new value. The whole arena is freed implicitly when
+    /// the function's epilogue tears down the frame.
+    AllocaInit,
 }
 
-const OPS: [Op; 84] = [
+const OPS: [Op; 88] = [
     Op::Lea,
     Op::Imm,
     Op::Jmp,
@@ -387,10 +442,51 @@ const OPS: [Op; 84] = [
     Op::Fge,
     Op::Fcvtfi,
     Op::Fcvtif,
+    Op::Lf,
+    Op::Sf,
     Op::Mcpy,
     Op::TlsLea,
     Op::TailExt,
+    Op::Intrinsic,
+    Op::AllocaInit,
 ];
+
+/// Per-function alloca arena size, in 8-byte slots. Chosen
+/// large enough to cover stb_vorbis's `inverse_mdct` (~4 KB
+/// of float scratch) and the smaller `decode_residue` block-array
+/// temporaries with headroom, without bloating every alloca-using
+/// frame by a megabyte. Functions that need more than this end
+/// up corrupting the saved-x19 / pool area below the arena --
+/// bounds-checking is a future-work item.
+pub const ALLOCA_ARENA_SLOTS: i64 = 1024;
+
+/// Compiler-builtin intrinsic discriminant. Each lowering target
+/// dispatches on this value to emit the per-arch sequence.
+/// Keep the discriminants stable -- bytecode produced under an
+/// older c5 may live in a vendor-deps archive and re-running it
+/// would mis-decode the operand if these reshuffle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i64)]
+pub enum Intrinsic {
+    /// `alloca(n)` / `__builtin_alloca(n)` -- bumps the caller's
+    /// native stack pointer down by `n` (rounded up to the
+    /// platform's stack-alignment, typically 16) and returns
+    /// the new SP as a `void *`. The memory is reclaimed when
+    /// the caller's function returns. The VM runs this through
+    /// a per-call-frame leak list -- malloc + remember to free
+    /// at the matching `Op::Lev` -- because the VM doesn't
+    /// have a real native stack to bump.
+    Alloca = 1,
+}
+
+impl Intrinsic {
+    pub fn from_i64(v: i64) -> Option<Self> {
+        match v {
+            1 => Some(Intrinsic::Alloca),
+            _ => None,
+        }
+    }
+}
 
 impl Op {
     pub fn from_i64(val: i64) -> Option<Self> {
@@ -420,7 +516,8 @@ impl Op {
             // arithmetic / comparison ops.
             Lea | Imm | Jmp | Jsr | Bz | Bnz | Ent | Adj | JsrExt | TailExt | AddI | SubI
             | MulI | AndI | OrI | XorI | ShlI | ShrI | ShruI | EqI | NeI | LtI | GtI | LeI
-            | GeI | UltI | UgtI | UleI | UgeI | LdLocI | LdLocC | StLocI | Mcpy | TlsLea => 1,
+            | GeI | UltI | UgtI | UleI | UgeI | LdLocI | LdLocC | StLocI | Mcpy | TlsLea
+            | Intrinsic | AllocaInit => 1,
             // Everything else -- arithmetic, loads/stores, push,
             // indirect-jump, return, etc. -- is encoded in a
             // single word with no operand.

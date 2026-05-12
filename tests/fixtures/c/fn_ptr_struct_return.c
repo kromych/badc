@@ -18,10 +18,10 @@
 // lineage through identifier loads, casts, and `*` / `&`, so
 // the unary `*` handler suppresses the spurious load.
 //
-// In the wild this fires on sqlite's
-// `(**(finder_type*)pVfs->pAppData)(zFilename, pNew)` inside
-// unixOpen -- vfp's return type is `const sqlite3_io_methods *`,
-// the same struct-pointer-return pattern the fixture pins.
+// The shape this targets is a doubly-indirected fn-ptr cast
+// such as `(**(finder_type*)ptr)(arg1, arg2)`, where the
+// returned type is itself a struct pointer -- the same
+// pattern the fixture pins.
 #include <stdlib.h>
 
 struct iom { int x; };
@@ -55,9 +55,9 @@ int main(void) {
     // Double-deref through a fn-ptr lvalue: still the fn ptr.
     if ((**fp)(0) == 0) return 5;
 
-    // Cast-through-finder-shape: sqlite's exact pattern. Take a
-    // void pointer that *actually* points at a fn_t variable,
-    // cast to `fn_t *`, then `**` to call.
+    // Cast-through-finder shape: take a void pointer that
+    // *actually* points at a fn_t variable, cast to `fn_t *`,
+    // then `**` to call.
     void *opaque = &the_fn;
     if ((**(fn_t *)opaque)(0) == 0) return 6;
 

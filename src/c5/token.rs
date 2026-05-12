@@ -1,3 +1,85 @@
+/// Runtime token identity as stored by the lexer.
+///
+/// C lexing has to mix two namespaces in the same scalar slot:
+///   * ASCII punctuation (`(`, `;`, `{`, ...) is its own byte
+///     value -- enumerating each of the 128 ASCII bytes inside
+///     [`Token`] would dwarf the meaningful keyword / operator
+///     variants.
+///   * Multi-character keywords and operators get explicit
+///     discriminants starting at 128 (just past ASCII), encoded
+///     in the [`Token`] enum.
+///
+/// `Tok` wraps the underlying `i64` so that call sites can write
+/// `lex.tk == Token::MulOp` (without an `as i64`) and
+/// `lex.tk == '('` (without an `as i64`) -- the `PartialEq`
+/// impls below route both shapes through a single integer
+/// comparison. `lex.tk.raw()` recovers the i64 for diagnostics
+/// and the few places that need the bit pattern directly
+/// (token-id tables, the describe() pretty-printer).
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, Default)]
+pub(crate) struct Tok(pub i64);
+
+impl Tok {
+    /// Sentinel for end-of-input. The lexer sets this when the
+    /// source is exhausted; comparisons against `Tok::EOF` mirror
+    /// `lex.tk == 0` but read more clearly.
+    pub const EOF: Tok = Tok(0);
+
+    /// Raw i64 for callers that genuinely need the bit pattern
+    /// (the diagnostic pretty-printer, hash-table keys, etc.).
+    pub const fn raw(self) -> i64 {
+        self.0
+    }
+}
+
+impl From<Token> for Tok {
+    fn from(t: Token) -> Self {
+        Tok(t as i64)
+    }
+}
+
+impl PartialEq<Token> for Tok {
+    fn eq(&self, other: &Token) -> bool {
+        self.0 == *other as i64
+    }
+}
+
+impl PartialEq<char> for Tok {
+    fn eq(&self, other: &char) -> bool {
+        self.0 == *other as i64
+    }
+}
+
+impl PartialEq<u8> for Tok {
+    fn eq(&self, other: &u8) -> bool {
+        self.0 == *other as i64
+    }
+}
+
+impl PartialEq<i64> for Tok {
+    fn eq(&self, other: &i64) -> bool {
+        self.0 == *other
+    }
+}
+
+impl PartialEq<i32> for Tok {
+    fn eq(&self, other: &i32) -> bool {
+        self.0 == *other as i64
+    }
+}
+
+impl PartialOrd<i64> for Tok {
+    fn partial_cmp(&self, other: &i64) -> Option<core::cmp::Ordering> {
+        self.0.partial_cmp(other)
+    }
+}
+
+impl core::fmt::Display for Tok {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 /// Lexical Tokens
 #[repr(i64)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -221,6 +303,122 @@ pub(crate) enum Token {
     /// The lexer stores the parsed `f64` bit pattern in `ival`; the
     /// parser plucks it back out via `f64::from_bits(ival as u64)`.
     FloatNum,
+    /// `_Static_assert` keyword (C11 6.7.10) and the C23 alias
+    /// `static_assert`. Followed by `( <const-int-expr>,
+    /// "<string-literal>" )` at declaration position. The parser
+    /// folds the constant expression; if it's zero, the message
+    /// is surfaced through the standard compile-error path,
+    /// otherwise the construct is a parse-time no-op.
+    StaticAssert,
+    /// `void` keyword. A distinct lexeme so a bare `void` return
+    /// type or `(void)` parameter list can be told apart from a
+    /// `char` of the same width. The type encoding stays
+    /// `Ty::Char | UNSIGNED_BIT` for both spellings (so `void *`
+    /// arithmetic, sizeof, struct-field layout, and function-
+    /// pointer encoding behave identically to a previous `void
+    /// = char` desugaring); the void-vs-char distinction is
+    /// carried out-of-band by
+    /// [`super::compiler::Compiler::pending_base_was_void`] and
+    /// [`super::symbol::Symbol::returns_void`]. The earlier
+    /// attempt to add a `Ty::Void` band collided with
+    /// function-pointer encoding in sqlite3 dispatch tables
+    /// (`void (*xFunc)(...)`); keeping the encoding untouched and
+    /// carrying void-ness on the side avoids that trap.
+    Void,
+}
+
+/// Map a token-id (the value stored in `lex.tk` as i64) back to a
+/// human-readable spelling for diagnostics. ASCII tokens (`(`,
+/// `;`, `{` etc.) render as a quoted single character; the
+/// keyword / operator / classifier tokens render under the
+/// canonical name. Returns an owned `String` so callers don't
+/// have to worry about the storage of the ASCII branch's
+/// formatted glyph.
+pub(crate) fn describe(tk: Tok) -> alloc::string::String {
+    use alloc::format;
+    use alloc::string::ToString;
+    let tk = tk.raw();
+    if tk == 0 {
+        return "end of file".to_string();
+    }
+    if (0..128).contains(&tk) {
+        let c = tk as u8 as char;
+        if c.is_ascii_graphic() || c == ' ' {
+            return format!("`{}`", c);
+        }
+        return format!("byte {tk:#x}");
+    }
+    let name = match tk {
+        x if x == Token::Num as i64 => "integer literal",
+        x if x == Token::Fun as i64 => "function identifier",
+        x if x == Token::Sys as i64 => "libc binding",
+        x if x == Token::Glo as i64 => "global identifier",
+        x if x == Token::Loc as i64 => "local identifier",
+        x if x == Token::Id as i64 => "identifier",
+        x if x == Token::Char as i64 => "`char`",
+        x if x == Token::Else as i64 => "`else`",
+        x if x == Token::Enum as i64 => "`enum`",
+        x if x == Token::For as i64 => "`for`",
+        x if x == Token::If as i64 => "`if`",
+        x if x == Token::Int as i64 => "`int`",
+        x if x == Token::Return as i64 => "`return`",
+        x if x == Token::Sizeof as i64 => "`sizeof`",
+        x if x == Token::While as i64 => "`while`",
+        x if x == Token::Assign as i64 => "`=`",
+        x if x == Token::AssignOp as i64 => "compound-assign (`+=` / `-=` / ...)",
+        x if x == Token::Cond as i64 => "`?`",
+        x if x == Token::Lor as i64 => "`||`",
+        x if x == Token::Lan as i64 => "`&&`",
+        x if x == Token::OrOp as i64 => "`|`",
+        x if x == Token::XorOp as i64 => "`^`",
+        x if x == Token::AndOp as i64 => "`&`",
+        x if x == Token::EqOp as i64 => "`==`",
+        x if x == Token::NeOp as i64 => "`!=`",
+        x if x == Token::LtOp as i64 => "`<`",
+        x if x == Token::GtOp as i64 => "`>`",
+        x if x == Token::LeOp as i64 => "`<=`",
+        x if x == Token::GeOp as i64 => "`>=`",
+        x if x == Token::ShlOp as i64 => "`<<`",
+        x if x == Token::ShrOp as i64 => "`>>`",
+        x if x == Token::AddOp as i64 => "`+`",
+        x if x == Token::SubOp as i64 => "`-`",
+        x if x == Token::MulOp as i64 => "`*`",
+        x if x == Token::DivOp as i64 => "`/`",
+        x if x == Token::ModOp as i64 => "`%`",
+        x if x == Token::Inc as i64 => "`++`",
+        x if x == Token::Dec as i64 => "`--`",
+        x if x == Token::Brak as i64 => "`[`",
+        x if x == Token::Do as i64 => "`do`",
+        x if x == Token::Break as i64 => "`break`",
+        x if x == Token::Continue as i64 => "`continue`",
+        x if x == Token::Goto as i64 => "`goto`",
+        x if x == Token::Switch as i64 => "`switch`",
+        x if x == Token::Case as i64 => "`case`",
+        x if x == Token::Default as i64 => "`default`",
+        x if x == Token::Struct as i64 => "`struct`",
+        x if x == Token::Arrow as i64 => "`->`",
+        x if x == Token::Ellipsis as i64 => "`...`",
+        x if x == Token::Dot as i64 => "`.`",
+        x if x == Token::ThreadLocal as i64 => "`_Thread_local`",
+        x if x == Token::Extern as i64 => "`extern`",
+        x if x == Token::Static as i64 => "`static`",
+        x if x == Token::TypeQual as i64 => "type qualifier (`const` / `volatile` / `restrict`)",
+        x if x == Token::IntMod as i64 => "integer-type modifier",
+        x if x == Token::Short as i64 => "`short`",
+        x if x == Token::Signed as i64 => "`signed`",
+        x if x == Token::Unsigned as i64 => "`unsigned`",
+        x if x == Token::Long as i64 => "`long`",
+        x if x == Token::FuncSpec as i64 => "function specifier (`inline` / `register` / `auto`)",
+        x if x == Token::Typedef as i64 => "`typedef`",
+        x if x == Token::Union as i64 => "`union`",
+        x if x == Token::Float as i64 => "`float`",
+        x if x == Token::Double as i64 => "`double`",
+        x if x == Token::FloatNum as i64 => "floating-point literal",
+        x if x == Token::StaticAssert as i64 => "`static_assert` / `_Static_assert`",
+        x if x == Token::Void as i64 => "`void`",
+        _ => return format!("token id {tk}"),
+    };
+    name.to_string()
 }
 
 /// Primitive Types

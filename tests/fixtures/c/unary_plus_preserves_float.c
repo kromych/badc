@@ -29,7 +29,7 @@ int main() {
     if ((r + sign) != 2.0) return 3;
     if ((r + ((r < 0) ? -0.5 : +0.5)) != 2.0) return 4;
 
-    // 3. The full sqlite-style cast chain.
+    // 3. The full nested-cast chain.
     long li = (long)(r + ((r < 0) ? -0.5 : +0.5));
     if (li != 2) return 5;
     double back = (double)((long)(r + ((r < 0) ? -0.5 : +0.5)));

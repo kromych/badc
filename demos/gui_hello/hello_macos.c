@@ -22,30 +22,107 @@
  *     ./hello-macos
  *
  * Caveats:
- *   * Cocoa expects a few coordinated bits of state
- *     (`activateIgnoringOtherApps:` etc.); the demo
- *     follows the AppKit boilerplate Apple's documentation
- *     spells out (cf. "Bundles and Frameworks" /
- *     `Apple-AppKit-Sample-Code`).
+ *   * Cocoa expects a few coordinated bits of state to land
+ *     before the run loop spins up (`setActivationPolicy:`,
+ *     `activateIgnoringOtherApps:`, an `NSApplicationDelegate`
+ *     for the terminate-on-window-close hook); each is wired
+ *     in `main` below.
  *   * Frameworks resolve through `/System/Library/Frameworks`
  *     -- listed below the same way `libSystem` is. */
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 /* libobjc.A.dylib -- the ObjC runtime. */
 #pragma dylib(libobjc, "/usr/lib/libobjc.A.dylib")
 #pragma binding(libobjc::objc_getClass,    "_objc_getClass")
 #pragma binding(libobjc::sel_registerName, "_sel_registerName")
 #pragma binding(libobjc::objc_msgSend,     "_objc_msgSend")
+/* Runtime-side primitives for synthesising a fresh ObjC class
+ * at runtime. c5 has no `@interface`/`@implementation` syntax,
+ * so the `NSApplicationDelegate` we need for "terminate when
+ * the last window closes" is built through the C-level runtime
+ * surface: allocate a class pair, attach a method whose IMP is
+ * a regular C function, register the pair, instantiate it. */
+#pragma binding(libobjc::objc_allocateClassPair, "_objc_allocateClassPair")
+#pragma binding(libobjc::objc_registerClassPair, "_objc_registerClassPair")
+#pragma binding(libobjc::class_addMethod,        "_class_addMethod")
+/* objc_msgSend's *underlying* ABI follows the receiver method's
+ * declared signature, not a variadic register layout. Apple's
+ * runtime is happy to be called with any argument shape that
+ * matches the method's selector, but each call site has to
+ * pick the right register / stack assignment for that
+ * signature. c5 picks one calling convention per binding, so
+ * we declare each shape we use as a *separate*, non-variadic
+ * binding pointing at the same `_objc_msgSend` symbol. The
+ * non-variadic prototype below lets c5 emit standard AAPCS64
+ * register-passing (first 4 doubles in d0..d3, first few
+ * integers in x0..x7), which matches what AppKit expects of
+ * the method we're dispatching to. */
+#pragma binding(libobjc::objc_msgSend_rect, "_objc_msgSend")
+#pragma binding(libobjc::objc_msgSend_b,    "_objc_msgSend")
+#pragma binding(libobjc::objc_msgSend_p,    "_objc_msgSend")
 
 void *objc_getClass(char *name);
 void *sel_registerName(char *name);
-/* `objc_msgSend(id self, SEL op, ...)` -- variadic trampoline.
- * c5 doesn't have an ObjC syntax layer, so we call it like
- * any other variadic C function. The runtime's job is to
- * pick the right stub for the receiver's argument list. */
+/* `objc_msgSend(id self, SEL op, ...)` -- variadic trampoline
+ * for receiver+selector-only call sites (`alloc`, `run`, ...)
+ * where no further argument shape matters. */
 void *objc_msgSend(void *recv, void *sel, ...);
+/* Non-variadic specialisation for the NSWindow initWithContentRect
+ * shape: receiver + selector + four NSRect doubles + three
+ * integer arguments. With a non-variadic prototype, c5 emits the
+ * standard AAPCS64 register layout (d0..d3 for the NSRect
+ * doubles; x2..x4 for the styleMask / backing / defer), which is
+ * what AppKit's selector implementation reads on macOS arm64. */
+void *objc_msgSend_rect(void *recv, void *sel,
+                        double x, double y, double w, double h,
+                        long long mask, long long backing, long long defer);
+/* Non-variadic specialisation for selectors that take a single
+ * `long long`-shaped argument (BOOL / NSUInteger). Examples:
+ * `activateIgnoringOtherApps:`. */
+void *objc_msgSend_b(void *recv, void *sel, long long arg);
+/* Non-variadic specialisation for selectors that take a single
+ * pointer (`id` / `NSString *` / `char *`). Examples:
+ * `setTitle:`, `makeKeyAndOrderFront:`,
+ * `stringWithUTF8String:`. */
+void *objc_msgSend_p(void *recv, void *sel, void *arg);
+
+/* `objc_allocateClassPair(superclass, name, extraBytes)` returns
+ * a fresh, *unregistered* class derived from `superclass`. The
+ * caller adds the desired methods through `class_addMethod` and
+ * then calls `objc_registerClassPair` to make it eligible for
+ * `+alloc` / `-init` and any other runtime dispatch. */
+void *objc_allocateClassPair(void *superclass, char *name, long long extra_bytes);
+/* Commit a class previously allocated via `objc_allocateClassPair`
+ * to the runtime's class hierarchy. Calling `+alloc` on the
+ * class before this step would return nil. */
+void objc_registerClassPair(void *cls);
+/* `class_addMethod(cls, sel, imp, types)` -- attach a method
+ * implementation to a class. `imp` is a regular C function whose
+ * first two arguments are `self` and `_cmd`; remaining arguments
+ * follow the selector's declared shape. `types` is an Apple
+ * Method Type Encoding string (see Objective-C Runtime
+ * Programming Guide, "Type Encodings"). Returns 1 (BOOL YES) on
+ * success. */
+long long class_addMethod(void *cls, void *sel, void *imp, char *types);
+
+/* IMP for `applicationShouldTerminateAfterLastWindowClosed:`.
+ * NSApplicationDelegate's protocol declares this method as
+ * `- (BOOL)applicationShouldTerminateAfterLastWindowClosed:
+ *      (NSApplication *)sender` -- type encoding `B@:@`. We
+ * return 1 (YES), telling AppKit to call `-terminate:` on NSApp
+ * after the last window closes, which winds down `run`'s event
+ * loop and returns from `main`. Without this delegate, closing
+ * the only window leaves the app spinning indefinitely. */
+static long long app_should_terminate_yes(void *self, void *_cmd, void *sender) {
+    (void)self;
+    (void)_cmd;
+    (void)sender;
+    return 1;
+}
 
 /* Cocoa lives in AppKit.framework; pulling
  * `_NSApp` etc. would normally happen through AppKit's
@@ -70,27 +147,86 @@ void *objc_msgSend(void *recv, void *sel, ...);
 #define NS_RESIZABLE   0x8
 #define NS_BACKING_BUF 2
 
-/* NSRect-shaped argument (CGFloat == double on 64-bit Apple
- * platforms). Cocoa's frame APIs take it by value; with c5's
- * struct-by-value support that means four doubles back-to-
- * back. Today c5 marshals struct-by-value through pointer
- * thunks for many APIs; for objc_msgSend we route through
- * the variadic surface, which AAPCS64 / SysV both spell as
- * "first 4 doubles in d0..d3" -- the same convention NSRect
- * uses. */
+/* NSRect is four CGFloats (double on 64-bit Apple platforms).
+ * AppKit's `initWithContentRect:...` signature reads them out
+ * of FP registers per AAPCS64 -- the `objc_msgSend_rect`
+ * binding above wraps the call so c5's standard register-
+ * passing path lines up with what the selector reads. */
 
 int main(int argc, char **argv) {
     (void)argc; (void)argv;
 
-    /* [NSApplication sharedApplication] -- the singleton
-     * NSApp instance that owns the run loop. */
+    /* Detach from the controlling terminal so the shell that
+     * launched us regains its prompt immediately while the GUI
+     * keeps running. The parent process exits as soon as the
+     * fork succeeds; the child carries on with the AppKit
+     * setup. The fork happens before any ObjC / AppKit call so
+     * the child inherits a fresh process without any runtime
+     * state to reconcile. */
+    int child = fork();
+    if (child < 0) {
+        fprintf(stderr, "hello-macos: fork failed\n");
+        return 1;
+    }
+    if (child > 0) {
+        return 0;
+    }
+
+    /* Suppress AppKit's NSLog chatter from the unbundled-binary
+     * launch path: a few `+[NSXPCSharedListener ...]: Connection
+     * invalid` / `Connection Invalid error for service
+     * com.apple.hiservices-xpcservice` messages land on stderr
+     * during NSWindow setup but don't affect the window itself.
+     * NSLog writes to fd 2, so `dup2`'ing /dev/null over fd 2
+     * silences the lot. Our own diagnostics below use `printf`
+     * (stdout) so genuine setup failures still surface. */
+    int devnull = open("/dev/null", O_WRONLY);
+    if (devnull >= 0) {
+        dup2(devnull, 2);
+        close(devnull);
+    }
     void *NSApplication = objc_getClass("NSApplication");
     void *sharedApp     = sel_registerName("sharedApplication");
     void *app = objc_msgSend(NSApplication, sharedApp);
     if (!app) {
-        fprintf(stderr, "hello-macos: NSApplication sharedApplication failed\n");
+        printf("hello-macos: NSApplication sharedApplication failed\n");
         return 1;
     }
+
+    /* `[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular]`
+     * -- an unbundled executable defaults to `BackgroundOnly`
+     * (no Dock icon, no visible windows). Without this call,
+     * the window we create later is still constructed correctly
+     * and the run loop spins, but macOS keeps the process out
+     * of the foreground UI session so nothing appears on
+     * screen. `NSApplicationActivationPolicyRegular = 0`. */
+    void *setPolicy = sel_registerName("setActivationPolicy:");
+    objc_msgSend_b(app, setPolicy, (long long)0);
+
+    /* Install an NSApplicationDelegate that terminates the app
+     * when the last window closes. AppKit's default policy is
+     * "keep running" -- a `.app` bundle with a menu bar would
+     * exit via Cmd-Q's `terminate:`, but our minimal demo has
+     * no menu, so without the delegate, clicking the close
+     * button leaves the run loop spinning. */
+    void *NSObject_cls   = objc_getClass("NSObject");
+    void *delegate_cls   = objc_allocateClassPair(
+        NSObject_cls, "BadcAppDelegate", 0);
+    void *should_term_sel = sel_registerName(
+        "applicationShouldTerminateAfterLastWindowClosed:");
+    /* Type encoding `B@:@` -- BOOL return, `id self`, `SEL _cmd`,
+     * `id sender`. The IMP is a regular C function whose first
+     * two args match `self` / `_cmd`. */
+    class_addMethod(
+        delegate_cls, should_term_sel,
+        (void *)&app_should_terminate_yes, "B@:@");
+    objc_registerClassPair(delegate_cls);
+    void *alloc_sel = sel_registerName("alloc");
+    void *init_sel  = sel_registerName("init");
+    void *delegate_obj = objc_msgSend(delegate_cls, alloc_sel);
+    delegate_obj = objc_msgSend(delegate_obj, init_sel);
+    void *setDelegate = sel_registerName("setDelegate:");
+    objc_msgSend_p(app, setDelegate, delegate_obj);
 
     /* NSWindow alloc + init with content rect, style mask,
      * backing store, defer flag. The four NSRect doubles
@@ -102,14 +238,14 @@ int main(int argc, char **argv) {
     void *init     = sel_registerName(
         "initWithContentRect:styleMask:backing:defer:");
     void *winAlloc = objc_msgSend(NSWindow, alloc);
-    void *window = objc_msgSend(
+    void *window = objc_msgSend_rect(
         winAlloc, init,
         100.0, 100.0, 480.0, 240.0,
         (long long)(NS_TITLED | NS_CLOSABLE | NS_RESIZABLE),
         (long long)NS_BACKING_BUF,
         (long long)0);
     if (!window) {
-        fprintf(stderr, "hello-macos: NSWindow alloc / init failed\n");
+        printf("hello-macos: NSWindow alloc / init failed\n");
         return 1;
     }
 
@@ -119,17 +255,17 @@ int main(int argc, char **argv) {
      * NSString class method `stringWithUTF8String:`. */
     void *NSString = objc_getClass("NSString");
     void *swus     = sel_registerName("stringWithUTF8String:");
-    void *title    = objc_msgSend(NSString, swus, "badc Cocoa hello");
+    void *title    = objc_msgSend_p(NSString, swus, "badc Cocoa hello");
     void *setTitle = sel_registerName("setTitle:");
-    objc_msgSend(window, setTitle, title);
+    objc_msgSend_p(window, setTitle, title);
 
     /* [window makeKeyAndOrderFront:nil] + [NSApp run]. The
      * activate / run pair gives the window focus and starts
      * the modal AppKit event loop. */
     void *makeKey = sel_registerName("makeKeyAndOrderFront:");
-    objc_msgSend(window, makeKey, (void *)0);
+    objc_msgSend_p(window, makeKey, (void *)0);
     void *activate = sel_registerName("activateIgnoringOtherApps:");
-    objc_msgSend(app, activate, (long long)1);
+    objc_msgSend_b(app, activate, (long long)1);
     void *run = sel_registerName("run");
     objc_msgSend(app, run);
     return 0;

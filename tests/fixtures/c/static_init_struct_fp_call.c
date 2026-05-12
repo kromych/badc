@@ -5,7 +5,7 @@
 // shows up here without the surrounding designated/positional
 // initializer variants.
 //
-// Was the regression marker for gh #50: on PE/x64 the call landed
+// Was the regression marker for: on PE/x64 the call landed
 // on the c5 function's bare body, but Win64's Jsri lowering had
 // already allocated 32 bytes of shadow space before the call, so
 // the body's `[rbp+16]` reads pointed into that shadow region

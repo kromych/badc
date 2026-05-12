@@ -26,7 +26,7 @@ use alloc::vec::Vec;
 
 use super::super::error::C5Error;
 use super::super::op::Op;
-use super::super::token::Token;
+use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{is_struct_ty, struct_ptr_depth};
 
@@ -43,7 +43,7 @@ impl Compiler {
     /// the chain through this helper.
     pub(super) fn parse_full_expr(&mut self) -> Result<(), C5Error> {
         self.expr(Token::Assign as i64)?;
-        while self.lex.tk == ',' as i64 {
+        while self.lex.tk == ',' {
             self.next()?;
             self.expr(Token::Assign as i64)?;
         }
@@ -54,18 +54,29 @@ impl Compiler {
         self.next()?;
         self.consume(b'(', "open paren expected")?;
 
-        // Initialization (optional). Comma operator: `for(i=0,j=0; ...)`.
-        if self.lex.tk != ';' as i64 {
+        // C99 6.8.5.3 for-init is either an expression or a
+        // declaration. The declared identifier's scope is the
+        // entire for statement, so a fresh `block_symbols`
+        // vector lets us shadow and restore in the same shape
+        // as `parse_block_stmt`. `parse_block_local_decl`
+        // consumes its own trailing `;`; the expression branch
+        // does it explicitly.
+        let mut for_init_symbols: Vec<(usize, i64, i64, i64)> = Vec::new();
+        if self.lex.tk == ';' {
+            self.next()?;
+        } else if self.lex_is_type_start() {
+            self.parse_block_local_decl(&mut for_init_symbols)?;
+        } else {
             self.parse_full_expr()?;
+            self.consume(b';', "semicolon expected after for-init")?;
         }
-        self.consume(b';', "semicolon expected after for-init")?;
 
         // Condition (optional -- empty means `1`). The C99 grammar
         // makes the condition a full `expression`, so a comma chain
         // is legal here too -- the value of the last subexpression
         // becomes the loop predicate.
         let cond_pc = self.text.len();
-        if self.lex.tk != ';' as i64 {
+        if self.lex.tk != ';' {
             self.parse_full_expr()?;
         } else {
             self.emit_imm(1);
@@ -84,7 +95,7 @@ impl Compiler {
         // back to it; the body itself is reached via the `body_jmp_pc`
         // patched a few lines below. Comma operator: `i++, k--`.
         let step_pc = self.text.len();
-        if self.lex.tk != ')' as i64 {
+        if self.lex.tk != ')' {
             self.parse_full_expr()?;
         }
         self.emit_jmp(cond_pc as i64);
@@ -102,6 +113,16 @@ impl Compiler {
         self.text[end_jmp_pc] = self.text.len() as i64;
         let end_pc = self.text.len();
         self.patch_loop_breaks(end_pc);
+
+        // Restore symbols shadowed by the for-init declaration so
+        // the binding's scope ends with the for statement
+        // (C99 6.8.5.3 / 6.8p3). Restore in reverse order to
+        // unwind multiple shadows in declaration order.
+        for (idx, class, ty, val) in for_init_symbols.into_iter().rev() {
+            self.symbols[idx].class = class;
+            self.symbols[idx].type_ = ty;
+            self.symbols[idx].val = val;
+        }
         Ok(())
     }
 
@@ -180,11 +201,30 @@ impl Compiler {
     ) -> Result<(), C5Error> {
         self.next()?; // consume `typedef`
         let lbt = self.parse_decl_base_type()?;
-        while self.lex.tk != ';' as i64 {
+        while self.lex.tk != ';' {
             let (id_idx, ty, _) = self.parse_declarator(lbt)?;
             if id_idx == usize::MAX {
                 return Err(self.compile_err("typedef requires a name"));
             }
+            let fn_ptr_indirection = self.pending_fn_ptr_indirection.take().unwrap_or(0);
+            // C99 function-type typedef: `typedef RET NAME(args);`
+            // declared at block scope. Same handling as run_compile's
+            // file-scope branch -- parse the `(args)` and bind the
+            // typedef as a function-pointer alias. parse_function_params
+            // binds each named parameter as a Loc; with no body to put
+            // them into scope for, we restore the shadowed binding
+            // immediately.
+            let (typedef_ty, typedef_fpi, typedef_params) = if self.lex.tk == '(' {
+                self.next()?; // consume `(`
+                let pp = self.parse_function_params()?;
+                for &p in &pp.indices {
+                    Compiler::restore_shadowed_symbol(&mut self.symbols[p]);
+                }
+                let fty = ty + Ty::Ptr as i64;
+                (fty, 1i64, Some(pp))
+            } else {
+                (ty, fn_ptr_indirection, None)
+            };
             block_symbols.push((
                 id_idx,
                 self.symbols[id_idx].class,
@@ -192,9 +232,16 @@ impl Compiler {
                 self.symbols[id_idx].val,
             ));
             self.symbols[id_idx].class = Token::Typedef as i64;
-            self.symbols[id_idx].type_ = ty;
+            self.symbols[id_idx].type_ = typedef_ty;
             self.symbols[id_idx].val = 0;
-            if self.lex.tk == ',' as i64 {
+            if typedef_fpi > 0 {
+                self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
+            }
+            if let Some(pp) = typedef_params {
+                self.symbols[id_idx].params = pp.types;
+                self.symbols[id_idx].is_variadic = pp.is_variadic;
+            }
+            if self.lex.tk == ',' {
                 self.next()?;
             }
         }
@@ -217,8 +264,8 @@ impl Compiler {
         // promotes the declarator to a Glo symbol with persistent
         // data-segment storage.
         let mut is_static = false;
-        while self.lex.tk == Token::Extern as i64 || self.lex.tk == Token::Static as i64 {
-            if self.lex.tk == Token::Static as i64 {
+        while self.lex.tk == Token::Extern || self.lex.tk == Token::Static {
+            if self.lex.tk == Token::Static {
                 is_static = true;
             }
             self.next()?;
@@ -231,7 +278,7 @@ impl Compiler {
         // so the whole declaration is a no-op; the linker /
         // codegen-side import resolution finds the symbol via its
         // own table. Skip to the matching `;` and return.
-        if self.lex.tk == Token::Id as i64 && self.lex.peek_after_whitespace(b'(') {
+        if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b'(') {
             // Counted-paren skip from the name. Walk past the
             // identifier, then the `(`, then balance braces until
             // the matching `)`. Function-pointer declarators
@@ -241,9 +288,9 @@ impl Compiler {
             self.next()?; // consume `(`
             let mut depth: i64 = 1;
             while depth > 0 && self.lex.tk != 0 {
-                if self.lex.tk == '(' as i64 {
+                if self.lex.tk == '(' {
                     depth += 1;
-                } else if self.lex.tk == ')' as i64 {
+                } else if self.lex.tk == ')' {
                     depth -= 1;
                     if depth == 0 {
                         self.next()?;
@@ -257,13 +304,13 @@ impl Compiler {
             // standard form is one declaration per `;`, but the
             // C grammar would in principle allow `int foo(int),
             // bar(int);`. Skip until the terminator.
-            while self.lex.tk != ';' as i64 && self.lex.tk != 0 {
+            while self.lex.tk != ';' && self.lex.tk != 0 {
                 self.next()?;
             }
             self.next()?;
             return Ok(());
         }
-        while self.lex.tk != ';' as i64 {
+        while self.lex.tk != ';' {
             let (loc_idx, ty, array_size) = self.parse_declarator(lbt)?;
             self.ty = ty;
 
@@ -284,7 +331,7 @@ impl Compiler {
                 self.allocate_local_with_init(loc_idx, ty, array_size)?;
             }
 
-            if self.lex.tk == ',' as i64 {
+            if self.lex.tk == ',' {
                 self.next()?;
             }
         }
@@ -300,9 +347,13 @@ impl Compiler {
         self.next()?;
         let mut block_symbols = Vec::new();
 
-        while self.lex.tk != '}' as i64 {
-            if self.lex.tk == Token::Typedef as i64 {
+        while self.lex.tk != '}' {
+            if self.lex.tk == Token::Typedef {
                 self.parse_block_typedef(&mut block_symbols)?;
+            } else if self.lex.tk == Token::StaticAssert {
+                // C11 6.7.10 allows `static_assert` anywhere a
+                // declaration may appear -- including block scope.
+                self.parse_static_assert()?;
             } else if self.lex_is_type_start() {
                 self.parse_block_local_decl(&mut block_symbols)?;
             } else {
@@ -321,7 +372,7 @@ impl Compiler {
     }
 
     pub(super) fn stmt(&mut self) -> Result<(), C5Error> {
-        if self.lex.tk == Token::Id as i64 && self.lex.peek_after_whitespace(b':') {
+        if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b':') {
             let name = self.symbols[self.lex.curr_id_idx].name.clone();
             self.labels.push((name, self.text.len()));
             self.next()?; // consume Id
@@ -330,7 +381,7 @@ impl Compiler {
             return Ok(());
         }
 
-        if self.lex.tk == Token::If as i64 {
+        if self.lex.tk == Token::If {
             self.next()?;
             self.consume(b'(', "open paren expected")?;
             self.parse_full_expr()?;
@@ -339,7 +390,7 @@ impl Compiler {
             let b = self.text.len();
             self.emit_val(0);
             self.stmt()?;
-            if self.lex.tk == Token::Else as i64 {
+            if self.lex.tk == Token::Else {
                 self.text[b] = (self.text.len() + 2) as i64;
                 self.emit_op(Op::Jmp);
                 let b_else = self.text.len();
@@ -350,7 +401,7 @@ impl Compiler {
             } else {
                 self.text[b] = self.text.len() as i64;
             }
-        } else if self.lex.tk == Token::While as i64 {
+        } else if self.lex.tk == Token::While {
             self.next()?;
             let cond_pc = self.text.len();
             self.consume(b'(', "open paren expected")?;
@@ -369,14 +420,14 @@ impl Compiler {
             self.text[bz_pc] = self.text.len() as i64;
             let end_pc = self.text.len();
             self.patch_loop_breaks(end_pc);
-        } else if self.lex.tk == Token::Do as i64 {
+        } else if self.lex.tk == Token::Do {
             self.next()?;
             let start_pc = self.text.len();
 
             self.enter_loop();
             self.stmt()?;
 
-            if self.lex.tk == Token::While as i64 {
+            if self.lex.tk == Token::While {
                 self.next()?;
             } else {
                 return Err(self.compile_err("while expected after do"));
@@ -396,11 +447,11 @@ impl Compiler {
 
             let end_pc = self.text.len();
             self.patch_loop_breaks(end_pc);
-        } else if self.lex.tk == Token::For as i64 {
+        } else if self.lex.tk == Token::For {
             self.parse_for_stmt()?;
-        } else if self.lex.tk == Token::Switch as i64 {
+        } else if self.lex.tk == Token::Switch {
             self.parse_switch_stmt()?;
-        } else if self.lex.tk == Token::Case as i64 {
+        } else if self.lex.tk == Token::Case {
             self.next()?;
             // Case label is a constant expression: integer literal,
             // negated literal, parenthesised literal, enum / `#define`d
@@ -413,7 +464,7 @@ impl Compiler {
             };
             cases.push((val, self.text.len()));
             self.stmt()?;
-        } else if self.lex.tk == Token::Default as i64 {
+        } else if self.lex.tk == Token::Default {
             self.next()?;
             self.consume(b':', "expected colon after default")?;
             let Some(def) = self.switch_defaults.last_mut() else {
@@ -421,9 +472,9 @@ impl Compiler {
             };
             *def = Some(self.text.len());
             self.stmt()?;
-        } else if self.lex.tk == Token::Goto as i64 {
+        } else if self.lex.tk == Token::Goto {
             self.next()?;
-            if self.lex.tk != Token::Id as i64 {
+            if self.lex.tk != Token::Id {
                 return Err(self.compile_err("expected identifier after goto"));
             }
             let target_name = self.symbols[self.lex.curr_id_idx].name.clone();
@@ -439,7 +490,7 @@ impl Compiler {
             }
 
             self.consume(b';', "semicolon expected after goto")?;
-        } else if self.lex.tk == Token::Break as i64 {
+        } else if self.lex.tk == Token::Break {
             self.next()?;
             if self.loop_breaks.is_empty() {
                 return Err(self.compile_err("break outside of loop or switch"));
@@ -449,7 +500,7 @@ impl Compiler {
             self.emit_val(0);
             self.record_break_jmp(pc);
             self.consume(b';', "semicolon expected after break")?;
-        } else if self.lex.tk == Token::Continue as i64 {
+        } else if self.lex.tk == Token::Continue {
             self.next()?;
             if self.loop_continues.is_empty() {
                 return Err(self.compile_err("continue outside of loop"));
@@ -459,11 +510,23 @@ impl Compiler {
             self.emit_val(0);
             self.record_continue_jmp(pc);
             self.consume(b';', "semicolon expected after continue")?;
-        } else if self.lex.tk == Token::Return as i64 {
+        } else if self.lex.tk == Token::Return {
             self.next()?;
             let ret_ty = self.current_func_return_ty;
             let returns_struct = is_struct_ty(ret_ty) && struct_ptr_depth(ret_ty) == 0;
-            if self.lex.tk != ';' as i64 {
+            let returns_void = self.current_func_returns_void;
+            if self.lex.tk != ';' {
+                if returns_void {
+                    // C99 6.8.6.4p1: `return <expr>;` in a function
+                    // returning `void` is a constraint violation.
+                    // Reject here rather than silently dropping
+                    // the value -- gcc and clang both diagnose this
+                    // at the strict level.
+                    return Err(self.compile_err(
+                        "`return` with a value in a function returning `void` \
+                         (C99 6.8.6.4p1)",
+                    ));
+                }
                 if returns_struct {
                     // Push the hidden out-pointer (loaded from
                     // val=2 -- the slot the caller pushed before
@@ -490,12 +553,19 @@ impl Compiler {
                 } else {
                     self.parse_full_expr()?;
                 }
+            } else if returns_void {
+                // Bare `return;` in a void function. Zero the
+                // accumulator so the matching `Op::Lev` leaves a
+                // predictable value, matching the synthetic
+                // function-end Lev in run_compile.
+                self.emit_op(Op::Imm);
+                self.emit_val(0);
             }
             self.emit_op(Op::Lev);
             self.consume(b';', "semicolon expected")?;
-        } else if self.lex.tk == '{' as i64 {
+        } else if self.lex.tk == '{' {
             self.parse_block_stmt()?;
-        } else if self.lex.tk == ';' as i64 {
+        } else if self.lex.tk == ';' {
             self.next()?;
         } else {
             self.parse_full_expr()?;
@@ -506,19 +576,18 @@ impl Compiler {
 
     /// Consume a single-byte token, returning a labelled compile error otherwise.
     pub(super) fn consume(&mut self, expected: u8, msg: &str) -> Result<(), C5Error> {
-        if self.lex.tk == expected as i64 {
+        if self.lex.tk == expected {
             self.next()?;
             Ok(())
         } else {
+            let id_suffix = if self.lex.tk == Token::Id {
+                format!(" `{}`", self.symbols[self.lex.curr_id_idx].name)
+            } else {
+                alloc::string::String::new()
+            };
             Err(self.compile_err(format!(
-                "{} (got tk={}, id={:?})",
-                msg,
-                self.lex.tk,
-                if self.lex.tk == Token::Id as i64 {
-                    Some(self.symbols[self.lex.curr_id_idx].name.clone())
-                } else {
-                    None
-                }
+                "{msg} (got {}{id_suffix})",
+                super::super::token::describe(self.lex.tk),
             )))
         }
     }

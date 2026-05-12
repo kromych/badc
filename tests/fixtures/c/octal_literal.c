@@ -1,13 +1,13 @@
 #include <stdlib.h>
 
 // Octal integer literals (`0644` is octal `420`, not decimal
-// `644`). Until #58's lexer fix, c5 read every leading-zero
+// `644`). Before the lexer fix, c5 read every leading-zero
 // number as decimal and silently passed wrong file modes /
-// permission bits / sqlite-flag constants. sqlite's own VFS
-// uses `osOpen(zPath, flags, 0644)` to create database files,
-// so this regression made every newly-created sqlite db come
-// out with mode `1204` (decimal `644` re-encoded as octal)
-// instead of `0644`.
+// permission bits / flag constants to libc. Real-world code
+// uses `open(path, flags, 0644)` to create files with octal
+// permissions, so the regression produced files with mode
+// `1204` (decimal `644` re-encoded as octal) instead of
+// `0644`.
 //
 // Each `0644`-style literal here is checked against the
 // hand-computed decimal equivalent so a future regression

@@ -106,7 +106,7 @@ const IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE: u16 = 0x0040;
 const IMAGE_DLLCHARACTERISTICS_NX_COMPAT: u16 = 0x0100;
 const IMAGE_DLLCHARACTERISTICS_NO_SEH: u16 = 0x0400;
 
-/// COFF storage classes (`IMAGE_SYMBOL.StorageClass`). gh #61
+/// COFF storage classes (`IMAGE_SYMBOL.StorageClass`).
 /// uses `IMAGE_SYM_CLASS_EXTERNAL` for the per-trampoline names
 /// so debuggers (`gdb`, `lldb`, `windbg`) resolve `b malloc`
 /// against the local trampoline rather than chasing it through
@@ -194,7 +194,7 @@ fn num_sections(
         n += 1;
     }
     if dwarf_section_present {
-        // gh #42: five `__debug_*` sections (info / abbrev /
+        // Five `__debug_*` sections (info / abbrev /
         // line / str / frame). PE caps section names at 8 chars,
         // so the leading dot is dropped (mingw-w64 convention) --
         // dwarfdump / lldb / gdb all recognise the truncated
@@ -391,10 +391,10 @@ pub(super) fn write(
         || !build.data_relocs.is_empty()
         || !build.code_relocs.is_empty();
     let edata_section_present = is_dll && !build.exports.is_empty();
-    // gh #42: emit DWARF debug sections in PE images so lldb /
+    // Emit DWARF debug sections in PE images so lldb /
     // gdb can resolve user-function names + types in PE
     // backtraces. Suppressed when the user passed `--no-debug` /
-    // `-g0` (gh #62) -- the section headers + payload + COFF
+    // `-g0` -- the section headers + payload + COFF
     // string table are all skipped, `pointer_to_symbol_table`
     // returns to 0, and `SizeOfImage` shrinks accordingly.
     let dwarf_section_present = build.debug_info;
@@ -575,7 +575,7 @@ pub(super) fn write(
         idata_rva + idata_size
     };
 
-    // gh #42: lay out the five DWARF debug sections after the
+    // Lay out the five DWARF debug sections after the
     // existing ones. The mingw-w64 PE convention drops the leading
     // dot to fit each name in PE's 8-char limit; lldb / gdb / `llvm-
     // dwarfdump` all walk by section content rather than literal
@@ -585,7 +585,7 @@ pub(super) fn write(
     // skips them at runtime even though they occupy RVA range --
     // they only matter to the debugger walking the file image.
     let dwarf_sections = if dwarf_section_present {
-        // gh #68: PE has its own entry stub, but the symptom
+        // PE has its own entry stub, but the symptom
         // (gdb's "Cannot find bounds of current function" after
         // stepping past `return 0;` in main) was only verified
         // on linux/aarch64. Pass `None` here -- the ELF writer
@@ -640,7 +640,7 @@ pub(super) fn write(
     ];
     let mut coff_strtab: Vec<u8> = Vec::new();
     let mut dwarf_section_names: Vec<[u8; 8]> = Vec::with_capacity(5);
-    // gh #61: build a per-trampoline COFF symbol table so a
+    // Build a per-trampoline COFF symbol table so a
     // debugger's `b malloc` resolves to the local PLT trampoline
     // rather than getting lost in msvcrt's macro expansions. The
     // symbol table sits at `pointer_to_symbol_table` (= start of
@@ -703,7 +703,7 @@ pub(super) fn write(
         .map(|s| round_up(s.rva + s.bytes.len() as u32, SECTION_ALIGNMENT))
         .unwrap_or(pre_dwarf_end_rva);
 
-    // gh #61: build the COFF symbol-table payload now that the
+    // Build the COFF symbol-table payload now that the
     // long-name strtab offsets are stable. Each trampoline gets
     // one IMAGE_SYMBOL whose Value is the trampoline's RVA and
     // whose SectionNumber is 1 (.text). Names <= 8 bytes inline
@@ -933,7 +933,7 @@ pub(super) fn write(
             tls_table_size,
             export_table_rva: edata_rva,
             export_table_size: edata_size,
-            // gh #32: source-driven subsystem flag. Default
+            // Source-driven subsystem flag. Default
             // (`None`) keeps the historical console-subsystem
             // PE; `windows` opts in to GUI mode for `WinMain`-
             // shaped programs (the loader skips the auto-
@@ -1008,7 +1008,7 @@ pub(super) fn write(
             characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ,
         });
     }
-    // gh #42: DWARF debug sections. DISCARDABLE so the loader
+    // DWARF debug sections. DISCARDABLE so the loader
     // skips them at runtime; lldb / gdb / llvm-dwarfdump read
     // them from the file image.
     for slot in &dwarf_pe_sections {
@@ -1167,13 +1167,13 @@ pub(super) fn write(
         pad_to(&mut out, edata_file_off as usize);
         out.extend_from_slice(&edata_bytes);
     }
-    // gh #42: DWARF debug sections come last in the file image
+    // DWARF debug sections come last in the file image
     // (before the COFF string table that names them).
     for slot in &dwarf_pe_sections {
         pad_to(&mut out, slot.file_off as usize);
         out.extend_from_slice(&slot.bytes);
     }
-    // gh #61: COFF symbol table immediately before its string
+    // COFF symbol table immediately before its string
     // table. Both live at the file tail (post-DWARF). Emitted
     // when there are PLT trampolines; absent otherwise.
     if !coff_symbols.is_empty() {
@@ -1710,9 +1710,9 @@ fn write_coff_header(
                 dwarf_section_present,
             ) as u16,
             time_date_stamp: 0,
-            // gh #42: PE images carry a COFF strtab at the file
+            // PE images carry a COFF strtab at the file
             // tail so the long DWARF section names ("/<offset>")
-            // resolve. gh #61: with PLT trampolines we now also
+            // resolve. With PLT trampolines we now also
             // emit a real COFF symbol table -- one local-name
             // entry per import -- right before the strtab.
             //
@@ -1763,7 +1763,7 @@ struct OptionalHeaderInputs {
     export_table_rva: u32,
     export_table_size: u32,
     /// PE optional-header `Subsystem` field. Driven by
-    /// `#pragma subsystem(<kind>)` (gh #32) -- `console` ->
+    /// `#pragma subsystem(<kind>)` -- `console` ->
     /// `IMAGE_SUBSYSTEM_WINDOWS_CUI` (3, default), `windows`
     /// -> `IMAGE_SUBSYSTEM_WINDOWS_GUI` (2). The console
     /// shape is what every existing demo / fixture builds

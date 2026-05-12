@@ -21,7 +21,7 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::is_pointer_ty;
+use super::types::{UNSIGNED_BIT, is_pointer_ty};
 
 impl Compiler {
     /// Parse a global / TLS initializer's right-hand side and
@@ -38,6 +38,27 @@ impl Compiler {
         is_thread_local: bool,
     ) -> Result<(), C5Error> {
         let line = self.lex.line;
+        // C99 6.7.8p11 allows a scalar initializer to be enclosed
+        // in a single pair of braces: `int x = { 42 };`. Adjacent
+        // string-literal concatenation may produce a multi-piece
+        // RHS the lexer joins before this parser sees it. Strip
+        // the wrapper and recurse.
+        if self.lex.tk == '{' {
+            self.next()?;
+            self.parse_global_initializer(var_ty, var_offset, is_thread_local)?;
+            // A trailing `,` before `}` is allowed in C99.
+            if self.lex.tk == ',' {
+                self.next()?;
+            }
+            if self.lex.tk != '}' {
+                return Err(self.compile_err_at(
+                    line,
+                    "scalar initializer wrapped in `{{ ... }}` must hold a single value",
+                ));
+            }
+            self.next()?; // consume `}`
+            return Ok(());
+        }
         // Optional `(TYPE)` cast prefix. const-init only cares about
         // the resulting value, not the cast type, so we skip the
         // type spec and re-enter from the post-cast token. Common
@@ -47,7 +68,7 @@ impl Compiler {
         // runtime cast handler in `expr()` uses; if the inner token
         // isn't a type start, this is a parenthesised expression --
         // recurse on the inner and require the closing `)`.
-        if self.lex.tk == '(' as i64 {
+        if self.lex.tk == '(' {
             self.next()?;
             if self.lex_is_type_start() {
                 // Discard the cast destination type. Counted-paren
@@ -56,9 +77,9 @@ impl Compiler {
                 // having to model the declarator grammar twice.
                 let mut depth: i64 = 1;
                 while depth > 0 && self.lex.tk != 0 {
-                    if self.lex.tk == '(' as i64 {
+                    if self.lex.tk == '(' {
                         depth += 1;
-                    } else if self.lex.tk == ')' as i64 {
+                    } else if self.lex.tk == ')' {
                         depth -= 1;
                         if depth == 0 {
                             self.next()?;
@@ -72,7 +93,7 @@ impl Compiler {
             // Parenthesised expression: recurse on the inner and
             // consume the matching `)`.
             self.parse_global_initializer(var_ty, var_offset, is_thread_local)?;
-            if self.lex.tk == ')' as i64 {
+            if self.lex.tk == ')' {
                 self.next()?;
             }
             return Ok(());
@@ -85,7 +106,7 @@ impl Compiler {
         // synthetic Token::Fun whose val is filled in later by
         // `emit_sys_trampolines`; from that point on it follows the
         // same CodeReloc path as a user-defined function.
-        if self.lex.tk == Token::Id as i64
+        if self.lex.tk == Token::Id
             && (self.symbols[self.lex.curr_id_idx].class == Token::Fun as i64
                 || self.symbols[self.lex.curr_id_idx].class == Token::Sys as i64)
         {
@@ -111,7 +132,7 @@ impl Compiler {
             return Ok(());
         }
         // String literal in a `char *p` global initializer.
-        if self.lex.tk == '"' as i64 && is_pointer_ty(var_ty) {
+        if self.lex.tk == '"' && is_pointer_ty(var_ty) {
             if is_thread_local {
                 return Err(self.compile_err_at(
                     line,
@@ -120,7 +141,7 @@ impl Compiler {
             }
             let addr = self.lex.ival;
             self.next()?;
-            while self.lex.tk == '"' as i64 {
+            while self.lex.tk == '"' {
                 self.next()?;
             }
             self.data.push(0);
@@ -133,7 +154,7 @@ impl Compiler {
             return Ok(());
         }
         // `&<global>` -- address-of-global pointer init.
-        if self.lex.tk == Token::AndOp as i64 {
+        if self.lex.tk == Token::AndOp {
             if is_thread_local {
                 return Err(self.compile_err_at(
                     line,
@@ -144,7 +165,7 @@ impl Compiler {
                 ));
             }
             self.next()?;
-            if self.lex.tk != Token::Id as i64 {
+            if self.lex.tk != Token::Id {
                 return Err(
                     self.compile_err_at(line, "identifier expected after `&` in initializer")
                 );
@@ -188,10 +209,10 @@ impl Compiler {
             // `&array[N+M]` etc. The constant-expression evaluator
             // handles `+`, `-`, `*`, parens, `Token::Num`-class
             // identifiers (enum / `#define`d constants).
-            if self.lex.tk == Token::Brak as i64 {
+            if self.lex.tk == Token::Brak {
                 self.next()?;
                 let n = self.parse_constant_int()?;
-                if self.lex.tk != ']' as i64 {
+                if self.lex.tk != ']' {
                     return Err(self.compile_err_at(
                         line,
                         format!(
@@ -219,6 +240,42 @@ impl Compiler {
                 data_offset: var_offset as u64,
                 target_offset: target_offset as u64,
             });
+            return Ok(());
+        }
+
+        // Float / double scalar global with a constant-foldable
+        // float expression: `static float gamma = 1.0f / 2.2f;` and
+        // similar. The integer constant evaluator can't see through
+        // `/`, `*`, etc. on float operands, so route through the
+        // f64 folder in initializer.rs. The result is stored as the
+        // full 8 bytes the slot was sized for; a future
+        // f32-narrow-storage path would shrink it for `float`.
+        let var_is_float = {
+            let stripped = var_ty & !UNSIGNED_BIT;
+            stripped == Ty::Float as i64 || stripped == Ty::Double as i64
+        };
+        if var_is_float
+            && (self.lex.tk == Token::FloatNum
+                || (self.lex.tk == Token::SubOp && self.lex.peek_after_whitespace_starts_digit())
+                || (self.lex.tk == '(' && self.contents_until_close_paren_have_float_pub()?))
+        {
+            let bits = self.parse_const_float_expr()?;
+            let value = bits.to_bits() as i64;
+            let bytes = value.to_le_bytes();
+            let segment = if is_thread_local {
+                &mut self.tls_data
+            } else {
+                &mut self.data
+            };
+            let off = var_offset as usize;
+            debug_assert!(off + 8 <= segment.len());
+            segment[off..off + 8].copy_from_slice(&bytes);
+            if is_thread_local {
+                let end = off + 8;
+                if end > self.tls_init_size {
+                    self.tls_init_size = end;
+                }
+            }
             return Ok(());
         }
 
@@ -261,9 +318,11 @@ impl Compiler {
         // assignment path does.
         let init_ty = if value == 0 { 0 } else { Ty::Int as i64 };
         if let Some(reason) = Self::type_warning(var_ty, init_ty, value == 0) {
+            let var_s = super::types::format_type(var_ty, &self.structs);
+            let init_s = super::types::format_type(init_ty, &self.structs);
             self.warn_at(
                 line,
-                format!("{reason} in global initializer (var={var_ty}, value={init_ty})"),
+                format!("{reason} in global initializer (var={var_s}, value={init_s})"),
             );
         }
         Ok(())

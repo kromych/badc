@@ -33,7 +33,7 @@
 //! with the next struct id.
 
 use super::super::op::Op;
-use super::super::token::{Token, Ty};
+use super::super::token::{Tok, Token, Ty};
 
 /// Base of the struct-tag namespace. Every primitive (including
 /// the long band at 300) sits below this.
@@ -455,6 +455,12 @@ pub(super) fn pointee_size_no_struct(ty: i64) -> i64 {
     } else if ty == (Ty::Short as i64) + (Ty::Ptr as i64) {
         // Bare `short*` -- pointee is a 2-byte short.
         2
+    } else if ty == (Ty::Float as i64) + (Ty::Ptr as i64) {
+        // Bare `float*` -- pointee is a 4-byte single-precision
+        // float; `(float *)p + 1` strides four bytes, and the
+        // single-precision narrow-load `Op::Lf` reads the same
+        // 4 bytes.
+        4
     } else {
         8
     }
@@ -487,14 +493,14 @@ pub(super) fn fp_result_ty(lhs: i64, rhs: i64) -> i64 {
 /// *modifier-loop* level they're still consumed by
 /// `parse_decl_base_type` -- they drive flag bits rather than
 /// producing a separate token stream.
-pub(super) fn is_decl_modifier(tk: i64) -> bool {
-    tk == Token::TypeQual as i64
-        || tk == Token::IntMod as i64
-        || tk == Token::Signed as i64
-        || tk == Token::Unsigned as i64
-        || tk == Token::Long as i64
-        || tk == Token::Short as i64
-        || tk == Token::FuncSpec as i64
+pub(super) fn is_decl_modifier(tk: Tok) -> bool {
+    tk == Token::TypeQual
+        || tk == Token::IntMod
+        || tk == Token::Signed
+        || tk == Token::Unsigned
+        || tk == Token::Long
+        || tk == Token::Short
+        || tk == Token::FuncSpec
 }
 
 /// True for any token that may start a c5 declaration -- a base-type
@@ -502,16 +508,17 @@ pub(super) fn is_decl_modifier(tk: i64) -> bool {
 /// no-op modifiers above. Used by the parser to decide whether the
 /// next statement at block/file scope is a declaration or an
 /// expression / control-flow statement.
-pub(super) fn is_type_start_token(tk: i64) -> bool {
-    tk == Token::Int as i64
-        || tk == Token::Char as i64
-        || tk == Token::Float as i64
-        || tk == Token::Double as i64
-        || tk == Token::Struct as i64
-        || tk == Token::Union as i64
-        || tk == Token::Enum as i64
-        || tk == Token::Extern as i64
-        || tk == Token::Static as i64
+pub(super) fn is_type_start_token(tk: Tok) -> bool {
+    tk == Token::Int
+        || tk == Token::Char
+        || tk == Token::Void
+        || tk == Token::Float
+        || tk == Token::Double
+        || tk == Token::Struct
+        || tk == Token::Union
+        || tk == Token::Enum
+        || tk == Token::Extern
+        || tk == Token::Static
         || is_decl_modifier(tk)
 }
 
@@ -537,7 +544,9 @@ pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> Op {
     if is_pointer_ty(ty) {
         // Pointers are always 8 bytes (slot + native register
         // width). The Long-vs-LongLong distinction here would
-        // wrongly route `long *` through Lw on Windows.
+        // wrongly route `long *` through Lw on Windows; the
+        // Float-vs-Double distinction would wrongly route
+        // `float *` through Op::Lf.
         return Op::Li;
     }
     if stripped == Ty::Char as i64 {
@@ -546,6 +555,12 @@ pub(super) fn load_op_for(ty: i64, target: super::super::Target) -> Op {
         if unsigned { Op::Lhu } else { Op::Lh }
     } else if stripped == Ty::Int as i64 {
         if unsigned { Op::Lwu } else { Op::Lw }
+    } else if stripped == Ty::Float as i64 {
+        // 4-byte single-precision load that widens to f64 in the
+        // accumulator. `double` falls through to `Op::Li` since
+        // c5's f64 arithmetic ops carry the bit pattern verbatim
+        // and the 8-byte slot needs no narrowing.
+        Op::Lf
     } else if stripped == Ty::Long as i64 && target.is_windows() {
         // LLP64: `long` is 32 bits, same load path as int.
         if unsigned { Op::Lwu } else { Op::Lw }
@@ -566,6 +581,12 @@ pub(super) fn store_op_for(ty: i64, target: super::super::Target) -> Op {
         Op::Sh
     } else if stripped == Ty::Int as i64 {
         Op::Sw
+    } else if stripped == Ty::Float as i64 {
+        // 4-byte single-precision store that narrows the
+        // accumulator's f64 bits via round-to-nearest-ties-to-even.
+        // `double` falls through to `Op::Si` since the 8-byte slot
+        // holds the bit pattern verbatim.
+        Op::Sf
     } else if stripped == Ty::Long as i64 && target.is_windows() {
         // LLP64: `long` stores as 4 bytes, same as int.
         Op::Sw
@@ -590,6 +611,13 @@ pub(super) fn is_scalar_load_op_val(op_val: i64) -> bool {
         || op_val == Op::Lw as i64
         || op_val == Op::Lwu as i64
         || op_val == Op::Li as i64
+        // Single-precision narrow load behaves like the other
+        // scalar-load ops at every lvalue / address-of / inc-dec
+        // / compound-assign rewrite site: the parser drops the
+        // trailing load to recover the address, then re-emits
+        // the matching load (`reemit_scalar_load`) after the
+        // address-side rewrites are in place.
+        || op_val == Op::Lf as i64
 }
 
 /// Re-emit the same scalar load op that produced `op_val`. Caller
@@ -609,6 +637,8 @@ pub(super) fn reemit_scalar_load(op_val: i64) -> Op {
         Op::Lw
     } else if op_val == Op::Lwu as i64 {
         Op::Lwu
+    } else if op_val == Op::Lf as i64 {
+        Op::Lf
     } else {
         Op::Li
     }

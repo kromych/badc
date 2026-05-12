@@ -127,7 +127,7 @@ pub(crate) struct Binding {
     /// then carried into `ResolvedImport` so the DWARF emitter
     /// can give each PLT trampoline a `DW_TAG_subprogram` with
     /// `DW_TAG_formal_parameter` children typed accurately
-    /// (gh #67). Empty when the parser hasn't seen the prototype.
+    /// Empty when the parser hasn't seen the prototype.
     pub param_types: Vec<i64>,
     /// c5-side name the source uses (e.g. `printf`).
     pub local_name: String,
@@ -230,20 +230,29 @@ pub(crate) struct Preprocessor {
     /// `include_trace` per `#include` resolve attempt and nothing
     /// else.
     show_includes: bool,
-    /// Source-declared entry-point name (`#pragma entrypoint(<id>)`,
-    /// gh #55). `None` means the default `main` is used; set via
+    /// Source-declared entry-point name (`#pragma entrypoint(<id>)`).
+    /// `None` means the default `main` is used; set via
     /// the pragma to opt the translation unit into a non-`main`
     /// entry like `WinMain` (Win32 `--gui`) or a custom `_start`.
     /// The compile pass reads this when resolving `entry_pc`; the
     /// PE writer reads it for the optional-header AddressOfEntryPoint.
     pub entrypoint: Option<String>,
-    /// Source-declared Windows subsystem (`#pragma subsystem(<kind>)`,
-    /// gh #32). `None` means the default `console`. Recognised
+    /// Source-declared Windows subsystem (`#pragma subsystem(<kind>)`).
+    /// `None` means the default `console`. Recognised
     /// kinds today: `console` (IMAGE_SUBSYSTEM_WINDOWS_CUI = 3) and
     /// `windows` (IMAGE_SUBSYSTEM_WINDOWS_GUI = 2). The PE writer
     /// reads this to set the optional header's Subsystem field;
     /// non-PE targets keep the field at `None` and ignore it.
     pub subsystem: Option<Subsystem>,
+    /// `#pragma intrinsic("name")` declarations -- a map from
+    /// callable identifier to the `Intrinsic` discriminant the
+    /// frontend should stamp on the matching `Symbol::intrinsic`
+    /// at declaration time. Today's surface is small (`alloca`
+    /// / `__builtin_alloca`); future atomics / cpuid / vector
+    /// builtins plug in by adding a new `Intrinsic` enum
+    /// variant in `op.rs` and a one-line entry in
+    /// [`Self::parse_pragma_intrinsic`].
+    pub intrinsics: alloc::collections::BTreeMap<String, i64>,
 }
 
 /// Windows PE subsystem selector. Mirrors the `IMAGE_SUBSYSTEM_*`
@@ -337,7 +346,7 @@ impl Preprocessor {
                 // family, etc.) lives in the bundled
                 // `msvc_compat.h` header and is opted into per
                 // translation unit via `badc -include
-                // msvc_compat.h ...` (gh #34). Keeping the
+                // msvc_compat.h ...`. Keeping the
                 // predefine table to genuine target-detection
                 // surfaces the "is this TU pretending to be MSVC?"
                 // question at the command line, where the build
@@ -362,6 +371,7 @@ impl Preprocessor {
             show_includes: false,
             entrypoint: None,
             subsystem: None,
+            intrinsics: alloc::collections::BTreeMap::new(),
         }
     }
 
@@ -712,6 +722,41 @@ impl Preprocessor {
                             }
                         }
                     }
+                    Directive::IncludeMacro(args) => {
+                        if active {
+                            // C99 6.10.2p4: expand the operand and
+                            // reparse the result as a `<...>` /
+                            // `"..."` literal include. Anything
+                            // else is malformed; surface a
+                            // warning and skip, matching how
+                            // other unrecognised directives are
+                            // handled.
+                            let expanded = self.substitute(args, filename, line_no);
+                            let trimmed = expanded.trim();
+                            let name = trimmed
+                                .strip_prefix('<')
+                                .and_then(|s| s.strip_suffix('>'))
+                                .or_else(|| {
+                                    trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"'))
+                                });
+                            if let Some(n) = name {
+                                let included = self.process_include(n.trim(), line_no, filename)?;
+                                out.push_str(&included);
+                                out.push_str(&format_line_marker(source_line + 1, &current_file));
+                                source_line += 1;
+                                idx_iter += 1;
+                                continue;
+                            }
+                            self.warnings.push(super::error::fmt_compile_warn(
+                                filename,
+                                line_no,
+                                &format!(
+                                    "#include `{args}` expands to `{trimmed}`, \
+                                     which is not a `<header>` or `\"header\"` literal"
+                                ),
+                            ));
+                        }
+                    }
                     Directive::Include(name) => {
                         if active {
                             let included = self.process_include(name, line_no, filename)?;
@@ -728,7 +773,7 @@ impl Preprocessor {
                             // here would snap the lexer back to
                             // physical-buffer coordinates and
                             // misattribute every subsequent emit --
-                            // the bug that gh #50 plumbing exposed
+                            // the bug that appears
                             // when the amalgamator started gluing
                             // multiple translation units together
                             // via `#line` markers.
@@ -783,6 +828,22 @@ impl Preprocessor {
                             )));
                         }
                     }
+                    Directive::Warning(message) => {
+                        // gcc/clang extension; standardised in C23.
+                        // Same shape as `#error` but emits a
+                        // `warning:` diagnostic and lets compilation
+                        // continue. Goes into the preprocessor's
+                        // warning bag so the CLI surfaces it through
+                        // the same TTY-colorising path as
+                        // type-mismatch and tentative-decl warnings.
+                        if active {
+                            self.warnings.push(super::error::fmt_compile_warn(
+                                filename,
+                                line_no,
+                                &format!("#warning {}", message.trim()),
+                            ));
+                        }
+                    }
                     Directive::Other => {
                         // Unknown directive. C99 6.10.6 reserves
                         // every non-directive form for the
@@ -824,7 +885,8 @@ impl Preprocessor {
             if active {
                 let mut buffer = String::from(line);
                 let mut consumed = 1usize;
-                while macro_call_unclosed(&buffer, &self.fn_macros) && idx + consumed < lines.len()
+                while macro_call_unclosed(&buffer, &self.fn_macros, &self.macros)
+                    && idx + consumed < lines.len()
                 {
                     buffer.push('\n');
                     buffer.push_str(lines[idx + consumed]);
@@ -966,6 +1028,60 @@ impl Preprocessor {
                     Some(expanded) => {
                         let mut nested: Vec<&str> = blocklist.to_vec();
                         nested.push(ident);
+                        // Token-stream rescan (C99 6.10.3.4): if the
+                        // expansion is a single identifier and the
+                        // *source* token immediately after the
+                        // original macro use is `(`, the rescan would
+                        // see `expanded_ident(args)` and trigger any
+                        // matching function-like macro. We don't have
+                        // a true token stream so emulate this here:
+                        // detect the shape and pull the args from the
+                        // source directly. Drives the canonical
+                        // C99 6.10.3.4 rescan shape where an
+                        // object-like alias resolves to a
+                        // function-like macro name -- e.g.
+                        // `#define ALIAS f` followed by `ALIAS(x)`
+                        // must expand to `f(x)` and then through
+                        // any function-like `f` definition.
+                        let trimmed = expanded.trim();
+                        if !trimmed.is_empty()
+                            && trimmed
+                                .bytes()
+                                .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                            && !trimmed.bytes().next().unwrap().is_ascii_digit()
+                            && let Some(macro_def) = self.fn_macros.get(trimmed)
+                            && !nested.contains(&trimmed)
+                        {
+                            let mut j = i;
+                            while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t') {
+                                j += 1;
+                            }
+                            if j < bytes.len()
+                                && bytes[j] == b'('
+                                && let Some((args, after)) = parse_macro_args(&line[j..])
+                            {
+                                let expanded_args: Vec<String> = args
+                                    .iter()
+                                    .map(|a| {
+                                        self.substitute_with_blocklist(
+                                            a, filename, line_no, &nested,
+                                        )
+                                    })
+                                    .collect();
+                                let body_expanded = expand_fn_macro(macro_def, &expanded_args);
+                                let mut deeper: Vec<&str> = nested.clone();
+                                deeper.push(trimmed);
+                                let recursed = self.substitute_with_blocklist(
+                                    &body_expanded,
+                                    filename,
+                                    line_no,
+                                    &deeper,
+                                );
+                                out.push_str(&recursed);
+                                i = j + after;
+                                continue;
+                            }
+                        }
                         out.push_str(
                             &self.substitute_with_blocklist(&expanded, filename, line_no, &nested),
                         );
@@ -1173,6 +1289,12 @@ impl Preprocessor {
             return self.parse_pragma_export(inner.trim(), line_no, filename);
         }
         if let Some(inner) = args
+            .strip_prefix("intrinsic(")
+            .and_then(|s| s.strip_suffix(')'))
+        {
+            return self.parse_pragma_intrinsic(inner.trim(), line_no, filename);
+        }
+        if let Some(inner) = args
             .strip_prefix("entrypoint(")
             .and_then(|s| s.strip_suffix(')'))
         {
@@ -1233,6 +1355,63 @@ impl Preprocessor {
             )));
         }
         self.entrypoint = Some(name.to_string());
+        Ok(())
+    }
+
+    /// `#pragma intrinsic("name")` -- tag the named callable
+    /// symbol as a compiler-builtin intrinsic. At
+    /// declaration time the frontend stamps the matching
+    /// `Symbol::intrinsic` field with the [`Intrinsic`]
+    /// discriminant from `op.rs`, and the call-site lowering
+    /// emits `Op::Intrinsic <id>` instead of a regular
+    /// Psh/Jsr/JsrExt + Adj sequence. The arg list is
+    /// expected to be a quoted string so future intrinsics
+    /// whose spellings collide with c5 keywords don't trip
+    /// the identifier parser; the body uses `is_ident` to
+    /// stay strict.
+    fn parse_pragma_intrinsic(
+        &mut self,
+        inner: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<(), C5Error> {
+        let raw = inner.trim();
+        let name = raw.strip_prefix('"').and_then(|s| s.strip_suffix('"'));
+        let Some(name) = name else {
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                &format!(
+                    "`#pragma intrinsic({raw})` -- expected a quoted \
+                     identifier, e.g. `#pragma intrinsic(\"alloca\")`"
+                ),
+            )));
+        };
+        if !is_ident(name) {
+            return Err(C5Error::Compile(super::error::fmt_compile_err(
+                filename,
+                line_no,
+                &format!(
+                    "`#pragma intrinsic(\"{name}\")` -- name must be a \
+                     plain identifier"
+                ),
+            )));
+        }
+        let id = match name {
+            "alloca" | "__builtin_alloca" => super::op::Intrinsic::Alloca as i64,
+            _ => {
+                return Err(C5Error::Compile(super::error::fmt_compile_err(
+                    filename,
+                    line_no,
+                    &format!(
+                        "`#pragma intrinsic(\"{name}\")` -- unknown \
+                         intrinsic; supported today: alloca, \
+                         __builtin_alloca"
+                    ),
+                )));
+            }
+        };
+        self.intrinsics.insert(name.to_string(), id);
         Ok(())
     }
 
@@ -1724,9 +1903,21 @@ enum Directive<'a> {
         line: usize,
         file: Option<&'a str>,
     },
+    /// `#include <pp-tokens>` -- C99 6.10.2p4. The operand isn't
+    /// already in `<...>` or `"..."` form, so the preprocessor
+    /// has to macro-substitute the tokens before reparsing the
+    /// result as one of the two literal include forms. The raw
+    /// text is carried verbatim; substitution happens in the
+    /// handler.
+    IncludeMacro(&'a str),
     /// `#error <message>` -- C99 sec 6.10.5. The diagnostic message is
     /// the literal text after `#error` up to the newline.
     Error(&'a str),
+    /// `#warning <message>` -- gcc/clang extension, standardised in
+    /// C23. Emits a `warning:` diagnostic but, unlike `#error`,
+    /// compilation continues. Matches the diagnostic format every
+    /// other warning site uses, so downstream tooling can scrape it.
+    Warning(&'a str),
     Shebang,
     Other,
 }
@@ -1875,6 +2066,14 @@ fn parse_directive(rest: &str) -> Directive<'_> {
             return Directive::Error(after.trim_start());
         }
     }
+    if let Some(after) = rest.strip_prefix("warning") {
+        // `#warning <message>` -- emits a warning and continues.
+        // gcc/clang extension; standardised by C23. Same shape as
+        // `#error`, just a different severity.
+        if after.is_empty() || after.starts_with(char::is_whitespace) {
+            return Directive::Warning(after.trim_start());
+        }
+    }
     if let Some(after) = rest.strip_prefix("line") {
         let trimmed = after.trim();
         // Line number is required.
@@ -1896,15 +2095,23 @@ fn parse_directive(rest: &str) -> Directive<'_> {
     }
     if let Some(after) = rest.strip_prefix("include") {
         let trimmed = after.trim();
-        // Strip the `<...>` or `"..."` wrapping. Anything else falls
-        // through to `Directive::Other` and is silently dropped, the
-        // same as malformed `#define` lines.
+        // Strip the `<...>` or `"..."` wrapping when the operand
+        // is already in one of the two literal forms.
         if let Some(name) = trimmed
             .strip_prefix('<')
             .and_then(|s| s.strip_suffix('>'))
             .or_else(|| trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"')))
         {
             return Directive::Include(name.trim());
+        }
+        // C99 6.10.2p4: `#include <pp-tokens>` -- when the operand
+        // isn't already a `<...>` or `"..."` literal, the
+        // preprocessor expands the tokens and re-parses the
+        // result as one of the two literal forms. Defer the
+        // expansion to the include handler so the caller's
+        // macro table is available.
+        if !trimmed.is_empty() {
+            return Directive::IncludeMacro(trimmed);
         }
     }
     if rest.starts_with('!') {
@@ -2025,7 +2232,19 @@ fn parse_macro_args(s: &str) -> Option<(Vec<String>, usize)> {
 /// next source line should be appended to the current logical
 /// line so a multi-line `assert(\n  expr\n)` call expands. Quotes
 /// and char literals are skipped so `"foo("` doesn't trigger.
-fn macro_call_unclosed(buffer: &str, fn_macros: &HashMap<String, FnMacro>) -> bool {
+///
+/// Also accepts an object-like macro whose expansion is a single
+/// identifier that *is* a function-like macro -- the C99
+/// 6.10.3.4 rescan turns `STB_C_LEX_CPP_COMMENTS(if (...) ...)`
+/// (where `#define STB_C_LEX_CPP_COMMENTS Y` and `#define Y(a)
+/// a`) into a call on `Y`; without joining the source lines
+/// here, the rescan in `substitute_with_blocklist` only sees the
+/// first line and can't find the matching `)`.
+fn macro_call_unclosed(
+    buffer: &str,
+    fn_macros: &HashMap<String, FnMacro>,
+    obj_macros: &HashMap<String, String>,
+) -> bool {
     let bytes = buffer.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
@@ -2052,7 +2271,25 @@ fn macro_call_unclosed(buffer: &str, fn_macros: &HashMap<String, FnMacro>) -> bo
                 i += 1;
             }
             let name = &buffer[start..i];
-            if fn_macros.contains_key(name) {
+            let direct_fn = fn_macros.contains_key(name);
+            // Object-like macro that resolves to a fn-like-macro
+            // identifier (single-word body). One level of
+            // indirection is enough for the canonical
+            // `#define ALIAS Y` followed by `Y(args)` shape;
+            // deeper chains are vanishingly rare in real headers.
+            let indirect_fn = !direct_fn && {
+                obj_macros
+                    .get(name)
+                    .map(|body| {
+                        let t = body.trim();
+                        !t.is_empty()
+                            && t.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                            && !t.bytes().next().unwrap().is_ascii_digit()
+                            && fn_macros.contains_key(t)
+                    })
+                    .unwrap_or(false)
+            };
+            if direct_fn || indirect_fn {
                 let mut j = i;
                 while j < bytes.len()
                     && (bytes[j] == b' ' || bytes[j] == b'\t' || bytes[j] == b'\n')
@@ -2968,7 +3205,7 @@ mod tests {
 
     #[test]
     fn leading_marker_names_top_level_source() {
-        // gh #49: every preprocessed buffer opens with a GNU line
+        // every preprocessed buffer opens with a GNU line
         // marker so the lexer attributes the first source line to
         // `(<source>, 1)` rather than letting its initial state
         // decide. Without this, an `#include` later in the buffer
@@ -2979,7 +3216,7 @@ mod tests {
 
     #[test]
     fn line_directive_retargets_file_and_line() {
-        // gh #51: `#line N "file"` rewrites the lexer's
+        // `#line N "file"` rewrites the lexer's
         // `(file, line)` state so the next source line is
         // attributed to `(file, N)`.
         let out = process("#line 100 \"fakegen.c\"\nint x;\n");

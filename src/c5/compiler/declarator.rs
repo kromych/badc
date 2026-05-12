@@ -48,17 +48,17 @@ impl Compiler {
     pub(super) fn parse_declarator(&mut self, base: i64) -> Result<(usize, i64, i64), C5Error> {
         let mut ty = base;
         let mut leading_ptr_count: i64 = 0;
-        while self.lex.tk == Token::MulOp as i64 {
+        while self.lex.tk == Token::MulOp {
             self.next()?;
             ty += Ty::Ptr as i64;
             leading_ptr_count += 1;
             // Pointer-level qualifiers: `int *const p`, `int *volatile p`,
             // `char *restrict s`. Consumed; no semantic effect.
-            while self.lex.tk == Token::TypeQual as i64 {
+            while self.lex.tk == Token::TypeQual {
                 self.next()?;
             }
         }
-        // gh #19 lineage propagation: if the caller pre-seeded
+        // Fn-pointer lineage propagation: if the caller pre-seeded
         // `pending_fn_ptr_indirection` from a typedef-of-fn-ptr
         // base type, the leading `*`s here add directly to the
         // indirection count: `fn_t fp` -> 1, `fn_t *pp` -> 2,
@@ -79,7 +79,7 @@ impl Compiler {
         // `int register_cb(void *ctx, int(*)(void*,int))`).
         // Detected by peeking past the open paren: `*` opens the
         // pointer-cum-declarator, `(` starts a nested parens group.
-        if self.lex.tk == '(' as i64
+        if self.lex.tk == '('
             && (self.lex.peek_after_whitespace(b'*')
                 || self.lex.peek_after_whitespace(b'(')
                 || self.lex.peek_after_whitespace_starts_ident())
@@ -87,7 +87,7 @@ impl Compiler {
             self.next()?; // consume the outer `(`
             let outer_ty_before_inner = ty;
             let (idx, mut inner_ty, inner_array_size) = self.parse_declarator(ty)?;
-            // Function-pointer lineage trace (gh #19): the inner
+            // Function-pointer lineage trace: the inner
             // declarator's leading `*`s plus the fn-pointer's own
             // pointer level give the indirection count from the
             // variable's loaded value down to the fn-pointer
@@ -96,16 +96,16 @@ impl Compiler {
             // matching Symbol::fn_ptr_indirection's "value IS fn
             // ptr" convention. For `T (**name)(args)` the inner
             // added two Ptrs, depth = 2 (one more deref needed).
+            //
+            // The "is this actually a function pointer" check
+            // happens after the trailing decorations are scanned
+            // -- only then do we know whether the parenthesised
+            // declarator was followed by `(args)` (fn-ptr) or by
+            // `[N]` (pointer-to-array, NOT a fn-ptr). Set the
+            // indirection unconditionally for now and clear it
+            // back to None if the shape resolves to an array.
             let ty_delta = inner_ty - outer_ty_before_inner;
             let inner_ptr_levels = ty_delta / (Ty::Ptr as i64);
-            if inner_ptr_levels > 0 {
-                // Only set the side-channel for the OUTERMOST
-                // fn-ptr declarator: the inner recursive call may
-                // itself have set it for a nested fn-ptr declarator
-                // (function-returning-fp shape), and the outer
-                // call's value is the right one to expose.
-                self.pending_fn_ptr_indirection = Some(inner_ptr_levels);
-            }
             // The inner declarator may have stopped on `(` if it
             // was a function-returning-fp shape like
             // `void (*foo(args1))(args2)`. In that case `foo` is
@@ -119,30 +119,42 @@ impl Compiler {
             // bind `foo` as `Token::Fun` and parse the body even
             // though the next token will be `{` (not `(` -- the
             // params are already consumed).
-            if self.lex.tk == '(' as i64 {
+            let mut saw_fn_signature = false;
+            if self.lex.tk == '(' {
                 self.next()?;
                 // parse_function_params consumes the matching `)`,
                 // so on return we're already past the inner args1.
                 let params = self.parse_function_params()?;
                 self.pending_fn_params = Some(params);
+                saw_fn_signature = true;
             }
-            if self.lex.tk != ')' as i64 {
+            if self.lex.tk != ')' {
                 return Err(self.compile_err("close paren expected in nested declarator"));
             }
             self.next()?;
             // Trailing decorations on the parenthesised group.
-            // Multiple are legal: `(*pp)[N](args)` etc.
+            // Multiple are legal: `(*pp)[N](args)` etc. Each
+            // `[N]` adds a pointer level to `inner_ty` and a
+            // dimension to the symbol's `array_dims` so the
+            // indexing path can stride correctly through a
+            // `T (*p)[N]` shape (`p[i]` strides by
+            // `N * sizeof(T)`, not `sizeof(T*)`).
+            let mut pointee_dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
             loop {
-                if self.lex.tk == '(' as i64 {
+                if self.lex.tk == '(' {
                     self.next()?;
                     self.skip_balanced_parens_after_open()?;
-                } else if self.lex.tk == Token::Brak as i64 {
+                    saw_fn_signature = true;
+                } else if self.lex.tk == Token::Brak {
                     self.next()?;
-                    if self.lex.tk == ']' as i64 {
+                    if self.lex.tk == ']' {
                         self.next()?;
                     } else {
-                        let _ = self.parse_constant_int()?;
-                        if self.lex.tk == ']' as i64 {
+                        let m = self.parse_constant_int()?;
+                        if m > 0 {
+                            pointee_dims.push(m);
+                        }
+                        if self.lex.tk == ']' {
                             self.next()?;
                         }
                     }
@@ -150,6 +162,34 @@ impl Compiler {
                 } else {
                     break;
                 }
+            }
+            // Now the shape is fully known. Only expose the
+            // fn-pointer lineage if a function signature actually
+            // appeared in the declarator; pointer-to-array shapes
+            // share the parenthesised form but must NOT be
+            // tagged as fn-ptr lineage (otherwise the unary `*`
+            // handler treats `*p` on `T (*p)[N]` as the fn-ptr
+            // decay no-op and the row deref never fires).
+            if saw_fn_signature && inner_ptr_levels > 0 {
+                // Only set the side-channel for the OUTERMOST
+                // fn-ptr declarator: the inner recursive call may
+                // itself have set it for a nested fn-ptr declarator
+                // (function-returning-fp shape), and the outer
+                // call's value is the right one to expose.
+                self.pending_fn_ptr_indirection = Some(inner_ptr_levels);
+            }
+            if idx != usize::MAX && !pointee_dims.is_empty() {
+                // Pointer-to-array shape: `T (*p)[M1][M2]...[Mn]`.
+                // Store dims with a leading 0 sentinel so the
+                // indexing paths can disambiguate from a decayed
+                // array (which has dims[0] > 0). The peel-one-Ptr
+                // step at use-time recovers the decayed-array
+                // encoding so the existing multi-dim stride
+                // logic applies unchanged.
+                let mut dims = alloc::vec::Vec::with_capacity(pointee_dims.len() + 1);
+                dims.push(0);
+                dims.extend(pointee_dims);
+                self.symbols[idx].array_dims = dims;
             }
             return Ok((idx, inner_ty, inner_array_size));
         }
@@ -160,23 +200,23 @@ impl Compiler {
         // closing-out (`,` / `)`). Return `usize::MAX` so callers
         // recognise "no symbol to bind"; only `parse_function_params`
         // is in a context that should accept this.
-        if self.lex.tk == ')' as i64 || self.lex.tk == ',' as i64 {
+        if self.lex.tk == ')' || self.lex.tk == ',' {
             return Ok((usize::MAX, ty, 0));
         }
 
-        if self.lex.tk != Token::Id as i64 {
+        if self.lex.tk != Token::Id {
             return Err(self.compile_err(format!(
-                "identifier expected in declaration (tk={})",
-                self.lex.tk
+                "identifier expected in declaration (got {})",
+                super::super::token::describe(self.lex.tk)
             )));
         }
         let idx = self.lex.curr_id_idx;
         self.next()?;
 
         let mut array_size: i64 = 0;
-        if self.lex.tk == Token::Brak as i64 {
+        if self.lex.tk == Token::Brak {
             self.next()?;
-            if self.lex.tk == ']' as i64 {
+            if self.lex.tk == ']' {
                 // `int xs[]` -- empty brackets. The dimension is
                 // deferred: in parameter position the caller decays
                 // to a pointer; at file or block scope with an
@@ -200,23 +240,25 @@ impl Compiler {
                         self.compile_err(format!("array dimension must be positive (got {n})"))
                     );
                 }
-                if self.lex.tk != ']' as i64 {
+                if self.lex.tk != ']' {
                     return Err(self.compile_err("close bracket expected in array declarator"));
                 }
                 self.next()?;
                 array_size = n;
             }
-            // Trailing `[M]` dimension for 2D arrays. c5 stores
-            // `array_size = N*M` (total element count) and
-            // `inner_array_size = M` on the symbol so the indexing
-            // path can scale the first index by `M * sizeof(T)`.
-            // Higher-dimensional arrays are flattened: their inner
-            // strides aren't tracked, but the byte storage is
-            // correct.
-            let mut inner_dim: i64 = 0;
-            while self.lex.tk == Token::Brak as i64 {
+            // Trailing dimensions for N-dim arrays. c5 stores
+            // `array_size = product(dims)` (total element count),
+            // `inner_array_size = dims[1]` for the 2D-init padding
+            // path, and `array_dims = [dims..]` for the indexing
+            // path so 3D / 4D / ... arrays compute strides at
+            // every level.
+            let mut dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
+            if array_size > 0 {
+                dims.push(array_size);
+            }
+            while self.lex.tk == Token::Brak {
                 self.next()?;
-                if self.lex.tk == ']' as i64 {
+                if self.lex.tk == ']' {
                     self.next()?;
                     continue;
                 }
@@ -226,20 +268,38 @@ impl Compiler {
                         self.compile_err(format!("array dimension must be positive (got {m})"))
                     );
                 }
-                if self.lex.tk != ']' as i64 {
+                if self.lex.tk != ']' {
                     return Err(self.compile_err("close bracket expected in array declarator"));
                 }
                 self.next()?;
-                if inner_dim == 0 {
-                    inner_dim = m;
-                }
+                dims.push(m);
                 if array_size > 0 {
                     array_size *= m;
                 }
             }
-            if inner_dim > 0 && idx != usize::MAX {
+            let inner_dim: i64 = if dims.len() >= 2 { dims[1] } else { 0 };
+            if idx != usize::MAX {
+                // Always overwrite, even with 0, so a rebinding of a
+                // name that previously carried a multi-dim shape (a
+                // struct field, an outer-scope local, etc.) doesn't
+                // inherit the stale strides. C99 6.2.1 identifier
+                // scopes: each new binding starts fresh, so any
+                // per-symbol shape metadata must be cleared when the
+                // binding's scope begins.
                 self.symbols[idx].inner_array_size = inner_dim;
+                self.symbols[idx].array_dims = if dims.len() >= 2 {
+                    dims
+                } else {
+                    alloc::vec::Vec::new()
+                };
             }
+        } else if idx != usize::MAX {
+            // No `[` suffix at all -- the declarator is a scalar or
+            // pointer. Same rationale as above: scrub any stale
+            // multi-dim metadata carried over from an earlier
+            // binding of the same name.
+            self.symbols[idx].inner_array_size = 0;
+            self.symbols[idx].array_dims = alloc::vec::Vec::new();
         }
 
         Ok((idx, ty, array_size))

@@ -120,6 +120,15 @@ enum Insn {
     /// touch the operand; the variant exists so the decode/encode
     /// pair stays in sync with the bytecode.
     TlsLea(i64),
+    /// `Op::Intrinsic <id>` -- compiler-builtin (`alloca` today).
+    /// Passthrough: the optimizer doesn't fold or rewrite it,
+    /// but the variant has to exist so the decode pass advances
+    /// past the operand instead of treating the id as a fresh
+    /// op.
+    Intrinsic(i64),
+    /// `Op::AllocaInit <slot_idx>` -- alloca arena bookkeeping
+    /// slot setup. Passthrough, same role as `Intrinsic`.
+    AllocaInit(i64),
     /// Tombstone left in place by a pass that removed an instruction.
     /// The encoder skips these; targets continue to refer to indices,
     /// so leaving holes keeps everything stable across passes.
@@ -146,7 +155,9 @@ impl Insn {
             | Insn::Branch(_, _)
             | Insn::ArithI(_, _)
             | Insn::Mcpy(_)
-            | Insn::TlsLea(_) => 2,
+            | Insn::TlsLea(_)
+            | Insn::Intrinsic(_)
+            | Insn::AllocaInit(_) => 2,
             Insn::Removed => 0,
         }
     }
@@ -329,7 +340,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         .collect();
 
     // Remap source-line / source-function debug info through the
-    // optimizer so dump-asm and DWARF (gh #39) keep their names and
+    // optimizer so dump-asm and DWARF keep their names and
     // line numbers at -O. For each pre-opt insn index `i`: its OLD
     // bc-pc was `pc_at_idx[i]` and its NEW bc-pc is `new_pc[i]`.
     // Each insn occupies `word_size()` text words; copy the
@@ -369,7 +380,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
     // PC table. Compiler captured each Loc symbol with the *pre-
     // optimizer* Ent position; the optimizer can shift Ents to
     // new positions (DCE never removes them, but earlier
-    // instructions may collapse). gh #46 -- without this remap
+    // instructions may collapse). Without this remap
     // the DWARF emitter's `function_bc_pc == ent_pc` filter
     // misses every function under -O, so `frame variable` works
     // at noO but goes silent at -O.
@@ -400,7 +411,9 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
     // xmm0 and feeding `sin(0.5)` an interpretation of 0.5's
     // bit pattern as an integer (4602678819172646912 -- which
     // libm reads as a vast double, returning sin(huge)=junk or
-    // 0). Surfaced compiling kissfft at -O.
+    // 0). Standard ABI surface: any FP argument in a libc call
+    // through the optimizer has to keep its argument-register
+    // mask intact across the PC remap.
     let remapped_call_fp_arg_masks: Vec<(usize, u32)> = call_fp_arg_masks
         .iter()
         .filter_map(|&(old_pc, mask)| {
@@ -424,7 +437,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         // heuristic in codegen (`v >= CODE_BASE && v - CODE_BASE <
         // text.len()`) misclassifies user constants that happen to
         // land in that range -- e.g. an integer flag with value
-        // `0x20000000` (gh #30) gets emitted as a func-ptr
+        // `0x20000000` gets emitted as a func-ptr
         // ADRP+ADD pair and corrupts the user's bit field.
         code_imm_positions,
         tls_data,
@@ -465,7 +478,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
 /// any user constant in `[CODE_BASE, CODE_BASE + text.len())` as a
 /// func-ptr and corrupts integer flag values that happen to land in
 /// that range, like a flag with literal value `0x20000000` matching
-/// `CODE_BASE`; cf. gh #30).
+/// `CODE_BASE`).
 fn decode(
     text: &[i64],
     data_imm_positions: &[usize],
@@ -484,16 +497,21 @@ fn decode(
     let mut pc = 0usize;
     while pc < text.len() {
         let op = Op::from_i64(text[pc]).ok_or_else(|| {
-            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-                "optimizer: bad opcode at PC {pc}: {}",
-                text[pc]
-            )))
+            C5Error::Compile(crate::c5::error::fmt_ice_text(
+                "optimizer: bad opcode -- the decoder drifted off the \
+                 op/operand boundary or the op enum changed without \
+                 updating from_i64",
+                text,
+                pc,
+            ))
         })?;
         pc_to_idx[pc] = insns.len();
         pc += 1;
         if op.operand_count() > 0 && pc >= text.len() {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            return Err(C5Error::Compile(crate::c5::error::fmt_ice_text(
                 &format!("optimizer: truncated operand for {op:?} at end of text"),
+                text,
+                pc.saturating_sub(1),
             )));
         }
         let insn = match op {
@@ -549,6 +567,16 @@ fn decode(
                 let v = text[pc];
                 pc += 1;
                 Insn::Mcpy(v)
+            }
+            Op::Intrinsic => {
+                let v = text[pc];
+                pc += 1;
+                Insn::Intrinsic(v)
+            }
+            Op::AllocaInit => {
+                let v = text[pc];
+                pc += 1;
+                Insn::AllocaInit(v)
             }
             Op::TlsLea => {
                 // Op::TlsLea: byte offset within `tls_data` of the
@@ -696,7 +724,7 @@ fn lookup_pc(
 /// `[CODE_BASE, CODE_BASE + text.len())` range. A flag literal
 /// `0x20000000` is exactly `CODE_BASE`, so the previous "fall back
 /// to range heuristic at -O" shape misclassified the integer as a
-/// func ptr (gh #30).
+/// func ptr.
 fn encode(
     insns: &[Insn],
     entry_idx: usize,
@@ -787,6 +815,14 @@ fn encode(
             }
             Insn::TlsLea(v) => {
                 text.push(Op::TlsLea as i64);
+                text.push(*v);
+            }
+            Insn::Intrinsic(v) => {
+                text.push(Op::Intrinsic as i64);
+                text.push(*v);
+            }
+            Insn::AllocaInit(v) => {
+                text.push(Op::AllocaInit as i64);
                 text.push(*v);
             }
             Insn::Removed => {}
@@ -1282,7 +1318,7 @@ mod tests {
 
     #[test]
     fn imm_equal_to_code_base_is_not_promoted() {
-        // gh #30: a user constant whose value happens to land in
+        // A user constant whose value happens to land in
         // `[CODE_BASE, CODE_BASE + text.len())` (e.g. an integer
         // flag literal `0x20000000`, exactly `CODE_BASE`) must
         // survive the optimizer as a plain integer. The empty

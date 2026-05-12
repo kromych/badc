@@ -94,6 +94,19 @@ struct RegState<'a> {
     plan: Option<&'a RegStackPlan>,
     use_pool: bool,
     current_callee_depth: u8,
+    /// Local-byte reservation for the current function, captured on
+    /// `Op::Ent` and read on `Op::Lev`. The epilogue's pool /
+    /// saved-r13 restore pops from the current RSP, so a function
+    /// that ran `Op::Intrinsic(Alloca)` and left RSP further down
+    /// would re-read alloca scratch as register state. Resetting
+    /// RSP to `RBP - (locals + 16 + pool*16)` at epilogue start
+    /// recovers the prologue's end-of-setup RSP.
+    current_locals_bytes: u32,
+    /// FP-slot byte offset (positive) of the alloca-top bookkeeping
+    /// slot for the current function, or 0 if the function doesn't
+    /// use alloca. Set by `Op::AllocaInit` and read by the
+    /// matching `Op::Intrinsic(Alloca)`.
+    current_alloca_top_offset: u32,
     pseudo_stack: Vec<Option<(u8, PoolBank)>>,
     /// cmp+branch fusion peephole, mirror of the aarch64 field.
     /// When a compare op (`Lt`/`Eq`/...) elides its `setcc + movzx`
@@ -112,6 +125,8 @@ impl<'a> RegState<'a> {
             plan,
             use_pool: false,
             current_callee_depth: 0,
+            current_locals_bytes: 0,
+            current_alloca_top_offset: 0,
             pseudo_stack: Vec::new(),
             pending_cmp_cond: None,
         }
@@ -685,6 +700,67 @@ pub(super) fn emit_cvttsd2si(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
 }
 
+/// `MOVSS xmm, [base+disp32]` -- load 4 bytes (single-precision) into
+/// the low dword of an XMM register, zeroing the rest. Encoding:
+/// `F3 0F 10 /r`. Used by [`Op::Lf`] to pull a `float`-typed lvalue
+/// out of its 4-byte storage before the widening `cvtss2sd`.
+pub(super) fn emit_movss_xmm_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: i32) {
+    emit_byte(code, 0xF3);
+    if xmm.high() || base.high() {
+        emit_byte(code, rex(false, xmm.high(), false, base.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x10);
+    // SIB-driven mod=10/disp32 form, matching emit_movq_xmm_r_mem so
+    // rsp/r12 base registers stay correct.
+    emit_byte(code, modrm(0b10, xmm.lo(), 0b100));
+    emit_byte(code, sib(0, 0b100, base.lo()));
+    emit_i32(code, disp);
+}
+
+/// `MOVSS [base+disp32], xmm` -- store 4 bytes from the low dword of
+/// an XMM register. Encoding: `F3 0F 11 /r`. Companion to
+/// [`emit_movss_xmm_mem`]; the [`Op::Sf`] handler uses this for the
+/// final narrowed store.
+pub(super) fn emit_movss_mem_xmm(code: &mut Vec<u8>, base: Reg, disp: i32, xmm: Reg) {
+    emit_byte(code, 0xF3);
+    if xmm.high() || base.high() {
+        emit_byte(code, rex(false, xmm.high(), false, base.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x11);
+    emit_byte(code, modrm(0b10, xmm.lo(), 0b100));
+    emit_byte(code, sib(0, 0b100, base.lo()));
+    emit_i32(code, disp);
+}
+
+/// `CVTSS2SD xmm, xmm` -- widen single-precision to double-precision.
+/// Encoding: `F3 0F 5A /r`. The IEEE 754 single -> double widening
+/// is bit-exact for every finite source value.
+pub(super) fn emit_cvtss2sd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_byte(code, 0xF3);
+    if dst.high() || src.high() {
+        emit_byte(code, rex(false, dst.high(), false, src.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x5A);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
+/// `CVTSD2SS xmm, xmm` -- narrow double-precision to single-precision
+/// with round-to-nearest-ties-to-even (matching IEEE 754 and the
+/// VM's `f64 as f32` semantics). Encoding: `F2 0F 5A /r`. Used by
+/// [`Op::Sf`] before the single-precision store.
+pub(super) fn emit_cvtsd2ss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_byte(code, 0xF2);
+    if dst.high() || src.high() {
+        emit_byte(code, rex(false, dst.high(), false, src.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x5A);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
 /// `CQO` (`CDQE` for 32-bit; we want the 64-bit form) -- sign-extend
 /// rax into rdx:rax. Encoding: `REX.W + 99`.
 pub(super) fn emit_cqo(code: &mut Vec<u8>) {
@@ -1015,7 +1091,7 @@ fn emit_modrm_mem(code: &mut Vec<u8>, reg: Reg, base: Reg, disp: i32) {
 /// (mov rdi, [rsp]; lea rsi, [rsp+8]; call rel32) + 3 bytes of
 /// `mov rdi, rax` + 6 bytes of `call qword [rip+disp32]`.
 pub(super) const START_STUB_LEN: u64 = 23;
-/// Length of the syscall-tail `_start` stub (gh #69). One byte
+/// Length of the syscall-tail `_start` stub. One byte
 /// longer than the libc tail because `mov eax, 231` (5 bytes) +
 /// `syscall` (2 bytes) totals 7 vs. the libc tail's `call
 /// qword [rip+disp32]` (6 bytes).
@@ -1051,8 +1127,8 @@ pub(super) fn emit_start_stub(
     // call main. Target byte offset (within the code blob) is
     // start_stub_len + main_offset_in_code; the rel32 for `call`
     // is measured from the byte *after* the 5-byte `call`
-    // instruction. Syscall vs libc tails differ by 1 byte
-    // (gh #69), so the math has to track which we picked.
+    // instruction. Syscall vs libc tails differ by 1 byte,
+    // so the math has to track which we picked.
     let call_byte_off = (code.len() - stub_start) as i64;
     let after_call = call_byte_off + 5;
     let stub_len = if use_libc_exit {
@@ -1076,7 +1152,7 @@ pub(super) fn emit_start_stub(
         emit_call_qword_rip32(code, 0);
         Some(stub_start + exit_call_offset)
     } else {
-        // gh #69: Linux x86_64 sys_exit_group = 231. Status is
+        // Linux x86_64 sys_exit_group = 231. Status is
         // already in rdi from the mov above.
         // mov eax, 231 (5 bytes)
         code.extend_from_slice(&[0xb8, 0xe7, 0x00, 0x00, 0x00]);
@@ -1357,7 +1433,7 @@ pub(super) fn lower(
     let mut fixups: Vec<Fixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();
     let mut got_fixups: Vec<GotFixup> = Vec::new();
-    // gh #61: each `JsrExt` / `TailExt` site records a `CALL rel32`
+    // Each `JsrExt` / `TailExt` site records a `CALL rel32`
     // / `JMP rel32` placeholder; displacements get backfilled once
     // trampolines are appended to `code`. Mirrors the aarch64 path.
     let mut plt_call_fixups: Vec<PltCallFixup> = Vec::new();
@@ -1379,9 +1455,13 @@ pub(super) fn lower(
         bytecode_to_native[op_pc] = code.len();
         let raw = program.text[pc];
         let op = Op::from_i64(raw).ok_or_else(|| {
-            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-                "native codegen (x86_64): bad opcode at PC {pc}: {raw}"
-            )))
+            C5Error::Compile(crate::c5::error::fmt_ice_bytecode(
+                "x86_64 codegen: bad opcode -- the bytecode scanner \
+                 drifted off the op/operand boundary or the op enum \
+                 changed without updating from_i64",
+                program,
+                pc,
+            ))
         })?;
         pc += 1;
         if matches!(op, Op::Ent) {
@@ -1433,7 +1513,7 @@ pub(super) fn lower(
 
     apply_fixups(&mut code, &fixups, &bytecode_to_native, program.text.len())?;
 
-    // gh #61: append one PLT trampoline per import. CALL rel32 /
+    // Append one PLT trampoline per import. CALL rel32 /
     // JMP rel32 placeholders recorded in `plt_call_fixups` get
     // their disp32 backfilled to the matching trampoline. The
     // trampoline body is a single `JMP qword ptr [rip + disp32]`
@@ -1631,6 +1711,12 @@ fn lower_op(
         // ---- Function frame ----
         Op::Ent => {
             let locals = read_operand(text, pc, "Ent")?;
+            let aligned_locals = (((locals as u32) * 8) + 15) & !15;
+            reg_state.current_locals_bytes = aligned_locals;
+            // Reset alloca state -- AllocaInit (emitted right
+            // after Ent by the compiler) restores it for
+            // functions that use alloca.
+            reg_state.current_alloca_top_offset = 0;
             emit_prologue(code, locals, in_main, abi, reg_state.current_callee_depth);
             // BADC_SAVED_RBP_CHECK at function entry: trap if our own
             // saved-rbp slot (= what our caller pushed) is below the
@@ -1653,7 +1739,12 @@ fn lower_op(
                 emit_saved_rbp_check(code, op_pc, 0);
                 emit_saved_rbp_check(code, op_pc, 1);
             }
-            emit_epilogue(code, in_main, reg_state.current_callee_depth);
+            emit_epilogue(
+                code,
+                in_main,
+                reg_state.current_callee_depth,
+                reg_state.current_locals_bytes,
+            );
         }
         Op::Adj => {
             // Drop N pushed slots (16 bytes each, matching Op::Psh).
@@ -1762,6 +1853,26 @@ fn lower_op(
             // *(i16*)addr = r13[15:0]
             let lhs = pop_lhs_reg(code, reg_state);
             emit_mov_mem16_r(code, lhs, 0, Reg::R13);
+        }
+        Op::Lf => {
+            // Single-precision load + widen-to-double:
+            //   movss   xmm0, [r13]   ; load 4 bytes through XMM0's low dword
+            //   cvtss2sd xmm0, xmm0   ; widen to f64
+            //   movq    r13, xmm0     ; deliver f64::to_bits() to the accumulator
+            emit_movss_xmm_mem(code, Reg::XMM0, Reg::R13, 0);
+            emit_cvtss2sd(code, Reg::XMM0, Reg::XMM0);
+            emit_movq_r_xmm(code, Reg::R13, Reg::XMM0);
+        }
+        Op::Sf => {
+            // Narrow f64 -> f32 and store 4 bytes:
+            //   movq    xmm0, r13     ; stage the accumulator's bits as a double
+            //   cvtsd2ss xmm0, xmm0   ; narrow with round-to-nearest-ties-to-even
+            //   pop     lhs           ; destination address
+            //   movss   [lhs], xmm0   ; write 4 bytes
+            emit_movq_xmm_r(code, Reg::XMM0, Reg::R13);
+            emit_cvtsd2ss(code, Reg::XMM0, Reg::XMM0);
+            let lhs = pop_lhs_reg(code, reg_state);
+            emit_movss_mem_xmm(code, lhs, 0, Reg::XMM0);
         }
         Op::Psh => {
             // With the native optimizer on AND a Pseudo classification,
@@ -2079,7 +2190,7 @@ fn lower_op(
             // host ABI's argument registers / shadow-space slots,
             // so the libc fn sees exactly what the caller's `Adj N`
             // declared; we just forward control through the PLT
-            // trampoline (gh #61) and let the libc fn's `ret`
+            // trampoline and let the libc fn's `ret`
             // carry us back to the caller. No frame setup, no
             // stack manipulation, no post-call accumulator copy
             // -- the call site's Jsri lowering is responsible for
@@ -2098,6 +2209,69 @@ fn lower_op(
             });
             // Placeholder displacement; resolved post-trampoline-emission.
             emit_jmp_rel32(code, 0);
+        }
+        Op::Intrinsic => {
+            let id = read_operand(text, pc, "Intrinsic")?;
+            let intrinsic = crate::c5::op::Intrinsic::from_i64(id).ok_or_else(|| {
+                C5Error::Compile(crate::c5::error::fmt_internal_err(&alloc::format!(
+                    "native codegen (x86_64): unknown intrinsic id {id}"
+                )))
+            })?;
+            match intrinsic {
+                crate::c5::op::Intrinsic::Alloca => {
+                    // alloca(n): bump the per-frame arena's top
+                    // pointer down by n (rounded up to 16), store
+                    // it back, and return the new top in r13.
+                    // The arena lives at a fixed RBP-relative
+                    // offset reserved by `Op::Ent`; the
+                    // bookkeeping slot's RBP offset comes from
+                    // `current_alloca_top_offset` (filled in by
+                    // the matching `Op::AllocaInit`). RSP stays
+                    // put so outstanding `Op::Psh` values are
+                    // unaffected.
+                    let top_offset = reg_state.current_alloca_top_offset;
+                    if top_offset == 0 {
+                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                            "native codegen (x86_64): Op::Intrinsic(Alloca) emitted \
+                             without a preceding AllocaInit; the compiler should have \
+                             patched both at function-end",
+                        )));
+                    }
+                    let disp = -(top_offset as i32);
+                    // Round the requested size up to a 16-byte
+                    // multiple so each returned pointer is
+                    // naturally aligned. `add r13, 15; and r13, ~15`.
+                    emit_add_r_imm32(code, Reg::R13, 15);
+                    emit_and_r_imm32(code, Reg::R13, -16);
+                    // r10 = address of alloca-top slot.
+                    emit_lea_r_mem(code, Reg::R10, Reg::RBP, disp);
+                    // r11 = current alloca-top.
+                    emit_mov_r_mem(code, Reg::R11, Reg::R10, 0);
+                    // r11 -= r13 (new alloca-top).
+                    emit_sub_rr(code, Reg::R11, Reg::R13);
+                    // Store new alloca-top back.
+                    emit_mov_mem_r(code, Reg::R10, 0, Reg::R11);
+                    // Return value in r13.
+                    emit_mov_rr(code, Reg::R13, Reg::R11);
+                }
+            }
+        }
+        Op::AllocaInit => {
+            // Per-function alloca arena setup. Operand: FP-slot
+            // index of the bookkeeping slot (in 8-byte units),
+            // or 0 for "this function doesn't use alloca".
+            let slot_idx = read_operand(text, pc, "AllocaInit")?;
+            if slot_idx > 0 {
+                let top_offset = (slot_idx as u32) * 8;
+                reg_state.current_alloca_top_offset = top_offset;
+                let disp = -(top_offset as i32);
+                // r10 = &alloca_top_slot = rbp + disp. The slot's
+                // address is also the initial alloca-top value
+                // (one byte past the top of the arena), so we
+                // store r10 into the slot it points at.
+                emit_lea_r_mem(code, Reg::R10, Reg::RBP, disp);
+                emit_mov_mem_r(code, Reg::R10, 0, Reg::R10);
+            }
         }
 
         // ---- Floating-point ----
@@ -2383,7 +2557,7 @@ fn emit_libc_call(
         }
     }
 
-    // gh #61: emit a 5-byte CALL rel32 placeholder + record a
+    // Emit a 5-byte CALL rel32 placeholder + record a
     // PltCallFixup; the trampoline at `imports[import_index]`'s
     // tail position will be patched in by `apply_plt_call_fixups`
     // once trampolines are emitted at the end of `lower()`. The
@@ -2439,7 +2613,7 @@ fn emit_libc_call(
     Ok(())
 }
 
-/// gh #61: per-call-site placeholder for the post-pass that
+/// Per-call-site placeholder for the post-pass that
 /// patches `CALL rel32` / `JMP rel32` displacements once
 /// trampolines have been laid out at the tail of `code`. Mirror
 /// of the aarch64 type with the same name.
@@ -2558,7 +2732,8 @@ fn pop_lhs_reg(code: &mut Vec<u8>, reg_state: &mut RegState<'_>) -> Reg {
 /// when the env var is set, with `up_levels = 0` for "check our own
 /// saved rbp" and `up_levels = 1` for "check the caller's saved rbp"
 /// (= the slot the caller's prologue pushed when it was called -- which
-/// is the slot the gh #46 leaf bug clobbers).
+/// is the slot a leaf-function prologue would clobber if it forgot to
+/// save rbp).
 ///
 /// Skipped under `is_main` because the libc startup stub leaves rbp = 0
 /// when calling main, which would always trip a 0-level check.
@@ -2848,6 +3023,32 @@ fn read_operand(text: &[i64], pc: &mut usize, op_name: &str) -> Result<i64, C5Er
 /// push argc / argv as 16-byte slots in caller-style, then re-push
 /// the ret addr; the resulting layout matches what
 /// [`lea_offset_bytes`] expects.
+/// Walk RSP down `frame_bytes` in `page_size` chunks, touching
+/// each page before sliding past it so the kernel's stack-guard
+/// page fires on overflow rather than silently mapping in a
+/// neighbouring region. Used by `emit_prologue` whenever the
+/// frame alone would cross a guard page. Clobbers r11 (caller-
+/// saved on both System V and Win64, so safe at prologue start
+/// before any arg-reg consumption). Touching writes the running
+/// counter into the page; the value doesn't matter since the
+/// caller's locals will overwrite it later.
+fn emit_stack_probe(code: &mut Vec<u8>, frame_bytes: u32, page_size: u32) {
+    let pages = frame_bytes / page_size;
+    let remainder = frame_bytes - pages * page_size;
+    emit_mov_r_imm64(code, Reg::R11, pages as i64);
+    let loop_start = code.len();
+    emit_sub_rsp_imm32(code, page_size);
+    emit_mov_mem_r(code, Reg::RSP, 0, Reg::R11);
+    emit_sub_r_imm32(code, Reg::R11, 1);
+    // 6-byte Jcc; rel32 is measured from the byte after it.
+    let jcc_end = code.len() as i32 + 6;
+    let delta = loop_start as i32 - jcc_end;
+    emit_jcc_rel32(code, Cc::Ne, delta);
+    if remainder != 0 {
+        emit_sub_rsp_imm32(code, remainder);
+    }
+}
+
 fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool, abi: Abi, pool_depth: u8) {
     if is_main {
         // The entry stub passed argc / argv via the platform's first
@@ -2878,7 +3079,15 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool, abi: Abi, pool_
         // 8 bytes) and `push rbp` (8 more) rsp is at -16 mod 16
         // again. Round local space up to 16 to preserve that.
         let aligned = (bytes + 15) & !15;
-        emit_sub_rsp_imm32(code, aligned);
+        // Probe each guard page if the frame would otherwise
+        // skip one in a single SUB. x86_64 guard pages are 4 KB
+        // on Linux, macOS, and Windows alike.
+        const PAGE_SIZE: u32 = 4096;
+        if aligned > PAGE_SIZE {
+            emit_stack_probe(code, aligned, PAGE_SIZE);
+        } else {
+            emit_sub_rsp_imm32(code, aligned);
+        }
     }
     // Save r13 (the VM accumulator) below the locals. r13 is
     // callee-saved per System V x86_64 ABI -- self-hosted c4-to-c4
@@ -2912,7 +3121,7 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool, abi: Abi, pool_
 /// slots inserted by the prologue -- they sit between the saved rbp
 /// and the return address, so we pop the ret addr into a temp, drop
 /// the slots, then push it back before `ret` consumes it.
-fn emit_epilogue(code: &mut Vec<u8>, is_main: bool, pool_depth: u8) {
+fn emit_epilogue(code: &mut Vec<u8>, is_main: bool, pool_depth: u8, locals_bytes: u32) {
     // STACK-CHECK INSTRUMENT (#46 bisection). When BADC_RSP_CHECK is
     // set in the env, emit a runtime check at the start of every
     // epilogue: rsp must equal rbp minus the prologue's reservation.
@@ -2937,6 +3146,7 @@ fn emit_epilogue(code: &mut Vec<u8>, is_main: bool, pool_depth: u8) {
     // value the trap writes to stderr identifies the corrupting
     // function.)
     emit_mov_rr(code, Reg::RAX, Reg::R13);
+    let _ = locals_bytes; // see commentary below
     // Restore the pool first (it sits on top of saved-r13).
     emit_restore_pool(code, pool_depth);
     // Restore r13 from its 16-byte slot at [rsp]. We then drop both
@@ -3224,7 +3434,7 @@ mod tests {
 
     #[test]
     fn start_stub_syscall_tail_decodes_to_known_bytes() {
-        // gh #69: when no libc `exit` binding is in scope the
+        // When no libc `exit` binding is in scope the
         // stub's tail is a direct sys_exit_group syscall (231)
         // instead of the libc-routed indirect call. Tail layout:
         //   mov rdi, rax        (3 bytes, rax = main's return)

@@ -91,6 +91,19 @@ struct RegState<'a> {
     /// the epilogue must restore the same number. Caller-saved
     /// slots don't enter into this count (they're not saved).
     current_callee_depth: u8,
+    /// Local-byte reservation for the current function, captured on
+    /// `Op::Ent` and read on `Op::Lev`. The epilogue reverses the
+    /// prologue's `sub sp, sp, locals` and adjacent saved-x19 +
+    /// pool slot pushes off of FP; without the saved value
+    /// `Op::Intrinsic(Alloca)`'s `sub sp, sp, n` would leave SP
+    /// below the pool and the epilogue's pop sequence would read
+    /// alloca scratch as register state.
+    current_locals_bytes: u32,
+    /// FP-slot byte offset of the alloca-top pointer for the
+    /// current function, or 0 if the function doesn't use
+    /// alloca. Set by `Op::AllocaInit` and read by the
+    /// `Op::Intrinsic(Alloca)` handler.
+    current_alloca_top_offset: u32,
     /// Runtime mirror of the c4 push-stack: each Psh appends an
     /// entry, each pop op pops one. `Some((slot, bank))` means the
     /// value is live in the bank/slot pool register; `None` means
@@ -115,6 +128,8 @@ impl<'a> RegState<'a> {
             plan,
             use_pool: false,
             current_callee_depth: 0,
+            current_locals_bytes: 0,
+            current_alloca_top_offset: 0,
             pseudo_stack: Vec::new(),
             pending_cmp_cond: None,
         }
@@ -292,6 +307,15 @@ pub(super) fn enc_sub_imm(rd: Reg, rn: Reg, imm12: u32) -> u32 {
     0xD100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+/// `SUBS <Xd>, <Xn|SP>, #imm12` -- like `SUB` but sets NZCV.
+/// Used by the stack-probe loop's counter decrement so the
+/// trailing `b.ne` can read the flags. Top 8 bits flip from
+/// `1101_0001` (SUB) to `1111_0001` (SUBS).
+pub(super) fn enc_subs_imm(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+    debug_assert!(imm12 < 4096, "subs imm: {imm12} > 12-bit max");
+    0xF100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
 /// `SUB <Xd>, <Xn|SP>, #imm12, LSL #12`. The shifted-12 form
 /// extends the reach of the immediate to multiples of 4096 up
 /// to ~16 MiB, used together with the unshifted form to cover
@@ -375,6 +399,16 @@ pub(super) fn enc_sub_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
 /// `AND <Xd>, <Xn>, <Xm>` -- bitwise and.
 pub(super) fn enc_and_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     0x8A00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `AND <Xd>, <Xn>, #~15` -- mask off the low four bits so the
+/// result is a multiple of 16. Used by the alloca lowering to
+/// round the requested size up to the platform's stack-alignment
+/// before bumping the per-frame arena top. AArch64 logical-
+/// immediate encoding for the 64-bit mask `0xFFFFFFFFFFFFFFF0`:
+/// `sf=1`, `N=1`, `immr=0`, `imms=59` (sixty ones, no rotation).
+pub(super) fn enc_and_imm_neg16(rd: Reg, rn: Reg) -> u32 {
+    0x9240_EC00 | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
 /// `ORR <Xd>, <Xn>, <Xm>` -- bitwise or.
@@ -536,6 +570,44 @@ pub(super) fn enc_ldr_d_imm(dt: u8, rn: Reg, imm: u32) -> u32 {
     debug_assert!(dt < 32);
     debug_assert!(imm.is_multiple_of(8) && imm < 32760);
     0xFD40_0000 | ((imm / 8) << 10) | ((rn.0 as u32) << 5) | (dt as u32)
+}
+
+/// `LDR <St>, [<Xn|SP>, #imm]` -- 32-bit unsigned-offset FP/SIMD
+/// load. The offset is byte-addressed but encoded as `imm/4`;
+/// caller passes raw bytes (must be multiple of 4 in 0..16380).
+/// Used by [`Op::Lf`] to load a `float`-typed lvalue's storage
+/// directly into the `sN` half of `dN` before the widening fcvt.
+pub(super) fn enc_ldr_s_imm(st: u8, rn: Reg, imm: u32) -> u32 {
+    debug_assert!(st < 32);
+    debug_assert!(imm.is_multiple_of(4) && imm < 16380);
+    0xBD40_0000 | ((imm / 4) << 10) | ((rn.0 as u32) << 5) | (st as u32)
+}
+
+/// `STR <St>, [<Xn|SP>, #imm]` -- 32-bit unsigned-offset FP/SIMD
+/// store. Same encoding family as [`enc_ldr_s_imm`]; companion to
+/// [`Op::Sf`].
+pub(super) fn enc_str_s_imm(st: u8, rn: Reg, imm: u32) -> u32 {
+    debug_assert!(st < 32);
+    debug_assert!(imm.is_multiple_of(4) && imm < 16380);
+    0xBD00_0000 | ((imm / 4) << 10) | ((rn.0 as u32) << 5) | (st as u32)
+}
+
+/// `FCVT <Dd>, <Sn>` -- widen single-precision to double-precision
+/// (bit-exact for any finite single value, matching the IEEE
+/// short-to-long conversion). Used by [`Op::Lf`] after the
+/// single-precision load.
+pub(super) fn enc_fcvt_d_s(dd: u8, sn: u8) -> u32 {
+    debug_assert!(dd < 32 && sn < 32);
+    0x1E22_C000 | ((sn as u32) << 5) | (dd as u32)
+}
+
+/// `FCVT <Sd>, <Dn>` -- narrow double-precision to single-precision
+/// with round-to-nearest-ties-to-even (matching IEEE 754 and the
+/// VM's `f64 as f32` semantics). Used by [`Op::Sf`] before the
+/// single-precision store.
+pub(super) fn enc_fcvt_s_d(sd: u8, dn: u8) -> u32 {
+    debug_assert!(sd < 32 && dn < 32);
+    0x1E62_4000 | ((dn as u32) << 5) | (sd as u32)
 }
 
 // ---- Comparisons + condition-set. ----
@@ -1116,7 +1188,7 @@ pub(super) fn lower(
     let mut bytecode_to_native: Vec<usize> = vec![usize::MAX; program.text.len() + 1];
     let mut fixups: Vec<Fixup> = Vec::new();
     let mut got_fixups: Vec<GotFixup> = Vec::new();
-    // gh #61: each `JsrExt` / `TailExt` site emits a placeholder
+    // Each `JsrExt` / `TailExt` site emits a placeholder
     // BL/B; the displacement gets backfilled once trampolines are
     // laid out at the tail of `code`.
     let mut plt_call_fixups: Vec<PltCallFixup> = Vec::new();
@@ -1156,9 +1228,13 @@ pub(super) fn lower(
         bytecode_to_native[op_pc] = code.len();
         let raw = program.text[pc];
         let op = Op::from_i64(raw).ok_or_else(|| {
-            C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-                "native codegen: bad opcode at PC {pc}: {raw}"
-            )))
+            C5Error::Compile(crate::c5::error::fmt_ice_bytecode(
+                "aarch64 codegen: bad opcode -- the bytecode scanner \
+                 drifted off the op/operand boundary or the op enum \
+                 changed without updating from_i64",
+                program,
+                pc,
+            ))
         })?;
         pc += 1;
         if matches!(op, Op::Ent) {
@@ -1214,12 +1290,12 @@ pub(super) fn lower(
 
     apply_fixups(&mut code, &fixups, &bytecode_to_native, program.text.len())?;
 
-    // gh #61: append one PLT trampoline per import. Every BL/B
+    // Append one PLT trampoline per import. Every BL/B
     // placeholder recorded in `plt_call_fixups` now gets its imm26
     // backfilled to the matching trampoline's byte offset. The
     // trampoline body's adrp+ldr pair is patched by the per-format
     // writer through the same `GotFixup` shape the inline call
-    // sequence used pre-#61.
+    // sequence used before PLT trampolines existed.
     let plt_trampoline_offsets =
         emit_plt_trampolines(&mut code, &mut got_fixups, imports.imports.len());
     apply_plt_call_fixups(&mut code, &plt_call_fixups, &plt_trampoline_offsets)?;
@@ -1439,9 +1515,26 @@ fn lower_op(
         // ---- Function frame ----
         Op::Ent => {
             let locals = read_operand(text, pc, "Ent")?;
-            emit_prologue(code, locals, in_main, reg_state.current_callee_depth);
+            let aligned_locals = (((locals as u32) * 8) + 15) & !15;
+            reg_state.current_locals_bytes = aligned_locals;
+            // Reset alloca state -- AllocaInit (emitted by the
+            // compiler right after Ent) sets it back if this
+            // function uses alloca.
+            reg_state.current_alloca_top_offset = 0;
+            emit_prologue(
+                code,
+                locals,
+                in_main,
+                reg_state.current_callee_depth,
+                target,
+            );
         }
-        Op::Lev => emit_epilogue(code, in_main, reg_state.current_callee_depth),
+        Op::Lev => emit_epilogue(
+            code,
+            in_main,
+            reg_state.current_callee_depth,
+            reg_state.current_locals_bytes,
+        ),
         Op::Adj => {
             // Adj N drops N pushed slots (each slot is 16 bytes on
             // our native stack -- see Op::Psh below for why). With
@@ -1566,6 +1659,28 @@ fn lower_op(
         Op::Sh => {
             let lhs = pop_lhs_reg(code, reg_state);
             emit(code, enc_strh_imm(Reg::X19, lhs, 0));
+        }
+        Op::Lf => {
+            // Single-precision load + widen-to-double:
+            //   ldr  s0, [x19]   ; load 4 bytes through `s0`'s half of `d0`
+            //   fcvt d0, s0      ; widen to double
+            //   fmov x19, d0     ; deliver `f64::to_bits()` to the accumulator
+            // The IEEE 754 single -> double widening is bit-exact
+            // for every finite source value.
+            emit(code, enc_ldr_s_imm(0, Reg::X19, 0));
+            emit(code, enc_fcvt_d_s(0, 0));
+            emit(code, enc_fmov_d_to_x(Reg::X19, 0));
+        }
+        Op::Sf => {
+            // Narrow f64 -> f32 and store 4 bytes:
+            //   fmov d0, x19     ; stage the accumulator as a double
+            //   fcvt s0, d0      ; narrow with round-to-nearest-ties-to-even
+            //   ldr  lhs, [sp]   ; (via pop_lhs_reg) destination address
+            //   str  s0, [lhs]   ; write 4 bytes
+            emit(code, enc_fmov_x_to_d(0, Reg::X19));
+            emit(code, enc_fcvt_s_d(0, 0));
+            let lhs = pop_lhs_reg(code, reg_state);
+            emit(code, enc_str_s_imm(0, lhs, 0));
         }
         Op::Psh => {
             // With the native optimizer on AND a Pseudo classification
@@ -1853,6 +1968,94 @@ fn lower_op(
             })?;
             emit_got_tail_jump(code, plt_call_fixups, import_index);
         }
+        Op::Intrinsic => {
+            let id = read_operand(text, pc, "Intrinsic")?;
+            let intrinsic = crate::c5::op::Intrinsic::from_i64(id).ok_or_else(|| {
+                C5Error::Compile(crate::c5::error::fmt_internal_err(&alloc::format!(
+                    "native codegen (aarch64): unknown intrinsic id {id}"
+                )))
+            })?;
+            match intrinsic {
+                crate::c5::op::Intrinsic::Alloca => {
+                    // alloca(n): bump the per-frame arena's top
+                    // pointer down by n (rounded up to 16), store
+                    // the new top back into the bookkeeping slot,
+                    // and return the new top in x19. The arena
+                    // lives at a fixed FP-relative offset
+                    // reserved by `Op::Ent` and pointed at by
+                    // `current_alloca_top_offset`, which an
+                    // earlier `Op::AllocaInit` filled in. SP is
+                    // untouched, so outstanding `Op::Psh` values
+                    // stay where they are and matching pops still
+                    // resolve correctly -- the design trade-off
+                    // is a fixed per-function arena size rather
+                    // than the unlimited runtime SP bump that a
+                    // native alloca would do.
+                    let top_offset = reg_state.current_alloca_top_offset;
+                    if top_offset == 0 {
+                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                            "native codegen (aarch64): Op::Intrinsic(Alloca) emitted \
+                             without a preceding AllocaInit; the compiler should have \
+                             patched both at function-end",
+                        )));
+                    }
+                    // x19 holds the requested size. Round up to a
+                    // 16-byte multiple so each returned pointer is
+                    // aligned for any scalar type.
+                    emit(code, enc_add_imm(Reg::X19, Reg::X19, 15));
+                    // and x19, x19, #~15 -- bit pattern is the
+                    // logical-imm encoding for the 64-bit mask
+                    // 0xFFFF_FFFF_FFFF_FFF0 (4 zero low bits).
+                    emit(code, enc_and_imm_neg16(Reg::X19, Reg::X19));
+                    // Load current alloca-top from `[fp, -top_offset]`.
+                    // Compute the slot's address in x16 to sidestep
+                    // ldr/str's signed-9-bit and unsigned-12-bit
+                    // immediate ranges for deep frames.
+                    if top_offset < 4096 {
+                        emit(code, enc_sub_imm(Reg::X16, Reg::X29, top_offset));
+                    } else {
+                        let high = top_offset & !0xfff;
+                        let low = top_offset & 0xfff;
+                        emit(code, enc_sub_imm_lsl12(Reg::X16, Reg::X29, high >> 12));
+                        if low != 0 {
+                            emit(code, enc_sub_imm(Reg::X16, Reg::X16, low));
+                        }
+                    }
+                    emit(code, enc_ldr_imm(Reg::X17, Reg::X16, 0));
+                    emit(code, enc_sub_reg(Reg::X17, Reg::X17, Reg::X19));
+                    emit(code, enc_str_imm(Reg::X17, Reg::X16, 0));
+                    // Result (the new alloca-top) goes back into
+                    // x19, the c5 accumulator.
+                    emit_mov_reg(code, Reg::X19, Reg::X17);
+                }
+            }
+        }
+        Op::AllocaInit => {
+            // operand = FP-slot index of the alloca-top pointer
+            // (positive, in 8-byte units). Zero means the
+            // function doesn't use alloca -- emit nothing.
+            let slot_idx = read_operand(text, pc, "AllocaInit")?;
+            if slot_idx > 0 {
+                let top_offset = (slot_idx as u32) * 8;
+                reg_state.current_alloca_top_offset = top_offset;
+                // Initial alloca-top points at the bookkeeping
+                // slot itself, i.e. the address one byte past the
+                // top of the arena. The first alloca(n) subtracts
+                // n from this and lands inside the arena
+                // (slot_idx + 1 .. slot_idx + ARENA_SLOTS).
+                if top_offset < 4096 {
+                    emit(code, enc_sub_imm(Reg::X16, Reg::X29, top_offset));
+                } else {
+                    let high = top_offset & !0xfff;
+                    let low = top_offset & 0xfff;
+                    emit(code, enc_sub_imm_lsl12(Reg::X16, Reg::X29, high >> 12));
+                    if low != 0 {
+                        emit(code, enc_sub_imm(Reg::X16, Reg::X16, low));
+                    }
+                }
+                emit(code, enc_str_imm(Reg::X16, Reg::X16, 0));
+            }
+        }
 
         // ---- Floating-point arithmetic ----
         //
@@ -2022,14 +2225,25 @@ fn lower_op(
             // overwriting `dst`.
             let size = read_operand(text, pc, "Mcpy")?;
             let dst = pop_lhs_reg(code, reg_state);
-            // Copy whole 8-byte words first.
+            // Copy whole 8-byte words via the scaled 12-bit
+            // unsigned-offset `LDR/STR` form (byte offsets
+            // 0..32760, multiples of 8). The earlier shape used
+            // `ldur/stur`, whose 9-bit signed offset silently
+            // wrapped for any byte offset >= 256, mis-copying
+            // every word past the 32nd; struct-copy of types
+            // > 256 bytes (sqlite's internal handles, stb_vorbis's
+            // ~1.9 KB stb_vorbis struct, ...) produced zeroed
+            // or shifted regions and downstream "the field I
+            // just wrote reads back as 0" mysteries.
             let words = size / 8;
             for w in 0..words {
-                let off = (w * 8) as i32;
-                emit(code, enc_ldur(Reg::X17, Reg::X19, off));
-                emit(code, enc_stur(Reg::X17, dst, off));
+                let off = (w * 8) as u32;
+                emit(code, enc_ldr_imm(Reg::X17, Reg::X19, off));
+                emit(code, enc_str_imm(Reg::X17, dst, off));
             }
-            // Byte tail.
+            // Byte tail. `ldrb`/`strb` (immediate, unscaled) take
+            // a 12-bit unsigned offset (range 0..4095), so any
+            // sub-word tail fits without the wrap-around risk.
             let tail_start = words * 8;
             for i in 0..(size - tail_start) {
                 let off = (tail_start + i) as u32;
@@ -2342,11 +2556,9 @@ fn emit_adrp_add_placeholder(code: &mut Vec<u8>) {
     emit(code, enc_add_imm(Reg::X19, Reg::X19, 0));
 }
 
-/// Emit `adrp x16, GOT_PAGE; ldr x16, [x16, #GOT_OFF]; blr x16` --
-/// the standard macOS PC-relative GOT call sequence. Both the adrp
-/// gh #61: a single 4-byte `BL <plt_trampoline>` placeholder at
+/// A single 4-byte `BL <plt_trampoline>` placeholder at
 /// every libc call site, plus a per-import trampoline appended at
-/// the tail of `Build::text`. The trampoline holds the pre-#61
+/// the tail of `Build::text`. The trampoline holds the
 /// `adrp + ldr + br` sequence (with `BR x16` -- libc's RET returns
 /// directly to the call's BL site).
 ///
@@ -2756,7 +2968,13 @@ fn emit_local_load(code: &mut Vec<u8>, offset: i64, byte: bool) {
 ///   bp + 16: argc  (top arg, c5 val=2 -- first declared)
 ///   bp + 24: argv  (next slot, c5 val=3 -- second declared)
 /// matching [`lea_offset_bytes`] under c5's cdecl push order.
-fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool, callee_pool_depth: u8) {
+fn emit_prologue(
+    code: &mut Vec<u8>,
+    locals: i64,
+    is_main: bool,
+    callee_pool_depth: u8,
+    target: Target,
+) {
     if is_main {
         // Push argv first (deeper), then argc (shallower). 16-byte
         // slots so the layout matches c5's cdecl push convention.
@@ -2788,15 +3006,84 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool, callee_pool_dep
     if locals > 0 {
         let bytes = (locals as u32) * 8;
         let aligned = (bytes + 15) & !15;
-        // SUB (immediate) only takes 12 bits unshifted, so for
-        // functions with more than ~511 locals we need the two-
-        // instruction shifted-12 split. Without this the
-        // immediate silently overflows into the shift bits and
-        // the prologue traps with SIGILL on first call.
-        emit_sub_sp_imm(code, aligned);
+        // For frames that cross a stack guard page, walk SP down
+        // page-by-page touching each page so the OS's guard
+        // mechanism fires on overflow instead of silently
+        // mapping unrelated memory. Threshold is the target's
+        // page size (16 KB on Apple Silicon, 4 KB elsewhere).
+        // Below the threshold the single SUB is fine -- the
+        // first real local access touches the (sole) crossed
+        // page before any later access wanders further.
+        let page_size = stack_probe_page_size(target);
+        if aligned > page_size {
+            emit_stack_probe(code, aligned, page_size);
+        } else {
+            // SUB (immediate) only takes 12 bits unshifted, so
+            // for frames > ~4 KB we need the two-instruction
+            // shifted-12 split. Without it the immediate silently
+            // overflows into the shift bits and the prologue
+            // traps with SIGILL on first call.
+            emit_sub_sp_imm(code, aligned);
+        }
     }
     emit(code, enc_str_pre(Reg::X19, Reg::SP, -16));
     emit_save_pool(code, callee_pool_depth);
+}
+
+/// Stack-guard page size used by the prologue's probe decision.
+/// The host kernel's page size is what really matters; we
+/// hard-code the value the target's OS uses by default rather
+/// than querying at runtime. Apple Silicon defaults to 16 KB;
+/// every other lane (Linux x86_64, Linux aarch64, Windows on
+/// either ISA) uses 4 KB. Over-probing on a system configured
+/// with larger pages is harmless; under-probing risks jumping
+/// past the guard without touching it.
+fn stack_probe_page_size(target: Target) -> u32 {
+    match target {
+        Target::MacOSAarch64 => 16384,
+        _ => 4096,
+    }
+}
+
+/// Walk SP down `frame_bytes` in `page_size` steps, touching
+/// each page before sliding past it so the OS's stack-guard
+/// page fires on overflow. Used by `emit_prologue` when the
+/// frame would otherwise skip a guard page in a single SUB.
+/// `frame_bytes` is the 16-byte-aligned local reservation
+/// (caller's responsibility); the loop emits exactly
+/// `frame_bytes / page_size` iterations and a single trailing
+/// `sub sp, sp, #remainder` for the leftover bytes.
+fn emit_stack_probe(code: &mut Vec<u8>, frame_bytes: u32, page_size: u32) {
+    let pages = frame_bytes / page_size;
+    let remainder = frame_bytes - pages * page_size;
+    // x16 = page counter. The probe scratches x16 only -- AAPCS64
+    // marks x16/x17 as IP0/IP1, intra-procedure-call scratch, so
+    // clobbering them in the prologue is safe.
+    load_imm64(code, Reg::X16, pages as u64);
+    let loop_start = code.len();
+    // sub sp, sp, #page_size  -- single instruction since
+    // page_size is 4096 (immediate) or 16384 (LSL12 form).
+    if page_size == 4096 {
+        emit(code, enc_sub_imm_lsl12(Reg::SP, Reg::SP, 1));
+    } else if page_size == 16384 {
+        emit(code, enc_sub_imm_lsl12(Reg::SP, Reg::SP, 4));
+    } else {
+        emit_sub_sp_imm(code, page_size);
+    }
+    // str xzr, [sp]  -- touch the page so the guard maps it (or
+    // faults on overflow). Reg(31) is XZR in store-rt position
+    // (the same encoding doubles as SP in base-rn position).
+    emit(code, enc_str_imm(Reg(31), Reg::SP, 0));
+    // subs x16, x16, #1; b.ne loop_start.
+    emit(code, enc_subs_imm(Reg::X16, Reg::X16, 1));
+    let loop_pc = code.len() as i64;
+    let target_pc = loop_start as i64;
+    let imm19 = ((target_pc - loop_pc) / 4) as i32;
+    emit(code, enc_b_cond(Cond::Ne, imm19));
+    // Finally drop the partial-page remainder.
+    if remainder != 0 {
+        emit_sub_sp_imm(code, remainder);
+    }
 }
 
 /// Mirror of [`emit_prologue`]. Move the VM accumulator into `x0`
@@ -2804,8 +3091,9 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool, callee_pool_dep
 /// saved x19, tear down the frame, return. For main we also drop
 /// the two 16-byte argc/argv slots so the stack pointer is back to
 /// what the kernel / Rust caller handed us.
-fn emit_epilogue(code: &mut Vec<u8>, is_main: bool, callee_pool_depth: u8) {
+fn emit_epilogue(code: &mut Vec<u8>, is_main: bool, callee_pool_depth: u8, locals_bytes: u32) {
     emit_mov_reg(code, Reg::X0, Reg::X19);
+    let _ = locals_bytes; // see commentary below
     // Stack layout below this point (top-down):
     //   callee pool regs (`callee_pool_depth` of them, 16 bytes per slot)
     //   saved x19

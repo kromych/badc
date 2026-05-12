@@ -1,11 +1,11 @@
 #include <stdlib.h>
 
-// Float scalar arithmetic isn't lowered yet, but every operation
-// that doesn't require an FP add/sub/mul/div works today: `float`
-// and `double` types parse, float pointers stride one slot at a
-// time, and `sizeof` reports 8 for both scalars (c5 keeps every
-// FP value in an 8-byte slot; the IEEE 754 32-bit narrowing for
-// `float` is future work).
+// Real IEEE 754 single-precision support: `sizeof(float) == 4`,
+// `float *fa; fa + 1` strides 4 bytes, the slot storage is the
+// narrow single rather than an 8-byte mirror. The c5 accumulator
+// still moves f64 bits across `Op::Lf` / `Op::Sf` (the
+// widening/narrowing happens at the load/store boundary), so
+// arithmetic ops keep using the f64 dispatch.
 //
 // 32-bit bit patterns round-trip through `int` (4 bytes everywhere)
 // and 64-bit bit patterns through `long long` (8 bytes on every
@@ -20,17 +20,19 @@ int main() {
     // sizeof on the type form.
     sz_f = sizeof(float);
     sz_d = sizeof(double);
-    if (sz_f != 8) return 1;
+    if (sz_f != 4) return 1;
     if (sz_d != 8) return 2;
 
-    // Pointer arithmetic: `fa + 1` advances 8 bytes, just like
-    // any non-`char *` pointer.
+    // Pointer arithmetic: `fa + 1` advances 4 bytes (one IEEE
+    // single); `da + 1` still advances 8 bytes.
     n = 4;
-    fa = (float *)malloc(n * 8);
+    fa = (float *)malloc(n * 4);
     da = (double *)malloc(n * 8);
 
-    // Index-write through float pointer (Sw, the  4-byte
-    // store). The single-precision pattern fits in `int`.
+    // Index-write through float pointer: the single-precision
+    // bit pattern fits in `int` (4 bytes everywhere) and the
+    // 4-byte stride lands exactly on the slot the matching
+    // `*(int *)&fa[i]` re-reads.
     *(int *)&fa[0] = 0x3f800000;        // bit pattern of 1.0f
     *(int *)&fa[1] = 0x40000000;        // bit pattern of 2.0f
     // Double's 64-bit pattern needs a real 8-byte slot -- `int` is

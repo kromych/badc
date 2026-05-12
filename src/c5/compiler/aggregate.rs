@@ -91,7 +91,7 @@ impl Compiler {
         let mut bf_active = false;
         let mut bf_storage_offset: usize = 0;
         let mut bf_next_bit: u32 = 0;
-        while self.lex.tk != '}' as i64 {
+        while self.lex.tk != '}' {
             // Field type prefix: int, char, float, double, or struct Name.
             // Leading qualifiers / int modifiers / function specifiers
             // (`const`, `unsigned`, ...) are no-ops; track if any int
@@ -112,18 +112,18 @@ impl Compiler {
             // synthesised tag stays a regular nested-struct type.
             let mut anon_aggregate_inner_id: Option<usize> = None;
             while is_decl_modifier(self.lex.tk) {
-                if self.lex.tk == Token::IntMod as i64 {
+                if self.lex.tk == Token::IntMod {
                     saw_int_mod = true;
-                } else if self.lex.tk == Token::Signed as i64 {
+                } else if self.lex.tk == Token::Signed {
                     saw_signed = true;
                     saw_int_mod = true;
-                } else if self.lex.tk == Token::Unsigned as i64 {
+                } else if self.lex.tk == Token::Unsigned {
                     saw_unsigned = true;
                     saw_int_mod = true;
-                } else if self.lex.tk == Token::Long as i64 {
+                } else if self.lex.tk == Token::Long {
                     long_count = long_count.saturating_add(1);
                     saw_int_mod = true;
-                } else if self.lex.tk == Token::Short as i64 {
+                } else if self.lex.tk == Token::Short {
                     saw_short = true;
                     saw_int_mod = true;
                 }
@@ -131,7 +131,7 @@ impl Compiler {
             }
             let saw_long = long_count >= 1;
             let saw_long_long = long_count >= 2;
-            let field_base = if self.lex.tk == Token::Int as i64 {
+            let field_base = if self.lex.tk == Token::Int {
                 self.next()?;
                 let base = if saw_long_long {
                     Ty::LongLong as i64
@@ -147,7 +147,7 @@ impl Compiler {
                 } else {
                     base
                 }
-            } else if self.lex.tk == Token::Char as i64 {
+            } else if self.lex.tk == Token::Char {
                 self.next()?;
                 // Mirror parse_decl_base_type: `signed char` is a
                 // real 1-byte signed field; plain / unsigned char
@@ -157,14 +157,29 @@ impl Compiler {
                 } else {
                     Ty::Char as i64 | UNSIGNED_BIT
                 }
-            } else if self.lex.tk == Token::Float as i64 {
+            } else if self.lex.tk == Token::Void {
+                self.next()?;
+                // `void *p;` / `void (*fp)(...);` fields: routed
+                // through the `unsigned char` encoding so the
+                // pointer-arithmetic + sizeof match the
+                // legacy void-as-char path. Bare `void m;` is
+                // a constraint violation (incomplete type), but
+                // c5 doesn't reject it here -- the declarator
+                // would have to add a `*` for a real use, and
+                // a hypothetical bare field would just allocate
+                // 1 byte like the prior behavior did. Promoting
+                // this to an error needs a separate
+                // declarator-aware check; the bytecode
+                // generation works either way.
+                Ty::Char as i64 | UNSIGNED_BIT
+            } else if self.lex.tk == Token::Float {
                 self.next()?;
                 Ty::Float as i64
-            } else if self.lex.tk == Token::Double as i64 {
+            } else if self.lex.tk == Token::Double {
                 self.next()?;
                 Ty::Double as i64
-            } else if self.lex.tk == Token::Struct as i64 || self.lex.tk == Token::Union as i64 {
-                let nested_is_union = self.lex.tk == Token::Union as i64;
+            } else if self.lex.tk == Token::Struct || self.lex.tk == Token::Union {
+                let nested_is_union = self.lex.tk == Token::Union;
                 self.next()?;
                 // Three shapes:
                 //   * `struct Foo { ... }` -- named definition.
@@ -180,11 +195,11 @@ impl Compiler {
                 //                            fields PROMOTE into
                 //                            the enclosing scope
                 //                            -- C11 6.7.2.1p13.
-                let (inner_name, had_explicit_tag) = if self.lex.tk == Token::Id as i64 {
+                let (inner_name, had_explicit_tag) = if self.lex.tk == Token::Id {
                     let name = self.symbols[self.lex.curr_id_idx].name.clone();
                     self.next()?;
                     (name, true)
-                } else if self.lex.tk == '{' as i64 {
+                } else if self.lex.tk == '{' {
                     let kind = if nested_is_union {
                         "anon_union"
                     } else {
@@ -197,7 +212,7 @@ impl Compiler {
                 } else {
                     return Err(self.compile_err("aggregate name or `{{` expected in field type"));
                 };
-                let inner_id = if self.lex.tk == '{' as i64 {
+                let inner_id = if self.lex.tk == '{' {
                     self.parse_aggregate_body(&inner_name, nested_is_union)?
                 } else {
                     self.find_or_forward_declare_struct(&inner_name)
@@ -208,7 +223,7 @@ impl Compiler {
                     Some(inner_id)
                 };
                 struct_ty_for(inner_id)
-            } else if self.lex.tk == Token::Enum as i64 {
+            } else if self.lex.tk == Token::Enum {
                 // C99 6.7.2.2: an `enum X` field collapses to plain
                 // `int` in c5's type system the same way every other
                 // enum reference does. Consume any tag name and the
@@ -217,10 +232,10 @@ impl Compiler {
                 // `parse_decl_base_type` enum branch so the same
                 // shape works at file scope and inside a struct.
                 self.next()?;
-                if self.lex.tk == Token::Id as i64 {
+                if self.lex.tk == Token::Id {
                     self.next()?;
                 }
-                if self.lex.tk == '{' as i64 {
+                if self.lex.tk == '{' {
                     self.parse_enum_body()?;
                 }
                 Ty::Int as i64
@@ -264,7 +279,7 @@ impl Compiler {
             // an unnamed `struct { ... }` and must be reachable
             // as `li.LowPart` (not `li.<some-tag>.LowPart`).
             if let Some(inner_id) = anon_aggregate_inner_id
-                && self.lex.tk == ';' as i64
+                && self.lex.tk == ';'
             {
                 {
                     // Seal any pending bitfield run -- the
@@ -313,6 +328,7 @@ impl Compiler {
                             ty: inner_field.ty,
                             array_size: inner_field.array_size,
                             inner_array_size: inner_field.inner_array_size,
+                            array_dims: inner_field.array_dims,
                             bit_offset: inner_field.bit_offset,
                             bit_width: inner_field.bit_width,
                         });
@@ -332,7 +348,7 @@ impl Compiler {
                 // Anonymous bitfield (`int :N;`) -- skips a name and
                 // just reserves bits for padding. Detected by `:`
                 // appearing in declarator position.
-                let anon_bitfield_width = if self.lex.tk == ':' as i64 {
+                let anon_bitfield_width = if self.lex.tk == ':' {
                     self.next()?;
                     let n = self.parse_constant_int()?;
                     if n < 0 {
@@ -363,7 +379,7 @@ impl Compiler {
                         }
                         bf_next_bit += width;
                     }
-                    if self.lex.tk == ',' as i64 {
+                    if self.lex.tk == ',' {
                         self.next()?;
                         continue;
                     }
@@ -371,6 +387,17 @@ impl Compiler {
                 }
 
                 let (id_idx, field_ty, field_array_size) = self.parse_declarator(field_base)?;
+                // Struct fields don't carry the fn-pointer lineage
+                // tag on their own (the StructField record has no
+                // place for it), so consume the side-channel here.
+                // Without this, a struct containing a `int (*cb)(...)`
+                // field leaks fn_ptr_indirection = 1 into whatever
+                // declaration follows the closing `}` -- including
+                // the typedef name in `typedef struct { ... } T;`,
+                // which would then mistakenly treat `T *p` as a
+                // function-pointer-pointer and turn `*p` into a
+                // decay no-op.
+                self.pending_fn_ptr_indirection.take();
                 let is_aggregate_value = is_struct_ty(field_ty) && struct_ptr_depth(field_ty) == 0;
                 if is_aggregate_value
                     && field_array_size == 0
@@ -387,7 +414,7 @@ impl Compiler {
                 let mut bit_width: u32 = 0;
                 let mut bit_offset: u32 = 0;
                 let field_offset: usize;
-                if self.lex.tk == ':' as i64 {
+                if self.lex.tk == ':' {
                     if field_array_size != 0 {
                         return Err(self.compile_err("array fields cannot also be bitfields"));
                     }
@@ -465,24 +492,26 @@ impl Compiler {
                 }
 
                 let field_inner_array_size = self.symbols[id_idx].inner_array_size;
+                let field_array_dims = core::mem::take(&mut self.symbols[id_idx].array_dims);
                 self.structs[struct_id].fields.push(StructField {
                     name: field_name,
                     offset: field_offset,
                     ty: field_ty,
                     array_size: field_array_size,
                     inner_array_size: field_inner_array_size,
+                    array_dims: field_array_dims,
                     bit_offset,
                     bit_width,
                 });
 
-                if self.lex.tk == ',' as i64 {
+                if self.lex.tk == ',' {
                     self.next()?;
                     continue;
                 }
                 break;
             }
 
-            if self.lex.tk != ';' as i64 {
+            if self.lex.tk != ';' {
                 return Err(self.compile_err("semicolon expected after struct field"));
             }
             self.next()?;

@@ -52,7 +52,7 @@ impl Compiler {
     ///                      post-body fixup pass.
     fn push_init_reloc(&mut self, here: usize, value: i64, reloc: InitElemReloc) {
         match reloc {
-            InitElemReloc::None => {}
+            InitElemReloc::None | InitElemReloc::Float64Bits => {}
             InitElemReloc::Data => {
                 self.data_relocs.push(crate::c5::program::DataReloc {
                     data_offset: here as u64,
@@ -67,6 +67,50 @@ impl Compiler {
                 self.code_reloc_sym_idx.push(sym_idx);
             }
         }
+    }
+
+    /// Convert an initializer element's `(value, reloc)` to the
+    /// bit pattern that should land in the data segment for an
+    /// element of type `elem_ty`. c5 models every FP slot as
+    /// `f64` bits in an 8-byte slot (sizeof(float) returns 8),
+    /// so:
+    ///   * `Float64Bits` value -- already f64 bits, pass through.
+    ///   * Plain integer constant in a float/double element --
+    ///     convert int -> f64 bits so e.g.
+    ///     `static float a[] = { 1 }` ends up as the bit pattern
+    ///     of `1.0`, not `0x0000000000000001`.
+    /// Non-FP elem types and FP values destined for pointer
+    /// slots (Data / Code relocs) pass through unchanged.
+    fn to_storage_bits(&self, value: i64, reloc: InitElemReloc, elem_ty: i64) -> i64 {
+        let stripped = elem_ty & !UNSIGNED_BIT;
+        let is_float = stripped == Ty::Float as i64;
+        let is_double = stripped == Ty::Double as i64;
+        if !is_float && !is_double {
+            return value;
+        }
+        // Compute the canonical f64 bit pattern from the source
+        // value first, then narrow to f32 for the `Ty::Float` case.
+        // The 4-byte single-precision storage slot can only hold the
+        // narrowed bits -- a direct truncation of the f64 pattern
+        // (the bug this branch fixes) would zero out the entire low
+        // mantissa for any non-tiny value, e.g. `1.0` ->
+        // `0x3FF0_0000_0000_0000` -> low 4 bytes = `0x0000_0000` =
+        // `+0.0f`, which made every entry of `static float
+        // basis[12][4] = { {1, 1, 0}, ... }` in stb_perlin collapse
+        // to zero.
+        let f64_bits = match reloc {
+            InitElemReloc::Float64Bits => value,
+            InitElemReloc::None => (value as f64).to_bits() as i64,
+            // Data / Code relocs land in pointer-typed slots, not
+            // FP slots; the upstream paths reject the type mix
+            // before reaching here.
+            _ => return value,
+        };
+        if is_float {
+            let f = f64::from_bits(f64_bits as u64) as f32;
+            return f.to_bits() as i64;
+        }
+        f64_bits
     }
 
     /// Write `n_bytes` little-endian bytes of `value` into
@@ -97,10 +141,19 @@ impl Compiler {
         &mut self,
         elem_ty: i64,
     ) -> Result<Vec<(i64, InitElemReloc)>, C5Error> {
-        if self.lex.tk == '"' as i64 && (elem_ty & !UNSIGNED_BIT) == Ty::Char as i64 {
+        // 2D inner-dim hint -- callers set this when the declarator
+        // shape is `T xs[N][M]` so a nested `{ row }` that lists
+        // fewer than M values gets zero-padded per C99 6.7.8p21
+        // (the remaining elements of an aggregate are initialised
+        // implicitly to zero). Without padding, subsequent rows
+        // shift into the previous row's tail and `xs[i][j]` reads
+        // garbage. Read-and-clear so a recursive call into an
+        // inner brace doesn't inherit it.
+        let inner_dim = core::mem::take(&mut self.pending_init_inner_dim);
+        if self.lex.tk == '"' && (elem_ty & !UNSIGNED_BIT) == Ty::Char as i64 {
             let start_addr = self.lex.ival as usize;
             self.next()?;
-            while self.lex.tk == '"' as i64 {
+            while self.lex.tk == '"' {
                 self.next()?;
             }
             self.data.push(0);
@@ -110,26 +163,71 @@ impl Compiler {
                 .collect();
             return Ok(elems);
         }
-        if self.lex.tk != '{' as i64 {
+        if self.lex.tk != '{' {
             return Err(
                 self.compile_err("array initializer must be a string literal or `{{ ... }}`")
             );
         }
         self.next()?;
-        let mut elements = Vec::new();
-        while self.lex.tk != '}' as i64 {
+        let mut elements: Vec<(i64, InitElemReloc)> = Vec::new();
+        // C99 6.7.8 designated initializers: a `[N] = ...` clause
+        // sets the write position to N; subsequent positional
+        // entries (and chained `[K] = ...` clauses) continue
+        // from there. Track the cursor here so designated and
+        // positional entries can interleave per 6.7.8p17.
+        let mut cursor: usize = 0;
+        while self.lex.tk != '}' {
+            // Array designator `[N] = ...`. Single-level only --
+            // nested designators (`[N].field = ...`) aren't
+            // supported yet; a constraint violation falls through
+            // to `parse_constant_init_value` and surfaces as a
+            // parse error.
+            if self.lex.tk == Token::Brak {
+                self.next()?;
+                let n = self.parse_constant_int()?;
+                if n < 0 {
+                    return Err(self.compile_err(format!(
+                        "array designator index must be non-negative (got {n})"
+                    )));
+                }
+                if self.lex.tk != ']' {
+                    return Err(self.compile_err("`]` expected after array designator index"));
+                }
+                self.next()?;
+                if self.lex.tk != Token::Assign {
+                    return Err(self.compile_err("`=` expected after `[N]` designator"));
+                }
+                self.next()?;
+                cursor = n as usize;
+            }
             // Nested brace list (multi-dim array): `{ {1,2}, {3,4}, ... }`.
             // c5's array-symbol storage carries a single flat
             // dimension, so we flatten the rows by recursing and
-            // concatenating element vectors. Indexing into the
-            // multi-dim shape isn't precise (only the outermost
-            // dimension scales), but the bytes laid out in `data`
-            // match the equivalent `T xs[N*M]` layout, which is
-            // what code that walks the array linearly expects.
-            if self.lex.tk == '{' as i64 {
-                let mut inner = self.collect_array_initializer(elem_ty)?;
-                elements.append(&mut inner);
-                if self.lex.tk == ',' as i64 {
+            // concatenating element vectors. When `inner_dim > 0`
+            // the caller has told us the row width, so a short
+            // inner list gets padded with zero-valued elements
+            // before the next row starts.
+            if self.lex.tk == '{' {
+                let before = cursor;
+                let inner = self.collect_array_initializer(elem_ty)?;
+                let written = inner.len();
+                if elements.len() < before + written {
+                    elements.resize(before + written, (0, InitElemReloc::None));
+                }
+                for (i, entry) in inner.into_iter().enumerate() {
+                    elements[before + i] = entry;
+                }
+                cursor = before + written;
+                if inner_dim > 0 {
+                    let pad = (inner_dim as usize).saturating_sub(written);
+                    if pad > 0 {
+                        if elements.len() < cursor + pad {
+                            elements.resize(cursor + pad, (0, InitElemReloc::None));
+                        }
+                        cursor += pad;
+                    }
+                }
+                if self.lex.tk == ',' {
                     self.next()?;
                 }
                 continue;
@@ -142,8 +240,12 @@ impl Compiler {
             // both `Data` (string / `&global`) and `Code` (function
             // pointer) get a true reloc; integer constants don't.
             let (value, reloc) = self.parse_constant_init_value()?;
-            elements.push((value, reloc));
-            if self.lex.tk == ',' as i64 {
+            if elements.len() <= cursor {
+                elements.resize(cursor + 1, (0, InitElemReloc::None));
+            }
+            elements[cursor] = (value, reloc);
+            cursor += 1;
+            if self.lex.tk == ',' {
                 self.next()?;
             }
         }
@@ -177,7 +279,8 @@ impl Compiler {
             self.data.resize(start_addr + elements.len() * elem_size, 0);
             for (idx, &(v, reloc)) in elements.iter().enumerate() {
                 let here = start_addr + idx * elem_size;
-                self.write_init_bytes(here, v, elem_size);
+                let bits = self.to_storage_bits(v, reloc, elem_ty);
+                self.write_init_bytes(here, bits, elem_size);
                 self.push_init_reloc(here, v, reloc);
             }
         }
@@ -194,13 +297,56 @@ impl Compiler {
     ///     (enum value, `#define`d constant), use its `val`
     ///   * `0` is special -- a NULL pointer / zero scalar, no reloc.
     pub(super) fn parse_constant_init_value(&mut self) -> Result<(i64, InitElemReloc), C5Error> {
-        // Float literal -- store the f64 bit pattern. The struct
-        // field's declared type drives the runtime interpretation;
-        // the on-disk image is just bytes.
-        if self.lex.tk == Token::FloatNum as i64 {
+        // Float literal -- store the f64 bit pattern. The element
+        // type drives the runtime interpretation; the on-disk
+        // image is just bytes.
+        //
+        // C99 6.6 defines arithmetic constant expressions over
+        // floating-point operands. A trailing `+ - * /` after the
+        // literal continues the chain; fold it in `f64`
+        // precision since the integer const-expr evaluator can't
+        // see through float operands.
+        if self.lex.tk == Token::FloatNum {
             let v = self.lex.ival;
             self.next()?;
-            return Ok((v, InitElemReloc::None));
+            if self.tk_is_float_arith_op() {
+                let bits = self.parse_const_float_add_from(f64::from_bits(v as u64))?;
+                return Ok((bits.to_bits() as i64, InitElemReloc::Float64Bits));
+            }
+            return Ok((v, InitElemReloc::Float64Bits));
+        }
+        // Negative float / integer literal: `-1.5e+020` lexes as
+        // `-` followed by FloatNum, and `-42` as `-` followed by
+        // Num. The integer-only fallback at the tail of this
+        // function (`parse_constant_int`) handles `-(expr)` and
+        // `-IDENT_MACRO` via its own unary-minus path; here we
+        // only intercept when the byte after `-` is the start of
+        // a literal, so we don't disturb the existing routes.
+        // C99 6.6 admits unary `-` on a numeric literal as a
+        // constant expression -- the float case has to flip the
+        // IEEE-754 sign bit rather than negate an integer value.
+        if self.lex.tk == Token::SubOp && self.lex.peek_after_whitespace_starts_digit() {
+            self.next()?; // consume `-`
+            if self.lex.tk == Token::FloatNum {
+                let bits = (self.lex.ival as u64) ^ (1u64 << 63);
+                self.next()?;
+                if self.tk_is_float_arith_op() {
+                    let folded = self.parse_const_float_add_from(f64::from_bits(bits))?;
+                    return Ok((folded.to_bits() as i64, InitElemReloc::Float64Bits));
+                }
+                return Ok((bits as i64, InitElemReloc::Float64Bits));
+            }
+            if self.lex.tk == Token::Num {
+                let v = -self.lex.ival;
+                self.next()?;
+                return Ok((v, InitElemReloc::None));
+            }
+            // peek said "digit next", so the lexer must have
+            // produced a numeric token. Anything else is a bug.
+            return Err(self.compile_err(format!(
+                "expected numeric literal after `-` in initializer (got {})",
+                super::super::token::describe(self.lex.tk)
+            )));
         }
         // `(type)expr` cast or `(expr)` parenthesized constant in a
         // static initializer. After consuming `(`, peek the next
@@ -208,11 +354,20 @@ impl Compiler {
         // the value (c5's i64-shaped representation makes integer /
         // pointer casts no-ops). Otherwise it's a parenthesized
         // constant expression -- evaluate it and expect `)`.
-        if self.lex.tk == '(' as i64 {
+        if self.lex.tk == '(' {
+            // Cast / float-content detection both need to look
+            // past the `(`. Snapshot so we can rewind for the
+            // integer-expression fall-through, which has to see
+            // `(` to absorb both the parenthesised sub-expression
+            // *and* any trailing operators -- a struct initialiser
+            // entry like `{ (127-13) << 23 }` needs the integer
+            // const-expr evaluator to start outside the parens so
+            // the `<< 23` after `)` joins the chain.
+            let snap = self.lex.snapshot();
             self.next()?;
             if self.lex_is_type_start() {
                 let _ = self.parse_decl_base_type()?;
-                while self.lex.tk == Token::MulOp as i64 || self.lex.tk == Token::TypeQual as i64 {
+                while self.lex.tk == Token::MulOp || self.lex.tk == Token::TypeQual {
                     self.next()?;
                 }
                 // Optional function-pointer abstract declarator
@@ -220,13 +375,13 @@ impl Compiler {
                 // as in the expression-level cast handler: scan
                 // counted parens until the cast's outer `)`,
                 // then skip the trailing `(args)` arg-list shape.
-                if self.lex.tk == '(' as i64 {
+                if self.lex.tk == '(' {
                     let mut depth: i64 = 1;
                     self.next()?;
                     while depth > 0 && self.lex.tk != 0 {
-                        if self.lex.tk == '(' as i64 {
+                        if self.lex.tk == '(' {
                             depth += 1;
-                        } else if self.lex.tk == ')' as i64 {
+                        } else if self.lex.tk == ')' {
                             depth -= 1;
                             if depth == 0 {
                                 self.next()?;
@@ -235,37 +390,59 @@ impl Compiler {
                         }
                         self.next()?;
                     }
-                    if self.lex.tk == '(' as i64 {
+                    if self.lex.tk == '(' {
                         self.next()?;
                         self.skip_balanced_parens_after_open()?;
                     }
                 }
-                if self.lex.tk != ')' as i64 {
+                if self.lex.tk != ')' {
                     return Err(self.compile_err("close paren expected after cast in initializer"));
                 }
                 self.next()?;
                 return self.parse_constant_init_value();
             }
-            let v = self.parse_const_expr_or()?;
-            if self.lex.tk != ')' as i64 {
-                return Err(self.compile_err("close paren expected in initializer"));
+            // Sub-expression in parens. Peek for any FloatNum
+            // token inside (up to the matching `)`); if present,
+            // fold the whole sub-expression in f64 precision so
+            // shapes like `(1.0f + 2.0f) * 4.0f` round-trip
+            // exactly. Pure-integer parens fall through to the
+            // integer expression evaluator below so trailing
+            // `<<`, `+`, ... operators after `)` are absorbed too.
+            if self.contents_until_close_paren_have_float()? {
+                let seed = self.parse_const_float_unary()?;
+                let v = self.parse_const_float_add_from(seed)?;
+                if self.lex.tk != ')' {
+                    return Err(self.compile_err("close paren expected in initializer"));
+                }
+                self.next()?;
+                // The result of the parens is itself a float
+                // value; any trailing `+ / - / * / /` continues
+                // the float expression chain.
+                if self.tk_is_float_arith_op() {
+                    let folded = self.parse_const_float_add_from(v)?;
+                    return Ok((folded.to_bits() as i64, InitElemReloc::Float64Bits));
+                }
+                return Ok((v.to_bits() as i64, InitElemReloc::Float64Bits));
             }
-            self.next()?;
+            // Rewind so the integer evaluator below absorbs the
+            // whole `(expr) op rhs` chain as one expression.
+            self.lex.restore(snap);
+            let v = self.parse_constant_int()?;
             return Ok((v, InitElemReloc::None));
         }
-        if self.lex.tk == '"' as i64 {
+        if self.lex.tk == '"' {
             let addr = self.lex.ival;
             self.next()?;
-            while self.lex.tk == '"' as i64 {
+            while self.lex.tk == '"' {
                 self.next()?;
             }
             self.data.push(0);
             return Ok((addr, InitElemReloc::Data));
         }
-        if self.lex.tk == Token::AndOp as i64 {
+        if self.lex.tk == Token::AndOp {
             // `&global` -- address-of-global pointer init.
             self.next()?;
-            if self.lex.tk != Token::Id as i64 {
+            if self.lex.tk != Token::Id {
                 return Err(self.compile_err("identifier expected after `&` in initializer"));
             }
             let target_idx = self.lex.curr_id_idx;
@@ -280,9 +457,30 @@ impl Compiler {
             self.next()?;
             return Ok((off, InitElemReloc::Data));
         }
-        if self.lex.tk == Token::Id as i64 {
+        if self.lex.tk == Token::Id {
             let idx = self.lex.curr_id_idx;
             let class = self.symbols[idx].class;
+            // Forward-referenced function pointer in a static
+            // initializer: dispatch tables that list functions
+            // defined later in the same TU. The post-parse
+            // `apply_fn_call_fixups` pass already resolves
+            // `target_bc_pc` from each symbol's final `val`, so
+            // we bind the identifier as `Token::Fun` with val=0
+            // here and let the fixup pass patch both the data
+            // bytes and the CodeReloc entry once the body has
+            // been emitted. The forward-ref heuristic only
+            // fires when the next token is `,` / `}` -- i.e.,
+            // the identifier is the entire init slot, not the
+            // start of an expression that happens to use an
+            // undeclared name.
+            if class == 0
+                && (self.lex.peek_after_whitespace(b',') || self.lex.peek_after_whitespace(b'}'))
+            {
+                self.symbols[idx].class = Token::Fun as i64;
+                self.symbols[idx].type_ = Ty::Int as i64;
+                self.next()?;
+                return Ok((0, InitElemReloc::Code(idx)));
+            }
             if class == Token::Fun as i64 {
                 let bc_pc = self.symbols[idx].val;
                 self.next()?;
@@ -318,8 +516,64 @@ impl Compiler {
                 // "..."`) this is the array-decay rule: the value
                 // is the array's data-segment offset; a DataReloc
                 // patches it to the runtime address.
-                let off = self.symbols[idx].val;
+                let mut off = self.symbols[idx].val;
+                let array_size = self.symbols[idx].array_size;
+                let inner_dim = self.symbols[idx].inner_array_size;
+                let elem_ty = self.symbols[idx].type_;
                 self.next()?;
+                // Optional `[N]...` postfixes -- decay-to-address-
+                // of-element. `arr[N]` is equivalent to `&arr[N]`
+                // in a constant initializer (C99 6.3.2.1p3 array-
+                // to-pointer conversion); a chain of `[N]`s
+                // navigates further into a multi-dim array
+                // before taking its address.
+                //
+                // c5 only tracks `inner_array_size` (the second
+                // dim of `T name[A][B]`), so for the third index
+                // of a 3D `T name[A][B][C]` we don't have a stride
+                // to multiply by. The common static-init shape is
+                // `arr[0][0]` (a row pointer through a 2D or 3D
+                // table) which only matters as the base address;
+                // we accept further `[0]` postfixes without error
+                // and reject `[non-zero]` past the second index.
+                let mut depth: usize = 0;
+                while self.lex.tk == Token::Brak {
+                    self.next()?;
+                    let n = self.parse_constant_int()?;
+                    if self.lex.tk != ']' {
+                        return Err(self.compile_err(format!(
+                            "close bracket expected in `{}[...]` initializer",
+                            self.symbols[idx].name
+                        )));
+                    }
+                    self.next()?;
+                    let stride: i64 = if depth == 0 {
+                        if inner_dim > 0 {
+                            // 2D / 3D: first index strides over rows.
+                            inner_dim * self.size_of_type(elem_ty) as i64
+                        } else if array_size > 0 {
+                            self.size_of_type(elem_ty) as i64
+                        } else {
+                            1
+                        }
+                    } else if depth == 1 {
+                        // Second index: scalar element stride.
+                        self.size_of_type(elem_ty) as i64
+                    } else {
+                        // Beyond 2D, c5 has no per-dim stride.
+                        if n != 0 {
+                            return Err(self.compile_err(format!(
+                                "static initializer index past 2D for `{}` -- \
+                                 c5 only tracks two dimensions, only `[0]` is \
+                                 accepted beyond that",
+                                self.symbols[idx].name
+                            )));
+                        }
+                        0
+                    };
+                    off += n * stride;
+                    depth += 1;
+                }
                 return Ok((off, InitElemReloc::Data));
             }
             return Err(self.compile_err(format!(
@@ -342,21 +596,21 @@ impl Compiler {
         struct_id: usize,
         var_offset: i64,
     ) -> Result<(), C5Error> {
-        if self.lex.tk != '{' as i64 {
+        if self.lex.tk != '{' {
             return Err(self.compile_err("struct initializer must start with `{{`"));
         }
         self.next()?;
         let mut pos: usize = 0;
-        while self.lex.tk != '}' as i64 {
+        while self.lex.tk != '}' {
             // Designator?
-            let field_idx = if self.lex.tk == Token::Dot as i64 {
+            let field_idx = if self.lex.tk == Token::Dot {
                 self.next()?;
-                if self.lex.tk != Token::Id as i64 {
+                if self.lex.tk != Token::Id {
                     return Err(self.compile_err("field name expected after `.`"));
                 }
                 let field_name = self.symbols[self.lex.curr_id_idx].name.clone();
                 self.next()?;
-                if self.lex.tk != Token::Assign as i64 {
+                if self.lex.tk != Token::Assign {
                     return Err(
                         self.compile_err(format!("`=` expected after `.{field_name}` designator"))
                     );
@@ -391,7 +645,7 @@ impl Compiler {
             // Pointer / scalar / bitfield fields read a single
             // constant-expression value via parse_constant_init_value.
             if field.array_size > 0
-                && self.lex.tk == '"' as i64
+                && self.lex.tk == '"'
                 && (field.ty & !UNSIGNED_BIT) == Ty::Char as i64
             {
                 // `struct S { char a[N]; } x = { "..." };` -- copy the
@@ -403,7 +657,7 @@ impl Compiler {
                 // 8 bytes, which produces garbage at read time.
                 let start_addr = self.lex.ival as usize;
                 self.next()?;
-                while self.lex.tk == '"' as i64 {
+                while self.lex.tk == '"' {
                     self.next()?;
                 }
                 self.data.push(0); // ensure NUL terminator
@@ -429,11 +683,11 @@ impl Compiler {
                         // write_init_value when source byte is 0).
                     }
                 }
-            } else if field.array_size > 0 && self.lex.tk == '{' as i64 {
+            } else if field.array_size > 0 && self.lex.tk == '{' {
                 self.next()?;
                 let elem_size = self.size_of_type(field.ty);
                 let mut idx: usize = 0;
-                while self.lex.tk != '}' as i64 {
+                while self.lex.tk != '}' {
                     if idx as i64 >= field.array_size {
                         return Err(self.compile_err(format!(
                             "too many initializers for `{}.{}`",
@@ -444,14 +698,40 @@ impl Compiler {
                     let here = field_base + idx * elem_size;
                     self.write_init_value(here, elem_size, value, reloc);
                     idx += 1;
-                    if self.lex.tk == ',' as i64 {
+                    if self.lex.tk == ',' {
                         self.next()?;
                     }
                 }
                 self.next()?; // consume `}`
+            } else if field.array_size > 0 {
+                // C99 6.7.8p20 "implicit braces removed": a flat
+                // value list inside a struct initializer can fill
+                // an array field directly, without nested braces.
+                // Absorb up to `array_size` values from the
+                // surrounding brace list; the outer struct loop
+                // then advances to the next field on the
+                // following `,`. A canonical instance is
+                //   struct { unsigned char c[4]; } v = { 1,2,3,4 };
+                // where the inner array's brace pair is elided.
+                let elem_size = self.size_of_type(field.ty);
+                let mut idx: usize = 0;
+                while (idx as i64) < field.array_size && self.lex.tk != '}' {
+                    let (value, reloc) = self.parse_constant_init_value()?;
+                    let here = field_base + idx * elem_size;
+                    self.write_init_value(here, elem_size, value, reloc);
+                    idx += 1;
+                    if idx as i64 >= field.array_size {
+                        break;
+                    }
+                    if self.lex.tk == ',' {
+                        self.next()?;
+                    } else {
+                        break;
+                    }
+                }
             } else if is_struct_ty(field.ty)
                 && struct_ptr_depth(field.ty) == 0
-                && self.lex.tk == '{' as i64
+                && self.lex.tk == '{'
             {
                 let nested_sid = struct_id_of(field.ty);
                 self.collect_struct_initializer(nested_sid, field_base as i64)?;
@@ -461,7 +741,7 @@ impl Compiler {
                 self.write_init_value(field_base, field_size, value, reloc);
             }
             pos = field_idx + 1;
-            if self.lex.tk == ',' as i64 {
+            if self.lex.tk == ',' {
                 self.next()?;
             }
         }
@@ -500,7 +780,8 @@ impl Compiler {
         let elem_size = self.size_of_type(elem_ty);
         let mut byte_off = var_offset as usize;
         for &(v, reloc) in elements {
-            self.write_init_bytes(byte_off, v, elem_size);
+            let bits = self.to_storage_bits(v, reloc, elem_ty);
+            self.write_init_bytes(byte_off, bits, elem_size);
             // char-element arrays never carry a relocation kind --
             // the elements are bare bytes from a string literal --
             // so the reloc-push helper's None branch is the only
@@ -539,11 +820,29 @@ impl Compiler {
         self.emit_lea(local_val);
         self.emit_op(Op::Psh);
         self.expr(Token::Assign as i64)?;
+        // C99 6.5.16.1p2: the RHS of an assignment is converted
+        // to the unqualified LHS type. For a float / double
+        // destination with an integer-typed initializer (a
+        // common case: `float r = data[i];` where `data[i]` is
+        // `unsigned char`), the bit pattern in `a` is an int
+        // that has to be lifted to an IEEE-754 f64 before the
+        // store lands. Mirror logic for the reverse direction
+        // (int destination, float source).
+        self.convert_assign_rhs(ty);
         if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
             self.emit_op(Op::Mcpy);
             self.emit_val(self.size_of_type(ty) as i64);
         } else if (ty & !UNSIGNED_BIT) == Ty::Char as i64 {
             self.emit_op(Op::Sc);
+        } else if (ty & !UNSIGNED_BIT) == Ty::Float as i64 {
+            // `float`-typed local: narrow the accumulator (an f64
+            // bit pattern from the RHS) to single-precision and
+            // store 4 bytes. The slot reserved by
+            // `local_storage_slots` is still an 8-byte c5 stack
+            // word, so the upper 4 bytes stay whatever they were;
+            // the matching `Op::Lf` reads only the low 4 and
+            // widens them back to f64.
+            self.emit_op(Op::Sf);
         } else {
             // Local int / long / pointer: the slot is a full c5
             // stack word (8 bytes), so a single `Si` writes the
@@ -556,5 +855,185 @@ impl Compiler {
             self.emit_op(Op::Si);
         }
         Ok(())
+    }
+
+    /// Peek tokens from the current position (just past an
+    /// already-consumed `(`) up to the matching `)`; returns true
+    /// if any FloatNum literal appears inside. Used by the
+    /// initializer paren branch to decide between the integer
+    /// constant evaluator and the f64 folder. Snapshots /
+    /// restores the lexer so the caller's position is unchanged.
+    fn contents_until_close_paren_have_float(&mut self) -> Result<bool, C5Error> {
+        let snap = self.lex.snapshot();
+        let mut depth: i64 = 1;
+        let mut has_float = false;
+        while depth > 0 && self.lex.tk != 0 {
+            if self.lex.tk == '(' {
+                depth += 1;
+            } else if self.lex.tk == ')' {
+                depth -= 1;
+                if depth == 0 {
+                    break;
+                }
+            } else if self.lex.tk == Token::FloatNum {
+                has_float = true;
+                break;
+            }
+            self.next()?;
+        }
+        self.lex.restore(snap);
+        Ok(has_float)
+    }
+
+    /// True when `self.lex.tk` is `+ / - / * / /` -- the binary
+    /// float operators the constant-initializer evaluator
+    /// recognises. Whitespace-only check; doesn't consume.
+    fn tk_is_float_arith_op(&self) -> bool {
+        self.lex.tk == Token::AddOp
+            || self.lex.tk == Token::SubOp
+            || self.lex.tk == Token::MulOp
+            || self.lex.tk == Token::DivOp
+    }
+
+    /// Continue an in-flight float constant expression from a
+    /// seed `left` value. Used by `parse_constant_init_value`
+    /// after it consumed a leading `FloatNum` and noticed an
+    /// arithmetic operator next: the caller hands the already-
+    /// loaded value here and we drive the remaining `+ / - / *
+    /// / /` operators at the standard C precedences. Mixed
+    /// integer literals are widened to `f64`.
+    /// Entry point for callers that don't have an already-loaded
+    /// seed: read a float-typed constant expression starting from
+    /// the current token. Used by `parse_global_initializer` to
+    /// fold `static float x = 1.0f / 2.2f;` at parse time.
+    pub(super) fn parse_const_float_expr(&mut self) -> Result<f64, C5Error> {
+        let seed = self.parse_const_float_unary()?;
+        self.parse_const_float_add_from(seed)
+    }
+
+    /// Public wrapper around `contents_until_close_paren_have_float`
+    /// so `global_init.rs` can use the same peek when deciding
+    /// between integer and float constant evaluators for a
+    /// parenthesised initializer.
+    pub(super) fn contents_until_close_paren_have_float_pub(&mut self) -> Result<bool, C5Error> {
+        self.contents_until_close_paren_have_float()
+    }
+
+    fn parse_const_float_add_from(&mut self, left: f64) -> Result<f64, C5Error> {
+        let mut acc = self.parse_const_float_mul_from(left)?;
+        loop {
+            if self.lex.tk == Token::AddOp {
+                self.next()?;
+                let seed = self.parse_const_float_unary()?;
+                let r = self.parse_const_float_mul_from(seed)?;
+                acc += r;
+            } else if self.lex.tk == Token::SubOp {
+                self.next()?;
+                let seed = self.parse_const_float_unary()?;
+                let r = self.parse_const_float_mul_from(seed)?;
+                acc -= r;
+            } else {
+                break;
+            }
+        }
+        Ok(acc)
+    }
+
+    /// Continue a mul/div chain from a seed `left` value. Same
+    /// helper shape as `parse_const_float_add_from`; consumes
+    /// the current `* / /` operators and stops at the first
+    /// lower-precedence token.
+    fn parse_const_float_mul_from(&mut self, mut acc: f64) -> Result<f64, C5Error> {
+        loop {
+            if self.lex.tk == Token::MulOp {
+                self.next()?;
+                let r = self.parse_const_float_unary()?;
+                acc *= r;
+            } else if self.lex.tk == Token::DivOp {
+                self.next()?;
+                let r = self.parse_const_float_unary()?;
+                if r == 0.0 {
+                    return Err(self.compile_err("division by zero in constant float expression"));
+                }
+                acc /= r;
+            } else {
+                break;
+            }
+        }
+        Ok(acc)
+    }
+
+    fn parse_const_float_unary(&mut self) -> Result<f64, C5Error> {
+        if self.lex.tk == Token::SubOp {
+            self.next()?;
+            return Ok(-self.parse_const_float_unary()?);
+        }
+        if self.lex.tk == Token::AddOp {
+            self.next()?;
+            return self.parse_const_float_unary();
+        }
+        self.parse_const_float_primary()
+    }
+
+    fn parse_const_float_primary(&mut self) -> Result<f64, C5Error> {
+        if self.lex.tk == '(' {
+            self.next()?;
+            // C-style cast in a constant float expression:
+            // `(float)EXPR` / `(double)EXPR`. Recognised so
+            // stb sources that pin the result width explicitly
+            // still fold. Pointer / non-arithmetic types in
+            // this position would be a type error.
+            if self.lex_is_type_start() {
+                let _ = self.parse_decl_base_type()?;
+                while self.lex.tk == Token::MulOp || self.lex.tk == Token::TypeQual {
+                    self.next()?;
+                }
+                if self.lex.tk != ')' {
+                    return Err(self.compile_err(
+                        "close paren expected after cast in constant float expression",
+                    ));
+                }
+                self.next()?;
+                return self.parse_const_float_unary();
+            }
+            // Parenthesized sub-expression: recurse at the top of
+            // the precedence chain so a fully-nested `(a + b) * c`
+            // parses associativity-correctly.
+            let inner_left = self.parse_const_float_unary()?;
+            let v = self.parse_const_float_add_from(inner_left)?;
+            if self.lex.tk != ')' {
+                return Err(self.compile_err("close paren expected in constant float expression"));
+            }
+            self.next()?;
+            return Ok(v);
+        }
+        if self.lex.tk == Token::FloatNum {
+            let v = f64::from_bits(self.lex.ival as u64);
+            self.next()?;
+            return Ok(v);
+        }
+        if self.lex.tk == Token::Num {
+            // Integer literal in a float context -- promote to
+            // f64. The runtime conversion is exact for values
+            // that fit a double's mantissa (the only ones c5
+            // accepts as constant integers anyway).
+            let v = self.lex.ival as f64;
+            self.next()?;
+            return Ok(v);
+        }
+        if self.lex.tk == Token::Id && self.symbols[self.lex.curr_id_idx].class == Token::Num as i64
+        {
+            // `#define`d integer constants and enum values used
+            // inside a float initializer (rare but legal). C99
+            // 6.6 lets a constant expression include any value
+            // that's a compile-time constant of arithmetic type.
+            let v = self.symbols[self.lex.curr_id_idx].val as f64;
+            self.next()?;
+            return Ok(v);
+        }
+        Err(self.compile_err(format!(
+            "constant float expression expected (got {})",
+            super::super::token::describe(self.lex.tk)
+        )))
     }
 }

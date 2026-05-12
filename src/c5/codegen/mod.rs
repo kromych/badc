@@ -317,7 +317,7 @@ pub(crate) struct ResolvedImport {
     /// also reduces to `Ty::Char` since the lexer aliases it.
     pub return_type_tag: i64,
     /// Per-fixed-parameter type tags from the prototype. Carried
-    /// from `Binding::param_types`; the DWARF emitter (gh #67)
+    /// from `Binding::param_types`; the DWARF emitter
     /// uses these to give every PLT trampoline a
     /// `DW_TAG_subprogram` with `DW_TAG_formal_parameter`
     /// children typed accurately so gdb / lldb show the
@@ -508,6 +508,27 @@ impl ResolvedImports {
             });
         }
 
+        // A `#pragma dylib(name, "path")` that the source declared
+        // but never bound any symbol from still has to flow through
+        // as a LOAD_DYLIB / DT_NEEDED entry: a typical use is
+        // forcing a framework's runtime-init code to fire (e.g.,
+        // AppKit registering the NSApplication class with the
+        // Objective-C runtime so `objc_getClass("NSApplication")`
+        // resolves). The bytecode walk above only collects dylibs
+        // that owned at least one `Op::JsrExt` binding; declared-
+        // but-unused dylibs were silently dropped here, with the
+        // visible symptom that the program's dynamic-init hook
+        // never ran. Append them in source-declared order so the
+        // load-command sequence matches the user's intent.
+        for spec in &program.dylibs {
+            if !dylibs.iter().any(|d| d.name == spec.name) {
+                dylibs.push(ResolvedDylib {
+                    name: spec.name.clone(),
+                    path: spec.path.clone(),
+                });
+            }
+        }
+
         Ok(ResolvedImports { imports, dylibs })
     }
 }
@@ -672,9 +693,9 @@ pub(crate) struct Build {
     /// Mirror of [`NativeOptions::debug_info`]. The per-format
     /// writers gate DWARF section emission on this -- when
     /// `false`, no `.debug_*` sections appear in the output
-    /// image (gh #62). Defaults to `true` for `Build::default()`
-    /// so existing tests that build a `Build` by hand keep the
-    /// pre-#62 behaviour.
+    /// image. Defaults to `true` for `Build::default()`
+    /// so existing tests that build a `Build` by hand keep
+    /// debug info enabled.
     pub debug_info: bool,
     /// Byte offset within `Build::text` of each import's PLT
     /// trampoline. Indexed by `ResolvedImports::imports` slot --
@@ -689,7 +710,7 @@ pub(crate) struct Build {
     /// here via `bl` / `call rel32` instead of inlining the GOT
     /// load -- so a debugger's `b malloc` resolves against this
     /// in-image local symbol rather than getting lost in the
-    /// dynamic linker's macro-expansion sites. See gh #61.
+    /// dynamic linker's macro-expansion sites.
     pub plt_trampoline_offsets: Vec<usize>,
 }
 
@@ -861,7 +882,6 @@ pub struct NativeOptions {
     /// only varying input across runs that differ in source
     /// path is the DWARF blob -- gives byte-identical
     /// production binaries useful for golden-hash bisection.
-    /// See gh #62.
     pub debug_info: bool,
 }
 
@@ -921,7 +941,7 @@ impl NativeOptions {
     }
 
     /// Set [`Self::debug_info`] and return self. Pass `false`
-    /// to skip DWARF emission (gh #62) -- the writer drops the
+    /// to skip DWARF emission -- the writer drops the
     /// debug sections entirely from the output image.
     pub const fn with_debug_info(mut self, on: bool) -> Self {
         self.debug_info = on;
@@ -982,7 +1002,7 @@ fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Resul
     // a "no `#pragma binding(libc::exit, ...)`" error on
     // sources that legitimately don't include `<stdlib.h>`.
     let is_shared = options.output_kind == OutputKind::SharedLibrary;
-    // gh #69: only force-include libc `exit` when the user
+    // Only force-include libc `exit` when the user
     // already declared a binding for it (typically via
     // `#include <stdlib.h>`). When no `exit` binding is in
     // scope, the ELF `_start` stub falls back to a direct

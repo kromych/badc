@@ -1,11 +1,11 @@
 // C99 6.6 constant expressions admit the conditional operator
-// `?:`. This is heavily relied on by the static-assert idiom
-// `typedef char check[cond ? 1 : -1];` (miniz, sqlite, libpng,
-// stb_*) -- a `false` conditional resolves to `-1`, which fails
-// the array-dimension positivity check at compile time. c5 used
-// to stop the constant-expression chain at logical-or, so the
-// idiom hit "close bracket expected in array declarator" and
-// every consumer was unbuildable. Now const-expr starts at
+// `?:`. This is heavily relied on by the pre-C11 static-assert
+// idiom `typedef char check[cond ? 1 : -1];` -- a `false`
+// conditional resolves to `-1`, which fails the array-dimension
+// positivity check at compile time. c5 used to stop the
+// constant-expression chain at logical-or, so the idiom hit
+// "close bracket expected in array declarator" and every
+// consumer was unbuildable. Now const-expr starts at
 // `parse_const_expr_cond`, matching clang/gcc.
 #include <stdlib.h>
 

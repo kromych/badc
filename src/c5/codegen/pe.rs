@@ -2362,19 +2362,22 @@ fn build_x86_64_entry_stub() -> EntryStub {
 ///   mov  ecx, eax
 ///   call exit
 fn build_x86_64_winmain_stub() -> EntryStub {
-    // Stack frame: we need a 32-byte shadow area for our callees
-    // (Win64 ABI) plus an 8-byte spill slot for `hInstance` across
-    // the `GetCommandLineA` call. Pick `sub rsp, 0x28` (40 bytes)
-    // so post-sub `rsp` is 16-aligned for the calls below:
-    //   * entry rsp is 8 mod 16 (OS pushed the return address)
-    //   * subtract 0x28 (40) -> 16N - 48 = 16M  -> 16-aligned
+    // Win64 ABI requires 32 bytes of shadow space at `[rsp..rsp+0x20]`
+    // before every call -- the callee is free to clobber those bytes
+    // for its own argument spilling. Anything we want to survive a
+    // call has to sit **above** the shadow space, even if the callee
+    // it precedes doesn't read any args (the OS-provided thunks for
+    // `kernel32.dll` are still entitled to scratch their shadow area).
     //
-    // Frame layout after the SUB:
-    //   [rsp + 0x00..0x08]  spill: hInstance saved across
-    //                                GetCommandLineA
-    //   [rsp + 0x08..0x20]  unused (part of shadow space)
-    //   [rsp + 0x20..0x28]  return-addr (pushed by the OS); not
-    //                                touched by us
+    // Frame layout after `sub rsp, 0x28` (40 bytes):
+    //   [rsp + 0x00..0x20]  shadow space for our callees -- clobbered
+    //                       by every IAT call we make
+    //   [rsp + 0x20..0x28]  hInstance spill, lives across the
+    //                       `GetCommandLineA` call
+    //
+    // Total carved = 40 bytes. The OS-pushed return address landed
+    // with rsp = 8 mod 16; subtracting 0x28 makes rsp = -32 mod 16
+    // = 0 mod 16 = aligned for the calls below.
     let mut bytes: Vec<u8> = Vec::with_capacity(64);
 
     // sub rsp, 0x28                          (4 bytes)
@@ -2385,8 +2388,9 @@ fn build_x86_64_winmain_stub() -> EntryStub {
     // call qword [rip+0]  GetModuleHandleA   (6 bytes)
     let call_gmh_off = bytes.len() as u32;
     bytes.extend_from_slice(&[0xFF, 0x15, 0, 0, 0, 0]);
-    // mov [rsp], rax                         (4 bytes) -- spill hInstance
-    bytes.extend_from_slice(&[0x48, 0x89, 0x04, 0x24]);
+    // mov [rsp+0x20], rax                    (5 bytes) -- spill hInstance
+    //                                                    ABOVE shadow.
+    bytes.extend_from_slice(&[0x48, 0x89, 0x44, 0x24, 0x20]);
 
     // call qword [rip+0]  GetCommandLineA    (6 bytes)
     let call_gcl_off = bytes.len() as u32;
@@ -2394,8 +2398,8 @@ fn build_x86_64_winmain_stub() -> EntryStub {
 
     // mov r8, rax                            (3 bytes) -- arg3 = lpCmdLine
     bytes.extend_from_slice(&[0x49, 0x89, 0xC0]);
-    // mov rcx, [rsp]                         (4 bytes) -- arg1 = hInstance
-    bytes.extend_from_slice(&[0x48, 0x8B, 0x0C, 0x24]);
+    // mov rcx, [rsp+0x20]                    (5 bytes) -- arg1 = hInstance
+    bytes.extend_from_slice(&[0x48, 0x8B, 0x4C, 0x24, 0x20]);
     // xor edx, edx                           (2 bytes) -- arg2 = NULL
     bytes.extend_from_slice(&[0x31, 0xD2]);
     // mov r9d, SW_SHOWDEFAULT                (6 bytes) -- arg4 = 10
@@ -3060,6 +3064,40 @@ mod tests {
         assert!(
             s.bytes.windows(needle.len()).any(|w| w == needle),
             "GUI stub missing `mov r9d, SW_SHOWDEFAULT`: bytes = {:02X?}",
+            s.bytes
+        );
+
+        // The hInstance spill MUST live above the 32-byte Win64
+        // shadow space, otherwise the very next IAT call
+        // (GetCommandLineA) is entitled to clobber it. The encoded
+        // form is `mov [rsp+0x20], rax` -- `48 89 44 24 20`; the
+        // matching reload is `mov rcx, [rsp+0x20]` -- `48 8B 4C 24
+        // 20`. Both must appear.
+        let store_at_0x20: &[u8] = &[0x48, 0x89, 0x44, 0x24, 0x20];
+        let load_at_0x20: &[u8] = &[0x48, 0x8B, 0x4C, 0x24, 0x20];
+        assert!(
+            s.bytes
+                .windows(store_at_0x20.len())
+                .any(|w| w == store_at_0x20),
+            "GUI stub must spill hInstance ABOVE shadow space (`mov [rsp+0x20], rax`): {:02X?}",
+            s.bytes
+        );
+        assert!(
+            s.bytes
+                .windows(load_at_0x20.len())
+                .any(|w| w == load_at_0x20),
+            "GUI stub must reload hInstance from above shadow space (`mov rcx, [rsp+0x20]`): {:02X?}",
+            s.bytes
+        );
+        // Conversely, a spill at `[rsp]` (= `mov [rsp], rax` ->
+        // `48 89 04 24`) would land inside the shadow region and be
+        // legal-but-undefined after any call. Refuse that shape.
+        let store_at_rsp: &[u8] = &[0x48, 0x89, 0x04, 0x24];
+        assert!(
+            !s.bytes
+                .windows(store_at_rsp.len())
+                .any(|w| w == store_at_rsp),
+            "GUI stub must NOT spill into shadow space (`mov [rsp], rax`): {:02X?}",
             s.bytes
         );
     }

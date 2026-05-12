@@ -137,8 +137,10 @@ Rejected.
 `register` / `auto` are accepted as no-ops. `inline` /
 `__inline` / `__inline__` are accepted but don't expand.
 `const` / `volatile` / `restrict` are accepted as no-ops at
-every position. `_Noreturn`, `_Complex`, `_Imaginary`,
-`_Pragma`, `#line`, `__func__`, `__STDC_VERSION__`,
+every position. `#line` is supported -- both the C99
+`#line N "file"` form and the GNU `# N "file"` shape route
+through the same lexer hook. `_Noreturn`, `_Complex`,
+`_Imaginary`, `_Pragma`, `__func__`, `__STDC_VERSION__`,
 `__STDC_HOSTED__`, hex floats (`0x1p10`), float `++`/`--`,
 universal character names, digraphs / trigraphs, K&R
 identifier-list function declarators, GCC named-rest

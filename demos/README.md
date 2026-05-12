@@ -107,3 +107,34 @@ Linux X11, macOS Cocoa via raw `objc_msgSend`. Cross-builds
 to all five supported targets; CI runs the smoke build-only
 since runners have no display server. See
 [`gui_hello/README.md`](./gui_hello/README.md).
+
+## efi_hello/
+
+Single-file UEFI application that prints "Hello, EFI!" through
+`SystemTable->ConOut->OutputString`. Exercises the new
+`#pragma subsystem(efi_application)` -- the PE optional header
+carries Subsystem = `IMAGE_SUBSYSTEM_EFI_APPLICATION (10)` and
+the firmware loader hands `(EFI_HANDLE, EFI_SYSTEM_TABLE *)`
+directly to `efi_main`. No CRT shim sits in front; no msvcrt
+import is added. Build-only in CI -- running it needs a UEFI
+shell (TianoCore's UEFI Shell, OVMF under qemu, or a real
+machine's firmware shell).
+
+## nt_hello/
+
+NT-native usermode skeleton -- subsystem = `IMAGE_SUBSYSTEM_NATIVE
+(1)`, entry = `NtProcessStartup`, calls `ntdll!NtTerminateProcess`
+to exit cleanly. The image is what `smss.exe` / `autochk.exe` /
+boot-time `chkdsk.exe` start out as. Build-only in CI; runs on
+Windows when wired through the `BootExecute` registry value (or
+during smss/csrss bringup).
+
+## wdm_driver/
+
+Minimal Windows kernel-mode driver skeleton -- subsystem =
+`IMAGE_SUBSYSTEM_NATIVE (1)` via the `driver` pragma alias,
+entry = `DriverEntry(PDRIVER_OBJECT, PUNICODE_STRING)` per the
+WDM contract, registers a `DRIVER_UNLOAD` callback so the
+service can be stopped with `sc stop`. Build-only -- loading
+requires admin + test-signing on the target. Same compiler
+plumbing as `nt_hello`; differs in entry-point shape only.

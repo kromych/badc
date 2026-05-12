@@ -310,8 +310,17 @@ const ARM64_PACKED_FUNCTION_MAX_BYTES: u32 = 2048 * 4;
 //     entry's return value.
 //
 // `hPrevInstance` is always `NULL` (16-bit legacy) and `nShowCmd`
-// is `SW_SHOWDEFAULT` (10), which is the value the Win32 loader
-// would pass to a real CRT-supplied `WinMainCRTStartup`.
+// is `SW_SHOWNORMAL` (1) -- a real CRT's `WinMainCRTStartup`
+// would read `STARTUPINFOA::wShowWindow` via `GetStartupInfoA`
+// and fall back to `SW_SHOWDEFAULT` (10) when `STARTF_USESHOWWINDOW`
+// isn't set, but `SW_SHOWDEFAULT` then defers back to whatever
+// the parent process's `STARTUPINFOA` named -- and some launchers
+// (and some wine paths) set `wShowWindow = 0` (`SW_HIDE`) without
+// setting the matching flag, which makes `SW_SHOWDEFAULT`
+// effectively `SW_HIDE`. Passing the unconditional `SW_SHOWNORMAL`
+// matches what most user code wants and avoids the
+// `STARTUPINFOA` round-trip (and the extra `GetStartupInfoA`
+// import) entirely.
 //
 // These ride alongside whatever the program asked for via
 // `#pragma binding(...)`. They have no c5-side name, so they live
@@ -324,11 +333,16 @@ const STUB_IMPORT_EXIT: (&str, &str) = ("exit", "msvcrt.dll");
 const STUB_IMPORT_GETMODULEHANDLEA: (&str, &str) = ("GetModuleHandleA", "kernel32.dll");
 const STUB_IMPORT_GETCOMMANDLINEA: (&str, &str) = ("GetCommandLineA", "kernel32.dll");
 
-/// `SW_SHOWDEFAULT` -- the `nShowCmd` value the Win32 loader would
-/// pass to `WinMainCRTStartup`. Hardcoded into the GUI entry stub
-/// so windows actually appear when `ShowWindow(hwnd, nShowCmd)` is
-/// called.
-const SW_SHOWDEFAULT: u32 = 10;
+/// `SW_SHOWNORMAL` -- "activate the window and show it at its
+/// default size and position". The GUI entry stub passes this as
+/// `nShowCmd` so windows actually appear when `ShowWindow(hwnd,
+/// nShowCmd)` is called. We deliberately don't pass
+/// `SW_SHOWDEFAULT` (10) because that value tells `ShowWindow`
+/// to consult `STARTUPINFOA::wShowWindow`, and a parent process
+/// that left `wShowWindow = SW_HIDE` (0) without setting
+/// `STARTF_USESHOWWINDOW` -- common under wine and some launcher
+/// shells -- would then keep our window hidden.
+const SW_SHOWNORMAL: u32 = 1;
 
 // ----------------------------------------------------------------
 // Top-level writer.
@@ -2164,7 +2178,7 @@ fn plan_idata(dlls: &[DllGroup], imports: &[(String, String)], base_rva: u32) ->
 //   * Windows GUI (`IMAGE_SUBSYSTEM_WINDOWS_GUI`, opt-in via
 //     `#pragma subsystem(windows)`): the stub calls
 //     `GetModuleHandleA(NULL)` and `GetCommandLineA()`, loads
-//     `SW_SHOWDEFAULT` into the 4th-arg register, then `call
+//     `SW_SHOWNORMAL` into the 4th-arg register, then `call
 //     WinMain` and `exit`. The user's entry is treated as
 //     `int WinMain(HINSTANCE, HINSTANCE, LPSTR, int)` -- the
 //     canonical Win32 GUI signature.
@@ -2357,7 +2371,7 @@ fn build_x86_64_entry_stub() -> EntryStub {
 ///   rcx = GetModuleHandleA(NULL)   -- hInstance
 ///   rdx = 0                        -- hPrevInstance
 ///   r8  = GetCommandLineA()        -- lpCmdLine
-///   r9  = SW_SHOWDEFAULT (10)      -- nShowCmd
+///   r9  = SW_SHOWNORMAL (1)        -- nShowCmd
 ///   call WinMain
 ///   mov  ecx, eax
 ///   call exit
@@ -2402,10 +2416,10 @@ fn build_x86_64_winmain_stub() -> EntryStub {
     bytes.extend_from_slice(&[0x48, 0x8B, 0x4C, 0x24, 0x20]);
     // xor edx, edx                           (2 bytes) -- arg2 = NULL
     bytes.extend_from_slice(&[0x31, 0xD2]);
-    // mov r9d, SW_SHOWDEFAULT                (6 bytes) -- arg4 = 10
+    // mov r9d, SW_SHOWNORMAL                 (6 bytes) -- arg4 = 1
     bytes.push(0x41);
     bytes.push(0xB9);
-    bytes.extend_from_slice(&SW_SHOWDEFAULT.to_le_bytes());
+    bytes.extend_from_slice(&SW_SHOWNORMAL.to_le_bytes());
 
     // call WinMain rel32 (placeholder, 5 bytes)
     let call_main_off = bytes.len() as u32;
@@ -2539,7 +2553,7 @@ fn build_aarch64_entry_stub() -> EntryStub {
 ///   x0 = GetModuleHandleA(NULL)   -- hInstance
 ///   x1 = 0                        -- hPrevInstance
 ///   x2 = GetCommandLineA()        -- lpCmdLine
-///   w3 = SW_SHOWDEFAULT (10)      -- nShowCmd
+///   w3 = SW_SHOWNORMAL (1)        -- nShowCmd
 ///   bl WinMain
 ///   bl exit
 fn build_aarch64_winmain_stub() -> EntryStub {
@@ -2583,8 +2597,8 @@ fn build_aarch64_winmain_stub() -> EntryStub {
     a::emit(&mut bytes, a::enc_ldr_imm(a::Reg::X0, a::Reg::SP, 0x00));
     // mov x1, #0
     a::emit(&mut bytes, a::enc_movz(a::Reg::X1, 0, 0));
-    // mov w3, #SW_SHOWDEFAULT (10) -- a 16-bit imm fits in one movz.
-    a::emit(&mut bytes, a::enc_movz(a::Reg(3), SW_SHOWDEFAULT as u16, 0));
+    // mov w3, #SW_SHOWNORMAL (1) -- a 16-bit imm fits in one movz.
+    a::emit(&mut bytes, a::enc_movz(a::Reg(3), SW_SHOWNORMAL as u16, 0));
 
     // bl WinMain (rel26 placeholder)
     let bl_main_off = bytes.len() as u32;
@@ -3057,13 +3071,13 @@ mod tests {
         assert!(gmh < gcl);
         assert!(gcl < main);
         assert!(main < exit);
-        // SW_SHOWDEFAULT immediate must land in the stub bytes -- a
-        // simple search verifies the `mov r9d, 10` instruction is
-        // present (41 B9 0A 00 00 00).
-        let needle: &[u8] = &[0x41, 0xB9, 0x0A, 0x00, 0x00, 0x00];
+        // SW_SHOWNORMAL immediate must land in the stub bytes -- a
+        // simple search verifies the `mov r9d, 1` instruction is
+        // present (41 B9 01 00 00 00).
+        let needle: &[u8] = &[0x41, 0xB9, 0x01, 0x00, 0x00, 0x00];
         assert!(
             s.bytes.windows(needle.len()).any(|w| w == needle),
-            "GUI stub missing `mov r9d, SW_SHOWDEFAULT`: bytes = {:02X?}",
+            "GUI stub missing `mov r9d, SW_SHOWNORMAL`: bytes = {:02X?}",
             s.bytes
         );
 

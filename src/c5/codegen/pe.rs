@@ -2989,7 +2989,10 @@ mod tests {
         // The stub has three patch sites: two IAT lookups (start of
         // the `call qword [rip+disp32]` instructions) and one
         // direct call to main.
-        assert_eq!(s.stub_imports, vec![STUB_IMPORT_GETMAINARGS, STUB_IMPORT_EXIT]);
+        assert_eq!(
+            s.stub_imports,
+            vec![STUB_IMPORT_GETMAINARGS, STUB_IMPORT_EXIT]
+        );
         assert_eq!(s.iat_patches.len(), 2);
         // __getmainargs is the first patch, exit is the second.
         assert_eq!(s.iat_patches[0].byte_offset, 38);
@@ -3006,7 +3009,10 @@ mod tests {
         assert_eq!(s.bytes.len(), 76);
         // Patch sites point at adrp instructions / the bl. Each is
         // 4 bytes.
-        assert_eq!(s.stub_imports, vec![STUB_IMPORT_GETMAINARGS, STUB_IMPORT_EXIT]);
+        assert_eq!(
+            s.stub_imports,
+            vec![STUB_IMPORT_GETMAINARGS, STUB_IMPORT_EXIT]
+        );
         assert_eq!(s.iat_patches.len(), 2);
         let gma = s.iat_patches[0].byte_offset;
         let exit = s.iat_patches[1].byte_offset;
@@ -3753,11 +3759,8 @@ mod tests {
         //    image (the import-name table writes them verbatim).
         //    msvcrt!__getmainargs must not appear -- the GUI stub
         //    doesn't synthesize argv.
-        let contains = |needle: &str| -> bool {
-            bytes
-                .windows(needle.len())
-                .any(|w| w == needle.as_bytes())
-        };
+        let contains =
+            |needle: &str| -> bool { bytes.windows(needle.len()).any(|w| w == needle.as_bytes()) };
         assert!(
             contains("GetModuleHandleA"),
             "GUI subsystem must import kernel32!GetModuleHandleA"
@@ -3781,10 +3784,7 @@ mod tests {
     /// (`__getmainargs`, `exit`, `GetModuleHandleA`,
     /// `GetCommandLineA`) -- those would be wrong (no CRT in the
     /// environment) and would block a real freestanding link.
-    fn passthrough_subsystem_skips_stub(
-        pragma: &str,
-        expected_subsystem: u16,
-    ) {
+    fn passthrough_subsystem_skips_stub(pragma: &str, expected_subsystem: u16) {
         use crate::Compiler;
         let src = format!(
             "
@@ -3831,7 +3831,12 @@ mod tests {
 
         // 3) No CRT shim imports. Each name appears as an ASCII
         //    string in the import-name table when present.
-        for needle in &["__getmainargs", "exit", "GetModuleHandleA", "GetCommandLineA"] {
+        for needle in &[
+            "__getmainargs",
+            "exit",
+            "GetModuleHandleA",
+            "GetCommandLineA",
+        ] {
             assert!(
                 !bytes.windows(needle.len()).any(|w| w == needle.as_bytes()),
                 "passthrough subsystem `{pragma}` must NOT import {needle}"

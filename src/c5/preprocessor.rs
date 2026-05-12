@@ -1658,12 +1658,10 @@ impl Preprocessor {
             "console" | "CUI" | "cui" => Subsystem::Console,
             "windows" | "GUI" | "gui" => Subsystem::Windows,
             "native" | "NATIVE" | "nt" | "NT" | "driver" | "DRIVER" => Subsystem::Native,
-            "efi_application" | "efi-application" | "EFI_APPLICATION" => {
-                Subsystem::EfiApplication
+            "efi_application" | "efi-application" | "EFI_APPLICATION" => Subsystem::EfiApplication,
+            "efi_boot_service_driver" | "efi-boot-service-driver" | "EFI_BOOT_SERVICE_DRIVER" => {
+                Subsystem::EfiBootServiceDriver
             }
-            "efi_boot_service_driver"
-            | "efi-boot-service-driver"
-            | "EFI_BOOT_SERVICE_DRIVER" => Subsystem::EfiBootServiceDriver,
             "efi_runtime_driver" | "efi-runtime-driver" | "EFI_RUNTIME_DRIVER" => {
                 Subsystem::EfiRuntimeDriver
             }

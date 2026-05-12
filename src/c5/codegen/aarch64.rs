@@ -1665,8 +1665,8 @@ fn lower_op(
             //   ldr  s0, [x19]   ; load 4 bytes through `s0`'s half of `d0`
             //   fcvt d0, s0      ; widen to double
             //   fmov x19, d0     ; deliver `f64::to_bits()` to the accumulator
-            // The conversion is bit-exact for any finite single value
-            // (the C standard's promotion from `float` to `double`).
+            // The IEEE 754 single -> double widening is bit-exact
+            // for every finite source value.
             emit(code, enc_ldr_s_imm(0, Reg::X19, 0));
             emit(code, enc_fcvt_d_s(0, 0));
             emit(code, enc_fmov_d_to_x(Reg::X19, 0));

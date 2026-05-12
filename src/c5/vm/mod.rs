@@ -1093,10 +1093,9 @@ impl<H: Host> Vm<H> {
                 }
                 Op::Lf => {
                     // 4-byte single-precision load from address in `a`,
-                    // widened to f64 in `a` (as `to_bits`). The
-                    // single-precision-to-double conversion is
-                    // bit-exact for any finite single value the C
-                    // standard prescribes for `float`.
+                    // widened to f64 (carried as `to_bits` in `a`).
+                    // The widening conversion is bit-exact for every
+                    // finite IEEE 754 single value.
                     let bits = self.load_i32(a as usize)? as u32;
                     let f32_val = f32::from_bits(bits);
                     a = (f32_val as f64).to_bits() as i64;
@@ -1104,10 +1103,11 @@ impl<H: Host> Vm<H> {
                 Op::Sf => {
                     // Narrow the accumulator (as `f64::to_bits`) to
                     // single-precision and write 4 bytes at the
-                    // address on top of stack. The narrowing rounds
-                    // to-nearest-even per IEEE 754, matching the
-                    // hardware `cvtsd2ss` / `fcvt s, d` semantics
-                    // the JIT lowering uses.
+                    // address on top of stack. Rust's `as f32`
+                    // round-mode matches the IEEE 754 default
+                    // (round-to-nearest-ties-to-even), same as the
+                    // hardware `cvtsd2ss` / `fcvt s, d` the JIT
+                    // lowering emits.
                     let addr = self.load_i64(sp)? as usize;
                     sp += 8;
                     let f64_val = f64::from_bits(a as u64);

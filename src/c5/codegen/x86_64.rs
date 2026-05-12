@@ -735,8 +735,8 @@ pub(super) fn emit_movss_mem_xmm(code: &mut Vec<u8>, base: Reg, disp: i32, xmm: 
 }
 
 /// `CVTSS2SD xmm, xmm` -- widen single-precision to double-precision.
-/// Encoding: `F3 0F 5A /r`. The widening is bit-exact for any finite
-/// single value (the C standard's `float`-to-`double` promotion).
+/// Encoding: `F3 0F 5A /r`. The IEEE 754 single -> double widening
+/// is bit-exact for every finite source value.
 pub(super) fn emit_cvtss2sd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, 0xF3);
     if dst.high() || src.high() {

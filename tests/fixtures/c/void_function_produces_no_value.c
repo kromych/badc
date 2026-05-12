@@ -1,22 +1,12 @@
 // C99 6.8.6.4p3: a function declared `void` does not produce a
 // value. Observing one through a mistyped function-pointer cast
-// is undefined behaviour, and gcc / clang make no portable
-// guarantee about what's left in the platform's return register
-// (measured: gcc 15.2 -O0 leaks the body's last computed value,
-// gcc -O2 happens to materialise 0 after dead-code elimination,
-// Apple clang leaks whichever argument was passed in the return-
-// register slot). c5 deliberately picks the strongest of these:
-// the function-exit lowering clears the C-level "return slot" so
-// the observed value is always 0, independent of optimisation
-// level or argument shape. The fixture pins that c5 choice; any
-// regression that lets the body's accumulator state survive into
-// the caller would surface here.
+// is undefined behaviour. This fixture pins c5's specific
+// observable value (0) for two void-exit paths so a regression
+// that lets the body's last computation leak into the caller
+// would surface here:
 //
-// Two paths exercise the fix:
-//   * The body falls off the end (no `return` statement) -- the
-//     function-exit lowering must clear the return slot.
-//   * The body uses a bare `return;` -- the explicit return
-//     statement must clear the same slot.
+//   * The body falls off the end (no `return` statement).
+//   * The body uses a bare `return;`.
 
 #include <stdio.h>
 
@@ -36,10 +26,6 @@ void early_return_void(int x) {
     // Fall-through reaches the function-end exit path instead.
 }
 
-// Mis-typed cast: the function pointer claims an int return. A
-// conforming caller would never write this, but C lets you, and
-// the question is what value the caller observes. The standard
-// says "no value," gcc and clang materialise 0; c5 matches.
 typedef int (*fn_int_int_int)(int, int);
 typedef int (*fn_int_int)(int);
 

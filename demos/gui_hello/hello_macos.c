@@ -22,11 +22,11 @@
  *     ./hello-macos
  *
  * Caveats:
- *   * Cocoa expects a few coordinated bits of state
- *     (`activateIgnoringOtherApps:` etc.); the demo
- *     follows the AppKit boilerplate Apple's documentation
- *     spells out (cf. "Bundles and Frameworks" /
- *     `Apple-AppKit-Sample-Code`).
+ *   * Cocoa expects a few coordinated bits of state to land
+ *     before the run loop spins up (`setActivationPolicy:`,
+ *     `activateIgnoringOtherApps:`, an `NSApplicationDelegate`
+ *     for the terminate-on-window-close hook); each is wired
+ *     in `main` below.
  *   * Frameworks resolve through `/System/Library/Frameworks`
  *     -- listed below the same way `libSystem` is. */
 
@@ -68,8 +68,8 @@
 void *objc_getClass(char *name);
 void *sel_registerName(char *name);
 /* `objc_msgSend(id self, SEL op, ...)` -- variadic trampoline
- * for the call sites that match Apple's "two-arg-and-no-FP"
- * shape (alloc, run, ...). */
+ * for receiver+selector-only call sites (`alloc`, `run`, ...)
+ * where no further argument shape matters. */
 void *objc_msgSend(void *recv, void *sel, ...);
 /* Non-variadic specialisation for the NSWindow initWithContentRect
  * shape: receiver + selector + four NSRect doubles + three
@@ -147,14 +147,11 @@ static long long app_should_terminate_yes(void *self, void *_cmd, void *sender) 
 #define NS_RESIZABLE   0x8
 #define NS_BACKING_BUF 2
 
-/* NSRect-shaped argument (CGFloat == double on 64-bit Apple
- * platforms). Cocoa's frame APIs take it by value; with c5's
- * struct-by-value support that means four doubles back-to-
- * back. Today c5 marshals struct-by-value through pointer
- * thunks for many APIs; for objc_msgSend we route through
- * the variadic surface, which AAPCS64 / SysV both spell as
- * "first 4 doubles in d0..d3" -- the same convention NSRect
- * uses. */
+/* NSRect is four CGFloats (double on 64-bit Apple platforms).
+ * AppKit's `initWithContentRect:...` signature reads them out
+ * of FP registers per AAPCS64 -- the `objc_msgSend_rect`
+ * binding above wraps the call so c5's standard register-
+ * passing path lines up with what the selector reads. */
 
 int main(int argc, char **argv) {
     (void)argc; (void)argv;
@@ -163,13 +160,9 @@ int main(int argc, char **argv) {
      * launched us regains its prompt immediately while the GUI
      * keeps running. The parent process exits as soon as the
      * fork succeeds; the child carries on with the AppKit
-     * setup. AppKit (the ObjC runtime + libdispatch) hasn't been
-     * touched yet at this point, which matters: forking *after*
-     * any Cocoa call lands in the well-known "fork-after-objc"
-     * corner of `os_log_internal` where the child's runloop /
-     * dispatch queues stall on stale Mach ports. Doing the
-     * fork before the first `objc_getClass` call sidesteps all
-     * of that. */
+     * setup. The fork happens before any ObjC / AppKit call so
+     * the child inherits a fresh process without any runtime
+     * state to reconcile. */
     int child = fork();
     if (child < 0) {
         fprintf(stderr, "hello-macos: fork failed\n");
@@ -179,18 +172,14 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    /* Suppress AppKit's "Connection Invalid" / XPC chatter.
-     * Unbundled executables can't authenticate against macOS's
-     * HIServices XPC backbone, so AppKit logs a handful of
-     * `+[NSXPCSharedListener ...]: an error occurred ...`
-     * messages on the way up. They're informational -- the
-     * window still opens and the run loop still pumps events --
-     * but they spam the terminal. NSLog writes to fd 2, so
-     * `dup2`'ing /dev/null over fd 2 silences the lot. Our own
-     * error diagnostics (the `printf` paths below) deliberately
-     * use stdout for the same reason; they're for genuine
-     * setup failures and the user wants to see them on the
-     * console. */
+    /* Suppress AppKit's NSLog chatter from the unbundled-binary
+     * launch path: a few `+[NSXPCSharedListener ...]: Connection
+     * invalid` / `Connection Invalid error for service
+     * com.apple.hiservices-xpcservice` messages land on stderr
+     * during NSWindow setup but don't affect the window itself.
+     * NSLog writes to fd 2, so `dup2`'ing /dev/null over fd 2
+     * silences the lot. Our own diagnostics below use `printf`
+     * (stdout) so genuine setup failures still surface. */
     int devnull = open("/dev/null", O_WRONLY);
     if (devnull >= 0) {
         dup2(devnull, 2);

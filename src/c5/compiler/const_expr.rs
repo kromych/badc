@@ -13,11 +13,14 @@
 //!
 //! Internally each recursive-descent rule returns a [`ConstVal`]
 //! so a floating literal can flow through the chain (e.g.
-//! `int xs[(int)(1.5 * 2.0)];` per C99 6.6 with the gcc/clang
-//! "any value of arithmetic type at parse time" extension). The
-//! three public entry points coerce the result back to `i64` so
-//! every existing caller -- which always wants an integer --
-//! sees the same shape it did before.
+//! `int xs[(int)(1.5 * 2.0)];`). C99 6.6 strictly admits a
+//! floating constant only as the *immediate* operand of a cast
+//! in an integer constant expression; gcc / clang accept the
+//! wider "any arithmetic constant expression" shape as an
+//! extension (gcc warns under `-Wpedantic`). The three public
+//! entry points coerce the result back to `i64` so every
+//! existing caller -- which always wants an integer -- sees
+//! the same shape it did before.
 //!
 //! Lives next to `compiler/mod.rs` rather than inside it because
 //! the constant-expression grammar is self-contained and was the
@@ -83,15 +86,15 @@ impl Compiler {
     /// Parse a constant integer expression at parse time. Used
     /// during declarator parsing where the value has to be known
     /// before any bytecode emission (array dimensions, bitfield
-    /// widths, enum initialisers). Supports the C99 constant-
-    /// expression grammar: integer + floating literals, identifiers
-    /// bound to integer constants (enum values, `#define`d numeric
-    /// macros the preprocessor expanded), parenthesised sub-
-    /// expressions, and the standard operator hierarchy. A floating
-    /// result is truncated to an `i64` at this boundary -- the C99
-    /// constraint that an "integer constant expression" only have
-    /// integer operands is widened the way gcc/clang do, to "any
-    /// constant arithmetic expression," then narrowed to int here.
+    /// widths, enum initialisers). Accepts integer literals plus
+    /// floating literals as primary terms; full arithmetic over
+    /// either type flows through and a floating result is
+    /// truncated to an `i64` at this boundary. Strict C99 6.6
+    /// only allows floats as the immediate operand of a cast in
+    /// an integer constant expression, so c5 is more lenient
+    /// here -- it accepts the wider "any constant arithmetic
+    /// expression" grammar that gcc / clang permit (gcc warns
+    /// under `-Wpedantic`).
     pub(super) fn parse_constant_int(&mut self) -> Result<i64, C5Error> {
         Ok(self.parse_const_expr_cond_val()?.as_int())
     }

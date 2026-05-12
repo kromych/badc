@@ -10,9 +10,9 @@
 use alloc::string::ToString;
 use alloc::vec::Vec;
 
+use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::StructDef;
-use super::super::token::{Token, Ty};
 use super::types::{
     UNSIGNED_BIT, is_pointer_ty, is_struct_ty, is_type_start_token, pointee_size_no_struct,
     struct_id_of, struct_ptr_depth,

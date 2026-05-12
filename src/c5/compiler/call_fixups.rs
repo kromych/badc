@@ -22,12 +22,12 @@
 use alloc::format;
 use alloc::vec::Vec;
 
-use super::CODE_BASE;
-use super::Compiler;
 use super::super::error::C5Error;
 use super::super::lexer;
 use super::super::op::Op;
 use super::super::token::Token;
+use super::CODE_BASE;
+use super::Compiler;
 
 impl Compiler {
     /// Rewrite every recorded forward-call placeholder so each

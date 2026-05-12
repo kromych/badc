@@ -21,8 +21,8 @@
 //! `expr()`; centralising them here keeps the per-operator branches
 //! readable.
 
-use super::Compiler;
 use super::super::op::Op;
+use super::Compiler;
 use super::types::{is_floating_scalar, is_pointer_ty, is_unsigned_ty, usual_arith_common_ty};
 
 impl Compiler {

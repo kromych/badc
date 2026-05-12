@@ -18,11 +18,11 @@
 
 use alloc::format;
 
-use super::Compiler;
-use super::decl_base;
 use super::super::error::C5Error;
 use super::super::op::Op;
 use super::super::token::{Token, Ty};
+use super::Compiler;
+use super::decl_base;
 use super::types::{
     UNSIGNED_BIT, format_signature, is_decl_modifier, is_struct_ty, struct_id_of, struct_ptr_depth,
 };

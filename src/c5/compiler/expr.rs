@@ -33,11 +33,11 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use super::CODE_BASE;
-use super::Compiler;
 use super::super::error::C5Error;
 use super::super::op::Op;
 use super::super::token::{Token, Ty};
+use super::CODE_BASE;
+use super::Compiler;
 use super::types::{
     format_type, fp_result_ty, is_floating_scalar, is_pointer_ty, is_struct_ty, is_unsigned_ty,
     load_op_for, store_op_for, struct_id_of, struct_ptr_depth, usual_arith_common_ty,

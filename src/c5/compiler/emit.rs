@@ -14,11 +14,11 @@
 //! from an rvalue load to a stack push or address. Both keep the
 //! parallel debug-info columns in sync.
 
-use super::Compiler;
 use super::super::error::C5Error;
 use super::super::op::Op;
 use super::super::symbol::Symbol;
 use super::super::token::{Token, Ty};
+use super::Compiler;
 use super::types::{is_scalar_load_op_val, reemit_scalar_load};
 
 impl Compiler {
@@ -27,6 +27,29 @@ impl Compiler {
     pub(super) fn next(&mut self) -> Result<(), C5Error> {
         self.lex
             .next(&mut self.symbols, &mut self.symbol_index, &mut self.data)
+    }
+
+    /// Skip tokens until the matching close paren. Caller has
+    /// just consumed the opening `(`; on exit, `tk` is one past
+    /// the matching `)`. Tracks nested parens and stops when the
+    /// outermost `)` is reached. Used by the function-pointer
+    /// declarator path and a handful of fallback parsers to
+    /// discard parameter type lists c5 doesn't yet record.
+    pub(super) fn skip_balanced_parens_after_open(&mut self) -> Result<(), C5Error> {
+        let mut depth: i64 = 1;
+        while depth > 0 && self.lex.tk != 0 {
+            if self.lex.tk == '(' {
+                depth += 1;
+            } else if self.lex.tk == ')' {
+                depth -= 1;
+                if depth == 0 {
+                    self.next()?;
+                    return Ok(());
+                }
+            }
+            self.next()?;
+        }
+        Err(self.compile_err("unmatched parentheses"))
     }
 
     // ---- Code emission ----
@@ -311,4 +334,3 @@ impl Compiler {
         sym.fn_ptr_indirection = sym.h_fn_ptr_indirection;
     }
 }
-

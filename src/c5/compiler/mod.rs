@@ -799,29 +799,6 @@ impl Compiler {
         }
     }
 
-    /// Skip tokens until the matching close paren. Caller has
-    /// just consumed the opening `(`; on exit, `tk` is one past
-    /// the matching `)`. Tracks nested parens and stops when the
-    /// outermost `)` is reached. Used by the function-pointer
-    /// declarator path to discard parameter type lists c5 doesn't
-    /// yet record.
-    fn skip_balanced_parens_after_open(&mut self) -> Result<(), C5Error> {
-        let mut depth: i64 = 1;
-        while depth > 0 && self.lex.tk != 0 {
-            if self.lex.tk == '(' {
-                depth += 1;
-            } else if self.lex.tk == ')' {
-                depth -= 1;
-                if depth == 0 {
-                    self.next()?;
-                    return Ok(());
-                }
-            }
-            self.next()?;
-        }
-        Err(self.compile_err("unmatched parentheses"))
-    }
-
     /// Compile the source. On success, the returned `Program` contains the
     /// bytecode, the static data segment, and the PC of `main`.
     pub fn compile(mut self) -> Result<Program, C5Error> {
@@ -935,5 +912,4 @@ impl Compiler {
             subsystem: self.pp_subsystem,
         })
     }
-
 }

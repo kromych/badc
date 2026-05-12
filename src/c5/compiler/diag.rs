@@ -10,10 +10,10 @@
 //! (`NULL = 0`, `void *` ~ `char *`) would otherwise drown the
 //! output. Errors short-circuit through `C5Error::Compile`.
 
-use super::Compiler;
 use super::super::error::C5Error;
 use super::super::op::Op;
 use super::super::token::Ty;
+use super::Compiler;
 use super::types::{
     UNSIGNED_BIT, is_floating_scalar, is_pointer_ty, is_struct_ty, struct_ptr_depth,
 };

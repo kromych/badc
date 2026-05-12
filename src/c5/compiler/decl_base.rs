@@ -28,9 +28,9 @@
 
 use alloc::format;
 
-use super::Compiler;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
+use super::Compiler;
 use super::types::{UNSIGNED_BIT, is_decl_modifier, struct_ty_for};
 
 /// Accumulator for the int-modifier soup that prefixes a C base

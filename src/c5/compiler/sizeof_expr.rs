@@ -95,11 +95,11 @@ impl Compiler {
             } else {
                 Token::Inc as i64
             };
-            self.last_array_decay_size = 0;
-            self.last_array_decay_bytes = 0;
+            self.pending.last_array_decay_size = 0;
+            self.pending.last_array_decay_bytes = 0;
             self.expr(lev)?;
-            let array_count = self.last_array_decay_size;
-            let array_bytes = self.last_array_decay_bytes;
+            let array_count = self.pending.last_array_decay_size;
+            let array_bytes = self.pending.last_array_decay_bytes;
             let expr_ty = self.ty;
             // Drop the operand's emitted code. Keep the parallel
             // debug tables (source_lines / source_functions /
@@ -115,8 +115,8 @@ impl Compiler {
             self.data_imm_positions.truncate(saved_data_imm_positions);
             self.fn_call_fixups.truncate(saved_fn_call_fixups);
             self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);
-            self.last_array_decay_size = 0;
-            self.last_array_decay_bytes = 0;
+            self.pending.last_array_decay_size = 0;
+            self.pending.last_array_decay_bytes = 0;
             if array_bytes > 0 {
                 // Multi-dim pointer-to-array subscript or `*p`
                 // row deref: the row's byte size is known

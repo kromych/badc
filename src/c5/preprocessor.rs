@@ -667,7 +667,10 @@ impl Preprocessor {
                         } else {
                             false
                         };
-                        let frame = cond_stack.last_mut().unwrap();
+                        // Non-empty by the `parent_active` ok_or_else above.
+                        let frame = cond_stack
+                            .last_mut()
+                            .expect("cond_stack non-empty after parent_active check");
                         if frame.saw_else {
                             return Err(C5Error::Compile(super::error::fmt_compile_err(
                                 filename,
@@ -1048,7 +1051,7 @@ impl Preprocessor {
                             && trimmed
                                 .bytes()
                                 .all(|b| b.is_ascii_alphanumeric() || b == b'_')
-                            && !trimmed.bytes().next().unwrap().is_ascii_digit()
+                            && trimmed.bytes().next().is_some_and(|b| !b.is_ascii_digit())
                             && let Some(macro_def) = self.fn_macros.get(trimmed)
                             && !nested.contains(&trimmed)
                         {
@@ -2284,7 +2287,7 @@ fn macro_call_unclosed(
                         let t = body.trim();
                         !t.is_empty()
                             && t.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
-                            && !t.bytes().next().unwrap().is_ascii_digit()
+                            && t.bytes().next().is_some_and(|b| !b.is_ascii_digit())
                             && fn_macros.contains_key(t)
                     })
                     .unwrap_or(false)

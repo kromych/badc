@@ -89,7 +89,7 @@ impl Compiler {
             // unary `*` handler to recognise function-pointer
             // decay (C99 6.3.2.1p4) as a no-op rather than a
             // through-pointer load.
-            let fn_ptr_indirection = self.pending_fn_ptr_indirection.take().unwrap_or(0);
+            let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             self.ty = ty;
             if self.symbols[loc_idx].class == Token::Loc as i64 {
                 return Err(self.compile_err("duplicate local definition"));
@@ -208,7 +208,7 @@ impl Compiler {
                     }
                     return Ok(());
                 }
-                self.pending_init_inner_dim = self.symbols[loc_idx].inner_array_size;
+                self.pending.init_inner_dim = self.symbols[loc_idx].inner_array_size;
                 let elements = self.collect_array_initializer(ty)?;
                 let final_size = elements.len() as i64;
                 self.symbols[loc_idx].array_size = final_size;
@@ -224,7 +224,7 @@ impl Compiler {
                 }
                 self.write_array_init_into_data(off, ty, &elements);
             } else if array_size > 0 {
-                self.pending_init_inner_dim = self.symbols[loc_idx].inner_array_size;
+                self.pending.init_inner_dim = self.symbols[loc_idx].inner_array_size;
                 let elements = self.collect_array_initializer(ty)?;
                 let var_offset = self.symbols[loc_idx].val;
                 self.write_array_init_into_data(var_offset, ty, &elements);
@@ -339,7 +339,7 @@ impl Compiler {
                 // identical to before this fix when no runtime
                 // expressions are present.
             }
-            self.pending_init_inner_dim = self.symbols[loc_idx].inner_array_size;
+            self.pending.init_inner_dim = self.symbols[loc_idx].inner_array_size;
             let elements = self.collect_array_initializer(ty)?;
             let final_size = elements.len() as i64;
             self.symbols[loc_idx].array_size = final_size;
@@ -384,7 +384,7 @@ impl Compiler {
                     )?;
                     return Ok(());
                 }
-                self.pending_init_inner_dim = self.symbols[loc_idx].inner_array_size;
+                self.pending.init_inner_dim = self.symbols[loc_idx].inner_array_size;
                 let elements = self.collect_array_initializer(ty)?;
                 let init_count = elements.len();
                 let max = declared_array_size as usize;

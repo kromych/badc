@@ -15,9 +15,13 @@ fn main() {
             defines.push((n, v));
         }
     }
-    let program = Compiler::with_full_options(src, Target::MacOSAarch64, &defines, &[], &[], &[])
-        .compile()
-        .unwrap();
+    let program = Compiler::with_options(
+        src,
+        Target::MacOSAarch64,
+        badc::CompileOptions::default().with_defines(defines),
+    )
+    .compile()
+    .unwrap();
 
     // Find sqlite3ExprAffinity in source_functions
     let mut bc = 0usize;

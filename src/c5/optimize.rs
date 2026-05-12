@@ -556,7 +556,11 @@ fn decode(
             Op::Jmp | Op::Jsr | Op::Bz | Op::Bnz => {
                 let target = text[pc] as usize;
                 pc += 1;
-                Insn::Branch(BrKind::from_op(op).unwrap(), target)
+                // The match arm guarantees `BrKind::from_op` returns
+                // Some; if a future Op variant slips into the arm
+                // without a `BrKind` entry, the `expect` surfaces it.
+                let kind = BrKind::from_op(op).expect("Op matched the BrKind arm above");
+                Insn::Branch(kind, target)
             }
             Op::Mcpy => {
                 // Op::Mcpy carries a compile-time byte size as its

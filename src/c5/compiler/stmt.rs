@@ -164,8 +164,13 @@ impl Compiler {
 
         // Dispatcher block.
         self.text[disp_pc_patch] = self.text.len() as i64;
-        let cases = self.switch_cases.pop().unwrap();
-        let default_pc = self.switch_defaults.pop().unwrap();
+        // The pair was pushed by the matching `switch_cases.push` /
+        // `switch_defaults.push(None)` just before `enter_switch`
+        // above, so a missing entry would be an internal parser
+        // bug; `unwrap_or_default` + `flatten` keep the codegen
+        // forward-progressing in that case rather than panicking.
+        let cases = self.switch_cases.pop().unwrap_or_default();
+        let default_pc = self.switch_defaults.pop().flatten();
 
         for (val, pc) in cases {
             self.emit_lea(switch_val_offset);
@@ -206,7 +211,7 @@ impl Compiler {
             if id_idx == usize::MAX {
                 return Err(self.compile_err("typedef requires a name"));
             }
-            let fn_ptr_indirection = self.pending_fn_ptr_indirection.take().unwrap_or(0);
+            let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             // C99 function-type typedef: `typedef RET NAME(args);`
             // declared at block scope. Same handling as run_compile's
             // file-scope branch -- parse the `(args)` and bind the

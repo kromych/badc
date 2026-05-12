@@ -397,7 +397,7 @@ impl Compiler {
                 // which would then mistakenly treat `T *p` as a
                 // function-pointer-pointer and turn `*p` into a
                 // decay no-op.
-                self.pending_fn_ptr_indirection.take();
+                self.pending.fn_ptr_indirection.take();
                 let is_aggregate_value = is_struct_ty(field_ty) && struct_ptr_depth(field_ty) == 0;
                 if is_aggregate_value
                     && field_array_size == 0

@@ -1,12 +1,16 @@
 // C99 6.8.6.4p3: a function declared `void` does not produce a
-// value. Before the fix, c5 lexed `void` as `char` and left
-// whatever the function body last computed in the C-level
-// "return register" -- a caller that mis-typed the prototype
-// (e.g. through a function-pointer cast claiming an `int`
-// return) would observe that stale value instead of seeing
-// "no value." gcc and clang both leave a predictable 0 in the
-// observable return slot for void callees -- this fixture pins
-// the same behaviour.
+// value. Observing one through a mistyped function-pointer cast
+// is undefined behaviour, and gcc / clang make no portable
+// guarantee about what's left in the platform's return register
+// (measured: gcc 15.2 -O0 leaks the body's last computed value,
+// gcc -O2 happens to materialise 0 after dead-code elimination,
+// Apple clang leaks whichever argument was passed in the return-
+// register slot). c5 deliberately picks the strongest of these:
+// the function-exit lowering clears the C-level "return slot" so
+// the observed value is always 0, independent of optimisation
+// level or argument shape. The fixture pins that c5 choice; any
+// regression that lets the body's accumulator state survive into
+// the caller would surface here.
 //
 // Two paths exercise the fix:
 //   * The body falls off the end (no `return` statement) -- the

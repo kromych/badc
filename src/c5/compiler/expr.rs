@@ -43,6 +43,53 @@ use super::types::{
     load_op_for, store_op_for, struct_id_of, struct_ptr_depth, usual_arith_common_ty,
 };
 
+/// Relational comparison operator. The four variants share an
+/// identical emit shape -- push LHS, evaluate RHS at shift
+/// precedence, pick the FP / unsigned / signed Op flavour by
+/// inspecting the operand types -- and only differ in *which* Op
+/// to emit per flavour plus the diagnostic spelling. Threading
+/// them through this enum collapses what was four near-identical
+/// branches into one.
+#[derive(Copy, Clone)]
+enum Cmp {
+    Lt,
+    Gt,
+    Le,
+    Ge,
+}
+
+impl Cmp {
+    /// Map a lexer token onto the relational op it represents.
+    /// Returns `None` for every non-relational token so the caller
+    /// can use it as an `if let` arm in the precedence-climbing
+    /// chain.
+    fn from_tok(tok: super::super::token::Tok) -> Option<Self> {
+        if tok == Token::LtOp {
+            Some(Cmp::Lt)
+        } else if tok == Token::GtOp {
+            Some(Cmp::Gt)
+        } else if tok == Token::LeOp {
+            Some(Cmp::Le)
+        } else if tok == Token::GeOp {
+            Some(Cmp::Ge)
+        } else {
+            None
+        }
+    }
+
+    /// Return the (signed, unsigned, FP, name) tuple of bytecode
+    /// ops + diagnostic spelling for this comparison. Same shape
+    /// the per-arm code emitted before the collapse.
+    fn ops(self) -> (Op, Op, Op, &'static str) {
+        match self {
+            Cmp::Lt => (Op::Lt, Op::Ult, Op::Flt, "<"),
+            Cmp::Gt => (Op::Gt, Op::Ugt, Op::Fgt, ">"),
+            Cmp::Le => (Op::Le, Op::Ule, Op::Fle, "<="),
+            Cmp::Ge => (Op::Ge, Op::Uge, Op::Fge, ">="),
+        }
+    }
+}
+
 impl Compiler {
     pub(super) fn expr(&mut self, lev: i64) -> Result<(), C5Error> {
         let mut t: i64;
@@ -1362,78 +1409,40 @@ impl Compiler {
                 self.expr(Token::EqOp as i64)?;
                 self.emit_op(Op::And);
                 self.ty = Ty::Int as i64;
-            } else if self.lex.tk == Token::EqOp {
+            } else if self.lex.tk == Token::EqOp || self.lex.tk == Token::NeOp {
+                // `==` and `!=` share emit shape -- only the FP
+                // variant and the `invert` flag handed to
+                // `emit_eq_with_common_width` differ.
+                let invert = self.lex.tk == Token::NeOp;
+                let (fp_op, name) = if invert {
+                    (Op::Fne, "!=")
+                } else {
+                    (Op::Feq, "==")
+                };
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::LtOp as i64)?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
-                    self.require_both_float(t, "==")?;
-                    self.emit_op(Op::Feq);
+                    self.require_both_float(t, name)?;
+                    self.emit_op(fp_op);
                 } else {
-                    self.emit_eq_with_common_width(t, /*invert=*/ false);
+                    self.emit_eq_with_common_width(t, invert);
                 }
                 self.ty = Ty::Int as i64;
-            } else if self.lex.tk == Token::NeOp {
-                self.next()?;
-                self.emit_op(Op::Psh);
-                self.expr(Token::LtOp as i64)?;
-                if is_floating_scalar(t) || is_floating_scalar(self.ty) {
-                    self.require_both_float(t, "!=")?;
-                    self.emit_op(Op::Fne);
-                } else {
-                    self.emit_eq_with_common_width(t, /*invert=*/ true);
-                }
-                self.ty = Ty::Int as i64;
-            } else if self.lex.tk == Token::LtOp {
+            } else if let Some(cmp) = Cmp::from_tok(self.lex.tk) {
+                // All four relational ops share the same emit shape;
+                // see `Cmp::ops` for the per-flavour op picks.
+                let (signed_op, unsigned_op, fp_op, name) = cmp.ops();
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::ShlOp as i64)?;
                 if is_floating_scalar(t) || is_floating_scalar(self.ty) {
-                    self.require_both_float(t, "<")?;
-                    self.emit_op(Op::Flt);
+                    self.require_both_float(t, name)?;
+                    self.emit_op(fp_op);
                 } else if is_unsigned_ty(usual_arith_common_ty(t, self.ty, self.target)) {
-                    self.emit_op(Op::Ult);
+                    self.emit_op(unsigned_op);
                 } else {
-                    self.emit_op(Op::Lt);
-                }
-                self.ty = Ty::Int as i64;
-            } else if self.lex.tk == Token::GtOp {
-                self.next()?;
-                self.emit_op(Op::Psh);
-                self.expr(Token::ShlOp as i64)?;
-                if is_floating_scalar(t) || is_floating_scalar(self.ty) {
-                    self.require_both_float(t, ">")?;
-                    self.emit_op(Op::Fgt);
-                } else if is_unsigned_ty(usual_arith_common_ty(t, self.ty, self.target)) {
-                    self.emit_op(Op::Ugt);
-                } else {
-                    self.emit_op(Op::Gt);
-                }
-                self.ty = Ty::Int as i64;
-            } else if self.lex.tk == Token::LeOp {
-                self.next()?;
-                self.emit_op(Op::Psh);
-                self.expr(Token::ShlOp as i64)?;
-                if is_floating_scalar(t) || is_floating_scalar(self.ty) {
-                    self.require_both_float(t, "<=")?;
-                    self.emit_op(Op::Fle);
-                } else if is_unsigned_ty(usual_arith_common_ty(t, self.ty, self.target)) {
-                    self.emit_op(Op::Ule);
-                } else {
-                    self.emit_op(Op::Le);
-                }
-                self.ty = Ty::Int as i64;
-            } else if self.lex.tk == Token::GeOp {
-                self.next()?;
-                self.emit_op(Op::Psh);
-                self.expr(Token::ShlOp as i64)?;
-                if is_floating_scalar(t) || is_floating_scalar(self.ty) {
-                    self.require_both_float(t, ">=")?;
-                    self.emit_op(Op::Fge);
-                } else if is_unsigned_ty(usual_arith_common_ty(t, self.ty, self.target)) {
-                    self.emit_op(Op::Uge);
-                } else {
-                    self.emit_op(Op::Ge);
+                    self.emit_op(signed_op);
                 }
                 self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::ShlOp {

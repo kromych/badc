@@ -460,6 +460,19 @@ int _tmain(int argc, TCHAR **argv)
 
             _NtWriteVirtualMemory(hProcess, iat_addr, &fn_addr, 8, NULL);
 
+            // Read back to verify the patch landed -- catches the
+            // case where the section's pages aren't actually
+            // writable from another process even though the
+            // section header marks them RW.
+            void *verify = NULL;
+            _NtReadVirtualMemory(hProcess, iat_addr, &verify, 8, NULL);
+            if (verify != fn_addr)
+            {
+                LOG_ERR(_T("IAT patch at %p didn't stick: wrote %p, read back %p"),
+                        iat_addr, fn_addr, verify);
+                goto cleanup;
+            }
+
             thunk_addr += 8;
             iat_addr += 8;
             n++;

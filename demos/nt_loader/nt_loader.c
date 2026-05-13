@@ -1,24 +1,28 @@
-// nt_loader -- launches a user-mode native NT program end-to-end.
+// nt_loader -- launches a NATIVE-subsystem NT program end-to-end.
 //
-// Builds an `SEC_IMAGE` section over a transacted file (preferred)
-// or a plain CreateFile open (fallback when the host has no active
-// KTM resource manager). Spawns a process from the section via
-// `NtCreateProcessEx`, manually resolves the child's PE imports
-// against the parent's already-loaded DLLs and patches the child's
-// IAT in place, then starts the initial thread at the PE's entry
-// point via `NtCreateThreadEx`. The child runs, opens a named event
-// in `\BaseNamedObjects`, signals it, and self-terminates; the
-// loader observes the signal on its own wait.
+// Resolves `ntdll!NtCreateUserProcess` and uses it to spawn
+// `nt_hello.exe`. The kernel does the full setup the child needs
+// (open the image, create an SEC_IMAGE section, build a process,
+// initialize the PEB, create the initial thread, and dispatch
+// through `LdrInitializeThunk` so `ntdll`'s loader sets up its
+// own internal state before the PE's entry runs). The loader
+// holds a named event in `\BaseNamedObjects`; `nt_hello` opens
+// that NT path, signals it, and self-terminates. The loader's
+// wait observes the signal.
 //
 // `#define USE_UNICODE` selects the wide-char (`wmain`) build;
 // commenting it out selects the narrow-char (`main`) build.
 //
-// Manual IAT patching is what makes the demo work without running
-// `ntdll!LdrInitializeThunk` in the child. We control both halves
-// of the handshake, and `nt_hello` imports only from `ntdll`, which
-// is mapped at the same address in every process within a boot
-// session -- so resolved addresses in the parent are valid in the
-// child verbatim.
+// `NtCreateUserProcess` is the same syscall `kernel32!CreateProcessW`
+// uses internally. The educational gain over `CreateProcessW` is
+// that it accepts NATIVE-subsystem images (which `CreateProcessW`
+// refuses with ERROR_INVALID_IMAGE_FORMAT) and that the
+// PS_ATTRIBUTE_LIST + PS_CREATE_INFO calling convention is laid
+// out in the open. An earlier draft tried `NtCreateProcessEx` +
+// manual import patching + `NtCreateThreadEx`; that approach
+// crashed in `ntdll!LdrInitializeThunk` on `PEB.Ldr == NULL`.
+// Modern Windows only sets `PEB.Ldr` along the
+// `NtCreateUserProcess` path.
 
 #define USE_UNICODE
 
@@ -26,6 +30,7 @@
 #include <winternl.h>
 #include <stdio.h>
 #include <wchar.h>
+#include <string.h>
 
 // TCHAR macros.
 #ifdef USE_UNICODE
@@ -41,27 +46,13 @@ typedef CHAR    TCHAR;
 #endif
 
 // ntdll function-pointer typedefs (resolved at run time).
-// Entries are fetched via `GetProcAddress`; the produced PE
-// carries no ntdll import.
-
-typedef NTSTATUS (*fpNtCreateProcessEx)(
-    PHANDLE ProcessHandle, ACCESS_MASK DesiredAccess,
-    POBJECT_ATTRIBUTES ObjectAttributes, HANDLE ParentProcess,
-    ULONG Flags, HANDLE SectionHandle, HANDLE DebugPort,
-    HANDLE ExceptionPort, int InJob);
-
-typedef NTSTATUS (*fpNtCreateTransaction)(
-    PHANDLE TransactionHandle, ACCESS_MASK DesiredAccess,
-    POBJECT_ATTRIBUTES ObjectAttributes, void *Uow,
-    HANDLE TmHandle, ULONG CreateOptions,
-    ULONG IsolationLevel, ULONG IsolationFlags,
-    PLARGE_INTEGER Timeout, PUNICODE_STRING Description);
-
-typedef NTSTATUS (*fpNtCreateSection)(
-    PHANDLE SectionHandle, ACCESS_MASK DesiredAccess,
-    POBJECT_ATTRIBUTES ObjectAttributes,
-    PLARGE_INTEGER MaximumSize, ULONG SectionPageProtection,
-    ULONG AllocationAttributes, HANDLE FileHandle);
+typedef NTSTATUS (*fpNtCreateUserProcess)(
+    PHANDLE ProcessHandle, PHANDLE ThreadHandle,
+    ACCESS_MASK ProcessDesiredAccess, ACCESS_MASK ThreadDesiredAccess,
+    POBJECT_ATTRIBUTES ProcessObjectAttributes,
+    POBJECT_ATTRIBUTES ThreadObjectAttributes,
+    ULONG ProcessFlags, ULONG ThreadFlags,
+    PVOID ProcessParameters, PVOID CreateInfo, PVOID AttributeList);
 
 typedef NTSTATUS (*fpNtCreateEvent)(
     PHANDLE EventHandle, ACCESS_MASK DesiredAccess,
@@ -76,44 +67,26 @@ typedef NTSTATUS (*fpNtClose)(HANDLE Handle);
 typedef void (*fpRtlInitUnicodeString)(
     PUNICODE_STRING DestinationString, PWSTR SourceString);
 
-typedef NTSTATUS (*fpNtQueryInformationProcess)(
-    HANDLE ProcessHandle, ULONG InformationClass,
-    PVOID Buffer, ULONG BufferLength, ULONG *ReturnLength);
-
-typedef NTSTATUS (*fpNtReadVirtualMemory)(
-    HANDLE ProcessHandle, PVOID BaseAddress, PVOID Buffer,
-    long long NumberOfBytesToRead, long long *NumberOfBytesRead);
-
-typedef NTSTATUS (*fpNtWriteVirtualMemory)(
-    HANDLE ProcessHandle, PVOID BaseAddress, PVOID Buffer,
-    long long NumberOfBytesToWrite, long long *NumberOfBytesWritten);
-
-typedef NTSTATUS (*fpNtCreateThreadEx)(
-    PHANDLE ThreadHandle, ACCESS_MASK DesiredAccess,
-    POBJECT_ATTRIBUTES ObjectAttributes, HANDLE ProcessHandle,
-    PVOID StartRoutine, PVOID Argument, ULONG CreateFlags,
-    long long ZeroBits, long long StackSize,
-    long long MaximumStackSize, PVOID AttributeList);
-
-// PROCESS_BASIC_INFORMATION (x64 / arm64 layout, 48 bytes).
-typedef struct {
-    NTSTATUS  ExitStatus;
-    PVOID     PebBaseAddress;
-    long long AffinityMask;
-    LONG      BasePriority;
-    HANDLE    UniqueProcessId;
-    HANDLE    InheritedFromUniqueProcessId;
-} PROCESS_BASIC_INFORMATION;
-
-// `nt_hello` opens this NT path via `NtOpenEvent`. Both the loader
-// and the child resolve through the same `\BaseNamedObjects`
-// namespace, so they meet without going through Win32's per-session
-// mapping.
+// `nt_hello` opens this NT path via `NtOpenEvent`. The loader
+// creates it via `NtCreateEvent`; both endpoints route through
+// the same `\BaseNamedObjects` namespace.
 static WCHAR *g_event_name = L"\\BaseNamedObjects\\BadcLoaderSync";
 
 // `NtWaitForSingleObject` timeout, in 100-ns ticks. Negative
 // values are relative; -2*10^7 = 2 s.
 #define EVENT_WAIT_TIMEOUT_TICKS  ((long long)-20000000)
+
+// PS_ATTRIBUTE_IMAGE_NAME = number 5 | PS_ATTRIBUTE_INPUT (0x20000).
+#define PS_ATTRIBUTE_IMAGE_NAME 0x00020005
+
+// PS_CREATE_INFO is a versioned, partially-tagged-union struct
+// the kernel uses to report which phase of process creation
+// succeeded or failed. We only fill in the input fields (Size +
+// State); the kernel populates the rest as it progresses. The
+// `Size` byte count is fixed at 88 in the Windows 10 / 11 ABI
+// (the union's largest variant is `SuccessState`, which the
+// kernel writes on a clean run).
+#define PS_CREATE_INFO_SIZE 88
 
 // Logging helpers.
 #define LOG(fmt, ...)     _tprintf(_T("[*] ") fmt _T("\n"), ##__VA_ARGS__)
@@ -137,19 +110,8 @@ int _tmain(int argc, TCHAR **argv)
     NTSTATUS  status;
     HANDLE    hProcess = NULL;
     HANDLE    hThread = NULL;
-    HANDLE    hTransaction = NULL;
-    HANDLE    hFile = INVALID_HANDLE_VALUE;
-    HANDLE    hSection = NULL;
     HANDLE    hEvent = NULL;
     int       exitCode = 1;
-
-    OBJECT_ATTRIBUTES objattr;
-    objattr.Length = sizeof(OBJECT_ATTRIBUTES);
-    objattr.Attributes = OBJ_CASE_INSENSITIVE;
-    objattr.ObjectName = NULL;
-    objattr.RootDirectory = NULL;
-    objattr.SecurityDescriptor = NULL;
-    objattr.SecurityQualityOfService = NULL;
 
     // Resolve ntdll exports.
     LOG(_T("Resolving ntdll exports"));
@@ -160,43 +122,32 @@ int _tmain(int argc, TCHAR **argv)
         return 1;
     }
 
-    fpNtCreateProcessEx        _NtCreateProcessEx        = (fpNtCreateProcessEx)       GetProcAddress(hNtdll, "NtCreateProcessEx");
-    fpNtCreateTransaction      _NtCreateTransaction      = (fpNtCreateTransaction)     GetProcAddress(hNtdll, "NtCreateTransaction");
-    fpNtCreateSection          _NtCreateSection          = (fpNtCreateSection)         GetProcAddress(hNtdll, "NtCreateSection");
-    fpNtCreateEvent            _NtCreateEvent            = (fpNtCreateEvent)           GetProcAddress(hNtdll, "NtCreateEvent");
-    fpNtWaitForSingleObject    _NtWaitForSingleObject    = (fpNtWaitForSingleObject)   GetProcAddress(hNtdll, "NtWaitForSingleObject");
-    fpNtClose                  _NtClose                  = (fpNtClose)                 GetProcAddress(hNtdll, "NtClose");
-    fpRtlInitUnicodeString     _RtlInitUnicodeString     = (fpRtlInitUnicodeString)    GetProcAddress(hNtdll, "RtlInitUnicodeString");
-    fpNtQueryInformationProcess _NtQueryInformationProcess = (fpNtQueryInformationProcess) GetProcAddress(hNtdll, "NtQueryInformationProcess");
-    fpNtReadVirtualMemory      _NtReadVirtualMemory      = (fpNtReadVirtualMemory)     GetProcAddress(hNtdll, "NtReadVirtualMemory");
-    fpNtWriteVirtualMemory     _NtWriteVirtualMemory     = (fpNtWriteVirtualMemory)    GetProcAddress(hNtdll, "NtWriteVirtualMemory");
-    fpNtCreateThreadEx         _NtCreateThreadEx         = (fpNtCreateThreadEx)        GetProcAddress(hNtdll, "NtCreateThreadEx");
+    fpNtCreateUserProcess   _NtCreateUserProcess   = (fpNtCreateUserProcess)   GetProcAddress(hNtdll, "NtCreateUserProcess");
+    fpNtCreateEvent         _NtCreateEvent         = (fpNtCreateEvent)         GetProcAddress(hNtdll, "NtCreateEvent");
+    fpNtWaitForSingleObject _NtWaitForSingleObject = (fpNtWaitForSingleObject) GetProcAddress(hNtdll, "NtWaitForSingleObject");
+    fpNtClose               _NtClose               = (fpNtClose)               GetProcAddress(hNtdll, "NtClose");
+    fpRtlInitUnicodeString  _RtlInitUnicodeString  = (fpRtlInitUnicodeString)  GetProcAddress(hNtdll, "RtlInitUnicodeString");
 
-    if (!_NtCreateProcessEx || !_NtCreateTransaction || !_NtCreateSection
-        || !_NtCreateEvent || !_NtWaitForSingleObject || !_NtClose
-        || !_RtlInitUnicodeString || !_NtQueryInformationProcess
-        || !_NtReadVirtualMemory || !_NtWriteVirtualMemory
-        || !_NtCreateThreadEx)
+    if (!_NtCreateUserProcess || !_NtCreateEvent || !_NtWaitForSingleObject
+        || !_NtClose || !_RtlInitUnicodeString)
     {
         LOG_ERR(_T("Failed to resolve one or more ntdll exports"));
         return 1;
     }
     LOG_OK(_T("ntdll exports resolved"));
 
-    // Create the sync event under `\BaseNamedObjects`. The child
-    // opens the same NT path so both sides see the same kernel
-    // object regardless of the calling session.
+    // Create the sync event under `\BaseNamedObjects`.
     UNICODE_STRING event_name_us;
     _RtlInitUnicodeString(&event_name_us, g_event_name);
-    OBJECT_ATTRIBUTES event_objattr;
-    event_objattr.Length = sizeof(OBJECT_ATTRIBUTES);
-    event_objattr.Attributes = OBJ_CASE_INSENSITIVE;
-    event_objattr.ObjectName = &event_name_us;
-    event_objattr.RootDirectory = NULL;
-    event_objattr.SecurityDescriptor = NULL;
-    event_objattr.SecurityQualityOfService = NULL;
+    OBJECT_ATTRIBUTES event_oa;
+    event_oa.Length = sizeof(OBJECT_ATTRIBUTES);
+    event_oa.Attributes = OBJ_CASE_INSENSITIVE;
+    event_oa.ObjectName = &event_name_us;
+    event_oa.RootDirectory = NULL;
+    event_oa.SecurityDescriptor = NULL;
+    event_oa.SecurityQualityOfService = NULL;
     status = _NtCreateEvent(
-        &hEvent, EVENT_ALL_ACCESS, &event_objattr,
+        &hEvent, EVENT_ALL_ACCESS, &event_oa,
         NOTIFICATION_EVENT, FALSE);
     if (!NT_SUCCESS(status))
     {
@@ -205,307 +156,75 @@ int _tmain(int argc, TCHAR **argv)
     }
     LOG_OK(_T("Sync event created"));
 
-    // Build wide path (UNICODE_STRING.Buffer is always PWSTR).
-    WCHAR wPath[MAX_PATH];
+    // Build the child's image path in NT form. Win32 paths
+    // (`D:\foo\bar.exe`) become `\??\D:\foo\bar.exe` when handed
+    // to NT syscalls; `\??\` is the per-session Object Manager
+    // symbolic-link directory that resolves DOS drive letters.
+    WCHAR nt_path[600];
+    nt_path[0] = L'\\';
+    nt_path[1] = L'?';
+    nt_path[2] = L'?';
+    nt_path[3] = L'\\';
 
 #ifdef USE_UNICODE
-    if (wcslen(argv[1]) >= MAX_PATH)
+    if (wcslen(argv[1]) >= 590)
     {
-        LOG_ERR(_T("Path too long (>= MAX_PATH)"));
+        LOG_ERR(_T("Path too long"));
         goto cleanup;
     }
-    lstrcpyW(wPath, argv[1]);
+    wcscpy(&nt_path[4], (unsigned short *)argv[1]);
 #else
-    int wPathLen = MultiByteToWideChar(CP_ACP, 0, argv[1], -1, wPath, MAX_PATH);
-    if (wPathLen == 0)
+    int wlen = MultiByteToWideChar(CP_ACP, 0, argv[1], -1, &nt_path[4], 596);
+    if (wlen == 0)
     {
         LOG_ERR(_T("MultiByteToWideChar failed: 0x%08lX"), GetLastError());
         goto cleanup;
     }
 #endif
 
-    // Open the image file. TxF (transacted) is the preferred path
-    // -- that's what the demo is about -- but the KTM resource
-    // manager is absent on hosted Windows CI volumes (and any host
-    // where TxF was never enabled). Try transacted first, fall
-    // back to a plain CreateFile so the rest of the section /
-    // process / event-sync flow still runs.
-    //
-    // Access uses MAXIMUM_ALLOWED rather than GENERIC_READ |
-    // GENERIC_EXECUTE: hosted runners' SAFER / AppLocker / WDAC
-    // policy can reject the GENERIC_EXECUTE wrapper on freshly
-    // built executables with ERROR_PRIVILEGE_NOT_HELD.
-    // MAXIMUM_ALLOWED asks the kernel for whatever the token
-    // permits, which for a runner's own files normally includes
-    // FILE_EXECUTE (needed downstream for SEC_IMAGE).
-    LOG(_T("Creating KTM transaction"));
-    status = _NtCreateTransaction(
-        &hTransaction,
-        TRANSACTION_ALL_ACCESS,
-        &objattr,
-        NULL, NULL, 0, 0, 0, NULL, NULL);
+    int path_chars = (int)wcslen(nt_path);
+    LOG(_T("Spawning child: %s"), nt_path);
 
-    if (NT_SUCCESS(status))
-    {
-        LOG_OK(_T("Transaction created (handle: %p)"), hTransaction);
-        LOG(_T("Opening transacted file: %s"), argv[1]);
-#ifdef USE_UNICODE
-        hFile = CreateFileTransactedW(
-            wPath,
-            MAXIMUM_ALLOWED,
-            FILE_SHARE_READ, NULL,
-            OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL,
-            NULL, hTransaction, NULL, NULL);
-#else
-        hFile = CreateFileTransactedA(
-            argv[1],
-            MAXIMUM_ALLOWED,
-            FILE_SHARE_READ, NULL,
-            OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL,
-            NULL, hTransaction, NULL, NULL);
-#endif
-        if (hFile == INVALID_HANDLE_VALUE)
-        {
-            LOG_ERR(_T("CreateFileTransacted failed: 0x%08lX; falling back to non-transacted open"),
-                    GetLastError());
-            _NtClose(hTransaction);
-            hTransaction = NULL;
-        }
-        else
-        {
-            LOG_OK(_T("Transacted file opened (handle: %p)"), hFile);
-        }
-    }
-    else
-    {
-        LOG_ERR(_T("NtCreateTransaction failed: 0x%08lX; falling back to non-transacted open"),
-                (ULONG)status);
-    }
+    // PS_CREATE_INFO -- input fields only. The buffer is fixed at
+    // PS_CREATE_INFO_SIZE bytes; the kernel rejects sizes it
+    // doesn't recognize. Layout (input): [0..8) Size, [8..12)
+    // State. PsCreateInitialState = 0 is the only legal input
+    // state; the kernel advances the State as it processes.
+    char create_info[PS_CREATE_INFO_SIZE];
+    memset(create_info, 0, sizeof(create_info));
+    *(long long *)&create_info[0] = PS_CREATE_INFO_SIZE;
 
-    if (hFile == INVALID_HANDLE_VALUE)
-    {
-        LOG(_T("Opening file (non-transacted): %s"), argv[1]);
-#ifdef USE_UNICODE
-        hFile = CreateFileW(
-            wPath,
-            MAXIMUM_ALLOWED,
-            FILE_SHARE_READ, NULL,
-            OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL,
-            NULL);
-#else
-        hFile = CreateFileA(
-            argv[1],
-            MAXIMUM_ALLOWED,
-            FILE_SHARE_READ, NULL,
-            OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL,
-            NULL);
-#endif
-        if (hFile == INVALID_HANDLE_VALUE)
-        {
-            LOG_ERR(_T("CreateFile failed: 0x%08lX"), GetLastError());
-            goto cleanup;
-        }
-        LOG_OK(_T("File opened (handle: %p)"), hFile);
-    }
+    // PS_ATTRIBUTE_LIST with a single PS_ATTRIBUTE entry.
+    // Header layout: [0..8) TotalLength; then for each entry:
+    // [+0..8) Attribute, [+8..16) Size, [+16..24) ValuePtr,
+    // [+24..32) ReturnLength.
+    char attr_list[40];
+    memset(attr_list, 0, sizeof(attr_list));
+    *(long long *)&attr_list[0]  = (long long)sizeof(attr_list);
+    *(long long *)&attr_list[8]  = (long long)PS_ATTRIBUTE_IMAGE_NAME;
+    *(long long *)&attr_list[16] = (long long)(path_chars * 2);
+    *(void   **)&attr_list[24]  = nt_path;
+    // attr_list[32..40] (ReturnLength) stays 0.
 
-    // Create image section backed by the file.
-    LOG(_T("Creating image section"));
-    status = _NtCreateSection(
-        &hSection,
-        SECTION_ALL_ACCESS,
-        NULL,
-        NULL,
-        PAGE_READONLY,
-        SEC_IMAGE,
-        hFile);
-
+    status = _NtCreateUserProcess(
+        &hProcess, &hThread,
+        PROCESS_ALL_ACCESS, THREAD_ALL_ACCESS,
+        NULL, NULL,            // process / thread OBJECT_ATTRIBUTES
+        0, 0,                  // process / thread flags
+        NULL,                  // ProcessParameters (kernel defaults)
+        (PVOID)create_info,
+        (PVOID)attr_list);
     if (!NT_SUCCESS(status))
     {
-        LOG_ERR(_T("NtCreateSection failed: 0x%08lX"), (ULONG)status);
+        // On failure the State field of create_info indicates
+        // which phase the kernel got to before bailing -- useful
+        // for diagnosing path / image-format issues.
+        ULONG fail_state = *(ULONG *)&create_info[8];
+        LOG_ERR(_T("NtCreateUserProcess failed: 0x%08lX (create_info.State = %lu)"),
+                (ULONG)status, (ULONG)fail_state);
         goto cleanup;
     }
-    LOG_OK(_T("Image section created (handle: %p)"), hSection);
-
-    // Create process from the section.
-    LOG(_T("Creating process from image section"));
-    status = _NtCreateProcessEx(
-        &hProcess,
-        PROCESS_ALL_ACCESS,
-        NULL,
-        NtCurrentProcess(),
-        PS_INHERIT_HANDLES,
-        hSection,
-        NULL, NULL,
-        FALSE);
-
-    if (!NT_SUCCESS(status))
-    {
-        LOG_ERR(_T("NtCreateProcessEx failed: 0x%08lX"), (ULONG)status);
-        goto cleanup;
-    }
-
-    DWORD pid = GetProcessId(hProcess);
-    LOG_OK(_T("Process created. PID = %lu"), (ULONG)pid);
-
-    // Query the child's PEB to find ImageBase. NtCreateProcessEx
-    // sets `PEB.ImageBaseAddress` at section attach (offset 0x10
-    // on x64/arm64). The user-mode loader normally fills in the
-    // rest later; we'll patch imports ourselves.
-    LOG(_T("Querying child PEB"));
-    PROCESS_BASIC_INFORMATION pbi;
-    ULONG pbi_ret = 0;
-    status = _NtQueryInformationProcess(hProcess, 0, &pbi, sizeof(pbi), &pbi_ret);
-    if (!NT_SUCCESS(status))
-    {
-        LOG_ERR(_T("NtQueryInformationProcess failed: 0x%08lX"), (ULONG)status);
-        goto cleanup;
-    }
-
-    char *child_base = NULL;
-    status = _NtReadVirtualMemory(hProcess, (char*)pbi.PebBaseAddress + 0x10, &child_base, 8, NULL);
-    if (!NT_SUCCESS(status) || !child_base)
-    {
-        LOG_ERR(_T("Reading child ImageBase failed: 0x%08lX"), (ULONG)status);
-        goto cleanup;
-    }
-    LOG_OK(_T("Child ImageBase = %p"), child_base);
-
-    // Read PE header offsets from the child's mapped image.
-    ULONG e_lfanew = 0;
-    _NtReadVirtualMemory(hProcess, child_base + 0x3C, &e_lfanew, 4, NULL);
-
-    // PE32+ optional header begins at `nt_off + 4 (NT sig) + 20
-    // (COFF header) = nt_off + 24`. `AddressOfEntryPoint` is at
-    // optional-header offset 16; `DataDirectory[0]` (Export) is at
-    // offset 112, `DataDirectory[1]` (Import) at offset 120 (each
-    // directory entry is 8 bytes: RVA then Size).
-    char *opt_hdr = child_base + e_lfanew + 24;
-    ULONG entry_rva = 0;
-    ULONG import_rva = 0;
-    _NtReadVirtualMemory(hProcess, opt_hdr + 16,  &entry_rva,  4, NULL);
-    _NtReadVirtualMemory(hProcess, opt_hdr + 120, &import_rva, 4, NULL);
-
-    if (import_rva == 0)
-    {
-        LOG_ERR(_T("Child has no import directory"));
-        goto cleanup;
-    }
-
-    // Walk import descriptors (20 bytes each) and patch the IAT.
-    LOG(_T("Patching child imports"));
-    char *desc = child_base + import_rva;
-    int total_imports = 0;
-    int total_dlls = 0;
-    while (1)
-    {
-        ULONG ilt_rva = 0, name_rva = 0, iat_rva = 0;
-        _NtReadVirtualMemory(hProcess, desc + 0,  &ilt_rva,  4, NULL);
-        _NtReadVirtualMemory(hProcess, desc + 12, &name_rva, 4, NULL);
-        _NtReadVirtualMemory(hProcess, desc + 16, &iat_rva,  4, NULL);
-        if (name_rva == 0) break;
-
-        char dll_name[64];
-        _NtReadVirtualMemory(hProcess, child_base + name_rva, dll_name, sizeof(dll_name), NULL);
-        dll_name[63] = 0;
-
-        HANDLE hDll = GetModuleHandleA(dll_name);
-        if (!hDll)
-        {
-            hDll = LoadLibraryA(dll_name);
-        }
-        if (!hDll)
-        {
-            LOG_ERR(_T("Could not load `%hs` for child"), dll_name);
-            goto cleanup;
-        }
-
-        // Walk the lookup table (ILT preferred; falls back to IAT
-        // if the linker collapsed them). Each 8-byte entry is
-        // either a name-table RVA (low 31 bits) or, with the high
-        // bit set, an ordinal in the low 16 bits.
-        char *thunk_addr = child_base + (ilt_rva ? ilt_rva : iat_rva);
-        char *iat_addr   = child_base + iat_rva;
-        int n = 0;
-        while (1)
-        {
-            long long entry = 0;
-            _NtReadVirtualMemory(hProcess, thunk_addr, &entry, 8, NULL);
-            if (entry == 0) break;
-
-            void *fn_addr = NULL;
-            if (entry < 0)
-            {
-                // Bit 63 set: import by ordinal.
-                fn_addr = (void*)GetProcAddress(hDll, (char*)(entry & 0xFFFF));
-            }
-            else
-            {
-                // By name: 2-byte hint then null-terminated string.
-                char fn_name[128];
-                _NtReadVirtualMemory(hProcess,
-                    child_base + (entry & 0xFFFFFFFF) + 2,
-                    fn_name, sizeof(fn_name), NULL);
-                fn_name[127] = 0;
-                fn_addr = (void*)GetProcAddress(hDll, fn_name);
-            }
-            if (!fn_addr)
-            {
-                LOG_ERR(_T("Failed to resolve an import from `%hs`"), dll_name);
-                goto cleanup;
-            }
-
-            _NtWriteVirtualMemory(hProcess, iat_addr, &fn_addr, 8, NULL);
-
-            // Read back to verify the patch landed -- catches the
-            // case where the section's pages aren't actually
-            // writable from another process even though the
-            // section header marks them RW.
-            void *verify = NULL;
-            _NtReadVirtualMemory(hProcess, iat_addr, &verify, 8, NULL);
-            if (verify != fn_addr)
-            {
-                LOG_ERR(_T("IAT patch at %p didn't stick: wrote %p, read back %p"),
-                        iat_addr, fn_addr, verify);
-                goto cleanup;
-            }
-
-            thunk_addr += 8;
-            iat_addr += 8;
-            n++;
-        }
-        LOG_OK(_T("  %hs: %d imports patched"), dll_name, n);
-        desc += 20;
-        total_dlls++;
-        total_imports += n;
-    }
-    LOG_OK(_T("Patched %d imports across %d DLLs"), total_imports, total_dlls);
-
-    // Compute entry point in the child's address space and start
-    // the initial thread there. The kernel's RtlUserThreadStart
-    // trampoline invokes StartRoutine(Argument); nt_hello's
-    // entry is `void NtProcessStartup(void *Peb)` and ignores
-    // its argument, so passing NULL is fine.
-    void *entry_point = child_base + entry_rva;
-    LOG(_T("Starting child thread at %p"), entry_point);
-    // THREAD_CREATE_FLAGS_INITIAL_THREAD = 0x80 marks this as the
-    // first thread of a new process so the kernel routes it
-    // through the same startup path NtCreateUserProcess uses.
-    // Without this, RtlUserThreadStart -> LdrInitializeThunk
-    // dereferences PEB.Ldr (which NtCreateProcessEx never fills
-    // in) and the child AVs before reaching our entry.
-    status = _NtCreateThreadEx(
-        &hThread, THREAD_ALL_ACCESS, NULL, hProcess,
-        entry_point, NULL, 0x80, 0, 0, 0, NULL);
-    if (!NT_SUCCESS(status))
-    {
-        LOG_ERR(_T("NtCreateThreadEx failed: 0x%08lX"), (ULONG)status);
-        goto cleanup;
-    }
-    LOG_OK(_T("Child thread started (handle: %p)"), hThread);
+    LOG_OK(_T("Child process + initial thread created"));
 
     // Wait for the child to signal the event. A timeout is a hard
     // failure -- the demo's contract is the handshake.
@@ -527,31 +246,11 @@ int _tmain(int argc, TCHAR **argv)
         LOG_ERR(_T("NtWaitForSingleObject failed: 0x%08lX"), (ULONG)status);
     }
 
-    // Diagnostic: report what state the child ended up in. If the
-    // process has terminated with status 0, nt_hello reached
-    // NtTerminateProcess (with or without successfully signalling
-    // -- nt_hello swallows NtOpenEvent failures and terminates
-    // either way). Non-zero exit codes from a NATIVE crash look
-    // like 0xC0000005 etc. STATUS_PENDING means the thread is
-    // still alive, probably blocked.
-    LARGE_INTEGER short_wait;
-    short_wait.QuadPart = (long long)-5000000;  // 0.5s
-    _NtWaitForSingleObject(hProcess, FALSE, &short_wait);
-    PROCESS_BASIC_INFORMATION pbi2;
-    ULONG pbi2_ret = 0;
-    if (NT_SUCCESS(_NtQueryInformationProcess(hProcess, 0, &pbi2, sizeof(pbi2), &pbi2_ret)))
-    {
-        LOG(_T("Child process ExitStatus = 0x%08lX"), (ULONG)pbi2.ExitStatus);
-    }
-
 cleanup:
     LOG(_T("Cleaning up handles"));
-    if (hFile != INVALID_HANDLE_VALUE) CloseHandle(hFile);
-    if (hTransaction)                  _NtClose(hTransaction);
-    if (hSection)                      _NtClose(hSection);
-    if (hThread)                       _NtClose(hThread);
-    if (hProcess)                      _NtClose(hProcess);
-    if (hEvent)                        _NtClose(hEvent);
+    if (hThread)  _NtClose(hThread);
+    if (hProcess) _NtClose(hProcess);
+    if (hEvent)   _NtClose(hEvent);
 
     LOG(_T("Done (exit code: %d)"), exitCode);
     return exitCode;

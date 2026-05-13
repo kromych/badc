@@ -132,6 +132,13 @@ impl Compiler {
                 // `unsigned x;` / `short x;` / `long x;` /
                 // `long long x;` (the implicit-int rule).
                 bt = m.int_base();
+            } else if self.lex.tk == Token::Id {
+                // Identifier in base-type position with no
+                // matching typedef. Errors here rather than
+                // falling through to the `Ty::Int` default,
+                // which would silently mis-type the declarator.
+                let name = self.symbols[self.lex.curr_id_idx].name.clone();
+                return Err(self.compile_err(format!("unknown type name `{name}`")));
             }
             // Trailing qualifiers / int modifiers between the base
             // type and the declarators -- `Foo const *p`, `int long
@@ -231,6 +238,7 @@ impl Compiler {
                     self.symbols[id_idx].class = Token::Typedef as i64;
                     self.symbols[id_idx].type_ = typedef_ty;
                     self.symbols[id_idx].val = 0;
+                    self.symbols[id_idx].is_void_typedef = declarator_is_bare_void;
                     if typedef_fpi > 0 {
                         self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
                     }

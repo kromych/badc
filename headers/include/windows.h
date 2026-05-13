@@ -17,6 +17,10 @@
 
 #ifdef _WIN32
 
+// `NULL` and `size_t` (C99 7.17) -- included so consumers
+// that only pull in `<windows.h>` get them too.
+#include <stddef.h>
+
 // Win32 API decoration macros. The runtime calls go through the
 // IAT (kernel32.dll already exports them by name) so the
 // __stdcall / __declspec(dllimport) tagging the headers carry on
@@ -54,8 +58,6 @@
 typedef void *FARPROC;
 typedef void *HMODULE;
 typedef void *HINSTANCE;
-typedef HANDLE *PHANDLE;
-typedef HANDLE *LPHANDLE;
 typedef int   *LPDWORD;
 typedef int   *PDWORD;
 typedef int    LPVOID_TYPE_PLACEHOLDER;
@@ -119,7 +121,9 @@ typedef int    GET_FILEEX_INFO_LEVELS;
 // types (LPWSTR / LPCWSTR) point at unsigned short rather than
 // `wchar_t` because c5 doesn't have a separate wchar_t typedef
 // and msvcrt's wchar is 16-bit anyway.
-typedef long long          HANDLE;
+typedef void              *HANDLE;
+typedef HANDLE            *PHANDLE;
+typedef HANDLE            *LPHANDLE;
 typedef long long          SIZE_T;
 typedef long long          ULONG_PTR;
 typedef long long          UINT_PTR;
@@ -323,6 +327,10 @@ typedef struct _OSVERSIONINFOW *POSVERSIONINFOW;
 #define GENERIC_WRITE       0x40000000
 #define GENERIC_EXECUTE     0x20000000
 #define GENERIC_ALL         0x10000000
+#define MAXIMUM_ALLOWED     0x02000000
+#define FILE_READ_DATA      0x00000001
+#define FILE_EXECUTE        0x00000020
+#define SYNCHRONIZE         0x00100000
 #define FILE_SHARE_READ     0x00000001
 #define FILE_SHARE_WRITE    0x00000002
 #define FILE_SHARE_DELETE   0x00000004
@@ -372,6 +380,14 @@ typedef struct _OSVERSIONINFOW *POSVERSIONINFOW;
 #define PAGE_EXECUTE        0x10
 #define PAGE_EXECUTE_READ   0x20
 #define PAGE_EXECUTE_READWRITE 0x40
+
+// Section / process / event access masks.
+#define SECTION_ALL_ACCESS  0x000F001FUL
+#define PROCESS_ALL_ACCESS  0x001FFFFFUL
+#define THREAD_ALL_ACCESS   0x001FFFFFUL
+#define EVENT_ALL_ACCESS    0x001F0003UL
+#define EVENT_MODIFY_STATE  0x00000002UL
+#define SEC_IMAGE           0x01000000UL
 #define FILE_MAP_READ       0x0004
 #define FILE_MAP_WRITE      0x0002
 #define FILE_MAP_COPY       0x0001
@@ -616,10 +632,10 @@ typedef struct _CONSOLE_SCREEN_BUFFER_INFO *PCONSOLE_SCREEN_BUFFER_INFO;
 char *VirtualAlloc(char *addr, long long size, int type, int protect);
 int VirtualProtect(char *addr, long long size, int new_protect, int *old_protect);
 int VirtualFree(char *addr, long long size, int type);
-char *LoadLibraryA(char *name);
-char *GetProcAddress(char *module, char *name);
-int FreeLibrary(char *module);
-int GetLastError();
+HANDLE LoadLibraryA(char *name);
+PVOID  GetProcAddress(HANDLE module, char *name);
+int    FreeLibrary(HANDLE module);
+DWORD  GetLastError(void);
 int ExitProcess(int status);
 int Sleep(int milliseconds);
 
@@ -651,6 +667,7 @@ int DeleteCriticalSection(char *cs);
 #pragma binding(kernel32::CancelIo,                "CancelIo")
 #pragma binding(kernel32::CreateEventA,            "CreateEventA")
 #pragma binding(kernel32::FlushViewOfFile,         "FlushViewOfFile")
+#pragma binding(kernel32::GetModuleHandleA,        "GetModuleHandleA")
 #pragma binding(kernel32::GetModuleHandleW,        "GetModuleHandleW")
 #pragma binding(kernel32::GetNativeSystemInfo,     "GetNativeSystemInfo")
 #pragma binding(kernel32::GetProcessHeap,          "GetProcessHeap")
@@ -658,6 +675,8 @@ int DeleteCriticalSection(char *cs);
 #pragma binding(kernel32::CharLowerW,              "CharLowerW")
 #pragma binding(kernel32::CharUpperW,              "CharUpperW")
 #pragma binding(kernel32::CreateFileA,             "CreateFileA")
+#pragma binding(kernel32::CreateFileTransactedA,   "CreateFileTransactedA")
+#pragma binding(kernel32::CreateFileTransactedW,   "CreateFileTransactedW")
 #pragma binding(kernel32::CreateFileMappingA,      "CreateFileMappingA")
 #pragma binding(kernel32::CreateFileMappingW,      "CreateFileMappingW")
 #pragma binding(kernel32::CreateFileW,             "CreateFileW")
@@ -670,6 +689,9 @@ int DeleteCriticalSection(char *cs);
 #pragma binding(kernel32::FormatMessageA,          "FormatMessageA")
 #pragma binding(kernel32::FormatMessageW,          "FormatMessageW")
 #pragma binding(kernel32::GetCurrentProcessId,     "GetCurrentProcessId")
+#pragma binding(kernel32::GetProcessId,            "GetProcessId")
+#pragma binding(kernel32::lstrcpyA,                "lstrcpyA")
+#pragma binding(kernel32::lstrcpyW,                "lstrcpyW")
 #pragma binding(kernel32::GetDiskFreeSpaceA,       "GetDiskFreeSpaceA")
 #pragma binding(kernel32::GetDiskFreeSpaceW,       "GetDiskFreeSpaceW")
 #pragma binding(kernel32::GetFileAttributesA,      "GetFileAttributesA")
@@ -835,10 +857,11 @@ int CancelIo(HANDLE hFile);
 HANDLE CreateEventA(LPSECURITY_ATTRIBUTES lpEventAttributes, int bManualReset,
                     int bInitialState, LPCSTR lpName);
 int    FlushViewOfFile(LPCVOID lpBaseAddress, SIZE_T dwNumberOfBytesToFlush);
+HANDLE GetModuleHandleA(LPCSTR lpModuleName);
 HANDLE GetModuleHandleW(LPCWSTR lpModuleName);
 int    GetNativeSystemInfo(LPSYSTEM_INFO lpSystemInfo);
 HANDLE GetProcessHeap(void);
-PVOID  GetProcAddressA(void *hModule, LPCSTR lpProcName);
+PVOID  GetProcAddressA(HANDLE hModule, LPCSTR lpProcName);
 int    CharLowerW(LPWSTR lpsz);
 int    CharUpperW(LPWSTR lpsz);
 HANDLE CreateFileA(LPCSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
@@ -855,6 +878,23 @@ HANDLE CreateFileW(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
                    LPSECURITY_ATTRIBUTES lpSecurityAttributes,
                    DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes,
                    HANDLE hTemplateFile);
+HANDLE CreateFileTransactedA(LPCSTR lpFileName, DWORD dwDesiredAccess,
+                             DWORD dwShareMode,
+                             LPSECURITY_ATTRIBUTES lpSecurityAttributes,
+                             DWORD dwCreationDisposition,
+                             DWORD dwFlagsAndAttributes,
+                             HANDLE hTemplateFile, HANDLE hTransaction,
+                             PVOID pusMiniVersion, PVOID pExtendedParameter);
+HANDLE CreateFileTransactedW(LPCWSTR lpFileName, DWORD dwDesiredAccess,
+                             DWORD dwShareMode,
+                             LPSECURITY_ATTRIBUTES lpSecurityAttributes,
+                             DWORD dwCreationDisposition,
+                             DWORD dwFlagsAndAttributes,
+                             HANDLE hTemplateFile, HANDLE hTransaction,
+                             PVOID pusMiniVersion, PVOID pExtendedParameter);
+DWORD  GetProcessId(HANDLE Process);
+LPSTR  lstrcpyA(LPSTR lpString1, LPCSTR lpString2);
+LPWSTR lstrcpyW(LPWSTR lpString1, LPCWSTR lpString2);
 HANDLE CreateMutexW(LPSECURITY_ATTRIBUTES lpMutexAttributes, int bInitialOwner,
                     LPCWSTR lpName);
 int DeleteFileA(LPCSTR lpFileName);

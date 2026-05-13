@@ -222,6 +222,18 @@ jobs:
         # Stations / XQuartz; a developer runs the produced
         # binary locally to see the actual window.
         run: python demos/gui_hello/smoke.py
+      - name: nt_loader / nt_hello smoke
+        # Builds both NT-flavoured demos for windows-x64 and
+        # windows-arm64 and validates the Subsystem byte (CUI
+        # for nt_loader, NATIVE for nt_hello). On the two Windows
+        # runners the loader is additionally executed against
+        # nt_hello as a codegen canary: the loader can't actually
+        # launch a NATIVE image without SeTcbPrivilege, but the
+        # smoke asserts it reaches every milestone log line in
+        # order and exits 1 with one of the known privilege-gate
+        # NTSTATUSes. An AV / truncated output / unexpected
+        # NTSTATUS would signal a c5 Windows-codegen regression.
+        run: python demos/nt_loader/smoke.py
 
   features:
     name: feature combos

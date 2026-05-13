@@ -45,6 +45,36 @@ fn warn_call_arity_mismatch() {
     );
 }
 
+/// `typedef HANDLE *PHANDLE;` with no prior `HANDLE` typedef
+/// must error at the declaration site, not silently default
+/// to `int *`.
+#[test]
+fn unknown_type_name_is_a_compile_error() {
+    use crate::Compiler;
+    let result = Compiler::new("typedef HANDLE *PHANDLE; int main(void) { return 0; }".to_string())
+        .compile();
+    let err = result.expect_err("expected an error for unknown `HANDLE`");
+    let msg = format!("{err:?}");
+    assert!(
+        msg.contains("unknown type name `HANDLE`"),
+        "expected `unknown type name`, got: {msg}"
+    );
+}
+
+/// `HANDLE x;` at file scope must error rather than declare
+/// `x` as `int`.
+#[test]
+fn unknown_base_type_in_global_decl_is_an_error() {
+    use crate::Compiler;
+    let result = Compiler::new("HANDLE x;".to_string()).compile();
+    let err = result.expect_err("expected an error for unknown `HANDLE`");
+    let msg = format!("{err:?}");
+    assert!(
+        msg.contains("unknown type name `HANDLE`"),
+        "expected `unknown type name`, got: {msg}"
+    );
+}
+
 #[test]
 fn cast_to_struct_pointer_compiles_and_runs() {
     // `(struct Node *)malloc(...)` -- the cast operator must accept a

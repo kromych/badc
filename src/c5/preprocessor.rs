@@ -262,6 +262,14 @@ pub(crate) struct Preprocessor {
     /// Stack of `warning_disabled` snapshots taken at each
     /// `#pragma warning(push)`; popped by `#pragma warning(pop)`.
     pub(crate) warning_stack: Vec<BTreeSet<u32>>,
+    /// Borland / Watcom-style `#pragma warn -<code>` requests.
+    /// Holds the 3-letter (or longer) code strings that the source
+    /// asked to disable -- the `-` form. Like `warning_disabled`
+    /// above, c5 doesn't currently filter against these but the
+    /// parse is real (so typos surface) and the recorded set is
+    /// visible for future per-code filtering. sqlite3 uses this
+    /// form for `-rch` / `-aus` / etc.
+    pub(crate) warn_disabled: BTreeSet<alloc::string::String>,
     /// `#pragma intrinsic("name")` declarations -- a map from
     /// callable identifier to the `Intrinsic` discriminant the
     /// frontend should stamp on the matching `Symbol::intrinsic`
@@ -273,18 +281,47 @@ pub(crate) struct Preprocessor {
     pub intrinsics: alloc::collections::BTreeMap<String, i64>,
 }
 
-/// Windows PE subsystem selector. Mirrors the `IMAGE_SUBSYSTEM_*`
-/// constants from `<winnt.h>`: `Console` is the default for badc-
-/// produced PEs (CRT-style stdio works, but the loader allocates
-/// a console window when one isn't already attached); `Windows`
-/// is the GUI flavour the loader uses for apps that own their
-/// own window message loop.
+/// Windows PE subsystem selector; mirrors the `IMAGE_SUBSYSTEM_*`
+/// constants from `<winnt.h>`. The PE writer uses this both for
+/// the optional-header `Subsystem` field and to pick the entry
+/// stub shape:
+///
+/// * `Console` / `Windows` -- hosted Win32 programs. The writer
+///   emits a CRT-flavoured stub that imports
+///   `msvcrt!__getmainargs` / `msvcrt!exit` and calls the entry
+///   with `(argc, argv)` (console) or the WinMain argument set
+///   (windows).
+///
+/// * `Native` (alias `driver`) -- NT-native usermode programs and
+///   kernel-mode drivers. The loader invokes the entry directly
+///   with the platform-native signature (`NtProcessStartup(PPEB)`
+///   for usermode; `DriverEntry(PDRIVER_OBJECT, PUNICODE_STRING)`
+///   for drivers). The PE writer suppresses the stub and points
+///   `AddressOfEntryPoint` at the user's entry function.
+///
+/// * `EfiApplication` / `EfiBootServiceDriver` /
+///   `EfiRuntimeDriver` / `EfiRom` -- UEFI binaries. The firmware
+///   loader invokes the entry with
+///   `(EFI_HANDLE, EFI_SYSTEM_TABLE *)`. Same passthrough
+///   handling as `Native`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Subsystem {
     /// `IMAGE_SUBSYSTEM_WINDOWS_CUI` (3) -- console subsystem.
     Console,
     /// `IMAGE_SUBSYSTEM_WINDOWS_GUI` (2) -- windowed subsystem.
     Windows,
+    /// `IMAGE_SUBSYSTEM_NATIVE` (1) -- NT-native usermode programs
+    /// and kernel-mode drivers (.sys files). `#pragma
+    /// subsystem(driver)` is an alias for this variant.
+    Native,
+    /// `IMAGE_SUBSYSTEM_EFI_APPLICATION` (10).
+    EfiApplication,
+    /// `IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER` (11).
+    EfiBootServiceDriver,
+    /// `IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER` (12).
+    EfiRuntimeDriver,
+    /// `IMAGE_SUBSYSTEM_EFI_ROM` (13).
+    EfiRom,
 }
 
 impl Preprocessor {
@@ -392,6 +429,7 @@ impl Preprocessor {
             counter: Cell::new(0),
             warning_disabled: BTreeSet::new(),
             warning_stack: Vec::new(),
+            warn_disabled: BTreeSet::new(),
             intrinsics: alloc::collections::BTreeMap::new(),
         }
     }
@@ -1299,10 +1337,10 @@ impl Preprocessor {
         Ok(v.truthy())
     }
 
-    /// Recognise `dylib(...)` and `binding(...)`. Other pragmas
-    /// are accepted silently -- the c5 source already uses
-    /// `#pragma` markers for things the preprocessor doesn't care
-    /// about, and future tools may add their own.
+    /// Dispatches c5's pragma surface (`dylib`, `binding`,
+    /// `export`, `intrinsic`, `entrypoint`, `subsystem`). `pack`
+    /// and `once` are handled elsewhere and bypass this function.
+    /// Any other directive is accepted with a warning.
     fn parse_pragma(&mut self, args: &str, line_no: usize, filename: &str) -> Result<(), C5Error> {
         let args = args.trim();
         if let Some(inner) = args
@@ -1347,6 +1385,26 @@ impl Preprocessor {
         {
             return self.parse_pragma_warning(inner.trim(), line_no, filename);
         }
+        // Borland / Watcom `#pragma warn -<code>` form -- sqlite3
+        // uses `-rch` / `-aus` / etc. Parsed for visibility into
+        // `warn_disabled`; see `parse_pragma_warn` for the syntax.
+        if let Some(inner) = args.strip_prefix("warn ") {
+            return self.parse_pragma_warn(inner.trim(), line_no, filename);
+        }
+        if args.trim() == "warn" {
+            return self.parse_pragma_warn("", line_no, filename);
+        }
+        // `pack` and `once` are consumed elsewhere; everything
+        // else falls through to the unknown-pragma warning below.
+        let directive = args.split('(').next().unwrap_or(args).trim();
+        if matches!(directive, "pack" | "once") {
+            return Ok(());
+        }
+        self.warnings.push(super::error::fmt_compile_warn(
+            filename,
+            line_no,
+            &format!("unknown `#pragma {directive}` -- ignored"),
+        ));
         Ok(())
     }
 
@@ -1488,6 +1546,70 @@ impl Preprocessor {
         Ok(())
     }
 
+    /// Borland / Watcom `#pragma warn` -- mostly seen in sqlite3:
+    ///
+    /// ```text
+    /// #pragma warn -rch  /* disable "unreachable code" */
+    /// #pragma warn -aus  /* disable "assigned value never used" */
+    /// #pragma warn +ccc  /* re-enable "condition always true/false" */
+    /// #pragma warn .rch  /* restore "rch" to its default state */
+    /// ```
+    ///
+    /// Each token is `<sign><code>` where `<sign>` is one of
+    /// `-` (disable), `+` (enable), `.` (default). Multiple
+    /// tokens per directive are accepted.
+    ///
+    /// Like the MSVC variant, c5 doesn't filter on these codes;
+    /// the parse exists so the source's intent is preserved on
+    /// the `warn_disabled` set rather than dropped on the floor.
+    /// Empty payloads and bad sign prefixes surface as warnings.
+    fn parse_pragma_warn(
+        &mut self,
+        inner: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<(), C5Error> {
+        let inner = inner.trim();
+        if inner.is_empty() {
+            self.warnings.push(format!(
+                "{filename}:{line_no}: warning: \
+                 `#pragma warn` with no payload -- expected \
+                 `-<code>` / `+<code>` / `.<code>`"
+            ));
+            return Ok(());
+        }
+        for tok in inner.split_whitespace() {
+            let (sign, code) = match tok.chars().next() {
+                Some(c @ ('-' | '+' | '.')) => (c, &tok[1..]),
+                _ => {
+                    self.warnings.push(format!(
+                        "{filename}:{line_no}: warning: \
+                         `#pragma warn {tok}` -- expected a leading \
+                         `-` / `+` / `.`"
+                    ));
+                    continue;
+                }
+            };
+            if code.is_empty() {
+                self.warnings.push(format!(
+                    "{filename}:{line_no}: warning: \
+                     `#pragma warn {tok}` -- code follows the sign"
+                ));
+                continue;
+            }
+            match sign {
+                '-' => {
+                    self.warn_disabled.insert(code.to_string());
+                }
+                '+' | '.' => {
+                    self.warn_disabled.remove(code);
+                }
+                _ => unreachable!(),
+            }
+        }
+        Ok(())
+    }
+
     /// `#pragma entrypoint(<name>)` -- override the function the
     /// loader / `--jit` handoff jumps to. Default is `main`. The
     /// only constraint here is that `<name>` is a plain
@@ -1594,13 +1716,27 @@ impl Preprocessor {
         Ok(())
     }
 
-    /// `#pragma subsystem(<kind>)` -- pick the Windows PE
-    /// subsystem header value. Recognised today: `console`
-    /// (default; `IMAGE_SUBSYSTEM_WINDOWS_CUI`) and `windows`
-    /// (`IMAGE_SUBSYSTEM_WINDOWS_GUI`). Quietly accepted on
-    /// non-PE targets so the same source can compile for
-    /// multiple OSes; the PE writer is the only consumer that
-    /// looks at the value.
+    /// `#pragma subsystem(<kind>)` -- select the PE
+    /// optional-header `Subsystem` value. Accepted kinds:
+    ///
+    ///   * `console` / `cui` -- `IMAGE_SUBSYSTEM_WINDOWS_CUI` (3,
+    ///     default). Entry signature `main(argc, argv)`.
+    ///   * `windows` / `gui` -- `IMAGE_SUBSYSTEM_WINDOWS_GUI` (2).
+    ///     Entry signature `WinMain(hinst, prev, cmdline, show)`.
+    ///   * `native` / `nt` / `driver` -- `IMAGE_SUBSYSTEM_NATIVE`
+    ///     (1). NT-native usermode and kernel drivers share this
+    ///     subsystem byte; the entry signature is selected by the
+    ///     source, not the pragma.
+    ///   * `efi_application` -- `IMAGE_SUBSYSTEM_EFI_APPLICATION`
+    ///     (10).
+    ///   * `efi_boot_service_driver` --
+    ///     `IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER` (11).
+    ///   * `efi_runtime_driver` --
+    ///     `IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER` (12).
+    ///   * `efi_rom` -- `IMAGE_SUBSYSTEM_EFI_ROM` (13).
+    ///
+    /// Accepted on non-PE targets and ignored there; the PE
+    /// writer is the only consumer.
     fn parse_pragma_subsystem(
         &mut self,
         inner: &str,
@@ -1611,13 +1747,24 @@ impl Preprocessor {
         let parsed = match kind {
             "console" | "CUI" | "cui" => Subsystem::Console,
             "windows" | "GUI" | "gui" => Subsystem::Windows,
+            "native" | "NATIVE" | "nt" | "NT" | "driver" | "DRIVER" => Subsystem::Native,
+            "efi_application" | "efi-application" | "EFI_APPLICATION" => Subsystem::EfiApplication,
+            "efi_boot_service_driver" | "efi-boot-service-driver" | "EFI_BOOT_SERVICE_DRIVER" => {
+                Subsystem::EfiBootServiceDriver
+            }
+            "efi_runtime_driver" | "efi-runtime-driver" | "EFI_RUNTIME_DRIVER" => {
+                Subsystem::EfiRuntimeDriver
+            }
+            "efi_rom" | "efi-rom" | "EFI_ROM" => Subsystem::EfiRom,
             _ => {
                 return Err(C5Error::Compile(super::error::fmt_compile_err(
                     filename,
                     line_no,
                     &format!(
-                        "`#pragma subsystem({kind})` -- expected \
-                         `console` or `windows`"
+                        "`#pragma subsystem({kind})` -- expected one of \
+                         `console`, `windows`, `native` (alias `driver`), \
+                         `efi_application`, `efi_boot_service_driver`, \
+                         `efi_runtime_driver`, `efi_rom`"
                     ),
                 )));
             }
@@ -3588,6 +3735,59 @@ int x_2 = __COUNTER__;
             .unwrap();
         assert!(pp.warnings.is_empty(), "got warnings: {:?}", pp.warnings);
         assert!(pp.warning_disabled.is_empty());
+    }
+
+    #[test]
+    fn pragma_warn_disable_codes_recorded() {
+        // Borland / Watcom form sqlite3 sprinkles in: `-<code>`
+        // for each warning category it wants silenced. Multiple
+        // tokens per line are accepted.
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let _ = pp
+            .process(
+                "#pragma warn -rch\n\
+                 #pragma warn -aus -csu\n",
+            )
+            .unwrap();
+        assert!(pp.warnings.is_empty(), "got warnings: {:?}", pp.warnings);
+        let codes: Vec<&str> = pp.warn_disabled.iter().map(|s| s.as_str()).collect();
+        assert_eq!(codes, vec!["aus", "csu", "rch"]);
+    }
+
+    #[test]
+    fn pragma_warn_plus_and_dot_clear() {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let _ = pp
+            .process(
+                "#pragma warn -rch -aus -csu\n\
+                 #pragma warn +aus\n\
+                 #pragma warn .csu\n",
+            )
+            .unwrap();
+        let codes: Vec<&str> = pp.warn_disabled.iter().map(|s| s.as_str()).collect();
+        assert_eq!(codes, vec!["rch"]);
+    }
+
+    #[test]
+    fn pragma_warn_bad_sign_warns() {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let _ = pp.process("#pragma warn rch\n").unwrap();
+        assert!(
+            pp.warnings.iter().any(|w| w.contains("leading")),
+            "expected bad-sign warning: {:?}",
+            pp.warnings
+        );
+    }
+
+    #[test]
+    fn pragma_warn_empty_warns() {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let _ = pp.process("#pragma warn\n").unwrap();
+        assert!(
+            pp.warnings.iter().any(|w| w.contains("no payload")),
+            "expected empty-payload warning: {:?}",
+            pp.warnings
+        );
     }
 
     #[test]

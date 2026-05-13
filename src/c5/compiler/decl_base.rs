@@ -249,6 +249,12 @@ impl Compiler {
             if typedef_fpi > 0 {
                 self.pending.fn_ptr_indirection = Some(typedef_fpi);
             }
+            // Propagate the bare-void flag through the typedef so
+            // `(VOID)` in parameter position is recognised as the
+            // no-parameter idiom.
+            if self.symbols[self.lex.curr_id_idx].is_void_typedef {
+                self.pending.base_was_void = true;
+            }
             self.next()?;
             aliased
         } else if m.saw_int_mod {

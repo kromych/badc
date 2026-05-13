@@ -107,3 +107,41 @@ Linux X11, macOS Cocoa via raw `objc_msgSend`. Cross-builds
 to all five supported targets; CI runs the smoke build-only
 since runners have no display server. See
 [`gui_hello/README.md`](./gui_hello/README.md).
+
+## efi_hello/
+
+UEFI application that prints "Hello, EFI!" through
+`SystemTable->ConOut->OutputString`. Subsystem =
+`IMAGE_SUBSYSTEM_EFI_APPLICATION (10)`; the firmware loader
+invokes `efi_main(EFI_HANDLE, EFI_SYSTEM_TABLE *)` directly,
+with no CRT shim and no msvcrt import. Build-only in CI;
+running needs a UEFI shell (TianoCore's UEFI Shell, OVMF under
+qemu, or a real machine's firmware shell).
+
+## nt_hello/
+
+NT-native usermode skeleton. Subsystem =
+`IMAGE_SUBSYSTEM_NATIVE (1)`, entry = `NtProcessStartup`, calls
+`ntdll!NtTerminateProcess` to exit. Same image shape as
+`smss.exe` / `autochk.exe` / boot-time `chkdsk.exe`. Build-only
+in CI; runs on Windows via the `BootExecute` registry value or
+during smss/csrss bringup.
+
+## wdm_driver/
+
+Windows kernel-mode driver skeleton. Subsystem =
+`IMAGE_SUBSYSTEM_NATIVE (1)` via the `driver` pragma alias,
+entry = `DriverEntry(PDRIVER_OBJECT, PUNICODE_STRING)`,
+registers a `DRIVER_UNLOAD` callback so the service is
+stoppable via `sc stop`. Build-only; loading needs admin and
+test-signing on the target. Same compiler plumbing as
+`nt_hello`; differs only in entry signature.
+
+## nt_loader/
+
+Launches user-mode NT-native programs (e.g. `nt_hello`)
+through a transacted `SEC_IMAGE` section and waits up to two
+seconds on a named event the child signals. Builds in both
+UNICODE (`wmain`, `__wgetmainargs`) and ANSI (`main`,
+`__getmainargs`) modes from the same source; `#define
+USE_UNICODE` selects.

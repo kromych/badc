@@ -155,6 +155,7 @@ typedef struct __c5_FILE FILE;
 #ifdef _WIN32
 #pragma dylib(msvcrt, "msvcrt.dll")
 #pragma binding(msvcrt::printf,    "printf")
+#pragma binding(msvcrt::wprintf,   "wprintf")
 #pragma binding(msvcrt::fprintf,   "fprintf")
 #pragma binding(msvcrt::sprintf,   "sprintf")
 // MSVC renamed the safe forms; the original `snprintf` only landed
@@ -303,6 +304,7 @@ typedef struct __c5_FILE FILE;
 #endif
 
 int printf(char *fmt, ...);
+int wprintf(const unsigned short *fmt, ...);
 int fprintf(FILE *stream, char *fmt, ...);
 int sprintf(char *buf, char *fmt, ...);
 int snprintf(char *buf, int size, char *fmt, ...);

@@ -97,6 +97,53 @@
 #define _Pre_satisfies_(x)
 #define _Post_satisfies_(x)
 
+// `#pragma comment(lib, "...")` is an MSVC linker directive.
+// badc resolves imports through `#pragma binding(...)` (emitted
+// below) and the preprocessor emits an unknown-pragma warning
+// for the unrecognised spelling, so sources retaining it
+// compile cleanly.
+
+// ── kernel32 / msvcrt bindings ────────────────────────────────
+//
+// Sources that declare imports as `__declspec(dllimport) X
+// f(...)` rely on a separate link step to wire the IAT.
+// badc routes calls through `#pragma binding(<dylib>::<sym>,
+// "<real>")`; the bindings below cover the kernel32 / msvcrt
+// surface MSVC-shaped sources commonly reach for.
+
+#pragma dylib(kernel32, "kernel32.dll")
+#pragma dylib(msvcrt,   "msvcrt.dll")
+
+#pragma binding(kernel32::GetModuleHandleA,   "GetModuleHandleA")
+#pragma binding(kernel32::GetModuleHandleW,   "GetModuleHandleW")
+#pragma binding(kernel32::GetProcAddress,     "GetProcAddress")
+#pragma binding(kernel32::CloseHandle,        "CloseHandle")
+#pragma binding(kernel32::GetLastError,       "GetLastError")
+#pragma binding(kernel32::GetProcessId,       "GetProcessId")
+#pragma binding(kernel32::lstrcpyA,           "lstrcpyA")
+#pragma binding(kernel32::lstrcpyW,           "lstrcpyW")
+#pragma binding(kernel32::lstrlenA,           "lstrlenA")
+#pragma binding(kernel32::lstrlenW,           "lstrlenW")
+#pragma binding(kernel32::MultiByteToWideChar, "MultiByteToWideChar")
+#pragma binding(kernel32::WideCharToMultiByte, "WideCharToMultiByte")
+#pragma binding(kernel32::CreateFileA,        "CreateFileA")
+#pragma binding(kernel32::CreateFileW,        "CreateFileW")
+#pragma binding(kernel32::CreateFileTransactedA, "CreateFileTransactedA")
+#pragma binding(kernel32::CreateFileTransactedW, "CreateFileTransactedW")
+#pragma binding(kernel32::ExitProcess,        "ExitProcess")
+
+#pragma binding(msvcrt::printf,   "printf")
+#pragma binding(msvcrt::wprintf,  "wprintf")
+#pragma binding(msvcrt::puts,     "puts")
+#pragma binding(msvcrt::strlen,   "strlen")
+#pragma binding(msvcrt::wcslen,   "wcslen")
+#pragma binding(msvcrt::malloc,   "malloc")
+#pragma binding(msvcrt::free,     "free")
+#pragma binding(msvcrt::memcpy,   "memcpy")
+#pragma binding(msvcrt::memset,   "memset")
+#pragma binding(msvcrt::memcmp,   "memcmp")
+#pragma binding(msvcrt::exit,     "exit")
+
 // NOTE: `_CRT_INSECURE_DEPRECATE` / `_CRT_NONSTDC_DEPRECATE` /
 // `_CRT_OBSOLETE` / `_CRT_DEPRECATE_TEXT` are deliberately NOT
 // defined here. sqlite's `localtime_s` selector gates on

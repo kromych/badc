@@ -1448,6 +1448,21 @@ pub(super) fn lower(
     let data_imm_positions: &[usize] = &program.data_imm_positions;
     let code_imm_positions: &[usize] = &program.code_imm_positions;
 
+    // Parameter count of the entry function. The main-style
+    // prologue / epilogue uses this to spill host int-arg
+    // registers (rcx/rdx/r8/r9 on Win64; rdi/rsi/... on SysV)
+    // into the c5 frame and drop the matching slots on return.
+    // Returns 0 when `entry_pc` doesn't land on `Op::Ent` (DLL
+    // / exports-only builds); the loop's `op_pc == entry_pc`
+    // gate keeps the regular prologue in those cases.
+    let entry_n_params = if program.entry_pc < program.text.len()
+        && Op::from_i64(program.text[program.entry_pc]) == Some(Op::Ent)
+    {
+        param_count_for_func(&program.text, program.entry_pc)
+    } else {
+        0
+    };
+
     let mut in_main = false;
     let mut pc = 0usize;
     while pc < program.text.len() {
@@ -1499,6 +1514,7 @@ pub(super) fn lower(
             data_imm_positions,
             code_imm_positions,
             in_main,
+            entry_n_params,
             abi,
             &mut reg_state,
             op_pc,
@@ -1698,6 +1714,7 @@ fn lower_op(
     data_imm_positions: &[usize],
     code_imm_positions: &[usize],
     in_main: bool,
+    entry_n_params: usize,
     abi: Abi,
     reg_state: &mut RegState<'_>,
     op_pc: usize,
@@ -1707,6 +1724,10 @@ fn lower_op(
     tls_total_size: usize,
     fp_arg_masks: &[(usize, u32)],
 ) -> Result<(), C5Error> {
+    // `None` for non-entry functions; `Some(n)` for the entry,
+    // so the prologue / epilogue spill `n` int-arg registers
+    // and drop the matching slots.
+    let entry_n_params_opt = in_main.then_some(entry_n_params);
     match op {
         // ---- Function frame ----
         Op::Ent => {
@@ -1717,7 +1738,13 @@ fn lower_op(
             // after Ent by the compiler) restores it for
             // functions that use alloca.
             reg_state.current_alloca_top_offset = 0;
-            emit_prologue(code, locals, in_main, abi, reg_state.current_callee_depth);
+            emit_prologue(
+                code,
+                locals,
+                entry_n_params_opt,
+                abi,
+                reg_state.current_callee_depth,
+            );
             // BADC_SAVED_RBP_CHECK at function entry: trap if our own
             // saved-rbp slot (= what our caller pushed) is below the
             // "looks like a stack address" threshold. Caller's rbp
@@ -1741,9 +1768,10 @@ fn lower_op(
             }
             emit_epilogue(
                 code,
-                in_main,
+                entry_n_params_opt,
                 reg_state.current_callee_depth,
                 reg_state.current_locals_bytes,
+                abi,
             );
         }
         Op::Adj => {
@@ -3049,27 +3077,40 @@ fn emit_stack_probe(code: &mut Vec<u8>, frame_bytes: u32, page_size: u32) {
     }
 }
 
-fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool, abi: Abi, pool_depth: u8) {
-    if is_main {
-        // The entry stub passed argc / argv via the platform's first
-        // two integer arg registers: System V uses rdi/rsi, Win64
-        // uses rcx/rdx. c5's cdecl push order maps `int main(int
-        // argc, char **argv)` to argc at `rbp + 16` (val=2, first
-        // declared, on top) and argv at `rbp + 24` (val=3, second
-        // declared, deeper). We pop the ret addr into a temp, push
-        // argv first (deeper) then argc (top), then re-push the ret
-        // addr so the rest of the prologue lines up.
-        let (argc_reg, argv_reg) = if abi.shadow_space != 0 {
-            (Reg::RCX, Reg::RDX)
-        } else {
-            (Reg::RDI, Reg::RSI)
-        };
-        emit_pop_r(code, Reg::R10); // r10 = ret addr
-        emit_sub_rsp_imm32(code, 16);
-        emit_mov_mem_r(code, Reg::RSP, 0, argv_reg); // argv deeper
-        emit_sub_rsp_imm32(code, 16);
-        emit_mov_mem_r(code, Reg::RSP, 0, argc_reg); // argc on top
-        emit_push_r(code, Reg::R10); // restore ret addr above the slots
+fn emit_prologue(
+    code: &mut Vec<u8>,
+    locals: i64,
+    entry_n_params: Option<usize>,
+    abi: Abi,
+    pool_depth: u8,
+) {
+    if let Some(n_params) = entry_n_params {
+        // The entry stub passed the entry's arguments in the
+        // platform's int-arg registers (SysV: rdi/rsi/rdx/rcx/r8/r9;
+        // Win64: rcx/rdx/r8/r9). Spill them into c5's cdecl
+        // 16-byte slots so the i'th declared parameter (val = i + 2)
+        // lands at `[rbp + 16*(i+1)]`.
+        //
+        // Sequence: pop the return address into a scratch register,
+        // push each int-arg register into its own 16-byte slot in
+        // reverse order (arg n-1 deepest, arg 0 on top), then
+        // push the return address back above the slots.
+        //
+        // For `main(int argc, char **argv)` that places argc at
+        // `rbp + 16` and argv at `rbp + 32`; for
+        // `WinMain(HINSTANCE, HINSTANCE, LPSTR, int)` `nShowCmd`
+        // ends up at `rbp + 64`.
+        //
+        // Stack-passed entry parameters (e.g. a 7th declared param
+        // on SysV) are unsupported; every entry signature wired up
+        // here fits inside the register set.
+        let n_reg = n_params.min(abi.int_arg_regs.len());
+        emit_pop_r(code, Reg::R10);
+        for i in (0..n_reg).rev() {
+            emit_sub_rsp_imm32(code, 16);
+            emit_mov_mem_r(code, Reg::RSP, 0, Reg(abi.int_arg_regs[i]));
+        }
+        emit_push_r(code, Reg::R10);
     }
     emit_push_r(code, Reg::RBP);
     emit_mov_rr(code, Reg::RBP, Reg::RSP);
@@ -3115,13 +3156,21 @@ fn emit_prologue(code: &mut Vec<u8>, locals: i64, is_main: bool, abi: Abi, pool_
     emit_save_pool(code, pool_depth);
 }
 
-/// Mirror of [`emit_prologue`]. Move the VM accumulator into rax
-/// (return register), restore the pool, restore r13, tear down the
-/// frame, return. For main we also drop the two 16-byte argc / argv
-/// slots inserted by the prologue -- they sit between the saved rbp
-/// and the return address, so we pop the ret addr into a temp, drop
-/// the slots, then push it back before `ret` consumes it.
-fn emit_epilogue(code: &mut Vec<u8>, is_main: bool, pool_depth: u8, locals_bytes: u32) {
+/// Mirror of [`emit_prologue`]. Moves the VM accumulator into
+/// rax, restores the pool and r13, tears down the frame, and
+/// returns. For the entry function it also drops the 16-byte
+/// slots the prologue inserted (one per int-arg-register
+/// parameter) -- those sit between the saved rbp and the return
+/// address, so the epilogue pops the return address into a temp,
+/// drops the slots, then pushes the return address back before
+/// `ret`.
+fn emit_epilogue(
+    code: &mut Vec<u8>,
+    entry_n_params: Option<usize>,
+    pool_depth: u8,
+    locals_bytes: u32,
+    abi: Abi,
+) {
     // STACK-CHECK INSTRUMENT (#46 bisection). When BADC_RSP_CHECK is
     // set in the env, emit a runtime check at the start of every
     // epilogue: rsp must equal rbp minus the prologue's reservation.
@@ -3154,10 +3203,13 @@ fn emit_epilogue(code: &mut Vec<u8>, is_main: bool, pool_depth: u8, locals_bytes
     emit_mov_r_mem(code, Reg::R13, Reg::RSP, 0);
     emit_mov_rr(code, Reg::RSP, Reg::RBP);
     emit_pop_r(code, Reg::RBP);
-    if is_main {
-        emit_pop_r(code, Reg::R10); // ret addr
-        emit_add_rsp_imm32(code, 32); // drop argc + argv slots
-        emit_push_r(code, Reg::R10);
+    if let Some(n_params) = entry_n_params {
+        let n_reg = n_params.min(abi.int_arg_regs.len());
+        if n_reg > 0 {
+            emit_pop_r(code, Reg::R10);
+            emit_add_rsp_imm32(code, (16 * n_reg) as u32);
+            emit_push_r(code, Reg::R10);
+        }
     }
     emit_ret(code);
 }
@@ -3452,5 +3504,104 @@ mod tests {
         assert_eq!(&buf[17..22], &[0xb8, 0xe7, 0x00, 0x00, 0x00]);
         // syscall.
         assert_eq!(&buf[22..24], &[0x0f, 0x05]);
+    }
+
+    /// `#pragma entrypoint(WinMain)` on Windows x64 must spill
+    /// all four int-arg-register parameters (rcx/rdx/r8/r9) into
+    /// the c5 frame. Probes the prologue bytes for each
+    /// `mov [rsp], <reg>` form.
+    #[test]
+    fn winmain_4arg_prologue_spills_all_four_host_arg_regs() {
+        use crate::Compiler;
+        let src = "
+            #pragma subsystem(windows)
+            #pragma entrypoint(WinMain)
+            int WinMain(long hinst, long prev, long cmdline, int show) {
+                (void)hinst; (void)prev; (void)cmdline;
+                return show;
+            }
+        ";
+        let program = Compiler::new(src.to_string()).compile().expect("compile");
+        let imports = super::super::ResolvedImports::resolve(&program).expect("resolve");
+        let build = super::lower(
+            &program,
+            super::super::Target::WindowsX64,
+            super::super::NativeOptions::default(),
+            &imports,
+        )
+        .expect("lower");
+
+        let entry = build.entry_offset;
+        // 128-byte window covers 4 spills + frame setup + pool
+        // save without overlapping the function body.
+        let prologue_end = (entry + 128).min(build.text.len());
+        let prologue = &build.text[entry..prologue_end];
+
+        // `mov [rsp], <reg>` encodings (4 bytes each):
+        //   4C 89 0C 24 = r9   4C 89 04 24 = r8
+        //   48 89 14 24 = rdx  48 89 0C 24 = rcx
+        let contains = |needle: &[u8]| prologue.windows(needle.len()).any(|w| w == needle);
+        assert!(
+            contains(&[0x4C, 0x89, 0x0C, 0x24]),
+            "WinMain prologue must spill r9 (= nShowCmd) into the c5 frame; got {:02X?}",
+            prologue
+        );
+        assert!(
+            contains(&[0x4C, 0x89, 0x04, 0x24]),
+            "WinMain prologue must spill r8 (= lpCmdLine) into the c5 frame; got {:02X?}",
+            prologue
+        );
+        assert!(
+            contains(&[0x48, 0x89, 0x14, 0x24]),
+            "WinMain prologue must spill rdx (= hPrevInstance) into the c5 frame; got {:02X?}",
+            prologue
+        );
+        assert!(
+            contains(&[0x48, 0x89, 0x0C, 0x24]),
+            "WinMain prologue must spill rcx (= hInstance) into the c5 frame; got {:02X?}",
+            prologue
+        );
+    }
+
+    /// Two-arg `main(argc, argv)`: prologue spills rcx and rdx
+    /// on Win64, not r8 / r9.
+    #[test]
+    fn console_main_prologue_spills_only_argc_argv() {
+        use crate::Compiler;
+        let src = "int main(int argc, char **argv) { (void)argc; return (long)argv & 1; }";
+        let program = Compiler::new(src.to_string()).compile().expect("compile");
+        let imports = super::super::ResolvedImports::resolve(&program).expect("resolve");
+        let build = super::lower(
+            &program,
+            super::super::Target::WindowsX64,
+            super::super::NativeOptions::default(),
+            &imports,
+        )
+        .expect("lower");
+
+        let entry = build.entry_offset;
+        let prologue_end = (entry + 128).min(build.text.len());
+        let prologue = &build.text[entry..prologue_end];
+        let contains = |needle: &[u8]| prologue.windows(needle.len()).any(|w| w == needle);
+        assert!(
+            contains(&[0x48, 0x89, 0x0C, 0x24]),
+            "console main must spill rcx (= argc) into the c5 frame; got {:02X?}",
+            prologue
+        );
+        assert!(
+            contains(&[0x48, 0x89, 0x14, 0x24]),
+            "console main must spill rdx (= argv) into the c5 frame; got {:02X?}",
+            prologue
+        );
+        assert!(
+            !contains(&[0x4C, 0x89, 0x04, 0x24]),
+            "console main must NOT spill r8 (function has only 2 params); got {:02X?}",
+            prologue
+        );
+        assert!(
+            !contains(&[0x4C, 0x89, 0x0C, 0x24]),
+            "console main must NOT spill r9 (function has only 2 params); got {:02X?}",
+            prologue
+        );
     }
 }

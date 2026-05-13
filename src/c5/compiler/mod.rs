@@ -764,24 +764,46 @@ impl Compiler {
     /// only consults it for `--shared` builds. No signature
     /// validation: c5 trusts user `main` the same way and DllMain
     /// is just a different ABI.
-    fn resolve_entry_and_dllmain_pcs(&self) -> Result<(usize, Option<usize>), C5Error> {
-        let entry_name_str: &str = self.pp_entrypoint.as_deref().unwrap_or("main");
-        let entry_idx = lexer::find_symbol(&self.symbols, &self.symbol_index, entry_name_str);
+    fn resolve_entry_and_dllmain_pcs(
+        &self,
+    ) -> Result<(usize, Option<usize>, Option<String>), C5Error> {
+        let pragma_name = self.pp_entrypoint.as_deref();
+        let default_name: &str = pragma_name.unwrap_or("main");
+        let lookup_fun = |name: &str| {
+            lexer::find_symbol(&self.symbols, &self.symbol_index, name)
+                .filter(|&idx| self.symbols[idx].class == Token::Fun as i64)
+        };
+        // Without `#pragma entrypoint(<name>)`, accept any of
+        // `main` / `wmain` / `WinMain` / `wWinMain` in that
+        // priority order.
+        let resolved_idx = lookup_fun(default_name).or_else(|| {
+            if pragma_name.is_some() {
+                None
+            } else {
+                ["wmain", "WinMain", "wWinMain"]
+                    .iter()
+                    .find_map(|&n| lookup_fun(n).map(|idx| (n, idx)))
+                    .map(|(_, idx)| idx)
+            }
+        });
+
         let dllmain_idx = lexer::find_symbol(&self.symbols, &self.symbol_index, "DllMain");
         let has_user_dllmain =
             dllmain_idx.is_some_and(|idx| self.symbols[idx].class == Token::Fun as i64);
-        let entry_pc = match entry_idx {
-            Some(idx) if self.symbols[idx].class == Token::Fun as i64 => {
-                self.symbols[idx].val as usize
-            }
-            _ if !self.pending_exports.is_empty() || has_user_dllmain => 0,
-            _ => {
-                return Err(self.compile_err(format!("{entry_name_str}() not defined")));
+
+        let (entry_pc, entry_name) = match resolved_idx {
+            Some(idx) => (
+                self.symbols[idx].val as usize,
+                Some(self.symbols[idx].name.clone()),
+            ),
+            None if !self.pending_exports.is_empty() || has_user_dllmain => (0, None),
+            None => {
+                return Err(self.compile_err(format!("{default_name}() not defined")));
             }
         };
         let dllmain_pc =
             dllmain_idx.and_then(|idx| has_user_dllmain.then(|| self.symbols[idx].val as usize));
-        Ok((entry_pc, dllmain_pc))
+        Ok((entry_pc, dllmain_pc, entry_name))
     }
 
     /// Resolve `#pragma export(<name>)` directives against the
@@ -830,7 +852,7 @@ impl Compiler {
         // operands and `target_bc_pc` slots.
         self.emit_sys_trampolines();
         self.apply_fn_call_fixups()?;
-        let (entry_pc, dllmain_pc) = self.resolve_entry_and_dllmain_pcs()?;
+        let (entry_pc, dllmain_pc, resolved_entry_name) = self.resolve_entry_and_dllmain_pcs()?;
         let exports = self.resolve_exports()?;
         Ok(Program {
             text: self.text,
@@ -861,11 +883,11 @@ impl Compiler {
             // `DW_TAG_structure_type` DIEs. The VM /
             // JIT / interpreter ignore this field.
             structs: self.structs,
-            // Source-driven entry-name and
-            // Windows subsystem flags drained from the
-            // preprocessor. Both default to None (image writers
-            // pick `main` / `Console` respectively).
-            entry_name: self.pp_entrypoint,
+            // Resolved entry name. Includes the value from a
+            // source-level `#pragma entrypoint(<name>)` plus the
+            // CRT-recognised fallbacks (`wmain`, `WinMain`,
+            // `wWinMain`) chosen when `main` is absent.
+            entry_name: resolved_entry_name,
             subsystem: self.pp_subsystem,
         })
     }

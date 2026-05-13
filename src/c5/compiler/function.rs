@@ -76,6 +76,14 @@ impl Compiler {
             } else {
                 Ty::Int as i64
             };
+            // `(void)` via a typedef alias. The early check above
+            // matches only the bare `void` keyword; aliases reach
+            // here with `base_was_void` set by `parse_decl_base_type`.
+            let _ = base;
+            if self.pending.base_was_void && types.is_empty() && self.lex.tk == ')' {
+                self.pending.base_was_void = false;
+                break;
+            }
             // Consume the parameter declarator. C allows three
             // shapes here:
             //   * Named:  `int foo`        -- regular declarator.

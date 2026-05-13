@@ -259,15 +259,13 @@ pub struct Program {
     /// `DW_TAG_union_type` DIEs. The VM / JIT / interpreter
     /// ignore this field.
     pub structs: Vec<crate::c5::compiler::StructDef>,
-    /// Source-declared entry-point name. Set by
-    /// `#pragma entrypoint(<name>)`; `None` falls back to the
-    /// canonical `main`. The compile pass already used the
-    /// override to compute `entry_pc`; this field carries the
-    /// name forward so the PE writer (and any future image
-    /// writer that wants the symbol name in the export table)
-    /// can name the entry symbol correctly. The VM / JIT
-    /// resolve through `entry_pc` directly and ignore this
-    /// field.
+    /// Resolved entry-function name: `#pragma entrypoint(<name>)`
+    /// when present, otherwise whichever of `main` / `wmain` /
+    /// `WinMain` / `wWinMain` the source defines. `None` for
+    /// entry-less images (DLL with exports). The PE writer
+    /// reads this to pick the stub flavour (`wmain` swaps
+    /// `__getmainargs` for `__wgetmainargs`); other writers
+    /// ignore it.
     pub entry_name: Option<String>,
     /// Source-declared Windows subsystem. Set by
     /// `#pragma subsystem(<kind>)`; `None` falls back to the

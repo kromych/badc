@@ -351,6 +351,137 @@ impl Lexer {
     /// like other pragmas, because pack is source-position-
     /// dependent in a way the per-translation-unit `dylibs` /
     /// `bindings` accumulator can't capture).
+    /// Tokenise a C99 wide-string (`L"..."`) or wide-character
+    /// (`L'...'`) literal. Caller has consumed the `L`; `self.pos`
+    /// points at the opening quote. Characters are emitted into
+    /// `data` as 16-bit little-endian values (one slot per `char`)
+    /// to match the `WCHAR` / `unsigned short` representation in
+    /// the bundled `windows.h`. Adjacent `L"..."` literals are
+    /// absorbed into the current token so the parser's narrow
+    /// concatenation loop does not interleave a 1-byte gap, and a
+    /// 16-bit `0` terminator is appended at the end.
+    fn lex_wide_literal(&mut self, data: &mut Vec<u8>) -> Result<(), C5Error> {
+        let quote = self.src[self.pos];
+        self.pos += 1;
+        let start_data = data.len() as i64;
+        let mut char_value: i64 = 0;
+        loop {
+            while self.pos < self.src.len() && self.src[self.pos] != quote {
+                let mut val = self.src[self.pos] as i64;
+                self.pos += 1;
+                if val == b'\\' as i64 {
+                    if self.pos >= self.src.len() {
+                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                            &format!("{}: unterminated wide-literal escape", self.line),
+                        )));
+                    }
+                    let esc = self.src[self.pos];
+                    self.pos += 1;
+                    match esc {
+                        b'a' => val = 0x07,
+                        b'b' => val = 0x08,
+                        b't' => val = 0x09,
+                        b'n' => val = 0x0A,
+                        b'v' => val = 0x0B,
+                        b'f' => val = 0x0C,
+                        b'r' => val = 0x0D,
+                        b'\\' => val = b'\\' as i64,
+                        b'\'' => val = b'\'' as i64,
+                        b'"' => val = b'"' as i64,
+                        b'?' => val = b'?' as i64,
+                        b'x' => {
+                            let mut acc: i64 = 0;
+                            let mut count = 0;
+                            while self.pos < self.src.len() {
+                                let h = self.src[self.pos];
+                                let d = match h {
+                                    b'0'..=b'9' => (h - b'0') as i64,
+                                    b'a'..=b'f' => 10 + (h - b'a') as i64,
+                                    b'A'..=b'F' => 10 + (h - b'A') as i64,
+                                    _ => break,
+                                };
+                                acc = (acc << 4) | d;
+                                self.pos += 1;
+                                count += 1;
+                            }
+                            if count == 0 {
+                                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                                    &format!(
+                                        "{}: \\x in wide literal needs at least one hex digit",
+                                        self.line
+                                    ),
+                                )));
+                            }
+                            val = acc;
+                        }
+                        b'0'..=b'7' => {
+                            let mut acc: i64 = (esc - b'0') as i64;
+                            let mut count = 1;
+                            while count < 3 && self.pos < self.src.len() {
+                                let o = self.src[self.pos];
+                                if !(b'0'..=b'7').contains(&o) {
+                                    break;
+                                }
+                                acc = (acc << 3) | (o - b'0') as i64;
+                                self.pos += 1;
+                                count += 1;
+                            }
+                            val = acc;
+                        }
+                        _ => val = esc as i64,
+                    }
+                }
+                if quote == b'"' {
+                    data.push(val as u8);
+                    data.push((val >> 8) as u8);
+                } else {
+                    char_value = val;
+                }
+            }
+            if self.pos >= self.src.len() {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!("{}: unterminated wide literal", self.line),
+                )));
+            }
+            self.pos += 1; // consume closing quote
+            if quote != b'"' {
+                self.ival = char_value;
+                self.tk = Tok(Token::Num as i64);
+                return Ok(());
+            }
+            // Absorb adjacent `L"..."` literals so the 16-bit
+            // terminator below isn't split by the parser's narrow
+            // concatenation loop.
+            let saved_pos = self.pos;
+            let saved_line = self.line;
+            while self.pos < self.src.len() {
+                let ch = self.src[self.pos];
+                if ch == b' ' || ch == b'\t' || ch == b'\r' {
+                    self.pos += 1;
+                } else if ch == b'\n' {
+                    self.line += 1;
+                    self.pos += 1;
+                } else {
+                    break;
+                }
+            }
+            if self.pos + 1 < self.src.len()
+                && self.src[self.pos] == b'L'
+                && self.src[self.pos + 1] == b'"'
+            {
+                self.pos += 2;
+                continue;
+            }
+            self.pos = saved_pos;
+            self.line = saved_line;
+            data.push(0);
+            data.push(0);
+            self.ival = start_data;
+            self.tk = Tok('"' as i64);
+            return Ok(());
+        }
+    }
+
     fn apply_pack_directive(&mut self, dir: PackDirective) {
         match dir {
             PackDirective::Set(n) => {
@@ -591,6 +722,18 @@ impl Lexer {
                     }
                     hash = hash.wrapping_mul(147).wrapping_add(nc as i64);
                     self.pos += 1;
+                }
+                // C99 wide-literal prefix: a lone `L` directly
+                // followed by `"` or `'` is the start of a wide
+                // string / wide char literal rather than an
+                // identifier. `u` / `U` / `u8` follow the same
+                // pattern but aren't yet wired up.
+                if self.pos - start == 1
+                    && self.src[start] == b'L'
+                    && self.pos < self.src.len()
+                    && (self.src[self.pos] == b'"' || self.src[self.pos] == b'\'')
+                {
+                    return self.lex_wide_literal(data);
                 }
                 let name_slice = &self.src[start..self.pos];
                 self.curr_id_idx = resolve_symbol(symbols, index, name_slice, hash);
@@ -1408,5 +1551,39 @@ mod tests {
         // Matches GCC's implementation-defined behaviour for unknown
         // escapes: emit the literal char.
         assert_eq!(lex_string_literal(r#""\q""#), vec![b'q']);
+    }
+
+    #[test]
+    fn wide_string_literal_emits_two_bytes_per_char() {
+        // `L"AB"` -- two ASCII chars, encoded as 16-bit LE
+        // (0x41 0x00, 0x42 0x00) plus a 16-bit nul terminator.
+        assert_eq!(
+            lex_string_literal(r#"L"AB""#),
+            vec![0x41, 0x00, 0x42, 0x00, 0x00, 0x00]
+        );
+    }
+
+    #[test]
+    fn wide_string_literal_absorbs_adjacent_wide_chunks() {
+        // The lexer concatenates adjacent `L"..."` literals into
+        // one token so the 16-bit terminator lands at the end of
+        // the merged payload, not between chunks.
+        assert_eq!(
+            lex_string_literal(r#"L"A" L"B""#),
+            vec![0x41, 0x00, 0x42, 0x00, 0x00, 0x00]
+        );
+    }
+
+    #[test]
+    fn wide_string_literal_honours_escapes() {
+        // `\n` -> 0x0A, `\\` -> 0x5C, `\x41` -> 0x41.
+        assert_eq!(
+            lex_string_literal(r#"L"\n\\""#),
+            vec![0x0A, 0x00, 0x5C, 0x00, 0x00, 0x00]
+        );
+        assert_eq!(
+            lex_string_literal(r#"L"\x41""#),
+            vec![0x41, 0x00, 0x00, 0x00]
+        );
     }
 }

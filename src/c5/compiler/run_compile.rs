@@ -231,6 +231,10 @@ impl Compiler {
                     self.symbols[id_idx].class = Token::Typedef as i64;
                     self.symbols[id_idx].type_ = typedef_ty;
                     self.symbols[id_idx].val = 0;
+                    // Propagate the bare-void flag across the
+                    // alias so `typedef void VOID; int f(VOID);`
+                    // is recognised as the no-parameter idiom.
+                    self.symbols[id_idx].is_void_typedef = declarator_is_bare_void;
                     if typedef_fpi > 0 {
                         self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
                     }

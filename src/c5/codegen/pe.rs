@@ -315,6 +315,7 @@ const ARM64_PACKED_FUNCTION_MAX_BYTES: u32 = 2048 * 4;
 // ----------------------------------------------------------------
 
 const STUB_IMPORT_GETMAINARGS: (&str, &str) = ("__getmainargs", "msvcrt.dll");
+const STUB_IMPORT_WGETMAINARGS: (&str, &str) = ("__wgetmainargs", "msvcrt.dll");
 const STUB_IMPORT_EXIT: (&str, &str) = ("exit", "msvcrt.dll");
 const STUB_IMPORT_GETMODULEHANDLEA: (&str, &str) = ("GetModuleHandleA", "kernel32.dll");
 const STUB_IMPORT_GETCOMMANDLINEA: (&str, &str) = ("GetCommandLineA", "kernel32.dll");
@@ -373,7 +374,7 @@ pub(super) fn write(
     let stub = if user_dllmain || passthrough_entry {
         EntryStub::empty()
     } else {
-        build_entry_stub(machine, is_dll, subsystem)
+        build_entry_stub(machine, is_dll, subsystem, program.entry_name.as_deref())
     };
 
     // 2) Combined imports list. Index N becomes IAT slot N. The
@@ -2165,16 +2166,31 @@ impl EntryStub {
     }
 }
 
-fn build_entry_stub(machine: Machine, is_dll: bool, subsystem: u16) -> EntryStub {
+fn build_entry_stub(
+    machine: Machine,
+    is_dll: bool,
+    subsystem: u16,
+    entry_name: Option<&str>,
+) -> EntryStub {
     if is_dll {
         return build_dllmain_stub(machine);
     }
     let gui = subsystem == IMAGE_SUBSYSTEM_WINDOWS_GUI;
+    // `wmain` is the wide-char console entry; populate argv via
+    // `__wgetmainargs` so the entry sees `wchar_t **` instead of
+    // `char **`. Everything else stays on the historical narrow
+    // path.
+    let wide_console = !gui && entry_name == Some("wmain");
+    let getmainargs_import = if wide_console {
+        STUB_IMPORT_WGETMAINARGS
+    } else {
+        STUB_IMPORT_GETMAINARGS
+    };
     match machine {
         Machine::X86_64 if gui => build_x86_64_winmain_stub(),
-        Machine::X86_64 => build_x86_64_entry_stub(),
+        Machine::X86_64 => build_x86_64_entry_stub(getmainargs_import),
         Machine::Aarch64 if gui => build_aarch64_winmain_stub(),
-        Machine::Aarch64 => build_aarch64_entry_stub(),
+        Machine::Aarch64 => build_aarch64_entry_stub(getmainargs_import),
     }
 }
 
@@ -2212,7 +2228,7 @@ fn build_dllmain_stub(machine: Machine) -> EntryStub {
     }
 }
 
-fn build_x86_64_entry_stub() -> EntryStub {
+fn build_x86_64_entry_stub(getmainargs_import: (&'static str, &'static str)) -> EntryStub {
     // Stack frame for the call to `__getmainargs(int* pargc,
     // char*** pargv, char*** penvp, int doWildcardExpand,
     // _startupinfo* sinfo)`. Win64 passes the first four args in
@@ -2283,7 +2299,7 @@ fn build_x86_64_entry_stub() -> EntryStub {
     // `disp32 = target - (call + 6)`.
     EntryStub {
         bytes,
-        stub_imports: vec![STUB_IMPORT_GETMAINARGS, STUB_IMPORT_EXIT],
+        stub_imports: vec![getmainargs_import, STUB_IMPORT_EXIT],
         iat_patches: vec![
             StubIatPatch {
                 byte_offset: call_gma_off,
@@ -2387,7 +2403,7 @@ fn build_x86_64_winmain_stub() -> EntryStub {
 /// `__getmainargs` via IAT, hand argc/argv to `main`, then call
 /// `ExitProcess` via IAT. AAPCS64 calling convention -- args are
 /// in x0..x7, no shadow space.
-fn build_aarch64_entry_stub() -> EntryStub {
+fn build_aarch64_entry_stub(getmainargs_import: (&'static str, &'static str)) -> EntryStub {
     use super::aarch64 as a;
     let mut bytes: Vec<u8> = Vec::with_capacity(80);
 
@@ -2456,7 +2472,7 @@ fn build_aarch64_entry_stub() -> EntryStub {
 
     EntryStub {
         bytes,
-        stub_imports: vec![STUB_IMPORT_GETMAINARGS, STUB_IMPORT_EXIT],
+        stub_imports: vec![getmainargs_import, STUB_IMPORT_EXIT],
         iat_patches: vec![
             StubIatPatch {
                 byte_offset: iat_gma_off,
@@ -2922,9 +2938,40 @@ mod tests {
         assert_eq!(round_up(0x201, 0x200), 0x400);
     }
 
+    /// `entry_name = Some("wmain")` swaps the `__getmainargs`
+    /// IAT entry for `__wgetmainargs` so the wide-char console
+    /// entry receives `wchar_t **` argv. The stub byte layout
+    /// is otherwise identical to the narrow path.
+    #[test]
+    fn x86_64_wmain_entry_stub_uses_wgetmainargs() {
+        let s_main = build_entry_stub(
+            Machine::X86_64,
+            false,
+            IMAGE_SUBSYSTEM_WINDOWS_CUI,
+            Some("main"),
+        );
+        let s_wmain = build_entry_stub(
+            Machine::X86_64,
+            false,
+            IMAGE_SUBSYSTEM_WINDOWS_CUI,
+            Some("wmain"),
+        );
+        assert_eq!(s_main.bytes, s_wmain.bytes);
+        assert_eq!(s_main.iat_patches.len(), s_wmain.iat_patches.len());
+        assert_eq!(s_main.stub_imports[0], STUB_IMPORT_GETMAINARGS);
+        assert_eq!(s_wmain.stub_imports[0], STUB_IMPORT_WGETMAINARGS);
+        assert_eq!(s_main.stub_imports[1], STUB_IMPORT_EXIT);
+        assert_eq!(s_wmain.stub_imports[1], STUB_IMPORT_EXIT);
+    }
+
     #[test]
     fn x86_64_console_entry_stub_layout_matches_expected_size() {
-        let s = build_entry_stub(Machine::X86_64, false, IMAGE_SUBSYSTEM_WINDOWS_CUI);
+        let s = build_entry_stub(
+            Machine::X86_64,
+            false,
+            IMAGE_SUBSYSTEM_WINDOWS_CUI,
+            Some("main"),
+        );
         // 4 + 2 + 4 + 5 + 5 + 5 + 5 + 5 + 3 + 6 + 5 + 5 + 5 + 3 + 6 = 68 bytes.
         assert_eq!(s.bytes.len(), 68);
         assert_eq!(
@@ -2941,7 +2988,12 @@ mod tests {
 
     #[test]
     fn aarch64_console_entry_stub_is_one_word_per_instruction() {
-        let s = build_entry_stub(Machine::Aarch64, false, IMAGE_SUBSYSTEM_WINDOWS_CUI);
+        let s = build_entry_stub(
+            Machine::Aarch64,
+            false,
+            IMAGE_SUBSYSTEM_WINDOWS_CUI,
+            Some("main"),
+        );
         // 19 instructions * 4 bytes = 76 bytes.
         assert_eq!(s.bytes.len(), 76);
         assert_eq!(
@@ -2962,7 +3014,12 @@ mod tests {
 
     #[test]
     fn x86_64_gui_entry_stub_pulls_in_kernel32_imports() {
-        let s = build_entry_stub(Machine::X86_64, false, IMAGE_SUBSYSTEM_WINDOWS_GUI);
+        let s = build_entry_stub(
+            Machine::X86_64,
+            false,
+            IMAGE_SUBSYSTEM_WINDOWS_GUI,
+            Some("WinMain"),
+        );
         // Three IAT lookups + one direct call to WinMain. The GUI
         // stub does not call `__getmainargs`.
         assert_eq!(
@@ -3029,7 +3086,12 @@ mod tests {
 
     #[test]
     fn aarch64_gui_entry_stub_pulls_in_kernel32_imports() {
-        let s = build_entry_stub(Machine::Aarch64, false, IMAGE_SUBSYSTEM_WINDOWS_GUI);
+        let s = build_entry_stub(
+            Machine::Aarch64,
+            false,
+            IMAGE_SUBSYSTEM_WINDOWS_GUI,
+            Some("WinMain"),
+        );
         assert_eq!(
             s.stub_imports,
             vec![
@@ -3527,7 +3589,7 @@ mod tests {
     #[test]
     fn dllmain_stub_returns_true() {
         // DLL stubs don't depend on subsystem; pass console.
-        let s_x64 = build_entry_stub(Machine::X86_64, true, IMAGE_SUBSYSTEM_WINDOWS_CUI);
+        let s_x64 = build_entry_stub(Machine::X86_64, true, IMAGE_SUBSYSTEM_WINDOWS_CUI, None);
         assert_eq!(
             s_x64.bytes,
             vec![0xB8, 0x01, 0x00, 0x00, 0x00, 0xC3],
@@ -3537,7 +3599,7 @@ mod tests {
         assert!(s_x64.iat_patches.is_empty());
         assert!(s_x64.direct_call_main_offset.is_none());
 
-        let s_arm = build_entry_stub(Machine::Aarch64, true, IMAGE_SUBSYSTEM_WINDOWS_CUI);
+        let s_arm = build_entry_stub(Machine::Aarch64, true, IMAGE_SUBSYSTEM_WINDOWS_CUI, None);
         // 2 instructions x 4 bytes.
         assert_eq!(s_arm.bytes.len(), 8);
         // First word: movz w0, #1 => 0x52800020 (movz is the

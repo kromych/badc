@@ -113,4 +113,13 @@ pub(crate) struct Symbol {
     ///     <expr>;` is rejected as a constraint violation
     ///     (C99 6.8.6.4p1).
     pub returns_void: bool,
+
+    /// Set on a `Token::Typedef` symbol whose alias chain ends at
+    /// the bare `void` keyword (`typedef void VOID;`,
+    /// `typedef VOID FOO;`). Because c5 collapses `void` to the
+    /// same encoding as `unsigned char`, this flag is the only
+    /// way to tell that a typedef'd parameter base (e.g.
+    /// `int f(VOID);`) means "no parameters" rather than "one
+    /// `unsigned char` parameter".
+    pub is_void_typedef: bool,
 }

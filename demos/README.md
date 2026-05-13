@@ -136,3 +136,27 @@ registers a `DRIVER_UNLOAD` callback so the service is
 stoppable via `sc stop`. Build-only; loading needs admin and
 test-signing on the target. Same compiler plumbing as
 `nt_hello`; differs only in entry signature.
+
+## nt_loader/
+
+MSVC-style console program that resolves ntdll exports via
+`GetModuleHandleW` + `GetProcAddress`, creates a KTM
+transaction, opens a target image inside it, creates an
+`SEC_IMAGE` section, and spawns a process from the section
+via `NtCreateProcessEx`. Builds both as a wide-char
+(`wmain`) UNICODE binary and a narrow-char (`main`) ANSI
+binary from the same source -- `#define USE_UNICODE` selects
+which. The demo exercises the surface
+`<msvc_compat.h>` exposes:
+
+* MSVC-keyword no-ops (`__int64`, `__stdcall`, `__cdecl`,
+  `__declspec(dllimport)`).
+* Wide-string literals (`L"..."`) and the `_T(x) -> L##x`
+  preprocessor pattern.
+* `#pragma comment(lib, ...)` silently accepted.
+* `kernel32` / `msvcrt` bindings (GetModuleHandleW,
+  GetProcAddress, lstrcpyW/A, MultiByteToWideChar,
+  CreateFileTransactedW/A, wprintf / printf, wcslen, ...).
+* `wmain` recognised as a console-subsystem entry; the PE
+  writer wires it to `msvcrt!__wgetmainargs` instead of
+  `__getmainargs` so argv comes through as `wchar_t **`.

@@ -7,10 +7,24 @@ use badc::{
 };
 
 const USAGE: &str = "\
-usage: badc [options] <source.c> [program-args...]
+usage: badc [options] <input...> [program-args...]
        badc [options] -    [program-args...]   (read source from stdin)
        cat foo.c | badc [options]              (same -- stdin auto-detected
                                                 when not a terminal)
+
+Inputs are positional and may mix `.c` source files, c5 `.o`
+object files, and `.a` archives. A single `.c` (and no `.o` /
+`.a` inputs) follows the legacy single-TU path. Two or more
+inputs (or any `-l` / `-L` / `-c` flag) activate the
+cross-translation-unit linker:
+  * each `.c` compiles to a `LinkUnit`,
+  * each `.o` is mmap'd and parsed,
+  * each `.a` (positional or `-l<name>` resolved through
+    `-L<dir>` paths) supplies on-demand definitions for any
+    name a root unit references but doesn't define,
+  * `link_units` merges every text / data / TLS segment, fixes
+    cross-TU relocations, and produces a Program the existing
+    native writer turns into a final binary.
 
 Output mode -- pick at most one (defaults to \"compile to native binary\"):
   --interp                 Run under the bytecode VM (with optional safety net).
@@ -27,6 +41,24 @@ Output mode -- pick at most one (defaults to \"compile to native binary\"):
                            for extracting them into `./include` so
                            you can override one without rebuilding
                            badc.
+
+Multi-TU knobs:
+  -c, --compile-only       Emit a c5 `.o` (ELF-wrapped bytecode
+                           object file) per source instead of
+                           linking. Output goes to the `-o`
+                           path when a single source is named
+                           or to `<stem>.o` next to each input
+                           otherwise. The `.o` is target-
+                           independent: linking decides the
+                           final `--target=`.
+  -L <dir>                 Add an archive search path (used by
+                           `-l<name>`). Repeatable; paths are
+                           probed in declared order.
+  -l <name>                Pull `lib<name>.a` in as a static
+                           library. Each archive is parsed
+                           lazily -- members are pulled in only
+                           when they define a name that some
+                           root input references.
 
 Compile knobs:
   -O, --optimize           Enable the bytecode optimizer + native
@@ -114,6 +146,11 @@ enum Mode {
     /// `--dump-headers` -- print every bundled header (with
     /// file separators) to stdout and exit. Takes no source.
     DumpHeaders,
+    /// `--ar` -- bundle every input (compiled `.c` plus any
+    /// `.o`) into a single `.a` archive named by `-o`. No
+    /// linking; the archive is meant to be passed back as
+    /// input to a future link.
+    BuildArchive,
 }
 
 impl Mode {
@@ -126,6 +163,7 @@ impl Mode {
             Mode::DumpAsm => "--dump-asm",
             Mode::ListSymbols => "--list-symbols",
             Mode::DumpHeaders => "--dump-headers",
+            Mode::BuildArchive => "--ar",
         }
     }
 }
@@ -154,6 +192,16 @@ fn main() {
     // here" or "why didn't this header resolve" without poking the
     // amalgamated `__BADC_DUMP_PP` output.
     let mut show_includes = false;
+    // Multi-translation-unit linker plumbing. Bytecode `.o`
+    // inputs accumulate alongside C sources; `.a` archives
+    // arrive either positionally or through `-l<name>` after a
+    // search through `-L<dir>` paths. `compile_only` switches
+    // off the link step entirely and writes one `.o` per
+    // source so the bytes can be fed back through another
+    // badc invocation.
+    let mut compile_only = false;
+    let mut lib_names: Vec<String> = Vec::new();
+    let mut library_paths: Vec<String> = Vec::new();
 
     let mut iter = raw.into_iter();
     let prog0 = iter.next().unwrap_or_default();
@@ -182,6 +230,7 @@ fn main() {
             "--dump-asm" => claim(&mut mode, Mode::DumpAsm),
             "--jit" => claim(&mut mode, Mode::Jit),
             "--shared" => claim(&mut mode, Mode::SharedLibrary),
+            "--ar" | "--archive" => claim(&mut mode, Mode::BuildArchive),
             "-h" | "--help" => {
                 println!("{USAGE}");
                 return;
@@ -250,6 +299,32 @@ fn main() {
             // marking nesting depth. `--show-includes` is the
             // descriptive long form (also matches MSVC's spelling).
             "-H" | "--show-includes" => show_includes = true,
+            // `-c` / `--compile-only` -- emit a c5 object file
+            // (`.o`) per source instead of linking through to a
+            // native binary. The output goes to either the
+            // explicit -o path (when one source is named) or
+            // `<stem>.o` next to each input.
+            "-c" | "--compile-only" => compile_only = true,
+            "-l" => match iter.next() {
+                Some(name) => lib_names.push(name),
+                None => {
+                    eprintln!("badc: -l requires a library name");
+                    std::process::exit(1);
+                }
+            },
+            s if s.starts_with("-l") && s.len() > 2 => {
+                lib_names.push(s[2..].to_string());
+            }
+            "-L" => match iter.next() {
+                Some(path) => library_paths.push(path),
+                None => {
+                    eprintln!("badc: -L requires a directory");
+                    std::process::exit(1);
+                }
+            },
+            s if s.starts_with("-L") && s.len() > 2 => {
+                library_paths.push(s[2..].to_string());
+            }
             s if s.starts_with("--target=") => {
                 target_spec = Some(s["--target=".len()..].to_string());
             }
@@ -314,17 +389,88 @@ fn main() {
         return;
     }
 
-    // Source resolution. Three shapes are accepted:
-    //   * `badc <path>` -- positional source file. (Existing
-    //     default path -- unchanged.)
-    //   * `badc -`      -- read source from stdin explicitly.
-    //   * `cat foo.c | badc` -- no positional, stdin is a pipe;
-    //     auto-detect and read from stdin. Falls back to the
-    //     usage error when stdin is a terminal (= the user
-    //     forgot the source file).
-    // `path` keeps a synthetic value (`"-"` or `"<stdin>"`) when
-    // the source came from stdin so default_output_path /
-    // jit_run / VM `argv[0]` reads still get a sensible name.
+    // Classify every positional input by extension:
+    //   * `.c`      -- a C source file to compile.
+    //   * `.o`      -- a c5 object file, mmap'd straight in.
+    //   * `.a`      -- a static archive, parsed lazily for
+    //                  pull-in.
+    //   * `-`       -- stdin source (single occurrence allowed).
+    //   * (no ext)  -- treated as a C source path so a `badc foo`
+    //                  invocation with no extension still works.
+    //                  Same fallback the previous single-input
+    //                  mode used.
+    // Unrecognised entries past the first non-input become the
+    // program's argv for VM / JIT modes.
+    let mut sources: Vec<String> = Vec::new();
+    let mut objects: Vec<String> = Vec::new();
+    let mut archives: Vec<String> = Vec::new();
+    let mut stdin_was_input = false;
+    let mut prog_args_start: usize = args.len();
+    for (i, a) in args.iter().enumerate().skip(1) {
+        if a == "-" {
+            sources.push(a.clone());
+            stdin_was_input = true;
+            continue;
+        }
+        let ext = std::path::Path::new(a)
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("");
+        match ext {
+            "c" | "" => sources.push(a.clone()),
+            "o" => objects.push(a.clone()),
+            "a" => archives.push(a.clone()),
+            _ => {
+                // First unrecognised entry marks the boundary;
+                // everything from here on is the C program's
+                // argv (so `badc foo.c arg1 arg2` still works).
+                prog_args_start = i;
+                break;
+            }
+        }
+    }
+
+    // Resolve `-l<name>` against `-L<dir>` paths -- each lib
+    // becomes a positional archive in declared order.
+    for name in &lib_names {
+        let candidate = format!("lib{name}.a");
+        let mut found: Option<String> = None;
+        for dir in &library_paths {
+            let p = std::path::Path::new(dir).join(&candidate);
+            if p.exists() {
+                found = Some(p.to_string_lossy().into_owned());
+                break;
+            }
+        }
+        match found {
+            Some(p) => archives.push(p),
+            None => {
+                eprintln!(
+                    "badc: cannot find `lib{name}.a` on any -L search path \
+                     ({} probed)",
+                    library_paths.len()
+                );
+                std::process::exit(1);
+            }
+        }
+    }
+
+    // Fall back to stdin when no positional source was given
+    // and stdin isn't a terminal -- the legacy
+    // `cat foo.c | badc` pipeline.
+    if sources.is_empty()
+        && objects.is_empty()
+        && archives.is_empty()
+        && !std::io::stdin().is_terminal()
+    {
+        sources.push("-".to_string());
+        stdin_was_input = true;
+    }
+    if sources.is_empty() && objects.is_empty() {
+        eprintln!("{USAGE}");
+        std::process::exit(1);
+    }
+
     let read_stdin_source = || -> String {
         let mut s = String::new();
         if let Err(e) = std::io::stdin().read_to_string(&mut s) {
@@ -333,76 +479,232 @@ fn main() {
         }
         s
     };
-    let (path, contents): (String, String) = if args.len() >= 2 && args[1] != "-" {
-        let p = args[1].clone();
-        let mut file = match std::fs::File::open(&p) {
-            Ok(f) => f,
+
+    // Compile sources to LinkUnits.
+    let mut units: Vec<badc::LinkUnit> = Vec::with_capacity(sources.len() + objects.len());
+    let mut unit_source_paths: Vec<String> = Vec::with_capacity(sources.len());
+    let mut accumulated_warnings: Vec<String> = Vec::new();
+    let mut accumulated_include_trace: Vec<String> = Vec::new();
+    for src_path in &sources {
+        let (label, contents) = if src_path == "-" {
+            ("-".to_string(), read_stdin_source())
+        } else {
+            let mut file = match std::fs::File::open(src_path) {
+                Ok(f) => f,
+                Err(e) => {
+                    eprintln!("badc: cannot open `{src_path}`: {e}");
+                    std::process::exit(1);
+                }
+            };
+            let mut s = String::new();
+            if let Err(e) = Read::read_to_string(&mut file, &mut s) {
+                eprintln!("badc: error reading `{src_path}`: {e}");
+                std::process::exit(1);
+            }
+            (src_path.clone(), s)
+        };
+        let mut compiler = Compiler::with_options(
+            contents,
+            target,
+            badc::CompileOptions::default()
+                .with_defines(defines.clone())
+                .with_undefines(undefines.clone())
+                .with_include_paths(include_paths.clone())
+                .with_force_includes(force_includes.clone())
+                .with_source_label(label.clone())
+                .with_show_includes(show_includes),
+        );
+        if show_includes {
+            accumulated_include_trace.extend(compiler.take_include_trace());
+        }
+        let mut unit = match compiler.compile_to_link_unit() {
+            Ok(u) => u,
             Err(e) => {
-                eprintln!("badc: cannot open `{p}`: {e}");
+                eprint_diagnostic(e);
                 std::process::exit(1);
             }
         };
-        let mut s = String::new();
-        if let Err(e) = Read::read_to_string(&mut file, &mut s) {
-            eprintln!("badc: error reading `{p}`: {e}");
-            std::process::exit(1);
-        }
-        (p, s)
-    } else if (args.len() >= 2 && args[1] == "-") || !std::io::stdin().is_terminal() {
-        // Reserve `-` in argv[0]'s slot so VM-mode `argv[0]` gets
-        // something readable rather than the empty string.
-        ("-".to_string(), read_stdin_source())
-    } else {
-        eprintln!("{USAGE}");
-        std::process::exit(1);
-    };
+        unit.source_path = label.clone();
+        accumulated_warnings.extend(unit.warnings.iter().cloned());
+        unit_source_paths.push(label);
+        units.push(unit);
+    }
 
-    // Thread the user's `--target` choice plus any `-D` / `-U`
-    // predefines into the compiler. The bytecode itself is target-
-    // independent; only the resolved binding map and the
-    // preprocessor predefines vary.
-    let mut compiler = Compiler::with_options(
-        contents,
-        target,
-        badc::CompileOptions::default()
-            .with_defines(defines)
-            .with_undefines(undefines)
-            .with_include_paths(include_paths)
-            .with_force_includes(force_includes)
-            .with_source_label(path.clone())
-            .with_show_includes(show_includes),
-    );
-    // Pull the include trace out *before* the borrow `compile`
-    // takes -- the trace is fully populated by the preprocessor
-    // step that runs in the constructor, so we don't need the
-    // post-compile state for it.
-    let include_trace_lines = if show_includes {
-        compiler.take_include_trace()
-    } else {
-        Vec::new()
-    };
+    // Load each `.o` input through mmap-shaped read.
+    for obj_path in &objects {
+        let bytes = match std::fs::read(obj_path) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("badc: cannot read `{obj_path}`: {e}");
+                std::process::exit(1);
+            }
+        };
+        match badc::read_object(&bytes) {
+            Ok(u) => units.push(u),
+            Err(e) => {
+                eprintln!("badc: failed to parse `{obj_path}`: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+
     if show_includes {
-        // Match gcc's `-H`: dump immediately, before any compile
-        // diagnostic, so a missing header surfaces in the trace
-        // even if the parser then errors out on the empty body
-        // that resulted.
-        for line in &include_trace_lines {
+        for line in &accumulated_include_trace {
             eprintln!("{line}");
         }
     }
-    let mut program = match compiler.compile() {
+
+    // `-c` / `--compile-only`: write each compiled source's
+    // LinkUnit to disk as a `.o` and exit. Archives / `-l`
+    // inputs aren't meaningful here -- the caller is asking
+    // for the per-source object emit, not a link.
+    if compile_only {
+        if !archives.is_empty() || !lib_names.is_empty() {
+            eprintln!(
+                "badc: -c is incompatible with archive inputs / -l flags \
+                 (object emit doesn't involve linking)"
+            );
+            std::process::exit(1);
+        }
+        if units.is_empty() {
+            eprintln!("badc: -c requires at least one source input");
+            std::process::exit(1);
+        }
+        // Source-derived units come first in `units`; objects
+        // would only appear if the user mixed them in, which is
+        // already an error path above.
+        let source_count = sources.len();
+        if let Some(out) = output_path.as_deref() {
+            if source_count != 1 {
+                eprintln!(
+                    "badc: `-o <path>` together with `-c` requires exactly one \
+                     `.c` input ({} given)",
+                    source_count
+                );
+                std::process::exit(1);
+            }
+            let bytes = badc::write_object(&units[0]);
+            if let Err(e) = std::fs::write(out, &bytes) {
+                eprintln!("badc: failed to write {}: {e}", out.display());
+                std::process::exit(1);
+            }
+        } else {
+            for (i, unit) in units.iter().take(source_count).enumerate() {
+                let src = &unit_source_paths[i];
+                let p = std::path::Path::new(src);
+                let out = p.with_extension("o");
+                let bytes = badc::write_object(unit);
+                if let Err(e) = std::fs::write(&out, &bytes) {
+                    eprintln!("badc: failed to write {}: {e}", out.display());
+                    std::process::exit(1);
+                }
+            }
+        }
+        return;
+    }
+
+    // `--ar` mode: bundle every input unit (compiled `.c`
+    // plus any `.o`) into a single archive named by `-o`.
+    // Each member is the unit's `.o` bytes; the SysV symbol
+    // index lists every externally-linkable defined name so
+    // pull-in works without re-parsing each member.
+    if mode == Mode::BuildArchive {
+        if !archives.is_empty() || !lib_names.is_empty() {
+            eprintln!(
+                "badc: --ar can't be combined with archive inputs / -l flags \
+                 (the archive is an output, not a link target)"
+            );
+            std::process::exit(1);
+        }
+        let Some(out_path) = output_path.clone() else {
+            eprintln!("badc: --ar requires -o <archive>.a");
+            std::process::exit(1);
+        };
+        if units.is_empty() {
+            eprintln!("badc: --ar requires at least one input");
+            std::process::exit(1);
+        }
+        let mut members: Vec<badc::ArchiveMember> = Vec::with_capacity(units.len());
+        let mut sym_index: Vec<(usize, Vec<String>)> = Vec::with_capacity(units.len());
+        // Member name comes from the source / object path's
+        // file stem with a `.o` suffix -- mirrors how a regular
+        // `-c` invocation would name the per-source output.
+        let source_count = sources.len();
+        for (i, unit) in units.iter().enumerate() {
+            let base = if i < source_count {
+                std::path::Path::new(&unit_source_paths[i])
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| format!("tu{i}"))
+            } else {
+                std::path::Path::new(&objects[i - source_count])
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| format!("tu{i}"))
+            };
+            let bytes = badc::write_object(unit);
+            let defined: Vec<String> = unit
+                .symbols
+                .iter()
+                .filter(|s| {
+                    !matches!(s.kind, badc::SymbolKind::Undefined)
+                        && !matches!(s.linkage, badc::Linkage::Internal | badc::Linkage::None)
+                })
+                .map(|s| s.name.clone())
+                .collect();
+            members.push(badc::ArchiveMember {
+                name: format!("{base}.o"),
+                bytes,
+            });
+            sym_index.push((i, defined));
+        }
+        let blob = badc::write_archive(&members, &sym_index);
+        if let Err(e) = std::fs::write(&out_path, &blob) {
+            eprintln!("badc: failed to write {}: {e}", out_path.display());
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    // Parse positional + resolved archives. The order matches
+    // command-line order so a later `-l` overrides an earlier
+    // one's symbol resolution (gcc / ld convention).
+    let mut link_archives: Vec<badc::LinkArchive> = Vec::with_capacity(archives.len());
+    for a in &archives {
+        let bytes = match std::fs::read(a) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("badc: cannot read `{a}`: {e}");
+                std::process::exit(1);
+            }
+        };
+        match badc::LinkArchive::parse(a.clone(), &bytes) {
+            Ok(la) => link_archives.push(la),
+            Err(e) => {
+                eprintln!("badc: failed to parse `{a}`: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    // Drive the link step. `program` ends up the same shape
+    // a single-TU `Compiler::compile()` would have produced.
+    let path = unit_source_paths
+        .first()
+        .cloned()
+        .unwrap_or_else(|| objects.first().cloned().unwrap_or_else(|| "-".to_string()));
+    let mut program = match badc::link_units(units, &link_archives, badc::LinkOptions::default()) {
         Ok(p) => p,
         Err(e) => {
             eprint_diagnostic(e);
             std::process::exit(1);
         }
     };
-    // The compiler doesn't see the user's filesystem path; thread
-    // it onto the Program so the DWARF emitter (gh #44) can put a
-    // real `DW_AT_name` on the compilation-unit DIE. lldb / gdb
-    // then show `foo.c:N` instead of `<unknown>:N` next to every
-    // resolved address.
-    program.source_path = path.clone();
+    program.warnings.extend(accumulated_warnings);
+    let _ = stdin_was_input;
+    if program.source_path.is_empty() {
+        program.source_path = path.clone();
+    }
 
     let program = if optimize_flag && std::env::var("BADC_BC_OPT_OFF").is_err() {
         match optimize(program) {
@@ -454,7 +756,14 @@ fn main() {
             // The JIT loader picks the host arch on its own; --target is
             // ignored (the JIT can't cross-compile, and the lowering it
             // does is determined by the host).
-            let c_args: Vec<String> = args[1..].to_vec();
+            // argv[0] = first source path so the hosted program sees a
+            // sensible name; argv[1..] = whatever followed the inputs
+            // on the command line.
+            let mut c_args: Vec<String> = Vec::new();
+            c_args.push(path.clone());
+            if prog_args_start < args.len() {
+                c_args.extend(args[prog_args_start..].iter().cloned());
+            }
             match jit_run_with_options(&program, &c_args, native_opts) {
                 Ok(code) => std::process::exit(code),
                 Err(e) => {
@@ -467,7 +776,11 @@ fn main() {
             // Pass everything from argv[1] onward to the C program -- argv[0]
             // of the hosted program is the source file name, argv[1..] are
             // its own args.
-            let c_args: Vec<String> = args[1..].to_vec();
+            let mut c_args: Vec<String> = Vec::new();
+            c_args.push(path.clone());
+            if prog_args_start < args.len() {
+                c_args.extend(args[prog_args_start..].iter().cloned());
+            }
             let mut vm = Vm::new(program).with_args(c_args);
             if track_pointers {
                 vm = vm.with_pointer_tracking();
@@ -508,6 +821,7 @@ fn main() {
         }
         Mode::ListSymbols => unreachable!("handled above"),
         Mode::DumpHeaders => unreachable!("handled above"),
+        Mode::BuildArchive => unreachable!("handled above"),
     }
 }
 

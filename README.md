@@ -9,6 +9,7 @@
 `badc` (other name ideas were `betsy` and `badseed`) is a rather
 small compiler of a pretty large chunk of the C language as defined in
 the C99 standard. It used to be a bad one when the projects just started out and the name stuck.
+It supports separate translation units and has a small linker inside it as well.
 
 Its small footprint and embedded headers (which
 you can override) give a fun one-executable experience. Its codebase

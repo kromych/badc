@@ -384,6 +384,7 @@ typedef struct _OSVERSIONINFOW *POSVERSIONINFOW;
 // Section / process / event access masks.
 #define SECTION_ALL_ACCESS  0x000F001FUL
 #define PROCESS_ALL_ACCESS  0x001FFFFFUL
+#define THREAD_ALL_ACCESS   0x001FFFFFUL
 #define EVENT_ALL_ACCESS    0x001F0003UL
 #define EVENT_MODIFY_STATE  0x00000002UL
 #define SEC_IMAGE           0x01000000UL
@@ -666,6 +667,7 @@ int DeleteCriticalSection(char *cs);
 #pragma binding(kernel32::CancelIo,                "CancelIo")
 #pragma binding(kernel32::CreateEventA,            "CreateEventA")
 #pragma binding(kernel32::FlushViewOfFile,         "FlushViewOfFile")
+#pragma binding(kernel32::GetModuleHandleA,        "GetModuleHandleA")
 #pragma binding(kernel32::GetModuleHandleW,        "GetModuleHandleW")
 #pragma binding(kernel32::GetNativeSystemInfo,     "GetNativeSystemInfo")
 #pragma binding(kernel32::GetProcessHeap,          "GetProcessHeap")
@@ -855,6 +857,7 @@ int CancelIo(HANDLE hFile);
 HANDLE CreateEventA(LPSECURITY_ATTRIBUTES lpEventAttributes, int bManualReset,
                     int bInitialState, LPCSTR lpName);
 int    FlushViewOfFile(LPCVOID lpBaseAddress, SIZE_T dwNumberOfBytesToFlush);
+HANDLE GetModuleHandleA(LPCSTR lpModuleName);
 HANDLE GetModuleHandleW(LPCWSTR lpModuleName);
 int    GetNativeSystemInfo(LPSYSTEM_INFO lpSystemInfo);
 HANDLE GetProcessHeap(void);

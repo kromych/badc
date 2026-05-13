@@ -1,16 +1,24 @@
-// nt_loader -- launches a user-mode native NT program.
+// nt_loader -- launches a user-mode native NT program end-to-end.
 //
-// Builds an `SEC_IMAGE` section over a transacted file, spawns a
-// process from the section via `NtCreateProcessEx`, then waits up
-// to two seconds on a named event for the child to signal it.
+// Builds an `SEC_IMAGE` section over a transacted file (preferred)
+// or a plain CreateFile open (fallback when the host has no active
+// KTM resource manager). Spawns a process from the section via
+// `NtCreateProcessEx`, manually resolves the child's PE imports
+// against the parent's already-loaded DLLs and patches the child's
+// IAT in place, then starts the initial thread at the PE's entry
+// point via `NtCreateThreadEx`. The child runs, opens a named event
+// in `\BaseNamedObjects`, signals it, and self-terminates; the
+// loader observes the signal on its own wait.
+//
 // `#define USE_UNICODE` selects the wide-char (`wmain`) build;
 // commenting it out selects the narrow-char (`main`) build.
 //
-// The TxF / section / process steps are best-effort: hosted
-// Windows CI runners have no active KTM resource manager, so
-// `CreateFileTransacted` returns ERROR_RM_NOT_ACTIVE there. The
-// loader logs the failure and proceeds to the event wait so the
-// cross-process sync half of the demo still runs.
+// Manual IAT patching is what makes the demo work without running
+// `ntdll!LdrInitializeThunk` in the child. We control both halves
+// of the handshake, and `nt_hello` imports only from `ntdll`, which
+// is mapped at the same address in every process within a boot
+// session -- so resolved addresses in the parent are valid in the
+// child verbatim.
 
 #define USE_UNICODE
 
@@ -55,6 +63,11 @@ typedef NTSTATUS (*fpNtCreateSection)(
     PLARGE_INTEGER MaximumSize, ULONG SectionPageProtection,
     ULONG AllocationAttributes, HANDLE FileHandle);
 
+typedef NTSTATUS (*fpNtCreateEvent)(
+    PHANDLE EventHandle, ACCESS_MASK DesiredAccess,
+    POBJECT_ATTRIBUTES ObjectAttributes, ULONG EventType,
+    int InitialState);
+
 typedef NTSTATUS (*fpNtWaitForSingleObject)(
     HANDLE Handle, int Alertable, PLARGE_INTEGER Timeout);
 
@@ -63,13 +76,40 @@ typedef NTSTATUS (*fpNtClose)(HANDLE Handle);
 typedef void (*fpRtlInitUnicodeString)(
     PUNICODE_STRING DestinationString, PWSTR SourceString);
 
-// Shared event name. Uses a bare name so Win32's `CreateEventW`
-// places the object in the per-session BaseNamedObjects, which is
-// also where another Win32 caller's `OpenEventW(name)` looks. An
-// NT-path prefix like `\BaseNamedObjects\...` would land in the
-// real global BNO from an admin process and miss the per-session
-// view that the smoke harness uses.
-static WCHAR *g_event_name = L"BadcLoaderSync";
+typedef NTSTATUS (*fpNtQueryInformationProcess)(
+    HANDLE ProcessHandle, ULONG InformationClass,
+    PVOID Buffer, ULONG BufferLength, ULONG *ReturnLength);
+
+typedef NTSTATUS (*fpNtReadVirtualMemory)(
+    HANDLE ProcessHandle, PVOID BaseAddress, PVOID Buffer,
+    long long NumberOfBytesToRead, long long *NumberOfBytesRead);
+
+typedef NTSTATUS (*fpNtWriteVirtualMemory)(
+    HANDLE ProcessHandle, PVOID BaseAddress, PVOID Buffer,
+    long long NumberOfBytesToWrite, long long *NumberOfBytesWritten);
+
+typedef NTSTATUS (*fpNtCreateThreadEx)(
+    PHANDLE ThreadHandle, ACCESS_MASK DesiredAccess,
+    POBJECT_ATTRIBUTES ObjectAttributes, HANDLE ProcessHandle,
+    PVOID StartRoutine, PVOID Argument, ULONG CreateFlags,
+    long long ZeroBits, long long StackSize,
+    long long MaximumStackSize, PVOID AttributeList);
+
+// PROCESS_BASIC_INFORMATION (x64 / arm64 layout, 48 bytes).
+typedef struct {
+    NTSTATUS  ExitStatus;
+    PVOID     PebBaseAddress;
+    long long AffinityMask;
+    LONG      BasePriority;
+    HANDLE    UniqueProcessId;
+    HANDLE    InheritedFromUniqueProcessId;
+} PROCESS_BASIC_INFORMATION;
+
+// `nt_hello` opens this NT path via `NtOpenEvent`. Both the loader
+// and the child resolve through the same `\BaseNamedObjects`
+// namespace, so they meet without going through Win32's per-session
+// mapping.
+static WCHAR *g_event_name = L"\\BaseNamedObjects\\BadcLoaderSync";
 
 // `NtWaitForSingleObject` timeout, in 100-ns ticks. Negative
 // values are relative; -2*10^7 = 2 s.
@@ -96,6 +136,7 @@ int _tmain(int argc, TCHAR **argv)
 
     NTSTATUS  status;
     HANDLE    hProcess = NULL;
+    HANDLE    hThread = NULL;
     HANDLE    hTransaction = NULL;
     HANDLE    hFile = INVALID_HANDLE_VALUE;
     HANDLE    hSection = NULL;
@@ -119,30 +160,47 @@ int _tmain(int argc, TCHAR **argv)
         return 1;
     }
 
-    fpNtCreateProcessEx     _NtCreateProcessEx     = (fpNtCreateProcessEx)    GetProcAddress(hNtdll, "NtCreateProcessEx");
-    fpNtCreateTransaction   _NtCreateTransaction   = (fpNtCreateTransaction)  GetProcAddress(hNtdll, "NtCreateTransaction");
-    fpNtCreateSection       _NtCreateSection       = (fpNtCreateSection)      GetProcAddress(hNtdll, "NtCreateSection");
-    fpNtWaitForSingleObject _NtWaitForSingleObject = (fpNtWaitForSingleObject)GetProcAddress(hNtdll, "NtWaitForSingleObject");
-    fpNtClose               _NtClose               = (fpNtClose)              GetProcAddress(hNtdll, "NtClose");
-    fpRtlInitUnicodeString  _RtlInitUnicodeString  = (fpRtlInitUnicodeString) GetProcAddress(hNtdll, "RtlInitUnicodeString");
+    fpNtCreateProcessEx        _NtCreateProcessEx        = (fpNtCreateProcessEx)       GetProcAddress(hNtdll, "NtCreateProcessEx");
+    fpNtCreateTransaction      _NtCreateTransaction      = (fpNtCreateTransaction)     GetProcAddress(hNtdll, "NtCreateTransaction");
+    fpNtCreateSection          _NtCreateSection          = (fpNtCreateSection)         GetProcAddress(hNtdll, "NtCreateSection");
+    fpNtCreateEvent            _NtCreateEvent            = (fpNtCreateEvent)           GetProcAddress(hNtdll, "NtCreateEvent");
+    fpNtWaitForSingleObject    _NtWaitForSingleObject    = (fpNtWaitForSingleObject)   GetProcAddress(hNtdll, "NtWaitForSingleObject");
+    fpNtClose                  _NtClose                  = (fpNtClose)                 GetProcAddress(hNtdll, "NtClose");
+    fpRtlInitUnicodeString     _RtlInitUnicodeString     = (fpRtlInitUnicodeString)    GetProcAddress(hNtdll, "RtlInitUnicodeString");
+    fpNtQueryInformationProcess _NtQueryInformationProcess = (fpNtQueryInformationProcess) GetProcAddress(hNtdll, "NtQueryInformationProcess");
+    fpNtReadVirtualMemory      _NtReadVirtualMemory      = (fpNtReadVirtualMemory)     GetProcAddress(hNtdll, "NtReadVirtualMemory");
+    fpNtWriteVirtualMemory     _NtWriteVirtualMemory     = (fpNtWriteVirtualMemory)    GetProcAddress(hNtdll, "NtWriteVirtualMemory");
+    fpNtCreateThreadEx         _NtCreateThreadEx         = (fpNtCreateThreadEx)        GetProcAddress(hNtdll, "NtCreateThreadEx");
 
     if (!_NtCreateProcessEx || !_NtCreateTransaction || !_NtCreateSection
-        || !_NtWaitForSingleObject || !_NtClose || !_RtlInitUnicodeString)
+        || !_NtCreateEvent || !_NtWaitForSingleObject || !_NtClose
+        || !_RtlInitUnicodeString || !_NtQueryInformationProcess
+        || !_NtReadVirtualMemory || !_NtWriteVirtualMemory
+        || !_NtCreateThreadEx)
     {
         LOG_ERR(_T("Failed to resolve one or more ntdll exports"));
         return 1;
     }
     LOG_OK(_T("ntdll exports resolved"));
 
-    // Create the sync event via Win32 so its name resolves to the
-    // per-session BaseNamedObjects -- the same namespace another
-    // Win32 caller's `OpenEventW(bare_name)` sees. The companion
-    // `nt_hello` opens the event by NT path; once we have a way to
-    // start its thread, both halves can run end-to-end.
-    hEvent = CreateEventW(NULL, TRUE, FALSE, g_event_name);
-    if (!hEvent)
+    // Create the sync event under `\BaseNamedObjects`. The child
+    // opens the same NT path so both sides see the same kernel
+    // object regardless of the calling session.
+    UNICODE_STRING event_name_us;
+    _RtlInitUnicodeString(&event_name_us, g_event_name);
+    OBJECT_ATTRIBUTES event_objattr;
+    event_objattr.Length = sizeof(OBJECT_ATTRIBUTES);
+    event_objattr.Attributes = OBJ_CASE_INSENSITIVE;
+    event_objattr.ObjectName = &event_name_us;
+    event_objattr.RootDirectory = NULL;
+    event_objattr.SecurityDescriptor = NULL;
+    event_objattr.SecurityQualityOfService = NULL;
+    status = _NtCreateEvent(
+        &hEvent, EVENT_ALL_ACCESS, &event_objattr,
+        NOTIFICATION_EVENT, FALSE);
+    if (!NT_SUCCESS(status))
     {
-        LOG_ERR(_T("CreateEventW failed: 0x%08lX"), GetLastError());
+        LOG_ERR(_T("NtCreateEvent failed: 0x%08lX"), (ULONG)status);
         return 1;
     }
     LOG_OK(_T("Sync event created"));
@@ -291,17 +349,146 @@ int _tmain(int argc, TCHAR **argv)
     }
 
     DWORD pid = GetProcessId(hProcess);
-    if (pid == 0)
-    {
-        LOG_ERR(_T("GetProcessId failed: 0x%08lX"), GetLastError());
-        goto cleanup;
-    }
     LOG_OK(_T("Process created. PID = %lu"), (ULONG)pid);
 
-    // Wait for the child (or the smoke harness) to signal the
-    // event. A timeout is a hard failure -- the demo's stated
-    // contract is the handshake, so silence is a bug, not a soft
-    // miss.
+    // Query the child's PEB to find ImageBase. NtCreateProcessEx
+    // sets `PEB.ImageBaseAddress` at section attach (offset 0x10
+    // on x64/arm64). The user-mode loader normally fills in the
+    // rest later; we'll patch imports ourselves.
+    LOG(_T("Querying child PEB"));
+    PROCESS_BASIC_INFORMATION pbi;
+    ULONG pbi_ret = 0;
+    status = _NtQueryInformationProcess(hProcess, 0, &pbi, sizeof(pbi), &pbi_ret);
+    if (!NT_SUCCESS(status))
+    {
+        LOG_ERR(_T("NtQueryInformationProcess failed: 0x%08lX"), (ULONG)status);
+        goto cleanup;
+    }
+
+    char *child_base = NULL;
+    status = _NtReadVirtualMemory(hProcess, (char*)pbi.PebBaseAddress + 0x10, &child_base, 8, NULL);
+    if (!NT_SUCCESS(status) || !child_base)
+    {
+        LOG_ERR(_T("Reading child ImageBase failed: 0x%08lX"), (ULONG)status);
+        goto cleanup;
+    }
+    LOG_OK(_T("Child ImageBase = %p"), child_base);
+
+    // Read PE header offsets from the child's mapped image.
+    ULONG e_lfanew = 0;
+    _NtReadVirtualMemory(hProcess, child_base + 0x3C, &e_lfanew, 4, NULL);
+
+    // PE32+ optional header begins at `nt_off + 4 (NT sig) + 20
+    // (COFF header) = nt_off + 24`. `AddressOfEntryPoint` is at
+    // optional-header offset 16; `DataDirectory[1]` (Import) is at
+    // optional-header offset 112.
+    char *opt_hdr = child_base + e_lfanew + 24;
+    ULONG entry_rva = 0;
+    ULONG import_rva = 0;
+    _NtReadVirtualMemory(hProcess, opt_hdr + 16,  &entry_rva,  4, NULL);
+    _NtReadVirtualMemory(hProcess, opt_hdr + 112, &import_rva, 4, NULL);
+
+    if (import_rva == 0)
+    {
+        LOG_ERR(_T("Child has no import directory"));
+        goto cleanup;
+    }
+
+    // Walk import descriptors (20 bytes each) and patch the IAT.
+    LOG(_T("Patching child imports"));
+    char *desc = child_base + import_rva;
+    int total_imports = 0;
+    int total_dlls = 0;
+    while (1)
+    {
+        ULONG ilt_rva = 0, name_rva = 0, iat_rva = 0;
+        _NtReadVirtualMemory(hProcess, desc + 0,  &ilt_rva,  4, NULL);
+        _NtReadVirtualMemory(hProcess, desc + 12, &name_rva, 4, NULL);
+        _NtReadVirtualMemory(hProcess, desc + 16, &iat_rva,  4, NULL);
+        if (name_rva == 0) break;
+
+        char dll_name[64];
+        _NtReadVirtualMemory(hProcess, child_base + name_rva, dll_name, sizeof(dll_name), NULL);
+        dll_name[63] = 0;
+
+        HANDLE hDll = GetModuleHandleA(dll_name);
+        if (!hDll)
+        {
+            hDll = LoadLibraryA(dll_name);
+        }
+        if (!hDll)
+        {
+            LOG_ERR(_T("Could not load `%s` for child"), dll_name);
+            goto cleanup;
+        }
+
+        // Walk the lookup table (ILT preferred; falls back to IAT
+        // if the linker collapsed them). Each 8-byte entry is
+        // either a name-table RVA (low 31 bits) or, with the high
+        // bit set, an ordinal in the low 16 bits.
+        char *thunk_addr = child_base + (ilt_rva ? ilt_rva : iat_rva);
+        char *iat_addr   = child_base + iat_rva;
+        int n = 0;
+        while (1)
+        {
+            long long entry = 0;
+            _NtReadVirtualMemory(hProcess, thunk_addr, &entry, 8, NULL);
+            if (entry == 0) break;
+
+            void *fn_addr = NULL;
+            if (entry < 0)
+            {
+                // Bit 63 set: import by ordinal.
+                fn_addr = (void*)GetProcAddress(hDll, (char*)(entry & 0xFFFF));
+            }
+            else
+            {
+                // By name: 2-byte hint then null-terminated string.
+                char fn_name[128];
+                _NtReadVirtualMemory(hProcess,
+                    child_base + (entry & 0xFFFFFFFF) + 2,
+                    fn_name, sizeof(fn_name), NULL);
+                fn_name[127] = 0;
+                fn_addr = (void*)GetProcAddress(hDll, fn_name);
+            }
+            if (!fn_addr)
+            {
+                LOG_ERR(_T("Failed to resolve an import from `%s`"), dll_name);
+                goto cleanup;
+            }
+
+            _NtWriteVirtualMemory(hProcess, iat_addr, &fn_addr, 8, NULL);
+
+            thunk_addr += 8;
+            iat_addr += 8;
+            n++;
+        }
+        LOG_OK(_T("  %s: %d imports patched"), dll_name, n);
+        desc += 20;
+        total_dlls++;
+        total_imports += n;
+    }
+    LOG_OK(_T("Patched %d imports across %d DLLs"), total_imports, total_dlls);
+
+    // Compute entry point in the child's address space and start
+    // the initial thread there. The kernel's RtlUserThreadStart
+    // trampoline invokes StartRoutine(Argument); nt_hello's
+    // entry is `void NtProcessStartup(void *Peb)` and ignores
+    // its argument, so passing NULL is fine.
+    void *entry_point = child_base + entry_rva;
+    LOG(_T("Starting child thread at %p"), entry_point);
+    status = _NtCreateThreadEx(
+        &hThread, THREAD_ALL_ACCESS, NULL, hProcess,
+        entry_point, NULL, 0, 0, 0, 0, NULL);
+    if (!NT_SUCCESS(status))
+    {
+        LOG_ERR(_T("NtCreateThreadEx failed: 0x%08lX"), (ULONG)status);
+        goto cleanup;
+    }
+    LOG_OK(_T("Child thread started (handle: %p)"), hThread);
+
+    // Wait for the child to signal the event. A timeout is a hard
+    // failure -- the demo's contract is the handshake.
     LOG(_T("Waiting up to 2s for sync event"));
     LARGE_INTEGER timeout;
     timeout.QuadPart = EVENT_WAIT_TIMEOUT_TICKS;
@@ -323,10 +510,11 @@ int _tmain(int argc, TCHAR **argv)
 cleanup:
     LOG(_T("Cleaning up handles"));
     if (hFile != INVALID_HANDLE_VALUE) CloseHandle(hFile);
-    if (hTransaction)                            _NtClose(hTransaction);
-    if (hSection)                                _NtClose(hSection);
-    if (hProcess)                                _NtClose(hProcess);
-    if (hEvent)                                  _NtClose(hEvent);
+    if (hTransaction)                  _NtClose(hTransaction);
+    if (hSection)                      _NtClose(hSection);
+    if (hThread)                       _NtClose(hThread);
+    if (hProcess)                      _NtClose(hProcess);
+    if (hEvent)                        _NtClose(hEvent);
 
     LOG(_T("Done (exit code: %d)"), exitCode);
     return exitCode;

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Build the nt_loader / nt_hello demos with badc and, on Windows
-hosts, verify the cross-process event handshake end-to-end.
+hosts, verify the real cross-process event handshake end-to-end.
 
 Outside Windows: build-only smoke. Both PEs are produced via
 `badc --target=windows-{x64,arm64}` and the script asserts each
@@ -8,11 +8,12 @@ output exists and has the expected Subsystem byte
 (IMAGE_SUBSYSTEM_WINDOWS_CUI for nt_loader, IMAGE_SUBSYSTEM_NATIVE
 for nt_hello).
 
-On Windows: build the binaries for the host arch, start
-nt_loader in the background, open the shared
-`BadcLoaderSync` named event from Python via Win32, signal it,
-then wait for the loader to exit. Pass requires exit code 0
-and `Sync event received` in the captured stdout.
+On Windows: run `nt_loader <nt_hello.exe>` and capture stdout.
+The loader spawns nt_hello, patches its imports, starts its
+thread; nt_hello opens the shared event in `\\BaseNamedObjects`
+and signals it; the loader's wait observes the signal and exits
+0. The smoke just asserts exit code 0 and `Sync event received`
+in the captured output.
 
 Override the badc binary with `BADC=path/to/badc`.
 """
@@ -23,7 +24,6 @@ import os
 import platform
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 NT_DIR = Path(__file__).resolve().parent
@@ -93,62 +93,24 @@ def host_windows_target() -> str | None:
 
 
 def run_event_handshake(loader: Path, hello: Path) -> None:
-    """Start the loader, signal the named event from Python, then
-    check the exit code and the captured log."""
-    import ctypes  # win32-only import; deferred so non-Windows builds don't choke.
-
-    kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
-    kernel32.OpenEventW.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_wchar_p]
-    kernel32.OpenEventW.restype = ctypes.c_void_p
-    kernel32.SetEvent.argtypes = [ctypes.c_void_p]
-    kernel32.SetEvent.restype = ctypes.c_int
-    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
-    kernel32.CloseHandle.restype = ctypes.c_int
-
-    event_modify_state = 0x0002
-    event_name = "BadcLoaderSync"
-
-    proc = subprocess.Popen(
+    """Run the loader against nt_hello and verify the real
+    cross-process handshake completes: nt_hello signals the event
+    and the loader's wait observes it before timing out."""
+    proc = subprocess.run(
         [str(loader), str(hello)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        capture_output=True,
         text=True,
+        timeout=15,
     )
-
-    # Poll for the event to exist rather than racing a fixed sleep:
-    # the loader prints "Sync event created" after NtCreateEvent
-    # returns, so once OpenEventW succeeds we're past that point.
-    handle = None
-    for _ in range(50):  # up to ~1s
-        handle = kernel32.OpenEventW(event_modify_state, 0, event_name)
-        if handle:
-            break
-        time.sleep(0.02)
-
-    if not handle:
-        # Drain whatever the loader printed before giving up.
-        proc.terminate()
-        out, _ = proc.communicate(timeout=5)
-        print(
-            f"smoke: OpenEventW({event_name!r}) failed; loader output:\n{out}",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    if not kernel32.SetEvent(handle):
-        print(f"smoke: SetEvent failed (GetLastError={kernel32.GetLastError()})", file=sys.stderr)
-        kernel32.CloseHandle(handle)
-        proc.terminate()
-        sys.exit(1)
-    kernel32.CloseHandle(handle)
-
-    out, _ = proc.communicate(timeout=10)
-    print(out)
+    print(proc.stdout)
     if proc.returncode != 0:
         print(f"smoke: nt_loader exit={proc.returncode}", file=sys.stderr)
         sys.exit(1)
-    if "Sync event received" not in out:
-        print("smoke: loader log missing `Sync event received`", file=sys.stderr)
+    if "Sync event received" not in proc.stdout:
+        print(
+            "smoke: loader log missing `Sync event received` -- handshake never completed",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
 

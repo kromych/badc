@@ -491,9 +491,15 @@ int _tmain(int argc, TCHAR **argv)
     // its argument, so passing NULL is fine.
     void *entry_point = child_base + entry_rva;
     LOG(_T("Starting child thread at %p"), entry_point);
+    // THREAD_CREATE_FLAGS_INITIAL_THREAD = 0x80 marks this as the
+    // first thread of a new process so the kernel routes it
+    // through the same startup path NtCreateUserProcess uses.
+    // Without this, RtlUserThreadStart -> LdrInitializeThunk
+    // dereferences PEB.Ldr (which NtCreateProcessEx never fills
+    // in) and the child AVs before reaching our entry.
     status = _NtCreateThreadEx(
         &hThread, THREAD_ALL_ACCESS, NULL, hProcess,
-        entry_point, NULL, 0, 0, 0, 0, NULL);
+        entry_point, NULL, 0x80, 0, 0, 0, NULL);
     if (!NT_SUCCESS(status))
     {
         LOG_ERR(_T("NtCreateThreadEx failed: 0x%08lX"), (ULONG)status);

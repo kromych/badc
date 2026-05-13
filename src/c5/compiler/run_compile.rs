@@ -60,6 +60,8 @@ impl Compiler {
             // file-scope path interpret it identically.
             let mut thread_local = false;
             let mut is_typedef = false;
+            let mut static_seen = false;
+            let mut extern_seen = false;
             let mut m = decl_base::IntModifiers::default();
             loop {
                 if self.lex.tk == Token::ThreadLocal {
@@ -71,10 +73,13 @@ impl Compiler {
                 } else if self.try_consume_int_modifier(&mut m)? {
                     // Consumed an int modifier; the helper already
                     // advanced the lexer.
-                } else if self.lex.tk == Token::Extern
-                    || self.lex.tk == Token::Static
-                    || is_decl_modifier(self.lex.tk)
-                {
+                } else if self.lex.tk == Token::Static {
+                    static_seen = true;
+                    self.next()?;
+                } else if self.lex.tk == Token::Extern {
+                    extern_seen = true;
+                    self.next()?;
+                } else if is_decl_modifier(self.lex.tk) {
                     self.next()?;
                 } else {
                     break;
@@ -294,6 +299,24 @@ impl Compiler {
                 if self.lex.tk == '(' || preconsumed_params.is_some() {
                     if !was_sys {
                         self.symbols[id_idx].class = Token::Fun as i64;
+                        // C99 6.2.2 linkage: `static` at file scope
+                        // is internal; everything else (bare or
+                        // `extern`) is external. `static` on either
+                        // the prototype or the definition is
+                        // sticky -- once seen, the function is
+                        // internal-linkage from then on. Mirrors
+                        // gcc / clang: `static int f(); int f() {
+                        // ... }` keeps f static.
+                        if static_seen {
+                            self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::Internal;
+                        } else if self.symbols[id_idx].linkage
+                            != crate::c5::symbol::Linkage::Internal
+                        {
+                            self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::External;
+                        }
+                        if extern_seen {
+                            self.symbols[id_idx].is_extern_decl = true;
+                        }
                         // Leave `val` untouched. For a first-time
                         // prototype it stays at the Symbol default
                         // (0); calls before the body see that 0 as
@@ -498,6 +521,11 @@ impl Compiler {
                     // run_compile rewrites their operands to this
                     // post-body PC.
                     self.symbols[id_idx].val = ent_pc as i64;
+                    self.symbols[id_idx].defined_here = true;
+                    // A body trumps any earlier `extern T f();`
+                    // forward declaration -- the function is now
+                    // defined in this translation unit.
+                    self.symbols[id_idx].is_extern_decl = false;
                     self.emit_op(Op::Ent);
                     self.emit_val(0); // patched below
                     // Placeholder AllocaInit. If the function body
@@ -703,6 +731,32 @@ impl Compiler {
                     if !was_tentative_glo {
                         self.symbols[id_idx].is_thread_local = thread_local;
                     }
+                    // C99 6.2.2 linkage on file-scope variables.
+                    // `static` is sticky once seen on any earlier
+                    // declaration of the same name; absent that,
+                    // the default is external linkage. `extern T x;`
+                    // is captured separately so an extern-only
+                    // declaration can be distinguished from a
+                    // tentative definition at link-unit assembly.
+                    if static_seen {
+                        self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::Internal;
+                    } else if self.symbols[id_idx].linkage != crate::c5::symbol::Linkage::Internal {
+                        self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::External;
+                    }
+                    let was_extern_only_decl =
+                        extern_seen && self.lex.tk != Token::Assign && array_size != -1;
+                    if was_extern_only_decl {
+                        self.symbols[id_idx].is_extern_decl = true;
+                    } else {
+                        self.symbols[id_idx].is_extern_decl = false;
+                        // Default: a file-scope global declaration
+                        // that reaches this branch will allocate
+                        // storage (or merge with prior tentative
+                        // storage) below; the matching
+                        // `defined_here = true` is set at each
+                        // alloc site so the field tracks every
+                        // path that produces real bytes.
+                    }
                     // Deferred-size array global: the dimension
                     // comes from the initializer and storage is
                     // reserved after parsing it. Disallow on TLS
@@ -769,6 +823,7 @@ impl Compiler {
                                 self.data.push(0);
                             }
                             self.symbols[id_idx].has_initializer = true;
+                            self.symbols[id_idx].defined_here = true;
                             if self.lex.tk == ',' {
                                 self.next()?;
                             }
@@ -794,6 +849,7 @@ impl Compiler {
                         }
                         self.write_array_init_into_data(off, ty, &elements);
                         self.symbols[id_idx].has_initializer = true;
+                        self.symbols[id_idx].defined_here = true;
                     } else {
                         let bytes = if array_size > 0 {
                             let total = (self.size_of_type(ty) as i64) * array_size;
@@ -801,6 +857,20 @@ impl Compiler {
                         } else {
                             self.slots_of_type(ty) * 8
                         };
+                        // `extern T x;` -- C99 6.9.2 says no
+                        // tentative definition. We still
+                        // allocate storage here so the single-TU
+                        // `Compiler::compile()` path stays
+                        // permissive (writing through `a` in
+                        // `extern int a; a = 1;` works without a
+                        // link partner). At link-unit assembly
+                        // time, [`Compiler::compile_to_link_unit`]
+                        // re-classifies an `extern`-marked Glo
+                        // with no initializer as an undefined
+                        // external symbol, dropping the local
+                        // storage so the defining TU's bytes are
+                        // the ones in play.
+                        let _ = was_extern_only_decl;
                         // Tentative-merge: reuse the storage that was
                         // already allocated for the prior declaration.
                         // The initializer (if any) writes into the
@@ -828,6 +898,7 @@ impl Compiler {
                             }
                             off
                         };
+                        self.symbols[id_idx].defined_here = true;
 
                         // Optional initializer. For non-arrays, the
                         // restricted constant-expression path

@@ -11,14 +11,26 @@ path = "src/lib.rs"
 [[bin]]
 name = "badc"
 path = "src/main.rs"
+required-features = ["std", "linker"]
 
 [features]
-default = ["std"]
+default = ["std", "linker"]
 # Enables the StdHost adapter (file IO, env vars, real stdin/stdout) and
 # the std::error::Error impl on C5Error (the c5-dialect error type).
 # Without it, the library builds under no_std + alloc and callers must
 # supply their own Host impl.
 std = []
+# Enables the cross-translation-unit linker: writing and reading c5
+# bytecode object files (ELF wrapper, `.o`) and ar(5) archives
+# (`.a`), plus the `link_units` driver that merges objects into a
+# single Program ready for the existing native code emitters. Adds
+# storage-class linkage tracking (external vs internal) and the
+# corresponding undefined-symbol relocation machinery. Required by
+# the `badc` binary (`-c`, `.o` / `.a` inputs, `-L`, `-l`).
+# Library callers that don't need multi-TU artifacts can opt out
+# with `default-features = false, features = ["std"]` to keep the
+# library footprint slim.
+linker = []
 
 [dependencies]
 # `hashbrown` is the no_std-friendly hash table the preprocessor uses

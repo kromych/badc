@@ -262,6 +262,14 @@ pub(crate) struct Preprocessor {
     /// Stack of `warning_disabled` snapshots taken at each
     /// `#pragma warning(push)`; popped by `#pragma warning(pop)`.
     pub(crate) warning_stack: Vec<BTreeSet<u32>>,
+    /// Borland / Watcom-style `#pragma warn -<code>` requests.
+    /// Holds the 3-letter (or longer) code strings that the source
+    /// asked to disable -- the `-` form. Like `warning_disabled`
+    /// above, c5 doesn't currently filter against these but the
+    /// parse is real (so typos surface) and the recorded set is
+    /// visible for future per-code filtering. sqlite3 uses this
+    /// form for `-rch` / `-aus` / etc.
+    pub(crate) warn_disabled: BTreeSet<alloc::string::String>,
     /// `#pragma intrinsic("name")` declarations -- a map from
     /// callable identifier to the `Intrinsic` discriminant the
     /// frontend should stamp on the matching `Symbol::intrinsic`
@@ -421,6 +429,7 @@ impl Preprocessor {
             counter: Cell::new(0),
             warning_disabled: BTreeSet::new(),
             warning_stack: Vec::new(),
+            warn_disabled: BTreeSet::new(),
             intrinsics: alloc::collections::BTreeMap::new(),
         }
     }
@@ -1376,13 +1385,19 @@ impl Preprocessor {
         {
             return self.parse_pragma_warning(inner.trim(), line_no, filename);
         }
-        // `pack` and `once` are consumed elsewhere; `warn`
-        // (Borland / Watcom-style `#pragma warn -rch`) is accepted
-        // silently so sqlite3's sprinkled lines don't add per-build
-        // log noise. Everything else falls through to the
-        // unknown-pragma warning below.
+        // Borland / Watcom `#pragma warn -<code>` form -- sqlite3
+        // uses `-rch` / `-aus` / etc. Parsed for visibility into
+        // `warn_disabled`; see `parse_pragma_warn` for the syntax.
+        if let Some(inner) = args.strip_prefix("warn ") {
+            return self.parse_pragma_warn(inner.trim(), line_no, filename);
+        }
+        if args.trim() == "warn" {
+            return self.parse_pragma_warn("", line_no, filename);
+        }
+        // `pack` and `once` are consumed elsewhere; everything
+        // else falls through to the unknown-pragma warning below.
         let directive = args.split('(').next().unwrap_or(args).trim();
-        if matches!(directive, "pack" | "once" | "warn") {
+        if matches!(directive, "pack" | "once") {
             return Ok(());
         }
         self.warnings.push(super::error::fmt_compile_warn(
@@ -1526,6 +1541,70 @@ impl Preprocessor {
                          `error` / `once` / `suppress`"
                     ));
                 }
+            }
+        }
+        Ok(())
+    }
+
+    /// Borland / Watcom `#pragma warn` -- mostly seen in sqlite3:
+    ///
+    /// ```text
+    /// #pragma warn -rch  /* disable "unreachable code" */
+    /// #pragma warn -aus  /* disable "assigned value never used" */
+    /// #pragma warn +ccc  /* re-enable "condition always true/false" */
+    /// #pragma warn .rch  /* restore "rch" to its default state */
+    /// ```
+    ///
+    /// Each token is `<sign><code>` where `<sign>` is one of
+    /// `-` (disable), `+` (enable), `.` (default). Multiple
+    /// tokens per directive are accepted.
+    ///
+    /// Like the MSVC variant, c5 doesn't filter on these codes;
+    /// the parse exists so the source's intent is preserved on
+    /// the `warn_disabled` set rather than dropped on the floor.
+    /// Empty payloads and bad sign prefixes surface as warnings.
+    fn parse_pragma_warn(
+        &mut self,
+        inner: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<(), C5Error> {
+        let inner = inner.trim();
+        if inner.is_empty() {
+            self.warnings.push(format!(
+                "{filename}:{line_no}: warning: \
+                 `#pragma warn` with no payload -- expected \
+                 `-<code>` / `+<code>` / `.<code>`"
+            ));
+            return Ok(());
+        }
+        for tok in inner.split_whitespace() {
+            let (sign, code) = match tok.chars().next() {
+                Some(c @ ('-' | '+' | '.')) => (c, &tok[1..]),
+                _ => {
+                    self.warnings.push(format!(
+                        "{filename}:{line_no}: warning: \
+                         `#pragma warn {tok}` -- expected a leading \
+                         `-` / `+` / `.`"
+                    ));
+                    continue;
+                }
+            };
+            if code.is_empty() {
+                self.warnings.push(format!(
+                    "{filename}:{line_no}: warning: \
+                     `#pragma warn {tok}` -- code follows the sign"
+                ));
+                continue;
+            }
+            match sign {
+                '-' => {
+                    self.warn_disabled.insert(code.to_string());
+                }
+                '+' | '.' => {
+                    self.warn_disabled.remove(code);
+                }
+                _ => unreachable!(),
             }
         }
         Ok(())
@@ -3656,6 +3735,59 @@ int x_2 = __COUNTER__;
             .unwrap();
         assert!(pp.warnings.is_empty(), "got warnings: {:?}", pp.warnings);
         assert!(pp.warning_disabled.is_empty());
+    }
+
+    #[test]
+    fn pragma_warn_disable_codes_recorded() {
+        // Borland / Watcom form sqlite3 sprinkles in: `-<code>`
+        // for each warning category it wants silenced. Multiple
+        // tokens per line are accepted.
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let _ = pp
+            .process(
+                "#pragma warn -rch\n\
+                 #pragma warn -aus -csu\n",
+            )
+            .unwrap();
+        assert!(pp.warnings.is_empty(), "got warnings: {:?}", pp.warnings);
+        let codes: Vec<&str> = pp.warn_disabled.iter().map(|s| s.as_str()).collect();
+        assert_eq!(codes, vec!["aus", "csu", "rch"]);
+    }
+
+    #[test]
+    fn pragma_warn_plus_and_dot_clear() {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let _ = pp
+            .process(
+                "#pragma warn -rch -aus -csu\n\
+                 #pragma warn +aus\n\
+                 #pragma warn .csu\n",
+            )
+            .unwrap();
+        let codes: Vec<&str> = pp.warn_disabled.iter().map(|s| s.as_str()).collect();
+        assert_eq!(codes, vec!["rch"]);
+    }
+
+    #[test]
+    fn pragma_warn_bad_sign_warns() {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let _ = pp.process("#pragma warn rch\n").unwrap();
+        assert!(
+            pp.warnings.iter().any(|w| w.contains("leading")),
+            "expected bad-sign warning: {:?}",
+            pp.warnings
+        );
+    }
+
+    #[test]
+    fn pragma_warn_empty_warns() {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let _ = pp.process("#pragma warn\n").unwrap();
+        assert!(
+            pp.warnings.iter().any(|w| w.contains("no payload")),
+            "expected empty-payload warning: {:?}",
+            pp.warnings
+        );
     }
 
     #[test]

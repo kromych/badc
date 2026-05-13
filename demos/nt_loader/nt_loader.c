@@ -419,7 +419,7 @@ int _tmain(int argc, TCHAR **argv)
         }
         if (!hDll)
         {
-            LOG_ERR(_T("Could not load `%s` for child"), dll_name);
+            LOG_ERR(_T("Could not load `%hs` for child"), dll_name);
             goto cleanup;
         }
 
@@ -454,7 +454,7 @@ int _tmain(int argc, TCHAR **argv)
             }
             if (!fn_addr)
             {
-                LOG_ERR(_T("Failed to resolve an import from `%s`"), dll_name);
+                LOG_ERR(_T("Failed to resolve an import from `%hs`"), dll_name);
                 goto cleanup;
             }
 
@@ -464,7 +464,7 @@ int _tmain(int argc, TCHAR **argv)
             iat_addr += 8;
             n++;
         }
-        LOG_OK(_T("  %s: %d imports patched"), dll_name, n);
+        LOG_OK(_T("  %hs: %d imports patched"), dll_name, n);
         desc += 20;
         total_dlls++;
         total_imports += n;
@@ -506,6 +506,23 @@ int _tmain(int argc, TCHAR **argv)
     else
     {
         LOG_ERR(_T("NtWaitForSingleObject failed: 0x%08lX"), (ULONG)status);
+    }
+
+    // Diagnostic: report what state the child ended up in. If the
+    // process has terminated with status 0, nt_hello reached
+    // NtTerminateProcess (with or without successfully signalling
+    // -- nt_hello swallows NtOpenEvent failures and terminates
+    // either way). Non-zero exit codes from a NATIVE crash look
+    // like 0xC0000005 etc. STATUS_PENDING means the thread is
+    // still alive, probably blocked.
+    LARGE_INTEGER short_wait;
+    short_wait.QuadPart = (long long)-5000000;  // 0.5s
+    _NtWaitForSingleObject(hProcess, FALSE, &short_wait);
+    PROCESS_BASIC_INFORMATION pbi2;
+    ULONG pbi2_ret = 0;
+    if (NT_SUCCESS(_NtQueryInformationProcess(hProcess, 0, &pbi2, sizeof(pbi2), &pbi2_ret)))
+    {
+        LOG(_T("Child process ExitStatus = 0x%08lX"), (ULONG)pbi2.ExitStatus);
     }
 
 cleanup:

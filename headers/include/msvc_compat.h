@@ -97,24 +97,19 @@
 #define _Pre_satisfies_(x)
 #define _Post_satisfies_(x)
 
-// MSVC `#pragma comment(lib, "...")` -- linker directive that the
-// C front-end is supposed to forward to link.exe. badc resolves
-// imports via `#pragma binding(...)` instead, so the directive
-// has no equivalent and the matching binding pragmas are emitted
-// from the headers below. Accept the spelling by mapping it to
-// `__pragma()` which already no-ops; c5 itself also tolerates
-// unknown `#pragma` directives so sources that retain the
-// `#pragma comment(...)` lines compile cleanly.
+// `#pragma comment(lib, "...")` is an MSVC linker directive.
+// badc resolves imports through `#pragma binding(...)` (emitted
+// below) and the preprocessor emits an unknown-pragma warning
+// for the unrecognised spelling, so sources retaining it
+// compile cleanly.
 
 // ── kernel32 / msvcrt bindings ────────────────────────────────
 //
-// MSVC sources name their imports with `__declspec(dllimport)`
-// + the function prototype and rely on link.exe to wire the IAT
-// at link time. badc has no link step; it learns about each
-// import from `#pragma binding(<dylib>::<sym>, "<real>")`. The
-// bindings below cover the kernel32 / msvcrt surface that
-// MSVC-shaped Windows sources usually expect to be available
-// without a separate `#include <windows.h>`.
+// Sources that declare imports as `__declspec(dllimport) X
+// f(...)` rely on a separate link step to wire the IAT.
+// badc routes calls through `#pragma binding(<dylib>::<sym>,
+// "<real>")`; the bindings below cover the kernel32 / msvcrt
+// surface MSVC-shaped sources commonly reach for.
 
 #pragma dylib(kernel32, "kernel32.dll")
 #pragma dylib(msvcrt,   "msvcrt.dll")

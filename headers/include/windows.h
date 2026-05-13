@@ -17,11 +17,8 @@
 
 #ifdef _WIN32
 
-// `NULL` and `size_t` come from `<stddef.h>` per C99 7.17. Real
-// Windows SDK exposes them transitively from `<windows.h>` too;
-// include `<stddef.h>` here so sources that only pull in
-// `<windows.h>` (and the dependents under `<winternl.h>`) get
-// the same surface.
+// `NULL` and `size_t` (C99 7.17) -- included so consumers
+// that only pull in `<windows.h>` get them too.
 #include <stddef.h>
 
 // Win32 API decoration macros. The runtime calls go through the
@@ -380,8 +377,7 @@ typedef struct _OSVERSIONINFOW *POSVERSIONINFOW;
 #define PAGE_EXECUTE_READ   0x20
 #define PAGE_EXECUTE_READWRITE 0x40
 
-// Section / process / event access masks (subset of the
-// `<winnt.h>` constants the `nt_loader` demo references).
+// Section / process / event access masks.
 #define SECTION_ALL_ACCESS  0x000F001FUL
 #define PROCESS_ALL_ACCESS  0x001FFFFFUL
 #define EVENT_ALL_ACCESS    0x001F0003UL

@@ -1,18 +1,13 @@
 /* Minimal NT-native usermode program.
  *
- * NT-native binaries are EXE-form PEs with Subsystem set to
- * `IMAGE_SUBSYSTEM_NATIVE (1)`. The loader path is
- * `ntdll!LdrpInitializeProcess`, not the kernel32-backed Win32
- * path: no kernel32, no msvcrt, no console attachment, and no
- * access to most of the Win32 API. ntdll's system-call layer is
- * what's reliably available before the CRT.
+ * EXE-form PE with Subsystem = `IMAGE_SUBSYSTEM_NATIVE (1)`;
+ * loader path is `ntdll!LdrpInitializeProcess`. No kernel32,
+ * no msvcrt, no console.
  *
- * The demo opens the cross-process event the bundled `nt_loader`
- * demo creates (`\BaseNamedObjects\BadcLoaderSync`), signals it,
- * and exits with status 0. Running stand-alone (no matching
- * loader) is harmless: `NtOpenEvent` returns
- * `STATUS_OBJECT_NAME_NOT_FOUND` and the process terminates
- * cleanly. */
+ * Opens the cross-process event `nt_loader` creates
+ * (`\BaseNamedObjects\BadcLoaderSync`), signals it, and exits.
+ * Stand-alone: `NtOpenEvent` returns
+ * `STATUS_OBJECT_NAME_NOT_FOUND` and the process exits cleanly. */
 
 #pragma subsystem(native)
 #pragma entrypoint(NtProcessStartup)
@@ -33,16 +28,13 @@ NTSTATUS NtClose(HANDLE Handle);
 
 static WCHAR *g_event_name = L"\\BaseNamedObjects\\BadcLoaderSync";
 
-/* NT-native usermode entry: the loader hands `PPEB` in `rcx`
- * (Win64) / `x0` (AAPCS64). Declaring the parameter pins c5's
- * main-prologue spill so the body could read
- * `Peb->ProcessParameters` if the demo grew. */
+/* The NT loader calls `NtProcessStartup` with `PPEB` in `rcx`
+ * (Win64) / `x0` (AAPCS64). */
 void NtProcessStartup(void *Peb) {
     (void)Peb;
 
-    /* Build the OBJECT_ATTRIBUTES + UNICODE_STRING in place. No
-     * `RtlInitUnicodeString` dependency: counting the chars
-     * inline keeps the import set to four ntdll exports. */
+    /* OBJECT_ATTRIBUTES + UNICODE_STRING are built inline to
+     * avoid an `RtlInitUnicodeString` import. */
     UNICODE_STRING name;
     int n = 0;
     while (g_event_name[n] != 0) {

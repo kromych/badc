@@ -303,15 +303,10 @@ const ARM64_PACKED_FUNCTION_MAX_BYTES: u32 = 2048 * 4;
 //   kernel32!GetCommandLineA  -- supplies `LPSTR lpCmdLine`.
 //   msvcrt!exit               -- as above.
 //
-// `hPrevInstance` is hardcoded `NULL`. `nShowCmd` is hardcoded
-// `SW_SHOWNORMAL` (1). The Win32 CRT would read
-// `STARTUPINFOA::wShowWindow` via `GetStartupInfoA` and use
-// `SW_SHOWDEFAULT` (10) as the fallback when
-// `STARTF_USESHOWWINDOW` isn't set, but `SW_SHOWDEFAULT` defers
-// back to `STARTUPINFOA` and resolves to `SW_HIDE` when a parent
-// process left `wShowWindow = 0` without setting the flag.
-// `SW_SHOWNORMAL` is the value `SW_SHOWDEFAULT` would resolve to
-// for a typical interactive launch, and avoids the extra import.
+// `hPrevInstance` is `NULL`. `nShowCmd` is `SW_SHOWNORMAL` (1)
+// rather than `SW_SHOWDEFAULT` (10); `SW_SHOWDEFAULT` defers to
+// `STARTUPINFOA::wShowWindow`, which resolves to `SW_HIDE` when
+// a parent left `wShowWindow = 0` without `STARTF_USESHOWWINDOW`.
 // ----------------------------------------------------------------
 
 const STUB_IMPORT_GETMAINARGS: (&str, &str) = ("__getmainargs", "msvcrt.dll");
@@ -320,11 +315,8 @@ const STUB_IMPORT_EXIT: (&str, &str) = ("exit", "msvcrt.dll");
 const STUB_IMPORT_GETMODULEHANDLEA: (&str, &str) = ("GetModuleHandleA", "kernel32.dll");
 const STUB_IMPORT_GETCOMMANDLINEA: (&str, &str) = ("GetCommandLineA", "kernel32.dll");
 
-/// `nShowCmd` value the GUI entry stub passes to `WinMain`.
-/// `SW_SHOWDEFAULT` (10) would defer to `STARTUPINFOA::wShowWindow`,
-/// which resolves to `SW_HIDE` when the parent set
-/// `wShowWindow = 0` without `STARTF_USESHOWWINDOW` (observed
-/// under wine and some launcher shells).
+/// `nShowCmd` value passed by the GUI entry stub. See the
+/// nShowCmd notes above the stub-import constants.
 const SW_SHOWNORMAL: u32 = 1;
 
 // ----------------------------------------------------------------
@@ -2176,10 +2168,8 @@ fn build_entry_stub(
         return build_dllmain_stub(machine);
     }
     let gui = subsystem == IMAGE_SUBSYSTEM_WINDOWS_GUI;
-    // `wmain` is the wide-char console entry; populate argv via
-    // `__wgetmainargs` so the entry sees `wchar_t **` instead of
-    // `char **`. Everything else stays on the historical narrow
-    // path.
+    // `wmain` -- swap `__getmainargs` for `__wgetmainargs` so
+    // argv comes through as `wchar_t **`.
     let wide_console = !gui && entry_name == Some("wmain");
     let getmainargs_import = if wide_console {
         STUB_IMPORT_WGETMAINARGS

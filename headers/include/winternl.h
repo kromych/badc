@@ -1,12 +1,11 @@
-// <winternl.h> -- subset of the documented NT-internal surface.
+// <winternl.h> -- NT-internal types and constants.
 //
-// Mirrors the MSDN-documented `<winternl.h>`: UNICODE_STRING,
-// OBJECT_ATTRIBUTES, OBJ_*, NT_SUCCESS, NtCurrentProcess, and the
-// access masks / NTSTATUS values demos use. The header declares
-// types and constants only; ntdll bindings are deliberately left
-// to each translation unit (some TUs pull the functions in
-// statically via `#pragma binding(ntdll::Nt...)`, others resolve
-// them dynamically through `GetProcAddress`).
+// UNICODE_STRING, OBJECT_ATTRIBUTES, OBJ_*, NT_SUCCESS,
+// NtCurrentProcess, and the EVENT / SECTION / PROCESS /
+// TRANSACTION access masks plus selected NTSTATUS values.
+// No ntdll bindings: translation units choose between
+// static binding (`#pragma binding(ntdll::...)`) and
+// `GetProcAddress`.
 
 #pragma once
 
@@ -50,19 +49,17 @@ typedef struct _OBJECT_ATTRIBUTES *POBJECT_ATTRIBUTES;
 #define TRANSACTION_ALL_ACCESS  0x000F003FUL
 #define PS_INHERIT_HANDLES      4
 
-// NTSTATUS values relevant to the demos. The MSDN-canonical set
-// lives in `<ntstatus.h>` (4000+ codes); we only declare the
-// ones actually checked at call sites.
+// NTSTATUS values. The full set lives in `<ntstatus.h>`; the
+// subset here covers the codes checked at call sites in the
+// bundled demos.
 #define STATUS_SUCCESS                  ((NTSTATUS)0x00000000L)
 #define STATUS_TIMEOUT                  ((NTSTATUS)0x00000102L)
 #define STATUS_OBJECT_NAME_NOT_FOUND    ((NTSTATUS)0xC0000034L)
 
-// NTSTATUS severity is encoded in the top two bits; >= 0 means
-// success / informational.
+// Severity is encoded in the top two bits; >= 0 covers
+// success and informational results.
 #define NT_SUCCESS(Status)      ((NTSTATUS)(Status) >= 0)
 
-// Pseudo-handle returned to `NtTerminateProcess` / `NtQuery...`
-// / `NtSetInformationProcess` callers to mean "the calling
-// process". Kernel-side maps it to the real handle on syscall
-// entry.
+// Pseudo-handle for the calling process; the kernel maps it
+// to the real handle on syscall entry.
 #define NtCurrentProcess()      ((HANDLE)(LONG_PTR)-1)

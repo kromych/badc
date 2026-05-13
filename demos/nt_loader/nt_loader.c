@@ -27,9 +27,8 @@ typedef CHAR    TCHAR;
 #endif
 
 // ─── ntdll function-pointer typedefs (resolved at run time) ──────────────────
-// ntdll is mapped into every process; the loader fetches each
-// entry through `GetProcAddress` rather than pulling them in as
-// static imports so the produced PE has no ntdll dependency.
+// Entries fetched through `GetProcAddress`; the produced PE
+// carries no ntdll import.
 
 typedef NTSTATUS (*fpNtCreateProcessEx)(
     PHANDLE ProcessHandle, ACCESS_MASK DesiredAccess,
@@ -63,14 +62,11 @@ typedef NTSTATUS (*fpNtClose)(HANDLE Handle);
 typedef void (*fpRtlInitUnicodeString)(
     PUNICODE_STRING DestinationString, PWSTR SourceString);
 
-// ─── Shared event name ───────────────────────────────────────────────────────
-// `\BaseNamedObjects\BadcLoaderSync` -- the same name the bundled
-// `nt_hello` demo opens to signal back. Bytes flow into `.data`
-// as 16-bit little-endian via the lexer's `L"..."` path.
+// Shared event name; `nt_hello` opens this object to signal back.
 static WCHAR *g_event_name = L"\\BaseNamedObjects\\BadcLoaderSync";
 
-// `NtWaitForSingleObject` timeout in 100-ns ticks. Negative values
-// are relative ("wait at most N ticks from now"); -2*10^7 = 2 s.
+// `NtWaitForSingleObject` timeout, in 100-ns ticks. Negative
+// values are relative; -2*10^7 = 2 s.
 #define EVENT_WAIT_TIMEOUT_TICKS  ((long long)-20000000)
 
 // ─── Logging helpers ─────────────────────────────────────────────────────────

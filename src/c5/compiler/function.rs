@@ -76,14 +76,9 @@ impl Compiler {
             } else {
                 Ty::Int as i64
             };
-            // `(void)` -- typedef-aliased form
-            // (`typedef void VOID; int f(VOID);`). The early
-            // check above only fires on the bare `void` keyword;
-            // an alias is recognised here via the
-            // `base_was_void` side channel that
-            // `parse_decl_base_type` propagates across typedef
-            // chains. With no parameters parsed so far and `)`
-            // up next, the parameter is the no-parameter idiom.
+            // `(void)` via a typedef alias. The early check above
+            // matches only the bare `void` keyword; aliases reach
+            // here with `base_was_void` set by `parse_decl_base_type`.
             let _ = base;
             if self.pending.base_was_void && types.is_empty() && self.lex.tk == ')' {
                 self.pending.base_was_void = false;

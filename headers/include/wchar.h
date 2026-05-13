@@ -1,10 +1,7 @@
-// <wchar.h> -- minimal wide-character / wide-string surface.
+// <wchar.h> -- wide-character / wide-string surface.
 //
-// c5 doesn't expose `wchar_t` as a built-in; sources that need
-// the 16-bit element type use `WCHAR` from <windows.h> on
-// Windows targets. The declarations below cover the wide-string
-// functions the bundled demos (`demos/nt_loader`) call; expand
-// as needed.
+// c5 does not provide a `wchar_t` typedef. Sources that need
+// the 16-bit element type use `WCHAR` from <windows.h>.
 
 #pragma once
 

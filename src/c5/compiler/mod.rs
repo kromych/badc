@@ -773,11 +773,9 @@ impl Compiler {
             lexer::find_symbol(&self.symbols, &self.symbol_index, name)
                 .filter(|&idx| self.symbols[idx].class == Token::Fun as i64)
         };
-        // Without an explicit `#pragma entrypoint(<name>)`, accept
-        // any of the four CRT-recognised entry names. The order
-        // mirrors what MSVC's link.exe picks when no `/ENTRY:` is
-        // set; main has priority over wmain (a project that
-        // defines both still gets the narrow path).
+        // Without `#pragma entrypoint(<name>)`, accept any of
+        // `main` / `wmain` / `WinMain` / `wWinMain` in that
+        // priority order.
         let resolved_idx = lookup_fun(default_name).or_else(|| {
             if pragma_name.is_some() {
                 None

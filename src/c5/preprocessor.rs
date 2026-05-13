@@ -1328,13 +1328,10 @@ impl Preprocessor {
         Ok(v.truthy())
     }
 
-    /// Recognise c5's pragma surface (`dylib`, `binding`, `export`,
-    /// `intrinsic`, `entrypoint`, `subsystem`). Anything else --
-    /// MSVC `#pragma comment(...)`, gcc `#pragma GCC ...`,
-    /// `#pragma once`, `#pragma pack(...)` (handled in the lexer),
-    /// and so on -- is accepted, but unrecognised forms emit a
-    /// warning so a misspelled c5 directive doesn't fall through
-    /// silently.
+    /// Dispatches c5's pragma surface (`dylib`, `binding`,
+    /// `export`, `intrinsic`, `entrypoint`, `subsystem`). `pack`
+    /// and `once` are handled elsewhere and bypass this function.
+    /// Any other directive is accepted with a warning.
     fn parse_pragma(&mut self, args: &str, line_no: usize, filename: &str) -> Result<(), C5Error> {
         let args = args.trim();
         if let Some(inner) = args
@@ -1379,14 +1376,11 @@ impl Preprocessor {
         {
             return self.parse_pragma_warning(inner.trim(), line_no, filename);
         }
-        // `pack(...)` and `once` are handled outside this function
-        // (the lexer applies pack on the fly; once is folded into
-        // the include guard set), so they reach `parse_pragma` only
-        // when the surrounding logic doesn't claim them. `warn`
-        // (Borland / Watcom-style `#pragma warn -rch`) is also
-        // accepted silently because sqlite3 sprinkles those in
-        // and we don't want the build to grow a per-pragma warning
-        // log line. Avoid the misleading warning for these.
+        // `pack` and `once` are consumed elsewhere; `warn`
+        // (Borland / Watcom-style `#pragma warn -rch`) is accepted
+        // silently so sqlite3's sprinkled lines don't add per-build
+        // log noise. Everything else falls through to the
+        // unknown-pragma warning below.
         let directive = args.split('(').next().unwrap_or(args).trim();
         if matches!(directive, "pack" | "once" | "warn") {
             return Ok(());

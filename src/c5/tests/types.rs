@@ -45,11 +45,9 @@ fn warn_call_arity_mismatch() {
     );
 }
 
-/// An unresolved identifier in base-type position used to fall
-/// through to the `int` default and produce a silently wrong
-/// declaration (`typedef HANDLE *PHANDLE;` before `HANDLE`
-/// becomes `int *PHANDLE;`). Make sure it now surfaces as a
-/// compile error at the declaration site.
+/// `typedef HANDLE *PHANDLE;` with no prior `HANDLE` typedef
+/// must error at the declaration site, not silently default
+/// to `int *`.
 #[test]
 fn unknown_type_name_is_a_compile_error() {
     use crate::Compiler;
@@ -63,8 +61,8 @@ fn unknown_type_name_is_a_compile_error() {
     );
 }
 
-/// `HANDLE x;` at file scope used to silently declare `x` as
-/// `int`. Same root cause as the typedef case above.
+/// `HANDLE x;` at file scope must error rather than declare
+/// `x` as `int`.
 #[test]
 fn unknown_base_type_in_global_decl_is_an_error() {
     use crate::Compiler;

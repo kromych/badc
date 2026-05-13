@@ -133,19 +133,12 @@ impl Compiler {
                 // `long long x;` (the implicit-int rule).
                 bt = m.int_base();
             } else if self.lex.tk == Token::Id {
-                // Unknown identifier in base-type position. Real
-                // compilers diagnose this; c5 historically fell
-                // through to the `Ty::Int` default, which silently
-                // typedef'd `PHANDLE` as `int *` when `HANDLE`
-                // wasn't yet defined in `<windows.h>` and then
-                // shifted `sizeof(OBJECT_ATTRIBUTES)` by eight
-                // bytes downstream. Surface the cause at the
-                // declaration site.
+                // Identifier in base-type position with no
+                // matching typedef. Errors here rather than
+                // falling through to the `Ty::Int` default,
+                // which would silently mis-type the declarator.
                 let name = self.symbols[self.lex.curr_id_idx].name.clone();
-                return Err(self.compile_err(format!(
-                    "unknown type name `{name}` (did you forget an \
-                     earlier `typedef` or `#include`?)"
-                )));
+                return Err(self.compile_err(format!("unknown type name `{name}`")));
             }
             // Trailing qualifiers / int modifiers between the base
             // type and the declarators -- `Foo const *p`, `int long
@@ -245,9 +238,6 @@ impl Compiler {
                     self.symbols[id_idx].class = Token::Typedef as i64;
                     self.symbols[id_idx].type_ = typedef_ty;
                     self.symbols[id_idx].val = 0;
-                    // Propagate the bare-void flag across the
-                    // alias so `typedef void VOID; int f(VOID);`
-                    // is recognised as the no-parameter idiom.
                     self.symbols[id_idx].is_void_typedef = declarator_is_bare_void;
                     if typedef_fpi > 0 {
                         self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;

@@ -143,6 +143,13 @@
 #pragma binding(msvcrt::memset,   "memset")
 #pragma binding(msvcrt::memcmp,   "memcmp")
 #pragma binding(msvcrt::exit,     "exit")
+// POSIX-shape names that sqlite3.c reaches for on Windows
+// without including unistd.h. msvcrt exports them with a
+// leading-underscore spelling; bind the unprefixed local name
+// so a user extern decl resolves through the Token::Sys path
+// rather than leaving the call as an unresolved cross-TU
+// reference.
+#pragma binding(msvcrt::getpid,   "_getpid")
 
 // NOTE: `_CRT_INSECURE_DEPRECATE` / `_CRT_NONSTDC_DEPRECATE` /
 // `_CRT_OBSOLETE` / `_CRT_DEPRECATE_TEXT` are deliberately NOT

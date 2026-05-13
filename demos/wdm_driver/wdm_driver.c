@@ -18,7 +18,7 @@
  *
  * Build:
  *
- *     badc --target=windows-x64 demos/wdm_driver/wdm_driver.c -o wdm_hello.sys
+ *     badc -O demos/wdm_driver/wdm_driver.c -o wdm_hello.sys
  *
  * Load (Windows host, elevated, test-signing enabled so an
  * unsigned driver can load):

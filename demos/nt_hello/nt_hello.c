@@ -13,7 +13,7 @@
  *
  * Build:
  *
- *     badc --target=windows-x64 demos/nt_hello/nt_hello.c -o nt_hello.exe
+ *     badc -O demos/nt_hello/nt_hello.c -o nt_hello.exe
  *
  * Run (Windows host -- placing a native exe in
  * `\SystemRoot\System32` and adding it to the `BootExecute`

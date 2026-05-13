@@ -1448,15 +1448,13 @@ pub(super) fn lower(
     let data_imm_positions: &[usize] = &program.data_imm_positions;
     let code_imm_positions: &[usize] = &program.code_imm_positions;
 
-    // Param count of the entry function, used by the main-style
-    // prologue / epilogue to spill the host's int-arg registers
-    // (rcx/rdx/r8/r9 on Win64; rdi/rsi/... on SysV) into the c5
-    // frame and to drop the matching slots on the way out.
-    // `param_count_for_func` returns 0 when `entry_pc` doesn't
-    // land on an `Op::Ent` (DLL/exports-only builds) -- the loop
-    // gates the entry-style prologue on `op_pc == entry_pc`, so a
-    // misaligned `entry_pc` keeps every function on the regular
-    // path.
+    // Parameter count of the entry function. The main-style
+    // prologue / epilogue uses this to spill host int-arg
+    // registers (rcx/rdx/r8/r9 on Win64; rdi/rsi/... on SysV)
+    // into the c5 frame and drop the matching slots on return.
+    // Returns 0 when `entry_pc` doesn't land on `Op::Ent` (DLL
+    // / exports-only builds); the loop's `op_pc == entry_pc`
+    // gate keeps the regular prologue in those cases.
     let entry_n_params = if program.entry_pc < program.text.len()
         && Op::from_i64(program.text[program.entry_pc]) == Some(Op::Ent)
     {
@@ -1726,10 +1724,9 @@ fn lower_op(
     tls_total_size: usize,
     fp_arg_masks: &[(usize, u32)],
 ) -> Result<(), C5Error> {
-    // `None` for regular functions, `Some(n)` when this function
-    // is the program's entry -- the main-style prologue / epilogue
-    // then spill the host's first `n` int-arg regs into the c5
-    // frame and drop the matching slots on the way out.
+    // `None` for non-entry functions; `Some(n)` for the entry,
+    // so the prologue / epilogue spill `n` int-arg registers
+    // and drop the matching slots.
     let entry_n_params_opt = in_main.then_some(entry_n_params);
     match op {
         // ---- Function frame ----
@@ -3088,31 +3085,25 @@ fn emit_prologue(
     pool_depth: u8,
 ) {
     if let Some(n_params) = entry_n_params {
-        // The entry stub passed the user's arguments via the
-        // platform's first int-arg registers: System V uses
-        // rdi/rsi/rdx/rcx/r8/r9, Win64 uses rcx/rdx/r8/r9.
+        // The entry stub passed the entry's arguments in the
+        // platform's int-arg registers (SysV: rdi/rsi/rdx/rcx/r8/r9;
+        // Win64: rcx/rdx/r8/r9). Spill them into c5's cdecl
+        // 16-byte slots so the i'th declared parameter (val = i + 2)
+        // lands at `[rbp + 16*(i+1)]`.
         //
-        // c5's cdecl push order maps the i'th source-order
-        // declared parameter (val = i + 2) to `[rbp + 16*(i+1)]`
-        // after the prologue. We materialize that layout by
-        // popping the return address into a scratch register,
-        // pushing each host arg-register into its own 16-byte
-        // slot in REVERSE order (deepest arg first so the top of
-        // the stack lands on arg 0), then re-pushing the return
-        // address above the slots.
+        // Sequence: pop the return address into a scratch register,
+        // push each int-arg register into its own 16-byte slot in
+        // reverse order (arg n-1 deepest, arg 0 on top), then
+        // push the return address back above the slots.
         //
-        // For console `main(int argc, char **argv)` this matches
-        // the historical layout: argc at `rbp + 16`, argv at
-        // `rbp + 32`. For `int WinMain(HINSTANCE, HINSTANCE,
-        // LPSTR, int)` it places `nShowCmd` at `rbp + 64` -- the
-        // c5 stack slot the function's body reads it from.
+        // For `main(int argc, char **argv)` that places argc at
+        // `rbp + 16` and argv at `rbp + 32`; for
+        // `WinMain(HINSTANCE, HINSTANCE, LPSTR, int)` `nShowCmd`
+        // ends up at `rbp + 64`.
         //
-        // Args past `n_reg` (e.g. a 7th declared parameter on
-        // SysV) live on the host stack at the call site; we
-        // don't lift those today. Every entry signature we wire
-        // up (`main`, `WinMain`, `NtProcessStartup`, EFI's
-        // `(EFI_HANDLE, EFI_SYSTEM_TABLE *)`) fits inside the
-        // register set.
+        // Stack-passed entry parameters (e.g. a 7th declared param
+        // on SysV) are unsupported; every entry signature wired up
+        // here fits inside the register set.
         let n_reg = n_params.min(abi.int_arg_regs.len());
         emit_pop_r(code, Reg::R10);
         for i in (0..n_reg).rev() {
@@ -3165,13 +3156,14 @@ fn emit_prologue(
     emit_save_pool(code, pool_depth);
 }
 
-/// Mirror of [`emit_prologue`]. Move the VM accumulator into rax
-/// (return register), restore the pool, restore r13, tear down the
-/// frame, return. For the entry function we also drop the 16-byte
-/// slots the prologue inserted -- one per declared host-passed
-/// parameter -- since they sit between the saved rbp and the
-/// return address. We pop the ret addr into a temp, drop the
-/// slots, then push it back before `ret` consumes it.
+/// Mirror of [`emit_prologue`]. Moves the VM accumulator into
+/// rax, restores the pool and r13, tears down the frame, and
+/// returns. For the entry function it also drops the 16-byte
+/// slots the prologue inserted (one per int-arg-register
+/// parameter) -- those sit between the saved rbp and the return
+/// address, so the epilogue pops the return address into a temp,
+/// drops the slots, then pushes the return address back before
+/// `ret`.
 fn emit_epilogue(
     code: &mut Vec<u8>,
     entry_n_params: Option<usize>,
@@ -3514,16 +3506,10 @@ mod tests {
         assert_eq!(&buf[22..24], &[0x0f, 0x05]);
     }
 
-    /// `#pragma entrypoint(WinMain)` on Windows x64 must spill all
-    /// four host-passed parameter registers (rcx/rdx/r8/r9) into
-    /// the c5 frame. Pre-fix, the main prologue only spilled
-    /// rcx/rdx (the historic argc/argv pair), leaving r9 holding
-    /// stale `xor r9d, r9d` from the `__getmainargs` setup and so
-    /// WinMain's `nShowCmd` came in as 0 (SW_HIDE).
-    ///
-    /// Probe the prologue bytes directly -- the `mov [rsp], <reg>`
-    /// for r9 (`4C 89 0C 24`) and r8 (`4C 89 04 24`) must both
-    /// appear in the prologue region.
+    /// `#pragma entrypoint(WinMain)` on Windows x64 must spill
+    /// all four int-arg-register parameters (rcx/rdx/r8/r9) into
+    /// the c5 frame. Probes the prologue bytes for each
+    /// `mov [rsp], <reg>` form.
     #[test]
     fn winmain_4arg_prologue_spills_all_four_host_arg_regs() {
         use crate::Compiler;
@@ -3546,17 +3532,14 @@ mod tests {
         .expect("lower");
 
         let entry = build.entry_offset;
-        // Generous prologue window: 4 spills (~44 bytes) + frame
-        // setup (~24 bytes) + pool save (~16 bytes) -- 128 bytes
-        // is plenty without overlapping the function body.
+        // 128-byte window covers 4 spills + frame setup + pool
+        // save without overlapping the function body.
         let prologue_end = (entry + 128).min(build.text.len());
         let prologue = &build.text[entry..prologue_end];
 
-        // Each spill encodes as `mov [rsp], <reg>` (4 bytes).
-        // `4C 89 04 24` = mov [rsp], r8.
-        // `4C 89 0C 24` = mov [rsp], r9.
-        // `48 89 14 24` = mov [rsp], rdx.
-        // `48 89 0C 24` = mov [rsp], rcx.
+        // `mov [rsp], <reg>` encodings (4 bytes each):
+        //   4C 89 0C 24 = r9   4C 89 04 24 = r8
+        //   48 89 14 24 = rdx  48 89 0C 24 = rcx
         let contains = |needle: &[u8]| prologue.windows(needle.len()).any(|w| w == needle);
         assert!(
             contains(&[0x4C, 0x89, 0x0C, 0x24]),
@@ -3580,9 +3563,8 @@ mod tests {
         );
     }
 
-    /// Two-arg `main(argc, argv)` -- the historical case -- must
-    /// keep working: prologue spills rcx (argc) and rdx (argv) on
-    /// Win64 (or rdi / rsi on SysV) and does NOT spill r8 / r9.
+    /// Two-arg `main(argc, argv)`: prologue spills rcx and rdx
+    /// on Win64, not r8 / r9.
     #[test]
     fn console_main_prologue_spills_only_argc_argv() {
         use crate::Compiler;

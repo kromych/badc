@@ -1217,21 +1217,17 @@ pub(super) fn lower(
 
     // Track which function we're currently inside so the prologue
     // and epilogue agree on whether to push/pop the entry's
-    // host-passed arg pair. c4 doesn't mark function boundaries
-    // explicitly -- we assume every Ent starts a new function and
-    // we're "in" that function until the next Ent.
+    // host-passed arguments. Bytecode has no explicit function
+    // boundaries; each `Op::Ent` starts a function and `in_main`
+    // stays set until the next `Ent`.
     let mut in_main = false;
 
-    // Param count of the entry function. The main-style prologue
-    // spills `min(n, 8)` host int-arg regs (x0..x7 on AAPCS64)
-    // into the c5 frame and the epilogue drops the matching
-    // slots; using `param_count_for_func` lets `WinMain` (4
-    // params) and EFI entries (2 params) get all their arguments
-    // properly staged, not just the first two like the historical
-    // `main(argc, argv)` shape. Returns 0 when `entry_pc` doesn't
-    // land on an `Op::Ent` (DLL/exports-only builds); the in_main
-    // gate inside the loop keeps every function on the regular
-    // path then.
+    // Parameter count of the entry function. The main-style
+    // prologue spills `min(n, 8)` int-arg regs (x0..x7) into the
+    // c5 frame and the epilogue drops the matching slots.
+    // Returns 0 when `entry_pc` doesn't land on `Op::Ent` (DLL /
+    // exports-only builds); the loop's `op_pc == entry_pc` gate
+    // keeps the regular prologue in those cases.
     let entry_n_params = if program.entry_pc < program.text.len()
         && Op::from_i64(program.text[program.entry_pc]) == Some(Op::Ent)
     {
@@ -2999,19 +2995,15 @@ fn emit_prologue(
     abi: super::Abi,
 ) {
     if let Some(n_params) = entry_n_params {
-        // Spill the host-passed entry args into c5's cdecl
-        // 16-byte-stride slots. The PE / Mach-O / ELF loader
-        // hands us the user's declared parameters in AAPCS64's
-        // x0..x7 (we cap at the int-arg-reg count); the c5
-        // function body then reads param `i` at `[fp + 16*(i+1)]`.
-        // Pushing in REVERSE order means the deepest param ends
-        // up at the highest offset (matching `param_count_for_func`
-        // / `lea_offset_bytes`).
+        // Spill the entry's host-passed arguments into c5's
+        // cdecl 16-byte-stride slots: loader passes them in
+        // x0..x7 (capped at the int-arg-reg count); the function
+        // body reads param `i` at `[fp + 16*(i+1)]`. Reverse
+        // order so arg 0 lands on top.
         //
-        // For console `main(int argc, char **argv)` this matches
-        // the historical 2-slot layout; for `int WinMain(...)`
-        // (4 params) it ensures `nShowCmd` -- the 4th declared
-        // param -- lands at `[fp + 64]` where the body reads it.
+        // `main(argc, argv)` ends up with the historical 2-slot
+        // layout; `WinMain` (4 params) places `nShowCmd` at
+        // `[fp + 64]`.
         let n_reg = n_params.min(abi.int_arg_regs.len());
         for i in (0..n_reg).rev() {
             emit(code, enc_str_pre(Reg(abi.int_arg_regs[i]), Reg::SP, -16));
@@ -3122,12 +3114,11 @@ fn emit_stack_probe(code: &mut Vec<u8>, frame_bytes: u32, page_size: u32) {
     }
 }
 
-/// Mirror of [`emit_prologue`]. Move the VM accumulator into `x0`
-/// (the return register), restore the pool registers, restore the
-/// saved x19, tear down the frame, return. For the entry function
-/// we also drop the 16-byte slots the prologue inserted -- one
-/// per declared host-passed parameter -- so the stack pointer is
-/// back to what the kernel / firmware / Rust caller handed us.
+/// Mirror of [`emit_prologue`]. Moves the VM accumulator into
+/// `x0`, restores the pool and the saved x19, tears down the
+/// frame, and returns. For the entry function it also drops the
+/// 16-byte slots the prologue inserted (one per int-arg-register
+/// parameter) so sp returns to the value the caller handed in.
 fn emit_epilogue(
     code: &mut Vec<u8>,
     entry_n_params: Option<usize>,

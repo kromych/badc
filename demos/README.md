@@ -110,31 +110,29 @@ since runners have no display server. See
 
 ## efi_hello/
 
-Single-file UEFI application that prints "Hello, EFI!" through
-`SystemTable->ConOut->OutputString`. Exercises the new
-`#pragma subsystem(efi_application)` -- the PE optional header
-carries Subsystem = `IMAGE_SUBSYSTEM_EFI_APPLICATION (10)` and
-the firmware loader hands `(EFI_HANDLE, EFI_SYSTEM_TABLE *)`
-directly to `efi_main`. No CRT shim sits in front; no msvcrt
-import is added. Build-only in CI -- running it needs a UEFI
-shell (TianoCore's UEFI Shell, OVMF under qemu, or a real
-machine's firmware shell).
+UEFI application that prints "Hello, EFI!" through
+`SystemTable->ConOut->OutputString`. Subsystem =
+`IMAGE_SUBSYSTEM_EFI_APPLICATION (10)`; the firmware loader
+invokes `efi_main(EFI_HANDLE, EFI_SYSTEM_TABLE *)` directly,
+with no CRT shim and no msvcrt import. Build-only in CI;
+running needs a UEFI shell (TianoCore's UEFI Shell, OVMF under
+qemu, or a real machine's firmware shell).
 
 ## nt_hello/
 
-NT-native usermode skeleton -- subsystem = `IMAGE_SUBSYSTEM_NATIVE
-(1)`, entry = `NtProcessStartup`, calls `ntdll!NtTerminateProcess`
-to exit cleanly. The image is what `smss.exe` / `autochk.exe` /
-boot-time `chkdsk.exe` start out as. Build-only in CI; runs on
-Windows when wired through the `BootExecute` registry value (or
-during smss/csrss bringup).
+NT-native usermode skeleton. Subsystem =
+`IMAGE_SUBSYSTEM_NATIVE (1)`, entry = `NtProcessStartup`, calls
+`ntdll!NtTerminateProcess` to exit. Same image shape as
+`smss.exe` / `autochk.exe` / boot-time `chkdsk.exe`. Build-only
+in CI; runs on Windows via the `BootExecute` registry value or
+during smss/csrss bringup.
 
 ## wdm_driver/
 
-Minimal Windows kernel-mode driver skeleton -- subsystem =
+Windows kernel-mode driver skeleton. Subsystem =
 `IMAGE_SUBSYSTEM_NATIVE (1)` via the `driver` pragma alias,
-entry = `DriverEntry(PDRIVER_OBJECT, PUNICODE_STRING)` per the
-WDM contract, registers a `DRIVER_UNLOAD` callback so the
-service can be stopped with `sc stop`. Build-only -- loading
-requires admin + test-signing on the target. Same compiler
-plumbing as `nt_hello`; differs in entry-point shape only.
+entry = `DriverEntry(PDRIVER_OBJECT, PUNICODE_STRING)`,
+registers a `DRIVER_UNLOAD` callback so the service is
+stoppable via `sc stop`. Build-only; loading needs admin and
+test-signing on the target. Same compiler plumbing as
+`nt_hello`; differs only in entry signature.

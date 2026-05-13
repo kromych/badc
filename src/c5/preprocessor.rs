@@ -273,31 +273,29 @@ pub(crate) struct Preprocessor {
     pub intrinsics: alloc::collections::BTreeMap<String, i64>,
 }
 
-/// Windows PE subsystem selector. Mirrors the `IMAGE_SUBSYSTEM_*`
-/// constants from `<winnt.h>`. The PE writer uses this to set
-/// the optional-header `Subsystem` field *and* to pick the
-/// shape of the entry stub:
+/// Windows PE subsystem selector; mirrors the `IMAGE_SUBSYSTEM_*`
+/// constants from `<winnt.h>`. The PE writer uses this both for
+/// the optional-header `Subsystem` field and to pick the entry
+/// stub shape:
 ///
 /// * `Console` / `Windows` -- hosted Win32 programs. The writer
-///   emits a CRT-flavoured entry stub that pulls in
-///   `msvcrt!__getmainargs` / `msvcrt!exit` and routes the user's
-///   entry through `main(argc, argv)` (console) or `WinMain(...)`
+///   emits a CRT-flavoured stub that imports
+///   `msvcrt!__getmainargs` / `msvcrt!exit` and calls the entry
+///   with `(argc, argv)` (console) or the WinMain argument set
 ///   (windows).
 ///
 /// * `Native` (alias `driver`) -- NT-native usermode programs and
-///   kernel-mode drivers. No CRT: the loader calls the user's
-///   entry directly with its native signature
-///   (`NtProcessStartup(PPEB)` for usermode native;
-///   `DriverEntry(PDRIVER_OBJECT, PUNICODE_STRING)` for drivers).
-///   The PE writer skips the entry stub and points
-///   `AddressOfEntryPoint` straight at the user's entry function.
+///   kernel-mode drivers. The loader invokes the entry directly
+///   with the platform-native signature (`NtProcessStartup(PPEB)`
+///   for usermode; `DriverEntry(PDRIVER_OBJECT, PUNICODE_STRING)`
+///   for drivers). The PE writer suppresses the stub and points
+///   `AddressOfEntryPoint` at the user's entry function.
 ///
 /// * `EfiApplication` / `EfiBootServiceDriver` /
 ///   `EfiRuntimeDriver` / `EfiRom` -- UEFI binaries. The firmware
-///   loader calls the user's entry with the canonical
-///   `(EFI_HANDLE, EFI_SYSTEM_TABLE *)` pair. Like `Native`,
-///   no CRT and no stub: the writer just sets the Subsystem
-///   field and direct-points the entry.
+///   loader invokes the entry with
+///   `(EFI_HANDLE, EFI_SYSTEM_TABLE *)`. Same passthrough
+///   handling as `Native`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Subsystem {
     /// `IMAGE_SUBSYSTEM_WINDOWS_CUI` (3) -- console subsystem.
@@ -1625,17 +1623,17 @@ impl Preprocessor {
         Ok(())
     }
 
-    /// `#pragma subsystem(<kind>)` -- pick the Windows PE
-    /// subsystem header value. Recognised kinds:
+    /// `#pragma subsystem(<kind>)` -- select the PE
+    /// optional-header `Subsystem` value. Accepted kinds:
     ///
     ///   * `console` / `cui` -- `IMAGE_SUBSYSTEM_WINDOWS_CUI` (3,
-    ///     default). CRT-style `main(argc, argv)`.
+    ///     default). Entry signature `main(argc, argv)`.
     ///   * `windows` / `gui` -- `IMAGE_SUBSYSTEM_WINDOWS_GUI` (2).
-    ///     Win32 `WinMain(hinst, prev, cmdline, show)`.
+    ///     Entry signature `WinMain(hinst, prev, cmdline, show)`.
     ///   * `native` / `nt` / `driver` -- `IMAGE_SUBSYSTEM_NATIVE`
-    ///     (1). NT-native usermode programs and kernel drivers
-    ///     (the loader picks the entry-point shape from the file
-    ///     extension / boot config, not from the PE header).
+    ///     (1). NT-native usermode and kernel drivers share this
+    ///     subsystem byte; the entry signature is selected by the
+    ///     source, not the pragma.
     ///   * `efi_application` -- `IMAGE_SUBSYSTEM_EFI_APPLICATION`
     ///     (10).
     ///   * `efi_boot_service_driver` --
@@ -1644,9 +1642,8 @@ impl Preprocessor {
     ///     `IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER` (12).
     ///   * `efi_rom` -- `IMAGE_SUBSYSTEM_EFI_ROM` (13).
     ///
-    /// Quietly accepted on non-PE targets so the same source can
-    /// compile for multiple OSes; the PE writer is the only
-    /// consumer that looks at the value.
+    /// Accepted on non-PE targets and ignored there; the PE
+    /// writer is the only consumer.
     fn parse_pragma_subsystem(
         &mut self,
         inner: &str,

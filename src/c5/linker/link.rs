@@ -449,10 +449,16 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                     }
                     pc += 2;
                 }
-                Some(Op::Jsr) => {
+                Some(Op::Jsr) | Some(Op::Jmp) | Some(Op::Bz) | Some(Op::Bnz) => {
+                    // Each of these carries a single intra-unit
+                    // bytecode-PC operand. Internally-resolved
+                    // already at parse time, so the operand
+                    // holds the unit-local PC; shift by the
+                    // unit's text offset to get the merged-
+                    // program PC.
                     let operand_pc = pc + 1;
                     if operand_pc >= unit.text.len() {
-                        return Err(err("dangling Jsr operand"));
+                        return Err(err("dangling branch operand"));
                     }
                     let bc_pc = unit.text[operand_pc];
                     merged_text.push(bc_pc + text_off as i64);
@@ -591,7 +597,18 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
     // that name in the merged symbol table; else fall back to
     // searching `main` / `wmain` / `WinMain` / `wWinMain` per
     // the historical single-TU rules.
-    let entry_pc = resolve_entry_pc(&entry_name, &defined, &units, &text_base)?;
+    let (entry_pc, resolved_entry_name) =
+        resolve_entry_pc(&entry_name, &defined, &units, &text_base)?;
+    // Override the propagated `entry_name` (which only carries
+    // `#pragma entrypoint(...)` overrides) with whatever the
+    // resolver actually picked. Without this, a source whose
+    // entry function is `wmain` / `WinMain` / `wWinMain`
+    // (resolved through the fallback list) leaves `entry_name`
+    // at `None`, and the PE writer falls back to the
+    // narrow-console `__getmainargs` import -- argv comes
+    // through as `char**` even though the user's signature
+    // declared `wchar_t**`.
+    let entry_name = resolved_entry_name.or(entry_name);
 
     // Struct registry: union all units' struct lists. This is
     // a soft merge -- two units may define the same struct via
@@ -764,10 +781,18 @@ fn flat_binding_index(
     dylib_idx: usize,
     binding: &Binding,
 ) -> usize {
-    // Append (or find existing identical binding) inside the
-    // chosen dylib. The flat binding index is the sum of all
-    // earlier dylibs' bindings + this binding's position in
-    // its dylib.
+    // Append unconditionally inside the chosen dylib. Some
+    // headers re-declare the same `local_name`/`real_symbol`
+    // pair with slightly different prototypes (e.g.
+    // `msvcrt::printf` appears in both `<stdio.h>` and
+    // `msvc_compat.h` with different `is_variadic` /
+    // `return_type_tag` shadow fields). Dedup-by-name here
+    // would pick the first occurrence's metadata for both
+    // call sites, which the bytecode caller wasn't typed
+    // against. Keeping every binding preserves the parser's
+    // per-binding flat index across the link; the resulting
+    // IAT carries a duplicate import name per duplicate, which
+    // the per-format writer treats as harmless overhead.
     let mut flat: usize = 0;
     for (i, d) in merged_dylibs.iter().enumerate() {
         if i == dylib_idx {
@@ -776,24 +801,25 @@ fn flat_binding_index(
         flat += d.bindings.len();
     }
     let dy = &mut merged_dylibs[dylib_idx];
-    if let Some(pos) = dy
-        .bindings
-        .iter()
-        .position(|b| b.local_name == binding.local_name && b.real_symbol == binding.real_symbol)
-    {
-        return flat + pos;
-    }
     let pos = dy.bindings.len();
     dy.bindings.push(binding.clone());
     flat + pos
 }
 
+/// Resolve the program's entry function. Returns the entry's
+/// bytecode PC plus the resolved symbol name (e.g. `wmain` /
+/// `WinMain` / `main`). The PE writer reads
+/// `Program::entry_name` to pick between `__getmainargs` and
+/// `__wgetmainargs` -- a single-TU `Compiler::compile` records
+/// the same name on its `Program`, and the link path has to
+/// keep that field accurate so the wide-console entry path
+/// stays in scope.
 fn resolve_entry_pc(
     entry_name: &Option<String>,
     defined: &HashMap<String, GlobalSymbol>,
     units: &[LinkUnit],
     text_base: &[usize],
-) -> Result<usize, C5Error> {
+) -> Result<(usize, Option<String>), C5Error> {
     let preferred: Vec<String> = match entry_name {
         Some(n) => alloc::vec![n.clone()],
         None => alloc::vec![
@@ -807,7 +833,7 @@ fn resolve_entry_pc(
         if let Some(g) = defined.get(n) {
             let sym = &units[g.unit_idx].symbols[g.sym_idx];
             if matches!(sym.kind, SymbolKind::Function) {
-                return Ok(text_base[g.unit_idx] + sym.value as usize);
+                return Ok((text_base[g.unit_idx] + sym.value as usize, Some(n.clone())));
             }
         }
     }

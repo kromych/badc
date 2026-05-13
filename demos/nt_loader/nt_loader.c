@@ -55,11 +55,6 @@ typedef NTSTATUS (*fpNtCreateSection)(
     PLARGE_INTEGER MaximumSize, ULONG SectionPageProtection,
     ULONG AllocationAttributes, HANDLE FileHandle);
 
-typedef NTSTATUS (*fpNtCreateEvent)(
-    PHANDLE EventHandle, ACCESS_MASK DesiredAccess,
-    POBJECT_ATTRIBUTES ObjectAttributes, ULONG EventType,
-    int InitialState);
-
 typedef NTSTATUS (*fpNtWaitForSingleObject)(
     HANDLE Handle, int Alertable, PLARGE_INTEGER Timeout);
 
@@ -68,8 +63,13 @@ typedef NTSTATUS (*fpNtClose)(HANDLE Handle);
 typedef void (*fpRtlInitUnicodeString)(
     PUNICODE_STRING DestinationString, PWSTR SourceString);
 
-// Shared event name; `nt_hello` opens this object to signal back.
-static WCHAR *g_event_name = L"\\BaseNamedObjects\\BadcLoaderSync";
+// Shared event name. Uses a bare name so Win32's `CreateEventW`
+// places the object in the per-session BaseNamedObjects, which is
+// also where another Win32 caller's `OpenEventW(name)` looks. An
+// NT-path prefix like `\BaseNamedObjects\...` would land in the
+// real global BNO from an admin process and miss the per-session
+// view that the smoke harness uses.
+static WCHAR *g_event_name = L"BadcLoaderSync";
 
 // `NtWaitForSingleObject` timeout, in 100-ns ticks. Negative
 // values are relative; -2*10^7 = 2 s.
@@ -83,6 +83,11 @@ static WCHAR *g_event_name = L"\\BaseNamedObjects\\BadcLoaderSync";
 // Entry point.
 int _tmain(int argc, TCHAR **argv)
 {
+    // CI smoke pipes stdout, which trips msvcrt's full-buffering for
+    // wprintf. Without this, a SIGKILL from the smoke harness drops
+    // every diagnostic line on the floor and the log shows nothing.
+    setvbuf(stdout, NULL, _IONBF, 0);
+
     if (argc != 2)
     {
         LOG_ERR(_T("Usage: %s <image path>"), argv[0]);
@@ -117,36 +122,27 @@ int _tmain(int argc, TCHAR **argv)
     fpNtCreateProcessEx     _NtCreateProcessEx     = (fpNtCreateProcessEx)    GetProcAddress(hNtdll, "NtCreateProcessEx");
     fpNtCreateTransaction   _NtCreateTransaction   = (fpNtCreateTransaction)  GetProcAddress(hNtdll, "NtCreateTransaction");
     fpNtCreateSection       _NtCreateSection       = (fpNtCreateSection)      GetProcAddress(hNtdll, "NtCreateSection");
-    fpNtCreateEvent         _NtCreateEvent         = (fpNtCreateEvent)        GetProcAddress(hNtdll, "NtCreateEvent");
     fpNtWaitForSingleObject _NtWaitForSingleObject = (fpNtWaitForSingleObject)GetProcAddress(hNtdll, "NtWaitForSingleObject");
     fpNtClose               _NtClose               = (fpNtClose)              GetProcAddress(hNtdll, "NtClose");
     fpRtlInitUnicodeString  _RtlInitUnicodeString  = (fpRtlInitUnicodeString) GetProcAddress(hNtdll, "RtlInitUnicodeString");
 
     if (!_NtCreateProcessEx || !_NtCreateTransaction || !_NtCreateSection
-        || !_NtCreateEvent || !_NtWaitForSingleObject || !_NtClose
-        || !_RtlInitUnicodeString)
+        || !_NtWaitForSingleObject || !_NtClose || !_RtlInitUnicodeString)
     {
         LOG_ERR(_T("Failed to resolve one or more ntdll exports"));
         return 1;
     }
     LOG_OK(_T("ntdll exports resolved"));
 
-    // Create the sync event.
-    UNICODE_STRING event_name_us;
-    _RtlInitUnicodeString(&event_name_us, g_event_name);
-    OBJECT_ATTRIBUTES event_objattr;
-    event_objattr.Length = sizeof(OBJECT_ATTRIBUTES);
-    event_objattr.Attributes = OBJ_CASE_INSENSITIVE;
-    event_objattr.ObjectName = &event_name_us;
-    event_objattr.RootDirectory = NULL;
-    event_objattr.SecurityDescriptor = NULL;
-    event_objattr.SecurityQualityOfService = NULL;
-    status = _NtCreateEvent(
-        &hEvent, EVENT_ALL_ACCESS, &event_objattr,
-        NOTIFICATION_EVENT, FALSE);
-    if (!NT_SUCCESS(status))
+    // Create the sync event via Win32 so its name resolves to the
+    // per-session BaseNamedObjects -- the same namespace another
+    // Win32 caller's `OpenEventW(bare_name)` sees. The companion
+    // `nt_hello` opens the event by NT path; once we have a way to
+    // start its thread, both halves can run end-to-end.
+    hEvent = CreateEventW(NULL, TRUE, FALSE, g_event_name);
+    if (!hEvent)
     {
-        LOG_ERR(_T("NtCreateEvent failed: 0x%08lX"), (ULONG)status);
+        LOG_ERR(_T("CreateEventW failed: 0x%08lX"), GetLastError());
         return 1;
     }
     LOG_OK(_T("Sync event created"));

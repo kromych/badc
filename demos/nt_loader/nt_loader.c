@@ -67,6 +67,16 @@ typedef NTSTATUS (*fpNtClose)(HANDLE Handle);
 typedef void (*fpRtlInitUnicodeString)(
     PUNICODE_STRING DestinationString, PWSTR SourceString);
 
+typedef NTSTATUS (*fpRtlCreateProcessParametersEx)(
+    PVOID *pProcessParameters, PUNICODE_STRING ImagePathName,
+    PUNICODE_STRING DllPath, PUNICODE_STRING CurrentDirectory,
+    PUNICODE_STRING CommandLine, PVOID Environment,
+    PUNICODE_STRING WindowTitle, PUNICODE_STRING DesktopInfo,
+    PUNICODE_STRING ShellInfo, PUNICODE_STRING RuntimeData,
+    ULONG Flags);
+
+typedef NTSTATUS (*fpRtlDestroyProcessParameters)(PVOID ProcessParameters);
+
 // `nt_hello` opens this NT path via `NtOpenEvent`. The loader
 // creates it via `NtCreateEvent`; both endpoints route through
 // the same `\BaseNamedObjects` namespace.
@@ -122,6 +132,7 @@ int _tmain(int argc, TCHAR **argv)
     HANDLE    hProcess = NULL;
     HANDLE    hThread = NULL;
     HANDLE    hEvent = NULL;
+    PVOID     proc_params = NULL;
     int       exitCode = 1;
 
     // Resolve ntdll exports.
@@ -133,14 +144,17 @@ int _tmain(int argc, TCHAR **argv)
         return 1;
     }
 
-    fpNtCreateUserProcess   _NtCreateUserProcess   = (fpNtCreateUserProcess)   GetProcAddress(hNtdll, "NtCreateUserProcess");
-    fpNtCreateEvent         _NtCreateEvent         = (fpNtCreateEvent)         GetProcAddress(hNtdll, "NtCreateEvent");
-    fpNtWaitForSingleObject _NtWaitForSingleObject = (fpNtWaitForSingleObject) GetProcAddress(hNtdll, "NtWaitForSingleObject");
-    fpNtClose               _NtClose               = (fpNtClose)               GetProcAddress(hNtdll, "NtClose");
-    fpRtlInitUnicodeString  _RtlInitUnicodeString  = (fpRtlInitUnicodeString)  GetProcAddress(hNtdll, "RtlInitUnicodeString");
+    fpNtCreateUserProcess           _NtCreateUserProcess           = (fpNtCreateUserProcess)           GetProcAddress(hNtdll, "NtCreateUserProcess");
+    fpNtCreateEvent                 _NtCreateEvent                 = (fpNtCreateEvent)                 GetProcAddress(hNtdll, "NtCreateEvent");
+    fpNtWaitForSingleObject         _NtWaitForSingleObject         = (fpNtWaitForSingleObject)         GetProcAddress(hNtdll, "NtWaitForSingleObject");
+    fpNtClose                       _NtClose                       = (fpNtClose)                       GetProcAddress(hNtdll, "NtClose");
+    fpRtlInitUnicodeString          _RtlInitUnicodeString          = (fpRtlInitUnicodeString)          GetProcAddress(hNtdll, "RtlInitUnicodeString");
+    fpRtlCreateProcessParametersEx  _RtlCreateProcessParametersEx  = (fpRtlCreateProcessParametersEx)  GetProcAddress(hNtdll, "RtlCreateProcessParametersEx");
+    fpRtlDestroyProcessParameters   _RtlDestroyProcessParameters   = (fpRtlDestroyProcessParameters)   GetProcAddress(hNtdll, "RtlDestroyProcessParameters");
 
     if (!_NtCreateUserProcess || !_NtCreateEvent || !_NtWaitForSingleObject
-        || !_NtClose || !_RtlInitUnicodeString)
+        || !_NtClose || !_RtlInitUnicodeString
+        || !_RtlCreateProcessParametersEx || !_RtlDestroyProcessParameters)
     {
         LOG_ERR(_T("Failed to resolve one or more ntdll exports"));
         return 1;
@@ -196,6 +210,29 @@ int _tmain(int argc, TCHAR **argv)
     int path_chars = (int)wcslen(nt_path);
     LOG(_T("Spawning child: %s"), nt_path);
 
+    UNICODE_STRING image_path_us;
+    _RtlInitUnicodeString(&image_path_us, nt_path);
+
+    // Build RTL_USER_PROCESS_PARAMETERS via the Rtl helper.
+    // NtCreateUserProcess rejects NULL ProcessParameters on
+    // modern Windows -- ntdll's LdrpInitializeProcess reads
+    // PEB.ProcessParameters for the command line / current
+    // directory / environment, and those fields need to be
+    // properly populated.
+    status = _RtlCreateProcessParametersEx(
+        &proc_params, &image_path_us,
+        NULL,            // DllPath (inherits parent's)
+        NULL,            // CurrentDirectory (inherits)
+        &image_path_us,  // CommandLine = image path
+        NULL,            // Environment (inherits)
+        NULL, NULL, NULL, NULL,
+        0);              // Flags
+    if (!NT_SUCCESS(status))
+    {
+        LOG_ERR(_T("RtlCreateProcessParametersEx failed: 0x%08lX"), (ULONG)status);
+        goto cleanup;
+    }
+
     // PS_CREATE_INFO -- input fields only. The buffer is fixed at
     // 88 bytes; the kernel rejects sizes it doesn't recognize.
     // Declared as a long-long array so c5 picks 8-byte alignment
@@ -240,7 +277,7 @@ int _tmain(int argc, TCHAR **argv)
         PROCESS_ALL_ACCESS, THREAD_ALL_ACCESS,
         NULL, NULL,                                          // process / thread OAs
         0, 0,                                                // process / thread flags
-        NULL,                                                // ProcessParameters
+        proc_params,
         (PVOID)create_info,
         (PVOID)attr_list);
     if (!NT_SUCCESS(status))
@@ -277,9 +314,10 @@ int _tmain(int argc, TCHAR **argv)
 
 cleanup:
     LOG(_T("Cleaning up handles"));
-    if (hThread)  _NtClose(hThread);
-    if (hProcess) _NtClose(hProcess);
-    if (hEvent)   _NtClose(hEvent);
+    if (hThread)     _NtClose(hThread);
+    if (hProcess)    _NtClose(hProcess);
+    if (hEvent)      _NtClose(hEvent);
+    if (proc_params) _RtlDestroyProcessParameters(proc_params);
 
     LOG(_T("Done (exit code: %d)"), exitCode);
     return exitCode;

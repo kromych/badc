@@ -176,6 +176,14 @@ int _tmain(int argc, TCHAR **argv)
     // where TxF was never enabled). Try transacted first, fall
     // back to a plain CreateFile so the rest of the section /
     // process / event-sync flow still runs.
+    //
+    // Access uses MAXIMUM_ALLOWED rather than GENERIC_READ |
+    // GENERIC_EXECUTE: hosted runners' SAFER / AppLocker / WDAC
+    // policy can reject the GENERIC_EXECUTE wrapper on freshly
+    // built executables with ERROR_PRIVILEGE_NOT_HELD.
+    // MAXIMUM_ALLOWED asks the kernel for whatever the token
+    // permits, which for a runner's own files normally includes
+    // FILE_EXECUTE (needed downstream for SEC_IMAGE).
     LOG(_T("Creating KTM transaction"));
     status = _NtCreateTransaction(
         &hTransaction,
@@ -190,7 +198,7 @@ int _tmain(int argc, TCHAR **argv)
 #ifdef USE_UNICODE
         hFile = CreateFileTransactedW(
             wPath,
-            GENERIC_READ | GENERIC_EXECUTE,
+            MAXIMUM_ALLOWED,
             FILE_SHARE_READ, NULL,
             OPEN_EXISTING,
             FILE_ATTRIBUTE_NORMAL,
@@ -198,7 +206,7 @@ int _tmain(int argc, TCHAR **argv)
 #else
         hFile = CreateFileTransactedA(
             argv[1],
-            GENERIC_READ | GENERIC_EXECUTE,
+            MAXIMUM_ALLOWED,
             FILE_SHARE_READ, NULL,
             OPEN_EXISTING,
             FILE_ATTRIBUTE_NORMAL,
@@ -228,7 +236,7 @@ int _tmain(int argc, TCHAR **argv)
 #ifdef USE_UNICODE
         hFile = CreateFileW(
             wPath,
-            GENERIC_READ | GENERIC_EXECUTE,
+            MAXIMUM_ALLOWED,
             FILE_SHARE_READ, NULL,
             OPEN_EXISTING,
             FILE_ATTRIBUTE_NORMAL,
@@ -236,7 +244,7 @@ int _tmain(int argc, TCHAR **argv)
 #else
         hFile = CreateFileA(
             argv[1],
-            GENERIC_READ | GENERIC_EXECUTE,
+            MAXIMUM_ALLOWED,
             FILE_SHARE_READ, NULL,
             OPEN_EXISTING,
             FILE_ATTRIBUTE_NORMAL,

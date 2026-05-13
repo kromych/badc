@@ -77,6 +77,12 @@ typedef NTSTATUS (*fpNtWaitForSingleObject)(
 
 typedef NTSTATUS (*fpNtClose)(HANDLE Handle);
 
+typedef NTSTATUS (*fpNtCreateSection)(
+    PHANDLE SectionHandle, ACCESS_MASK DesiredAccess,
+    POBJECT_ATTRIBUTES ObjectAttributes,
+    PLARGE_INTEGER MaximumSize, ULONG SectionPageProtection,
+    ULONG AllocationAttributes, HANDLE FileHandle);
+
 typedef void (*fpRtlInitUnicodeString)(
     PUNICODE_STRING DestinationString, PWSTR SourceString);
 
@@ -177,6 +183,7 @@ int _tmain(int argc, TCHAR **argv)
     fpNtCreateEvent                 _NtCreateEvent                 = (fpNtCreateEvent)                 GetProcAddress(hNtdll, "NtCreateEvent");
     fpNtWaitForSingleObject         _NtWaitForSingleObject         = (fpNtWaitForSingleObject)         GetProcAddress(hNtdll, "NtWaitForSingleObject");
     fpNtClose                       _NtClose                       = (fpNtClose)                       GetProcAddress(hNtdll, "NtClose");
+    fpNtCreateSection               _NtCreateSection               = (fpNtCreateSection)               GetProcAddress(hNtdll, "NtCreateSection");
     fpRtlInitUnicodeString          _RtlInitUnicodeString          = (fpRtlInitUnicodeString)          GetProcAddress(hNtdll, "RtlInitUnicodeString");
     fpRtlCreateProcessParametersEx  _RtlCreateProcessParametersEx  = (fpRtlCreateProcessParametersEx)  GetProcAddress(hNtdll, "RtlCreateProcessParametersEx");
     fpRtlDestroyProcessParameters   _RtlDestroyProcessParameters   = (fpRtlDestroyProcessParameters)   GetProcAddress(hNtdll, "RtlDestroyProcessParameters");
@@ -185,7 +192,7 @@ int _tmain(int argc, TCHAR **argv)
     fpRtlFreeUnicodeString          _RtlFreeUnicodeString          = (fpRtlFreeUnicodeString)          GetProcAddress(hNtdll, "RtlFreeUnicodeString");
 
     if (!_NtCreateUserProcess || !_NtCreateEvent || !_NtWaitForSingleObject
-        || !_NtClose || !_RtlInitUnicodeString
+        || !_NtClose || !_NtCreateSection || !_RtlInitUnicodeString
         || !_RtlCreateProcessParametersEx || !_RtlDestroyProcessParameters
         || !_RtlAdjustPrivilege || !_RtlDosPathNameToNtPathName_U
         || !_RtlFreeUnicodeString)
@@ -267,6 +274,51 @@ int _tmain(int argc, TCHAR **argv)
         goto cleanup;
     }
     LOG(_T("Spawning child: %s"), image_path_us.Buffer);
+
+    // Side-channel codegen canary: exercise the kernel32!CreateFile
+    // -> ntdll!NtCreateSection path against the same image, separate
+    // from the NtCreateUserProcess attempt below. These two calls
+    // were the main consumers of the windows.h HANDLE-return audit
+    // (a `CreateFile` declared as `int` truncated handles to 32
+    // bits; a miscompiled `NtCreateSection` would surface as a
+    // bogus NTSTATUS or a crash). Open, build an SEC_IMAGE section,
+    // close. Failure here is logged but not fatal -- the smoke
+    // verifies the milestones afterwards.
+    LOG(_T("Codegen canary: CreateFileW + NtCreateSection on %s"), dos_path);
+    HANDLE hCanaryFile = CreateFileW(
+        dos_path,
+        MAXIMUM_ALLOWED,
+        FILE_SHARE_READ, NULL,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL);
+    if (hCanaryFile == INVALID_HANDLE_VALUE)
+    {
+        LOG_ERR(_T("CreateFileW failed: 0x%08lX"), GetLastError());
+    }
+    else
+    {
+        LOG_OK(_T("CreateFileW returned handle: %p"), hCanaryFile);
+        HANDLE hCanarySection = NULL;
+        NTSTATUS sect_status = _NtCreateSection(
+            &hCanarySection,
+            SECTION_ALL_ACCESS,
+            NULL,
+            NULL,
+            PAGE_READONLY,
+            SEC_IMAGE,
+            hCanaryFile);
+        if (!NT_SUCCESS(sect_status))
+        {
+            LOG_ERR(_T("NtCreateSection failed: 0x%08lX"), (ULONG)sect_status);
+        }
+        else
+        {
+            LOG_OK(_T("NtCreateSection returned handle: %p"), hCanarySection);
+            _NtClose(hCanarySection);
+        }
+        CloseHandle(hCanaryFile);
+    }
 
     // Build RTL_USER_PROCESS_PARAMETERS via the Rtl helper.
     // NtCreateUserProcess rejects NULL ProcessParameters on

@@ -102,11 +102,18 @@ def host_windows_target() -> str | None:
 # failing at the privilege gate. A missing or out-of-order
 # milestone means the loader either crashed earlier or got
 # rerouted -- in either case a codegen smell worth flagging.
+# The `CreateFileW` / `NtCreateSection` markers exercise the
+# kernel32 HANDLE-returning bindings that the windows.h audit
+# fixed; a truncated handle would surface here, not at the
+# NtCreateUserProcess line.
 MILESTONES = [
     "Resolving ntdll exports",
     "ntdll exports resolved",
     "Sync event created",
     "Spawning child:",
+    "Codegen canary: CreateFileW + NtCreateSection",
+    "CreateFileW returned handle:",
+    "NtCreateSection returned handle:",
     "NtCreateUserProcess failed:",
 ]
 

@@ -294,12 +294,11 @@ int _tmain(int argc, TCHAR **argv)
     memset(attr_list, 0, sizeof(attr_list));
     attr_list[0]  = (long long)sizeof(attr_list);            // TotalLength
     attr_list[1]  = PS_ATTRIBUTE_IMAGE_NAME;                 // Attribute
-    // PsAttributeImageName's value is a pointer to a
-    // UNICODE_STRING, not to the raw wide-char buffer. Pass
-    // &image_path_us; the kernel reads .Length / .Buffer out of
-    // it.
-    attr_list[2]  = (long long)sizeof(UNICODE_STRING);
-    *(void **)&attr_list[3] = &image_path_us;
+    // Empirical: the kernel reads ValuePtr as the raw wide-char
+    // buffer and Size as byte length, not as a pointer to a
+    // UNICODE_STRING. Match what kernel32 / Wine pass.
+    attr_list[2]  = (long long)image_path_us.Length;
+    *(void **)&attr_list[3] = image_path_us.Buffer;
     // attr_list[4] (ReturnLength) stays 0.
 
     status = _NtCreateUserProcess(

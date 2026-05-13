@@ -1389,7 +1389,9 @@ impl Preprocessor {
         }
         // `push, <level>` -- accepted; the level is ignored
         // because c5 has no notion of overall warning levels.
-        if let Some(level) = inner.strip_prefix("push").and_then(|s| s.trim().strip_prefix(','))
+        if let Some(level) = inner
+            .strip_prefix("push")
+            .and_then(|s| s.trim().strip_prefix(','))
         {
             let level = level.trim();
             if !level.chars().all(|c| c.is_ascii_digit()) {
@@ -3498,7 +3500,11 @@ int x_2 = __COUNTER__;
         let _ = pp
             .process("#pragma warning(disable : 4054 4055 4100)\n")
             .expect("preprocessor failed");
-        assert!(pp.warnings.is_empty(), "expected no warnings: {:?}", pp.warnings);
+        assert!(
+            pp.warnings.is_empty(),
+            "expected no warnings: {:?}",
+            pp.warnings
+        );
         assert_eq!(
             pp.warning_disabled.iter().copied().collect::<Vec<_>>(),
             vec![4054_u32, 4055, 4100]
@@ -3549,9 +3555,7 @@ int x_2 = __COUNTER__;
     #[test]
     fn pragma_warning_bad_action_warns() {
         let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
-        let _ = pp
-            .process("#pragma warning(silence : 4267)\n")
-            .unwrap();
+        let _ = pp.process("#pragma warning(silence : 4267)\n").unwrap();
         assert!(
             pp.warnings.iter().any(|w| w.contains("silence")),
             "expected unrecognised-action warning: {:?}",
@@ -3562,11 +3566,11 @@ int x_2 = __COUNTER__;
     #[test]
     fn pragma_warning_bad_id_warns() {
         let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
-        let _ = pp
-            .process("#pragma warning(disable : abc)\n")
-            .unwrap();
+        let _ = pp.process("#pragma warning(disable : abc)\n").unwrap();
         assert!(
-            pp.warnings.iter().any(|w| w.contains("expected an integer")),
+            pp.warnings
+                .iter()
+                .any(|w| w.contains("expected an integer")),
             "expected bad-ID warning: {:?}",
             pp.warnings
         );

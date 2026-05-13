@@ -281,8 +281,12 @@ int _tmain(int argc, TCHAR **argv)
     memset(attr_list, 0, sizeof(attr_list));
     attr_list[0]  = (long long)sizeof(attr_list);            // TotalLength
     attr_list[1]  = PS_ATTRIBUTE_IMAGE_NAME;                 // Attribute
-    attr_list[2]  = (long long)(path_chars * 2);             // Size (bytes)
-    *(void **)&attr_list[3] = nt_path;                       // ValuePtr
+    // PsAttributeImageName's value is a pointer to a
+    // UNICODE_STRING, not to the raw wide-char buffer. Pass
+    // &image_path_us; the kernel reads .Length / .Buffer out of
+    // it.
+    attr_list[2]  = (long long)sizeof(UNICODE_STRING);
+    *(void **)&attr_list[3] = &image_path_us;
     // attr_list[4] (ReturnLength) stays 0.
 
     status = _NtCreateUserProcess(

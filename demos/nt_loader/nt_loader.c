@@ -1,65 +1,71 @@
-// ─── Build configuration ──────────────────────────────────────────────────────
-// Define USE_UNICODE to build with wide-character (Unicode) strings.
-// Comment out or undefine for narrow-character (ANSI) strings.
+// nt_loader -- launches a user-mode native NT program.
+//
+// Builds an `SEC_IMAGE` section over a transacted file, spawns a
+// process from the section via `NtCreateProcessEx`, then waits up
+// to two seconds on a named event for the child to signal it.
+// `#define USE_UNICODE` selects the wide-char (`wmain`) build;
+// commenting it out selects the narrow-char (`main`) build.
+
 #define USE_UNICODE
 
-// ─── MSVC compatibility shim ──────────────────────────────────────────────────
-// `<msvc_compat.h>` provides no-op definitions for the MSVC keywords
-// this source uses (`__int64`, `__stdcall`, `__cdecl`, `__declspec`)
-// plus the `#pragma binding(...)` entries that wire the
-// kernel32 / msvcrt declarations below to the IAT.
-#include "msvc_compat.h"
+// ─── DLL bindings ────────────────────────────────────────────────────────────
+// c5 resolves imports through `#pragma binding(...)`; declarations
+// below are plain C and the per-binding pragma wires each to its
+// IAT slot.
 
-// ─── Linker directives ───────────────────────────────────────────────────────
-// `#pragma comment(lib, ...)` is an MSVC linker directive; badc has
-// no link step and resolves imports through the bindings emitted by
-// `<msvc_compat.h>`. The compiler accepts the directive silently.
-#pragma comment(lib, "kernel32.lib")
-#pragma comment(lib, "msvcrt.lib")
+#pragma dylib(kernel32, "kernel32.dll")
+#pragma dylib(msvcrt,   "msvcrt.dll")
 
-// ─── Primitive types (replaces <windows.h>) ───────────────────────────────────
-typedef void                    VOID;
-typedef void* PVOID;
-typedef unsigned char           UCHAR;
-typedef unsigned char           BOOLEAN;
-typedef unsigned short          USHORT;
-typedef unsigned long           ULONG;
-typedef long                    LONG;
-typedef int                     BOOL;
-typedef unsigned long           DWORD;
-typedef PVOID                   HANDLE;
-typedef HANDLE* PHANDLE;
-typedef ULONG                   ACCESS_MASK;
-typedef LONG                    NTSTATUS;
-typedef USHORT                  WCHAR;
-typedef WCHAR* PWSTR;
-typedef char                    CHAR;
-typedef CHAR* PSTR;
-typedef UCHAR* PUCHAR;
+#pragma binding(kernel32::GetModuleHandleW,      "GetModuleHandleW")
+#pragma binding(kernel32::GetProcAddress,        "GetProcAddress")
+#pragma binding(kernel32::CloseHandle,           "CloseHandle")
+#pragma binding(kernel32::GetLastError,          "GetLastError")
+#pragma binding(kernel32::GetProcessId,          "GetProcessId")
+#pragma binding(kernel32::lstrcpyW,              "lstrcpyW")
+#pragma binding(kernel32::lstrcpyA,              "lstrcpyA")
+#pragma binding(kernel32::MultiByteToWideChar,   "MultiByteToWideChar")
+#pragma binding(kernel32::CreateFileTransactedW, "CreateFileTransactedW")
+#pragma binding(kernel32::CreateFileTransactedA, "CreateFileTransactedA")
 
-#ifdef _WIN64
-typedef __int64                 LONG_PTR;
-typedef unsigned __int64        ULONG_PTR;
-typedef unsigned __int64        SIZE_T;
-#else
-typedef long                    LONG_PTR;
-typedef unsigned long           ULONG_PTR;
-typedef unsigned long           SIZE_T;
-#endif
+#pragma binding(msvcrt::wprintf, "wprintf")
+#pragma binding(msvcrt::printf,  "printf")
+#pragma binding(msvcrt::wcslen,  "wcslen")
+
+// ─── Primitive types ─────────────────────────────────────────────────────────
+typedef void                     VOID;
+typedef void                    *PVOID;
+typedef unsigned char            UCHAR;
+typedef unsigned char            BOOLEAN;
+typedef unsigned short           USHORT;
+typedef unsigned long            ULONG;
+typedef long                     LONG;
+typedef int                      BOOL;
+typedef unsigned long            DWORD;
+typedef PVOID                    HANDLE;
+typedef HANDLE                  *PHANDLE;
+typedef ULONG                    ACCESS_MASK;
+typedef LONG                     NTSTATUS;
+typedef unsigned short           WCHAR;
+typedef WCHAR                   *PWSTR;
+typedef char                     CHAR;
+typedef CHAR                    *PSTR;
+typedef long long                LONG_PTR;
+typedef unsigned long long       ULONG_PTR;
+typedef unsigned long long       SIZE_T;
 
 typedef union _LARGE_INTEGER {
     struct { ULONG LowPart; LONG HighPart; };
-    __int64 QuadPart;
-} LARGE_INTEGER, * PLARGE_INTEGER;
+    long long QuadPart;
+} LARGE_INTEGER, *PLARGE_INTEGER;
 
 typedef struct _GUID {
     unsigned long  Data1;
     unsigned short Data2;
     unsigned short Data3;
     unsigned char  Data4[8];
-} GUID, * LPGUID;
+} GUID, *LPGUID;
 
-// ─── TCHAR macros (replaces <tchar.h>) ───────────────────────────────────────
+// ─── TCHAR macros ────────────────────────────────────────────────────────────
 #ifdef USE_UNICODE
 typedef WCHAR   TCHAR;
 #  define _T(x)      L##x
@@ -72,7 +78,7 @@ typedef CHAR    TCHAR;
 #  define _tmain     main
 #endif
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Constants ───────────────────────────────────────────────────────────────
 #define NULL                    ((PVOID)0)
 #define FALSE                   ((BOOLEAN)0)
 #define TRUE                    ((BOOLEAN)1)
@@ -86,28 +92,36 @@ typedef CHAR    TCHAR;
 
 #define PAGE_READONLY           0x02UL
 #define SEC_IMAGE               0x01000000UL
-#define SECTION_ALL_ACCESS      0x000F001FUL    // STANDARD_RIGHTS_REQUIRED | section-specific bits
-#define PROCESS_ALL_ACCESS      0x001FFFFFUL    // STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0xFFFF
-#define TRANSACTION_ALL_ACCESS  0x000F003FUL    // STANDARD_RIGHTS_REQUIRED | 0x3F
+#define SECTION_ALL_ACCESS      0x000F001FUL
+#define PROCESS_ALL_ACCESS      0x001FFFFFUL
+#define TRANSACTION_ALL_ACCESS  0x000F003FUL
+#define EVENT_ALL_ACCESS        0x001F0003UL
 
 #define CP_ACP                  0
 #define OBJ_CASE_INSENSITIVE    0x00000040UL
 #define PS_INHERIT_HANDLES      4
 
-// ─── NT helpers ───────────────────────────────────────────────────────────────
+// `EVENT_TYPE` values for `NtCreateEvent` -- 0 = NotificationEvent
+// (manual-reset), 1 = SynchronizationEvent (auto-reset).
+#define NOTIFICATION_EVENT      0
+#define SYNCHRONIZATION_EVENT   1
+
+// `NtWaitForSingleObject` timeout values are 100-ns ticks; negative
+// values are relative (counted from now), positive are absolute.
+// -10_000 (= -1e4) = 1 ms; -2 * 1e7 = 2 seconds.
+#define EVENT_WAIT_TIMEOUT_TICKS  ((long long)-20000000)
+
+#define STATUS_TIMEOUT          ((NTSTATUS)0x00000102L)
+
 #define NT_SUCCESS(Status)      ((NTSTATUS)(Status) >= 0)
 #define NtCurrentProcess()      ((HANDLE)(LONG_PTR)-1)
 
-// ─── Calling conventions ──────────────────────────────────────────────────────
-#define NTAPI   __stdcall
-#define WINAPI  __stdcall
-
-// ─── NT struct definitions ────────────────────────────────────────────────────
+// ─── NT struct definitions ───────────────────────────────────────────────────
 typedef struct _UNICODE_STRING {
-    USHORT Length;          // bytes, not including null terminator
+    USHORT Length;
     USHORT MaximumLength;
     PWSTR  Buffer;
-} UNICODE_STRING, * PUNICODE_STRING;
+} UNICODE_STRING, *PUNICODE_STRING;
 
 typedef struct _OBJECT_ATTRIBUTES {
     ULONG           Length;
@@ -116,84 +130,88 @@ typedef struct _OBJECT_ATTRIBUTES {
     ULONG           Attributes;
     PVOID           SecurityDescriptor;
     PVOID           SecurityQualityOfService;
-} OBJECT_ATTRIBUTES, * POBJECT_ATTRIBUTES;
+} OBJECT_ATTRIBUTES, *POBJECT_ATTRIBUTES;
 
-// ─── NT function pointer typedefs ─────────────────────────────────────────────
-typedef NTSTATUS(NTAPI* fpNtCreateProcessEx)(
-    PHANDLE            ProcessHandle,
-    ACCESS_MASK        DesiredAccess,
+// ─── ntdll function-pointer typedefs ─────────────────────────────────────────
+typedef NTSTATUS (*fpNtCreateProcessEx)(
+    PHANDLE ProcessHandle, ACCESS_MASK DesiredAccess,
+    POBJECT_ATTRIBUTES ObjectAttributes, HANDLE ParentProcess,
+    ULONG Flags, HANDLE SectionHandle, HANDLE DebugPort,
+    HANDLE ExceptionPort, BOOLEAN InJob);
+
+typedef NTSTATUS (*fpNtCreateTransaction)(
+    PHANDLE TransactionHandle, ACCESS_MASK DesiredAccess,
+    POBJECT_ATTRIBUTES ObjectAttributes, LPGUID Uow,
+    HANDLE TmHandle, ULONG CreateOptions,
+    ULONG IsolationLevel, ULONG IsolationFlags,
+    PLARGE_INTEGER Timeout, PUNICODE_STRING Description);
+
+typedef NTSTATUS (*fpNtCreateSection)(
+    PHANDLE SectionHandle, ACCESS_MASK DesiredAccess,
     POBJECT_ATTRIBUTES ObjectAttributes,
-    HANDLE             ParentProcess,
-    ULONG              Flags,
-    HANDLE             SectionHandle,
-    HANDLE             DebugPort,
-    HANDLE             ExceptionPort,
-    BOOLEAN            InJob
-    );
+    PLARGE_INTEGER MaximumSize, ULONG SectionPageProtection,
+    ULONG AllocationAttributes, HANDLE FileHandle);
 
-typedef NTSTATUS(NTAPI* fpNtCreateTransaction)(
-    PHANDLE            TransactionHandle,
-    ACCESS_MASK        DesiredAccess,
-    POBJECT_ATTRIBUTES ObjectAttributes,
-    LPGUID             Uow,
-    HANDLE             TmHandle,
-    ULONG              CreateOptions,
-    ULONG              IsolationLevel,
-    ULONG              IsolationFlags,
-    PLARGE_INTEGER     Timeout,
-    PUNICODE_STRING    Description
-    );
+typedef NTSTATUS (*fpNtCreateEvent)(
+    PHANDLE EventHandle, ACCESS_MASK DesiredAccess,
+    POBJECT_ATTRIBUTES ObjectAttributes, ULONG EventType,
+    BOOLEAN InitialState);
 
-typedef NTSTATUS(NTAPI* fpNtCreateSection)(
-    PHANDLE            SectionHandle,
-    ACCESS_MASK        DesiredAccess,
-    POBJECT_ATTRIBUTES ObjectAttributes,
-    PLARGE_INTEGER     MaximumSize,
-    ULONG              SectionPageProtection,
-    ULONG              AllocationAttributes,
-    HANDLE             FileHandle
-    );
+typedef NTSTATUS (*fpNtWaitForSingleObject)(
+    HANDLE Handle, BOOLEAN Alertable, PLARGE_INTEGER Timeout);
 
-typedef NTSTATUS(NTAPI* fpNtClose)(
-    HANDLE Handle
-    );
+typedef NTSTATUS (*fpNtClose)(HANDLE Handle);
 
-// ─── Win32 API declarations ───────────────────────────────────────────────────
-typedef int (WINAPI* FARPROC)();
+typedef void (*fpRtlInitUnicodeString)(
+    PUNICODE_STRING DestinationString, PWSTR SourceString);
 
-__declspec(dllimport) HANDLE WINAPI GetModuleHandleW(const WCHAR* lpModuleName);
-__declspec(dllimport) FARPROC WINAPI GetProcAddress(HANDLE hModule, const CHAR* lpProcName);
-__declspec(dllimport) BOOL   WINAPI CloseHandle(HANDLE hObject);
-__declspec(dllimport) DWORD  WINAPI GetLastError(VOID);
-__declspec(dllimport) DWORD  WINAPI GetProcessId(HANDLE Process);
-__declspec(dllimport) WCHAR* WINAPI lstrcpyW(WCHAR* lpString1, const WCHAR* lpString2);
-__declspec(dllimport) CHAR* WINAPI lstrcpyA(CHAR* lpString1, const CHAR* lpString2);
-__declspec(dllimport) int    WINAPI MultiByteToWideChar(DWORD CodePage, DWORD dwFlags, const CHAR* lpMultiByteStr, int cbMultiByte, WCHAR* lpWideCharStr, int cchWideChar);
+// ─── Win32 declarations ──────────────────────────────────────────────────────
+HANDLE GetModuleHandleW(const WCHAR *lpModuleName);
+PVOID  GetProcAddress(HANDLE hModule, const CHAR *lpProcName);
+BOOL   CloseHandle(HANDLE hObject);
+DWORD  GetLastError(VOID);
+DWORD  GetProcessId(HANDLE Process);
+WCHAR *lstrcpyW(WCHAR *dst, const WCHAR *src);
+CHAR  *lstrcpyA(CHAR *dst, const CHAR *src);
+int    MultiByteToWideChar(DWORD CodePage, DWORD dwFlags,
+                           const CHAR *lpMultiByteStr, int cbMultiByte,
+                           WCHAR *lpWideCharStr, int cchWideChar);
 
-__declspec(dllimport) HANDLE WINAPI CreateFileTransactedW(
-    const WCHAR* lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
+HANDLE CreateFileTransactedW(
+    const WCHAR *lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
     PVOID lpSecurityAttributes, DWORD dwCreationDisposition,
     DWORD dwFlagsAndAttributes, HANDLE hTemplateFile,
     HANDLE hTransaction, PVOID pusMiniVersion, PVOID pExtendedParameter);
 
-__declspec(dllimport) HANDLE WINAPI CreateFileTransactedA(
-    const CHAR* lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
+HANDLE CreateFileTransactedA(
+    const CHAR *lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
     PVOID lpSecurityAttributes, DWORD dwCreationDisposition,
     DWORD dwFlagsAndAttributes, HANDLE hTemplateFile,
     HANDLE hTransaction, PVOID pusMiniVersion, PVOID pExtendedParameter);
 
 // ─── CRT declarations (msvcrt.dll) ───────────────────────────────────────────
-__declspec(dllimport) int    __cdecl wprintf(const WCHAR * _Format, ...);
-__declspec(dllimport) int    __cdecl printf(const CHAR * _Format, ...);
-__declspec(dllimport) SIZE_T __cdecl wcslen(const WCHAR * str);
+int    wprintf(const WCHAR *fmt, ...);
+int    printf(const CHAR *fmt, ...);
+SIZE_T wcslen(const WCHAR *str);
 
-// ─── Logging helpers ──────────────────────────────────────────────────────────
+// ─── Shared-object name for the cross-process event ──────────────────────────
+// `\BaseNamedObjects\BadcLoaderSync` -- canonical NT-namespace name.
+// The loader creates it; the spawned process (demos/nt_hello) opens
+// and signals it.
+static WCHAR g_event_name[] = {
+    '\\', 'B', 'a', 's', 'e', 'N', 'a', 'm', 'e', 'd', 'O', 'b', 'j',
+    'e', 'c', 't', 's', '\\',
+    'B', 'a', 'd', 'c', 'L', 'o', 'a', 'd', 'e', 'r', 'S', 'y', 'n', 'c',
+    0
+};
+
+// ─── Logging helpers ─────────────────────────────────────────────────────────
 #define LOG(fmt, ...)     _tprintf(_T("[*] ") fmt _T("\n"), ##__VA_ARGS__)
 #define LOG_OK(fmt, ...)  _tprintf(_T("[+] ") fmt _T("\n"), ##__VA_ARGS__)
 #define LOG_ERR(fmt, ...) _tprintf(_T("[-] ") fmt _T("\n"), ##__VA_ARGS__)
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
-int _tmain(int argc, TCHAR** argv)
+int _tmain(int argc, TCHAR **argv)
 {
     if (argc != 2)
     {
@@ -206,6 +224,7 @@ int _tmain(int argc, TCHAR** argv)
     HANDLE    hTransaction = NULL;
     HANDLE    hTransactedFile = INVALID_HANDLE_VALUE;
     HANDLE    hSection = NULL;
+    HANDLE    hEvent = NULL;
     int       exitCode = 1;
 
     OBJECT_ATTRIBUTES objattr;
@@ -216,9 +235,9 @@ int _tmain(int argc, TCHAR** argv)
     objattr.SecurityDescriptor = NULL;
     objattr.SecurityQualityOfService = NULL;
 
-    // ── Resolve ntdll exports ─────────────────────────────────────────────────
-    // ntdll is always mapped into every process; GetModuleHandle avoids a
-    // ref-count bump and the need for a matching FreeLibrary.
+    // ── Resolve ntdll exports ────────────────────────────────────────────────
+    // ntdll is mapped into every process; GetModuleHandle avoids
+    // a ref-count bump and an explicit FreeLibrary.
     LOG(_T("Resolving ntdll exports"));
     HANDLE hNtdll = GetModuleHandleW(L"ntdll.dll");
     if (!hNtdll)
@@ -227,17 +246,42 @@ int _tmain(int argc, TCHAR** argv)
         return 1;
     }
 
-    fpNtCreateProcessEx   _NtCreateProcessEx = (fpNtCreateProcessEx)GetProcAddress(hNtdll, "NtCreateProcessEx");
-    fpNtCreateTransaction _NtCreateTransaction = (fpNtCreateTransaction)GetProcAddress(hNtdll, "NtCreateTransaction");
-    fpNtCreateSection     _NtCreateSection = (fpNtCreateSection)GetProcAddress(hNtdll, "NtCreateSection");
-    fpNtClose             _NtClose = (fpNtClose)GetProcAddress(hNtdll, "NtClose");
+    fpNtCreateProcessEx     _NtCreateProcessEx     = (fpNtCreateProcessEx)    GetProcAddress(hNtdll, "NtCreateProcessEx");
+    fpNtCreateTransaction   _NtCreateTransaction   = (fpNtCreateTransaction)  GetProcAddress(hNtdll, "NtCreateTransaction");
+    fpNtCreateSection       _NtCreateSection       = (fpNtCreateSection)      GetProcAddress(hNtdll, "NtCreateSection");
+    fpNtCreateEvent         _NtCreateEvent         = (fpNtCreateEvent)        GetProcAddress(hNtdll, "NtCreateEvent");
+    fpNtWaitForSingleObject _NtWaitForSingleObject = (fpNtWaitForSingleObject)GetProcAddress(hNtdll, "NtWaitForSingleObject");
+    fpNtClose               _NtClose               = (fpNtClose)              GetProcAddress(hNtdll, "NtClose");
+    fpRtlInitUnicodeString  _RtlInitUnicodeString  = (fpRtlInitUnicodeString) GetProcAddress(hNtdll, "RtlInitUnicodeString");
 
-    if (!_NtCreateProcessEx || !_NtCreateTransaction || !_NtCreateSection || !_NtClose)
+    if (!_NtCreateProcessEx || !_NtCreateTransaction || !_NtCreateSection
+        || !_NtCreateEvent || !_NtWaitForSingleObject || !_NtClose
+        || !_RtlInitUnicodeString)
     {
         LOG_ERR(_T("Failed to resolve one or more ntdll exports"));
         return 1;
     }
     LOG_OK(_T("ntdll exports resolved"));
+
+    // ── Create the sync event ─────────────────────────────────────────────────
+    UNICODE_STRING event_name_us;
+    _RtlInitUnicodeString(&event_name_us, g_event_name);
+    OBJECT_ATTRIBUTES event_objattr;
+    event_objattr.Length = sizeof(OBJECT_ATTRIBUTES);
+    event_objattr.Attributes = OBJ_CASE_INSENSITIVE;
+    event_objattr.ObjectName = &event_name_us;
+    event_objattr.RootDirectory = NULL;
+    event_objattr.SecurityDescriptor = NULL;
+    event_objattr.SecurityQualityOfService = NULL;
+    status = _NtCreateEvent(
+        &hEvent, EVENT_ALL_ACCESS, &event_objattr,
+        NOTIFICATION_EVENT, FALSE);
+    if (!NT_SUCCESS(status))
+    {
+        LOG_ERR(_T("NtCreateEvent failed: 0x%08lX"), (ULONG)status);
+        return 1;
+    }
+    LOG_OK(_T("Sync event created"));
 
     // ── Build wide path (UNICODE_STRING.Buffer is always PWSTR) ──────────────
     WCHAR wPath[MAX_PATH];
@@ -246,7 +290,7 @@ int _tmain(int argc, TCHAR** argv)
     if (wcslen(argv[1]) >= MAX_PATH)
     {
         LOG_ERR(_T("Path too long (>= MAX_PATH)"));
-        return 1;
+        goto cleanup;
     }
     lstrcpyW(wPath, argv[1]);
 #else
@@ -254,11 +298,11 @@ int _tmain(int argc, TCHAR** argv)
     if (wPathLen == 0)
     {
         LOG_ERR(_T("MultiByteToWideChar failed: 0x%08lX"), GetLastError());
-        return 1;
+        goto cleanup;
     }
 #endif
 
-    // ── Create KTM transaction ────────────────────────────────────────────────
+    // ── Create KTM transaction ───────────────────────────────────────────────
     LOG(_T("Creating KTM transaction"));
     status = _NtCreateTransaction(
         &hTransaction,
@@ -273,7 +317,7 @@ int _tmain(int argc, TCHAR** argv)
     }
     LOG_OK(_T("Transaction created (handle: %p)"), hTransaction);
 
-    // ── Open target file within the transaction ───────────────────────────────
+    // ── Open target file within the transaction ──────────────────────────────
     LOG(_T("Opening transacted file: %s"), argv[1]);
 
 #ifdef USE_UNICODE
@@ -301,13 +345,13 @@ int _tmain(int argc, TCHAR** argv)
     }
     LOG_OK(_T("Transacted file opened (handle: %p)"), hTransactedFile);
 
-    // ── Create image section backed by the transacted file ────────────────────
+    // ── Create image section backed by the transacted file ───────────────────
     LOG(_T("Creating image section"));
     status = _NtCreateSection(
         &hSection,
         SECTION_ALL_ACCESS,
         NULL,
-        NULL,               // MaximumSize = NULL: use full file size
+        NULL,
         PAGE_READONLY,
         SEC_IMAGE,
         hTransactedFile);
@@ -344,6 +388,24 @@ int _tmain(int argc, TCHAR** argv)
         goto cleanup;
     }
     LOG_OK(_T("Process created. PID = %lu"), (ULONG)pid);
+
+    // ── Wait for the child to signal the event (2 s) ─────────────────────────
+    LOG(_T("Waiting up to 2s for child to signal the sync event"));
+    LARGE_INTEGER timeout;
+    timeout.QuadPart = EVENT_WAIT_TIMEOUT_TICKS;
+    status = _NtWaitForSingleObject(hEvent, FALSE, &timeout);
+    if (status == 0)
+    {
+        LOG_OK(_T("Sync event received"));
+    }
+    else if (status == STATUS_TIMEOUT)
+    {
+        LOG_ERR(_T("Timed out waiting for sync event"));
+    }
+    else
+    {
+        LOG_ERR(_T("NtWaitForSingleObject failed: 0x%08lX"), (ULONG)status);
+    }
     exitCode = 0;
 
 cleanup:
@@ -352,6 +414,7 @@ cleanup:
     if (hTransaction)                            _NtClose(hTransaction);
     if (hSection)                                _NtClose(hSection);
     if (hProcess)                                _NtClose(hProcess);
+    if (hEvent)                                  _NtClose(hEvent);
 
     LOG(_T("Done (exit code: %d)"), exitCode);
     return exitCode;

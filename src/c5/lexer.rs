@@ -355,9 +355,8 @@ impl Lexer {
     /// (`L'...'`) literal. Caller has consumed the `L`; `self.pos`
     /// points at the opening quote. Characters are emitted into
     /// `data` as 16-bit little-endian values (one slot per `char`)
-    /// to match the `WCHAR` / `unsigned short` representation in
-    /// the bundled `windows.h`. Adjacent `L"..."` literals are
-    /// absorbed into the current token so the parser's narrow
+    /// per the UTF-16 representation. Adjacent `L"..."` literals
+    /// are absorbed into the current token so the parser's narrow
     /// concatenation loop does not interleave a 1-byte gap, and a
     /// 16-bit `0` terminator is appended at the end.
     fn lex_wide_literal(&mut self, data: &mut Vec<u8>) -> Result<(), C5Error> {

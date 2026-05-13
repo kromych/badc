@@ -5,11 +5,14 @@
  * `ntdll!LdrpInitializeProcess`, not the kernel32-backed Win32
  * path: no kernel32, no msvcrt, no console attachment, and no
  * access to most of the Win32 API. ntdll's system-call layer is
- * the only thing reliably available before the CRT.
+ * what's reliably available before the CRT.
  *
- * The demo declares `NtTerminateProcess` from `ntdll.dll` and
- * exits with status 0. `smss.exe`, `autochk.exe`, and the
- * boot-time `chkdsk.exe` start out in roughly this shape.
+ * The demo opens the cross-process event the bundled `nt_loader`
+ * demo creates (`\BaseNamedObjects\BadcLoaderSync`), signals it,
+ * and exits with status 0. Running it stand-alone (with no
+ * matching loader) is harmless: `NtOpenEvent` returns
+ * `STATUS_OBJECT_NAME_NOT_FOUND` and the process still
+ * terminates cleanly.
  *
  * Build:
  *
@@ -24,31 +27,67 @@
  *         /v BootExecute /t REG_MULTI_SZ /d "autocheck autochk *\0nt_hello"
  *     -- reboot --
  *
- * The process runs before Win32 / csrss are up and has no
- * console to print to. Real native apps reach `NtDisplayString`
- * (visible on the boot console) or build their own console via
- * `NtCreateFile` against `\Device\NamedPipe\...`.
- *
  * The PE writer treats `subsystem(native)` as passthrough: no
  * CRT shim sits in front of `NtProcessStartup`, no
  * `msvcrt!__getmainargs` / `msvcrt!exit` are auto-added. The
- * IAT contains exactly what the source declares -- here, one
- * entry: `ntdll!NtTerminateProcess`. */
+ * IAT contains exactly the ntdll exports the source declares. */
 
 #pragma subsystem(native)
 #pragma entrypoint(NtProcessStartup)
 
 #pragma dylib(ntdll, "ntdll.dll")
-#pragma binding(ntdll::NtTerminateProcess, "NtTerminateProcess")
+#pragma binding(ntdll::NtTerminateProcess,  "NtTerminateProcess")
+#pragma binding(ntdll::NtOpenEvent,         "NtOpenEvent")
+#pragma binding(ntdll::NtSetEvent,          "NtSetEvent")
+#pragma binding(ntdll::NtClose,             "NtClose")
 
-typedef long NTSTATUS;
-typedef void *HANDLE;
+typedef long           NTSTATUS;
+typedef void          *PVOID;
+typedef PVOID          HANDLE;
+typedef HANDLE        *PHANDLE;
+typedef unsigned long  ULONG;
+typedef unsigned short USHORT;
+typedef unsigned short WCHAR;
+typedef WCHAR         *PWSTR;
+typedef ULONG          ACCESS_MASK;
 
-/* `(HANDLE)-1` is the calling-process pseudo-handle; the kernel
- * maps it to the real process handle on syscall entry. */
-#define NtCurrentProcess ((HANDLE)(long long)-1)
+#define NULL                  ((PVOID)0)
+#define NtCurrentProcess      ((HANDLE)(long long)-1)
+#define OBJ_CASE_INSENSITIVE  0x00000040UL
+#define EVENT_MODIFY_STATE    0x00000002UL
+#define NT_SUCCESS(s)         ((NTSTATUS)(s) >= 0)
+
+typedef struct _UNICODE_STRING {
+    USHORT Length;
+    USHORT MaximumLength;
+    PWSTR  Buffer;
+} UNICODE_STRING, *PUNICODE_STRING;
+
+typedef struct _OBJECT_ATTRIBUTES {
+    ULONG           Length;
+    HANDLE          RootDirectory;
+    PUNICODE_STRING ObjectName;
+    ULONG           Attributes;
+    PVOID           SecurityDescriptor;
+    PVOID           SecurityQualityOfService;
+} OBJECT_ATTRIBUTES, *POBJECT_ATTRIBUTES;
 
 NTSTATUS NtTerminateProcess(HANDLE ProcessHandle, NTSTATUS ExitStatus);
+NTSTATUS NtOpenEvent(PHANDLE EventHandle, ACCESS_MASK DesiredAccess,
+                     POBJECT_ATTRIBUTES ObjectAttributes);
+NTSTATUS NtSetEvent(HANDLE EventHandle, ULONG *PreviousState);
+NTSTATUS NtClose(HANDLE Handle);
+
+/* `\BaseNamedObjects\BadcLoaderSync` -- the same name the loader
+ * uses for the cross-process event. Spelled as a literal CHAR16
+ * array so the demo stays free of the `L"..."` wide-string
+ * literal surface. */
+static WCHAR g_event_name[] = {
+    '\\', 'B', 'a', 's', 'e', 'N', 'a', 'm', 'e', 'd', 'O', 'b', 'j',
+    'e', 'c', 't', 's', '\\',
+    'B', 'a', 'd', 'c', 'L', 'o', 'a', 'd', 'e', 'r', 'S', 'y', 'n', 'c',
+    0
+};
 
 /* NT-native usermode entry: the loader hands `PPEB` in `rcx`
  * (Win64) / `x0` (AAPCS64). Declaring the parameter pins c5's
@@ -56,9 +95,33 @@ NTSTATUS NtTerminateProcess(HANDLE ProcessHandle, NTSTATUS ExitStatus);
  * `Peb->ProcessParameters` if the demo grew. */
 void NtProcessStartup(void *Peb) {
     (void)Peb;
-    /* NtTerminateProcess on the calling process does not return;
-     * the kernel tears down the address space before the
-     * instruction pointer can advance. The dead end-of-body
-     * keeps c5's flow analysis quiet. */
+
+    /* Build the OBJECT_ATTRIBUTES + UNICODE_STRING in place; no
+     * `RtlInitUnicodeString` import needed. `Length` and
+     * `MaximumLength` are in bytes and exclude the trailing nul. */
+    UNICODE_STRING name;
+    int n = 0;
+    while (g_event_name[n] != 0) {
+        n++;
+    }
+    name.Length        = (USHORT)(n * 2);
+    name.MaximumLength = (USHORT)((n + 1) * 2);
+    name.Buffer        = g_event_name;
+
+    OBJECT_ATTRIBUTES oa;
+    oa.Length                   = sizeof(OBJECT_ATTRIBUTES);
+    oa.RootDirectory            = NULL;
+    oa.ObjectName               = &name;
+    oa.Attributes               = OBJ_CASE_INSENSITIVE;
+    oa.SecurityDescriptor       = NULL;
+    oa.SecurityQualityOfService = NULL;
+
+    HANDLE hEvent = NULL;
+    if (NT_SUCCESS(NtOpenEvent(&hEvent, EVENT_MODIFY_STATE, &oa))) {
+        NtSetEvent(hEvent, NULL);
+        NtClose(hEvent);
+    }
+    /* Falling through to NtTerminateProcess covers both the
+     * "loader present, event signalled" and "no loader" paths. */
     NtTerminateProcess(NtCurrentProcess, 0);
 }

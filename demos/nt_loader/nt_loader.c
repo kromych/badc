@@ -5,6 +5,12 @@
 // to two seconds on a named event for the child to signal it.
 // `#define USE_UNICODE` selects the wide-char (`wmain`) build;
 // commenting it out selects the narrow-char (`main`) build.
+//
+// The TxF / section / process steps are best-effort: hosted
+// Windows CI runners have no active KTM resource manager, so
+// `CreateFileTransacted` returns ERROR_RM_NOT_ACTIVE there. The
+// loader logs the failure and proceeds to the event wait so the
+// cross-process sync half of the demo still runs.
 
 #define USE_UNICODE
 
@@ -13,7 +19,7 @@
 #include <stdio.h>
 #include <wchar.h>
 
-// ─── TCHAR macros ────────────────────────────────────────────────────────────
+// TCHAR macros.
 #ifdef USE_UNICODE
 typedef WCHAR   TCHAR;
 #  define _T(x)      L##x
@@ -26,8 +32,8 @@ typedef CHAR    TCHAR;
 #  define _tmain     main
 #endif
 
-// ─── ntdll function-pointer typedefs (resolved at run time) ──────────────────
-// Entries fetched through `GetProcAddress`; the produced PE
+// ntdll function-pointer typedefs (resolved at run time).
+// Entries are fetched via `GetProcAddress`; the produced PE
 // carries no ntdll import.
 
 typedef NTSTATUS (*fpNtCreateProcessEx)(
@@ -69,12 +75,12 @@ static WCHAR *g_event_name = L"\\BaseNamedObjects\\BadcLoaderSync";
 // values are relative; -2*10^7 = 2 s.
 #define EVENT_WAIT_TIMEOUT_TICKS  ((long long)-20000000)
 
-// ─── Logging helpers ─────────────────────────────────────────────────────────
+// Logging helpers.
 #define LOG(fmt, ...)     _tprintf(_T("[*] ") fmt _T("\n"), ##__VA_ARGS__)
 #define LOG_OK(fmt, ...)  _tprintf(_T("[+] ") fmt _T("\n"), ##__VA_ARGS__)
 #define LOG_ERR(fmt, ...) _tprintf(_T("[-] ") fmt _T("\n"), ##__VA_ARGS__)
 
-// ─── Entry point ─────────────────────────────────────────────────────────────
+// Entry point.
 int _tmain(int argc, TCHAR **argv)
 {
     if (argc != 2)
@@ -86,7 +92,7 @@ int _tmain(int argc, TCHAR **argv)
     NTSTATUS  status;
     HANDLE    hProcess = NULL;
     HANDLE    hTransaction = NULL;
-    HANDLE    hTransactedFile = INVALID_HANDLE_VALUE;
+    HANDLE    hFile = INVALID_HANDLE_VALUE;
     HANDLE    hSection = NULL;
     HANDLE    hEvent = NULL;
     int       exitCode = 1;
@@ -99,7 +105,7 @@ int _tmain(int argc, TCHAR **argv)
     objattr.SecurityDescriptor = NULL;
     objattr.SecurityQualityOfService = NULL;
 
-    // ── Resolve ntdll exports ────────────────────────────────────────────────
+    // Resolve ntdll exports.
     LOG(_T("Resolving ntdll exports"));
     HANDLE hNtdll = GetModuleHandleW(L"ntdll.dll");
     if (!hNtdll)
@@ -125,7 +131,7 @@ int _tmain(int argc, TCHAR **argv)
     }
     LOG_OK(_T("ntdll exports resolved"));
 
-    // ── Create the sync event ─────────────────────────────────────────────────
+    // Create the sync event.
     UNICODE_STRING event_name_us;
     _RtlInitUnicodeString(&event_name_us, g_event_name);
     OBJECT_ATTRIBUTES event_objattr;
@@ -145,7 +151,7 @@ int _tmain(int argc, TCHAR **argv)
     }
     LOG_OK(_T("Sync event created"));
 
-    // ── Build wide path (UNICODE_STRING.Buffer is always PWSTR) ──────────────
+    // Build wide path (UNICODE_STRING.Buffer is always PWSTR).
     WCHAR wPath[MAX_PATH];
 
 #ifdef USE_UNICODE
@@ -164,7 +170,12 @@ int _tmain(int argc, TCHAR **argv)
     }
 #endif
 
-    // ── Create KTM transaction ───────────────────────────────────────────────
+    // Open the image file. TxF (transacted) is the preferred path
+    // -- that's what the demo is about -- but the KTM resource
+    // manager is absent on hosted Windows CI volumes (and any host
+    // where TxF was never enabled). Try transacted first, fall
+    // back to a plain CreateFile so the rest of the section /
+    // process / event-sync flow still runs.
     LOG(_T("Creating KTM transaction"));
     status = _NtCreateTransaction(
         &hTransaction,
@@ -172,42 +183,74 @@ int _tmain(int argc, TCHAR **argv)
         &objattr,
         NULL, NULL, 0, 0, 0, NULL, NULL);
 
-    if (!NT_SUCCESS(status))
+    if (NT_SUCCESS(status))
     {
-        LOG_ERR(_T("NtCreateTransaction failed: 0x%08lX"), (ULONG)status);
-        goto cleanup;
-    }
-    LOG_OK(_T("Transaction created (handle: %p)"), hTransaction);
-
-    // ── Open target file within the transaction ──────────────────────────────
-    LOG(_T("Opening transacted file: %s"), argv[1]);
-
+        LOG_OK(_T("Transaction created (handle: %p)"), hTransaction);
+        LOG(_T("Opening transacted file: %s"), argv[1]);
 #ifdef USE_UNICODE
-    hTransactedFile = CreateFileTransactedW(
-        wPath,
-        GENERIC_READ | GENERIC_WRITE,
-        0, NULL,
-        OPEN_EXISTING,
-        FILE_ATTRIBUTE_NORMAL,
-        NULL, hTransaction, NULL, NULL);
+        hFile = CreateFileTransactedW(
+            wPath,
+            GENERIC_READ | GENERIC_EXECUTE,
+            FILE_SHARE_READ, NULL,
+            OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL,
+            NULL, hTransaction, NULL, NULL);
 #else
-    hTransactedFile = CreateFileTransactedA(
-        argv[1],
-        GENERIC_READ | GENERIC_WRITE,
-        0, NULL,
-        OPEN_EXISTING,
-        FILE_ATTRIBUTE_NORMAL,
-        NULL, hTransaction, NULL, NULL);
+        hFile = CreateFileTransactedA(
+            argv[1],
+            GENERIC_READ | GENERIC_EXECUTE,
+            FILE_SHARE_READ, NULL,
+            OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL,
+            NULL, hTransaction, NULL, NULL);
 #endif
-
-    if (hTransactedFile == INVALID_HANDLE_VALUE)
-    {
-        LOG_ERR(_T("CreateFileTransacted failed: 0x%08lX"), GetLastError());
-        goto cleanup;
+        if (hFile == INVALID_HANDLE_VALUE)
+        {
+            LOG_ERR(_T("CreateFileTransacted failed: 0x%08lX; falling back to non-transacted open"),
+                    GetLastError());
+            _NtClose(hTransaction);
+            hTransaction = NULL;
+        }
+        else
+        {
+            LOG_OK(_T("Transacted file opened (handle: %p)"), hFile);
+        }
     }
-    LOG_OK(_T("Transacted file opened (handle: %p)"), hTransactedFile);
+    else
+    {
+        LOG_ERR(_T("NtCreateTransaction failed: 0x%08lX; falling back to non-transacted open"),
+                (ULONG)status);
+    }
 
-    // ── Create image section backed by the transacted file ───────────────────
+    if (hFile == INVALID_HANDLE_VALUE)
+    {
+        LOG(_T("Opening file (non-transacted): %s"), argv[1]);
+#ifdef USE_UNICODE
+        hFile = CreateFileW(
+            wPath,
+            GENERIC_READ | GENERIC_EXECUTE,
+            FILE_SHARE_READ, NULL,
+            OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL,
+            NULL);
+#else
+        hFile = CreateFileA(
+            argv[1],
+            GENERIC_READ | GENERIC_EXECUTE,
+            FILE_SHARE_READ, NULL,
+            OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL,
+            NULL);
+#endif
+        if (hFile == INVALID_HANDLE_VALUE)
+        {
+            LOG_ERR(_T("CreateFile failed: 0x%08lX"), GetLastError());
+            goto cleanup;
+        }
+        LOG_OK(_T("File opened (handle: %p)"), hFile);
+    }
+
+    // Create image section backed by the file.
     LOG(_T("Creating image section"));
     status = _NtCreateSection(
         &hSection,
@@ -216,7 +259,7 @@ int _tmain(int argc, TCHAR **argv)
         NULL,
         PAGE_READONLY,
         SEC_IMAGE,
-        hTransactedFile);
+        hFile);
 
     if (!NT_SUCCESS(status))
     {
@@ -225,7 +268,7 @@ int _tmain(int argc, TCHAR **argv)
     }
     LOG_OK(_T("Image section created (handle: %p)"), hSection);
 
-    // ── Create process from the section ──────────────────────────────────────
+    // Create process from the section.
     LOG(_T("Creating process from image section"));
     status = _NtCreateProcessEx(
         &hProcess,
@@ -251,14 +294,18 @@ int _tmain(int argc, TCHAR **argv)
     }
     LOG_OK(_T("Process created. PID = %lu"), (ULONG)pid);
 
-    // ── Wait for the child to signal the event (2 s) ─────────────────────────
-    LOG(_T("Waiting up to 2s for child to signal the sync event"));
+    // Wait for the child (or the smoke harness) to signal the
+    // event. A timeout is a hard failure -- the demo's stated
+    // contract is the handshake, so silence is a bug, not a soft
+    // miss.
+    LOG(_T("Waiting up to 2s for sync event"));
     LARGE_INTEGER timeout;
     timeout.QuadPart = EVENT_WAIT_TIMEOUT_TICKS;
     status = _NtWaitForSingleObject(hEvent, FALSE, &timeout);
     if (status == STATUS_SUCCESS)
     {
         LOG_OK(_T("Sync event received"));
+        exitCode = 0;
     }
     else if (status == STATUS_TIMEOUT)
     {
@@ -268,11 +315,10 @@ int _tmain(int argc, TCHAR **argv)
     {
         LOG_ERR(_T("NtWaitForSingleObject failed: 0x%08lX"), (ULONG)status);
     }
-    exitCode = 0;
 
 cleanup:
     LOG(_T("Cleaning up handles"));
-    if (hTransactedFile != INVALID_HANDLE_VALUE) CloseHandle(hTransactedFile);
+    if (hFile != INVALID_HANDLE_VALUE) CloseHandle(hFile);
     if (hTransaction)                            _NtClose(hTransaction);
     if (hSection)                                _NtClose(hSection);
     if (hProcess)                                _NtClose(hProcess);

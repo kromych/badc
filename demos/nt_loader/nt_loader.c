@@ -80,6 +80,12 @@ typedef NTSTATUS (*fpRtlDestroyProcessParameters)(PVOID ProcessParameters);
 typedef NTSTATUS (*fpRtlAdjustPrivilege)(
     ULONG Privilege, int Enable, int CurrentThread, int *PreviousValue);
 
+typedef int (*fpRtlDosPathNameToNtPathName_U)(
+    PWSTR DosFileName, PUNICODE_STRING NtFileName,
+    PWSTR *FilePart, PVOID Reserved);
+
+typedef void (*fpRtlFreeUnicodeString)(PUNICODE_STRING UnicodeString);
+
 #define SE_TCB_PRIVILEGE 7
 
 // `nt_hello` opens this NT path via `NtOpenEvent`. The loader
@@ -133,12 +139,17 @@ int _tmain(int argc, TCHAR **argv)
         return 1;
     }
 
-    NTSTATUS  status;
-    HANDLE    hProcess = NULL;
-    HANDLE    hThread = NULL;
-    HANDLE    hEvent = NULL;
-    PVOID     proc_params = NULL;
-    int       exitCode = 1;
+    NTSTATUS         status;
+    HANDLE           hProcess = NULL;
+    HANDLE           hThread = NULL;
+    HANDLE           hEvent = NULL;
+    PVOID            proc_params = NULL;
+    UNICODE_STRING   image_path_us;
+    int              exitCode = 1;
+
+    image_path_us.Length = 0;
+    image_path_us.MaximumLength = 0;
+    image_path_us.Buffer = NULL;
 
     // Resolve ntdll exports.
     LOG(_T("Resolving ntdll exports"));
@@ -157,11 +168,14 @@ int _tmain(int argc, TCHAR **argv)
     fpRtlCreateProcessParametersEx  _RtlCreateProcessParametersEx  = (fpRtlCreateProcessParametersEx)  GetProcAddress(hNtdll, "RtlCreateProcessParametersEx");
     fpRtlDestroyProcessParameters   _RtlDestroyProcessParameters   = (fpRtlDestroyProcessParameters)   GetProcAddress(hNtdll, "RtlDestroyProcessParameters");
     fpRtlAdjustPrivilege            _RtlAdjustPrivilege            = (fpRtlAdjustPrivilege)            GetProcAddress(hNtdll, "RtlAdjustPrivilege");
+    fpRtlDosPathNameToNtPathName_U  _RtlDosPathNameToNtPathName_U  = (fpRtlDosPathNameToNtPathName_U)  GetProcAddress(hNtdll, "RtlDosPathNameToNtPathName_U");
+    fpRtlFreeUnicodeString          _RtlFreeUnicodeString          = (fpRtlFreeUnicodeString)          GetProcAddress(hNtdll, "RtlFreeUnicodeString");
 
     if (!_NtCreateUserProcess || !_NtCreateEvent || !_NtWaitForSingleObject
         || !_NtClose || !_RtlInitUnicodeString
         || !_RtlCreateProcessParametersEx || !_RtlDestroyProcessParameters
-        || !_RtlAdjustPrivilege)
+        || !_RtlAdjustPrivilege || !_RtlDosPathNameToNtPathName_U
+        || !_RtlFreeUnicodeString)
     {
         LOG_ERR(_T("Failed to resolve one or more ntdll exports"));
         return 1;
@@ -210,25 +224,23 @@ int _tmain(int argc, TCHAR **argv)
     }
     LOG_OK(_T("Sync event created"));
 
-    // Build the child's image path in NT form. Win32 paths
-    // (`D:\foo\bar.exe`) become `\??\D:\foo\bar.exe` when handed
-    // to NT syscalls; `\??\` is the per-session Object Manager
-    // symbolic-link directory that resolves DOS drive letters.
-    WCHAR nt_path[600];
-    nt_path[0] = L'\\';
-    nt_path[1] = L'?';
-    nt_path[2] = L'?';
-    nt_path[3] = L'\\';
-
+    // Build the child's image path in NT form. Use the official
+    // `RtlDosPathNameToNtPathName_U` translator -- it produces
+    // either `\??\<dos-form>` or `\Device\<volume>\<rest>`
+    // depending on environment, handles normalization (collapses
+    // `\.`, resolves `..`, etc.), and respects DOS-device
+    // remapping. Hand-rolling `\\??\\` + raw concatenation tends
+    // to trip `STATUS_OBJECT_PATH_SYNTAX_BAD`.
+    WCHAR dos_path[600];
 #ifdef USE_UNICODE
-    if (wcslen(argv[1]) >= 590)
+    if (wcslen(argv[1]) >= 599)
     {
         LOG_ERR(_T("Path too long"));
         goto cleanup;
     }
-    wcscpy(&nt_path[4], (unsigned short *)argv[1]);
+    wcscpy(dos_path, (unsigned short *)argv[1]);
 #else
-    int wlen = MultiByteToWideChar(CP_ACP, 0, argv[1], -1, &nt_path[4], 596);
+    int wlen = MultiByteToWideChar(CP_ACP, 0, argv[1], -1, dos_path, 600);
     if (wlen == 0)
     {
         LOG_ERR(_T("MultiByteToWideChar failed: 0x%08lX"), GetLastError());
@@ -236,11 +248,12 @@ int _tmain(int argc, TCHAR **argv)
     }
 #endif
 
-    int path_chars = (int)wcslen(nt_path);
-    LOG(_T("Spawning child: %s"), nt_path);
-
-    UNICODE_STRING image_path_us;
-    _RtlInitUnicodeString(&image_path_us, nt_path);
+    if (!_RtlDosPathNameToNtPathName_U(dos_path, &image_path_us, NULL, NULL))
+    {
+        LOG_ERR(_T("RtlDosPathNameToNtPathName_U failed for %s"), dos_path);
+        goto cleanup;
+    }
+    LOG(_T("Spawning child: %s"), image_path_us.Buffer);
 
     // Build RTL_USER_PROCESS_PARAMETERS via the Rtl helper.
     // NtCreateUserProcess rejects NULL ProcessParameters on
@@ -331,10 +344,11 @@ int _tmain(int argc, TCHAR **argv)
 
 cleanup:
     LOG(_T("Cleaning up handles"));
-    if (hThread)     _NtClose(hThread);
-    if (hProcess)    _NtClose(hProcess);
-    if (hEvent)      _NtClose(hEvent);
-    if (proc_params) _RtlDestroyProcessParameters(proc_params);
+    if (hThread)              _NtClose(hThread);
+    if (hProcess)             _NtClose(hProcess);
+    if (hEvent)               _NtClose(hEvent);
+    if (proc_params)          _RtlDestroyProcessParameters(proc_params);
+    if (image_path_us.Buffer) _RtlFreeUnicodeString(&image_path_us);
 
     LOG(_T("Done (exit code: %d)"), exitCode);
     return exitCode;

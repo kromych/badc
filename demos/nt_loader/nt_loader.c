@@ -274,32 +274,16 @@ int _tmain(int argc, TCHAR **argv)
     memset(create_info, 0, sizeof(create_info));
     create_info[0] = PS_CREATE_INFO_SIZE;
 
-    // PS_ATTRIBUTE_LIST with three entries (image name, plus
-    // out-only client-id and TEB so the kernel populates them --
-    // some Windows builds reject a list without these even when
-    // the docs mark them optional). 8-byte TotalLength + N*32-byte
-    // entries.
-    CLIENT_ID  client_id;
-    void      *teb_address = NULL;
-    long long  attr_list[1 + 3 * 4];            // header + 3 attrs
+    // PS_ATTRIBUTE_LIST with a single entry: the image name.
+    // 8-byte TotalLength + one 32-byte entry = 40 bytes (5 long
+    // longs).
+    long long attr_list[1 + 1 * 4];
     memset(attr_list, 0, sizeof(attr_list));
     attr_list[0]  = (long long)sizeof(attr_list);            // TotalLength
-
-    // [0] image name (input).
     attr_list[1]  = PS_ATTRIBUTE_IMAGE_NAME;                 // Attribute
     attr_list[2]  = (long long)(path_chars * 2);             // Size (bytes)
     *(void **)&attr_list[3] = nt_path;                       // ValuePtr
     // attr_list[4] (ReturnLength) stays 0.
-
-    // [1] client-id (output, thread-flagged).
-    attr_list[5]  = PS_ATTRIBUTE_CLIENT_ID;                  // 0x10003
-    attr_list[6]  = (long long)sizeof(client_id);
-    *(void **)&attr_list[7] = &client_id;
-
-    // [2] TEB address (output, thread-flagged).
-    attr_list[9]  = PS_ATTRIBUTE_TEB_ADDRESS;                // 0x10004
-    attr_list[10] = (long long)sizeof(teb_address);
-    *(void **)&attr_list[11] = &teb_address;
 
     status = _NtCreateUserProcess(
         &hProcess, &hThread,

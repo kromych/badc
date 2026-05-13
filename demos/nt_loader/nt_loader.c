@@ -380,13 +380,14 @@ int _tmain(int argc, TCHAR **argv)
 
     // PE32+ optional header begins at `nt_off + 4 (NT sig) + 20
     // (COFF header) = nt_off + 24`. `AddressOfEntryPoint` is at
-    // optional-header offset 16; `DataDirectory[1]` (Import) is at
-    // optional-header offset 112.
+    // optional-header offset 16; `DataDirectory[0]` (Export) is at
+    // offset 112, `DataDirectory[1]` (Import) at offset 120 (each
+    // directory entry is 8 bytes: RVA then Size).
     char *opt_hdr = child_base + e_lfanew + 24;
     ULONG entry_rva = 0;
     ULONG import_rva = 0;
     _NtReadVirtualMemory(hProcess, opt_hdr + 16,  &entry_rva,  4, NULL);
-    _NtReadVirtualMemory(hProcess, opt_hdr + 112, &import_rva, 4, NULL);
+    _NtReadVirtualMemory(hProcess, opt_hdr + 120, &import_rva, 4, NULL);
 
     if (import_rva == 0)
     {

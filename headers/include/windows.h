@@ -121,7 +121,7 @@ typedef int    GET_FILEEX_INFO_LEVELS;
 // types (LPWSTR / LPCWSTR) point at unsigned short rather than
 // `wchar_t` because c5 doesn't have a separate wchar_t typedef
 // and msvcrt's wchar is 16-bit anyway.
-typedef long long          HANDLE;
+typedef void              *HANDLE;
 typedef HANDLE            *PHANDLE;
 typedef HANDLE            *LPHANDLE;
 typedef long long          SIZE_T;

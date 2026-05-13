@@ -24,6 +24,8 @@ mod dwarf;
 mod intrinsics;
 mod jit;
 mod lexer;
+#[cfg(feature = "linker")]
+mod linker;
 mod native;
 mod native_elf;
 mod native_elf_x64;

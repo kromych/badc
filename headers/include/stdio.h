@@ -114,6 +114,13 @@ typedef struct __c5_FILE FILE;
 #pragma binding(libc::remove,    "_remove")
 #pragma binding(libc::rename,    "_rename")
 #pragma binding(libc::dlsym,     "_dlsym")
+// POSIX `popen` / `pclose` -- not in C89 but universally
+// available on macOS / BSD. A source that opens its own
+// `extern FILE *popen(const char *, const char *);` prototype
+// (sqlite3 shell.c does this) now binds through this entry
+// instead of leaving the call as an unresolved Token::Fun.
+#pragma binding(libc::popen,     "_popen")
+#pragma binding(libc::pclose,    "_pclose")
 #endif
 
 #ifdef __linux__
@@ -150,6 +157,13 @@ typedef struct __c5_FILE FILE;
 #pragma binding(libc::rename,    "rename")
 #pragma dylib(libdl_for_stdio, "libdl.so.2")
 #pragma binding(libdl_for_stdio::dlsym, "dlsym")
+// POSIX `popen` / `pclose` -- not in C89 but universally
+// available on glibc / musl. A source that opens its own
+// `extern FILE *popen(const char *, const char *);` prototype
+// (sqlite3 shell.c does this) now binds through this entry
+// instead of leaving the call as an unresolved Token::Fun.
+#pragma binding(libc::popen,     "popen")
+#pragma binding(libc::pclose,    "pclose")
 #endif
 
 #ifdef _WIN32

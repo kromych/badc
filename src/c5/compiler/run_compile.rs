@@ -132,6 +132,20 @@ impl Compiler {
                 // `unsigned x;` / `short x;` / `long x;` /
                 // `long long x;` (the implicit-int rule).
                 bt = m.int_base();
+            } else if self.lex.tk == Token::Id {
+                // Unknown identifier in base-type position. Real
+                // compilers diagnose this; c5 historically fell
+                // through to the `Ty::Int` default, which silently
+                // typedef'd `PHANDLE` as `int *` when `HANDLE`
+                // wasn't yet defined in `<windows.h>` and then
+                // shifted `sizeof(OBJECT_ATTRIBUTES)` by eight
+                // bytes downstream. Surface the cause at the
+                // declaration site.
+                let name = self.symbols[self.lex.curr_id_idx].name.clone();
+                return Err(self.compile_err(format!(
+                    "unknown type name `{name}` (did you forget an \
+                     earlier `typedef` or `#include`?)"
+                )));
             }
             // Trailing qualifiers / int modifiers between the base
             // type and the declarators -- `Foo const *p`, `int long

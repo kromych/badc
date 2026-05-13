@@ -45,6 +45,38 @@ fn warn_call_arity_mismatch() {
     );
 }
 
+/// An unresolved identifier in base-type position used to fall
+/// through to the `int` default and produce a silently wrong
+/// declaration (`typedef HANDLE *PHANDLE;` before `HANDLE`
+/// becomes `int *PHANDLE;`). Make sure it now surfaces as a
+/// compile error at the declaration site.
+#[test]
+fn unknown_type_name_is_a_compile_error() {
+    use crate::Compiler;
+    let result = Compiler::new("typedef HANDLE *PHANDLE; int main(void) { return 0; }".to_string())
+        .compile();
+    let err = result.expect_err("expected an error for unknown `HANDLE`");
+    let msg = format!("{err:?}");
+    assert!(
+        msg.contains("unknown type name `HANDLE`"),
+        "expected `unknown type name`, got: {msg}"
+    );
+}
+
+/// `HANDLE x;` at file scope used to silently declare `x` as
+/// `int`. Same root cause as the typedef case above.
+#[test]
+fn unknown_base_type_in_global_decl_is_an_error() {
+    use crate::Compiler;
+    let result = Compiler::new("HANDLE x;".to_string()).compile();
+    let err = result.expect_err("expected an error for unknown `HANDLE`");
+    let msg = format!("{err:?}");
+    assert!(
+        msg.contains("unknown type name `HANDLE`"),
+        "expected `unknown type name`, got: {msg}"
+    );
+}
+
 #[test]
 fn cast_to_struct_pointer_compiles_and_runs() {
     // `(struct Node *)malloc(...)` -- the cast operator must accept a

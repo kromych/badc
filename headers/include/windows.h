@@ -832,31 +832,31 @@ int DeleteCriticalSection(char *cs);
 // the bytes back; sqlite + shell.c never look inside.
 int AreFileApisANSI(void);
 int CancelIo(HANDLE hFile);
-int CreateEventA(LPSECURITY_ATTRIBUTES lpEventAttributes, int bManualReset,
-                 int bInitialState, LPCSTR lpName);
-int FlushViewOfFile(LPCVOID lpBaseAddress, SIZE_T dwNumberOfBytesToFlush);
-int GetModuleHandleW(LPCWSTR lpModuleName);
-int GetNativeSystemInfo(LPSYSTEM_INFO lpSystemInfo);
-int GetProcessHeap(void);
-int GetProcAddressA(void *hModule, LPCSTR lpProcName);
-int CharLowerW(LPWSTR lpsz);
-int CharUpperW(LPWSTR lpsz);
-int CreateFileA(LPCSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
-                LPSECURITY_ATTRIBUTES lpSecurityAttributes,
-                DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes,
-                HANDLE hTemplateFile);
-int CreateFileMappingA(HANDLE hFile, LPSECURITY_ATTRIBUTES lpFileMappingAttributes,
-                       DWORD flProtect, DWORD dwMaximumSizeHigh,
-                       DWORD dwMaximumSizeLow, LPCSTR lpName);
-int CreateFileMappingW(HANDLE hFile, LPSECURITY_ATTRIBUTES lpFileMappingAttributes,
-                       DWORD flProtect, DWORD dwMaximumSizeHigh,
-                       DWORD dwMaximumSizeLow, LPCWSTR lpName);
-int CreateFileW(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
-                LPSECURITY_ATTRIBUTES lpSecurityAttributes,
-                DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes,
-                HANDLE hTemplateFile);
-int CreateMutexW(LPSECURITY_ATTRIBUTES lpMutexAttributes, int bInitialOwner,
-                 LPCWSTR lpName);
+HANDLE CreateEventA(LPSECURITY_ATTRIBUTES lpEventAttributes, int bManualReset,
+                    int bInitialState, LPCSTR lpName);
+int    FlushViewOfFile(LPCVOID lpBaseAddress, SIZE_T dwNumberOfBytesToFlush);
+HANDLE GetModuleHandleW(LPCWSTR lpModuleName);
+int    GetNativeSystemInfo(LPSYSTEM_INFO lpSystemInfo);
+HANDLE GetProcessHeap(void);
+PVOID  GetProcAddressA(void *hModule, LPCSTR lpProcName);
+int    CharLowerW(LPWSTR lpsz);
+int    CharUpperW(LPWSTR lpsz);
+HANDLE CreateFileA(LPCSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
+                   LPSECURITY_ATTRIBUTES lpSecurityAttributes,
+                   DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes,
+                   HANDLE hTemplateFile);
+HANDLE CreateFileMappingA(HANDLE hFile, LPSECURITY_ATTRIBUTES lpFileMappingAttributes,
+                          DWORD flProtect, DWORD dwMaximumSizeHigh,
+                          DWORD dwMaximumSizeLow, LPCSTR lpName);
+HANDLE CreateFileMappingW(HANDLE hFile, LPSECURITY_ATTRIBUTES lpFileMappingAttributes,
+                          DWORD flProtect, DWORD dwMaximumSizeHigh,
+                          DWORD dwMaximumSizeLow, LPCWSTR lpName);
+HANDLE CreateFileW(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
+                   LPSECURITY_ATTRIBUTES lpSecurityAttributes,
+                   DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes,
+                   HANDLE hTemplateFile);
+HANDLE CreateMutexW(LPSECURITY_ATTRIBUTES lpMutexAttributes, int bInitialOwner,
+                    LPCWSTR lpName);
 int DeleteFileA(LPCSTR lpFileName);
 int DeleteFileW(LPCWSTR lpFileName);
 int FileTimeToLocalFileTime(FILETIME *lpFileTime, LPFILETIME lpLocalFileTime);
@@ -890,24 +890,24 @@ int GetTempPathW(DWORD nBufferLength, LPWSTR lpBuffer);
 int GetTickCount(void);
 int GetVersionExA(LPOSVERSIONINFOA lpVersionInformation);
 int GetVersionExW(LPOSVERSIONINFOW lpVersionInformation);
-int HeapAlloc(HANDLE hHeap, DWORD dwFlags, SIZE_T dwBytes);
-int HeapCompact(HANDLE hHeap, DWORD dwFlags);
-int HeapCreate(DWORD flOptions, SIZE_T dwInitialSize, SIZE_T dwMaximumSize);
-int HeapDestroy(HANDLE hHeap);
-int HeapFree(HANDLE hHeap, DWORD dwFlags, LPVOID lpMem);
-int HeapReAlloc(HANDLE hHeap, DWORD dwFlags, LPVOID lpMem, SIZE_T dwBytes);
-int HeapSize(HANDLE hHeap, DWORD dwFlags, LPCVOID lpMem);
-int HeapValidate(HANDLE hHeap, DWORD dwFlags, LPCVOID lpMem);
-int LoadLibraryW(LPCWSTR lpLibFileName);
-int LocalFree(HLOCAL hMem);
+LPVOID HeapAlloc(HANDLE hHeap, DWORD dwFlags, SIZE_T dwBytes);
+int    HeapCompact(HANDLE hHeap, DWORD dwFlags);
+HANDLE HeapCreate(DWORD flOptions, SIZE_T dwInitialSize, SIZE_T dwMaximumSize);
+int    HeapDestroy(HANDLE hHeap);
+int    HeapFree(HANDLE hHeap, DWORD dwFlags, LPVOID lpMem);
+LPVOID HeapReAlloc(HANDLE hHeap, DWORD dwFlags, LPVOID lpMem, SIZE_T dwBytes);
+SIZE_T HeapSize(HANDLE hHeap, DWORD dwFlags, LPCVOID lpMem);
+int    HeapValidate(HANDLE hHeap, DWORD dwFlags, LPCVOID lpMem);
+HANDLE LoadLibraryW(LPCWSTR lpLibFileName);
+HLOCAL LocalFree(HLOCAL hMem);
 int LockFile(HANDLE hFile, DWORD dwFileOffsetLow, DWORD dwFileOffsetHigh,
              DWORD nNumberOfBytesToLockLow, DWORD nNumberOfBytesToLockHigh);
 int LockFileEx(HANDLE hFile, DWORD dwFlags, DWORD dwReserved,
                DWORD nNumberOfBytesToLockLow, DWORD nNumberOfBytesToLockHigh,
                LPOVERLAPPED lpOverlapped);
-int MapViewOfFile(HANDLE hFileMappingObject, DWORD dwDesiredAccess,
-                  DWORD dwFileOffsetHigh, DWORD dwFileOffsetLow,
-                  SIZE_T dwNumberOfBytesToMap);
+LPVOID MapViewOfFile(HANDLE hFileMappingObject, DWORD dwDesiredAccess,
+                     DWORD dwFileOffsetHigh, DWORD dwFileOffsetLow,
+                     SIZE_T dwNumberOfBytesToMap);
 int MultiByteToWideChar(UINT CodePage, DWORD dwFlags, LPCSTR lpMultiByteStr,
                         int cbMultiByte, LPWSTR lpWideCharStr,
                         int cchWideChar);

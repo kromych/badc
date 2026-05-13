@@ -77,6 +77,11 @@ typedef NTSTATUS (*fpRtlCreateProcessParametersEx)(
 
 typedef NTSTATUS (*fpRtlDestroyProcessParameters)(PVOID ProcessParameters);
 
+typedef NTSTATUS (*fpRtlAdjustPrivilege)(
+    ULONG Privilege, int Enable, int CurrentThread, int *PreviousValue);
+
+#define SE_TCB_PRIVILEGE 7
+
 // `nt_hello` opens this NT path via `NtOpenEvent`. The loader
 // creates it via `NtCreateEvent`; both endpoints route through
 // the same `\BaseNamedObjects` namespace.
@@ -151,15 +156,39 @@ int _tmain(int argc, TCHAR **argv)
     fpRtlInitUnicodeString          _RtlInitUnicodeString          = (fpRtlInitUnicodeString)          GetProcAddress(hNtdll, "RtlInitUnicodeString");
     fpRtlCreateProcessParametersEx  _RtlCreateProcessParametersEx  = (fpRtlCreateProcessParametersEx)  GetProcAddress(hNtdll, "RtlCreateProcessParametersEx");
     fpRtlDestroyProcessParameters   _RtlDestroyProcessParameters   = (fpRtlDestroyProcessParameters)   GetProcAddress(hNtdll, "RtlDestroyProcessParameters");
+    fpRtlAdjustPrivilege            _RtlAdjustPrivilege            = (fpRtlAdjustPrivilege)            GetProcAddress(hNtdll, "RtlAdjustPrivilege");
 
     if (!_NtCreateUserProcess || !_NtCreateEvent || !_NtWaitForSingleObject
         || !_NtClose || !_RtlInitUnicodeString
-        || !_RtlCreateProcessParametersEx || !_RtlDestroyProcessParameters)
+        || !_RtlCreateProcessParametersEx || !_RtlDestroyProcessParameters
+        || !_RtlAdjustPrivilege)
     {
         LOG_ERR(_T("Failed to resolve one or more ntdll exports"));
         return 1;
     }
     LOG_OK(_T("ntdll exports resolved"));
+
+    // Try to enable SeTcbPrivilege. Modern Windows requires this
+    // ("act as part of OS") to launch IMAGE_SUBSYSTEM_NATIVE
+    // images via NtCreateUserProcess. Admin tokens usually don't
+    // carry this privilege, so the enable call typically fails
+    // with STATUS_PRIVILEGE_NOT_HELD; we log and continue so
+    // NtCreateUserProcess can fail loudly with a useful error
+    // rather than silently.
+    {
+        int prev = 0;
+        NTSTATUS tcb = _RtlAdjustPrivilege(SE_TCB_PRIVILEGE, TRUE, FALSE, &prev);
+        if (NT_SUCCESS(tcb))
+        {
+            LOG_OK(_T("SeTcbPrivilege enabled (was %s)"),
+                   prev ? _T("on") : _T("off"));
+        }
+        else
+        {
+            LOG_ERR(_T("RtlAdjustPrivilege(SeTcbPrivilege) failed: 0x%08lX"),
+                    (ULONG)tcb);
+        }
+    }
 
     // Create the sync event under `\BaseNamedObjects`.
     UNICODE_STRING event_name_us;

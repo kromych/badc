@@ -764,6 +764,21 @@ impl Compiler {
                     // needs design work.
                     if array_size == -1 {
                         if self.lex.tk != Token::Assign {
+                            // `extern T x[];` declares an array
+                            // whose definition (with its actual
+                            // size) lives in another TU. Mark
+                            // the symbol as undefined-here and
+                            // let the link step resolve the
+                            // address against the defining TU's
+                            // storage.
+                            if extern_seen {
+                                self.symbols[id_idx].is_extern_decl = true;
+                                self.symbols[id_idx].defined_here = false;
+                                if self.lex.tk == ',' {
+                                    self.next()?;
+                                }
+                                continue;
+                            }
                             return Err(self.compile_err(format!(
                                 "array `{}` declared with empty brackets needs an initializer",
                                 self.symbols[id_idx].name

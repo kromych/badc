@@ -143,13 +143,18 @@
 #pragma binding(msvcrt::memset,   "memset")
 #pragma binding(msvcrt::memcmp,   "memcmp")
 #pragma binding(msvcrt::exit,     "exit")
-// POSIX-shape names that sqlite3.c reaches for on Windows
-// without including unistd.h. msvcrt exports them with a
-// leading-underscore spelling; bind the unprefixed local name
-// so a user extern decl resolves through the Token::Sys path
-// rather than leaving the call as an unresolved cross-TU
-// reference.
-#pragma binding(msvcrt::getpid,   "_getpid")
+// POSIX `getpid()`: sqlite3.c reaches for it on Windows
+// without including unistd.h. Rather than bind through msvcrt
+// (where the export is `_getpid` and the legacy arm64
+// msvcrt.dll skipped that name), route through kernel32's
+// `GetCurrentProcessId`, which is universally available.
+// windows.h binds the same name via its own pragma; both
+// declarations resolve to the same kernel32 Sys symbol.
+#pragma binding(kernel32::GetCurrentProcessId, "GetCurrentProcessId")
+int GetCurrentProcessId(void);
+static int getpid(void) {
+    return (int)GetCurrentProcessId();
+}
 
 // NOTE: `_CRT_INSECURE_DEPRECATE` / `_CRT_NONSTDC_DEPRECATE` /
 // `_CRT_OBSOLETE` / `_CRT_DEPRECATE_TEXT` are deliberately NOT

@@ -57,6 +57,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 
 use alloc::vec::Vec;
+use core::cell::Cell;
 use hashbrown::HashMap;
 
 use super::codegen::Target;
@@ -244,6 +245,23 @@ pub(crate) struct Preprocessor {
     /// reads this to set the optional header's Subsystem field;
     /// non-PE targets keep the field at `None` and ignore it.
     pub subsystem: Option<Subsystem>,
+    /// Monotonically-increasing per-translation-unit counter for
+    /// the MSVC / GCC `__COUNTER__` predefine. Each expansion
+    /// produces the current value as an integer literal and
+    /// post-increments. Used by demos to mint unique identifiers
+    /// at macro-expansion time. Lives in a `Cell` because the
+    /// substitution path takes `&self`.
+    pub(crate) counter: Cell<i64>,
+    /// MSVC-style `#pragma warning(disable : N)` IDs currently
+    /// suppressed. Push/pop variants nest via `warning_stack`.
+    /// c5 doesn't number its own warnings, so the IDs in here
+    /// don't currently filter anything -- but the parse is real
+    /// (typos raise a warning) and tests can read this set, which
+    /// gives visibility into what the source asked to silence.
+    pub(crate) warning_disabled: BTreeSet<u32>,
+    /// Stack of `warning_disabled` snapshots taken at each
+    /// `#pragma warning(push)`; popped by `#pragma warning(pop)`.
+    pub(crate) warning_stack: Vec<BTreeSet<u32>>,
     /// `#pragma intrinsic("name")` declarations -- a map from
     /// callable identifier to the `Intrinsic` discriminant the
     /// frontend should stamp on the matching `Symbol::intrinsic`
@@ -371,6 +389,9 @@ impl Preprocessor {
             show_includes: false,
             entrypoint: None,
             subsystem: None,
+            counter: Cell::new(0),
+            warning_disabled: BTreeSet::new(),
+            warning_stack: Vec::new(),
             intrinsics: alloc::collections::BTreeMap::new(),
         }
     }
@@ -972,6 +993,17 @@ impl Preprocessor {
                     out.push('"');
                     continue;
                 }
+                // MSVC / GCC extension: each `__COUNTER__` use
+                // expands to a monotonically increasing integer
+                // literal -- 0, 1, 2, ... -- and post-increments.
+                // Often paired with `##` to mint unique
+                // identifiers from macros.
+                if ident == "__COUNTER__" {
+                    let n = self.counter.get();
+                    self.counter.set(n + 1);
+                    out.push_str(&format!("{n}"));
+                    continue;
+                }
                 // C99 "blue paint": don't re-expand a name that's
                 // already being expanded on the current chain.
                 if blocklist.contains(&ident) {
@@ -1308,6 +1340,148 @@ impl Preprocessor {
             .and_then(|s| s.strip_suffix(')'))
         {
             return self.parse_pragma_subsystem(inner.trim(), line_no, filename);
+        }
+        if let Some(inner) = args
+            .strip_prefix("warning(")
+            .and_then(|s| s.strip_suffix(')'))
+        {
+            return self.parse_pragma_warning(inner.trim(), line_no, filename);
+        }
+        Ok(())
+    }
+
+    /// MSVC `#pragma warning(...)` -- the most common forms seen
+    /// in code that builds under both MSVC and other compilers:
+    ///
+    /// * `#pragma warning(disable : N1 N2 ...)` -- silence those IDs
+    /// * `#pragma warning(default : N1 ...)` -- restore default
+    /// * `#pragma warning(enable : N1 ...)` -- explicitly re-enable
+    /// * `#pragma warning(error : N1 ...)` -- escalate to error
+    /// * `#pragma warning(once : N1 ...)` -- report only once
+    /// * `#pragma warning(suppress : N1 ...)` -- suppress next stmt
+    /// * `#pragma warning(push)` / `#pragma warning(push, level)`
+    /// * `#pragma warning(pop)`
+    ///
+    /// c5's diagnostics aren't numbered the way MSVC's are, so
+    /// `disable : 4267` doesn't *actually* silence anything c5
+    /// emits. What this parser buys is:
+    ///   1. The source's intent is recognised rather than dropped
+    ///      on the floor, so future-c5 can hook up real filtering
+    ///      against the recorded ID set.
+    ///   2. Syntax typos surface as warnings instead of silently
+    ///      no-opping.
+    ///   3. `push` / `pop` track a stack of disabled-ID snapshots
+    ///      so source that brackets a region of disables works
+    ///      the way it does in MSVC.
+    fn parse_pragma_warning(
+        &mut self,
+        inner: &str,
+        line_no: usize,
+        filename: &str,
+    ) -> Result<(), C5Error> {
+        // `inner` is the text between the outer parens, e.g.
+        // `disable : 4267 4100` or `push, 3` or `pop`.
+        let inner = inner.trim();
+
+        if inner == "push" {
+            self.warning_stack.push(self.warning_disabled.clone());
+            return Ok(());
+        }
+        // `push, <level>` -- accepted; the level is ignored
+        // because c5 has no notion of overall warning levels.
+        if let Some(level) = inner.strip_prefix("push").and_then(|s| s.trim().strip_prefix(','))
+        {
+            let level = level.trim();
+            if !level.chars().all(|c| c.is_ascii_digit()) {
+                self.warnings.push(format!(
+                    "{filename}:{line_no}: warning: \
+                     `#pragma warning(push, <level>)` expects an integer level, \
+                     got `{level}`"
+                ));
+                return Ok(());
+            }
+            self.warning_stack.push(self.warning_disabled.clone());
+            return Ok(());
+        }
+        if inner == "pop" {
+            if let Some(prev) = self.warning_stack.pop() {
+                self.warning_disabled = prev;
+            } else {
+                self.warnings.push(format!(
+                    "{filename}:{line_no}: warning: \
+                     `#pragma warning(pop)` with no matching push"
+                ));
+            }
+            return Ok(());
+        }
+
+        // Action-with-IDs forms: `<action> : N1 N2 ...`. Multiple
+        // comma-separated groups are allowed (`disable: 4 ; enable: 5`)
+        // -- accept the semicolon-separated form too because
+        // some sources use it.
+        for clause in inner.split(';') {
+            let clause = clause.trim();
+            if clause.is_empty() {
+                continue;
+            }
+            let Some((action, rest)) = clause.split_once(':') else {
+                self.warnings.push(format!(
+                    "{filename}:{line_no}: warning: \
+                     unrecognised `#pragma warning({clause})` \
+                     -- expected `disable : N` / `enable : N` / \
+                     `default : N` / `error : N` / `once : N` / \
+                     `suppress : N` / `push` / `pop`"
+                ));
+                continue;
+            };
+            let action = action.trim();
+            let ids = rest;
+            let mut ids_parsed: Vec<u32> = Vec::new();
+            let mut had_bad_token = false;
+            for tok in ids.split_whitespace() {
+                match tok.parse::<u32>() {
+                    Ok(n) => ids_parsed.push(n),
+                    Err(_) => {
+                        self.warnings.push(format!(
+                            "{filename}:{line_no}: warning: \
+                             `#pragma warning({action} : {tok})` \
+                             -- expected an integer warning ID"
+                        ));
+                        had_bad_token = true;
+                    }
+                }
+            }
+            if had_bad_token {
+                continue;
+            }
+            match action {
+                "disable" => {
+                    for id in ids_parsed {
+                        self.warning_disabled.insert(id);
+                    }
+                }
+                "enable" | "default" => {
+                    for id in ids_parsed {
+                        self.warning_disabled.remove(&id);
+                    }
+                }
+                "error" | "once" | "suppress" => {
+                    // Recognised but currently no-op in c5: c5
+                    // doesn't escalate by ID, can't "report only
+                    // once" without a per-ID counter, and
+                    // `suppress` is a per-statement modifier
+                    // that needs lexer cooperation. Accept the
+                    // syntax silently.
+                }
+                _ => {
+                    self.warnings.push(format!(
+                        "{filename}:{line_no}: warning: \
+                         unrecognised `#pragma warning` action `{action}` \
+                         -- expected `disable` / `enable` / `default` / \
+                         `error` / `once` / `suppress`"
+                    ));
+                }
+            }
         }
         Ok(())
     }
@@ -3284,6 +3458,132 @@ mod tests {
             "missing-include warning shape: {}",
             pp.warnings[0]
         );
+    }
+
+    #[test]
+    fn counter_monotonically_increases() {
+        // Each `__COUNTER__` expansion advances the per-TU
+        // counter, starting from 0. The `##` paste here mints
+        // unique identifiers, the canonical use case.
+        let src = "\
+#define UNIQUE_(prefix, n) prefix##n
+#define UNIQUE(prefix)     UNIQUE_(prefix, __COUNTER__)
+int UNIQUE(x_);
+int UNIQUE(x_);
+int x_2 = __COUNTER__;
+";
+        let out = process(src);
+        assert!(out.contains("int x_0;"), "first counter use: {out}");
+        assert!(out.contains("int x_1;"), "second counter use: {out}");
+        assert!(out.contains("int x_2 = 2"), "third counter use: {out}");
+    }
+
+    #[test]
+    fn counter_resets_per_preprocessor_instance() {
+        // Each fresh Preprocessor starts its counter at 0 -- two
+        // separate translation units don't share state.
+        let mut pp1 = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let out1 = pp1.process("int a = __COUNTER__;\n").unwrap();
+        assert!(out1.contains("int a = 0"));
+        let mut pp2 = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let out2 = pp2.process("int a = __COUNTER__;\n").unwrap();
+        assert!(out2.contains("int a = 0"));
+    }
+
+    #[test]
+    fn pragma_warning_disable_records_ids() {
+        // `#pragma warning(disable : N N N)` -- the headline
+        // sqlite3 case. Each ID lands in `warning_disabled`.
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let _ = pp
+            .process("#pragma warning(disable : 4054 4055 4100)\n")
+            .expect("preprocessor failed");
+        assert!(pp.warnings.is_empty(), "expected no warnings: {:?}", pp.warnings);
+        assert_eq!(
+            pp.warning_disabled.iter().copied().collect::<Vec<_>>(),
+            vec![4054_u32, 4055, 4100]
+        );
+    }
+
+    #[test]
+    fn pragma_warning_enable_clears_ids() {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let _ = pp
+            .process(
+                "#pragma warning(disable : 100 200 300)\n\
+                 #pragma warning(enable : 200)\n",
+            )
+            .unwrap();
+        assert_eq!(
+            pp.warning_disabled.iter().copied().collect::<Vec<_>>(),
+            vec![100_u32, 300]
+        );
+    }
+
+    #[test]
+    fn pragma_warning_push_pop_restores_state() {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let _ = pp
+            .process(
+                "#pragma warning(disable : 100)\n\
+                 #pragma warning(push)\n\
+                 #pragma warning(disable : 200)\n\
+                 #pragma warning(pop)\n",
+            )
+            .unwrap();
+        assert!(pp.warning_disabled.contains(&100));
+        assert!(!pp.warning_disabled.contains(&200));
+    }
+
+    #[test]
+    fn pragma_warning_pop_without_push_warns() {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let _ = pp.process("#pragma warning(pop)\n").unwrap();
+        assert!(
+            pp.warnings.iter().any(|w| w.contains("no matching push")),
+            "expected unmatched-pop warning: {:?}",
+            pp.warnings
+        );
+    }
+
+    #[test]
+    fn pragma_warning_bad_action_warns() {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let _ = pp
+            .process("#pragma warning(silence : 4267)\n")
+            .unwrap();
+        assert!(
+            pp.warnings.iter().any(|w| w.contains("silence")),
+            "expected unrecognised-action warning: {:?}",
+            pp.warnings
+        );
+    }
+
+    #[test]
+    fn pragma_warning_bad_id_warns() {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let _ = pp
+            .process("#pragma warning(disable : abc)\n")
+            .unwrap();
+        assert!(
+            pp.warnings.iter().any(|w| w.contains("expected an integer")),
+            "expected bad-ID warning: {:?}",
+            pp.warnings
+        );
+    }
+
+    #[test]
+    fn pragma_warning_push_with_level_accepted() {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        let _ = pp
+            .process(
+                "#pragma warning(push, 3)\n\
+                 #pragma warning(disable : 100)\n\
+                 #pragma warning(pop)\n",
+            )
+            .unwrap();
+        assert!(pp.warnings.is_empty(), "got warnings: {:?}", pp.warnings);
+        assert!(pp.warning_disabled.is_empty());
     }
 
     #[test]

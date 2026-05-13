@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Build the nt_loader / nt_hello demos with badc and, on Windows
-hosts, verify the real cross-process event handshake end-to-end.
+"""Build the nt_loader / nt_hello demos with badc.
 
-Outside Windows: build-only smoke. Both PEs are produced via
-`badc --target=windows-{x64,arm64}` and the script asserts each
-output exists and has the expected Subsystem byte
-(IMAGE_SUBSYSTEM_WINDOWS_CUI for nt_loader, IMAGE_SUBSYSTEM_NATIVE
-for nt_hello).
+Both PEs are produced via `badc --target=windows-{x64,arm64}` and
+the script asserts each output exists and has the expected
+Subsystem byte (IMAGE_SUBSYSTEM_WINDOWS_CUI for nt_loader,
+IMAGE_SUBSYSTEM_NATIVE for nt_hello).
 
-On Windows: run `nt_loader <nt_hello.exe>` and capture stdout.
-The loader spawns nt_hello, patches its imports, starts its
-thread; nt_hello opens the shared event in `\\BaseNamedObjects`
-and signals it; the loader's wait observes the signal and exits
-0. The smoke just asserts exit code 0 and `Sync event received`
-in the captured output.
+The two demos are independent: nt_loader exercises TxF + SEC_IMAGE
+section creation + NtCreateProcessEx process-object creation, but
+stops short of starting an initial thread. nt_hello is a NATIVE-
+subsystem PE that opens / signals a named event when launched by
+something with sufficient privilege. Wiring them together for an
+end-to-end handshake needs either SeTcbPrivilege (so the loader
+can call NtCreateUserProcess on a NATIVE image) or hand-built
+PEB.Ldr + PEB.ProcessParameters; both are out of scope here.
 
 Override the badc binary with `BADC=path/to/badc`.
 """
@@ -21,7 +21,6 @@ Override the badc binary with `BADC=path/to/badc`.
 from __future__ import annotations
 
 import os
-import platform
 import subprocess
 import sys
 from pathlib import Path
@@ -80,40 +79,6 @@ def build_pe(badc: Path, target: str, source: Path, out: Path) -> None:
         sys.exit(1)
 
 
-def host_windows_target() -> str | None:
-    """Map the running Windows host to its badc target id."""
-    if sys.platform != "win32":
-        return None
-    arch = platform.machine().lower()
-    if arch in ("arm64", "aarch64"):
-        return "windows-arm64"
-    if arch in ("amd64", "x86_64"):
-        return "windows-x64"
-    return None
-
-
-def run_event_handshake(loader: Path, hello: Path) -> None:
-    """Run the loader against nt_hello and verify the real
-    cross-process handshake completes: nt_hello signals the event
-    and the loader's wait observes it before timing out."""
-    proc = subprocess.run(
-        [str(loader), str(hello)],
-        capture_output=True,
-        text=True,
-        timeout=15,
-    )
-    print(proc.stdout)
-    if proc.returncode != 0:
-        print(f"smoke: nt_loader exit={proc.returncode}", file=sys.stderr)
-        sys.exit(1)
-    if "Sync event received" not in proc.stdout:
-        print(
-            "smoke: loader log missing `Sync event received` -- handshake never completed",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-
 def main() -> int:
     badc = resolve_badc()
     work = NT_DIR / ".build"
@@ -143,16 +108,6 @@ def main() -> int:
             return 1
         print(f"build OK [{target}]: nt_loader + nt_hello, subsystems CUI / NATIVE")
 
-    host_target = host_windows_target()
-    if host_target is None:
-        print("\nnt_loader smoke: build-only (non-Windows host)")
-        return 0
-
-    loader = work / f"nt_loader-{host_target}.exe"
-    hello = work / f"nt_hello-{host_target}.exe"
-    print(f"\nrunning {loader.name} {hello.name}")
-    run_event_handshake(loader, hello)
-    print(f"\nnt_loader smoke: event handshake verified on {host_target}")
     return 0
 
 

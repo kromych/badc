@@ -76,8 +76,19 @@ static WCHAR *g_event_name = L"\\BaseNamedObjects\\BadcLoaderSync";
 // values are relative; -2*10^7 = 2 s.
 #define EVENT_WAIT_TIMEOUT_TICKS  ((long long)-20000000)
 
-// PS_ATTRIBUTE_IMAGE_NAME = number 5 | PS_ATTRIBUTE_INPUT (0x20000).
+// PS_ATTRIBUTE encoding: bits 0..15 = number, 0x10000 = thread-
+// flagged, 0x20000 = input, 0x40000 = additive.
+// ImageName    (5, input)             = 0x00020005
+// ClientId     (3, thread, output)    = 0x00010003
+// TebAddress   (4, thread, output)    = 0x00010004
 #define PS_ATTRIBUTE_IMAGE_NAME 0x00020005
+#define PS_ATTRIBUTE_CLIENT_ID  0x00010003
+#define PS_ATTRIBUTE_TEB_ADDRESS 0x00010004
+
+typedef struct {
+    HANDLE UniqueProcess;
+    HANDLE UniqueThread;
+} CLIENT_ID;
 
 // PS_CREATE_INFO is a versioned, partially-tagged-union struct
 // the kernel uses to report which phase of process creation
@@ -186,32 +197,50 @@ int _tmain(int argc, TCHAR **argv)
     LOG(_T("Spawning child: %s"), nt_path);
 
     // PS_CREATE_INFO -- input fields only. The buffer is fixed at
-    // PS_CREATE_INFO_SIZE bytes; the kernel rejects sizes it
-    // doesn't recognize. Layout (input): [0..8) Size, [8..12)
-    // State. PsCreateInitialState = 0 is the only legal input
-    // state; the kernel advances the State as it processes.
-    char create_info[PS_CREATE_INFO_SIZE];
+    // 88 bytes; the kernel rejects sizes it doesn't recognize.
+    // Declared as a long-long array so c5 picks 8-byte alignment
+    // -- the kernel's ProbeForRead expects 8-aligned fields and
+    // returns STATUS_ACCESS_VIOLATION otherwise.
+    //
+    // Layout (input): [0..8) Size, [8..12) State.
+    // PsCreateInitialState = 0 is the only legal input state.
+    long long create_info[11];                  // 88 bytes
     memset(create_info, 0, sizeof(create_info));
-    *(long long *)&create_info[0] = PS_CREATE_INFO_SIZE;
+    create_info[0] = PS_CREATE_INFO_SIZE;
 
-    // PS_ATTRIBUTE_LIST with a single PS_ATTRIBUTE entry.
-    // Header layout: [0..8) TotalLength; then for each entry:
-    // [+0..8) Attribute, [+8..16) Size, [+16..24) ValuePtr,
-    // [+24..32) ReturnLength.
-    char attr_list[40];
+    // PS_ATTRIBUTE_LIST with three entries (image name, plus
+    // out-only client-id and TEB so the kernel populates them --
+    // some Windows builds reject a list without these even when
+    // the docs mark them optional). 8-byte TotalLength + N*32-byte
+    // entries.
+    CLIENT_ID  client_id;
+    void      *teb_address = NULL;
+    long long  attr_list[1 + 3 * 4];            // header + 3 attrs
     memset(attr_list, 0, sizeof(attr_list));
-    *(long long *)&attr_list[0]  = (long long)sizeof(attr_list);
-    *(long long *)&attr_list[8]  = (long long)PS_ATTRIBUTE_IMAGE_NAME;
-    *(long long *)&attr_list[16] = (long long)(path_chars * 2);
-    *(void   **)&attr_list[24]  = nt_path;
-    // attr_list[32..40] (ReturnLength) stays 0.
+    attr_list[0]  = (long long)sizeof(attr_list);            // TotalLength
+
+    // [0] image name (input).
+    attr_list[1]  = PS_ATTRIBUTE_IMAGE_NAME;                 // Attribute
+    attr_list[2]  = (long long)(path_chars * 2);             // Size (bytes)
+    *(void **)&attr_list[3] = nt_path;                       // ValuePtr
+    // attr_list[4] (ReturnLength) stays 0.
+
+    // [1] client-id (output, thread-flagged).
+    attr_list[5]  = PS_ATTRIBUTE_CLIENT_ID;                  // 0x10003
+    attr_list[6]  = (long long)sizeof(client_id);
+    *(void **)&attr_list[7] = &client_id;
+
+    // [2] TEB address (output, thread-flagged).
+    attr_list[9]  = PS_ATTRIBUTE_TEB_ADDRESS;                // 0x10004
+    attr_list[10] = (long long)sizeof(teb_address);
+    *(void **)&attr_list[11] = &teb_address;
 
     status = _NtCreateUserProcess(
         &hProcess, &hThread,
         PROCESS_ALL_ACCESS, THREAD_ALL_ACCESS,
-        NULL, NULL,            // process / thread OBJECT_ATTRIBUTES
-        0, 0,                  // process / thread flags
-        NULL,                  // ProcessParameters (kernel defaults)
+        NULL, NULL,                                          // process / thread OAs
+        0, 0,                                                // process / thread flags
+        NULL,                                                // ProcessParameters
         (PVOID)create_info,
         (PVOID)attr_list);
     if (!NT_SUCCESS(status))

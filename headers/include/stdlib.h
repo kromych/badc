@@ -127,6 +127,7 @@
 #pragma binding(msvcrt::atol,    "atol")
 #pragma binding(msvcrt::atof,    "atof")
 #pragma binding(msvcrt::strtol,  "strtol")
+#pragma binding(msvcrt::strtoul, "strtoul")
 // MSVC has _strtoi64; strtoll itself only landed in UCRT.
 #pragma binding(msvcrt::strtoll, "_strtoi64")
 // Underscored aliases for source compiled directly against the
@@ -273,4 +274,14 @@ static inline void __clear_cache(void *begin, void *end) {
     FlushInstructionCache(GetCurrentProcess(), begin,
                           (long long)((char *)end - (char *)begin));
 }
+// msvcrt exposes the environment vector through the `_environ`
+// data symbol. The c5 dialect has no dynamic-data-import binding
+// yet, so each TU contributes a tentative definition (C99 6.9.2)
+// that the linker collapses into one zero-initialised slot.
+// Programs that need the real msvcrt environ have to populate
+// this slot themselves from `main`'s `envp` argument.
+// TODO: replace the tentative definition with a real data
+// import once the binding-pragma surface grows a data form.
+char **environ;
+char **_environ;
 #endif

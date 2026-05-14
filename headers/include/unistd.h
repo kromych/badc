@@ -141,8 +141,16 @@
 #pragma binding(libc::sync,      "sync")
 #pragma binding(libc::confstr,   "confstr")
 // POSIX `environ` is exposed by glibc as a data symbol pointing
-// at the per-process environment vector.
-extern char **environ;
+// at the per-process environment vector. The c5 dialect has no
+// dynamic-data-import binding yet, so each TU contributes a
+// tentative definition (C99 6.9.2) that the linker collapses
+// into a single zero-initialised slot. Programs that need the
+// real glibc environ value -- e.g., to pass it through to a
+// child process -- have to populate this slot themselves from
+// the `envp` argument of `main`.
+// TODO: replace the tentative definition with a real data
+// import once the binding-pragma surface grows a data form.
+char **environ;
 #endif
 
 #ifdef _WIN32
@@ -156,6 +164,8 @@ extern char **environ;
 #pragma binding(msvcrt::isatty,"_isatty")
 #pragma binding(msvcrt::dup,   "_dup")
 #pragma binding(msvcrt::dup2,  "_dup2")
+#pragma binding(msvcrt::getcwd, "_getcwd")
+#pragma binding(msvcrt::unlink, "_unlink")
 #endif
 
 int open(char *path, int flags, ...);
@@ -257,14 +267,19 @@ struct rusage {
     char __pad[64];
 };
 
+#ifndef _WIN32
 // sysconf(3) selectors. Names match POSIX; the underlying value
 // is platform-specific but the bound libc reads it directly.
+// msvcrt has no `sysconf` entry, so the selector macros stay out
+// of the Windows path -- source that gates on `defined
+// _SC_PAGESIZE` falls back to its non-sysconf branch there.
 #define _SC_PAGESIZE      29
 #define _SC_PAGE_SIZE     _SC_PAGESIZE
 #define _SC_NPROCESSORS_ONLN 84
 #define _SC_OPEN_MAX      4
 #define _SC_ARG_MAX       0
 #define _SC_NPROC_ONLN    _SC_NPROCESSORS_ONLN
+#endif
 
 // Standard fd numbers. Already defined above; redeclared here
 // for grep-ability.

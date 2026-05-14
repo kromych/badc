@@ -94,6 +94,12 @@ typedef int    GET_FILEEX_INFO_LEVELS;
 #pragma binding(kernel32::ExitProcess,             "ExitProcess")
 #pragma binding(kernel32::Sleep,                   "Sleep")
 #pragma binding(kernel32::CreateThread,            "CreateThread")
+// Function-table registration for SEH-style stack unwinding.
+// `RtlAddFunctionTable` registers a `RUNTIME_FUNCTION` array as
+// the unwind data for a code range; `RtlDeleteFunctionTable`
+// removes a previously-registered table.
+#pragma binding(kernel32::RtlAddFunctionTable,     "RtlAddFunctionTable")
+#pragma binding(kernel32::RtlDeleteFunctionTable,  "RtlDeleteFunctionTable")
 #pragma binding(kernel32::WaitForSingleObject,     "WaitForSingleObject")
 #pragma binding(kernel32::CloseHandle,             "CloseHandle")
 #pragma binding(kernel32::GetExitCodeThread,       "GetExitCodeThread")
@@ -268,6 +274,21 @@ struct _SYSTEM_INFO {
 };
 typedef struct _SYSTEM_INFO SYSTEM_INFO;
 typedef struct _SYSTEM_INFO *LPSYSTEM_INFO;
+
+// SEH function-table entry. Layout differs between Win64 x64 and
+// AArch64 / IA64; the fields below match the Win64 x64 shape
+// since that is the only one any c5 consumer references today.
+// AArch64 uses a different `UnwindData` encoding inside the same
+// DWORD slot, so the c5-side declaration stays a flat
+// three-DWORD struct that both ABIs accept by ignoring the
+// platform-specific bit packing.
+struct _RUNTIME_FUNCTION {
+    DWORD BeginAddress;
+    DWORD EndAddress;
+    DWORD UnwindData;
+};
+typedef struct _RUNTIME_FUNCTION RUNTIME_FUNCTION;
+typedef struct _RUNTIME_FUNCTION *PRUNTIME_FUNCTION;
 
 // FILETIME / SYSTEMTIME -- the two structs sqlite's Windows VFS
 // uses (file timestamps + broken-down localtime fallback). Layout
@@ -653,6 +674,13 @@ int    FreeLibrary(HANDLE module);
 DWORD  GetLastError(void);
 int ExitProcess(int status);
 int Sleep(int milliseconds);
+// Function-table registration for SEH-style stack unwinding on
+// Win64. `EntryCount` is the number of `RUNTIME_FUNCTION`
+// entries; `BaseAddress` is the image base the offsets are
+// relative to.
+int RtlAddFunctionTable(PRUNTIME_FUNCTION FunctionTable, DWORD EntryCount,
+                        long long BaseAddress);
+int RtlDeleteFunctionTable(PRUNTIME_FUNCTION FunctionTable);
 
 // CreateThread returns a thread HANDLE (kernel object). Args
 // mirror the Win32 prototype: lpThreadAttributes, dwStackSize,

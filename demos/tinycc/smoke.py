@@ -367,7 +367,16 @@ def main() -> int:
         cmd.extend(["-o", str(out_path), *src_files])
         proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
         if proc.returncode != 0:
-            print("  link FAIL:", proc.stderr.strip().splitlines()[:5], file=sys.stderr)
+            # The driver prints per-source `badc: compiling <path>`
+            # progress lines on stderr in multi-TU mode. Skip those
+            # so the trailing error lines (the actual link failure)
+            # are what the user sees.
+            err_lines = [
+                line
+                for line in proc.stderr.strip().splitlines()
+                if not line.startswith("badc: compiling ")
+            ]
+            print("  link FAIL:", err_lines[-5:], file=sys.stderr)
             return 1
         print(f"  link OK   -> {out_path}")
         return 0

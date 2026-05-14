@@ -305,7 +305,6 @@ typedef struct __c5_FILE FILE;
 #pragma binding(msvcrt::_get_errno,     "_get_errno")
 #pragma binding(msvcrt::_set_errno,     "_set_errno")
 #pragma binding(msvcrt::_errno,         "_errno")
-#pragma binding(msvcrt::_environ,       "_environ")
 #pragma binding(msvcrt::__argc,         "__argc")
 #pragma binding(msvcrt::__argv,         "__argv")
 #pragma binding(msvcrt::__wargv,        "__wargv")
@@ -499,7 +498,6 @@ int   _stricmp();
 int   _get_errno();
 int   _set_errno();
 int  *_errno();
-char **_environ();
 int   __argc();
 char **__argv();
 unsigned short **__wargv();

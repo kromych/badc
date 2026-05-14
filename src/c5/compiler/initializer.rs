@@ -726,6 +726,13 @@ impl Compiler {
             } else if field.array_size > 0 && self.lex.tk == '{' {
                 self.next()?;
                 let elem_size = self.size_of_type(field.ty);
+                let elem_is_struct =
+                    is_struct_ty(field.ty) && struct_ptr_depth(field.ty) == 0;
+                let elem_sid = if elem_is_struct {
+                    Some(struct_id_of(field.ty))
+                } else {
+                    None
+                };
                 let mut idx: usize = 0;
                 while self.lex.tk != '}' {
                     if idx as i64 >= field.array_size {
@@ -734,9 +741,22 @@ impl Compiler {
                             self.structs[struct_id].name, field.name
                         )));
                     }
-                    let (value, reloc) = self.parse_constant_init_value()?;
                     let here = field_base + idx * elem_size;
-                    self.write_init_value(here, elem_size, value, reloc);
+                    // C99 6.7.8p20: an array-of-struct field accepts
+                    // a nested brace-enclosed initializer for each
+                    // element. Route the inner `{ ... }` through the
+                    // struct collector so the per-field offsets are
+                    // honoured; scalar element types fall through to
+                    // the constant-value path.
+                    if elem_is_struct && self.lex.tk == '{' {
+                        self.collect_struct_initializer(
+                            elem_sid.expect("elem_is_struct implies a struct id"),
+                            here as i64,
+                        )?;
+                    } else {
+                        let (value, reloc) = self.parse_constant_init_value()?;
+                        self.write_init_value(here, elem_size, value, reloc);
+                    }
                     idx += 1;
                     if self.lex.tk == ',' {
                         self.next()?;

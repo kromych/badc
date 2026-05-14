@@ -246,6 +246,16 @@ fn macro_arg_blue_paint_preserved_across_body_rescan() {
 }
 
 #[test]
+fn nested_struct_array_initializer() {
+    // C99 6.7.8: an array-of-struct field inside an enclosing
+    // struct accepts a nested brace-enclosed initializer for
+    // each element. The fixture exercises the array between
+    // scalar fields, as the only field, and adjacent to a flat
+    // int array; every per-element value reads back correctly.
+    assert_eq!(run_fixture("nested_struct_array_initializer.c"), 0);
+}
+
+#[test]
 fn array_initializer_accepts_constant_expressions() {
     // C99 6.6: a constant arithmetic expression is a valid
     // initializer in every position, including individual

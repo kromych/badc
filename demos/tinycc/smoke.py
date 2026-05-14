@@ -25,6 +25,7 @@ Override the badc binary via ``BADC`` (default:
 
 from __future__ import annotations
 
+import argparse
 import os
 import platform
 import subprocess
@@ -235,9 +236,17 @@ def resolve_badc() -> Path:
     sys.exit(2)
 
 
-def compile_one(badc: Path, src: Path, out: Path, cpp_defs: tuple[str, ...]) -> tuple[bool, str]:
+def compile_one(
+    badc: Path,
+    src: Path,
+    out: Path,
+    cpp_defs: tuple[str, ...],
+    target: str | None,
+) -> tuple[bool, str]:
     """Run badc -c against `src`. Returns (ok, captured_stderr_head)."""
     cmd = [str(badc), "-I", str(TINYCC_DIR)]
+    if target is not None:
+        cmd.append(f"--target={target}")
     for d in cpp_defs:
         cmd.extend(["-D", d])
     cmd.extend(["-c", str(src), "-o", str(out)])
@@ -248,8 +257,40 @@ def compile_one(badc: Path, src: Path, out: Path, cpp_defs: tuple[str, ...]) -> 
     return False, err[0] if err else f"exit {proc.returncode}"
 
 
+# Host triple -> badc `--target=<spec>` value. Used when the
+# smoke is asked to cross-probe a non-native lane from a
+# developer workstation; CI lanes pass through `None` so the
+# host detection picks up automatically.
+TARGET_FOR_HOST: dict[tuple[str, str], str] = {
+    ("Linux", "x86_64"): "linux-x64",
+    ("Linux", "aarch64"): "linux-aarch64",
+    ("Darwin", "arm64"): "macos-aarch64",
+    ("Windows", "AMD64"): "windows-x64",
+    ("Windows", "ARM64"): "windows-arm64",
+}
+
+
 def main() -> int:
-    key = host_key()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--host",
+        choices=sorted(f"{a}-{b}" for (a, b) in HOST_MATRIX),
+        help=(
+            "Cross-probe a non-native lane. Passes the matching "
+            "--target=<spec> through to badc and selects the named "
+            "lane's HOST_MATRIX entry. The link step is still "
+            "attempted so the cross-compile object set can be exercised "
+            "end-to-end."
+        ),
+    )
+    args = parser.parse_args()
+
+    if args.host:
+        key = tuple(args.host.split("-", 1))
+        target = TARGET_FOR_HOST[key]
+    else:
+        key = host_key()
+        target = None
     if key not in HOST_MATRIX:
         print(f"smoke: skip -- host {key} not in supported matrix")
         return 2
@@ -288,7 +329,7 @@ def main() -> int:
             print(f"smoke: source missing: {name}", file=sys.stderr)
             return 2
         out = work / (name + ".o")
-        ok, err = compile_one(badc, src, out, cpp_defs)
+        ok, err = compile_one(badc, src, out, cpp_defs, target)
         if ok:
             green.append(name)
             if not expected_green:
@@ -316,8 +357,11 @@ def main() -> int:
     if len(green) == len(active):
         # Every TU compiled -- try the multi-TU link.
         src_files = [str(TINYCC_DIR / name) for name in active]
-        out_path = work / ("tcc.exe" if WIN else "tcc")
+        link_target_is_win = key[0] == "Windows"
+        out_path = work / ("tcc.exe" if link_target_is_win else "tcc")
         cmd = [str(badc), "-I", str(TINYCC_DIR)]
+        if target is not None:
+            cmd.append(f"--target={target}")
         for d in cpp_defs:
             cmd.extend(["-D", d])
         cmd.extend(["-o", str(out_path), *src_files])

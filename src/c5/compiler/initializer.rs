@@ -521,8 +521,14 @@ impl Compiler {
                 return Ok((bc_pc, InitElemReloc::Code(idx)));
             }
             if class == Token::Num as i64 {
-                let v = self.symbols[idx].val;
-                self.next()?;
+                // Integer constant -- either a bare enum / macro
+                // value or the head of a constant arithmetic
+                // expression (`E_A | E_B`, `K << 4`, ...). Defer
+                // to the full integer-constant evaluator so any
+                // trailing operator chain is folded in per C99
+                // 6.6, instead of returning the head value and
+                // leaving the operator to fail downstream.
+                let v = self.parse_constant_int()?;
                 return Ok((v, InitElemReloc::None));
             }
             if class == Token::Sys as i64 {

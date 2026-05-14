@@ -140,6 +140,9 @@
 #pragma binding(libc::getopt,    "getopt")
 #pragma binding(libc::sync,      "sync")
 #pragma binding(libc::confstr,   "confstr")
+// POSIX `environ` is exposed by glibc as a data symbol pointing
+// at the per-process environment vector.
+extern char **environ;
 #endif
 
 #ifdef _WIN32

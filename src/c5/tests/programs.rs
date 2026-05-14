@@ -246,6 +246,18 @@ fn macro_arg_blue_paint_preserved_across_body_rescan() {
 }
 
 #[test]
+fn array_initializer_accepts_constant_expressions() {
+    // C99 6.6: a constant arithmetic expression is a valid
+    // initializer in every position, including individual
+    // elements of an array (or nested struct/array) initializer
+    // list. The fixture exercises bitwise (|, ^, &), additive,
+    // multiplicative, and shift compound forms of integer
+    // constants -- both macro-defined and enum-declared --
+    // across scalar arrays and nested struct-of-array tables.
+    assert_eq!(run_fixture("array_init_constant_expression.c"), 0);
+}
+
+#[test]
 fn sizeof_through_null_pointer_cast() {
     // C99 6.5.3.4: `sizeof` does not evaluate its operand, so
     // `sizeof ((T *)0)->m` is a valid way to read the size of a

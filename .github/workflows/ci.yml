@@ -170,7 +170,7 @@ jobs:
         # The no_std variant -- no StdHost adapter, alloc only. Library-
         # only because the binary needs std for argv / stdio.
         run: cargo build --locked --no-default-features --lib --verbose
-      - name: sqlite3 amalgamation smoke
+      - name: sqlite3 smoke
         # Fetch upstream sqlite, compile `sqlite3.c + shell.c`
         # with the freshly-built badc, and round-trip the
         # in-memory and file-backed scenarios at both -O and noO.
@@ -179,28 +179,41 @@ jobs:
         run: |
           cargo build --release --locked
           python demos/sqlite3/smoke.py
-      - name: miniz amalgamation smoke
+      - name: miniz smoke (amalg + TU + archive)
         # Same shape as the sqlite step but smaller: ~9k LOC of
         # integer + bit-twiddle deflate code. Compresses + uncompresses
         # a known buffer at both -O and noO and checks CRC32 / Adler32
-        # against RFC 1950 / 3309 reference values.
+        # against RFC 1950 / 3309 reference values. Runs three build
+        # flavours (single-source amalgamation, separate-compilation
+        # `-c` + link, and `--ar` archive + `-l`) at both -O levels
+        # to exercise the linker pipeline end-to-end.
         run: python demos/miniz/smoke.py
-      - name: kissfft amalgamation smoke
+      - name: kissfft smoke (amalg + TU + archive)
         # First real FP exerciser. Builds KISS FFT + a real-only
         # add-on through badc and runs an impulse FFT, a forward
         # +inverse round-trip, and a single-frequency sine real
         # FFT at both -O and noO. Catches FP libm boundary
         # regressions (xmm0 / d0 return value, FP arg masks
-        # through the optimizer, ...).
+        # through the optimizer, ...). Runs the same three build
+        # flavours as miniz so the multi-TU FP paths get exercised.
         run: python demos/kissfft/smoke.py
-      - name: bzip2 amalgamation smoke
+      - name: bzip2 smoke (amalg + TU + archive)
         # Third non-trivial demo. Integer + bit-twiddle heavy:
         # BWT, move-to-front, run-length encoding, and Huffman
         # coding through a 128-bit bitstream packer. Compresses +
         # decompresses a 600-byte buffer at blockSize 1 and 9 at
         # both -O and noO. Different code shape from miniz's
-        # deflate.
+        # deflate. Runs the same three build flavours so the
+        # bzip2 library bundles correctly through `--ar`.
         run: python demos/bzip2/smoke.py
+      - name: chibicc bringup smoke (informational)
+        # chibicc is the substantial multi-TU exerciser for the
+        # cross-TU linker. Bringup is in progress -- expect a
+        # subset of TUs to compile, the rest to surface their
+        # blockers. The harness defaults to exit-2 (informational)
+        # while bringup is open; set `BADC_CHIBICC_STRICT=1` once
+        # every TU is green to gate CI on regressions.
+        run: python demos/chibicc/smoke.py || test $? -eq 2
       - name: stb header-only smoke
         # The densest demo: a single TU pulls in six stb_*.h
         # headers (stb_sprintf, stb_perlin, stb_image_write,

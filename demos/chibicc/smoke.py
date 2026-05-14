@@ -93,6 +93,18 @@ def compile_one(badc: Path, src: Path, out: Path) -> tuple[bool, str]:
 
 
 def main() -> int:
+    # chibicc's body is POSIX-shaped: it calls `fork`/`execvp`/
+    # `waitpid`, walks paths via `glob`/`dirname`, allocates with
+    # `strndup` / `open_memstream`, and parses long-double via
+    # `strtold`. None of those surface through msvcrt without a
+    # substantial emulation layer, so the bringup currently
+    # targets macOS / Linux only. Skip cleanly on Windows so the
+    # CI lane reports the smoke as "not applicable here" rather
+    # than as a hard regression.
+    if WIN:
+        print("smoke: skip -- chibicc bringup targets POSIX hosts (macOS / Linux)")
+        return 2
+
     badc = resolve_badc()
 
     # Pull the source down if it isn't already on disk. We

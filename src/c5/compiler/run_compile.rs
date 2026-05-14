@@ -856,11 +856,8 @@ impl Compiler {
                         if let Some(first) = self.symbols[id_idx].array_dims.first().copied()
                             && first == 0
                         {
-                            let inner_product: i64 = self.symbols[id_idx]
-                                .array_dims
-                                .iter()
-                                .skip(1)
-                                .product();
+                            let inner_product: i64 =
+                                self.symbols[id_idx].array_dims.iter().skip(1).product();
                             if inner_product > 0 {
                                 self.symbols[id_idx].array_dims[0] = final_size / inner_product;
                             }

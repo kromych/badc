@@ -208,13 +208,17 @@ jobs:
         run: python demos/bzip2/smoke.py
       - name: chibicc bringup smoke
         # chibicc is the substantial multi-TU exerciser for the
-        # cross-TU linker. All nine TUs compile, the multi-TU link
-        # emits a working chibicc binary, and that binary produces
-        # byte-identical assembly to a gcc-built reference on the
-        # self-host sample suite (see `self_host.py`, gated to
-        # Linux x86_64).
+        # cross-TU linker. All nine TUs compile on macOS / Linux,
+        # the multi-TU link emits a working chibicc binary, and
+        # that binary produces byte-identical assembly to a gcc-
+        # built reference on the self-host sample suite (see
+        # `self_host.py`, gated to Linux x86_64). Windows runners
+        # exit 2 (skip): chibicc's body is POSIX-shaped (fork +
+        # execvp + waitpid + glob + dirname + strndup +
+        # open_memstream + strtold) and the bringup currently
+        # targets POSIX hosts only.
         shell: bash
-        run: python demos/chibicc/smoke.py
+        run: python demos/chibicc/smoke.py || test $? -eq 2
       - name: chibicc self-host parity (Linux x86_64 only)
         # Builds chibicc twice (gcc + badc), compares the .s
         # output on a curated sample suite, and asserts the

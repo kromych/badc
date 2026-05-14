@@ -189,10 +189,9 @@ impl Compiler {
                     cl_ty += Ty::Ptr as i64;
                 }
                 if self.lex.tk != ')' {
-                    return Err(self.compile_err_at(
-                        line,
-                        "`)` expected to close compound-literal type",
-                    ));
+                    return Err(
+                        self.compile_err_at(line, "`)` expected to close compound-literal type")
+                    );
                 }
                 self.next()?;
                 if self.lex.tk != '{' {
@@ -209,7 +208,7 @@ impl Compiler {
                 }
                 self.align_data_to_8();
                 let size = self.size_of_type(cl_ty);
-                let aligned = ((size + 7) / 8) * 8;
+                let aligned = size.div_ceil(8) * 8;
                 let off = self.data.len() as i64;
                 for _ in 0..aligned {
                     self.data.push(0);

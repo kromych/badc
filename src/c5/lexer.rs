@@ -1353,6 +1353,15 @@ const KEYWORDS: &[(&str, Token)] = &[
     ("__inline__", Token::FuncSpec),
     ("register", Token::FuncSpec),
     ("auto", Token::FuncSpec),
+    // C11 _Noreturn -- pure hint to optimizers (the called function
+    // never returns); semantics-equivalent to dropping it. Treated as
+    // a no-op function specifier so user code that pulls in
+    // <stdnoreturn.h> (which defines `noreturn` as `_Noreturn`)
+    // compiles unchanged. `noreturn` itself is the macro spelling
+    // and is recognised under the same token so source that omits
+    // the header (chibicc, for instance) still parses.
+    ("_Noreturn", Token::FuncSpec),
+    ("noreturn", Token::FuncSpec),
     // typedef -- drives the parser's type-alias registration.
     ("typedef", Token::Typedef),
     // union -- like struct, but all members share offset 0 and

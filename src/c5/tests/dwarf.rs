@@ -16,7 +16,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::{Compiler, Target, emit_native};
+use crate::{CompileOptions, Compiler, LinkOptions, Target, emit_native, link_units};
 
 /// Compile the inline source with the standard prelude and write
 /// an ad-hoc-signed Mach-O into a unique temp file. The path is
@@ -78,6 +78,20 @@ fn lldb_batch(path: &Path, commands: &[&str]) -> Option<String> {
 fn dwarfdump_debug_info(path: &Path) -> Option<String> {
     let out = Command::new("dwarfdump")
         .arg("--debug-info")
+        .arg(path)
+        .output()
+        .ok()?;
+    Some(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// Run `dwarfdump --debug-line <path>` and return its stdout.
+/// Used to inspect the line program directly -- specifically, to
+/// confirm a multi-TU link produced one file-table entry per
+/// translation-unit `.c` file and that the line program references
+/// each one. `None` when dwarfdump is missing on PATH.
+fn dwarfdump_debug_line(path: &Path) -> Option<String> {
+    let out = Command::new("dwarfdump")
+        .arg("--debug-line")
         .arg(path)
         .output()
         .ok()?;
@@ -372,5 +386,182 @@ fn lldb_resolves_bitfield_widths() {
     for needle in ["width : 5", "height : 6", "rest : 21"] {
         assert!(out.contains(needle), "expected `{needle}` in:\n{out}");
     }
+    let _ = std::fs::remove_file(&path);
+}
+
+/// Compile two inline TUs with distinct source labels, link them
+/// through `link_units`, and write an ad-hoc-signed Mach-O. The
+/// distinct source labels propagate through the preprocessor into
+/// each unit's `source_files[0]`; after the linker merges them, the
+/// resulting `program.source_files` carries both names and the
+/// DWARF line-program emitter places one file-table entry per TU.
+fn build_signed_mach_o_two_units(
+    src_a: &str,
+    label_a: &str,
+    src_b: &str,
+    label_b: &str,
+    stem: &str,
+) -> PathBuf {
+    let unit_a = Compiler::with_options(
+        super::with_prelude(src_a),
+        Target::MacOSAarch64,
+        CompileOptions::default().with_source_label(label_a),
+    )
+    .compile_to_link_unit()
+    .unwrap_or_else(|e| panic!("compile_to_link_unit failed for {label_a}: {e}"));
+    let unit_b = Compiler::with_options(
+        super::with_prelude(src_b),
+        Target::MacOSAarch64,
+        CompileOptions::default().with_source_label(label_b),
+    )
+    .compile_to_link_unit()
+    .unwrap_or_else(|e| panic!("compile_to_link_unit failed for {label_b}: {e}"));
+    let mut unit_a = unit_a;
+    let mut unit_b = unit_b;
+    unit_a.source_path = label_a.to_string();
+    unit_b.source_path = label_b.to_string();
+    // `main`-bearing unit first so link_units anchors the entry on it.
+    let mut program = link_units(alloc::vec![unit_b, unit_a], &[], LinkOptions::default())
+        .unwrap_or_else(|e| panic!("link_units failed: {e}"));
+    if program.source_path.is_empty() {
+        program.source_path = label_b.to_string();
+    }
+    let bytes = emit_native(&program, Target::MacOSAarch64)
+        .unwrap_or_else(|e| panic!("emit_native failed for {stem}: {e}"));
+
+    let path = std::env::temp_dir().join(format!("badc-dwarf-{stem}.bin"));
+    {
+        let mut f = std::fs::File::create(&path).expect("create temp file");
+        f.write_all(&bytes).expect("write temp file");
+    }
+    use std::os::unix::fs::PermissionsExt;
+    let mut perms = std::fs::metadata(&path).unwrap().permissions();
+    perms.set_mode(perms.mode() | 0o111);
+    std::fs::set_permissions(&path, perms).unwrap();
+    let status = Command::new("/usr/bin/codesign")
+        .args(["--sign", "-", "--force"])
+        .arg(&path)
+        .status()
+        .expect("codesign not available");
+    assert!(status.success(), "codesign failed for {path:?}");
+    path
+}
+
+#[test]
+fn multi_tu_dwarf_line_table_carries_both_files() {
+    // gh #88-shape regression: after the cross-TU linker landed, the
+    // DWARF line program must continue to attribute each PC back to
+    // the `.c` file it came from. The DWARF emitter walks
+    // `program.source_files` (skipping the lexer's `<source>`
+    // placeholder) and assigns one DWARF file number per entry; the
+    // line-program rows reach the right file via `DW_LNS_SET_FILE`
+    // through `program.source_file_indices`. If the linker's source-
+    // table merge or the file-index remap regresses, the file table
+    // would either lose one of the TUs or every PC would attribute
+    // back to file 1.
+    let path = build_signed_mach_o_two_units(
+        // TU A: a helper that does a couple of statements so its
+        // body has more than one line-program row.
+        r#"
+        int helper(int x) {
+            int y;
+            y = x + 1;
+            y = y * 2;
+            return y;
+        }
+        "#,
+        "tu_helper.c",
+        // TU B: main calls helper through an extern.
+        r#"
+        extern int helper(int x);
+        int main() {
+            int r;
+            r = helper(20);
+            return r;
+        }
+        "#,
+        "tu_main.c",
+        "multi_tu_lines",
+    );
+    let Some(out) = dwarfdump_debug_line(&path) else {
+        eprintln!("dwarfdump not on PATH -- skipping multi-TU DWARF line-table test");
+        let _ = std::fs::remove_file(&path);
+        return;
+    };
+    // Both TUs should appear as file-table entries. dwarfdump renders
+    // each file row containing the file name as a quoted string.
+    assert!(
+        out.contains("tu_main.c"),
+        "expected `tu_main.c` in dwarfdump --debug-line output:\n{out}"
+    );
+    assert!(
+        out.contains("tu_helper.c"),
+        "expected `tu_helper.c` in dwarfdump --debug-line output:\n{out}"
+    );
+    // dwarfdump prints the file_names table with `file_names[<n>]`.
+    // At least two entries (one per TU) should be present beyond the
+    // sentinel; dwarfdump uses 1-based numbering and a buggy single-
+    // file emit would print only one row.
+    let n_file_rows = out.matches("file_names[").count();
+    assert!(
+        n_file_rows >= 2,
+        "expected at least two file_names rows in line program, got {n_file_rows}:\n{out}"
+    );
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn multi_tu_lldb_step_crosses_translation_unit_boundary() {
+    // Scripted lldb step test: run to `main`, step into `helper`
+    // (defined in a different TU), and verify lldb resolves the
+    // PC to the helper's source file. Catches any drift where the
+    // multi-TU line-program either drops the file change or
+    // produces unsteppable rows (PC ranges that don't cover the
+    // call site, line=0 stop reasons, etc.).
+    let path = build_signed_mach_o_two_units(
+        r#"
+        int helper(int x) {
+            int y;
+            y = x + 1;
+            y = y * 2;
+            return y;
+        }
+        "#,
+        "tu_helper.c",
+        r#"
+        extern int helper(int x);
+        int main() {
+            int r;
+            r = helper(20);
+            return r;
+        }
+        "#,
+        "tu_main.c",
+        "multi_tu_step",
+    );
+    // `b helper` sets a breakpoint on the helper symbol. `run`
+    // launches; the first `stop reason = breakpoint` row carries
+    // the file name lldb resolved through the DWARF line program.
+    let Some(out) = lldb_batch(
+        &path,
+        &["breakpoint set --name helper", "run", "frame info", "quit"],
+    ) else {
+        eprintln!("lldb not on PATH -- skipping multi-TU lldb step test");
+        let _ = std::fs::remove_file(&path);
+        return;
+    };
+    // lldb's `frame info` prints something like
+    //   frame #0: 0x... `helper(x=20) at tu_helper.c:3
+    // when DWARF resolved the PC to the right source file. If the
+    // linker had collapsed both TUs onto a single file entry, the
+    // resolution would say `tu_main.c` instead.
+    assert!(
+        out.contains("helper"),
+        "expected lldb to stop in `helper`:\n{out}"
+    );
+    assert!(
+        out.contains("tu_helper.c"),
+        "expected lldb to attribute helper's PC to `tu_helper.c`:\n{out}"
+    );
     let _ = std::fs::remove_file(&path);
 }

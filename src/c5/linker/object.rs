@@ -92,6 +92,98 @@ const STT_OBJECT: u8 = 1;
 const STT_FUNC: u8 = 2;
 const SHN_UNDEF: u16 = 0;
 
+// ------------------------------------------------------------------
+// On-disk shapes. Mirror the same `#[repr(C)]` + `write_struct`
+// approach the native ELF emitter in `c5/codegen/elf.rs` uses:
+// little-endian fields packed at C-ABI offsets, so a single memcpy
+// produces the correct wire bytes. Const-time size asserts catch
+// any future field-width drift before we ship malformed objects.
+// ------------------------------------------------------------------
+
+const ELF64_EHDR_SIZE: usize = 64;
+const ELF64_SHDR_SIZE: usize = 64;
+const ELF64_SYM_SIZE: usize = 24;
+const ELF64_RELA_SIZE: usize = 24;
+
+/// Elf64_Ehdr -- the file header at offset 0.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct Elf64Ehdr {
+    e_ident: [u8; 16],
+    e_type: u16,
+    e_machine: u16,
+    e_version: u32,
+    e_entry: u64,
+    e_phoff: u64,
+    e_shoff: u64,
+    e_flags: u32,
+    e_ehsize: u16,
+    e_phentsize: u16,
+    e_phnum: u16,
+    e_shentsize: u16,
+    e_shnum: u16,
+    e_shstrndx: u16,
+}
+
+const _: () = assert!(core::mem::size_of::<Elf64Ehdr>() == ELF64_EHDR_SIZE);
+
+/// Elf64_Shdr -- one entry in the section header table.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct Elf64Shdr {
+    sh_name: u32,
+    sh_type: u32,
+    sh_flags: u64,
+    sh_addr: u64,
+    sh_offset: u64,
+    sh_size: u64,
+    sh_link: u32,
+    sh_info: u32,
+    sh_addralign: u64,
+    sh_entsize: u64,
+}
+
+const _: () = assert!(core::mem::size_of::<Elf64Shdr>() == ELF64_SHDR_SIZE);
+
+/// Elf64_Sym -- one entry in `.symtab`.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct Elf64Sym {
+    st_name: u32,
+    st_info: u8,
+    st_other: u8,
+    st_shndx: u16,
+    st_value: u64,
+    st_size: u64,
+}
+
+const _: () = assert!(core::mem::size_of::<Elf64Sym>() == ELF64_SYM_SIZE);
+
+/// Elf64_Rela -- one entry in `.rela.*`.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct Elf64Rela {
+    r_offset: u64,
+    r_info: u64,
+    r_addend: i64,
+}
+
+const _: () = assert!(core::mem::size_of::<Elf64Rela>() == ELF64_RELA_SIZE);
+
+/// Append a `#[repr(C)]` struct's raw bytes to `out`. Same shape
+/// the native ELF / PE writers use; we are little-endian on every
+/// supported host so a memcpy hits the right wire format.
+fn write_struct<T: Copy>(out: &mut Vec<u8>, value: &T) {
+    const _: () = assert!(
+        cfg!(target_endian = "little"),
+        "object writer assumes a little-endian host"
+    );
+    let bytes = unsafe {
+        core::slice::from_raw_parts((value as *const T) as *const u8, core::mem::size_of::<T>())
+    };
+    out.extend_from_slice(bytes);
+}
+
 /// Section indices we emit. Order is fixed so the symbol table's
 /// `st_shndx` values can be set without a second pass.
 const SHIDX_NULL: u16 = 0;
@@ -140,11 +232,11 @@ impl Writer {
     }
 
     fn encode(&mut self, unit: &LinkUnit) {
-        // ELF64 header is fixed-size (64 bytes) and lives at
-        // offset 0; we patch its `e_shoff` field once the
-        // section data is laid out.
+        // ELF64 header is fixed-size and lives at offset 0; we
+        // reserve the slot here and patch its `e_shoff` field once
+        // the section data is laid out.
         let ehdr_off = self.out.len();
-        self.out.resize(ehdr_off + 64, 0);
+        self.out.resize(ehdr_off + ELF64_EHDR_SIZE, 0);
 
         // Section data is concatenated immediately after the
         // header; each section is 8-byte aligned for clean
@@ -238,7 +330,7 @@ impl Writer {
         sections[SHIDX_SHSTRTAB as usize] =
             (shstrtab_off as u64, (self.out.len() - shstrtab_off) as u64);
 
-        // Section header table. Each Elf64_Shdr is 64 bytes.
+        // Section header table.
         self.align_to(8);
         let shoff = self.out.len() as u64;
         // First-local index in .symtab: count locals (STB_LOCAL).
@@ -248,17 +340,20 @@ impl Writer {
             let (sh_type, sh_flags, sh_link, sh_info, sh_entsize, sh_addralign) =
                 section_metadata(shidx as u16, symtab_first_global);
             let name_off = shstr_offsets[shidx];
-            self.write_shdr(
-                name_off as u32,
-                sh_type,
-                sh_flags,
-                0, // sh_addr = 0 in a relocatable file
-                offset,
-                size,
-                sh_link,
-                sh_info,
-                sh_addralign,
-                sh_entsize,
+            write_struct(
+                &mut self.out,
+                &Elf64Shdr {
+                    sh_name: name_off as u32,
+                    sh_type,
+                    sh_flags,
+                    sh_addr: 0, // sh_addr = 0 in a relocatable file
+                    sh_offset: offset,
+                    sh_size: size,
+                    sh_link,
+                    sh_info,
+                    sh_addralign,
+                    sh_entsize,
+                },
             );
         }
 
@@ -273,82 +368,38 @@ impl Writer {
     }
 
     fn write_ehdr(&mut self, ehdr_off: usize, shoff: u64) {
-        let mut ident = [0u8; 16];
-        ident[0..4].copy_from_slice(b"\x7fELF");
-        ident[4] = ELF_CLASS_64;
-        ident[5] = ELF_DATA_LSB;
-        ident[6] = ELF_VERSION_CURRENT;
-        ident[7] = ELFOSABI_BADC;
-        ident[8] = ELFABIVERSION_BADC;
-        // ident[9..16] padded to 0.
-        let mut p = ehdr_off;
-        self.out[p..p + 16].copy_from_slice(&ident);
-        p += 16;
-        self.put_u16(&mut p, ET_REL);
-        self.put_u16(&mut p, EM_NONE);
-        self.put_u32(&mut p, 1); // e_version
-        self.put_u64(&mut p, 0); // e_entry (none for object file)
-        self.put_u64(&mut p, 0); // e_phoff
-        self.put_u64(&mut p, shoff);
-        self.put_u32(&mut p, 0); // e_flags
-        self.put_u16(&mut p, 64); // e_ehsize
-        self.put_u16(&mut p, 0); // e_phentsize
-        self.put_u16(&mut p, 0); // e_phnum
-        self.put_u16(&mut p, 64); // e_shentsize (Elf64_Shdr size)
-        self.put_u16(&mut p, NUM_SECTIONS as u16); // e_shnum
-        self.put_u16(&mut p, SHIDX_SHSTRTAB); // e_shstrndx
-        let _ = p;
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn write_shdr(
-        &mut self,
-        sh_name: u32,
-        sh_type: u32,
-        sh_flags: u64,
-        sh_addr: u64,
-        sh_offset: u64,
-        sh_size: u64,
-        sh_link: u32,
-        sh_info: u32,
-        sh_addralign: u64,
-        sh_entsize: u64,
-    ) {
-        let mut buf = [0u8; 64];
-        let mut p = 0;
-        Self::put_u32_in(&mut buf, &mut p, sh_name);
-        Self::put_u32_in(&mut buf, &mut p, sh_type);
-        Self::put_u64_in(&mut buf, &mut p, sh_flags);
-        Self::put_u64_in(&mut buf, &mut p, sh_addr);
-        Self::put_u64_in(&mut buf, &mut p, sh_offset);
-        Self::put_u64_in(&mut buf, &mut p, sh_size);
-        Self::put_u32_in(&mut buf, &mut p, sh_link);
-        Self::put_u32_in(&mut buf, &mut p, sh_info);
-        Self::put_u64_in(&mut buf, &mut p, sh_addralign);
-        Self::put_u64_in(&mut buf, &mut p, sh_entsize);
-        let _ = p;
-        self.out.extend_from_slice(&buf);
-    }
-
-    fn put_u16(&mut self, p: &mut usize, v: u16) {
-        self.out[*p..*p + 2].copy_from_slice(&v.to_le_bytes());
-        *p += 2;
-    }
-    fn put_u32(&mut self, p: &mut usize, v: u32) {
-        self.out[*p..*p + 4].copy_from_slice(&v.to_le_bytes());
-        *p += 4;
-    }
-    fn put_u64(&mut self, p: &mut usize, v: u64) {
-        self.out[*p..*p + 8].copy_from_slice(&v.to_le_bytes());
-        *p += 8;
-    }
-    fn put_u32_in(buf: &mut [u8], p: &mut usize, v: u32) {
-        buf[*p..*p + 4].copy_from_slice(&v.to_le_bytes());
-        *p += 4;
-    }
-    fn put_u64_in(buf: &mut [u8], p: &mut usize, v: u64) {
-        buf[*p..*p + 8].copy_from_slice(&v.to_le_bytes());
-        *p += 8;
+        let mut e_ident = [0u8; 16];
+        e_ident[0..4].copy_from_slice(b"\x7fELF");
+        e_ident[4] = ELF_CLASS_64;
+        e_ident[5] = ELF_DATA_LSB;
+        e_ident[6] = ELF_VERSION_CURRENT;
+        e_ident[7] = ELFOSABI_BADC;
+        e_ident[8] = ELFABIVERSION_BADC;
+        // e_ident[9..16] left zero.
+        let ehdr = Elf64Ehdr {
+            e_ident,
+            e_type: ET_REL,
+            e_machine: EM_NONE,
+            e_version: 1,
+            e_entry: 0, // no entry point in a relocatable object
+            e_phoff: 0,
+            e_shoff: shoff,
+            e_flags: 0,
+            e_ehsize: ELF64_EHDR_SIZE as u16,
+            e_phentsize: 0,
+            e_phnum: 0,
+            e_shentsize: ELF64_SHDR_SIZE as u16,
+            e_shnum: NUM_SECTIONS as u16,
+            e_shstrndx: SHIDX_SHSTRTAB,
+        };
+        // Write into the reserved slot we sized at encode() time.
+        let bytes = unsafe {
+            core::slice::from_raw_parts(
+                (&ehdr as *const Elf64Ehdr) as *const u8,
+                ELF64_EHDR_SIZE,
+            )
+        };
+        self.out[ehdr_off..ehdr_off + ELF64_EHDR_SIZE].copy_from_slice(bytes);
     }
 }
 
@@ -412,7 +463,17 @@ fn encode_symtab(unit: &LinkUnit, name_offsets: &[u32]) -> Vec<u8> {
     // globals by binding, only by `st_shndx == SHN_UNDEF`).
     let mut out = Vec::new();
     // Null sentinel.
-    out.extend_from_slice(&[0u8; 24]);
+    write_struct(
+        &mut out,
+        &Elf64Sym {
+            st_name: 0,
+            st_info: 0,
+            st_other: 0,
+            st_shndx: 0,
+            st_value: 0,
+            st_size: 0,
+        },
+    );
     let mut writer_order: Vec<usize> = (0..unit.symbols.len()).collect();
     writer_order.sort_by_key(|&i| match unit.symbols[i].linkage {
         crate::c5::symbol::Linkage::Internal => 0,
@@ -420,7 +481,6 @@ fn encode_symtab(unit: &LinkUnit, name_offsets: &[u32]) -> Vec<u8> {
     });
     for &i in &writer_order {
         let s = &unit.symbols[i];
-        let name_off = name_offsets[i];
         let st_info = (binding_of(s) << 4) | (st_type_of(s) & 0xf);
         let st_shndx: u16 = match s.kind {
             SymbolKind::Function => SHIDX_TEXT,
@@ -433,16 +493,21 @@ fn encode_symtab(unit: &LinkUnit, name_offsets: &[u32]) -> Vec<u8> {
         // tooling that mistakes the section for raw bytes sees
         // a sensible "address". The linker reads the original
         // bytecode index back out by dividing by 8.
-        let value: u64 = match s.kind {
+        let st_value: u64 = match s.kind {
             SymbolKind::Function => s.value.saturating_mul(8),
             _ => s.value,
         };
-        out.extend_from_slice(&name_off.to_le_bytes());
-        out.push(st_info);
-        out.push(0); // st_other
-        out.extend_from_slice(&st_shndx.to_le_bytes());
-        out.extend_from_slice(&value.to_le_bytes());
-        out.extend_from_slice(&s.size.to_le_bytes());
+        write_struct(
+            &mut out,
+            &Elf64Sym {
+                st_name: name_offsets[i],
+                st_info,
+                st_other: 0,
+                st_shndx,
+                st_value,
+                st_size: s.size,
+            },
+        );
     }
     out
 }
@@ -523,7 +588,6 @@ fn encode_relocs(unit: &LinkUnit) -> (Vec<u8>, Vec<u8>) {
 
     let mut rt = Vec::new();
     let mut rd = Vec::new();
-    let mut tmp = [0u8; 24];
     // Stable ordering by location keeps the output deterministic
     // and gives the reader a clean "scan in order" loop.
     let mut sorted: Vec<&Reloc> = unit.relocs.iter().collect();
@@ -542,18 +606,16 @@ fn encode_relocs(unit: &LinkUnit) -> (Vec<u8>, Vec<u8>) {
             .copied()
             .unwrap_or(0);
         let r_info: u64 = ((elf_idx as u64) << 32) | (r.kind.as_u8() as u64);
-        let r_addend = r.addend;
-        tmp[0..8].copy_from_slice(&r_offset.to_le_bytes());
-        tmp[8..16].copy_from_slice(&r_info.to_le_bytes());
-        tmp[16..24].copy_from_slice(&r_addend.to_le_bytes());
-        match r.kind {
-            RelocKind::JsrPc | RelocKind::ImmCodeAddr | RelocKind::ImmDataAddr => {
-                rt.extend_from_slice(&tmp);
-            }
-            RelocKind::DataDataAbs64 | RelocKind::DataCodeAbs64 => {
-                rd.extend_from_slice(&tmp);
-            }
-        }
+        let rela = Elf64Rela {
+            r_offset,
+            r_info,
+            r_addend: r.addend,
+        };
+        let target = match r.kind {
+            RelocKind::JsrPc | RelocKind::ImmCodeAddr | RelocKind::ImmDataAddr => &mut rt,
+            RelocKind::DataDataAbs64 | RelocKind::DataCodeAbs64 => &mut rd,
+        };
+        write_struct(target, &rela);
     }
     (rt, rd)
 }

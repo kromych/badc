@@ -90,6 +90,13 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
         "sys/select.h",
         include_str!("../../headers/include/sys/select.h"),
     ),
+    (
+        "sys/wait.h",
+        include_str!("../../headers/include/sys/wait.h"),
+    ),
+    ("strings.h", include_str!("../../headers/include/strings.h")),
+    ("libgen.h", include_str!("../../headers/include/libgen.h")),
+    ("glob.h", include_str!("../../headers/include/glob.h")),
     ("pthread.h", include_str!("../../headers/include/pthread.h")),
     ("dlfcn.h", include_str!("../../headers/include/dlfcn.h")),
     ("windows.h", include_str!("../../headers/include/windows.h")),

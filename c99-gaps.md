@@ -42,7 +42,10 @@ initializers; the `<stdio.h>` / `<stdlib.h>` / `<string.h>`
 `<windows.h>` surfaces documented in `headers/include/`;
 multi-source compile + link (`badc -c foo.c bar.c` followed
 by `badc -o app foo.o bar.o`, plus `--ar` for archives and
-`-L<dir>` / `-l<name>` for archive resolution).
+`-L<dir>` / `-l<name>` for archive resolution); binary
+integer literals (`0b...` / `0B...`, C23 / GCC extension)
+with the same suffix-letter handling as hex and decimal
+constants.
 
 The integer-arithmetic surface is C99-correct end-to-end:
 unsigned wrap-modulo-2^N, signed-overflow truncate-and-sign-
@@ -114,7 +117,13 @@ high-half garbage.
 
 ### Compound literals (`(struct Foo){.x=1}`), severity 3
 
-Rejected.
+Supported at file scope (C99 6.5.2.5p5, static storage
+duration): `Type *p = &(T){...};` and the empty form
+`Scope *s = &(T){};` synthesize an anonymous internal-linkage
+symbol of the named struct type and patch the surrounding `&`
+reloc to point at it. Block-scope compound literals
+(`f(&(struct Pt){1, 2})`, automatic storage duration with
+lifetime equal to the enclosing block) are still rejected.
 
 ### Standalone abstract function-pointer declarators, severity 4
 
@@ -188,5 +197,5 @@ C11+ features showing up in modern code:
 
 1. libc `struct`-by-value ABI bridge.
 2. `_Bool` 0/1 normalisation.
-3. Compound literals (`(struct Foo){.x = 1}`).
+3. Block-scope compound literals (`f(&(struct Pt){1, 2})`).
 4. Standalone abstract function-pointer declarators in `sizeof` / cast position.

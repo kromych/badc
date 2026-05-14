@@ -43,6 +43,7 @@
 #pragma binding(libc::strtol,  "_strtol")
 #pragma binding(libc::strtoll, "_strtoll")
 #pragma binding(libc::strtod,  "_strtod")
+#pragma binding(libc::strtold, "_strtold")
 #pragma binding(libc::abs,     "_abs")
 #pragma binding(libc::abort,   "_abort")
 #pragma binding(libc::exit,    "_exit")
@@ -76,6 +77,7 @@
 #pragma binding(libc::strtol,  "strtol")
 #pragma binding(libc::strtoll, "strtoll")
 #pragma binding(libc::strtod,  "strtod")
+#pragma binding(libc::strtold, "strtold")
 #pragma binding(libc::abs,     "abs")
 #pragma binding(libc::abort,   "abort")
 #pragma binding(libc::exit,    "exit")
@@ -120,6 +122,9 @@
 // MSVC has _strtoi64; strtoll itself only landed in UCRT.
 #pragma binding(msvcrt::strtoll, "_strtoi64")
 #pragma binding(msvcrt::strtod,  "strtod")
+// msvcrt.dll has no `strtold`; UCRT exports it but the
+// universally-available CRT here does not. Programs that
+// need `long double` parsing on Windows pin to UCRT.
 #pragma binding(msvcrt::abs,     "abs")
 #pragma binding(msvcrt::abort,   "abort")
 #pragma binding(msvcrt::system,  "system")
@@ -151,6 +156,13 @@ double atof(char *s);
 int strtol(char *s, char **endp, int base);
 int strtoll(char *s, char **endp, int base);
 double strtod(char *s, char **endp);
+#ifndef _WIN32
+// `long double` falls back to f64 in c5 (16-byte storage, 8-byte
+// precision) -- the return value flows through the long-double
+// load/store pipeline; the libc-side conversion happens at full
+// 80-bit precision and gets narrowed on the way back.
+long double strtold(char *s, char **endp);
+#endif
 int abs(int x);
 int abort();
 int exit(int status);

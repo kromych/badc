@@ -921,6 +921,17 @@ impl Compiler {
                         self.pending.fn_ptr_chain_depth = prior_depth - 1;
                     }
                 }
+                // The operand may have been an array-decayed pointer
+                // (e.g. `*arr` where `arr` is `T arr[N]`), in which
+                // case the identifier-load path seeded
+                // `last_array_decay_size` with the array's element
+                // count. After the `*` consumed that decay, the
+                // value is no longer the array-of-T shape but the
+                // T-shaped first element, so an enclosing
+                // `sizeof(*arr)` must compute `sizeof(T)` rather
+                // than `N * sizeof(T)`. Clear the marker.
+                self.pending.last_array_decay_size = 0;
+                self.pending.last_array_decay_bytes = 0;
             }
         } else if self.lex.tk == Token::AndOp {
             self.next()?;

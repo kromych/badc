@@ -40,6 +40,7 @@
 #pragma binding(libc::strncat,  "_strncat")
 #pragma binding(libc::strerror, "_strerror")
 #pragma binding(libc::strdup,   "_strdup")
+#pragma binding(libc::strndup,  "_strndup")
 #pragma binding(libc::strspn,   "_strspn")
 #pragma binding(libc::strcspn,  "_strcspn")
 #pragma binding(libc::strpbrk,  "_strpbrk")
@@ -65,6 +66,7 @@
 #pragma binding(libc::strncat,  "strncat")
 #pragma binding(libc::strerror, "strerror")
 #pragma binding(libc::strdup,   "strdup")
+#pragma binding(libc::strndup,  "strndup")
 #pragma binding(libc::strspn,   "strspn")
 #pragma binding(libc::strcspn,  "strcspn")
 #pragma binding(libc::strpbrk,  "strpbrk")
@@ -92,6 +94,9 @@
 // MSVC marks `strdup` as deprecated and exports the underscored form;
 // it's the universally available spelling on every modern msvcrt.
 #pragma binding(msvcrt::strdup,   "_strdup")
+// msvcrt has no `strndup` (POSIX.1-2008 7.24.1.4); programs
+// that need the bounded copy on Windows emulate via
+// `strnlen` + `malloc` + `memcpy`.
 #pragma binding(msvcrt::strspn,   "strspn")
 #pragma binding(msvcrt::strcspn,  "strcspn")
 #pragma binding(msvcrt::strpbrk,  "strpbrk")
@@ -117,6 +122,12 @@ char *strcat(char *dst, char *src);
 char *strncat(char *dst, char *src, int n);
 char *strerror(int errnum);
 char *strdup(char *s);
+#ifndef _WIN32
+// POSIX.1-2008 7.24.1.4 `strndup` -- C2x but not in C99
+// `<string.h>`. Bound on macOS / Linux; msvcrt has no
+// equivalent so the prototype is gated out on Windows.
+char *strndup(char *s, int n);
+#endif
 int strspn(char *s, char *accept);
 int strcspn(char *s, char *reject);
 char *strpbrk(char *s, char *accept);

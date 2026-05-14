@@ -277,7 +277,28 @@ impl Compiler {
                     array_size *= m;
                 }
             }
-            let inner_dim: i64 = if dims.len() >= 2 { dims[1] } else { 0 };
+            // Deferred-outer multi-dim arrays (`T arr[][N]`,
+            // `T arr[][N][M]`, ...): the outermost dimension's count
+            // arrives later, from the initializer. The trailing
+            // inner dims still need to be recorded NOW so the
+            // indexer's stride math is correct -- otherwise
+            // `arr[i]` strides by `elem_size` instead of
+            // `inner_dim * elem_size` and an out-of-row reference
+            // walks into the previous row's tail bytes.
+            //
+            // Convention: `array_dims[0] = 0` marks the deferred
+            // outer dim. `seed_multi_dim_strides` only reads
+            // `dims[k+1..]` for stride[k] so the placeholder zero
+            // never propagates into a computed stride; the
+            // post-init fixup in `run_compile` overwrites it with
+            // the real count once the initializer has been parsed.
+            let inner_dim: i64 = if dims.len() >= 2 {
+                dims[1]
+            } else if array_size < 0 && !dims.is_empty() {
+                dims[0]
+            } else {
+                0
+            };
             if idx != usize::MAX {
                 // Always overwrite, even with 0, so a rebinding of a
                 // name that previously carried a multi-dim shape (a
@@ -289,6 +310,11 @@ impl Compiler {
                 self.symbols[idx].inner_array_size = inner_dim;
                 self.symbols[idx].array_dims = if dims.len() >= 2 {
                     dims
+                } else if array_size < 0 && !dims.is_empty() {
+                    let mut v = alloc::vec::Vec::with_capacity(dims.len() + 1);
+                    v.push(0);
+                    v.extend(dims);
+                    v
                 } else {
                     alloc::vec::Vec::new()
                 };

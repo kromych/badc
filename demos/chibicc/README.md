@@ -13,60 +13,54 @@ Pulled through the badc vendor-deps mirror -- see
 
 ## Bringup status
 
-This is a **work-in-progress** bringup. The chibicc source pre-
-dates c5 by several years and uses C99 / C11 / GNU features the
-c5 dialect doesn't currently implement. Per-TU survey of what
-compiles unmodified through badc today:
+Every TU compiles, the multi-TU link succeeds, and the produced
+chibicc binary matches the gcc-built reference byte-for-byte on
+the self-host sample suite. See `self_host.py` for the parity
+check; `smoke.py` covers per-TU compile + link.
 
-| TU             | Status   | First blocker                       |
-|----------------|----------|-------------------------------------|
-| `chibicc.h`    | parses   | (header)                            |
-| `hashmap.c`    | compiles |                                     |
-| `codegen.c`    | compiles |                                     |
-| `tokenize.c`   | blocked  | `strncasecmp` binding missing       |
-| `strings.c`    | blocked  | `open_memstream` binding missing    |
-| `preprocess.c` | blocked  | `strndup` binding missing           |
-| `main.c`       | blocked  | `dirname` binding missing           |
-| `unicode.c`    | blocked  | `0b...` binary integer literals     |
-| `type.c`       | blocked  | compound literals (`&(Type){...}`)  |
-| `parse.c`      | blocked  | compound literals (`&(Scope){}`)    |
+Per-TU status:
 
-Already-landed fixes on this branch:
+| TU             | Status   |
+|----------------|----------|
+| `chibicc.h`    | parses   |
+| `hashmap.c`    | compiles |
+| `codegen.c`    | compiles |
+| `tokenize.c`   | compiles |
+| `strings.c`    | compiles |
+| `preprocess.c` | compiles |
+| `main.c`       | compiles |
+| `unicode.c`    | compiles |
+| `type.c`       | compiles |
+| `parse.c`      | compiles |
 
-* `<stdbool.h>` -- maps `bool` -> `_Bool` (C99 7.16).
-* `<stdnoreturn.h>` -- defines `noreturn` macro (C11 7.23).
-* `_Noreturn` / `noreturn` accepted as no-op function specifiers.
+Bringup landed by closing five gaps in the c5 dialect:
 
-Each remaining blocker tracks a real gap in the c5 dialect:
+1. **POSIX libc bindings** -- new headers `<strings.h>`,
+   `<libgen.h>`, `<glob.h>`, `<sys/wait.h>`; bindings for
+   `strndup`, `open_memstream`, `strtold`, `execvp`, `_exit`,
+   `ctime_r`.
+2. **Binary integer literals** (`0b...` / `0B...`) -- lexer
+   branch beside the hex path.
+3. **Compound literals** at file scope (`&(Type){...}`) --
+   anonymous internal-linkage symbol synthesized for the
+   backing storage; reloc points at it.
+4. **Deferred-outer multi-dim arrays** (`T arr[][N]`) --
+   declarator now populates `array_dims` with a placeholder
+   for the outer dim and run_compile patches it once the
+   initializer count is known.
+5. **`sizeof(*arr)` decay clear** -- the unary `*` handler
+   now clears `last_array_decay_size` so `sizeof(*arr)`
+   reports `sizeof(elem)` rather than `N * sizeof(elem)`.
 
-* **POSIX libc bindings** -- `<strings.h>` (`strncasecmp`,
-  `strcasecmp`), `<string.h>` `strndup`, `<stdio.h>`
-  `open_memstream`, `<libgen.h>` `dirname` / `basename`,
-  `<glob.h>` `glob`, `<sys/wait.h>` `waitpid`. Each is a single
-  `#pragma binding` line plus a header.
-* **Binary integer literals** (`0b1010`) -- C23 / GNU; small
-  lexer extension.
-* **Compound literals** -- `(struct Foo){.x=1}` at every position
-  including the global initializer that chibicc relies on (every
-  base-type Type DIE is a `&(Type){...}`). Documented in
-  `c99-gaps.md` as severity-3 rejected.
-
-Beyond the per-TU blockers above, the codegen will also need:
-
-* **`long double`** -- chibicc's `Token`, `Type`, `Node` carry
-  a `long double fval` and the parser performs arithmetic in
-  long-double precision for FP constant folding. c5 has no
-  long-double pipeline.
-* **GNU statement expressions** (`({ ... })`), labels-as-values,
-  computed goto -- used in error-reporting macros and the
-  parser's expression-folding helpers.
-* **`alloca`** -- chibicc uses it for VLAs and intermediate
-  buffers.
-* **VLA** (`int xs[n]` with runtime `n`) -- chibicc supports
-  them in user code and emits dedicated codegen.
-* **`_Atomic`** -- the parser surfaces ND_CAS / ND_EXCH for
-  C11 atomics. Distinct semantic; needs real codegen.
-* **`asm`** -- one inline-asm string in chibicc's codegen.
+chibicc's body does NOT exercise the features the README
+originally flagged as deeper gaps (GNU statement expressions,
+alloca, VLA, `_Atomic`, asm). It parses them as input but
+doesn't use them itself, so they remain out of scope for the
+self-host loop. `long double` shows up as a field in
+`Token`/`Node` and once via `strtold`; the c5 dialect accepts
+the type as 8-byte storage (alias for `double`), which is
+internally consistent in chibicc's own use of those fields and
+preserves the self-host fixed point.
 
 ## Layout
 
@@ -76,6 +70,10 @@ Beyond the per-TU blockers above, the codegen will also need:
   out of band; `setup.py` is the source of truth for what they
   are).
 * `smoke.py` -- build-only smoke harness. Tracks per-TU
-  compile state and reports a summary. Returns 0 only when
-  every TU compiles cleanly; until the blockers above are
-  closed, expect non-zero.
+  compile state, exits 0 when every TU compiles cleanly and
+  the multi-TU link emits a working binary.
+* `self_host.py` -- parity check: builds chibicc with both gcc
+  and badc, runs each on a curated sample suite, asserts the
+  emitted `.s` files are byte-identical and the linked binaries
+  return the same exit code. Linux x86_64 only (chibicc emits
+  SysV x86_64 GAS).

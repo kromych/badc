@@ -297,6 +297,69 @@ impl Compiler {
             self.emit_op(Op::Si); // pops field_addr, stores a (=combined).
             self.ty = Ty::Int as i64;
             Ok(())
+        } else if self.lex.tk == Token::AssignOp {
+            // Bitfield compound assignment: `s.f OP= expr` per C99
+            // 6.5.16.2 ("E1 = E1 OP E2 with E1 evaluated once").
+            // The math needs old_value twice -- once to extract the
+            // current bitfield value as the binop's left operand,
+            // once to clear the slot for the final merge. A
+            // dedicated scratch local hands `Op::StLocI` /
+            // `Op::LdLocI` the spill / reload pair that the plain
+            // `Lea N; Si` shape cannot express (Lea clobbers `a`).
+            let binop = self.lex.ival;
+            self.next()?; // consume the assign-op
+            self.loc_offs += 1;
+            if self.loc_offs > self.max_loc_offs {
+                self.max_loc_offs = self.loc_offs;
+            }
+            let ov_temp = -self.loc_offs;
+            // a = field_addr; stack: [...]
+            self.emit_op(Op::Psh); // stack: [..., field_addr]
+            self.emit_op(Op::Li); // a = old_value
+            // Spill old_value into the scratch local without
+            // disturbing `a` or the c5 stack.
+            self.emit_op(Op::StLocI);
+            self.emit_val(ov_temp);
+            // Extract current = (old_value >> bit_offset) & mask.
+            if bit_offset > 0 {
+                self.emit_binop_with_imm(Op::Shr, bit_offset as i64);
+            }
+            self.emit_binop_with_imm(Op::And, mask);
+            // Evaluate the RHS with `current` on the c5 stack so
+            // the binop pops it as the left operand. Right-hand-
+            // side parsing follows the same precedence as a bare
+            // assignment.
+            self.emit_op(Op::Psh); // stack: [..., field_addr, current]
+            self.expr(Token::Assign as i64)?;
+            let op = match binop {
+                x if x == Token::AddOp as i64 => Op::Add,
+                x if x == Token::SubOp as i64 => Op::Sub,
+                x if x == Token::MulOp as i64 => Op::Mul,
+                x if x == Token::DivOp as i64 => Op::Div,
+                x if x == Token::ModOp as i64 => Op::Mod,
+                x if x == Token::AndOp as i64 => Op::And,
+                x if x == Token::OrOp as i64 => Op::Or,
+                x if x == Token::XorOp as i64 => Op::Xor,
+                x if x == Token::ShlOp as i64 => Op::Shl,
+                x if x == Token::ShrOp as i64 => Op::Shr,
+                _ => return Err(self.compile_err("unsupported compound op on bitfield")),
+            };
+            self.emit_op(op);
+            // Mask + shift the combined value back into the slot.
+            self.emit_binop_with_imm(Op::And, mask);
+            if bit_offset > 0 {
+                self.emit_binop_with_imm(Op::Shl, bit_offset as i64);
+            }
+            // shifted_new in `a`. Push it so the next ops can
+            // reload the cleared old_value into `a`.
+            self.emit_op(Op::Psh); // stack: [..., field_addr, shifted_new]
+            self.emit_op(Op::LdLocI);
+            self.emit_val(ov_temp);
+            self.emit_binop_with_imm(Op::And, !(mask << bit_offset));
+            self.emit_op(Op::Or); // pops shifted_new; a = cleared | shifted_new
+            self.emit_op(Op::Si); // pops field_addr, stores a
+            self.ty = Ty::Int as i64;
+            Ok(())
         } else {
             // Bitfield read: `s.f` in any non-assignment context.
             self.emit_op(Op::Li); // a = full storage word

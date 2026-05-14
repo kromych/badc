@@ -155,7 +155,7 @@ TU_STATE = {
     "tcc.c": True,
     "libtcc.c": True,
     "tccpp.c": True,
-    "tccgen.c": False,
+    "tccgen.c": True,
     "tccelf.c": True,
     "tccasm.c": True,
     "tccdbg.c": True,

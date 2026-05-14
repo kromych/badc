@@ -224,6 +224,16 @@ fn float_long_double_suffix_accepted() {
 }
 
 #[test]
+fn bitfield_compound_assignment() {
+    // C99 6.5.16.2: a bitfield is a valid lvalue for every
+    // compound assignment operator. The fixture walks the
+    // logical / arithmetic / shift compound set against a
+    // multi-field struct, asserting both the updated field's
+    // value and that adjacent bits stay untouched.
+    assert_eq!(run_fixture("bitfield_compound_assignment.c"), 0);
+}
+
+#[test]
 fn macro_arg_blue_paint_preserved_across_body_rescan() {
     // C99 6.10.3.4: a macro that fired during the pre-expansion
     // of a function-like macro's argument must not re-fire when

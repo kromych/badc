@@ -213,6 +213,18 @@ fn adjacent_string_literals_concatenate() {
 }
 
 #[test]
+fn func_name_predeclared_identifier() {
+    // C99 6.4.2.2 makes `__func__` an implicitly declared string
+    // literal carrying the enclosing function's name. c5 mirrors
+    // the standard plus the GCC aliases `__FUNCTION__` and
+    // `__PRETTY_FUNCTION__`. The fixture pins three properties:
+    // each name resolves to the right function, the three
+    // spellings agree byte-for-byte, and distinct functions
+    // produce distinct strings.
+    assert_eq!(run_fixture("function_macro.c"), 0);
+}
+
+#[test]
 fn unistd_exposes_posix_types() {
     // POSIX-2017 requires `<unistd.h>` to make `ssize_t`,
     // `size_t`, `off_t`, `pid_t`, `uid_t`, `gid_t` visible; the

@@ -132,6 +132,26 @@ impl Compiler {
             let total_bytes = self.sizeof_operand_bytes()?;
             self.emit_imm(total_bytes);
             self.ty = Ty::Int as i64;
+        } else if self.lex.tk == Token::Id
+            && !self.current_function_name.is_empty()
+            && matches!(
+                self.symbols[self.lex.curr_id_idx].name.as_str(),
+                "__func__" | "__FUNCTION__" | "__PRETTY_FUNCTION__"
+            )
+        {
+            // C99 6.4.2.2: __func__ is implicitly declared as
+            // `static const char __func__[] = "function-name";` at
+            // the start of every function body. GCC predates the
+            // standard with __FUNCTION__ / __PRETTY_FUNCTION__ as
+            // aliases. The bytes are appended to the data segment
+            // and the expression's value is the pointer to them.
+            let fn_name = self.current_function_name.clone();
+            let offset = self.data.len() as i64;
+            self.data.extend_from_slice(fn_name.as_bytes());
+            self.data.push(0);
+            self.emit_data_imm(offset);
+            self.next()?;
+            self.ty = Ty::Char as i64 + Ty::Ptr as i64;
         } else if self.lex.tk == Token::Id {
             let id_idx = self.lex.curr_id_idx;
             self.next()?;

@@ -366,7 +366,7 @@ impl Preprocessor {
             fn_macros.insert(
                 name.to_string(),
                 FnMacro {
-                    params: vec!["x".to_string()],
+                    params: alloc::vec!["x".to_string()],
                     body: String::new(),
                     is_variadic: false,
                 },

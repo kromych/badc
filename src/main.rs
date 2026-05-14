@@ -12,53 +12,35 @@ usage: badc [options] <input...> [program-args...]
        cat foo.c | badc [options]              (same -- stdin auto-detected
                                                 when not a terminal)
 
-Inputs are positional and may mix `.c` source files, c5 `.o`
-object files, and `.a` archives. A single `.c` (and no `.o` /
-`.a` inputs) follows the legacy single-TU path. Two or more
-inputs (or any `-l` / `-L` / `-c` flag) activate the
-cross-translation-unit linker:
-  * each `.c` compiles to a `LinkUnit`,
-  * each `.o` is mmap'd and parsed,
-  * each `.a` (positional or `-l<name>` resolved through
-    `-L<dir>` paths) supplies on-demand definitions for any
-    name a root unit references but doesn't define,
-  * `link_units` merges every text / data / TLS segment, fixes
-    cross-TU relocations, and produces a Program the existing
-    native writer turns into a final binary.
+Inputs are positional and may mix `.c` sources, c5 `.o` objects,
+and `.a` archives. A single `.c` input compiles and emits a
+binary directly; two or more inputs (or any `-l` / `-L` / `-c`
+flag) run through the cross-TU linker.
 
-Output mode -- pick at most one (defaults to \"compile to native binary\"):
-  --interp                 Run under the bytecode VM (with optional safety net).
+Output mode -- pick at most one (defaults to a native binary):
+  --interp                 Run under the bytecode VM.
   --jit                    Lower in-process and call main() directly.
-  --shared                 Produce a shared library (Mach-O .dylib /
-                           ELF .so / PE .dll) exposing every #pragma
-                           export(name) function.
+  --shared                 Produce a shared library (.dylib / .so /
+                           .dll) exporting every #pragma export(name)
+                           function.
   --dump-asm               Print the lowered native listing and exit.
-                           No source is executed.
-  --list-symbols           Print pre-defined keywords / library calls /
-                           constants and exit. Takes no source.
-  --dump-headers           Print every bundled header (with file
-                           separators) to stdout and exit. Useful
-                           for extracting them into `./include` so
-                           you can override one without rebuilding
-                           badc.
+  --list-symbols           Print built-in keywords / library calls /
+                           constants and exit.
+  --dump-headers           Print every bundled header to stdout and
+                           exit. Useful for extracting a header into
+                           `./include` to override it locally.
 
 Multi-TU knobs:
-  -c, --compile-only       Emit a c5 `.o` (ELF-wrapped bytecode
-                           object file) per source instead of
-                           linking. Output goes to the `-o`
-                           path when a single source is named
-                           or to `<stem>.o` next to each input
-                           otherwise. The `.o` is target-
-                           independent: linking decides the
-                           final `--target=`.
-  -L <dir>                 Add an archive search path (used by
-                           `-l<name>`). Repeatable; paths are
-                           probed in declared order.
+  -c, --compile-only       Emit a c5 `.o` per source instead of
+                           linking. Output is `-o`'s path when a
+                           single source is named, otherwise
+                           `<stem>.o` next to each input. The `.o`
+                           is target-independent; `--target=` is
+                           decided at link time.
+  -L <dir>                 Archive search path for `-l<name>`.
+                           Repeatable; probed in declared order.
   -l <name>                Pull `lib<name>.a` in as a static
-                           library. Each archive is parsed
-                           lazily -- members are pulled in only
-                           when they define a name that some
-                           root input references.
+                           library. Members are pulled in on demand.
 
 Compile knobs:
   -O, --optimize           Enable the bytecode optimizer + native
@@ -68,55 +50,40 @@ Compile knobs:
   --target=<spec>          Pick the binary format (one of
                            macos-aarch64, linux-aarch64, linux-x64,
                            windows-x64, windows-arm64). Defaults to
-                           the host. Ignored under --interp / --jit;
-                           the JIT can only target the host arch.
+                           the host. Ignored under --interp / --jit
+                           (those always target the host).
   -o <path>                Output path. Default depends on output
                            mode and target (.exe / .dylib / .so /
                            .dll suffixes added as appropriate).
-                           Pass `-` (or omit -o entirely when
-                           stdout is a pipe) to write the binary
-                           bytes to stdout for shell-pipeline use.
-  -D NAME[=VALUE]          Predefine an object-like macro (`-D X`
-                           is equivalent to `-D X=1`). Source-level
-                           `#define` / `#undef` still apply on top.
-  -U NAME                  Drop a predefine before the source
-                           runs, including any default predefine.
-  -I path                  Add a filesystem header search path
-                           probed before the bundled in-binary
-                           headers on #include. Repeatable. The
-                           current directory's `./include` and
-                           `./headers/include` are auto-added if
-                           they exist, so a user-edited copy of
-                           a bundled header can override the
-                           one shipped in the badc binary.
-  -include FILE            Splice the named header in front of
-                           the source as if `#include \"FILE\"` had
-                           been written at the top of the
-                           translation unit. Resolved through
-                           the same -I / embedded-registry chain
-                           as a normal #include. Repeatable;
-                           order matters (later flags expand
-                           after earlier ones). Used to opt
-                           translation units into the MSVC-
-                           shape predefines via
-                           `-include msvc_compat.h` when
-                           targeting Windows.
-  -H, --show-includes      Print the resolved path of every
-                           #include directive to stderr while
-                           preprocessing -- gcc-style, with
-                           leading dots marking nesting depth.
-                           Missing headers (which produce a
-                           warning rather than failing the
-                           compile) print as `! <name> (missing)`.
+                           Pass `-` (or omit -o when stdout is a
+                           pipe) to write the binary to stdout.
+  -D NAME[=VALUE]          Predefine an object-like macro
+                           (`-D X` <=> `-D X=1`).
+  -U NAME                  Drop a predefine, including any
+                           default predefine.
+  -I path                  Add a header search path, probed before
+                           the bundled headers on #include.
+                           Repeatable. `./include` and
+                           `./headers/include` are auto-added when
+                           present, so a local copy of a bundled
+                           header overrides the embedded one.
+  -include FILE            Splice the named header in front of the
+                           source as if `#include \"FILE\"` opened
+                           the translation unit. Repeatable; later
+                           flags expand after earlier ones.
+  -H, --show-includes      Print every #include's resolved path to
+                           stderr (gcc -H shape; leading dots mark
+                           nesting depth; missing headers print as
+                           `! <name> (missing)`).
 
 VM-only knobs (require --interp):
   --track-pointers         Allocation tracking + use-after-free guard.
   --trace                  Per-instruction stdout trace (noisy).
 
 Mutually exclusive: --interp / --jit / --shared / --dump-asm /
---list-symbols / --dump-headers all pick the output mode; you can
-only pick one. --track-pointers and --trace require --interp. -o
-makes no sense under --interp / --list-symbols / --dump-headers.";
+--list-symbols / --dump-headers all pick the output mode; only one
+applies. --track-pointers and --trace require --interp. -o has no
+effect under --interp / --list-symbols / --dump-headers.";
 
 /// Where the AOT codesign tool lives on every macOS install. Hardcoded
 /// so we don't accidentally pick up a homebrew shim that signs differently.

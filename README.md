@@ -38,6 +38,7 @@ There are various demo's under [`demos`](./demos/):
   noise generation, sound, JPEG, PNG, BMP, PSD support to name a few).
   It really stresses all of the compiler.
 * `chibicc` - a small C compiler
+* `tinycc` - a cool and small C toolchain
 
 It can also run the code JIT-ted in-process so no binary is written
 to the disk. That option might be useful for using `badc` to run the

@@ -211,9 +211,15 @@ def build_stage1_tcc(badc: Path, work: Path) -> Path | None:
 
 
 def compile_with(tcc: Path, src: Path, out: Path) -> tuple[bool, str]:
-    """Run ``tcc -c src -o out``. Returns (ok, captured_stderr)."""
+    """Run ``tcc -c src -o out``. Returns (ok, captured_stderr).
+
+    The ``-B`` flag points at the vendored ``include/`` directory
+    so tcc finds ``tccdefs.h`` -- needed because the demo runs with
+    ``CONFIG_TCC_PREDEFS=0``, which makes the predefines header a
+    runtime lookup rather than a baked string literal.
+    """
     proc = subprocess.run(
-        [str(tcc), "-c", str(src), "-o", str(out)],
+        [str(tcc), "-B", str(TINYCC_DIR), "-c", str(src), "-o", str(out)],
         capture_output=True,
         text=True,
     )

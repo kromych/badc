@@ -39,7 +39,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use hashbrown::HashMap;
+use hashbrown::{HashMap, HashSet};
 
 use crate::c5::CODE_BASE;
 use crate::c5::error::C5Error;
@@ -100,22 +100,39 @@ pub fn link_units(
     // Each pass collects every undefined external reference
     // across `units`, then walks archives in declared order
     // looking for a defining member; the first match wins.
+    //
+    // Within one pass, after pulling member `M` to satisfy
+    // `needed_a`, the same member typically also defines
+    // `needed_b` from the same iteration's undefined list. We
+    // mark that name as just-satisfied so the next `needed_b`
+    // iteration doesn't pull `M` a second time -- otherwise the
+    // produced link unit would carry duplicate definitions and
+    // trip the multiple-definition check below.
     if !options.no_archive_pullin {
         loop {
             let (defined, undefined) = collect_defined_undefined(&units);
             let mut pulled = false;
+            let mut just_pulled_defs: HashSet<String> = HashSet::new();
             for needed in &undefined {
-                if defined.contains_key(needed) {
+                if defined.contains_key(needed) || just_pulled_defs.contains(needed) {
                     continue;
                 }
                 for ar in archives {
                     if let Some(mem) = find_defining_member(&ar.members, needed)? {
-                        units.push(read_object(&mem.bytes).map_err(|e| {
+                        let pulled_unit = read_object(&mem.bytes).map_err(|e| {
                             link_err(&format!(
                                 "failed to parse archive `{}` member `{}`: {}",
                                 ar.path, mem.name, e
                             ))
-                        })?);
+                        })?;
+                        for sym in &pulled_unit.symbols {
+                            if matches!(sym.linkage, crate::c5::symbol::Linkage::External)
+                                && !matches!(sym.kind, SymbolKind::Undefined)
+                            {
+                                just_pulled_defs.insert(sym.name.clone());
+                            }
+                        }
+                        units.push(pulled_unit);
                         pulled = true;
                         break;
                     }

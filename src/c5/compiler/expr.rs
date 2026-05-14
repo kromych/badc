@@ -157,16 +157,10 @@ impl Compiler {
             self.next()?;
             if self.lex.tk == '(' {
                 self.next()?;
-                // Compiler-builtin intrinsic call (`alloca`, future
-                // atomics / cpuid / ...). The frontend stamped the
-                // symbol's `intrinsic` field at declaration time
-                // from `#pragma intrinsic("name")`. Skip the usual
-                // staging-slot dance and per-arg FP-mask shenanigans
-                // -- intrinsics today take exactly one integer
-                // argument and leave the result in the accumulator,
-                // so we just evaluate the arg expression and emit
-                // `Op::Intrinsic <id>`. Multi-arg / FP-arg intrinsics
-                // can grow this branch as needed.
+                // Intrinsic call: the identifier was registered via
+                // `#pragma intrinsic("name")`. Accepts one integer
+                // argument, evaluates it, and emits `Op::Intrinsic
+                // <id>` with the result in the accumulator.
                 if let Some(&intrinsic_id) = self.pp_intrinsics.get(&self.symbols[id_idx].name) {
                     let fn_name = self.symbols[id_idx].name.clone();
                     if self.lex.tk == ')' {

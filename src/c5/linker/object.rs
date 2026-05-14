@@ -394,10 +394,7 @@ impl Writer {
         };
         // Write into the reserved slot we sized at encode() time.
         let bytes = unsafe {
-            core::slice::from_raw_parts(
-                (&ehdr as *const Elf64Ehdr) as *const u8,
-                ELF64_EHDR_SIZE,
-            )
+            core::slice::from_raw_parts((&ehdr as *const Elf64Ehdr) as *const u8, ELF64_EHDR_SIZE)
         };
         self.out[ehdr_off..ehdr_off + ELF64_EHDR_SIZE].copy_from_slice(bytes);
     }

@@ -319,10 +319,7 @@ fn cross_tu_call_through_secondary_dylib() {
         dylibs: alloc::vec![DylibSpec {
             name: "libc".to_string(),
             path: "libc.so.6".to_string(),
-            bindings: alloc::vec![
-                mk_binding("printf", "printf"),
-                mk_binding("fputs", "fputs"),
-            ],
+            bindings: alloc::vec![mk_binding("printf", "printf"), mk_binding("fputs", "fputs"),],
         }],
         symbols: alloc::vec![LinkSymbol {
             name: "main".to_string(),

@@ -656,6 +656,36 @@ impl Compiler {
     /// [`Self::compile`] runs -- this keeps the construction API
     /// infallible so the `Compiler::new(src).compile()` shape
     /// every existing caller uses keeps working.
+    /// Run the preprocessor on `source` with the same setup
+    /// `with_options` performs and return the expanded text. Used
+    /// by the `--dump-pp` / `-E` CLI mode to surface what the
+    /// lexer is about to see, without paying for the parse / codegen
+    /// passes. Errors propagate via `Result` rather than the
+    /// deferred-error channel because the caller has no compiler
+    /// state to attach them to.
+    pub fn preprocess(
+        source: String,
+        target: Target,
+        opts: CompileOptions,
+    ) -> Result<String, C5Error> {
+        let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
+        pp.set_source_label(&opts.source_label);
+        pp.set_show_includes(opts.show_includes);
+        for path in &opts.include_paths {
+            pp.add_search_path(path);
+        }
+        for name in &opts.force_includes {
+            pp.add_force_include(name);
+        }
+        for (name, body) in &opts.defines {
+            pp.define(name, body);
+        }
+        for name in &opts.undefines {
+            pp.undef(name);
+        }
+        pp.process(&source)
+    }
+
     pub fn with_options(source: String, target: Target, opts: CompileOptions) -> Self {
         // Run the preprocessor first so we know the
         // `#pragma binding(...)` set before seeding the symbol

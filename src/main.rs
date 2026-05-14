@@ -29,6 +29,9 @@ Output mode -- pick at most one (defaults to a native binary):
   --dump-headers           Print every bundled header to stdout and
                            exit. Useful for extracting a header into
                            `./include` to override it locally.
+  --dump-pp, -E            Run the preprocessor on the input and
+                           print the expanded source to stdout.
+                           Mirrors gcc / clang `-E`.
 
 Multi-TU knobs:
   -c, --compile-only       Emit a c5 `.o` per source instead of
@@ -113,6 +116,11 @@ enum Mode {
     /// `--dump-headers` -- print every bundled header (with
     /// file separators) to stdout and exit. Takes no source.
     DumpHeaders,
+    /// `--dump-pp` -- run the preprocessor on the input and
+    /// print the expanded source to stdout. Mirrors gcc / clang
+    /// `-E` for inspecting macro expansion and include
+    /// resolution.
+    DumpPp,
     /// `--ar` -- bundle every input (compiled `.c` plus any
     /// `.o`) into a single `.a` archive named by `-o`. No
     /// linking; the archive is meant to be passed back as
@@ -130,6 +138,7 @@ impl Mode {
             Mode::DumpAsm => "--dump-asm",
             Mode::ListSymbols => "--list-symbols",
             Mode::DumpHeaders => "--dump-headers",
+            Mode::DumpPp => "--dump-pp",
             Mode::BuildArchive => "--ar",
         }
     }
@@ -192,6 +201,7 @@ fn main() {
             "--trace" => trace = true,
             "--list-symbols" => claim(&mut mode, Mode::ListSymbols),
             "--dump-headers" => claim(&mut mode, Mode::DumpHeaders),
+            "--dump-pp" | "-E" => claim(&mut mode, Mode::DumpPp),
             "--optimize" | "-O" => optimize_flag = true,
             "--no-debug" | "-g0" => emit_debug_info = false,
             "--dump-asm" => claim(&mut mode, Mode::DumpAsm),
@@ -452,6 +462,7 @@ fn main() {
     let mut unit_source_paths: Vec<String> = Vec::with_capacity(sources.len());
     let mut accumulated_warnings: Vec<String> = Vec::new();
     let mut accumulated_include_trace: Vec<String> = Vec::new();
+    let multi_tu = sources.len() > 1;
     for src_path in &sources {
         let (label, contents) = if src_path == "-" {
             ("-".to_string(), read_stdin_source())
@@ -470,6 +481,37 @@ fn main() {
             }
             (src_path.clone(), s)
         };
+        // Multi-TU progress: one line per source on stderr so a long
+        // batch makes its current position visible. Single-source
+        // compiles stay silent so `badc file.c` does not gain extra
+        // chatter.
+        if multi_tu && mode != Mode::DumpPp {
+            eprintln!("badc: compiling {label}");
+        }
+        if mode == Mode::DumpPp {
+            let opts = badc::CompileOptions::default()
+                .with_defines(defines.clone())
+                .with_undefines(undefines.clone())
+                .with_include_paths(include_paths.clone())
+                .with_force_includes(force_includes.clone())
+                .with_source_label(label.clone());
+            match Compiler::preprocess(contents, target, opts) {
+                Ok(s) => {
+                    // File separator on stderr so a multi-source
+                    // dump remains parseable while the actual
+                    // preprocessed bytes stay clean on stdout.
+                    if multi_tu {
+                        eprintln!("--- {label} ---");
+                    }
+                    print!("{s}");
+                }
+                Err(e) => {
+                    eprint_diagnostic(e);
+                    std::process::exit(1);
+                }
+            }
+            continue;
+        }
         let mut compiler = Compiler::with_options(
             contents,
             target,
@@ -495,6 +537,14 @@ fn main() {
         accumulated_warnings.extend(unit.warnings.iter().cloned());
         unit_source_paths.push(label);
         units.push(unit);
+    }
+
+    // --dump-pp is a per-source dump; nothing downstream of the
+    // per-source loop applies (no link, no codegen, no output
+    // file). Return now so the rest of the driver doesn't trip on
+    // the empty unit list.
+    if mode == Mode::DumpPp {
+        return;
     }
 
     // Load each `.o` input through mmap-shaped read.
@@ -788,6 +838,7 @@ fn main() {
         }
         Mode::ListSymbols => unreachable!("handled above"),
         Mode::DumpHeaders => unreachable!("handled above"),
+        Mode::DumpPp => unreachable!("handled above"),
         Mode::BuildArchive => unreachable!("handled above"),
     }
 }

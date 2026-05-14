@@ -17,6 +17,7 @@ Override the badc binary via the ``BADC`` env var (default:
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import sys
@@ -25,6 +26,14 @@ from pathlib import Path
 
 BZIP2_DIR = Path(__file__).resolve().parent
 REPO_ROOT = BZIP2_DIR.parent.parent
+
+# Import the shared TU-build helpers from `demos/_tu_build.py`
+# without dragging the demos/ directory onto sys.path.
+_tu_spec = importlib.util.spec_from_file_location(
+    "_tu_build", BZIP2_DIR.parent / "_tu_build.py"
+)
+_tu_build = importlib.util.module_from_spec(_tu_spec)
+_tu_spec.loader.exec_module(_tu_build)
 WIN = sys.platform == "win32"
 EXE_SUFFIX = ".exe" if WIN else ""
 
@@ -170,9 +179,93 @@ def main() -> int:
             print("smoke FAIL: build (-O) failed", file=sys.stderr)
             return 1
 
+        # Separate-compilation flavour: each .c through `-c`
+        # to its own .o, link the eight pieces. Same source
+        # bodies, no amalgamation step.
+        tu_noopt = work / f"bzip2_smoke.tu{EXE_SUFFIX}"
+        tu_opt = work / f"bzip2_smoke.tu.opt{EXE_SUFFIX}"
+        srcs = [BZIP2_DIR / name for name in LIB_SOURCES] + [
+            BZIP2_DIR / "smoke_main.c"
+        ]
+        (work / "tu").mkdir(exist_ok=True)
+        try:
+            _tu_build.build_tu_separate(
+                badc,
+                srcs,
+                tu_noopt,
+                optimize=False,
+                defines=BUILD_DEFINES,
+                include_paths=(BZIP2_DIR,),
+                force_includes=("msvc_compat.h",),
+                work_dir=work / "tu",
+            )
+        except subprocess.CalledProcessError:
+            print("smoke FAIL: TU build (no -O) failed", file=sys.stderr)
+            return 1
+        try:
+            _tu_build.build_tu_separate(
+                badc,
+                srcs,
+                tu_opt,
+                optimize=True,
+                defines=BUILD_DEFINES,
+                include_paths=(BZIP2_DIR,),
+                force_includes=("msvc_compat.h",),
+                work_dir=work / "tu",
+            )
+        except subprocess.CalledProcessError:
+            print("smoke FAIL: TU build (-O) failed", file=sys.stderr)
+            return 1
+
+        # Archive flavour: bundle the seven library sources
+        # into libbzip2.a, then link smoke_main.c against it
+        # through -l bzip2. Pull-in must surface every member
+        # referenced from the driver.
+        ar_noopt = work / f"bzip2_smoke.ar{EXE_SUFFIX}"
+        ar_opt = work / f"bzip2_smoke.ar.opt{EXE_SUFFIX}"
+        lib_srcs = [BZIP2_DIR / name for name in LIB_SOURCES]
+        driver_srcs = [BZIP2_DIR / "smoke_main.c"]
+        (work / "ar").mkdir(exist_ok=True)
+        try:
+            _tu_build.build_tu_archive(
+                badc,
+                lib_srcs,
+                driver_srcs,
+                "bzip2",
+                ar_noopt,
+                optimize=False,
+                defines=BUILD_DEFINES,
+                include_paths=(BZIP2_DIR,),
+                force_includes=("msvc_compat.h",),
+                work_dir=work / "ar",
+            )
+        except subprocess.CalledProcessError:
+            print("smoke FAIL: archive build (no -O) failed", file=sys.stderr)
+            return 1
+        try:
+            _tu_build.build_tu_archive(
+                badc,
+                lib_srcs,
+                driver_srcs,
+                "bzip2",
+                ar_opt,
+                optimize=True,
+                defines=BUILD_DEFINES,
+                include_paths=(BZIP2_DIR,),
+                force_includes=("msvc_compat.h",),
+                work_dir=work / "ar",
+            )
+        except subprocess.CalledProcessError:
+            print("smoke FAIL: archive build (-O) failed", file=sys.stderr)
+            return 1
+
         ok = True
-        ok &= run_and_check("no-O", smoke_noopt)
-        ok &= run_and_check("-O", smoke_opt)
+        ok &= run_and_check("amalg-no-O", smoke_noopt)
+        ok &= run_and_check("amalg--O", smoke_opt)
+        ok &= run_and_check("tu-no-O", tu_noopt)
+        ok &= run_and_check("tu--O", tu_opt)
+        ok &= run_and_check("ar-no-O", ar_noopt)
+        ok &= run_and_check("ar--O", ar_opt)
         return 0 if ok else 1
 
 

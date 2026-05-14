@@ -105,6 +105,32 @@ fn unresolved_external_function_errors_cleanly() {
 }
 
 #[test]
+fn duplicate_function_definition_across_units_is_rejected() {
+    // Two TUs that each define `foo` should hard-fail at link
+    // time. Pre-fix, the second definition silently shadowed the
+    // first and the produced binary used whichever copy the
+    // linker iterated to last.
+    let a = compile_unit("int foo(void) { return 1; }");
+    let b = compile_unit(
+        "
+        int foo(void) { return 2; }
+        int main() { return foo(); }
+        ",
+    );
+    let result = link_units(alloc::vec![a, b], &[], LinkOptions::default());
+    let err = result.expect_err("link should fail with duplicate definition");
+    let msg = format!("{}", err);
+    assert!(
+        msg.contains("multiple definition") && msg.contains("foo"),
+        "unexpected error message: {msg}"
+    );
+    assert!(
+        !msg.contains("internal compiler error"),
+        "duplicate-definition diagnostic must not be tagged as ICE: {msg}"
+    );
+}
+
+#[test]
 fn object_round_trip_through_elf_wrapper() {
     use crate::c5::{read_object, write_object};
     let a = compile_unit("int sum(int a, int b) { return a + b; }");

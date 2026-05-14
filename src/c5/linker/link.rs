@@ -142,6 +142,42 @@ pub fn link_units(
         )));
     }
 
+    // Duplicate-definition check. Two TUs that each emit a body
+    // for the same external function name produce
+    // `error: multiple definition of `foo``. We scope this to
+    // `SymbolKind::Function` for now: data symbols can be
+    // C99-6.9.2 tentative definitions (`int x;` in two TUs is
+    // legal and merges to one zero-initialised storage), which
+    // c5's `LinkSymbol` doesn't yet distinguish from a defining
+    // definition. Duplicate function bodies are always a hard
+    // error in C99, so the narrow check catches the common
+    // user mistake without false-firing on tentative data.
+    let mut function_defs: HashMap<String, usize> = HashMap::new();
+    let mut dup_funcs: Vec<String> = Vec::new();
+    for unit in &units {
+        for sym in &unit.symbols {
+            if !matches!(sym.linkage, crate::c5::symbol::Linkage::External) {
+                continue;
+            }
+            if !matches!(sym.kind, SymbolKind::Function) {
+                continue;
+            }
+            let count = function_defs.entry(sym.name.clone()).or_insert(0);
+            *count += 1;
+            if *count == 2 {
+                dup_funcs.push(sym.name.clone());
+            }
+        }
+    }
+    if !dup_funcs.is_empty() {
+        dup_funcs.sort();
+        let names: Vec<String> = dup_funcs.into_iter().take(20).collect();
+        return Err(link_err(&format!(
+            "multiple definition of `{}`",
+            names.join("`, `")
+        )));
+    }
+
     merge(units, defined)
 }
 

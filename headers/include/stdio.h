@@ -92,6 +92,7 @@ typedef struct __c5_FILE FILE;
 #pragma binding(libc::vsnprintf, "_vsnprintf")
 #pragma binding(libc::sscanf,    "_sscanf")
 #pragma binding(libc::fopen,     "_fopen")
+#pragma binding(libc::freopen,   "_freopen")
 #pragma binding(libc::fclose,    "_fclose")
 #pragma binding(libc::fread,     "_fread")
 #pragma binding(libc::fwrite,    "_fwrite")
@@ -145,6 +146,7 @@ typedef struct __c5_FILE FILE;
 #pragma binding(libc::vsnprintf, "vsnprintf")
 #pragma binding(libc::sscanf,    "sscanf")
 #pragma binding(libc::fopen,     "fopen")
+#pragma binding(libc::freopen,   "freopen")
 #pragma binding(libc::fclose,    "fclose")
 #pragma binding(libc::fread,     "fread")
 #pragma binding(libc::fwrite,    "fwrite")
@@ -201,6 +203,7 @@ typedef struct __c5_FILE FILE;
 #pragma binding(msvcrt::vsnprintf, "_vsnprintf")
 #pragma binding(msvcrt::sscanf,    "sscanf")
 #pragma binding(msvcrt::fopen,     "fopen")
+#pragma binding(msvcrt::freopen,   "freopen")
 #pragma binding(msvcrt::fclose,    "fclose")
 #pragma binding(msvcrt::fread,     "fread")
 #pragma binding(msvcrt::fwrite,    "fwrite")
@@ -345,6 +348,9 @@ int sprintf(char *buf, char *fmt, ...);
 int snprintf(char *buf, int size, char *fmt, ...);
 int sscanf(char *src, char *fmt, ...);
 FILE *fopen(char *path, char *mode);
+// C99 7.19.5.4: reopen a stream with a new file. Used by
+// programs that re-route stdin / stdout / stderr to a file.
+FILE *freopen(char *path, char *mode, FILE *stream);
 int fclose(FILE *stream);
 int fread(char *buf, int size, int n, FILE *stream);
 int fwrite(char *buf, int size, int n, FILE *stream);

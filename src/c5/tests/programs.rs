@@ -224,6 +224,17 @@ fn float_long_double_suffix_accepted() {
 }
 
 #[test]
+fn extern_declaration_inside_function_body() {
+    // C99 6.7.1 paragraph 3: `extern` declarations are valid at
+    // any scope. c5 has no separate translation units, so a
+    // block-scope extern is consumed as a no-op; the resolver
+    // still finds the symbol through its own table. The fixture
+    // exercises both the bare-identifier form and the
+    // pointer-qualified return type (`extern int abs(int);`).
+    assert_eq!(run_fixture("extern_in_function.c"), 0);
+}
+
+#[test]
 fn va_copy_clones_va_list_cursor() {
     // C99 7.15.1.2: `va_copy(dst, src)` initialises `dst` to the
     // same position in the variadic list as `src`. The fixture

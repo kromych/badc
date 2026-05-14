@@ -76,6 +76,12 @@
 #pragma binding(libc::getopt,    "_getopt")
 #pragma binding(libc::sync,      "_sync")
 #pragma binding(libc::confstr,   "_confstr")
+// macOS does not expose the SysV-style `environ` global through
+// libSystem; the supported accessor is `_NSGetEnviron`, which
+// returns a `char ***` pointing at the per-process environ
+// slot. Programs that walk the environment portably reach for
+// it inside a Mach-O #ifdef branch.
+#pragma binding(libc::_NSGetEnviron, "__NSGetEnviron")
 #endif
 
 #ifdef __linux__
@@ -199,6 +205,11 @@ int getrusage(int who, char *usage);
 int flock(int fd, int operation);
 int nanosleep(char *req, char *rem);
 char *getenv(char *name);
+#ifdef __APPLE__
+// libSystem accessor for the per-process environ slot. Returns a
+// `char ***` whose deref yields the SysV-style `char **environ`.
+char ***_NSGetEnviron(void);
+#endif
 int setenv(char *name, char *value, int overwrite);
 int unsetenv(char *name);
 char *realpath(char *path, char *resolved);

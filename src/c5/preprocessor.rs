@@ -1104,8 +1104,66 @@ impl Preprocessor {
                         nested.push(ident);
                         let recursed =
                             self.substitute_with_blocklist(&expanded, filename, line_no, &nested);
+                        // Token-stream rescan (C99 6.10.3.4): if the
+                        // function-like macro's body reduces to a
+                        // single identifier and the *source* token
+                        // immediately after the original invocation
+                        // is `(`, the standard requires that
+                        // identifier to be treated as the head of a
+                        // further function-like call. Drives the
+                        // common `WIDTH##_##NAME(...)` paste idiom
+                        // where the pasted token is itself a macro.
+                        let next_src = j + after;
+                        let trimmed = recursed.trim();
+                        if !trimmed.is_empty()
+                            && trimmed
+                                .bytes()
+                                .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                            && trimmed.bytes().next().is_some_and(|b| !b.is_ascii_digit())
+                            && !blocklist.contains(&trimmed)
+                            && let Some(inner_def) = self.fn_macros.get(trimmed)
+                        {
+                            let mut k = next_src;
+                            while k < bytes.len() && (bytes[k] == b' ' || bytes[k] == b'\t') {
+                                k += 1;
+                            }
+                            if k < bytes.len()
+                                && bytes[k] == b'('
+                                && let Some((inner_args, inner_after)) =
+                                    parse_macro_args(&line[k..])
+                            {
+                                // The inner args come from the source
+                                // file's tokens after the outer
+                                // invocation -- C99 6.10.3.4 paragraph 1
+                                // treats those as "the rest of the
+                                // source file's preprocessing tokens",
+                                // so they are pre-expanded with the
+                                // caller's blocklist, not with the just-
+                                // completed outer macro on it.
+                                let inner_expanded_args: Vec<String> = inner_args
+                                    .iter()
+                                    .map(|a| {
+                                        self.substitute_with_blocklist(
+                                            a, filename, line_no, blocklist,
+                                        )
+                                    })
+                                    .collect();
+                                let inner_body = expand_fn_macro(inner_def, &inner_expanded_args);
+                                let mut deeper: Vec<&str> = blocklist.to_vec();
+                                deeper.push(trimmed);
+                                let inner_recursed = self.substitute_with_blocklist(
+                                    &inner_body,
+                                    filename,
+                                    line_no,
+                                    &deeper,
+                                );
+                                out.push_str(&inner_recursed);
+                                i = k + inner_after;
+                                continue;
+                            }
+                        }
                         out.push_str(&recursed);
-                        i = j + after;
+                        i = next_src;
                         continue;
                     }
                 }

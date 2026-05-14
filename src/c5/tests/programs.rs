@@ -213,6 +213,18 @@ fn adjacent_string_literals_concatenate() {
 }
 
 #[test]
+fn macro_paste_result_is_rescanned() {
+    // C99 6.10.3.4: after a function-like macro's body is built,
+    // the result is re-scanned for further replacement; when the
+    // re-scan finds another function-like macro name and the
+    // source token immediately after the outer invocation is `(`,
+    // those arguments feed the inner expansion. The fixture
+    // exercises the width-mux `WIDTH##_##NAME(...)` idiom that
+    // tinycc's `ELFW(...)` family depends on.
+    assert_eq!(run_fixture("macro_paste_rescan.c"), 0);
+}
+
+#[test]
 fn func_name_predeclared_identifier() {
     // C99 6.4.2.2 makes `__func__` an implicitly declared string
     // literal carrying the enclosing function's name. c5 mirrors

@@ -165,7 +165,7 @@ TU_STATE = {
     "x86_64-link.c": False,
     "i386-asm.c": False,
     "arm64-gen.c": True,
-    "arm64-link.c": False,
+    "arm64-link.c": True,
     "arm64-asm.c": True,
     "tccpe.c": False,
     "tccmacho.c": False,

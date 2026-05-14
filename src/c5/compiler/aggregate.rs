@@ -241,6 +241,14 @@ impl Compiler {
                 Ty::Int as i64
             } else if self.is_lex_typedef_name() {
                 let aliased = self.symbols[self.lex.curr_id_idx].type_;
+                // C99 6.7.7 paragraph 3: a typedef name carries
+                // through any array dimension on its alias. Stash
+                // the count so the field-binding code below can
+                // make `jmp_buf b;` lay out `long b[64];`.
+                let typedef_array = self.symbols[self.lex.curr_id_idx].array_size;
+                if typedef_array > 0 {
+                    self.pending.typedef_base_array_size = typedef_array;
+                }
                 self.next()?;
                 aliased
             } else if saw_int_mod {
@@ -386,7 +394,19 @@ impl Compiler {
                     break;
                 }
 
-                let (id_idx, field_ty, field_array_size) = self.parse_declarator(field_base)?;
+                let (id_idx, field_ty, mut field_array_size) =
+                    self.parse_declarator(field_base)?;
+                // A typedef whose alias is an array contributes its
+                // dimension when the declarator did not already
+                // supply one (`jmp_buf b;` -> `long b[64];`). A
+                // declarator that *did* spell its own dimension
+                // takes precedence and the typedef count drops on
+                // the floor; the explicit form is unambiguous.
+                let typedef_dim =
+                    core::mem::take(&mut self.pending.typedef_base_array_size);
+                if typedef_dim > 0 && field_array_size == 0 {
+                    field_array_size = typedef_dim;
+                }
                 // Struct fields don't carry the fn-pointer lineage
                 // tag on their own (the StructField record has no
                 // place for it), so consume the side-channel here.

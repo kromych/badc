@@ -246,6 +246,31 @@ fn macro_arg_blue_paint_preserved_across_body_rescan() {
 }
 
 #[test]
+fn array_typedef_dimensions_propagate() {
+    // C99 6.7.7 paragraph 3: a typedef name denotes the same
+    // type as its right-hand-side, including any array
+    // dimension. The fixture exercises the four positions where
+    // the parser routes the type into a declarator -- file
+    // scope, block scope, struct field, plus a raw-array
+    // comparison -- and asserts each reports the array's full
+    // byte count.
+    assert_eq!(run_fixture("array_typedef_dimensions_propagate.c"), 0);
+}
+
+#[test]
+fn typedef_shadowed_by_parameter_name() {
+    // C99 6.2.1 paragraph 4: an inner-scope declaration that
+    // reuses an outer name (here, a function-prototype parameter
+    // taking the spelling of an outer typedef) fully hides the
+    // outer binding only for the duration of the inner scope.
+    // The outer typedef -- including its array dimension -- must
+    // reappear unchanged on scope exit. The fixture confirms the
+    // shadow-restore protocol covers `array_size`, not only
+    // `class` / `type_` / `val`.
+    assert_eq!(run_fixture("typedef_shadowed_by_parameter_name.c"), 0);
+}
+
+#[test]
 fn nested_struct_array_initializer() {
     // C99 6.7.8: an array-of-struct field inside an enclosing
     // struct accepts a nested brace-enclosed initializer for
@@ -348,7 +373,7 @@ fn attribute_and_declspec_absorbed_as_no_op() {
 }
 
 #[test]
-#[ignore = "TODO: typedef of array type decays to scalar when used as a struct field, so jmp_buf is 8 bytes not 512 and the unwind corrupts the saved frame"]
+#[ignore = "TODO: c5 VM has no setjmp / longjmp shim; the fixture verifies the host-libc semantic and needs the JIT / AOT path"]
 fn setjmp_longjmp_unwinds_through_jmp_buf() {
     // C99 7.13: `setjmp` returns 0 directly and the matching
     // `longjmp(env, val)` rewinds control to the setjmp site with

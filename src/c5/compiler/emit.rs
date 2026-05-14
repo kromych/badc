@@ -388,6 +388,13 @@ impl Compiler {
         s.h_type = s.type_;
         s.h_val = s.val;
         s.h_fn_ptr_indirection = s.fn_ptr_indirection;
+        s.h_array_size = s.array_size;
+        s.h_inner_array_size = s.inner_array_size;
+        // Clone rather than `mem::take`: the inner-scope binding
+        // (parameter or block local) keeps using the live
+        // `array_dims` for the duration of its scope. Restore
+        // copies the shadow back on scope exit.
+        s.h_array_dims = s.array_dims.clone();
     }
 
     /// Inverse of [`Self::shadow_symbol`]: restore the saved outer
@@ -400,5 +407,8 @@ impl Compiler {
         sym.type_ = sym.h_type;
         sym.val = sym.h_val;
         sym.fn_ptr_indirection = sym.h_fn_ptr_indirection;
+        sym.array_size = sym.h_array_size;
+        sym.inner_array_size = sym.h_inner_array_size;
+        sym.array_dims = core::mem::take(&mut sym.h_array_dims);
     }
 }

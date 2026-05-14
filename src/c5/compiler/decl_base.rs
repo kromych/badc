@@ -176,6 +176,13 @@ impl Compiler {
         // Reset the void side channel up front so a previous
         // declaration's bare-void base doesn't leak into this one.
         self.pending.base_was_void = false;
+        // Same reset for the array-typedef dimension carrier: a
+        // previous declaration that consumed a typedef-array base
+        // (parameter parsing, abstract-declarator casts, ...)
+        // may not have routed through the per-declarator
+        // consumer, so clear here to keep the channel scoped to
+        // this one base-type parse.
+        self.pending.typedef_base_array_size = 0;
         // Leading modifier soup -- the order doesn't matter; we
         // collect everything we see, then look at the next token
         // for the type keyword.
@@ -254,6 +261,13 @@ impl Compiler {
             // no-parameter idiom.
             if self.symbols[self.lex.curr_id_idx].is_void_typedef {
                 self.pending.base_was_void = true;
+            }
+            // Propagate the typedef's array dimension (C99 6.7.7
+            // paragraph 3). `typedef long jmp_buf[64]; jmp_buf b;`
+            // must bind `b` as `long b[64]`, not as a scalar.
+            let typedef_array = self.symbols[self.lex.curr_id_idx].array_size;
+            if typedef_array > 0 {
+                self.pending.typedef_base_array_size = typedef_array;
             }
             self.next()?;
             aliased

@@ -255,6 +255,15 @@ pub(in crate::c5::compiler) struct Pending {
     /// pointer's `sizeof(T*) = 8`. Cleared at the top of every
     /// `expr()` call so a previous decay doesn't leak into an
     /// unrelated sizeof.
+    /// Side channel from the base-type parsers to the declarator-
+    /// binding sites: when the base type was a typedef whose
+    /// alias resolved to an array, this carries the typedef's
+    /// element count so the bound declarator can inherit the
+    /// array-ness. C99 6.7.7 paragraph 3: a typedef name
+    /// "denotes the same type" as its aliased type, including
+    /// the array length. Cleared by every base-type parse
+    /// (`0` means "not from an array typedef").
+    pub typedef_base_array_size: i64,
     pub last_array_decay_size: i64,
 
     /// Companion to `last_array_decay_size` for cases where the
@@ -299,6 +308,7 @@ impl Default for Pending {
             end_of_expr_stride: 0,
             end_of_expr_strides_tail: Vec::new(),
             init_inner_dim: 0,
+            typedef_base_array_size: 0,
             last_array_decay_size: 0,
             last_array_decay_bytes: 0,
             // `-1` means "not in a fn-ptr-tracked chain"; see field

@@ -94,7 +94,7 @@ impl Compiler {
         // declarator to walk its own `*` chain).
         self.lex.restore(proto_snap);
         while self.lex.tk != ';' {
-            let (loc_idx, ty, array_size) = self.parse_declarator(lbt)?;
+            let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
             // Function-pointer lineage carries through to local
             // bindings -- pick up the side-channel parse_declarator
             // (or the typedef base type) populated. Used by the
@@ -102,6 +102,12 @@ impl Compiler {
             // decay (C99 6.3.2.1p4) as a no-op rather than a
             // through-pointer load.
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
+            // Array typedef carries its dimension when the
+            // declarator did not supply one (C99 6.7.7 p3).
+            let typedef_dim = core::mem::take(&mut self.pending.typedef_base_array_size);
+            if typedef_dim > 0 && array_size == 0 {
+                array_size = typedef_dim;
+            }
             self.ty = ty;
             if self.symbols[loc_idx].class == Token::Loc as i64 {
                 return Err(self.compile_err("duplicate local definition"));

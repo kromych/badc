@@ -45,6 +45,11 @@ impl Compiler {
             // matches `Token::Void`; consumed by the function-decl
             // path to mark `Symbol::returns_void`.
             self.pending.base_was_void = false;
+            // Same reset for the typedef-array dimension carrier
+            // so a previous declaration's typedef base does not
+            // leak its array count into this iteration's
+            // declarator binding.
+            self.pending.typedef_base_array_size = 0;
             // Storage-class prefixes -- can appear in any order
             // and any combination before the type. C lets you
             // mix `static extern` (silly but legal in some
@@ -131,6 +136,13 @@ impl Compiler {
                 if typedef_fpi > 0 {
                     self.pending.fn_ptr_indirection = Some(typedef_fpi);
                 }
+                // C99 6.7.7 paragraph 3: a typedef whose alias is
+                // an array contributes its dimension to the
+                // bound declarator.
+                let typedef_array = self.symbols[self.lex.curr_id_idx].array_size;
+                if typedef_array > 0 {
+                    self.pending.typedef_base_array_size = typedef_array;
+                }
                 self.next()?;
             } else if m.saw_int_mod {
                 // Bare modifier(s) without an explicit type keyword:
@@ -154,12 +166,24 @@ impl Compiler {
             }
 
             while self.lex.tk != ';' && self.lex.tk != '}' {
-                let (id_idx, ty, array_size) = self.parse_declarator(bt)?;
+                let (id_idx, ty, mut array_size) = self.parse_declarator(bt)?;
                 // Pick up the fn-pointer indirection count
                 // the declarator (or its typedef base type)
                 // recorded, and store it on the symbol so a later
                 // identifier load can seed the chain-depth tracker.
                 let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
+                // A typedef whose alias is an array contributes its
+                // dimension when the declarator did not supply
+                // one. The multi-dim composition rule (`arr_t
+                // four[4]` -> `long four[4][64]` per C99 6.7.7)
+                // needs the `array_dims` chain and is out of
+                // scope here; the single-dim case is the common
+                // one and is what the immediate fix unblocks.
+                let typedef_dim =
+                    core::mem::take(&mut self.pending.typedef_base_array_size);
+                if typedef_dim > 0 && array_size == 0 {
+                    array_size = typedef_dim;
+                }
                 self.ty = ty;
                 self.symbols[id_idx].array_size = array_size;
                 if fn_ptr_indirection > 0 {

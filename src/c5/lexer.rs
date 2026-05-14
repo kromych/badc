@@ -916,10 +916,13 @@ impl Lexer {
                     }
                     let body_end = self.pos;
                     if self.pos < self.src.len()
-                        && (self.src[self.pos] == b'f' || self.src[self.pos] == b'F')
+                        && matches!(self.src[self.pos], b'f' | b'F' | b'l' | b'L')
                     {
-                        // Consume the `f`/`F` suffix; both `1.0` and
-                        // `1.0f` are stored as `f64` internally.
+                        // Consume the floating-point suffix per C99
+                        // 6.4.4.2: `f`/`F` is float, `l`/`L` is long
+                        // double. The c5 dialect aliases long double
+                        // to double, so every suffix lands in `f64`
+                        // and the suffix is purely informational.
                         self.pos += 1;
                     }
                     let lit =
@@ -1253,8 +1256,14 @@ impl Lexer {
                             }
                             let body_end = self.pos;
                             if self.pos < self.src.len()
-                                && (self.src[self.pos] == b'f' || self.src[self.pos] == b'F')
+                                && matches!(self.src[self.pos], b'f' | b'F' | b'l' | b'L')
                             {
+                                // Floating-point suffix (C99 6.4.4.2):
+                                // `f`/`F` -> float, `l`/`L` -> long
+                                // double. The c5 dialect aliases long
+                                // double to double, so the suffix is
+                                // informational and the bytes land in
+                                // `f64`.
                                 self.pos += 1;
                             }
                             let lit = core::str::from_utf8(&self.src[int_start..body_end])

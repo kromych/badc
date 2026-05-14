@@ -213,6 +213,27 @@ fn adjacent_string_literals_concatenate() {
 }
 
 #[test]
+fn float_long_double_suffix_accepted() {
+    // C99 6.4.4.2: the floating-suffix is one of `f`, `F`, `l`,
+    // `L`. The dialect stores every floating literal in `f64`,
+    // so the four spellings of the same value land identical at
+    // the bit level. The fixture also pins the integer-vs-float
+    // disambiguator -- bare `7L` stays a `long` integer because
+    // no `.` / `e` was seen.
+    assert_eq!(run_fixture("float_long_double_suffix.c"), 0);
+}
+
+#[test]
+fn va_copy_clones_va_list_cursor() {
+    // C99 7.15.1.2: `va_copy(dst, src)` initialises `dst` to the
+    // same position in the variadic list as `src`. The fixture
+    // builds a copy of the cursor immediately after `va_start`
+    // and walks the copy; the sum must match the values passed
+    // to the variadic call.
+    assert_eq!(run_fixture("va_copy.c"), 0);
+}
+
+#[test]
 fn macro_paste_result_is_rescanned() {
     // C99 6.10.3.4: after a function-like macro's body is built,
     // the result is re-scanned for further replacement; when the

@@ -50,3 +50,8 @@ typedef long long *va_list;
 #define va_start(ap, last) ap = ((long long *)&(last)) + 2
 #define va_arg(ap, T)      (ap = ap + 2, *(T *)(ap - 2))
 #define va_end(ap)
+// C99 7.15.1.2: `va_copy(dst, src)` initialises `dst` to the same
+// list position as `src`. With `va_list` defined as a plain cursor,
+// the copy is just pointer assignment -- two walkers proceed
+// independently from the same point.
+#define va_copy(dst, src)  ((dst) = (src))

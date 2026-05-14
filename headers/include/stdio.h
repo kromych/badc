@@ -198,9 +198,15 @@ typedef struct __c5_FILE FILE;
 // on overflow, but neither does our other targets' `snprintf` once
 // the buffer fills).
 #pragma binding(msvcrt::snprintf,  "_snprintf")
+// Source that pre-rewrites snprintf -> _snprintf via a private
+// `#define` (common in cross-platform projects) reaches for the
+// underscored spelling directly; bind the alias to the same
+// msvcrt entry point.
+#pragma binding(msvcrt::_snprintf, "_snprintf")
 #pragma binding(msvcrt::vfprintf,  "vfprintf")
 #pragma binding(msvcrt::vsprintf,  "vsprintf")
 #pragma binding(msvcrt::vsnprintf, "_vsnprintf")
+#pragma binding(msvcrt::_vsnprintf,"_vsnprintf")
 #pragma binding(msvcrt::sscanf,    "sscanf")
 #pragma binding(msvcrt::fopen,     "fopen")
 #pragma binding(msvcrt::freopen,   "freopen")
@@ -346,6 +352,11 @@ int wprintf(const unsigned short *fmt, ...);
 int fprintf(FILE *stream, char *fmt, ...);
 int sprintf(char *buf, char *fmt, ...);
 int snprintf(char *buf, int size, char *fmt, ...);
+// Alias forms used by source that pre-rewrites the standard
+// spelling through a per-platform `#define`. The msvcrt path
+// binds both to the same `_snprintf` / `_vsnprintf` entry.
+int _snprintf(char *buf, int size, char *fmt, ...);
+int _vsnprintf(char *buf, int size, char *fmt, char *ap);
 int sscanf(char *src, char *fmt, ...);
 FILE *fopen(char *path, char *mode);
 // C99 7.19.5.4: reopen a stream with a new file. Used by

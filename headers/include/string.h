@@ -101,6 +101,20 @@
 #pragma binding(msvcrt::strcspn,  "strcspn")
 #pragma binding(msvcrt::strpbrk,  "strpbrk")
 #pragma binding(msvcrt::strtok,   "strtok")
+// Case-insensitive compares: msvcrt's POSIX-style names live
+// behind a leading underscore. Expose both spellings so source
+// reaching for the underscored direct form resolves the same
+// way as source using the POSIX alias.
+#pragma binding(msvcrt::stricmp,   "_stricmp")
+#pragma binding(msvcrt::_stricmp,  "_stricmp")
+#pragma binding(msvcrt::strnicmp,  "_strnicmp")
+#pragma binding(msvcrt::_strnicmp, "_strnicmp")
+// In-place case conversions; msvcrt exposes both as
+// underscored entries.
+#pragma binding(msvcrt::strlwr,    "_strlwr")
+#pragma binding(msvcrt::_strlwr,   "_strlwr")
+#pragma binding(msvcrt::strupr,    "_strupr")
+#pragma binding(msvcrt::_strupr,   "_strupr")
 #endif
 
 // Portable prototypes -- `char` is one byte, `int` is the c4 machine
@@ -132,3 +146,17 @@ int strspn(char *s, char *accept);
 int strcspn(char *s, char *reject);
 char *strpbrk(char *s, char *accept);
 char *strtok(char *s, char *delim);
+#ifdef _WIN32
+// Case-insensitive compares -- msvcrt-only, no POSIX equivalent
+// in the c5 surface. Names match the underscored entries
+// programs reach for directly; the POSIX aliases (stricmp /
+// strnicmp / strlwr / strupr) bind to the same symbols.
+int stricmp(char *a, char *b);
+int _stricmp(char *a, char *b);
+int strnicmp(char *a, char *b, int n);
+int _strnicmp(char *a, char *b, int n);
+char *strlwr(char *s);
+char *_strlwr(char *s);
+char *strupr(char *s);
+char *_strupr(char *s);
+#endif

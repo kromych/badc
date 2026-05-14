@@ -84,6 +84,12 @@ typedef int    GET_FILEEX_INFO_LEVELS;
 #pragma binding(kernel32::LoadLibraryA,            "LoadLibraryA")
 #pragma binding(kernel32::GetProcAddress,          "GetProcAddress")
 #pragma binding(kernel32::FreeLibrary,             "FreeLibrary")
+#pragma binding(kernel32::GetModuleFileNameA,      "GetModuleFileNameA")
+// SearchPathA is the canonical kernel32 entry; the unsuffixed
+// `SearchPath` spelling lets source compiled against `<windows.h>`
+// pick up the same binding through the `#define SearchPath
+// SearchPathA` alias below.
+#pragma binding(kernel32::SearchPath,              "SearchPathA")
 #pragma binding(kernel32::GetLastError,            "GetLastError")
 #pragma binding(kernel32::ExitProcess,             "ExitProcess")
 #pragma binding(kernel32::Sleep,                   "Sleep")
@@ -380,6 +386,15 @@ typedef struct _OSVERSIONINFOW *POSVERSIONINFOW;
 #define PAGE_EXECUTE        0x10
 #define PAGE_EXECUTE_READ   0x20
 #define PAGE_EXECUTE_READWRITE 0x40
+
+// VirtualAlloc / VirtualFree allocation-type flags.
+#define MEM_COMMIT          0x00001000
+#define MEM_RESERVE         0x00002000
+#define MEM_DECOMMIT        0x00004000
+#define MEM_RELEASE         0x00008000
+#define MEM_RESET           0x00080000
+#define MEM_TOP_DOWN        0x00100000
+#define MEM_LARGE_PAGES     0x20000000
 
 // Section / process / event access masks.
 #define SECTION_ALL_ACCESS  0x000F001FUL
@@ -1034,6 +1049,9 @@ int ExpandEnvironmentStringsA(LPCSTR lpSrc, LPSTR lpDst, DWORD nSize);
 int ExpandEnvironmentStringsW(LPCWSTR lpSrc, LPWSTR lpDst, DWORD nSize);
 int SearchPathA(LPCSTR lpPath, LPCSTR lpFileName, LPCSTR lpExtension,
                 DWORD nBufferLength, LPSTR lpBuffer, char **lpFilePart);
+int SearchPath(LPCSTR lpPath, LPCSTR lpFileName, LPCSTR lpExtension,
+               DWORD nBufferLength, LPSTR lpBuffer, char **lpFilePart);
+int GetModuleFileNameA(void *hModule, LPSTR lpFilename, DWORD nSize);
 int SearchPathW(LPCWSTR lpPath, LPCWSTR lpFileName, LPCWSTR lpExtension,
                 DWORD nBufferLength, LPWSTR lpBuffer,
                 unsigned short **lpFilePart);

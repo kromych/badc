@@ -129,9 +129,13 @@
 #pragma binding(msvcrt::strtol,  "strtol")
 // MSVC has _strtoi64; strtoll itself only landed in UCRT.
 #pragma binding(msvcrt::strtoll, "_strtoi64")
+// Underscored aliases for source compiled directly against the
+// msvcrt spelling (typically through a per-platform `#define`).
+#pragma binding(msvcrt::_strtoi64, "_strtoi64")
 // Matching unsigned form -- `_strtoui64` is msvcrt's spelling for
 // what every other libc calls `strtoull`.
 #pragma binding(msvcrt::strtoull, "_strtoui64")
+#pragma binding(msvcrt::_strtoui64, "_strtoui64")
 #pragma binding(msvcrt::strtod,  "strtod")
 #pragma binding(msvcrt::strtof,  "strtof")
 // msvcrt.dll has no `strtold`; UCRT exports it but the
@@ -167,6 +171,7 @@ int atol(char *s);
 double atof(char *s);
 int strtol(char *s, char **endp, int base);
 int strtoll(char *s, char **endp, int base);
+int _strtoi64(char *s, char **endp, int base);
 double strtod(char *s, char **endp);
 // C99 7.20.1.3. c5 stores every floating literal in `f64`, so
 // the prototype declares the return as double; the binding above
@@ -204,6 +209,33 @@ int strtoul(char *s, char **endp, int base);
 // dialect stores integers as 64-bit values regardless of width
 // so the prototype returns `int` (also 64-bit on stack).
 int strtoull(char *s, char **endp, int base);
+int _strtoui64(char *s, char **endp, int base);
+#ifdef _WIN32
+// msvcrt's `_spawn*` family takes a mode argument up front.
+// `P_NOWAIT` returns the child handle immediately; the other
+// modes block until the child exits.
+#define P_WAIT          0
+#define P_NOWAIT        1
+#define P_OVERLAY       2
+#define P_NOWAITO       3
+#define P_DETACH        4
+#pragma binding(msvcrt::_spawnvp,  "_spawnvp")
+#pragma binding(msvcrt::_spawnv,   "_spawnv")
+#pragma binding(msvcrt::_spawnl,   "_spawnl")
+int _spawnvp(int mode, char *cmdname, char **argv);
+int _spawnv(int mode, char *cmdname, char **argv);
+int _spawnl(int mode, char *cmdname, char *arg0, ...);
+// `_cwait` action flag: wait for the supplied child handle.
+#define WAIT_CHILD       0
+#define WAIT_GRANDCHILD  1
+#pragma binding(msvcrt::_cwait, "_cwait")
+int _cwait(int *termstat, int handle, int action);
+// msvcrt path-resolution -- analogous to POSIX `realpath`.
+// Resolves a relative path against the current directory and
+// writes the canonical absolute form into `absPath`.
+#pragma binding(msvcrt::_fullpath, "_fullpath")
+char *_fullpath(char *absPath, char *relPath, int maxLength);
+#endif
 int mkstemp(char *templ);
 char *mkdtemp(char *templ);
 char *mktemp(char *templ);

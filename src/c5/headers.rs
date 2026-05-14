@@ -59,6 +59,7 @@ pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("stdio.h", include_str!("../../headers/include/stdio.h")),
     ("stdlib.h", include_str!("../../headers/include/stdlib.h")),
     ("alloca.h", include_str!("../../headers/include/alloca.h")),
+    ("malloc.h", include_str!("../../headers/include/malloc.h")),
     ("stdarg.h", include_str!("../../headers/include/stdarg.h")),
     ("stdbool.h", include_str!("../../headers/include/stdbool.h")),
     (

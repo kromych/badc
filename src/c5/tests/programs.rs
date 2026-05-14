@@ -224,6 +224,18 @@ fn float_long_double_suffix_accepted() {
 }
 
 #[test]
+fn macro_arg_blue_paint_preserved_across_body_rescan() {
+    // C99 6.10.3.4: a macro that fired during the pre-expansion
+    // of a function-like macro's argument must not re-fire when
+    // the substituted body is rescanned. The fixture exercises
+    // the per-state-accessor pattern (`#define foo s1->foo`)
+    // passed as an argument to a generic helper macro -- without
+    // blue paint the inner accessor re-fires inside the body and
+    // double-prefixes the access.
+    assert_eq!(run_fixture("macro_arg_blue_paint.c"), 0);
+}
+
+#[test]
 fn sizeof_through_null_pointer_cast() {
     // C99 6.5.3.4: `sizeof` does not evaluate its operand, so
     // `sizeof ((T *)0)->m` is a valid way to read the size of a

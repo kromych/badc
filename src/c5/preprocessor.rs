@@ -1013,6 +1013,49 @@ impl Preprocessor {
         self.substitute_with_blocklist(line, filename, line_no, &[])
     }
 
+    /// Scan `text` for identifiers that name a macro currently
+    /// in the registry, append each to `out`. Used to compute
+    /// the C99 6.10.3.4 "blue paint" set after a function-like
+    /// macro's arguments have been pre-expanded: any macro name
+    /// surviving in the pre-expanded arg text must have fired
+    /// during pre-expansion, so it must not re-fire during the
+    /// body rescan.
+    fn collect_macro_idents_into(&self, text: &str, out: &mut alloc::vec::Vec<String>) {
+        let bytes = text.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            let c = bytes[i];
+            if c.is_ascii_alphabetic() || c == b'_' {
+                let start = i;
+                i += 1;
+                while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+                    i += 1;
+                }
+                let ident = &text[start..i];
+                if (self.macros.contains_key(ident) || self.fn_macros.contains_key(ident))
+                    && !out.iter().any(|s| s == ident)
+                {
+                    out.push(ident.to_string());
+                }
+            } else if c == b'"' || c == b'\'' {
+                let quote = c;
+                i += 1;
+                while i < bytes.len() && bytes[i] != quote {
+                    if bytes[i] == b'\\' && i + 1 < bytes.len() {
+                        i += 2;
+                    } else {
+                        i += 1;
+                    }
+                }
+                if i < bytes.len() {
+                    i += 1;
+                }
+            } else {
+                i += 1;
+            }
+        }
+    }
+
     /// Like [`substitute`], but `blocklist` enumerates macro names
     /// currently being expanded -- the C99 "blue paint" rule says a
     /// macro doesn't re-expand inside its own replacement list.
@@ -1096,12 +1139,30 @@ impl Preprocessor {
                             })
                             .collect();
                         let expanded = expand_fn_macro(macro_def, &expanded_args);
-                        // Re-substitute so nested macro names inside
-                        // the expansion get a chance too -- but mark
-                        // `ident` as being expanded so it doesn't
-                        // trigger another round.
+                        // C99 6.10.3.4 "blue paint": any macro that
+                        // fired during arg pre-expansion stays on
+                        // the blocklist for the body rescan, so a
+                        // pre-expanded arg like `s1->symtab_section`
+                        // does not re-trigger `symtab_section` after
+                        // substitution. Approximate the fired set by
+                        // scanning each pre-expanded arg for macro
+                        // names: a name that survived in the
+                        // expanded text and is still in the
+                        // registry must have already expanded
+                        // through pre-expansion (otherwise pre-
+                        // expansion would have substituted it).
+                        let mut blue_paint: alloc::vec::Vec<String> = alloc::vec::Vec::new();
+                        for arg_text in &expanded_args {
+                            self.collect_macro_idents_into(arg_text, &mut blue_paint);
+                        }
                         let mut nested: Vec<&str> = blocklist.to_vec();
                         nested.push(ident);
+                        for bp in &blue_paint {
+                            let s: &str = bp.as_str();
+                            if !nested.contains(&s) {
+                                nested.push(s);
+                            }
+                        }
                         let recursed =
                             self.substitute_with_blocklist(&expanded, filename, line_no, &nested);
                         // Token-stream rescan (C99 6.10.3.4): if the

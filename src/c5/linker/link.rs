@@ -44,7 +44,7 @@ use hashbrown::HashMap;
 use crate::c5::CODE_BASE;
 use crate::c5::error::C5Error;
 use crate::c5::op::Op;
-use crate::c5::preprocessor::{Binding, DylibSpec};
+use crate::c5::preprocessor::DylibSpec;
 use crate::c5::program::{CodeReloc, DataReloc, ExportedFunction, Program};
 
 use super::archive::{ArchiveMember, read_archive};
@@ -324,8 +324,32 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
     // Merged dylib + binding table, with a per-unit binding-
     // index remap so each unit's Op::JsrExt operands can be
     // rewritten as we copy text.
+    //
+    // Two-pass to avoid a flat-index shift hazard. The
+    // parser-emitted operand encodes binding position as
+    // `sum(prior dylibs' sizes) + within-dylib position`. If
+    // we built `merged_dylibs` and computed each unit's remap
+    // in the same loop, a later unit appending to (say) libc
+    // would grow libc and shift libm's start -- silently
+    // moving the merged-program index that was supposed to
+    // name `sin`. The single-unit prelude path doesn't notice
+    // because nothing appends to libc after it. The fix:
+    //
+    //   * pass 1: dedupe dylibs by name into `merged_dylibs`
+    //     and concatenate every unit's bindings to the right
+    //     dylib. Record only the (dylib_idx, position) per
+    //     binding so the remap can be computed once sizes are
+    //     final.
+    //   * pass 2: cumulative dylib starts are known; each
+    //     binding's merged flat index is
+    //     `dylib_starts[dylib_idx] + position_within_dylib`.
     let mut merged_dylibs: Vec<DylibSpec> = Vec::new();
     let mut binding_remap_per_unit: Vec<Vec<i64>> = Vec::with_capacity(n);
+    // Per-unit, per-binding: (merged_dylib_idx, within_dylib_pos).
+    // Same shape as the parser's flat binding indices but split
+    // into the two pieces we need post-merge to compute the
+    // final flat offset.
+    let mut binding_positions_per_unit: Vec<Vec<(usize, usize)>> = Vec::with_capacity(n);
 
     for unit in &units {
         // Source file table: dedupe per-unit names into one
@@ -334,8 +358,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         source_file_offset_per_unit.push(file_offset);
         merged_source_files.extend(unit.source_files.iter().cloned());
 
-        // Dylibs + bindings.
-        let mut unit_binding_remap: Vec<i64> = Vec::new();
+        let mut positions: Vec<(usize, usize)> = Vec::new();
         for spec in &unit.dylibs {
             let merged_dylib_idx = match merged_dylibs.iter().position(|d| d.name == spec.name) {
                 Some(i) => i,
@@ -349,11 +372,28 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                 }
             };
             for b in &spec.bindings {
-                let new_flat_idx = flat_binding_index(&mut merged_dylibs, merged_dylib_idx, b);
-                unit_binding_remap.push(new_flat_idx as i64);
+                let pos = merged_dylibs[merged_dylib_idx].bindings.len();
+                merged_dylibs[merged_dylib_idx].bindings.push(b.clone());
+                positions.push((merged_dylib_idx, pos));
             }
         }
-        binding_remap_per_unit.push(unit_binding_remap);
+        binding_positions_per_unit.push(positions);
+    }
+
+    // Pass 2: cumulative dylib starts are now stable -- compute
+    // each unit's flat-index remap.
+    let mut dylib_starts: Vec<usize> = Vec::with_capacity(merged_dylibs.len());
+    let mut cum = 0;
+    for d in &merged_dylibs {
+        dylib_starts.push(cum);
+        cum += d.bindings.len();
+    }
+    for positions in &binding_positions_per_unit {
+        let mut remap: Vec<i64> = Vec::with_capacity(positions.len());
+        for &(mdi, pos) in positions {
+            remap.push((dylib_starts[mdi] + pos) as i64);
+        }
+        binding_remap_per_unit.push(remap);
     }
 
     for (ui, unit) in units.iter().enumerate() {
@@ -774,36 +814,6 @@ fn apply_reloc(
         }
     }
     Ok(())
-}
-
-fn flat_binding_index(
-    merged_dylibs: &mut [DylibSpec],
-    dylib_idx: usize,
-    binding: &Binding,
-) -> usize {
-    // Append unconditionally inside the chosen dylib. Some
-    // headers re-declare the same `local_name`/`real_symbol`
-    // pair with slightly different prototypes (e.g.
-    // `msvcrt::printf` appears in both `<stdio.h>` and
-    // `msvc_compat.h` with different `is_variadic` /
-    // `return_type_tag` shadow fields). Dedup-by-name here
-    // would pick the first occurrence's metadata for both
-    // call sites, which the bytecode caller wasn't typed
-    // against. Keeping every binding preserves the parser's
-    // per-binding flat index across the link; the resulting
-    // IAT carries a duplicate import name per duplicate, which
-    // the per-format writer treats as harmless overhead.
-    let mut flat: usize = 0;
-    for (i, d) in merged_dylibs.iter().enumerate() {
-        if i == dylib_idx {
-            break;
-        }
-        flat += d.bindings.len();
-    }
-    let dy = &mut merged_dylibs[dylib_idx];
-    let pos = dy.bindings.len();
-    dy.bindings.push(binding.clone());
-    flat + pos
 }
 
 /// Resolve the program's entry function. Returns the entry's

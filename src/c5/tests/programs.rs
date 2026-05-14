@@ -213,6 +213,55 @@ fn adjacent_string_literals_concatenate() {
 }
 
 #[test]
+fn unistd_exposes_posix_types() {
+    // POSIX-2017 requires `<unistd.h>` to make `ssize_t`,
+    // `size_t`, `off_t`, `pid_t`, `uid_t`, `gid_t` visible; the
+    // width-sensitive ones come through `<sys/types.h>`. c5's
+    // `<unistd.h>` includes `<sys/types.h>` to satisfy this. The
+    // fixture asserts the types resolve under only `<unistd.h>`
+    // and that their widths match the LP64 contract c5 ships.
+    assert_eq!(run_fixture("unistd_exposes_posix_types.c"), 0);
+}
+
+#[test]
+fn attribute_and_declspec_absorbed_as_no_op() {
+    // The preprocessor predefines `__attribute__` / `__declspec`
+    // as empty function-like macros so attribute-decorated
+    // declarations parse without dragging in real attribute
+    // semantics. Fixture exercises prefix attribute on a
+    // function declaration, postfix attribute (the GCC
+    // position), nested-paren payloads with comma arguments,
+    // and `__declspec(align(...))` on a struct.
+    assert_eq!(run_fixture("attribute_noop.c"), 0);
+}
+
+#[test]
+#[ignore = "TODO: typedef of array type decays to scalar when used as a struct field, so jmp_buf is 8 bytes not 512 and the unwind corrupts the saved frame"]
+fn setjmp_longjmp_unwinds_through_jmp_buf() {
+    // C99 7.13: `setjmp` returns 0 directly and the matching
+    // `longjmp(env, val)` rewinds control to the setjmp site with
+    // a return value of `val`. The fixture embeds a `jmp_buf` in
+    // a struct (tinycc's `TCCState` shape) and checks both the
+    // return-value contract and the survival of a volatile local
+    // across the unwind. Bound to host libc per platform; if a
+    // host's libc setjmp implementation requires a wider buffer
+    // than 64 longs (512 bytes), this fixture detects the size
+    // mismatch before tinycc does.
+    assert_eq!(run_fixture("setjmp_longjmp.c"), 0);
+}
+
+#[test]
+fn inttypes_header_supplies_types_and_format_macros() {
+    // C99 7.8: `<inttypes.h>` layers on top of `<stdint.h>` and adds
+    // the PRI / SCN conversion-specifier macros. The fixture
+    // includes only `<inttypes.h>` and asserts the fixed-width
+    // typedefs still resolve transitively, plus the macro
+    // expansions match the LP64 / LLP64 contract c5 ships
+    // (int64_t aliases `long long`, so PRId64 is "lld" uniformly).
+    assert_eq!(run_fixture("inttypes_header.c"), 0);
+}
+
+#[test]
 fn predefined_constants_are_visible() {
     // PROT_*, O_*, STDIN_FILENO, NULL, EXIT_SUCCESS/FAILURE -- each is
     // an integer constant the lexer pre-binds before any user code is

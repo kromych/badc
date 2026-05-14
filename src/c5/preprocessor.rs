@@ -352,7 +352,26 @@ impl Preprocessor {
     ///     `__BADC_WINDOWS__` we used before this commit.
     pub fn new(target_spec: &str, target: Target, crate_version: &str) -> Self {
         let mut macros: HashMap<String, String> = HashMap::new();
-        let fn_macros: HashMap<String, FnMacro> = HashMap::new();
+        let mut fn_macros: HashMap<String, FnMacro> = HashMap::new();
+        // GCC `__attribute__((...))` and MSVC `__declspec(...)` are
+        // common implementation-defined extensions used throughout
+        // real-world C source for hints the c5 dialect doesn't act
+        // on (printf-format checks, alignment, packing, calling
+        // convention). Absorbing them as empty function-like
+        // macros lets the parser see attribute-free declarations
+        // without losing the surrounding tokens. C99 6.10.3 paragraph
+        // 11 keeps the inner `(...)` payload as one macro argument
+        // because commas inside balanced parens are not separators.
+        for name in ["__attribute__", "__attribute", "__declspec"] {
+            fn_macros.insert(
+                name.to_string(),
+                FnMacro {
+                    params: vec!["x".to_string()],
+                    body: String::new(),
+                    is_variadic: false,
+                },
+            );
+        }
         macros.insert(
             "__BADC_VERSION__".to_string(),
             format!("\"{crate_version}\""),

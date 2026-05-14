@@ -16,6 +16,13 @@
 #ifndef _C5_SYS_TYPES_H
 #define _C5_SYS_TYPES_H
 
+/* POSIX-2017 requires `<sys/types.h>` to make `size_t` visible.
+** In c5 the canonical declaration lives in `<stddef.h>`; pulling
+** it in transitively lets `<unistd.h>` (which includes this
+** header) deliver `size_t` alongside `ssize_t` / `off_t` /
+** `pid_t` without each caller needing a separate `<stddef.h>`. */
+#include <stddef.h>
+
 #ifdef __BADC_WINDOWS__
 typedef long long ssize_t;
 typedef long long off_t;

@@ -11,6 +11,10 @@
 ** `struct rusage` declaration below references the same type
 ** that `<time.h>` and the bound libc functions agree on. */
 #include <time.h>
+/* POSIX-2017 mandates that `<unistd.h>` make `ssize_t`,
+** `size_t`, `off_t`, `pid_t`, `uid_t`, `gid_t` visible; the
+** width-sensitive ones live in `<sys/types.h>` already. */
+#include <sys/types.h>
 
 #define STDIN_FILENO  0
 #define STDOUT_FILENO 1

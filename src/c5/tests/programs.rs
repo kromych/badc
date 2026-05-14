@@ -224,6 +224,18 @@ fn float_long_double_suffix_accepted() {
 }
 
 #[test]
+fn sizeof_through_null_pointer_cast() {
+    // C99 6.5.3.4: `sizeof` does not evaluate its operand, so
+    // `sizeof ((T *)0)->m` is a valid way to read the size of a
+    // member without instantiating the struct. The fixture
+    // exercises four scalar member widths, a nested-struct
+    // member access via `->...`, and the matching `offsetof`
+    // macro (the address-of-via-null-cast variant) to keep both
+    // sides of the standard idiom locked.
+    assert_eq!(run_fixture("sizeof_member_via_null_cast.c"), 0);
+}
+
+#[test]
 fn extern_declaration_inside_function_body() {
     // C99 6.7.1 paragraph 3: `extern` declarations are valid at
     // any scope. c5 has no separate translation units, so a

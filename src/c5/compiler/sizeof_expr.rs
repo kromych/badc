@@ -29,11 +29,31 @@ impl Compiler {
     /// Parse the operand of a `sizeof` and return its byte
     /// count. The `sizeof` keyword has already been consumed.
     pub(super) fn sizeof_operand_bytes(&mut self) -> Result<i64, C5Error> {
-        let had_paren = self.lex.tk == '(';
-        if had_paren {
+        // Snapshot the lex state before any speculative paren
+        // consumption so the operand-shape dispatch below can
+        // restore when `sizeof (expr)->m` turns out to wrap the
+        // outer parens around a unary-expression rather than a
+        // type-name. C99 6.5.3.4 admits two operand shapes:
+        // `sizeof unary-expression` and `sizeof ( type-name )`;
+        // an eagerly-consumed `(` for the latter has to be put
+        // back when it really belongs to the former so any
+        // trailing postfix (`->`, `.`, `[`) stays attached to
+        // the unary-expression instead of dangling against the
+        // surrounding `int` result.
+        let pre_paren_snap = self.lex.snapshot();
+        let leading_paren = self.lex.tk == '(';
+        if leading_paren {
             self.next()?;
         }
         let saved_ty = self.ty;
+        // `had_paren` is the "sizeof actually owns this paren and
+        // will consume the matching `)` at the end" tracker. It
+        // starts equal to `leading_paren` and is cleared in the
+        // general-expression branch when the inner content turns
+        // out to be a unary-expression rather than a type-name --
+        // in that case the paren belongs to the operand and is
+        // matched by the regular parser's `(` -> `)` rule.
+        let mut had_paren = leading_paren;
         let total: i64 = if had_paren && self.lex_is_type_start() {
             // sizeof(<type>): parse a type name with optional
             // pointer decoration and return its size.
@@ -90,11 +110,20 @@ impl Compiler {
             let saved_data_imm_positions = self.data_imm_positions.len();
             let saved_fn_call_fixups = self.fn_call_fixups.len();
             let saved_code_reloc_sym_idx = self.code_reloc_sym_idx.len();
-            let lev = if had_paren {
-                Token::Assign as i64
-            } else {
-                Token::Inc as i64
-            };
+            // If sizeof consumed a leading `(` but the inner
+            // content is not a type-name, the paren belongs to a
+            // surrounding unary-expression. Restore the snapshot
+            // so the regular parser sees the original `(...)` and
+            // its postfix loop can chain through `->` / `.` / `[`
+            // after the matching `)`. Clear `had_paren` so the
+            // trailing `)` consumer at the end of this function
+            // does not consume a paren that was never sizeof's
+            // to begin with.
+            if had_paren {
+                self.lex.restore(pre_paren_snap);
+                had_paren = false;
+            }
+            let lev = Token::Inc as i64;
             self.pending.last_array_decay_size = 0;
             self.pending.last_array_decay_bytes = 0;
             self.expr(lev)?;

@@ -86,6 +86,86 @@ int main(void) {
     return (int)(y & 0xFFu);
 }
 """,
+    "bitfields.c": """
+struct flags {
+    unsigned a : 3;
+    unsigned b : 5;
+    unsigned c : 8;
+};
+int main(void) {
+    struct flags f;
+    f.a = 5; f.b = 17; f.c = 200;
+    return (int)(f.a + f.b + f.c);
+}
+""",
+    "enum_switch.c": """
+enum color { RED = 1, GREEN = 2, BLUE = 4 };
+static int score(enum color c) {
+    switch (c) {
+    case RED:   return 10;
+    case GREEN: return 20;
+    case BLUE:  return 40;
+    default:    return -1;
+    }
+}
+int main(void) { return score(GREEN) + score(BLUE); }
+""",
+    "typedef_array.c": """
+typedef int row_t[8];
+static int row_sum(row_t r) {
+    int s = 0;
+    for (int i = 0; i < 8; i++) s += r[i];
+    return s;
+}
+int main(void) {
+    row_t r = { 1, 2, 3, 4, 5, 6, 7, 8 };
+    return row_sum(r);
+}
+""",
+    "fn_pointers.c": """
+static int add(int a, int b) { return a + b; }
+static int mul(int a, int b) { return a * b; }
+typedef int (*binop_t)(int, int);
+int main(void) {
+    binop_t ops[2] = { add, mul };
+    return ops[0](3, 4) + ops[1](3, 4);
+}
+""",
+    "static_locals.c": """
+static int next_id(void) {
+    static int counter = 0;
+    counter = counter + 1;
+    return counter;
+}
+int main(void) {
+    int a = next_id();
+    int b = next_id();
+    int c = next_id();
+    return a * 100 + b * 10 + c;
+}
+""",
+    "two_d_array.c": """
+int main(void) {
+    int m[3][4] = {
+        { 1,  2,  3,  4 },
+        { 5,  6,  7,  8 },
+        { 9, 10, 11, 12 },
+    };
+    int s = 0;
+    for (int i = 0; i < 3; i++)
+        for (int j = 0; j < 4; j++)
+            s += m[i][j];
+    return s;
+}
+""",
+    "compound_assign.c": """
+int main(void) {
+    int x = 100;
+    x += 5;  x -= 2;  x *= 3;  x /= 4;
+    x &= 0xFF; x |= 0x100; x ^= 0x55; x <<= 1; x >>= 2;
+    return x;
+}
+""",
 }
 
 
@@ -303,11 +383,7 @@ def main() -> int:
     for name in mismatches:
         print(f"  DIFF  {name}", file=sys.stderr)
 
-    # TODO: tighten to byte-identical once every per-target codegen
-    # quirk in the badc-built tcc is closed. For now the byte
-    # comparison is a strong claim; mismatches are surfaced but do
-    # not gate CI.
-    if failures:
+    if failures or mismatches:
         return 1
     return 0
 

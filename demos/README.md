@@ -11,6 +11,29 @@ sit behind a handful of `#ifdef`s; the libc / Winsock / pthread /
 Win32 thread bindings come from the shipped `<sys/socket.h>`,
 `<sys/select.h>`, `<pthread.h>`, and `<windows.h>` headers.
 
+## Build flavours
+
+The multi-source library demos (miniz, kissfft, bzip2) each build
+their smoke harness three different ways at both `-O0` and `-O`:
+
+1. **Amalgamation** -- one combined source file straight through
+   `badc`. The classic single-TU path; same shape `sqlite3.c +
+   shell.c` already exercises.
+2. **Translation units** -- `badc -c` on each `.c` file (emitting
+   ELF-wrapped `.badc.text` / `.badc.data` `.o` files), then
+   `badc -o app *.o` to link them. Exercises the linker's
+   cross-TU `Op::JsrExt` binding-merge and the C99 6.2.2
+   internal / external linkage rules.
+3. **Archive** -- `badc --ar -o libfoo.a *.c` to bundle the
+   library into a SysV ar(5) archive with `/` symbol index, then
+   `badc -o app main.c -L. -l foo` to pull members in by
+   reference (gcc-style). Exercises the on-demand archive
+   resolution path.
+
+The flat single-source demos (`hello_server`, `coro_pool`,
+`threads`) and stb's header-only smoke stay single-TU -- the
+multi-TU paths are exercised by the library demos.
+
 ## hello_server.c
 
 A `select(2)`-driven HTTP server that serves `Hello, World!` on

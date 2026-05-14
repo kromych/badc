@@ -151,6 +151,10 @@ impl Compiler {
                 data_offset: var_offset as u64,
                 target_offset: addr as u64,
             });
+            // String-literal target -- no originating
+            // symbol; sentinel marks the entry as
+            // intra-unit only.
+            self.data_reloc_sym_idx.push(usize::MAX);
             return Ok(());
         }
         // `&<global>` -- address-of-global pointer init.
@@ -240,6 +244,7 @@ impl Compiler {
                 data_offset: var_offset as u64,
                 target_offset: target_offset as u64,
             });
+            self.data_reloc_sym_idx.push(target_idx);
             return Ok(());
         }
 

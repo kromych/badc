@@ -25,6 +25,8 @@ mod expr;
 mod function;
 mod global_init;
 mod initializer;
+#[cfg(feature = "linker")]
+mod link_unit;
 mod locals;
 mod run_compile;
 mod sizeof_expr;
@@ -567,6 +569,28 @@ pub struct Compiler {
     /// `target_bc_pc` and the matching data-segment bytes once
     /// every body has been parsed.
     code_reloc_sym_idx: Vec<usize>,
+    /// (text_index, sym_idx) for every `Op::Imm <data_offset>`
+    /// emitted as a `Token::Glo` address-of -- the data
+    /// reference shape that becomes a cross-TU relocation when
+    /// the target global is defined in another translation
+    /// unit. Empty in single-TU compiles; the link-unit
+    /// conversion walks the list to decide which entries need
+    /// an `ImmDataAddr` relocation versus an already-resolved
+    /// data offset. Distinct from `data_imm_positions`, which
+    /// records every Imm operand that holds *some* data offset
+    /// (string literals included) without identifying the
+    /// originating symbol.
+    pub(super) glo_imm_refs: alloc::vec::Vec<(usize, usize)>,
+    /// Per-`data_relocs` originating symbol index. Tracks the
+    /// `Token::Glo` whose address an initializer like
+    /// `int *p = &x;` baked into the data segment. Cross-TU
+    /// link-unit assembly walks this list in parallel with
+    /// `data_relocs` to convert any entry whose `x` is an
+    /// undefined external reference into a `DataDataAbs64`
+    /// relocation. Length matches `data_relocs.len()` -- one
+    /// symbol idx per emitted reloc -- so the parallel arrays
+    /// don't drift out of sync.
+    pub(super) data_reloc_sym_idx: alloc::vec::Vec<usize>,
     /// Per-libc-symbol trampoline registry. When source code
     /// reaches for the *address* of a `Token::Sys` binding --
     /// either bare (`fp = lstat;`) or in a static initializer
@@ -736,6 +760,8 @@ impl Compiler {
             fn_call_fixups: Vec::new(),
             code_reloc_sym_idx: Vec::new(),
             sys_trampoline_sym: alloc::collections::BTreeMap::new(),
+            glo_imm_refs: alloc::vec::Vec::new(),
+            data_reloc_sym_idx: alloc::vec::Vec::new(),
         }
     }
 

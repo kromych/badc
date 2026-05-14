@@ -39,7 +39,10 @@ logical operators) in array sizes, bitfield widths, enum
 initializers, `_Static_assert`, and scalar global integer
 initializers; the `<stdio.h>` / `<stdlib.h>` / `<string.h>`
 / `<math.h>` / `<time.h>` / `<dlfcn.h>` / `<pthread.h>` /
-`<windows.h>` surfaces documented in `headers/include/`.
+`<windows.h>` surfaces documented in `headers/include/`;
+multi-source compile + link (`badc -c foo.c bar.c` followed
+by `badc -o app foo.o bar.o`, plus `--ar` for archives and
+`-L<dir>` / `-l<name>` for archive resolution).
 
 The integer-arithmetic surface is C99-correct end-to-end:
 unsigned wrap-modulo-2^N, signed-overflow truncate-and-sign-
@@ -78,11 +81,6 @@ as a distinct type and integer-promotes to signed `int` for
 arithmetic. Severity: 4.
 
 ## Divergences
-
-### Translation units (sec 6.9), severity 1
-
-`badc` compiles a single source file at a time. `extern int
-x;` in one TU and `int x;` in another can't be linked.
 
 ### libc `struct`-by-value ABI, severity 2
 
@@ -188,8 +186,7 @@ C11+ features showing up in modern code:
 
 ## Roadmap
 
-1. Multiple translation units (sec 6.9).
-2. libc `struct`-by-value ABI bridge.
-3. `_Bool` 0/1 normalisation.
-4. Compound literals (`(struct Foo){.x = 1}`).
-5. Standalone abstract function-pointer declarators in `sizeof` / cast position.
+1. libc `struct`-by-value ABI bridge.
+2. `_Bool` 0/1 normalisation.
+3. Compound literals (`(struct Foo){.x = 1}`).
+4. Standalone abstract function-pointer declarators in `sizeof` / cast position.

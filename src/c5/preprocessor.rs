@@ -69,7 +69,7 @@ use super::headers::embedded_header;
 /// `#pragma binding(name::c4_fn, "real_symbol")` directives that
 /// reference this dylib through its `name`.
 #[derive(Debug, Clone)]
-pub(crate) struct DylibSpec {
+pub struct DylibSpec {
     /// c5-side identifier for this dylib (e.g. `libc`, `kernel32`).
     /// Bindings reference it via their `name::c4_fn` left-hand
     /// side, so directive ordering in the header doesn't matter --
@@ -92,7 +92,7 @@ pub(crate) struct DylibSpec {
 /// One `#pragma binding(dylib::local_name, "real_symbol")` declaration.
 /// Owned by the [`DylibSpec`] whose `name` matched the qualifier.
 #[derive(Debug, Clone)]
-pub(crate) struct Binding {
+pub struct Binding {
     /// `true` if the function's prototype ended with `, ...)` --
     /// e.g. `int printf(char *fmt, ...);`. The lowering reads
     /// this to decide whether the call site needs the

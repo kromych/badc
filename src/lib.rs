@@ -78,3 +78,10 @@ pub use c5::{
 
 #[cfg(feature = "std")]
 pub use c5::StdHost;
+
+#[cfg(feature = "linker")]
+pub use c5::{
+    ArchiveMember, Binding, DylibSpec, LinkArchive, LinkOptions, LinkSymbol, LinkUnit, Linkage,
+    Reloc, RelocKind, Subsystem, SymbolKind, link_units, read_archive, read_object, write_archive,
+    write_object,
+};

@@ -4,6 +4,8 @@ mod error;
 mod headers;
 mod host;
 mod lexer;
+#[cfg(feature = "linker")]
+mod linker;
 mod op;
 mod optimize;
 mod preprocessor;
@@ -38,6 +40,17 @@ pub use {
 
 #[cfg(feature = "std")]
 pub use host::StdHost;
+
+#[cfg(feature = "linker")]
+#[allow(unused_imports)]
+pub use linker::{
+    ArchiveMember, LinkArchive, LinkOptions, LinkSymbol, LinkUnit, Reloc, RelocKind, SymbolKind,
+    link_units, read_archive, read_object, write_archive, write_object,
+};
+#[cfg(feature = "linker")]
+pub use preprocessor::{Binding, DylibSpec, Subsystem};
+#[cfg(feature = "linker")]
+pub use symbol::Linkage;
 
 /// Base offset that separates the code address space from the data /
 /// stack address spaces. Function-pointer values seen by user code are

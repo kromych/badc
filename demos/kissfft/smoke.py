@@ -19,6 +19,7 @@ Override the badc binary via the ``BADC`` env var (default:
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import sys
@@ -27,6 +28,13 @@ from pathlib import Path
 
 KISSFFT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = KISSFFT_DIR.parent.parent
+
+# Import the shared TU-build helpers from `demos/_tu_build.py`.
+_tu_spec = importlib.util.spec_from_file_location(
+    "_tu_build", KISSFFT_DIR.parent / "_tu_build.py"
+)
+_tu_build = importlib.util.module_from_spec(_tu_spec)
+_tu_spec.loader.exec_module(_tu_build)
 WIN = sys.platform == "win32"
 EXE_SUFFIX = ".exe" if WIN else ""
 
@@ -154,9 +162,68 @@ def main() -> int:
             print("smoke FAIL: build (-O) failed", file=sys.stderr)
             return 1
 
+        # Separate-compilation flavour: each .c through `-c`
+        # to its own .o, link the three pieces. No amalgamation.
+        tu_dir = work / "tu"
+        tu_dir.mkdir()
+        srcs = [
+            KISSFFT_DIR / "kiss_fft.c",
+            KISSFFT_DIR / "kiss_fftr.c",
+            KISSFFT_DIR / "smoke_main.c",
+        ]
+        tu_noopt = work / f"kissfft_smoke.tu{EXE_SUFFIX}"
+        tu_opt = work / f"kissfft_smoke.tu.opt{EXE_SUFFIX}"
+        for (out, opt) in [(tu_noopt, False), (tu_opt, True)]:
+            try:
+                _tu_build.build_tu_separate(
+                    badc,
+                    srcs,
+                    out,
+                    optimize=opt,
+                    defines=BUILD_DEFINES,
+                    include_paths=(KISSFFT_DIR,),
+                    force_includes=("msvc_compat.h",),
+                    work_dir=tu_dir,
+                )
+            except subprocess.CalledProcessError:
+                tag = "-O" if opt else "no-O"
+                print(f"smoke FAIL: TU build ({tag}) failed", file=sys.stderr)
+                return 1
+
+        # Archive flavour: bundle the two library sources into
+        # libkissfft.a, link smoke_main.c against it via -l.
+        ar_dir = work / "ar"
+        ar_dir.mkdir()
+        lib_srcs = [KISSFFT_DIR / "kiss_fft.c", KISSFFT_DIR / "kiss_fftr.c"]
+        driver_srcs = [KISSFFT_DIR / "smoke_main.c"]
+        ar_noopt = work / f"kissfft_smoke.ar{EXE_SUFFIX}"
+        ar_opt = work / f"kissfft_smoke.ar.opt{EXE_SUFFIX}"
+        for (out, opt) in [(ar_noopt, False), (ar_opt, True)]:
+            try:
+                _tu_build.build_tu_archive(
+                    badc,
+                    lib_srcs,
+                    driver_srcs,
+                    "kissfft",
+                    out,
+                    optimize=opt,
+                    defines=BUILD_DEFINES,
+                    include_paths=(KISSFFT_DIR,),
+                    force_includes=("msvc_compat.h",),
+                    work_dir=ar_dir,
+                )
+            except subprocess.CalledProcessError:
+                tag = "-O" if opt else "no-O"
+                print(f"smoke FAIL: archive build ({tag}) failed", file=sys.stderr)
+                return 1
+
         ok = True
-        ok &= run_and_check("no-O", smoke_noopt)
-        ok &= run_and_check("-O", smoke_opt)
+        ok &= run_and_check("amalg-no-O", smoke_noopt)
+        ok &= run_and_check("amalg--O", smoke_opt)
+        ok &= run_and_check("tu-no-O", tu_noopt)
+        ok &= run_and_check("tu--O", tu_opt)
+        ok &= run_and_check("ar-no-O", ar_noopt)
+        ok &= run_and_check("ar--O", ar_opt)
         return 0 if ok else 1
 
 

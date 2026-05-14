@@ -47,8 +47,14 @@ use super::types::{UNSIGNED_BIT, is_struct_ty, struct_id_of, struct_ptr_depth};
 pub(super) enum InitElemReloc {
     /// Plain integer constant; bytes are final.
     None,
-    /// Value is a data-segment offset; needs a DataReloc.
-    Data,
+    /// Value is a data-segment offset; needs a DataReloc. The
+    /// optional payload is the originating `Token::Glo`
+    /// symbol's index (for `&global` initializers) or `None`
+    /// for string-literal addresses where no source symbol
+    /// owns the bytes. Cross-TU link-unit assembly reads this
+    /// to convert `Some(sym)` entries against undefined
+    /// externals into `DataDataAbs64` relocations.
+    Data(Option<usize>),
     /// Value is a function bytecode PC; needs a CodeReloc. The
     /// payload is the function's symbol index, captured at parse
     /// time so the post-body fixup pass can look up the
@@ -80,11 +86,12 @@ impl Compiler {
     fn push_init_reloc(&mut self, here: usize, value: i64, reloc: InitElemReloc) {
         match reloc {
             InitElemReloc::None | InitElemReloc::Float64Bits => {}
-            InitElemReloc::Data => {
+            InitElemReloc::Data(src_sym) => {
                 self.data_relocs.push(crate::c5::program::DataReloc {
                     data_offset: here as u64,
                     target_offset: value as u64,
                 });
+                self.data_reloc_sym_idx.push(src_sym.unwrap_or(usize::MAX));
             }
             InitElemReloc::Code(sym_idx) => {
                 self.code_relocs.push(crate::c5::program::CodeReloc {
@@ -464,7 +471,7 @@ impl Compiler {
                 self.next()?;
             }
             self.data.push(0);
-            return Ok((addr, InitElemReloc::Data));
+            return Ok((addr, InitElemReloc::Data(None)));
         }
         if self.lex.tk == Token::AndOp {
             // `&global` -- address-of-global pointer init.
@@ -482,7 +489,7 @@ impl Compiler {
             }
             let off = self.symbols[target_idx].val;
             self.next()?;
-            return Ok((off, InitElemReloc::Data));
+            return Ok((off, InitElemReloc::Data(Some(target_idx))));
         }
         if self.lex.tk == Token::Id {
             let idx = self.lex.curr_id_idx;
@@ -601,7 +608,7 @@ impl Compiler {
                     off += n * stride;
                     depth += 1;
                 }
-                return Ok((off, InitElemReloc::Data));
+                return Ok((off, InitElemReloc::Data(Some(idx))));
             }
             return Err(self.compile_err(format!(
                 "identifier `{}` is not a constant-expression value",

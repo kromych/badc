@@ -42,6 +42,16 @@
 
 #include "bzlib.h"
 
+/* Provide the AssertH hook required by `BZ_NO_STDIO` builds.
+ * Upstream bzip2 leaves this symbol to the embedder (the
+ * stdio-disabled flavour can't do its own fprintf). We never
+ * expect to trip a bzip2 internal assertion in the smoke
+ * scenarios; if one fires, surface the code and exit hard. */
+void bz_internal_error(int errcode) {
+    fprintf(stderr, "bz_internal_error: %d\n", errcode);
+    exit(3);
+}
+
 /* 64 KiB feeds bzip2's 100 KiB minimum block in a single pass --
  * matches the smallest block-size knob without spilling into
  * the multi-block stitch path. Scenarios 1-3 share this size so

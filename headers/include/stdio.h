@@ -114,6 +114,13 @@ typedef struct __c5_FILE FILE;
 #pragma binding(libc::remove,    "_remove")
 #pragma binding(libc::rename,    "_rename")
 #pragma binding(libc::dlsym,     "_dlsym")
+// POSIX `popen` / `pclose` -- not in C89 but universally
+// available on macOS / BSD. A source that opens its own
+// `extern FILE *popen(const char *, const char *);` prototype
+// (sqlite3 shell.c does this) now binds through this entry
+// instead of leaving the call as an unresolved Token::Fun.
+#pragma binding(libc::popen,     "_popen")
+#pragma binding(libc::pclose,    "_pclose")
 #endif
 
 #ifdef __linux__
@@ -150,6 +157,13 @@ typedef struct __c5_FILE FILE;
 #pragma binding(libc::rename,    "rename")
 #pragma dylib(libdl_for_stdio, "libdl.so.2")
 #pragma binding(libdl_for_stdio::dlsym, "dlsym")
+// POSIX `popen` / `pclose` -- not in C89 but universally
+// available on glibc / musl. A source that opens its own
+// `extern FILE *popen(const char *, const char *);` prototype
+// (sqlite3 shell.c does this) now binds through this entry
+// instead of leaving the call as an unresolved Token::Fun.
+#pragma binding(libc::popen,     "popen")
+#pragma binding(libc::pclose,    "pclose")
 #endif
 
 #ifdef _WIN32
@@ -622,7 +636,7 @@ static char *__c5_lazy_stream(int idx) {
 // `#define sqlite3_vfprintf vfprintf` transitively follows.
 #include <c5io.h>
 
-int c5_vfprintf_FILE(FILE *out, char *fmt, va_list ap) {
+static int c5_vfprintf_FILE(FILE *out, char *fmt, va_list ap) {
     char buf[8192];
     int n;
     n = c5_vsnprintf(buf, 8192, fmt, ap);
@@ -630,7 +644,7 @@ int c5_vfprintf_FILE(FILE *out, char *fmt, va_list ap) {
     return n;
 }
 
-int c5_vprintf_stdout(char *fmt, va_list ap) {
+static int c5_vprintf_stdout(char *fmt, va_list ap) {
     return c5_vfprintf_FILE(stdout, fmt, ap);
 }
 
@@ -638,7 +652,7 @@ int c5_vprintf_stdout(char *fmt, va_list ap) {
 // the caller is responsible for sizing the buffer. Implemented
 // as a thin wrapper around c5_vsnprintf with INT_MAX as the
 // cap.
-int c5_vsprintf_unbounded(char *buf, char *fmt, va_list ap) {
+static int c5_vsprintf_unbounded(char *buf, char *fmt, va_list ap) {
     return c5_vsnprintf(buf, 0x7FFFFFFF, fmt, ap);
 }
 

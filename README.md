@@ -9,6 +9,7 @@
 `badc` (other name ideas were `betsy` and `badseed`) is a rather
 small compiler of a pretty large chunk of the C language as defined in
 the C99 standard. It used to be a bad one when the projects just started out and the name stuck.
+It supports separate translation units and has a small linker inside it as well.
 
 Its small footprint and embedded headers (which
 you can override) give a fun one-executable experience. Its codebase
@@ -154,6 +155,38 @@ safety-net check. The Mach-O, ELF, and PE paths are mirrored
 test-for-test. What native mode doesn't have: the VM's runtime
 safety net (`--track-pointers`, code-vs-data separation checks).
 Use `--interp` if you want those.
+
+### Multiple translation units
+
+A single `badc` invocation can mix `.c` source files, `.o`
+object files, and `.a` archives:
+
+```sh
+badc -c foo.c bar.c               # emits foo.o + bar.o (target-independent bytecode)
+badc -o app foo.o bar.o           # links them into a final binary
+
+badc --ar -o libfoo.a foo.c bar.c # bundles into a SysV ar(5) archive
+badc -o app main.c -L. -l foo     # link against libfoo.a, gcc-style
+```
+
+`badc` ships its own linker -- there's no `ld` / `lld` /
+`link.exe` dependency. Object files are an ELF wrapper around
+c5 bytecode (target-independent at `.o` time; native lowering
+happens at link), with standard `.symtab` / `.strtab` /
+`.rela.*` for cross-TU symbol resolution and badc-specific
+`.badc.text` / `.badc.data` / `.badc.tdata` / `.badc.tbss` /
+`.badc.meta` sections carrying the payload. Archives are
+ar(5) with a SysV-style symbol index. The `linker` cargo
+feature -- on by default -- gates the entire pipeline; library
+consumers that don't need multi-TU artifacts can opt out via
+`default-features = false, features = ["std"]` to keep the
+footprint slim.
+
+Storage-class linkage follows C99 6.2.2: `static` at file
+scope is internal, bare or `extern` declarations are external,
+and `extern T x;` with no defining declaration becomes an
+unresolved external that the linker tries to satisfy from the
+remaining objects or archive members.
 
 ### What is supported
 

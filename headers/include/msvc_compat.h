@@ -143,6 +143,18 @@
 #pragma binding(msvcrt::memset,   "memset")
 #pragma binding(msvcrt::memcmp,   "memcmp")
 #pragma binding(msvcrt::exit,     "exit")
+// POSIX `getpid()`: sqlite3.c reaches for it on Windows
+// without including unistd.h. Rather than bind through msvcrt
+// (where the export is `_getpid` and the legacy arm64
+// msvcrt.dll skipped that name), route through kernel32's
+// `GetCurrentProcessId`, which is universally available.
+// windows.h binds the same name via its own pragma; both
+// declarations resolve to the same kernel32 Sys symbol.
+#pragma binding(kernel32::GetCurrentProcessId, "GetCurrentProcessId")
+int GetCurrentProcessId(void);
+static int getpid(void) {
+    return (int)GetCurrentProcessId();
+}
 
 // NOTE: `_CRT_INSECURE_DEPRECATE` / `_CRT_NONSTDC_DEPRECATE` /
 // `_CRT_OBSOLETE` / `_CRT_DEPRECATE_TEXT` are deliberately NOT

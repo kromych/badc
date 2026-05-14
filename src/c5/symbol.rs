@@ -121,4 +121,57 @@ pub(crate) struct Symbol {
     /// distinguish `int f(VOID)` (no parameters) from
     /// `int f(BYTE)` (one byte-typed parameter).
     pub is_void_typedef: bool,
+
+    /// C99 6.2.2 linkage class of a file-scope identifier.
+    /// `Linkage::None` for block-scope names; `Linkage::Internal`
+    /// for `static`-qualified file-scope names; `Linkage::External`
+    /// for everything else at file scope. Used by the linker
+    /// (when the `linker` feature is enabled) to decide whether
+    /// this symbol participates in the cross-translation-unit
+    /// symbol table -- internal-linkage names stay private to the
+    /// translation unit. Inside a single TU compile this field is
+    /// informational only.
+    pub linkage: Linkage,
+
+    /// True for a `Token::Fun` whose body has been emitted into
+    /// `Compiler::text`, or a `Token::Glo` whose storage has been
+    /// allocated in `Compiler::data` / `Compiler::tls_data`.
+    /// False for forward prototypes (`int foo();`) and for
+    /// `extern T x;` declarations whose definition lives in
+    /// another translation unit -- those become undefined-symbol
+    /// references in the link-unit symbol table.
+    pub defined_here: bool,
+
+    /// True for a file-scope declaration that explicitly carried
+    /// the `extern` storage-class keyword. Combined with
+    /// `defined_here == false`, it distinguishes an extern
+    /// declaration (a forward reference satisfied by another TU)
+    /// from a tentative definition that the parser is still
+    /// waiting to resolve.
+    pub is_extern_decl: bool,
+}
+
+/// C99 6.2.2 linkage class. `None` is the default for block-scope
+/// declarations and for the symbol-table predefines; file-scope
+/// declarations resolve to one of `Internal` (`static`) or
+/// `External` (everything else, including bare declarations and
+/// `extern T x;`). Materialised onto every symbol so the linker
+/// can decide whether to surface the name in the cross-TU symbol
+/// table or keep it private.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Linkage {
+    /// No linkage -- block-scope names, function parameters,
+    /// per-target header predefines, and any symbol the linker
+    /// has no business looking at. The default for a freshly-
+    /// constructed `Symbol`.
+    #[default]
+    None,
+    /// `static` file-scope identifiers. Visible only within the
+    /// containing translation unit; never emitted into the
+    /// link-unit symbol table.
+    Internal,
+    /// Unqualified file-scope identifiers and `extern T x;`
+    /// references. Visible to other translation units through
+    /// the link-unit symbol table.
+    External,
 }

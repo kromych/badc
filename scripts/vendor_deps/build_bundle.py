@@ -100,6 +100,18 @@ SOURCES = [
         upstream_sha="31c1ad37456438565541f4919958214b6e762fb4",
         sha_kind="git",
     ),
+    Source(
+        # chibicc -- Rui Ueyama's small self-hosting C compiler.
+        # No versioned releases; the project's last commit on `main`
+        # is the canonical "release". Version embeds the commit's
+        # author date for provenance.
+        name="chibicc",
+        version="20201207",
+        url="https://github.com/rui314/chibicc/archive/90d1f7f199cc55b13c7fdb5839d1409806633fdb.zip",
+        ext=".zip",
+        upstream_sha="90d1f7f199cc55b13c7fdb5839d1409806633fdb",
+        sha_kind="git",
+    ),
 ]
 
 

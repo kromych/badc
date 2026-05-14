@@ -58,6 +58,21 @@ pub(crate) fn fmt_internal_err(message: &str) -> String {
     format!("error: internal compiler error: {message}")
 }
 
+/// Helper: produce an `error: <message>` string for user-level
+/// link / driver errors (undefined references, no input files,
+/// malformed archives). These describe a problem with the user's
+/// command line or sources -- not a c5 bug -- so they MUST NOT
+/// carry the `internal compiler error:` marker. Mirrors ld /
+/// gold's "error:" prefix. Gated to the `linker` feature -- the
+/// only caller lives in the linker module, so under
+/// `--no-default-features --lib` this helper would otherwise
+/// trip the dead-code lint.
+#[cfg(feature = "linker")]
+pub(crate) fn fmt_link_err(message: &str) -> String {
+    use alloc::format;
+    format!("error: {message}")
+}
+
 /// Build the trailing `ctx: [pc-N]=Op ...` window the ICE
 /// helpers append. Decodes each preceding slot as an `Op` when
 /// it falls inside the enum range, otherwise emits `?<raw>` so a

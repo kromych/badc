@@ -48,6 +48,8 @@
 #pragma binding(libc::dup2,      "_dup2")
 #pragma binding(libc::pipe,      "_pipe")
 #pragma binding(libc::fork,      "_fork")
+#pragma binding(libc::execvp,    "_execvp")
+#pragma binding(libc::_exit,     "__exit")
 #pragma binding(libc::fchmod,    "_fchmod")
 #pragma binding(libc::fchown,    "_fchown")
 #pragma binding(libc::utimes,    "_utimes")
@@ -104,6 +106,8 @@
 #pragma binding(libc::dup2,      "dup2")
 #pragma binding(libc::pipe,      "pipe")
 #pragma binding(libc::fork,      "fork")
+#pragma binding(libc::execvp,    "execvp")
+#pragma binding(libc::_exit,     "_exit")
 #pragma binding(libc::fchmod,    "fchmod")
 #pragma binding(libc::fchown,    "fchown")
 #pragma binding(libc::utimes,    "utimes")
@@ -171,6 +175,11 @@ int dup(int fd);
 int dup2(int oldfd, int newfd);
 int pipe(int *fds);
 int fork();
+int execvp(char *file, char **argv);
+// `_exit` skips the libc atexit / fflush chain. Programs use it
+// after a failed exec in the child branch of fork+exec to avoid
+// running the parent's exit handlers a second time.
+int _exit(int status);
 int fchmod(int fd, int mode);
 int fchown(int fd, int uid, int gid);
 int utimes(char *path, char *times);

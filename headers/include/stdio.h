@@ -114,6 +114,13 @@ typedef struct __c5_FILE FILE;
 #pragma binding(libc::remove,    "_remove")
 #pragma binding(libc::rename,    "_rename")
 #pragma binding(libc::dlsym,     "_dlsym")
+// POSIX `open_memstream` -- creates a FILE* backed by a heap
+// buffer the libc grows as the program writes through it. The
+// caller passes (char **buf, size_t *sz) addresses that get
+// updated to the current buffer + length on every `fflush` /
+// `fclose`. Available on macOS 10.13+ and every modern glibc /
+// musl; absent from msvcrt.
+#pragma binding(libc::open_memstream, "_open_memstream")
 // POSIX `popen` / `pclose` -- not in C89 but universally
 // available on macOS / BSD. A source that opens its own
 // `extern FILE *popen(const char *, const char *);` prototype
@@ -157,6 +164,9 @@ typedef struct __c5_FILE FILE;
 #pragma binding(libc::rename,    "rename")
 #pragma dylib(libdl_for_stdio, "libdl.so.2")
 #pragma binding(libdl_for_stdio::dlsym, "dlsym")
+// POSIX `open_memstream` -- same shape as on macOS, exported
+// directly by glibc / musl.
+#pragma binding(libc::open_memstream, "open_memstream")
 // POSIX `popen` / `pclose` -- not in C89 but universally
 // available on glibc / musl. A source that opens its own
 // `extern FILE *popen(const char *, const char *);` prototype
@@ -345,6 +355,12 @@ int clearerr(FILE *stream);
 int setvbuf(FILE *stream, char *buf, int mode, int size);
 int remove(char *path);
 int rename(char *old_path, char *new_path);
+#ifndef _WIN32
+// POSIX open_memstream(3). Caller passes addresses of (char *,
+// size_t) slots the libc updates as bytes are written; the
+// `size_t` is c5's `int`-shaped machine word.
+FILE *open_memstream(char **bufp, int *sizep);
+#endif
 #ifdef _WIN32
 FILE *_wfopen(unsigned short *path, unsigned short *mode);
 FILE *_wpopen(unsigned short *cmd, unsigned short *mode);

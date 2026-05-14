@@ -89,6 +89,7 @@ typedef long clock_t;
 #pragma binding(libc::localtime_r,   "_localtime_r")
 #pragma binding(libc::gmtime,        "_gmtime")
 #pragma binding(libc::gmtime_r,      "_gmtime_r")
+#pragma binding(libc::ctime_r,       "_ctime_r")
 #pragma binding(libc::strftime,      "_strftime")
 #endif
 
@@ -104,6 +105,7 @@ typedef long clock_t;
 #pragma binding(libc::localtime_r,   "localtime_r")
 #pragma binding(libc::gmtime,        "gmtime")
 #pragma binding(libc::gmtime_r,      "gmtime_r")
+#pragma binding(libc::ctime_r,       "ctime_r")
 #pragma binding(libc::strftime,      "strftime")
 #endif
 
@@ -132,4 +134,7 @@ struct tm *localtime(int *t);
 struct tm *localtime_r(int *t, struct tm *result);
 struct tm *gmtime(int *t);
 struct tm *gmtime_r(int *t, struct tm *result);
+// POSIX `ctime_r` -- 26-byte timestamp string written into the
+// caller's buffer; returns the buffer pointer or NULL on error.
+char *ctime_r(int *t, char *buf);
 int strftime(char *buf, int max, char *fmt, struct tm *tm);

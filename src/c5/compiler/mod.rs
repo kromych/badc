@@ -607,6 +607,16 @@ pub struct Compiler {
     /// real function body lands so they never split a caller
     /// mid-emission.
     sys_trampoline_sym: alloc::collections::BTreeMap<usize, usize>,
+
+    /// Per-TU counter for anonymous compound-literal backing
+    /// symbols. C99 6.5.2.5 compound literals at file scope
+    /// (`Type *p = &(Type){ ... };`) need a synthetic symbol so the
+    /// linker can resolve the `&` reloc; the name is
+    /// `__compound.<n>` with `n` incrementing on every literal.
+    /// The same counter feeds block-scope compound literals that
+    /// spill to internal-linkage storage. Reset implicitly via
+    /// `Compiler::default()` on every fresh compile.
+    next_compound_literal_id: usize,
 }
 
 impl Compiler {
@@ -762,6 +772,7 @@ impl Compiler {
             sys_trampoline_sym: alloc::collections::BTreeMap::new(),
             glo_imm_refs: alloc::vec::Vec::new(),
             data_reloc_sym_idx: alloc::vec::Vec::new(),
+            next_compound_literal_id: 0,
         }
     }
 

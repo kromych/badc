@@ -848,6 +848,23 @@ impl Compiler {
                         let elements = self.collect_array_initializer(ty)?;
                         let final_size = elements.len() as i64;
                         self.symbols[id_idx].array_size = final_size;
+                        // Patch the deferred-outer placeholder in
+                        // `array_dims[0]` to the resolved row count.
+                        // Layout: total elements = outer * inner-dims-product,
+                        // so the outermost count is final_size /
+                        // product(dims[1..]).
+                        if let Some(first) = self.symbols[id_idx].array_dims.first().copied()
+                            && first == 0
+                        {
+                            let inner_product: i64 = self.symbols[id_idx]
+                                .array_dims
+                                .iter()
+                                .skip(1)
+                                .product();
+                            if inner_product > 0 {
+                                self.symbols[id_idx].array_dims[0] = final_size / inner_product;
+                            }
+                        }
                         let total_bytes = (self.size_of_type(ty) as i64) * final_size;
                         let aligned = ((total_bytes + 7) / 8) * 8;
                         // On a tentative-merge path the prior

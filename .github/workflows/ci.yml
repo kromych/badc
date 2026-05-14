@@ -206,21 +206,23 @@ jobs:
         # deflate. Runs the same three build flavours so the
         # bzip2 library bundles correctly through `--ar`.
         run: python demos/bzip2/smoke.py
-      - name: chibicc bringup smoke (informational)
+      - name: chibicc bringup smoke
         # chibicc is the substantial multi-TU exerciser for the
-        # cross-TU linker. Bringup is in progress -- expect a
-        # subset of TUs to compile, the rest to surface their
-        # blockers. The harness defaults to exit-2 (informational)
-        # while bringup is open; set `BADC_CHIBICC_STRICT=1` once
-        # every TU is green to gate CI on regressions.
-        #
-        # `shell: bash` is required: Windows runners default to
-        # PowerShell, where `$?` is a boolean (False/True) rather
-        # than the integer exit code, so `test $? -eq 2` rejects
-        # `False` as `invalid integer`. Bash on Windows comes from
-        # the Git-for-Windows install on every windows-* runner.
+        # cross-TU linker. All nine TUs compile, the multi-TU link
+        # emits a working chibicc binary, and that binary produces
+        # byte-identical assembly to a gcc-built reference on the
+        # self-host sample suite (see `self_host.py`, gated to
+        # Linux x86_64).
         shell: bash
-        run: python demos/chibicc/smoke.py || test $? -eq 2
+        run: python demos/chibicc/smoke.py
+      - name: chibicc self-host parity (Linux x86_64 only)
+        # Builds chibicc twice (gcc + badc), compares the .s
+        # output on a curated sample suite, and asserts the
+        # linked binaries return the same exit code. Skipped
+        # automatically on non-Linux-x86_64 runners (chibicc
+        # emits SysV x86_64 GAS only).
+        shell: bash
+        run: python demos/chibicc/self_host.py || test $? -eq 2
       - name: stb header-only smoke
         # The densest demo: a single TU pulls in six stb_*.h
         # headers (stb_sprintf, stb_perlin, stb_image_write,

@@ -764,6 +764,46 @@ impl Lexer {
                 }
                 if val == 0
                     && self.pos < self.src.len()
+                    && (self.src[self.pos] as char == 'b' || self.src[self.pos] as char == 'B')
+                {
+                    let mark = self.pos;
+                    self.pos += 1;
+                    // C23 / GCC extension: `0b`/`0B` prefixes a binary
+                    // integer literal. Accumulate via wrapping_mul so a
+                    // 64-bit pattern (`0b1...64...`) doesn't trip
+                    // debug-build overflow detection.
+                    let mut consumed = 0;
+                    while self.pos < self.src.len() {
+                        let nc = self.src[self.pos];
+                        let digit = match nc {
+                            b'0' => 0i64,
+                            b'1' => 1i64,
+                            _ => break,
+                        };
+                        val = val.wrapping_mul(2).wrapping_add(digit);
+                        self.pos += 1;
+                        consumed += 1;
+                    }
+                    if consumed == 0 {
+                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                            &format!(
+                                "{}: binary literal `0{}` has no digits",
+                                self.line,
+                                char::from(self.src[mark])
+                            ),
+                        )));
+                    }
+                    while self.pos < self.src.len()
+                        && matches!(self.src[self.pos], b'u' | b'U' | b'l' | b'L')
+                    {
+                        self.pos += 1;
+                    }
+                    self.ival = val;
+                    self.tk = Tok(Token::Num as i64);
+                    return Ok(());
+                }
+                if val == 0
+                    && self.pos < self.src.len()
                     && (self.src[self.pos] as char == 'x' || self.src[self.pos] as char == 'X')
                 {
                     self.pos += 1;

@@ -2,20 +2,19 @@
 """Build-only smoke for the chibicc bringup.
 
 chibicc is the substantial multi-TU exerciser for badc's cross-TU
-linker. Bringup is in progress (see ``README.md`` for the per-TU
-status). This harness walks each upstream `.c` file in isolation,
-running ``badc -c`` on it and recording compile / blocker
-status, then attempts the full multi-TU link only when every TU
-compiled cleanly.
+linker. This harness walks each upstream `.c` file in isolation,
+running ``badc -c`` on it and recording compile state, then runs
+the multi-TU link to produce a working chibicc binary.
 
 Exit codes:
   0  -- every TU compiled AND the multi-TU link succeeded
-  1  -- a TU that previously compiled now regresses
-  2  -- expected-blocker TUs are still blocked (informational)
+  1  -- a TU that previously compiled now regresses, OR the
+        link failed
 
-The ``BADC_CHIBICC_STRICT`` env var, when set to a non-empty
-value, escalates the informational-blockers exit (2) to a hard
-failure (1). Used to gate the CI lane once bringup catches up.
+The matching parity check (``self_host.py``) compares the badc-
+built chibicc against a gcc-built reference on a curated sample
+suite, asserting byte-identical assembly and matching exit
+codes. Linux x86_64 only.
 
 Override the badc binary via ``BADC`` (default:
 ``target/release/badc[.exe]`` next to the repo root).
@@ -41,13 +40,13 @@ WIN = sys.platform == "win32"
 TU_STATE = {
     "hashmap.c": True,
     "codegen.c": True,
-    "tokenize.c": False,    # blocker: strncasecmp
-    "strings.c": False,     # blocker: open_memstream
-    "preprocess.c": False,  # blocker: strndup
-    "main.c": False,        # blocker: dirname
-    "unicode.c": False,     # blocker: 0b... binary literals
-    "type.c": False,        # blocker: compound literals
-    "parse.c": False,       # blocker: compound literals
+    "tokenize.c": True,
+    "strings.c": True,
+    "preprocess.c": True,
+    "main.c": True,
+    "unicode.c": True,
+    "type.c": True,
+    "parse.c": True,
 }
 
 
@@ -160,8 +159,11 @@ def main() -> int:
         print(f"  link OK   -> {out_path}")
         return 0
 
-    strict = bool(os.environ.get("BADC_CHIBICC_STRICT"))
-    return 1 if strict else 2
+    # An expected-green TU has gone red. The block above already
+    # surfaced the regression details via `regressions`; reaching
+    # here means a previously-blocked TU is still blocked, which
+    # is the final guard before the link step.
+    return 1
 
 
 if __name__ == "__main__":

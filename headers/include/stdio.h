@@ -128,6 +128,10 @@ typedef struct __c5_FILE FILE;
 // instead of leaving the call as an unresolved Token::Fun.
 #pragma binding(libc::popen,     "_popen")
 #pragma binding(libc::pclose,    "_pclose")
+// POSIX `fdopen` -- wraps an already-open file descriptor as a
+// `FILE *` stream. Used by archive / pipe consumers that get a
+// raw fd from a system call and need stdio-level formatting.
+#pragma binding(libc::fdopen,    "_fdopen")
 #endif
 
 #ifdef __linux__
@@ -174,6 +178,10 @@ typedef struct __c5_FILE FILE;
 // instead of leaving the call as an unresolved Token::Fun.
 #pragma binding(libc::popen,     "popen")
 #pragma binding(libc::pclose,    "pclose")
+// POSIX `fdopen` -- wraps an already-open file descriptor as a
+// `FILE *` stream. Used by archive / pipe consumers that get a
+// raw fd from a system call and need stdio-level formatting.
+#pragma binding(libc::fdopen,    "fdopen")
 #endif
 
 #ifdef _WIN32
@@ -312,6 +320,9 @@ typedef struct __c5_FILE FILE;
 #pragma binding(msvcrt::_dup,           "_dup")
 #pragma binding(msvcrt::_dup2,          "_dup2")
 #pragma binding(msvcrt::_fdopen,        "_fdopen")
+// POSIX-style `fdopen` -- msvcrt only exposes the underscored
+// form, so the portable spelling binds to the same entry point.
+#pragma binding(msvcrt::fdopen,         "_fdopen")
 #pragma binding(msvcrt::_byteswap_ulong,  "_byteswap_ulong")
 #pragma binding(msvcrt::_byteswap_uint64, "_byteswap_uint64")
 #pragma binding(msvcrt::_byteswap_ushort, "_byteswap_ushort")
@@ -495,6 +506,10 @@ int   _getpid();
 int   _dup(int fd);
 int   _dup2(int fd, int newfd);
 FILE *_fdopen(int fd, char *mode);
+// Portable POSIX-style spelling for the same operation -- routed
+// through `_fdopen` on Windows because msvcrt does not export the
+// non-underscored name.
+FILE *fdopen(int fd, char *mode);
 unsigned int       _byteswap_ulong(unsigned int v);
 unsigned long long _byteswap_uint64(unsigned long long v);
 unsigned short     _byteswap_ushort(unsigned short v);

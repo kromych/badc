@@ -56,6 +56,7 @@
 #pragma binding(libc::srand,   "_srand")
 #pragma binding(libc::atexit,  "_atexit")
 #pragma binding(libc::strtoul, "_strtoul")
+#pragma binding(libc::strtoull, "_strtoull")
 #pragma binding(libc::mkstemp, "_mkstemp")
 #pragma binding(libc::mkdtemp, "_mkdtemp")
 #pragma binding(libc::mktemp,  "_mktemp")
@@ -99,6 +100,7 @@
 // for "register on the main program's exit chain."
 #pragma binding(libc::__cxa_atexit, "__cxa_atexit")
 #pragma binding(libc::strtoul, "strtoul")
+#pragma binding(libc::strtoull, "strtoull")
 #pragma binding(libc::mkstemp, "mkstemp")
 #pragma binding(libc::mkdtemp, "mkdtemp")
 #pragma binding(libc::mktemp,  "mktemp")
@@ -121,6 +123,9 @@
 #pragma binding(msvcrt::strtol,  "strtol")
 // MSVC has _strtoi64; strtoll itself only landed in UCRT.
 #pragma binding(msvcrt::strtoll, "_strtoi64")
+// Matching unsigned form -- `_strtoui64` is msvcrt's spelling for
+// what every other libc calls `strtoull`.
+#pragma binding(msvcrt::strtoull, "_strtoui64")
 #pragma binding(msvcrt::strtod,  "strtod")
 // msvcrt.dll has no `strtold`; UCRT exports it but the
 // universally-available CRT here does not. Programs that
@@ -184,6 +189,10 @@ int __cxa_atexit(int *handler, char *arg, char *dso);
 int atexit(int *handler);
 #endif
 int strtoul(char *s, char **endp, int base);
+// C99 7.20.1.4: `strtoull` parses an unsigned long long. The c5
+// dialect stores integers as 64-bit values regardless of width
+// so the prototype returns `int` (also 64-bit on stack).
+int strtoull(char *s, char **endp, int base);
 int mkstemp(char *templ);
 char *mkdtemp(char *templ);
 char *mktemp(char *templ);

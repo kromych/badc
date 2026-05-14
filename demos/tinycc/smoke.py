@@ -64,7 +64,7 @@ HOST_MATRIX = {
             "x86_64-link.c",
             "i386-asm.c",
         ),
-        "cpp_defs": ("_GNU_SOURCE",),
+        "cpp_defs": ("_GNU_SOURCE", "ONE_SOURCE=0"),
     },
     ("Linux", "aarch64"): {
         "target_macros": ("TCC_TARGET_ARM64",),
@@ -82,7 +82,7 @@ HOST_MATRIX = {
             "arm64-link.c",
             "arm64-asm.c",
         ),
-        "cpp_defs": ("_GNU_SOURCE",),
+        "cpp_defs": ("_GNU_SOURCE", "ONE_SOURCE=0"),
     },
     ("Darwin", "arm64"): {
         "target_macros": ("TCC_TARGET_ARM64", "TCC_TARGET_MACHO"),
@@ -101,7 +101,7 @@ HOST_MATRIX = {
             "arm64-asm.c",
             "tccmacho.c",
         ),
-        "cpp_defs": (),
+        "cpp_defs": ("ONE_SOURCE=0",),
     },
     ("Windows", "AMD64"): {
         "target_macros": ("TCC_TARGET_X86_64", "TCC_TARGET_PE"),
@@ -120,7 +120,7 @@ HOST_MATRIX = {
             "i386-asm.c",
             "tccpe.c",
         ),
-        "cpp_defs": (),
+        "cpp_defs": ("ONE_SOURCE=0",),
     },
     ("Windows", "ARM64"): {
         "target_macros": ("TCC_TARGET_ARM64", "TCC_TARGET_PE"),
@@ -139,7 +139,7 @@ HOST_MATRIX = {
             "arm64-asm.c",
             "tccpe.c",
         ),
-        "cpp_defs": (),
+        "cpp_defs": ("ONE_SOURCE=0",),
     },
 }
 
@@ -152,15 +152,15 @@ HOST_MATRIX = {
 # Every TU starts at ``False`` -- entries flip to ``True`` as the
 # corresponding c5 gap closes.
 TU_STATE = {
-    "tcc.c": False,
-    "libtcc.c": False,
-    "tccpp.c": False,
+    "tcc.c": True,
+    "libtcc.c": True,
+    "tccpp.c": True,
     "tccgen.c": False,
     "tccelf.c": False,
-    "tccasm.c": False,
+    "tccasm.c": True,
     "tccdbg.c": False,
     "tccrun.c": False,
-    "tcctools.c": False,
+    "tcctools.c": True,
     "x86_64-gen.c": False,
     "x86_64-link.c": False,
     "i386-asm.c": False,
@@ -168,7 +168,7 @@ TU_STATE = {
     "arm64-link.c": True,
     "arm64-asm.c": True,
     "tccpe.c": False,
-    "tccmacho.c": False,
+    "tccmacho.c": True,
 }
 
 
@@ -194,7 +194,12 @@ def synthesize_config_h(target_macros: tuple[str, ...]) -> str:
     ]
     for m in target_macros:
         lines.append(f"#define {m} 1")
-    lines.append("#define CONFIG_TCC_PREDEFS 1")
+    # CONFIG_TCC_PREDEFS controls whether the predefs header is
+    # baked into the binary as a generated string (`tccdefs_.h`,
+    # emitted by an upstream support script the demo does not
+    # ship) or loaded from `<tccdefs.h>` at runtime via -isystem.
+    # The runtime path keeps the demo self-contained.
+    lines.append("#define CONFIG_TCC_PREDEFS 0")
     # Disable the threading semaphore. CONFIG_TCC_SEMLOCK=1 pulls in
     # `<dispatch/dispatch.h>` on macOS, `<semaphore.h>` on Linux, and
     # `CRITICAL_SECTION` on Windows -- none of which c5 ships today.

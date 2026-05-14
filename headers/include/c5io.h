@@ -49,7 +49,7 @@
 // `base` is 10 or 16; non-decimal bases mask off the sign bit each
 // step so a negative i64 prints as its bit pattern rather than as
 // a signed magnitude.
-int c5_emit_digits(char *buf, int end, int val, int base) {
+static int c5_emit_digits(char *buf, int end, int val, int base) {
     int i;
     int d;
     i = end;
@@ -77,7 +77,7 @@ int c5_emit_digits(char *buf, int end, int val, int base) {
     return i;
 }
 
-int c5_emit_int(int fd, int val) {
+static int c5_emit_int(int fd, int val) {
     char *buf;
     int i;
     int neg;
@@ -99,7 +99,7 @@ int c5_emit_int(int fd, int val) {
     return n;
 }
 
-int c5_emit_hex(int fd, int val) {
+static int c5_emit_hex(int fd, int val) {
     char *buf;
     int i;
     int n;
@@ -114,7 +114,7 @@ int c5_emit_hex(int fd, int val) {
 // %p: always 0x + 16 hex digits, zero-padded. Pointers on c5's
 // 64-bit targets fit in 16 nibbles; fixed width keeps output
 // columns aligned across calls.
-int c5_emit_ptr(int fd, int val) {
+static int c5_emit_ptr(int fd, int val) {
     char *buf;
     int i;
     int d;
@@ -134,7 +134,7 @@ int c5_emit_ptr(int fd, int val) {
     return 18;
 }
 
-int c5_emit_str(int fd, char *s) {
+static int c5_emit_str(int fd, char *s) {
     int n;
     if (s == 0) {
         write(fd, "(null)", 6);
@@ -146,7 +146,7 @@ int c5_emit_str(int fd, char *s) {
     return n;
 }
 
-int c5_vfprintf(int fd, char *fmt, va_list ap) {
+static int c5_vfprintf(int fd, char *fmt, va_list ap) {
     int total;
     int i;
     char c;
@@ -215,7 +215,7 @@ int c5_vfprintf(int fd, char *fmt, va_list ap) {
     return total;
 }
 
-int c5_vprintf(char *fmt, va_list ap) {
+static int c5_vprintf(char *fmt, va_list ap) {
     return c5_vfprintf(STDOUT_FILENO, fmt, ap);
 }
 
@@ -224,13 +224,13 @@ int c5_vprintf(char *fmt, va_list ap) {
 // NUL), but ALWAYS advance `*cursor` so the final value reflects
 // the would-have-been-written length per snprintf semantics.
 // Pass `size <= 0` to skip writes entirely (length-only mode).
-int c5_buf_putc(char *buf, int size, int *cursor, int c) {
+static int c5_buf_putc(char *buf, int size, int *cursor, int c) {
     if (size > 0 && *cursor + 1 < size) buf[*cursor] = (char)c;
     *cursor = *cursor + 1;
     return 1;
 }
 
-int c5_buf_puts(char *buf, int size, int *cursor, char *s) {
+static int c5_buf_puts(char *buf, int size, int *cursor, char *s) {
     int n;
     if (s == 0) s = "(null)";
     n = 0;
@@ -263,7 +263,7 @@ int c5_buf_puts(char *buf, int size, int *cursor, char *s) {
 // Returns the number of bytes that would have been written (=
 // the strlen of the unbounded result), matching libc vsnprintf:
 // callers compare against `size` to detect truncation.
-int c5_vsnprintf(char *buf, int size, char *fmt, va_list ap) {
+static int c5_vsnprintf(char *buf, int size, char *fmt, va_list ap) {
     int cursor;
     int i;
     int j;

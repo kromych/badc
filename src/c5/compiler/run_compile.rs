@@ -179,8 +179,7 @@ impl Compiler {
                 // needs the `array_dims` chain and is out of
                 // scope here; the single-dim case is the common
                 // one and is what the immediate fix unblocks.
-                let typedef_dim =
-                    core::mem::take(&mut self.pending.typedef_base_array_size);
+                let typedef_dim = core::mem::take(&mut self.pending.typedef_base_array_size);
                 if typedef_dim > 0 && array_size == 0 {
                     array_size = typedef_dim;
                 }

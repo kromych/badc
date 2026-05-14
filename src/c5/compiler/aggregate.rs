@@ -394,16 +394,14 @@ impl Compiler {
                     break;
                 }
 
-                let (id_idx, field_ty, mut field_array_size) =
-                    self.parse_declarator(field_base)?;
+                let (id_idx, field_ty, mut field_array_size) = self.parse_declarator(field_base)?;
                 // A typedef whose alias is an array contributes its
                 // dimension when the declarator did not already
                 // supply one (`jmp_buf b;` -> `long b[64];`). A
                 // declarator that *did* spell its own dimension
                 // takes precedence and the typedef count drops on
                 // the floor; the explicit form is unambiguous.
-                let typedef_dim =
-                    core::mem::take(&mut self.pending.typedef_base_array_size);
+                let typedef_dim = core::mem::take(&mut self.pending.typedef_base_array_size);
                 if typedef_dim > 0 && field_array_size == 0 {
                     field_array_size = typedef_dim;
                 }

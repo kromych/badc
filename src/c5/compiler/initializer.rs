@@ -726,8 +726,7 @@ impl Compiler {
             } else if field.array_size > 0 && self.lex.tk == '{' {
                 self.next()?;
                 let elem_size = self.size_of_type(field.ty);
-                let elem_is_struct =
-                    is_struct_ty(field.ty) && struct_ptr_depth(field.ty) == 0;
+                let elem_is_struct = is_struct_ty(field.ty) && struct_ptr_depth(field.ty) == 0;
                 let elem_sid = if elem_is_struct {
                     Some(struct_id_of(field.ty))
                 } else {

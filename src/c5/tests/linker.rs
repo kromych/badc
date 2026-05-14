@@ -94,6 +94,14 @@ fn unresolved_external_function_errors_cleanly() {
         msg.contains("undefined reference") && msg.contains("foo"),
         "unexpected error message: {msg}"
     );
+    // The message MUST NOT carry the `internal compiler error:`
+    // marker -- undefined externs are a user-level link error,
+    // not a c5 bug. Regression for the polish item that split
+    // `link_err` away from `err()` in the linker.
+    assert!(
+        !msg.contains("internal compiler error"),
+        "undefined-reference diagnostic must not be tagged as ICE: {msg}"
+    );
 }
 
 #[test]

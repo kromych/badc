@@ -93,7 +93,7 @@ pub fn link_units(
     options: LinkOptions,
 ) -> Result<Program, C5Error> {
     if units.is_empty() {
-        return Err(err("no input objects to link"));
+        return Err(link_err("no input objects to link"));
     }
 
     // Archive pull-in. Iterate until no new members are added.
@@ -111,7 +111,7 @@ pub fn link_units(
                 for ar in archives {
                     if let Some(mem) = find_defining_member(&ar.members, needed)? {
                         units.push(read_object(&mem.bytes).map_err(|e| {
-                            err(&format!(
+                            link_err(&format!(
                                 "failed to parse archive `{}` member `{}`: {}",
                                 ar.path, mem.name, e
                             ))
@@ -136,7 +136,7 @@ pub fn link_units(
     undef_remaining.sort();
     if !undef_remaining.is_empty() {
         let names: Vec<String> = undef_remaining.into_iter().take(20).cloned().collect();
-        return Err(err(&format!(
+        return Err(link_err(&format!(
             "undefined reference to: {}",
             names.join(", ")
         )));
@@ -186,7 +186,7 @@ fn find_defining_member<'a>(
 ) -> Result<Option<&'a ArchiveMember>, C5Error> {
     for m in members {
         let unit = read_object(&m.bytes).map_err(|e| {
-            err(&format!(
+            link_err(&format!(
                 "failed to parse archive member `{}`: {}",
                 m.name, e
             ))
@@ -850,12 +850,24 @@ fn resolve_entry_pc(
     // Shared-library output may legitimately have no main; the
     // caller decides whether to require one. For now we report
     // the same diagnostic the single-TU path uses.
-    Err(err(&format!(
+    Err(link_err(&format!(
         "{}() not defined",
         preferred.first().map(|s| s.as_str()).unwrap_or("main")
     )))
 }
 
+/// User-level link diagnostic (undefined reference, no inputs,
+/// malformed archive, ...). Routed through the `error:` prefix
+/// without the `internal compiler error:` marker so consumers
+/// don't misread a missing extern as a c5 bug.
+fn link_err(msg: &str) -> C5Error {
+    C5Error::Compile(crate::c5::error::fmt_link_err(msg))
+}
+
+/// Genuine internal-consistency violation in the linker
+/// (dangling operand, reloc location out of range, non-op word in
+/// a TU's text segment). These are c5 bugs surfaced through the
+/// link path; keep the ICE marker.
 fn err(msg: &str) -> C5Error {
     C5Error::Compile(crate::c5::error::fmt_internal_err(msg))
 }

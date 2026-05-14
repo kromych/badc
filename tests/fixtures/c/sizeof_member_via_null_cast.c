@@ -18,7 +18,9 @@ struct Stab_Sym {
 
 struct Nested {
     struct {
-        long deep;
+        // long long is 8 bytes on every supported target;
+        // `long` would be 4 bytes on Windows LLP64.
+        long long deep;
     } inner;
 };
 

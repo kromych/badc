@@ -157,44 +157,17 @@ impl Compiler {
             self.next()?;
             if self.lex.tk == '(' {
                 self.next()?;
-                // GCC `__builtin___clear_cache(begin, end)` and the
-                // `__clear_cache` alias are runtime hints to flush
-                // the instruction cache over a byte range. macOS
-                // aarch64 and modern Linux x86_64 / aarch64 maintain
-                // coherency automatically across the mprotect +
-                // jit-write-protect sequence c5 emits, so the call
-                // has no effect on a c5-produced binary. Recognise
-                // the spellings here, evaluate every argument for
-                // side effects, and emit nothing for the call
-                // itself. The result type is `void` per the C
-                // signature; c5 reports `int` and zero so an
-                // enclosing expression has a value to discard.
-                let is_noop_builtin = matches!(
-                    self.symbols[id_idx].name.as_str(),
-                    "__clear_cache" | "__builtin___clear_cache"
-                );
-                if is_noop_builtin {
-                    if self.lex.tk != ')' {
-                        loop {
-                            self.expr(Token::Assign as i64)?;
-                            if self.lex.tk == ',' {
-                                self.next()?;
-                            } else {
-                                break;
-                            }
-                        }
-                    }
-                    if self.lex.tk != ')' {
-                        return Err(
-                            self.compile_err("close paren expected in `__clear_cache` call")
-                        );
-                    }
-                    self.next()?;
-                    self.emit_imm(0);
-                    self.ty = Ty::Int as i64;
-                } else if let Some(&intrinsic_id) =
-                    self.pp_intrinsics.get(&self.symbols[id_idx].name)
-                {
+                // Compiler-builtin intrinsic call (`alloca`, future
+                // atomics / cpuid / ...). The frontend stamped the
+                // symbol's `intrinsic` field at declaration time
+                // from `#pragma intrinsic("name")`. Skip the usual
+                // staging-slot dance and per-arg FP-mask shenanigans
+                // -- intrinsics today take exactly one integer
+                // argument and leave the result in the accumulator,
+                // so we just evaluate the arg expression and emit
+                // `Op::Intrinsic <id>`. Multi-arg / FP-arg intrinsics
+                // can grow this branch as needed.
+                if let Some(&intrinsic_id) = self.pp_intrinsics.get(&self.symbols[id_idx].name) {
                     let fn_name = self.symbols[id_idx].name.clone();
                     if self.lex.tk == ')' {
                         return Err(self

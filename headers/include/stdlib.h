@@ -209,3 +209,36 @@ char *mkdtemp(char *templ);
 char *mktemp(char *templ);
 int random();
 int srandom(int seed);
+
+/* GCC / clang `__clear_cache(begin, end)` is the runtime hint
+** that makes instructions newly written into [begin, end)
+** observable to the fetch path. AArch64 requires the explicit
+** flush; x86_64 hardware keeps the instruction cache coherent
+** so the call is effectively a no-op. Each platform exposes
+** the flush through a different libc surface, so the wrappers
+** below bridge the (begin, end) signature to the native
+** (start, len) shape. Linux glibc exports __clear_cache
+** directly. */
+#ifdef __APPLE__
+#pragma binding(libc::sys_icache_invalidate, "_sys_icache_invalidate")
+void sys_icache_invalidate(void *start, long long len);
+static inline void __clear_cache(void *begin, void *end) {
+    sys_icache_invalidate(begin, (long long)((char *)end - (char *)begin));
+}
+#endif
+
+#ifdef __linux__
+#pragma binding(libc::__clear_cache, "__clear_cache")
+void __clear_cache(void *begin, void *end);
+#endif
+
+#ifdef _WIN32
+#pragma binding(kernel32::FlushInstructionCache, "FlushInstructionCache")
+#pragma binding(kernel32::GetCurrentProcess, "GetCurrentProcess")
+int FlushInstructionCache(void *hProcess, void *lpBaseAddress, long long dwSize);
+void *GetCurrentProcess(void);
+static inline void __clear_cache(void *begin, void *end) {
+    FlushInstructionCache(GetCurrentProcess(), begin,
+                          (long long)((char *)end - (char *)begin));
+}
+#endif

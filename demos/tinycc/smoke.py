@@ -161,13 +161,13 @@ TU_STATE = {
     # link unit; tracking it separately would duplicate the
     # ar / makedeps symbols at link.
     # "tcctools.c": True,
-    "x86_64-gen.c": False,
-    "x86_64-link.c": False,
-    "i386-asm.c": False,
+    "x86_64-gen.c": True,
+    "x86_64-link.c": True,
+    "i386-asm.c": True,
     "arm64-gen.c": True,
     "arm64-link.c": True,
     "arm64-asm.c": True,
-    "tccpe.c": False,
+    "tccpe.c": True,
     "tccmacho.c": True,
 }
 

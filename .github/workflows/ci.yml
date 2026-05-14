@@ -231,12 +231,17 @@ jobs:
         # Vendored tinycc HEAD compiles + multi-TU links across
         # every supported runner: each lane's HOST_MATRIX entry
         # picks the matching target_macros / cpp_defs / TU set.
-        # The gen1 binary runs to the banner; running gen1 to
-        # compile gen2 (the fixed-point self-host) is gated on
-        # the macOS aarch64 variadic-ABI bringup that prints the
-        # libtcc error_func messages correctly. TODO: wire a
-        # self_host.py step once gen1 round-trips a hello.c.
         run: python demos/tinycc/smoke.py
+      - name: tinycc self-host parity (Linux x86_64 only)
+        # Compares `tcc -c` output between a reference tcc built
+        # with the host gcc and a stage1 tcc built through badc on
+        # a curated set of include-free C samples. Skipped
+        # automatically on non-Linux-x86_64 runners; tcc emits ELF
+        # only and the Mach-O / PE format paths are not exercised
+        # by this gate yet. TODO: tighten to gate on byte-identical
+        # output once the per-target codegen drift is closed.
+        shell: bash
+        run: python demos/tinycc/self_host.py || test $? -eq 2
       - name: stb header-only smoke
         # The densest demo: a single TU pulls in six stb_*.h
         # headers (stb_sprintf, stb_perlin, stb_image_write,

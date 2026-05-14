@@ -144,6 +144,74 @@ fn unresolved_extern_function_fails_link() {
 }
 
 #[test]
+fn jit_links_and_runs_two_translation_units() {
+    // Multi-TU through `--jit`: two `.c` files on the command
+    // line, no intermediate `.o`, no native binary written. The
+    // JIT path's exit code mirrors `main`'s return value, so a
+    // mis-resolved cross-TU `Op::JsrPc` would surface as a wrong
+    // exit code (or a crash) rather than the expected 42.
+    let dir = tempdir("jit-multi-tu");
+    let a = write_source(&dir, "a.c", "int add(int x, int y) { return x + y; }\n");
+    let b = write_source(
+        &dir,
+        "b.c",
+        "extern int add(int, int);\nint main() { return add(40, 2); }\n",
+    );
+    let out = Command::new(badc())
+        .arg("--jit")
+        .arg(&b)
+        .arg(&a)
+        .current_dir(&dir)
+        .output()
+        .expect("invoke badc --jit");
+    assert_eq!(
+        out.status.code(),
+        Some(42),
+        "JIT exit code mismatch: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+#[test]
+fn duplicate_function_definition_fails_link() {
+    // Two TUs each defining `foo` with conflicting bodies must
+    // hard-fail at link time with a `multiple definition` error.
+    // Pre-fix the linker silently kept whichever definition it
+    // saw last; the produced binary returned 2 (from b.c) rather
+    // than failing.
+    let dir = tempdir("dup-fn");
+    write_source(&dir, "a.c", "int foo(void) { return 1; }\n");
+    write_source(
+        &dir,
+        "b.c",
+        "int foo(void) { return 2; }\nint main() { return foo(); }\n",
+    );
+    let result = Command::new(badc())
+        .arg("-o")
+        .arg(dir.join("prog"))
+        .arg(dir.join("a.c"))
+        .arg(dir.join("b.c"))
+        .current_dir(&dir)
+        .output()
+        .expect("invoke badc");
+    assert!(
+        !result.status.success(),
+        "link should have failed: stderr={:?}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(
+        stderr.contains("multiple definition") && stderr.contains("foo"),
+        "expected `multiple definition of foo` in stderr, got: {stderr}"
+    );
+    assert!(
+        !stderr.contains("internal compiler error"),
+        "duplicate-definition diagnostic must not be tagged as ICE: {stderr}"
+    );
+}
+
+#[test]
 fn compile_only_with_minus_o_writes_named_object() {
     let dir = tempdir("co-o");
     let src = write_source(&dir, "foo.c", "int seven() { return 7; }\n");

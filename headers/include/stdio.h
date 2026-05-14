@@ -114,12 +114,12 @@ typedef struct __c5_FILE FILE;
 #pragma binding(libc::remove,    "_remove")
 #pragma binding(libc::rename,    "_rename")
 #pragma binding(libc::dlsym,     "_dlsym")
-// POSIX `open_memstream` -- creates a FILE* backed by a heap
-// buffer the libc grows as the program writes through it. The
-// caller passes (char **buf, size_t *sz) addresses that get
-// updated to the current buffer + length on every `fflush` /
-// `fclose`. Available on macOS 10.13+ and every modern glibc /
-// musl; absent from msvcrt.
+// POSIX.1-2008 `open_memstream` -- creates a FILE * backed
+// by a heap buffer the libc grows as the program writes
+// through it. The caller passes (char **buf, size_t *sz)
+// addresses that get updated to the current buffer + length
+// on every `fflush` / `fclose`. Available on macOS 10.13+
+// and every modern glibc / musl; absent from msvcrt.
 #pragma binding(libc::open_memstream, "_open_memstream")
 // POSIX `popen` / `pclose` -- not in C89 but universally
 // available on macOS / BSD. A source that opens its own

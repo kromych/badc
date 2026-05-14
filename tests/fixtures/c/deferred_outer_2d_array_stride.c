@@ -1,11 +1,15 @@
-// Deferred-outer multi-dim arrays (`T arr[][N]`) had a stride
-// regression: the declarator left `array_dims` empty so the
-// indexer treated `arr[i]` as one scalar element instead of
-// an N-element row. Surfaced by chibicc's `static char
-// *cast_table[][11]`. The fix populates `array_dims` with a
-// zero placeholder for the deferred outer dim; the post-init
-// fixup in run_compile patches the count once the
-// initializer is parsed.
+// Deferred-outer multi-dim array shapes (C99 6.7.5.2: an
+// outer `[]` is allowed when an initializer supplies the
+// count, and the trailing `[N]` dimensions stay required).
+// For `T arr[][N]` the indexer must stride `arr[i]` by
+// `N * sizeof(T)`; a regression that left `array_dims` empty
+// collapsed the stride to `sizeof(T)` and made `arr[i][j]`
+// walk into the previous row's tail bytes.
+//
+// The fix records `array_dims = [0, N, ...]` at declaration
+// time (zero placeholder for the deferred outer dim) and
+// patches the placeholder with the resolved count once the
+// initializer has been parsed.
 
 #include <stdio.h>
 

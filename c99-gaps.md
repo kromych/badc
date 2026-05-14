@@ -117,13 +117,13 @@ high-half garbage.
 
 ### Compound literals (`(struct Foo){.x=1}`), severity 3
 
-Supported at file scope: `Type *p = &(Type){TY_INT, 4, 4};`
-and the empty form `Scope *s = &(Scope){};` synthesize an
-anonymous internal-linkage symbol of the named struct type
-and patch the surrounding `&` reloc to point at it. Block-
-scope compound literals (`f(&(struct Pt){1, 2})`) are still
-rejected; the dialect implements only the file-scope form
-chibicc's `type.c` and `parse.c` rely on.
+Supported at file scope (C99 6.5.2.5p5, static storage
+duration): `Type *p = &(T){...};` and the empty form
+`Scope *s = &(T){};` synthesize an anonymous internal-linkage
+symbol of the named struct type and patch the surrounding `&`
+reloc to point at it. Block-scope compound literals
+(`f(&(struct Pt){1, 2})`, automatic storage duration with
+lifetime equal to the enclosing block) are still rejected.
 
 ### Standalone abstract function-pointer declarators, severity 4
 

@@ -1,9 +1,13 @@
-// File-scope compound literals (C99 6.5.2.5) for the
-// `&(T){...}` pointer-init idiom chibicc's type.c and
-// parse.c rely on. Each one synthesizes an anonymous
-// internal-linkage symbol whose initialiser bytes are
-// written through the struct-initializer collector; the
-// surrounding `&` reloc resolves to the new symbol's slot.
+// File-scope compound literals -- C99 6.5.2.5p5: a compound
+// literal at file scope has static storage duration and its
+// address is a constant expression suitable for initialising
+// another file-scope object. The empty initializer form
+// `(T){}` is the zero-initialisation shape.
+//
+// Each `&(T){...}` synthesises an anonymous internal-linkage
+// symbol whose bytes are written through the struct-initializer
+// collector; the surrounding `&` reloc resolves to the new
+// symbol's slot.
 #include <stdio.h>
 
 struct Type {

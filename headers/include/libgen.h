@@ -22,9 +22,8 @@
 #endif
 
 #ifdef _WIN32
-// msvcrt has no POSIX `dirname` / `basename`; the bringup for
-// chibicc targets macOS / Linux first. A Windows port can
-// emulate via `_splitpath` if needed.
+// msvcrt has no POSIX `dirname` / `basename`; programs that
+// need the equivalent on Windows route through `_splitpath`.
 #endif
 
 char *dirname(char *path);

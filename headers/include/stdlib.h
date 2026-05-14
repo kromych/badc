@@ -122,10 +122,9 @@
 // MSVC has _strtoi64; strtoll itself only landed in UCRT.
 #pragma binding(msvcrt::strtoll, "_strtoi64")
 #pragma binding(msvcrt::strtod,  "strtod")
-// msvcrt has no `strtold`; UCRT has it but msvcrt.dll itself
-// only ships strtod. The chibicc bringup currently targets
-// macOS / Linux; Windows resolution lands when the rest of
-// the bringup catches up.
+// msvcrt.dll has no `strtold`; UCRT exports it but the
+// universally-available CRT here does not. Programs that
+// need `long double` parsing on Windows pin to UCRT.
 #pragma binding(msvcrt::abs,     "abs")
 #pragma binding(msvcrt::abort,   "abort")
 #pragma binding(msvcrt::system,  "system")

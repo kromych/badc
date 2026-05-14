@@ -41,11 +41,9 @@
 #endif
 
 #ifdef _WIN32
-// Windows has no fork(2) / wait(2) family. Programs that drive a
-// child process there use CreateProcess + WaitForSingleObject.
-// chibicc's main.c reaches for fork+wait when invoking the
-// assembler / linker; the bringup currently targets macOS /
-// Linux so the Windows path is stubbed out at the call site.
+// Windows has no fork(2) / wait(2) family. Programs that drive
+// a child process there go through CreateProcess +
+// WaitForSingleObject instead.
 #endif
 
 int wait(int *status);

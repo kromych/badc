@@ -94,9 +94,9 @@
 // MSVC marks `strdup` as deprecated and exports the underscored form;
 // it's the universally available spelling on every modern msvcrt.
 #pragma binding(msvcrt::strdup,   "_strdup")
-// msvcrt has no `strndup`; the chibicc bringup currently targets
-// macOS / Linux and the Windows port can land an emulator once
-// it picks up.
+// msvcrt has no `strndup` (POSIX.1-2008 7.24.1.4); programs
+// that need the bounded copy on Windows emulate via
+// `strnlen` + `malloc` + `memcpy`.
 #pragma binding(msvcrt::strspn,   "strspn")
 #pragma binding(msvcrt::strcspn,  "strcspn")
 #pragma binding(msvcrt::strpbrk,  "strpbrk")
@@ -123,9 +123,9 @@ char *strncat(char *dst, char *src, int n);
 char *strerror(int errnum);
 char *strdup(char *s);
 #ifndef _WIN32
-// POSIX `strndup` -- C2x but not C99. Bound on macOS / Linux;
-// msvcrt has no equivalent so the prototype is gated out on
-// Windows and the bringup defers the Windows port.
+// POSIX.1-2008 7.24.1.4 `strndup` -- C2x but not in C99
+// `<string.h>`. Bound on macOS / Linux; msvcrt has no
+// equivalent so the prototype is gated out on Windows.
 char *strndup(char *s, int n);
 #endif
 int strspn(char *s, char *accept);

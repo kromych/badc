@@ -1,9 +1,9 @@
-// glob.h -- POSIX filename pattern expansion.
+// glob.h -- POSIX glob(3) filename pattern expansion.
 //
-// Used by chibicc's main.c to expand `-I` search-path arguments
-// that include shell-style wildcards. Layout pinned to the
-// glibc / Darwin shape so the libc-side writes land at the
-// offsets c5 reads.
+// IEEE Std 1003.1 specifies `glob` / `globfree` plus the
+// `glob_t` result struct and the `GLOB_*` flag macros. Layout
+// pinned to the glibc / Darwin shape so the libc-side writes
+// land at the offsets c5 reads.
 
 #pragma once
 
@@ -46,9 +46,8 @@ typedef struct {
 #endif
 
 #ifdef _WIN32
-// msvcrt has no `glob`; the bringup for chibicc targets macOS /
-// Linux first. A Windows port would walk paths via FindFirstFile
-// directly.
+// msvcrt has no POSIX `glob`; programs that need wildcard
+// expansion on Windows walk paths via FindFirstFile directly.
 #endif
 
 int  glob(char *pattern, int flags, void *errfunc, glob_t *pglob);

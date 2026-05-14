@@ -1,8 +1,7 @@
-// Binary integer literals -- C23 / GCC extension.
-//
-// chibicc's unicode.c relies on the `0b...` shape for the UTF-8
-// continuation-byte patterns. Same lexer slot as `0x...` hex;
-// suffix-letter handling is shared.
+// Binary integer literals -- C23 6.4.4.1 (the `0b` / `0B`
+// prefix was added in C23; widely available as a GCC / Clang
+// extension before that). Same lexer slot as `0x...` hex;
+// suffix-letter handling (`u`/`U`/`l`/`L`) is shared.
 #include <stdio.h>
 
 int main() {

@@ -227,6 +227,16 @@ jobs:
         # emits SysV x86_64 GAS only).
         shell: bash
         run: python demos/chibicc/self_host.py || test $? -eq 2
+      - name: tinycc bringup smoke
+        # Vendored tinycc HEAD compiles + multi-TU links across
+        # every supported runner: each lane's HOST_MATRIX entry
+        # picks the matching target_macros / cpp_defs / TU set.
+        # The gen1 binary runs to the banner; running gen1 to
+        # compile gen2 (the fixed-point self-host) is gated on
+        # the macOS aarch64 variadic-ABI bringup that prints the
+        # libtcc error_func messages correctly. TODO: wire a
+        # self_host.py step once gen1 round-trips a hello.c.
+        run: python demos/tinycc/smoke.py
       - name: stb header-only smoke
         # The densest demo: a single TU pulls in six stb_*.h
         # headers (stb_sprintf, stb_perlin, stb_image_write,

@@ -230,3 +230,150 @@ fn extern_global_int_pointer_initializer_resolves_across_units() {
     );
     assert_eq!(link_and_run(alloc::vec![b, a]), 99);
 }
+
+#[test]
+fn cross_tu_call_through_secondary_dylib() {
+    // Regression marker for the binding flat-index shift the
+    // two-pass merge in `link.rs::merge` exists to prevent.
+    //
+    // The parser encodes each `Op::JsrExt` operand as
+    // `sum(prior dylibs' sizes) + within-dylib position`. With
+    // two units that share the first dylib (libc) and one of
+    // them also references a binding past that prefix (sitting
+    // in a separate dylib), a single-pass merge would append
+    // unit 2's libc bindings AFTER computing unit 1's remap --
+    // silently shifting where the secondary dylib starts and
+    // leaving unit 1's `JsrExt <secondary>` resolving to a
+    // random libc import. The resulting binary SIGSEGV'd on
+    // Linux ELF / Windows PE and got "lucky" on macOS Mach-O
+    // (the wrong-index lookup happened to land on a benign
+    // libc import for the specific demo shapes).
+    //
+    // Build two units with custom dylib tables that mimic the
+    // header surface (libc has multiple bindings; libutil has
+    // a single binding that unit 1 calls). Run the link and
+    // assert the merged Program's `Op::JsrExt` operand still
+    // names the libutil binding after merging.
+    use crate::c5::op::Op;
+    use crate::c5::{Binding, DylibSpec, LinkSymbol, Linkage, SymbolKind};
+
+    let mk_binding = |local: &str, real: &str| Binding {
+        is_variadic: false,
+        fixed_args: 0,
+        return_type_tag: 0,
+        param_types: Vec::new(),
+        local_name: local.to_string(),
+        real_symbol: real.to_string(),
+    };
+
+    // Unit 1: declares libc {printf, malloc} + libutil {do_work},
+    // body of `lib_call` is `Op::JsrExt 2; Op::Lev`, which under
+    // the parser's flat-index scheme names libutil's `do_work`
+    // (sum(libc.bindings)=2, plus position 0 within libutil).
+    let lib_text = alloc::vec![
+        Op::Ent as i64,
+        0,
+        Op::JsrExt as i64,
+        2, // libutil::do_work in unit 1's view
+        Op::Lev as i64,
+    ];
+    let mut lib_unit = LinkUnit {
+        text: lib_text.clone(),
+        dylibs: alloc::vec![
+            DylibSpec {
+                name: "libc".to_string(),
+                path: "libc.so.6".to_string(),
+                bindings: alloc::vec![
+                    mk_binding("printf", "printf"),
+                    mk_binding("malloc", "malloc"),
+                ],
+            },
+            DylibSpec {
+                name: "libutil".to_string(),
+                path: "libutil.so.1".to_string(),
+                bindings: alloc::vec![mk_binding("do_work", "do_work")],
+            },
+        ],
+        symbols: alloc::vec![LinkSymbol {
+            name: "lib_call".to_string(),
+            linkage: Linkage::External,
+            kind: SymbolKind::Function,
+            value: 0,
+            size: 0,
+            type_tag: 0,
+        }],
+        ..Default::default()
+    };
+    lib_unit.source_lines = alloc::vec![0; lib_text.len()];
+    lib_unit.source_functions = alloc::vec![String::new(); lib_text.len()];
+    lib_unit.source_file_indices = alloc::vec![0; lib_text.len()];
+    let _ = lib_text;
+
+    // Unit 2: only references libc (two new bindings). If the
+    // merge appends these to the merged libc *before* unit 1's
+    // operand resolution, the flat index 2 now lands inside
+    // libc -- not libutil.
+    let unit2_text = alloc::vec![Op::Ent as i64, 0, Op::Lev as i64];
+    let mut other_unit = LinkUnit {
+        text: unit2_text.clone(),
+        dylibs: alloc::vec![DylibSpec {
+            name: "libc".to_string(),
+            path: "libc.so.6".to_string(),
+            bindings: alloc::vec![
+                mk_binding("printf", "printf"),
+                mk_binding("fputs", "fputs"),
+            ],
+        }],
+        symbols: alloc::vec![LinkSymbol {
+            name: "main".to_string(),
+            linkage: Linkage::External,
+            kind: SymbolKind::Function,
+            value: 0,
+            size: 0,
+            type_tag: 0,
+        }],
+        ..Default::default()
+    };
+    other_unit.source_lines = alloc::vec![0; unit2_text.len()];
+    other_unit.source_functions = alloc::vec![String::new(); unit2_text.len()];
+    other_unit.source_file_indices = alloc::vec![0; unit2_text.len()];
+
+    let program = link_units(
+        alloc::vec![other_unit, lib_unit],
+        &[],
+        LinkOptions::default(),
+    )
+    .expect("link_units failed");
+
+    // Find lib_call's JsrExt and confirm its operand resolves
+    // to the libutil::do_work binding in the merged dylib
+    // table -- not whatever libc binding the buggy merge would
+    // have shifted it to.
+    let mut found = false;
+    let mut pc = 0usize;
+    while pc + 1 < program.text.len() {
+        if program.text[pc] == Op::JsrExt as i64 {
+            let flat = program.text[pc + 1] as usize;
+            // Walk merged dylibs in declared order to resolve.
+            let mut cursor = flat;
+            let mut resolved: Option<&str> = None;
+            for d in program.dylibs.iter() {
+                if cursor < d.bindings.len() {
+                    resolved = Some(&d.bindings[cursor].real_symbol);
+                    break;
+                }
+                cursor -= d.bindings.len();
+            }
+            assert_eq!(
+                resolved,
+                Some("do_work"),
+                "merged JsrExt operand {flat} resolved to {resolved:?}, not do_work; \
+                 the binding flat-index shift hazard is back"
+            );
+            found = true;
+            break;
+        }
+        pc += 1;
+    }
+    assert!(found, "expected to find a JsrExt in the merged text");
+}

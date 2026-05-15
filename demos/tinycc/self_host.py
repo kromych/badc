@@ -749,9 +749,7 @@ def main() -> int:
                 "-ldl",
                 "-lpthread",
             ]
-            link_proc = subprocess.run(
-                link_cmd, capture_output=True, text=True
-            )
+            link_proc = subprocess.run(link_cmd, capture_output=True, text=True)
             if link_proc.returncode != 0:
                 print("self_host: gen2 link failed:", file=sys.stderr)
                 print(link_proc.stderr, file=sys.stderr)
@@ -759,6 +757,55 @@ def main() -> int:
                 bootstrap_skip = "gen2 link failed"
             else:
                 bootstrap_skip = ""
+
+    # Stage1 self-link of the gen2 binary -- drops the host gcc
+    # dependency on the link step. Uses `-nostdlib` plus the
+    # host's CRT trio + `libc.so.6` directly (the GNU `ld` linker
+    # script under `libc.so` pulls in `libc_nonshared.a`; the
+    # static archive's contents -- `atexit` /
+    # `__stack_chk_fail_local` / `pthread_atfork` -- are not
+    # referenced by tinycc itself). Skipped on non-multiarch
+    # hosts since the path layout is Debian / Ubuntu-specific.
+    gen2_self_tcc: Path | None = None
+    gen2_self_skip = ""
+    if gen2_tcc is not None and multiarch is not None:
+        triplet = multiarch.name
+        crt_dir = Path(f"/usr/lib/{triplet}")
+        crt1 = crt_dir / "crt1.o"
+        crti = crt_dir / "crti.o"
+        crtn = crt_dir / "crtn.o"
+        libc = Path(f"/lib/{triplet}/libc.so.6")
+        if not libc.is_file():
+            libc = crt_dir / "libc.so.6"
+        if all(p.is_file() for p in (crt1, crti, crtn, libc)):
+            libtcc1 = work / "libtcc1.a"
+            gen2_self_tcc = work / "tcc-gen2-self"
+            link_cmd = [
+                str(stage1_tcc),
+                "-B",
+                str(TINYCC_DIR),
+                "-nostdlib",
+                str(crt1),
+                str(crti),
+                *[str(p) for p in gen2_objs],
+                str(libtcc1),
+                str(libc),
+                str(crtn),
+                "-o",
+                str(gen2_self_tcc),
+            ]
+            link_proc = subprocess.run(link_cmd, capture_output=True, text=True)
+            if link_proc.returncode != 0:
+                print("self_host: gen2-self link failed:", file=sys.stderr)
+                print(link_proc.stderr, file=sys.stderr)
+                gen2_self_tcc = None
+                gen2_self_skip = "stage1 link failed"
+        else:
+            gen2_self_skip = "host CRT / libc.so.6 not at expected multiarch path"
+    elif gen2_tcc is None:
+        gen2_self_skip = "no gen2 to mirror"
+    else:
+        gen2_self_skip = "non-multiarch host"
 
     boot_matches = 0
     boot_mismatches: list[str] = []
@@ -789,6 +836,41 @@ def main() -> int:
             print(f"  BOOT DIFF  {name}", file=sys.stderr)
     else:
         print(f"tinycc self-host -- bootstrap skipped: {bootstrap_skip}")
+
+    # gen2-self compile gate -- have stage1 link gen2 itself
+    # (no host gcc), then run that binary to recompile every TU
+    # and assert the resulting objects match the gen3 set
+    # produced by the gcc-linked gen2 binary. Proves the
+    # stage1-linker output is functionally equivalent to the host
+    # linker's for the full tinycc corpus.
+    gen2_self_matches = 0
+    gen2_self_mismatches: list[str] = []
+    gen2_self_failures: list[tuple[str, str, str]] = []
+    if gen2_self_tcc is not None:
+        for name in TINYCC_TUS:
+            src = TINYCC_DIR / name
+            gen3_o = work / f"corpus.{name}.gen3.o"
+            gen3_self_o = work / f"corpus.{name}.gen3-self.o"
+            ok, err = compile_with(gen2_self_tcc, src, gen3_self_o, tu_flags)
+            if not ok:
+                gen2_self_failures.append((name, "gen3-self", err))
+                continue
+            if gen3_o.read_bytes() == gen3_self_o.read_bytes():
+                gen2_self_matches += 1
+            else:
+                gen2_self_mismatches.append(name)
+        print(
+            f"tinycc self-host -- gen2-self compile == gen3: "
+            f"{gen2_self_matches}/{len(TINYCC_TUS)} "
+            f"(mismatches: {len(gen2_self_mismatches)}, "
+            f"failures: {len(gen2_self_failures)})"
+        )
+        for name, side, err in gen2_self_failures:
+            print(f"  SELF FAIL  ({side}) {name}: {err}", file=sys.stderr)
+        for name in gen2_self_mismatches:
+            print(f"  SELF DIFF  {name}", file=sys.stderr)
+    else:
+        print(f"tinycc self-host -- gen2-self skipped: {gen2_self_skip}")
 
     # Functional check: stage1 and gen2 must produce code that
     # actually runs, not just code that's byte-equivalent to the
@@ -911,6 +993,13 @@ def main() -> int:
             print(f"  {name}", file=sys.stderr)
         return 1
     if functional_failures:
+        return 1
+    # gen2-self: the gen2 binary is linked by stage1 (not host gcc)
+    # and then asked to compile every tinycc TU. Both the linker
+    # and the compile output must succeed; the per-TU object must
+    # match gen3 byte-for-byte (gen3 was the same TU compiled by
+    # the host-linked gen2).
+    if gen2_self_failures or gen2_self_mismatches:
         return 1
     return 0
 

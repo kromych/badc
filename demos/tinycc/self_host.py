@@ -697,15 +697,38 @@ def main() -> int:
     else:
         print(f"tinycc self-host -- bootstrap skipped: {bootstrap_skip}")
 
-    # Sample failures + mismatches gate the build, plus any
-    # corpus or bootstrap *failure* (running the binary at all).
-    # Bootstrap mismatches still surface but do not fail until
-    # the long-double truncation is closed (TODO marker).
+    # Known-drifting TUs are surfaced but do not fail. Each entry
+    # is tracked with a TODO marker; whittling the set down is the
+    # work of closing the underlying bug.
+    #
+    #   tccpp.c -- long-double-returning libc bindings (strtold)
+    #              return -0.0 through the badc link path; the
+    #              gcc-linked gen2 produces the correct 80-bit
+    #              encoding. TODO: x87 st(0) -> XMM0 transfer in
+    #              the libc-call lowering.
+    KNOWN_DRIFT = {"tccpp.c"}
+
+    unexpected_corpus = [n for n in tu_mismatches if n not in KNOWN_DRIFT]
+    unexpected_boot = [n for n in boot_mismatches if n not in KNOWN_DRIFT]
+
+    # Sample failures + mismatches gate the build. Corpus and
+    # bootstrap *failures* (running the binary at all) gate. So do
+    # mismatches outside KNOWN_DRIFT -- those are regressions.
     if failures or mismatches:
         return 1
     if tu_failures:
         return 1
     if boot_failures:
+        return 1
+    if unexpected_corpus:
+        print("self_host: unexpected corpus diff -- regression:", file=sys.stderr)
+        for name in unexpected_corpus:
+            print(f"  {name}", file=sys.stderr)
+        return 1
+    if unexpected_boot:
+        print("self_host: unexpected bootstrap diff -- regression:", file=sys.stderr)
+        for name in unexpected_boot:
+            print(f"  {name}", file=sys.stderr)
         return 1
     return 0
 

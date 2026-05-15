@@ -1254,13 +1254,9 @@ pub(super) fn function_is_variadic(text: &[i64], ent_pc: usize) -> bool {
                     let mul_pc = imm8_pc + Op::Imm.word_size();
                     if mul_pc < text.len() && Op::from_i64(text[mul_pc]) == Some(Op::Mul) {
                         let add_pc = mul_pc + Op::Mul.word_size();
-                        if add_pc < text.len()
-                            && Op::from_i64(text[add_pc]) == Some(Op::Add)
-                        {
+                        if add_pc < text.len() && Op::from_i64(text[add_pc]) == Some(Op::Add) {
                             let si_pc = add_pc + Op::Add.word_size();
-                            if si_pc < text.len()
-                                && Op::from_i64(text[si_pc]) == Some(Op::Si)
-                            {
+                            if si_pc < text.len() && Op::from_i64(text[si_pc]) == Some(Op::Si) {
                                 return true;
                             }
                         }

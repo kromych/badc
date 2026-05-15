@@ -810,11 +810,17 @@ def main() -> int:
         hello_extra = ("-I", str(multiarch))
     # When the host has a multiarch directory, link via the host's
     # CRT objects + `libc.so.6` (the shared library) directly.
-    # Passing `libc.so` instead would land on a GNU `ld` linker
-    # script that pulls in `libc_nonshared.a`; tcc's `read_ar_header`
-    # rejects the long-name extension that archive uses (TODO marker
-    # for tightening tcc's archive reader). `libc.so.6` carries every
-    # symbol a plain `printf` round-trip needs.
+    # Passing `libc.so` would land on a GNU `ld` linker script
+    # whose `GROUP` clause pulls in `libc_nonshared.a` alongside
+    # `libc.so.6`. The badc-linked stage1 binary fails to load
+    # that archive (TODO marker for the badc-link-path bug --
+    # gcc-linked tcc binaries built from identical objects load
+    # it without complaint, so the regression is the linker, not
+    # tcc's reader). `libc.so.6` carries the symbols this
+    # `hello.c` resolves (`printf`, `puts`, `__libc_start_main`);
+    # the static archive's contents (`atexit`,
+    # `__stack_chk_fail_local`, `pthread_atfork`) are not
+    # referenced by a stack-protector-off, no-atexit program.
     self_link_lib = None
     if multiarch is not None:
         triplet = multiarch.name

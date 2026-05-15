@@ -668,10 +668,16 @@ def main() -> int:
 
     # Parity on the real tinycc corpus -- the same TUs the smoke
     # step links. Strictly larger surface than the curated samples.
+    # The multiarch `-D` flags from `tcc_build_defines` are passed
+    # through to every TU compile so the gen2 binary (linked from
+    # the resulting objects) carries the same baked-in
+    # `CONFIG_TCC_*` paths as the reference; without that, gen2's
+    # runtime library search misses `/usr/lib/<triplet>/`.
     multiarch = multiarch_dir
     tu_flags: tuple[str, ...] = TINYCC_TU_FLAGS
     if multiarch is not None:
         tu_flags = tu_flags + ("-I", str(multiarch))
+    tu_flags = tu_flags + tcc_build_defines(multiarch)
     tu_matches = 0
     tu_mismatches: list[str] = []
     tu_failures: list[tuple[str, str, str]] = []

@@ -111,6 +111,26 @@ INCLUDE_HEADERS = (
     "varargs.h",
 )
 
+# Upstream runtime-support sources. Build into ``libtcc1.a`` once
+# the bootstrap stage wants tcc to link its own binaries instead
+# of going through host gcc + libgcc. The set here is the
+# x86_64-linux row from the upstream Makefile: libtcc1.o,
+# va_list.o, dsohandle.o, plus the COMMON_O set (stdatomic,
+# atomic, builtin, alloca, alloca-bt) and the Native-only
+# runmain.o / tcov.o.
+LIB_SOURCES = (
+    "libtcc1.c",
+    "va_list.c",
+    "dsohandle.c",
+    "stdatomic.c",
+    "atomic.S",
+    "builtin.c",
+    "alloca.S",
+    "alloca-bt.S",
+    "runmain.c",
+    "tcov.c",
+)
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -133,12 +153,17 @@ def main(argv: list[str] | None = None) -> int:
     flat = CORE_C + TARGET_C + FORMAT_C + HEADERS
     include_dir = tinycc_dir / "include"
     include_dir.mkdir(exist_ok=True)
+    lib_dir = tinycc_dir / "lib"
+    lib_dir.mkdir(exist_ok=True)
     with zipfile.ZipFile(zip_path) as zf:
         for name in flat:
             with zf.open(f"{prefix}/{name}") as src, (tinycc_dir / name).open("wb") as dst:
                 shutil.copyfileobj(src, dst)
         for name in INCLUDE_HEADERS:
             with zf.open(f"{prefix}/include/{name}") as src, (include_dir / name).open("wb") as dst:
+                shutil.copyfileobj(src, dst)
+        for name in LIB_SOURCES:
+            with zf.open(f"{prefix}/lib/{name}") as src, (lib_dir / name).open("wb") as dst:
                 shutil.copyfileobj(src, dst)
 
     if args.verbose:
@@ -147,6 +172,9 @@ def main(argv: list[str] | None = None) -> int:
             log(f"done -- {p} {p.stat().st_size}")
         for name in INCLUDE_HEADERS:
             p = include_dir / name
+            log(f"done -- {p} {p.stat().st_size}")
+        for name in LIB_SOURCES:
+            p = lib_dir / name
             log(f"done -- {p} {p.stat().st_size}")
     return 0
 

@@ -228,7 +228,7 @@ fn main() {
             "-o" => match iter.next() {
                 Some(p) => output_path = Some(PathBuf::from(p)),
                 None => {
-                    eprintln!("badc: -o requires a path argument");
+                    eprint_diagnostic(format!("badc: error: -o requires a path argument"));
                     std::process::exit(1);
                 }
             },
@@ -238,7 +238,7 @@ fn main() {
                     None => defines.push((s, String::from("1"))),
                 },
                 None => {
-                    eprintln!("badc: -D requires NAME[=VALUE]");
+                    eprint_diagnostic(format!("badc: error: -D requires NAME[=VALUE]"));
                     std::process::exit(1);
                 }
             },
@@ -252,7 +252,7 @@ fn main() {
             "-U" => match iter.next() {
                 Some(s) => undefines.push(s),
                 None => {
-                    eprintln!("badc: -U requires a NAME");
+                    eprint_diagnostic(format!("badc: error: -U requires a NAME"));
                     std::process::exit(1);
                 }
             },
@@ -262,7 +262,7 @@ fn main() {
             "-I" => match iter.next() {
                 Some(p) => include_paths.push(p),
                 None => {
-                    eprintln!("badc: -I requires a path argument");
+                    eprint_diagnostic(format!("badc: error: -I requires a path argument"));
                     std::process::exit(1);
                 }
             },
@@ -280,7 +280,7 @@ fn main() {
             "-include" => match iter.next() {
                 Some(name) => force_includes.push(name),
                 None => {
-                    eprintln!("badc: -include requires a header name");
+                    eprint_diagnostic(format!("badc: error: -include requires a header name"));
                     std::process::exit(1);
                 }
             },
@@ -302,7 +302,7 @@ fn main() {
             "-l" => match iter.next() {
                 Some(name) => lib_names.push(name),
                 None => {
-                    eprintln!("badc: -l requires a library name");
+                    eprint_diagnostic(format!("badc: error: -l requires a library name"));
                     std::process::exit(1);
                 }
             },
@@ -312,7 +312,7 @@ fn main() {
             "-L" => match iter.next() {
                 Some(path) => library_paths.push(path),
                 None => {
-                    eprintln!("badc: -L requires a directory");
+                    eprint_diagnostic(format!("badc: error: -L requires a directory"));
                     std::process::exit(1);
                 }
             },
@@ -468,7 +468,7 @@ fn main() {
     let read_stdin_source = || -> String {
         let mut s = String::new();
         if let Err(e) = std::io::stdin().read_to_string(&mut s) {
-            eprintln!("badc: error reading stdin: {e}");
+            eprint_diagnostic(format!("badc: error: error reading stdin: {e}"));
             std::process::exit(1);
         }
         s
@@ -487,13 +487,13 @@ fn main() {
             let mut file = match std::fs::File::open(src_path) {
                 Ok(f) => f,
                 Err(e) => {
-                    eprintln!("badc: cannot open `{src_path}`: {e}");
+                    eprint_diagnostic(format!("badc: error: cannot open `{src_path}`: {e}"));
                     std::process::exit(1);
                 }
             };
             let mut s = String::new();
             if let Err(e) = Read::read_to_string(&mut file, &mut s) {
-                eprintln!("badc: error reading `{src_path}`: {e}");
+                eprint_diagnostic(format!("badc: error: error reading `{src_path}`: {e}"));
                 std::process::exit(1);
             }
             (src_path.clone(), s)
@@ -569,14 +569,14 @@ fn main() {
         let bytes = match std::fs::read(obj_path) {
             Ok(b) => b,
             Err(e) => {
-                eprintln!("badc: cannot read `{obj_path}`: {e}");
+                eprint_diagnostic(format!("badc: error: cannot read `{obj_path}`: {e}"));
                 std::process::exit(1);
             }
         };
         match badc::read_object(&bytes) {
             Ok(u) => units.push(u),
             Err(e) => {
-                eprintln!("badc: failed to parse `{obj_path}`: {e}");
+                eprint_diagnostic(format!("badc: error: failed to parse `{obj_path}`: {e}"));
                 std::process::exit(1);
             }
         }
@@ -601,7 +601,7 @@ fn main() {
             std::process::exit(1);
         }
         if units.is_empty() {
-            eprintln!("badc: -c requires at least one source input");
+            eprint_diagnostic(format!("badc: error: -c requires at least one source input"));
             std::process::exit(1);
         }
         // Source-derived units come first in `units`; objects
@@ -645,11 +645,11 @@ fn main() {
             std::process::exit(1);
         }
         let Some(out_path) = output_path.clone() else {
-            eprintln!("badc: --ar requires -o <archive>.a");
+            eprint_diagnostic(format!("badc: error: --ar requires -o <archive>.a"));
             std::process::exit(1);
         };
         if units.is_empty() {
-            eprintln!("badc: --ar requires at least one input");
+            eprint_diagnostic(format!("badc: error: --ar requires at least one input"));
             std::process::exit(1);
         }
         let mut members: Vec<badc::ArchiveMember> = Vec::with_capacity(units.len());
@@ -699,14 +699,14 @@ fn main() {
         let bytes = match std::fs::read(a) {
             Ok(b) => b,
             Err(e) => {
-                eprintln!("badc: cannot read `{a}`: {e}");
+                eprint_diagnostic(format!("badc: error: cannot read `{a}`: {e}"));
                 std::process::exit(1);
             }
         };
         match badc::LinkArchive::parse(a.clone(), &bytes) {
             Ok(la) => link_archives.push(la),
             Err(e) => {
-                eprintln!("badc: failed to parse `{a}`: {e}");
+                eprint_diagnostic(format!("badc: error: failed to parse `{a}`: {e}"));
                 std::process::exit(1);
             }
         }
@@ -959,7 +959,7 @@ fn emit_native_binary_to_stdout(program: &badc::Program, target: Target, options
         }
     };
     if let Err(e) = std::io::stdout().write_all(&bytes) {
-        eprintln!("badc: failed to write binary to stdout: {e}");
+        eprint_diagnostic(format!("badc: error: failed to write binary to stdout: {e}"));
         std::process::exit(1);
     }
     let _ = std::io::stdout().flush();
@@ -973,7 +973,7 @@ fn emit_native_binary_to_stdout(program: &badc::Program, target: Target, options
 /// severity word picks up the green TTY color.
 fn write_output(out: &std::path::Path, bytes: &[u8], quiet: bool) {
     if let Err(e) = std::fs::write(out, bytes) {
-        eprintln!("badc: failed to write {}: {e}", out.display());
+        eprint_diagnostic(format!("badc: error: failed to write {}: {e}", out.display()));
         std::process::exit(1);
     }
     if !quiet {
@@ -1069,10 +1069,10 @@ fn codesign(path: &std::path::Path) {
     match status {
         Ok(s) if s.success() => {}
         Ok(s) => {
-            eprintln!("badc: codesign exited with status {s} -- binary may not run");
+            eprint_diagnostic(format!("badc: warning: codesign exited with status {s}; the binary may not run"));
         }
         Err(e) => {
-            eprintln!("badc: failed to invoke {CODESIGN}: {e}");
+            eprint_diagnostic(format!("badc: error: failed to invoke {CODESIGN}: {e}"));
         }
     }
 }

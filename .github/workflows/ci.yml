@@ -239,12 +239,12 @@ jobs:
         # only and the Mach-O / PE format paths are not exercised
         # by this gate yet. The harness runs on every Linux runner;
         # HOST_PROFILES in self_host.py picks the per-host TU set
-        # plus `TCC_TARGET_*` macros. The x86_64 lane gates on the
-        # full five-stage fixed point (samples / corpus / gen2 ==
-        # gen3 / gen2-self compile / functional). The aarch64 lane
-        # currently reports per-stage tallies but does not gate;
-        # TODO: c5 aarch64 corpus codegen drift on four upstream
-        # TUs blocks strict gating there.
+        # plus `TCC_TARGET_*` macros. Both lanes gate strictly on
+        # the five-stage fixed point (samples / corpus / gen2 ==
+        # gen3 / gen2-self compile / functional). KNOWN_DRIFT lists
+        # the one residual aarch64 mismatch (tccpp.c's FP literal
+        # pool placement) -- an informational diff that does not
+        # affect correctness; TODO clears it.
         shell: bash
         run: python demos/tinycc/self_host.py || test $? -eq 2
       - name: stb header-only smoke

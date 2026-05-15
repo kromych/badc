@@ -1023,20 +1023,17 @@ def main() -> int:
     # Known-drifting TUs are surfaced but do not fail. Each entry
     # is tracked with a TODO marker; whittling the set down is
     # the work of closing the underlying bug. Empty today on
-    # (Linux, x86_64): the corpus and bootstrap passes both
-    # reach 11/11.
+    # (Linux, x86_64): the corpus and bootstrap passes both reach
+    # 11/11. On (Linux, aarch64) the gen2 binary runs cleanly,
+    # but `tccpp.c` keeps a six-byte diff in a floating-point
+    # literal pool -- the pool placement differs between c5 and
+    # gcc lowerings of the same source. The diff is informational
+    # and does not affect correctness (gen2-self compile == gen3
+    # reaches 11/11). TODO: align c5's FP-literal-pool placement
+    # with gcc's for byte-identical corpus parity on aarch64.
     KNOWN_DRIFT: set[str] = set()
-
-    # The (Linux, aarch64) lane is in active bringup: samples
-    # already reach 25/25, but the corpus pass diverges on four
-    # TUs (tcc.c / tccpp.c / tccgen.c / tccasm.c) and the gen2
-    # link path is short of softfloat helpers (`__multf3`,
-    # `__addtf3`, `__divtf3`, ...) that libtcc1.a does not carry
-    # yet. The harness reports the per-stage tallies but does
-    # not gate yet. TODO: c5 aarch64 corpus codegen drift +
-    # 128-bit long-double softfloat helper set in libtcc1.a.
     if host == ("Linux", "aarch64"):
-        return 0
+        KNOWN_DRIFT = {"tccpp.c"}
 
     unexpected_corpus = [n for n in tu_mismatches if n not in KNOWN_DRIFT]
     unexpected_boot = [n for n in boot_mismatches if n not in KNOWN_DRIFT]

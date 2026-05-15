@@ -415,15 +415,38 @@ TINYCC_TUS: tuple[str, ...] = (
     "i386-asm.c",
 )
 
-# Flags every tinycc TU needs to see. Match the smoke step's
-# Linux x86_64 row exactly so the comparison stays apples-to-apples.
+# Flags every tinycc TU needs to see. ``-D_GNU_SOURCE`` is dropped
+# even though smoke.py passes it through to badc -- tcc.h already
+# defines it at the top of the file, and tcc's own preprocessor
+# warns on the redefinition. The macro set otherwise matches the
+# smoke step's Linux x86_64 row.
 TINYCC_TU_FLAGS: tuple[str, ...] = (
     "-DTCC_TARGET_X86_64=1",
     "-DONE_SOURCE=0",
-    "-D_GNU_SOURCE",
     "-I",
     str(TINYCC_DIR),
 )
+
+
+def detect_multiarch_include() -> Path | None:
+    """Return the host's `/usr/include/<multiarch>` directory if it
+    exists. On modern Debian / Ubuntu, glibc headers like stdlib.h
+    pull in `<bits/libc-header-start.h>` which lives under this
+    multiarch directory; tcc has to be told about it explicitly.
+    Returns ``None`` on non-multiarch hosts (e.g. RHEL-like)."""
+    try:
+        out = subprocess.run(
+            ["gcc", "-print-multiarch"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return None
+    if not out:
+        return None
+    cand = Path("/usr/include") / out
+    return cand if cand.is_dir() else None
 
 
 def main() -> int:
@@ -503,6 +526,10 @@ def main() -> int:
 
     # Parity on the real tinycc corpus -- the same TUs the smoke
     # step links. Strictly larger surface than the curated samples.
+    multiarch = detect_multiarch_include()
+    tu_flags: tuple[str, ...] = TINYCC_TU_FLAGS
+    if multiarch is not None:
+        tu_flags = tu_flags + ("-I", str(multiarch))
     tu_matches = 0
     tu_mismatches: list[str] = []
     tu_failures: list[tuple[str, str, str]] = []
@@ -512,11 +539,11 @@ def main() -> int:
         ref_o = work / f"corpus.{name}.ref.o"
         s1_o = work / f"corpus.{name}.s1.o"
 
-        ok_ref, err_ref = compile_with(ref_tcc, src, ref_o, TINYCC_TU_FLAGS)
+        ok_ref, err_ref = compile_with(ref_tcc, src, ref_o, tu_flags)
         if not ok_ref:
             tu_failures.append((name, "ref", err_ref))
             continue
-        ok_s1, err_s1 = compile_with(stage1_tcc, src, s1_o, TINYCC_TU_FLAGS)
+        ok_s1, err_s1 = compile_with(stage1_tcc, src, s1_o, tu_flags)
         if not ok_s1:
             tu_failures.append((name, "stage1", err_s1))
             continue

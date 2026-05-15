@@ -79,7 +79,7 @@ Compile knobs:
                            nesting depth; missing headers print as
                            `! <name> (missing)`).
   -q, --quiet              Suppress `info:` chatter on stderr (the
-                           per-source `badc: compiling <path>`
+                           per-source `info: compiling <path>`
                            progress line in multi-TU mode and the
                            `info: wrote file <path>` line emitted
                            after each output write). Errors and
@@ -175,7 +175,7 @@ fn main() {
     // amalgamated `__BADC_DUMP_PP` output.
     let mut show_includes = false;
     // `-q` / `--quiet` suppresses `info:` chatter on stderr. The
-    // per-source `badc: compiling <path>` progress line in
+    // per-source `info: compiling <path>` progress line in
     // multi-TU mode and the `info: wrote file <path>` lines that
     // follow each output write are both gated on this flag.
     // Errors and warnings still print; only informational lines
@@ -503,7 +503,7 @@ fn main() {
         // compiles stay silent so `badc file.c` does not gain extra
         // chatter.
         if multi_tu && mode != Mode::DumpPp && !quiet {
-            eprintln!("badc: compiling {label}");
+            eprint_diagnostic(format!("info: compiling {label}"));
         }
         if mode == Mode::DumpPp {
             let opts = badc::CompileOptions::default()
@@ -883,9 +883,9 @@ fn colorize_diagnostic(line: &str, is_tty: bool) -> std::borrow::Cow<'_, str> {
         ("Error", "\x1b[1;31m"),
         ("warning", "\x1b[1;33m"), // bold yellow
         ("Warning", "\x1b[1;33m"),
-        ("info", "\x1b[1;36m"), // bold cyan
-        ("Info", "\x1b[1;36m"),
-        ("note", "\x1b[1;36m"),
+        ("info", "\x1b[1;32m"), // bold green
+        ("Info", "\x1b[1;32m"),
+        ("note", "\x1b[1;36m"), // bold cyan
         ("Note", "\x1b[1;36m"),
     ];
     const RESET: &str = "\x1b[0m";
@@ -969,13 +969,15 @@ fn emit_native_binary_to_stdout(program: &badc::Program, target: Target, options
 /// `info: wrote file <path>` on success unless `quiet` is set.
 /// Used by every output path -- object emit, archive emit, JIT
 /// binary emit, native-binary emit -- so the chatter is uniform.
+/// Routes the info line through `eprint_diagnostic` so the
+/// severity word picks up the green TTY color.
 fn write_output(out: &std::path::Path, bytes: &[u8], quiet: bool) {
     if let Err(e) = std::fs::write(out, bytes) {
         eprintln!("badc: failed to write {}: {e}", out.display());
         std::process::exit(1);
     }
     if !quiet {
-        eprintln!("info: wrote file {}", out.display());
+        eprint_diagnostic(format!("info: wrote file {}", out.display()));
     }
 }
 

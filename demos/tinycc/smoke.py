@@ -377,7 +377,7 @@ def main() -> int:
             cmd, capture_output=True, text=True, check=False, cwd=str(REPO_ROOT)
         )
         if proc.returncode != 0:
-            # The driver prints per-source `badc: compiling <path>`
+            # The driver prints per-source `info: compiling <path>`
             # progress lines on stderr in multi-TU mode. `-q`
             # already silences those plus the `info: wrote file
             # <path>` chatter from successful writes, so anything

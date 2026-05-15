@@ -2878,9 +2878,14 @@ pub(super) fn function_is_variadic(text: &[i64], ent_pc: usize) -> bool {
             break;
         }
         if matches!(op, Op::Imm) && pc + 1 < text.len() && text[pc + 1] == 2 {
-            // Look ahead for `Imm 2; Psh; Imm 8; Mul`. Tolerate
-            // any insertion of intermediate `Psh` only (the c5
-            // emitter never inlines other ops here).
+            // The full c5 va_start expansion is
+            // `Lea -K; Psh; Lea P (positive); Psh;
+            //  Imm 2; Psh; Imm 8; Mul; Add; Si`
+            // -- compute `&last + 16` and store into the va_list
+            // local. The trailing `Add; Si` distinguishes this
+            // from `xs[2]` on an 8-byte-element array (which
+            // shares the leading `Imm 2; Psh; Imm 8; Mul` but
+            // ends in `Add; Lw / Li`).
             let after_imm2 = pc + Op::Imm.word_size();
             if after_imm2 < text.len() && Op::from_i64(text[after_imm2]) == Some(Op::Psh) {
                 let imm8_pc = after_imm2 + Op::Psh.word_size();
@@ -2889,8 +2894,20 @@ pub(super) fn function_is_variadic(text: &[i64], ent_pc: usize) -> bool {
                     && text[imm8_pc + 1] == 8
                 {
                     let mul_pc = imm8_pc + Op::Imm.word_size();
-                    if mul_pc < text.len() && Op::from_i64(text[mul_pc]) == Some(Op::Mul) {
-                        return true;
+                    if mul_pc < text.len()
+                        && Op::from_i64(text[mul_pc]) == Some(Op::Mul)
+                    {
+                        let add_pc = mul_pc + Op::Mul.word_size();
+                        if add_pc < text.len()
+                            && Op::from_i64(text[add_pc]) == Some(Op::Add)
+                        {
+                            let si_pc = add_pc + Op::Add.word_size();
+                            if si_pc < text.len()
+                                && Op::from_i64(text[si_pc]) == Some(Op::Si)
+                            {
+                                return true;
+                            }
+                        }
                     }
                 }
             }

@@ -260,22 +260,11 @@ impl Compiler {
         &mut self,
         bit_offset: u32,
         bit_width: u32,
-        unit_size: u8,
     ) -> Result<(), C5Error> {
         let mask: i64 = if bit_width >= 64 {
             -1
         } else {
             (1i64 << bit_width) - 1
-        };
-        // The bitfield's storage unit width (C99 6.7.2.1p11) picks
-        // the load / store opcode pair. Sub-word units must not
-        // load eight bytes -- doing so would mix in adjacent
-        // fields and the subsequent merge would clobber them.
-        let (load_op, store_op) = match unit_size {
-            1 => (Op::Lc, Op::Sc),
-            2 => (Op::Lh, Op::Sh),
-            4 => (Op::Lw, Op::Sw),
-            _ => (Op::Li, Op::Si),
         };
         if self.lex.tk == Token::Assign {
             // Bitfield write: `s.f = expr`. The c5 stack discipline
@@ -285,7 +274,7 @@ impl Compiler {
             self.next()?; // consume `=`
             // a = field_addr; stack: [...]
             self.emit_op(Op::Psh); // stack: [..., field_addr]; a = field_addr
-            self.emit_op(load_op); // a = old_value; stack: [..., field_addr]
+            self.emit_op(Op::Li); // a = old_value; stack: [..., field_addr]
             self.emit_op(Op::Psh); // stack: [..., field_addr, old_value]
             self.emit_op(Op::Imm);
             self.emit_val(!(mask << bit_offset)); // a = ~(mask << off)
@@ -305,7 +294,7 @@ impl Compiler {
             // stack: [..., field_addr]. The trailing Si pops
             // field_addr as the destination.
             self.emit_op(Op::Or);
-            self.emit_op(store_op); // pops field_addr, stores a (=combined).
+            self.emit_op(Op::Si); // pops field_addr, stores a (=combined).
             self.ty = Ty::Int as i64;
             Ok(())
         } else if self.lex.tk == Token::AssignOp {
@@ -326,7 +315,7 @@ impl Compiler {
             let ov_temp = -self.loc_offs;
             // a = field_addr; stack: [...]
             self.emit_op(Op::Psh); // stack: [..., field_addr]
-            self.emit_op(load_op); // a = old_value
+            self.emit_op(Op::Li); // a = old_value
             // Spill old_value into the scratch local without
             // disturbing `a` or the c5 stack.
             self.emit_op(Op::StLocI);
@@ -368,12 +357,12 @@ impl Compiler {
             self.emit_val(ov_temp);
             self.emit_binop_with_imm(Op::And, !(mask << bit_offset));
             self.emit_op(Op::Or); // pops shifted_new; a = cleared | shifted_new
-            self.emit_op(store_op); // pops field_addr, stores a
+            self.emit_op(Op::Si); // pops field_addr, stores a
             self.ty = Ty::Int as i64;
             Ok(())
         } else {
             // Bitfield read: `s.f` in any non-assignment context.
-            self.emit_op(load_op); // a = full storage word
+            self.emit_op(Op::Li); // a = full storage word
             if bit_offset > 0 {
                 self.emit_op(Op::Psh);
                 self.emit_imm(bit_offset as i64);

@@ -83,21 +83,14 @@ pub struct StructField {
     /// or 1D-array fields. The field-access decay path reads
     /// this to compute the per-level strides for `s.xs[i][j][k]`.
     pub array_dims: Vec<i64>,
-    /// Bit offset within the storage unit. Meaningful only when
-    /// `bit_width > 0`.
+    /// Bit offset within the 8-byte storage unit. Meaningful only
+    /// when `bit_width > 0`.
     pub bit_offset: u32,
     /// Bit width of a bitfield, or 0 for a regular field. Bitfields
-    /// pack into shared storage units sized by their base type
-    /// (C99 6.7.2.1p11); reads emit a load-shift-mask sequence and
-    /// writes emit a load-clear-shift-or-store sequence keyed by
-    /// `bit_unit_size`.
+    /// pack into shared 8-byte storage units; reads emit
+    /// `Li; Imm bit_offset; Shr; Imm mask; And` and writes emit a
+    /// load-clear-shift-or-store sequence.
     pub bit_width: u32,
-    /// Storage-unit size in bytes (1, 2, 4, or 8). Picks the
-    /// matching `Lc/Lh/Lw/Li` and `Sc/Sh/Sw/Si` opcodes for the
-    /// bitfield read / write so a 32-bit-base bitfield does not
-    /// load eight bytes (which would mix in adjacent fields).
-    /// Meaningful only when `bit_width > 0`; 0 otherwise.
-    pub bit_unit_size: u8,
 }
 
 /// Optional preprocessor / driver knobs threaded through compiler

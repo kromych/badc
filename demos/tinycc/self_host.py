@@ -342,17 +342,6 @@ def build_stage1_tcc(badc: Path, work: Path) -> Path | None:
             "i386-asm.c",
         )
     ]
-    (TINYCC_DIR / "config.h").write_text(
-        "/* synthesized by self_host.py -- mirrors smoke.py's Linux x86_64 row */\n"
-        '#define TCC_VERSION "0.9.28-badc"\n'
-        "#define CC_NAME CC_clang\n"
-        "#define GCC_MAJOR 0\n"
-        "#define GCC_MINOR 0\n"
-        "#define TCC_TARGET_X86_64 1\n"
-        "#define CONFIG_TCC_PREDEFS 0\n"
-        "#define CONFIG_TCC_SEMLOCK 0\n"
-        "#define CONFIG_TCC_BACKTRACE 0\n"
-    )
     out = work / "tcc-stage1"
     cmd = [
         str(badc),
@@ -481,6 +470,22 @@ def main() -> int:
     samples_dir.mkdir()
     for name, body in SAMPLES.items():
         (samples_dir / name).write_text(body)
+
+    # Both compiler builds and every subsequent `tcc -c` need the
+    # same target-selection macros baked in. Write the synthesised
+    # config.h up front; smoke.py may have left a different lane's
+    # macros from a previous run.
+    (TINYCC_DIR / "config.h").write_text(
+        "/* synthesized by self_host.py -- mirrors smoke.py's Linux x86_64 row */\n"
+        '#define TCC_VERSION "0.9.28-badc"\n'
+        "#define CC_NAME CC_clang\n"
+        "#define GCC_MAJOR 0\n"
+        "#define GCC_MINOR 0\n"
+        "#define TCC_TARGET_X86_64 1\n"
+        "#define CONFIG_TCC_PREDEFS 0\n"
+        "#define CONFIG_TCC_SEMLOCK 0\n"
+        "#define CONFIG_TCC_BACKTRACE 0\n"
+    )
 
     ref_tcc = build_reference_tcc(cc, work)
     if ref_tcc is None:

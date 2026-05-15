@@ -1849,6 +1849,7 @@ impl Compiler {
                         field.bit_offset,
                         field.bit_width,
                         field.bit_unit_size,
+                        field.ty,
                     )?;
                 } else {
                     // Trailing Lc/Li loads the field. The assignment handler

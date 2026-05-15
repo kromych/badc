@@ -160,6 +160,17 @@ fn bitfield_brace_init_packs_into_storage_unit() {
 }
 
 #[test]
+fn bitfield_signed_read_sign_extends() {
+    // C99 6.7.2.1p4: a signed bitfield of width N holds values in
+    // [-2^(N-1), 2^(N-1)-1]; the read path must sign-extend so the
+    // bit pattern `11...1` for width N reads as -1, not the
+    // unsigned `(1 << N) - 1`. Surfaced by stb_connected_components
+    // where a `signed short:2 cluster_dx` storing -1 read back as
+    // 3 and `dx + base_x` produced an out-of-range cluster index.
+    assert_eq!(run_fixture("bitfield_signed_read.c"), 0);
+}
+
+#[test]
 fn bitfield_storage_unit_matches_base_type() {
     // C99 6.7.2.1 paragraph 11: a bitfield's addressable
     // storage unit width is implementation-defined, but the

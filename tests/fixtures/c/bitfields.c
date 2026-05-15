@@ -7,24 +7,27 @@
 
 #include <stdlib.h>
 
+// C99 6.7.2.1p4 leaves the signedness of a plain `int` bitfield
+// implementation-defined, but a signed bitfield of width N can
+// only hold values in [-2^(N-1), 2^(N-1)-1]. The boolean / flag
+// patterns below ask for the unsigned ranges; declare them
+// unsigned so the read-back values match the assignments.
 struct Flags {
-    int present:1;
-    int dirty:1;
-    int kind:3;
-    int prio:5;
-    int wide:32;     // wide field within the same storage word
-    int normal;      // regular field after bitfields
+    unsigned int present:1;
+    unsigned int dirty:1;
+    unsigned int kind:3;
+    unsigned int prio:5;
+    unsigned int wide:32;
+    int normal;
 };
 
-// Pure bitfield struct -- exercises packing into a single storage
-// unit and reading every bit.
 struct Bits {
-    int a:1;
-    int b:1;
-    int c:1;
-    int d:1;
-    int e:4;
-    int f:8;
+    unsigned int a:1;
+    unsigned int b:1;
+    unsigned int c:1;
+    unsigned int d:1;
+    unsigned int e:4;
+    unsigned int f:8;
 };
 
 int main() {

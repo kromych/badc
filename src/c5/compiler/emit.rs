@@ -18,6 +18,7 @@ use super::super::error::C5Error;
 use super::super::op::Op;
 use super::super::symbol::Symbol;
 use super::super::token::{Token, Ty};
+use super::types::is_unsigned_ty;
 use super::Compiler;
 use super::types::{is_scalar_load_op_val, reemit_scalar_load};
 
@@ -261,6 +262,7 @@ impl Compiler {
         bit_offset: u32,
         bit_width: u32,
         unit_size: u8,
+        field_ty: i64,
     ) -> Result<(), C5Error> {
         let mask: i64 = if bit_width >= 64 {
             -1
@@ -373,6 +375,13 @@ impl Compiler {
             Ok(())
         } else {
             // Bitfield read: `s.f` in any non-assignment context.
+            // C99 6.7.2.1p10: a bitfield's signedness follows its
+            // declared base type. For a signed bitfield narrower than
+            // the c5 accumulator width, the post-mask value is in
+            // [0, 2^width) and must be sign-extended so that bit
+            // (width-1) propagates through the high half of the
+            // 64-bit accumulator; without this `signed short f:2`
+            // with the bit pattern `11` reads as `3` instead of `-1`.
             self.emit_op(load_op); // a = full storage word
             if bit_offset > 0 {
                 self.emit_op(Op::Psh);
@@ -382,6 +391,11 @@ impl Compiler {
             self.emit_op(Op::Psh);
             self.emit_imm(mask);
             self.emit_op(Op::And); // a = (...) & mask
+            if !is_unsigned_ty(field_ty) && bit_width < 64 {
+                let shift = 64i64 - (bit_width as i64);
+                self.emit_binop_with_imm(Op::Shl, shift);
+                self.emit_binop_with_imm(Op::Shr, shift); // Op::Shr is arithmetic
+            }
             self.ty = Ty::Int as i64;
             Ok(())
         }

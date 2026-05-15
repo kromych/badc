@@ -39,8 +39,9 @@ use super::super::token::{Token, Ty};
 use super::CODE_BASE;
 use super::Compiler;
 use super::types::{
-    format_type, fp_result_ty, is_floating_scalar, is_pointer_ty, is_struct_ty, is_unsigned_ty,
-    load_op_for, store_op_for, struct_id_of, struct_ptr_depth, usual_arith_common_ty,
+    format_type, fp_result_ty, integer_promote, is_floating_scalar, is_pointer_ty, is_struct_ty,
+    is_unsigned_ty, load_op_for, store_op_for, struct_id_of, struct_ptr_depth,
+    usual_arith_common_ty,
 };
 
 /// Relational comparison operator. The four variants share an
@@ -1051,8 +1052,17 @@ impl Compiler {
                     self.emit_op(Op::Fneg);
                     // self.ty already matches the operand's FP type
                 } else {
+                    // C99 6.5.3.3 paragraph 3: the integer promotions
+                    // are performed on the operand, and the result has
+                    // the promoted type. Collapsing the result to
+                    // `Ty::Int` here truncates a `unsigned long long`
+                    // operand to 32 bits, so a subsequent
+                    // `-svcoff < 0x1000` against a 64-bit value
+                    // mis-evaluates after the negation: the high half
+                    // is discarded and the comparison runs in `int`.
+                    let operand_ty = self.ty;
                     self.emit_binop_with_imm(Op::Mul, -1);
-                    self.ty = Ty::Int as i64;
+                    self.ty = integer_promote(operand_ty);
                 }
             }
         } else if self.lex.tk == Token::Inc || self.lex.tk == Token::Dec {

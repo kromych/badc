@@ -149,6 +149,17 @@ fn sizeof_string_literal_returns_array_size() {
 }
 
 #[test]
+fn unary_minus_preserves_uint64_width() {
+    // C99 6.5.3.3 paragraph 3: the integer promotions are
+    // performed on the operand of unary `-` and the result has
+    // the promoted operand type. Collapsing the result to `int`
+    // after the negation truncates an `unsigned long long`
+    // operand to 32 bits, which then mis-evaluates against a
+    // 64-bit guard like `if (-svcoff < 0x1000)`.
+    assert_eq!(run_fixture("unary_minus_uint64_compare.c"), 0);
+}
+
+#[test]
 fn sizeof_threads_through_malloc_write_and_return() {
     // sizeof(struct Packet) used in three positions in one program:
     // malloc size, write count, and the function's return value. Tests

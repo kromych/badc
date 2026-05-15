@@ -759,6 +759,59 @@ def main() -> int:
     else:
         print(f"tinycc self-host -- bootstrap skipped: {bootstrap_skip}")
 
+    # Functional check: stage1 and gen2 must produce code that
+    # actually runs, not just code that's byte-equivalent to the
+    # gcc-built reference. Byte equality catches codegen drift;
+    # this run-test catches a class of bugs where badc produces
+    # technically-correct-looking objects that crash on entry.
+    hello_src = work / "hello.c"
+    hello_src.write_text(
+        '#include <stdio.h>\n'
+        'int main(int argc, char **argv) {\n'
+        '    (void)argv;\n'
+        '    printf("hello-from-tcc\\n");\n'
+        '    return argc + 40;\n'
+        '}\n'
+    )
+    functional_failures: list[str] = []
+    multiarch_ld_dir = "/usr/lib/x86_64-linux-gnu"
+    hello_extra: tuple[str, ...] = ()
+    if multiarch is not None:
+        hello_extra = ("-I", str(multiarch))
+    for name, tcc_bin in (("stage1", stage1_tcc), ("gen2", gen2_tcc)):
+        if tcc_bin is None:
+            continue
+        hello_o = work / f"hello.{name}.o"
+        hello_bin = work / f"hello.{name}.bin"
+        ok, err = compile_with(tcc_bin, hello_src, hello_o, hello_extra)
+        if not ok:
+            functional_failures.append(f"{name} compile: {err}")
+            continue
+        link_cmd = [cc, "-o", str(hello_bin), str(hello_o)]
+        link_proc = subprocess.run(link_cmd, capture_output=True, text=True)
+        if link_proc.returncode != 0:
+            functional_failures.append(f"{name} link: {link_proc.stderr.strip()}")
+            continue
+        run_proc = subprocess.run(
+            [str(hello_bin)], capture_output=True, text=True
+        )
+        if run_proc.returncode != 41:
+            functional_failures.append(
+                f"{name} run: exit {run_proc.returncode}, want 41"
+            )
+            continue
+        if run_proc.stdout != "hello-from-tcc\n":
+            functional_failures.append(
+                f"{name} run: stdout {run_proc.stdout!r}, want 'hello-from-tcc\\n'"
+            )
+    _ = multiarch_ld_dir  # currently unused; retained for the libtcc1.a self-link TODO
+    print(
+        f"tinycc self-host -- functional: "
+        f"{2 - len(functional_failures)}/2 hello-world round trips"
+    )
+    for f in functional_failures:
+        print(f"  FUNC FAIL  {f}", file=sys.stderr)
+
     # Known-drifting TUs are surfaced but do not fail. Each entry
     # is tracked with a TODO marker; whittling the set down is the
     # work of closing the underlying bug. Empty today: the corpus
@@ -786,6 +839,8 @@ def main() -> int:
         print("self_host: unexpected bootstrap diff -- regression:", file=sys.stderr)
         for name in unexpected_boot:
             print(f"  {name}", file=sys.stderr)
+        return 1
+    if functional_failures:
         return 1
     return 0
 

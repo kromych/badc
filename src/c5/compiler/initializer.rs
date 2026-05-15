@@ -805,7 +805,11 @@ impl Compiler {
                 // the bitfield's bits into the existing storage
                 // unit instead.
                 let (value, _reloc) = self.parse_constant_init_value()?;
-                let unit_bytes = 8usize;
+                // C99 6.7.2.1p11: the bitfield's addressable storage
+                // unit width is determined by the declared base type;
+                // the RMW span must match `bit_unit_size` so it does
+                // not read or write outside the unit.
+                let unit_bytes = field.bit_unit_size as usize;
                 let mut unit_value: i64 = 0;
                 for i in 0..unit_bytes {
                     unit_value |= (self.data[field_base + i] as i64) << (i * 8);

@@ -18,8 +18,8 @@ use super::super::error::C5Error;
 use super::super::op::Op;
 use super::super::symbol::Symbol;
 use super::super::token::{Token, Ty};
-use super::types::is_unsigned_ty;
 use super::Compiler;
+use super::types::is_unsigned_ty;
 use super::types::{is_scalar_load_op_val, reemit_scalar_load};
 
 impl Compiler {

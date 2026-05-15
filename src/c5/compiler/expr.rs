@@ -112,7 +112,15 @@ impl Compiler {
             self.next()?;
             self.ty = Ty::Double as i64;
         } else if self.lex.tk == '"' {
-            self.emit_data_imm(self.lex.ival);
+            // C99 6.4.5 paragraph 6: a string literal has type
+            // `char[N+1]` where the +1 is the trailing NUL. The
+            // value decays to `char *` in this expression context,
+            // but `sizeof("...")` reads the full array size --
+            // surface the byte count via `last_array_decay_bytes`
+            // so `sizeof_operand_bytes` returns N+1 instead of the
+            // decayed pointer's 8.
+            let start_offset = self.lex.ival;
+            self.emit_data_imm(start_offset);
             self.next()?;
             // C concatenates adjacent string literals -- `"a" "b"` is one
             // string. The lexer leaves the NUL off so the bytes flow
@@ -121,6 +129,8 @@ impl Compiler {
                 self.next()?;
             }
             self.data.push(0);
+            self.pending.last_array_decay_bytes =
+                (self.data.len() as i64) - start_offset;
             self.ty = Ty::Ptr as i64;
         } else if self.lex.tk == Token::Sizeof {
             // C99 6.5.3.4: `sizeof(<type>)`, `sizeof(<expr>)`, or

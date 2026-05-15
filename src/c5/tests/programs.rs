@@ -139,6 +139,16 @@ fn sizeof_handles_expressions() {
 }
 
 #[test]
+fn sizeof_string_literal_returns_array_size() {
+    // C99 6.4.5p6: a string literal has type `char[N+1]` (the
+    // `+1` counts the trailing NUL). `sizeof` reads the array
+    // size, not the decayed pointer size. The fixture pins the
+    // four byte counts plus the adjacent-literal concatenation
+    // and the `sizeof - 1` skip-trailing-NUL idiom.
+    assert_eq!(run_fixture("sizeof_string_literal.c"), 0);
+}
+
+#[test]
 fn sizeof_threads_through_malloc_write_and_return() {
     // sizeof(struct Packet) used in three positions in one program:
     // malloc size, write count, and the function's return value. Tests

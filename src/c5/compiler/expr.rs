@@ -129,8 +129,7 @@ impl Compiler {
                 self.next()?;
             }
             self.data.push(0);
-            self.pending.last_array_decay_bytes =
-                (self.data.len() as i64) - start_offset;
+            self.pending.last_array_decay_bytes = (self.data.len() as i64) - start_offset;
             self.ty = Ty::Ptr as i64;
         } else if self.lex.tk == Token::Sizeof {
             // C99 6.5.3.4: `sizeof(<type>)`, `sizeof(<expr>)`, or

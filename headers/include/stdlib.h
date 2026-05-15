@@ -261,13 +261,15 @@ static inline void __clear_cache(void *begin, void *end) {
 #endif
 
 #ifdef __linux__
-/* Linux glibc does not export `__clear_cache`; it is a compiler-
-** runtime helper that lives in libgcc_s.so.1. The x86_64 backend
-** never calls it (hardware keeps the instruction cache coherent
-** automatically) so the symbol stays a quiescent reference there,
-** but on AArch64 the JIT path in tinycc relies on it to flush the
-** I-cache after emitting code. Pin the dylib explicitly so the
-** produced binary carries DT_NEEDED libgcc_s.so.1 next to libc. */
+/* Linux glibc does not export `__clear_cache`; the GCC / clang
+** documented surface places the helper in libgcc_s.so.1. ARM
+** ARM B2.4.4 requires explicit instruction-cache maintenance
+** after a writer publishes new code -- AArch64 callers reach
+** for `__clear_cache` to drive that sequence. x86_64 hardware
+** keeps the instruction cache coherent with the data side, so
+** the symbol stays unreferenced there. Pin the dylib explicitly
+** so callers that do reach for it get a DT_NEEDED entry for
+** libgcc_s.so.1 next to libc. */
 #pragma dylib(libgcc_s, "libgcc_s.so.1")
 #pragma binding(libgcc_s::__clear_cache, "__clear_cache")
 void __clear_cache(void *begin, void *end);

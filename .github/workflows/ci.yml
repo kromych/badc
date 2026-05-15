@@ -232,14 +232,19 @@ jobs:
         # every supported runner: each lane's HOST_MATRIX entry
         # picks the matching target_macros / cpp_defs / TU set.
         run: python demos/tinycc/smoke.py
-      - name: tinycc self-host parity (Linux x86_64 only)
+      - name: tinycc self-host parity (Linux)
         # Compares `tcc -c` output between a reference tcc built
-        # with the host gcc and a stage1 tcc built through badc on
-        # a curated set of include-free C samples. Skipped
-        # automatically on non-Linux-x86_64 runners; tcc emits ELF
+        # with the host gcc and a stage1 tcc built through badc.
+        # Skipped automatically on non-Linux runners; tcc emits ELF
         # only and the Mach-O / PE format paths are not exercised
-        # by this gate yet. TODO: tighten to gate on byte-identical
-        # output once the per-target codegen drift is closed.
+        # by this gate yet. The harness runs on every Linux runner;
+        # HOST_PROFILES in self_host.py picks the per-host TU set
+        # plus `TCC_TARGET_*` macros. The x86_64 lane gates on the
+        # full five-stage fixed point (samples / corpus / gen2 ==
+        # gen3 / gen2-self compile / functional). The aarch64 lane
+        # currently reports per-stage tallies but does not gate;
+        # TODO: c5 aarch64 corpus codegen drift on four upstream
+        # TUs blocks strict gating there.
         shell: bash
         run: python demos/tinycc/self_host.py || test $? -eq 2
       - name: stb header-only smoke

@@ -1053,13 +1053,12 @@ impl Compiler {
                     // self.ty already matches the operand's FP type
                 } else {
                     // C99 6.5.3.3 paragraph 3: the integer promotions
-                    // are performed on the operand, and the result has
-                    // the promoted type. Collapsing the result to
-                    // `Ty::Int` here truncates a `unsigned long long`
-                    // operand to 32 bits, so a subsequent
-                    // `-svcoff < 0x1000` against a 64-bit value
-                    // mis-evaluates after the negation: the high half
-                    // is discarded and the comparison runs in `int`.
+                    // are performed on the operand of unary `-`, and
+                    // the result has the promoted operand type.
+                    // Forcing `Ty::Int` here would drop the high half
+                    // of a `long long` / `unsigned long long` operand
+                    // and run any subsequent comparison or shift on
+                    // the negated value in `int`.
                     let operand_ty = self.ty;
                     self.emit_binop_with_imm(Op::Mul, -1);
                     self.ty = integer_promote(operand_ty);

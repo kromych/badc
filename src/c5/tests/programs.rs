@@ -153,9 +153,9 @@ fn unary_minus_preserves_uint64_width() {
     // C99 6.5.3.3 paragraph 3: the integer promotions are
     // performed on the operand of unary `-` and the result has
     // the promoted operand type. Collapsing the result to `int`
-    // after the negation truncates an `unsigned long long`
-    // operand to 32 bits, which then mis-evaluates against a
-    // 64-bit guard like `if (-svcoff < 0x1000)`.
+    // after the negation drops the high half of an
+    // `unsigned long long` operand and mis-evaluates the
+    // subsequent comparison in 32-bit signed.
     assert_eq!(run_fixture("unary_minus_uint64_compare.c"), 0);
 }
 
@@ -286,8 +286,7 @@ fn variadic_call_through_fnptr_delivers_all_args() {
     // c5 used to route every address-taken function through an
     // arg-shuffling thunk that lost the variadic tail; the
     // fixture covers a bare fn-pointer call and the
-    // comma-operator-yielding-fn-pointer macro shape upstream
-    // tinycc uses for its TCC_SET_STATE-style wrappers.
+    // comma-operator-yielding-fn-pointer macro shape.
     assert_eq!(run_fixture("variadic_via_fnptr.c"), 0);
 }
 
@@ -378,8 +377,7 @@ fn macro_paste_result_is_rescanned() {
     // re-scan finds another function-like macro name and the
     // source token immediately after the outer invocation is `(`,
     // those arguments feed the inner expansion. The fixture
-    // exercises the width-mux `WIDTH##_##NAME(...)` idiom that
-    // tinycc's `ELFW(...)` family depends on.
+    // exercises the width-mux `WIDTH##_##NAME(...)` idiom.
     assert_eq!(run_fixture("macro_paste_rescan.c"), 0);
 }
 
@@ -422,14 +420,13 @@ fn attribute_and_declspec_absorbed_as_no_op() {
 #[ignore = "TODO: c5 VM has no setjmp / longjmp shim; the fixture verifies the host-libc semantic and needs the JIT / AOT path"]
 fn setjmp_longjmp_unwinds_through_jmp_buf() {
     // C99 7.13: `setjmp` returns 0 directly and the matching
-    // `longjmp(env, val)` rewinds control to the setjmp site with
-    // a return value of `val`. The fixture embeds a `jmp_buf` in
-    // a struct (tinycc's `TCCState` shape) and checks both the
-    // return-value contract and the survival of a volatile local
-    // across the unwind. Bound to host libc per platform; if a
-    // host's libc setjmp implementation requires a wider buffer
-    // than 64 longs (512 bytes), this fixture detects the size
-    // mismatch before tinycc does.
+    // `longjmp(env, val)` rewinds control to the setjmp site
+    // with a return value of `val`. The fixture embeds a
+    // `jmp_buf` in a struct and checks both the return-value
+    // contract and the survival of a volatile local across the
+    // unwind. Bound to host libc per platform; if a host's libc
+    // setjmp implementation requires a wider buffer than 64
+    // longs (512 bytes), this fixture detects the size mismatch.
     assert_eq!(run_fixture("setjmp_longjmp.c"), 0);
 }
 

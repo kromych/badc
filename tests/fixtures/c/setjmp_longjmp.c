@@ -23,8 +23,10 @@ static void trigger(struct error_state *s, int n) {
 }
 
 int main(void) {
-    // jmp_buf must be embeddable in a struct -- tinycc's
-    // `TCCState` holds one as a field for its error-recovery path.
+    // jmp_buf must be embeddable in a struct -- C99 7.13 lets
+    // an implementation pick any object type for `jmp_buf` and
+    // many real-world error-recovery designs hold one as a
+    // struct field.
     struct error_state s;
     if (sizeof(s.env) < 64) return 11;
 

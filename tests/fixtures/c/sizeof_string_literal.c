@@ -8,9 +8,7 @@
 // type to `Ty::Ptr` immediately, with no array-byte-count side
 // channel. `sizeof("...")` then read the pointer's size and
 // returned 8 for every literal, breaking idioms like
-// `sizeof "magic" - 1`, `static char buf[sizeof DEFAULT]`, and
-// the `sizeof ARMAG - 1` archive-magic offset upstream tinycc
-// uses.
+// `sizeof "magic" - 1` and `static char buf[sizeof DEFAULT]`.
 //
 // Returns 0 on success; each failure path returns a distinct
 // nonzero code.

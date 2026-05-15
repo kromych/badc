@@ -5,9 +5,7 @@
 // the same arguments.
 //
 // The fixture verifies that a single walk through a copy
-// observes the same values as the original cursor would. That
-// is the exact shape tinycc's preprocessor reaches for when a
-// macro-expansion error path needs to re-read the varargs.
+// observes the same values as the original cursor would.
 
 #include <stdarg.h>
 

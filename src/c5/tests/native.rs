@@ -352,6 +352,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("leading_dot_float_literal.c", 7),
     ("libc_fp_return_value.c", 11),
     ("long_double_libc_return.c", 0),
+    ("variadic_via_fnptr.c", 0),
     ("pragma_entrypoint.c", 23),
     ("struct_field_enum_type.c", 13),
     ("compound_assign_fp_int_rhs.c", 17),

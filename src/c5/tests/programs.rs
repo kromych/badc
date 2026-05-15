@@ -258,6 +258,19 @@ fn array_typedef_dimensions_propagate() {
 }
 
 #[test]
+#[ignore = "TODO: VM walks variadic args in reverse order under explicit per-slot va_arg reads (separate from the native fn-ptr-thunk bug). The fixture verifies the native fn-ptr path through NATIVE_FIXTURES."]
+fn variadic_call_through_fnptr_delivers_all_args() {
+    // C99 6.5.2.2: a call through a function pointer must
+    // deliver every fixed and variadic argument to the callee.
+    // c5 used to route every address-taken function through an
+    // arg-shuffling thunk that lost the variadic tail; the
+    // fixture covers a bare fn-pointer call and the
+    // comma-operator-yielding-fn-pointer macro shape upstream
+    // tinycc uses for its TCC_SET_STATE-style wrappers.
+    assert_eq!(run_fixture("variadic_via_fnptr.c"), 0);
+}
+
+#[test]
 #[ignore = "TODO: c5 VM has no shim for strtold / ldexpl; the fixture verifies the SysV x86_64 long-double libc-return convention through the native lane via NATIVE_FIXTURES"]
 fn long_double_libc_return_round_trips() {
     // SysV x86_64 ABI: `long double` libc returns ride in

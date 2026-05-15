@@ -1221,6 +1221,47 @@ fn lea_offset_bytes(offset: i64) -> i64 {
 /// host-arg thunks built on top of this only spill the regs the
 /// function actually reads, so an unused declared param never reads
 /// garbage.
+/// See aarch64::function_is_variadic. The bytecode shape is
+/// platform-independent, but the helper lives per-arch alongside
+/// `param_count_for_func` for symmetry with the existing thunk
+/// decision.
+pub(super) fn function_is_variadic(text: &[i64], ent_pc: usize) -> bool {
+    if ent_pc >= text.len() || Op::from_i64(text[ent_pc]) != Some(Op::Ent) {
+        return false;
+    }
+    let mut pc = ent_pc + Op::Ent.word_size();
+    while pc < text.len() {
+        let op = match Op::from_i64(text[pc]) {
+            Some(o) => o,
+            None => break,
+        };
+        if matches!(op, Op::Ent) {
+            break;
+        }
+        if matches!(op, Op::Imm) && pc + 1 < text.len() && text[pc + 1] == 2 {
+            let after_imm2 = pc + Op::Imm.word_size();
+            if after_imm2 < text.len()
+                && Op::from_i64(text[after_imm2]) == Some(Op::Psh)
+            {
+                let imm8_pc = after_imm2 + Op::Psh.word_size();
+                if imm8_pc + 1 < text.len()
+                    && Op::from_i64(text[imm8_pc]) == Some(Op::Imm)
+                    && text[imm8_pc + 1] == 8
+                {
+                    let mul_pc = imm8_pc + Op::Imm.word_size();
+                    if mul_pc < text.len()
+                        && Op::from_i64(text[mul_pc]) == Some(Op::Mul)
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        pc += op.word_size();
+    }
+    false
+}
+
 pub(super) fn param_count_for_func(text: &[i64], ent_pc: usize) -> usize {
     if ent_pc >= text.len() || Op::from_i64(text[ent_pc]) != Some(Op::Ent) {
         return 0;
@@ -1575,6 +1616,11 @@ pub(super) fn lower(
         }
         let target = bytecode_to_native[func_pc];
         if target == usize::MAX {
+            continue;
+        }
+        // Variadic c5 functions skip the thunk -- see the matching
+        // comment in aarch64.rs.
+        if function_is_variadic(&program.text, func_pc) {
             continue;
         }
         let thunk_offset = emit_arg_thunk(&mut code, n_params, target, abi);

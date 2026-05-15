@@ -1353,6 +1353,14 @@ pub(super) fn lower(
         if target == usize::MAX {
             continue;
         }
+        // Variadic c5 functions skip the thunk. The shuffler would
+        // only spill the fixed-arg count of register args and
+        // discard the variadic tail; `Op::Jsri` already pushes
+        // every arg onto the c5 stack, so the bare body reads the
+        // varargs correctly through its declared parameter slots.
+        if function_is_variadic(&program.text, func_pc) {
+            continue;
+        }
         let thunk_offset = emit_arg_thunk(&mut code, n_params, target, abi);
         thunk_for_func.insert(func_pc, thunk_offset);
     }
@@ -2840,6 +2848,62 @@ fn lea_offset_bytes(offset: i64) -> i64 {
 /// the optimized bytecode would look like the function never reads
 /// its params. Mirror of x86_64::param_count_for_func; kept per-arch
 /// so neither backend needs to import the other.
+/// Walk a function body starting at its `Op::Ent` and look for the
+/// c5 expansion of `va_start(ap, last)`. The macro lowers to a
+/// `Lea LAST; Psh; Imm 2; Psh; Imm 8; Mul; Add; Si` sequence: take
+/// the address of the last fixed parameter, add `2 * 8 == 16`
+/// (one c5 stack slot), and store the result into the `va_list`
+/// local. The `Imm 2; Psh; Imm 8; Mul` triple is unique enough to
+/// the va_start path that no other c5 IR emits it.
+///
+/// Variadic functions can't go through the standard arg-shuffling
+/// thunk because the thunk only spills the fixed parameter count
+/// of register args -- the variadic tail in x1..x7 would be lost.
+/// `Op::Jsri` already pushes every arg onto the c5 stack, so a
+/// variadic callee reached through a c5 fn-pointer reads its args
+/// from the bare body. Host-ABI callbacks (`pthread_create`,
+/// `qsort`, ...) don't pass variadic c5 callees anyway -- the
+/// missing thunk doesn't lose a real use case.
+pub(super) fn function_is_variadic(text: &[i64], ent_pc: usize) -> bool {
+    if ent_pc >= text.len() || Op::from_i64(text[ent_pc]) != Some(Op::Ent) {
+        return false;
+    }
+    let mut pc = ent_pc + Op::Ent.word_size();
+    while pc < text.len() {
+        let op = match Op::from_i64(text[pc]) {
+            Some(o) => o,
+            None => break,
+        };
+        if matches!(op, Op::Ent) {
+            break;
+        }
+        if matches!(op, Op::Imm) && pc + 1 < text.len() && text[pc + 1] == 2 {
+            // Look ahead for `Imm 2; Psh; Imm 8; Mul`. Tolerate
+            // any insertion of intermediate `Psh` only (the c5
+            // emitter never inlines other ops here).
+            let after_imm2 = pc + Op::Imm.word_size();
+            if after_imm2 < text.len()
+                && Op::from_i64(text[after_imm2]) == Some(Op::Psh)
+            {
+                let imm8_pc = after_imm2 + Op::Psh.word_size();
+                if imm8_pc + 1 < text.len()
+                    && Op::from_i64(text[imm8_pc]) == Some(Op::Imm)
+                    && text[imm8_pc + 1] == 8
+                {
+                    let mul_pc = imm8_pc + Op::Imm.word_size();
+                    if mul_pc < text.len()
+                        && Op::from_i64(text[mul_pc]) == Some(Op::Mul)
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        pc += op.word_size();
+    }
+    false
+}
+
 pub(super) fn param_count_for_func(text: &[i64], ent_pc: usize) -> usize {
     if ent_pc >= text.len() || Op::from_i64(text[ent_pc]) != Some(Op::Ent) {
         return 0;

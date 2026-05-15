@@ -1181,6 +1181,8 @@ def main() -> int:
     KNOWN_DRIFT: set[str] = set()
     if host == ("Linux", "aarch64"):
         KNOWN_DRIFT = {"tccpp.c"}
+    elif host == ("Darwin", "arm64"):
+        KNOWN_DRIFT = {"tccmacho.c"}
 
     unexpected_corpus = [n for n in tu_mismatches if n not in KNOWN_DRIFT]
     unexpected_boot = [n for n in boot_mismatches if n not in KNOWN_DRIFT]

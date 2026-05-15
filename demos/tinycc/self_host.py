@@ -318,7 +318,28 @@ def resolve_badc() -> Path | None:
     return None
 
 
-def build_reference_tcc(cc: str, work: Path) -> Path | None:
+def tcc_build_defines(multiarch: Path | None) -> tuple[str, ...]:
+    """Per-target compile-time macros baked into both the
+    reference and stage1 tcc binaries. The CRT / library paths
+    are compile-time constants on tinycc; pointing them at the
+    host's multiarch directory lets the produced binary find
+    `crt1.o` / `crti.o` / `libc.so` without runtime `-L` flags.
+    The sysinclude path keeps `{B}/include` first so `tccdefs.h`
+    (under the demo tree) still resolves through tcc's own
+    `-B` lookup; only the trailing system path is multiarched.
+    On non-multiarch hosts the defaults suffice.
+    """
+    if multiarch is None:
+        return ()
+    triplet = multiarch.name
+    return (
+        f'-DCONFIG_TCC_CRTPREFIX="/usr/lib/{triplet}"',
+        f'-DCONFIG_TCC_LIBPATHS="{{B}}:/usr/lib/{triplet}:/usr/lib"',
+        f'-DCONFIG_TCC_SYSINCLUDEPATHS="{{B}}/include:/usr/include/{triplet}:/usr/include"',
+    )
+
+
+def build_reference_tcc(cc: str, work: Path, multiarch: Path | None) -> Path | None:
     """Build a reference tcc via host gcc/cc.
 
     Mirrors the upstream Makefile's `tcc` link step but invoked
@@ -353,6 +374,7 @@ def build_reference_tcc(cc: str, work: Path) -> Path | None:
         "-DCONFIG_TCC_SEMLOCK=0",
         "-DCONFIG_TCC_BACKTRACE=0",
         "-D_GNU_SOURCE",
+        *tcc_build_defines(multiarch),
         f"-I{TINYCC_DIR}",
         "-o",
         str(out),
@@ -434,7 +456,7 @@ def libtcc1_objects_for_gen2_link(archive: Path) -> list[Path]:
     return [archive]
 
 
-def build_stage1_tcc(badc: Path, work: Path) -> Path | None:
+def build_stage1_tcc(badc: Path, work: Path, multiarch: Path | None) -> Path | None:
     """Build a stage1 tcc through badc -- the same TU set the
     smoke step links. ``cwd`` is pinned to the repo root so badc's
     `./include` auto-add picks up c5's bundled headers."""
@@ -462,6 +484,7 @@ def build_stage1_tcc(badc: Path, work: Path) -> Path | None:
         "-DONE_SOURCE=0",
         "-DTCC_TARGET_X86_64=1",
         "-D_GNU_SOURCE",
+        *tcc_build_defines(multiarch),
         "-o",
         str(out),
         *sources,
@@ -599,11 +622,13 @@ def main() -> int:
         "#define CONFIG_TCC_BACKTRACE 0\n"
     )
 
-    ref_tcc = build_reference_tcc(cc, work)
+    multiarch_dir = detect_multiarch_include()
+
+    ref_tcc = build_reference_tcc(cc, work, multiarch_dir)
     if ref_tcc is None:
         return 1
 
-    stage1_tcc = build_stage1_tcc(badc, work)
+    stage1_tcc = build_stage1_tcc(badc, work, multiarch_dir)
     if stage1_tcc is None:
         return 1
 
@@ -643,7 +668,7 @@ def main() -> int:
 
     # Parity on the real tinycc corpus -- the same TUs the smoke
     # step links. Strictly larger surface than the curated samples.
-    multiarch = detect_multiarch_include()
+    multiarch = multiarch_dir
     tu_flags: tuple[str, ...] = TINYCC_TU_FLAGS
     if multiarch is not None:
         tu_flags = tu_flags + ("-I", str(multiarch))

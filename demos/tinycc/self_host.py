@@ -368,43 +368,32 @@ def build_reference_tcc(cc: str, work: Path) -> Path | None:
     return out
 
 
-def build_libtcc1_helpers(cc: str, work: Path) -> list[Path] | None:
-    """Build the minimal libtcc1 helper objects gen2 needs at link
-    time on Linux x86_64: ``__floatundixf`` / ``__fixxfdi`` (80-bit
-    long-double conversions emitted by tcc's codegen) and
-    ``__va_arg`` (tcc's stack-walking va_arg helper). Pulls the
-    upstream lib/libtcc1.c + lib/va_list.c sources straight from
-    the cache zip rather than vendoring them as a separate setup.py
-    asset; the full libtcc1.a buildup is tracked under the TODO
-    marker.
+def build_libtcc1_archive(stage1_tcc: Path, work: Path) -> Path | None:
+    """Compile the vendored ``lib/libtcc1.c`` + ``lib/va_list.c``
+    with the stage1 tcc binary and bundle the resulting objects
+    into a ``libtcc1.a`` archive. The archive exposes
+    ``__floatundixf`` / ``__fixxfdi`` (80-bit long-double
+    conversion helpers tcc's codegen emits as undefined
+    references) and ``__va_arg`` (tcc's stack-walking va_arg
+    helper).
+
+    The archive sits at ``<work>/libtcc1.a`` and at
+    ``<TINYCC_DIR>/libtcc1.a`` so a later step that invokes tcc
+    with ``-B <TINYCC_DIR>`` can pick it up via tcc's standard
+    library-path search. The full upstream libtcc1.a covers
+    coverage / backtrace / bcheck helpers (tcov, runmain,
+    bcheck); those are needed only for ``-bt`` / ``-run`` /
+    ``-fbounds-checking`` and stay outside this subset.
     """
-    cache_dir = TINYCC_DIR / ".cache"
-    candidates = list(cache_dir.glob("tinycc-*.zip"))
-    if not candidates:
-        return None
-    import zipfile
-
-    extract = work / "libtcc1_src"
-    extract.mkdir(exist_ok=True)
-    prefix = "tinycc-757507eb022f7af4be63dc9a72b299761181efbb"
-    names = ("lib/libtcc1.c", "lib/va_list.c")
-    src_paths: list[Path] = []
-    with zipfile.ZipFile(candidates[0]) as zf:
-        for name in names:
-            out = extract / Path(name).name
-            with zf.open(f"{prefix}/{name}") as src, out.open("wb") as dst:
-                shutil.copyfileobj(src, dst)
-            src_paths.append(out)
-
+    sources = (TINYCC_DIR / "lib" / "libtcc1.c", TINYCC_DIR / "lib" / "va_list.c")
     obj_paths: list[Path] = []
-    for src in src_paths:
-        obj = work / (src.stem + ".o")
+    for src in sources:
+        obj = work / (src.stem + ".lib.o")
         cmd = [
-            cc,
+            str(stage1_tcc),
+            "-B",
+            str(TINYCC_DIR),
             "-c",
-            "-O0",
-            "-fPIC",
-            f"-I{TINYCC_DIR}",
             str(src),
             "-o",
             str(obj),
@@ -415,7 +404,34 @@ def build_libtcc1_helpers(cc: str, work: Path) -> list[Path] | None:
             print(proc.stderr, file=sys.stderr)
             return None
         obj_paths.append(obj)
-    return obj_paths
+
+    archive = work / "libtcc1.a"
+    if archive.exists():
+        archive.unlink()
+    cmd = [
+        shutil.which("ar") or "ar",
+        "rcs",
+        str(archive),
+        *[str(p) for p in obj_paths],
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        print("self_host: libtcc1.a archive build failed:", file=sys.stderr)
+        print(proc.stderr, file=sys.stderr)
+        return None
+    # Mirror to the tcc lib path so `-B <TINYCC_DIR>` resolves it.
+    mirror = TINYCC_DIR / "libtcc1.a"
+    shutil.copyfile(archive, mirror)
+    return archive
+
+
+def libtcc1_objects_for_gen2_link(archive: Path) -> list[Path]:
+    """Return the path list to splice into the host-gcc link of
+    `tcc-gen2`. Passing the archive directly is enough: ld pulls
+    only the members that satisfy undefined symbols, so the
+    minimal-archive contents land in `tcc-gen2` and nothing else.
+    """
+    return [archive]
 
 
 def build_stage1_tcc(badc: Path, work: Path) -> Path | None:
@@ -681,10 +697,10 @@ def main() -> int:
         bootstrap_skip = "missing one or more gen2 objects"
     else:
         gen2_tcc = work / "tcc-gen2"
-        helper_objs = build_libtcc1_helpers(cc, work)
-        if helper_objs is None:
+        libtcc1 = build_libtcc1_archive(stage1_tcc, work)
+        if libtcc1 is None:
             gen2_tcc = None
-            bootstrap_skip = "libtcc1 helper build failed"
+            bootstrap_skip = "libtcc1.a build failed"
         else:
             link_cmd = [
                 cc,
@@ -698,7 +714,7 @@ def main() -> int:
                 "-o",
                 str(gen2_tcc),
                 *[str(p) for p in gen2_objs],
-                *[str(p) for p in helper_objs],
+                *[str(p) for p in libtcc1_objects_for_gen2_link(libtcc1)],
                 "-ldl",
                 "-lpthread",
             ]

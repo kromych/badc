@@ -799,10 +799,28 @@ def main() -> int:
         '}\n'
     )
     functional_failures: list[str] = []
-    multiarch_ld_dir = "/usr/lib/x86_64-linux-gnu"
     hello_extra: tuple[str, ...] = ()
     if multiarch is not None:
         hello_extra = ("-I", str(multiarch))
+    # When the host has a multiarch directory, link via the host's
+    # CRT objects + `libc.so.6` (the shared library) directly.
+    # Passing `libc.so` instead would land on a GNU `ld` linker
+    # script that pulls in `libc_nonshared.a`; tcc's `read_ar_header`
+    # rejects the long-name extension that archive uses (TODO marker
+    # for tightening tcc's archive reader). `libc.so.6` carries every
+    # symbol a plain `printf` round-trip needs.
+    self_link_lib = None
+    if multiarch is not None:
+        triplet = multiarch.name
+        crt_dir = Path(f"/usr/lib/{triplet}")
+        crt1 = crt_dir / "crt1.o"
+        crti = crt_dir / "crti.o"
+        crtn = crt_dir / "crtn.o"
+        libc = Path(f"/lib/{triplet}/libc.so.6")
+        if not libc.is_file():
+            libc = crt_dir / "libc.so.6"
+        if all(p.is_file() for p in (crt1, crti, crtn, libc)):
+            self_link_lib = (crt1, crti, libc, crtn)
     for name, tcc_bin in (("stage1", stage1_tcc), ("gen2", gen2_tcc)):
         if tcc_bin is None:
             continue
@@ -812,7 +830,22 @@ def main() -> int:
         if not ok:
             functional_failures.append(f"{name} compile: {err}")
             continue
-        link_cmd = [cc, "-o", str(hello_bin), str(hello_o)]
+        if self_link_lib is not None:
+            link_cmd = [
+                str(tcc_bin),
+                "-B",
+                str(TINYCC_DIR),
+                "-nostdlib",
+                str(self_link_lib[0]),
+                str(self_link_lib[1]),
+                str(hello_o),
+                str(self_link_lib[2]),
+                str(self_link_lib[3]),
+                "-o",
+                str(hello_bin),
+            ]
+        else:
+            link_cmd = [cc, "-o", str(hello_bin), str(hello_o)]
         link_proc = subprocess.run(link_cmd, capture_output=True, text=True)
         if link_proc.returncode != 0:
             functional_failures.append(f"{name} link: {link_proc.stderr.strip()}")
@@ -829,9 +862,9 @@ def main() -> int:
             functional_failures.append(
                 f"{name} run: stdout {run_proc.stdout!r}, want 'hello-from-tcc\\n'"
             )
-    _ = multiarch_ld_dir  # currently unused; retained for the libtcc1.a self-link TODO
+    linker_label = "stage1 self-link" if self_link_lib is not None else "host gcc link"
     print(
-        f"tinycc self-host -- functional: "
+        f"tinycc self-host -- functional ({linker_label}): "
         f"{2 - len(functional_failures)}/2 hello-world round trips"
     )
     for f in functional_failures:

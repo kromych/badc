@@ -578,7 +578,15 @@ def compile_with(
     cmd = [str(tcc), "-B", str(TINYCC_DIR), *extra, "-c", str(src), "-o", str(out)]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
-        return False, proc.stderr.strip()
+        # Surface the returncode alongside stderr so silent crashes
+        # (Windows access violation 0xC0000005 = -1073741819, SIGSEGV
+        # = -11 on POSIX) are distinguishable from a clean nonzero
+        # exit. An empty stderr with a crash-shaped returncode tells
+        # the reader the process died before it could write a
+        # diagnostic.
+        err = proc.stderr.strip()
+        rc = proc.returncode
+        return False, f"exit {rc}{': ' + err if err else ''}"
     return True, ""
 
 

@@ -2882,18 +2882,14 @@ pub(super) fn function_is_variadic(text: &[i64], ent_pc: usize) -> bool {
             // any insertion of intermediate `Psh` only (the c5
             // emitter never inlines other ops here).
             let after_imm2 = pc + Op::Imm.word_size();
-            if after_imm2 < text.len()
-                && Op::from_i64(text[after_imm2]) == Some(Op::Psh)
-            {
+            if after_imm2 < text.len() && Op::from_i64(text[after_imm2]) == Some(Op::Psh) {
                 let imm8_pc = after_imm2 + Op::Psh.word_size();
                 if imm8_pc + 1 < text.len()
                     && Op::from_i64(text[imm8_pc]) == Some(Op::Imm)
                     && text[imm8_pc + 1] == 8
                 {
                     let mul_pc = imm8_pc + Op::Imm.word_size();
-                    if mul_pc < text.len()
-                        && Op::from_i64(text[mul_pc]) == Some(Op::Mul)
-                    {
+                    if mul_pc < text.len() && Op::from_i64(text[mul_pc]) == Some(Op::Mul) {
                         return true;
                     }
                 }

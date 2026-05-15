@@ -166,6 +166,91 @@ int main(void) {
     return x;
 }
 """,
+    "sizeof_exprs.c": """
+struct P { int x; int y; int z; };
+int main(void) {
+    int arr[16];
+    struct P p;
+    int s = 0;
+    s += (int)sizeof(int);
+    s += (int)sizeof(arr);
+    s += (int)sizeof(arr) / (int)sizeof(arr[0]);
+    s += (int)sizeof(p);
+    s += (int)sizeof(p.y);
+    s += (int)sizeof("hello");
+    return s;
+}
+""",
+    "conditional.c": """
+static int max3(int a, int b, int c) {
+    int m = a > b ? a : b;
+    return m > c ? m : c;
+}
+int main(void) {
+    return max3(7, 12, 9) + (1 < 2 ? 10 : 20) - (0 ? 5 : 3);
+}
+""",
+    "comma_op.c": """
+int main(void) {
+    int i, j, k;
+    for (i = 0, j = 10; i < j; i++, j--)
+        ;
+    k = (i = 1, j = 2, i + j);
+    return i * 100 + j * 10 + k;
+}
+""",
+    "signed_unsigned.c": """
+int main(void) {
+    int s = -1;
+    unsigned u = 1;
+    long long sl = (long long)s + (long long)u;
+    if (s < (int)u) sl += 100;
+    unsigned mask = 0xFFFFFFFFu;
+    if ((mask >> 1) == 0x7FFFFFFFu) sl += 1000;
+    return (int)sl;
+}
+""",
+    "string_concat.c": """
+static int strlen_local(const char *s) {
+    int n = 0;
+    while (s[n]) n++;
+    return n;
+}
+int main(void) {
+    const char *s = "abc" "def" "ghi";
+    return strlen_local(s);
+}
+""",
+    "char_arith.c": """
+int main(void) {
+    char c = 'A';
+    int upper = (int)c;
+    c = c + 32;
+    int lower = (int)c;
+    return lower - upper;
+}
+""",
+    "global_struct_init.c": """
+struct Pt { int x; int y; };
+struct Pt g_origin = { 0, 0 };
+struct Pt g_pts[3] = { { 1, 2 }, { 3, 4 }, { 5, 6 } };
+int main(void) {
+    int s = g_origin.x + g_origin.y;
+    for (int i = 0; i < 3; i++) s += g_pts[i].x + g_pts[i].y;
+    return s;
+}
+""",
+    "nested_struct.c": """
+struct inner { int a; int b; };
+struct outer { struct inner head; struct inner tail; int n; };
+int main(void) {
+    struct outer o;
+    o.head.a = 1; o.head.b = 2;
+    o.tail.a = 3; o.tail.b = 4;
+    o.n = 10;
+    return o.head.a + o.head.b + o.tail.a + o.tail.b + o.n;
+}
+""",
 }
 
 

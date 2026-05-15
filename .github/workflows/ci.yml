@@ -241,11 +241,12 @@ jobs:
         # fixed point (samples / corpus / gen2 == gen3 /
         # gen2-self compile / functional). The macOS aarch64 lane
         # is soft-gated on gen2-self while a c5 miscompile in
-        # `tccmacho.c`'s Mach-O binding emit gets resolved.
-        # KNOWN_DRIFT lists per-host residual mismatches that do
-        # not affect correctness. Skipped on Windows runners; tcc
-        # emits ELF intermediates and the PE final-link recipe
-        # is not exercised yet.
+        # `tccmacho.c`'s Mach-O binding emit gets resolved. The
+        # Windows lanes (x86_64 + ARM64) are in active bringup
+        # and run as soft-report only; the harness publishes
+        # tallies but does not fail CI yet. KNOWN_DRIFT lists
+        # per-host residual mismatches that do not affect
+        # correctness.
         shell: bash
         run: python demos/tinycc/self_host.py || test $? -eq 2
       - name: stb header-only smoke

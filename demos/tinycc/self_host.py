@@ -358,21 +358,25 @@ def host_link_libs(host: tuple[str, str]) -> tuple[str, ...]:
     binaries need to resolve their dependencies. Linux pulls in
     `libdl` and `libpthread` separately; macOS bundles both into
     `libSystem`, which clang autolinks, so the list is empty.
+    Windows ships its libc / threading surface in the C runtime
+    DLL the toolchain autolinks (msvcrt for mingw, ucrt for the
+    UCRT variant), so the list is also empty there.
     """
-    if host[0] == "Darwin":
-        return ()
-    return ("-ldl", "-lpthread")
+    if host[0] == "Linux":
+        return ("-ldl", "-lpthread")
+    return ()
 
 
 def host_link_flags(host: tuple[str, str]) -> tuple[str, ...]:
     """Linker flags only valid on a given host. The
     `--no-eh-frame-hdr` workaround addresses GNU ld's
-    overlapping-FDE diagnostic on multi-TU tcc objects; macOS's
-    ld64 has no equivalent flag.
+    overlapping-FDE diagnostic on multi-TU tcc objects produced
+    for ELF output; macOS's ld64 and the PE / COFF linkers have
+    no equivalent flag.
     """
-    if host[0] == "Darwin":
-        return ()
-    return ("-Wl,--no-eh-frame-hdr",)
+    if host[0] == "Linux":
+        return ("-Wl,--no-eh-frame-hdr",)
+    return ()
 
 
 def codesign_if_macos(host: tuple[str, str], path: Path) -> None:
@@ -634,18 +638,54 @@ HOST_PROFILES: dict[tuple[str, str], dict[str, tuple[str, ...]]] = {
         ),
         "target_macros": ("TCC_TARGET_ARM64", "TCC_TARGET_MACHO"),
     },
+    ("Windows", "x86_64"): {
+        "tus": (
+            "tcc.c",
+            "libtcc.c",
+            "tccpp.c",
+            "tccgen.c",
+            "tccelf.c",
+            "tccasm.c",
+            "tccdbg.c",
+            "tccrun.c",
+            "x86_64-gen.c",
+            "x86_64-link.c",
+            "i386-asm.c",
+            "tccpe.c",
+        ),
+        "target_macros": ("TCC_TARGET_X86_64", "TCC_TARGET_PE"),
+    },
+    ("Windows", "ARM64"): {
+        "tus": (
+            "tcc.c",
+            "libtcc.c",
+            "tccpp.c",
+            "tccgen.c",
+            "tccelf.c",
+            "tccasm.c",
+            "tccdbg.c",
+            "tccrun.c",
+            "arm64-gen.c",
+            "arm64-link.c",
+            "arm64-asm.c",
+            "tccpe.c",
+        ),
+        "target_macros": ("TCC_TARGET_ARM64", "TCC_TARGET_PE"),
+    },
 }
 
 
 def host_key() -> tuple[str, str]:
     """Match ``platform.machine()`` against the host-profile key set.
-    ``x86_64`` and ``amd64`` are aliased to ``x86_64`` because Linux
-    reports the latter on a handful of distros.
+    ``x86_64`` and ``amd64`` (and Windows-style ``AMD64``) are aliased
+    to ``x86_64``. Windows ``ARM64`` keeps its casing so the
+    HOST_PROFILES key matches what `platform.machine()` returns there.
     """
+    system = platform.system()
     machine = platform.machine()
-    if machine == "amd64":
+    if machine.lower() == "amd64":
         machine = "x86_64"
-    return (platform.system(), machine)
+    return (system, machine)
 
 
 def target_macro_flags(target_macros: tuple[str, ...]) -> tuple[str, ...]:
@@ -716,15 +756,22 @@ def main() -> int:
     profile = HOST_PROFILES.get(host)
     if profile is None:
         return env_unsuitable(
-            f"unsupported host {host[0]}/{host[1]}; "
-            f"tcc -c emits Linux ELF and the harness only knows how "
-            f"to build the host reference + stage1 tcc on Linux "
-            f"x86_64 / aarch64 today"
+            f"unsupported host {host[0]}/{host[1]}; the harness only "
+            f"knows how to build the host reference + stage1 tcc on "
+            f"Linux x86_64 / aarch64, Darwin arm64, and Windows "
+            f"x86_64 / ARM64"
         )
 
-    cc = shutil.which("gcc") or shutil.which("cc")
+    # GitHub-hosted Windows runners ship mingw-w64; the binary is
+    # spelled `gcc.exe`. Linux / macOS go through the regular
+    # `gcc` / `cc` lookup. The reference tcc must be built by a
+    # C99 compiler whose driver understands `-c`, `-o`, and the
+    # standard `-D` / `-I` flags -- gcc, clang, and mingw-gcc all
+    # qualify; MSVC (`cl.exe`) needs a different driver shape and
+    # is not handled by this harness.
+    cc = shutil.which("gcc") or shutil.which("clang") or shutil.which("cc")
     if not cc:
-        return env_unsuitable("gcc / cc not on PATH")
+        return env_unsuitable("gcc / clang / cc not on PATH")
 
     badc = resolve_badc()
     if not badc:
@@ -1186,6 +1233,14 @@ def main() -> int:
 
     unexpected_corpus = [n for n in tu_mismatches if n not in KNOWN_DRIFT]
     unexpected_boot = [n for n in boot_mismatches if n not in KNOWN_DRIFT]
+
+    # Windows lanes (PE x86_64 / arm64) are in active bringup:
+    # the harness reports samples + corpus tallies but does not
+    # gate any stage yet. TODO: harden the PE bringup once the c5
+    # PE codegen path covers struct pass-by-value at every
+    # sub-word width and the bitfield-storage-unit work re-lands.
+    if host[0] == "Windows":
+        return 0
 
     # Sample failures + mismatches gate the build. Corpus and
     # bootstrap *failures* (running the binary at all) gate. So do

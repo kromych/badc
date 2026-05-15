@@ -375,22 +375,55 @@ def build_stage1_tcc(badc: Path, work: Path) -> Path | None:
     return out
 
 
-def compile_with(tcc: Path, src: Path, out: Path) -> tuple[bool, str]:
+def compile_with(
+    tcc: Path,
+    src: Path,
+    out: Path,
+    extra: tuple[str, ...] = (),
+) -> tuple[bool, str]:
     """Run ``tcc -c src -o out``. Returns (ok, captured_stderr).
 
     The ``-B`` flag points at the vendored ``include/`` directory
     so tcc finds ``tccdefs.h`` -- needed because the demo runs with
     ``CONFIG_TCC_PREDEFS=0``, which makes the predefines header a
-    runtime lookup rather than a baked string literal.
+    runtime lookup rather than a baked string literal. ``extra``
+    carries any per-source flags (``-D`` defines, ``-I`` paths) the
+    caller needs the compiler to see.
     """
-    proc = subprocess.run(
-        [str(tcc), "-B", str(TINYCC_DIR), "-c", str(src), "-o", str(out)],
-        capture_output=True,
-        text=True,
-    )
+    cmd = [str(tcc), "-B", str(TINYCC_DIR), *extra, "-c", str(src), "-o", str(out)]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         return False, proc.stderr.strip()
     return True, ""
+
+
+# The same TU set the smoke step links on the Linux x86_64 row.
+# Each entry is compiled with both reference and stage1 tcc; the
+# bytes are compared. This is parity on the real tinycc corpus,
+# not just a curated sample set.
+TINYCC_TUS: tuple[str, ...] = (
+    "tcc.c",
+    "libtcc.c",
+    "tccpp.c",
+    "tccgen.c",
+    "tccelf.c",
+    "tccasm.c",
+    "tccdbg.c",
+    "tccrun.c",
+    "x86_64-gen.c",
+    "x86_64-link.c",
+    "i386-asm.c",
+)
+
+# Flags every tinycc TU needs to see. Match the smoke step's
+# Linux x86_64 row exactly so the comparison stays apples-to-apples.
+TINYCC_TU_FLAGS: tuple[str, ...] = (
+    "-DTCC_TARGET_X86_64=1",
+    "-DONE_SOURCE=0",
+    "-D_GNU_SOURCE",
+    "-I",
+    str(TINYCC_DIR),
+)
 
 
 def main() -> int:
@@ -459,7 +492,7 @@ def main() -> int:
 
     total = len(SAMPLES)
     print(
-        f"tinycc self-host -- byte-identical objects: "
+        f"tinycc self-host -- samples byte-identical: "
         f"{matches}/{total} (mismatches: {len(mismatches)}, "
         f"failures: {len(failures)})"
     )
@@ -468,7 +501,49 @@ def main() -> int:
     for name in mismatches:
         print(f"  DIFF  {name}", file=sys.stderr)
 
+    # Parity on the real tinycc corpus -- the same TUs the smoke
+    # step links. Strictly larger surface than the curated samples.
+    tu_matches = 0
+    tu_mismatches: list[str] = []
+    tu_failures: list[tuple[str, str, str]] = []
+
+    for name in TINYCC_TUS:
+        src = TINYCC_DIR / name
+        ref_o = work / f"corpus.{name}.ref.o"
+        s1_o = work / f"corpus.{name}.s1.o"
+
+        ok_ref, err_ref = compile_with(ref_tcc, src, ref_o, TINYCC_TU_FLAGS)
+        if not ok_ref:
+            tu_failures.append((name, "ref", err_ref))
+            continue
+        ok_s1, err_s1 = compile_with(stage1_tcc, src, s1_o, TINYCC_TU_FLAGS)
+        if not ok_s1:
+            tu_failures.append((name, "stage1", err_s1))
+            continue
+
+        if ref_o.read_bytes() == s1_o.read_bytes():
+            tu_matches += 1
+        else:
+            tu_mismatches.append(name)
+
+    print(
+        f"tinycc self-host -- corpus byte-identical: "
+        f"{tu_matches}/{len(TINYCC_TUS)} (mismatches: {len(tu_mismatches)}, "
+        f"failures: {len(tu_failures)})"
+    )
+    for name, side, err in tu_failures:
+        print(f"  TU FAIL  ({side}) {name}: {err}", file=sys.stderr)
+    for name in tu_mismatches:
+        print(f"  TU DIFF  {name}", file=sys.stderr)
+
+    # Sample failures + mismatches gate the build. Corpus
+    # mismatches surface but do not fail yet: an x86_64-gen.c
+    # diff would block the gate before we have a Linux x86_64
+    # repro path, and the sample gate is already a strong claim.
+    # TODO: tighten once the corpus is byte-identical.
     if failures or mismatches:
+        return 1
+    if tu_failures:
         return 1
     return 0
 

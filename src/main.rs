@@ -78,6 +78,12 @@ Compile knobs:
                            stderr (gcc -H shape; leading dots mark
                            nesting depth; missing headers print as
                            `! <name> (missing)`).
+  -q, --quiet              Suppress `info:` chatter on stderr (the
+                           per-source `badc: compiling <path>`
+                           progress line in multi-TU mode and the
+                           `info: wrote file <path>` line emitted
+                           after each output write). Errors and
+                           warnings are unaffected.
 
 VM-only knobs (require --interp):
   --track-pointers         Allocation tracking + use-after-free guard.
@@ -168,6 +174,13 @@ fn main() {
     // here" or "why didn't this header resolve" without poking the
     // amalgamated `__BADC_DUMP_PP` output.
     let mut show_includes = false;
+    // `-q` / `--quiet` suppresses `info:` chatter on stderr. The
+    // per-source `badc: compiling <path>` progress line in
+    // multi-TU mode and the `info: wrote file <path>` lines that
+    // follow each output write are both gated on this flag.
+    // Errors and warnings still print; only informational lines
+    // are quieted.
+    let mut quiet = false;
     // Multi-translation-unit linker plumbing. Bytecode `.o`
     // inputs accumulate alongside C sources; `.a` archives
     // arrive either positionally or through `-l<name>` after a
@@ -276,6 +289,10 @@ fn main() {
             // marking nesting depth. `--show-includes` is the
             // descriptive long form (also matches MSVC's spelling).
             "-H" | "--show-includes" => show_includes = true,
+            // Quiet mode -- silence informational output (per-source
+            // progress, `info: wrote file <path>` lines). Errors
+            // and warnings remain on stderr unchanged.
+            "-q" | "--quiet" => quiet = true,
             // `-c` / `--compile-only` -- emit a c5 object file
             // (`.o`) per source instead of linking through to a
             // native binary. The output goes to either the
@@ -485,7 +502,7 @@ fn main() {
         // batch makes its current position visible. Single-source
         // compiles stay silent so `badc file.c` does not gain extra
         // chatter.
-        if multi_tu && mode != Mode::DumpPp {
+        if multi_tu && mode != Mode::DumpPp && !quiet {
             eprintln!("badc: compiling {label}");
         }
         if mode == Mode::DumpPp {
@@ -601,20 +618,14 @@ fn main() {
                 std::process::exit(1);
             }
             let bytes = badc::write_object(&units[0]);
-            if let Err(e) = std::fs::write(out, &bytes) {
-                eprintln!("badc: failed to write {}: {e}", out.display());
-                std::process::exit(1);
-            }
+            write_output(out, &bytes, quiet);
         } else {
             for (i, unit) in units.iter().take(source_count).enumerate() {
                 let src = &unit_source_paths[i];
                 let p = std::path::Path::new(src);
                 let out = p.with_extension("o");
                 let bytes = badc::write_object(unit);
-                if let Err(e) = std::fs::write(&out, &bytes) {
-                    eprintln!("badc: failed to write {}: {e}", out.display());
-                    std::process::exit(1);
-                }
+                write_output(&out, &bytes, quiet);
             }
         }
         return;
@@ -676,10 +687,7 @@ fn main() {
             sym_index.push((i, defined));
         }
         let blob = badc::write_archive(&members, &sym_index);
-        if let Err(e) = std::fs::write(&out_path, &blob) {
-            eprintln!("badc: failed to write {}: {e}", out_path.display());
-            std::process::exit(1);
-        }
+        write_output(&out_path, &blob, quiet);
         return;
     }
 
@@ -833,7 +841,7 @@ fn main() {
                 emit_native_binary_to_stdout(&program, target, native_opts);
             } else {
                 let out = output_path.unwrap_or_else(|| default_output_path(&path, target, mode));
-                emit_native_binary(&program, &out, target, native_opts, mode);
+                emit_native_binary(&program, &out, target, native_opts, mode, quiet);
             }
         }
         Mode::ListSymbols => unreachable!("handled above"),
@@ -957,12 +965,27 @@ fn emit_native_binary_to_stdout(program: &badc::Program, target: Target, options
     let _ = std::io::stdout().flush();
 }
 
+/// Write `bytes` to `out`, exit on failure, log
+/// `info: wrote file <path>` on success unless `quiet` is set.
+/// Used by every output path -- object emit, archive emit, JIT
+/// binary emit, native-binary emit -- so the chatter is uniform.
+fn write_output(out: &std::path::Path, bytes: &[u8], quiet: bool) {
+    if let Err(e) = std::fs::write(out, bytes) {
+        eprintln!("badc: failed to write {}: {e}", out.display());
+        std::process::exit(1);
+    }
+    if !quiet {
+        eprintln!("info: wrote file {}", out.display());
+    }
+}
+
 fn emit_native_binary(
     program: &badc::Program,
     out: &std::path::Path,
     target: Target,
     options: NativeOptions,
     mode: Mode,
+    quiet: bool,
 ) {
     let bytes = match emit_native_with_options(program, target, options) {
         Ok(b) => b,
@@ -971,10 +994,7 @@ fn emit_native_binary(
             std::process::exit(1);
         }
     };
-    if let Err(e) = std::fs::write(out, &bytes) {
-        eprintln!("badc: failed to write {}: {e}", out.display());
-        std::process::exit(1);
-    }
+    write_output(out, &bytes, quiet);
     if mode == Mode::NativeExecutable {
         set_executable(out);
     }

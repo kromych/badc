@@ -244,7 +244,7 @@ def compile_one(
     target: str | None,
 ) -> tuple[bool, str]:
     """Run badc -c against `src`. Returns (ok, captured_stderr_head)."""
-    cmd = [str(badc), "-I", str(TINYCC_DIR)]
+    cmd = [str(badc), "-q", "-I", str(TINYCC_DIR)]
     if target is not None:
         cmd.append(f"--target={target}")
     for d in cpp_defs:
@@ -365,7 +365,7 @@ def main() -> int:
         src_files = [str(TINYCC_DIR / name) for name in active]
         link_target_is_win = key[0] == "Windows"
         out_path = work / ("tcc.exe" if link_target_is_win else "tcc")
-        cmd = [str(badc), "-I", str(TINYCC_DIR)]
+        cmd = [str(badc), "-q", "-I", str(TINYCC_DIR)]
         if target is not None:
             cmd.append(f"--target={target}")
         for d in cpp_defs:
@@ -378,14 +378,11 @@ def main() -> int:
         )
         if proc.returncode != 0:
             # The driver prints per-source `badc: compiling <path>`
-            # progress lines on stderr in multi-TU mode. Skip those
-            # so the trailing error lines (the actual link failure)
-            # are what the user sees.
-            err_lines = [
-                line
-                for line in proc.stderr.strip().splitlines()
-                if not line.startswith("badc: compiling ")
-            ]
+            # progress lines on stderr in multi-TU mode. `-q`
+            # already silences those plus the `info: wrote file
+            # <path>` chatter from successful writes, so anything
+            # left on stderr is a real diagnostic.
+            err_lines = proc.stderr.strip().splitlines()
             print("  link FAIL:", err_lines[-5:], file=sys.stderr)
             return 1
         print(f"  link OK   -> {out_path}")

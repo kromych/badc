@@ -384,14 +384,21 @@ def build_reference_tcc(
     return out
 
 
-def build_libtcc1_archive(stage1_tcc: Path, work: Path) -> Path | None:
+def build_libtcc1_archive(
+    stage1_tcc: Path, work: Path, host: tuple[str, str]
+) -> Path | None:
     """Compile the vendored ``lib/libtcc1.c`` + ``lib/va_list.c``
     with the stage1 tcc binary and bundle the resulting objects
     into a ``libtcc1.a`` archive. The archive exposes
     ``__floatundixf`` / ``__fixxfdi`` (80-bit long-double
     conversion helpers tcc's codegen emits as undefined
     references) and ``__va_arg`` (tcc's stack-walking va_arg
-    helper).
+    helper). On AArch64 the archive also picks up
+    ``lib/lib-arm64.c``, which carries the binary128 long-double
+    softfloat helper set tcc emits references to (``__multf3``,
+    ``__addtf3``, ``__divtf3``, ``__floatsitf``, ...). The host
+    gcc autolinks libgcc_s.so.1 for the same surface; the
+    libtcc1.a route keeps the badc-built link self-contained.
 
     The archive sits at ``<work>/libtcc1.a`` and at
     ``<TINYCC_DIR>/libtcc1.a`` so a later step that invokes tcc
@@ -401,7 +408,19 @@ def build_libtcc1_archive(stage1_tcc: Path, work: Path) -> Path | None:
     bcheck); those are needed only for ``-bt`` / ``-run`` /
     ``-fbounds-checking`` and stay outside this subset.
     """
-    sources = (TINYCC_DIR / "lib" / "libtcc1.c", TINYCC_DIR / "lib" / "va_list.c")
+    sources: list[Path] = [
+        TINYCC_DIR / "lib" / "libtcc1.c",
+        TINYCC_DIR / "lib" / "va_list.c",
+    ]
+    if host[1] == "aarch64":
+        # `lib-arm64.c` -- binary128 long-double softfloat helpers.
+        # `armflush.c` -- `__clear_cache` wrapper that lowers to
+        # tinycc's `__arm64_clear_cache` intrinsic (the inline
+        # `dc cvau` / `ic ivau` cacheflush sequence). Both are
+        # autolinked from libgcc_s.so.1 on a gcc-driven host build,
+        # so the stage1-driven link needs them in libtcc1.a.
+        sources.append(TINYCC_DIR / "lib" / "lib-arm64.c")
+        sources.append(TINYCC_DIR / "lib" / "armflush.c")
     obj_paths: list[Path] = []
     for src in sources:
         obj = work / (src.stem + ".lib.o")
@@ -765,7 +784,7 @@ def main() -> int:
         bootstrap_skip = "missing one or more gen2 objects"
     else:
         gen2_tcc = work / "tcc-gen2"
-        libtcc1 = build_libtcc1_archive(stage1_tcc, work)
+        libtcc1 = build_libtcc1_archive(stage1_tcc, work, host)
         if libtcc1 is None:
             gen2_tcc = None
             bootstrap_skip = "libtcc1.a build failed"

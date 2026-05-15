@@ -117,7 +117,9 @@ INCLUDE_HEADERS = (
 # x86_64-linux row from the upstream Makefile: libtcc1.o,
 # va_list.o, dsohandle.o, plus the COMMON_O set (stdatomic,
 # atomic, builtin, alloca, alloca-bt) and the Native-only
-# runmain.o / tcov.o.
+# runmain.o / tcov.o. ``lib-arm64.c`` carries the binary128
+# long-double softfloat helpers AArch64 needs (the host gcc
+# autolinks libgcc_s for the same set on x86_64).
 LIB_SOURCES = (
     "libtcc1.c",
     "va_list.c",
@@ -129,6 +131,8 @@ LIB_SOURCES = (
     "alloca-bt.S",
     "runmain.c",
     "tcov.c",
+    "lib-arm64.c",
+    "armflush.c",
 )
 
 

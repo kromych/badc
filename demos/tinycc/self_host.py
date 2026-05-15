@@ -699,14 +699,9 @@ def main() -> int:
 
     # Known-drifting TUs are surfaced but do not fail. Each entry
     # is tracked with a TODO marker; whittling the set down is the
-    # work of closing the underlying bug.
-    #
-    #   tccpp.c -- long-double-returning libc bindings (strtold)
-    #              return -0.0 through the badc link path; the
-    #              gcc-linked gen2 produces the correct 80-bit
-    #              encoding. TODO: x87 st(0) -> XMM0 transfer in
-    #              the libc-call lowering.
-    KNOWN_DRIFT = {"tccpp.c"}
+    # work of closing the underlying bug. Empty today: the corpus
+    # and bootstrap passes both reach 11/11.
+    KNOWN_DRIFT: set[str] = set()
 
     unexpected_corpus = [n for n in tu_mismatches if n not in KNOWN_DRIFT]
     unexpected_boot = [n for n in boot_mismatches if n not in KNOWN_DRIFT]

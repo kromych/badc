@@ -186,6 +186,18 @@ pub(in crate::c5::compiler) struct Pending {
     /// declarator added no leading `*`s.
     pub base_was_void: bool,
 
+    /// Side channel from `parse_decl_base_type` to the function-
+    /// prototype path: the base type was spelled `long double`,
+    /// not bare `double`. Cleared at the start of every base-type
+    /// parse. The function-decl path consumes this when stamping
+    /// a libc binding so the codegen knows to read the return
+    /// value out of x87 `st(0)` on SysV x86_64 (long-double libc
+    /// returns) instead of XMM0 (which carries double / float).
+    /// The encoded type stays `Ty::Double` for storage so the
+    /// rest of the compiler treats the value as an 8-byte double;
+    /// the distinction is libc-ABI-only.
+    pub base_was_long_double: bool,
+
     /// Side channel from `parse_declarator` to `run_compile`: when
     /// the declarator's nested-paren branch encounters a "function
     /// returning function pointer" shape (`T (*name(args1))(args2)`),
@@ -301,6 +313,7 @@ impl Default for Pending {
     fn default() -> Self {
         Self {
             base_was_void: false,
+            base_was_long_double: false,
             fn_params: None,
             fn_ptr_indirection: None,
             index_stride: 0,

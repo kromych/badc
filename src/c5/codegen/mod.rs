@@ -316,6 +316,14 @@ pub(crate) struct ResolvedImport {
     /// prototype seen") falls through with no extension; `void`
     /// also reduces to `Ty::Char` since the lexer aliases it.
     pub return_type_tag: i64,
+    /// Prototype's return type was spelled `long double`. The
+    /// SysV x86_64 ABI returns long double in x87 `st(0)`; c5's
+    /// generic FP-return path reads XMM0 (where plain `double`
+    /// returns land), so without this flag the binding's first
+    /// caller reads -0.0 or whatever XMM0 had on entry. Plumbed
+    /// from `Binding::returns_long_double` through
+    /// `apply_fold_to_binding`.
+    pub returns_long_double: bool,
     /// Per-fixed-parameter type tags from the prototype. Carried
     /// from `Binding::param_types`; the DWARF emitter
     /// uses these to give every PLT trampoline a
@@ -424,6 +432,7 @@ impl ResolvedImports {
             is_variadic: b.is_variadic,
             fixed_args: b.fixed_args,
             return_type_tag: b.return_type_tag,
+            returns_long_double: b.returns_long_double,
             param_types: b.param_types.clone(),
         });
         Ok(())
@@ -504,6 +513,7 @@ impl ResolvedImports {
                 is_variadic: b.is_variadic,
                 fixed_args: b.fixed_args,
                 return_type_tag: b.return_type_tag,
+                returns_long_double: b.returns_long_double,
                 param_types: b.param_types.clone(),
             });
         }

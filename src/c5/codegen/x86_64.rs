@@ -2607,15 +2607,24 @@ fn emit_libc_call(
         use crate::c5::compiler::types as ty_helpers;
         let return_type_tag = imports.imports[import_index].return_type_tag;
         let bare = ty_helpers::strip_unsigned(return_type_tag);
-        // FP-returning libc fns (sin, cos, sqrt, ...) hand the
-        // result back in xmm0 on both SysV x86_64 and Win64. The
-        // integer-return path below routes RAX -> R13 and would
-        // leave the c5 accumulator holding whatever junk RAX had
-        // (typically 0, since FP return is independent of the
-        // integer return register). Move xmm0 -> R13 instead so
-        // the bit pattern of the f64 lands in c5's accumulator
-        // ready for downstream `Op::Sf` / `Op::Fadd` / etc.
-        if ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare) {
+        let returns_long_double = imports.imports[import_index].returns_long_double;
+        // SysV x86_64 returns `long double` in x87 `st(0)`, not
+        // XMM0 / RAX. Spill the top of the FP stack to a 16-byte
+        // scratch slot and load the low 8 bytes back into R13 --
+        // c5 stores long double in an 8-byte f64 slot, so the
+        // truncation to double is correct for the rest of the
+        // pipeline. The 16-byte SUB / ADD keeps the x86_64
+        // stack 16-byte aligned for any nested call. Win64 has
+        // no x87 long-double convention; this branch never fires
+        // there (no prototype carries `returns_long_double`).
+        if returns_long_double && target == super::Target::LinuxX64 {
+            emit_sub_rsp_imm32(code, 16);
+            // fstp QWORD PTR [rsp] -- `DD /3`, mod=00, rm=100
+            // (SIB follows), SIB = 0x24 (base=rsp, no index).
+            code.extend_from_slice(&[0xDD, 0x1C, 0x24]);
+            emit_mov_r_mem(code, Reg::R13, Reg::RSP, 0);
+            emit_add_rsp_imm32(code, 16);
+        } else if ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare) {
             emit_movq_r_xmm(code, Reg::R13, Reg::XMM0);
         } else {
             // Sign- or zero-extend a sub-word return into a full

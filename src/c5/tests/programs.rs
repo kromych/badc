@@ -258,6 +258,18 @@ fn array_typedef_dimensions_propagate() {
 }
 
 #[test]
+#[ignore = "TODO: c5 VM has no shim for strtold / ldexpl; the fixture verifies the SysV x86_64 long-double libc-return convention through the native lane via NATIVE_FIXTURES"]
+fn long_double_libc_return_round_trips() {
+    // SysV x86_64 ABI: `long double` libc returns ride in
+    // x87 `st(0)`, not XMM0. The libc-call lowering spills
+    // st(0) and reloads as double; the fixture asserts that
+    // strtold and ldexpl yield the right bit pattern after
+    // the round trip. Pre-fix the path read XMM0 and got
+    // -0.0 for every call.
+    assert_eq!(run_fixture("long_double_libc_return.c"), 0);
+}
+
+#[test]
 fn typedef_shadowed_by_parameter_name() {
     // C99 6.2.1 paragraph 4: an inner-scope declaration that
     // reuses an outer name (here, a function-prototype parameter

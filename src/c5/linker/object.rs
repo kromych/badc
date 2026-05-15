@@ -748,6 +748,7 @@ fn encode_meta(unit: &LinkUnit) -> Vec<u8> {
                 buf.push(if b.is_variadic { 1 } else { 0 });
                 write_u32(&mut buf, b.fixed_args as u32);
                 write_i64(&mut buf, b.return_type_tag);
+                buf.push(if b.returns_long_double { 1 } else { 0 });
                 write_u32(&mut buf, b.param_types.len() as u32);
                 for &p in &b.param_types {
                     write_i64(&mut buf, p);
@@ -920,6 +921,7 @@ fn dylibs_len(ds: &[crate::c5::preprocessor::DylibSpec]) -> u32 {
             total += 1; // is_variadic
             total += 4; // fixed_args
             total += 8; // return_type_tag
+            total += 1; // returns_long_double
             total += 4 + b.param_types.len() as u32 * 8;
             total += 4 + b.local_name.len() as u32;
             total += 4 + b.real_symbol.len() as u32;
@@ -1583,6 +1585,11 @@ fn read_dylibs(body: &[u8]) -> Result<Vec<crate::c5::preprocessor::DylibSpec>, C
             }
             let return_type_tag = i64_at(body, cursor);
             cursor += 8;
+            if cursor + 1 > body.len() {
+                return Err(err("binding returns_long_double truncated"));
+            }
+            let returns_long_double = body[cursor] != 0;
+            cursor += 1;
             if cursor + 4 > body.len() {
                 return Err(err("binding param_types count truncated"));
             }
@@ -1602,6 +1609,7 @@ fn read_dylibs(body: &[u8]) -> Result<Vec<crate::c5::preprocessor::DylibSpec>, C
                 is_variadic,
                 fixed_args,
                 return_type_tag,
+                returns_long_double,
                 param_types,
                 local_name,
                 real_symbol,

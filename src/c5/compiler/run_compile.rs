@@ -45,6 +45,11 @@ impl Compiler {
             // matches `Token::Void`; consumed by the function-decl
             // path to mark `Symbol::returns_void`.
             self.pending.base_was_void = false;
+            // Same reset for the long-double marker. A previous
+            // declaration that consumed `long double` would
+            // otherwise stamp this iteration's binding with the
+            // wrong x87 return convention.
+            self.pending.base_was_long_double = false;
             // Same reset for the typedef-array dimension carrier
             // so a previous declaration's typedef base does not
             // leak its array count into this iteration's
@@ -112,6 +117,16 @@ impl Compiler {
                 bt = Ty::Float as i64;
             } else if self.lex.tk == Token::Double {
                 self.next()?;
+                // `long double` collapses to the same f64 encoding
+                // as plain `double` for storage / expression
+                // semantics. The marker carries the spelling out
+                // of band so the function-prototype path can
+                // stamp a libc binding's return-convention flag
+                // (SysV x86_64 returns long double in x87 st(0),
+                // not XMM0).
+                if m.saw_long() {
+                    self.pending.base_was_long_double = true;
+                }
                 bt = Ty::Double as i64;
             } else if self.lex.tk == Token::Enum {
                 self.parse_enum_decl()?;
@@ -362,6 +377,11 @@ impl Compiler {
                     // / memcpy / fcntl in the standard library
                     // would drown real bugs.
                     let prior_was_known = was_fwd_fun;
+                    // Capture the long-double return-type marker
+                    // before parameter parsing, which calls
+                    // `parse_decl_base_type` per param and clears
+                    // the side channel as part of its reset.
+                    let ret_was_long_double = self.pending.base_was_long_double;
                     let params = if let Some(pp) = preconsumed_params {
                         pp
                     } else {
@@ -450,12 +470,14 @@ impl Compiler {
                         // `int` returns) and needs sign / zero extension
                         // before the result becomes the c5 accumulator.
                         let ret_ty = ty;
+                        let ret_is_long_double = ret_was_long_double;
                         for spec in self.dylibs.iter_mut() {
                             for binding in spec.bindings.iter_mut() {
                                 if binding.local_name == name {
                                     binding.is_variadic = variadic;
                                     binding.fixed_args = fixed;
                                     binding.return_type_tag = ret_ty;
+                                    binding.returns_long_double = ret_is_long_double;
                                     // Per-param types for the
                                     // DWARF subprogram DIE the codegen
                                     // emits over each PLT trampoline.

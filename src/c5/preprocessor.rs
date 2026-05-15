@@ -122,6 +122,14 @@ pub struct Binding {
     /// the prototype hasn't been seen yet; the codegen treats
     /// that as "no extension needed".
     pub return_type_tag: i64,
+    /// True when the prototype's return type was spelled `long
+    /// double`. The encoded `return_type_tag` is still
+    /// `Ty::Double` (c5 stores both as f64), but the libc-call
+    /// codegen needs this flag to read the result out of x87
+    /// `st(0)` on SysV x86_64 instead of XMM0. False for plain
+    /// `double` returns and for everything that isn't a floating
+    /// scalar.
+    pub returns_long_double: bool,
     /// Per-fixed-parameter type tags from the prototype (same
     /// encoding as `return_type_tag`). Captured by the parser at
     /// the same fold-site that fills `fixed_args` / `is_variadic`,
@@ -2174,6 +2182,7 @@ impl Preprocessor {
             is_variadic: false,
             fixed_args: 0,
             return_type_tag: 0,
+            returns_long_double: false,
             param_types: Vec::new(),
             local_name: local_name.to_string(),
             real_symbol: real_symbol.to_string(),

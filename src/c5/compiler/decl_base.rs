@@ -176,6 +176,10 @@ impl Compiler {
         // Reset the void side channel up front so a previous
         // declaration's bare-void base doesn't leak into this one.
         self.pending.base_was_void = false;
+        // Same reset for the long-double marker -- a binding
+        // declared `double f(...)` after one declared `long
+        // double g(...)` must not inherit g's marker.
+        self.pending.base_was_long_double = false;
         // Same reset for the array-typedef dimension carrier: a
         // previous declaration that consumed a typedef-array base
         // (parameter parsing, abstract-declarator casts, ...)
@@ -225,9 +229,17 @@ impl Compiler {
             Ty::Float as i64
         } else if self.lex.tk == Token::Double {
             self.next()?;
-            // `long double` is only as wide as `double` here -- c5
-            // has no 80- or 128-bit FP type. The trailing-modifier
-            // loop already silently consumes any extra `long`.
+            // `long double` collapses to the same f64 encoding as
+            // plain `double` for storage and expression semantics
+            // -- c5 has no 80- or 128-bit FP scalar. The
+            // trailing-modifier loop silently consumes any extra
+            // `long`. The marker below carries the spelling out
+            // of band so the function-prototype path can stamp
+            // a libc binding's return-convention flag (SysV
+            // x86_64 returns long double in x87 st(0), not XMM0).
+            if m.saw_long() {
+                self.pending.base_was_long_double = true;
+            }
             Ty::Double as i64
         } else if self.lex.tk == Token::Enum {
             // `enum [Tag] [{ ... }]` -- in c5 every enum collapses

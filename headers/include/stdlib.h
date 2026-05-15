@@ -261,7 +261,15 @@ static inline void __clear_cache(void *begin, void *end) {
 #endif
 
 #ifdef __linux__
-#pragma binding(libc::__clear_cache, "__clear_cache")
+/* Linux glibc does not export `__clear_cache`; it is a compiler-
+** runtime helper that lives in libgcc_s.so.1. The x86_64 backend
+** never calls it (hardware keeps the instruction cache coherent
+** automatically) so the symbol stays a quiescent reference there,
+** but on AArch64 the JIT path in tinycc relies on it to flush the
+** I-cache after emitting code. Pin the dylib explicitly so the
+** produced binary carries DT_NEEDED libgcc_s.so.1 next to libc. */
+#pragma dylib(libgcc_s, "libgcc_s.so.1")
+#pragma binding(libgcc_s::__clear_cache, "__clear_cache")
 void __clear_cache(void *begin, void *end);
 #endif
 

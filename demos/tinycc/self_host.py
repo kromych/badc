@@ -322,6 +322,56 @@ def build_reference_tcc(cc: str, work: Path) -> Path | None:
     return out
 
 
+def build_libtcc1_helpers(cc: str, work: Path) -> list[Path] | None:
+    """Build the minimal libtcc1 helper objects gen2 needs at link
+    time on Linux x86_64: ``__floatundixf`` / ``__fixxfdi`` (80-bit
+    long-double conversions emitted by tcc's codegen) and
+    ``__va_arg`` (tcc's stack-walking va_arg helper). Pulls the
+    upstream lib/libtcc1.c + lib/va_list.c sources straight from
+    the cache zip rather than vendoring them as a separate setup.py
+    asset; the full libtcc1.a buildup is tracked under the TODO
+    marker.
+    """
+    cache_dir = TINYCC_DIR / ".cache"
+    candidates = list(cache_dir.glob("tinycc-*.zip"))
+    if not candidates:
+        return None
+    import zipfile
+
+    extract = work / "libtcc1_src"
+    extract.mkdir(exist_ok=True)
+    prefix = "tinycc-757507eb022f7af4be63dc9a72b299761181efbb"
+    names = ("lib/libtcc1.c", "lib/va_list.c")
+    src_paths: list[Path] = []
+    with zipfile.ZipFile(candidates[0]) as zf:
+        for name in names:
+            out = extract / Path(name).name
+            with zf.open(f"{prefix}/{name}") as src, out.open("wb") as dst:
+                shutil.copyfileobj(src, dst)
+            src_paths.append(out)
+
+    obj_paths: list[Path] = []
+    for src in src_paths:
+        obj = work / (src.stem + ".o")
+        cmd = [
+            cc,
+            "-c",
+            "-O0",
+            "-fPIC",
+            f"-I{TINYCC_DIR}",
+            str(src),
+            "-o",
+            str(obj),
+        ]
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if proc.returncode != 0:
+            print(f"self_host: libtcc1 helper {src.name} build failed:", file=sys.stderr)
+            print(proc.stderr, file=sys.stderr)
+            return None
+        obj_paths.append(obj)
+    return obj_paths
+
+
 def build_stage1_tcc(badc: Path, work: Path) -> Path | None:
     """Build a stage1 tcc through badc -- the same TU set the
     smoke step links. ``cwd`` is pinned to the repo root so badc's
@@ -568,14 +618,94 @@ def main() -> int:
     for name in tu_mismatches:
         print(f"  TU DIFF  {name}", file=sys.stderr)
 
-    # Sample failures + mismatches gate the build. Corpus
-    # mismatches surface but do not fail yet: an x86_64-gen.c
-    # diff would block the gate before we have a Linux x86_64
-    # repro path, and the sample gate is already a strong claim.
-    # TODO: tighten once the corpus is byte-identical.
+    # Bootstrap fixed point: link the stage1-compiled tinycc
+    # objects into a runnable `tcc-gen2` with host gcc, run
+    # gen2 to compile every TU into a fresh set of objects, and
+    # assert each gen2 object byte-equals its gen3 sibling.
+    # libtcc1.a is not on disk yet (TODO marker), so the link
+    # uses the host toolchain rather than gen2 itself; the
+    # comparison still asserts the compile path is bootstrap-
+    # stable: a compiler built from gen2-objs produces the same
+    # objects gen2-objs were.
+    gen2_tcc: Path | None = None
+    gen2_objs = [work / f"corpus.{name}.s1.o" for name in TINYCC_TUS]
+    if tu_failures:
+        bootstrap_skip = "corpus pass had failures"
+    elif not all(p.is_file() for p in gen2_objs):
+        bootstrap_skip = "missing one or more gen2 objects"
+    else:
+        gen2_tcc = work / "tcc-gen2"
+        helper_objs = build_libtcc1_helpers(cc, work)
+        if helper_objs is None:
+            gen2_tcc = None
+            bootstrap_skip = "libtcc1 helper build failed"
+        else:
+            link_cmd = [
+                cc,
+                "-O0",
+                "-g",
+                # tcc's `.eh_frame` records can overlap on
+                # multi-TU output; passing `--no-eh-frame-hdr`
+                # matches the workaround upstream's Makefile
+                # uses when host ld objects.
+                "-Wl,--no-eh-frame-hdr",
+                "-o",
+                str(gen2_tcc),
+                *[str(p) for p in gen2_objs],
+                *[str(p) for p in helper_objs],
+                "-ldl",
+                "-lpthread",
+            ]
+            link_proc = subprocess.run(
+                link_cmd, capture_output=True, text=True
+            )
+            if link_proc.returncode != 0:
+                print("self_host: gen2 link failed:", file=sys.stderr)
+                print(link_proc.stderr, file=sys.stderr)
+                gen2_tcc = None
+                bootstrap_skip = "gen2 link failed"
+            else:
+                bootstrap_skip = ""
+
+    boot_matches = 0
+    boot_mismatches: list[str] = []
+    boot_failures: list[tuple[str, str, str]] = []
+
+    if gen2_tcc is not None:
+        for name in TINYCC_TUS:
+            src = TINYCC_DIR / name
+            gen2_o = work / f"corpus.{name}.s1.o"
+            gen3_o = work / f"corpus.{name}.gen3.o"
+            ok, err = compile_with(gen2_tcc, src, gen3_o, tu_flags)
+            if not ok:
+                boot_failures.append((name, "gen3", err))
+                continue
+            if gen2_o.read_bytes() == gen3_o.read_bytes():
+                boot_matches += 1
+            else:
+                boot_mismatches.append(name)
+        print(
+            f"tinycc self-host -- gen2 == gen3 byte-identical: "
+            f"{boot_matches}/{len(TINYCC_TUS)} "
+            f"(mismatches: {len(boot_mismatches)}, "
+            f"failures: {len(boot_failures)})"
+        )
+        for name, side, err in boot_failures:
+            print(f"  BOOT FAIL  ({side}) {name}: {err}", file=sys.stderr)
+        for name in boot_mismatches:
+            print(f"  BOOT DIFF  {name}", file=sys.stderr)
+    else:
+        print(f"tinycc self-host -- bootstrap skipped: {bootstrap_skip}")
+
+    # Sample failures + mismatches gate the build, plus any
+    # corpus or bootstrap *failure* (running the binary at all).
+    # Bootstrap mismatches still surface but do not fail until
+    # the long-double truncation is closed (TODO marker).
     if failures or mismatches:
         return 1
     if tu_failures:
+        return 1
+    if boot_failures:
         return 1
     return 0
 

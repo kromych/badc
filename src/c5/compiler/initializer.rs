@@ -794,6 +794,34 @@ impl Compiler {
             {
                 let nested_sid = struct_id_of(field.ty);
                 self.collect_struct_initializer(nested_sid, field_base as i64)?;
+            } else if field.bit_width > 0 {
+                // Bitfield brace-initializer entry. C99 6.7.8 says
+                // the initializer's value is converted to the
+                // bitfield's type as if assigned. A naive
+                // `write_init_value(field_base, sizeof(base), value)`
+                // would clobber every other bitfield sharing the
+                // same storage unit -- adjacent fields in the same
+                // brace list each rewrite the entire unit. Merge
+                // the bitfield's bits into the existing storage
+                // unit instead.
+                let (value, _reloc) = self.parse_constant_init_value()?;
+                let unit_bytes = 8usize;
+                let mut unit_value: i64 = 0;
+                for i in 0..unit_bytes {
+                    unit_value |= (self.data[field_base + i] as i64) << (i * 8);
+                }
+                let bit_width = field.bit_width;
+                let bit_offset = field.bit_offset;
+                let mask: i64 = if bit_width >= 64 {
+                    -1
+                } else {
+                    (1i64 << bit_width) - 1
+                };
+                let cleared = unit_value & !(mask << bit_offset);
+                let merged = cleared | ((value & mask) << bit_offset);
+                for i in 0..unit_bytes {
+                    self.data[field_base + i] = ((merged >> (i * 8)) & 0xFF) as u8;
+                }
             } else {
                 let (value, reloc) = self.parse_constant_init_value()?;
                 let field_size = self.size_of_type(field.ty);

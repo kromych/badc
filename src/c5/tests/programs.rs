@@ -149,6 +149,17 @@ fn sizeof_string_literal_returns_array_size() {
 }
 
 #[test]
+fn bitfield_brace_init_packs_into_storage_unit() {
+    // C99 6.7.8: each bitfield brace-initializer entry is
+    // converted to the field's type and merged into the shared
+    // storage unit. A naive byte-wide overwrite at the unit's
+    // offset (which c5 did historically) stomps every other
+    // bitfield in the same unit; the per-field RMW preserves
+    // adjacent bits.
+    assert_eq!(run_fixture("bitfield_brace_init.c"), 0);
+}
+
+#[test]
 fn integer_literal_suffix_picks_type() {
     // C99 6.4.4.1 paragraph 5: an integer literal's type comes
     // from its suffix. `1ULL` is unsigned long long, not int;

@@ -251,6 +251,52 @@ int main(void) {
     return o.head.a + o.head.b + o.tail.a + o.tail.b + o.n;
 }
 """,
+    "array_param_decay.c": """
+static int sum(int *p, int n) {
+    int s = 0;
+    for (int i = 0; i < n; i++) s += p[i];
+    return s;
+}
+int main(void) {
+    int xs[5] = { 2, 4, 6, 8, 10 };
+    return sum(xs, 5);
+}
+""",
+    "early_returns.c": """
+static int classify(int x) {
+    if (x < 0) return -1;
+    if (x == 0) return 0;
+    if (x < 100) return 1;
+    return 2;
+}
+int main(void) {
+    int s = 0;
+    s += classify(-5);
+    s += classify(0);
+    s += classify(42);
+    s += classify(1000);
+    return s + 10;
+}
+""",
+    "do_while_once.c": """
+int main(void) {
+    int n = 0;
+    int v = 0;
+    do {
+        v += 1;
+        n++;
+    } while (n < 1 && v > 100);
+    return v;
+}
+""",
+    "ternary_chain.c": """
+static int sign(int x) {
+    return x < 0 ? -1 : x > 0 ? 1 : 0;
+}
+int main(void) {
+    return sign(-7) * 100 + sign(0) * 10 + sign(42);
+}
+""",
 }
 
 

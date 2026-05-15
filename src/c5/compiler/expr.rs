@@ -39,8 +39,8 @@ use super::super::token::{Token, Ty};
 use super::CODE_BASE;
 use super::Compiler;
 use super::types::{
-    format_type, fp_result_ty, integer_promote, is_floating_scalar, is_pointer_ty, is_struct_ty,
-    is_unsigned_ty, load_op_for, store_op_for, struct_id_of, struct_ptr_depth,
+    UNSIGNED_BIT, format_type, fp_result_ty, integer_promote, is_floating_scalar, is_pointer_ty,
+    is_struct_ty, is_unsigned_ty, load_op_for, store_op_for, struct_id_of, struct_ptr_depth,
     usual_arith_common_ty,
 };
 
@@ -99,8 +99,21 @@ impl Compiler {
             return Err(self.compile_err("unexpected eof in expression"));
         } else if self.lex.tk == Token::Num {
             self.emit_imm(self.lex.ival);
+            // C99 6.4.4.1 paragraph 5: pick the literal's type from
+            // the suffix shape the lexer recorded. Two `l`/`L`
+            // letters force long-long, one forces long, none stays
+            // at int. The `u`/`U` modifier flips signedness on the
+            // chosen rank.
+            let mut lit_ty = match self.lex.int_suffix_long {
+                2 => Ty::LongLong as i64,
+                1 => Ty::Long as i64,
+                _ => Ty::Int as i64,
+            };
+            if self.lex.int_suffix_unsigned {
+                lit_ty |= UNSIGNED_BIT;
+            }
             self.next()?;
-            self.ty = Ty::Int as i64;
+            self.ty = lit_ty;
         } else if self.lex.tk == Token::FloatNum {
             // The lexer parsed `1.5` etc. into f64 and stored
             // `f64::to_bits()` cast to i64 in `ival`. The byte

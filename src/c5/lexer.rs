@@ -196,6 +196,16 @@ pub(crate) struct Lexer {
     pub ival: i64,
     pub curr_id_idx: usize,
 
+    /// Integer-literal suffix shape from the most recent `Token::Num`
+    /// produced by `next()`. C99 6.4.4.1 lists the canonical six
+    /// suffix combinations; c5 collapses them to a (longness,
+    /// unsigned) pair the expression parser consumes to type the
+    /// literal. `int_suffix_long`: 0 = no L (default int), 1 = one
+    /// L (`long`), 2 = two L (`long long`). `int_suffix_unsigned`:
+    /// true if any `u`/`U` appeared in the suffix.
+    pub int_suffix_long: u8,
+    pub int_suffix_unsigned: bool,
+
     /// `#pragma pack(N)` stack. Top of stack is the active pack value
     /// at the current source position; struct layout (`aggregate.rs`)
     /// reads it via [`Self::current_pack`] and clamps each field's
@@ -327,6 +337,8 @@ impl Lexer {
             tk: Tok::EOF,
             ival: 0,
             curr_id_idx: 0,
+            int_suffix_long: 0,
+            int_suffix_unsigned: false,
             // Bottom of the stack is the default pack -- c5 already
             // caps struct alignment at 8, and that's the implicit
             // upper bound here too. Real `#pragma pack(N)` updates
@@ -664,6 +676,12 @@ impl Lexer {
         index: &mut SymbolIndex,
         data: &mut Vec<u8>,
     ) -> Result<(), C5Error> {
+        // Reset the integer-literal suffix fields so a previous
+        // `Num` token's suffix does not leak into the next token's
+        // type tracking. The integer-literal lex paths set these
+        // explicitly before returning a `Token::Num`.
+        self.int_suffix_long = 0;
+        self.int_suffix_unsigned = false;
         loop {
             if self.pos >= self.src.len() {
                 self.tk = Tok::EOF;
@@ -830,17 +848,28 @@ impl Lexer {
                     }
                     // Hex literals can carry the standard integer suffix
                     // letters (u/U/l/L plus ll/LL combinations such as
-                    // 0xFFFFULL). c5 has a single 64-bit integer
-                    // representation so the suffix is purely
-                    // informational; we consume any sequence of suffix
-                    // letters and store the value unchanged.
+                    // 0xFFFFULL). Per C99 6.4.4.1 record the longness
+                    // (one or two `l`/`L`) and the unsigned modifier
+                    // so the expression parser can type the literal
+                    // accordingly; without that the literal would
+                    // default to `int` and any arithmetic that
+                    // assumes 64-bit width truncates to 32.
+                    let mut l_count: u8 = 0;
+                    let mut u_seen = false;
                     while self.pos < self.src.len()
                         && matches!(self.src[self.pos], b'u' | b'U' | b'l' | b'L')
                     {
+                        match self.src[self.pos] {
+                            b'l' | b'L' => l_count = l_count.saturating_add(1),
+                            b'u' | b'U' => u_seen = true,
+                            _ => {}
+                        }
                         self.pos += 1;
                     }
                     self.ival = val;
                     self.tk = Tok(Token::Num as i64);
+                    self.int_suffix_long = l_count.min(2);
+                    self.int_suffix_unsigned = u_seen;
                     return Ok(());
                 }
 
@@ -865,17 +894,29 @@ impl Lexer {
                 // (1u, 1L, 1ULL, 1lu, ...). When any suffix letter is
                 // present, the literal is unambiguously an integer --
                 // no float-suffix `f`/`F` can follow because the
-                // standard doesn't allow it on integer literals.
+                // standard doesn't allow it on integer literals. Per
+                // C99 6.4.4.1, count consecutive `l`/`L` characters
+                // (one => long, two => long long) and note any
+                // `u`/`U` for the unsigned modifier.
                 if self.pos < self.src.len()
                     && matches!(self.src[self.pos], b'u' | b'U' | b'l' | b'L')
                 {
+                    let mut l_count: u8 = 0;
+                    let mut u_seen = false;
                     while self.pos < self.src.len()
                         && matches!(self.src[self.pos], b'u' | b'U' | b'l' | b'L')
                     {
+                        match self.src[self.pos] {
+                            b'l' | b'L' => l_count = l_count.saturating_add(1),
+                            b'u' | b'U' => u_seen = true,
+                            _ => {}
+                        }
                         self.pos += 1;
                     }
                     self.ival = val;
                     self.tk = Tok(Token::Num as i64);
+                    self.int_suffix_long = l_count.min(2);
+                    self.int_suffix_unsigned = u_seen;
                     return Ok(());
                 }
 

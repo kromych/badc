@@ -149,6 +149,15 @@ fn sizeof_string_literal_returns_array_size() {
 }
 
 #[test]
+fn integer_literal_suffix_picks_type() {
+    // C99 6.4.4.1 paragraph 5: an integer literal's type comes
+    // from its suffix. `1ULL` is unsigned long long, not int;
+    // dropping the suffix truncates downstream 64-bit
+    // arithmetic through the int rank.
+    assert_eq!(run_fixture("integer_literal_suffix.c"), 0);
+}
+
+#[test]
 fn unary_minus_preserves_uint64_width() {
     // C99 6.5.3.3 paragraph 3: the integer promotions are
     // performed on the operand of unary `-` and the result has

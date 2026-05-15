@@ -780,6 +780,7 @@ fn encode_meta(unit: &LinkUnit) -> Vec<u8> {
                 }
                 write_u32(&mut buf, f.bit_offset);
                 write_u32(&mut buf, f.bit_width);
+                write_u32(&mut buf, f.bit_unit_size as u32);
             }
         }
     }
@@ -939,7 +940,7 @@ fn structs_len(ss: &[crate::c5::compiler::StructDef]) -> u32 {
             total += 4 + f.name.len() as u32;
             total += 8 + 8 + 8 + 8;
             total += 4 + f.array_dims.len() as u32 * 8;
-            total += 4 + 4;
+            total += 4 + 4 + 4;
         }
     }
     total
@@ -1669,12 +1670,14 @@ fn read_structs(body: &[u8]) -> Result<Vec<crate::c5::compiler::StructDef>, C5Er
                 array_dims.push(i64_at(body, cursor));
                 cursor += 8;
             }
-            if cursor + 8 > body.len() {
-                return Err(err("field bit_offset/bit_width truncated"));
+            if cursor + 12 > body.len() {
+                return Err(err("field bit_offset/bit_width/bit_unit_size truncated"));
             }
             let bit_offset = u32_at(body, cursor);
             cursor += 4;
             let bit_width = u32_at(body, cursor);
+            cursor += 4;
+            let bit_unit_size = u32_at(body, cursor) as u8;
             cursor += 4;
             fields.push(StructField {
                 name: fname,
@@ -1685,6 +1688,7 @@ fn read_structs(body: &[u8]) -> Result<Vec<crate::c5::compiler::StructDef>, C5Er
                 array_dims,
                 bit_offset,
                 bit_width,
+                bit_unit_size,
             });
         }
         out.push(StructDef {

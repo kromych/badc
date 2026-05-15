@@ -149,6 +149,17 @@ fn sizeof_string_literal_returns_array_size() {
 }
 
 #[test]
+fn bitfield_storage_unit_matches_base_type() {
+    // C99 6.7.2.1 paragraph 11: a bitfield's addressable
+    // storage unit width is implementation-defined, but the
+    // struct's size respects the base type's width. Treating
+    // every bitfield as if it lived in an 8-byte unit inflates
+    // a uint32_t-based struct to 8 bytes and bleeds a
+    // read-modify-write into adjacent storage.
+    assert_eq!(run_fixture("bitfield_storage_unit.c"), 0);
+}
+
+#[test]
 fn integer_literal_suffix_picks_type() {
     // C99 6.4.4.1 paragraph 5: an integer literal's type comes
     // from its suffix. `1ULL` is unsigned long long, not int;

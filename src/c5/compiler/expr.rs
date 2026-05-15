@@ -1845,7 +1845,11 @@ impl Compiler {
                     //                    extraction that lands the
                     //                    bitfield's value in `a` for
                     //                    the surrounding expression.
-                    self.emit_bitfield_access(field.bit_offset, field.bit_width)?;
+                    self.emit_bitfield_access(
+                        field.bit_offset,
+                        field.bit_width,
+                        field.bit_unit_size,
+                    )?;
                 } else {
                     // Trailing Lc/Li loads the field. The assignment handler
                     // (in the same loop) converts a trailing Li/Lc to Psh, so

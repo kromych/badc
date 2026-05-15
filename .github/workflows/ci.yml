@@ -232,19 +232,20 @@ jobs:
         # every supported runner: each lane's HOST_MATRIX entry
         # picks the matching target_macros / cpp_defs / TU set.
         run: python demos/tinycc/smoke.py
-      - name: tinycc self-host parity (Linux)
+      - name: tinycc self-host parity
         # Compares `tcc -c` output between a reference tcc built
-        # with the host gcc and a stage1 tcc built through badc.
-        # Skipped automatically on non-Linux runners; tcc emits ELF
-        # only and the Mach-O / PE format paths are not exercised
-        # by this gate yet. The harness runs on every Linux runner;
-        # HOST_PROFILES in self_host.py picks the per-host TU set
-        # plus `TCC_TARGET_*` macros. Both lanes gate strictly on
-        # the five-stage fixed point (samples / corpus / gen2 ==
-        # gen3 / gen2-self compile / functional). KNOWN_DRIFT lists
-        # the one residual aarch64 mismatch (tccpp.c's FP literal
-        # pool placement) -- an informational diff that does not
-        # affect correctness; TODO clears it.
+        # with the host compiler and a stage1 tcc built through
+        # badc. HOST_PROFILES in self_host.py picks the per-host
+        # TU set plus `TCC_TARGET_*` macros. The Linux lanes
+        # (x86_64 + aarch64) gate strictly on the five-stage
+        # fixed point (samples / corpus / gen2 == gen3 /
+        # gen2-self compile / functional). The macOS aarch64 lane
+        # is soft-gated on gen2-self while a c5 miscompile in
+        # `tccmacho.c`'s Mach-O binding emit gets resolved.
+        # KNOWN_DRIFT lists per-host residual mismatches that do
+        # not affect correctness. Skipped on Windows runners; tcc
+        # emits ELF intermediates and the PE final-link recipe
+        # is not exercised yet.
         shell: bash
         run: python demos/tinycc/self_host.py || test $? -eq 2
       - name: stb header-only smoke

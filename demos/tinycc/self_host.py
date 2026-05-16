@@ -479,8 +479,17 @@ def build_libtcc1_archive(
     """
     sources: list[Path] = [
         TINYCC_DIR / "lib" / "libtcc1.c",
-        TINYCC_DIR / "lib" / "va_list.c",
     ]
+    if host[0] != "Windows":
+        # `va_list.c` provides the `__va_arg` helper for the SysV
+        # x86_64 / Linux + macOS aarch64 va_list ABI. tinycc's
+        # tccdefs.h redefines `__builtin_va_list` as `char *` on
+        # `_WIN32`, which collides with va_list.c's struct typedef;
+        # upstream tinycc's win32 Makefile already excludes it
+        # because the Win64 va_arg lowering is the inline macro at
+        # `tccdefs.h:__builtin_va_arg` -- no `__va_arg` reference
+        # is emitted.
+        sources.append(TINYCC_DIR / "lib" / "va_list.c")
     if host[1] == "aarch64":
         # `lib-arm64.c` -- binary128 long-double softfloat helpers.
         # `armflush.c` -- `__clear_cache` wrapper that lowers to

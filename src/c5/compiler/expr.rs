@@ -1082,6 +1082,16 @@ impl Compiler {
                     let operand_ty = self.ty;
                     self.emit_binop_with_imm(Op::Mul, -1);
                     self.ty = integer_promote(operand_ty);
+                    // C99 6.5.3.3p3: result has the promoted operand
+                    // type and follows that type's overflow rules.
+                    // For `unsigned int` (4-byte unsigned that does
+                    // not promote down) wrap modulo 2^32, otherwise
+                    // the 64-bit Mul leaves the sign-extended high
+                    // half set and a downstream Or / Shr operates
+                    // on the wider pattern.
+                    if is_unsigned_ty(self.ty) && self.size_of_type(self.ty) == 4 {
+                        self.emit_binop_with_imm(Op::And, 0xffff_ffff);
+                    }
                 }
             }
         } else if self.lex.tk == Token::Inc || self.lex.tk == Token::Dec {
@@ -1552,6 +1562,7 @@ impl Compiler {
                 self.expr(Token::AddOp as i64)?;
                 // Pick logical (Shru) for unsigned LHS, arithmetic (Shr) otherwise.
                 // The RHS is the shift count; only the LHS sign matters.
+
                 if is_unsigned_ty(t) {
                     self.emit_op(Op::Shru);
                     // Preserve LHS unsigned-ness so chained shifts/compares stay unsigned.

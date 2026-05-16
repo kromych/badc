@@ -282,6 +282,20 @@ fn preprocessor_handles_uint64_literal() {
 }
 
 #[test]
+fn unary_minus_on_unsigned_int_wraps_mod_2_pow_32() {
+    // C99 6.5.3.3p3: the unary `-` operator's result has the
+    // promoted operand type. `unsigned int` does not promote
+    // down, so `-x` on a `uint32_t` must wrap modulo 2^32. c5
+    // lowers the negation as a 64-bit signed multiply, so
+    // without an explicit 32-bit mask the sign-extended high
+    // half stays in the register and a downstream `|` / `>>`
+    // operates on the wider pattern -- the constant-time
+    // identity `(q | -q) >> 31` then returns 0xFFFFFFFF
+    // instead of 1.
+    assert_eq!(run_fixture("unary_minus_unsigned_int_truncation.c"), 0);
+}
+
+#[test]
 fn typedef_struct_carrier_does_not_leak() {
     // C99 6.7.7p3 boundary: a `typedef struct { fe X; ... } ge;`
     // whose final field is an array-typedef must not leak that

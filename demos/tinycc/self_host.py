@@ -445,7 +445,7 @@ def build_reference_tcc(
         *[str(s) for s in sources],
         *host_link_libs(host),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if proc.returncode != 0:
         print(f"self_host: reference tcc build failed via {cc}:", file=sys.stderr)
         print(proc.stderr, file=sys.stderr)
@@ -511,7 +511,7 @@ def build_libtcc1_archive(
             "-o",
             str(obj),
         ]
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if proc.returncode != 0:
             print(f"self_host: libtcc1 helper {src.name} build failed:", file=sys.stderr)
             print(proc.stderr, file=sys.stderr)
@@ -527,14 +527,18 @@ def build_libtcc1_archive(
         str(archive),
         *[str(p) for p in obj_paths],
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if proc.returncode != 0:
         print("self_host: libtcc1.a archive build failed:", file=sys.stderr)
         print(proc.stderr, file=sys.stderr)
         return None
     # Mirror to the tcc lib path so `-B <TINYCC_DIR>` resolves it.
-    mirror = TINYCC_DIR / "libtcc1.a"
-    shutil.copyfile(archive, mirror)
+    # `CONFIG_TCC_LIBPATHS` is `{B}` on POSIX targets and `{B}/lib`
+    # on PE / `_WIN32` per tcc.h, so place a copy at both locations
+    # rather than branch on host. Existing `lib/` ships the libtcc1
+    # source files; adding the archive alongside is harmless.
+    for mirror in (TINYCC_DIR / "libtcc1.a", TINYCC_DIR / "lib" / "libtcc1.a"):
+        shutil.copyfile(archive, mirror)
     return archive
 
 
@@ -575,7 +579,12 @@ def build_stage1_tcc(
         *sources,
     ]
     proc = subprocess.run(
-        cmd, capture_output=True, text=True, cwd=str(REPO_ROOT)
+        cmd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(REPO_ROOT),
     )
     if proc.returncode != 0:
         print("self_host: stage1 tcc build failed via badc:", file=sys.stderr)
@@ -600,7 +609,12 @@ def compile_with(
     caller needs the compiler to see.
     """
     cmd = [str(tcc), "-B", str(TINYCC_DIR), *extra, "-c", str(src), "-o", str(out)]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    # `errors="replace"` so a stray non-UTF8 byte (the Windows runner
+    # locale defaults to cp1252) does not crash the harness or
+    # produce mojibake-decorated diagnostics.
+    proc = subprocess.run(
+        cmd, capture_output=True, text=True, encoding="utf-8", errors="replace"
+    )
     if proc.returncode != 0:
         # Surface the returncode alongside stderr so silent crashes
         # (Windows access violation 0xC0000005 = -1073741819, SIGSEGV
@@ -863,7 +877,11 @@ def main() -> int:
     # failure (AV during dispatch) from a per-sample compile bug.
     if host[0] == "Windows":
         probe = subprocess.run(
-            [str(stage1_tcc), "-v"], capture_output=True, text=True
+            [str(stage1_tcc), "-v"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         print(
             f"tinycc self-host -- probe (-v): exit={probe.returncode} "
@@ -1011,7 +1029,7 @@ def main() -> int:
                     *[str(p) for p in libtcc1_objects_for_gen2_link(libtcc1)],
                     *host_link_libs(host),
                 ]
-            link_proc = subprocess.run(link_cmd, capture_output=True, text=True)
+            link_proc = subprocess.run(link_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
             if link_proc.returncode != 0:
                 print("self_host: gen2 link failed:", file=sys.stderr)
                 print(link_proc.stderr, file=sys.stderr)
@@ -1046,7 +1064,7 @@ def main() -> int:
             *[str(p) for p in gen2_objs],
             str(libtcc1),
         ]
-        link_proc = subprocess.run(link_cmd, capture_output=True, text=True)
+        link_proc = subprocess.run(link_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if link_proc.returncode != 0:
             print("self_host: gen2-self link failed:", file=sys.stderr)
             print(link_proc.stderr, file=sys.stderr)
@@ -1080,7 +1098,7 @@ def main() -> int:
                 "-o",
                 str(gen2_self_tcc),
             ]
-            link_proc = subprocess.run(link_cmd, capture_output=True, text=True)
+            link_proc = subprocess.run(link_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
             if link_proc.returncode != 0:
                 print("self_host: gen2-self link failed:", file=sys.stderr)
                 print(link_proc.stderr, file=sys.stderr)
@@ -1240,7 +1258,7 @@ def main() -> int:
             ]
         else:
             link_cmd = [cc, "-o", str(hello_bin), str(hello_o)]
-        link_proc = subprocess.run(link_cmd, capture_output=True, text=True)
+        link_proc = subprocess.run(link_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if link_proc.returncode != 0:
             functional_failures.append(f"{name} link: {link_proc.stderr.strip()}")
             continue

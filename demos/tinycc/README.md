@@ -48,45 +48,58 @@ points the produced tcc at them.
 
 ## Bringup status
 
-The vendored set is in place; per-gap issues are tracked off
-the umbrella tracker. The smoke records but does not gate on
-known blockers and flips a TU to a hard regression once it has
-been marked green.
+Every TU in the vendored set compiles cleanly through badc on
+every host profile (Linux x86_64 / aarch64, macOS aarch64,
+Windows x86_64 / arm64). The smoke harness is gated; a TU
+regression fails CI.
 
-Probe state on macOS aarch64 (1 of 13 TUs green; each remaining
-TU has its own well-scoped gap issue):
+The self-host fixed point is exercised by `self_host.py`, which
+runs five tiers in sequence on every lane:
 
-| TU              | Status   | Blocker                            |
-|-----------------|----------|------------------------------------|
-| `tcc.h`         | parses   |                                    |
-| `arm64-gen.c`   | green    |                                    |
-| `arm64-link.c`  | blocked  | `##` paste re-scan                 |
-| `arm64-asm.c`   | blocked  | `__FUNCTION__`                     |
-| `tcc.c`         | blocked  | `va_copy`                          |
-| `libtcc.c`      | blocked  | `va_copy`                          |
-| `tccpp.c`       | blocked  | `va_copy`                          |
-| `tccgen.c`      | blocked  | `##` paste re-scan                 |
-| `tccelf.c`      | blocked  | `##` paste re-scan                 |
-| `tccmacho.c`    | blocked  | `##` paste re-scan                 |
-| `tccasm.c`      | blocked  | `strtoull` libc binding            |
-| `tccdbg.c`      | blocked  | `sizeof ((T*)0)->m`                |
-| `tccrun.c`      | blocked  | extern in function body            |
-| `tcctools.c`    | blocked  | `fdopen` libc binding              |
-| `tccpe.c`       | blocked  | (not active on macOS host)         |
-| `x86_64-gen.c`  | blocked  | (not active on macOS host)         |
-| `x86_64-link.c` | blocked  | (not active on macOS host)         |
-| `i386-asm.c`    | blocked  | (not active on macOS host)         |
+| Tier         | What it asserts                                                                          |
+|--------------|------------------------------------------------------------------------------------------|
+| samples      | per-TU `-c` parity (badc-built tcc vs host-cc-built tcc) on 25 small fixtures            |
+| corpus       | per-TU `-c` parity on tinycc's own 11-12 TUs                                             |
+| bootstrap    | `tcc-gen2` (host-linked from stage1-compiled TUs) compiles every TU byte-identical       |
+| gen2-self    | `tcc-gen2-self` (stage1-self-linked) compiles every TU byte-identical to gen2's output   |
+| functional   | hello-world compile + link + run round trip through stage1 and gen2                      |
+
+Current per-lane state:
+
+| Lane                | samples | corpus  | bootstrap | gen2-self | functional | notes                                                |
+|---------------------|---------|---------|-----------|-----------|------------|------------------------------------------------------|
+| macOS aarch64       | 25/25   | 12/12   | 12/12     | 12/12     | 2/2        | full fixed point                                     |
+| Linux x86_64        | 25/25   | 11/11   | 11/11     | 11/11     | 2/2        | full fixed point                                     |
+| Linux aarch64       | 25/25   | 11/11   | 11/11     | 11/11     | 2/2        | known FP-pool drift on `tccpp.c` (TODO)              |
+| Windows x86_64      | 25/25   | 12/12   | 12/12     | 12/12     | 2/2        | full fixed point                                     |
+| Windows arm64       | 25/25   | 12/12   | skipped   | skipped   | 1/2        | libtcc1 `_environ` dllimport blocker in `crt1.c`     |
+
+`samples` and `corpus` are strict-gated on every lane;
+`bootstrap`, `gen2-self`, and `functional` are strict-gated on
+the four lanes that reach them and stay in soft bringup on
+Windows arm64 pending the upstream `_environ` dllimport fix.
 
 Already-closed gaps that the bringup surfaced:
 
-* `<inttypes.h>` ships (PRI / SCN format macros over `<stdint.h>`).
+* `<inttypes.h>` PRI / SCN format macros over `<stdint.h>`.
 * `__attribute__` / `__declspec` absorbed as empty fn macros.
 * `<unistd.h>` exposes `ssize_t` / `size_t` / `off_t` / `pid_t` /
-  `uid_t` / `gid_t` per POSIX-2017 by pulling in `<sys/types.h>`
-  (which itself pulls in `<stddef.h>` for `size_t`).
-* `<setjmp.h>` ships with per-platform `libc::setjmp` /
-  `libc::longjmp` bindings; runtime correctness of the
-  `jmp_buf` array typedef is gated on a separate c5 fix.
+  `uid_t` / `gid_t` per POSIX-2017 through `<sys/types.h>`.
+* `<setjmp.h>` ships per-platform `libc::setjmp` /
+  `libc::longjmp` bindings; on Windows x86_64 the header wraps
+  setjmp / longjmp in alignment macros so msvcrt's `_setjmp`
+  sees a 16-byte-aligned env (the `movdqa` saves of
+  xmm6..xmm15 fault otherwise).
+* `sizeof(typedef T arr[N])` reports `N * sizeof(T)` per C99
+  6.5.3.4 / 6.7.7 (the typedef array dim is propagated through
+  the operand-shape parser).
+* Integer literal `u` / `l` / `L` suffixes drive longness +
+  unsignedness per C99 6.4.4.1.
+* Unary `-` on `uint64_t` preserves the operand's width per
+  C99 6.5.3.3p3.
+* Bitfield storage unit follows the base type per C99 6.7.2.1p11
+  (the unit width tracks `sizeof(base_type)`, not a hard-coded
+  8 bytes).
 
 ## config.h
 
@@ -103,10 +116,18 @@ not invoke `configure` -- selecting macros from this table:
 | Windows x86_64      | `TCC_TARGET_X86_64`, `TCC_TARGET_PE`           |
 | Windows aarch64     | `TCC_TARGET_ARM64`, `TCC_TARGET_PE`            |
 
-`CONFIG_TCC_SYSINCLUDEPATHS` / `CONFIG_TCC_LIBPATHS` /
-`CONFIG_TCC_ELFINTERP` are left undefined; the produced tcc
-binary needs them at runtime, not at compile time, and the
-self-host stage supplies them via CLI flags when it runs.
+`CONFIG_TCC_SYSINCLUDEPATHS` / `CONFIG_TCC_LIBPATHS` are baked
+in per host so the produced tcc resolves `<stdio.h>` etc. and
+`-lkernel32` / `-lmsvcrt` etc. without a separate install step:
+
+| Host           | `CONFIG_TCC_SYSINCLUDEPATHS` (after `{B}` resolves to `demos/tinycc`)             | `CONFIG_TCC_LIBPATHS`             |
+|----------------|----------------------------------------------------------------------------------|-----------------------------------|
+| Linux          | `{B}/include:/usr/include/<triplet>:/usr/include`                                | `{B}:/usr/lib/<triplet>:/usr/lib` |
+| macOS          | `{B}/include:<SDK>/usr/include:/usr/include`                                     | `{B}:<SDK>/usr/lib:/usr/lib`      |
+| Windows        | `{B}/win32/include;{B}/win32/include/winapi;{B}/include`                         | `{B}/lib;{B}/win32/lib`           |
+
+`CONFIG_TCC_ELFINTERP` stays undefined; the self-host stage
+supplies it via CLI when it links an ELF binary that needs one.
 
 The synthesized `config.h` also forces `CONFIG_TCC_SEMLOCK 0`:
 the upstream default pulls in `<dispatch/dispatch.h>` on macOS,
@@ -118,18 +139,26 @@ weight here.
 
 ## Layout
 
-* `setup.py` -- fetch the source tarball from the vendor-deps
-  release; idempotent. Drops the curated set of `.c` / `.h`
-  files flat into the demo dir, and the shipped system headers
-  under `include/`.
+* `setup.py` -- fetch the source zip from the vendor-deps
+  release and extract the curated set; idempotent. Drops the
+  core tinycc `.c` / `.h` files flat into the demo dir, the
+  cross-platform system headers under `include/`, the runtime
+  helper sources under `lib/`, the upstream Windows headers
+  under `win32/include/` (mingw `<stdio.h>` etc. plus the Win32
+  API tree at `win32/include/winapi/`), and the Windows PE
+  startup + DLL `.def` files under `win32/lib/` (used to
+  satisfy `_start` / `__chkstk` / `-lkernel32` / `-lmsvcrt` at
+  link time).
 * `smoke.py` -- build-only smoke harness. Synthesizes
   `config.h` for the host, walks each TU through `badc -c`,
   tracks per-TU compile state, exits 0 when every TU compiles
   cleanly and the multi-TU link emits a working tcc binary.
-* `self_host.py` -- (follow-up) parity check: builds tcc with
-  both the system cc and badc, runs each on a curated sample
-  suite, asserts behaviour parity. Wired once every TU is
-  green.
-* `tcc.c`, `tcc.h`, ..., `include/*.h` -- vendored upstream
+* `self_host.py` -- five-tier fixed-point parity check (samples
+  -> corpus -> bootstrap -> gen2-self -> functional). Builds a
+  reference tcc with the host cc and a stage1 tcc with badc,
+  then asserts each tier matches byte-for-byte and that the
+  final binaries round-trip a hello world.
+* `tcc.c`, `tcc.h`, ..., `include/*.h`, `lib/*.c` / `*.S`,
+  `win32/include/**`, `win32/lib/**` -- vendored upstream
   sources (gitignored out of band; `setup.py` is the source of
   truth for what they are).

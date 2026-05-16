@@ -13,39 +13,56 @@ in modern source.
 
 Full preprocessor (incl. `#if` arithmetic, function-like
 macros, stringification, token paste, varargs `__VA_ARGS__`,
-`#pragma once`); the integer + float arithmetic surface with
-C99 6.3.1.8 usual-arithmetic-conversions and 6.3.1.1 integer
-promotions; signed and unsigned `char` / `short` / `int` /
-`long` / `long long`; `void`-returning functions (with the
-6.8.6.4p1 constraint on `return <expr>;` diagnosed and
-6.8.6.4p3 "no value" enforced); IEEE 754 single-precision
-`float` (4-byte storage) and double-precision `double`
-(8-byte); pointers, arrays, multi-dim arrays, function
-pointers and chains thereof; `struct` / `union` / `enum` /
-`typedef`, bitfields, `#pragma pack(N)`, anonymous
-struct/union members; struct designated initializers
-(`{.x = 1}`) at file and function scope, including
-non-constant runtime values; array designated initializers
-(`[N] = ...`); `static` / `extern` / `_Thread_local`;
-varargs at the c5-internal calling convention; the C99
-for-init declaration (`for (int i = 0; ...; ...)`); switch
-with `case` / `default` / fall-through; full set of compound
-assignment and increment/decrement operators; pointer
-arithmetic, ordered pointer compares (against zero and
-exhaustive equality); the full C99 6.6 constant-expression
-grammar with FP folding (`int xs[(int)(1.5 * 2.0)];`,
-arithmetic / comparisons / conditional / sizeof / bitwise /
-logical operators) in array sizes, bitfield widths, enum
+`#pragma once`); standard predefines `__STDC__`, `__DATE__`,
+`__TIME__`, `__FILE__`, `__LINE__` per C99 6.10.8 plus the
+GCC / MSVC `__COUNTER__` and `__func__` / `__FUNCTION__` /
+`__PRETTY_FUNCTION__` (C99 6.4.2.2) extensions;
+MSVC-shape `#pragma warning(push)` / `#pragma warning(pop)`
+/ `#pragma warning(disable : N)`; the integer + float
+arithmetic surface with C99 6.3.1.8 usual-arithmetic-
+conversions and 6.3.1.1 integer promotions; integer literal
+`u` / `U` / `l` / `L` / `ll` / `LL` suffixes per C99 6.4.4.1
+drive longness + signedness in decimal, hex, octal, and
+binary constants; signed and unsigned `char` / `short` /
+`int` / `long` / `long long`; `void`-returning functions
+(with the 6.8.6.4p1 constraint on `return <expr>;` diagnosed
+and 6.8.6.4p3 "no value" enforced); IEEE 754 single-
+precision `float` (4-byte storage) and double-precision
+`double` (8-byte); pointers, arrays, multi-dim arrays,
+function pointers and chains thereof; `struct` / `union` /
+`enum` / `typedef`, bitfields (signed and unsigned, sign-
+extending read per C99 6.7.2.1p4, adjacent same-base-type
+fields sharing a storage unit of `sizeof(base_type)` per
+C99 6.7.2.1p11), `#pragma pack(N)`, anonymous struct / union
+members; struct designated initializers (`{.x = 1}`) at file
+and function scope, including non-constant runtime values;
+array designated initializers (`[N] = ...`); `static` /
+`extern` / `_Thread_local`; varargs at the c5-internal
+calling convention; the C99 for-init declaration
+(`for (int i = 0; ...; ...)`); switch with `case` /
+`default` / fall-through; full set of compound assignment
+and increment / decrement operators; pointer arithmetic,
+ordered pointer compares (against zero and exhaustive
+equality); the full C99 6.6 constant-expression grammar
+with FP folding (`int xs[(int)(1.5 * 2.0)];`, arithmetic /
+comparisons / conditional / sizeof / bitwise / logical
+operators) in array sizes, bitfield widths, enum
 initializers, `_Static_assert`, and scalar global integer
-initializers; the `<stdio.h>` / `<stdlib.h>` / `<string.h>`
-/ `<math.h>` / `<time.h>` / `<dlfcn.h>` / `<pthread.h>` /
-`<windows.h>` surfaces documented in `headers/include/`;
+initializers; `sizeof` over typedef-of-array operands
+returns the total byte count per C99 6.5.3.4p4 + 6.7.7p3;
+the `<stdio.h>` / `<stdlib.h>` / `<string.h>` / `<math.h>`
+/ `<time.h>` / `<setjmp.h>` / `<dlfcn.h>` / `<pthread.h>` /
+`<windows.h>` surfaces documented in `headers/include/`
+(setjmp / longjmp coexist as both the macro and the function
+form per C99 7.1.4 so bare-identifier uses still resolve);
 multi-source compile + link (`badc -c foo.c bar.c` followed
 by `badc -o app foo.o bar.o`, plus `--ar` for archives and
-`-L<dir>` / `-l<name>` for archive resolution); binary
-integer literals (`0b...` / `0B...`, C23 / GCC extension)
-with the same suffix-letter handling as hex and decimal
-constants.
+`-L<dir>` / `-l<name>` for archive resolution); multiple
+translation units (C99 5.1.1.1) merge through the cross-TU
+linker with binding tables remapped against each unit's
+final import set; binary integer literals (`0b...` / `0B...`,
+C23 / GCC extension) with the same suffix-letter handling
+as hex and decimal constants.
 
 The integer-arithmetic surface is C99-correct end-to-end:
 unsigned wrap-modulo-2^N, signed-overflow truncate-and-sign-
@@ -103,6 +120,30 @@ separate non-variadic prototypes per selector signature
 that route through the standard AAPCS64 register-passing
 path.
 
+### `long double` is 8-byte FP64 in c5 storage, severity 5
+
+C99 6.2.5p10 lets `long double` be any FP type at least as wide as
+`double`, and the host ABIs differ:
+
+| Target           | Platform-correct `long double` |
+|------------------|--------------------------------|
+| Linux x86_64     | 80-bit x87 extended (10 bytes, 16-byte aligned) |
+| Linux aarch64    | IEEE binary128 (16 bytes)      |
+| macOS aarch64    | IEEE binary64 -- same as `double` (8 bytes) |
+| Windows x86_64   | IEEE binary64 -- same as `double` (8 bytes) |
+| Windows aarch64  | IEEE binary64 -- same as `double` (8 bytes) |
+
+c5 stores every `long double` as 8-byte FP64 regardless of host.
+That matches macOS / Windows directly; on Linux x86_64 and Linux
+aarch64 the libc-boundary readers narrow the wider host return
+value into c5's FP64 slot via x87-`fstp QWORD PTR [rsp]` and a
+`__trunctfdf2` libgcc helper call respectively, so `strtold` and
+friends round-trip the value the host computes (down to FP64
+precision). Long-double *literals* inside c5 source still compile
+through the FP64 pipeline, so an `0x1p120L` literal would lose
+the trailing exponent range and a binary built against c5 cannot
+represent the full Linux aarch64 binary128 dynamic range.
+
 ### libc `int`-returning calls used as register-resident rvalue, severity 3
 
 `strcmp`, `atoi`, etc. leave only the low 32 bits defined
@@ -144,15 +185,16 @@ Rejected.
 `register` / `auto` are accepted as no-ops. `inline` /
 `__inline` / `__inline__` are accepted but don't expand.
 `const` / `volatile` / `restrict` are accepted as no-ops at
-every position. `#line` is supported -- both the C99
-`#line N "file"` form and the GNU `# N "file"` shape route
-through the same lexer hook. `_Noreturn`, `_Complex`,
-`_Imaginary`, `_Pragma`, `__func__`, `__STDC_VERSION__`,
-`__STDC_HOSTED__`, hex floats (`0x1p10`), float `++`/`--`,
+every position. `_Noreturn` (C11 6.7.4) is accepted as a
+no-op (the optimizer hint isn't propagated). `#line` is
+supported -- both the C99 `#line N "file"` form and the GNU
+`# N "file"` shape route through the same lexer hook.
+`_Complex`, `_Imaginary`, `_Pragma`, `__STDC_VERSION__`,
+`__STDC_HOSTED__`, hex floats (`0x1p10`), float `++` / `--`,
 universal character names, digraphs / trigraphs, K&R
 identifier-list function declarators, GCC named-rest
-variadic (`#define foo(args...)`) -- all rejected (or, for
-the no-op qualifier set, silently dropped). Severity 4-5.
+variadic (`#define foo(args...)`) -- all rejected. Severity
+4-5.
 
 ## Beyond C99
 

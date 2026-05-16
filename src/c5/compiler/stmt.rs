@@ -316,7 +316,13 @@ impl Compiler {
             return Ok(());
         }
         while self.lex.tk != ';' {
-            let (loc_idx, ty, array_size) = self.parse_declarator(lbt)?;
+            let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
+            // C99 6.7.7 paragraph 3: an array typedef carries its
+            // dimension when the declarator did not supply one.
+            let typedef_dim = core::mem::take(&mut self.pending.typedef_base_array_size);
+            if typedef_dim > 0 && array_size == 0 {
+                array_size = typedef_dim;
+            }
             self.ty = ty;
 
             block_symbols.push((

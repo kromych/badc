@@ -521,8 +521,14 @@ impl Compiler {
                 return Ok((bc_pc, InitElemReloc::Code(idx)));
             }
             if class == Token::Num as i64 {
-                let v = self.symbols[idx].val;
-                self.next()?;
+                // Integer constant -- either a bare enum / macro
+                // value or the head of a constant arithmetic
+                // expression (`E_A | E_B`, `K << 4`, ...). Defer
+                // to the full integer-constant evaluator so any
+                // trailing operator chain is folded in per C99
+                // 6.6, instead of returning the head value and
+                // leaving the operator to fail downstream.
+                let v = self.parse_constant_int()?;
                 return Ok((v, InitElemReloc::None));
             }
             if class == Token::Sys as i64 {
@@ -720,6 +726,12 @@ impl Compiler {
             } else if field.array_size > 0 && self.lex.tk == '{' {
                 self.next()?;
                 let elem_size = self.size_of_type(field.ty);
+                let elem_is_struct = is_struct_ty(field.ty) && struct_ptr_depth(field.ty) == 0;
+                let elem_sid = if elem_is_struct {
+                    Some(struct_id_of(field.ty))
+                } else {
+                    None
+                };
                 let mut idx: usize = 0;
                 while self.lex.tk != '}' {
                     if idx as i64 >= field.array_size {
@@ -728,9 +740,22 @@ impl Compiler {
                             self.structs[struct_id].name, field.name
                         )));
                     }
-                    let (value, reloc) = self.parse_constant_init_value()?;
                     let here = field_base + idx * elem_size;
-                    self.write_init_value(here, elem_size, value, reloc);
+                    // C99 6.7.8p20: an array-of-struct field accepts
+                    // a nested brace-enclosed initializer for each
+                    // element. Route the inner `{ ... }` through the
+                    // struct collector so the per-field offsets are
+                    // honoured; scalar element types fall through to
+                    // the constant-value path.
+                    if elem_is_struct && self.lex.tk == '{' {
+                        self.collect_struct_initializer(
+                            elem_sid.expect("elem_is_struct implies a struct id"),
+                            here as i64,
+                        )?;
+                    } else {
+                        let (value, reloc) = self.parse_constant_init_value()?;
+                        self.write_init_value(here, elem_size, value, reloc);
+                    }
                     idx += 1;
                     if self.lex.tk == ',' {
                         self.next()?;
@@ -769,6 +794,38 @@ impl Compiler {
             {
                 let nested_sid = struct_id_of(field.ty);
                 self.collect_struct_initializer(nested_sid, field_base as i64)?;
+            } else if field.bit_width > 0 {
+                // Bitfield brace-initializer entry. C99 6.7.8 says
+                // the initializer's value is converted to the
+                // bitfield's type as if assigned. A naive
+                // `write_init_value(field_base, sizeof(base), value)`
+                // would clobber every other bitfield sharing the
+                // same storage unit -- adjacent fields in the same
+                // brace list each rewrite the entire unit. Merge
+                // the bitfield's bits into the existing storage
+                // unit instead.
+                let (value, _reloc) = self.parse_constant_init_value()?;
+                // C99 6.7.2.1p11: the bitfield's addressable storage
+                // unit width is determined by the declared base type;
+                // the RMW span must match `bit_unit_size` so it does
+                // not read or write outside the unit.
+                let unit_bytes = field.bit_unit_size as usize;
+                let mut unit_value: i64 = 0;
+                for i in 0..unit_bytes {
+                    unit_value |= (self.data[field_base + i] as i64) << (i * 8);
+                }
+                let bit_width = field.bit_width;
+                let bit_offset = field.bit_offset;
+                let mask: i64 = if bit_width >= 64 {
+                    -1
+                } else {
+                    (1i64 << bit_width) - 1
+                };
+                let cleared = unit_value & !(mask << bit_offset);
+                let merged = cleared | ((value & mask) << bit_offset);
+                for i in 0..unit_bytes {
+                    self.data[field_base + i] = ((merged >> (i * 8)) & 0xFF) as u8;
+                }
             } else {
                 let (value, reloc) = self.parse_constant_init_value()?;
                 let field_size = self.size_of_type(field.ty);

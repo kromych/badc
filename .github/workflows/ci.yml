@@ -227,6 +227,174 @@ jobs:
         # emits SysV x86_64 GAS only).
         shell: bash
         run: python demos/chibicc/self_host.py || test $? -eq 2
+      - name: tinycc bringup smoke
+        # Vendored tinycc HEAD compiles + multi-TU links across
+        # every supported runner: each lane's HOST_MATRIX entry
+        # picks the matching target_macros / cpp_defs / TU set.
+        run: python demos/tinycc/smoke.py
+      - name: tinycc self-host parity
+        # Compares `tcc -c` output between a reference tcc built
+        # with the host compiler and a stage1 tcc built through
+        # badc. HOST_PROFILES in self_host.py picks the per-host
+        # TU set plus `TCC_TARGET_*` macros. The Linux lanes
+        # (x86_64 + aarch64) gate strictly on the five-stage
+        # fixed point (samples / corpus / gen2 == gen3 /
+        # gen2-self compile / functional). The macOS aarch64 lane
+        # is soft-gated on gen2-self while a c5 miscompile in
+        # `tccmacho.c`'s Mach-O binding emit gets resolved. The
+        # Windows lanes (x86_64 + ARM64) are in active bringup
+        # and run as soft-report only; the harness publishes
+        # tallies but does not fail CI yet. KNOWN_DRIFT lists
+        # per-host residual mismatches that do not affect
+        # correctness.
+        shell: bash
+        run: python demos/tinycc/self_host.py || test $? -eq 2
+      - name: upload tinycc stage1 binary (Windows lanes only)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tcc-stage1-${{ matrix.os }}
+          path: demos/tinycc/.self_host/tcc-stage1*
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 1
+      - name: upload tinycc gen2 / gen2-self binaries (Windows lanes only)
+        # Both binaries are produced from the same stage1-compiled
+        # .o objects; gen2 is host-gcc-linked and works, gen2-self
+        # is stage1-linked through tccpe.c and AVs at runtime on
+        # Windows arm64. Side-by-side `objdump -p` / `dumpbin
+        # /headers` of the two reveals the c5-side link-output
+        # structural delta that drives the AV.
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tcc-gen2-${{ matrix.os }}
+          path: |
+            demos/tinycc/.self_host/tcc-gen2*
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 1
+      - name: probe tcc-stage1 imports vs system DLL exports (Windows lanes only)
+        # On windows-11-arm the binary fails to load with
+        # STATUS_ENTRYPOINT_NOT_FOUND (0xC0000139). Cross-reference
+        # the binary's imports against the actual exports of every
+        # DLL it links so the missing symbol surfaces in the log
+        # without needing a debugger.
+        if: runner.os == 'Windows'
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $stage1 = Get-ChildItem demos/tinycc/.self_host/tcc-stage1* | Select-Object -First 1
+          if (-not $stage1) { Write-Host 'no tcc-stage1 present'; exit 0 }
+          Write-Host "=== inspecting $($stage1.FullName) ==="
+          $arch = $env:PROCESSOR_ARCHITECTURE
+          $dumpbin = (Get-ChildItem "C:\Program Files\Microsoft Visual Studio\*\*\VC\Tools\MSVC\*\bin\Host*\*\dumpbin.exe" -ErrorAction SilentlyContinue | Select-Object -First 1)
+          if (-not $dumpbin) { Write-Host 'dumpbin not found, skipping'; exit 0 }
+          $rawImports = & $dumpbin /imports $stage1.FullName 2>&1 | Out-String
+          # Parse `<spaces><hex>  <name>` rows; group by preceding `DLL Name:` line.
+          $currentDll = ''
+          $importMap = @{}
+          foreach ($line in ($rawImports -split "`r?`n")) {
+              if ($line -match '^\s+(?<dll>\S+\.dll)$') {
+                  $currentDll = $matches['dll'].ToLower()
+                  if (-not $importMap.ContainsKey($currentDll)) { $importMap[$currentDll] = New-Object 'System.Collections.Generic.HashSet[string]' }
+              }
+              elseif ($currentDll -and $line -match '^\s+[0-9A-Fa-f]+\s+(?<sym>[A-Za-z_][A-Za-z0-9_]*)\s*$') {
+                  $importMap[$currentDll].Add($matches['sym']) | Out-Null
+              }
+          }
+          foreach ($dll in $importMap.Keys) {
+              Write-Host ""
+              Write-Host "=== imports from $dll : $($importMap[$dll].Count) symbols ==="
+              $dllPath = "C:\Windows\System32\$dll"
+              if (-not (Test-Path $dllPath)) { Write-Host "  $dllPath not found, skipping"; continue }
+              $rawExports = & $dumpbin /exports $dllPath 2>&1 | Out-String
+              $exports = New-Object 'System.Collections.Generic.HashSet[string]'
+              foreach ($eline in ($rawExports -split "`r?`n")) {
+                  if ($eline -match '^\s+\d+\s+[0-9A-Fa-f]+\s+[0-9A-Fa-f]+\s+(?<sym>[A-Za-z_][A-Za-z0-9_@?$]*)') {
+                      $exports.Add($matches['sym']) | Out-Null
+                  }
+              }
+              Write-Host "  $($exports.Count) symbols in $dllPath"
+              $missing = @($importMap[$dll]) | Where-Object { -not $exports.Contains($_) }
+              if ($missing) {
+                  Write-Host "  *** MISSING from $dll ***"
+                  $missing | ForEach-Object { Write-Host "    $_" }
+              } else {
+                  Write-Host "  (all imports resolve)"
+              }
+          }
+      - name: capture stage1 crash under cdb (Windows lanes only)
+        # On windows-latest the binary loads cleanly (`-v` returns
+        # 0) but every `-c` invocation faults. Run a single sample
+        # under cdb with the crash-state dump command so the AV PC
+        # + unwind reach the log.
+        if: runner.os == 'Windows'
+        shell: cmd
+        continue-on-error: true
+        run: |
+          @echo off
+          setlocal
+          dir demos\tinycc\.self_host\
+          rem badc may emit `tcc-stage1` or `tcc-stage1.exe` depending
+          rem on the writer; prefer the .exe spelling because cdb's
+          rem CreateProcess does not auto-append the extension the way
+          rem the Python harness's subprocess.run does.
+          set "STAGE1=demos\tinycc\.self_host\tcc-stage1.exe"
+          if not exist "%STAGE1%" set "STAGE1=demos\tinycc\.self_host\tcc-stage1"
+          if not exist "%STAGE1%" ( echo no tcc-stage1 present & exit /b 0 )
+          rem Make a copy with the .exe extension so cdb's CreateProcess
+          rem accepts it even when the harness wrote the binary without
+          rem the suffix.
+          if not exist "%STAGE1%.exe" copy /Y "%STAGE1%" "%STAGE1%.exe" >nul
+          if exist "%STAGE1%.exe" set "STAGE1=%STAGE1%.exe"
+          set "CDBDIR=x64"
+          if /I "%PROCESSOR_ARCHITECTURE%"=="ARM64" set "CDBDIR=arm64"
+          set "CDB=C:\Program Files (x86)\Windows Kits\10\Debuggers\%CDBDIR%\cdb.exe"
+          if not exist "%CDB%" ( echo cdb not found at "%CDB%" & exit /b 0 )
+          echo === cdb at %CDB% ===
+          set "SAMPLE=demos\tinycc\.self_host\samples\arithmetic.c"
+          if not exist "%SAMPLE%" ( echo sample not present & exit /b 0 )
+          set "LOG=%RUNNER_TEMP%\cdb.log"
+          if exist "%LOG%" del "%LOG%"
+          rem cmd-shell quoting puts the `-c` debugger script in a
+          rem single quoted token, then `--` separates from the
+          rem inferior + its args. PowerShell's Start-Process
+          rem ArgumentList globbed the whole tail into one string
+          rem last run; cmd preserves arg boundaries.
+          "%CDB%" -logo "%LOG%" -c "g; .lastevent; r; kn 30; lm; qq" -G -g "%STAGE1%" -B demos/tinycc -c "%SAMPLE%" -o "%RUNNER_TEMP%\arith.o"
+          echo cdb exit: %ERRORLEVEL%
+          if exist "%LOG%" ( echo === cdb log === & type "%LOG%" ) else ( echo no cdb log produced )
+      - name: capture gen2-self crash under cdb (Windows lanes only)
+        # gen2-self is the stage1-linked tcc binary built from the
+        # gen2-compiled tinycc objects -- functionally identical to
+        # gen2, except linked by stage1's tccpe-driven PE writer
+        # rather than host gcc + mingw ld. On Windows arm64 the
+        # gen2-self binary AVs early. Run it under cdb with the
+        # same script the stage1 step uses so the AV PC + unwind
+        # land in the log.
+        if: runner.os == 'Windows'
+        shell: cmd
+        continue-on-error: true
+        run: |
+          @echo off
+          setlocal
+          set "GEN2SELF=demos\tinycc\.self_host\tcc-gen2-self.exe"
+          if not exist "%GEN2SELF%" set "GEN2SELF=demos\tinycc\.self_host\tcc-gen2-self"
+          if not exist "%GEN2SELF%" ( echo no tcc-gen2-self present & exit /b 0 )
+          if not exist "%GEN2SELF%.exe" copy /Y "%GEN2SELF%" "%GEN2SELF%.exe" >nul
+          if exist "%GEN2SELF%.exe" set "GEN2SELF=%GEN2SELF%.exe"
+          set "CDBDIR=x64"
+          if /I "%PROCESSOR_ARCHITECTURE%"=="ARM64" set "CDBDIR=arm64"
+          set "CDB=C:\Program Files (x86)\Windows Kits\10\Debuggers\%CDBDIR%\cdb.exe"
+          if not exist "%CDB%" ( echo cdb not found at "%CDB%" & exit /b 0 )
+          set "SAMPLE=demos\tinycc\.self_host\samples\arithmetic.c"
+          if not exist "%SAMPLE%" ( echo sample not present & exit /b 0 )
+          set "LOG=%RUNNER_TEMP%\cdb-gen2-self.log"
+          if exist "%LOG%" del "%LOG%"
+          "%CDB%" -logo "%LOG%" -c "g; .lastevent; r; kn 30; lm; qq" -G -g "%GEN2SELF%" -B demos/tinycc -c "%SAMPLE%" -o "%RUNNER_TEMP%\arith.gen2self.o"
+          echo cdb exit: %ERRORLEVEL%
+          if exist "%LOG%" ( echo === cdb gen2-self log === & type "%LOG%" ) else ( echo no cdb log produced )
       - name: stb header-only smoke
         # The densest demo: a single TU pulls in six stb_*.h
         # headers (stb_sprintf, stb_perlin, stb_image_write,

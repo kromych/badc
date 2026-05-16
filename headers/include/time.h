@@ -10,8 +10,26 @@
 #pragma once
 
 #define CLOCKS_PER_SEC 1000000
-#define CLOCK_REALTIME 0
+
+// Per-target clockid_t values. POSIX leaves the integer assignments
+// implementation-defined and every libc picks its own; the constants
+// here must match what the host's `clock_gettime` accepts at runtime,
+// otherwise the call returns -1 with errno = EINVAL and the timespec
+// is left untouched.
+//
+//   * Linux glibc / musl: REALTIME=0, MONOTONIC=1 (linux/time.h).
+//   * Apple libSystem:   REALTIME=0, MONOTONIC=6 (sys/_types/_clockid_t.h).
+//   * Windows: no POSIX `clock_gettime` -- the time.h surface routes
+//     through a c5-side shim that internally calls
+//     `QueryPerformanceCounter`, so the constant value is opaque to
+//     the host and only needs to be self-consistent within c5.
+#ifdef __APPLE__
+#define CLOCK_REALTIME  0
+#define CLOCK_MONOTONIC 6
+#else
+#define CLOCK_REALTIME  0
 #define CLOCK_MONOTONIC 1
+#endif
 
 // `tv_sec` is `time_t` per POSIX; we just inline the per-target
 // width so the typedef order doesn't matter. `tv_nsec` / `tv_usec`

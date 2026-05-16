@@ -19,6 +19,7 @@ use super::super::op::Op;
 use super::super::symbol::Symbol;
 use super::super::token::{Token, Ty};
 use super::Compiler;
+use super::types::is_unsigned_ty;
 use super::types::{is_scalar_load_op_val, reemit_scalar_load};
 
 impl Compiler {
@@ -260,11 +261,23 @@ impl Compiler {
         &mut self,
         bit_offset: u32,
         bit_width: u32,
+        unit_size: u8,
+        field_ty: i64,
     ) -> Result<(), C5Error> {
         let mask: i64 = if bit_width >= 64 {
             -1
         } else {
             (1i64 << bit_width) - 1
+        };
+        // The bitfield's storage unit width (C99 6.7.2.1p11) picks
+        // the load / store opcode pair. Sub-word units must not
+        // load eight bytes -- doing so would mix in adjacent
+        // fields and the subsequent merge would clobber them.
+        let (load_op, store_op) = match unit_size {
+            1 => (Op::Lc, Op::Sc),
+            2 => (Op::Lh, Op::Sh),
+            4 => (Op::Lw, Op::Sw),
+            _ => (Op::Li, Op::Si),
         };
         if self.lex.tk == Token::Assign {
             // Bitfield write: `s.f = expr`. The c5 stack discipline
@@ -274,7 +287,7 @@ impl Compiler {
             self.next()?; // consume `=`
             // a = field_addr; stack: [...]
             self.emit_op(Op::Psh); // stack: [..., field_addr]; a = field_addr
-            self.emit_op(Op::Li); // a = old_value; stack: [..., field_addr]
+            self.emit_op(load_op); // a = old_value; stack: [..., field_addr]
             self.emit_op(Op::Psh); // stack: [..., field_addr, old_value]
             self.emit_op(Op::Imm);
             self.emit_val(!(mask << bit_offset)); // a = ~(mask << off)
@@ -294,12 +307,82 @@ impl Compiler {
             // stack: [..., field_addr]. The trailing Si pops
             // field_addr as the destination.
             self.emit_op(Op::Or);
-            self.emit_op(Op::Si); // pops field_addr, stores a (=combined).
+            self.emit_op(store_op); // pops field_addr, stores a (=combined).
+            self.ty = Ty::Int as i64;
+            Ok(())
+        } else if self.lex.tk == Token::AssignOp {
+            // Bitfield compound assignment: `s.f OP= expr` per C99
+            // 6.5.16.2 ("E1 = E1 OP E2 with E1 evaluated once").
+            // The math needs old_value twice -- once to extract the
+            // current bitfield value as the binop's left operand,
+            // once to clear the slot for the final merge. A
+            // dedicated scratch local hands `Op::StLocI` /
+            // `Op::LdLocI` the spill / reload pair that the plain
+            // `Lea N; Si` shape cannot express (Lea clobbers `a`).
+            let binop = self.lex.ival;
+            self.next()?; // consume the assign-op
+            self.loc_offs += 1;
+            if self.loc_offs > self.max_loc_offs {
+                self.max_loc_offs = self.loc_offs;
+            }
+            let ov_temp = -self.loc_offs;
+            // a = field_addr; stack: [...]
+            self.emit_op(Op::Psh); // stack: [..., field_addr]
+            self.emit_op(load_op); // a = old_value
+            // Spill old_value into the scratch local without
+            // disturbing `a` or the c5 stack.
+            self.emit_op(Op::StLocI);
+            self.emit_val(ov_temp);
+            // Extract current = (old_value >> bit_offset) & mask.
+            if bit_offset > 0 {
+                self.emit_binop_with_imm(Op::Shr, bit_offset as i64);
+            }
+            self.emit_binop_with_imm(Op::And, mask);
+            // Evaluate the RHS with `current` on the c5 stack so
+            // the binop pops it as the left operand. Right-hand-
+            // side parsing follows the same precedence as a bare
+            // assignment.
+            self.emit_op(Op::Psh); // stack: [..., field_addr, current]
+            self.expr(Token::Assign as i64)?;
+            let op = match binop {
+                x if x == Token::AddOp as i64 => Op::Add,
+                x if x == Token::SubOp as i64 => Op::Sub,
+                x if x == Token::MulOp as i64 => Op::Mul,
+                x if x == Token::DivOp as i64 => Op::Div,
+                x if x == Token::ModOp as i64 => Op::Mod,
+                x if x == Token::AndOp as i64 => Op::And,
+                x if x == Token::OrOp as i64 => Op::Or,
+                x if x == Token::XorOp as i64 => Op::Xor,
+                x if x == Token::ShlOp as i64 => Op::Shl,
+                x if x == Token::ShrOp as i64 => Op::Shr,
+                _ => return Err(self.compile_err("unsupported compound op on bitfield")),
+            };
+            self.emit_op(op);
+            // Mask + shift the combined value back into the slot.
+            self.emit_binop_with_imm(Op::And, mask);
+            if bit_offset > 0 {
+                self.emit_binop_with_imm(Op::Shl, bit_offset as i64);
+            }
+            // shifted_new in `a`. Push it so the next ops can
+            // reload the cleared old_value into `a`.
+            self.emit_op(Op::Psh); // stack: [..., field_addr, shifted_new]
+            self.emit_op(Op::LdLocI);
+            self.emit_val(ov_temp);
+            self.emit_binop_with_imm(Op::And, !(mask << bit_offset));
+            self.emit_op(Op::Or); // pops shifted_new; a = cleared | shifted_new
+            self.emit_op(store_op); // pops field_addr, stores a
             self.ty = Ty::Int as i64;
             Ok(())
         } else {
             // Bitfield read: `s.f` in any non-assignment context.
-            self.emit_op(Op::Li); // a = full storage word
+            // C99 6.7.2.1p10: a bitfield's signedness follows its
+            // declared base type. For a signed bitfield narrower than
+            // the c5 accumulator width, the post-mask value is in
+            // [0, 2^width) and must be sign-extended so that bit
+            // (width-1) propagates through the high half of the
+            // 64-bit accumulator; without this `signed short f:2`
+            // with the bit pattern `11` reads as `3` instead of `-1`.
+            self.emit_op(load_op); // a = full storage word
             if bit_offset > 0 {
                 self.emit_op(Op::Psh);
                 self.emit_imm(bit_offset as i64);
@@ -308,6 +391,11 @@ impl Compiler {
             self.emit_op(Op::Psh);
             self.emit_imm(mask);
             self.emit_op(Op::And); // a = (...) & mask
+            if !is_unsigned_ty(field_ty) && bit_width < 64 {
+                let shift = 64i64 - (bit_width as i64);
+                self.emit_binop_with_imm(Op::Shl, shift);
+                self.emit_binop_with_imm(Op::Shr, shift); // Op::Shr is arithmetic
+            }
             self.ty = Ty::Int as i64;
             Ok(())
         }
@@ -325,6 +413,13 @@ impl Compiler {
         s.h_type = s.type_;
         s.h_val = s.val;
         s.h_fn_ptr_indirection = s.fn_ptr_indirection;
+        s.h_array_size = s.array_size;
+        s.h_inner_array_size = s.inner_array_size;
+        // Clone rather than `mem::take`: the inner-scope binding
+        // (parameter or block local) keeps using the live
+        // `array_dims` for the duration of its scope. Restore
+        // copies the shadow back on scope exit.
+        s.h_array_dims = s.array_dims.clone();
     }
 
     /// Inverse of [`Self::shadow_symbol`]: restore the saved outer
@@ -337,5 +432,8 @@ impl Compiler {
         sym.type_ = sym.h_type;
         sym.val = sym.h_val;
         sym.fn_ptr_indirection = sym.h_fn_ptr_indirection;
+        sym.array_size = sym.h_array_size;
+        sym.inner_array_size = sym.h_inner_array_size;
+        sym.array_dims = core::mem::take(&mut sym.h_array_dims);
     }
 }

@@ -11,6 +11,10 @@
 ** `struct rusage` declaration below references the same type
 ** that `<time.h>` and the bound libc functions agree on. */
 #include <time.h>
+/* POSIX-2017 mandates that `<unistd.h>` make `ssize_t`,
+** `size_t`, `off_t`, `pid_t`, `uid_t`, `gid_t` visible; the
+** width-sensitive ones live in `<sys/types.h>` already. */
+#include <sys/types.h>
 
 #define STDIN_FILENO  0
 #define STDOUT_FILENO 1
@@ -72,6 +76,12 @@
 #pragma binding(libc::getopt,    "_getopt")
 #pragma binding(libc::sync,      "_sync")
 #pragma binding(libc::confstr,   "_confstr")
+// macOS does not expose the SysV-style `environ` global through
+// libSystem; the supported accessor is `_NSGetEnviron`, which
+// returns a `char ***` pointing at the per-process environ
+// slot. Programs that walk the environment portably reach for
+// it inside a Mach-O #ifdef branch.
+#pragma binding(libc::_NSGetEnviron, "__NSGetEnviron")
 #endif
 
 #ifdef __linux__
@@ -130,6 +140,17 @@
 #pragma binding(libc::getopt,    "getopt")
 #pragma binding(libc::sync,      "sync")
 #pragma binding(libc::confstr,   "confstr")
+// POSIX `environ` is exposed by glibc as a data symbol pointing
+// at the per-process environment vector. The c5 dialect has no
+// dynamic-data-import binding yet, so each TU contributes a
+// tentative definition (C99 6.9.2) that the linker collapses
+// into a single zero-initialised slot. Programs that need the
+// real glibc environ value -- e.g., to pass it through to a
+// child process -- have to populate this slot themselves from
+// the `envp` argument of `main`.
+// TODO: replace the tentative definition with a real data
+// import once the binding-pragma surface grows a data form.
+char **environ;
 #endif
 
 #ifdef _WIN32
@@ -143,6 +164,8 @@
 #pragma binding(msvcrt::isatty,"_isatty")
 #pragma binding(msvcrt::dup,   "_dup")
 #pragma binding(msvcrt::dup2,  "_dup2")
+#pragma binding(msvcrt::getcwd, "_getcwd")
+#pragma binding(msvcrt::unlink, "_unlink")
 #endif
 
 int open(char *path, int flags, ...);
@@ -195,6 +218,11 @@ int getrusage(int who, char *usage);
 int flock(int fd, int operation);
 int nanosleep(char *req, char *rem);
 char *getenv(char *name);
+#ifdef __APPLE__
+// libSystem accessor for the per-process environ slot. Returns a
+// `char ***` whose deref yields the SysV-style `char **environ`.
+char ***_NSGetEnviron(void);
+#endif
 int setenv(char *name, char *value, int overwrite);
 int unsetenv(char *name);
 char *realpath(char *path, char *resolved);
@@ -239,14 +267,19 @@ struct rusage {
     char __pad[64];
 };
 
+#ifndef _WIN32
 // sysconf(3) selectors. Names match POSIX; the underlying value
 // is platform-specific but the bound libc reads it directly.
+// msvcrt has no `sysconf` entry, so the selector macros stay out
+// of the Windows path -- source that gates on `defined
+// _SC_PAGESIZE` falls back to its non-sysconf branch there.
 #define _SC_PAGESIZE      29
 #define _SC_PAGE_SIZE     _SC_PAGESIZE
 #define _SC_NPROCESSORS_ONLN 84
 #define _SC_OPEN_MAX      4
 #define _SC_ARG_MAX       0
 #define _SC_NPROC_ONLN    _SC_NPROCESSORS_ONLN
+#endif
 
 // Standard fd numbers. Already defined above; redeclared here
 // for grep-ability.

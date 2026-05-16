@@ -44,15 +44,22 @@ impl Compiler {
             self.next()?;
         }
         let lbt = self.parse_decl_base_type()?;
-        // Function-prototype declaration at function-body scope:
-        // `extern int foo(int);` -- the next two tokens are an
-        // identifier and `(`, and what follows is a parameter list
-        // ending with `);`. c5 has no separate translation units,
-        // so the declaration is a no-op; the import resolver finds
-        // the symbol via its own table. Skip to the `;` and return.
-        // Mirrors the matching branch in `parse_block_local_decl`
-        // for `{` blocks nested below the function body's top
-        // level.
+        // Function-prototype declaration at function-body scope
+        // (C99 6.7.1 paragraph 3 allows `extern` declarations at
+        // any scope): `extern T (*) name (args);` where `(*)` is
+        // any run of `*` qualifying the return type. c5 has no
+        // separate translation units, so the declaration is a
+        // no-op; the import resolver finds the symbol via its own
+        // table. Skip to the closing `;` and return.
+        //
+        // Snapshot before the speculative `*` walk so a plain
+        // pointer-variable declaration with multiple declarators
+        // (`int *p, *q;`) doesn't get its leading `*` swallowed
+        // and rebound to a wider base type.
+        let proto_snap = self.lex.snapshot();
+        while self.lex.tk == Token::MulOp {
+            self.next()?;
+        }
         if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b'(') {
             self.next()?; // consume name
             self.next()?; // consume `(`
@@ -81,8 +88,13 @@ impl Compiler {
             let _ = lbt;
             return Ok(());
         }
+        // Not a function prototype after all -- rewind so the
+        // declarator loop below sees the `*`s and consumes them
+        // per-declarator (the comma-separated path needs each
+        // declarator to walk its own `*` chain).
+        self.lex.restore(proto_snap);
         while self.lex.tk != ';' {
-            let (loc_idx, ty, array_size) = self.parse_declarator(lbt)?;
+            let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
             // Function-pointer lineage carries through to local
             // bindings -- pick up the side-channel parse_declarator
             // (or the typedef base type) populated. Used by the
@@ -90,6 +102,12 @@ impl Compiler {
             // decay (C99 6.3.2.1p4) as a no-op rather than a
             // through-pointer load.
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
+            // Array typedef carries its dimension when the
+            // declarator did not supply one (C99 6.7.7 p3).
+            let typedef_dim = core::mem::take(&mut self.pending.typedef_base_array_size);
+            if typedef_dim > 0 && array_size == 0 {
+                array_size = typedef_dim;
+            }
             self.ty = ty;
             if self.symbols[loc_idx].class == Token::Loc as i64 {
                 return Err(self.compile_err("duplicate local definition"));

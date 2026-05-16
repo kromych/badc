@@ -40,6 +40,17 @@ pub(crate) struct Symbol {
     /// case lands.
     pub array_size: i64,
 
+    /// Shadow slot for `array_size`. C99 6.2.1 paragraph 4: an
+    /// inner block-scope or function-parameter declaration that
+    /// reuses an outer name fully hides the outer binding for the
+    /// duration of the inner scope, and the outer binding becomes
+    /// visible again unchanged on scope exit. The parameter and
+    /// local-decl paths overwrite `array_size` on the same symbol
+    /// slot; without this save the outer typedef-array dimension
+    /// (e.g. `typedef long jmp_buf[64]`) is permanently lost when
+    /// a prototype reuses the name (`f(void *jmp_buf)`).
+    pub h_array_size: i64,
+
     /// Inner dimension of a 2D-or-greater array variable. For
     /// `T xs[N][M]` we record `array_size = N*M` and
     /// `inner_array_size = M` so subscripting `xs[i]` scales by
@@ -52,6 +63,9 @@ pub(crate) struct Symbol {
     /// for 1D arrays.
     pub inner_array_size: i64,
 
+    /// Shadow slot for `inner_array_size`. See `h_array_size`.
+    pub h_inner_array_size: i64,
+
     /// Full dimension list, outermost first. For `T xs[N][M][K]`
     /// this is `[N, M, K]`. Empty for non-array or 1D-array
     /// symbols (the 1D case is fully described by `array_size`).
@@ -61,6 +75,9 @@ pub(crate) struct Symbol {
     /// final innermost subscript falling through to the regular
     /// `sizeof(elem)` + decay path.
     pub array_dims: Vec<i64>,
+
+    /// Shadow slot for `array_dims`. See `h_array_size`.
+    pub h_array_dims: Vec<i64>,
 
     /// True once a `Token::Glo` symbol has been seen with an
     /// explicit initializer (`= ...`). Tentative-definition

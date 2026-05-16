@@ -243,7 +243,7 @@ pub(super) fn long_long_ptr_depth(ty: i64) -> i64 {
 /// bytes vs char's 1 / short's 2, so the result is always the
 /// signed `Ty::Int` -- the "convert to unsigned int" branch of the
 /// C99 rule never fires here.
-fn integer_promote(ty: i64) -> i64 {
+pub(super) fn integer_promote(ty: i64) -> i64 {
     let stripped = strip_unsigned(ty);
     if stripped == Ty::Char as i64 || stripped == Ty::Short as i64 {
         Ty::Int as i64

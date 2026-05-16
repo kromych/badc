@@ -43,6 +43,11 @@
 #pragma binding(libc::strtol,  "_strtol")
 #pragma binding(libc::strtoll, "_strtoll")
 #pragma binding(libc::strtod,  "_strtod")
+// C99 7.20.1.3: `strtof` returns a `float`. The c5 dialect aliases
+// `float` to `double` for ABI; binding routes to `_strtod` so the
+// 64-bit FP return slot is filled correctly. The supplied string
+// is the same; precision loss from float -> double is harmless.
+#pragma binding(libc::strtof,  "_strtod")
 #pragma binding(libc::strtold, "_strtold")
 #pragma binding(libc::abs,     "_abs")
 #pragma binding(libc::abort,   "_abort")
@@ -56,6 +61,7 @@
 #pragma binding(libc::srand,   "_srand")
 #pragma binding(libc::atexit,  "_atexit")
 #pragma binding(libc::strtoul, "_strtoul")
+#pragma binding(libc::strtoull, "_strtoull")
 #pragma binding(libc::mkstemp, "_mkstemp")
 #pragma binding(libc::mkdtemp, "_mkdtemp")
 #pragma binding(libc::mktemp,  "_mktemp")
@@ -77,6 +83,7 @@
 #pragma binding(libc::strtol,  "strtol")
 #pragma binding(libc::strtoll, "strtoll")
 #pragma binding(libc::strtod,  "strtod")
+#pragma binding(libc::strtof,  "strtof")
 #pragma binding(libc::strtold, "strtold")
 #pragma binding(libc::abs,     "abs")
 #pragma binding(libc::abort,   "abort")
@@ -99,6 +106,7 @@
 // for "register on the main program's exit chain."
 #pragma binding(libc::__cxa_atexit, "__cxa_atexit")
 #pragma binding(libc::strtoul, "strtoul")
+#pragma binding(libc::strtoull, "strtoull")
 #pragma binding(libc::mkstemp, "mkstemp")
 #pragma binding(libc::mkdtemp, "mkdtemp")
 #pragma binding(libc::mktemp,  "mktemp")
@@ -119,9 +127,18 @@
 #pragma binding(msvcrt::atol,    "atol")
 #pragma binding(msvcrt::atof,    "atof")
 #pragma binding(msvcrt::strtol,  "strtol")
+#pragma binding(msvcrt::strtoul, "strtoul")
 // MSVC has _strtoi64; strtoll itself only landed in UCRT.
 #pragma binding(msvcrt::strtoll, "_strtoi64")
+// Underscored aliases for source compiled directly against the
+// msvcrt spelling (typically through a per-platform `#define`).
+#pragma binding(msvcrt::_strtoi64, "_strtoi64")
+// Matching unsigned form -- `_strtoui64` is msvcrt's spelling for
+// what every other libc calls `strtoull`.
+#pragma binding(msvcrt::strtoull, "_strtoui64")
+#pragma binding(msvcrt::_strtoui64, "_strtoui64")
 #pragma binding(msvcrt::strtod,  "strtod")
+#pragma binding(msvcrt::strtof,  "strtof")
 // msvcrt.dll has no `strtold`; UCRT exports it but the
 // universally-available CRT here does not. Programs that
 // need `long double` parsing on Windows pin to UCRT.
@@ -155,7 +172,12 @@ int atol(char *s);
 double atof(char *s);
 int strtol(char *s, char **endp, int base);
 int strtoll(char *s, char **endp, int base);
+int _strtoi64(char *s, char **endp, int base);
 double strtod(char *s, char **endp);
+// C99 7.20.1.3. c5 stores every floating literal in `f64`, so
+// the prototype declares the return as double; the binding above
+// routes through strtod everywhere.
+double strtof(char *s, char **endp);
 #ifndef _WIN32
 // `long double` falls back to f64 in c5 (16-byte storage, 8-byte
 // precision) -- the return value flows through the long-double
@@ -184,8 +206,109 @@ int __cxa_atexit(int *handler, char *arg, char *dso);
 int atexit(int *handler);
 #endif
 int strtoul(char *s, char **endp, int base);
+// C99 7.20.1.4: `strtoull` parses an unsigned long long. The c5
+// dialect stores integers as 64-bit values regardless of width
+// so the prototype returns `int` (also 64-bit on stack).
+int strtoull(char *s, char **endp, int base);
+int _strtoui64(char *s, char **endp, int base);
+#ifdef _WIN32
+// msvcrt's `_spawn*` family takes a mode argument up front.
+// `P_NOWAIT` returns the child handle immediately; the other
+// modes block until the child exits.
+#define P_WAIT          0
+#define P_NOWAIT        1
+#define P_OVERLAY       2
+#define P_NOWAITO       3
+#define P_DETACH        4
+#pragma binding(msvcrt::_spawnvp,  "_spawnvp")
+#pragma binding(msvcrt::_spawnv,   "_spawnv")
+#pragma binding(msvcrt::_spawnl,   "_spawnl")
+int _spawnvp(int mode, char *cmdname, char **argv);
+int _spawnv(int mode, char *cmdname, char **argv);
+int _spawnl(int mode, char *cmdname, char *arg0, ...);
+// `_cwait` action flag: wait for the supplied child handle.
+#define WAIT_CHILD       0
+#define WAIT_GRANDCHILD  1
+#pragma binding(msvcrt::_cwait, "_cwait")
+int _cwait(int *termstat, int handle, int action);
+// msvcrt path-resolution -- analogous to POSIX `realpath`.
+// Resolves a relative path against the current directory and
+// writes the canonical absolute form into `absPath`.
+#pragma binding(msvcrt::_fullpath, "_fullpath")
+char *_fullpath(char *absPath, char *relPath, int maxLength);
+#endif
 int mkstemp(char *templ);
 char *mkdtemp(char *templ);
 char *mktemp(char *templ);
 int random();
 int srandom(int seed);
+
+/* GCC / clang `__clear_cache(begin, end)` is the runtime hint
+** that makes instructions newly written into [begin, end)
+** observable to the fetch path. AArch64 requires the explicit
+** flush; x86_64 hardware keeps the instruction cache coherent
+** so the call is effectively a no-op. Each platform exposes
+** the flush through a different libc surface, so the wrappers
+** below bridge the (begin, end) signature to the native
+** (start, len) shape. Linux glibc exports __clear_cache
+** directly. */
+#ifdef __APPLE__
+#pragma binding(libc::sys_icache_invalidate, "_sys_icache_invalidate")
+void sys_icache_invalidate(void *start, long long len);
+static inline void __clear_cache(void *begin, void *end) {
+    sys_icache_invalidate(begin, (long long)((char *)end - (char *)begin));
+}
+#endif
+
+#ifdef __linux__
+/* Linux glibc does not export `__clear_cache`; the GCC / clang
+** documented surface places the helper in libgcc_s.so.1. ARM
+** ARM B2.4.4 requires explicit instruction-cache maintenance
+** after a writer publishes new code -- AArch64 callers reach
+** for `__clear_cache` to drive that sequence. x86_64 hardware
+** keeps the instruction cache coherent with the data side, so
+** the symbol stays unreferenced there. Pin the dylib explicitly
+** so callers that do reach for it get a DT_NEEDED entry for
+** libgcc_s.so.1 next to libc. */
+#pragma dylib(libgcc_s, "libgcc_s.so.1")
+#pragma binding(libgcc_s::__clear_cache, "__clear_cache")
+void __clear_cache(void *begin, void *end);
+/* AAPCS64 returns `long double` (IEEE binary128) in v0 as a
+** single 128-bit Q register. c5 stores `long double` in an
+** 8-byte FP64 slot, so callers of glibc functions that return
+** `long double` (strtold, ldexpl, ...) need an explicit
+** truncation pass after the call -- otherwise the c5 accumulator
+** reads the low 64 bits of v0, which are zero for every power-
+** of-two value. The libgcc helper `__trunctfdf2(long double) ->
+** double` performs the IEEE-correct round-to-nearest-even
+** narrowing; the aarch64 codegen emits a `bl __trunctfdf2` after
+** any libc call whose binding carries `returns_long_double`. The
+** declaration stays target-agnostic so that the binding is in
+** scope when the codegen lowers for `LinuxAarch64`, even if the
+** preprocessor ran for a different host target. On x86_64 the
+** call is never emitted; the symbol stays unreferenced and
+** libgcc_s.so.1 is not pulled in as a `DT_NEEDED`. */
+#pragma binding(libgcc_s::__trunctfdf2, "__trunctfdf2")
+double __trunctfdf2(long double a);
+#endif
+
+#ifdef _WIN32
+#pragma binding(kernel32::FlushInstructionCache, "FlushInstructionCache")
+#pragma binding(kernel32::GetCurrentProcess, "GetCurrentProcess")
+int FlushInstructionCache(void *hProcess, void *lpBaseAddress, long long dwSize);
+void *GetCurrentProcess(void);
+static inline void __clear_cache(void *begin, void *end) {
+    FlushInstructionCache(GetCurrentProcess(), begin,
+                          (long long)((char *)end - (char *)begin));
+}
+// msvcrt exposes the environment vector through the `_environ`
+// data symbol. The c5 dialect has no dynamic-data-import binding
+// yet, so each TU contributes a tentative definition (C99 6.9.2)
+// that the linker collapses into one zero-initialised slot.
+// Programs that need the real msvcrt environ have to populate
+// this slot themselves from `main`'s `envp` argument.
+// TODO: replace the tentative definition with a real data
+// import once the binding-pragma surface grows a data form.
+char **environ;
+char **_environ;
+#endif

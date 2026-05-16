@@ -92,6 +92,7 @@ typedef struct __c5_FILE FILE;
 #pragma binding(libc::vsnprintf, "_vsnprintf")
 #pragma binding(libc::sscanf,    "_sscanf")
 #pragma binding(libc::fopen,     "_fopen")
+#pragma binding(libc::freopen,   "_freopen")
 #pragma binding(libc::fclose,    "_fclose")
 #pragma binding(libc::fread,     "_fread")
 #pragma binding(libc::fwrite,    "_fwrite")
@@ -128,6 +129,10 @@ typedef struct __c5_FILE FILE;
 // instead of leaving the call as an unresolved Token::Fun.
 #pragma binding(libc::popen,     "_popen")
 #pragma binding(libc::pclose,    "_pclose")
+// POSIX `fdopen` -- wraps an already-open file descriptor as a
+// `FILE *` stream. Used by archive / pipe consumers that get a
+// raw fd from a system call and need stdio-level formatting.
+#pragma binding(libc::fdopen,    "_fdopen")
 #endif
 
 #ifdef __linux__
@@ -141,6 +146,7 @@ typedef struct __c5_FILE FILE;
 #pragma binding(libc::vsnprintf, "vsnprintf")
 #pragma binding(libc::sscanf,    "sscanf")
 #pragma binding(libc::fopen,     "fopen")
+#pragma binding(libc::freopen,   "freopen")
 #pragma binding(libc::fclose,    "fclose")
 #pragma binding(libc::fread,     "fread")
 #pragma binding(libc::fwrite,    "fwrite")
@@ -174,6 +180,10 @@ typedef struct __c5_FILE FILE;
 // instead of leaving the call as an unresolved Token::Fun.
 #pragma binding(libc::popen,     "popen")
 #pragma binding(libc::pclose,    "pclose")
+// POSIX `fdopen` -- wraps an already-open file descriptor as a
+// `FILE *` stream. Used by archive / pipe consumers that get a
+// raw fd from a system call and need stdio-level formatting.
+#pragma binding(libc::fdopen,    "fdopen")
 #endif
 
 #ifdef _WIN32
@@ -188,11 +198,18 @@ typedef struct __c5_FILE FILE;
 // on overflow, but neither does our other targets' `snprintf` once
 // the buffer fills).
 #pragma binding(msvcrt::snprintf,  "_snprintf")
+// Source that pre-rewrites snprintf -> _snprintf via a private
+// `#define` (common in cross-platform projects) reaches for the
+// underscored spelling directly; bind the alias to the same
+// msvcrt entry point.
+#pragma binding(msvcrt::_snprintf, "_snprintf")
 #pragma binding(msvcrt::vfprintf,  "vfprintf")
 #pragma binding(msvcrt::vsprintf,  "vsprintf")
 #pragma binding(msvcrt::vsnprintf, "_vsnprintf")
+#pragma binding(msvcrt::_vsnprintf,"_vsnprintf")
 #pragma binding(msvcrt::sscanf,    "sscanf")
 #pragma binding(msvcrt::fopen,     "fopen")
+#pragma binding(msvcrt::freopen,   "freopen")
 #pragma binding(msvcrt::fclose,    "fclose")
 #pragma binding(msvcrt::fread,     "fread")
 #pragma binding(msvcrt::fwrite,    "fwrite")
@@ -288,7 +305,6 @@ typedef struct __c5_FILE FILE;
 #pragma binding(msvcrt::_get_errno,     "_get_errno")
 #pragma binding(msvcrt::_set_errno,     "_set_errno")
 #pragma binding(msvcrt::_errno,         "_errno")
-#pragma binding(msvcrt::_environ,       "_environ")
 #pragma binding(msvcrt::__argc,         "__argc")
 #pragma binding(msvcrt::__argv,         "__argv")
 #pragma binding(msvcrt::__wargv,        "__wargv")
@@ -312,6 +328,9 @@ typedef struct __c5_FILE FILE;
 #pragma binding(msvcrt::_dup,           "_dup")
 #pragma binding(msvcrt::_dup2,          "_dup2")
 #pragma binding(msvcrt::_fdopen,        "_fdopen")
+// POSIX-style `fdopen` -- msvcrt only exposes the underscored
+// form, so the portable spelling binds to the same entry point.
+#pragma binding(msvcrt::fdopen,         "_fdopen")
 #pragma binding(msvcrt::_byteswap_ulong,  "_byteswap_ulong")
 #pragma binding(msvcrt::_byteswap_uint64, "_byteswap_uint64")
 #pragma binding(msvcrt::_byteswap_ushort, "_byteswap_ushort")
@@ -332,8 +351,16 @@ int wprintf(const unsigned short *fmt, ...);
 int fprintf(FILE *stream, char *fmt, ...);
 int sprintf(char *buf, char *fmt, ...);
 int snprintf(char *buf, int size, char *fmt, ...);
+// Alias forms used by source that pre-rewrites the standard
+// spelling through a per-platform `#define`. The msvcrt path
+// binds both to the same `_snprintf` / `_vsnprintf` entry.
+int _snprintf(char *buf, int size, char *fmt, ...);
+int _vsnprintf(char *buf, int size, char *fmt, char *ap);
 int sscanf(char *src, char *fmt, ...);
 FILE *fopen(char *path, char *mode);
+// C99 7.19.5.4: reopen a stream with a new file. Used by
+// programs that re-route stdin / stdout / stderr to a file.
+FILE *freopen(char *path, char *mode, FILE *stream);
 int fclose(FILE *stream);
 int fread(char *buf, int size, int n, FILE *stream);
 int fwrite(char *buf, int size, int n, FILE *stream);
@@ -471,7 +498,6 @@ int   _stricmp();
 int   _get_errno();
 int   _set_errno();
 int  *_errno();
-char **_environ();
 int   __argc();
 char **__argv();
 unsigned short **__wargv();
@@ -495,6 +521,10 @@ int   _getpid();
 int   _dup(int fd);
 int   _dup2(int fd, int newfd);
 FILE *_fdopen(int fd, char *mode);
+// Portable POSIX-style spelling for the same operation -- routed
+// through `_fdopen` on Windows because msvcrt does not export the
+// non-underscored name.
+FILE *fdopen(int fd, char *mode);
 unsigned int       _byteswap_ulong(unsigned int v);
 unsigned long long _byteswap_uint64(unsigned long long v);
 unsigned short     _byteswap_ushort(unsigned short v);
@@ -693,3 +723,19 @@ static int c5_vsprintf_unbounded(char *buf, char *fmt, va_list ap) {
 #define vprintf   c5_vprintf_stdout
 #define vsnprintf c5_vsnprintf
 #define vsprintf  c5_vsprintf_unbounded
+
+// Windows-flavoured sources pre-rewrite the v* names with leading
+// underscores (`#define vsnprintf _vsnprintf` is a common idiom in
+// MSVC-compatibility blocks). The macro substitution lands on
+// `_vsnprintf` *before* the redirection above gets a chance to
+// fire, so the call resolves against the msvcrt `#pragma binding`
+// for `_vsnprintf` -- a real CRT entry point whose va_list ABI is
+// the platform-native register-save struct, not the long-long
+// cursor c5's <stdarg.h> produces. Alias the underscored spellings
+// to the same c5-side shims so the cursor-format va_list reaches a
+// walker that understands it. Without this, callers see the wrong
+// slot stride and every argument past the first reads garbage.
+#define _vfprintf  c5_vfprintf_FILE
+#define _vprintf   c5_vprintf_stdout
+#define _vsnprintf c5_vsnprintf
+#define _vsprintf  c5_vsprintf_unbounded

@@ -83,14 +83,21 @@ pub struct StructField {
     /// or 1D-array fields. The field-access decay path reads
     /// this to compute the per-level strides for `s.xs[i][j][k]`.
     pub array_dims: Vec<i64>,
-    /// Bit offset within the 8-byte storage unit. Meaningful only
-    /// when `bit_width > 0`.
+    /// Bit offset within the storage unit. Meaningful only when
+    /// `bit_width > 0`.
     pub bit_offset: u32,
     /// Bit width of a bitfield, or 0 for a regular field. Bitfields
-    /// pack into shared 8-byte storage units; reads emit
-    /// `Li; Imm bit_offset; Shr; Imm mask; And` and writes emit a
-    /// load-clear-shift-or-store sequence.
+    /// pack into shared storage units sized by their base type
+    /// (C99 6.7.2.1p11); reads emit a load-shift-mask sequence and
+    /// writes emit a load-clear-shift-or-store sequence keyed by
+    /// `bit_unit_size`.
     pub bit_width: u32,
+    /// Storage-unit size in bytes (1, 2, 4, or 8). Picks the
+    /// matching `Lc/Lh/Lw/Li` and `Sc/Sh/Sw/Si` opcodes for the
+    /// bitfield read / write so a 32-bit-base bitfield does not
+    /// load eight bytes (which would mix in adjacent fields).
+    /// Meaningful only when `bit_width > 0`; 0 otherwise.
+    pub bit_unit_size: u8,
 }
 
 /// Optional preprocessor / driver knobs threaded through compiler
@@ -186,6 +193,18 @@ pub(in crate::c5::compiler) struct Pending {
     /// declarator added no leading `*`s.
     pub base_was_void: bool,
 
+    /// Side channel from `parse_decl_base_type` to the function-
+    /// prototype path: the base type was spelled `long double`,
+    /// not bare `double`. Cleared at the start of every base-type
+    /// parse. The function-decl path consumes this when stamping
+    /// a libc binding so the codegen knows to read the return
+    /// value out of x87 `st(0)` on SysV x86_64 (long-double libc
+    /// returns) instead of XMM0 (which carries double / float).
+    /// The encoded type stays `Ty::Double` for storage so the
+    /// rest of the compiler treats the value as an 8-byte double;
+    /// the distinction is libc-ABI-only.
+    pub base_was_long_double: bool,
+
     /// Side channel from `parse_declarator` to `run_compile`: when
     /// the declarator's nested-paren branch encounters a "function
     /// returning function pointer" shape (`T (*name(args1))(args2)`),
@@ -255,6 +274,15 @@ pub(in crate::c5::compiler) struct Pending {
     /// pointer's `sizeof(T*) = 8`. Cleared at the top of every
     /// `expr()` call so a previous decay doesn't leak into an
     /// unrelated sizeof.
+    /// Side channel from the base-type parsers to the declarator-
+    /// binding sites: when the base type was a typedef whose
+    /// alias resolved to an array, this carries the typedef's
+    /// element count so the bound declarator can inherit the
+    /// array-ness. C99 6.7.7 paragraph 3: a typedef name
+    /// "denotes the same type" as its aliased type, including
+    /// the array length. Cleared by every base-type parse
+    /// (`0` means "not from an array typedef").
+    pub typedef_base_array_size: i64,
     pub last_array_decay_size: i64,
 
     /// Companion to `last_array_decay_size` for cases where the
@@ -292,6 +320,7 @@ impl Default for Pending {
     fn default() -> Self {
         Self {
             base_was_void: false,
+            base_was_long_double: false,
             fn_params: None,
             fn_ptr_indirection: None,
             index_stride: 0,
@@ -299,6 +328,7 @@ impl Default for Pending {
             end_of_expr_stride: 0,
             end_of_expr_strides_tail: Vec::new(),
             init_inner_dim: 0,
+            typedef_base_array_size: 0,
             last_array_decay_size: 0,
             last_array_decay_bytes: 0,
             // `-1` means "not in a fn-ptr-tracked chain"; see field
@@ -656,6 +686,36 @@ impl Compiler {
     /// [`Self::compile`] runs -- this keeps the construction API
     /// infallible so the `Compiler::new(src).compile()` shape
     /// every existing caller uses keeps working.
+    /// Run the preprocessor on `source` with the same setup
+    /// `with_options` performs and return the expanded text. Used
+    /// by the `--dump-pp` / `-E` CLI mode to surface what the
+    /// lexer is about to see, without paying for the parse / codegen
+    /// passes. Errors propagate via `Result` rather than the
+    /// deferred-error channel because the caller has no compiler
+    /// state to attach them to.
+    pub fn preprocess(
+        source: String,
+        target: Target,
+        opts: CompileOptions,
+    ) -> Result<String, C5Error> {
+        let mut pp = Preprocessor::new(target.id_str(), target, env!("CARGO_PKG_VERSION"));
+        pp.set_source_label(&opts.source_label);
+        pp.set_show_includes(opts.show_includes);
+        for path in &opts.include_paths {
+            pp.add_search_path(path);
+        }
+        for name in &opts.force_includes {
+            pp.add_force_include(name);
+        }
+        for (name, body) in &opts.defines {
+            pp.define(name, body);
+        }
+        for name in &opts.undefines {
+            pp.undef(name);
+        }
+        pp.process(&source)
+    }
+
     pub fn with_options(source: String, target: Target, opts: CompileOptions) -> Self {
         // Run the preprocessor first so we know the
         // `#pragma binding(...)` set before seeding the symbol

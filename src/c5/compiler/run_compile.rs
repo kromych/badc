@@ -45,6 +45,16 @@ impl Compiler {
             // matches `Token::Void`; consumed by the function-decl
             // path to mark `Symbol::returns_void`.
             self.pending.base_was_void = false;
+            // Same reset for the long-double marker. A previous
+            // declaration that consumed `long double` would
+            // otherwise stamp this iteration's binding with the
+            // wrong x87 return convention.
+            self.pending.base_was_long_double = false;
+            // Same reset for the typedef-array dimension carrier
+            // so a previous declaration's typedef base does not
+            // leak its array count into this iteration's
+            // declarator binding.
+            self.pending.typedef_base_array_size = 0;
             // Storage-class prefixes -- can appear in any order
             // and any combination before the type. C lets you
             // mix `static extern` (silly but legal in some
@@ -107,6 +117,16 @@ impl Compiler {
                 bt = Ty::Float as i64;
             } else if self.lex.tk == Token::Double {
                 self.next()?;
+                // `long double` collapses to the same f64 encoding
+                // as plain `double` for storage / expression
+                // semantics. The marker carries the spelling out
+                // of band so the function-prototype path can
+                // stamp a libc binding's return-convention flag
+                // (SysV x86_64 returns long double in x87 st(0),
+                // not XMM0).
+                if m.saw_long() {
+                    self.pending.base_was_long_double = true;
+                }
                 bt = Ty::Double as i64;
             } else if self.lex.tk == Token::Enum {
                 self.parse_enum_decl()?;
@@ -131,6 +151,13 @@ impl Compiler {
                 if typedef_fpi > 0 {
                     self.pending.fn_ptr_indirection = Some(typedef_fpi);
                 }
+                // C99 6.7.7 paragraph 3: a typedef whose alias is
+                // an array contributes its dimension to the
+                // bound declarator.
+                let typedef_array = self.symbols[self.lex.curr_id_idx].array_size;
+                if typedef_array > 0 {
+                    self.pending.typedef_base_array_size = typedef_array;
+                }
                 self.next()?;
             } else if m.saw_int_mod {
                 // Bare modifier(s) without an explicit type keyword:
@@ -154,12 +181,23 @@ impl Compiler {
             }
 
             while self.lex.tk != ';' && self.lex.tk != '}' {
-                let (id_idx, ty, array_size) = self.parse_declarator(bt)?;
+                let (id_idx, ty, mut array_size) = self.parse_declarator(bt)?;
                 // Pick up the fn-pointer indirection count
                 // the declarator (or its typedef base type)
                 // recorded, and store it on the symbol so a later
                 // identifier load can seed the chain-depth tracker.
                 let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
+                // A typedef whose alias is an array contributes its
+                // dimension when the declarator did not supply
+                // one. The multi-dim composition rule (`arr_t
+                // four[4]` -> `long four[4][64]` per C99 6.7.7)
+                // needs the `array_dims` chain and is out of
+                // scope here; the single-dim case is the common
+                // one and is what the immediate fix unblocks.
+                let typedef_dim = core::mem::take(&mut self.pending.typedef_base_array_size);
+                if typedef_dim > 0 && array_size == 0 {
+                    array_size = typedef_dim;
+                }
                 self.ty = ty;
                 self.symbols[id_idx].array_size = array_size;
                 if fn_ptr_indirection > 0 {
@@ -339,6 +377,11 @@ impl Compiler {
                     // / memcpy / fcntl in the standard library
                     // would drown real bugs.
                     let prior_was_known = was_fwd_fun;
+                    // Capture the long-double return-type marker
+                    // before parameter parsing, which calls
+                    // `parse_decl_base_type` per param and clears
+                    // the side channel as part of its reset.
+                    let ret_was_long_double = self.pending.base_was_long_double;
                     let params = if let Some(pp) = preconsumed_params {
                         pp
                     } else {
@@ -427,12 +470,14 @@ impl Compiler {
                         // `int` returns) and needs sign / zero extension
                         // before the result becomes the c5 accumulator.
                         let ret_ty = ty;
+                        let ret_is_long_double = ret_was_long_double;
                         for spec in self.dylibs.iter_mut() {
                             for binding in spec.bindings.iter_mut() {
                                 if binding.local_name == name {
                                     binding.is_variadic = variadic;
                                     binding.fixed_args = fixed;
                                     binding.return_type_tag = ret_ty;
+                                    binding.returns_long_double = ret_is_long_double;
                                     // Per-param types for the
                                     // DWARF subprogram DIE the codegen
                                     // emits over each PLT trampoline.

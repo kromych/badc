@@ -112,6 +112,17 @@ SOURCES = [
         upstream_sha="90d1f7f199cc55b13c7fdb5839d1409806633fdb",
         sha_kind="git",
     ),
+    Source(
+        # tinycc -- Fabrice Bellard's TCC, pinned to the `mob` branch
+        # because the last release tag (release_0_9_27, 2017). Version
+        # embeds the commit's author date.
+        name="tinycc",
+        version="20260513",
+        url="https://github.com/TinyCC/tinycc/archive/757507eb022f7af4be63dc9a72b299761181efbb.zip",
+        ext=".zip",
+        upstream_sha="757507eb022f7af4be63dc9a72b299761181efbb",
+        sha_kind="git",
+    ),
 ]
 
 
@@ -188,9 +199,9 @@ def main(argv: list[str] | None = None) -> int:
         f"    --repo {args.repo} \\\n"
         f'    --title "vendor deps for demo smokes" \\\n'
         '    --notes "Mirror of upstream miniz / kissfft / bzip2 / sqlite '
-        'amalgamation archives. Filenames embed upstream version + short '
-        'commit/fossil SHA. sha256 of each asset is in manifest.json and '
-        'pinned in each demo\'s setup.py." \\\n'
+        "amalgamation archives. Filenames embed upstream version + short "
+        "commit/fossil SHA. sha256 of each asset is in manifest.json and "
+        "pinned in each demo's setup.py.\" \\\n"
         f"    {rel_paths}\n"
         f"\nIf the tag already exists use `gh release upload {args.tag} --repo {args.repo} --clobber <files>` instead."
     )

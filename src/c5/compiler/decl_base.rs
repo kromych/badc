@@ -176,6 +176,17 @@ impl Compiler {
         // Reset the void side channel up front so a previous
         // declaration's bare-void base doesn't leak into this one.
         self.pending.base_was_void = false;
+        // Same reset for the long-double marker -- a binding
+        // declared `double f(...)` after one declared `long
+        // double g(...)` must not inherit g's marker.
+        self.pending.base_was_long_double = false;
+        // Same reset for the array-typedef dimension carrier: a
+        // previous declaration that consumed a typedef-array base
+        // (parameter parsing, abstract-declarator casts, ...)
+        // may not have routed through the per-declarator
+        // consumer, so clear here to keep the channel scoped to
+        // this one base-type parse.
+        self.pending.typedef_base_array_size = 0;
         // Leading modifier soup -- the order doesn't matter; we
         // collect everything we see, then look at the next token
         // for the type keyword.
@@ -218,9 +229,17 @@ impl Compiler {
             Ty::Float as i64
         } else if self.lex.tk == Token::Double {
             self.next()?;
-            // `long double` is only as wide as `double` here -- c5
-            // has no 80- or 128-bit FP type. The trailing-modifier
-            // loop already silently consumes any extra `long`.
+            // `long double` collapses to the same f64 encoding as
+            // plain `double` for storage and expression semantics
+            // -- c5 has no 80- or 128-bit FP scalar. The
+            // trailing-modifier loop silently consumes any extra
+            // `long`. The marker below carries the spelling out
+            // of band so the function-prototype path can stamp
+            // a libc binding's return-convention flag (SysV
+            // x86_64 returns long double in x87 st(0), not XMM0).
+            if m.saw_long() {
+                self.pending.base_was_long_double = true;
+            }
             Ty::Double as i64
         } else if self.lex.tk == Token::Enum {
             // `enum [Tag] [{ ... }]` -- in c5 every enum collapses
@@ -254,6 +273,13 @@ impl Compiler {
             // no-parameter idiom.
             if self.symbols[self.lex.curr_id_idx].is_void_typedef {
                 self.pending.base_was_void = true;
+            }
+            // Propagate the typedef's array dimension (C99 6.7.7
+            // paragraph 3). `typedef long jmp_buf[64]; jmp_buf b;`
+            // must bind `b` as `long b[64]`, not as a scalar.
+            let typedef_array = self.symbols[self.lex.curr_id_idx].array_size;
+            if typedef_array > 0 {
+                self.pending.typedef_base_array_size = typedef_array;
             }
             self.next()?;
             aliased

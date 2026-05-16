@@ -34,6 +34,13 @@
 #pragma binding(libc::cosh,  "_cosh")
 #pragma binding(libc::tanh,  "_tanh")
 #pragma binding(libc::ldexp, "_ldexp")
+// C99 7.12 declares `ldexpl` as the long-double form of `ldexp`.
+// c5 aliases `long double` to `double` for storage, so the value
+// passed to / returned from the host ABI is the same 64-bit
+// double. Binding `ldexpl` to host `ldexp` keeps the
+// calling-convention contract on every target without depending
+// on the platform's actual `long double` width.
+#pragma binding(libc::ldexpl, "_ldexp")
 #pragma binding(libc::frexp, "_frexp")
 #pragma binding(libc::modf,  "_modf")
 #endif
@@ -63,6 +70,7 @@
 #pragma binding(libm::cosh,  "cosh")
 #pragma binding(libm::tanh,  "tanh")
 #pragma binding(libm::ldexp, "ldexp")
+#pragma binding(libm::ldexpl, "ldexp")
 #pragma binding(libm::frexp, "frexp")
 #pragma binding(libm::modf,  "modf")
 #endif
@@ -91,6 +99,7 @@
 #pragma binding(msvcrt::cosh,  "cosh")
 #pragma binding(msvcrt::tanh,  "tanh")
 #pragma binding(msvcrt::ldexp, "ldexp")
+#pragma binding(msvcrt::ldexpl, "ldexp")
 #pragma binding(msvcrt::frexp, "frexp")
 #pragma binding(msvcrt::modf,  "modf")
 #endif
@@ -148,6 +157,9 @@ double cosh(double x);
 double tanh(double x);
 // C99 7.12.6.6: ldexp(x, exp) = x * 2^exp.
 double ldexp(double x, int exp);
+// C99 7.12 long-double form. c5 aliases long double to double, so
+// the prototype and the binding both reduce to the `ldexp` ABI.
+double ldexpl(double x, int exp);
 // C99 7.12.6.4: frexp(x, *exp) splits x into a normalised
 // significand in [0.5, 1.0) and an integer exponent.
 double frexp(double x, int *exp);

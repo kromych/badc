@@ -84,12 +84,16 @@ impl Compiler {
         let mut struct_align: usize = 1;
         // Bit-packing state for contiguous bitfields. When
         // `bf_active` is true, `bf_storage_offset` is the byte
-        // offset of the current 8-byte storage unit and
-        // `bf_next_bit` is the next free bit position within it.
-        // A non-bitfield field or a bitfield that doesn't fit
-        // closes the unit.
+        // offset of the current storage unit, `bf_unit_size` is
+        // the unit's width in bytes (the bitfield's base type
+        // size per C99 6.7.2.1p11), and `bf_next_bit` is the
+        // next free bit position within it. A non-bitfield
+        // field, a bitfield with a different base size, or a
+        // bitfield that doesn't fit in the remaining bits closes
+        // the unit.
         let mut bf_active = false;
         let mut bf_storage_offset: usize = 0;
+        let mut bf_unit_size: usize = 0;
         let mut bf_next_bit: u32 = 0;
         while self.lex.tk != '}' {
             // Field type prefix: int, char, float, double, or struct Name.
@@ -241,6 +245,14 @@ impl Compiler {
                 Ty::Int as i64
             } else if self.is_lex_typedef_name() {
                 let aliased = self.symbols[self.lex.curr_id_idx].type_;
+                // C99 6.7.7 paragraph 3: a typedef name carries
+                // through any array dimension on its alias. Stash
+                // the count so the field-binding code below can
+                // make `jmp_buf b;` lay out `long b[64];`.
+                let typedef_array = self.symbols[self.lex.curr_id_idx].array_size;
+                if typedef_array > 0 {
+                    self.pending.typedef_base_array_size = typedef_array;
+                }
                 self.next()?;
                 aliased
             } else if saw_int_mod {
@@ -331,6 +343,7 @@ impl Compiler {
                             array_dims: inner_field.array_dims,
                             bit_offset: inner_field.bit_offset,
                             bit_width: inner_field.bit_width,
+                            bit_unit_size: inner_field.bit_unit_size,
                         });
                     }
 
@@ -362,19 +375,26 @@ impl Compiler {
                 };
 
                 if let Some(width) = anon_bitfield_width {
+                    let field_unit_size = self.size_of_type(field_base).max(1);
+                    let unit_capacity_bits = (field_unit_size as u32) * 8;
                     if width == 0 {
-                        // C99 `:0` -- explicit alignment to next storage unit.
+                        // C99 6.7.2.1p11: a width-zero bitfield aligns
+                        // the next field to the start of the next
+                        // storage unit of the bitfield's base type.
                         if bf_active && !is_union {
-                            offset = bf_storage_offset + 8;
+                            offset = bf_storage_offset + bf_unit_size;
                         }
                         bf_active = false;
                     } else if !is_union {
-                        // Allocate or extend a bitfield run for the padding.
-                        if !bf_active || bf_next_bit + width > 64 {
-                            offset = round_up(offset, 8);
+                        let need_new_unit = !bf_active
+                            || bf_unit_size != field_unit_size
+                            || bf_next_bit + width > unit_capacity_bits;
+                        if need_new_unit {
+                            offset = round_up(offset, field_unit_size);
                             bf_storage_offset = offset;
-                            offset += 8;
+                            offset += field_unit_size;
                             bf_next_bit = 0;
+                            bf_unit_size = field_unit_size;
                             bf_active = true;
                         }
                         bf_next_bit += width;
@@ -386,7 +406,17 @@ impl Compiler {
                     break;
                 }
 
-                let (id_idx, field_ty, field_array_size) = self.parse_declarator(field_base)?;
+                let (id_idx, field_ty, mut field_array_size) = self.parse_declarator(field_base)?;
+                // A typedef whose alias is an array contributes its
+                // dimension when the declarator did not already
+                // supply one (`jmp_buf b;` -> `long b[64];`). A
+                // declarator that *did* spell its own dimension
+                // takes precedence and the typedef count drops on
+                // the floor; the explicit form is unambiguous.
+                let typedef_dim = core::mem::take(&mut self.pending.typedef_base_array_size);
+                if typedef_dim > 0 && field_array_size == 0 {
+                    field_array_size = typedef_dim;
+                }
                 // Struct fields don't carry the fn-pointer lineage
                 // tag on their own (the StructField record has no
                 // place for it), so consume the side-channel here.
@@ -436,11 +466,25 @@ impl Compiler {
                         field_offset = 0;
                         bit_offset = 0;
                     } else {
-                        if !bf_active || bf_next_bit + bit_width > 64 {
-                            offset = round_up(offset, 8);
+                        // C99 6.7.2.1p11 / p13: the bitfield's
+                        // addressable storage unit is implementation
+                        // defined; c5 sizes it at the bitfield's
+                        // base type. Consecutive bitfields share a
+                        // unit only when their base sizes match and
+                        // the new field fits in the remaining bits;
+                        // otherwise the old unit closes and a new
+                        // one starts.
+                        let field_unit_size = self.size_of_type(field_ty);
+                        let unit_capacity_bits = (field_unit_size as u32) * 8;
+                        let need_new_unit = !bf_active
+                            || bf_unit_size != field_unit_size
+                            || bf_next_bit + bit_width > unit_capacity_bits;
+                        if need_new_unit {
+                            offset = round_up(offset, field_unit_size.max(1));
                             bf_storage_offset = offset;
-                            offset += 8;
+                            offset += field_unit_size;
                             bf_next_bit = 0;
+                            bf_unit_size = field_unit_size;
                             bf_active = true;
                         }
                         field_offset = bf_storage_offset;
@@ -502,6 +546,7 @@ impl Compiler {
                     array_dims: field_array_dims,
                     bit_offset,
                     bit_width,
+                    bit_unit_size: if bit_width > 0 { bf_unit_size as u8 } else { 0 },
                 });
 
                 if self.lex.tk == ',' {

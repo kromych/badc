@@ -139,6 +139,107 @@ fn sizeof_handles_expressions() {
 }
 
 #[test]
+fn sizeof_typedef_array_reports_total_bytes() {
+    // C99 6.5.3.4 paragraph 4: `sizeof` on an array type yields
+    // the total byte count. C99 6.7.7 paragraph 3 makes
+    // `typedef T arr[N]; arr v;` equivalent to `T v[N];`, so
+    // `sizeof(arr) == N * sizeof(T)`. Pointer decoration on the
+    // typedef collapses to a scalar pointer.
+    assert_eq!(run_fixture("sizeof_typedef_array.c"), 0);
+}
+
+#[test]
+fn sizeof_string_literal_returns_array_size() {
+    // C99 6.4.5p6: a string literal has type `char[N+1]` (the
+    // `+1` counts the trailing NUL). `sizeof` reads the array
+    // size, not the decayed pointer size. The fixture pins the
+    // four byte counts plus the adjacent-literal concatenation
+    // and the `sizeof - 1` skip-trailing-NUL idiom.
+    assert_eq!(run_fixture("sizeof_string_literal.c"), 0);
+}
+
+#[test]
+fn bitfield_brace_init_packs_into_storage_unit() {
+    // C99 6.7.8: each bitfield brace-initializer entry is
+    // converted to the field's type and merged into the shared
+    // storage unit. A naive byte-wide overwrite at the unit's
+    // offset (which c5 did historically) stomps every other
+    // bitfield in the same unit; the per-field RMW preserves
+    // adjacent bits.
+    assert_eq!(run_fixture("bitfield_brace_init.c"), 0);
+}
+
+#[test]
+fn vsnprintf_underscore_alias_resolves_to_c5_shim() {
+    // Locks the c5 <stdio.h> alias so `#define vsnprintf _vsnprintf`
+    // (the standard MSVC-compatibility rewrite per C99 7.1.4 and
+    // CRT convention) still routes through the c5-side cursor-aware
+    // shim. Without the alias the call resolves against msvcrt's
+    // native va_list ABI, where the variadic reads come from the
+    // wrong slot offsets and every argument past the first lands
+    // in the wrong place.
+    //
+    // Compile-only: the c5 VM has no vsnprintf shim. The runtime
+    // contract is exercised by the PE-host fixture parity test.
+    use super::compile_fixture;
+    let _ = compile_fixture("vsnprintf_underscore_alias.c");
+}
+
+#[test]
+fn bitop_preserves_operand_width() {
+    // C99 6.5.10 / 6.5.11 / 6.5.12: the result type of `&` /
+    // `^` / `|` is the common type from the usual arithmetic
+    // conversions, not unconditionally `int`. A wrong type pin
+    // here lets downstream operators emit a 32-bit
+    // sign-extension that clobbers bits 32..63 of a 64-bit
+    // value -- e.g. `(u64 | u64) + 1` would land at
+    // `value & 0xFFFFFFFF + 1` for any positive operand.
+    assert_eq!(run_fixture("bitop_common_type.c"), 0);
+}
+
+#[test]
+fn bitfield_signed_read_sign_extends() {
+    // C99 6.7.2.1p4: a signed bitfield of width N holds values in
+    // [-2^(N-1), 2^(N-1)-1]; the read path must sign-extend so the
+    // bit pattern `11...1` for width N reads as -1, not the
+    // unsigned `(1 << N) - 1`. Surfaced by stb_connected_components
+    // where a `signed short:2 cluster_dx` storing -1 read back as
+    // 3 and `dx + base_x` produced an out-of-range cluster index.
+    assert_eq!(run_fixture("bitfield_signed_read.c"), 0);
+}
+
+#[test]
+fn bitfield_storage_unit_matches_base_type() {
+    // C99 6.7.2.1 paragraph 11: a bitfield's addressable
+    // storage unit width is implementation-defined, but the
+    // struct's size respects the base type's width. Treating
+    // every bitfield as if it lived in an 8-byte unit inflates
+    // a uint32_t-based struct to 8 bytes and bleeds a
+    // read-modify-write into adjacent storage.
+    assert_eq!(run_fixture("bitfield_storage_unit.c"), 0);
+}
+
+#[test]
+fn integer_literal_suffix_picks_type() {
+    // C99 6.4.4.1 paragraph 5: an integer literal's type comes
+    // from its suffix. `1ULL` is unsigned long long, not int;
+    // dropping the suffix truncates downstream 64-bit
+    // arithmetic through the int rank.
+    assert_eq!(run_fixture("integer_literal_suffix.c"), 0);
+}
+
+#[test]
+fn unary_minus_preserves_uint64_width() {
+    // C99 6.5.3.3 paragraph 3: the integer promotions are
+    // performed on the operand of unary `-` and the result has
+    // the promoted operand type. Collapsing the result to `int`
+    // after the negation drops the high half of an
+    // `unsigned long long` operand and mis-evaluates the
+    // subsequent comparison in 32-bit signed.
+    assert_eq!(run_fixture("unary_minus_uint64_compare.c"), 0);
+}
+
+#[test]
 fn sizeof_threads_through_malloc_write_and_return() {
     // sizeof(struct Packet) used in three positions in one program:
     // malloc size, write count, and the function's return value. Tests
@@ -210,6 +311,214 @@ fn adjacent_string_literals_concatenate() {
     // to put a NUL between each part, breaking lookups past the first
     // segment -- which made original c4.c's keyword table truncate.
     assert_eq!(run_fixture("adjacent_strings.c"), 'f' as i64);
+}
+
+#[test]
+fn float_long_double_suffix_accepted() {
+    // C99 6.4.4.2: the floating-suffix is one of `f`, `F`, `l`,
+    // `L`. The dialect stores every floating literal in `f64`,
+    // so the four spellings of the same value land identical at
+    // the bit level. The fixture also pins the integer-vs-float
+    // disambiguator -- bare `7L` stays a `long` integer because
+    // no `.` / `e` was seen.
+    assert_eq!(run_fixture("float_long_double_suffix.c"), 0);
+}
+
+#[test]
+fn bitfield_compound_assignment() {
+    // C99 6.5.16.2: a bitfield is a valid lvalue for every
+    // compound assignment operator. The fixture walks the
+    // logical / arithmetic / shift compound set against a
+    // multi-field struct, asserting both the updated field's
+    // value and that adjacent bits stay untouched.
+    assert_eq!(run_fixture("bitfield_compound_assignment.c"), 0);
+}
+
+#[test]
+fn macro_arg_blue_paint_preserved_across_body_rescan() {
+    // C99 6.10.3.4: a macro that fired during the pre-expansion
+    // of a function-like macro's argument must not re-fire when
+    // the substituted body is rescanned. The fixture exercises
+    // the per-state-accessor pattern (`#define foo s1->foo`)
+    // passed as an argument to a generic helper macro -- without
+    // blue paint the inner accessor re-fires inside the body and
+    // double-prefixes the access.
+    assert_eq!(run_fixture("macro_arg_blue_paint.c"), 0);
+}
+
+#[test]
+fn array_typedef_dimensions_propagate() {
+    // C99 6.7.7 paragraph 3: a typedef name denotes the same
+    // type as its right-hand-side, including any array
+    // dimension. The fixture exercises the four positions where
+    // the parser routes the type into a declarator -- file
+    // scope, block scope, struct field, plus a raw-array
+    // comparison -- and asserts each reports the array's full
+    // byte count.
+    assert_eq!(run_fixture("array_typedef_dimensions_propagate.c"), 0);
+}
+
+#[test]
+#[ignore = "TODO: VM walks variadic args in reverse order under explicit per-slot va_arg reads (separate from the native fn-ptr-thunk bug). The fixture verifies the native fn-ptr path through NATIVE_FIXTURES."]
+fn variadic_call_through_fnptr_delivers_all_args() {
+    // C99 6.5.2.2: a call through a function pointer must
+    // deliver every fixed and variadic argument to the callee.
+    // c5 used to route every address-taken function through an
+    // arg-shuffling thunk that lost the variadic tail; the
+    // fixture covers a bare fn-pointer call and the
+    // comma-operator-yielding-fn-pointer macro shape.
+    assert_eq!(run_fixture("variadic_via_fnptr.c"), 0);
+}
+
+#[test]
+#[ignore = "TODO: c5 VM has no shim for strtold / ldexpl; the fixture verifies the SysV x86_64 long-double libc-return convention through the native lane via NATIVE_FIXTURES"]
+fn long_double_libc_return_round_trips() {
+    // SysV x86_64 ABI: `long double` libc returns ride in
+    // x87 `st(0)`, not XMM0. The libc-call lowering spills
+    // st(0) and reloads as double; the fixture asserts that
+    // strtold and ldexpl yield the right bit pattern after
+    // the round trip. Pre-fix the path read XMM0 and got
+    // -0.0 for every call.
+    assert_eq!(run_fixture("long_double_libc_return.c"), 0);
+}
+
+#[test]
+fn typedef_shadowed_by_parameter_name() {
+    // C99 6.2.1 paragraph 4: an inner-scope declaration that
+    // reuses an outer name (here, a function-prototype parameter
+    // taking the spelling of an outer typedef) fully hides the
+    // outer binding only for the duration of the inner scope.
+    // The outer typedef -- including its array dimension -- must
+    // reappear unchanged on scope exit. The fixture confirms the
+    // shadow-restore protocol covers `array_size`, not only
+    // `class` / `type_` / `val`.
+    assert_eq!(run_fixture("typedef_shadowed_by_parameter_name.c"), 0);
+}
+
+#[test]
+fn nested_struct_array_initializer() {
+    // C99 6.7.8: an array-of-struct field inside an enclosing
+    // struct accepts a nested brace-enclosed initializer for
+    // each element. The fixture exercises the array between
+    // scalar fields, as the only field, and adjacent to a flat
+    // int array; every per-element value reads back correctly.
+    assert_eq!(run_fixture("nested_struct_array_initializer.c"), 0);
+}
+
+#[test]
+fn array_initializer_accepts_constant_expressions() {
+    // C99 6.6: a constant arithmetic expression is a valid
+    // initializer in every position, including individual
+    // elements of an array (or nested struct/array) initializer
+    // list. The fixture exercises bitwise (|, ^, &), additive,
+    // multiplicative, and shift compound forms of integer
+    // constants -- both macro-defined and enum-declared --
+    // across scalar arrays and nested struct-of-array tables.
+    assert_eq!(run_fixture("array_init_constant_expression.c"), 0);
+}
+
+#[test]
+fn sizeof_through_null_pointer_cast() {
+    // C99 6.5.3.4: `sizeof` does not evaluate its operand, so
+    // `sizeof ((T *)0)->m` is a valid way to read the size of a
+    // member without instantiating the struct. The fixture
+    // exercises four scalar member widths, a nested-struct
+    // member access via `->...`, and the matching `offsetof`
+    // macro (the address-of-via-null-cast variant) to keep both
+    // sides of the standard idiom locked.
+    assert_eq!(run_fixture("sizeof_member_via_null_cast.c"), 0);
+}
+
+#[test]
+fn extern_declaration_inside_function_body() {
+    // C99 6.7.1 paragraph 3: `extern` declarations are valid at
+    // any scope. c5 has no separate translation units, so a
+    // block-scope extern is consumed as a no-op; the resolver
+    // still finds the symbol through its own table. The fixture
+    // exercises both the bare-identifier form and the
+    // pointer-qualified return type (`extern int abs(int);`).
+    assert_eq!(run_fixture("extern_in_function.c"), 0);
+}
+
+#[test]
+fn va_copy_clones_va_list_cursor() {
+    // C99 7.15.1.2: `va_copy(dst, src)` initialises `dst` to the
+    // same position in the variadic list as `src`. The fixture
+    // builds a copy of the cursor immediately after `va_start`
+    // and walks the copy; the sum must match the values passed
+    // to the variadic call.
+    assert_eq!(run_fixture("va_copy.c"), 0);
+}
+
+#[test]
+fn macro_paste_result_is_rescanned() {
+    // C99 6.10.3.4: after a function-like macro's body is built,
+    // the result is re-scanned for further replacement; when the
+    // re-scan finds another function-like macro name and the
+    // source token immediately after the outer invocation is `(`,
+    // those arguments feed the inner expansion. The fixture
+    // exercises the width-mux `WIDTH##_##NAME(...)` idiom.
+    assert_eq!(run_fixture("macro_paste_rescan.c"), 0);
+}
+
+#[test]
+fn func_name_predeclared_identifier() {
+    // C99 6.4.2.2 makes `__func__` an implicitly declared string
+    // literal carrying the enclosing function's name. c5 mirrors
+    // the standard plus the GCC aliases `__FUNCTION__` and
+    // `__PRETTY_FUNCTION__`. The fixture pins three properties:
+    // each name resolves to the right function, the three
+    // spellings agree byte-for-byte, and distinct functions
+    // produce distinct strings.
+    assert_eq!(run_fixture("function_macro.c"), 0);
+}
+
+#[test]
+fn unistd_exposes_posix_types() {
+    // POSIX-2017 requires `<unistd.h>` to make `ssize_t`,
+    // `size_t`, `off_t`, `pid_t`, `uid_t`, `gid_t` visible; the
+    // width-sensitive ones come through `<sys/types.h>`. c5's
+    // `<unistd.h>` includes `<sys/types.h>` to satisfy this. The
+    // fixture asserts the types resolve under only `<unistd.h>`
+    // and that their widths match the LP64 contract c5 ships.
+    assert_eq!(run_fixture("unistd_exposes_posix_types.c"), 0);
+}
+
+#[test]
+fn attribute_and_declspec_absorbed_as_no_op() {
+    // The preprocessor predefines `__attribute__` / `__declspec`
+    // as empty function-like macros so attribute-decorated
+    // declarations parse without dragging in real attribute
+    // semantics. Fixture exercises prefix attribute on a
+    // function declaration, postfix attribute (the GCC
+    // position), nested-paren payloads with comma arguments,
+    // and `__declspec(align(...))` on a struct.
+    assert_eq!(run_fixture("attribute_noop.c"), 0);
+}
+
+#[test]
+#[ignore = "TODO: c5 VM has no setjmp / longjmp shim; the fixture verifies the host-libc semantic and needs the JIT / AOT path"]
+fn setjmp_longjmp_unwinds_through_jmp_buf() {
+    // C99 7.13: `setjmp` returns 0 directly and the matching
+    // `longjmp(env, val)` rewinds control to the setjmp site
+    // with a return value of `val`. The fixture embeds a
+    // `jmp_buf` in a struct and checks both the return-value
+    // contract and the survival of a volatile local across the
+    // unwind. Bound to host libc per platform; if a host's libc
+    // setjmp implementation requires a wider buffer than 64
+    // longs (512 bytes), this fixture detects the size mismatch.
+    assert_eq!(run_fixture("setjmp_longjmp.c"), 0);
+}
+
+#[test]
+fn inttypes_header_supplies_types_and_format_macros() {
+    // C99 7.8: `<inttypes.h>` layers on top of `<stdint.h>` and adds
+    // the PRI / SCN conversion-specifier macros. The fixture
+    // includes only `<inttypes.h>` and asserts the fixed-width
+    // typedefs still resolve transitively, plus the macro
+    // expansions match the LP64 / LLP64 contract c5 ships
+    // (int64_t aliases `long long`, so PRId64 is "lld" uniformly).
+    assert_eq!(run_fixture("inttypes_header.c"), 0);
 }
 
 #[test]

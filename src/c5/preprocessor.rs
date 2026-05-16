@@ -122,6 +122,14 @@ pub struct Binding {
     /// the prototype hasn't been seen yet; the codegen treats
     /// that as "no extension needed".
     pub return_type_tag: i64,
+    /// True when the prototype's return type was spelled `long
+    /// double`. The encoded `return_type_tag` is still
+    /// `Ty::Double` (c5 stores both as f64), but the libc-call
+    /// codegen needs this flag to read the result out of x87
+    /// `st(0)` on SysV x86_64 instead of XMM0. False for plain
+    /// `double` returns and for everything that isn't a floating
+    /// scalar.
+    pub returns_long_double: bool,
     /// Per-fixed-parameter type tags from the prototype (same
     /// encoding as `return_type_tag`). Captured by the parser at
     /// the same fold-site that fills `fixed_args` / `is_variadic`,
@@ -352,7 +360,26 @@ impl Preprocessor {
     ///     `__BADC_WINDOWS__` we used before this commit.
     pub fn new(target_spec: &str, target: Target, crate_version: &str) -> Self {
         let mut macros: HashMap<String, String> = HashMap::new();
-        let fn_macros: HashMap<String, FnMacro> = HashMap::new();
+        let mut fn_macros: HashMap<String, FnMacro> = HashMap::new();
+        // GCC `__attribute__((...))` and MSVC `__declspec(...)` are
+        // common implementation-defined extensions used throughout
+        // real-world C source for hints the c5 dialect doesn't act
+        // on (printf-format checks, alignment, packing, calling
+        // convention). Absorbing them as empty function-like
+        // macros lets the parser see attribute-free declarations
+        // without losing the surrounding tokens. C99 6.10.3 paragraph
+        // 11 keeps the inner `(...)` payload as one macro argument
+        // because commas inside balanced parens are not separators.
+        for name in ["__attribute__", "__attribute", "__declspec"] {
+            fn_macros.insert(
+                name.to_string(),
+                FnMacro {
+                    params: alloc::vec!["x".to_string()],
+                    body: String::new(),
+                    is_variadic: false,
+                },
+            );
+        }
         macros.insert(
             "__BADC_VERSION__".to_string(),
             format!("\"{crate_version}\""),
@@ -994,6 +1021,49 @@ impl Preprocessor {
         self.substitute_with_blocklist(line, filename, line_no, &[])
     }
 
+    /// Scan `text` for identifiers that name a macro currently
+    /// in the registry, append each to `out`. Used to compute
+    /// the C99 6.10.3.4 "blue paint" set after a function-like
+    /// macro's arguments have been pre-expanded: any macro name
+    /// surviving in the pre-expanded arg text must have fired
+    /// during pre-expansion, so it must not re-fire during the
+    /// body rescan.
+    fn collect_macro_idents_into(&self, text: &str, out: &mut alloc::vec::Vec<String>) {
+        let bytes = text.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            let c = bytes[i];
+            if c.is_ascii_alphabetic() || c == b'_' {
+                let start = i;
+                i += 1;
+                while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+                    i += 1;
+                }
+                let ident = &text[start..i];
+                if (self.macros.contains_key(ident) || self.fn_macros.contains_key(ident))
+                    && !out.iter().any(|s| s == ident)
+                {
+                    out.push(ident.to_string());
+                }
+            } else if c == b'"' || c == b'\'' {
+                let quote = c;
+                i += 1;
+                while i < bytes.len() && bytes[i] != quote {
+                    if bytes[i] == b'\\' && i + 1 < bytes.len() {
+                        i += 2;
+                    } else {
+                        i += 1;
+                    }
+                }
+                if i < bytes.len() {
+                    i += 1;
+                }
+            } else {
+                i += 1;
+            }
+        }
+    }
+
     /// Like [`substitute`], but `blocklist` enumerates macro names
     /// currently being expanded -- the C99 "blue paint" rule says a
     /// macro doesn't re-expand inside its own replacement list.
@@ -1077,16 +1147,92 @@ impl Preprocessor {
                             })
                             .collect();
                         let expanded = expand_fn_macro(macro_def, &expanded_args);
-                        // Re-substitute so nested macro names inside
-                        // the expansion get a chance too -- but mark
-                        // `ident` as being expanded so it doesn't
-                        // trigger another round.
+                        // C99 6.10.3.4 "blue paint": any macro that
+                        // fired during arg pre-expansion stays on
+                        // the blocklist for the body rescan, so a
+                        // pre-expanded arg like `s1->symtab_section`
+                        // does not re-trigger `symtab_section` after
+                        // substitution. Approximate the fired set by
+                        // scanning each pre-expanded arg for macro
+                        // names: a name that survived in the
+                        // expanded text and is still in the
+                        // registry must have already expanded
+                        // through pre-expansion (otherwise pre-
+                        // expansion would have substituted it).
+                        let mut blue_paint: alloc::vec::Vec<String> = alloc::vec::Vec::new();
+                        for arg_text in &expanded_args {
+                            self.collect_macro_idents_into(arg_text, &mut blue_paint);
+                        }
                         let mut nested: Vec<&str> = blocklist.to_vec();
                         nested.push(ident);
+                        for bp in &blue_paint {
+                            let s: &str = bp.as_str();
+                            if !nested.contains(&s) {
+                                nested.push(s);
+                            }
+                        }
                         let recursed =
                             self.substitute_with_blocklist(&expanded, filename, line_no, &nested);
+                        // Token-stream rescan (C99 6.10.3.4): if the
+                        // function-like macro's body reduces to a
+                        // single identifier and the *source* token
+                        // immediately after the original invocation
+                        // is `(`, the standard requires that
+                        // identifier to be treated as the head of a
+                        // further function-like call. Drives the
+                        // common `WIDTH##_##NAME(...)` paste idiom
+                        // where the pasted token is itself a macro.
+                        let next_src = j + after;
+                        let trimmed = recursed.trim();
+                        if !trimmed.is_empty()
+                            && trimmed
+                                .bytes()
+                                .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                            && trimmed.bytes().next().is_some_and(|b| !b.is_ascii_digit())
+                            && !blocklist.contains(&trimmed)
+                            && let Some(inner_def) = self.fn_macros.get(trimmed)
+                        {
+                            let mut k = next_src;
+                            while k < bytes.len() && (bytes[k] == b' ' || bytes[k] == b'\t') {
+                                k += 1;
+                            }
+                            if k < bytes.len()
+                                && bytes[k] == b'('
+                                && let Some((inner_args, inner_after)) =
+                                    parse_macro_args(&line[k..])
+                            {
+                                // The inner args come from the source
+                                // file's tokens after the outer
+                                // invocation -- C99 6.10.3.4 paragraph 1
+                                // treats those as "the rest of the
+                                // source file's preprocessing tokens",
+                                // so they are pre-expanded with the
+                                // caller's blocklist, not with the just-
+                                // completed outer macro on it.
+                                let inner_expanded_args: Vec<String> = inner_args
+                                    .iter()
+                                    .map(|a| {
+                                        self.substitute_with_blocklist(
+                                            a, filename, line_no, blocklist,
+                                        )
+                                    })
+                                    .collect();
+                                let inner_body = expand_fn_macro(inner_def, &inner_expanded_args);
+                                let mut deeper: Vec<&str> = blocklist.to_vec();
+                                deeper.push(trimmed);
+                                let inner_recursed = self.substitute_with_blocklist(
+                                    &inner_body,
+                                    filename,
+                                    line_no,
+                                    &deeper,
+                                );
+                                out.push_str(&inner_recursed);
+                                i = k + inner_after;
+                                continue;
+                            }
+                        }
                         out.push_str(&recursed);
-                        i = j + after;
+                        i = next_src;
                         continue;
                     }
                 }
@@ -2036,6 +2182,7 @@ impl Preprocessor {
             is_variadic: false,
             fixed_args: 0,
             return_type_tag: 0,
+            returns_long_double: false,
             param_types: Vec::new(),
             local_name: local_name.to_string(),
             real_symbol: real_symbol.to_string(),

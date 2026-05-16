@@ -356,6 +356,12 @@ const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     // pre-packer code routed everything as 8-byte words via the
     // integer arg regs and the formatter printed 0.0.
     ("printf_float.c", 0),
+    // SysV x86_64 returns `long double` in x87 st(0); c5 stores
+    // it as FP64. The codegen emits an `fstp QWORD PTR [rsp]`
+    // post-call to narrow st(0) to FP64. The fixture locks the
+    // round-trip in -- regressions surface as `strtold` landing
+    // on stale xmm0 garbage instead of the parsed value.
+    ("strtold_aapcs_return.c", 0),
 ];
 
 #[test]

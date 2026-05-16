@@ -39,8 +39,9 @@ use super::super::token::{Token, Ty};
 use super::CODE_BASE;
 use super::Compiler;
 use super::types::{
-    format_type, fp_result_ty, is_floating_scalar, is_pointer_ty, is_struct_ty, is_unsigned_ty,
-    load_op_for, store_op_for, struct_id_of, struct_ptr_depth, usual_arith_common_ty,
+    UNSIGNED_BIT, format_type, fp_result_ty, integer_promote, is_floating_scalar, is_pointer_ty,
+    is_struct_ty, is_unsigned_ty, load_op_for, store_op_for, struct_id_of, struct_ptr_depth,
+    usual_arith_common_ty,
 };
 
 /// Relational comparison operator. The four variants share an
@@ -98,8 +99,21 @@ impl Compiler {
             return Err(self.compile_err("unexpected eof in expression"));
         } else if self.lex.tk == Token::Num {
             self.emit_imm(self.lex.ival);
+            // C99 6.4.4.1 paragraph 5: pick the literal's type from
+            // the suffix shape the lexer recorded. Two `l`/`L`
+            // letters force long-long, one forces long, none stays
+            // at int. The `u`/`U` modifier flips signedness on the
+            // chosen rank.
+            let mut lit_ty = match self.lex.int_suffix_long {
+                2 => Ty::LongLong as i64,
+                1 => Ty::Long as i64,
+                _ => Ty::Int as i64,
+            };
+            if self.lex.int_suffix_unsigned {
+                lit_ty |= UNSIGNED_BIT;
+            }
             self.next()?;
-            self.ty = Ty::Int as i64;
+            self.ty = lit_ty;
         } else if self.lex.tk == Token::FloatNum {
             // The lexer parsed `1.5` etc. into f64 and stored
             // `f64::to_bits()` cast to i64 in `ival`. The byte
@@ -112,7 +126,15 @@ impl Compiler {
             self.next()?;
             self.ty = Ty::Double as i64;
         } else if self.lex.tk == '"' {
-            self.emit_data_imm(self.lex.ival);
+            // C99 6.4.5 paragraph 6: a string literal has type
+            // `char[N+1]` where the +1 is the trailing NUL. The
+            // value decays to `char *` in this expression context,
+            // but `sizeof("...")` reads the full array size --
+            // surface the byte count via `last_array_decay_bytes`
+            // so `sizeof_operand_bytes` returns N+1 instead of the
+            // decayed pointer's 8.
+            let start_offset = self.lex.ival;
+            self.emit_data_imm(start_offset);
             self.next()?;
             // C concatenates adjacent string literals -- `"a" "b"` is one
             // string. The lexer leaves the NUL off so the bytes flow
@@ -121,6 +143,7 @@ impl Compiler {
                 self.next()?;
             }
             self.data.push(0);
+            self.pending.last_array_decay_bytes = (self.data.len() as i64) - start_offset;
             self.ty = Ty::Ptr as i64;
         } else if self.lex.tk == Token::Sizeof {
             // C99 6.5.3.4: `sizeof(<type>)`, `sizeof(<expr>)`, or
@@ -132,21 +155,35 @@ impl Compiler {
             let total_bytes = self.sizeof_operand_bytes()?;
             self.emit_imm(total_bytes);
             self.ty = Ty::Int as i64;
+        } else if self.lex.tk == Token::Id
+            && !self.current_function_name.is_empty()
+            && matches!(
+                self.symbols[self.lex.curr_id_idx].name.as_str(),
+                "__func__" | "__FUNCTION__" | "__PRETTY_FUNCTION__"
+            )
+        {
+            // C99 6.4.2.2: __func__ is implicitly declared as
+            // `static const char __func__[] = "function-name";` at
+            // the start of every function body. GCC predates the
+            // standard with __FUNCTION__ / __PRETTY_FUNCTION__ as
+            // aliases. The bytes are appended to the data segment
+            // and the expression's value is the pointer to them.
+            let fn_name = self.current_function_name.clone();
+            let offset = self.data.len() as i64;
+            self.data.extend_from_slice(fn_name.as_bytes());
+            self.data.push(0);
+            self.emit_data_imm(offset);
+            self.next()?;
+            self.ty = Ty::Char as i64 + Ty::Ptr as i64;
         } else if self.lex.tk == Token::Id {
             let id_idx = self.lex.curr_id_idx;
             self.next()?;
             if self.lex.tk == '(' {
                 self.next()?;
-                // Compiler-builtin intrinsic call (`alloca`, future
-                // atomics / cpuid / ...). The frontend stamped the
-                // symbol's `intrinsic` field at declaration time
-                // from `#pragma intrinsic("name")`. Skip the usual
-                // staging-slot dance and per-arg FP-mask shenanigans
-                // -- intrinsics today take exactly one integer
-                // argument and leave the result in the accumulator,
-                // so we just evaluate the arg expression and emit
-                // `Op::Intrinsic <id>`. Multi-arg / FP-arg intrinsics
-                // can grow this branch as needed.
+                // Intrinsic call: the identifier was registered via
+                // `#pragma intrinsic("name")`. Accepts one integer
+                // argument, evaluates it, and emits `Op::Intrinsic
+                // <id>` with the result in the accumulator.
                 if let Some(&intrinsic_id) = self.pp_intrinsics.get(&self.symbols[id_idx].name) {
                     let fn_name = self.symbols[id_idx].name.clone();
                     if self.lex.tk == ')' {
@@ -1028,8 +1065,16 @@ impl Compiler {
                     self.emit_op(Op::Fneg);
                     // self.ty already matches the operand's FP type
                 } else {
+                    // C99 6.5.3.3 paragraph 3: the integer promotions
+                    // are performed on the operand of unary `-`, and
+                    // the result has the promoted operand type.
+                    // Forcing `Ty::Int` here would drop the high half
+                    // of a `long long` / `unsigned long long` operand
+                    // and run any subsequent comparison or shift on
+                    // the negated value in `int`.
+                    let operand_ty = self.ty;
                     self.emit_binop_with_imm(Op::Mul, -1);
-                    self.ty = Ty::Int as i64;
+                    self.ty = integer_promote(operand_ty);
                 }
             }
         } else if self.lex.tk == Token::Inc || self.lex.tk == Token::Dec {
@@ -1407,23 +1452,36 @@ impl Compiler {
                 self.text[b] = self.text.len() as i64;
                 self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::OrOp {
+                // C99 6.5.12: result of `|` is the common type
+                // produced by the usual arithmetic conversions on
+                // the operands. Forcing `int` here drops the upper
+                // 32 bits when either operand is a 64-bit type and
+                // a downstream operator narrows back to `int` --
+                // e.g. `(u64 | u64) + 1` ends up emitting a
+                // Shl 32 / Shr 32 pair on the result and zeroes
+                // bits 32..63 for a positive value.
+                let lhs_ty = t;
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::XorOp as i64)?;
                 self.emit_op(Op::Or);
-                self.ty = Ty::Int as i64;
+                self.ty = usual_arith_common_ty(lhs_ty, self.ty, self.target);
             } else if self.lex.tk == Token::XorOp {
+                // C99 6.5.11: same common-type rule as `|`.
+                let lhs_ty = t;
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::AndOp as i64)?;
                 self.emit_op(Op::Xor);
-                self.ty = Ty::Int as i64;
+                self.ty = usual_arith_common_ty(lhs_ty, self.ty, self.target);
             } else if self.lex.tk == Token::AndOp {
+                // C99 6.5.10: same common-type rule as `|`.
+                let lhs_ty = t;
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::EqOp as i64)?;
                 self.emit_op(Op::And);
-                self.ty = Ty::Int as i64;
+                self.ty = usual_arith_common_ty(lhs_ty, self.ty, self.target);
             } else if self.lex.tk == Token::EqOp || self.lex.tk == Token::NeOp {
                 // `==` and `!=` share emit shape -- only the FP
                 // variant and the `invert` flag handed to
@@ -1800,7 +1858,12 @@ impl Compiler {
                     //                    extraction that lands the
                     //                    bitfield's value in `a` for
                     //                    the surrounding expression.
-                    self.emit_bitfield_access(field.bit_offset, field.bit_width)?;
+                    self.emit_bitfield_access(
+                        field.bit_offset,
+                        field.bit_width,
+                        field.bit_unit_size,
+                        field.ty,
+                    )?;
                 } else {
                     // Trailing Lc/Li loads the field. The assignment handler
                     // (in the same loop) converts a trailing Li/Lc to Psh, so

@@ -84,10 +84,22 @@ typedef int    GET_FILEEX_INFO_LEVELS;
 #pragma binding(kernel32::LoadLibraryA,            "LoadLibraryA")
 #pragma binding(kernel32::GetProcAddress,          "GetProcAddress")
 #pragma binding(kernel32::FreeLibrary,             "FreeLibrary")
+#pragma binding(kernel32::GetModuleFileNameA,      "GetModuleFileNameA")
+// SearchPathA is the canonical kernel32 entry; the unsuffixed
+// `SearchPath` spelling lets source compiled against `<windows.h>`
+// pick up the same binding through the `#define SearchPath
+// SearchPathA` alias below.
+#pragma binding(kernel32::SearchPath,              "SearchPathA")
 #pragma binding(kernel32::GetLastError,            "GetLastError")
 #pragma binding(kernel32::ExitProcess,             "ExitProcess")
 #pragma binding(kernel32::Sleep,                   "Sleep")
 #pragma binding(kernel32::CreateThread,            "CreateThread")
+// Function-table registration for SEH-style stack unwinding.
+// `RtlAddFunctionTable` registers a `RUNTIME_FUNCTION` array as
+// the unwind data for a code range; `RtlDeleteFunctionTable`
+// removes a previously-registered table.
+#pragma binding(kernel32::RtlAddFunctionTable,     "RtlAddFunctionTable")
+#pragma binding(kernel32::RtlDeleteFunctionTable,  "RtlDeleteFunctionTable")
 #pragma binding(kernel32::WaitForSingleObject,     "WaitForSingleObject")
 #pragma binding(kernel32::CloseHandle,             "CloseHandle")
 #pragma binding(kernel32::GetExitCodeThread,       "GetExitCodeThread")
@@ -263,6 +275,21 @@ struct _SYSTEM_INFO {
 typedef struct _SYSTEM_INFO SYSTEM_INFO;
 typedef struct _SYSTEM_INFO *LPSYSTEM_INFO;
 
+// SEH function-table entry. Layout differs between Win64 x64 and
+// AArch64 / IA64; the fields below match the Win64 x64 shape
+// since that is the only one any c5 consumer references today.
+// AArch64 uses a different `UnwindData` encoding inside the same
+// DWORD slot, so the c5-side declaration stays a flat
+// three-DWORD struct that both ABIs accept by ignoring the
+// platform-specific bit packing.
+struct _RUNTIME_FUNCTION {
+    DWORD BeginAddress;
+    DWORD EndAddress;
+    DWORD UnwindData;
+};
+typedef struct _RUNTIME_FUNCTION RUNTIME_FUNCTION;
+typedef struct _RUNTIME_FUNCTION *PRUNTIME_FUNCTION;
+
 // FILETIME / SYSTEMTIME -- the two structs sqlite's Windows VFS
 // uses (file timestamps + broken-down localtime fallback). Layout
 // matches the Win64 ABI byte-for-byte so kernel32 calls writing
@@ -380,6 +407,15 @@ typedef struct _OSVERSIONINFOW *POSVERSIONINFOW;
 #define PAGE_EXECUTE        0x10
 #define PAGE_EXECUTE_READ   0x20
 #define PAGE_EXECUTE_READWRITE 0x40
+
+// VirtualAlloc / VirtualFree allocation-type flags.
+#define MEM_COMMIT          0x00001000
+#define MEM_RESERVE         0x00002000
+#define MEM_DECOMMIT        0x00004000
+#define MEM_RELEASE         0x00008000
+#define MEM_RESET           0x00080000
+#define MEM_TOP_DOWN        0x00100000
+#define MEM_LARGE_PAGES     0x20000000
 
 // Section / process / event access masks.
 #define SECTION_ALL_ACCESS  0x000F001FUL
@@ -638,6 +674,13 @@ int    FreeLibrary(HANDLE module);
 DWORD  GetLastError(void);
 int ExitProcess(int status);
 int Sleep(int milliseconds);
+// Function-table registration for SEH-style stack unwinding on
+// Win64. `EntryCount` is the number of `RUNTIME_FUNCTION`
+// entries; `BaseAddress` is the image base the offsets are
+// relative to.
+int RtlAddFunctionTable(PRUNTIME_FUNCTION FunctionTable, DWORD EntryCount,
+                        long long BaseAddress);
+int RtlDeleteFunctionTable(PRUNTIME_FUNCTION FunctionTable);
 
 // CreateThread returns a thread HANDLE (kernel object). Args
 // mirror the Win32 prototype: lpThreadAttributes, dwStackSize,
@@ -1034,6 +1077,9 @@ int ExpandEnvironmentStringsA(LPCSTR lpSrc, LPSTR lpDst, DWORD nSize);
 int ExpandEnvironmentStringsW(LPCWSTR lpSrc, LPWSTR lpDst, DWORD nSize);
 int SearchPathA(LPCSTR lpPath, LPCSTR lpFileName, LPCSTR lpExtension,
                 DWORD nBufferLength, LPSTR lpBuffer, char **lpFilePart);
+int SearchPath(LPCSTR lpPath, LPCSTR lpFileName, LPCSTR lpExtension,
+               DWORD nBufferLength, LPSTR lpBuffer, char **lpFilePart);
+int GetModuleFileNameA(void *hModule, LPSTR lpFilename, DWORD nSize);
 int SearchPathW(LPCWSTR lpPath, LPCWSTR lpFileName, LPCWSTR lpExtension,
                 DWORD nBufferLength, LPWSTR lpBuffer,
                 unsigned short **lpFilePart);

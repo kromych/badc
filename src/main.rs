@@ -29,6 +29,9 @@ Output mode -- pick at most one (defaults to a native binary):
   --dump-headers           Print every bundled header to stdout and
                            exit. Useful for extracting a header into
                            `./include` to override it locally.
+  --dump-pp, -E            Run the preprocessor on the input and
+                           print the expanded source to stdout.
+                           Mirrors gcc / clang `-E`.
 
 Multi-TU knobs:
   -c, --compile-only       Emit a c5 `.o` per source instead of
@@ -75,6 +78,12 @@ Compile knobs:
                            stderr (gcc -H shape; leading dots mark
                            nesting depth; missing headers print as
                            `! <name> (missing)`).
+  -q, --quiet              Suppress `info:` chatter on stderr (the
+                           per-source `info: compiling <path>`
+                           progress line in multi-TU mode and the
+                           `info: wrote file <path>` line emitted
+                           after each output write). Errors and
+                           warnings are unaffected.
 
 VM-only knobs (require --interp):
   --track-pointers         Allocation tracking + use-after-free guard.
@@ -113,6 +122,11 @@ enum Mode {
     /// `--dump-headers` -- print every bundled header (with
     /// file separators) to stdout and exit. Takes no source.
     DumpHeaders,
+    /// `--dump-pp` -- run the preprocessor on the input and
+    /// print the expanded source to stdout. Mirrors gcc / clang
+    /// `-E` for inspecting macro expansion and include
+    /// resolution.
+    DumpPp,
     /// `--ar` -- bundle every input (compiled `.c` plus any
     /// `.o`) into a single `.a` archive named by `-o`. No
     /// linking; the archive is meant to be passed back as
@@ -130,6 +144,7 @@ impl Mode {
             Mode::DumpAsm => "--dump-asm",
             Mode::ListSymbols => "--list-symbols",
             Mode::DumpHeaders => "--dump-headers",
+            Mode::DumpPp => "--dump-pp",
             Mode::BuildArchive => "--ar",
         }
     }
@@ -159,6 +174,13 @@ fn main() {
     // here" or "why didn't this header resolve" without poking the
     // amalgamated `__BADC_DUMP_PP` output.
     let mut show_includes = false;
+    // `-q` / `--quiet` suppresses `info:` chatter on stderr. The
+    // per-source `info: compiling <path>` progress line in
+    // multi-TU mode and the `info: wrote file <path>` lines that
+    // follow each output write are both gated on this flag.
+    // Errors and warnings still print; only informational lines
+    // are quieted.
+    let mut quiet = false;
     // Multi-translation-unit linker plumbing. Bytecode `.o`
     // inputs accumulate alongside C sources; `.a` archives
     // arrive either positionally or through `-l<name>` after a
@@ -192,6 +214,7 @@ fn main() {
             "--trace" => trace = true,
             "--list-symbols" => claim(&mut mode, Mode::ListSymbols),
             "--dump-headers" => claim(&mut mode, Mode::DumpHeaders),
+            "--dump-pp" | "-E" => claim(&mut mode, Mode::DumpPp),
             "--optimize" | "-O" => optimize_flag = true,
             "--no-debug" | "-g0" => emit_debug_info = false,
             "--dump-asm" => claim(&mut mode, Mode::DumpAsm),
@@ -205,7 +228,7 @@ fn main() {
             "-o" => match iter.next() {
                 Some(p) => output_path = Some(PathBuf::from(p)),
                 None => {
-                    eprintln!("badc: -o requires a path argument");
+                    eprint_diagnostic("badc: error: -o requires a path argument");
                     std::process::exit(1);
                 }
             },
@@ -215,7 +238,7 @@ fn main() {
                     None => defines.push((s, String::from("1"))),
                 },
                 None => {
-                    eprintln!("badc: -D requires NAME[=VALUE]");
+                    eprint_diagnostic("badc: error: -D requires NAME[=VALUE]");
                     std::process::exit(1);
                 }
             },
@@ -229,7 +252,7 @@ fn main() {
             "-U" => match iter.next() {
                 Some(s) => undefines.push(s),
                 None => {
-                    eprintln!("badc: -U requires a NAME");
+                    eprint_diagnostic("badc: error: -U requires a NAME");
                     std::process::exit(1);
                 }
             },
@@ -239,7 +262,7 @@ fn main() {
             "-I" => match iter.next() {
                 Some(p) => include_paths.push(p),
                 None => {
-                    eprintln!("badc: -I requires a path argument");
+                    eprint_diagnostic("badc: error: -I requires a path argument");
                     std::process::exit(1);
                 }
             },
@@ -257,7 +280,7 @@ fn main() {
             "-include" => match iter.next() {
                 Some(name) => force_includes.push(name),
                 None => {
-                    eprintln!("badc: -include requires a header name");
+                    eprint_diagnostic("badc: error: -include requires a header name");
                     std::process::exit(1);
                 }
             },
@@ -266,6 +289,10 @@ fn main() {
             // marking nesting depth. `--show-includes` is the
             // descriptive long form (also matches MSVC's spelling).
             "-H" | "--show-includes" => show_includes = true,
+            // Quiet mode -- silence informational output (per-source
+            // progress, `info: wrote file <path>` lines). Errors
+            // and warnings remain on stderr unchanged.
+            "-q" | "--quiet" => quiet = true,
             // `-c` / `--compile-only` -- emit a c5 object file
             // (`.o`) per source instead of linking through to a
             // native binary. The output goes to either the
@@ -275,7 +302,7 @@ fn main() {
             "-l" => match iter.next() {
                 Some(name) => lib_names.push(name),
                 None => {
-                    eprintln!("badc: -l requires a library name");
+                    eprint_diagnostic("badc: error: -l requires a library name");
                     std::process::exit(1);
                 }
             },
@@ -285,7 +312,7 @@ fn main() {
             "-L" => match iter.next() {
                 Some(path) => library_paths.push(path),
                 None => {
-                    eprintln!("badc: -L requires a directory");
+                    eprint_diagnostic("badc: error: -L requires a directory");
                     std::process::exit(1);
                 }
             },
@@ -441,7 +468,7 @@ fn main() {
     let read_stdin_source = || -> String {
         let mut s = String::new();
         if let Err(e) = std::io::stdin().read_to_string(&mut s) {
-            eprintln!("badc: error reading stdin: {e}");
+            eprint_diagnostic(format!("badc: error: error reading stdin: {e}"));
             std::process::exit(1);
         }
         s
@@ -452,6 +479,7 @@ fn main() {
     let mut unit_source_paths: Vec<String> = Vec::with_capacity(sources.len());
     let mut accumulated_warnings: Vec<String> = Vec::new();
     let mut accumulated_include_trace: Vec<String> = Vec::new();
+    let multi_tu = sources.len() > 1;
     for src_path in &sources {
         let (label, contents) = if src_path == "-" {
             ("-".to_string(), read_stdin_source())
@@ -459,17 +487,48 @@ fn main() {
             let mut file = match std::fs::File::open(src_path) {
                 Ok(f) => f,
                 Err(e) => {
-                    eprintln!("badc: cannot open `{src_path}`: {e}");
+                    eprint_diagnostic(format!("badc: error: cannot open `{src_path}`: {e}"));
                     std::process::exit(1);
                 }
             };
             let mut s = String::new();
             if let Err(e) = Read::read_to_string(&mut file, &mut s) {
-                eprintln!("badc: error reading `{src_path}`: {e}");
+                eprint_diagnostic(format!("badc: error: error reading `{src_path}`: {e}"));
                 std::process::exit(1);
             }
             (src_path.clone(), s)
         };
+        // Multi-TU progress: one line per source on stderr so a long
+        // batch makes its current position visible. Single-source
+        // compiles stay silent so `badc file.c` does not gain extra
+        // chatter.
+        if multi_tu && mode != Mode::DumpPp && !quiet {
+            eprint_diagnostic(format!("info: compiling {label}"));
+        }
+        if mode == Mode::DumpPp {
+            let opts = badc::CompileOptions::default()
+                .with_defines(defines.clone())
+                .with_undefines(undefines.clone())
+                .with_include_paths(include_paths.clone())
+                .with_force_includes(force_includes.clone())
+                .with_source_label(label.clone());
+            match Compiler::preprocess(contents, target, opts) {
+                Ok(s) => {
+                    // File separator on stderr so a multi-source
+                    // dump remains parseable while the actual
+                    // preprocessed bytes stay clean on stdout.
+                    if multi_tu {
+                        eprintln!("--- {label} ---");
+                    }
+                    print!("{s}");
+                }
+                Err(e) => {
+                    eprint_diagnostic(e);
+                    std::process::exit(1);
+                }
+            }
+            continue;
+        }
         let mut compiler = Compiler::with_options(
             contents,
             target,
@@ -497,19 +556,27 @@ fn main() {
         units.push(unit);
     }
 
+    // --dump-pp is a per-source dump; nothing downstream of the
+    // per-source loop applies (no link, no codegen, no output
+    // file). Return now so the rest of the driver doesn't trip on
+    // the empty unit list.
+    if mode == Mode::DumpPp {
+        return;
+    }
+
     // Load each `.o` input through mmap-shaped read.
     for obj_path in &objects {
         let bytes = match std::fs::read(obj_path) {
             Ok(b) => b,
             Err(e) => {
-                eprintln!("badc: cannot read `{obj_path}`: {e}");
+                eprint_diagnostic(format!("badc: error: cannot read `{obj_path}`: {e}"));
                 std::process::exit(1);
             }
         };
         match badc::read_object(&bytes) {
             Ok(u) => units.push(u),
             Err(e) => {
-                eprintln!("badc: failed to parse `{obj_path}`: {e}");
+                eprint_diagnostic(format!("badc: error: failed to parse `{obj_path}`: {e}"));
                 std::process::exit(1);
             }
         }
@@ -534,7 +601,7 @@ fn main() {
             std::process::exit(1);
         }
         if units.is_empty() {
-            eprintln!("badc: -c requires at least one source input");
+            eprint_diagnostic("badc: error: -c requires at least one source input");
             std::process::exit(1);
         }
         // Source-derived units come first in `units`; objects
@@ -551,20 +618,14 @@ fn main() {
                 std::process::exit(1);
             }
             let bytes = badc::write_object(&units[0]);
-            if let Err(e) = std::fs::write(out, &bytes) {
-                eprintln!("badc: failed to write {}: {e}", out.display());
-                std::process::exit(1);
-            }
+            write_output(out, &bytes, quiet);
         } else {
             for (i, unit) in units.iter().take(source_count).enumerate() {
                 let src = &unit_source_paths[i];
                 let p = std::path::Path::new(src);
                 let out = p.with_extension("o");
                 let bytes = badc::write_object(unit);
-                if let Err(e) = std::fs::write(&out, &bytes) {
-                    eprintln!("badc: failed to write {}: {e}", out.display());
-                    std::process::exit(1);
-                }
+                write_output(&out, &bytes, quiet);
             }
         }
         return;
@@ -584,11 +645,11 @@ fn main() {
             std::process::exit(1);
         }
         let Some(out_path) = output_path.clone() else {
-            eprintln!("badc: --ar requires -o <archive>.a");
+            eprint_diagnostic("badc: error: --ar requires -o <archive>.a");
             std::process::exit(1);
         };
         if units.is_empty() {
-            eprintln!("badc: --ar requires at least one input");
+            eprint_diagnostic("badc: error: --ar requires at least one input");
             std::process::exit(1);
         }
         let mut members: Vec<badc::ArchiveMember> = Vec::with_capacity(units.len());
@@ -626,10 +687,7 @@ fn main() {
             sym_index.push((i, defined));
         }
         let blob = badc::write_archive(&members, &sym_index);
-        if let Err(e) = std::fs::write(&out_path, &blob) {
-            eprintln!("badc: failed to write {}: {e}", out_path.display());
-            std::process::exit(1);
-        }
+        write_output(&out_path, &blob, quiet);
         return;
     }
 
@@ -641,14 +699,14 @@ fn main() {
         let bytes = match std::fs::read(a) {
             Ok(b) => b,
             Err(e) => {
-                eprintln!("badc: cannot read `{a}`: {e}");
+                eprint_diagnostic(format!("badc: error: cannot read `{a}`: {e}"));
                 std::process::exit(1);
             }
         };
         match badc::LinkArchive::parse(a.clone(), &bytes) {
             Ok(la) => link_archives.push(la),
             Err(e) => {
-                eprintln!("badc: failed to parse `{a}`: {e}");
+                eprint_diagnostic(format!("badc: error: failed to parse `{a}`: {e}"));
                 std::process::exit(1);
             }
         }
@@ -783,11 +841,12 @@ fn main() {
                 emit_native_binary_to_stdout(&program, target, native_opts);
             } else {
                 let out = output_path.unwrap_or_else(|| default_output_path(&path, target, mode));
-                emit_native_binary(&program, &out, target, native_opts, mode);
+                emit_native_binary(&program, &out, target, native_opts, mode, quiet);
             }
         }
         Mode::ListSymbols => unreachable!("handled above"),
         Mode::DumpHeaders => unreachable!("handled above"),
+        Mode::DumpPp => unreachable!("handled above"),
         Mode::BuildArchive => unreachable!("handled above"),
     }
 }
@@ -824,9 +883,9 @@ fn colorize_diagnostic(line: &str, is_tty: bool) -> std::borrow::Cow<'_, str> {
         ("Error", "\x1b[1;31m"),
         ("warning", "\x1b[1;33m"), // bold yellow
         ("Warning", "\x1b[1;33m"),
-        ("info", "\x1b[1;36m"), // bold cyan
-        ("Info", "\x1b[1;36m"),
-        ("note", "\x1b[1;36m"),
+        ("info", "\x1b[1;32m"), // bold green
+        ("Info", "\x1b[1;32m"),
+        ("note", "\x1b[1;36m"), // bold cyan
         ("Note", "\x1b[1;36m"),
     ];
     const RESET: &str = "\x1b[0m";
@@ -900,10 +959,31 @@ fn emit_native_binary_to_stdout(program: &badc::Program, target: Target, options
         }
     };
     if let Err(e) = std::io::stdout().write_all(&bytes) {
-        eprintln!("badc: failed to write binary to stdout: {e}");
+        eprint_diagnostic(format!(
+            "badc: error: failed to write binary to stdout: {e}"
+        ));
         std::process::exit(1);
     }
     let _ = std::io::stdout().flush();
+}
+
+/// Write `bytes` to `out`, exit on failure, log
+/// `info: wrote file <path>` on success unless `quiet` is set.
+/// Used by every output path -- object emit, archive emit, JIT
+/// binary emit, native-binary emit -- so the chatter is uniform.
+/// Routes the info line through `eprint_diagnostic` so the
+/// severity word picks up the green TTY color.
+fn write_output(out: &std::path::Path, bytes: &[u8], quiet: bool) {
+    if let Err(e) = std::fs::write(out, bytes) {
+        eprint_diagnostic(format!(
+            "badc: error: failed to write {}: {e}",
+            out.display()
+        ));
+        std::process::exit(1);
+    }
+    if !quiet {
+        eprint_diagnostic(format!("info: wrote file {}", out.display()));
+    }
 }
 
 fn emit_native_binary(
@@ -912,6 +992,7 @@ fn emit_native_binary(
     target: Target,
     options: NativeOptions,
     mode: Mode,
+    quiet: bool,
 ) {
     let bytes = match emit_native_with_options(program, target, options) {
         Ok(b) => b,
@@ -920,10 +1001,7 @@ fn emit_native_binary(
             std::process::exit(1);
         }
     };
-    if let Err(e) = std::fs::write(out, &bytes) {
-        eprintln!("badc: failed to write {}: {e}", out.display());
-        std::process::exit(1);
-    }
+    write_output(out, &bytes, quiet);
     if mode == Mode::NativeExecutable {
         set_executable(out);
     }
@@ -996,10 +1074,12 @@ fn codesign(path: &std::path::Path) {
     match status {
         Ok(s) if s.success() => {}
         Ok(s) => {
-            eprintln!("badc: codesign exited with status {s} -- binary may not run");
+            eprint_diagnostic(format!(
+                "badc: warning: codesign exited with status {s}; the binary may not run"
+            ));
         }
         Err(e) => {
-            eprintln!("badc: failed to invoke {CODESIGN}: {e}");
+            eprint_diagnostic(format!("badc: error: failed to invoke {CODESIGN}: {e}"));
         }
     }
 }

@@ -1221,6 +1221,54 @@ fn lea_offset_bytes(offset: i64) -> i64 {
 /// host-arg thunks built on top of this only spill the regs the
 /// function actually reads, so an unused declared param never reads
 /// garbage.
+/// See aarch64::function_is_variadic. The bytecode shape is
+/// platform-independent, but the helper lives per-arch alongside
+/// `param_count_for_func` for symmetry with the existing thunk
+/// decision.
+pub(super) fn function_is_variadic(text: &[i64], ent_pc: usize) -> bool {
+    if ent_pc >= text.len() || Op::from_i64(text[ent_pc]) != Some(Op::Ent) {
+        return false;
+    }
+    let mut pc = ent_pc + Op::Ent.word_size();
+    while pc < text.len() {
+        let op = match Op::from_i64(text[pc]) {
+            Some(o) => o,
+            None => break,
+        };
+        if matches!(op, Op::Ent) {
+            break;
+        }
+        if matches!(op, Op::Imm) && pc + 1 < text.len() && text[pc + 1] == 2 {
+            // See the aarch64 sibling: require the trailing
+            // `Add; Si` to disambiguate the c5 va_start expansion
+            // from a constant-2 index into an 8-byte-element
+            // array (`xs[2]` for `long *xs`), which shares the
+            // leading `Imm 2; Psh; Imm 8; Mul` but ends in a load.
+            let after_imm2 = pc + Op::Imm.word_size();
+            if after_imm2 < text.len() && Op::from_i64(text[after_imm2]) == Some(Op::Psh) {
+                let imm8_pc = after_imm2 + Op::Psh.word_size();
+                if imm8_pc + 1 < text.len()
+                    && Op::from_i64(text[imm8_pc]) == Some(Op::Imm)
+                    && text[imm8_pc + 1] == 8
+                {
+                    let mul_pc = imm8_pc + Op::Imm.word_size();
+                    if mul_pc < text.len() && Op::from_i64(text[mul_pc]) == Some(Op::Mul) {
+                        let add_pc = mul_pc + Op::Mul.word_size();
+                        if add_pc < text.len() && Op::from_i64(text[add_pc]) == Some(Op::Add) {
+                            let si_pc = add_pc + Op::Add.word_size();
+                            if si_pc < text.len() && Op::from_i64(text[si_pc]) == Some(Op::Si) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        pc += op.word_size();
+    }
+    false
+}
+
 pub(super) fn param_count_for_func(text: &[i64], ent_pc: usize) -> usize {
     if ent_pc >= text.len() || Op::from_i64(text[ent_pc]) != Some(Op::Ent) {
         return 0;
@@ -1575,6 +1623,11 @@ pub(super) fn lower(
         }
         let target = bytecode_to_native[func_pc];
         if target == usize::MAX {
+            continue;
+        }
+        // Variadic c5 functions skip the thunk -- see the matching
+        // comment in aarch64.rs.
+        if function_is_variadic(&program.text, func_pc) {
             continue;
         }
         let thunk_offset = emit_arg_thunk(&mut code, n_params, target, abi);
@@ -2607,15 +2660,24 @@ fn emit_libc_call(
         use crate::c5::compiler::types as ty_helpers;
         let return_type_tag = imports.imports[import_index].return_type_tag;
         let bare = ty_helpers::strip_unsigned(return_type_tag);
-        // FP-returning libc fns (sin, cos, sqrt, ...) hand the
-        // result back in xmm0 on both SysV x86_64 and Win64. The
-        // integer-return path below routes RAX -> R13 and would
-        // leave the c5 accumulator holding whatever junk RAX had
-        // (typically 0, since FP return is independent of the
-        // integer return register). Move xmm0 -> R13 instead so
-        // the bit pattern of the f64 lands in c5's accumulator
-        // ready for downstream `Op::Sf` / `Op::Fadd` / etc.
-        if ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare) {
+        let returns_long_double = imports.imports[import_index].returns_long_double;
+        // SysV x86_64 returns `long double` in x87 `st(0)`, not
+        // XMM0 / RAX. Spill the top of the FP stack to a 16-byte
+        // scratch slot and load the low 8 bytes back into R13 --
+        // c5 stores long double in an 8-byte f64 slot, so the
+        // truncation to double is correct for the rest of the
+        // pipeline. The 16-byte SUB / ADD keeps the x86_64
+        // stack 16-byte aligned for any nested call. Win64 has
+        // no x87 long-double convention; this branch never fires
+        // there (no prototype carries `returns_long_double`).
+        if returns_long_double && target == super::Target::LinuxX64 {
+            emit_sub_rsp_imm32(code, 16);
+            // fstp QWORD PTR [rsp] -- `DD /3`, mod=00, rm=100
+            // (SIB follows), SIB = 0x24 (base=rsp, no index).
+            code.extend_from_slice(&[0xDD, 0x1C, 0x24]);
+            emit_mov_r_mem(code, Reg::R13, Reg::RSP, 0);
+            emit_add_rsp_imm32(code, 16);
+        } else if ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare) {
             emit_movq_r_xmm(code, Reg::R13, Reg::XMM0);
         } else {
             // Sign- or zero-extend a sub-word return into a full

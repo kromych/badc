@@ -49,11 +49,17 @@ pub fn embedded_headers() -> &'static [(&'static str, &'static str)] {
 pub(super) const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("stddef.h", include_str!("../../headers/include/stddef.h")),
     ("stdint.h", include_str!("../../headers/include/stdint.h")),
+    (
+        "inttypes.h",
+        include_str!("../../headers/include/inttypes.h"),
+    ),
+    ("setjmp.h", include_str!("../../headers/include/setjmp.h")),
     ("limits.h", include_str!("../../headers/include/limits.h")),
     ("string.h", include_str!("../../headers/include/string.h")),
     ("stdio.h", include_str!("../../headers/include/stdio.h")),
     ("stdlib.h", include_str!("../../headers/include/stdlib.h")),
     ("alloca.h", include_str!("../../headers/include/alloca.h")),
+    ("malloc.h", include_str!("../../headers/include/malloc.h")),
     ("stdarg.h", include_str!("../../headers/include/stdarg.h")),
     ("stdbool.h", include_str!("../../headers/include/stdbool.h")),
     (

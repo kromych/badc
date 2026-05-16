@@ -388,6 +388,16 @@ fn macro_argument_rescan_resolves_pasted_call() {
 }
 
 #[test]
+fn parenthesized_function_declarator() {
+    // C99 6.7.5 paragraph 1: parentheses around a direct
+    // declarator are transparent. `(name)(args)` declares a
+    // function, not a function pointer, so a forward
+    // declaration in that shape must not clash with the
+    // matching definition.
+    assert_eq!(run_fixture("parenthesized_function_declarator.c"), 0);
+}
+
+#[test]
 fn sizeof_threads_through_malloc_write_and_return() {
     // sizeof(struct Packet) used in three positions in one program:
     // malloc size, write count, and the function's return value. Tests

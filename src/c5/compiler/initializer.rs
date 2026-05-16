@@ -524,42 +524,40 @@ impl Compiler {
             return Ok((addr, InitElemReloc::Data(None)));
         }
         if self.lex.tk == Token::AndOp {
-            // `&global` or `&func` -- address-of init. C99
-            // 6.3.2.1p4 makes `&func` equivalent to the bare
-            // function-designator `func` (both yield the
-            // function pointer); the bare-identifier branch
-            // below handles `func` already, so route `&func`
-            // through the same code-reloc path.
-            //
-            // `&((T *)<base>)->field` is the GCC offsetof macro
-            // expansion. Hand the whole expression off to the
-            // integer constant-expression evaluator so the
-            // surrounding cast / subtraction chain folds with
-            // the offsetof in one pass.
-            if self.lex.peek_after_whitespace(b'(') {
-                let v = self.parse_constant_int()?;
-                return Ok((v, InitElemReloc::None));
-            }
+            // A static initializer leaf that begins with `&` is
+            // either a relocation-bearing pointer (`&global` or
+            // `&func`, equivalent under C99 6.3.2.1p4) or a
+            // constant arithmetic expression whose value is a
+            // byte offset (the canonical case is the C99 7.19 /
+            // GCC `offsetof` macro expansion
+            // `&((T *)0)->field`). Peek past the `&` to decide:
+            // if the next token is an identifier bound to a Glo
+            // or Fun symbol, take the reloc path; otherwise the
+            // integer constant-expression evaluator folds the
+            // whole expression (including the surrounding casts
+            // and pointer-difference of the offsetof macro).
+            let amp_snap = self.lex.snapshot();
             self.next()?;
-            if self.lex.tk != Token::Id {
-                return Err(self.compile_err("identifier expected after `&` in initializer"));
+            if self.lex.tk == Token::Id {
+                let target_idx = self.lex.curr_id_idx;
+                let class = self.symbols[target_idx].class;
+                if class == Token::Fun as i64 {
+                    let bc_pc = self.symbols[target_idx].val;
+                    self.next()?;
+                    return Ok((bc_pc, InitElemReloc::Code(target_idx)));
+                }
+                if class == Token::Glo as i64 {
+                    let off = self.symbols[target_idx].val;
+                    self.next()?;
+                    return Ok((off, InitElemReloc::Data(Some(target_idx))));
+                }
             }
-            let target_idx = self.lex.curr_id_idx;
-            let class = self.symbols[target_idx].class;
-            if class == Token::Fun as i64 {
-                let bc_pc = self.symbols[target_idx].val;
-                self.next()?;
-                return Ok((bc_pc, InitElemReloc::Code(target_idx)));
-            }
-            if class != Token::Glo as i64 {
-                return Err(self.compile_err(format!(
-                    "`&{}` -- only addresses of globals or functions are accepted in static initializers",
-                    self.symbols[target_idx].name
-                )));
-            }
-            let off = self.symbols[target_idx].val;
-            self.next()?;
-            return Ok((off, InitElemReloc::Data(Some(target_idx))));
+            // Not a relocation-bearing shape -- restore so the
+            // integer evaluator sees the leading `&` and routes
+            // through `parse_const_offsetof`.
+            self.lex.restore(amp_snap);
+            let v = self.parse_constant_int()?;
+            return Ok((v, InitElemReloc::None));
         }
         if self.lex.tk == Token::Id {
             let idx = self.lex.curr_id_idx;

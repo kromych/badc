@@ -421,6 +421,27 @@ fn return_int_widens_to_double() {
 }
 
 #[test]
+fn struct_fn_ptr_field_deref_call() {
+    // C99 6.3.2.1 paragraph 4: an lvalue of function type
+    // decays to a pointer to the function. `(*s.cb)(args)`
+    // is the canonical decay no-op; without a re-seed of the
+    // fn-ptr chain depth after the struct-field load the unary
+    // `*` emits a spurious `Li` and the call jumps to garbage.
+    assert_eq!(run_fixture("struct_fn_ptr_field_deref_call.c"), 0);
+}
+
+#[test]
+fn typedef_fn_ptr_struct_field_carries_lineage() {
+    // Same shape as the previous test but the field's type
+    // comes from a `typedef RET (*fn_t)(args)` alias rather
+    // than an inline fn-pointer declarator. The typedef's
+    // `fn_ptr_indirection` must propagate into the StructField
+    // record so the post-load `(*g->cb)(args)` recognises the
+    // decay.
+    assert_eq!(run_fixture("typedef_fn_ptr_struct_field.c"), 0);
+}
+
+#[test]
 fn sizeof_threads_through_malloc_write_and_return() {
     // sizeof(struct Packet) used in three positions in one program:
     // malloc size, write count, and the function's return value. Tests

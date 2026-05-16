@@ -1955,6 +1955,18 @@ impl Compiler {
                         self.seed_multi_dim_strides(&dims, elem_size);
                     } else if !field_is_struct_value {
                         self.emit_op(load_op_for(self.ty, self.target));
+                        // Function-pointer field: re-seed the fn-ptr
+                        // chain depth from the field's lineage tag so
+                        // a following unary `*` recognises the C99
+                        // 6.3.2.1p4 function-to-pointer decay no-op.
+                        // Without this re-seed `(*g->frealloc)(...)`
+                        // emits a spurious `Li` that loads through
+                        // the function's code address and the call
+                        // jumps to garbage. Mirrors the symbol-load
+                        // path in the Id branch above.
+                        if field.fn_ptr_indirection > 0 {
+                            self.pending.fn_ptr_chain_depth = field.fn_ptr_indirection - 1;
+                        }
                         // Pointer-to-array field (`T (*field)[M1]...[Mn]`):
                         // declarator stashed dims as `[0, M1, ...]`
                         // with a leading-0 sentinel, and bumped

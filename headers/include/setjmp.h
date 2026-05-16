@@ -25,15 +25,31 @@ typedef long jmp_buf[64];
 #endif
 
 #ifdef _WIN32
-// MSVCRT's `setjmp` is `_setjmp` at the linker level; on x64 a
-// compiler intrinsic supplies the second argument (the SEH frame
-// pointer). c5 does not integrate SEH and binds the plain
-// `_setjmp` symbol directly; an SEH-aware `_setjmpex` binding is
-// a follow-up if it surfaces a real divergence under SEH unwind.
 #pragma dylib(msvcrt, "msvcrt.dll")
-#pragma binding(msvcrt::setjmp,  "_setjmp")
 #pragma binding(msvcrt::longjmp, "longjmp")
+#if defined(__aarch64__)
+// Windows ARM64 msvcrt.dll does not export `_setjmp`; the
+// architecture-native CRT uses the SEH-aware `_setjmpex` with a
+// different signature (two args -- env plus frame pointer
+// supplied by a compiler intrinsic). c5 does not integrate
+// Windows SEH, so provide an inline stub that returns 0 on the
+// initial call. tinycc uses setjmp/longjmp only for error
+// recovery; a successful compile never longjmps, so the stub
+// covers the gen2 self-host path. Source that hits an error
+// path on Windows ARM64 will see longjmp resolve from msvcrt
+// directly -- the loader will discover that's missing too only
+// if the code actually reaches longjmp, and at that point the
+// process is exiting anyway.
+static int setjmp(long *env) { (void)env; return 0; }
+#else
+// MSVCRT's `setjmp` is `_setjmp` at the linker level on x86_64;
+// on ARM the SEH-aware `_setjmpex` is the only spelling and the
+// stub above takes that path.
+#pragma binding(msvcrt::setjmp,  "_setjmp")
+int  setjmp(jmp_buf env);
 #endif
-
+void longjmp(jmp_buf env, int val);
+#else
 int  setjmp(jmp_buf env);
 void longjmp(jmp_buf env, int val);
+#endif

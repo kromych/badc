@@ -1072,7 +1072,12 @@ def main() -> int:
     gen2_self_skip = ""
     if gen2_tcc is None:
         gen2_self_skip = "no gen2 to mirror"
-    elif host[0] == "Darwin":
+    elif host[0] in ("Darwin", "Windows"):
+        # macOS / Windows: stage1 self-links the gen2 objects
+        # against `libtcc1.a`. No host CRT is spliced in -- tcc's
+        # PE linker pulls `_start` from libtcc1.a's crt1 member and
+        # auto-binds the msvcrt / libSystem surface through the
+        # import-lib search rooted at `-B`.
         libtcc1 = work / "libtcc1.a"
         gen2_self_tcc = work / "tcc-gen2-self"
         link_cmd = [
@@ -1090,7 +1095,7 @@ def main() -> int:
             print(link_proc.stderr, file=sys.stderr)
             gen2_self_tcc = None
             gen2_self_skip = "stage1 link failed"
-        else:
+        elif host[0] == "Darwin":
             codesign_if_macos(host, gen2_self_tcc)
     elif multiarch is not None:
         triplet = multiarch.name

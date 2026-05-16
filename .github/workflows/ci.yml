@@ -314,40 +314,31 @@ jobs:
         # under cdb with the crash-state dump command so the AV PC
         # + unwind reach the log.
         if: runner.os == 'Windows'
-        shell: pwsh
+        shell: cmd
         continue-on-error: true
         run: |
-          $stage1 = Get-ChildItem demos/tinycc/.self_host/tcc-stage1* | Select-Object -First 1
-          if (-not $stage1) { Write-Host 'no tcc-stage1 present'; exit 0 }
-          $arch = $env:PROCESSOR_ARCHITECTURE
-          $archDir = if ($arch -eq 'AMD64') { 'x64' } else { $arch.ToLower() }
-          $cdb = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Debuggers\$archDir\cdb.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $cdb) { Write-Host "no cdb.exe under $archDir, skipping"; exit 0 }
-          Write-Host "=== cdb at $($cdb.FullName) ==="
-          $sample = Get-Item demos/tinycc/.self_host/samples/arithmetic.c -ErrorAction SilentlyContinue
-          if (-not $sample) { Write-Host 'sample not present'; exit 0 }
-          $logFile = "$env:RUNNER_TEMP\cdb.log"
-          if (Test-Path $logFile) { Remove-Item $logFile }
-          $bcmd = "g; .lastevent; r; kn 30; lm; qq"
-          $stage1Path = $stage1.FullName
-          $samplePath = $sample.FullName
-          $outO = "$env:RUNNER_TEMP\arith.o"
-          # Run cdb with -logo so the full session transcript lands
-          # in a file. PowerShell's stdout/stderr capture through
-          # the array-assign path swallowed all output last run.
-          $proc = Start-Process -FilePath $cdb.FullName -ArgumentList @(
-              '-logo', $logFile,
-              '-c', $bcmd,
-              '-G', '-g', '--',
-              $stage1Path, '-B', 'demos/tinycc', '-c', $samplePath, '-o', $outO
-          ) -Wait -NoNewWindow -PassThru
-          Write-Host "cdb exit: $($proc.ExitCode)"
-          if (Test-Path $logFile) {
-              Write-Host "=== cdb log ==="
-              Get-Content $logFile | ForEach-Object { Write-Host $_ }
-          } else {
-              Write-Host "no cdb log produced"
-          }
+          @echo off
+          setlocal
+          set "STAGE1=demos\tinycc\.self_host\tcc-stage1.exe"
+          if not exist "%STAGE1%" set "STAGE1=demos\tinycc\.self_host\tcc-stage1"
+          if not exist "%STAGE1%" ( echo no tcc-stage1 present & exit /b 0 )
+          set "CDBDIR=x64"
+          if /I "%PROCESSOR_ARCHITECTURE%"=="ARM64" set "CDBDIR=arm64"
+          set "CDB=C:\Program Files (x86)\Windows Kits\10\Debuggers\%CDBDIR%\cdb.exe"
+          if not exist "%CDB%" ( echo cdb not found at "%CDB%" & exit /b 0 )
+          echo === cdb at %CDB% ===
+          set "SAMPLE=demos\tinycc\.self_host\samples\arithmetic.c"
+          if not exist "%SAMPLE%" ( echo sample not present & exit /b 0 )
+          set "LOG=%RUNNER_TEMP%\cdb.log"
+          if exist "%LOG%" del "%LOG%"
+          rem cmd-shell quoting puts the `-c` debugger script in a
+          rem single quoted token, then `--` separates from the
+          rem inferior + its args. PowerShell's Start-Process
+          rem ArgumentList globbed the whole tail into one string
+          rem last run; cmd preserves arg boundaries.
+          "%CDB%" -logo "%LOG%" -c "g; .lastevent; r; kn 30; lm; qq" -G -g -- "%STAGE1%" -B demos/tinycc -c "%SAMPLE%" -o "%RUNNER_TEMP%\arith.o"
+          echo cdb exit: %ERRORLEVEL%
+          if exist "%LOG%" ( echo === cdb log === & type "%LOG%" ) else ( echo no cdb log produced )
       - name: stb header-only smoke
         # The densest demo: a single TU pulls in six stb_*.h
         # headers (stb_sprintf, stb_perlin, stb_image_write,

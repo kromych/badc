@@ -1278,15 +1278,25 @@ def main() -> int:
     unexpected_corpus = [n for n in tu_mismatches if n not in KNOWN_DRIFT]
     unexpected_boot = [n for n in boot_mismatches if n not in KNOWN_DRIFT]
 
-    # Windows lanes (PE x86_64 / arm64): the samples tier is now
-    # strict-gated -- both lanes reach 25/25 byte-identical, so any
-    # regression there fails CI. Corpus + bootstrap remain in soft
-    # bringup because tinycc's TUs depend on Windows-flavoured
-    # `<stdio.h>` / `<stdlib.h>` etc. that the c5 header tree does
-    # not vendor yet. TODO: vendor the upstream tinycc win32
-    # include tree so the corpus and bootstrap tiers can also gate.
+    # Windows lanes (PE x86_64 / arm64): samples + corpus are
+    # strict-gated -- both lanes reach 25/25 and 12/12 byte-identical
+    # against the host-gcc-built reference tcc, so any regression in
+    # either tier fails CI. Bootstrap remains in soft bringup:
+    #
+    # * Windows x86_64 -- gen2 link needs the libgcc softfloat
+    #   helpers (`__floatundidf` etc.) plus mingw's `__iob_func`
+    #   and a c5 codegen fix for the out-of-range `.pdata`
+    #   relocation against `.uw_base`.
+    # * Windows arm64 -- the runner's host ld is x86_64 mingw and
+    #   cannot link AArch64 objects, so gen2 needs to go through
+    #   stage1 tcc itself (self-link) rather than host gcc.
+    #
+    # TODO: address the two bootstrap blockers above and promote
+    # bootstrap + gen2-self to strict-gate on both lanes.
     if host[0] == "Windows":
         if failures or mismatches:
+            return 1
+        if tu_failures or unexpected_corpus:
             return 1
         return 0
 

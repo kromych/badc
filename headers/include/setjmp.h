@@ -65,6 +65,19 @@ typedef long long jmp_buf[34];
 #pragma binding(msvcrt::__c5_msvcrt_longjmp, "longjmp")
 int  __c5_msvcrt_setjmp(long long *env, void *frame);
 void __c5_msvcrt_longjmp(long long *env, int val);
+
+// C99 7.1.4 paragraph 1: a standard library function may also be
+// implemented as a macro, and the macro fires only when the
+// identifier is followed by `(`. Bare-identifier uses (taking the
+// function's address, passing it as an argument) must still
+// resolve to the function. tinycc's `libtcc.h` relies on this:
+//     #define tcc_setjmp(s1,jb,f) setjmp(_tcc_setjmp(s1, jb, f, longjmp))
+// passes `longjmp` as a function pointer.
+#pragma binding(msvcrt::setjmp,  "_setjmp")
+#pragma binding(msvcrt::longjmp, "longjmp")
+int  setjmp(jmp_buf env);
+void longjmp(jmp_buf env, int val);
+
 #define setjmp(env) \
     __c5_msvcrt_setjmp( \
         (long long *)(((unsigned long long)(env) + 15ULL) & ~15ULL), \

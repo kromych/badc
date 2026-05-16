@@ -120,6 +120,27 @@ separate non-variadic prototypes per selector signature
 that route through the standard AAPCS64 register-passing
 path.
 
+### `long double` is 8-byte FP64 everywhere, severity 4
+
+C99 6.2.5p10 lets `long double` be any FP type at least as wide as
+`double`, and the host ABIs differ:
+
+| Target           | Platform-correct `long double` |
+|------------------|--------------------------------|
+| Linux x86_64     | 80-bit x87 extended (10 bytes, 16-byte aligned) |
+| Linux aarch64    | IEEE binary128 (16 bytes)      |
+| macOS aarch64    | IEEE binary64 -- same as `double` (8 bytes) |
+| Windows x86_64   | IEEE binary64 -- same as `double` (8 bytes) |
+| Windows aarch64  | IEEE binary64 -- same as `double` (8 bytes) |
+
+c5 stores every `long double` as 8-byte FP64 regardless of host.
+That matches macOS / Windows but loses precision (and trips
+byte-identical-output checks against gcc-built objects) on Linux
+aarch64 and Linux x86_64. The c5 arithmetic pipeline already
+routes through f64, so a literal like `1.0L` compiles to an
+FP64 value; the binary just keeps eight zero bytes of padding
+where an FP128 (or x87 extended) would carry the high half.
+
 ### libc `int`-returning calls used as register-resident rvalue, severity 3
 
 `strcmp`, `atoi`, etc. leave only the low 32 bits defined

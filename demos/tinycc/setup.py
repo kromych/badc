@@ -223,6 +223,43 @@ def main(argv: list[str] | None = None) -> int:
             p = win32_lib_dir / rel
             log(f"done -- {p} {p.stat().st_size}")
 
+    # Local patch: upstream's `win32/include/stdlib.h` carries an
+    # `#if defined __aarch64__` block that undefs the dllimport
+    # macro chain for `__argc` / `__argv` / `_environ` /
+    # `_wenviron`. The AArch64 msvcrt.dll variant does not export
+    # the `_imp_*` indirection slots the dllimport macros expand
+    # into, so reading them through the dllimport chain crashes
+    # at load with STATUS_ENTRYPOINT_NOT_FOUND. The upstream
+    # workaround spells the symbols as plain `extern`, but no
+    # upstream module provides their storage -- the link fires
+    # `symbol '_environ' is missing __declspec(dllimport)` from
+    # tcc's PE linker.
+    #
+    # Replace the `extern` declarations with tentative
+    # definitions (C99 6.9.2) so each TU that includes
+    # <stdlib.h> contributes a candidate definition; the linker
+    # merges them into one BSS slot per symbol. `__getmainargs`
+    # then writes the real env / argv / argc into that local
+    # slot at startup.
+    stdlib_h = win32_include_dir / "stdlib.h"
+    text = stdlib_h.read_text()
+    needle = (
+        "extern int __argc;\n"
+        "extern char **__argv;\n"
+        "extern wchar_t **__wargv;\n"
+        "extern char **_environ;\n"
+        "extern wchar_t **_wenviron;\n"
+    )
+    replacement = (
+        "int __argc;\n"
+        "char **__argv;\n"
+        "wchar_t **__wargv;\n"
+        "char **_environ;\n"
+        "wchar_t **_wenviron;\n"
+    )
+    if needle in text:
+        stdlib_h.write_text(text.replace(needle, replacement))
+        log(f"patched -- {stdlib_h} (AArch64 tentative storage)")
     return 0
 
 

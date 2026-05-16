@@ -409,6 +409,18 @@ fn large_int_literal_auto_promotes() {
 }
 
 #[test]
+fn return_int_widens_to_double() {
+    // C99 6.8.6.4 paragraph 3: the value of a return
+    // expression is converted as if by assignment to the
+    // function's return type. An int-typed `return` from a
+    // `double`-returning function must lift via `Op::Fcvtif`;
+    // dropping the integer bit pattern into the FP slot would
+    // make a `(double)x == 505.0` check compare the bit
+    // patterns instead of the values.
+    assert_eq!(run_fixture("return_int_widens_to_double.c"), 0);
+}
+
+#[test]
 fn sizeof_threads_through_malloc_write_and_return() {
     // sizeof(struct Packet) used in three positions in one program:
     // malloc size, write count, and the function's return value. Tests

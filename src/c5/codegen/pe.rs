@@ -1852,12 +1852,20 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
             image_base: IMAGE_BASE,
             section_alignment: SECTION_ALIGNMENT,
             file_alignment: FILE_ALIGNMENT,
-            major_operating_system_version: 4,
+            // Windows 6.0 (Vista) is the earliest version that
+            // supports the modern PE security characteristics this
+            // image opts into (DYNAMIC_BASE + NX_COMPAT +
+            // HIGH_ENTROPY_VA). The previous 4.0 / 5.2 values
+            // (NT 4.0 + Windows Server 2003) leave the loader in a
+            // legacy code path that refuses to dispatch
+            // HIGH_ENTROPY_VA images on real Windows 10+; wine
+            // ignored the field and ran the binary anyway.
+            major_operating_system_version: 6,
             minor_operating_system_version: 0,
             major_image_version: 0,
             minor_image_version: 0,
-            major_subsystem_version: 5,
-            minor_subsystem_version: 2,
+            major_subsystem_version: 6,
+            minor_subsystem_version: 0,
             win32_version_value: 0,
             size_of_image: inp.size_of_image,
             size_of_headers: inp.size_of_headers,

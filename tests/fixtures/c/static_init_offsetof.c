@@ -9,13 +9,17 @@
 // returns a distinct nonzero code.
 
 #include <stddef.h>
+#include <stdint.h>
 
+// Width-explicit fields so the layout is the same on LP64 and
+// LLP64 hosts (`long` is 8 bytes on POSIX targets and 4 bytes
+// on Windows -- `int64_t` is 8 bytes everywhere).
 struct s {
-    int   a;
-    char  b;
-    long  c;
-    char  pad;
-    short d;
+    int32_t a;
+    char    b;
+    int64_t c;
+    char    pad;
+    int16_t d;
 };
 
 // Folded at parse time and packed into the data segment as a

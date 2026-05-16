@@ -39,6 +39,13 @@ fn main() {
     println!("cargo:rerun-if-changed=.git/HEAD");
     println!("cargo:rerun-if-changed=.git/refs");
     println!("cargo:rerun-if-changed=build.rs");
+    // include_str! attaches a per-file rerun-if-changed dep, but
+    // Cargo's incremental build under Swatinem/rust-cache has been
+    // observed not to detect content changes in headers/include/*
+    // when the cache restores a stale target/. Treating the
+    // headers directory as a build input forces a re-link whenever
+    // any of the embedded headers shift.
+    println!("cargo:rerun-if-changed=headers/include");
 }
 
 /// Format the current wall-clock time as a C99 `(__DATE__, __TIME__)`

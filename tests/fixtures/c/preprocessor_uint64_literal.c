@@ -13,13 +13,15 @@
 #include <stdint.h>
 
 // `unsigned long` is 32 bits on Windows (LLP64) and 64 bits on
-// the POSIX targets (LP64). The ULONG_MAX probe asserts a
-// distinct result per layout: 3 for the 64-bit case, 1 for the
-// 32-bit case. Both shapes still exercise the bare-literal
-// parse and the logical right shift on a stored bit pattern.
+// the POSIX targets (LP64). The ULONG_MAX shift probe yields
+// a distinct result per layout: 3 for the 64-bit case
+// (0xFFFFFFFFFFFFFFFF >> 31 = 0x1FFFFFFFF; >> 31 = 3), 0 for
+// the 32-bit case (0xFFFFFFFF >> 31 = 1; >> 31 = 0). Both
+// branches still exercise the bare-literal parse and the
+// logical right shift on a stored bit pattern.
 #ifdef __BADC_WINDOWS__
-#if ((ULONG_MAX >> 31) >> 31) != 1
-#error "expected ((ULONG_MAX >> 31) >> 31) == 1 on an LLP64 host"
+#if ((ULONG_MAX >> 31) >> 31) != 0
+#error "expected ((ULONG_MAX >> 31) >> 31) == 0 on an LLP64 host"
 #endif
 #else
 #if ((ULONG_MAX >> 31) >> 31) != 3

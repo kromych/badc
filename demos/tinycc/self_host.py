@@ -344,15 +344,19 @@ def tcc_build_defines(
             f'-DCONFIG_TCC_SYSINCLUDEPATHS="{{B}}/include:{sdk_include}:/usr/include"',
         )
     if host[0] == "Windows":
-        # tinycc resolves `<stdio.h>` etc. through its own sysinclude
-        # list; the upstream win32 build installs the mingw-style
-        # headers under `<install>/include`. Bring `{B}/win32/include`
-        # onto the search path so a tcc binary running out of the
-        # `demos/tinycc` source tree finds them without an install
-        # step. `{B}/include` keeps `tccdefs.h` reachable. The path
-        # separator is `;` on Windows per `tcc.h:PATHSEP`.
+        # tinycc resolves `<stdio.h>` / `<windows.h>` etc. through
+        # its own sysinclude list. The upstream win32 build installs
+        # the mingw-style headers under `<install>/include` plus the
+        # Win32 API headers under `<install>/include/winapi`. Mirror
+        # the same two-entry layout against the in-tree
+        # `demos/tinycc/win32/include/` so `tccpe.c` / `tccrun.c`
+        # (which `#include <windows.h>`) and the broader corpus
+        # resolve without an install step. `{B}/include` keeps
+        # `tccdefs.h` reachable. PATHSEP is `;` on Windows per
+        # `tcc.h:PATHSEP`.
         return (
-            '-DCONFIG_TCC_SYSINCLUDEPATHS="{B}/win32/include;{B}/include"',
+            '-DCONFIG_TCC_SYSINCLUDEPATHS='
+            '"{B}/win32/include;{B}/win32/include/winapi;{B}/include"',
         )
     if multiarch is None:
         return ()

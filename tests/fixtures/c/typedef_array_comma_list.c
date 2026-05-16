@@ -26,6 +26,16 @@ static const gf gf2 = { 0, 0, 7 };
 static gf m4[4];
 static gf n4[4];
 
+// Struct field of a typedef-array type, followed by another
+// field. The carrier must be cleared between field groups so
+// the scalar `code` field does not inherit the typedef-array
+// dimension and turn into `int[16]`.
+typedef long sjlj_buf[64];
+struct sjlj_holder {
+    sjlj_buf env;
+    int      code;
+};
+
 int main(void) {
     // gf0 is zero-initialized per C99 6.7.8p10: static-storage
     // arrays with no explicit init have every element set to
@@ -54,6 +64,14 @@ int main(void) {
     if (n4[3][15] !=  -1) return 12;
     if (m4[0][0]  !=   0) return 13;
     if (n4[0][0]  !=   0) return 14;
+
+    // Struct with typedef-array head field + scalar tail.
+    // The carrier must not leak from the array field into the
+    // scalar field's group.
+    struct sjlj_holder h;
+    h.code = 99;
+    if (h.code != 99) return 15;
+    if ((int)sizeof(h) < 64 * (int)sizeof(long) + (int)sizeof(int)) return 16;
 
     return 0;
 }

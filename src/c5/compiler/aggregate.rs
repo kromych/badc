@@ -96,6 +96,14 @@ impl Compiler {
         let mut bf_unit_size: usize = 0;
         let mut bf_next_bit: u32 = 0;
         while self.lex.tk != '}' {
+            // Reset the typedef-array carrier between field groups
+            // (`jmp_buf env;` then `int code;`). The aggregate
+            // parser has its own inline base-type reader and does
+            // not call `parse_decl_base_type`, so the carrier
+            // would otherwise leak its prior value into the next
+            // group and turn an unrelated scalar field into a
+            // bogus array.
+            self.pending.typedef_base_array_size = 0;
             // Field type prefix: int, char, float, double, or struct Name.
             // Leading qualifiers / int modifiers / function specifiers
             // (`const`, `unsigned`, ...) are no-ops; track if any int

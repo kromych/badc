@@ -223,43 +223,40 @@ def main(argv: list[str] | None = None) -> int:
             p = win32_lib_dir / rel
             log(f"done -- {p} {p.stat().st_size}")
 
-    # Local patch: upstream's `win32/include/stdlib.h` carries an
-    # `#if defined __aarch64__` block that undefs the dllimport
-    # macro chain for `__argc` / `__argv` / `_environ` /
-    # `_wenviron`. The AArch64 msvcrt.dll variant does not export
-    # the `_imp_*` indirection slots the dllimport macros expand
-    # into, so reading them through the dllimport chain crashes
-    # at load with STATUS_ENTRYPOINT_NOT_FOUND. The upstream
-    # workaround spells the symbols as plain `extern`, but no
-    # upstream module provides their storage -- the link fires
-    # `symbol '_environ' is missing __declspec(dllimport)` from
-    # tcc's PE linker.
+    # Storage for the AArch64-only globals upstream's
+    # `win32/include/stdlib.h` declares (without providing
+    # storage): `__argc` / `__argv` / `__wargv` / `_environ` /
+    # `_wenviron`. The Windows AArch64 msvcrt.dll variant does not
+    # export the `_imp_*` indirection slots the dllimport macros
+    # would expand into, so the upstream header undefs that path
+    # and falls back to plain `extern`. With no module providing
+    # the storage, tinycc's PE linker fires `symbol 'X' is
+    # missing __declspec(dllimport)`.
     #
-    # Replace the `extern` declarations with tentative
-    # definitions (C99 6.9.2) so each TU that includes
-    # <stdlib.h> contributes a candidate definition; the linker
-    # merges them into one BSS slot per symbol. `__getmainargs`
-    # then writes the real env / argv / argc into that local
-    # slot at startup.
-    stdlib_h = win32_include_dir / "stdlib.h"
-    text = stdlib_h.read_text()
-    needle = (
-        "extern int __argc;\n"
-        "extern char **__argv;\n"
-        "extern wchar_t **__wargv;\n"
-        "extern char **_environ;\n"
-        "extern wchar_t **_wenviron;\n"
+    # Drop a single explicitly-initialized definition file that
+    # the libtcc1 build picks up on Windows AArch64. Tentative
+    # definitions in the header looked tempting (C99 6.9.2 lets
+    # multiple TUs contribute candidates) but tinycc's PE linker
+    # lands the merged slot in `.rdata`, making `__getmainargs`
+    # AV when it tries to write argc / argv into the read-only
+    # page. Explicit initializers force the storage into `.data`,
+    # which is writable.
+    args_storage = win32_lib_dir / "c5_win_arm64_args.c"
+    args_storage.write_text(
+        "// Single-TU storage for the upstream AArch64 stdlib.h\n"
+        "// `extern` block. Explicit initializers route the\n"
+        "// linker into a writable .data slot per symbol.\n"
+        "int __argc = 0;\n"
+        "char **__argv = 0;\n"
+        "// `wchar_t` resolves to `unsigned short` in tinycc's\n"
+        "// Windows headers; spelling it out keeps the file\n"
+        "// self-contained when libtcc1's build path includes it\n"
+        "// without dragging in <stddef.h>.\n"
+        "unsigned short **__wargv = 0;\n"
+        "char **_environ = 0;\n"
+        "unsigned short **_wenviron = 0;\n"
     )
-    replacement = (
-        "int __argc;\n"
-        "char **__argv;\n"
-        "wchar_t **__wargv;\n"
-        "char **_environ;\n"
-        "wchar_t **_wenviron;\n"
-    )
-    if needle in text:
-        stdlib_h.write_text(text.replace(needle, replacement))
-        log(f"patched -- {stdlib_h} (AArch64 tentative storage)")
+    log(f"wrote -- {args_storage} (AArch64 args storage)")
     return 0
 
 

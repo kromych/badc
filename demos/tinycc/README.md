@@ -72,15 +72,9 @@ Current per-lane state:
 | Linux x86_64        | 25/25   | 11/11   | 11/11     | 11/11     | 2/2        | full fixed point                                     |
 | Linux aarch64       | 25/25   | 11/11   | 11/11     | 11/11     | 2/2        | full fixed point                                     |
 | Windows x86_64      | 25/25   | 12/12   | 12/12     | 12/12     | 2/2        | full fixed point                                     |
-| Windows arm64       | 25/25   | 12/12   | 12/12     | 0/12      | 1/2        | stage1 self-link AV (TODO)                           |
+| Windows arm64       | 25/25   | 12/12   | 12/12     | 12/12     | 2/2        | full fixed point                                     |
 
-`samples` / `corpus` / `bootstrap` are strict-gated on every
-lane. `gen2-self` and `functional` are strict-gated on the four
-POSIX lanes; on Windows arm64 the stage1 self-link path AVs at
-runtime (the gen3 objects are emitted byte-identical, but the
-binary linked by stage1 itself crashes on entry). Tracked as a
-TODO -- localize the AV in stage1's tccpe-derived link runtime
-on Windows arm64.
+All five tiers are strict-gated on every lane.
 
 Already-closed gaps that the bringup surfaced:
 
@@ -103,6 +97,10 @@ Already-closed gaps that the bringup surfaced:
 * Bitfield storage unit follows the base type per C99 6.7.2.1p11
   (the unit width tracks `sizeof(base_type)`, not a hard-coded
   8 bytes).
+* Bitwise `&` / `^` / `|` result type follows the usual
+  arithmetic conversions per C99 6.5.10 / 6.5.11 / 6.5.12; a
+  downstream arithmetic op no longer narrows a 64-bit operand
+  through a sign-extend from bit 31.
 
 ## config.h
 

@@ -1391,27 +1391,6 @@ def main() -> int:
     unexpected_corpus = [n for n in tu_mismatches if n not in KNOWN_DRIFT]
     unexpected_boot = [n for n in boot_mismatches if n not in KNOWN_DRIFT]
 
-    # Windows lanes (PE x86_64 / arm64): samples + corpus +
-    # bootstrap are strict-gated -- every Windows lane reaches
-    # byte-identical gen2 == gen3 against the host-gcc-built
-    # reference tcc, so a regression there fails CI. gen2-self
-    # and functional stay in soft bringup on the arm64 lane: the
-    # stage1 binary's self-link path AVs at runtime (the gen3
-    # objects are emitted correctly, but the binary linked by
-    # stage1 itself crashes on entry -- a c5 codegen issue in
-    # tccpe.c's link-time runtime, not in any compile-side
-    # output). TODO: localize the stage1-self-link AV on
-    # Windows arm64 and promote gen2-self / functional to
-    # strict-gate.
-    if host[0] == "Windows":
-        if failures or mismatches:
-            return 1
-        if tu_failures or unexpected_corpus:
-            return 1
-        if boot_failures or unexpected_boot:
-            return 1
-        return 0
-
     # Sample failures + mismatches gate the build. Corpus and
     # bootstrap *failures* (running the binary at all) gate. So do
     # mismatches outside KNOWN_DRIFT -- those are regressions.

@@ -498,9 +498,7 @@ impl Compiler {
                 if is_cast_of_string {
                     let (value, reloc) = self.parse_constant_init_value()?;
                     if self.lex.tk != ')' {
-                        return Err(
-                            self.compile_err("close paren expected in initializer"),
-                        );
+                        return Err(self.compile_err("close paren expected in initializer"));
                     }
                     self.next()?;
                     return Ok((value, reloc));

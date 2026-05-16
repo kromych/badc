@@ -397,10 +397,7 @@ impl Compiler {
                 // nested struct braces. Stage each element's
                 // bytes in `self.data` and Mcpy the block into
                 // the local slot.
-                if is_struct_ty(ty)
-                    && struct_ptr_depth(ty) == 0
-                    && self.lex.tk == '{'
-                {
+                if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 && self.lex.tk == '{' {
                     let elem_size = self.size_of_type(ty);
                     let sid = struct_id_of(ty);
                     // Pre-scan each element's brace list: if any
@@ -439,9 +436,9 @@ impl Compiler {
                                 )));
                             }
                             if self.lex.tk != '{' {
-                                return Err(self.compile_err(
-                                    "struct array element must be a brace list",
-                                ));
+                                return Err(
+                                    self.compile_err("struct array element must be a brace list")
+                                );
                             }
                             self.emit_struct_local_init_runtime_at(
                                 local_val,

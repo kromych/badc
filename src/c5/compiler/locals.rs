@@ -32,7 +32,7 @@ use super::super::error::C5Error;
 use super::super::op::Op;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{UNSIGNED_BIT, is_struct_ty, struct_id_of, struct_ptr_depth};
+use super::types::{UNSIGNED_BIT, is_pointer_ty, is_struct_ty, struct_id_of, struct_ptr_depth};
 
 impl Compiler {
     pub(super) fn parse_function_body_local_decl(&mut self) -> Result<(), C5Error> {
@@ -103,13 +103,19 @@ impl Compiler {
             // through-pointer load.
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             // Array typedef carries its dimension when the
-            // declarator did not supply one (C99 6.7.7 p3).
-            // Peek the carrier without clearing so every
-            // declarator in the comma list sees the same
-            // dimension; the outer parse_block / decl-loop
-            // resets the carrier when the declaration ends.
+            // declarator stayed at the typedef's element type --
+            // i.e., no `[N]` brackets and no leading `*`. A
+            // declarator that added a pointer level (`T *p` where
+            // `T` is an array typedef) names a pointer to the
+            // typedef's element type; the array dimension is part
+            // of the pointee and must not be re-applied to the
+            // declarator (C99 6.7.7p3 + 6.7.6.1). Peek the
+            // carrier without clearing so every declarator in the
+            // comma list sees the same dimension; the outer
+            // parse_block / decl-loop resets it on the next
+            // declaration.
             let typedef_dim = self.pending.typedef_base_array_size;
-            if typedef_dim > 0 && array_size == 0 {
+            if typedef_dim > 0 && array_size == 0 && !is_pointer_ty(ty) {
                 array_size = typedef_dim;
             }
             self.ty = ty;

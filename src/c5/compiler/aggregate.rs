@@ -19,8 +19,8 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::types::{
-    UNSIGNED_BIT, is_decl_modifier, is_struct_ty, round_up, struct_id_of, struct_ptr_depth,
-    struct_ty_for,
+    UNSIGNED_BIT, is_decl_modifier, is_pointer_ty, is_struct_ty, round_up, struct_id_of,
+    struct_ptr_depth, struct_ty_for,
 };
 use super::{Compiler, StructDef, StructField};
 
@@ -423,16 +423,19 @@ impl Compiler {
                 }
 
                 let (id_idx, field_ty, mut field_array_size) = self.parse_declarator(field_base)?;
-                // A typedef whose alias is an array contributes its
-                // dimension when the declarator did not already
-                // supply one (`jmp_buf b;` -> `long b[64];`). A
-                // declarator that *did* spell its own dimension
-                // takes precedence. Peek the carrier without
-                // clearing so every field in a comma list sees
-                // the dimension; the carrier is reset when the
-                // next field's base type is parsed.
+                // A typedef whose alias is an array contributes
+                // its dimension when the declarator stayed at the
+                // typedef's element type (`jmp_buf b;` ->
+                // `long b[64];`). A declarator that added a
+                // pointer level (`jmp_buf *p;`) names a pointer
+                // to the element type; the array dimension is
+                // part of the pointee and must not re-apply.
+                // Peek the carrier without clearing so every
+                // field in a comma list sees the dimension; the
+                // carrier is reset when the next field's base
+                // type is parsed.
                 let typedef_dim = self.pending.typedef_base_array_size;
-                if typedef_dim > 0 && field_array_size == 0 {
+                if typedef_dim > 0 && field_array_size == 0 && !is_pointer_ty(field_ty) {
                     field_array_size = typedef_dim;
                 }
                 // Struct fields don't carry the fn-pointer lineage

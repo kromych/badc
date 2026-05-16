@@ -343,6 +343,22 @@ impl Compiler {
             // binding of the same name.
             self.symbols[idx].inner_array_size = 0;
             self.symbols[idx].array_dims = alloc::vec::Vec::new();
+            // C99 6.7.7p3 + 6.7.6.1: a declarator `T *p` whose
+            // base type `T` is an array typedef declares `p` as
+            // a pointer to the typedef's element-array. Record
+            // the inner dimension on the symbol so a subsequent
+            // `p[i]` (which decays to a row pointer) strides by
+            // the row width and a chained `p[i][j]` resolves
+            // correctly. The outer dim is a non-zero placeholder:
+            // only `dims[1..]` participates in the per-level
+            // stride computation, but the multi-dim decay path
+            // bails when `dims[0] == 0`, which is reserved for
+            // declarator-level pointer-to-array shapes.
+            if leading_ptr_count > 0 && self.pending.typedef_base_array_size > 0 {
+                let inner = self.pending.typedef_base_array_size;
+                self.symbols[idx].inner_array_size = inner;
+                self.symbols[idx].array_dims = alloc::vec![1, inner];
+            }
         }
 
         Ok((idx, ty, array_size))

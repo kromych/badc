@@ -184,13 +184,24 @@ impl Compiler {
         // garbage. Read-and-clear so a recursive call into an
         // inner brace doesn't inherit it.
         let inner_dim = core::mem::take(&mut self.pending.init_inner_dim);
+        let target_size = core::mem::take(&mut self.pending.init_target_array_size);
         if self.lex.tk == '"' && (elem_ty & !UNSIGNED_BIT) == Ty::Char as i64 {
             let start_addr = self.lex.ival as usize;
             self.next()?;
             while self.lex.tk == '"' {
                 self.next()?;
             }
-            self.data.push(0);
+            let char_count = self.data.len() - start_addr;
+            // C99 6.7.8p14: a string-literal initializer for a
+            // bounded char array stores the literal's bytes
+            // including the terminating NUL when the array has
+            // room. When the literal is exactly `array_size`
+            // characters long, the NUL is omitted (the array
+            // holds the characters and nothing else).
+            let store_nul = target_size <= 0 || char_count < target_size as usize;
+            if store_nul {
+                self.data.push(0);
+            }
             let elems: Vec<(i64, InitElemReloc)> = self.data[start_addr..]
                 .iter()
                 .map(|&b| (b as i64, InitElemReloc::None))

@@ -104,7 +104,11 @@ impl Compiler {
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             // Array typedef carries its dimension when the
             // declarator did not supply one (C99 6.7.7 p3).
-            let typedef_dim = core::mem::take(&mut self.pending.typedef_base_array_size);
+            // Peek the carrier without clearing so every
+            // declarator in the comma list sees the same
+            // dimension; the outer parse_block / decl-loop
+            // resets the carrier when the declaration ends.
+            let typedef_dim = self.pending.typedef_base_array_size;
             if typedef_dim > 0 && array_size == 0 {
                 array_size = typedef_dim;
             }
@@ -243,6 +247,7 @@ impl Compiler {
                 self.write_array_init_into_data(off, ty, &elements);
             } else if array_size > 0 {
                 self.pending.init_inner_dim = self.symbols[loc_idx].inner_array_size;
+                self.pending.init_target_array_size = array_size;
                 let elements = self.collect_array_initializer(ty)?;
                 let var_offset = self.symbols[loc_idx].val;
                 self.write_array_init_into_data(var_offset, ty, &elements);
@@ -403,6 +408,7 @@ impl Compiler {
                     return Ok(());
                 }
                 self.pending.init_inner_dim = self.symbols[loc_idx].inner_array_size;
+                self.pending.init_target_array_size = declared_array_size;
                 let elements = self.collect_array_initializer(ty)?;
                 let init_count = elements.len();
                 let max = declared_array_size as usize;

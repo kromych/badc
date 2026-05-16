@@ -198,6 +198,47 @@ fn bitop_preserves_operand_width() {
 }
 
 #[test]
+fn string_literal_init_drops_nul_at_bound() {
+    // C99 6.7.8p14: a char-array string-literal initializer
+    // stores its trailing NUL when the array has room; when
+    // the literal's length is exactly the array's bound the
+    // NUL is omitted. Treating the NUL as mandatory rejects
+    // `static const char sigma[16] = "expand 32-byte k";`,
+    // which compiles cleanly on every other C99 toolchain.
+    assert_eq!(run_fixture("string_literal_no_room_for_nul.c"), 0);
+}
+
+#[test]
+fn typedef_array_outer_dim_composes() {
+    // C99 6.7.7p3 (multi-dim composition): when the typedef
+    // base aliases an array, the declarator's brackets supply
+    // the outer dimensions. `typedef i64 gf[16]; gf q[4];`
+    // declares `q` as `i64[4][16]`. sizeof and indexing must
+    // both reflect the composed shape.
+    assert_eq!(run_fixture("typedef_array_outer_dim.c"), 0);
+}
+
+#[test]
+fn typedef_array_param_decays_to_pointer() {
+    // C99 6.7.5.3p7: a parameter whose declared type is an
+    // array is adjusted to a pointer to the element type.
+    // The rule applies when the array shape comes from a
+    // typedef alias, not only from a direct declarator.
+    assert_eq!(run_fixture("typedef_array_param_decay.c"), 0);
+}
+
+#[test]
+fn typedef_array_dim_applies_to_comma_list() {
+    // C99 6.7.7p3: a typedef name names a type. When the
+    // typedef alias is an array, every declarator sharing the
+    // same base type carries that array dimension. Consuming
+    // the carrier on the first declarator and leaving zero for
+    // the rest of the comma list misroutes the trailing
+    // initializer through the scalar parser.
+    assert_eq!(run_fixture("typedef_array_comma_list.c"), 0);
+}
+
+#[test]
 fn bitfield_signed_read_sign_extends() {
     // C99 6.7.2.1p4: a signed bitfield of width N holds values in
     // [-2^(N-1), 2^(N-1)-1]; the read path must sign-extend so the

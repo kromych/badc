@@ -206,6 +206,16 @@ jobs:
         # deflate. Runs the same three build flavours so the
         # bzip2 library bundles correctly through `--ar`.
         run: python demos/bzip2/smoke.py
+      - name: tweetnacl smoke (amalg + TU + archive)
+        # TweetNaCl is the auditable NaCl implementation
+        # (Salsa20, Poly1305, X25519, Ed25519, SHA-512) in
+        # ~700 lines of portable C99. The five-scenario driver
+        # asserts a SHA-512 known-answer, an RFC 8032 Ed25519
+        # vector (deterministic signature byte-for-byte), and
+        # secretbox / box / sign round trips. Runs the same
+        # three build flavours so the multi-TU + archive paths
+        # get exercised across `-O` and no-`-O`.
+        run: python demos/tweetnacl/smoke.py
       - name: chibicc bringup smoke
         # chibicc is the substantial multi-TU exerciser for the
         # cross-TU linker. All nine TUs compile on macOS / Linux,

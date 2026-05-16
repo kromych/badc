@@ -194,7 +194,15 @@ impl Compiler {
                 // needs the `array_dims` chain and is out of
                 // scope here; the single-dim case is the common
                 // one and is what the immediate fix unblocks.
-                let typedef_dim = core::mem::take(&mut self.pending.typedef_base_array_size);
+                //
+                // The dimension belongs to the base type and must
+                // remain visible across every declarator in a
+                // comma list: `typedef i64 gf[16]; static const gf
+                // a, b = { 1 };` -- both `a` and `b` are `i64[16]`.
+                // The carrier is reset at the top of the next
+                // declaration loop iteration, so a peek here is
+                // sufficient.
+                let typedef_dim = self.pending.typedef_base_array_size;
                 if typedef_dim > 0 && array_size == 0 {
                     array_size = typedef_dim;
                 }
@@ -1035,6 +1043,7 @@ impl Compiler {
                                     ));
                                 }
                                 self.pending.init_inner_dim = self.symbols[id_idx].inner_array_size;
+                                self.pending.init_target_array_size = array_size;
                                 let elements = self.collect_array_initializer(ty)?;
                                 if elements.len() > array_size as usize {
                                     return Err(self.compile_err(format!(

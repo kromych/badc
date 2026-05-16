@@ -277,6 +277,23 @@ impl Compiler {
                     array_size *= m;
                 }
             }
+            // C99 6.7.7p3: when the base type is a typedef whose
+            // alias is an array, the typedef's dimensions extend
+            // the declarator's. `typedef i64 gf[16]; gf q[4];`
+            // declares `q` as `i64[4][16]`. The carrier is left
+            // intact so the rest of a comma-separated declarator
+            // list (`gf p[4], q[4];`) still folds the dimension;
+            // it is reset when the next declaration's base type
+            // is parsed. The caller observes `array_size > 0` and
+            // skips its own typedef-dim fold to avoid double
+            // application.
+            if array_size > 0 {
+                let typedef_dim = self.pending.typedef_base_array_size;
+                if typedef_dim > 0 {
+                    dims.push(typedef_dim);
+                    array_size *= typedef_dim;
+                }
+            }
             // Deferred-outer multi-dim arrays (`T arr[][N]`,
             // `T arr[][N][M]`, ...): the outermost dimension's count
             // arrives later, from the initializer. The trailing

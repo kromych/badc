@@ -411,9 +411,11 @@ impl Compiler {
                 // dimension when the declarator did not already
                 // supply one (`jmp_buf b;` -> `long b[64];`). A
                 // declarator that *did* spell its own dimension
-                // takes precedence and the typedef count drops on
-                // the floor; the explicit form is unambiguous.
-                let typedef_dim = core::mem::take(&mut self.pending.typedef_base_array_size);
+                // takes precedence. Peek the carrier without
+                // clearing so every field in a comma list sees
+                // the dimension; the carrier is reset when the
+                // next field's base type is parsed.
+                let typedef_dim = self.pending.typedef_base_array_size;
                 if typedef_dim > 0 && field_array_size == 0 {
                     field_array_size = typedef_dim;
                 }

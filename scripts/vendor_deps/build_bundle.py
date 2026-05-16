@@ -123,6 +123,20 @@ SOURCES = [
         upstream_sha="757507eb022f7af4be63dc9a72b299761181efbb",
         sha_kind="git",
     ),
+    Source(
+        # TweetNaCl -- the auditable NaCl implementation. Upstream
+        # ships only `tweetnacl.c` + `tweetnacl.h` on a static web
+        # page, no tarball, no VCS. Pinned by the sha256 of
+        # `tweetnacl.c` (the canonical content identifier); the
+        # mirror wraps the two files in a single tar.gz so each
+        # demo can fetch with one URL and one sha256.
+        name="tweetnacl",
+        version="20140427",
+        url="https://tweetnacl.cr.yp.to/20140427/tweetnacl.c",
+        ext=".tar.gz",
+        upstream_sha="02e65bc3013ff2168983365e55906bc783c4c7e0a60d8100f17bb303a17175c4",
+        sha_kind="content-sha256",
+    ),
 ]
 
 

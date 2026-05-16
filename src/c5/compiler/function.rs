@@ -104,9 +104,13 @@ impl Compiler {
                 }
             }
             // Optional `[N]` / `[]` after an unnamed parameter
-            // type ('int []' / 'char [16]'). Per C the array
-            // dimension decays to a pointer; we just bump the
-            // pointer level once and discard the size.
+            // type ('int []' / 'char [16]'). Per C99 6.7.5.3p7,
+            // a parameter declared with an array type is
+            // adjusted to a pointer to the element type; we
+            // bump the pointer level once and discard the size.
+            // The same adjustment applies when the base type is
+            // a typedef whose alias is an array (`typedef i64
+            // gf[16]; void f(gf x);` -- `x` is `i64 *`).
             if self.lex.tk == ',' || self.lex.tk == ')' || self.lex.tk == Token::Brak {
                 if self.lex.tk == Token::Brak {
                     self.next()?;
@@ -119,6 +123,9 @@ impl Compiler {
                             self.next()?;
                         }
                     }
+                    ty += Ty::Ptr as i64;
+                }
+                if self.pending.typedef_base_array_size > 0 {
                     ty += Ty::Ptr as i64;
                 }
                 self.ty = ty;
@@ -140,6 +147,16 @@ impl Compiler {
             // type but don't bind any symbol.
             let (param_idx, mut full_ty, array_size) = self.parse_declarator(ty)?;
             if array_size != 0 {
+                full_ty += Ty::Ptr as i64;
+            }
+            // Per C99 6.7.5.3p7, a named array parameter is
+            // adjusted to a pointer to the element type. The
+            // same rule applies when the base type is a typedef
+            // whose alias is an array. Only consult the carrier
+            // when parse_declarator did not already absorb it
+            // into `array_size` (i.e., the declarator carried no
+            // explicit brackets).
+            if array_size == 0 && self.pending.typedef_base_array_size > 0 {
                 full_ty += Ty::Ptr as i64;
             }
             // Fn-pointer lineage: pick up the side-channel that

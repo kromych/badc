@@ -349,9 +349,10 @@ def tcc_build_defines(
         # headers under `<install>/include`. Bring `{B}/win32/include`
         # onto the search path so a tcc binary running out of the
         # `demos/tinycc` source tree finds them without an install
-        # step. `{B}/include` keeps `tccdefs.h` reachable.
+        # step. `{B}/include` keeps `tccdefs.h` reachable. The path
+        # separator is `;` on Windows per `tcc.h:PATHSEP`.
         return (
-            '-DCONFIG_TCC_SYSINCLUDEPATHS="{B}/win32/include:{B}/include"',
+            '-DCONFIG_TCC_SYSINCLUDEPATHS="{B}/win32/include;{B}/include"',
         )
     if multiarch is None:
         return ()

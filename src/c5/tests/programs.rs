@@ -219,6 +219,16 @@ fn typedef_array_outer_dim_composes() {
 }
 
 #[test]
+fn preprocessor_handles_uint64_literal() {
+    // C99 6.10.1p4: `#if` evaluates in (u)intmax_t. A literal
+    // at 2^64-1 must parse, and shifts on it must use logical
+    // semantics so the BearSSL-style 64-bit host probe
+    // `((ULONG_MAX >> 31) >> 31) == 3` evaluates to true on an
+    // LP64 host.
+    assert_eq!(run_fixture("preprocessor_uint64_literal.c"), 0);
+}
+
+#[test]
 fn typedef_struct_carrier_does_not_leak() {
     // C99 6.7.7p3 boundary: a `typedef struct { fe X; ... } ge;`
     // whose final field is an array-typedef must not leak that

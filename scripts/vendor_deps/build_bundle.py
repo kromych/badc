@@ -150,6 +150,17 @@ SOURCES = [
         upstream_sha="bc1ca30b1b2654e4e7daf2492c0d204200e55137f23fda6b7142fd7d523bd6b4",
         sha_kind="tarball-sha256",
     ),
+    Source(
+        # BearSSL -- full TLS 1.0-1.2 stack in portable C99. The
+        # vendored archive is the upstream `bearssl-0.6.tar.gz`;
+        # the demo extracts a focused hash / MAC / KDF subset.
+        name="bearssl",
+        version="0.6",
+        url="https://bearssl.org/bearssl-0.6.tar.gz",
+        ext=".tar.gz",
+        upstream_sha="6705bba1714961b41a728dfc5debbe348d2966c117649392f8c8139efc83ff14",
+        sha_kind="tarball-sha256",
+    ),
 ]
 
 

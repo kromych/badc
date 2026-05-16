@@ -485,16 +485,26 @@ impl Compiler {
             return Ok((addr, InitElemReloc::Data(None)));
         }
         if self.lex.tk == Token::AndOp {
-            // `&global` -- address-of-global pointer init.
+            // `&global` or `&func` -- address-of init. C99
+            // 6.3.2.1p4 makes `&func` equivalent to the bare
+            // function-designator `func` (both yield the
+            // function pointer); the bare-identifier branch
+            // below handles `func` already, so route `&func`
+            // through the same code-reloc path.
             self.next()?;
             if self.lex.tk != Token::Id {
                 return Err(self.compile_err("identifier expected after `&` in initializer"));
             }
             let target_idx = self.lex.curr_id_idx;
             let class = self.symbols[target_idx].class;
+            if class == Token::Fun as i64 {
+                let bc_pc = self.symbols[target_idx].val;
+                self.next()?;
+                return Ok((bc_pc, InitElemReloc::Code(target_idx)));
+            }
             if class != Token::Glo as i64 {
                 return Err(self.compile_err(format!(
-                    "`&{}` -- only addresses of globals are accepted in static initializers",
+                    "`&{}` -- only addresses of globals or functions are accepted in static initializers",
                     self.symbols[target_idx].name
                 )));
             }

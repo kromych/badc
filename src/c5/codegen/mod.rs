@@ -1045,6 +1045,20 @@ fn lower_for(program: &Program, target: Target, options: NativeOptions) -> Resul
     if matches!(target, Target::MacOSAarch64) && !program.tls_data.is_empty() {
         imports.force_include_by_name("exit", program)?;
     }
+    // Linux aarch64 long-double libc returns. AAPCS64 returns
+    // binary128 in v0 (full Q register); c5 stores `long double`
+    // in an 8-byte FP64 slot, so any libc call whose prototype is
+    // `long double f(...)` needs a `__trunctfdf2` follow-up that
+    // truncates v0 to d0 before the c5 accumulator reads it. Force
+    // the binding in if any in-scope binding carries
+    // `returns_long_double`; otherwise the codegen has no import
+    // slot to record a fixup against. No-op when nothing in the
+    // program calls a `long double`-returning libc function.
+    if matches!(target, Target::LinuxAarch64)
+        && imports.imports.iter().any(|i| i.returns_long_double)
+    {
+        imports.force_include_by_name("__trunctfdf2", program)?;
+    }
     let mut build = match target {
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
             aarch64::lower(program, target, options, &imports)?

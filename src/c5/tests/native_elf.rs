@@ -406,6 +406,13 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     // in x1 and the formatter would print 0.0; the FP-aware
     // packer routes it to d0 and the test passes.
     ("printf_float.c", 0),
+    // AAPCS64 returns binary128 in v0; the libc binding metadata
+    // carries `returns_long_double`, and the aarch64 codegen
+    // emits a `__trunctfdf2` call after each such libc return to
+    // narrow v0 down to d0 before it becomes the c5 accumulator.
+    // Without that, `strtold` would land at 0.0 for any power-of-
+    // two value (mantissa = 0, exponent only in v0's high half).
+    ("strtold_aapcs_return.c", 0),
 ];
 
 #[test]

@@ -273,6 +273,23 @@ static inline void __clear_cache(void *begin, void *end) {
 #pragma dylib(libgcc_s, "libgcc_s.so.1")
 #pragma binding(libgcc_s::__clear_cache, "__clear_cache")
 void __clear_cache(void *begin, void *end);
+/* AAPCS64 returns `long double` (IEEE binary128) in v0 as a
+** single 128-bit Q register. c5 stores `long double` in an
+** 8-byte FP64 slot, so callers of glibc functions that return
+** `long double` (strtold, ldexpl, ...) need an explicit
+** truncation pass after the call -- otherwise the c5 accumulator
+** reads the low 64 bits of v0, which are zero for every power-
+** of-two value. The libgcc helper `__trunctfdf2(long double) ->
+** double` performs the IEEE-correct round-to-nearest-even
+** narrowing; the aarch64 codegen emits a `bl __trunctfdf2` after
+** any libc call whose binding carries `returns_long_double`. The
+** declaration stays target-agnostic so that the binding is in
+** scope when the codegen lowers for `LinuxAarch64`, even if the
+** preprocessor ran for a different host target. On x86_64 the
+** call is never emitted; the symbol stays unreferenced and
+** libgcc_s.so.1 is not pulled in as a `DT_NEEDED`. */
+#pragma binding(libgcc_s::__trunctfdf2, "__trunctfdf2")
+double __trunctfdf2(long double a);
 #endif
 
 #ifdef _WIN32

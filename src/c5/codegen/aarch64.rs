@@ -2500,6 +2500,31 @@ fn emit_libc_call(
         use crate::c5::compiler::types as ty_helpers;
         let return_type_tag = imports.imports[import_index].return_type_tag;
         let bare = ty_helpers::strip_unsigned(return_type_tag);
+        let returns_long_double = imports.imports[import_index].returns_long_double;
+        // AAPCS64 returns `long double` as IEEE binary128 in v0
+        // (full 128-bit Q register). c5 stores `long double` in
+        // an 8-byte FP64 slot, so any libc function whose
+        // prototype is `long double f(...)` needs a truncation
+        // pass before the value becomes the c5 accumulator. Emit
+        // a `bl __trunctfdf2` here -- the libgcc helper takes
+        // binary128 in v0 (already there from the libc call) and
+        // returns FP64 in d0. The fmov below then copies d0 to
+        // x19 as usual. Only fires on `Target::LinuxAarch64`; the
+        // macOS / Windows AArch64 ABIs alias `long double` to
+        // `double`, so v0 is already FP64 on the way out.
+        if returns_long_double && target == super::Target::LinuxAarch64 {
+            let trunc_idx = imports
+                .imports
+                .iter()
+                .position(|i| i.local_name == "__trunctfdf2")
+                .ok_or_else(|| {
+                    C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        "native codegen: `returns_long_double` libc call on \
+                         LinuxAarch64 but `__trunctfdf2` was not force-included",
+                    ))
+                })?;
+            emit_got_call(code, plt_call_fixups, trunc_idx);
+        }
         // FP-returning libc fns hand the result back in d0 on
         // AAPCS64. The integer path below routes x0 -> x19 and
         // would leave the c5 accumulator holding whatever junk

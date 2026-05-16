@@ -76,6 +76,14 @@ impl Compiler {
 
         self.next()?; // consume `{`
 
+        // Save the outer typedef-array carrier so a `typedef
+        // struct { fe X; ... } ge;` body that ends with an
+        // array-typedef field does not leak that dimension into
+        // the outer declarator binding of `ge`. Restored just
+        // before this function returns.
+        let saved_typedef_base_array_size = self.pending.typedef_base_array_size;
+        self.pending.typedef_base_array_size = 0;
+
         let mut offset = 0usize;
         // Running max field alignment for the aggregate. Each
         // non-bitfield field bumps this if its natural alignment
@@ -572,6 +580,7 @@ impl Compiler {
             self.next()?;
         }
         self.next()?; // consume `}`
+        self.pending.typedef_base_array_size = saved_typedef_base_array_size;
 
         // Cap struct alignment at 8 -- the rest of the IR slots
         // 8-wide and never asks for stricter alignment, so going

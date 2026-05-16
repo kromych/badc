@@ -219,6 +219,17 @@ fn typedef_array_outer_dim_composes() {
 }
 
 #[test]
+fn typedef_struct_carrier_does_not_leak() {
+    // C99 6.7.7p3 boundary: a `typedef struct { fe X; ... } ge;`
+    // whose final field is an array-typedef must not leak that
+    // dimension into the outer `ge` binding. Without the
+    // save/restore of `typedef_base_array_size` around the
+    // aggregate body, `ge *p` is misclassified and `p->X`
+    // rejects the operand as not a single-level struct pointer.
+    assert_eq!(run_fixture("typedef_struct_carrier_reset.c"), 0);
+}
+
+#[test]
 fn typedef_array_param_decays_to_pointer() {
     // C99 6.7.5.3p7: a parameter whose declared type is an
     // array is adjusted to a pointer to the element type.

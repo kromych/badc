@@ -137,6 +137,19 @@ SOURCES = [
         upstream_sha="02e65bc3013ff2168983365e55906bc783c4c7e0a60d8100f17bb303a17175c4",
         sha_kind="content-sha256",
     ),
+    Source(
+        # MonoCypher -- modern auditable crypto in two files (plus
+        # an optional SHA-512 + RFC 8032 Ed25519 module). The
+        # upstream sha is the sha256 of the released tarball
+        # itself (github does not expose a stable commit sha for
+        # the tag download).
+        name="monocypher",
+        version="4.0.2",
+        url="https://github.com/LoupVaillant/Monocypher/archive/refs/tags/4.0.2.tar.gz",
+        ext=".tar.gz",
+        upstream_sha="bc1ca30b1b2654e4e7daf2492c0d204200e55137f23fda6b7142fd7d523bd6b4",
+        sha_kind="tarball-sha256",
+    ),
 ]
 
 

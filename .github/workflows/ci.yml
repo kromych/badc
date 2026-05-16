@@ -216,6 +216,15 @@ jobs:
         # three build flavours so the multi-TU + archive paths
         # get exercised across `-O` and no-`-O`.
         run: python demos/tweetnacl/smoke.py
+      - name: monocypher smoke (amalg + TU + archive)
+        # MonoCypher is a modern auditable crypto library:
+        # Chacha20-Poly1305 AEAD, BLAKE2b, X25519, optional
+        # SHA-512 + RFC 8032 Ed25519. Five scenarios:
+        # SHA-512(`abc`), BLAKE2b(`abc`), RFC 8032 Ed25519
+        # vector 1 (sign + verify), AEAD round trip, X25519
+        # Diffie-Hellman. Same build flavour matrix as the
+        # other library demos.
+        run: python demos/monocypher/smoke.py
       - name: chibicc bringup smoke
         # chibicc is the substantial multi-TU exerciser for the
         # cross-TU linker. All nine TUs compile on macOS / Linux,

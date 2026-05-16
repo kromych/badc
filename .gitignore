@@ -62,6 +62,8 @@ demos/monocypher/*
 # const-array aliasing fix tracked separately.
 demos/bearssl/*
 !demos/bearssl/setup.py
+!demos/bearssl/smoke.py
+!demos/bearssl/smoke_main.c
 !demos/bearssl/README.md
 # stb -- a collection of single-file public-domain headers.
 # `setup.py` pulls the upstream archive from the vendor-deps

@@ -33,11 +33,31 @@ const unsigned int IV_B[8] = {
     0x510E527Fu, 0x9B05688Cu, 0x1F83D9ABu, 0x5BE0CD19u
 };
 
+// Same shape but for a non-array global: a previous extern-only
+// decl of a struct global allocates `sizeof(T)` bytes at
+// `sym.val`; code emitted in the same TU that references
+// `&v` (e.g. another function's body) bakes that offset in.
+// The defining `T v = { ... }` MUST therefore reuse that
+// storage so the baked-in references read the initialised
+// bytes -- a fresh allocation would leave the original offset
+// pointing at zeros.
+typedef struct vtbl { unsigned int desc; void *init; } vtbl;
+extern const vtbl V;
+const vtbl V = { 0xA5A5A5A5u, (void *)0xDEADBEEFu };
+static const vtbl *peek_via_extern(void) { return &V; }
+
 int main(void) {
     if (IV_A == IV_B)           return 1;
     if (IV_A[0] != 0xC1059ED8u) return 2;
     if (IV_B[0] != 0x6A09E667u) return 3;
     if (IV_A[7] != 0xBEFA4FA4u) return 4;
     if (IV_B[7] != 0x5BE0CD19u) return 5;
+
+    // `peek_via_extern` was parsed before the defining `V` was
+    // seen, so its body references the extern's offset. The
+    // initialised bytes must land at the same offset.
+    if (peek_via_extern() != &V)            return 6;
+    if (peek_via_extern()->desc != 0xA5A5A5A5u) return 7;
+    if (peek_via_extern()->init != (void *)0xDEADBEEFu) return 8;
     return 0;
 }

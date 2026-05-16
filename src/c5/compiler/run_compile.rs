@@ -326,22 +326,32 @@ impl Compiler {
                 // `T x;` (no `=`, no `extern`) becomes the defining
                 // declaration when re-declared, optionally with an
                 // initializer this time. Function-shaped re-decls
-                // never go through this path. An earlier extern-only
-                // declaration (`extern T x;` / `extern T x[];`) is
-                // a separate case: storage was not allocated and
-                // `sym.val` is the default `0`, so a tentative-style
-                // merge would alias every following defining decl
-                // to the first 8 bytes of the data segment. Track
-                // it separately so the duplicate-decl check passes
-                // (extern + def is legal) while the storage path
-                // below allocates fresh bytes for the definition.
+                // never go through this path.
+                //
+                // An earlier extern-only declaration is split into
+                // two sub-cases by whether storage was allocated:
+                //
+                //   * `extern T x;` / `extern const T x;` -- the
+                //     extern code path allocated `sizeof(T)` bytes
+                //     at `sym.val`. Any code already emitted that
+                //     refers to `&x` has that offset baked in.
+                //     Reuse the storage when the definition lands
+                //     so later refs see the same offset.
+                //
+                //   * `extern T x[];` -- deferred-size, no storage,
+                //     `defined_here == false`. A reuse would write
+                //     the initializer at `data[0..N]` and alias
+                //     every following defining decl. Allocate
+                //     fresh.
                 let was_extern_redecl = self.symbols[id_idx].class == Token::Glo as i64
                     && !self.symbols[id_idx].has_initializer
                     && self.symbols[id_idx].is_extern_decl
+                    && !self.symbols[id_idx].defined_here
                     && self.lex.tk != '(';
                 let was_tentative_glo = self.symbols[id_idx].class == Token::Glo as i64
                     && !self.symbols[id_idx].has_initializer
-                    && !self.symbols[id_idx].is_extern_decl
+                    && (!self.symbols[id_idx].is_extern_decl
+                        || self.symbols[id_idx].defined_here)
                     && self.lex.tk != '(';
                 if self.symbols[id_idx].class != 0
                     && !was_sys

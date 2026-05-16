@@ -225,6 +225,14 @@ jobs:
         # Diffie-Hellman. Same build flavour matrix as the
         # other library demos.
         run: python demos/monocypher/smoke.py
+      - name: bearssl smoke (amalg + TU + archive)
+        # BearSSL focused subset: SHA-256 / SHA-224 hash core,
+        # HMAC, HKDF. Four scenarios pin published vectors
+        # (FIPS 180-2, RFC 4231, RFC 5869). The TLS record
+        # layer, X.509 minimal validator, EC primitives, and
+        # AES hardware variants are tracked as later
+        # milestones.
+        run: python demos/bearssl/smoke.py
       - name: chibicc bringup smoke
         # chibicc is the substantial multi-TU exerciser for the
         # cross-TU linker. All nine TUs compile on macOS / Linux,

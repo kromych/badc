@@ -476,6 +476,8 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     // Windows x86_64 alignment of `_setjmp`: the header's macro
     // wrapper must align the env pointer up to 16 bytes so the
     // `movdqa` saves of xmm6..xmm15 don't AV.
+    ("setjmp_basic_stack.c", 0),
+    ("setjmp_longjmp.c", 0),
     ("setjmp_misaligned.c", 0),
 ];
 

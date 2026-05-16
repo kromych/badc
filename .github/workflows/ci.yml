@@ -235,6 +235,14 @@ jobs:
         # DRBGs, the TLS PRF, ChaCha20 and Poly1305. Slow
         # AES / DES KAT loops are tracked under TODO.
         run: python demos/bearssl/smoke.py
+      - name: lua smoke (multi-TU + upstream test suite)
+        # Vendored Lua 5.5.0 sources compile + multi-TU link
+        # through badc on every supported lane, and a curated
+        # subset of the upstream `lua-tests` (bitwise / closures
+        # / coroutines / math / pattern / sort / string / table
+        # / utf8 / vararg paths) runs against the produced
+        # interpreter at both -O and noO.
+        run: python demos/lua/smoke.py
       - name: chibicc bringup smoke
         # chibicc is the substantial multi-TU exerciser for the
         # cross-TU linker. All nine TUs compile on macOS / Linux,

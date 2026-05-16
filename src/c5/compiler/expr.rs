@@ -92,6 +92,56 @@ impl Cmp {
 }
 
 impl Compiler {
+    /// Pick the C99 6.4.4.1p5 type of an integer literal whose value
+    /// is `ival`, honouring the lexer-recorded `u`/`l`/`ll` suffix.
+    ///
+    /// No suffix: the first of `int`, `long`, `long long` whose
+    /// range holds the magnitude. A value above INT_MAX must not
+    /// stay at `int`, or the post-binop mask in `convert.rs`
+    /// truncates `INT64_MAX - 1` back to 32 bits.
+    /// With `u`/`U`: same hierarchy in the unsigned variants.
+    /// With `l`/`L` / `ll`/`LL`: floor at the named width and let
+    /// the magnitude bump further as needed.
+    fn literal_auto_promoted_type(&self, ival: i64) -> i64 {
+        let suffix_long = self.lex.int_suffix_long;
+        let is_unsigned = self.lex.int_suffix_unsigned;
+        let int_size = self.size_of_type(Ty::Int as i64);
+        let long_size = self.size_of_type(Ty::Long as i64);
+        let mag = (ival as i128).unsigned_abs();
+        let fits = |size_bytes: usize, signed: bool| -> bool {
+            let bits = (size_bytes as u32) * 8;
+            if signed {
+                if bits >= 128 {
+                    true
+                } else {
+                    mag <= (1u128 << (bits - 1))
+                }
+            } else if bits >= 128 {
+                true
+            } else if bits == 0 {
+                false
+            } else {
+                mag <= ((1u128 << bits) - 1u128)
+            }
+        };
+        let mut rank: u8 = suffix_long;
+        if rank < 1 && (!fits(int_size, !is_unsigned)) {
+            rank = 1;
+        }
+        if rank < 2 && (!fits(long_size, !is_unsigned)) {
+            rank = 2;
+        }
+        let mut ty = match rank {
+            2 => Ty::LongLong as i64,
+            1 => Ty::Long as i64,
+            _ => Ty::Int as i64,
+        };
+        if is_unsigned {
+            ty |= UNSIGNED_BIT;
+        }
+        ty
+    }
+
     pub(super) fn expr(&mut self, lev: i64) -> Result<(), C5Error> {
         let mut t: i64;
 
@@ -99,21 +149,8 @@ impl Compiler {
             return Err(self.compile_err("unexpected eof in expression"));
         } else if self.lex.tk == Token::Num {
             self.emit_imm(self.lex.ival);
-            // C99 6.4.4.1 paragraph 5: pick the literal's type from
-            // the suffix shape the lexer recorded. Two `l`/`L`
-            // letters force long-long, one forces long, none stays
-            // at int. The `u`/`U` modifier flips signedness on the
-            // chosen rank.
-            let mut lit_ty = match self.lex.int_suffix_long {
-                2 => Ty::LongLong as i64,
-                1 => Ty::Long as i64,
-                _ => Ty::Int as i64,
-            };
-            if self.lex.int_suffix_unsigned {
-                lit_ty |= UNSIGNED_BIT;
-            }
+            self.ty = self.literal_auto_promoted_type(self.lex.ival);
             self.next()?;
-            self.ty = lit_ty;
         } else if self.lex.tk == Token::FloatNum {
             // The lexer parsed `1.5` etc. into f64 and stored
             // `f64::to_bits()` cast to i64 in `ival`. The byte
@@ -1063,9 +1100,18 @@ impl Compiler {
             // to the parsed f64 bit pattern, not a sign flip on the
             // integer-shaped operand.
             if self.lex.tk == Token::Num {
-                self.emit_imm(-self.lex.ival);
+                let val = self.lex.ival;
+                self.emit_imm(val.wrapping_neg());
+                // C99 6.5.3.3p3: unary `-` returns the integer-
+                // promoted operand type. The literal's type comes
+                // from C99 6.4.4.1p5 (first of int / long / long
+                // long that holds the magnitude), so a value past
+                // INT_MAX must not stay at `int` here -- otherwise
+                // the post-Add/Sub mask in `convert.rs` truncates
+                // a downstream `-MAX - 1` back to 32 bits and
+                // yields 0 instead of `INT64_MIN`.
+                self.ty = self.literal_auto_promoted_type(val);
                 self.next()?;
-                self.ty = Ty::Int as i64;
             } else {
                 self.expr(Token::Inc as i64)?;
                 if is_floating_scalar(self.ty) {

@@ -398,6 +398,17 @@ fn parenthesized_function_declarator() {
 }
 
 #[test]
+fn large_int_literal_auto_promotes() {
+    // C99 6.4.4.1 paragraph 5: an unsuffixed decimal integer
+    // literal picks the first of `int`, `long`, `long long`
+    // that can hold its value. Leaving a value past INT_MAX at
+    // `int` forces the post-Add/Sub mask in the usual-arith
+    // path to truncate `INT64_MAX - 1` to -2 and
+    // `-LLONG_MAX - 1` to 0.
+    assert_eq!(run_fixture("large_int_literal_auto_promotes.c"), 0);
+}
+
+#[test]
 fn sizeof_threads_through_malloc_write_and_return() {
     // sizeof(struct Packet) used in three positions in one program:
     // malloc size, write count, and the function's return value. Tests

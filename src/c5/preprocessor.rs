@@ -3235,9 +3235,12 @@ impl<'a> IfExprParser<'a> {
         let (digits, raw_radix) = if radix == 10 {
             (body, 10u32)
         } else if radix == 16 {
-            (body.trim_start_matches("0x").trim_start_matches("0X"), 16u32)
+            (
+                body.trim_start_matches("0x").trim_start_matches("0X"),
+                16u32,
+            )
         } else {
-            (body.trim_start_matches('0'), radix as u32)
+            (body.trim_start_matches('0'), radix)
         };
         let v = if digits.is_empty() {
             Ok(0i64)

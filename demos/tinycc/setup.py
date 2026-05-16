@@ -258,29 +258,30 @@ def main(argv: list[str] | None = None) -> int:
     )
     log(f"wrote -- {args_storage} (AArch64 args storage)")
 
-    # Temporary instrumentation: log val/addr/off at every
-    # R_AARCH64_ADR_PREL_PG_HI21 relocation site. The gen2-self
-    # path encodes a wrong imm21 for these (bit 20 of `off` is
-    # set when it should not be), but the standalone encoding
-    # expression compiles correctly under badc on macOS arm64.
-    # The instrumentation captures the actual runtime
-    # arguments inside stage1's relocate() so the wrong-bit
-    # source becomes obvious. Remove once the c5-side codegen
-    # bug is localized.
-    arm64_link = tinycc_dir / "arm64-link.c"
-    text = arm64_link.read_text()
-    needle = "        case R_AARCH64_ADR_PREL_PG_HI21: {\n            uint64_t off = (val >> 12) - (addr >> 12);\n"
+    # Temporary instrumentation: at the relocate_syms `+=`
+    # site, dump sym->st_value before and after, plus the
+    # section's sh_addr and sh_num. The gen2-self path produces
+    # truncated `val` (upper 32 bits zero) for .data symbols
+    # only -- this trace pins whether the truncation is in the
+    # section base or in the `+=` itself.
+    tccelf = tinycc_dir / "tccelf.c"
+    text = tccelf.read_text()
+    needle = "            sym->st_value += s1->sections[sym->st_shndx]->sh_addr;\n"
     if needle in text:
         replacement = (
-            "        case R_AARCH64_ADR_PREL_PG_HI21: {\n"
-            "            uint64_t off = (val >> 12) - (addr >> 12);\n"
-            "            fprintf(stderr,\n"
-            "                \"[ADR21] val=0x%llx addr=0x%llx off=0x%llx ptr_word=0x%lx\\n\",\n"
-            "                (unsigned long long)val, (unsigned long long)addr,\n"
-            "                (unsigned long long)off, (unsigned long)read32le(ptr));\n"
+            "            {\n"
+            "                addr_t pre = sym->st_value;\n"
+            "                addr_t base = s1->sections[sym->st_shndx]->sh_addr;\n"
+            "                sym->st_value += base;\n"
+            "                fprintf(stderr,\n"
+            "                    \"[SYMV] shndx=%d pre=0x%llx base=0x%llx post=0x%llx\\n\",\n"
+            "                    (int)sym->st_shndx,\n"
+            "                    (unsigned long long)pre, (unsigned long long)base,\n"
+            "                    (unsigned long long)sym->st_value);\n"
+            "            }\n"
         )
-        arm64_link.write_text(text.replace(needle, replacement))
-        log(f"patched -- {arm64_link} (TEMP ADR21 instrumentation)")
+        tccelf.write_text(text.replace(needle, replacement))
+        log(f"patched -- {tccelf} (TEMP SYMV instrumentation)")
     return 0
 
 

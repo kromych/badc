@@ -72,14 +72,15 @@ Current per-lane state:
 | Linux x86_64        | 25/25   | 11/11   | 11/11     | 11/11     | 2/2        | full fixed point                                     |
 | Linux aarch64       | 25/25   | 11/11   | 11/11     | 11/11     | 2/2        | full fixed point                                     |
 | Windows x86_64      | 25/25   | 12/12   | 12/12     | 12/12     | 2/2        | full fixed point                                     |
-| Windows arm64       | 25/25   | 12/12   | skipped   | skipped   | 1/2        | libtcc1 `_environ` dllimport blocker in `crt1.c`     |
+| Windows arm64       | 25/25   | 12/12   | 12/12     | 0/12      | 1/2        | stage1 self-link AV (TODO)                           |
 
-`samples` and `corpus` are strict-gated on every lane;
-`bootstrap`, `gen2-self`, and `functional` are strict-gated on
-the four lanes that reach them. The remaining Windows arm64
-bootstrap blocker is the upstream tinycc `_environ`-missing-
-`__declspec(dllimport)` mismatch in `crt1.c` -- tracked as a
-TODO.
+`samples` / `corpus` / `bootstrap` are strict-gated on every
+lane. `gen2-self` and `functional` are strict-gated on the four
+POSIX lanes; on Windows arm64 the stage1 self-link path AVs at
+runtime (the gen3 objects are emitted byte-identical, but the
+binary linked by stage1 itself crashes on entry). Tracked as a
+TODO -- localize the AV in stage1's tccpe-derived link runtime
+on Windows arm64.
 
 Already-closed gaps that the bringup surfaced:
 

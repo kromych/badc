@@ -219,6 +219,36 @@ fn typedef_array_outer_dim_composes() {
 }
 
 #[test]
+fn local_struct_array_brace_init_works() {
+    // C99 6.7.8p18 + 6.7.8p13: a local `T xs[N] = { {...}, {...} }`
+    // array initializer must fan out into per-element field
+    // stores. Constant-folded elements stage in the data segment
+    // and Mcpy into the slot; non-constant elements (taking the
+    // address of another local etc.) emit per-field runtime
+    // stores into `&xs[i] + field.offset`.
+    assert_eq!(run_fixture("local_struct_array_brace_init.c"), 0);
+}
+
+#[test]
+fn static_init_accepts_paren_cast_of_string() {
+    // C99 6.7.8: a static initializer for a pointer slot can
+    // use the cast-of-string-literal idiom
+    // `((const T *)"...")`. The integer constant-expression
+    // path would drop the data relocation; the init parser
+    // must recognise the shape and route through the
+    // string-literal branch so the slot is patched at load.
+    assert_eq!(run_fixture("static_init_paren_cast_string.c"), 0);
+}
+
+#[test]
+fn static_init_folds_offsetof() {
+    // C99 6.6 + 7.19: the standard `offsetof(T, m)` macro
+    // expands to a constant arithmetic chain that must fold
+    // at translation time when used as an initializer.
+    assert_eq!(run_fixture("static_init_offsetof.c"), 0);
+}
+
+#[test]
 fn static_inline_function_compiles_and_runs() {
     // C99 6.7.4: a `static inline` function at file scope has
     // internal linkage; c5 treats `inline` as a no-op modifier

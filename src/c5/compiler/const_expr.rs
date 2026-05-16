@@ -413,7 +413,7 @@ impl Compiler {
         Ok(left)
     }
 
-    fn parse_const_expr_unary_val(&mut self) -> Result<ConstVal, C5Error> {
+    pub(super) fn parse_const_expr_unary_val(&mut self) -> Result<ConstVal, C5Error> {
         if self.lex.tk == Token::SubOp {
             self.next()?;
             return Ok(match self.parse_const_expr_unary_val()? {
@@ -646,6 +646,21 @@ impl Compiler {
             let v = self.lex.ival;
             self.next()?;
             return Ok(ConstVal::Int(v));
+        }
+        if self.lex.tk == '"' {
+            // String literal in a constant expression -- evaluates
+            // to the address of the literal's first byte in the
+            // data segment. Adjacent literals concatenate per
+            // C99 6.4.5p5. Used by static initializers that
+            // subtract pointer offsets like
+            // `(char *)"..." - (char *)0`.
+            let addr = self.lex.ival;
+            self.next()?;
+            while self.lex.tk == '"' {
+                self.next()?;
+            }
+            self.data.push(0);
+            return Ok(ConstVal::Int(addr));
         }
         if self.lex.tk == Token::FloatNum {
             // Floating literal -- the lexer staged the f64 bit

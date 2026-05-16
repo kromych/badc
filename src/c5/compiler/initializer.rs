@@ -469,8 +469,49 @@ impl Compiler {
                 }
                 return Ok((v.to_bits() as i64, InitElemReloc::Float64Bits));
             }
+            // Nested cast around a string literal:
+            // `((const T *)"...")` is a common header idiom for
+            // building a pointer-typed constant from a string
+            // literal. The outer `(` isn't a cast start, but the
+            // inner one is, and the cast wraps a string literal
+            // -- so the result must carry a Data reloc. The
+            // integer evaluator would drop the reloc and bake
+            // the parse-time data offset into the slot. Peek for
+            // the exact shape `(<type-tokens>*) "..."` before
+            // routing through the recursive primary parser.
+            if self.lex.tk == '(' {
+                let peek_snap = self.lex.snapshot();
+                self.next()?; // consume inner `(`
+                let inner_is_cast = self.lex_is_type_start();
+                let mut is_cast_of_string = false;
+                if inner_is_cast {
+                    let _ = self.parse_decl_base_type()?;
+                    while self.lex.tk == Token::MulOp || self.lex.tk == Token::TypeQual {
+                        self.next()?;
+                    }
+                    if self.lex.tk == ')' {
+                        self.next()?;
+                        is_cast_of_string = self.lex.tk == '"';
+                    }
+                }
+                self.lex.restore(peek_snap);
+                if is_cast_of_string {
+                    let (value, reloc) = self.parse_constant_init_value()?;
+                    if self.lex.tk != ')' {
+                        return Err(
+                            self.compile_err("close paren expected in initializer"),
+                        );
+                    }
+                    self.next()?;
+                    return Ok((value, reloc));
+                }
+            }
             // Rewind so the integer evaluator below absorbs the
-            // whole `(expr) op rhs` chain as one expression.
+            // whole `(expr) op rhs` chain as one expression. The
+            // string-literal and offsetof primaries are picked up
+            // through `parse_const_expr_primary_val`, so a static
+            // initializer can use `((char *)"...")` and
+            // `&((T *)0)->field` shapes inside arithmetic.
             self.lex.restore(snap);
             let v = self.parse_constant_int()?;
             return Ok((v, InitElemReloc::None));
@@ -491,6 +532,16 @@ impl Compiler {
             // function pointer); the bare-identifier branch
             // below handles `func` already, so route `&func`
             // through the same code-reloc path.
+            //
+            // `&((T *)<base>)->field` is the GCC offsetof macro
+            // expansion. Hand the whole expression off to the
+            // integer constant-expression evaluator so the
+            // surrounding cast / subtraction chain folds with
+            // the offsetof in one pass.
+            if self.lex.peek_after_whitespace(b'(') {
+                let v = self.parse_constant_int()?;
+                return Ok((v, InitElemReloc::None));
+            }
             self.next()?;
             if self.lex.tk != Token::Id {
                 return Err(self.compile_err("identifier expected after `&` in initializer"));

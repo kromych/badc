@@ -389,6 +389,105 @@ impl Compiler {
             let local_val = self.symbols[loc_idx].val;
             if declared_array_size > 0 {
                 let var_name = self.symbols[loc_idx].name.clone();
+                // Known-size local array of structs:
+                // `struct T xs[N] = { {...}, ... };`. C99 6.7.8p18
+                // lets each element be a brace-enclosed
+                // initializer; the `collect_array_initializer`
+                // path handles scalar / string elements, not
+                // nested struct braces. Stage each element's
+                // bytes in `self.data` and Mcpy the block into
+                // the local slot.
+                if is_struct_ty(ty)
+                    && struct_ptr_depth(ty) == 0
+                    && self.lex.tk == '{'
+                {
+                    let elem_size = self.size_of_type(ty);
+                    let sid = struct_id_of(ty);
+                    // Pre-scan each element's brace list: if any
+                    // value isn't a compile-time constant, take
+                    // the per-field runtime store path. Mirrors
+                    // the single-struct branch below.
+                    // The struct-init scan walks balanced braces
+                    // with a depth counter, so a `{ {...}, {...} }`
+                    // outer brace list works the same way as a
+                    // single-struct `{ ... }` initializer.
+                    let needs_runtime = self.struct_init_needs_runtime()?;
+                    let staged_off = self.data.len();
+                    for _ in 0..(declared_array_size as usize * elem_size) {
+                        self.data.push(0);
+                    }
+                    if needs_runtime {
+                        // Zero the entire array slot in one Mcpy
+                        // (the "omitted entries are zero" rule of
+                        // 6.7.8p19), then walk the brace list and
+                        // emit per-element runtime stores into
+                        // `&local + i*elem_size + field.offset`.
+                        self.emit_local_array_init(
+                            local_val,
+                            staged_off,
+                            elem_size * declared_array_size as usize,
+                        );
+                        self.next()?; // consume outer `{`
+                        let mut i: i64 = 0;
+                        while self.lex.tk != '}' {
+                            if i >= declared_array_size {
+                                return Err(self.compile_err(format!(
+                                    "too many initializers for array `{}` ({} > {})",
+                                    var_name,
+                                    i + 1,
+                                    declared_array_size
+                                )));
+                            }
+                            if self.lex.tk != '{' {
+                                return Err(self.compile_err(
+                                    "struct array element must be a brace list",
+                                ));
+                            }
+                            self.emit_struct_local_init_runtime_at(
+                                local_val,
+                                i * elem_size as i64,
+                                sid,
+                            )?;
+                            i += 1;
+                            if self.lex.tk == ',' {
+                                self.next()?;
+                            }
+                        }
+                        self.next()?; // consume outer `}`
+                        return Ok(());
+                    }
+                    self.next()?; // consume outer `{`
+                    let mut i: i64 = 0;
+                    while self.lex.tk != '}' {
+                        if i >= declared_array_size {
+                            return Err(self.compile_err(format!(
+                                "too many initializers for array `{}` ({} > {})",
+                                var_name,
+                                i + 1,
+                                declared_array_size
+                            )));
+                        }
+                        let here = staged_off as i64 + i * elem_size as i64;
+                        if self.lex.tk == '{' {
+                            self.collect_struct_initializer(sid, here)?;
+                        } else {
+                            return Err(
+                                self.compile_err("struct array element must be a brace list")
+                            );
+                        }
+                        i += 1;
+                        if self.lex.tk == ',' {
+                            self.next()?;
+                        }
+                    }
+                    self.next()?; // consume `}`
+                    self.emit_local_array_init(
+                        local_val,
+                        staged_off,
+                        elem_size * declared_array_size as usize,
+                    );
+                    return Ok(());
+                }
                 // C99 6.7.8 lets auto-storage local arrays carry
                 // initializers with non-constant expressions
                 // ("dynamic initialization"). The pre-scan looks
@@ -640,6 +739,20 @@ impl Compiler {
         local_val: i64,
         sid: usize,
     ) -> Result<(), C5Error> {
+        self.emit_struct_local_init_runtime_at(local_val, 0, sid)
+    }
+
+    /// Same as `emit_struct_local_init_runtime` but writes the
+    /// struct at `&local + extra_offset` rather than at
+    /// `&local`. Used by the struct-array path so each element
+    /// shares a single `local_val` (the array's frame base) and
+    /// the per-element byte offset rides through here.
+    pub(super) fn emit_struct_local_init_runtime_at(
+        &mut self,
+        local_val: i64,
+        extra_offset: i64,
+        sid: usize,
+    ) -> Result<(), C5Error> {
         debug_assert!(self.lex.tk == '{');
         self.next()?; // consume `{`
         let mut pos: usize = 0;
@@ -690,13 +803,17 @@ impl Compiler {
                     "non-constant nested-struct-field initializer not yet supported",
                 ));
             }
-            // Scalar / pointer field. Address = &local + field.offset;
-            // push, evaluate the init expression, store with the
-            // field's natural width.
+            // Scalar / pointer field. Address = &local +
+            // extra_offset + field.offset; push, evaluate the
+            // init expression, store with the field's natural
+            // width. `extra_offset` is the per-element base
+            // offset for struct-array elements (0 for plain
+            // struct locals).
             self.emit_lea(local_val);
-            if field.offset > 0 {
+            let total_offset = extra_offset + field.offset as i64;
+            if total_offset > 0 {
                 self.emit_op(Op::Psh);
-                self.emit_imm(field.offset as i64);
+                self.emit_imm(total_offset);
                 self.emit_op(Op::Add);
             }
             self.emit_op(Op::Psh);

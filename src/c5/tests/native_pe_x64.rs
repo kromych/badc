@@ -473,6 +473,10 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     // round-trip on the main thread is.
     ("thread_local_basic.c", 0),
     ("thread_local_initializer.c", 0),
+    // Windows x86_64 alignment of `_setjmp`: the header's macro
+    // wrapper must align the env pointer up to 16 bytes so the
+    // `movdqa` saves of xmm6..xmm15 don't AV.
+    ("setjmp_misaligned.c", 0),
 ];
 
 #[test]

@@ -832,6 +832,20 @@ def main() -> int:
     if stage1_tcc is None:
         return 1
 
+    # Windows lanes only -- probe whether the badc-built tcc-stage1
+    # binary starts at all before any compile is attempted. Running
+    # `tcc-stage1.exe -v` exercises CRT init + the version-print
+    # path; the exit code distinguishes a PE loader / startup
+    # failure (AV during dispatch) from a per-sample compile bug.
+    if host[0] == "Windows":
+        probe = subprocess.run(
+            [str(stage1_tcc), "-v"], capture_output=True, text=True
+        )
+        print(
+            f"tinycc self-host -- probe (-v): exit={probe.returncode} "
+            f"stdout={probe.stdout.strip()!r} stderr={probe.stderr.strip()!r}"
+        )
+
     matches = 0
     mismatches: list[str] = []
     failures: list[tuple[str, str, str]] = []

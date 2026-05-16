@@ -972,13 +972,20 @@ def main() -> int:
             gen2_tcc = None
             bootstrap_skip = "libtcc1.a build failed"
         else:
-            if host[0] == "Darwin":
+            if host[0] in ("Darwin", "Windows"):
                 # `tcc -c` always writes ELF intermediates regardless
                 # of the target format (libtcc.c sets
                 # `output_format = ELF` on `TCC_OUTPUT_OBJ`); the
-                # Mach-O conversion only happens at link. ld64
-                # cannot consume ELF, so the gen2 binary on macOS
-                # is linked by ref_tcc itself.
+                # PE / Mach-O conversion only happens at link. ld64
+                # cannot consume ELF; mingw ld on Windows accepts an
+                # x86_64 ELF object but mishandles tinycc's PE-side
+                # relocations (`.uw_base` against `.pdata` overflows
+                # the 32-bit displacement) and rejects an AArch64
+                # ELF object outright with the wrong-format
+                # diagnostic. Both shapes link cleanly through
+                # ref_tcc itself, which reads its own ELF
+                # intermediates and emits Mach-O / PE through the
+                # in-process linker.
                 link_cmd = [
                     str(ref_tcc),
                     "-B",
@@ -1215,11 +1222,14 @@ def main() -> int:
                 "-o",
                 str(hello_bin),
             ]
-        elif host[0] == "Darwin":
-            # `tcc -c` emits ELF on every host; on macOS ld64 cannot
-            # consume that, so the hello-world link goes through
-            # `tcc_bin` itself -- it knows how to produce a Mach-O
-            # executable from its own ELF intermediate.
+        elif host[0] in ("Darwin", "Windows"):
+            # `tcc -c` emits ELF on every host; ld64 on macOS and
+            # mingw ld on Windows both mishandle tinycc's ELF
+            # intermediate (the PE side overflows the `.pdata`
+            # `.uw_base` relocation, AArch64 ELF is outright
+            # rejected). Link through `tcc_bin` itself -- it reads
+            # its own ELF intermediate and produces a Mach-O / PE
+            # executable through the in-process linker.
             link_cmd = [
                 str(tcc_bin),
                 "-B",

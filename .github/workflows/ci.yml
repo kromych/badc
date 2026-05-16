@@ -320,18 +320,34 @@ jobs:
           $stage1 = Get-ChildItem demos/tinycc/.self_host/tcc-stage1* | Select-Object -First 1
           if (-not $stage1) { Write-Host 'no tcc-stage1 present'; exit 0 }
           $arch = $env:PROCESSOR_ARCHITECTURE
-          # On x86_64 runner `PROCESSOR_ARCHITECTURE` is `AMD64`; the
-          # matching cdb directory is `x64`. On the ARM64 runner it
-          # is `ARM64` which already matches the directory name.
           $archDir = if ($arch -eq 'AMD64') { 'x64' } else { $arch.ToLower() }
           $cdb = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Debuggers\$archDir\cdb.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $cdb) { Write-Host "no cdb.exe under $archDir, skipping"; exit 0 }
           Write-Host "=== cdb at $($cdb.FullName) ==="
-          $sample = Get-ChildItem demos/tinycc/.self_host/samples/arithmetic.c -ErrorAction SilentlyContinue | Select-Object -First 1
+          $sample = Get-Item demos/tinycc/.self_host/samples/arithmetic.c -ErrorAction SilentlyContinue
           if (-not $sample) { Write-Host 'sample not present'; exit 0 }
-          $bcmd = "g; .lastevent; r; k 20; lm; q"
-          $out = & $cdb.FullName -c $bcmd -G -g -- $stage1.FullName -B demos/tinycc -c $sample.FullName -o "$env:RUNNER_TEMP\arith.o" 2>&1
-          $out | ForEach-Object { Write-Host $_ }
+          $logFile = "$env:RUNNER_TEMP\cdb.log"
+          if (Test-Path $logFile) { Remove-Item $logFile }
+          $bcmd = "g; .lastevent; r; kn 30; lm; qq"
+          $stage1Path = $stage1.FullName
+          $samplePath = $sample.FullName
+          $outO = "$env:RUNNER_TEMP\arith.o"
+          # Run cdb with -logo so the full session transcript lands
+          # in a file. PowerShell's stdout/stderr capture through
+          # the array-assign path swallowed all output last run.
+          $proc = Start-Process -FilePath $cdb.FullName -ArgumentList @(
+              '-logo', $logFile,
+              '-c', $bcmd,
+              '-G', '-g', '--',
+              $stage1Path, '-B', 'demos/tinycc', '-c', $samplePath, '-o', $outO
+          ) -Wait -NoNewWindow -PassThru
+          Write-Host "cdb exit: $($proc.ExitCode)"
+          if (Test-Path $logFile) {
+              Write-Host "=== cdb log ==="
+              Get-Content $logFile | ForEach-Object { Write-Host $_ }
+          } else {
+              Write-Host "no cdb log produced"
+          }
       - name: stb header-only smoke
         # The densest demo: a single TU pulls in six stb_*.h
         # headers (stb_sprintf, stb_perlin, stb_image_write,

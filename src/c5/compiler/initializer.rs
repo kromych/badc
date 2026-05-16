@@ -184,13 +184,24 @@ impl Compiler {
         // garbage. Read-and-clear so a recursive call into an
         // inner brace doesn't inherit it.
         let inner_dim = core::mem::take(&mut self.pending.init_inner_dim);
+        let target_size = core::mem::take(&mut self.pending.init_target_array_size);
         if self.lex.tk == '"' && (elem_ty & !UNSIGNED_BIT) == Ty::Char as i64 {
             let start_addr = self.lex.ival as usize;
             self.next()?;
             while self.lex.tk == '"' {
                 self.next()?;
             }
-            self.data.push(0);
+            let char_count = self.data.len() - start_addr;
+            // C99 6.7.8p14: a string-literal initializer for a
+            // bounded char array stores the literal's bytes
+            // including the terminating NUL when the array has
+            // room. When the literal is exactly `array_size`
+            // characters long, the NUL is omitted (the array
+            // holds the characters and nothing else).
+            let store_nul = target_size <= 0 || char_count < target_size as usize;
+            if store_nul {
+                self.data.push(0);
+            }
             let elems: Vec<(i64, InitElemReloc)> = self.data[start_addr..]
                 .iter()
                 .map(|&b| (b as i64, InitElemReloc::None))
@@ -458,8 +469,47 @@ impl Compiler {
                 }
                 return Ok((v.to_bits() as i64, InitElemReloc::Float64Bits));
             }
+            // Nested cast around a string literal:
+            // `((const T *)"...")` is a common header idiom for
+            // building a pointer-typed constant from a string
+            // literal. The outer `(` isn't a cast start, but the
+            // inner one is, and the cast wraps a string literal
+            // -- so the result must carry a Data reloc. The
+            // integer evaluator would drop the reloc and bake
+            // the parse-time data offset into the slot. Peek for
+            // the exact shape `(<type-tokens>*) "..."` before
+            // routing through the recursive primary parser.
+            if self.lex.tk == '(' {
+                let peek_snap = self.lex.snapshot();
+                self.next()?; // consume inner `(`
+                let inner_is_cast = self.lex_is_type_start();
+                let mut is_cast_of_string = false;
+                if inner_is_cast {
+                    let _ = self.parse_decl_base_type()?;
+                    while self.lex.tk == Token::MulOp || self.lex.tk == Token::TypeQual {
+                        self.next()?;
+                    }
+                    if self.lex.tk == ')' {
+                        self.next()?;
+                        is_cast_of_string = self.lex.tk == '"';
+                    }
+                }
+                self.lex.restore(peek_snap);
+                if is_cast_of_string {
+                    let (value, reloc) = self.parse_constant_init_value()?;
+                    if self.lex.tk != ')' {
+                        return Err(self.compile_err("close paren expected in initializer"));
+                    }
+                    self.next()?;
+                    return Ok((value, reloc));
+                }
+            }
             // Rewind so the integer evaluator below absorbs the
-            // whole `(expr) op rhs` chain as one expression.
+            // whole `(expr) op rhs` chain as one expression. The
+            // string-literal and offsetof primaries are picked up
+            // through `parse_const_expr_primary_val`, so a static
+            // initializer can use `((char *)"...")` and
+            // `&((T *)0)->field` shapes inside arithmetic.
             self.lex.restore(snap);
             let v = self.parse_constant_int()?;
             return Ok((v, InitElemReloc::None));
@@ -474,22 +524,40 @@ impl Compiler {
             return Ok((addr, InitElemReloc::Data(None)));
         }
         if self.lex.tk == Token::AndOp {
-            // `&global` -- address-of-global pointer init.
+            // A static initializer leaf that begins with `&` is
+            // either a relocation-bearing pointer (`&global` or
+            // `&func`, equivalent under C99 6.3.2.1p4) or a
+            // constant arithmetic expression whose value is a
+            // byte offset (the canonical case is the C99 7.19 /
+            // GCC `offsetof` macro expansion
+            // `&((T *)0)->field`). Peek past the `&` to decide:
+            // if the next token is an identifier bound to a Glo
+            // or Fun symbol, take the reloc path; otherwise the
+            // integer constant-expression evaluator folds the
+            // whole expression (including the surrounding casts
+            // and pointer-difference of the offsetof macro).
+            let amp_snap = self.lex.snapshot();
             self.next()?;
-            if self.lex.tk != Token::Id {
-                return Err(self.compile_err("identifier expected after `&` in initializer"));
+            if self.lex.tk == Token::Id {
+                let target_idx = self.lex.curr_id_idx;
+                let class = self.symbols[target_idx].class;
+                if class == Token::Fun as i64 {
+                    let bc_pc = self.symbols[target_idx].val;
+                    self.next()?;
+                    return Ok((bc_pc, InitElemReloc::Code(target_idx)));
+                }
+                if class == Token::Glo as i64 {
+                    let off = self.symbols[target_idx].val;
+                    self.next()?;
+                    return Ok((off, InitElemReloc::Data(Some(target_idx))));
+                }
             }
-            let target_idx = self.lex.curr_id_idx;
-            let class = self.symbols[target_idx].class;
-            if class != Token::Glo as i64 {
-                return Err(self.compile_err(format!(
-                    "`&{}` -- only addresses of globals are accepted in static initializers",
-                    self.symbols[target_idx].name
-                )));
-            }
-            let off = self.symbols[target_idx].val;
-            self.next()?;
-            return Ok((off, InitElemReloc::Data(Some(target_idx))));
+            // Not a relocation-bearing shape -- restore so the
+            // integer evaluator sees the leading `&` and routes
+            // through `parse_const_offsetof`.
+            self.lex.restore(amp_snap);
+            let v = self.parse_constant_int()?;
+            return Ok((v, InitElemReloc::None));
         }
         if self.lex.tk == Token::Id {
             let idx = self.lex.curr_id_idx;

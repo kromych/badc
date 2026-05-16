@@ -28,7 +28,7 @@ use super::super::error::C5Error;
 use super::super::op::Op;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{is_struct_ty, struct_ptr_depth};
+use super::types::{is_pointer_ty, is_struct_ty, struct_ptr_depth};
 
 impl Compiler {
     /// `for (init; cond; step) body`. The body is emitted between the
@@ -317,10 +317,17 @@ impl Compiler {
         }
         while self.lex.tk != ';' {
             let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
-            // C99 6.7.7 paragraph 3: an array typedef carries its
-            // dimension when the declarator did not supply one.
-            let typedef_dim = core::mem::take(&mut self.pending.typedef_base_array_size);
-            if typedef_dim > 0 && array_size == 0 {
+            // C99 6.7.7p3 + 6.7.6.1: an array typedef contributes
+            // its dimension only when the declarator stayed at
+            // the typedef's element type. A `*` in the declarator
+            // names a pointer-to-element-type; the array
+            // dimension is part of the pointee and must not be
+            // re-applied to the declarator. Peek without
+            // clearing so the rest of the comma list keeps the
+            // dimension; the carrier is reset on the next
+            // declaration.
+            let typedef_dim = self.pending.typedef_base_array_size;
+            if typedef_dim > 0 && array_size == 0 && !is_pointer_ty(ty) {
                 array_size = typedef_dim;
             }
             self.ty = ty;

@@ -3012,10 +3012,31 @@ impl<'a> IfExprParser<'a> {
             self.skip_ws();
             if self.eat("<<") {
                 let right = self.parse_addsub()?;
-                left = IfValue::Int(left.as_int() << right.as_int());
+                // Use the wrapping bit-pattern shift so a left
+                // shift past bit 63 doesn't panic. The
+                // preprocessor stores both signed and unsigned
+                // values in `i64` per 6.10.1p4 widest-integer
+                // semantics; left shift on either type is
+                // bit-pattern identical.
+                let shift = (right.as_int() & 63) as u32;
+                let n = (left.as_int() as u64).wrapping_shl(shift) as i64;
+                left = IfValue::Int(n);
             } else if self.eat(">>") {
                 let right = self.parse_addsub()?;
-                left = IfValue::Int(left.as_int() >> right.as_int());
+                // C99 6.5.7p5: the right shift of a signed
+                // negative value is implementation-defined.
+                // c5's preprocessor uses logical (zero-fill)
+                // shift in both modes so that bit-pattern
+                // literals like `ULONG_MAX >> 31` -- where
+                // ULONG_MAX is stored as the wrap of `u64::MAX`
+                // -- yield their unsigned answer rather than
+                // the arithmetic-shift `-1`. The
+                // `((ULONG_MAX >> 31) >> 31) == 3` 64-bit-host
+                // probe shape standard in C library headers
+                // relies on the unsigned interpretation.
+                let shift = (right.as_int() & 63) as u32;
+                let n = (left.as_int() as u64).wrapping_shr(shift) as i64;
+                left = IfValue::Int(n);
             } else {
                 break;
             }
@@ -3203,25 +3224,36 @@ impl<'a> IfExprParser<'a> {
             }
         }
         let body = self.src[start..self.pos].trim_end_matches(['u', 'U', 'l', 'L']);
-        let v = if radix == 10 {
-            body.parse::<i64>()
+        // C99 6.10.1p4: preprocessor expressions evaluate in
+        // (u)intmax_t. A literal that does not fit `i64` (the
+        // signed widest type) but does fit `u64` is parsed
+        // as `u64` and stored as its bit pattern in `i64`.
+        // This handles `ULONG_MAX` / `UINT64_MAX` literals
+        // (e.g. `18446744073709551615`) when they appear in a
+        // `#if` expression on an LP64 host.
+        let (digits, raw_radix) = if radix == 10 {
+            (body, 10u32)
+        } else if radix == 16 {
+            (
+                body.trim_start_matches("0x").trim_start_matches("0X"),
+                16u32,
+            )
         } else {
-            // Strip the "0x" / leading "0" prefix.
-            let stripped = if radix == 16 {
-                body.trim_start_matches("0x").trim_start_matches("0X")
-            } else {
-                body.trim_start_matches('0')
-            };
-            if stripped.is_empty() {
-                Ok(0i64)
-            } else {
-                i64::from_str_radix(stripped, radix)
-            }
+            (body.trim_start_matches('0'), radix)
+        };
+        let v = if digits.is_empty() {
+            Ok(0i64)
+        } else if let Ok(signed) = i64::from_str_radix(digits, raw_radix) {
+            Ok(signed)
+        } else if let Ok(unsigned) = u64::from_str_radix(digits, raw_radix) {
+            Ok(unsigned as i64)
+        } else {
+            Err(())
         };
         let _ = body_start;
         match v {
             Ok(n) => Ok(IfValue::Int(n)),
-            Err(_) => Err(C5Error::Compile(alloc::format!(
+            Err(()) => Err(C5Error::Compile(alloc::format!(
                 "preprocessor: malformed integer literal {body:?} in `#if`",
             ))),
         }

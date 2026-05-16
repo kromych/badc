@@ -19,8 +19,8 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::types::{
-    UNSIGNED_BIT, is_decl_modifier, is_struct_ty, round_up, struct_id_of, struct_ptr_depth,
-    struct_ty_for,
+    UNSIGNED_BIT, is_decl_modifier, is_pointer_ty, is_struct_ty, round_up, struct_id_of,
+    struct_ptr_depth, struct_ty_for,
 };
 use super::{Compiler, StructDef, StructField};
 
@@ -76,6 +76,14 @@ impl Compiler {
 
         self.next()?; // consume `{`
 
+        // Save the outer typedef-array carrier so a `typedef
+        // struct { fe X; ... } ge;` body that ends with an
+        // array-typedef field does not leak that dimension into
+        // the outer declarator binding of `ge`. Restored just
+        // before this function returns.
+        let saved_typedef_base_array_size = self.pending.typedef_base_array_size;
+        self.pending.typedef_base_array_size = 0;
+
         let mut offset = 0usize;
         // Running max field alignment for the aggregate. Each
         // non-bitfield field bumps this if its natural alignment
@@ -96,6 +104,14 @@ impl Compiler {
         let mut bf_unit_size: usize = 0;
         let mut bf_next_bit: u32 = 0;
         while self.lex.tk != '}' {
+            // Reset the typedef-array carrier between field groups
+            // (`jmp_buf env;` then `int code;`). The aggregate
+            // parser has its own inline base-type reader and does
+            // not call `parse_decl_base_type`, so the carrier
+            // would otherwise leak its prior value into the next
+            // group and turn an unrelated scalar field into a
+            // bogus array.
+            self.pending.typedef_base_array_size = 0;
             // Field type prefix: int, char, float, double, or struct Name.
             // Leading qualifiers / int modifiers / function specifiers
             // (`const`, `unsigned`, ...) are no-ops; track if any int
@@ -407,14 +423,19 @@ impl Compiler {
                 }
 
                 let (id_idx, field_ty, mut field_array_size) = self.parse_declarator(field_base)?;
-                // A typedef whose alias is an array contributes its
-                // dimension when the declarator did not already
-                // supply one (`jmp_buf b;` -> `long b[64];`). A
-                // declarator that *did* spell its own dimension
-                // takes precedence and the typedef count drops on
-                // the floor; the explicit form is unambiguous.
-                let typedef_dim = core::mem::take(&mut self.pending.typedef_base_array_size);
-                if typedef_dim > 0 && field_array_size == 0 {
+                // A typedef whose alias is an array contributes
+                // its dimension when the declarator stayed at the
+                // typedef's element type (`jmp_buf b;` ->
+                // `long b[64];`). A declarator that added a
+                // pointer level (`jmp_buf *p;`) names a pointer
+                // to the element type; the array dimension is
+                // part of the pointee and must not re-apply.
+                // Peek the carrier without clearing so every
+                // field in a comma list sees the dimension; the
+                // carrier is reset when the next field's base
+                // type is parsed.
+                let typedef_dim = self.pending.typedef_base_array_size;
+                if typedef_dim > 0 && field_array_size == 0 && !is_pointer_ty(field_ty) {
                     field_array_size = typedef_dim;
                 }
                 // Struct fields don't carry the fn-pointer lineage
@@ -562,6 +583,7 @@ impl Compiler {
             self.next()?;
         }
         self.next()?; // consume `}`
+        self.pending.typedef_base_array_size = saved_typedef_base_array_size;
 
         // Cap struct alignment at 8 -- the rest of the IR slots
         // 8-wide and never asks for stricter alignment, so going

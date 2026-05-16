@@ -212,6 +212,108 @@ fn duplicate_function_definition_fails_link() {
 }
 
 #[test]
+fn static_inline_helper_in_shared_header_links_across_tus() {
+    // C99 6.7.4 + 6.2.2: a `static inline` function at file scope
+    // has internal linkage. A header that defines such a helper
+    // and is included by two TUs creates a private copy of the
+    // body in each TU's object; the linker must therefore see
+    // two distinct internal-linkage symbols, not a duplicate
+    // definition of the same external name.
+    let dir = tempdir("static-inline-multi-tu");
+    write_source(
+        &dir,
+        "h.h",
+        "#ifndef _H\n#define _H\nstatic inline int helper(int x) { return x * 3 + 1; }\n#endif\n",
+    );
+    write_source(
+        &dir,
+        "a.c",
+        "#include \"h.h\"\nint call_a(int x) { return helper(x); }\n",
+    );
+    write_source(
+        &dir,
+        "b.c",
+        "#include \"h.h\"\nint call_b(int x) { return helper(x) + 100; }\n",
+    );
+    write_source(
+        &dir,
+        "main.c",
+        "extern int call_a(int);\nextern int call_b(int);\n\
+         int main(void) {\n\
+         \tint a = call_a(2);\n\
+         \tint b = call_b(2);\n\
+         \treturn (a == 7 && b == 107) ? 0 : 1;\n\
+         }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-I")
+            .arg(&dir)
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("a.c"))
+            .arg(dir.join("b.c"))
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "link multi-TU with static inline header",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "exit code mismatch: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+#[test]
+fn extern_deferred_size_array_decays_in_other_tu() {
+    // C99 6.7.5.2 + 6.2.2: `extern T x[];` declares an array of
+    // unknown size; the defining declaration with the actual size
+    // lives in another TU. The header form is the standard idiom
+    // for cross-TU lookup tables. Within the consuming TU, every
+    // use of `x` must decay to `T *` so `x[i]` and pointer
+    // arithmetic resolve against the defining TU's storage at
+    // link time.
+    let dir = tempdir("extern-deferred-array");
+    write_source(
+        &dir,
+        "table.c",
+        "const unsigned char table[4] = { 10, 20, 30, 40 };\n",
+    );
+    write_source(
+        &dir,
+        "main.c",
+        "extern const unsigned char table[];\n\
+         int main(void) {\n\
+         \tint sum = 0;\n\
+         \tfor (int i = 0; i < 4; i++) sum += table[i];\n\
+         \treturn sum == 100 ? 0 : 1;\n\
+         }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("table.c"))
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "link extern-deferred-array across TUs",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "exit code mismatch: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+#[test]
 fn compile_only_with_minus_o_writes_named_object() {
     let dir = tempdir("co-o");
     let src = write_source(&dir, "foo.c", "int seven() { return 7; }\n");

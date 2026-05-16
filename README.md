@@ -39,6 +39,7 @@ There are various demo's under [`demos`](./demos/):
   It really stresses all of the compiler.
 * `chibicc` - a small C compiler
 * `tinycc` - a cool and small C toolchain
+* `tweetNacCl`, `MonoCypher`, `BearSSL` - cryptography
 
 It can also run the code JIT-ted in-process so no binary is written
 to the disk. That option might be useful for using `badc` to run the

@@ -24,7 +24,8 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::decl_base;
 use super::types::{
-    UNSIGNED_BIT, format_signature, is_decl_modifier, is_struct_ty, struct_id_of, struct_ptr_depth,
+    UNSIGNED_BIT, format_signature, is_decl_modifier, is_pointer_ty, is_struct_ty, struct_id_of,
+    struct_ptr_depth,
 };
 
 impl Compiler {
@@ -194,8 +195,22 @@ impl Compiler {
                 // needs the `array_dims` chain and is out of
                 // scope here; the single-dim case is the common
                 // one and is what the immediate fix unblocks.
-                let typedef_dim = core::mem::take(&mut self.pending.typedef_base_array_size);
-                if typedef_dim > 0 && array_size == 0 {
+                //
+                // The dimension belongs to the base type and must
+                // remain visible across every declarator in a
+                // comma list: `typedef i64 gf[16]; static const gf
+                // a, b = { 1 };` -- both `a` and `b` are `i64[16]`.
+                // The carrier is reset at the top of the next
+                // declaration loop iteration, so a peek here is
+                // sufficient.
+                // A declarator that added pointer levels (`T *p`
+                // for an array typedef `T`) names a pointer to
+                // the typedef's element type; the array dimension
+                // is part of the pointee and must not re-apply to
+                // the declarator (C99 6.7.7p3 + 6.7.6.1). Skip
+                // the carrier in that case.
+                let typedef_dim = self.pending.typedef_base_array_size;
+                if typedef_dim > 0 && array_size == 0 && !is_pointer_ty(ty) {
                     array_size = typedef_dim;
                 }
                 self.ty = ty;
@@ -315,14 +330,40 @@ impl Compiler {
                 let was_fwd_fun = self.symbols[id_idx].class == Token::Fun as i64
                     && (self.lex.tk == '(' || preconsumed_params.is_some());
                 // Tentative-definition merge (C11 6.9.2): a prior
-                // `static T x;` (no `=`) becomes the defining
+                // `T x;` (no `=`, no `extern`) becomes the defining
                 // declaration when re-declared, optionally with an
                 // initializer this time. Function-shaped re-decls
                 // never go through this path.
+                //
+                // An earlier extern-only declaration is split into
+                // two sub-cases by whether storage was allocated:
+                //
+                //   * `extern T x;` / `extern const T x;` -- the
+                //     extern code path allocated `sizeof(T)` bytes
+                //     at `sym.val`. Any code already emitted that
+                //     refers to `&x` has that offset baked in.
+                //     Reuse the storage when the definition lands
+                //     so later refs see the same offset.
+                //
+                //   * `extern T x[];` -- deferred-size, no storage,
+                //     `defined_here == false`. A reuse would write
+                //     the initializer at `data[0..N]` and alias
+                //     every following defining decl. Allocate
+                //     fresh.
+                let was_extern_redecl = self.symbols[id_idx].class == Token::Glo as i64
+                    && !self.symbols[id_idx].has_initializer
+                    && self.symbols[id_idx].is_extern_decl
+                    && !self.symbols[id_idx].defined_here
+                    && self.lex.tk != '(';
                 let was_tentative_glo = self.symbols[id_idx].class == Token::Glo as i64
                     && !self.symbols[id_idx].has_initializer
+                    && (!self.symbols[id_idx].is_extern_decl || self.symbols[id_idx].defined_here)
                     && self.lex.tk != '(';
-                if self.symbols[id_idx].class != 0 && !was_sys && !was_fwd_fun && !was_tentative_glo
+                if self.symbols[id_idx].class != 0
+                    && !was_sys
+                    && !was_fwd_fun
+                    && !was_tentative_glo
+                    && !was_extern_redecl
                 {
                     return Err(self.compile_err("duplicate global definition"));
                 }
@@ -1035,6 +1076,7 @@ impl Compiler {
                                     ));
                                 }
                                 self.pending.init_inner_dim = self.symbols[id_idx].inner_array_size;
+                                self.pending.init_target_array_size = array_size;
                                 let elements = self.collect_array_initializer(ty)?;
                                 if elements.len() > array_size as usize {
                                     return Err(self.compile_err(format!(

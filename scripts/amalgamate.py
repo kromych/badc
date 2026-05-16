@@ -146,7 +146,12 @@ def main(argv: list[str]) -> int:
 
     combined = amalgamate(inputs, display)
     if write_to_stdout:
-        sys.stdout.write(combined)
+        # `sys.stdout.write` re-encodes through the locale codec
+        # (cp1252 on Windows runners), which corrupts non-ASCII
+        # bytes such as the U+2014 em-dash in MonoCypher's
+        # license header. Write the bytes directly to bypass
+        # the locale path.
+        sys.stdout.buffer.write(combined.encode("utf-8"))
     else:
         Path(args.output).write_text(combined, encoding="utf-8")
     return 0

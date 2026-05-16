@@ -198,6 +198,135 @@ fn bitop_preserves_operand_width() {
 }
 
 #[test]
+fn string_literal_init_drops_nul_at_bound() {
+    // C99 6.7.8p14: a char-array string-literal initializer
+    // stores its trailing NUL when the array has room; when
+    // the literal's length is exactly the array's bound the
+    // NUL is omitted. Treating the NUL as mandatory rejects
+    // `static const char sigma[16] = "expand 32-byte k";`,
+    // which compiles cleanly on every other C99 toolchain.
+    assert_eq!(run_fixture("string_literal_no_room_for_nul.c"), 0);
+}
+
+#[test]
+fn typedef_array_outer_dim_composes() {
+    // C99 6.7.7p3 (multi-dim composition): when the typedef
+    // base aliases an array, the declarator's brackets supply
+    // the outer dimensions. `typedef i64 gf[16]; gf q[4];`
+    // declares `q` as `i64[4][16]`. sizeof and indexing must
+    // both reflect the composed shape.
+    assert_eq!(run_fixture("typedef_array_outer_dim.c"), 0);
+}
+
+#[test]
+fn local_struct_array_brace_init_works() {
+    // C99 6.7.8p18 + 6.7.8p13: a local `T xs[N] = { {...}, {...} }`
+    // array initializer must fan out into per-element field
+    // stores. Constant-folded elements stage in the data segment
+    // and Mcpy into the slot; non-constant elements (taking the
+    // address of another local etc.) emit per-field runtime
+    // stores into `&xs[i] + field.offset`.
+    assert_eq!(run_fixture("local_struct_array_brace_init.c"), 0);
+}
+
+#[test]
+fn static_init_accepts_paren_cast_of_string() {
+    // C99 6.7.8: a static initializer for a pointer slot can
+    // use the cast-of-string-literal idiom
+    // `((const T *)"...")`. The integer constant-expression
+    // path would drop the data relocation; the init parser
+    // must recognise the shape and route through the
+    // string-literal branch so the slot is patched at load.
+    assert_eq!(run_fixture("static_init_paren_cast_string.c"), 0);
+}
+
+#[test]
+fn static_init_folds_offsetof() {
+    // C99 6.6 + 7.19: the standard `offsetof(T, m)` macro
+    // expands to a constant arithmetic chain that must fold
+    // at translation time when used as an initializer.
+    assert_eq!(run_fixture("static_init_offsetof.c"), 0);
+}
+
+#[test]
+fn static_inline_function_compiles_and_runs() {
+    // C99 6.7.4: a `static inline` function at file scope has
+    // internal linkage; c5 treats `inline` as a no-op modifier
+    // and keeps the `static` attribute, so the body is emitted
+    // as a private definition in each TU that sees it. This
+    // fixture pins the single-TU case; the multi-TU variant
+    // is exercised through the library demos that include
+    // headers with `static inline` helpers.
+    assert_eq!(run_fixture("static_inline_function.c"), 0);
+}
+
+#[test]
+fn extern_decl_does_not_alias_following_defines() {
+    // C99 6.9.2 / 6.2.2: an earlier `extern T x;` followed
+    // by a defining `T x = ...;` must allocate fresh storage
+    // for the definition. Mishandling the merge collapses
+    // every following defining decl to the same `.data`
+    // offset, so two adjacent array globals would both read
+    // as whichever set of bytes landed first.
+    assert_eq!(run_fixture("extern_decl_then_define.c"), 0);
+}
+
+#[test]
+fn preprocessor_handles_uint64_literal() {
+    // C99 6.10.1p4: `#if` evaluates in (u)intmax_t. A literal
+    // at 2^64-1 must parse, and shifts on it must use logical
+    // semantics so the 64-bit-host probe
+    // `((ULONG_MAX >> 31) >> 31) == 3` evaluates to true on an
+    // LP64 host.
+    assert_eq!(run_fixture("preprocessor_uint64_literal.c"), 0);
+}
+
+#[test]
+fn unary_minus_on_unsigned_int_wraps_mod_2_pow_32() {
+    // C99 6.5.3.3p3: the unary `-` operator's result has the
+    // promoted operand type. `unsigned int` does not promote
+    // down, so `-x` on a `uint32_t` must wrap modulo 2^32. c5
+    // lowers the negation as a 64-bit signed multiply, so
+    // without an explicit 32-bit mask the sign-extended high
+    // half stays in the register and a downstream `|` / `>>`
+    // operates on the wider pattern -- the constant-time
+    // identity `(q | -q) >> 31` then returns 0xFFFFFFFF
+    // instead of 1.
+    assert_eq!(run_fixture("unary_minus_unsigned_int_truncation.c"), 0);
+}
+
+#[test]
+fn typedef_struct_carrier_does_not_leak() {
+    // C99 6.7.7p3 boundary: a `typedef struct { fe X; ... } ge;`
+    // whose final field is an array-typedef must not leak that
+    // dimension into the outer `ge` binding. Without the
+    // save/restore of `typedef_base_array_size` around the
+    // aggregate body, `ge *p` is misclassified and `p->X`
+    // rejects the operand as not a single-level struct pointer.
+    assert_eq!(run_fixture("typedef_struct_carrier_reset.c"), 0);
+}
+
+#[test]
+fn typedef_array_param_decays_to_pointer() {
+    // C99 6.7.5.3p7: a parameter whose declared type is an
+    // array is adjusted to a pointer to the element type.
+    // The rule applies when the array shape comes from a
+    // typedef alias, not only from a direct declarator.
+    assert_eq!(run_fixture("typedef_array_param_decay.c"), 0);
+}
+
+#[test]
+fn typedef_array_dim_applies_to_comma_list() {
+    // C99 6.7.7p3: a typedef name names a type. When the
+    // typedef alias is an array, every declarator sharing the
+    // same base type carries that array dimension. Consuming
+    // the carrier on the first declarator and leaving zero for
+    // the rest of the comma list misroutes the trailing
+    // initializer through the scalar parser.
+    assert_eq!(run_fixture("typedef_array_comma_list.c"), 0);
+}
+
+#[test]
 fn bitfield_signed_read_sign_extends() {
     // C99 6.7.2.1p4: a signed bitfield of width N holds values in
     // [-2^(N-1), 2^(N-1)-1]; the read path must sign-extend so the

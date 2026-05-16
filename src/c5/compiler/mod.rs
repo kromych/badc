@@ -266,6 +266,14 @@ pub(in crate::c5::compiler) struct Pending {
     /// reads-and-clears this on entry.
     pub init_inner_dim: i64,
 
+    /// Target array bound for the next `collect_array_initializer`
+    /// call. Set by callers that know the declarator's `[N]` so
+    /// the string-literal branch can drop the trailing NUL when
+    /// the literal would otherwise overflow by exactly one byte
+    /// per C99 6.7.8p14. Zero means "no bound" (deferred-size
+    /// array). Read-and-cleared on entry.
+    pub init_target_array_size: i64,
+
     /// Set whenever the most recent `expr()` step ended with an
     /// array-decay-to-pointer (a bare array variable, or a
     /// struct field whose declared shape is `T xs[N]`). Carries
@@ -328,6 +336,7 @@ impl Default for Pending {
             end_of_expr_stride: 0,
             end_of_expr_strides_tail: Vec::new(),
             init_inner_dim: 0,
+            init_target_array_size: 0,
             typedef_base_array_size: 0,
             last_array_decay_size: 0,
             last_array_decay_bytes: 0,

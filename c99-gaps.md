@@ -120,7 +120,7 @@ separate non-variadic prototypes per selector signature
 that route through the standard AAPCS64 register-passing
 path.
 
-### `long double` is 8-byte FP64 everywhere, severity 4
+### `long double` is 8-byte FP64 in c5 storage, severity 5
 
 C99 6.2.5p10 lets `long double` be any FP type at least as wide as
 `double`, and the host ABIs differ:
@@ -134,12 +134,15 @@ C99 6.2.5p10 lets `long double` be any FP type at least as wide as
 | Windows aarch64  | IEEE binary64 -- same as `double` (8 bytes) |
 
 c5 stores every `long double` as 8-byte FP64 regardless of host.
-That matches macOS / Windows but loses precision (and trips
-byte-identical-output checks against gcc-built objects) on Linux
-aarch64 and Linux x86_64. The c5 arithmetic pipeline already
-routes through f64, so a literal like `1.0L` compiles to an
-FP64 value; the binary just keeps eight zero bytes of padding
-where an FP128 (or x87 extended) would carry the high half.
+That matches macOS / Windows directly; on Linux x86_64 and Linux
+aarch64 the libc-boundary readers narrow the wider host return
+value into c5's FP64 slot via x87-`fstp QWORD PTR [rsp]` and a
+`__trunctfdf2` libgcc helper call respectively, so `strtold` and
+friends round-trip the value the host computes (down to FP64
+precision). Long-double *literals* inside c5 source still compile
+through the FP64 pipeline, so an `0x1p120L` literal would lose
+the trailing exponent range and a binary built against c5 cannot
+represent the full Linux aarch64 binary128 dynamic range.
 
 ### libc `int`-returning calls used as register-resident rvalue, severity 3
 

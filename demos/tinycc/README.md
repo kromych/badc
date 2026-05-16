@@ -70,14 +70,16 @@ Current per-lane state:
 |---------------------|---------|---------|-----------|-----------|------------|------------------------------------------------------|
 | macOS aarch64       | 25/25   | 12/12   | 12/12     | 12/12     | 2/2        | full fixed point                                     |
 | Linux x86_64        | 25/25   | 11/11   | 11/11     | 11/11     | 2/2        | full fixed point                                     |
-| Linux aarch64       | 25/25   | 11/11   | 11/11     | 11/11     | 2/2        | known FP-pool drift on `tccpp.c` (TODO)              |
+| Linux aarch64       | 25/25   | 11/11   | 11/11     | 11/11     | 2/2        | full fixed point                                     |
 | Windows x86_64      | 25/25   | 12/12   | 12/12     | 12/12     | 2/2        | full fixed point                                     |
 | Windows arm64       | 25/25   | 12/12   | skipped   | skipped   | 1/2        | libtcc1 `_environ` dllimport blocker in `crt1.c`     |
 
 `samples` and `corpus` are strict-gated on every lane;
 `bootstrap`, `gen2-self`, and `functional` are strict-gated on
-the four lanes that reach them and stay in soft bringup on
-Windows arm64 pending the upstream `_environ` dllimport fix.
+the four lanes that reach them. The remaining Windows arm64
+bootstrap blocker is the upstream tinycc `_environ`-missing-
+`__declspec(dllimport)` mismatch in `crt1.c` -- tracked as a
+TODO.
 
 Already-closed gaps that the bringup surfaced:
 

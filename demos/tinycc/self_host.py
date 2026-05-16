@@ -1378,26 +1378,9 @@ def main() -> int:
 
     # Known-drifting TUs are surfaced but do not fail. Each entry
     # is tracked with a TODO marker; whittling the set down is
-    # the work of closing the underlying bug. Empty today on
-    # (Linux, x86_64): the corpus and bootstrap passes both reach
-    # 11/11. On (Linux, aarch64) the gen2 binary runs cleanly,
-    # but `tccpp.c` keeps a six-byte diff in three FP literal
-    # pool entries (offsets 0xfc2e / 0xfc3e / 0xfc4e -- the high
-    # two bytes of three 16-byte slots). Root cause: c5 treats
-    # `long double` as 8-byte FP64 with eight bytes of zero pad,
-    # so `4294967296.0L` / `18446744073709551616.0L` /
-    # `79228162514264337593543950336.0L` at `tccpp.c:2363-2366`
-    # land as `<fp64-bits> 0000000000000000` rather than the
-    # AArch64 ELF binary128 form `<14-zero-bytes> <exp-low>
-    # <exp-high-with-sign>`. The drift is informational
-    # (gen2-self compile == gen3 reaches 11/11). TODO: lower
-    # `long double` as IEEE binary128 on AArch64 ELF and route
-    # arithmetic through the `__addtf3` / `__multf3` softfloat
-    # set (libtcc1.a already carries lib-arm64.c for the
-    # consumer side).
+    # the work of closing the underlying bug. Empty on every
+    # POSIX lane today.
     KNOWN_DRIFT: set[str] = set()
-    if host == ("Linux", "aarch64"):
-        KNOWN_DRIFT = {"tccpp.c"}
 
     unexpected_corpus = [n for n in tu_mismatches if n not in KNOWN_DRIFT]
     unexpected_boot = [n for n in boot_mismatches if n not in KNOWN_DRIFT]

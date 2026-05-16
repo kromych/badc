@@ -336,7 +336,7 @@ jobs:
           rem inferior + its args. PowerShell's Start-Process
           rem ArgumentList globbed the whole tail into one string
           rem last run; cmd preserves arg boundaries.
-          "%CDB%" -logo "%LOG%" -c "g; .lastevent; r; kn 30; lm; qq" -G -g -- "%STAGE1%" -B demos/tinycc -c "%SAMPLE%" -o "%RUNNER_TEMP%\arith.o"
+          "%CDB%" -logo "%LOG%" -c "g; .lastevent; r; kn 30; lm; qq" -G -g "%STAGE1%" -B demos/tinycc -c "%SAMPLE%" -o "%RUNNER_TEMP%\arith.o"
           echo cdb exit: %ERRORLEVEL%
           if exist "%LOG%" ( echo === cdb log === & type "%LOG%" ) else ( echo no cdb log produced )
       - name: stb header-only smoke

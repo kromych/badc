@@ -12,10 +12,9 @@ Two driver stages:
   (FIPS 180-2), HMAC-SHA-256 (RFC 4231 test case 1), HKDF-SHA-256
   (RFC 5869 test case 1).
 - The upstream test/test_crypto.c run against a whitelisted set
-  of fast KAT suites covering hashes, KDFs, DRBGs, the TLS PRF
-  and ChaCha20. The slower AES / DES KAT loops and the suites
-  currently exercising a c5 codegen issue are tracked under
-  TODO and excluded.
+  of fast KAT suites covering hashes, MACs, KDFs, DRBGs, the
+  TLS PRF, ChaCha20 and Poly1305. The slower AES / DES KAT
+  loops are tracked under TODO and excluded.
 
 Amalgamation is intentionally skipped: BearSSL reuses `static`
 table names (e.g. `C255_P`) across files, which collide when
@@ -100,9 +99,9 @@ EXPECTED_PREFIXES = (
 )
 
 # Whitelisted suites from test/test_crypto.c. The full set takes
-# minutes (AES_big / DES_tab iterate over thousands of vectors)
-# and a few suites (HMAC's HMAC_CT subset, Poly1305) currently
-# trip a c5 codegen bug -- both tracked under TODO.
+# minutes (AES_big / DES_tab iterate over thousands of vectors),
+# so the smoke only runs the fast portable suites covering
+# hashes, MACs, KDFs, DRBGs, the TLS PRF, ChaCha20 and Poly1305.
 KAT_SUITES = (
     "MD5",
     "SHA1",
@@ -112,11 +111,15 @@ KAT_SUITES = (
     "SHA512",
     "MD5_SHA1",
     "multihash",
+    "HMAC",
     "HKDF",
     "HMAC_DRBG",
     "AESCTR_DRBG",
     "PRF",
     "ChaCha20_ct",
+    "Poly1305_ctmul",
+    "Poly1305_ctmul32",
+    "Poly1305_i15",
 )
 KAT_EXPECTED_LINES = len(KAT_SUITES)
 

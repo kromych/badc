@@ -258,30 +258,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     log(f"wrote -- {args_storage} (AArch64 args storage)")
 
-    # Temporary instrumentation: at the relocate_syms `+=`
-    # site, dump sym->st_value before and after, plus the
-    # section's sh_addr and sh_num. The gen2-self path produces
-    # truncated `val` (upper 32 bits zero) for .data symbols
-    # only -- this trace pins whether the truncation is in the
-    # section base or in the `+=` itself.
-    tccelf = tinycc_dir / "tccelf.c"
-    text = tccelf.read_text()
-    needle = "            sym->st_value += s1->sections[sym->st_shndx]->sh_addr;\n"
-    if needle in text:
-        replacement = (
-            "            {\n"
-            "                addr_t pre = sym->st_value;\n"
-            "                addr_t base = s1->sections[sym->st_shndx]->sh_addr;\n"
-            "                sym->st_value += base;\n"
-            "                fprintf(stderr,\n"
-            "                    \"[SYMV] shndx=%d pre=0x%llx base=0x%llx post=0x%llx\\n\",\n"
-            "                    (int)sym->st_shndx,\n"
-            "                    (unsigned long long)pre, (unsigned long long)base,\n"
-            "                    (unsigned long long)sym->st_value);\n"
-            "            }\n"
-        )
-        tccelf.write_text(text.replace(needle, replacement))
-        log(f"patched -- {tccelf} (TEMP SYMV instrumentation)")
     return 0
 
 

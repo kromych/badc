@@ -1452,23 +1452,36 @@ impl Compiler {
                 self.text[b] = self.text.len() as i64;
                 self.ty = Ty::Int as i64;
             } else if self.lex.tk == Token::OrOp {
+                // C99 6.5.12: result of `|` is the common type
+                // produced by the usual arithmetic conversions on
+                // the operands. Forcing `int` here drops the upper
+                // 32 bits when either operand is a 64-bit type and
+                // a downstream operator narrows back to `int` --
+                // e.g. `(u64 | u64) + 1` ends up emitting a
+                // Shl 32 / Shr 32 pair on the result and zeroes
+                // bits 32..63 for a positive value.
+                let lhs_ty = t;
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::XorOp as i64)?;
                 self.emit_op(Op::Or);
-                self.ty = Ty::Int as i64;
+                self.ty = usual_arith_common_ty(lhs_ty, self.ty, self.target);
             } else if self.lex.tk == Token::XorOp {
+                // C99 6.5.11: same common-type rule as `|`.
+                let lhs_ty = t;
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::AndOp as i64)?;
                 self.emit_op(Op::Xor);
-                self.ty = Ty::Int as i64;
+                self.ty = usual_arith_common_ty(lhs_ty, self.ty, self.target);
             } else if self.lex.tk == Token::AndOp {
+                // C99 6.5.10: same common-type rule as `|`.
+                let lhs_ty = t;
                 self.next()?;
                 self.emit_op(Op::Psh);
                 self.expr(Token::EqOp as i64)?;
                 self.emit_op(Op::And);
-                self.ty = Ty::Int as i64;
+                self.ty = usual_arith_common_ty(lhs_ty, self.ty, self.target);
             } else if self.lex.tk == Token::EqOp || self.lex.tk == Token::NeOp {
                 // `==` and `!=` share emit shape -- only the FP
                 // variant and the `invert` flag handed to

@@ -1115,14 +1115,6 @@ def main() -> int:
                 gen2_tcc = None
                 bootstrap_skip = "gen2 link failed"
             else:
-                # TEMP: always surface the linker stderr so the
-                # ADR21 instrumentation in arm64-link.c reaches CI.
-                if link_proc.stderr.strip():
-                    print(
-                        "self_host: gen2 link stderr (success):\n"
-                        + link_proc.stderr,
-                        file=sys.stderr,
-                    )
                 codesign_if_macos(host, gen2_tcc)
                 bootstrap_skip = ""
 
@@ -1162,17 +1154,8 @@ def main() -> int:
             print(link_proc.stderr, file=sys.stderr)
             gen2_self_tcc = None
             gen2_self_skip = "stage1 link failed"
-        else:
-            # TEMP: always surface the linker stderr so the ADR21
-            # instrumentation in arm64-link.c reaches CI.
-            if link_proc.stderr.strip():
-                print(
-                    "self_host: gen2-self link stderr (success):\n"
-                    + link_proc.stderr,
-                    file=sys.stderr,
-                )
-            if host[0] == "Darwin":
-                codesign_if_macos(host, gen2_self_tcc)
+        elif host[0] == "Darwin":
+            codesign_if_macos(host, gen2_self_tcc)
     elif multiarch is not None:
         triplet = multiarch.name
         crt_dir = Path(f"/usr/lib/{triplet}")

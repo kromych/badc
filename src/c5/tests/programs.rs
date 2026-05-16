@@ -186,6 +186,18 @@ fn vsnprintf_underscore_alias_resolves_to_c5_shim() {
 }
 
 #[test]
+fn bitop_preserves_operand_width() {
+    // C99 6.5.10 / 6.5.11 / 6.5.12: the result type of `&` /
+    // `^` / `|` is the common type from the usual arithmetic
+    // conversions, not unconditionally `int`. A wrong type pin
+    // here lets downstream operators emit a 32-bit
+    // sign-extension that clobbers bits 32..63 of a 64-bit
+    // value -- e.g. `(u64 | u64) + 1` would land at
+    // `value & 0xFFFFFFFF + 1` for any positive operand.
+    assert_eq!(run_fixture("bitop_common_type.c"), 0);
+}
+
+#[test]
 fn bitfield_signed_read_sign_extends() {
     // C99 6.7.2.1p4: a signed bitfield of width N holds values in
     // [-2^(N-1), 2^(N-1)-1]; the read path must sign-extend so the

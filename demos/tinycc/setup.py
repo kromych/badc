@@ -187,6 +187,24 @@ def main(argv: list[str] | None = None) -> int:
             with zf.open(member) as src, dst_path.open("wb") as dst:
                 shutil.copyfileobj(src, dst)
             extracted_win32.append(rel)
+        # Upstream's Windows-side runtime + DLL import-libs live
+        # under `win32/lib/`. `wincrt1.c` supplies the `_start` PE
+        # entry, `chkstk.S` supplies `__chkstk_ms` / `alloca`, and
+        # the `.def` files (kernel32, msvcrt, user32, ...) tell tcc
+        # which DLL exports satisfy `-lkernel32` / `-lmsvcrt`.
+        win32_lib_dir = tinycc_dir / "win32" / "lib"
+        win32_lib_dir.mkdir(parents=True, exist_ok=True)
+        win32_lib_prefix = f"{prefix}/win32/lib/"
+        extracted_win32_lib: list[str] = []
+        for member in zf.namelist():
+            if not member.startswith(win32_lib_prefix) or member.endswith("/"):
+                continue
+            rel = member[len(win32_lib_prefix):]
+            dst_path = win32_lib_dir / rel
+            dst_path.parent.mkdir(parents=True, exist_ok=True)
+            with zf.open(member) as src, dst_path.open("wb") as dst:
+                shutil.copyfileobj(src, dst)
+            extracted_win32_lib.append(rel)
 
     if args.verbose:
         for name in flat:
@@ -200,6 +218,9 @@ def main(argv: list[str] | None = None) -> int:
             log(f"done -- {p} {p.stat().st_size}")
         for rel in extracted_win32:
             p = win32_include_dir / rel
+            log(f"done -- {p} {p.stat().st_size}")
+        for rel in extracted_win32_lib:
+            p = win32_lib_dir / rel
             log(f"done -- {p} {p.stat().st_size}")
     return 0
 

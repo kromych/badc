@@ -354,9 +354,15 @@ def tcc_build_defines(
         # resolve without an install step. `{B}/include` keeps
         # `tccdefs.h` reachable. PATHSEP is `;` on Windows per
         # `tcc.h:PATHSEP`.
+        #
+        # `CONFIG_TCC_LIBPATHS` defaults to `{B}/lib` on PE; the
+        # libtcc1 archive sits there. Add `{B}/win32/lib` so
+        # `-lkernel32` / `-lmsvcrt` find the upstream `.def`
+        # files that describe the DLL exports.
         return (
             '-DCONFIG_TCC_SYSINCLUDEPATHS='
             '"{B}/win32/include;{B}/win32/include/winapi;{B}/include"',
+            '-DCONFIG_TCC_LIBPATHS="{B}/lib;{B}/win32/lib"',
         )
     if multiarch is None:
         return ()
@@ -490,6 +496,14 @@ def build_libtcc1_archive(
         # `tccdefs.h:__builtin_va_arg` -- no `__va_arg` reference
         # is emitted.
         sources.append(TINYCC_DIR / "lib" / "va_list.c")
+    if host[0] == "Windows":
+        # PE startup: `wincrt1.c` supplies `_start`, the PE entry
+        # point. `chkstk.S` supplies `__chkstk_ms`, which tcc emits
+        # for stack probing on prologues larger than a page and
+        # which doubles as the `alloca` implementation on Win64.
+        # Matches upstream's win32 Makefile libtcc1 set.
+        sources.append(TINYCC_DIR / "win32" / "lib" / "wincrt1.c")
+        sources.append(TINYCC_DIR / "win32" / "lib" / "chkstk.S")
     if host[1] == "aarch64":
         # `lib-arm64.c` -- binary128 long-double softfloat helpers.
         # `armflush.c` -- `__clear_cache` wrapper that lowers to

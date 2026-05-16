@@ -280,9 +280,12 @@ const IMAGE_TLS_DIRECTORY64_SIZE: u32 = 40;
 
 /// AArch64 RUNTIME_FUNCTION packed-unwind format limit: the
 /// FunctionLength field is 11 bits (units = 4-byte instructions),
-/// so a single packed entry covers at most 2048 instructions
-/// = 8192 bytes. Larger `.text` sections need multiple entries.
-const ARM64_PACKED_FUNCTION_MAX_BYTES: u32 = 2048 * 4;
+/// so a single packed entry covers at most 2047 instructions
+/// = 8188 bytes. The maximum representable field value is `0x7FF`
+/// (2047), not 2048 -- a 2048-instruction chunk encodes as
+/// `2048 & 0x7FF == 0`, which the OS loader reads as a zero-length
+/// function. Larger `.text` sections need multiple entries.
+const ARM64_PACKED_FUNCTION_MAX_BYTES: u32 = 2047 * 4;
 
 // ----------------------------------------------------------------
 // Stub-only imports. Appended to the program's resolved imports
@@ -2926,6 +2929,34 @@ mod tests {
         assert_eq!(round_up(1, 0x200), 0x200);
         assert_eq!(round_up(0x200, 0x200), 0x200);
         assert_eq!(round_up(0x201, 0x200), 0x400);
+    }
+
+    /// The packed AArch64 RUNTIME_FUNCTION encodes `FunctionLength`
+    /// in 11 bits (units = 4-byte instructions). The maximum
+    /// representable value is `0x7FF == 2047` instructions; a
+    /// chunk of exactly 2048 instructions cannot be encoded and
+    /// must be split. Without the cap, `chunk_words & 0x7FF` for
+    /// a 2048-instruction chunk overflows to `0`, which the OS
+    /// loader reads as a zero-length function and refuses to
+    /// dispatch the binary's CRT init on real Windows ARM64.
+    /// Verifies that the cap is honoured and each emitted entry
+    /// declares a non-zero `FunctionLength`.
+    #[test]
+    fn aarch64_pdata_packs_chunks_under_function_length_limit() {
+        // 8 KiB + 1 instruction text exercises the multi-entry
+        // split: first entry should carry the cap, second the
+        // remainder.
+        let text_size = 2047 * 4 + 4 + 4;
+        let p = build_aarch64_pdata(0x1000, text_size);
+        // Each entry is 8 bytes (BeginAddress + UnwindData).
+        assert_eq!(p.bytes.len() % 8, 0);
+        for entry in p.bytes.chunks_exact(8) {
+            let unwind_data = u32::from_le_bytes([entry[4], entry[5], entry[6], entry[7]]);
+            let function_length = (unwind_data >> 2) & 0x7FF;
+            let flag = unwind_data & 0b11;
+            assert_eq!(flag, 0b01, "expected Flag=1 (packed canonical)");
+            assert_ne!(function_length, 0, "FunctionLength field truncated to zero");
+        }
     }
 
     /// `entry_name = Some("wmain")` swaps the `__getmainargs`

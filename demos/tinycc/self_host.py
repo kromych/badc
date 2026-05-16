@@ -497,12 +497,18 @@ def build_libtcc1_archive(
         # is emitted.
         sources.append(TINYCC_DIR / "lib" / "va_list.c")
     if host[0] == "Windows":
-        # PE startup: `wincrt1.c` supplies `_start`, the PE entry
-        # point. `chkstk.S` supplies `__chkstk_ms`, which tcc emits
-        # for stack probing on prologues larger than a page and
-        # which doubles as the `alloca` implementation on Win64.
-        # Matches upstream's win32 Makefile libtcc1 set.
-        sources.append(TINYCC_DIR / "win32" / "lib" / "wincrt1.c")
+        # PE startup + alloca on Windows:
+        #
+        # * `crt1.c` -- supplies `_start`, the PE entry point for
+        #   console apps. (`wincrt1.c` is the GUI-app variant and
+        #   defines `_winstart` instead, so it does not satisfy
+        #   `_start`.)
+        # * `alloca.S` -- supplies the `alloca` symbol tcc emits
+        #   for variable-length array / `alloca()` lowering.
+        # * `chkstk.S` -- supplies `__chkstk`, the stack-probe
+        #   helper tcc emits for prologues larger than one page.
+        sources.append(TINYCC_DIR / "win32" / "lib" / "crt1.c")
+        sources.append(TINYCC_DIR / "lib" / "alloca.S")
         sources.append(TINYCC_DIR / "win32" / "lib" / "chkstk.S")
     if host[1] == "aarch64":
         # `lib-arm64.c` -- binary128 long-double softfloat helpers.

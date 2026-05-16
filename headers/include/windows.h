@@ -82,6 +82,7 @@ typedef int    GET_FILEEX_INFO_LEVELS;
 #pragma binding(kernel32::VirtualProtect,          "VirtualProtect")
 #pragma binding(kernel32::VirtualFree,             "VirtualFree")
 #pragma binding(kernel32::LoadLibraryA,            "LoadLibraryA")
+#pragma binding(kernel32::LoadLibraryExA,          "LoadLibraryExA")
 #pragma binding(kernel32::GetProcAddress,          "GetProcAddress")
 #pragma binding(kernel32::FreeLibrary,             "FreeLibrary")
 #pragma binding(kernel32::GetModuleFileNameA,      "GetModuleFileNameA")
@@ -669,6 +670,9 @@ char *VirtualAlloc(char *addr, long long size, int type, int protect);
 int VirtualProtect(char *addr, long long size, int new_protect, int *old_protect);
 int VirtualFree(char *addr, long long size, int type);
 HANDLE LoadLibraryA(char *name);
+// LoadLibraryExA: name, hFile (reserved, must be NULL), dwFlags.
+// dwFlags bits (LOAD_*) control search-path and binding semantics.
+HANDLE LoadLibraryExA(char *name, HANDLE reserved, int flags);
 PVOID  GetProcAddress(HANDLE module, char *name);
 int    FreeLibrary(HANDLE module);
 DWORD  GetLastError(void);

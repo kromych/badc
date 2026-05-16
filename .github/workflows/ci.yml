@@ -319,9 +319,19 @@ jobs:
         run: |
           @echo off
           setlocal
+          dir demos\tinycc\.self_host\
+          rem badc may emit `tcc-stage1` or `tcc-stage1.exe` depending
+          rem on the writer; prefer the .exe spelling because cdb's
+          rem CreateProcess does not auto-append the extension the way
+          rem the Python harness's subprocess.run does.
           set "STAGE1=demos\tinycc\.self_host\tcc-stage1.exe"
           if not exist "%STAGE1%" set "STAGE1=demos\tinycc\.self_host\tcc-stage1"
           if not exist "%STAGE1%" ( echo no tcc-stage1 present & exit /b 0 )
+          rem Make a copy with the .exe extension so cdb's CreateProcess
+          rem accepts it even when the harness wrote the binary without
+          rem the suffix.
+          if not exist "%STAGE1%.exe" copy /Y "%STAGE1%" "%STAGE1%.exe" >nul
+          if exist "%STAGE1%.exe" set "STAGE1=%STAGE1%.exe"
           set "CDBDIR=x64"
           if /I "%PROCESSOR_ARCHITECTURE%"=="ARM64" set "CDBDIR=arm64"
           set "CDB=C:\Program Files (x86)\Windows Kits\10\Debuggers\%CDBDIR%\cdb.exe"

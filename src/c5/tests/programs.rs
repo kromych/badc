@@ -139,6 +139,16 @@ fn sizeof_handles_expressions() {
 }
 
 #[test]
+fn sizeof_typedef_array_reports_total_bytes() {
+    // C99 6.5.3.4 paragraph 4: `sizeof` on an array type yields
+    // the total byte count. C99 6.7.7 paragraph 3 makes
+    // `typedef T arr[N]; arr v;` equivalent to `T v[N];`, so
+    // `sizeof(arr) == N * sizeof(T)`. Pointer decoration on the
+    // typedef collapses to a scalar pointer.
+    assert_eq!(run_fixture("sizeof_typedef_array.c"), 0);
+}
+
+#[test]
 fn sizeof_string_literal_returns_array_size() {
     // C99 6.4.5p6: a string literal has type `char[N+1]` (the
     // `+1` counts the trailing NUL). `sizeof` reads the array

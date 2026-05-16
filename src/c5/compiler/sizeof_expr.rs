@@ -56,16 +56,31 @@ impl Compiler {
         let mut had_paren = leading_paren;
         let total: i64 = if had_paren && self.lex_is_type_start() {
             // sizeof(<type>): parse a type name with optional
-            // pointer decoration and return its size.
+            // pointer decoration and return its size. C99 6.5.3.4
+            // paragraph 4: the result on an array type is the total
+            // number of bytes, so an array typedef (jmp_buf etc.)
+            // must report `dim * sizeof(element)`. The array
+            // dimension rides through on `typedef_base_array_size`
+            // (set by `parse_decl_base_type` when the typedef
+            // resolves to an array); pointer decoration collapses
+            // the type to a scalar pointer and drops the dim.
             self.ty = self.parse_decl_base_type()?;
+            let typedef_dim = core::mem::take(&mut self.pending.typedef_base_array_size);
+            let mut decayed_to_ptr = false;
             while self.lex.tk == Token::MulOp {
                 self.next()?;
                 self.ty += Ty::Ptr as i64;
+                decayed_to_ptr = true;
                 while self.lex.tk == Token::TypeQual {
                     self.next()?;
                 }
             }
-            self.size_of_type(self.ty) as i64
+            let elem_size = self.size_of_type(self.ty) as i64;
+            if typedef_dim > 0 && !decayed_to_ptr {
+                typedef_dim * elem_size
+            } else {
+                elem_size
+            }
         } else if self.lex.tk == Token::Id
             && !self.lex.peek_after_whitespace(b'-')
             && !self.lex.peek_after_whitespace(b'.')

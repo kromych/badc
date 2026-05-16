@@ -219,6 +219,18 @@ fn typedef_array_outer_dim_composes() {
 }
 
 #[test]
+fn static_inline_function_compiles_and_runs() {
+    // C99 6.7.4: a `static inline` function at file scope has
+    // internal linkage; c5 treats `inline` as a no-op modifier
+    // and keeps the `static` attribute, so the body is emitted
+    // as a private definition in each TU that sees it. This
+    // fixture pins the single-TU case; the multi-TU variant
+    // is exercised through the library demos that include
+    // headers with `static inline` helpers.
+    assert_eq!(run_fixture("static_inline_function.c"), 0);
+}
+
+#[test]
 fn extern_decl_does_not_alias_following_defines() {
     // C99 6.9.2 / 6.2.2: an earlier `extern T x;` followed
     // by a defining `T x = ...;` must allocate fresh storage

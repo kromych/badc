@@ -55,11 +55,12 @@ int main(void) {
     }
 
     {
-        // Mixed-width signed/unsigned in one storage unit: the
-        // tinycc-stb regression that triggered this fixture. An
+        // Mixed-width signed/unsigned in one storage unit: an
         // unsigned 12-bit clump_index packed next to two signed
-        // 2-bit deltas; reading dx must yield -1 for bit pattern
-        // `11`, not the unsigned `3`.
+        // 2-bit deltas. C99 6.7.2.1 lets adjacent bitfields share
+        // a storage unit; the read path has to honour each field's
+        // own signedness, so dx must yield -1 for bit pattern `11`
+        // rather than the unsigned `3`.
         struct mixed_signedness m;
         m.idx = 7;
         m.dx = -1;

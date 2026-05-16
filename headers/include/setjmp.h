@@ -37,9 +37,9 @@ void longjmp(jmp_buf env, int val);
 // different signature (env plus frame pointer supplied by a
 // compiler intrinsic). c5 does not integrate Windows SEH, so
 // provide an inline stub that returns 0 on the initial call.
-// tinycc uses setjmp/longjmp only for error recovery; a successful
-// compile never longjmps, so the stub covers the gen2 self-host
-// path.
+// Code paths that only use setjmp/longjmp for error recovery
+// (the common C99 7.13 pattern) cover the success path here;
+// the error path stays untaken and never invokes longjmp.
 typedef long jmp_buf[64];
 #pragma binding(msvcrt::longjmp, "longjmp")
 static int setjmp(long *env) { (void)env; return 0; }
@@ -68,11 +68,11 @@ void __c5_msvcrt_longjmp(long long *env, int val);
 
 // C99 7.1.4 paragraph 1: a standard library function may also be
 // implemented as a macro, and the macro fires only when the
-// identifier is followed by `(`. Bare-identifier uses (taking the
-// function's address, passing it as an argument) must still
-// resolve to the function. tinycc's `libtcc.h` relies on this:
-//     #define tcc_setjmp(s1,jb,f) setjmp(_tcc_setjmp(s1, jb, f, longjmp))
-// passes `longjmp` as a function pointer.
+// identifier is followed by `(`. Bare-identifier uses -- taking
+// the function's address, passing it through a wrapper macro
+// like `#define save(env) setjmp((helper(env), longjmp))` -- must
+// still resolve to the function. Declare setjmp / longjmp as
+// regular functions alongside the macros so both shapes work.
 #pragma binding(msvcrt::setjmp,  "_setjmp")
 #pragma binding(msvcrt::longjmp, "longjmp")
 int  setjmp(jmp_buf env);

@@ -3,20 +3,21 @@
    `_vsprintf`, `_vfprintf`, `_vprintf`) resolve to the c5-side
    cursor-aware shims rather than to msvcrt's native va_list ABI.
 
-   Real-world trigger: tcc.h does
+   Windows-flavoured headers commonly rewrite the standard v*
+   names into the leading-underscore CRT spellings (e.g.
        # define vsnprintf _vsnprintf
-   in its `#ifdef _WIN32` block. The substituted `_vsnprintf` token
-   from any later `vsnprintf(...)` call has to land on
-   `c5_vsnprintf` so the long-long-cursor va_list c5's <stdarg.h>
-   produces reaches a walker that understands it. Without the
-   alias the call resolves against msvcrt's `_vsnprintf` directly
-   and the variadic reads come from wrong slot offsets. The
-   tinycc-stage1 binary on windows-arm64 emitted garbage bytes
-   for every `cstr_vprintf` predef line until this alias landed.
+   inside a `#ifdef _WIN32` block per the MS C runtime convention).
+   The substituted `_vsnprintf` token from any later `vsnprintf(...)`
+   call has to land on `c5_vsnprintf` so the long-long-cursor
+   va_list c5's <stdarg.h> produces reaches a walker that
+   understands it. Without the alias the call resolves against
+   msvcrt's `_vsnprintf` directly and the variadic reads come from
+   the wrong slot offsets, leaving every argument past the first
+   reading garbage.
 
    The c5 VM doesn't shim vsnprintf, so this fixture is exercised
-   through compile_fixture rather than run_fixture; the Windows
-   tinycc self-host parity lane covers the runtime end-to-end. */
+   through compile_fixture rather than run_fixture; the runtime
+   contract is covered by the PE-host fixture parity tests. */
 
 #include <stdio.h>
 #include <stdarg.h>

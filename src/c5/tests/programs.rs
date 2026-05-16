@@ -172,16 +172,15 @@ fn bitfield_brace_init_packs_into_storage_unit() {
 #[test]
 fn vsnprintf_underscore_alias_resolves_to_c5_shim() {
     // Locks the c5 <stdio.h> alias so `#define vsnprintf _vsnprintf`
-    // (the standard MSVC-compatibility rewrite) still routes through
-    // the c5-side cursor-aware shim; without the alias the call
-    // resolves against msvcrt's native va_list ABI and the variadic
-    // reads come from wrong slot offsets. Surfaced by tinycc on
-    // windows-arm64 where `cstr_vprintf` produced garbage for the
-    // 4th argument of every `putdef` predef-line.
+    // (the standard MSVC-compatibility rewrite per C99 7.1.4 and
+    // CRT convention) still routes through the c5-side cursor-aware
+    // shim. Without the alias the call resolves against msvcrt's
+    // native va_list ABI, where the variadic reads come from the
+    // wrong slot offsets and every argument past the first lands
+    // in the wrong place.
     //
     // Compile-only: the c5 VM has no vsnprintf shim. The runtime
-    // end-to-end is covered by the Windows tinycc self-host parity
-    // lane.
+    // contract is exercised by the PE-host fixture parity test.
     use super::compile_fixture;
     let _ = compile_fixture("vsnprintf_underscore_alias.c");
 }

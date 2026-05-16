@@ -726,16 +726,15 @@ static int c5_vsprintf_unbounded(char *buf, char *fmt, va_list ap) {
 
 // Windows-flavoured sources pre-rewrite the v* names with leading
 // underscores (`#define vsnprintf _vsnprintf` is a common idiom in
-// MSVC-compatibility blocks; tcc's tcc.h does this). The macro
-// substitution lands on `_vsnprintf` *before* the redirection
-// above gets a chance to fire, so the call resolves against the
-// msvcrt `#pragma binding` for `_vsnprintf` -- a real CRT entry
-// point whose va_list ABI is the platform-native register-save
-// struct, not the long-long cursor c5's <stdarg.h> produces.
-// Alias the underscored spellings to the same c5-side shims so
-// the cursor-format va_list reaches a walker that understands
-// it. Without this, `cstr_vprintf` in tinycc reads its varargs
-// off the wrong slot stride.
+// MSVC-compatibility blocks). The macro substitution lands on
+// `_vsnprintf` *before* the redirection above gets a chance to
+// fire, so the call resolves against the msvcrt `#pragma binding`
+// for `_vsnprintf` -- a real CRT entry point whose va_list ABI is
+// the platform-native register-save struct, not the long-long
+// cursor c5's <stdarg.h> produces. Alias the underscored spellings
+// to the same c5-side shims so the cursor-format va_list reaches a
+// walker that understands it. Without this, callers see the wrong
+// slot stride and every argument past the first reads garbage.
 #define _vfprintf  c5_vfprintf_FILE
 #define _vprintf   c5_vprintf_stdout
 #define _vsnprintf c5_vsnprintf

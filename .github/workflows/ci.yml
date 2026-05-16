@@ -256,6 +256,7 @@ jobs:
           name: tcc-stage1-${{ matrix.os }}
           path: demos/tinycc/.self_host/tcc-stage1*
           if-no-files-found: warn
+          include-hidden-files: true
           retention-days: 1
       - name: stb header-only smoke
         # The densest demo: a single TU pulls in six stb_*.h

@@ -369,6 +369,15 @@ fn unary_minus_preserves_uint64_width() {
 }
 
 #[test]
+fn size_t_is_unsigned() {
+    // C99 7.17 paragraph 2: `size_t` is an unsigned integer
+    // type. A signed underlying typedef silently corrupts
+    // every `MAX_SIZET / N`-shaped cap (-1 divided by N is 0
+    // in two's complement signed arithmetic).
+    assert_eq!(run_fixture("size_t_is_unsigned.c"), 0);
+}
+
+#[test]
 fn sizeof_threads_through_malloc_write_and_return() {
     // sizeof(struct Packet) used in three positions in one program:
     // malloc size, write count, and the function's return value. Tests

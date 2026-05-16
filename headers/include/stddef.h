@@ -7,6 +7,12 @@
 // `int` width since UTF-16 / UTF-32 codepoints fit in 4 bytes
 // and no host expects a wider value here.
 //
+// C99 7.17p2: `size_t` is the unsigned integer type of the
+// result of `sizeof`. A signed underlying type makes
+// `~(size_t)0` evaluate to -1 (instead of the max value) and
+// silently corrupts every `MAX_SIZET / N` style cap (lua's
+// `MAXASIZE`, sqlite's `SQLITE_MAX_LENGTH`, ...).
+//
 // NULL is the canonical zero pointer literal. The offsetof
 // shape `&((T*)0)->m` is recognised by the constant-expression
 // evaluator (see parse_const_offsetof in the compiler); the
@@ -15,10 +21,10 @@
 #define _C5_STDDEF_H
 
 #ifdef __BADC_WINDOWS__
-typedef long long size_t;
+typedef unsigned long long size_t;
 typedef long long ptrdiff_t;
 #else
-typedef long size_t;
+typedef unsigned long size_t;
 typedef long ptrdiff_t;
 #endif
 typedef int wchar_t;

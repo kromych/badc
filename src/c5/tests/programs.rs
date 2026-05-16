@@ -442,6 +442,17 @@ fn typedef_fn_ptr_struct_field_carries_lineage() {
 }
 
 #[test]
+fn fp_nan_unordered_compare() {
+    // C99 6.5.8 paragraph 4 + 6.5.9 paragraph 3 + footnote
+    // 96: NaN compares unordered with everything. Relational
+    // and equality ops yield 0 when either operand is NaN; `!=`
+    // yields 1. Locks the post-UCOMISD AND-with-`setnp` /
+    // OR-with-`setp` masks the x86_64 backend needs to honour
+    // the unordered case.
+    assert_eq!(run_fixture("fp_nan_unordered_compare.c"), 0);
+}
+
+#[test]
 fn sizeof_threads_through_malloc_write_and_return() {
     // sizeof(struct Packet) used in three positions in one program:
     // malloc size, write count, and the function's return value. Tests

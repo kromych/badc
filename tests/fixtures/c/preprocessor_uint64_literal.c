@@ -12,8 +12,19 @@
 #include <limits.h>
 #include <stdint.h>
 
+// `unsigned long` is 32 bits on Windows (LLP64) and 64 bits on
+// the POSIX targets (LP64). The ULONG_MAX probe asserts a
+// distinct result per layout: 3 for the 64-bit case, 1 for the
+// 32-bit case. Both shapes still exercise the bare-literal
+// parse and the logical right shift on a stored bit pattern.
+#ifdef __BADC_WINDOWS__
+#if ((ULONG_MAX >> 31) >> 31) != 1
+#error "expected ((ULONG_MAX >> 31) >> 31) == 1 on an LLP64 host"
+#endif
+#else
 #if ((ULONG_MAX >> 31) >> 31) != 3
 #error "expected ((ULONG_MAX >> 31) >> 31) == 3 on an LP64 host"
+#endif
 #endif
 
 #if ((UINT64_MAX >> 31) >> 31) != 3

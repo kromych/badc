@@ -1254,12 +1254,16 @@ def main() -> int:
     unexpected_corpus = [n for n in tu_mismatches if n not in KNOWN_DRIFT]
     unexpected_boot = [n for n in boot_mismatches if n not in KNOWN_DRIFT]
 
-    # Windows lanes (PE x86_64 / arm64) are in active bringup:
-    # the harness reports samples + corpus tallies but does not
-    # gate any stage yet. TODO: harden the PE bringup once the c5
-    # PE codegen path covers struct pass-by-value at every
-    # sub-word width and the bitfield-storage-unit work re-lands.
+    # Windows lanes (PE x86_64 / arm64): the samples tier is now
+    # strict-gated -- both lanes reach 25/25 byte-identical, so any
+    # regression there fails CI. Corpus + bootstrap remain in soft
+    # bringup because tinycc's TUs depend on Windows-flavoured
+    # `<stdio.h>` / `<stdlib.h>` etc. that the c5 header tree does
+    # not vendor yet. TODO: vendor the upstream tinycc win32
+    # include tree so the corpus and bootstrap tiers can also gate.
     if host[0] == "Windows":
+        if failures or mismatches:
+            return 1
         return 0
 
     # Sample failures + mismatches gate the build. Corpus and

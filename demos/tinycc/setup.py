@@ -222,6 +222,38 @@ def main(argv: list[str] | None = None) -> int:
         for rel in extracted_win32_lib:
             p = win32_lib_dir / rel
             log(f"done -- {p} {p.stat().st_size}")
+
+    # Local patch: upstream's `win32/include/stdlib.h` carries an
+    # `#if defined __aarch64__` block that undefs the dllimport
+    # macro path for `__argc` / `__argv` / `_environ` / `_wenviron`
+    # and falls back to plain `extern` declarations. With the
+    # dllimport indirection gone, tinycc's PE linker can't match
+    # `_environ` against `_imp___environ` in the msvcrt import
+    # set and fires `symbol '_environ' is missing
+    # __declspec(dllimport)` when linking any crt1.c that
+    # references the environ array (the standard console-app PE
+    # entry stub does). Strip the AArch64 special-case so the
+    # generic dllimport path applies to every PE target.
+    stdlib_h = win32_include_dir / "stdlib.h"
+    text = stdlib_h.read_text()
+    needle = (
+        "#if defined __aarch64__\n"
+        "/* something does not work using those from msvcrt.dll */\n"
+        "# undef __argc\n"
+        "# undef __argv\n"
+        "# undef __wargv\n"
+        "# undef _wenviron\n"
+        "# undef _environ\n"
+        "extern int __argc;\n"
+        "extern char **__argv;\n"
+        "extern wchar_t **__wargv;\n"
+        "extern char **_environ;\n"
+        "extern wchar_t **_wenviron;\n"
+        "#endif\n"
+    )
+    if needle in text:
+        stdlib_h.write_text(text.replace(needle, ""))
+        log(f"patched -- {stdlib_h} (dropped AArch64 dllimport special-case)")
     return 0
 
 

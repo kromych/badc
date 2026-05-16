@@ -323,14 +323,31 @@ impl Compiler {
                 let was_fwd_fun = self.symbols[id_idx].class == Token::Fun as i64
                     && (self.lex.tk == '(' || preconsumed_params.is_some());
                 // Tentative-definition merge (C11 6.9.2): a prior
-                // `static T x;` (no `=`) becomes the defining
+                // `T x;` (no `=`, no `extern`) becomes the defining
                 // declaration when re-declared, optionally with an
                 // initializer this time. Function-shaped re-decls
-                // never go through this path.
+                // never go through this path. An earlier extern-only
+                // declaration (`extern T x;` / `extern T x[];`) is
+                // a separate case: storage was not allocated and
+                // `sym.val` is the default `0`, so a tentative-style
+                // merge would alias every following defining decl
+                // to the first 8 bytes of the data segment. Track
+                // it separately so the duplicate-decl check passes
+                // (extern + def is legal) while the storage path
+                // below allocates fresh bytes for the definition.
+                let was_extern_redecl = self.symbols[id_idx].class == Token::Glo as i64
+                    && !self.symbols[id_idx].has_initializer
+                    && self.symbols[id_idx].is_extern_decl
+                    && self.lex.tk != '(';
                 let was_tentative_glo = self.symbols[id_idx].class == Token::Glo as i64
                     && !self.symbols[id_idx].has_initializer
+                    && !self.symbols[id_idx].is_extern_decl
                     && self.lex.tk != '(';
-                if self.symbols[id_idx].class != 0 && !was_sys && !was_fwd_fun && !was_tentative_glo
+                if self.symbols[id_idx].class != 0
+                    && !was_sys
+                    && !was_fwd_fun
+                    && !was_tentative_glo
+                    && !was_extern_redecl
                 {
                     return Err(self.compile_err("duplicate global definition"));
                 }

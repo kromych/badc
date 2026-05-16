@@ -219,6 +219,17 @@ fn typedef_array_outer_dim_composes() {
 }
 
 #[test]
+fn extern_decl_does_not_alias_following_defines() {
+    // C99 6.9.2 / 6.2.2: an earlier `extern T x;` followed
+    // by a defining `T x = ...;` must allocate fresh storage
+    // for the definition. Mishandling the merge collapses
+    // every following defining decl to the same `.data`
+    // offset, so e.g. `br_sha224_IV` and `br_sha256_IV` both
+    // read as the IV that landed first.
+    assert_eq!(run_fixture("extern_decl_then_define.c"), 0);
+}
+
+#[test]
 fn preprocessor_handles_uint64_literal() {
     // C99 6.10.1p4: `#if` evaluates in (u)intmax_t. A literal
     // at 2^64-1 must parse, and shifts on it must use logical

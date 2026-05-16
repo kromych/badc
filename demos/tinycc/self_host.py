@@ -343,6 +343,16 @@ def tcc_build_defines(
             f'-DCONFIG_TCC_LIBPATHS="{{B}}:{sdk_lib}:/usr/lib"',
             f'-DCONFIG_TCC_SYSINCLUDEPATHS="{{B}}/include:{sdk_include}:/usr/include"',
         )
+    if host[0] == "Windows":
+        # tinycc resolves `<stdio.h>` etc. through its own sysinclude
+        # list; the upstream win32 build installs the mingw-style
+        # headers under `<install>/include`. Bring `{B}/win32/include`
+        # onto the search path so a tcc binary running out of the
+        # `demos/tinycc` source tree finds them without an install
+        # step. `{B}/include` keeps `tccdefs.h` reachable.
+        return (
+            '-DCONFIG_TCC_SYSINCLUDEPATHS="{B}/win32/include:{B}/include"',
+        )
     if multiarch is None:
         return ()
     triplet = multiarch.name

@@ -159,6 +159,10 @@ def main(argv: list[str] | None = None) -> int:
     include_dir.mkdir(exist_ok=True)
     lib_dir = tinycc_dir / "lib"
     lib_dir.mkdir(exist_ok=True)
+    win32_include_dir = tinycc_dir / "win32" / "include"
+    win32_include_dir.mkdir(parents=True, exist_ok=True)
+    win32_include_prefix = f"{prefix}/win32/include/"
+    extracted_win32: list[str] = []
     with zipfile.ZipFile(zip_path) as zf:
         for name in flat:
             with zf.open(f"{prefix}/{name}") as src, (tinycc_dir / name).open("wb") as dst:
@@ -169,6 +173,20 @@ def main(argv: list[str] | None = None) -> int:
         for name in LIB_SOURCES:
             with zf.open(f"{prefix}/lib/{name}") as src, (lib_dir / name).open("wb") as dst:
                 shutil.copyfileobj(src, dst)
+        # Upstream's mingw-style Windows headers (stdio.h, stdlib.h,
+        # string.h, sys/*, ...) live under `win32/include/` in the
+        # zip. Stage1 tcc on Windows resolves `<stdio.h>` through its
+        # sysinclude path; without this tree the corpus + bootstrap
+        # tiers fail at the very first `#include`.
+        for member in zf.namelist():
+            if not member.startswith(win32_include_prefix) or member.endswith("/"):
+                continue
+            rel = member[len(win32_include_prefix):]
+            dst_path = win32_include_dir / rel
+            dst_path.parent.mkdir(parents=True, exist_ok=True)
+            with zf.open(member) as src, dst_path.open("wb") as dst:
+                shutil.copyfileobj(src, dst)
+            extracted_win32.append(rel)
 
     if args.verbose:
         for name in flat:
@@ -179,6 +197,9 @@ def main(argv: list[str] | None = None) -> int:
             log(f"done -- {p} {p.stat().st_size}")
         for name in LIB_SOURCES:
             p = lib_dir / name
+            log(f"done -- {p} {p.stat().st_size}")
+        for rel in extracted_win32:
+            p = win32_include_dir / rel
             log(f"done -- {p} {p.stat().st_size}")
     return 0
 

@@ -1028,6 +1028,15 @@ impl Preprocessor {
     /// surviving in the pre-expanded arg text must have fired
     /// during pre-expansion, so it must not re-fire during the
     /// body rescan.
+    ///
+    /// Only object-like macros are blue-painted from this scan.
+    /// A function-like macro name appearing in arg text without a
+    /// trailing `(` cannot have fired during pre-expansion (fn-
+    /// like macros only expand when followed by `(` per C99
+    /// 6.10.3p10), so its presence carries no information and
+    /// blue-painting it would suppress the canonical `APPLY(OP,
+    /// ...)` rescan shape where `OP` only becomes a call after
+    /// substitution.
     fn collect_macro_idents_into(&self, text: &str, out: &mut alloc::vec::Vec<String>) {
         let bytes = text.as_bytes();
         let mut i = 0;
@@ -1040,9 +1049,7 @@ impl Preprocessor {
                     i += 1;
                 }
                 let ident = &text[start..i];
-                if (self.macros.contains_key(ident) || self.fn_macros.contains_key(ident))
-                    && !out.iter().any(|s| s == ident)
-                {
+                if self.macros.contains_key(ident) && !out.iter().any(|s| s == ident) {
                     out.push(ident.to_string());
                 }
             } else if c == b'"' || c == b'\'' {

@@ -378,6 +378,16 @@ fn size_t_is_unsigned() {
 }
 
 #[test]
+fn macro_argument_rescan_resolves_pasted_call() {
+    // C99 6.10.3.4: the function-like macro's substituted body
+    // is rescanned for further macro replacement. An object
+    // identifier supplied as a parameter and immediately
+    // followed by `(` in the body must be recognised as a
+    // function-like call in the rescan.
+    assert_eq!(run_fixture("macro_argument_rescan.c"), 0);
+}
+
+#[test]
 fn sizeof_threads_through_malloc_write_and_return() {
     // sizeof(struct Packet) used in three positions in one program:
     // malloc size, write count, and the function's return value. Tests

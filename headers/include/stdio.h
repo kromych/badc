@@ -100,8 +100,14 @@ typedef struct __c5_FILE FILE;
 #pragma binding(libc::fgets,     "_fgets")
 #pragma binding(libc::fputc,     "_fputc")
 #pragma binding(libc::fgetc,     "_fgetc")
+#pragma binding(libc::putc,      "_putc")
+#pragma binding(libc::getc,      "_getc")
+#pragma binding(libc::ungetc,    "_ungetc")
 #pragma binding(libc::putchar,   "_putchar")
 #pragma binding(libc::getchar,   "_getchar")
+#pragma binding(libc::tmpfile,   "_tmpfile")
+#pragma binding(libc::tmpnam,    "_tmpnam")
+#pragma binding(libc::setbuf,    "_setbuf")
 #pragma binding(libc::puts,      "_puts")
 #pragma binding(libc::perror,    "_perror")
 #pragma binding(libc::fseek,     "_fseek")
@@ -154,8 +160,14 @@ typedef struct __c5_FILE FILE;
 #pragma binding(libc::fgets,     "fgets")
 #pragma binding(libc::fputc,     "fputc")
 #pragma binding(libc::fgetc,     "fgetc")
+#pragma binding(libc::putc,      "putc")
+#pragma binding(libc::getc,      "getc")
+#pragma binding(libc::ungetc,    "ungetc")
 #pragma binding(libc::putchar,   "putchar")
 #pragma binding(libc::getchar,   "getchar")
+#pragma binding(libc::tmpfile,   "tmpfile")
+#pragma binding(libc::tmpnam,    "tmpnam")
+#pragma binding(libc::setbuf,    "setbuf")
 #pragma binding(libc::puts,      "puts")
 #pragma binding(libc::perror,    "perror")
 #pragma binding(libc::fseek,     "fseek")
@@ -217,8 +229,14 @@ typedef struct __c5_FILE FILE;
 #pragma binding(msvcrt::fgets,     "fgets")
 #pragma binding(msvcrt::fputc,     "fputc")
 #pragma binding(msvcrt::fgetc,     "fgetc")
+#pragma binding(msvcrt::putc,      "putc")
+#pragma binding(msvcrt::getc,      "getc")
+#pragma binding(msvcrt::ungetc,    "ungetc")
 #pragma binding(msvcrt::putchar,   "putchar")
 #pragma binding(msvcrt::getchar,   "getchar")
+#pragma binding(msvcrt::tmpfile,   "tmpfile")
+#pragma binding(msvcrt::tmpnam,    "tmpnam")
+#pragma binding(msvcrt::setbuf,    "setbuf")
 #pragma binding(msvcrt::puts,      "puts")
 #pragma binding(msvcrt::perror,    "perror")
 #pragma binding(msvcrt::fseek,     "fseek")
@@ -368,8 +386,21 @@ int fputs(char *s, FILE *stream);
 char *fgets(char *buf, int n, FILE *stream);
 int fputc(int c, FILE *stream);
 int fgetc(FILE *stream);
+// C99 7.19.7.5 / 7.19.7.8: `getc` / `putc` are functionally
+// equivalent to `fgetc` / `fputc`. Spec permits multiple
+// evaluations of the `stream` argument; libc implementations
+// honour the same signature, so the binding is a direct alias.
+int getc(FILE *stream);
+int putc(int c, FILE *stream);
+// C99 7.19.7.11: push one byte back onto an input stream.
+int ungetc(int c, FILE *stream);
 int putchar(int c);
 int getchar();
+// C99 7.19.4.3 / 7.19.4.4: temporary file streams.
+FILE *tmpfile(void);
+char *tmpnam(char *s);
+// C99 7.19.5.5: convenience wrapper around setvbuf.
+void setbuf(FILE *stream, char *buf);
 int puts(char *s);
 int perror(char *s);
 int fseek(FILE *stream, int offset, int whence);

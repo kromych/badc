@@ -43,6 +43,7 @@
 #pragma binding(libc::ldexpl, "_ldexp")
 #pragma binding(libc::frexp, "_frexp")
 #pragma binding(libc::modf,  "_modf")
+#pragma binding(libc::trunc, "_trunc")
 #endif
 
 #ifdef __linux__
@@ -73,6 +74,7 @@
 #pragma binding(libm::ldexpl, "ldexp")
 #pragma binding(libm::frexp, "frexp")
 #pragma binding(libm::modf,  "modf")
+#pragma binding(libm::trunc, "trunc")
 #endif
 
 #ifdef _WIN32
@@ -102,6 +104,7 @@
 #pragma binding(msvcrt::ldexpl, "ldexp")
 #pragma binding(msvcrt::frexp, "frexp")
 #pragma binding(msvcrt::modf,  "modf")
+#pragma binding(msvcrt::trunc, "trunc")
 #endif
 
 // IEEE-754 sentinel values. The c5 lexer accepts the typical
@@ -166,3 +169,5 @@ double frexp(double x, int *exp);
 // C99 7.12.6.12: modf(x, *iptr) splits x into integer + fractional
 // parts.
 double modf(double x, double *iptr);
+// C99 7.12.9.8: trunc rounds toward zero.
+double trunc(double x);

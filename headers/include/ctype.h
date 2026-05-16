@@ -17,6 +17,7 @@
 #pragma binding(libc::isalnum,  "_isalnum")
 #pragma binding(libc::isxdigit, "_isxdigit")
 #pragma binding(libc::isprint,  "_isprint")
+#pragma binding(libc::isgraph,  "_isgraph")
 #pragma binding(libc::ispunct,  "_ispunct")
 #pragma binding(libc::iscntrl,  "_iscntrl")
 #pragma binding(libc::islower,  "_islower")
@@ -33,6 +34,7 @@
 #pragma binding(libc::isalnum,  "isalnum")
 #pragma binding(libc::isxdigit, "isxdigit")
 #pragma binding(libc::isprint,  "isprint")
+#pragma binding(libc::isgraph,  "isgraph")
 #pragma binding(libc::ispunct,  "ispunct")
 #pragma binding(libc::iscntrl,  "iscntrl")
 #pragma binding(libc::islower,  "islower")
@@ -49,6 +51,7 @@
 #pragma binding(msvcrt::isalnum,  "isalnum")
 #pragma binding(msvcrt::isxdigit, "isxdigit")
 #pragma binding(msvcrt::isprint,  "isprint")
+#pragma binding(msvcrt::isgraph,  "isgraph")
 #pragma binding(msvcrt::ispunct,  "ispunct")
 #pragma binding(msvcrt::iscntrl,  "iscntrl")
 #pragma binding(msvcrt::islower,  "islower")
@@ -63,6 +66,7 @@ int isalpha(int c);
 int isalnum(int c);
 int isxdigit(int c);
 int isprint(int c);
+int isgraph(int c);
 int ispunct(int c);
 int iscntrl(int c);
 int islower(int c);

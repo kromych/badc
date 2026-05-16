@@ -1,17 +1,26 @@
 #!/usr/bin/env python3
-"""End-to-end smoke for badc against the BearSSL 0.6 source subset.
+"""End-to-end smoke for badc against the full BearSSL 0.6 src/ tree.
 
-Builds the focused BearSSL set + a hand-written driver through
-badc in the four flavours the other demos use (amalg / TU x -O /
-no-O) plus the archive flavour, and runs each binary. Returns 0
-on success, non-zero with a diagnostic on failure.
+Builds every .c file under demos/bearssl/src + the hand-written
+driver and the upstream test/test_crypto.c through badc, in the
+per-TU and archive flavours (-O / no-O each). Returns 0 on success,
+non-zero with a diagnostic on failure.
 
-Four scenarios: SHA-256 / SHA-224 known-answers (FIPS 180-2),
-HMAC-SHA-256 (RFC 4231 test case 1), HKDF-SHA-256 (RFC 5869
-test case 1).
+Two driver stages:
 
-The TLS record layer, X.509 minimal validator, EC primitives,
-and AES hardware variants are tracked as later milestones.
+- The bundled smoke_main.c: SHA-256 / SHA-224 known-answers
+  (FIPS 180-2), HMAC-SHA-256 (RFC 4231 test case 1), HKDF-SHA-256
+  (RFC 5869 test case 1).
+- The upstream test/test_crypto.c run against a whitelisted set
+  of fast KAT suites covering hashes, KDFs, DRBGs, the TLS PRF
+  and ChaCha20. The slower AES / DES KAT loops and the suites
+  currently exercising a c5 codegen issue are tracked under
+  TODO and excluded.
+
+Amalgamation is intentionally skipped: BearSSL reuses `static`
+table names (e.g. `C255_P`) across files, which collide when
+concatenated into a single TU. Per-TU compilation respects the
+C99 6.2.2 internal-linkage scope and links cleanly.
 
 Override the badc binary via the ``BADC`` env var (default:
 ``target/release/badc[.exe]`` next to the repo root).
@@ -43,24 +52,14 @@ INCLUDE_PATHS = (
     BEAR_DIR / "src",
 )
 
-LIB_SOURCES = (
-    "src/hash/sha2small.c",
-    "src/hash/dig_size.c",
-    "src/hash/dig_oid.c",
-    "src/hash/multihash.c",
-    "src/mac/hmac.c",
-    "src/mac/hmac_ct.c",
-    "src/kdf/hkdf.c",
-    "src/int/i32_div32.c",
-    "src/codec/ccopy.c",
-    "src/codec/enc32be.c",
-    "src/codec/enc32le.c",
-    "src/codec/enc64be.c",
-    "src/codec/dec32be.c",
-    "src/codec/dec32le.c",
-    "src/codec/dec64be.c",
-    "src/settings.c",
-)
+def _collect_lib_sources() -> tuple[str, ...]:
+    # setup.py extracts the upstream src/ tree on demand, so this
+    # walk is deferred until main() has staged the files.
+    src_root = BEAR_DIR / "src"
+    rels: list[str] = []
+    for path in sorted(src_root.rglob("*.c")):
+        rels.append(str(path.relative_to(BEAR_DIR)))
+    return tuple(rels)
 
 
 def resolve_badc() -> Path:
@@ -81,17 +80,6 @@ def resolve_badc() -> Path:
     sys.exit(2)
 
 
-def build_smoke(badc: Path, combined: bytes, out_path: Path, optimize: bool) -> None:
-    cmd: list[str | os.PathLike[str]] = [str(badc)]
-    if optimize:
-        cmd.append("-O")
-    for ip in INCLUDE_PATHS:
-        cmd += ["-I", str(ip)]
-    cmd += ["-", "-o", str(out_path)]
-    cmd += [f"-D{d}" for d in BUILD_DEFINES]
-    subprocess.run(cmd, input=combined, check=True)
-
-
 EXPECTED_PREFIXES = (
     "hash OK [sha256-abc]:",
     "hash OK [sha224-abc]:",
@@ -99,6 +87,27 @@ EXPECTED_PREFIXES = (
     "kdf OK [hkdf-sha256]:",
     "bearssl smoke: all scenarios green",
 )
+
+# Whitelisted suites from test/test_crypto.c. The full set takes
+# minutes (AES_big / DES_tab iterate over thousands of vectors)
+# and a few suites (HMAC's HMAC_CT subset, Poly1305) currently
+# trip a c5 codegen bug -- both tracked under TODO.
+KAT_SUITES = (
+    "MD5",
+    "SHA1",
+    "SHA224",
+    "SHA256",
+    "SHA384",
+    "SHA512",
+    "MD5_SHA1",
+    "multihash",
+    "HKDF",
+    "HMAC_DRBG",
+    "AESCTR_DRBG",
+    "PRF",
+    "ChaCha20_ct",
+)
+KAT_EXPECTED_LINES = len(KAT_SUITES)
 
 
 def run_and_check(label: str, smoke_bin: Path) -> bool:
@@ -134,6 +143,32 @@ def run_and_check(label: str, smoke_bin: Path) -> bool:
     return True
 
 
+def run_kat_and_check(label: str, kat_bin: Path) -> bool:
+    proc = subprocess.run(
+        [str(kat_bin), *KAT_SUITES],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    out = proc.stdout.replace("\r", "")
+    err = proc.stderr.replace("\r", "")
+    if proc.returncode != 0 or err.strip():
+        print(
+            f"smoke FAIL [{label}]: exit {proc.returncode}\n--- stdout ---\n{out}\n--- stderr ---\n{err}",
+            file=sys.stderr,
+        )
+        return False
+    done_lines = [ln for ln in out.splitlines() if ln.endswith("done.")]
+    if len(done_lines) != KAT_EXPECTED_LINES:
+        print(
+            f"smoke FAIL [{label}]: expected {KAT_EXPECTED_LINES} `done.` lines, got {len(done_lines)}\n{out}",
+            file=sys.stderr,
+        )
+        return False
+    print(f"smoke OK [{label}]: {KAT_EXPECTED_LINES} KAT suites green")
+    return True
+
+
 def main() -> int:
     badc = resolve_badc()
 
@@ -142,34 +177,17 @@ def main() -> int:
         check=True,
     )
 
+    lib_sources = _collect_lib_sources()
+    if not lib_sources:
+        print("smoke FAIL: no .c sources under demos/bearssl/src", file=sys.stderr)
+        return 1
+
     with tempfile.TemporaryDirectory(prefix="bearssl-smoke-") as work_str:
         work = Path(work_str)
-        amalg_script = REPO_ROOT / "scripts" / "amalgamate.py"
-        amalg_inputs = [str(BEAR_DIR / name) for name in LIB_SOURCES]
-        amalg_inputs.append(str(BEAR_DIR / "smoke_main.c"))
-        amalg_proc = subprocess.run(
-            [sys.executable, str(amalg_script), "-o", "-", *amalg_inputs],
-            check=True,
-            capture_output=True,
-        )
-        combined = amalg_proc.stdout
-
-        smoke_noopt = work / f"bearssl_smoke{EXE_SUFFIX}"
-        smoke_opt = work / f"bearssl_smoke.opt{EXE_SUFFIX}"
-        try:
-            build_smoke(badc, combined, smoke_noopt, optimize=False)
-        except subprocess.CalledProcessError:
-            print("smoke FAIL: build (no -O) failed", file=sys.stderr)
-            return 1
-        try:
-            build_smoke(badc, combined, smoke_opt, optimize=True)
-        except subprocess.CalledProcessError:
-            print("smoke FAIL: build (-O) failed", file=sys.stderr)
-            return 1
 
         tu_noopt = work / f"bearssl_smoke.tu{EXE_SUFFIX}"
         tu_opt = work / f"bearssl_smoke.tu.opt{EXE_SUFFIX}"
-        srcs = [BEAR_DIR / name for name in LIB_SOURCES] + [
+        srcs = [BEAR_DIR / name for name in lib_sources] + [
             BEAR_DIR / "smoke_main.c"
         ]
         (work / "tu").mkdir(exist_ok=True)
@@ -194,7 +212,7 @@ def main() -> int:
 
         ar_noopt = work / f"bearssl_smoke.ar{EXE_SUFFIX}"
         ar_opt = work / f"bearssl_smoke.ar.opt{EXE_SUFFIX}"
-        lib_srcs = [BEAR_DIR / name for name in LIB_SOURCES]
+        lib_srcs = [BEAR_DIR / name for name in lib_sources]
         driver_srcs = [BEAR_DIR / "smoke_main.c"]
         (work / "ar").mkdir(exist_ok=True)
         try:
@@ -216,13 +234,28 @@ def main() -> int:
             print("smoke FAIL: archive build (-O) failed", file=sys.stderr)
             return 1
 
+        # Upstream test/test_crypto.c driver: link the same
+        # archive against the upstream KAT harness and run a
+        # whitelisted set of fast suites.
+        kat_bin = work / f"bearssl_test_crypto{EXE_SUFFIX}"
+        kat_driver = [BEAR_DIR / "test" / "test_crypto.c"]
+        (work / "kat").mkdir(exist_ok=True)
+        try:
+            _tu_build.build_tu_archive(
+                badc, lib_srcs, kat_driver, "bearssl", kat_bin,
+                optimize=False, defines=BUILD_DEFINES,
+                include_paths=INCLUDE_PATHS, work_dir=work / "kat",
+            )
+        except subprocess.CalledProcessError:
+            print("smoke FAIL: test_crypto archive build failed", file=sys.stderr)
+            return 1
+
         ok = True
-        ok &= run_and_check("amalg-no-O", smoke_noopt)
-        ok &= run_and_check("amalg--O", smoke_opt)
         ok &= run_and_check("tu-no-O", tu_noopt)
         ok &= run_and_check("tu--O", tu_opt)
         ok &= run_and_check("ar-no-O", ar_noopt)
         ok &= run_and_check("ar--O", ar_opt)
+        ok &= run_kat_and_check("upstream-test_crypto", kat_bin)
         return 0 if ok else 1
 
 

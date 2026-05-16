@@ -225,13 +225,16 @@ jobs:
         # Diffie-Hellman. Same build flavour matrix as the
         # other library demos.
         run: python demos/monocypher/smoke.py
-      - name: bearssl smoke (amalg + TU + archive)
-        # BearSSL focused subset: SHA-256 / SHA-224 hash core,
-        # HMAC, HKDF. Four scenarios pin published vectors
-        # (FIPS 180-2, RFC 4231, RFC 5869). The TLS record
-        # layer, X.509 minimal validator, EC primitives, and
-        # AES hardware variants are tracked as later
-        # milestones.
+      - name: bearssl smoke (TU + archive + upstream KATs)
+        # Builds every .c file under demos/bearssl/src into a
+        # static archive, links it against the bundled
+        # smoke_main.c (FIPS 180-2 SHA-256/224, RFC 4231
+        # HMAC-SHA-256, RFC 5869 HKDF-SHA-256) and against
+        # upstream test/test_crypto.c run with a whitelisted
+        # set of fast KAT suites covering hashes, KDFs, DRBGs,
+        # the TLS PRF and ChaCha20. Slow AES / DES KAT loops
+        # and the suites that currently exercise a c5 codegen
+        # issue (HMAC_CT, Poly1305) are tracked under TODO.
         run: python demos/bearssl/smoke.py
       - name: chibicc bringup smoke
         # chibicc is the substantial multi-TU exerciser for the

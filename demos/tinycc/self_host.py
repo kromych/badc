@@ -741,6 +741,54 @@ HOST_PROFILES: dict[tuple[str, str], dict[str, tuple[str, ...]]] = {
 }
 
 
+def describe_byte_diff(
+    ref_path: Path, s1_path: Path, max_runs: int = 4, max_run_bytes: int = 32
+) -> str:
+    """Summarize the byte-level differences between two object files.
+
+    Walks both byte arrays, groups contiguous diffs into runs, and
+    returns up to ``max_runs`` of them in the shape:
+
+      @0x1234 (6 bytes) ref=<hex> s1=<hex>
+
+    Run hex content is truncated to ``max_run_bytes`` per side so the
+    log stays readable on a long diff. Size mismatches are reported
+    separately ahead of the per-run dump.
+    """
+    a = ref_path.read_bytes()
+    b = s1_path.read_bytes()
+    out: list[str] = []
+    if len(a) != len(b):
+        out.append(f"size ref={len(a)} s1={len(b)} (delta {len(b) - len(a):+})")
+    common = min(len(a), len(b))
+    runs: list[tuple[int, int]] = []
+    i = 0
+    while i < common:
+        if a[i] != b[i]:
+            start = i
+            while i < common and a[i] != b[i]:
+                i += 1
+            runs.append((start, i))
+        else:
+            i += 1
+    if len(a) != len(b) and not runs:
+        # tail-only divergence
+        tail = common
+        runs.append((tail, max(len(a), len(b))))
+    out.append(f"{len(runs)} run(s)")
+    for start, end in runs[:max_runs]:
+        length = end - start
+        ref_slice = a[start : min(end, len(a))][:max_run_bytes].hex()
+        s1_slice = b[start : min(end, len(b))][:max_run_bytes].hex()
+        ellipsis = "..." if length > max_run_bytes else ""
+        out.append(
+            f"  @0x{start:x} ({length} bytes) ref={ref_slice}{ellipsis} s1={s1_slice}{ellipsis}"
+        )
+    if len(runs) > max_runs:
+        out.append(f"  ... {len(runs) - max_runs} more run(s)")
+    return "\n".join(out)
+
+
 def host_key() -> tuple[str, str]:
     """Match ``platform.machine()`` against the host-profile key set.
     ``x86_64`` and ``amd64`` (and Windows-style ``AMD64``) are aliased
@@ -977,6 +1025,11 @@ def main() -> int:
             tu_matches += 1
         else:
             tu_mismatches.append(name)
+            print(
+                f"tinycc self-host -- corpus diff [{name}]:\n"
+                f"{describe_byte_diff(ref_o, s1_o)}",
+                file=sys.stderr,
+            )
 
     print(
         f"tinycc self-host -- corpus byte-identical: "
@@ -1151,6 +1204,11 @@ def main() -> int:
                 boot_matches += 1
             else:
                 boot_mismatches.append(name)
+                print(
+                    f"tinycc self-host -- bootstrap diff [{name}]:\n"
+                    f"{describe_byte_diff(gen2_o, gen3_o)}",
+                    file=sys.stderr,
+                )
         print(
             f"tinycc self-host -- gen2 == gen3 byte-identical: "
             f"{boot_matches}/{len(host_tus)} "
@@ -1186,6 +1244,11 @@ def main() -> int:
                 gen2_self_matches += 1
             else:
                 gen2_self_mismatches.append(name)
+                print(
+                    f"tinycc self-host -- gen2-self diff [{name}]:\n"
+                    f"{describe_byte_diff(gen3_o, gen3_self_o)}",
+                    file=sys.stderr,
+                )
         print(
             f"tinycc self-host -- gen2-self compile == gen3: "
             f"{gen2_self_matches}/{len(host_tus)} "

@@ -258,6 +258,22 @@ jobs:
           if-no-files-found: warn
           include-hidden-files: true
           retention-days: 1
+      - name: upload tinycc gen2 / gen2-self binaries (Windows lanes only)
+        # Both binaries are produced from the same stage1-compiled
+        # .o objects; gen2 is host-gcc-linked and works, gen2-self
+        # is stage1-linked through tccpe.c and AVs at runtime on
+        # Windows arm64. Side-by-side `objdump -p` / `dumpbin
+        # /headers` of the two reveals the c5-side link-output
+        # structural delta that drives the AV.
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tcc-gen2-${{ matrix.os }}
+          path: |
+            demos/tinycc/.self_host/tcc-gen2*
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 1
       - name: probe tcc-stage1 imports vs system DLL exports (Windows lanes only)
         # On windows-11-arm the binary fails to load with
         # STATUS_ENTRYPOINT_NOT_FOUND (0xC0000139). Cross-reference
@@ -349,6 +365,36 @@ jobs:
           "%CDB%" -logo "%LOG%" -c "g; .lastevent; r; kn 30; lm; qq" -G -g "%STAGE1%" -B demos/tinycc -c "%SAMPLE%" -o "%RUNNER_TEMP%\arith.o"
           echo cdb exit: %ERRORLEVEL%
           if exist "%LOG%" ( echo === cdb log === & type "%LOG%" ) else ( echo no cdb log produced )
+      - name: capture gen2-self crash under cdb (Windows lanes only)
+        # gen2-self is the stage1-linked tcc binary built from the
+        # gen2-compiled tinycc objects -- functionally identical to
+        # gen2, except linked by stage1's tccpe-driven PE writer
+        # rather than host gcc + mingw ld. On Windows arm64 the
+        # gen2-self binary AVs early. Run it under cdb with the
+        # same script the stage1 step uses so the AV PC + unwind
+        # land in the log.
+        if: runner.os == 'Windows'
+        shell: cmd
+        continue-on-error: true
+        run: |
+          @echo off
+          setlocal
+          set "GEN2SELF=demos\tinycc\.self_host\tcc-gen2-self.exe"
+          if not exist "%GEN2SELF%" set "GEN2SELF=demos\tinycc\.self_host\tcc-gen2-self"
+          if not exist "%GEN2SELF%" ( echo no tcc-gen2-self present & exit /b 0 )
+          if not exist "%GEN2SELF%.exe" copy /Y "%GEN2SELF%" "%GEN2SELF%.exe" >nul
+          if exist "%GEN2SELF%.exe" set "GEN2SELF=%GEN2SELF%.exe"
+          set "CDBDIR=x64"
+          if /I "%PROCESSOR_ARCHITECTURE%"=="ARM64" set "CDBDIR=arm64"
+          set "CDB=C:\Program Files (x86)\Windows Kits\10\Debuggers\%CDBDIR%\cdb.exe"
+          if not exist "%CDB%" ( echo cdb not found at "%CDB%" & exit /b 0 )
+          set "SAMPLE=demos\tinycc\.self_host\samples\arithmetic.c"
+          if not exist "%SAMPLE%" ( echo sample not present & exit /b 0 )
+          set "LOG=%RUNNER_TEMP%\cdb-gen2-self.log"
+          if exist "%LOG%" del "%LOG%"
+          "%CDB%" -logo "%LOG%" -c "g; .lastevent; r; kn 30; lm; qq" -G -g "%GEN2SELF%" -B demos/tinycc -c "%SAMPLE%" -o "%RUNNER_TEMP%\arith.gen2self.o"
+          echo cdb exit: %ERRORLEVEL%
+          if exist "%LOG%" ( echo === cdb gen2-self log === & type "%LOG%" ) else ( echo no cdb log produced )
       - name: stb header-only smoke
         # The densest demo: a single TU pulls in six stb_*.h
         # headers (stb_sprintf, stb_perlin, stb_image_write,

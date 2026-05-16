@@ -350,8 +350,7 @@ impl Compiler {
                     && self.lex.tk != '(';
                 let was_tentative_glo = self.symbols[id_idx].class == Token::Glo as i64
                     && !self.symbols[id_idx].has_initializer
-                    && (!self.symbols[id_idx].is_extern_decl
-                        || self.symbols[id_idx].defined_here)
+                    && (!self.symbols[id_idx].is_extern_decl || self.symbols[id_idx].defined_here)
                     && self.lex.tk != '(';
                 if self.symbols[id_idx].class != 0
                     && !was_sys

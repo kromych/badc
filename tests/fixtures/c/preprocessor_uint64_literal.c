@@ -3,8 +3,9 @@
 // -- the canonical `ULONG_MAX` / `UINT64_MAX` value on LP64
 // hosts) must parse without erroring, and shift operations on
 // it must follow unsigned (logical) semantics so library
-// idioms like `((ULONG_MAX >> 31) >> 31) == 3` (BearSSL's
-// 64-bit host probe in inner.h) evaluate correctly.
+// idioms like `((ULONG_MAX >> 31) >> 31) == 3` (a 64-bit-host
+// probe pattern common in cryptographic library headers)
+// evaluate correctly.
 //
 // Returns 0 only when every check passes; each failure path
 // returns a distinct nonzero code.

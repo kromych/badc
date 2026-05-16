@@ -1,8 +1,9 @@
 // C99 6.7.8: a static initializer for a pointer element can use
 // a cast-of-string-literal idiom -- `((const T *)"...")` -- so
 // the slot ends up as a pointer to a fixed byte sequence. The
-// outer pair of parens around the cast is the form BearSSL uses
-// for its hash OID macros and the matching dispatch tables.
+// outer pair of parens around the cast is the form cryptographic
+// libraries use to pack hash OID byte strings into dispatch
+// tables.
 //
 // Returns 0 only when every check passes; each failure path
 // returns a distinct nonzero code.

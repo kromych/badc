@@ -3030,11 +3030,10 @@ impl<'a> IfExprParser<'a> {
                 // literals like `ULONG_MAX >> 31` -- where
                 // ULONG_MAX is stored as the wrap of `u64::MAX`
                 // -- yield their unsigned answer rather than
-                // the arithmetic-shift `-1`. Real preprocessor
-                // expressions in C library headers (BearSSL's
-                // `((ULONG_MAX >> 31) >> 31) == 3` 64-bit
-                // probe is the canonical case) rely on the
-                // unsigned interpretation.
+                // the arithmetic-shift `-1`. The
+                // `((ULONG_MAX >> 31) >> 31) == 3` 64-bit-host
+                // probe shape standard in C library headers
+                // relies on the unsigned interpretation.
                 let shift = (right.as_int() & 63) as u32;
                 let n = (left.as_int() as u64).wrapping_shr(shift) as i64;
                 left = IfValue::Int(n);

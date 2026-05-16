@@ -4,19 +4,18 @@
 // defining decl's storage; mishandling the merge collapses
 // every following defining decl to the same `.data` offset.
 //
-// Surface shape from BearSSL's `src/inner.h` +
-// `src/hash/sha2small.c`:
+// Canonical shape (header declares the public name as an
+// extern array, the implementation .c file defines it):
 //
-//     // inner.h
-//     extern const uint32_t br_sha224_IV[];
-//     extern const uint32_t br_sha256_IV[];
-//     // sha2small.c
-//     const uint32_t br_sha224_IV[8] = { 0xC1059ED8, ... };
-//     const uint32_t br_sha256_IV[8] = { 0x6A09E667, ... };
+//     // header
+//     extern const uint32_t IV_A[];
+//     extern const uint32_t IV_B[];
+//     // implementation
+//     const uint32_t IV_A[8] = { ... };
+//     const uint32_t IV_B[8] = { ... };
 //
 // Without distinct storage for each defining decl, both names
-// resolve to the same bytes and SHA-224 produces the SHA-256
-// digest.
+// resolve to the same bytes.
 //
 // Returns 0 only when every check passes; each failure path
 // returns a distinct nonzero code.

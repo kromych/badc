@@ -104,18 +104,19 @@ while still failing on a real build error (exit 1).
 ### Known Windows-only test failure (TODO)
 
 `math.lua:692` (`assert(math.ldexp(m, p) == x)` over a fixed
-vector of x values) fails on both Windows lanes for `x = ±inf`.
-The CI probe under `probe Windows libc number formatting +
-frexp/ldexp` shows the root cause:
+vector of x values) fails on both Windows lanes for the
+positive- and negative-infinity inputs. The CI probe under
+`probe Windows libc number formatting + frexp/ldexp` shows the
+root cause:
 
 ```
 RT[6] x=1.#INF m=-1.#IND e=-1 r=-1.#IND eq=0
 RT[7] x=-1.#INF m=-1.#IND e=-1 r=-1.#IND eq=0
 ```
 
-C99 7.12.6.4 paragraph 2 says `frexp(±inf)` returns the
+C99 7.12.6.4 paragraph 2 says `frexp(+/-inf)` returns the
 argument and stores an unspecified exponent. glibc and Apple
-libm both return `±inf`. msvcrt returns NaN. The round-trip
+libm both return `+/-inf`. msvcrt returns NaN. The round-trip
 through `ldexp` therefore loses the input on Windows. The
 divergence is in msvcrt, not c5; closing it requires either
 binding `math.frexp` to ucrtbase's implementation or skipping

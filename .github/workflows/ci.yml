@@ -358,18 +358,23 @@ jobs:
           >>"%WORK%\probe.c" echo     printf("RT[%%d] x=%%.17g m=%%.17g e=%%d r=%%.17g eq=%%d\n", i, x, m, e, r, r == x);
           >>"%WORK%\probe.c" echo   }
           >>"%WORK%\probe.c" echo   for (int i = 1; i ^<= 10; i++) {
-          >>"%WORK%\probe.c" echo     double x = ldexp(1.0, i);
-          >>"%WORK%\probe.c" echo     double y = x + ldexp(1.0, i - 52);
-          >>"%WORK%\probe.c" echo     char sx[64], sy[64], sx17[64], sy17[64];
-          >>"%WORK%\probe.c" echo     snprintf(sx,   64, "%%.15g", x);
-          >>"%WORK%\probe.c" echo     snprintf(sy,   64, "%%.15g", y);
-          >>"%WORK%\probe.c" echo     snprintf(sx17, 64, "%%.17g", x);
-          >>"%WORK%\probe.c" echo     snprintf(sy17, 64, "%%.17g", y);
-          >>"%WORK%\probe.c" echo     double rx  = strtod(sx,   NULL);
-          >>"%WORK%\probe.c" echo     double ry  = strtod(sy,   NULL);
-          >>"%WORK%\probe.c" echo     double rx17= strtod(sx17, NULL);
-          >>"%WORK%\probe.c" echo     printf("ULP[%%d] x=%%.17g y=%%.17g x_neq_y=%%d sx=%%s sy=%%s sx==sy=%%d  rx==x=%%d ry==y=%%d  sx17=%%s rx17==x=%%d\n",
-          >>"%WORK%\probe.c" echo            i, x, y, x != y, sx, sy, strcmp(sx, sy) == 0, rx == x, ry == y, sx17, rx17 == x);
+          >>"%WORK%\probe.c" echo     double xL = ldexp(1.0, i);
+          >>"%WORK%\probe.c" echo     double xP = pow(2.0, (double)i);
+          >>"%WORK%\probe.c" echo     double dP = pow(2.0, (double)(i - 52));
+          >>"%WORK%\probe.c" echo     double yP = xP + dP;
+          >>"%WORK%\probe.c" echo     printf("POW[%%d] xL=%%.17g xP=%%.17g xL_eq_xP=%%d dP=%%.17g yP=%%.17g xP_neq_yP=%%d\n",
+          >>"%WORK%\probe.c" echo            i, xL, xP, xL == xP, dP, yP, xP != yP);
+          >>"%WORK%\probe.c" echo     char fxP[64], fyP[64], buf[64];
+          >>"%WORK%\probe.c" echo     int len;
+          >>"%WORK%\probe.c" echo     len = snprintf(buf, 64, "%%.15g", xP);
+          >>"%WORK%\probe.c" echo     if (strtod(buf, NULL) != xP) len = snprintf(buf, 64, "%%.17g", xP);
+          >>"%WORK%\probe.c" echo     if (buf[strspn(buf, "-0123456789")] == 0) { buf[len++] = '.'; buf[len++] = '0'; buf[len] = 0; }
+          >>"%WORK%\probe.c" echo     strcpy(fxP, buf);
+          >>"%WORK%\probe.c" echo     len = snprintf(buf, 64, "%%.15g", yP);
+          >>"%WORK%\probe.c" echo     if (strtod(buf, NULL) != yP) len = snprintf(buf, 64, "%%.17g", yP);
+          >>"%WORK%\probe.c" echo     if (buf[strspn(buf, "-0123456789")] == 0) { buf[len++] = '.'; buf[len++] = '0'; buf[len] = 0; }
+          >>"%WORK%\probe.c" echo     strcpy(fyP, buf);
+          >>"%WORK%\probe.c" echo     printf("FMTPOW[%%d] fxP=%%s fyP=%%s eq=%%d\n", i, fxP, fyP, strcmp(fxP, fyP) == 0);
           >>"%WORK%\probe.c" echo   }
           >>"%WORK%\probe.c" echo   return 0;
           >>"%WORK%\probe.c" echo }

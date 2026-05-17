@@ -237,12 +237,74 @@ jobs:
         run: python demos/bearssl/smoke.py
       - name: lua smoke (multi-TU + upstream test suite)
         # Vendored Lua 5.5.0 sources compile + multi-TU link
-        # through badc on every supported lane, and a curated
-        # subset of the upstream `lua-tests` (bitwise / closures
-        # / coroutines / math / pattern / sort / string / table
-        # / utf8 / vararg paths) runs against the produced
-        # interpreter at both -O and noO.
+        # through badc on every supported lane, and the curated
+        # 24-script `lua-tests` subset (bitwise, closures,
+        # coroutines, math, pattern, sort, string, table, utf8,
+        # vararg, plus the `T`-driven api / gc / gengc / memerr
+        # / tracegc) runs against the produced interpreter at
+        # both -O and noO.
         run: python demos/lua/smoke.py
+      - name: probe Windows msvcrt setjmp + capture lua crash
+        # Diagnostic for the Windows runtime gaps the lua smoke
+        # surfaces. Runs only when the smoke fails. Two probes:
+        #   1. dump msvcrt.dll exports filtered to setjmp /
+        #      longjmp so the binding choice in <setjmp.h>
+        #      stops being a guess on this lane.
+        #   2. rebuild a fresh lua.exe (the smoke wipes its
+        #      tempdir) and run a quick assertion-failing
+        #      script under cdb so the crash PC + module +
+        #      unwind reach the log.
+        if: failure() && runner.os == 'Windows'
+        shell: cmd
+        continue-on-error: true
+        run: |
+          @echo off
+          setlocal
+          echo === msvcrt setjmp / longjmp exports ===
+          set "DUMPBIN="
+          for /f "delims=" %%P in ('dir /b /s "C:\Program Files\Microsoft Visual Studio\*\*\VC\Tools\MSVC\*\bin\Host*\*\dumpbin.exe" 2^>nul') do (
+            if not defined DUMPBIN set "DUMPBIN=%%P"
+          )
+          if not defined DUMPBIN ( echo dumpbin not on PATH; skipping & goto :build )
+          "%DUMPBIN%" /exports C:\Windows\System32\msvcrt.dll | findstr /i "setjmp longjmp _set"
+          :build
+          echo.
+          echo === building diagnostic lua.exe ===
+          set "BADC=%CD%\target\release\badc.exe"
+          set "WORK=%RUNNER_TEMP%\lua-diag"
+          if exist "%WORK%" rmdir /s /q "%WORK%"
+          mkdir "%WORK%"
+          set "SRC=%CD%\demos\lua\src"
+          set "LT=%CD%\demos\lua\tests\ltests"
+          "%BADC%" -q -DLUA_USER_H=\"ltests.h\" -I "%SRC%" -I "%LT%" -o "%WORK%\lua.exe" ^
+            "%SRC%\lapi.c" "%SRC%\lauxlib.c" "%SRC%\lbaselib.c" "%SRC%\lcode.c" ^
+            "%SRC%\lcorolib.c" "%SRC%\lctype.c" "%SRC%\ldblib.c" "%SRC%\ldebug.c" ^
+            "%SRC%\ldo.c" "%SRC%\ldump.c" "%SRC%\lfunc.c" "%SRC%\lgc.c" "%SRC%\linit.c" ^
+            "%SRC%\liolib.c" "%SRC%\llex.c" "%SRC%\lmathlib.c" "%SRC%\lmem.c" ^
+            "%SRC%\loadlib.c" "%SRC%\lobject.c" "%SRC%\lopcodes.c" "%SRC%\loslib.c" ^
+            "%SRC%\lparser.c" "%SRC%\lstate.c" "%SRC%\lstring.c" "%SRC%\lstrlib.c" ^
+            "%SRC%\ltable.c" "%SRC%\ltablib.c" "%SRC%\ltm.c" "%SRC%\lua.c" ^
+            "%SRC%\lundump.c" "%SRC%\lutf8lib.c" "%SRC%\lvm.c" "%SRC%\lzio.c" ^
+            "%LT%\ltests.c"
+          if errorlevel 1 ( echo lua build failed & exit /b 0 )
+          echo.
+          echo === sanity: lua -v ===
+          "%WORK%\lua.exe" -v
+          echo lua-v exit: %ERRORLEVEL%
+          echo.
+          echo === assertion script under cdb ===
+          set "CDBDIR=x64"
+          if /I "%PROCESSOR_ARCHITECTURE%"=="ARM64" set "CDBDIR=arm64"
+          set "CDB=C:\Program Files (x86)\Windows Kits\10\Debuggers\%CDBDIR%\cdb.exe"
+          if not exist "%CDB%" ( echo cdb not found at "%CDB%"; skipping crash capture & exit /b 0 )
+          echo print 'before assert' > "%WORK%\probe.lua"
+          echo assert(false, 'probe-assertion') >> "%WORK%\probe.lua"
+          echo print 'unreachable' >> "%WORK%\probe.lua"
+          set "LOG=%RUNNER_TEMP%\lua-cdb.log"
+          if exist "%LOG%" del "%LOG%"
+          "%CDB%" -logo "%LOG%" -c "g; .lastevent; r; kn 30; lm; qq" -G -g "%WORK%\lua.exe" "%WORK%\probe.lua"
+          echo cdb exit: %ERRORLEVEL%
+          if exist "%LOG%" ( echo === cdb log === & type "%LOG%" ) else ( echo no cdb log produced )
       - name: chibicc bringup smoke
         # chibicc is the substantial multi-TU exerciser for the
         # cross-TU linker. All nine TUs compile on macOS / Linux,

@@ -357,25 +357,33 @@ jobs:
           >>"%WORK%\probe.c" echo     double r = ldexp(m, e);
           >>"%WORK%\probe.c" echo     printf("RT[%%d] x=%%.17g m=%%.17g e=%%d r=%%.17g eq=%%d\n", i, x, m, e, r, r == x);
           >>"%WORK%\probe.c" echo   }
-          >>"%WORK%\probe.c" echo   for (int i = 1; i ^<= 10; i++) {
-          >>"%WORK%\probe.c" echo     double xL = ldexp(1.0, i);
-          >>"%WORK%\probe.c" echo     double xP = pow(2.0, (double)i);
-          >>"%WORK%\probe.c" echo     double dP = pow(2.0, (double)(i - 52));
-          >>"%WORK%\probe.c" echo     double yP = xP + dP;
-          >>"%WORK%\probe.c" echo     printf("POW[%%d] xL=%%.17g xP=%%.17g xL_eq_xP=%%d dP=%%.17g yP=%%.17g xP_neq_yP=%%d\n",
-          >>"%WORK%\probe.c" echo            i, xL, xP, xL == xP, dP, yP, xP != yP);
-          >>"%WORK%\probe.c" echo     char fxP[64], fyP[64], buf[64];
-          >>"%WORK%\probe.c" echo     int len;
-          >>"%WORK%\probe.c" echo     len = snprintf(buf, 64, "%%.15g", xP);
-          >>"%WORK%\probe.c" echo     if (strtod(buf, NULL) != xP) len = snprintf(buf, 64, "%%.17g", xP);
-          >>"%WORK%\probe.c" echo     if (buf[strspn(buf, "-0123456789")] == 0) { buf[len++] = '.'; buf[len++] = '0'; buf[len] = 0; }
-          >>"%WORK%\probe.c" echo     strcpy(fxP, buf);
-          >>"%WORK%\probe.c" echo     len = snprintf(buf, 64, "%%.15g", yP);
-          >>"%WORK%\probe.c" echo     if (strtod(buf, NULL) != yP) len = snprintf(buf, 64, "%%.17g", yP);
-          >>"%WORK%\probe.c" echo     if (buf[strspn(buf, "-0123456789")] == 0) { buf[len++] = '.'; buf[len++] = '0'; buf[len] = 0; }
-          >>"%WORK%\probe.c" echo     strcpy(fyP, buf);
-          >>"%WORK%\probe.c" echo     printf("FMTPOW[%%d] fxP=%%s fyP=%%s eq=%%d\n", i, fxP, fyP, strcmp(fxP, fyP) == 0);
+          >>"%WORK%\probe.c" echo   int first_x_eq_y = 0, first_str_eq = 0;
+          >>"%WORK%\probe.c" echo   int x_eq_y_i = 0,    str_eq_i = 0;
+          >>"%WORK%\probe.c" echo   for (int outer = 1; outer ^<= 1022; outer++) {
+          >>"%WORK%\probe.c" echo     int signs[2]; signs[0] = -outer; signs[1] = outer;
+          >>"%WORK%\probe.c" echo     for (int s = 0; s ^< 2; s++) {
+          >>"%WORK%\probe.c" echo       int i = signs[s];
+          >>"%WORK%\probe.c" echo       double xP = pow(2.0, (double)i);
+          >>"%WORK%\probe.c" echo       double dP = pow(2.0, (double)(i - 52));
+          >>"%WORK%\probe.c" echo       double yP = xP + dP;
+          >>"%WORK%\probe.c" echo       if (!first_x_eq_y ^&^& xP == yP) { first_x_eq_y = 1; x_eq_y_i = i;
+          >>"%WORK%\probe.c" echo         printf("XEQY i=%%d xP=%%.17g dP=%%.17g yP=%%.17g\n", i, xP, dP, yP); }
+          >>"%WORK%\probe.c" echo       char fxP[64], fyP[64], buf[64];
+          >>"%WORK%\probe.c" echo       int len;
+          >>"%WORK%\probe.c" echo       len = snprintf(buf, 64, "%%.15g", xP);
+          >>"%WORK%\probe.c" echo       if (strtod(buf, NULL) != xP) len = snprintf(buf, 64, "%%.17g", xP);
+          >>"%WORK%\probe.c" echo       if (buf[strspn(buf, "-0123456789")] == 0) { buf[len++] = '.'; buf[len++] = '0'; buf[len] = 0; }
+          >>"%WORK%\probe.c" echo       strcpy(fxP, buf);
+          >>"%WORK%\probe.c" echo       len = snprintf(buf, 64, "%%.15g", yP);
+          >>"%WORK%\probe.c" echo       if (strtod(buf, NULL) != yP) len = snprintf(buf, 64, "%%.17g", yP);
+          >>"%WORK%\probe.c" echo       if (buf[strspn(buf, "-0123456789")] == 0) { buf[len++] = '.'; buf[len++] = '0'; buf[len] = 0; }
+          >>"%WORK%\probe.c" echo       strcpy(fyP, buf);
+          >>"%WORK%\probe.c" echo       if (!first_str_eq ^&^& xP != yP ^&^& strcmp(fxP, fyP) == 0) {
+          >>"%WORK%\probe.c" echo         first_str_eq = 1; str_eq_i = i;
+          >>"%WORK%\probe.c" echo         printf("STREQ i=%%d xP=%%.17g yP=%%.17g fxP=%%s fyP=%%s\n", i, xP, yP, fxP, fyP); }
+          >>"%WORK%\probe.c" echo     }
           >>"%WORK%\probe.c" echo   }
+          >>"%WORK%\probe.c" echo   printf("WALK_SUMMARY: x_eq_y_first_i=%%d str_eq_first_i=%%d\n", x_eq_y_i, str_eq_i);
           >>"%WORK%\probe.c" echo   return 0;
           >>"%WORK%\probe.c" echo }
           "%BADC%" -o "%WORK%\probe.exe" "%WORK%\probe.c"

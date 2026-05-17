@@ -2432,93 +2432,73 @@ fn emit_libc_call(
         Some(Op::Adj) => text[pc_after_op + 1] as usize,
         _ => 0,
     };
-    // ABI arg routing. c5-arg-i sits at [rsp + scratch + i*16];
-    // the per-arg FP flag in `fp_arg_mask` (low bit = arg 0)
-    // selects between the integer and FP arg-register sequences.
-    //
-    // SysV: 6 int regs (rdi/rsi/rdx/rcx/r8/r9), 8 XMM regs
-    //       (xmm0..xmm7), independent counters. Stack overflow
-    //       at [rsp], [rsp+8], ... in argument order.
-    // Win64: 4 int regs (rcx/rdx/r8/r9), 4 XMM regs (xmm0..xmm3).
-    //       The position-i register depends only on the arg index,
-    //       not its type (e.g. xmm1 is used iff position 1 is FP);
-    //       AND for variadics the bit pattern is also written to
-    //       the matching int reg per the Win64 rule. Stack overflow
-    //       starts at [rsp+shadow_space].
-    let arg_regs = abi.int_arg_regs;
-    let int_max = arg_regs.len();
-    let xmm_max = if abi.shadow_space == 0 { 8 } else { 4 };
-    let extras = arg_count.saturating_sub(int_max) as u32;
-    let scratch = (abi.shadow_space + extras * 8 + 15) & !15;
     let _ = local_name;
-
-    if scratch > 0 {
-        emit_sub_rsp_imm32(code, scratch);
+    let imp = &imports.imports[import_index];
+    let fixed_args = if imp.is_variadic {
+        imp.fixed_args.min(arg_count)
+    } else {
+        arg_count
+    };
+    let plan = super::plan_call_args(arg_count, fixed_args, fp_arg_mask, abi);
+    if plan.scratch_bytes > 0 {
+        emit_sub_rsp_imm32(code, plan.scratch_bytes);
     }
 
-    let is_fp = |i: usize| -> bool { (fp_arg_mask & (1u32 << i)) != 0 };
-    let win64 = abi.shadow_space != 0;
-
-    // Walk args in order. SysV uses independent int/xmm counters;
-    // Win64 uses a single position counter (arg N goes to slot N
-    // for both reg files).
-    let mut int_idx = 0usize;
-    let mut xmm_idx = 0usize;
+    // c5-arg-i sits at `[rsp + scratch + i*16]`. R10 is caller-
+    // saved and not in either platform's int-arg-reg set
+    // (SysV: rdi/rsi/rdx/rcx/r8/r9; Win64: rcx/rdx/r8/r9) so
+    // it's a safe courier for stack args.
+    //
+    // Win64 has one extra dialect rule: a variadic FP arg must
+    // ride BOTH the matching XMM reg and the matching int-arg
+    // reg (msvcrt's va_arg(double) reads from the saved-int
+    // area). The planner places such an arg as `IntReg` per
+    // `variadic_int_only`; we emit the duplicate XMM write
+    // here when the source value is FP.
     let mut xmm_used = 0u8;
-    for i in 0..arg_count {
-        let src = scratch + (i as u32) * 16;
-        if win64 {
-            // Win64: arg i lands in [int_arg_regs[i], xmm[i]] for
-            // i < 4, then on stack. Variadic FP is duplicated in
-            // both files.
-            if i < int_max {
-                emit_mov_r_mem(code, Reg(arg_regs[i]), Reg::RSP, src as i32);
+    let win64 = abi.shadow_space != 0;
+    let int_max = abi.int_arg_regs.len();
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        let src = (plan.scratch_bytes + (i as u32) * 16) as i32;
+        let is_fp_arg = (fp_arg_mask & (1u32 << i)) != 0;
+        match placement {
+            super::ArgPlacement::IntReg(r) => {
+                emit_mov_r_mem(code, Reg(r), Reg::RSP, src);
+                if win64 && is_fp_arg && i < 4 {
+                    // Win64 fixed FP arg in the first 4 slots:
+                    // duplicate into the matching xmm reg.
+                    emit_movq_xmm_r(code, Reg(i as u8), Reg(r));
+                    xmm_used += 1;
+                }
             }
-            if is_fp(i) && i < xmm_max {
-                emit_movq_xmm_r(code, Reg(i as u8), Reg(arg_regs[i]));
+            super::ArgPlacement::FpReg(d) => {
+                emit_movq_xmm_r_mem(code, Reg(d), Reg::RSP, src);
                 xmm_used += 1;
+                if win64 && i < int_max {
+                    // Win64 mirror: also put the bit pattern in
+                    // the matching int-arg reg (the planner kept
+                    // the IntReg position free in this case so we
+                    // wouldn't double-allocate it).
+                    emit_mov_r_mem(code, Reg(abi.int_arg_regs[i]), Reg::RSP, src);
+                }
             }
-            if i >= int_max {
-                let dst = abi.shadow_space + ((i - int_max) as u32) * 8;
-                emit_mov_r_mem(code, Reg::R10, Reg::RSP, src as i32);
-                emit_mov_mem_r(code, Reg::RSP, dst as i32, Reg::R10);
+            super::ArgPlacement::Stack(off) => {
+                emit_mov_r_mem(code, Reg::R10, Reg::RSP, src);
+                emit_mov_mem_r(code, Reg::RSP, off as i32, Reg::R10);
             }
-        } else if is_fp(i) {
-            if xmm_idx < xmm_max {
-                // SysV: floats ride XMM regs, separate counter.
-                emit_movq_xmm_r_mem(code, Reg(xmm_idx as u8), Reg::RSP, src as i32);
-                xmm_idx += 1;
-                xmm_used += 1;
-            } else {
-                // Spill to host stack at the next free 8-byte slot.
-                let dst = (xmm_idx + int_idx).saturating_sub(xmm_max + int_max);
-                let dst = (dst as u32) * 8;
-                emit_mov_r_mem(code, Reg::R10, Reg::RSP, src as i32);
-                emit_mov_mem_r(code, Reg::RSP, dst as i32, Reg::R10);
-            }
-        } else if int_idx < int_max {
-            emit_mov_r_mem(code, Reg(arg_regs[int_idx]), Reg::RSP, src as i32);
-            int_idx += 1;
-        } else {
-            let dst = (xmm_idx + int_idx).saturating_sub(xmm_max + int_max);
-            let dst = (dst as u32) * 8;
-            emit_mov_r_mem(code, Reg::R10, Reg::RSP, src as i32);
-            emit_mov_mem_r(code, Reg::RSP, dst as i32, Reg::R10);
-            int_idx += 1;
         }
     }
-    if abi.shadow_space == 0 && abi.variadic_zero_xmm_count {
-        if imports.imports[import_index].is_variadic {
+    if abi.variadic_zero_xmm_count {
+        if imp.is_variadic {
             // Variadic System V: AL = number of XMM regs used.
-            // For an all-integer call this is 0 (the original
-            // `xor eax, eax`); calls with FP args set AL to the
-            // count routed through xmm0..xmm7.
+            // For an all-integer call this is 0; calls with FP
+            // args set AL to the count routed through XMM.
             emit_mov_al_imm8(code, xmm_used);
         } else {
-            // Non-variadic SysV: AL is don't-care, but zeroing rax
-            // before the call costs ~2 bytes and matches the
-            // historical sequence -- preserves disassembly diff
-            // discipline against the pre-FP-packer baseline.
+            // Non-variadic SysV: AL is don't-care, but zeroing
+            // rax matches the historical sequence and keeps
+            // diffs disciplined against the pre-FP-packer
+            // baseline.
             emit_xor_eax_eax(code);
         }
     }
@@ -2537,8 +2517,8 @@ fn emit_libc_call(
     });
     emit_call_rel32(code, 0);
 
-    if scratch > 0 {
-        emit_add_rsp_imm32(code, scratch);
+    if plan.scratch_bytes > 0 {
+        emit_add_rsp_imm32(code, plan.scratch_bytes);
     }
 
     {

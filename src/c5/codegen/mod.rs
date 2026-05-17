@@ -285,6 +285,141 @@ pub(super) fn param_count_for_func(text: &[i64], ent_pc: usize) -> usize {
     max_param_offset.map_or(0, |off| (off - 1) as usize)
 }
 
+/// Where a single call argument lands on the host ABI. Produced
+/// by [`plan_call_args`], consumed by the per-arch lowering at
+/// `Op::JsrExt` and (in non-variadic shape) at `Op::Jsr` /
+/// `Op::Jsri`. The placement is target-agnostic; the per-arch
+/// emitter turns each variant into the right load / store
+/// instruction pair.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ArgPlacement {
+    /// Goes into an integer arg register. Index is into
+    /// `Abi::int_arg_regs`.
+    IntReg(u8),
+    /// Goes into a floating-point arg register. Index is the
+    /// register number (d0..d7 on aarch64, xmm0..xmm7 on
+    /// x86_64).
+    FpReg(u8),
+    /// Goes onto the host outgoing-args stack at `[sp + offset]`
+    /// (post-`shadow_space`, post-scratch-allocation). 8-byte
+    /// stride.
+    Stack(u32),
+}
+
+/// Per-call argument plan + the host outgoing-args reservation
+/// the call site has to pre-allocate before staging the args.
+#[derive(Debug, Clone)]
+pub(super) struct CallPlan {
+    /// One entry per c5-stack arg, in source order. Length
+    /// matches `arg_count`.
+    pub placements: alloc::vec::Vec<ArgPlacement>,
+    /// Total bytes the caller must subtract from SP before
+    /// writing stack args, rounded up to a 16-byte multiple to
+    /// keep SP 16-aligned at the call. Includes `shadow_space`
+    /// (Win64 reserves 32 bytes for the callee to spill its
+    /// register args; AAPCS64 / SysV reserve 0).
+    pub scratch_bytes: u32,
+}
+
+/// Decide where each of `arg_count` call arguments lands per
+/// `abi`'s ABI dialect, given the per-arg FP-ness bitmap and how
+/// many of the args are fixed (the rest are variadic). The
+/// returned [`CallPlan`] is consumed by the per-arch emitter.
+///
+/// Argument-placement rules across the four supported dialects:
+///
+/// * **Standard AAPCS64 / SysV** (Linux aarch64, Linux x86_64):
+///   ints to `int_arg_regs`, FP scalars to the FP-reg bank,
+///   overflow to the host stack. Variadic args are placed
+///   identically to fixed ones.
+/// * **macOS arm64** (`variadic_on_stack`): fixed args follow
+///   AAPCS64; variadic args spill to the host stack at 8-byte
+///   stride, no FP regs used.
+/// * **Win64 / Windows aarch64** (`variadic_int_only`): fixed
+///   args follow the standard placement; variadic args use the
+///   integer reg bank only (FP variadic args ride int regs as
+///   their raw bit pattern), then overflow to the stack.
+pub(super) fn plan_call_args(
+    arg_count: usize,
+    fixed_args: usize,
+    fp_arg_mask: u32,
+    abi: Abi,
+) -> CallPlan {
+    let mut placements = alloc::vec::Vec::with_capacity(arg_count);
+    let int_max = abi.int_arg_regs.len();
+    let mut int_idx = 0usize;
+    let mut fp_idx = 0usize;
+    let mut stack_used: u32 = 0;
+    for i in 0..arg_count {
+        let is_fp = (fp_arg_mask & (1u32 << i)) != 0;
+        let is_variadic = i >= fixed_args;
+        let force_stack = is_variadic && abi.variadic_on_stack;
+        let allow_fp_reg = !is_variadic || !abi.variadic_int_only;
+
+        let placement = if force_stack {
+            let off = stack_used;
+            stack_used += 8;
+            ArgPlacement::Stack(off)
+        } else if abi.position_indexed_args {
+            // Win64: arg position i picks reg i for both int and
+            // FP. No separate counters; arg 0 burns slot 0 even
+            // if a prior FP arg already used xmm0.
+            if i < int_max {
+                if is_fp && allow_fp_reg {
+                    ArgPlacement::FpReg(i as u8)
+                } else {
+                    ArgPlacement::IntReg(abi.int_arg_regs[i])
+                }
+            } else {
+                let off = stack_used;
+                stack_used += 8;
+                ArgPlacement::Stack(off)
+            }
+        } else if is_fp && allow_fp_reg && fp_idx < 8 {
+            let r = fp_idx as u8;
+            fp_idx += 1;
+            ArgPlacement::FpReg(r)
+        } else if int_idx < int_max {
+            // Routes both real int args and variadic FP args
+            // (under `variadic_int_only`) through the integer
+            // bank. The c5 stack stores every value as its raw
+            // 8-byte bit pattern, so the int-reg transfer
+            // matches what va_arg(double) on Microsoft reads
+            // back from the saved-int area.
+            let r = abi.int_arg_regs[int_idx];
+            int_idx += 1;
+            ArgPlacement::IntReg(r)
+        } else {
+            let off = stack_used;
+            stack_used += 8;
+            ArgPlacement::Stack(off)
+        };
+        placements.push(placement);
+    }
+
+    // Shadow space rides ABOVE the outgoing-args region on Win64
+    // (caller-reserved area the callee may spill register args
+    // into). Add it to the reservation so the
+    // `[sp + offset]` writes from `Stack(offset)` land past it.
+    let raw = stack_used + abi.shadow_space;
+    let scratch_bytes = (raw + 15) & !15;
+    // Per `Stack(offset)` semantics, the caller writes each arg
+    // at `[sp + shadow_space + offset]`. Rebase the offsets so
+    // the emitter can use them directly without re-adding
+    // shadow_space on each store.
+    if abi.shadow_space > 0 {
+        for p in placements.iter_mut() {
+            if let ArgPlacement::Stack(off) = p {
+                *off += abi.shadow_space;
+            }
+        }
+    }
+    CallPlan {
+        placements,
+        scratch_bytes,
+    }
+}
+
 /// Decide how to extend a libc return value into the c5
 /// accumulator. `target` is needed to decide the `long` width:
 /// LP64 (Linux / macOS) -- 8 bytes, no extension; LLP64 (Windows)
@@ -1276,6 +1411,22 @@ pub(crate) struct Abi {
     /// pass variadic args identically to fixed args, so this
     /// flag is unset for them.
     pub variadic_on_stack: bool,
+    /// Windows variadic ABI passes variadic args through the
+    /// integer arg registers + the host stack, never through the
+    /// FP arg registers. Microsoft's `va_arg(double)` reads the
+    /// raw 8-byte bit pattern from the integer side (`__gr_top`
+    /// on Aarch64, the saved-int area on x64), so an AAPCS64-
+    /// or SysV-style FP-reg placement causes msvcrt's printf to
+    /// see denormal garbage. Mutually exclusive with
+    /// `variadic_on_stack` (Apple's all-stack flavour).
+    pub variadic_int_only: bool,
+    /// Win64 places each arg in the register at its argument
+    /// position (arg 0 -> int_arg_regs[0] / xmm0, arg 1 ->
+    /// int_arg_regs[1] / xmm1, ...) -- the type of arg 1 doesn't
+    /// shift arg 2's register. SysV / AAPCS64 instead advance
+    /// independent int and FP counters, so an FP arg in the
+    /// middle of an int sequence doesn't burn an int reg slot.
+    pub position_indexed_args: bool,
     /// SysV x86_64 requires `%al` to hold the count of XMM
     /// regs used at every variadic call site; c4 has no
     /// floats so the count is always 0, which means a single
@@ -1325,6 +1476,8 @@ impl Target {
                 int_arg_regs: AARCH64_INT_ARGS,
                 shadow_space: 0,
                 variadic_on_stack: true,
+                variadic_int_only: false,
+                position_indexed_args: false,
                 variadic_zero_xmm_count: false,
             },
             Target::LinuxAarch64 => Abi {
@@ -1332,6 +1485,8 @@ impl Target {
                 int_arg_regs: AARCH64_INT_ARGS,
                 shadow_space: 0,
                 variadic_on_stack: false,
+                variadic_int_only: false,
+                position_indexed_args: false,
                 variadic_zero_xmm_count: false,
             },
             Target::LinuxX64 => Abi {
@@ -1339,6 +1494,8 @@ impl Target {
                 int_arg_regs: SYSV_INT_ARGS,
                 shadow_space: 0,
                 variadic_on_stack: false,
+                variadic_int_only: false,
+                position_indexed_args: false,
                 variadic_zero_xmm_count: true,
             },
             Target::WindowsX64 => Abi {
@@ -1346,6 +1503,8 @@ impl Target {
                 int_arg_regs: WIN64_INT_ARGS,
                 shadow_space: 32,
                 variadic_on_stack: false,
+                variadic_int_only: true,
+                position_indexed_args: true,
                 variadic_zero_xmm_count: false,
             },
             Target::WindowsAarch64 => Abi {
@@ -1353,6 +1512,8 @@ impl Target {
                 int_arg_regs: AARCH64_INT_ARGS,
                 shadow_space: 0,
                 variadic_on_stack: false,
+                variadic_int_only: true,
+                position_indexed_args: false,
                 variadic_zero_xmm_count: false,
             },
         }

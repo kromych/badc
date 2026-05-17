@@ -2522,197 +2522,37 @@ fn emit_libc_call(
     // `printf`.
     let _ = local_name;
     let imp = &imports.imports[import_index];
-    let win_arm64_variadic = imp.is_variadic && target == super::Target::WindowsAarch64;
-    let is_variadic = imp.is_variadic && abi.variadic_on_stack;
-
-    if win_arm64_variadic {
-        // Windows AArch64 variadic ABI: fixed args follow
-        // standard AAPCS64 (ints in x0..x7, FP scalars in
-        // d0..d7); the variadic tail is passed through the
-        // integer registers x0..x7 and then on the stack at
-        // sp+0, sp+8, ..., with FP values transferred as their
-        // 8-byte bit pattern. Microsoft's va_arg(double) reads
-        // them from the integer side (`__gr_top`), not the FP
-        // side, which is why msvcrt's `snprintf` / `printf`
-        // see denormal garbage when AAPCS64-style d-reg
-        // placement is used.
-        let fixed = imp.fixed_args.min(arg_count);
-        let mut int_idx = 0usize;
-        let mut fp_idx = 0usize;
-        for i in 0..fixed {
-            let off = (i as u32) * 16;
-            let is_fp = (fp_arg_mask & (1u32 << i)) != 0;
-            if is_fp && fp_idx < 8 {
-                emit(code, enc_ldr_d_imm(fp_idx as u8, Reg::SP, off));
-                fp_idx += 1;
-            } else if !is_fp && int_idx < abi.int_arg_regs.len() {
-                let r = Reg(abi.int_arg_regs[int_idx]);
-                emit(code, enc_ldr_imm(r, Reg::SP, off));
-                int_idx += 1;
-            } else {
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!(
-                        "windows arm64 variadic call: fixed arg {i} \
-                         exceeds register banks (int_idx={int_idx}, \
-                         fp_idx={fp_idx})"
-                    ),
-                )));
-            }
-        }
-        let n_var = arg_count - fixed;
-        // Variadic args after the fixed prefix use the
-        // remaining int-arg registers, then spill at
-        // sp+0, sp+8, ... regardless of c5's int / FP
-        // classification.
-        let var_int_regs = abi.int_arg_regs.len().saturating_sub(int_idx);
-        let n_var_in_regs = n_var.min(var_int_regs);
-        let n_var_on_stack = n_var - n_var_in_regs;
-        let scratch_bytes = ((n_var_on_stack as u32) * 8 + 15) & !15;
-        if scratch_bytes > 0 {
-            emit(code, enc_sub_imm(Reg::SP, Reg::SP, scratch_bytes));
-        }
-        for i in 0..n_var_in_regs {
-            let src = scratch_bytes + ((fixed + i) as u32) * 16;
-            let r = Reg(abi.int_arg_regs[int_idx + i]);
-            emit(code, enc_ldr_imm(r, Reg::SP, src));
-        }
-        for i in 0..n_var_on_stack {
-            let src = scratch_bytes + ((fixed + n_var_in_regs + i) as u32) * 16;
-            emit(code, enc_ldr_imm(Reg::X16, Reg::SP, src));
-            emit(code, enc_str_imm(Reg::X16, Reg::SP, (i * 8) as u32));
-        }
-        emit_got_call(code, plt_call_fixups, import_index);
-        if scratch_bytes > 0 {
-            emit(code, enc_add_imm(Reg::SP, Reg::SP, scratch_bytes));
-        }
-    } else if is_variadic {
-        // macOS arm64 variadic ABI: the first `fixed_args`
-        // arguments follow standard AAPCS64 (ints to x0..x7,
-        // FP scalars to d0..d7); the variadic tail ALL spills
-        // to a fresh stack region with 8-byte spacing -- no FP
-        // registers are used for variadic args on Apple
-        // platforms (the AAPCS64 quirk), and we transfer the
-        // raw bit pattern, which is what va_arg(double) reads
-        // back off the stack.
-        let fixed = imp.fixed_args.min(arg_count);
-        // With cdecl push order, c5-arg-i sits at sp + i*16.
-        // Walk fixed args with independent int / FP counters,
-        // matching the non-variadic AAPCS64 path so that any FP
-        // value among the fixed args lands in d0..d7 instead of
-        // x0..x7.
-        let mut int_idx = 0usize;
-        let mut fp_idx = 0usize;
-        for i in 0..fixed {
-            let off = (i as u32) * 16;
-            let is_fp = (fp_arg_mask & (1u32 << i)) != 0;
-            if is_fp && fp_idx < 8 {
-                emit(code, enc_ldr_d_imm(fp_idx as u8, Reg::SP, off));
-                fp_idx += 1;
-            } else if !is_fp && int_idx < abi.int_arg_regs.len() {
-                let r = Reg(abi.int_arg_regs[int_idx]);
-                emit(code, enc_ldr_imm(r, Reg::SP, off));
-                int_idx += 1;
-            } else {
-                // Out of registers in the fixed prefix. macOS
-                // arm64 spills any overflow onto the same stack
-                // region as the variadic tail; fall through to
-                // the variadic packer by re-classing this arg
-                // as "variadic" for placement purposes. Today's
-                // bindings (printf, sprintf, ...) don't fill the
-                // 8-reg int bank with fixed args, so this is a
-                // future-proofing branch -- diagnostic-only.
-                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                    &format!(
-                        "macOS arm64 variadic call: fixed arg {i} \
-                     exceeds register banks (int_idx={int_idx}, \
-                     fp_idx={fp_idx}); stack-overflow for fixed \
-                     args isn't wired up yet"
-                    ),
-                )));
-            }
-        }
-        let n_var = arg_count - fixed;
-        if n_var > 0 {
-            // Pack variadic args into a fresh stack region.
-            // 8-byte slots; round up to 16 to keep SP aligned.
-            // FP variadic args ride the same int-style transfer
-            // because the c5 IR already stores doubles as their
-            // bit pattern in a GPR slot, and macOS va_arg(double)
-            // reads 8 raw bytes off the stack -- bit-for-bit
-            // identical to the integer transfer.
-            let scratch_bytes = ((n_var * 8 + 15) & !15) as u32;
-            emit(code, enc_sub_imm(Reg::SP, Reg::SP, scratch_bytes));
-            for i in 0..n_var {
-                // Variadic arg `i` is c5-arg-(fixed+i); its pre-sub
-                // slot is `(fixed + i) * 16`, shifted up by
-                // scratch_bytes after the sub.
-                let src = scratch_bytes + ((fixed + i) as u32) * 16;
-                emit(code, enc_ldr_imm(Reg::X16, Reg::SP, src));
-                emit(code, enc_str_imm(Reg::X16, Reg::SP, (i * 8) as u32));
-            }
-            emit_got_call(code, plt_call_fixups, import_index);
-            emit(code, enc_add_imm(Reg::SP, Reg::SP, scratch_bytes));
-        } else {
-            emit_got_call(code, plt_call_fixups, import_index);
-        }
+    let fixed_args = if imp.is_variadic {
+        imp.fixed_args.min(arg_count)
     } else {
-        // Non-variadic AAPCS64 (Linux/aarch64 takes this path for
-        // both fixed and variadic calls). c5-arg-K is at sp + K*16
-        // (cdecl push order, first decl on top). Walk args with
-        // independent int / FP counters: ints go to x0..x7, FP
-        // scalars to d0..d7, overflow spills to host stack at
-        // sp+0, sp+8, ...
-        //
-        // The FP-arg bitmap (`fp_arg_mask`, low bit = arg 0) marks
-        // FP-vs-int per position; a missing bit defaults to int.
-        // Standard AAPCS64 puts variadic FP args in d-regs the
-        // same way fixed FP args ride them; the macOS-on-stack
-        // path branched away above.
-        let mut int_idx = 0usize;
-        let mut fp_idx = 0usize;
-        let mut stack_used: usize = 0;
-        for i in 0..arg_count {
-            let is_fp = (fp_arg_mask & (1u32 << i)) != 0;
-            if is_fp {
-                if fp_idx >= 8 {
-                    stack_used += 1;
-                } else {
-                    fp_idx += 1;
-                }
-            } else if int_idx >= abi.int_arg_regs.len() {
-                stack_used += 1;
-            } else {
-                int_idx += 1;
+        arg_count
+    };
+    let plan = super::plan_call_args(arg_count, fixed_args, fp_arg_mask, abi);
+    if plan.scratch_bytes > 0 {
+        emit(code, enc_sub_imm(Reg::SP, Reg::SP, plan.scratch_bytes));
+    }
+    // c5-arg-i sits at `[sp + scratch + i*16]` (cdecl push order,
+    // first declared on top). Load each into the host position
+    // the planner chose. x16 is AAPCS64 scratch -- safe courier
+    // for stack args.
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        let src = plan.scratch_bytes + (i as u32) * 16;
+        match placement {
+            super::ArgPlacement::IntReg(r) => {
+                emit(code, enc_ldr_imm(Reg(r), Reg::SP, src));
             }
-        }
-        let scratch = ((stack_used as u32) * 8 + 15) & !15;
-        if scratch > 0 {
-            emit(code, enc_sub_imm(Reg::SP, Reg::SP, scratch));
-        }
-        let mut int_idx = 0usize;
-        let mut fp_idx = 0usize;
-        let mut stack_idx = 0usize;
-        for i in 0..arg_count {
-            let src = scratch + (i as u32) * 16;
-            let is_fp = (fp_arg_mask & (1u32 << i)) != 0;
-            if is_fp && fp_idx < 8 {
-                emit(code, enc_ldr_d_imm(fp_idx as u8, Reg::SP, src));
-                fp_idx += 1;
-            } else if !is_fp && int_idx < abi.int_arg_regs.len() {
-                let r = Reg(abi.int_arg_regs[int_idx]);
-                emit(code, enc_ldr_imm(r, Reg::SP, src));
-                int_idx += 1;
-            } else {
-                let dst = (stack_idx as u32) * 8;
+            super::ArgPlacement::FpReg(d) => {
+                emit(code, enc_ldr_d_imm(d, Reg::SP, src));
+            }
+            super::ArgPlacement::Stack(off) => {
                 emit(code, enc_ldr_imm(Reg::X16, Reg::SP, src));
-                emit(code, enc_str_imm(Reg::X16, Reg::SP, dst));
-                stack_idx += 1;
+                emit(code, enc_str_imm(Reg::X16, Reg::SP, off));
             }
         }
-        emit_got_call(code, plt_call_fixups, import_index);
-        if scratch > 0 {
-            emit(code, enc_add_imm(Reg::SP, Reg::SP, scratch));
-        }
+    }
+    emit_got_call(code, plt_call_fixups, import_index);
+    if plan.scratch_bytes > 0 {
+        emit(code, enc_add_imm(Reg::SP, Reg::SP, plan.scratch_bytes));
     }
 
     {

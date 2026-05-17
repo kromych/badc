@@ -1228,25 +1228,42 @@ pub(super) fn lower(
 
     // SSA observability: when --regalloc=ssa is requested, run
     // the lift + allocator on every function and dump the result
-    // if BADC_DUMP_SSA is set. The pool path still emits the
-    // native bytes for now; the SSA emit will hook in here
-    // once parity work lands.
+    // if BADC_DUMP_SSA is set. When `BADC_USE_SSA_EMIT` is also
+    // set, the SSA emit replaces the pool path per function: at
+    // each `Op::Ent`, the wire-in below tries `emit_function`;
+    // on success it records the SSA bytes and skips the pool
+    // walk for that function's PC range. The current handler
+    // coverage isn't wide enough for real programs, so the gate
+    // panics on any function the SSA emit can't lower -- the
+    // failure message + the dump are how the next handler gap
+    // gets surfaced.
+    let ssa_funcs: alloc::vec::Vec<super::ssa::FunctionSsa>;
+    let ssa_allocs: alloc::vec::Vec<super::ssa_alloc::Allocation>;
+    let mut ssa_lookup: alloc::collections::BTreeMap<usize, usize> =
+        alloc::collections::BTreeMap::new();
+    #[cfg(feature = "std")]
+    let use_ssa_emit =
+        matches!(native.regalloc, super::RegallocMode::Ssa) && std::env::var("BADC_USE_SSA_EMIT").is_ok();
+    #[cfg(not(feature = "std"))]
+    let use_ssa_emit = false;
     if matches!(native.regalloc, super::RegallocMode::Ssa) {
-        let ssa_funcs = super::ssa::lift_program(program)?;
+        ssa_funcs = super::ssa::lift_program(program)?;
+        ssa_allocs = ssa_funcs
+            .iter()
+            .map(|f| super::ssa_alloc::allocate(f, target))
+            .collect();
         #[cfg(feature = "std")]
-        let dump = super::ssa_dump::enabled();
-        #[cfg(not(feature = "std"))]
-        let dump = false;
-        for f in &ssa_funcs {
-            let alloc_result = super::ssa_alloc::allocate(f, target);
-            if dump {
-                #[cfg(feature = "std")]
-                {
-                    eprint!("{}", super::ssa_dump::dump_function(f, &alloc_result));
-                }
+        if super::ssa_dump::enabled() {
+            for (f, a) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
+                eprint!("{}", super::ssa_dump::dump_function(f, a));
             }
-            let _ = alloc_result;
         }
+        for (i, f) in ssa_funcs.iter().enumerate() {
+            ssa_lookup.insert(f.ent_pc, i);
+        }
+    } else {
+        ssa_funcs = alloc::vec::Vec::new();
+        ssa_allocs = alloc::vec::Vec::new();
     }
 
     // Pre-scan for branch targets so the cmp+branch fusion peephole
@@ -1310,6 +1327,50 @@ pub(super) fn lower(
         pc += 1;
         if matches!(op, Op::Ent) {
             current_func = funcs.get(&op_pc).copied().unwrap_or_default();
+            // SSA emit replacement: when --regalloc=ssa is on AND
+            // BADC_USE_SSA_EMIT is in the environment, replace the
+            // pool path's bytecode walk for this function with the
+            // SSA emit's output. A failure here panics with the
+            // SSA dump rendered to stderr -- the gate is opt-in,
+            // and silent fallback would obscure the gap.
+            if use_ssa_emit {
+                let ssa_idx = ssa_lookup.get(&op_pc).copied().ok_or_else(|| {
+                    C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        "ssa emit: bytecode Op::Ent has no corresponding FunctionSsa",
+                    ))
+                })?;
+                let func_ssa = &ssa_funcs[ssa_idx];
+                let alloc_for = &ssa_allocs[ssa_idx];
+                bytecode_to_native[op_pc] = code.len();
+                let ok = super::ssa_emit_aarch64::emit_function(
+                    func_ssa, alloc_for, target, &mut code,
+                );
+                if !ok {
+                    #[cfg(feature = "std")]
+                    {
+                        eprint!(
+                            "{}",
+                            super::ssa_dump::dump_function(func_ssa, alloc_for),
+                        );
+                    }
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        &alloc::format!(
+                            "ssa emit: function at ent_pc {} contains an op outside the implemented subset",
+                            op_pc,
+                        ),
+                    )));
+                }
+                // Skip the pool path's per-PC walk for the rest
+                // of this function. Advance pc past the function's
+                // bytecode range -- the next op the outer loop
+                // sees is the next function's `Op::Ent` (or end).
+                let next_ent_pc = ssa_funcs
+                    .get(ssa_idx + 1)
+                    .map(|f| f.ent_pc)
+                    .unwrap_or(program.text.len());
+                pc = next_ent_pc;
+                continue;
+            }
             // Clear any cmp+branch fusion state; pending_cmp_cond
             // is only legal for the immediate gap between a compare
             // op and its matching Bz/Bnz, never across a function

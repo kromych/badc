@@ -1598,11 +1598,7 @@ fn lookup_binding_dylib<'a>(
     local_name: &str,
 ) -> Option<&'a str> {
     for spec in dylibs {
-        if spec
-            .bindings
-            .iter()
-            .any(|b| b.local_name == local_name)
-        {
+        if spec.bindings.iter().any(|b| b.local_name == local_name) {
             return Some(spec.name.as_str());
         }
     }

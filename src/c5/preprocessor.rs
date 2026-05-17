@@ -1853,6 +1853,8 @@ impl Preprocessor {
         }
         let id = match name {
             "alloca" | "__builtin_alloca" => super::op::Intrinsic::Alloca as i64,
+            "__c5_aarch64_setjmp" => super::op::Intrinsic::SetjmpAArch64 as i64,
+            "__c5_aarch64_longjmp" => super::op::Intrinsic::LongjmpAArch64 as i64,
             _ => {
                 return Err(C5Error::Compile(super::error::fmt_compile_err(
                     filename,
@@ -1860,7 +1862,8 @@ impl Preprocessor {
                     &format!(
                         "`#pragma intrinsic(\"{name}\")` -- unknown \
                          intrinsic; supported today: alloca, \
-                         __builtin_alloca"
+                         __builtin_alloca, __c5_aarch64_setjmp, \
+                         __c5_aarch64_longjmp"
                     ),
                 )));
             }

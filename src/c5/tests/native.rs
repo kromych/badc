@@ -377,6 +377,13 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("libc_basic.c", 0),
     ("memset_mcmp.c", 42),
     ("memcpy_basic.c", 'A' as i32),
+    // C99 7.13 setjmp / longjmp round-trip. On macOS / Linux
+    // the binding hits host libc; on Windows x86_64 it routes
+    // through msvcrt; on Windows AArch64 the inline
+    // `Intrinsic::SetjmpAArch64` / `Intrinsic::LongjmpAArch64`
+    // expansions in the codegen replace the missing CRT
+    // surface.
+    ("setjmp_longjmp_roundtrip.c", 0),
     ("struct_basic.c", 25),
     ("struct_linked_list.c", 10),
     ("global_initializer_int.c", 141),

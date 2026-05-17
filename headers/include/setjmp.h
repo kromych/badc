@@ -32,18 +32,27 @@ void longjmp(jmp_buf env, int val);
 #pragma dylib(msvcrt, "msvcrt.dll")
 
 #if defined(__aarch64__)
-// Windows ARM64 msvcrt.dll does not export `_setjmp`; the
-// architecture-native CRT uses the SEH-aware `_setjmpex` with a
-// different signature (env plus frame pointer supplied by a
-// compiler intrinsic). c5 does not integrate Windows SEH, so
-// provide an inline stub that returns 0 on the initial call.
-// Code paths that only use setjmp/longjmp for error recovery
-// (the common C99 7.13 pattern) cover the success path here;
-// the error path stays untaken and never invokes longjmp.
-typedef long jmp_buf[64];
-#pragma binding(msvcrt::longjmp, "longjmp")
-static int setjmp(long *env) { (void)env; return 0; }
-void longjmp(jmp_buf env, int val);
+// Windows AArch64 msvcrt's `longjmp` routes through SEH and
+// raises STATUS_NONCONTINUABLE_EXCEPTION on a `jmp_buf` whose
+// frame pointer chain doesn't match a live unwind record. c5
+// does not integrate Windows SEH, so we provide a self-
+// contained setjmp / longjmp pair that uses only the AAPCS64
+// callee-saved register set plus SP and a captured resume PC.
+// The pair is lowered inline at each call site by the AArch64
+// codegen (`Intrinsic::SetjmpAArch64` /
+// `Intrinsic::LongjmpAArch64`).
+//
+// The jmp_buf must be 8-byte aligned; pick `long long` (8
+// bytes per slot on Windows LLP64) to guarantee that. 256 bytes
+// covers the 168-byte register save area with slack for any
+// future addition.
+typedef long long jmp_buf[32];
+#pragma intrinsic("__c5_aarch64_setjmp")
+#pragma intrinsic("__c5_aarch64_longjmp")
+int __c5_aarch64_setjmp(long long *env);
+void __c5_aarch64_longjmp(long long *env, int val);
+#define setjmp(env)        __c5_aarch64_setjmp((long long *)(env))
+#define longjmp(env, val)  __c5_aarch64_longjmp((long long *)(env), (val))
 #else
 // Windows x86_64. msvcrt's `_setjmp` saves xmm6-xmm15 with
 // `movdqa [env+0x60..0xC0], xmm*`, which raises an access

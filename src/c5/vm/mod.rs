@@ -1269,6 +1269,13 @@ impl<H: Host> Vm<H> {
                             self.store_i64(alloca_top_addr, new_top)?;
                             a = new_top;
                         }
+                        crate::c5::op::Intrinsic::SetjmpAArch64
+                        | crate::c5::op::Intrinsic::LongjmpAArch64 => {
+                            return Err(C5Error::Runtime(alloc::format!(
+                                "VM: Op::Intrinsic({intrinsic:?}) is AArch64- \
+                                 specific and cannot run in the bytecode VM"
+                            )));
+                        }
                     }
                 }
                 Op::AllocaInit => {

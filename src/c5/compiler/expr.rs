@@ -218,27 +218,53 @@ impl Compiler {
             if self.lex.tk == '(' {
                 self.next()?;
                 // Intrinsic call: the identifier was registered via
-                // `#pragma intrinsic("name")`. Accepts one integer
-                // argument, evaluates it, and emits `Op::Intrinsic
-                // <id>` with the result in the accumulator.
+                // `#pragma intrinsic("name")`. Each intrinsic has
+                // its own fixed arity (alloca / __c5_aarch64_setjmp
+                // take one; __c5_aarch64_longjmp takes two) and the
+                // call site lowering produces `Op::Intrinsic <id>`
+                // with the operand layout each lowering expects.
                 if let Some(&intrinsic_id) = self.pp_intrinsics.get(&self.symbols[id_idx].name) {
                     let fn_name = self.symbols[id_idx].name.clone();
                     if self.lex.tk == ')' {
                         return Err(self
                             .compile_err(format!("intrinsic `{fn_name}` requires one argument")));
                     }
-                    self.expr(Token::Assign as i64)?;
-                    // Coerce a float argument to int when the
-                    // intrinsic expects an integer size (the only
-                    // shape we have today). Mirrors the assignment
-                    // conversion in `convert_assign_rhs`.
-                    if is_floating_scalar(self.ty) {
-                        self.emit_op(Op::Fcvtfi);
-                        self.ty = Ty::Int as i64;
+                    let longjmp_id = crate::c5::op::Intrinsic::LongjmpAArch64 as i64;
+                    let setjmp_id = crate::c5::op::Intrinsic::SetjmpAArch64 as i64;
+                    let alloca_id = crate::c5::op::Intrinsic::Alloca as i64;
+                    if intrinsic_id == longjmp_id {
+                        // Two-arg shape: env then val. The first
+                        // gets pushed; the second lands in the
+                        // accumulator so the AArch64 lowering can
+                        // pop env and read val without extra
+                        // shuffling.
+                        self.expr(Token::Assign as i64)?;
+                        self.emit_op(Op::Psh);
+                        if self.lex.tk != ',' {
+                            return Err(self.compile_err(format!(
+                                "intrinsic `{fn_name}` takes (env, val)"
+                            )));
+                        }
+                        self.next()?;
+                        self.expr(Token::Assign as i64)?;
+                        if is_floating_scalar(self.ty) {
+                            self.emit_op(Op::Fcvtfi);
+                            self.ty = Ty::Int as i64;
+                        }
+                    } else {
+                        self.expr(Token::Assign as i64)?;
+                        // Coerce a float argument to int when the
+                        // intrinsic expects an integer size (alloca
+                        // and SetjmpAArch64 are both pointer-shape
+                        // inputs).
+                        if is_floating_scalar(self.ty) {
+                            self.emit_op(Op::Fcvtfi);
+                            self.ty = Ty::Int as i64;
+                        }
                     }
                     if self.lex.tk != ')' {
                         return Err(self.compile_err(format!(
-                            "intrinsic `{fn_name}` takes exactly one argument"
+                            "intrinsic `{fn_name}` arity mismatch at close paren"
                         )));
                     }
                     self.next()?;
@@ -251,14 +277,20 @@ impl Compiler {
                     // this point, and the slot must sit just
                     // below them so the arena ends up at the
                     // deepest part of the frame.
-                    if intrinsic_id == (crate::c5::op::Intrinsic::Alloca as i64) {
+                    if intrinsic_id == alloca_id {
                         self.uses_alloca_in_current_fn = true;
                     }
-                    // Result is a `void *` -- bump the return type
-                    // to a pointer so downstream uses (assigning to
-                    // a `T *`, casting via `(T *)alloca(n)`) see the
-                    // right shape.
-                    self.ty = (Ty::Char as i64) + (Ty::Ptr as i64);
+                    // Result type: alloca returns `void *`,
+                    // SetjmpAArch64 returns `int` (the 0 / val
+                    // boolean), LongjmpAArch64 has no real return
+                    // (control never reaches the next statement).
+                    if intrinsic_id == setjmp_id {
+                        self.ty = Ty::Int as i64;
+                    } else if intrinsic_id == longjmp_id {
+                        self.ty = Ty::Int as i64;
+                    } else {
+                        self.ty = (Ty::Char as i64) + (Ty::Ptr as i64);
+                    }
                 } else {
                     // Snapshot the declared signature up front: the per-arg
                     // type checks read from `expected_params` and `is_variadic`,

@@ -2343,6 +2343,15 @@ fn lower_op(
                     // Return value in r13.
                     emit_mov_rr(code, Reg::R13, Reg::R11);
                 }
+                crate::c5::op::Intrinsic::SetjmpAArch64
+                | crate::c5::op::Intrinsic::LongjmpAArch64 => {
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        "native codegen (x86_64): AArch64 setjmp / longjmp \
+                         intrinsics emitted on a non-AArch64 target; \
+                         <setjmp.h> should only bind these on the Windows \
+                         AArch64 lane",
+                    )));
+                }
             }
         }
         Op::AllocaInit => {

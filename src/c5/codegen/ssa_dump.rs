@@ -112,7 +112,10 @@ fn fmt_inst(inst: &Inst) -> String {
         ),
         TailExt(b) => format!("TailExt({b})"),
         Mcpy { dst, src, size } => format!("Mcpy {{ dst=v{dst}, src=v{src}, size={size} }}"),
-        Intrinsic { kind, arg } => format!("Intrinsic {{ kind={kind}, arg=v{arg} }}"),
+        Intrinsic { kind, args } => format!(
+            "Intrinsic {{ kind={kind}, args=[{}] }}",
+            fmt_value_list(args),
+        ),
         AllocaInit(slot) => format!("AllocaInit({slot})"),
         VstackSpill { slot, value } => format!("VstackSpill {{ slot={slot}, value=v{value} }}"),
         VstackReload { slot } => format!("VstackReload {{ slot={slot} }}"),

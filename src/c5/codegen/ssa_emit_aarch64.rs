@@ -162,6 +162,7 @@ pub(super) fn emit_function(
     data_fixups: &mut Vec<DataFixup>,
     pending_func_fixups: &mut Vec<(usize, usize)>,
     imports: &super::ResolvedImports,
+    variadic_targets: &alloc::collections::BTreeSet<usize>,
 ) -> bool {
     let frame = Frame::for_function(func, alloc);
     let abi = target.abi();
@@ -191,6 +192,7 @@ pub(super) fn emit_function(
                 data_fixups,
                 pending_func_fixups,
                 imports,
+                variadic_targets,
             ) {
                 #[cfg(feature = "std")]
                 if std::env::var("BADC_DUMP_SSA").is_ok() {
@@ -440,6 +442,7 @@ fn emit_inst(
     data_fixups: &mut Vec<DataFixup>,
     pending_func_fixups: &mut Vec<(usize, usize)>,
     imports: &super::ResolvedImports,
+    variadic_targets: &alloc::collections::BTreeSet<usize>,
 ) -> bool {
     match inst {
         Inst::AllocaInit(slot) => {
@@ -500,7 +503,16 @@ fn emit_inst(
             emit_binop_imm(code, *op, dst, *lhs, *rhs_imm, alloc, frame, scratch)
         }
         Inst::Call { target_pc, args } => emit_call(
-            code, dst, *target_pc, args, alloc, frame, scratch, abi, fixups,
+            code,
+            dst,
+            *target_pc,
+            args,
+            alloc,
+            frame,
+            scratch,
+            abi,
+            fixups,
+            variadic_targets.contains(target_pc),
         ),
         Inst::CallExt {
             binding_idx, args, ..
@@ -564,7 +576,126 @@ fn emit_inst(
             emit(code, enc_ldur(rd, Reg(29), off));
             true
         }
+        Inst::Intrinsic { kind, args } => {
+            emit_intrinsic(code, *kind, args, dst, alloc, frame, scratch)
+        }
         _ => false,
+    }
+}
+
+/// `Op::Intrinsic` lowering. Each variant matches the pool path's
+/// shape in [`super::aarch64::lower_op`] but pulls its operands
+/// from the allocator's `Place`s rather than off the c5 stack /
+/// accumulator.
+fn emit_intrinsic(
+    code: &mut Vec<u8>,
+    kind: i64,
+    args: &[u32],
+    dst: Place,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    use crate::c5::op::Intrinsic as I;
+    let intrinsic = match I::from_i64(kind) {
+        Some(i) => i,
+        None => {
+            bail_msg("intrinsic: unknown discriminant");
+            return false;
+        }
+    };
+    match intrinsic {
+        I::VaStart => {
+            // __builtin_va_start(&ap, &last). args[0] = &ap,
+            // args[1] = &last. Set *ap = &last + 16 (next c5 slot).
+            if args.len() != 2 {
+                bail_msg("VaStart: expected 2 args");
+                return false;
+            }
+            let ap_place = alloc
+                .places
+                .get(args[0] as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let last_place = alloc
+                .places
+                .get(args[1] as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let ap_r = match materialize_int(code, ap_place, scratch.primary, frame) {
+                Some(r) => r,
+                None => return false,
+            };
+            let last_r = match materialize_int(code, last_place, scratch.secondary, frame) {
+                Some(r) => r,
+                None => return false,
+            };
+            emit(code, enc_add_imm(scratch.secondary, last_r, 16));
+            emit(code, enc_str_imm(scratch.secondary, ap_r, 0));
+            true
+        }
+        I::VaArg => {
+            // __builtin_va_arg(&ap) returns *ap and advances *ap
+            // by 16 (one c5 slot in native layout). args[0] = &ap.
+            if args.len() != 1 {
+                bail_msg("VaArg: expected 1 arg");
+                return false;
+            }
+            let Some(rd) = int_reg(dst) else {
+                bail_msg("VaArg: dst not int reg");
+                return false;
+            };
+            let ap_place = alloc
+                .places
+                .get(args[0] as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let ap_r = match materialize_int(code, ap_place, scratch.primary, frame) {
+                Some(r) => r,
+                None => return false,
+            };
+            emit(code, enc_ldr_imm(rd, ap_r, 0));
+            emit(code, enc_add_imm(scratch.secondary, rd, 16));
+            emit(code, enc_str_imm(scratch.secondary, ap_r, 0));
+            true
+        }
+        I::VaEnd => {
+            // No teardown for the cursor model. args[0] is unused.
+            true
+        }
+        I::VaCopy => {
+            // __builtin_va_copy(&dst, &src). args[0] = &dst,
+            // args[1] = &src. *dst = *src.
+            if args.len() != 2 {
+                bail_msg("VaCopy: expected 2 args");
+                return false;
+            }
+            let dst_place = alloc
+                .places
+                .get(args[0] as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let src_place = alloc
+                .places
+                .get(args[1] as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let dst_r = match materialize_int(code, dst_place, scratch.primary, frame) {
+                Some(r) => r,
+                None => return false,
+            };
+            let src_r = match materialize_int(code, src_place, scratch.secondary, frame) {
+                Some(r) => r,
+                None => return false,
+            };
+            emit(code, enc_ldr_imm(scratch.secondary, src_r, 0));
+            emit(code, enc_str_imm(scratch.secondary, dst_r, 0));
+            true
+        }
+        I::Alloca | I::SetjmpAArch64 | I::LongjmpAArch64 => {
+            bail_msg("intrinsic: alloca / setjmp / longjmp not in thin slice");
+            false
+        }
     }
 }
 
@@ -666,11 +797,57 @@ fn emit_call(
     scratch: &ScratchPool,
     abi: super::Abi,
     fixups: &mut Vec<Fixup>,
+    callee_is_variadic: bool,
 ) -> bool {
-    // All-int args, no FP, no variadic: the planner returns
-    // IntReg placements for the prefix and Stack placements for
-    // the tail. The thin slice doesn't model FP-arg routing or
-    // variadic callees yet.
+    if callee_is_variadic {
+        // The variadic c5 ABI keeps the c5 stack: every arg is
+        // pushed at a 16-byte stride matching `Op::Psh`. The
+        // callee's prologue (`emit_prologue` with entry_spill=0)
+        // skips host-arg-reg spills and reads its args via
+        // `Op::Lea N` -> `fp + 16*(N-1)`. `va_start` continues the
+        // walk past the last named arg.
+        //
+        // Push args in cdecl order: args[N-1] first (deepest), so
+        // args[0] -- the first declared arg -- lands on top of the
+        // stack and the callee's `Op::Lea 2` reads it.
+        for &arg_id in args.iter().rev() {
+            let arg_place = alloc
+                .places
+                .get(arg_id as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let src = match materialize_int(code, arg_place, scratch.primary, frame) {
+                Some(r) => r,
+                None => return false,
+            };
+            emit(code, enc_str_pre(src, Reg(31), -16));
+        }
+        fixups.push(Fixup {
+            native_offset: code.len(),
+            target_bytecode_pc: target_pc,
+            kind: BranchKind::Bl,
+        });
+        emit(code, enc_b(0));
+        if !args.is_empty() {
+            emit(
+                code,
+                enc_add_imm(Reg(31), Reg(31), (args.len() as u32) * 16),
+            );
+        }
+        if let Some(rd) = int_reg(dst) {
+            if rd.0 != 0 {
+                emit(code, enc_mov_reg(rd, Reg(0)));
+            }
+        } else if let Place::Spill(slot) = dst {
+            let off = -((frame.alloc_spill_base + (slot + 1) * 8) as i32);
+            emit(code, enc_stur(Reg(0), Reg(29), off));
+        }
+        return true;
+    }
+    // Non-variadic: marshal through the host ABI. The planner
+    // returns IntReg placements for the prefix and Stack
+    // placements for the tail. FP-arg routing isn't part of the
+    // thin slice yet.
     let plan = super::plan_call_args(args.len(), args.len(), 0, abi);
     if plan.scratch_bytes > 0 {
         emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
@@ -1122,6 +1299,8 @@ mod tests {
         let mut data_fx = Vec::new();
         let mut pf_fx = Vec::new();
         let imps = super::super::ResolvedImports::default();
+        let variadic_targets: alloc::collections::BTreeSet<usize> =
+            alloc::collections::BTreeSet::new();
         let ok = emit_function(
             &func,
             &alloc,
@@ -1132,6 +1311,7 @@ mod tests {
             &mut data_fx,
             &mut pf_fx,
             &imps,
+            &variadic_targets,
         );
         assert!(
             ok,
@@ -1164,6 +1344,8 @@ mod tests {
         let mut data_fx = Vec::new();
         let mut pf_fx = Vec::new();
         let imps = super::super::ResolvedImports::default();
+        let variadic_targets: alloc::collections::BTreeSet<usize> =
+            alloc::collections::BTreeSet::new();
         let ok = emit_function(
             &func,
             &alloc,
@@ -1174,6 +1356,7 @@ mod tests {
             &mut data_fx,
             &mut pf_fx,
             &imps,
+            &variadic_targets,
         );
         assert!(ok, "binop handler should cover Add + Shl + Shr");
         assert_eq!(code.len() % 4, 0);
@@ -1199,6 +1382,8 @@ mod tests {
         let mut data_fx = Vec::new();
         let mut pf_fx = Vec::new();
         let imps = super::super::ResolvedImports::default();
+        let variadic_targets: alloc::collections::BTreeSet<usize> =
+            alloc::collections::BTreeSet::new();
         let ok = emit_function(
             &func,
             &alloc,
@@ -1209,6 +1394,7 @@ mod tests {
             &mut data_fx,
             &mut pf_fx,
             &imps,
+            &variadic_targets,
         );
         assert!(
             ok,

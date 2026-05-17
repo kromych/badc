@@ -146,11 +146,13 @@ pub(super) enum Inst {
         size: i64,
     },
     /// Compiler-builtin intrinsic (`Op::Intrinsic`). The discriminant
-    /// is the [`Intrinsic`] enum value; the single integer operand
-    /// flows in via `arg`. Most intrinsics return a value (alloca's
-    /// new pointer, setjmp's 0-on-initial-call); some (longjmp) do
-    /// not return at all.
-    Intrinsic { kind: i64, arg: ValueId },
+    /// is the [`Intrinsic`] enum value. Single-arg intrinsics carry
+    /// one element in `args`; two-arg intrinsics (longjmp, va_start,
+    /// va_copy) carry two elements with `args[0]` the pushed first
+    /// arg and `args[1]` the accumulator-resident second arg. Most
+    /// intrinsics return a value (alloca's new pointer, setjmp's
+    /// 0-on-initial-call); longjmp does not return at all.
+    Intrinsic { kind: i64, args: Vec<ValueId> },
     /// Per-frame alloca arena bookkeeping setup (`Op::AllocaInit`).
     /// Slot index is the alloca-top FP-slot offset. Produces no
     /// SSA value; emitted purely for the side effect.
@@ -999,26 +1001,20 @@ pub(super) fn lift_function(
                 }
                 Op::Intrinsic => {
                     let kind = text[pc + 1];
-                    let arg = acc;
-                    // longjmp(env, val): env was Psh'd, val is
-                    // in acc. The lowering handles the env pop
-                    // off the c5 stack on its own. To mirror that
-                    // shape in SSA, the intrinsic carries `arg`
-                    // = acc (val) and the lowering consumes one
-                    // virtual-stack entry (env) at emit time --
-                    // we drop it here so the vstack stays
-                    // balanced for any following ops.
                     let two_arg = kind == crate::c5::op::Intrinsic::LongjmpAArch64 as i64
                         || kind == crate::c5::op::Intrinsic::VaStart as i64
                         || kind == crate::c5::op::Intrinsic::VaCopy as i64;
-                    if two_arg {
-                        let _first = vstack.pop().ok_or_else(|| {
+                    let args: Vec<ValueId> = if two_arg {
+                        let first = vstack.pop().ok_or_else(|| {
                             C5Error::Compile(crate::c5::error::fmt_internal_err(
                                 "ssa lift: two-arg intrinsic with empty virtual stack",
                             ))
                         })?;
-                    }
-                    def(&mut insts, Inst::Intrinsic { kind, arg }, &mut acc);
+                        vec![first, acc]
+                    } else {
+                        vec![acc]
+                    };
+                    def(&mut insts, Inst::Intrinsic { kind, args }, &mut acc);
                     pc += op.word_size();
                 }
                 _ => {

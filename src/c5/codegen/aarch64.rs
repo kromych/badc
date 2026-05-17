@@ -1352,6 +1352,7 @@ pub(super) fn lower(
                     &mut data_fixups,
                     &mut pending_func_fixups,
                     imports,
+                    &program.variadic_functions,
                 );
                 if !ok {
                     #[cfg(feature = "std")]

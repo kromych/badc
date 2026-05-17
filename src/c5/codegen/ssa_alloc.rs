@@ -362,7 +362,11 @@ fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
                 bump(*dst, pc, &mut last_use);
                 bump(*src, pc, &mut last_use);
             }
-            Inst::Intrinsic { arg, .. } => bump(*arg, pc, &mut last_use),
+            Inst::Intrinsic { args, .. } => {
+                for &a in args {
+                    bump(a, pc, &mut last_use);
+                }
+            }
             Inst::VstackSpill { value, .. } => bump(*value, pc, &mut last_use),
             Inst::AccSpill { value } => bump(*value, pc, &mut last_use),
         }

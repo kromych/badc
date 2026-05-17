@@ -592,6 +592,37 @@ pub(super) fn enc_str_s_imm(st: u8, rn: Reg, imm: u32) -> u32 {
     0xBD00_0000 | ((imm / 4) << 10) | ((rn.0 as u32) << 5) | (st as u32)
 }
 
+/// `STR <Dt>, [<Xn|SP>, #imm]` -- 64-bit unsigned-offset FP/SIMD
+/// store, the partner of [`enc_ldr_d_imm`]. Used by the AArch64
+/// setjmp intrinsic to spill d8-d15 into the user's `jmp_buf`.
+pub(super) fn enc_str_d_imm(dt: u8, rn: Reg, imm: u32) -> u32 {
+    debug_assert!(dt < 32);
+    debug_assert!(imm.is_multiple_of(8) && imm < 32760);
+    0xFD00_0000 | ((imm / 8) << 10) | ((rn.0 as u32) << 5) | (dt as u32)
+}
+
+/// `ADR <Xd>, label` -- compute a PC-relative byte address (signed
+/// 21-bit offset) into `Xd`. Used by the AArch64 setjmp intrinsic
+/// to capture the resume address that a later longjmp branches to.
+/// Offset is in bytes from the ADR's own PC.
+pub(super) fn enc_adr(rd: Reg, off_bytes: i32) -> u32 {
+    debug_assert!((-(1 << 20)..(1 << 20)).contains(&off_bytes), "adr off");
+    let off = (off_bytes as u32) & 0x001F_FFFF;
+    let immlo = off & 0x3;
+    let immhi = (off >> 2) & 0x0007_FFFF;
+    0x1000_0000 | (immlo << 29) | (immhi << 5) | (rd.0 as u32)
+}
+
+/// `CINC <Xd>, <Xn>, <cond>` -- conditional increment. Alias for
+/// `CSINC Xd, Xn, Xn, invert(cond)`: if `cond` is true, write
+/// `Xn + 1`; otherwise write `Xn`. Used by the longjmp intrinsic to
+/// turn a 0 value into 1 per C99 7.13.2.1 ("if the function returns
+/// 0 it is as if longjmp had been called with the value 1").
+pub(super) fn enc_cinc(rd: Reg, rn: Reg, cond: Cond) -> u32 {
+    let inv = (cond as u32) ^ 1;
+    0x9A80_0400 | ((rn.0 as u32) << 16) | (inv << 12) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
 /// `FCVT <Dd>, <Sn>` -- widen single-precision to double-precision
 /// (bit-exact for any finite single value, matching the IEEE
 /// short-to-long conversion). Used by [`Op::Lf`] after the
@@ -2054,6 +2085,12 @@ fn lower_op(
                     // x19, the c5 accumulator.
                     emit_mov_reg(code, Reg::X19, Reg::X17);
                 }
+                crate::c5::op::Intrinsic::SetjmpAArch64 => {
+                    emit_setjmp_aarch64(code);
+                }
+                crate::c5::op::Intrinsic::LongjmpAArch64 => {
+                    emit_longjmp_aarch64(code, reg_state);
+                }
             }
         }
         Op::AllocaInit => {
@@ -2297,6 +2334,129 @@ fn emit_fp_binop(
     emit(code, enc_fmov_d_to_x(Reg::X19, 0));
 }
 
+/// jmp_buf field offsets for the AArch64 setjmp / longjmp
+/// intrinsics. Lays out 10 callee-saved x-regs, FP (x29), the
+/// resume PC, SP, and 8 callee-saved d-regs. Total 168 bytes;
+/// the `<setjmp.h>` typedef reserves 256 to leave slack for
+/// future additions.
+const JB_X19_OFF: u32 = 0;
+const JB_X21_OFF: u32 = 16;
+const JB_X23_OFF: u32 = 32;
+const JB_X25_OFF: u32 = 48;
+const JB_X27_OFF: u32 = 64;
+const JB_X29_OFF: u32 = 80;
+const JB_PC_OFF: u32 = 88;
+const JB_SP_OFF: u32 = 96;
+const JB_D8_OFF: u32 = 104;
+const JB_D10_OFF: u32 = 120;
+const JB_D12_OFF: u32 = 136;
+const JB_D14_OFF: u32 = 152;
+/// Total instruction count emitted by `emit_setjmp_aarch64` --
+/// every entry is one 4-byte AArch64 word. Used to compute the
+/// PC-relative offset the ADR captures so a matching longjmp
+/// branches to exactly the byte after the inline expansion.
+/// Layout: 1 mov + 10 str(x19-x28) + 1 str(x29) + 1 adr + 1
+/// str(pc) + 1 add(sp) + 1 str(sp) + 8 str(d8-d15) + 1 movz =
+/// 25 instructions; ADR sits at zero-based index 12.
+const SETJMP_AARCH64_INSN_COUNT: i32 = 25;
+const SETJMP_AARCH64_ADR_INSN_INDEX: i32 = 12;
+
+/// AArch64 setjmp inlined at the call site. The `env` pointer
+/// arrives in `x19` (c5's accumulator). On the initial call this
+/// writes the resume context into `[env]` and sets `x19 = 0`; on
+/// a matching longjmp control jumps to the address right after
+/// the inline expansion with `x19` carrying the longjmp value.
+///
+/// This is CRT-independent so it works on Windows AArch64, whose
+/// msvcrt `longjmp` routes through SEH and refuses an SEH-free
+/// `jmp_buf`. The Linux / macOS bindings continue to use the
+/// host libc setjmp -- that's already CRT-independent.
+fn emit_setjmp_aarch64(code: &mut Vec<u8>) {
+    let start = code.len();
+    // Move env from x19 into x16 (the existing IP0 scratch the
+    // surrounding code already treats as a compiler temp) so the
+    // upcoming saves can write x19 itself before x19 is clobbered
+    // with the return value 0.
+    emit(code, enc_mov_reg(Reg::X16, Reg::X19));
+    // Save x19-x28 one by one. STR / LDR keeps the code simple
+    // (no STP encoder family beyond pre-indexed) and the linear
+    // sequence costs ~10 extra instructions per pair, irrelevant
+    // for a routine called once per pcall.
+    for (i, off) in (JB_X19_OFF..JB_X29_OFF).step_by(8).enumerate() {
+        emit(code, enc_str_imm(Reg(19 + i as u8), Reg::X16, off));
+    }
+    emit(code, enc_str_imm(Reg::X29, Reg::X16, JB_X29_OFF));
+    // ADR's PC-relative offset is from this instruction's PC to
+    // the byte after the inline expansion. The expansion is
+    // SETJMP_AARCH64_INSN_COUNT instructions long, and the ADR
+    // sits at index SETJMP_AARCH64_ADR_INSN_INDEX.
+    let adr_off_bytes = (SETJMP_AARCH64_INSN_COUNT - SETJMP_AARCH64_ADR_INSN_INDEX) * 4;
+    debug_assert_eq!(
+        code.len() - start,
+        (SETJMP_AARCH64_ADR_INSN_INDEX as usize) * 4,
+        "setjmp ADR offset out of sync with instruction count"
+    );
+    emit(code, enc_adr(Reg::X17, adr_off_bytes));
+    emit(code, enc_str_imm(Reg::X17, Reg::X16, JB_PC_OFF));
+    // mov x17, sp -- ADD form because the source is SP.
+    emit(code, enc_add_imm(Reg::X17, Reg::SP, 0));
+    emit(code, enc_str_imm(Reg::X17, Reg::X16, JB_SP_OFF));
+    for (i, off) in (JB_D8_OFF..JB_D8_OFF + 64).step_by(8).enumerate() {
+        emit(code, enc_str_d_imm(8 + i as u8, Reg::X16, off));
+    }
+    // First-call return value: 0.
+    emit(code, enc_movz(Reg::X19, 0, 0));
+    debug_assert_eq!(
+        code.len() - start,
+        (SETJMP_AARCH64_INSN_COUNT as usize) * 4,
+        "setjmp instruction count drift"
+    );
+    // Fall through. A future longjmp lands here too with x19=val.
+}
+
+/// AArch64 longjmp inlined at the call site. The c5 emitter
+/// pushed `env` onto the 16-byte VM stack slot before evaluating
+/// `val`, so on entry `env` is at `[sp]` and `val` is in `x19`.
+/// Does not return to its own caller -- branches back to the
+/// PC saved by the matching setjmp with the C99-required value
+/// in `x19` (1 if `val` was 0, otherwise `val`).
+fn emit_longjmp_aarch64(code: &mut Vec<u8>, reg_state: &mut RegState<'_>) {
+    // env was pushed before val was evaluated. pop_lhs_reg
+    // handles both the real-stack push (`ldr x16, [sp], #16`)
+    // and the pseudo-promotion case (the value lives in a pool
+    // register the analyzer assigned). Move env into x16
+    // unconditionally so the rest of this routine has a single
+    // base reg to address.
+    let env_src = pop_lhs_reg(code, reg_state);
+    emit_mov_reg(code, Reg::X16, env_src);
+    // Stash val in a scratch before the upcoming restores
+    // clobber x19. x17 (IP1) is already a compiler scratch in
+    // this module.
+    emit(code, enc_mov_reg(Reg::X17, Reg::X19));
+    for (i, off) in (JB_X19_OFF..JB_X29_OFF).step_by(8).enumerate() {
+        emit(code, enc_ldr_imm(Reg(19 + i as u8), Reg::X16, off));
+    }
+    emit(code, enc_ldr_imm(Reg::X29, Reg::X16, JB_X29_OFF));
+    // Hoist the resume PC out of the env into x10 (a caller-
+    // saved AAPCS64 temp; setjmp's caller has no expectation
+    // that x10 survives). x18 is reserved on Windows AArch64
+    // for the TEB pointer, so anything that loads through it
+    // (TLS, msvcrt internals) must see TEB unmodified.
+    emit(code, enc_ldr_imm(Reg(10), Reg::X16, JB_PC_OFF));
+    emit(code, enc_ldr_imm(Reg(9), Reg::X16, JB_SP_OFF));
+    // mov sp, x9 -- ADD form because the destination is SP.
+    emit(code, enc_add_imm(Reg::SP, Reg(9), 0));
+    for (i, off) in (JB_D8_OFF..JB_D8_OFF + 64).step_by(8).enumerate() {
+        emit(code, enc_ldr_d_imm(8 + i as u8, Reg::X16, off));
+    }
+    // cmp val, #0 ; cinc x19, val, eq -- 0 becomes 1, anything
+    // else passes through. `subs xzr, x17, 0` is `cmp x17, #0`.
+    emit(code, enc_subs_imm(Reg(31), Reg::X17, 0));
+    emit(code, enc_cinc(Reg::X19, Reg::X17, Cond::Eq));
+    // Branch to the saved resume PC (loaded into x10 above).
+    emit(code, enc_br(Reg(10)));
+}
+
 /// FP comparison: `x19 = (top <cond> acc) ? 1 : 0`. d0/d1 hold
 /// `top` and `acc` respectively; FCMP sets NZCV; CSET reads the
 /// requested condition into x19.
@@ -2364,9 +2524,70 @@ fn emit_libc_call(
     // `printf`.
     let _ = local_name;
     let imp = &imports.imports[import_index];
+    let win_arm64_variadic = imp.is_variadic && target == super::Target::WindowsAarch64;
     let is_variadic = imp.is_variadic && abi.variadic_on_stack;
 
-    if is_variadic {
+    if win_arm64_variadic {
+        // Windows AArch64 variadic ABI: fixed args follow
+        // standard AAPCS64 (ints in x0..x7, FP scalars in
+        // d0..d7); the variadic tail is passed through the
+        // integer registers x0..x7 and then on the stack at
+        // sp+0, sp+8, ..., with FP values transferred as their
+        // 8-byte bit pattern. Microsoft's va_arg(double) reads
+        // them from the integer side (`__gr_top`), not the FP
+        // side, which is why msvcrt's `snprintf` / `printf`
+        // see denormal garbage when AAPCS64-style d-reg
+        // placement is used.
+        let fixed = imp.fixed_args.min(arg_count);
+        let mut int_idx = 0usize;
+        let mut fp_idx = 0usize;
+        for i in 0..fixed {
+            let off = (i as u32) * 16;
+            let is_fp = (fp_arg_mask & (1u32 << i)) != 0;
+            if is_fp && fp_idx < 8 {
+                emit(code, enc_ldr_d_imm(fp_idx as u8, Reg::SP, off));
+                fp_idx += 1;
+            } else if !is_fp && int_idx < abi.int_arg_regs.len() {
+                let r = Reg(abi.int_arg_regs[int_idx]);
+                emit(code, enc_ldr_imm(r, Reg::SP, off));
+                int_idx += 1;
+            } else {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!(
+                        "windows arm64 variadic call: fixed arg {i} \
+                         exceeds register banks (int_idx={int_idx}, \
+                         fp_idx={fp_idx})"
+                    ),
+                )));
+            }
+        }
+        let n_var = arg_count - fixed;
+        // Variadic args after the fixed prefix use the
+        // remaining int-arg registers, then spill at
+        // sp+0, sp+8, ... regardless of c5's int / FP
+        // classification.
+        let var_int_regs = abi.int_arg_regs.len().saturating_sub(int_idx);
+        let n_var_in_regs = n_var.min(var_int_regs);
+        let n_var_on_stack = n_var - n_var_in_regs;
+        let scratch_bytes = ((n_var_on_stack as u32) * 8 + 15) & !15;
+        if scratch_bytes > 0 {
+            emit(code, enc_sub_imm(Reg::SP, Reg::SP, scratch_bytes));
+        }
+        for i in 0..n_var_in_regs {
+            let src = scratch_bytes + ((fixed + i) as u32) * 16;
+            let r = Reg(abi.int_arg_regs[int_idx + i]);
+            emit(code, enc_ldr_imm(r, Reg::SP, src));
+        }
+        for i in 0..n_var_on_stack {
+            let src = scratch_bytes + ((fixed + n_var_in_regs + i) as u32) * 16;
+            emit(code, enc_ldr_imm(Reg::X16, Reg::SP, src));
+            emit(code, enc_str_imm(Reg::X16, Reg::SP, (i * 8) as u32));
+        }
+        emit_got_call(code, plt_call_fixups, import_index);
+        if scratch_bytes > 0 {
+            emit(code, enc_add_imm(Reg::SP, Reg::SP, scratch_bytes));
+        }
+    } else if is_variadic {
         // macOS arm64 variadic ABI: the first `fixed_args`
         // arguments follow standard AAPCS64 (ints to x0..x7,
         // FP scalars to d0..d7); the variadic tail ALL spills

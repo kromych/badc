@@ -269,6 +269,18 @@ impl Compiler {
                 if typedef_array > 0 {
                     self.pending.typedef_base_array_size = typedef_array;
                 }
+                // Carry the typedef's fn-pointer lineage forward
+                // (mirrors `decl_base.rs` for the non-aggregate
+                // path) so a `typedef RET (*fn_t)(args); struct {
+                // fn_t cb; }` field records `fn_ptr_indirection =
+                // 1`. Without it the StructField loses the tag and
+                // `(*s.cb)(...)` looks like a regular pointer
+                // deref rather than the C99 6.3.2.1p4 fn-pointer
+                // decay no-op, so the call jumps to garbage.
+                let typedef_fpi = self.symbols[self.lex.curr_id_idx].fn_ptr_indirection;
+                if typedef_fpi > 0 {
+                    self.pending.fn_ptr_indirection = Some(typedef_fpi);
+                }
                 self.next()?;
                 aliased
             } else if saw_int_mod {
@@ -360,6 +372,7 @@ impl Compiler {
                             bit_offset: inner_field.bit_offset,
                             bit_width: inner_field.bit_width,
                             bit_unit_size: inner_field.bit_unit_size,
+                            fn_ptr_indirection: inner_field.fn_ptr_indirection,
                         });
                     }
 
@@ -438,17 +451,16 @@ impl Compiler {
                 if typedef_dim > 0 && field_array_size == 0 && !is_pointer_ty(field_ty) {
                     field_array_size = typedef_dim;
                 }
-                // Struct fields don't carry the fn-pointer lineage
-                // tag on their own (the StructField record has no
-                // place for it), so consume the side-channel here.
-                // Without this, a struct containing a `int (*cb)(...)`
-                // field leaks fn_ptr_indirection = 1 into whatever
-                // declaration follows the closing `}` -- including
-                // the typedef name in `typedef struct { ... } T;`,
-                // which would then mistakenly treat `T *p` as a
-                // function-pointer-pointer and turn `*p` into a
-                // decay no-op.
-                self.pending.fn_ptr_indirection.take();
+                // Capture the fn-pointer lineage tag from the
+                // declarator (set by the function-pointer branch
+                // of `parse_declarator`) into the field record so
+                // a later `s.cb(...)` / `(*s.cb)(...)` access can
+                // recognise the C99 6.3.2.1p4 decay no-op. Always
+                // consume the side-channel: leaking it across the
+                // closing `}` would mistreat the typedef name in
+                // `typedef struct { ... } T;` as a fn-pointer
+                // alias.
+                let field_fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
                 let is_aggregate_value = is_struct_ty(field_ty) && struct_ptr_depth(field_ty) == 0;
                 if is_aggregate_value
                     && field_array_size == 0
@@ -568,6 +580,7 @@ impl Compiler {
                     bit_offset,
                     bit_width,
                     bit_unit_size: if bit_width > 0 { bf_unit_size as u8 } else { 0 },
+                    fn_ptr_indirection: field_fn_ptr_indirection,
                 });
 
                 if self.lex.tk == ',' {

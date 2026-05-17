@@ -33,6 +33,8 @@
 #pragma binding(libc::strncpy,  "_strncpy")
 #pragma binding(libc::strcmp,   "_strcmp")
 #pragma binding(libc::strncmp,  "_strncmp")
+#pragma binding(libc::strcoll,  "_strcoll")
+#pragma binding(libc::strxfrm,  "_strxfrm")
 #pragma binding(libc::strchr,   "_strchr")
 #pragma binding(libc::strrchr,  "_strrchr")
 #pragma binding(libc::strstr,   "_strstr")
@@ -59,6 +61,8 @@
 #pragma binding(libc::strncpy,  "strncpy")
 #pragma binding(libc::strcmp,   "strcmp")
 #pragma binding(libc::strncmp,  "strncmp")
+#pragma binding(libc::strcoll,  "strcoll")
+#pragma binding(libc::strxfrm,  "strxfrm")
 #pragma binding(libc::strchr,   "strchr")
 #pragma binding(libc::strrchr,  "strrchr")
 #pragma binding(libc::strstr,   "strstr")
@@ -85,6 +89,8 @@
 #pragma binding(msvcrt::strncpy,  "strncpy")
 #pragma binding(msvcrt::strcmp,   "strcmp")
 #pragma binding(msvcrt::strncmp,  "strncmp")
+#pragma binding(msvcrt::strcoll,  "strcoll")
+#pragma binding(msvcrt::strxfrm,  "strxfrm")
 #pragma binding(msvcrt::strchr,   "strchr")
 #pragma binding(msvcrt::strrchr,  "strrchr")
 #pragma binding(msvcrt::strstr,   "strstr")
@@ -129,6 +135,12 @@ char *strcpy(char *dst, char *src);
 char *strncpy(char *dst, char *src, int n);
 int strcmp(char *a, char *b);
 int strncmp(char *a, char *b, int n);
+// C99 7.21.4.3: locale-aware string compare. Returns a value
+// whose sign matches the LC_COLLATE ordering of `a` vs `b`.
+int strcoll(char *a, char *b);
+// C99 7.21.4.5: transform `src` into a buffer suitable for
+// `memcmp`-style comparison under the current LC_COLLATE.
+int strxfrm(char *dst, char *src, int n);
 char *strchr(char *s, int c);
 char *strrchr(char *s, int c);
 char *strstr(char *haystack, char *needle);

@@ -92,6 +92,56 @@ impl Cmp {
 }
 
 impl Compiler {
+    /// Pick the C99 6.4.4.1p5 type of an integer literal whose value
+    /// is `ival`, honouring the lexer-recorded `u`/`l`/`ll` suffix.
+    ///
+    /// No suffix: the first of `int`, `long`, `long long` whose
+    /// range holds the magnitude. A value above INT_MAX must not
+    /// stay at `int`, or the post-binop mask in `convert.rs`
+    /// truncates `INT64_MAX - 1` back to 32 bits.
+    /// With `u`/`U`: same hierarchy in the unsigned variants.
+    /// With `l`/`L` / `ll`/`LL`: floor at the named width and let
+    /// the magnitude bump further as needed.
+    fn literal_auto_promoted_type(&self, ival: i64) -> i64 {
+        let suffix_long = self.lex.int_suffix_long;
+        let is_unsigned = self.lex.int_suffix_unsigned;
+        let int_size = self.size_of_type(Ty::Int as i64);
+        let long_size = self.size_of_type(Ty::Long as i64);
+        let mag = (ival as i128).unsigned_abs();
+        let fits = |size_bytes: usize, signed: bool| -> bool {
+            let bits = (size_bytes as u32) * 8;
+            if signed {
+                if bits >= 128 {
+                    true
+                } else {
+                    mag <= (1u128 << (bits - 1))
+                }
+            } else if bits >= 128 {
+                true
+            } else if bits == 0 {
+                false
+            } else {
+                mag <= ((1u128 << bits) - 1u128)
+            }
+        };
+        let mut rank: u8 = suffix_long;
+        if rank < 1 && (!fits(int_size, !is_unsigned)) {
+            rank = 1;
+        }
+        if rank < 2 && (!fits(long_size, !is_unsigned)) {
+            rank = 2;
+        }
+        let mut ty = match rank {
+            2 => Ty::LongLong as i64,
+            1 => Ty::Long as i64,
+            _ => Ty::Int as i64,
+        };
+        if is_unsigned {
+            ty |= UNSIGNED_BIT;
+        }
+        ty
+    }
+
     pub(super) fn expr(&mut self, lev: i64) -> Result<(), C5Error> {
         let mut t: i64;
 
@@ -99,21 +149,8 @@ impl Compiler {
             return Err(self.compile_err("unexpected eof in expression"));
         } else if self.lex.tk == Token::Num {
             self.emit_imm(self.lex.ival);
-            // C99 6.4.4.1 paragraph 5: pick the literal's type from
-            // the suffix shape the lexer recorded. Two `l`/`L`
-            // letters force long-long, one forces long, none stays
-            // at int. The `u`/`U` modifier flips signedness on the
-            // chosen rank.
-            let mut lit_ty = match self.lex.int_suffix_long {
-                2 => Ty::LongLong as i64,
-                1 => Ty::Long as i64,
-                _ => Ty::Int as i64,
-            };
-            if self.lex.int_suffix_unsigned {
-                lit_ty |= UNSIGNED_BIT;
-            }
+            self.ty = self.literal_auto_promoted_type(self.lex.ival);
             self.next()?;
-            self.ty = lit_ty;
         } else if self.lex.tk == Token::FloatNum {
             // The lexer parsed `1.5` etc. into f64 and stored
             // `f64::to_bits()` cast to i64 in `ival`. The byte
@@ -181,27 +218,53 @@ impl Compiler {
             if self.lex.tk == '(' {
                 self.next()?;
                 // Intrinsic call: the identifier was registered via
-                // `#pragma intrinsic("name")`. Accepts one integer
-                // argument, evaluates it, and emits `Op::Intrinsic
-                // <id>` with the result in the accumulator.
+                // `#pragma intrinsic("name")`. Each intrinsic has
+                // its own fixed arity (alloca / __c5_aarch64_setjmp
+                // take one; __c5_aarch64_longjmp takes two) and the
+                // call site lowering produces `Op::Intrinsic <id>`
+                // with the operand layout each lowering expects.
                 if let Some(&intrinsic_id) = self.pp_intrinsics.get(&self.symbols[id_idx].name) {
                     let fn_name = self.symbols[id_idx].name.clone();
                     if self.lex.tk == ')' {
                         return Err(self
                             .compile_err(format!("intrinsic `{fn_name}` requires one argument")));
                     }
-                    self.expr(Token::Assign as i64)?;
-                    // Coerce a float argument to int when the
-                    // intrinsic expects an integer size (the only
-                    // shape we have today). Mirrors the assignment
-                    // conversion in `convert_assign_rhs`.
-                    if is_floating_scalar(self.ty) {
-                        self.emit_op(Op::Fcvtfi);
-                        self.ty = Ty::Int as i64;
+                    let longjmp_id = crate::c5::op::Intrinsic::LongjmpAArch64 as i64;
+                    let setjmp_id = crate::c5::op::Intrinsic::SetjmpAArch64 as i64;
+                    let alloca_id = crate::c5::op::Intrinsic::Alloca as i64;
+                    if intrinsic_id == longjmp_id {
+                        // Two-arg shape: env then val. The first
+                        // gets pushed; the second lands in the
+                        // accumulator so the AArch64 lowering can
+                        // pop env and read val without extra
+                        // shuffling.
+                        self.expr(Token::Assign as i64)?;
+                        self.emit_op(Op::Psh);
+                        if self.lex.tk != ',' {
+                            return Err(
+                                self.compile_err(format!("intrinsic `{fn_name}` takes (env, val)"))
+                            );
+                        }
+                        self.next()?;
+                        self.expr(Token::Assign as i64)?;
+                        if is_floating_scalar(self.ty) {
+                            self.emit_op(Op::Fcvtfi);
+                            self.ty = Ty::Int as i64;
+                        }
+                    } else {
+                        self.expr(Token::Assign as i64)?;
+                        // Coerce a float argument to int when the
+                        // intrinsic expects an integer size (alloca
+                        // and SetjmpAArch64 are both pointer-shape
+                        // inputs).
+                        if is_floating_scalar(self.ty) {
+                            self.emit_op(Op::Fcvtfi);
+                            self.ty = Ty::Int as i64;
+                        }
                     }
                     if self.lex.tk != ')' {
                         return Err(self.compile_err(format!(
-                            "intrinsic `{fn_name}` takes exactly one argument"
+                            "intrinsic `{fn_name}` arity mismatch at close paren"
                         )));
                     }
                     self.next()?;
@@ -214,14 +277,19 @@ impl Compiler {
                     // this point, and the slot must sit just
                     // below them so the arena ends up at the
                     // deepest part of the frame.
-                    if intrinsic_id == (crate::c5::op::Intrinsic::Alloca as i64) {
+                    if intrinsic_id == alloca_id {
                         self.uses_alloca_in_current_fn = true;
                     }
-                    // Result is a `void *` -- bump the return type
-                    // to a pointer so downstream uses (assigning to
-                    // a `T *`, casting via `(T *)alloca(n)`) see the
-                    // right shape.
-                    self.ty = (Ty::Char as i64) + (Ty::Ptr as i64);
+                    // Result type: alloca returns `void *`,
+                    // SetjmpAArch64 returns `int`, LongjmpAArch64
+                    // has no real return (control never reaches
+                    // the next statement) but the parser still
+                    // typechecks downstream uses as `int`.
+                    if intrinsic_id == setjmp_id || intrinsic_id == longjmp_id {
+                        self.ty = Ty::Int as i64;
+                    } else {
+                        self.ty = (Ty::Char as i64) + (Ty::Ptr as i64);
+                    }
                 } else {
                     // Snapshot the declared signature up front: the per-arg
                     // type checks read from `expected_params` and `is_variadic`,
@@ -1063,9 +1131,18 @@ impl Compiler {
             // to the parsed f64 bit pattern, not a sign flip on the
             // integer-shaped operand.
             if self.lex.tk == Token::Num {
-                self.emit_imm(-self.lex.ival);
+                let val = self.lex.ival;
+                self.emit_imm(val.wrapping_neg());
+                // C99 6.5.3.3p3: unary `-` returns the integer-
+                // promoted operand type. The literal's type comes
+                // from C99 6.4.4.1p5 (first of int / long / long
+                // long that holds the magnitude), so a value past
+                // INT_MAX must not stay at `int` here -- otherwise
+                // the post-Add/Sub mask in `convert.rs` truncates
+                // a downstream `-MAX - 1` back to 32 bits and
+                // yields 0 instead of `INT64_MIN`.
+                self.ty = self.literal_auto_promoted_type(val);
                 self.next()?;
-                self.ty = Ty::Int as i64;
             } else {
                 self.expr(Token::Inc as i64)?;
                 if is_floating_scalar(self.ty) {
@@ -1909,6 +1986,18 @@ impl Compiler {
                         self.seed_multi_dim_strides(&dims, elem_size);
                     } else if !field_is_struct_value {
                         self.emit_op(load_op_for(self.ty, self.target));
+                        // Function-pointer field: re-seed the fn-ptr
+                        // chain depth from the field's lineage tag so
+                        // a following unary `*` recognises the C99
+                        // 6.3.2.1p4 function-to-pointer decay no-op.
+                        // Without this re-seed `(*g->frealloc)(...)`
+                        // emits a spurious `Li` that loads through
+                        // the function's code address and the call
+                        // jumps to garbage. Mirrors the symbol-load
+                        // path in the Id branch above.
+                        if field.fn_ptr_indirection > 0 {
+                            self.pending.fn_ptr_chain_depth = field.fn_ptr_indirection - 1;
+                        }
                         // Pointer-to-array field (`T (*field)[M1]...[Mn]`):
                         // declarator stashed dims as `[0, M1, ...]`
                         // with a leading-0 sentinel, and bumped

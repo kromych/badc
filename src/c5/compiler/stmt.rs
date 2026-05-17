@@ -570,6 +570,13 @@ impl Compiler {
                     self.emit_val(size as i64);
                 } else {
                     self.parse_full_expr()?;
+                    // C99 6.8.6.4p3: the value is converted to the
+                    // function's return type as if by assignment.
+                    // Reuse `convert_assign_rhs` so an `int`-typed
+                    // `return` from a `double`-returning function
+                    // lifts via `Op::Fcvtif` rather than landing
+                    // the integer's bit pattern in the FP slot.
+                    self.convert_assign_rhs(ret_ty);
                 }
             } else if returns_void {
                 // Bare `return;` in a void function. Zero the

@@ -101,6 +101,16 @@ fetched on demand by `demos/sqlite3/setup.py`; in-memory and
 file-backed scenarios at both -O and noO. See
 [`sqlite3/README.md`](./sqlite3/README.md).
 
+## lua/
+
+End-to-end of the upstream Lua 5.5.0 interpreter. Pinned release,
+fetched on demand by `demos/lua/setup.py`; builds the interpreter
+with badc at both -O and noO and runs a curated subset of the
+upstream test suite (`bitwise / calls / closure / constructs /
+coroutine / cstack / errors / events / goto / literals / locals /
+math / nextvar / pm / sort / strings / tpack / utf8 / vararg`)
+against each lane. See [`lua/README.md`](./lua/README.md).
+
 ## miniz/
 
 End-to-end of the upstream [miniz](https://github.com/richgel999/miniz)

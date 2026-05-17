@@ -477,12 +477,33 @@ pub enum Intrinsic {
     /// at the matching `Op::Lev` -- because the VM doesn't
     /// have a real native stack to bump.
     Alloca = 1,
+    /// `__c5_aarch64_setjmp(env)` -- AArch64 setjmp implemented
+    /// as an inline expansion at the call site. Saves x19-x28,
+    /// x29, the address of the instruction after the expansion
+    /// (used as the longjmp return target), SP, and d8-d15 into
+    /// `env`. Returns 0 on the initial call; on a matching
+    /// longjmp the saved return address is branched back to with
+    /// the caller-supplied value in x19. AArch64 lowering only;
+    /// only emitted by Windows AArch64 headers because that
+    /// target's msvcrt longjmp routes through SEH and refuses an
+    /// SEH-free `jmp_buf` -- the Linux / macOS bindings continue
+    /// to use the host libc setjmp.
+    SetjmpAArch64 = 2,
+    /// `__c5_aarch64_longjmp(env, val)` -- partner to
+    /// `SetjmpAArch64`. Args reach this op as (env on the c5
+    /// eval stack, val in x19); the expansion restores the
+    /// callee-saved registers + SP from `env`, sets x19 to
+    /// `val != 0 ? val : 1`, and branches to the saved return
+    /// address. Does not return to its own caller.
+    LongjmpAArch64 = 3,
 }
 
 impl Intrinsic {
     pub fn from_i64(v: i64) -> Option<Self> {
         match v {
             1 => Some(Intrinsic::Alloca),
+            2 => Some(Intrinsic::SetjmpAArch64),
+            3 => Some(Intrinsic::LongjmpAArch64),
             _ => None,
         }
     }

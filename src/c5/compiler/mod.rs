@@ -98,6 +98,17 @@ pub struct StructField {
     /// load eight bytes (which would mix in adjacent fields).
     /// Meaningful only when `bit_width > 0`; 0 otherwise.
     pub bit_unit_size: u8,
+    /// Function-pointer lineage tag (mirrors
+    /// `Symbol::fn_ptr_indirection`). 0 for non-fn-ptr fields;
+    /// `n >= 1` for fields whose value, after `n - 1` derefs, is
+    /// the fn-pointer rvalue. `Symbol::fn_ptr_indirection`'s
+    /// convention: 1 means the field IS the fn-pointer, 2 means
+    /// it's a pointer-to-fn-pointer, etc. The post-load handler
+    /// in member access seeds `pending.fn_ptr_chain_depth` from
+    /// this so a following unary `*` recognises the C99 6.3.2.1
+    /// function-to-pointer no-op decay instead of emitting a
+    /// spurious `Li` that loads through code memory.
+    pub fn_ptr_indirection: i64,
 }
 
 /// Optional preprocessor / driver knobs threaded through compiler

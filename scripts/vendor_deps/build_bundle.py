@@ -161,6 +161,29 @@ SOURCES = [
         upstream_sha="6705bba1714961b41a728dfc5debbe348d2966c117649392f8c8139efc83ff14",
         sha_kind="tarball-sha256",
     ),
+    Source(
+        # Lua 5.5.0 -- the interpreter source distribution from
+        # www.lua.org. Pinned by the sha256 of the released tarball
+        # (Lua is published as standalone tarballs, with no public
+        # VCS or commit identifier).
+        name="lua",
+        version="5.5.0",
+        url="https://www.lua.org/ftp/lua-5.5.0.tar.gz",
+        ext=".tar.gz",
+        upstream_sha="57ccc32bbbd005cab75bcc52444052535af691789dba2b9016d5c50640d68b3d",
+        sha_kind="tarball-sha256",
+    ),
+    Source(
+        # Lua 5.5.0 official test suite -- published as a separate
+        # tarball at www.lua.org/tests/. Same pin model as the
+        # interpreter source: sha256 of the tarball.
+        name="lua-tests",
+        version="5.5.0",
+        url="https://www.lua.org/tests/lua-5.5.0-tests.tar.gz",
+        ext=".tar.gz",
+        upstream_sha="5e47bbfad7db2965d69580e918ee64edeb8d8d32de404b8dae9ce5c6d76a1472",
+        sha_kind="tarball-sha256",
+    ),
 ]
 
 

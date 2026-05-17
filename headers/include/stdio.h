@@ -100,8 +100,14 @@ typedef struct __c5_FILE FILE;
 #pragma binding(libc::fgets,     "_fgets")
 #pragma binding(libc::fputc,     "_fputc")
 #pragma binding(libc::fgetc,     "_fgetc")
+#pragma binding(libc::putc,      "_putc")
+#pragma binding(libc::getc,      "_getc")
+#pragma binding(libc::ungetc,    "_ungetc")
 #pragma binding(libc::putchar,   "_putchar")
 #pragma binding(libc::getchar,   "_getchar")
+#pragma binding(libc::tmpfile,   "_tmpfile")
+#pragma binding(libc::tmpnam,    "_tmpnam")
+#pragma binding(libc::setbuf,    "_setbuf")
 #pragma binding(libc::puts,      "_puts")
 #pragma binding(libc::perror,    "_perror")
 #pragma binding(libc::fseek,     "_fseek")
@@ -154,8 +160,14 @@ typedef struct __c5_FILE FILE;
 #pragma binding(libc::fgets,     "fgets")
 #pragma binding(libc::fputc,     "fputc")
 #pragma binding(libc::fgetc,     "fgetc")
+#pragma binding(libc::putc,      "putc")
+#pragma binding(libc::getc,      "getc")
+#pragma binding(libc::ungetc,    "ungetc")
 #pragma binding(libc::putchar,   "putchar")
 #pragma binding(libc::getchar,   "getchar")
+#pragma binding(libc::tmpfile,   "tmpfile")
+#pragma binding(libc::tmpnam,    "tmpnam")
+#pragma binding(libc::setbuf,    "setbuf")
 #pragma binding(libc::puts,      "puts")
 #pragma binding(libc::perror,    "perror")
 #pragma binding(libc::fseek,     "fseek")
@@ -196,12 +208,19 @@ typedef struct __c5_FILE FILE;
 // in msvcrt circa VS2015. `_snprintf` is the universally available
 // spelling and behaves the same way for our usage (no NUL guarantee
 // on overflow, but neither does our other targets' `snprintf` once
-// the buffer fills).
+// the buffer fills). Note that msvcrt's printf family prints
+// infinity / NaN as `1.#INF` / `1.#IND` / `1.#QNAN` rather than
+// C99 `inf` / `nan`; programs that classify formatted output by
+// a digit-prefix regex (e.g. Lua's math.lua line 1137 round-trip
+// guard `^%-?%d`) misclassify the msvcrt output as numeric.
+// Routing through `ucrtbase._snprintf` would emit the C99
+// spelling but that entry point fails with
+// STATUS_ENTRYPOINT_NOT_FOUND at PE load time on the GitHub
+// Windows runners -- the documented UCRT import path is via the
+// `api-ms-win-crt-stdio-l1-1-0.dll` proxy set, not ucrtbase
+// directly. Tracked under the TODO marker until c5 grows
+// support for the UCRT proxy DLLs.
 #pragma binding(msvcrt::snprintf,  "_snprintf")
-// Source that pre-rewrites snprintf -> _snprintf via a private
-// `#define` (common in cross-platform projects) reaches for the
-// underscored spelling directly; bind the alias to the same
-// msvcrt entry point.
 #pragma binding(msvcrt::_snprintf, "_snprintf")
 #pragma binding(msvcrt::vfprintf,  "vfprintf")
 #pragma binding(msvcrt::vsprintf,  "vsprintf")
@@ -217,8 +236,14 @@ typedef struct __c5_FILE FILE;
 #pragma binding(msvcrt::fgets,     "fgets")
 #pragma binding(msvcrt::fputc,     "fputc")
 #pragma binding(msvcrt::fgetc,     "fgetc")
+#pragma binding(msvcrt::putc,      "putc")
+#pragma binding(msvcrt::getc,      "getc")
+#pragma binding(msvcrt::ungetc,    "ungetc")
 #pragma binding(msvcrt::putchar,   "putchar")
 #pragma binding(msvcrt::getchar,   "getchar")
+#pragma binding(msvcrt::tmpfile,   "tmpfile")
+#pragma binding(msvcrt::tmpnam,    "tmpnam")
+#pragma binding(msvcrt::setbuf,    "setbuf")
 #pragma binding(msvcrt::puts,      "puts")
 #pragma binding(msvcrt::perror,    "perror")
 #pragma binding(msvcrt::fseek,     "fseek")
@@ -368,8 +393,21 @@ int fputs(char *s, FILE *stream);
 char *fgets(char *buf, int n, FILE *stream);
 int fputc(int c, FILE *stream);
 int fgetc(FILE *stream);
+// C99 7.19.7.5 / 7.19.7.8: `getc` / `putc` are functionally
+// equivalent to `fgetc` / `fputc`. Spec permits multiple
+// evaluations of the `stream` argument; libc implementations
+// honour the same signature, so the binding is a direct alias.
+int getc(FILE *stream);
+int putc(int c, FILE *stream);
+// C99 7.19.7.11: push one byte back onto an input stream.
+int ungetc(int c, FILE *stream);
 int putchar(int c);
 int getchar();
+// C99 7.19.4.3 / 7.19.4.4: temporary file streams.
+FILE *tmpfile(void);
+char *tmpnam(char *s);
+// C99 7.19.5.5: convenience wrapper around setvbuf.
+void setbuf(FILE *stream, char *buf);
 int puts(char *s);
 int perror(char *s);
 int fseek(FILE *stream, int offset, int whence);

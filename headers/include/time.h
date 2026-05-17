@@ -147,7 +147,11 @@ int clock();
 int clock_gettime(int clk_id, struct timespec *ts);
 int gettimeofday(struct timeval *tv, char *tz);
 double difftime(int t1, int t0);
-int mktime(struct timespec *ts);
+// C99 7.23.2.3: convert broken-down time to a `time_t`. The
+// caller's `struct tm` is updated in place (tm_wday / tm_yday and
+// any normalisation of out-of-range fields). Returns the seconds
+// count or (time_t)-1 on failure.
+int mktime(struct tm *tm);
 struct tm *localtime(int *t);
 struct tm *localtime_r(int *t, struct tm *result);
 struct tm *gmtime(int *t);

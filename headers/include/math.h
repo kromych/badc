@@ -43,6 +43,7 @@
 #pragma binding(libc::ldexpl, "_ldexp")
 #pragma binding(libc::frexp, "_frexp")
 #pragma binding(libc::modf,  "_modf")
+#pragma binding(libc::trunc, "_trunc")
 #endif
 
 #ifdef __linux__
@@ -73,6 +74,7 @@
 #pragma binding(libm::ldexpl, "ldexp")
 #pragma binding(libm::frexp, "frexp")
 #pragma binding(libm::modf,  "modf")
+#pragma binding(libm::trunc, "trunc")
 #endif
 
 #ifdef _WIN32
@@ -82,7 +84,6 @@
 #pragma binding(msvcrt::log10, "log10")
 #pragma binding(msvcrt::log2,  "log2")
 #pragma binding(msvcrt::exp,   "exp")
-#pragma binding(msvcrt::pow,   "pow")
 #pragma binding(msvcrt::floor, "floor")
 #pragma binding(msvcrt::ceil,  "ceil")
 #pragma binding(msvcrt::round, "round")
@@ -100,8 +101,26 @@
 #pragma binding(msvcrt::tanh,  "tanh")
 #pragma binding(msvcrt::ldexp, "ldexp")
 #pragma binding(msvcrt::ldexpl, "ldexp")
-#pragma binding(msvcrt::frexp, "frexp")
 #pragma binding(msvcrt::modf,  "modf")
+#pragma binding(msvcrt::trunc, "trunc")
+
+// msvcrt.dll's transcendental implementations underflow
+// aggressively and diverge from C99 at IEEE-754 edges:
+//   - `frexp(+/-inf)` returns NaN. C99 7.12.6.4 paragraph 2
+//     specifies that the argument is returned and `*exp` is
+//     unspecified.
+//   - `pow(2.0, -1023.0)` returns 0 instead of the largest
+//     subnormal double (~1.1125e-308). msvcrt flushes to zero
+//     well above the subnormal range, breaking any code that
+//     walks adjacent floats via `pow(2, i) + pow(2, i - 52)`.
+// The Universal CRT (`ucrtbase.dll`, shipped with Windows 10
+// and redistributed back to Windows 7 SP1) handles both. Pin
+// the affected entries to ucrtbase; the rest of the math
+// surface stays on msvcrt for now and migrates as new
+// divergences turn up under the TODO marker.
+#pragma dylib(ucrtbase, "ucrtbase.dll")
+#pragma binding(ucrtbase::frexp, "frexp")
+#pragma binding(ucrtbase::pow,   "pow")
 #endif
 
 // IEEE-754 sentinel values. The c5 lexer accepts the typical
@@ -166,3 +185,5 @@ double frexp(double x, int *exp);
 // C99 7.12.6.12: modf(x, *iptr) splits x into integer + fractional
 // parts.
 double modf(double x, double *iptr);
+// C99 7.12.9.8: trunc rounds toward zero.
+double trunc(double x);

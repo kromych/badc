@@ -1532,10 +1532,14 @@ pub fn predefined_symbols() -> Vec<PredefinedSymbol> {
 /// emit / run time.
 ///
 /// A name that's bound twice (two `#pragma binding`s with the same
-/// `local_name`) gets the *first* index; later bindings are ignored
-/// here since the symbol table only holds one entry per name.
-/// `#include`-time deduplication via `#pragma once` makes that the
-/// expected case.
+/// `local_name`) gets the *first* index; later bindings are silently
+/// dropped at the symbol-table level but cause `Op::JsrExt` calls to
+/// route to the first dylib regardless of which header the user
+/// thought was authoritative. `#pragma once` deduplication makes
+/// repeated identical bindings the common case; mismatched bindings
+/// from different dylibs (e.g. `msvcrt::pow` then `ucrtbase::pow`)
+/// instead surface as a `warning:` on stderr -- under `std` only --
+/// so the shadowed binding doesn't disappear silently.
 pub(crate) fn init_symbols(
     symbols: &mut Vec<Symbol>,
     index: &mut SymbolIndex,
@@ -1560,6 +1564,16 @@ pub(crate) fn init_symbols(
                     ..Default::default()
                 });
                 index.record(hash);
+            } else {
+                let winner = lookup_binding_dylib(dylibs, name);
+                if winner != Some(spec.name.as_str()) {
+                    warn_shadowed_binding(
+                        name,
+                        winner.unwrap_or("<unknown>"),
+                        spec.name.as_str(),
+                        binding.real_symbol.as_str(),
+                    );
+                }
             }
             binding_idx += 1;
         }
@@ -1573,6 +1587,46 @@ pub(crate) fn init_symbols(
         find_symbol(symbols, index, "main").is_some(),
         "init_symbols must register `main`"
     );
+}
+
+/// First dylib whose bindings list contains `local_name`, or `None`
+/// if no binding registered it. Walks `dylibs` in the same order as
+/// `init_symbols`, so the result names the dylib whose binding the
+/// symbol table actually retained.
+fn lookup_binding_dylib<'a>(
+    dylibs: &'a [super::preprocessor::DylibSpec],
+    local_name: &str,
+) -> Option<&'a str> {
+    for spec in dylibs {
+        if spec.bindings.iter().any(|b| b.local_name == local_name) {
+            return Some(spec.name.as_str());
+        }
+    }
+    None
+}
+
+#[cfg(feature = "std")]
+fn warn_shadowed_binding(
+    local_name: &str,
+    kept_dylib: &str,
+    shadowed_dylib: &str,
+    shadowed_real_name: &str,
+) {
+    eprintln!(
+        "badc: warning: `#pragma binding({shadowed_dylib}::{local_name}, \
+         \"{shadowed_real_name}\")` is shadowed by an earlier binding \
+         from `{kept_dylib}`; the later binding is ignored. Remove or \
+         reorder one of the two."
+    );
+}
+
+#[cfg(not(feature = "std"))]
+fn warn_shadowed_binding(
+    _local_name: &str,
+    _kept_dylib: &str,
+    _shadowed_dylib: &str,
+    _shadowed_real_name: &str,
+) {
 }
 
 #[cfg(test)]

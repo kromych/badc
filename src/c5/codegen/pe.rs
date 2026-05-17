@@ -1872,7 +1872,19 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
             checksum: 0,
             subsystem: inp.subsystem,
             dll_characteristics: dll_chars,
-            size_of_stack_reserve: 0x10_0000, // 1 MiB
+            // PE/COFF specifies `SizeOfStackReserve` as the
+            // committed-on-demand virtual range reserved for the
+            // initial thread's stack (cleared by the loader; no
+            // physical backing until each page faults in). MSVC's
+            // link.exe defaults to 1 MiB; mingw's ld defaults to
+            // 8 MiB, matching glibc / Apple libc thread defaults.
+            // c5 uses the mingw default so portable programs that
+            // exercise recursion to a depth tuned for the Linux /
+            // macOS C stack budget don't fault the guard page on
+            // Windows before whatever counter the program uses to
+            // self-limit fires (`LUAI_MAXCCALLS`, `tcc_state->
+            // nb_errors`, etc.).
+            size_of_stack_reserve: 0x80_0000, // 8 MiB
             size_of_stack_commit: 0x1000,
             size_of_heap_reserve: 0x10_0000,
             size_of_heap_commit: 0x1000,

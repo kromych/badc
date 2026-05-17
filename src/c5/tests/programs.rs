@@ -369,6 +369,90 @@ fn unary_minus_preserves_uint64_width() {
 }
 
 #[test]
+fn size_t_is_unsigned() {
+    // C99 7.17 paragraph 2: `size_t` is an unsigned integer
+    // type. A signed underlying typedef silently corrupts
+    // every `MAX_SIZET / N`-shaped cap (-1 divided by N is 0
+    // in two's complement signed arithmetic).
+    assert_eq!(run_fixture("size_t_is_unsigned.c"), 0);
+}
+
+#[test]
+fn macro_argument_rescan_resolves_pasted_call() {
+    // C99 6.10.3.4: the function-like macro's substituted body
+    // is rescanned for further macro replacement. An object
+    // identifier supplied as a parameter and immediately
+    // followed by `(` in the body must be recognised as a
+    // function-like call in the rescan.
+    assert_eq!(run_fixture("macro_argument_rescan.c"), 0);
+}
+
+#[test]
+fn parenthesized_function_declarator() {
+    // C99 6.7.5 paragraph 1: parentheses around a direct
+    // declarator are transparent. `(name)(args)` declares a
+    // function, not a function pointer, so a forward
+    // declaration in that shape must not clash with the
+    // matching definition.
+    assert_eq!(run_fixture("parenthesized_function_declarator.c"), 0);
+}
+
+#[test]
+fn large_int_literal_auto_promotes() {
+    // C99 6.4.4.1 paragraph 5: an unsuffixed decimal integer
+    // literal picks the first of `int`, `long`, `long long`
+    // that can hold its value. Leaving a value past INT_MAX at
+    // `int` forces the post-Add/Sub mask in the usual-arith
+    // path to truncate `INT64_MAX - 1` to -2 and
+    // `-LLONG_MAX - 1` to 0.
+    assert_eq!(run_fixture("large_int_literal_auto_promotes.c"), 0);
+}
+
+#[test]
+fn return_int_widens_to_double() {
+    // C99 6.8.6.4 paragraph 3: the value of a return
+    // expression is converted as if by assignment to the
+    // function's return type. An int-typed `return` from a
+    // `double`-returning function must lift via `Op::Fcvtif`;
+    // dropping the integer bit pattern into the FP slot would
+    // make a `(double)x == 505.0` check compare the bit
+    // patterns instead of the values.
+    assert_eq!(run_fixture("return_int_widens_to_double.c"), 0);
+}
+
+#[test]
+fn struct_fn_ptr_field_deref_call() {
+    // C99 6.3.2.1 paragraph 4: an lvalue of function type
+    // decays to a pointer to the function. `(*s.cb)(args)`
+    // is the canonical decay no-op; without a re-seed of the
+    // fn-ptr chain depth after the struct-field load the unary
+    // `*` emits a spurious `Li` and the call jumps to garbage.
+    assert_eq!(run_fixture("struct_fn_ptr_field_deref_call.c"), 0);
+}
+
+#[test]
+fn typedef_fn_ptr_struct_field_carries_lineage() {
+    // Same shape as the previous test but the field's type
+    // comes from a `typedef RET (*fn_t)(args)` alias rather
+    // than an inline fn-pointer declarator. The typedef's
+    // `fn_ptr_indirection` must propagate into the StructField
+    // record so the post-load `(*g->cb)(args)` recognises the
+    // decay.
+    assert_eq!(run_fixture("typedef_fn_ptr_struct_field.c"), 0);
+}
+
+#[test]
+fn fp_nan_unordered_compare() {
+    // C99 6.5.8 paragraph 4 + 6.5.9 paragraph 3 + footnote
+    // 96: NaN compares unordered with everything. Relational
+    // and equality ops yield 0 when either operand is NaN; `!=`
+    // yields 1. Locks the post-UCOMISD AND-with-`setnp` /
+    // OR-with-`setp` masks the x86_64 backend needs to honour
+    // the unordered case.
+    assert_eq!(run_fixture("fp_nan_unordered_compare.c"), 0);
+}
+
+#[test]
 fn sizeof_threads_through_malloc_write_and_return() {
     // sizeof(struct Packet) used in three positions in one program:
     // malloc size, write count, and the function's return value. Tests

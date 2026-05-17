@@ -132,6 +132,20 @@ impl Compiler {
                 return Err(self.compile_err("close paren expected in nested declarator"));
             }
             self.next()?;
+            // C99 6.7.5p1: a parenthesised declarator `(D)` is
+            // equivalent to `D`. When the inner is a plain
+            // identifier with no `*` and no fn-pointer signature
+            // got consumed already, the parens are redundant and
+            // must NOT promote a following `(args)` to a function-
+            // pointer or a following `[N]` to a pointer-to-array.
+            // Return immediately so the dispatch in `run_compile`
+            // parses `(args)` as a regular function signature on
+            // the identifier and a plain `[N]` (handled by the
+            // array-suffix branch below) lands as a real array.
+            if !saw_fn_signature && inner_ptr_levels == 0 && idx != usize::MAX && self.lex.tk == '('
+            {
+                return Ok((idx, inner_ty, inner_array_size));
+            }
             // Trailing decorations on the parenthesised group.
             // Multiple are legal: `(*pp)[N](args)` etc. Each
             // `[N]` adds a pointer level to `inner_ty` and a

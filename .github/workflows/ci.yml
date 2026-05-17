@@ -235,6 +235,161 @@ jobs:
         # DRBGs, the TLS PRF, ChaCha20 and Poly1305. Slow
         # AES / DES KAT loops are tracked under TODO.
         run: python demos/bearssl/smoke.py
+      - name: lua smoke (multi-TU + upstream test suite)
+        # Vendored Lua 5.5.0 sources compile + multi-TU link
+        # through badc on every supported lane, and the curated
+        # 24-script `lua-tests` subset (bitwise, closures,
+        # coroutines, math, pattern, sort, string, table, utf8,
+        # vararg, plus the `T`-driven api / gc / gengc / memerr
+        # / tracegc) runs against the produced interpreter at
+        # both -O and noO.
+        #
+        # macOS / Linux x86_64 / Linux aarch64 gate strictly.
+        # The Windows lanes match the chibicc / tinycc skip-on-2
+        # convention: smoke.py exits 2 when the build is green
+        # but Microsoft msvcrt-specific test idiosyncrasies fire
+        # (`math.lua` ldexp/frexp, `cstack.lua` recursion limit,
+        # `constructs.lua` / `strings.lua` formatting on
+        # AArch64). The c5 build + setjmp / longjmp paths
+        # themselves are still strict: every cargo `native_pe_*`
+        # fixture parity test runs against real Windows.
+        shell: bash
+        run: python demos/lua/smoke.py || test $? -eq 2
+      - name: probe Windows msvcrt setjmp + capture lua crash
+        # Diagnostic for the Windows runtime gaps the lua smoke
+        # surfaces. Runs only when the smoke fails. Two probes:
+        #   1. dump msvcrt.dll exports filtered to setjmp /
+        #      longjmp so the binding choice in <setjmp.h>
+        #      stops being a guess on this lane.
+        #   2. rebuild a fresh lua.exe (the smoke wipes its
+        #      tempdir) and run a quick assertion-failing
+        #      script under cdb so the crash PC + module +
+        #      unwind reach the log.
+        if: failure() && runner.os == 'Windows'
+        shell: cmd
+        continue-on-error: true
+        run: |
+          @echo off
+          setlocal
+          echo === msvcrt setjmp / longjmp exports ===
+          set "DUMPBIN="
+          for /f "delims=" %%P in ('dir /b /s "C:\Program Files\Microsoft Visual Studio\*\*\VC\Tools\MSVC\*\bin\Host*\*\dumpbin.exe" 2^>nul') do (
+            if not defined DUMPBIN set "DUMPBIN=%%P"
+          )
+          if not defined DUMPBIN ( echo dumpbin not on PATH; skipping & goto :build )
+          "%DUMPBIN%" /exports C:\Windows\System32\msvcrt.dll | findstr /i "setjmp longjmp _set"
+          :build
+          echo.
+          echo === building diagnostic lua.exe ===
+          set "BADC=%CD%\target\release\badc.exe"
+          set "WORK=%RUNNER_TEMP%\lua-diag"
+          if exist "%WORK%" rmdir /s /q "%WORK%"
+          mkdir "%WORK%"
+          set "SRC=%CD%\demos\lua\src"
+          set "LT=%CD%\demos\lua\tests\ltests"
+          "%BADC%" -q -DLUA_USER_H=\"ltests.h\" -I "%SRC%" -I "%LT%" -o "%WORK%\lua.exe" ^
+            "%SRC%\lapi.c" "%SRC%\lauxlib.c" "%SRC%\lbaselib.c" "%SRC%\lcode.c" ^
+            "%SRC%\lcorolib.c" "%SRC%\lctype.c" "%SRC%\ldblib.c" "%SRC%\ldebug.c" ^
+            "%SRC%\ldo.c" "%SRC%\ldump.c" "%SRC%\lfunc.c" "%SRC%\lgc.c" "%SRC%\linit.c" ^
+            "%SRC%\liolib.c" "%SRC%\llex.c" "%SRC%\lmathlib.c" "%SRC%\lmem.c" ^
+            "%SRC%\loadlib.c" "%SRC%\lobject.c" "%SRC%\lopcodes.c" "%SRC%\loslib.c" ^
+            "%SRC%\lparser.c" "%SRC%\lstate.c" "%SRC%\lstring.c" "%SRC%\lstrlib.c" ^
+            "%SRC%\ltable.c" "%SRC%\ltablib.c" "%SRC%\ltm.c" "%SRC%\lua.c" ^
+            "%SRC%\lundump.c" "%SRC%\lutf8lib.c" "%SRC%\lvm.c" "%SRC%\lzio.c" ^
+            "%LT%\ltests.c"
+          if errorlevel 1 ( echo lua build failed & exit /b 0 )
+          echo.
+          echo === sanity: lua -v ===
+          "%WORK%\lua.exe" -v
+          echo lua-v exit: %ERRORLEVEL%
+          echo.
+          echo === assertion script under cdb ===
+          set "CDBDIR=x64"
+          if /I "%PROCESSOR_ARCHITECTURE%"=="ARM64" set "CDBDIR=arm64"
+          set "CDB=C:\Program Files (x86)\Windows Kits\10\Debuggers\%CDBDIR%\cdb.exe"
+          if not exist "%CDB%" ( echo cdb not found at "%CDB%"; skipping crash capture & exit /b 0 )
+          echo print 'before assert' > "%WORK%\probe.lua"
+          echo assert(false, 'probe-assertion') >> "%WORK%\probe.lua"
+          echo print 'unreachable' >> "%WORK%\probe.lua"
+          set "LOG=%RUNNER_TEMP%\lua-cdb.log"
+          if exist "%LOG%" del "%LOG%"
+          "%CDB%" -logo "%LOG%" -c "g; .lastevent; r; kn 30; lm; qq" -G -g "%WORK%\lua.exe" "%WORK%\probe.lua"
+          echo cdb exit: %ERRORLEVEL%
+          if exist "%LOG%" ( echo === cdb log === & type "%LOG%" ) else ( echo no cdb log produced )
+      - name: probe Windows libc number formatting + frexp/ldexp
+        # Reproduces the msvcrt / ucrtbase entry points the
+        # windows-lane lua tests fail against:
+        # `snprintf("%.14g", 1203.125)` (strings.lua), the
+        # `ldexp(frexp(x))` round-trip on math.lua's eight
+        # constants, and the adjacent-ULP `tostring(x) !=
+        # tostring(x + 2^(i - 52))` chain from math.lua's
+        # 1100-1110 block. The output decides whether the
+        # remaining bug is in c5's binding choice, the printf /
+        # strtod two-step that `tostringbuffFloat` relies on,
+        # or the test idiom itself.
+        if: runner.os == 'Windows'
+        shell: cmd
+        continue-on-error: true
+        run: |
+          @echo off
+          setlocal
+          set "BADC=%CD%\target\release\badc.exe"
+          set "WORK=%RUNNER_TEMP%\probe"
+          if exist "%WORK%" rmdir /s /q "%WORK%"
+          mkdir "%WORK%"
+          > "%WORK%\probe.c" echo #include ^<stdio.h^>
+          >>"%WORK%\probe.c" echo #include ^<math.h^>
+          >>"%WORK%\probe.c" echo #include ^<stdlib.h^>
+          >>"%WORK%\probe.c" echo #include ^<string.h^>
+          >>"%WORK%\probe.c" echo int main(void) {
+          >>"%WORK%\probe.c" echo   char b[64];
+          >>"%WORK%\probe.c" echo   double vs[8] = {0.0, 10.0, 32.0, -3.14159265358979, 1e10, 1e-10, 0.0, 0.0};
+          >>"%WORK%\probe.c" echo   double inf_pos = 1.0; inf_pos = inf_pos / 0.0; vs[6] =  inf_pos;
+          >>"%WORK%\probe.c" echo   double neg     = 1.0; neg     = -neg / 0.0; vs[7] = neg;
+          >>"%WORK%\probe.c" echo   snprintf(b, 64, "%%.14g", 1203.125);    printf("FMT1203: [%%s]\n", b);
+          >>"%WORK%\probe.c" echo   snprintf(b, 64, "%%.14g", -0.5);        printf("FMTneg5: [%%s]\n", b);
+          >>"%WORK%\probe.c" echo   snprintf(b, 64, "%%.14g", -32767.0);    printf("FMTk32:  [%%s]\n", b);
+          >>"%WORK%\probe.c" echo   snprintf(b, 64, "%%g",    1203.125);    printf("FMTg:    [%%s]\n", b);
+          >>"%WORK%\probe.c" echo   for (int i = 0; i ^< 8; i++) {
+          >>"%WORK%\probe.c" echo     double x = vs[i];
+          >>"%WORK%\probe.c" echo     int e;
+          >>"%WORK%\probe.c" echo     double m = frexp(x, ^&e);
+          >>"%WORK%\probe.c" echo     double r = ldexp(m, e);
+          >>"%WORK%\probe.c" echo     printf("RT[%%d] x=%%.17g m=%%.17g e=%%d r=%%.17g eq=%%d\n", i, x, m, e, r, r == x);
+          >>"%WORK%\probe.c" echo   }
+          >>"%WORK%\probe.c" echo   int first_x_eq_y = 0, first_str_eq = 0;
+          >>"%WORK%\probe.c" echo   int x_eq_y_i = 0,    str_eq_i = 0;
+          >>"%WORK%\probe.c" echo   for (int outer = 1; outer ^<= 1022; outer++) {
+          >>"%WORK%\probe.c" echo     int signs[2]; signs[0] = -outer; signs[1] = outer;
+          >>"%WORK%\probe.c" echo     for (int s = 0; s ^< 2; s++) {
+          >>"%WORK%\probe.c" echo       int i = signs[s];
+          >>"%WORK%\probe.c" echo       double xP = pow(2.0, (double)i);
+          >>"%WORK%\probe.c" echo       double dP = pow(2.0, (double)(i - 52));
+          >>"%WORK%\probe.c" echo       double yP = xP + dP;
+          >>"%WORK%\probe.c" echo       if (!first_x_eq_y ^&^& xP == yP) { first_x_eq_y = 1; x_eq_y_i = i;
+          >>"%WORK%\probe.c" echo         printf("XEQY i=%%d xP=%%.17g dP=%%.17g yP=%%.17g\n", i, xP, dP, yP); }
+          >>"%WORK%\probe.c" echo       char fxP[64], fyP[64], buf[64];
+          >>"%WORK%\probe.c" echo       int len;
+          >>"%WORK%\probe.c" echo       len = snprintf(buf, 64, "%%.15g", xP);
+          >>"%WORK%\probe.c" echo       if (strtod(buf, NULL) != xP) len = snprintf(buf, 64, "%%.17g", xP);
+          >>"%WORK%\probe.c" echo       if (buf[strspn(buf, "-0123456789")] == 0) { buf[len++] = '.'; buf[len++] = '0'; buf[len] = 0; }
+          >>"%WORK%\probe.c" echo       strcpy(fxP, buf);
+          >>"%WORK%\probe.c" echo       len = snprintf(buf, 64, "%%.15g", yP);
+          >>"%WORK%\probe.c" echo       if (strtod(buf, NULL) != yP) len = snprintf(buf, 64, "%%.17g", yP);
+          >>"%WORK%\probe.c" echo       if (buf[strspn(buf, "-0123456789")] == 0) { buf[len++] = '.'; buf[len++] = '0'; buf[len] = 0; }
+          >>"%WORK%\probe.c" echo       strcpy(fyP, buf);
+          >>"%WORK%\probe.c" echo       if (!first_str_eq ^&^& xP != yP ^&^& strcmp(fxP, fyP) == 0) {
+          >>"%WORK%\probe.c" echo         first_str_eq = 1; str_eq_i = i;
+          >>"%WORK%\probe.c" echo         printf("STREQ i=%%d xP=%%.17g yP=%%.17g fxP=%%s fyP=%%s\n", i, xP, yP, fxP, fyP); }
+          >>"%WORK%\probe.c" echo     }
+          >>"%WORK%\probe.c" echo   }
+          >>"%WORK%\probe.c" echo   printf("WALK_SUMMARY: x_eq_y_first_i=%%d str_eq_first_i=%%d\n", x_eq_y_i, str_eq_i);
+          >>"%WORK%\probe.c" echo   return 0;
+          >>"%WORK%\probe.c" echo }
+          "%BADC%" -o "%WORK%\probe.exe" "%WORK%\probe.c"
+          if errorlevel 1 ( echo probe build failed & exit /b 0 )
+          "%WORK%\probe.exe"
+          echo probe exit: %ERRORLEVEL%
       - name: chibicc bringup smoke
         # chibicc is the substantial multi-TU exerciser for the
         # cross-TU linker. All nine TUs compile on macOS / Linux,

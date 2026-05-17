@@ -890,6 +890,12 @@ pub(super) enum Cc {
     A = 0x7,
     /// Above or equal (CF=0) -- FP `>=`.
     Ae = 0x3,
+    /// Parity (PF=1). After `UCOMISD` PF=1 indicates an unordered
+    /// (NaN) comparison.
+    P = 0xA,
+    /// Not parity (PF=0). After `UCOMISD` PF=0 indicates an
+    /// ordered comparison.
+    Np = 0xB,
 }
 
 impl Cc {
@@ -910,6 +916,8 @@ impl Cc {
             Cc::Ae => Cc::B,
             Cc::A => Cc::Be,
             Cc::Be => Cc::A,
+            Cc::P => Cc::Np,
+            Cc::Np => Cc::P,
         }
     }
 }
@@ -2335,6 +2343,15 @@ fn lower_op(
                     // Return value in r13.
                     emit_mov_rr(code, Reg::R13, Reg::R11);
                 }
+                crate::c5::op::Intrinsic::SetjmpAArch64
+                | crate::c5::op::Intrinsic::LongjmpAArch64 => {
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        "native codegen (x86_64): AArch64 setjmp / longjmp \
+                         intrinsics emitted on a non-AArch64 target; \
+                         <setjmp.h> should only bind these on the Windows \
+                         AArch64 lane",
+                    )));
+                }
             }
         }
         Op::AllocaInit => {
@@ -2377,11 +2394,19 @@ fn lower_op(
             emit_xorpd(code, Reg::XMM0, Reg::XMM1);
             emit_movq_r_xmm(code, Reg::R13, Reg::XMM0);
         }
-        Op::Feq => emit_fp_cmp(code, reg_state, Cc::E),
-        Op::Fne => emit_fp_cmp(code, reg_state, Cc::Ne),
-        Op::Flt => emit_fp_cmp(code, reg_state, Cc::B),
+        // IEEE 754 / C99 6.5.8p4 + 6.5.9p3: a NaN compares
+        // unordered with everything, so `==` / `<` / `<=` /
+        // `>` / `>=` involving a NaN must yield 0 and `!=`
+        // must yield 1. UCOMISD signals unordered via PF=1
+        // alongside ZF=1 and CF=1; CC codes that key off ZF or
+        // CF alone fire incorrectly. `emit_fp_cmp_ordered` AND-
+        // masks the ordered-only result against `setnp` (PF=0),
+        // and `emit_fp_cmp_ne` OR-merges `setne` with `setp`.
+        Op::Feq => emit_fp_cmp_ordered(code, reg_state, Cc::E),
+        Op::Fne => emit_fp_cmp_ne(code, reg_state),
+        Op::Flt => emit_fp_cmp_ordered(code, reg_state, Cc::B),
         Op::Fgt => emit_fp_cmp(code, reg_state, Cc::A),
-        Op::Fle => emit_fp_cmp(code, reg_state, Cc::Be),
+        Op::Fle => emit_fp_cmp_ordered(code, reg_state, Cc::Be),
         Op::Fge => emit_fp_cmp(code, reg_state, Cc::Ae),
         Op::Fcvtfi => {
             // r13 <- (i64)(xmm0 = f64::from_bits(r13))
@@ -2952,6 +2977,12 @@ fn emit_fp_binop<F: Fn(&mut Vec<u8>, Reg, Reg)>(
 /// 0/1 boolean by `cc`. Uses the unsigned-style cc codes (B/A/Be/Ae)
 /// because UCOMISD writes its result into CF/ZF rather than the
 /// signed SF/OF pair that integer SUBS targets.
+///
+/// Caller must pick a cc whose result is already 0 for an
+/// unordered (NaN) comparison -- e.g. `A` / `Ae`, which test
+/// CF=0 (and ZF=0 for A) and UCOMISD's NaN signal of CF=1
+/// already drives them to 0. CCs that key off ZF / CF alone
+/// (`E`, `Ne`, `B`, `Be`) need the ordered-only wrappers below.
 fn emit_fp_cmp(code: &mut Vec<u8>, reg_state: &mut RegState<'_>, cc: Cc) {
     let lhs = pop_lhs_reg(code, reg_state);
     emit_movq_xmm_r(code, Reg::XMM0, lhs);
@@ -2959,6 +2990,42 @@ fn emit_fp_cmp(code: &mut Vec<u8>, reg_state: &mut RegState<'_>, cc: Cc) {
     emit_ucomisd(code, Reg::XMM0, Reg::XMM1);
     emit_setcc_r8(code, cc, Reg::R10);
     emit_movzx_r_r8(code, Reg::R13, Reg::R10);
+}
+
+/// Ordered FP comparison: same shape as `emit_fp_cmp` but
+/// AND-masks the result with `setnp` so the boolean is forced
+/// to 0 on an unordered (NaN) comparison. Used for `==` / `<`
+/// / `<=` where UCOMISD's NaN-flag pattern would otherwise
+/// produce a false-positive 1. The two setcc results are each
+/// movzx'd into a clean 64-bit register before the AND so we
+/// never observe the undefined upper bits a bare `setcc` leaves
+/// in its destination.
+fn emit_fp_cmp_ordered(code: &mut Vec<u8>, reg_state: &mut RegState<'_>, cc: Cc) {
+    let lhs = pop_lhs_reg(code, reg_state);
+    emit_movq_xmm_r(code, Reg::XMM0, lhs);
+    emit_movq_xmm_r(code, Reg::XMM1, Reg::R13);
+    emit_ucomisd(code, Reg::XMM0, Reg::XMM1);
+    emit_setcc_r8(code, cc, Reg::R10);
+    emit_movzx_r_r8(code, Reg::R13, Reg::R10);
+    emit_setcc_r8(code, Cc::Np, Reg::R10);
+    emit_movzx_r_r8(code, Reg::R10, Reg::R10);
+    emit_and_rr(code, Reg::R13, Reg::R10);
+}
+
+/// FP `!=`: OR-merges `setne` (ZF=0) with `setp` (PF=1) so a
+/// NaN comparison yields 1. Without this NaN ucomisd would
+/// land ZF=1 and `setne` would return 0, contradicting
+/// C99 6.5.9p3 and IEEE 754.
+fn emit_fp_cmp_ne(code: &mut Vec<u8>, reg_state: &mut RegState<'_>) {
+    let lhs = pop_lhs_reg(code, reg_state);
+    emit_movq_xmm_r(code, Reg::XMM0, lhs);
+    emit_movq_xmm_r(code, Reg::XMM1, Reg::R13);
+    emit_ucomisd(code, Reg::XMM0, Reg::XMM1);
+    emit_setcc_r8(code, Cc::Ne, Reg::R10);
+    emit_movzx_r_r8(code, Reg::R13, Reg::R10);
+    emit_setcc_r8(code, Cc::P, Reg::R10);
+    emit_movzx_r_r8(code, Reg::R10, Reg::R10);
+    emit_or_rr(code, Reg::R13, Reg::R10);
 }
 
 /// Lower a register-register compare op (`Lt`/`Eq`/...). When the

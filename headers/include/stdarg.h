@@ -15,6 +15,32 @@
 // landing mid-slot. `int *` has the same 4-byte-stride problem
 // on every target.
 //
+// TODO: replace this c5-specific cursor with the host's native
+// `va_list` representation. That requires:
+//
+//   * Variadic c5 functions reached via the host-ABI call shape
+//     (host arg regs + host stack overflow) instead of the
+//     bare-bl + c5-stack-args path. The compiler's
+//     `Symbol::is_variadic` flag plus `Program::variadic_functions`
+//     already plumbs the declarator info to the codegen; today
+//     the codegen still routes variadic targets through the
+//     legacy c5-stack path to keep this header's macros valid.
+//   * A per-host-ABI variadic register save area emitted in the
+//     prologue of every variadic c5 function. AAPCS64: x0..x7
+//     contiguous in the gr-save area + d0..d7 contiguous in the
+//     vr-save area. SysV x86_64: rdi..r9 + xmm0..xmm7. Windows
+//     (both ISAs): variadic_int_only -- save only the int arg
+//     bank; FP args ride int regs as bit patterns.
+//   * `va_list` becomes the platform's documented struct (or
+//     `char *` on Windows). `va_start` initialises the offsets
+//     and pointers to the prologue-spilled save area; `va_arg`
+//     walks per the host's variadic protocol.
+//
+// Net effect: libc's `vfprintf` / `vsnprintf` / etc. would take
+// c5's `va_list` directly, retiring the c5_v* shims in
+// `<c5io.h>` and the `#define vsnprintf c5_vsnprintf` redirects
+// in `<stdio.h>`.
+//
 // Usage:
 //
 //   int sum(int count, ...) {

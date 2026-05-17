@@ -54,8 +54,9 @@ use super::aarch64::{
     enc_add_imm, enc_add_reg, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_cbnz, enc_cbz,
     enc_cmp_reg, enc_cset, enc_eor_reg, enc_ldp_post, enc_ldr32_imm, enc_ldr_imm, enc_ldrb_imm,
     enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm, enc_ldur, enc_lslv, enc_lsrv,
-    enc_mov_reg, enc_mul, enc_orr_reg, enc_ret, enc_stp_pre, enc_str32_imm, enc_str_imm,
-    enc_str_pre, enc_strb_imm, enc_strh_imm, enc_stur, enc_sub_imm, enc_sub_reg, load_imm64,
+    enc_mov_reg, enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_sdiv, enc_stp_pre, enc_str32_imm,
+    enc_str_imm, enc_str_pre, enc_strb_imm, enc_strh_imm, enc_stur, enc_sub_imm, enc_sub_reg,
+    enc_udiv, load_imm64,
 };
 use super::ssa::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
 use super::ssa_alloc::{Allocation, Place};
@@ -157,6 +158,13 @@ pub(super) fn emit_function(
                 code, inst, place, alloc, frame, &scratch, abi, fixups, plt_call_fixups,
                 imports,
             ) {
+                #[cfg(feature = "std")]
+                if std::env::var("BADC_DUMP_SSA").is_ok() {
+                    eprintln!(
+                        "ssa emit: bailed on inst v{v}: {:?} (place {:?})",
+                        inst, place,
+                    );
+                }
                 code.truncate(snapshot);
                 return false;
             }
@@ -715,10 +723,22 @@ fn emit_binop(
         emit(code, enc_cset(rd, cond));
         return true;
     }
+    if matches!(op, BinOp::Mod | BinOp::Modu) {
+        let divider = if matches!(op, BinOp::Mod) {
+            enc_sdiv(scratch.secondary, rn, rm)
+        } else {
+            enc_udiv(scratch.secondary, rn, rm)
+        };
+        emit(code, divider);
+        emit(code, enc_msub(rd, scratch.secondary, rm, rn));
+        return true;
+    }
     let word = match op {
         BinOp::Add => enc_add_reg(rd, rn, rm),
         BinOp::Sub => enc_sub_reg(rd, rn, rm),
         BinOp::Mul => enc_mul(rd, rn, rm),
+        BinOp::Div => enc_sdiv(rd, rn, rm),
+        BinOp::Divu => enc_udiv(rd, rn, rm),
         BinOp::And => enc_and_reg(rd, rn, rm),
         BinOp::Or => enc_orr_reg(rd, rn, rm),
         BinOp::Xor => enc_eor_reg(rd, rn, rm),
@@ -774,10 +794,23 @@ fn emit_binop_imm(
         emit(code, enc_cset(rd, cond));
         return true;
     }
+    // Mod / Modu under BinopI doesn't naturally arise from the
+    // bytecode optimizer (it only fuses Psh; Imm N; <op> into
+    // <op>I N for a fixed whitelist), but handle them
+    // defensively in case a future pass produces them.
+    if matches!(op, BinOp::Mod | BinOp::Modu) {
+        // Need a third scratch reg distinct from rn / rm.
+        // x16 holds rn (the materialised lhs); x17 = scratch.secondary
+        // holds the immediate. Use x18-equivalent isn't available
+        // (reserved on Windows); fall back to the pool path.
+        return false;
+    }
     let word = match op {
         BinOp::Add => enc_add_reg(rd, rn, rm),
         BinOp::Sub => enc_sub_reg(rd, rn, rm),
         BinOp::Mul => enc_mul(rd, rn, rm),
+        BinOp::Div => enc_sdiv(rd, rn, rm),
+        BinOp::Divu => enc_udiv(rd, rn, rm),
         BinOp::And => enc_and_reg(rd, rn, rm),
         BinOp::Or => enc_orr_reg(rd, rn, rm),
         BinOp::Xor => enc_eor_reg(rd, rn, rm),

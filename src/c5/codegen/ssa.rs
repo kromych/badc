@@ -142,6 +142,18 @@ pub(super) enum Inst {
     /// Slot index is the alloca-top FP-slot offset. Produces no
     /// SSA value; emitted purely for the side effect.
     AllocaInit(i64),
+    /// Spill a c5 vstack value to a function-wide spill slot.
+    /// Emitted at block end when the c5 virtual stack is non-
+    /// empty -- e.g. an outer expression's `Op::Psh` of the LHS
+    /// straddles a branch (ternary / short-circuit) before the
+    /// matching binop consumes it.
+    VstackSpill { slot: u32, value: ValueId },
+    /// Reload a function-wide vstack spill slot. Emitted at
+    /// block start, one per still-live vstack entry. The
+    /// instruction's id becomes the new SSA name for the
+    /// reloaded value; the block uses it on its local vstack
+    /// without referencing the predecessor's writer.
+    VstackReload { slot: u32 },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -303,6 +315,11 @@ pub(super) struct FunctionSsa {
     /// Basic blocks in source / execution order. Block 0 is the
     /// entry block.
     pub blocks: Vec<Block>,
+    /// Function-wide count of vstack spill slots. The per-arch
+    /// lowering reserves this many additional 8-byte frame slots
+    /// past the regular `locals` reservation; `VstackSpill` /
+    /// `VstackReload` insts read and write through them.
+    pub vstack_slots: u32,
 }
 
 /// Lift every function in `program.text` into a [`FunctionSsa`].
@@ -351,6 +368,14 @@ pub(super) fn lift_function(
     for (i, &pc) in block_starts.iter().enumerate() {
         pc_to_block.insert(pc, i as BlockId);
     }
+    // Pre-walk: determine the c5 virtual-stack depth at every
+    // block's entry. The lift uses this to emit `VstackReload`
+    // insts at block start and `VstackSpill` insts at block exit
+    // so values that ride the c5 stack across a branch (outer
+    // `Op::Psh` of a binop's LHS straddling a ternary or short-
+    // circuit) survive into the successor block.
+    let block_entry_depths = compute_block_entry_depths(text, ent_pc, end_pc, &block_starts)?;
+    let vstack_slots = block_entry_depths.iter().copied().max().unwrap_or(0);
 
     let mut insts: Vec<Inst> = Vec::new();
     let mut blocks: Vec<Block> = Vec::with_capacity(block_starts.len());
@@ -365,6 +390,17 @@ pub(super) fn lift_function(
         // Per-block state.
         let mut acc: ValueId = NO_VALUE;
         let mut vstack: Vec<ValueId> = Vec::new();
+        // Block entry: reload any cross-block vstack values from
+        // their spill slots. Slot 0 holds the value that was at
+        // the bottom of the vstack at the predecessor's spill;
+        // slot N-1 holds the top. The reload order matches so the
+        // local vstack starts with the same shape.
+        let entry_depth = block_entry_depths[block_idx];
+        for slot in 0..entry_depth {
+            let id = insts.len() as ValueId;
+            insts.push(Inst::VstackReload { slot });
+            vstack.push(id);
+        }
         let mut pc = start_pc;
         // The block's entry instruction is `Op::Ent` (only for
         // the entry block) or `Op::AllocaInit` after it; both are
@@ -914,10 +950,19 @@ pub(super) fn lift_function(
                 }
             }
         }
-        if !vstack.is_empty() {
-            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                "ssa lift: virtual stack non-empty at block end",
-            )));
+        // Spill any vstack values still alive at block exit so
+        // the successor block can reload them. Slot 0 = bottom-
+        // of-vstack at spill time, top-of-vstack = slot N-1.
+        // VstackSpill insts go BEFORE the terminator was
+        // emitted (they're side-effect-only and don't need to
+        // ride a separate "between exit-acc and terminator"
+        // phase -- the terminator wasn't appended to `insts`
+        // either; it lives in `terminator`).
+        for (slot, &value) in vstack.iter().enumerate() {
+            insts.push(Inst::VstackSpill {
+                slot: slot as u32,
+                value,
+            });
         }
         let inst_end = insts.len() as u32;
         blocks.push(Block {
@@ -935,7 +980,142 @@ pub(super) fn lift_function(
         is_variadic: meta.is_variadic,
         insts,
         blocks,
+        vstack_slots,
     })
+}
+
+/// Pre-walk the function and compute the c5 virtual-stack depth
+/// at each block's entry. Threads depth across fall-through and
+/// branch edges; the c5 emitter guarantees every predecessor of
+/// a block agrees on the entry depth (the bytecode is a
+/// well-balanced stream).
+fn compute_block_entry_depths(
+    text: &[i64],
+    _ent_pc: usize,
+    end_pc: usize,
+    block_starts: &[usize],
+) -> Result<Vec<u32>, C5Error> {
+    let mut depths = vec![None::<u32>; block_starts.len()];
+    let mut pc_to_block: alloc::collections::BTreeMap<usize, usize> =
+        alloc::collections::BTreeMap::new();
+    for (i, &pc) in block_starts.iter().enumerate() {
+        pc_to_block.insert(pc, i);
+    }
+    depths[0] = Some(0);
+
+    let record = |target_pc: usize, depth: u32, depths: &mut [Option<u32>]| -> Result<(), C5Error> {
+        if let Some(&idx) = pc_to_block.get(&target_pc) {
+            match depths[idx] {
+                None => depths[idx] = Some(depth),
+                Some(existing) if existing == depth => {}
+                Some(existing) => {
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        &alloc::format!(
+                            "ssa lift: block at pc {target_pc} reached with mismatched \
+                             c5-vstack depths ({existing} vs {depth})"
+                        ),
+                    )));
+                }
+            }
+        }
+        Ok(())
+    };
+
+    for (block_idx, &start_pc) in block_starts.iter().enumerate() {
+        let entry_depth = depths[block_idx].unwrap_or(0);
+        let mut depth = entry_depth;
+        let end_of_block = block_starts.get(block_idx + 1).copied().unwrap_or(end_pc);
+        let mut pc = start_pc;
+        while pc < end_of_block {
+            let Some(op) = Op::from_i64(text[pc]) else {
+                break;
+            };
+            match op {
+                Op::Psh => depth += 1,
+                Op::Or | Op::Xor | Op::And
+                | Op::Eq | Op::Ne | Op::Lt | Op::Gt | Op::Le | Op::Ge
+                | Op::Ult | Op::Ugt | Op::Ule | Op::Uge
+                | Op::Shl | Op::Shr | Op::Shru
+                | Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Mod
+                | Op::Divu | Op::Modu
+                | Op::Fadd | Op::Fsub | Op::Fmul | Op::Fdiv
+                | Op::Feq | Op::Fne | Op::Flt | Op::Fgt | Op::Fle | Op::Fge
+                | Op::Si | Op::Sc | Op::Sw | Op::Sh | Op::Sf
+                | Op::Mcpy => {
+                    depth = depth
+                        .checked_sub(1)
+                        .ok_or_else(|| {
+                            C5Error::Compile(crate::c5::error::fmt_internal_err(
+                                "ssa lift: stack underflow during depth pre-walk",
+                            ))
+                        })?;
+                }
+                Op::Jsr | Op::Jsri | Op::JsrExt => {
+                    // The SSA lift bundles the trailing `Adj N`
+                    // into the call's args list, so the call's
+                    // PC + the following `Adj`'s PC are folded
+                    // into a single virtual op that pops N. Mirror
+                    // that here: subtract N and skip past the Adj.
+                    let after = pc + op.word_size();
+                    if after < end_of_block
+                        && Op::from_i64(text[after]) == Some(Op::Adj)
+                    {
+                        let n = text[after + 1] as u32;
+                        depth = depth.checked_sub(n).ok_or_else(|| {
+                            C5Error::Compile(crate::c5::error::fmt_internal_err(
+                                "ssa lift: stack underflow at Adj during depth pre-walk",
+                            ))
+                        })?;
+                        pc = after + Op::Adj.word_size();
+                        continue;
+                    }
+                }
+                Op::Adj => {
+                    // Stray Adj (the call before it was 0-arg or
+                    // we missed something). Just drop and move on.
+                    let n = text[pc + 1] as u32;
+                    depth = depth.checked_sub(n).unwrap_or(depth);
+                }
+                Op::Intrinsic => {
+                    // longjmp(env, val) pops one (env) on inline
+                    // expansion. Other intrinsics don't perturb
+                    // the vstack.
+                    let kind = text[pc + 1];
+                    if kind == crate::c5::op::Intrinsic::LongjmpAArch64 as i64 {
+                        depth = depth.checked_sub(1).ok_or_else(|| {
+                            C5Error::Compile(crate::c5::error::fmt_internal_err(
+                                "ssa lift: stack underflow at longjmp during depth pre-walk",
+                            ))
+                        })?;
+                    }
+                }
+                Op::Jmp => {
+                    let target = text[pc + 1] as usize;
+                    record(target, depth, &mut depths)?;
+                    pc += op.word_size();
+                    continue;
+                }
+                Op::Bz | Op::Bnz => {
+                    let target = text[pc + 1] as usize;
+                    record(target, depth, &mut depths)?;
+                    // Fall-through path keeps the same depth.
+                }
+                Op::Lev | Op::TailExt => {
+                    // No successor; depth no longer matters.
+                    pc += op.word_size();
+                    continue;
+                }
+                _ => {}
+            }
+            pc += op.word_size();
+        }
+        // Fall-through to next block.
+        if let Some(&_next_pc) = block_starts.get(block_idx + 1) {
+            record(end_of_block, depth, &mut depths)?;
+        }
+    }
+
+    Ok(depths.into_iter().map(|d| d.unwrap_or(0)).collect())
 }
 
 /// Read the operand of a trailing `Op::Adj` if one sits at
@@ -1037,18 +1217,11 @@ mod tests {
 
     /// Lift c4.c -- the busiest fixture in the test set. Same
     /// invariants as above; catches anything that only shows up
-    /// on large bodies. TODO: c4's expression-level ternary-
-    /// inside-binop patterns leave the c5 virtual stack non-
-    /// empty across a branch boundary (an outer `Op::Psh` of
-    /// the LHS, then an inner `Bz/Bnz/Jmp` that splits a
-    /// successor block, then the matching binop that consumes
-    /// the still-pending push). The simplest block-based lift
-    /// rejects this; the proper handling needs to thread the
-    /// vstack as block-entry / block-exit parameters, which the
-    /// allocator (task #8) needs to consume anyway. Ignored
-    /// here until that lands.
+    /// on large bodies. Exercises the cross-block virtual-stack
+    /// threading (VstackSpill / VstackReload) because c4's
+    /// short-circuit and ternary patterns leave the c5 stack
+    /// non-empty across branches.
     #[test]
-    #[ignore = "TODO: cross-block virtual-stack threading"]
     fn lift_c4_self_host() {
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/c/c4.c");
         let src = std::fs::read_to_string(&path).expect("read fixture");

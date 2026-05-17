@@ -101,23 +101,25 @@ two Windows lanes adopt the chibicc / tinycc convention --
 fail, and the workflow accepts that exit (`|| test $? -eq 2`)
 while still failing on a real build error (exit 1).
 
-### Known Windows-only test failures (TODO)
+### Known Windows-only test failure (TODO)
 
-Each script that currently fails on a Windows runner is listed
-below with the line, the assertion, and the upstream cause.
-The c5 compiler builds the Lua interpreter cleanly on both
-Windows lanes and the `setjmp` / `longjmp` round-trip fixture
-in `tests/fixtures/c/setjmp_longjmp_roundtrip.c` passes through
-the cargo `native_pe_x64` / `native_pe_arm64` lanes -- the
-remaining failures are msvcrt-runtime divergences that need to
-be reproduced on real Windows hardware to drive down.
+`math.lua:692` (`assert(math.ldexp(m, p) == x)` over a fixed
+vector of x values) fails on both Windows lanes for `x = ±inf`.
+The CI probe under `probe Windows libc number formatting +
+frexp/ldexp` shows the root cause:
 
-| Script           | Line | Lane          | Upstream cause                                              |
-|------------------|-----:|---------------|-------------------------------------------------------------|
-| `math.lua`       | 692  | x64, aarch64  | msvcrt `ldexp` / `frexp` boundary differs from libm         |
-| `cstack.lua`     | --   | x64, aarch64  | msvcrt's recursion-limit / SEH stack-probe policy           |
-| `constructs.lua` | 83   | aarch64       | `load(code)` returning a function whose call asserts        |
-| `strings.lua`    | 140  | aarch64       | `tostring(float)` formatting through msvcrt printf          |
+```
+RT[6] x=1.#INF m=-1.#IND e=-1 r=-1.#IND eq=0
+RT[7] x=-1.#INF m=-1.#IND e=-1 r=-1.#IND eq=0
+```
+
+C99 7.12.6.4 paragraph 2 says `frexp(±inf)` returns the
+argument and stores an unspecified exponent. glibc and Apple
+libm both return `±inf`. msvcrt returns NaN. The round-trip
+through `ldexp` therefore loses the input on Windows. The
+divergence is in msvcrt, not c5; closing it requires either
+binding `math.frexp` to ucrtbase's implementation or skipping
+the inf cases on Windows. Tracked under the TODO marker.
 
 ## Bumping Lua
 

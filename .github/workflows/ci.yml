@@ -317,15 +317,16 @@ jobs:
           echo cdb exit: %ERRORLEVEL%
           if exist "%LOG%" ( echo === cdb log === & type "%LOG%" ) else ( echo no cdb log produced )
       - name: probe Windows libc number formatting + frexp/ldexp
-        # Reproduces -- in isolation -- the three msvcrt entry
-        # points the windows-lane lua tests fail against:
-        # `_snprintf("%.14g", 1203.125)` (strings.lua:140),
-        # `ldexp(frexp(x))` round-trip on the eight math.lua:692
-        # values, and the lua_Number2str shape that produces
-        # `tostring(-0.5)`. The output decides whether the bug
-        # is in c5's binding choice (msvcrt._snprintf vs
-        # ucrtbase.snprintf), c5's Win64 ABI emit, or the test
-        # idiom itself.
+        # Reproduces the msvcrt / ucrtbase entry points the
+        # windows-lane lua tests fail against:
+        # `snprintf("%.14g", 1203.125)` (strings.lua), the
+        # `ldexp(frexp(x))` round-trip on math.lua's eight
+        # constants, and the adjacent-ULP `tostring(x) !=
+        # tostring(x + 2^(i - 52))` chain from math.lua's
+        # 1100-1110 block. The output decides whether the
+        # remaining bug is in c5's binding choice, the printf /
+        # strtod two-step that `tostringbuffFloat` relies on,
+        # or the test idiom itself.
         if: runner.os == 'Windows'
         shell: cmd
         continue-on-error: true
@@ -336,10 +337,10 @@ jobs:
           set "WORK=%RUNNER_TEMP%\probe"
           if exist "%WORK%" rmdir /s /q "%WORK%"
           mkdir "%WORK%"
-          rem `%g` formatting and frexp / ldexp probes -- emit
-          rem distinct prefixes so grep can split the channels.
           > "%WORK%\probe.c" echo #include ^<stdio.h^>
           >>"%WORK%\probe.c" echo #include ^<math.h^>
+          >>"%WORK%\probe.c" echo #include ^<stdlib.h^>
+          >>"%WORK%\probe.c" echo #include ^<string.h^>
           >>"%WORK%\probe.c" echo int main(void) {
           >>"%WORK%\probe.c" echo   char b[64];
           >>"%WORK%\probe.c" echo   double vs[8] = {0.0, 10.0, 32.0, -3.14159265358979, 1e10, 1e-10, 0.0, 0.0};
@@ -355,6 +356,20 @@ jobs:
           >>"%WORK%\probe.c" echo     double m = frexp(x, ^&e);
           >>"%WORK%\probe.c" echo     double r = ldexp(m, e);
           >>"%WORK%\probe.c" echo     printf("RT[%%d] x=%%.17g m=%%.17g e=%%d r=%%.17g eq=%%d\n", i, x, m, e, r, r == x);
+          >>"%WORK%\probe.c" echo   }
+          >>"%WORK%\probe.c" echo   for (int i = 1; i ^<= 10; i++) {
+          >>"%WORK%\probe.c" echo     double x = ldexp(1.0, i);
+          >>"%WORK%\probe.c" echo     double y = x + ldexp(1.0, i - 52);
+          >>"%WORK%\probe.c" echo     char sx[64], sy[64], sx17[64], sy17[64];
+          >>"%WORK%\probe.c" echo     snprintf(sx,   64, "%%.15g", x);
+          >>"%WORK%\probe.c" echo     snprintf(sy,   64, "%%.15g", y);
+          >>"%WORK%\probe.c" echo     snprintf(sx17, 64, "%%.17g", x);
+          >>"%WORK%\probe.c" echo     snprintf(sy17, 64, "%%.17g", y);
+          >>"%WORK%\probe.c" echo     double rx  = strtod(sx,   NULL);
+          >>"%WORK%\probe.c" echo     double ry  = strtod(sy,   NULL);
+          >>"%WORK%\probe.c" echo     double rx17= strtod(sx17, NULL);
+          >>"%WORK%\probe.c" echo     printf("ULP[%%d] x=%%.17g y=%%.17g x_neq_y=%%d sx=%%s sy=%%s sx==sy=%%d  rx==x=%%d ry==y=%%d  sx17=%%s rx17==x=%%d\n",
+          >>"%WORK%\probe.c" echo            i, x, y, x != y, sx, sy, strcmp(sx, sy) == 0, rx == x, ry == y, sx17, rx17 == x);
           >>"%WORK%\probe.c" echo   }
           >>"%WORK%\probe.c" echo   return 0;
           >>"%WORK%\probe.c" echo }

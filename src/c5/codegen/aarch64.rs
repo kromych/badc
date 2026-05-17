@@ -2524,8 +2524,7 @@ fn emit_libc_call(
     // `printf`.
     let _ = local_name;
     let imp = &imports.imports[import_index];
-    let win_arm64_variadic =
-        imp.is_variadic && target == super::Target::WindowsAarch64;
+    let win_arm64_variadic = imp.is_variadic && target == super::Target::WindowsAarch64;
     let is_variadic = imp.is_variadic && abi.variadic_on_stack;
 
     if win_arm64_variadic {

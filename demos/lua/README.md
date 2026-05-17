@@ -117,16 +117,25 @@ Apple libm. The leading digit slips past the skip regex, the
 string feeds into `tonumber` which returns `nil`, and the
 assertion fires.
 
-The Universal CRT (`ucrtbase.dll`) switched to the C99
-spellings in VS2015 but does not export `snprintf` as a named
-DLL symbol -- the entry is an inline wrapper around
-`__stdio_common_vsnprintf` in the MSVC headers. The fix is the
-wholesale UCRT migration (bind the `__stdio_common_*` family
-and reproduce the inline wrapper at the c5 binding layer);
-tracked under the TODO marker. The earlier `math.lua:692`
-(`frexp(+/-inf)`) and `math.lua:1104` (`pow(2, -1023)` flushing
-to zero) divergences are already addressed via the surgical
-`ucrtbase::frexp` and `ucrtbase::pow` pins.
+The Universal CRT switched to the C99 spellings in VS2015 and
+the math entry points (`frexp`, `pow`) are exported directly
+by `ucrtbase.dll` -- the surgical `ucrtbase::frexp` and
+`ucrtbase::pow` pins in `headers/include/math.h` are what
+cleared the earlier `math.lua:692` (`frexp(+/-inf)`) and
+`math.lua:1104` (`pow(2, -1023)` flushing to zero) divergences.
+
+`snprintf` is harder. The C99 entry is an inline wrapper in
+the MSVC headers around `__stdio_common_vsnprintf`; the
+underscored legacy `_snprintf` is also not exported from
+`ucrtbase.dll` directly on the Windows runners (both binding
+attempts hit STATUS_ENTRYPOINT_NOT_FOUND at PE load). The
+documented UCRT import path is via the
+`api-ms-win-crt-stdio-l1-1-0.dll` API-set proxy DLL. Closing
+this case needs either: (a) c5 support for binding through
+api-ms-* proxies, or (b) binding `__stdio_common_vsnprintf`
+(which is a direct ucrtbase export) plus an inline wrapper
+that constructs a Windows-shaped `va_list` at the call site.
+Tracked under the TODO marker.
 
 ## Bumping Lua
 

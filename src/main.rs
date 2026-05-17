@@ -230,13 +230,13 @@ fn main() {
                         std::process::exit(1);
                     }
                 };
-                if matches!(regalloc_mode, badc::RegallocMode::Ssa) {
-                    eprintln!(
-                        "badc: --regalloc=ssa is not yet wired into the lowering; \
-                         falling back to pool"
-                    );
-                    regalloc_mode = badc::RegallocMode::Pool;
-                }
+                // --regalloc=ssa runs the SSA lift + allocator
+                // on every function (gated by BADC_DUMP_SSA for
+                // human-readable output) and emits native bytes
+                // via the pool path until the SSA emit reaches
+                // parity. Code is identical to --regalloc=pool;
+                // the extra work is observable but invisible to
+                // the final binary.
             }
             "--no-debug" | "-g0" => emit_debug_info = false,
             "--dump-asm" => claim(&mut mode, Mode::DumpAsm),

@@ -1226,6 +1226,29 @@ pub(super) fn lower(
     let plan: Option<&RegStackPlan> = plan_storage.as_ref();
     let mut reg_state = RegState::new(native.optimize, plan);
 
+    // SSA observability: when --regalloc=ssa is requested, run
+    // the lift + allocator on every function and dump the result
+    // if BADC_DUMP_SSA is set. The pool path still emits the
+    // native bytes for now; the SSA emit will hook in here
+    // once parity work lands.
+    if matches!(native.regalloc, super::RegallocMode::Ssa) {
+        let ssa_funcs = super::ssa::lift_program(program)?;
+        #[cfg(feature = "std")]
+        let dump = super::ssa_dump::enabled();
+        #[cfg(not(feature = "std"))]
+        let dump = false;
+        for f in &ssa_funcs {
+            let alloc_result = super::ssa_alloc::allocate(f, target);
+            if dump {
+                #[cfg(feature = "std")]
+                {
+                    eprint!("{}", super::ssa_dump::dump_function(f, &alloc_result));
+                }
+            }
+            let _ = alloc_result;
+        }
+    }
+
     // Pre-scan for branch targets so the cmp+branch fusion peephole
     // can refuse to fuse when the matching Bz/Bnz is reachable from
     // anywhere else. Cheap: one linear walk of `text`.

@@ -47,6 +47,8 @@ mod pe;
 mod regalloc;
 mod ssa;
 mod ssa_alloc;
+#[cfg(feature = "std")]
+mod ssa_dump;
 mod x86_64;
 
 pub use jit::{jit_run, jit_run_with_options};

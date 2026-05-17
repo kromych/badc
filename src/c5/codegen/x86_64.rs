@@ -1463,8 +1463,6 @@ pub(super) fn lower(
     // `Op::Jsri` callers that lay args onto the c5 stack first;
     // their fn-pointer fixups also land on the body, which keeps
     // that contract intact.
-    let thunk_for_func: alloc::collections::BTreeMap<usize, usize> =
-        alloc::collections::BTreeMap::new();
     let mut func_fixups: Vec<FuncFixup> = Vec::with_capacity(pending_func_fixups.len());
     for (instr_offset, target_bc_pc) in pending_func_fixups {
         if target_bc_pc > program.text.len() {
@@ -1509,7 +1507,6 @@ pub(super) fn lower(
         data_fixups,
         func_fixups,
         bytecode_to_native,
-        func_thunk_offsets: thunk_for_func,
         // Set by `lower_for` after this returns; see the matching
         // comment on the aarch64 lowering's `Build` construction.
         imports: super::ResolvedImports::default(),

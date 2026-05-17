@@ -1553,18 +1553,10 @@ pub(super) fn write(
     // .rela.dyn entries needed.
     for r in &build.code_relocs {
         let bc_pc = r.target_bc_pc as usize;
-        // Prefer the per-function arg-shuffling thunk; see the
-        // matching comment in pe.rs's code_reloc loop. SysV doesn't
-        // require this on its own (Jsri reads c5-stack args without
-        // a shadow-space alloc, so a bare body works by accident),
-        // but the lowering already emits the thunk and routing both
-        // initializer paths through it keeps the per-format writers
-        // uniform.
         let native_off = build
-            .func_thunk_offsets
-            .get(&bc_pc)
+            .bytecode_to_native
+            .get(bc_pc)
             .copied()
-            .or_else(|| build.bytecode_to_native.get(bc_pc).copied())
             .unwrap_or(usize::MAX);
         if native_off == usize::MAX {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -2162,7 +2154,6 @@ mod tests {
             data_fixups: Vec::new(),
             func_fixups: Vec::new(),
             bytecode_to_native: Vec::new(),
-            func_thunk_offsets: alloc::collections::BTreeMap::new(),
             imports: ResolvedImports {
                 imports: vec![ResolvedImport {
                     binding_idx: 0,

@@ -316,8 +316,7 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
 
 /// Same fixture set as `native_pe_x64`, since the Windows-flavored
 /// limitations (POSIX-only setenv shape, dlopen-against-libc-soname)
-/// are arch-independent. mprotect goes through the in-text thunk
-/// the same way, so `mprotect_allows_read.c` is included.
+/// are arch-independent.
 const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("arithmetic.c", 60),
     ("control_flow.c", 1),
@@ -355,6 +354,8 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("struct_field_enum_type.c", 13),
     ("compound_assign_fp_int_rhs.c", 17),
     ("optimizer_fp_arg_mask_remap.c", 19),
+    ("many_args_host_stack_overflow.c", 0),
+    ("variadic_optimizer_survives.c", 0),
     ("struct_2d_array_field.c", 27),
     ("anonymous_aggregates.c", 0),
     ("static_locals.c", 0),

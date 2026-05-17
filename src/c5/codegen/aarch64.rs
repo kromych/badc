@@ -1351,16 +1351,13 @@ pub(super) fn lower(
 
     // Function-pointer fixups resolve to each callee's body offset
     // directly: every function's prologue already spills the host
-    // arg registers into the c5 cdecl slots that the body reads via
-    // `Op::Lea`, so a host caller (`pthread_create`, `qsort`, a
-    // dispatch table, ...) can land on the body itself. Variadic
-    // c5 functions are the one exception today (the body still
-    // reads its args from the c5 stack); their fn-pointer fixups
-    // also land on the body, where the no-spill prologue keeps
-    // the c5-stack-arg contract intact for callers that came in
-    // via `Op::Jsri`.
-    let thunk_for_func: alloc::collections::BTreeMap<usize, usize> =
-        alloc::collections::BTreeMap::new();
+    // arg registers into the c5 cdecl slots that the body reads
+    // via `Op::Lea`, so a host caller (`pthread_create`, `qsort`,
+    // a static dispatch table, ...) can land on the body itself.
+    // Variadic c5 functions keep the c5-stack-based ABI and reach
+    // only via `Op::Jsri` callers that lay args onto the c5 stack
+    // first; their fn-pointer fixups also land on the body, which
+    // keeps that contract intact.
     let mut func_fixups: Vec<FuncFixup> = Vec::with_capacity(pending_func_fixups.len());
     for (adrp_offset, target_bc_pc) in pending_func_fixups {
         if target_bc_pc > program.text.len() {
@@ -1410,7 +1407,6 @@ pub(super) fn lower(
         data_fixups,
         func_fixups,
         bytecode_to_native,
-        func_thunk_offsets: thunk_for_func,
         // `imports` is set by `lower_for` after this returns; the
         // resolver runs once up there and the value is shared with
         // both the lowering and the writer. Default-empty here keeps

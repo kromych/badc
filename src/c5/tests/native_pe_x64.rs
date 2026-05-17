@@ -366,7 +366,7 @@ fn build_and_run_fixture_with_options(name: &str, opts: NativeOptions, suffix: &
 /// I/O against POSIX-flavoured paths, and dlopen-against-libc-soname
 /// are intentionally skipped here -- the Windows analogues exist
 /// but the c4 fixtures expect POSIX shapes the WINE path doesn't
-/// reproduce. mprotect now works through the in-text thunk that
+/// reproduce. mprotect works through an in-text helper that
 /// translates POSIX prot bits to PAGE_* and the BOOL return to
 /// 0/-1, so `mprotect_allows_read.c` is in.
 const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
@@ -406,6 +406,8 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("struct_field_enum_type.c", 13),
     ("compound_assign_fp_int_rhs.c", 17),
     ("optimizer_fp_arg_mask_remap.c", 19),
+    ("many_args_host_stack_overflow.c", 0),
+    ("variadic_optimizer_survives.c", 0),
     ("struct_2d_array_field.c", 27),
     ("anonymous_aggregates.c", 0),
     ("static_locals.c", 0),

@@ -829,21 +829,6 @@ pub(crate) struct Build {
     /// last entry is the total code length, so `[i+1] - [i]` gives
     /// the byte length of the op at PC `i`.
     pub bytecode_to_native: Vec<usize>,
-    /// Map from bytecode PC of an address-taken function to the
-    /// byte offset within `Build::text` of its host-ABI -> c5-ABI
-    /// arg-shuffling thunk. `code_relocs` data slots and Op::Imm
-    /// function-pointer literals must read this preferentially
-    /// over `bytecode_to_native`: the thunk re-spills the host's
-    /// register args onto the c5 stack at `[rbp+16]`, `[rbp+32]`,
-    /// ... where the body's `Lea` ops expect them. Calling a
-    /// bare body via Jsri works on SysV / AAPCS64 by accident
-    /// (the Jsri lowering reads c5-stack args without disturbing
-    /// rsp), but Win64's 32-byte shadow-space allocation shifts
-    /// rsp before the call and the body's `[rbp+16]` lands inside
-    /// the shadow region. Empty when no function's address is
-    /// taken (or when every address-taken function takes zero
-    /// args -- those don't need a thunk).
-    pub func_thunk_offsets: alloc::collections::BTreeMap<usize, usize>,
     /// Per-Build resolved import set. Built by lowering once it knows
     /// which libc ops the program uses; consumed by the wire-format
     /// writer to populate the IAT / dynsym / __got tables.

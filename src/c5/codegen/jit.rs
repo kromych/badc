@@ -207,17 +207,10 @@ mod jit_impl {
             let bytes = region.as_mut_slice(build.data.len());
             for r in &build.code_relocs {
                 let bc_pc = r.target_bc_pc as usize;
-                // Prefer the per-function arg-shuffling thunk; see
-                // pe.rs's code_reloc loop for the rationale. The JIT
-                // host is macOS arm64 / Linux today (no Win64 shadow
-                // space), so a bare body would also work, but the
-                // thunk lookup keeps the JIT in lockstep with what
-                // the per-format writers do.
                 let native_off = build
-                    .func_thunk_offsets
-                    .get(&bc_pc)
+                    .bytecode_to_native
+                    .get(bc_pc)
                     .copied()
-                    .or_else(|| build.bytecode_to_native.get(bc_pc).copied())
                     .unwrap_or(usize::MAX);
                 if native_off == usize::MAX {
                     return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(

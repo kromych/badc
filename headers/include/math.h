@@ -84,7 +84,6 @@
 #pragma binding(msvcrt::log10, "log10")
 #pragma binding(msvcrt::log2,  "log2")
 #pragma binding(msvcrt::exp,   "exp")
-#pragma binding(msvcrt::pow,   "pow")
 #pragma binding(msvcrt::floor, "floor")
 #pragma binding(msvcrt::ceil,  "ceil")
 #pragma binding(msvcrt::round, "round")

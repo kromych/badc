@@ -232,7 +232,14 @@ impl Compiler {
                     let longjmp_id = crate::c5::op::Intrinsic::LongjmpAArch64 as i64;
                     let setjmp_id = crate::c5::op::Intrinsic::SetjmpAArch64 as i64;
                     let alloca_id = crate::c5::op::Intrinsic::Alloca as i64;
-                    if intrinsic_id == longjmp_id {
+                    let va_start_id = crate::c5::op::Intrinsic::VaStart as i64;
+                    let va_arg_id = crate::c5::op::Intrinsic::VaArg as i64;
+                    let va_end_id = crate::c5::op::Intrinsic::VaEnd as i64;
+                    let va_copy_id = crate::c5::op::Intrinsic::VaCopy as i64;
+                    if intrinsic_id == longjmp_id
+                        || intrinsic_id == va_start_id
+                        || intrinsic_id == va_copy_id
+                    {
                         // Two-arg shape: env then val. The first
                         // gets pushed; the second lands in the
                         // accumulator so the AArch64 lowering can
@@ -285,8 +292,24 @@ impl Compiler {
                     // has no real return (control never reaches
                     // the next statement) but the parser still
                     // typechecks downstream uses as `int`.
-                    if intrinsic_id == setjmp_id || intrinsic_id == longjmp_id {
+                    // __builtin_va_start / __builtin_va_end /
+                    // __builtin_va_copy don't return a useful
+                    // value, but the parser threads them through
+                    // as int so a statement-context call
+                    // typechecks.
+                    if intrinsic_id == setjmp_id
+                        || intrinsic_id == longjmp_id
+                        || intrinsic_id == va_start_id
+                        || intrinsic_id == va_end_id
+                        || intrinsic_id == va_copy_id
+                    {
                         self.ty = Ty::Int as i64;
+                    } else if intrinsic_id == va_arg_id {
+                        // __builtin_va_arg returns `void *`
+                        // pointing at the just-vacated 8-byte
+                        // slot. The <stdarg.h> macro dereferences
+                        // as the requested type.
+                        self.ty = (Ty::Char as i64) + (Ty::Ptr as i64);
                     } else {
                         self.ty = (Ty::Char as i64) + (Ty::Ptr as i64);
                     }

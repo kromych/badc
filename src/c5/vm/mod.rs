@@ -1276,16 +1276,43 @@ impl<H: Host> Vm<H> {
                                  specific and cannot run in the bytecode VM"
                             )));
                         }
-                        crate::c5::op::Intrinsic::VaStart
-                        | crate::c5::op::Intrinsic::VaArg
-                        | crate::c5::op::Intrinsic::VaEnd
-                        | crate::c5::op::Intrinsic::VaCopy => {
-                            return Err(C5Error::Runtime(alloc::format!(
-                                "VM: Op::Intrinsic({intrinsic:?}) is a native-ABI \
-                                 builtin and not implemented in the bytecode VM; \
-                                 c5 sources that need <stdarg.h> must run through \
-                                 the native lowering"
-                            )));
+                        crate::c5::op::Intrinsic::VaStart => {
+                            // `__builtin_va_start(&ap, &last)`. The
+                            // c5 stack has &ap on top (last `Op::Psh`)
+                            // and `a` holds &last. The VM lays
+                            // pushed args at an 8-byte stride
+                            // (`Op::Psh` is `sp -= 8`), so the next
+                            // variadic slot is `&last + 8`.
+                            let ap_addr = self.load_i64(sp)? as usize;
+                            sp += 8;
+                            self.store_i64(ap_addr, a + 8)?;
+                        }
+                        crate::c5::op::Intrinsic::VaArg => {
+                            // `__builtin_va_arg(&ap)` returns the
+                            // current cursor and advances *ap by one
+                            // c5-stack slot (8 bytes in the VM).
+                            let ap_addr = a as usize;
+                            let cursor = self.load_i64(ap_addr)?;
+                            self.store_i64(ap_addr, cursor + 8)?;
+                            a = cursor;
+                        }
+                        crate::c5::op::Intrinsic::VaEnd => {
+                            // No teardown -- the cursor lives in
+                            // the caller's locals; the stdarg.h
+                            // macro passes &ap so the type checker
+                            // sees a callable, but there's nothing
+                            // to release.
+                        }
+                        crate::c5::op::Intrinsic::VaCopy => {
+                            // `__builtin_va_copy(&dst, &src)`. The
+                            // c5 stack holds &dst on top, `a` holds
+                            // &src. va_list is a single cursor, so
+                            // `*dst = *src`.
+                            let dst_addr = self.load_i64(sp)? as usize;
+                            sp += 8;
+                            let src_addr = a as usize;
+                            let cursor = self.load_i64(src_addr)?;
+                            self.store_i64(dst_addr, cursor)?;
                         }
                     }
                 }

@@ -293,15 +293,19 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C5E
             }
             Op::Intrinsic => {
                 let id = text[pc + 1];
-                if id == crate::c5::op::Intrinsic::LongjmpAArch64 as i64 {
-                    // longjmp(env, val) -- env was pushed before val
-                    // was evaluated. The inline expansion pops that
-                    // slot, then BRs out (no fall-through). Tell the
-                    // analyzer the push is consumed here so it doesn't
-                    // remain pending at the next call / function end.
+                let two_arg = id == crate::c5::op::Intrinsic::LongjmpAArch64 as i64
+                    || id == crate::c5::op::Intrinsic::VaStart as i64
+                    || id == crate::c5::op::Intrinsic::VaCopy as i64;
+                if two_arg {
+                    // Two-arg intrinsics (longjmp, va_start,
+                    // va_copy) push the first arg before the
+                    // second is evaluated. The inline expansion
+                    // pops the pushed slot; tell the analyzer
+                    // so the slot doesn't remain pending at the
+                    // next call / function end.
                     let (psh_pc, ac) = pending.pop().ok_or_else(|| {
                         C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-                            "regalloc: Op::Intrinsic(LongjmpAArch64) at pc {pc} \
+                            "regalloc: two-arg Op::Intrinsic({id}) at pc {pc} \
                              on empty push stack"
                         )))
                     })?;
@@ -479,6 +483,18 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C5E
             | Op::Fge
             | Op::Mcpy => {
                 if let Some(bank) = pseudo_trail.pop() {
+                    match bank {
+                        PoolBank::Callee => callee_depth -= 1,
+                        PoolBank::Caller => caller_depth -= 1,
+                    }
+                }
+            }
+            Op::Intrinsic => {
+                let id = text[pc + 1];
+                let two_arg = id == crate::c5::op::Intrinsic::LongjmpAArch64 as i64
+                    || id == crate::c5::op::Intrinsic::VaStart as i64
+                    || id == crate::c5::op::Intrinsic::VaCopy as i64;
+                if two_arg && let Some(bank) = pseudo_trail.pop() {
                     match bank {
                         PoolBank::Callee => callee_depth -= 1,
                         PoolBank::Caller => caller_depth -= 1,

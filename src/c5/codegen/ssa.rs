@@ -1008,10 +1008,13 @@ pub(super) fn lift_function(
                     // virtual-stack entry (env) at emit time --
                     // we drop it here so the vstack stays
                     // balanced for any following ops.
-                    if kind == crate::c5::op::Intrinsic::LongjmpAArch64 as i64 {
-                        let _env = vstack.pop().ok_or_else(|| {
+                    let two_arg = kind == crate::c5::op::Intrinsic::LongjmpAArch64 as i64
+                        || kind == crate::c5::op::Intrinsic::VaStart as i64
+                        || kind == crate::c5::op::Intrinsic::VaCopy as i64;
+                    if two_arg {
+                        let _first = vstack.pop().ok_or_else(|| {
                             C5Error::Compile(crate::c5::error::fmt_internal_err(
-                                "ssa lift: longjmp intrinsic with empty virtual stack",
+                                "ssa lift: two-arg intrinsic with empty virtual stack",
                             ))
                         })?;
                     }
@@ -1188,14 +1191,17 @@ fn compute_block_entry_depths(
                     depth = depth.checked_sub(n).unwrap_or(depth);
                 }
                 Op::Intrinsic => {
-                    // longjmp(env, val) pops one (env) on inline
-                    // expansion. Other intrinsics don't perturb
-                    // the vstack.
+                    // Two-arg intrinsics (longjmp, va_start,
+                    // va_copy) pop one slot on inline expansion.
+                    // Others don't perturb the vstack.
                     let kind = text[pc + 1];
-                    if kind == crate::c5::op::Intrinsic::LongjmpAArch64 as i64 {
+                    let two_arg = kind == crate::c5::op::Intrinsic::LongjmpAArch64 as i64
+                        || kind == crate::c5::op::Intrinsic::VaStart as i64
+                        || kind == crate::c5::op::Intrinsic::VaCopy as i64;
+                    if two_arg {
                         depth = depth.checked_sub(1).ok_or_else(|| {
                             C5Error::Compile(crate::c5::error::fmt_internal_err(
-                                "ssa lift: stack underflow at longjmp during depth pre-walk",
+                                "ssa lift: stack underflow at two-arg intrinsic during depth pre-walk",
                             ))
                         })?;
                     }

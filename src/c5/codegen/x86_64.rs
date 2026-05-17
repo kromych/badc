@@ -2216,18 +2216,38 @@ fn lower_op(
                          AArch64 lane",
                     )));
                 }
-                // TODO: per-target expansion. See aarch64.rs for the
-                // matching arm; both arches are waiting on the
-                // host-ABI variadic prologue + per-target va_list
-                // layout work.
-                crate::c5::op::Intrinsic::VaStart
-                | crate::c5::op::Intrinsic::VaArg
-                | crate::c5::op::Intrinsic::VaEnd
-                | crate::c5::op::Intrinsic::VaCopy => {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                        "native codegen (x86_64): __builtin_va_* intrinsics \
-                         require the host-ABI variadic prologue, not yet emitted",
-                    )));
+                crate::c5::op::Intrinsic::VaStart => {
+                    // `__builtin_va_start(&ap, &last)`. c5 stack
+                    // top = &ap (last Op::Psh), r13 = &last.
+                    // *ap = &last + 16 (next c5 slot).
+                    emit_mov_r_mem(code, Reg::R10, Reg::RSP, 0);
+                    emit_add_rsp_imm32(code, 16);
+                    emit_lea_r_mem(code, Reg::R11, Reg::R13, 16);
+                    emit_mov_mem_r(code, Reg::R10, 0, Reg::R11);
+                }
+                crate::c5::op::Intrinsic::VaArg => {
+                    // `__builtin_va_arg(&ap)` returns a pointer
+                    // to the just-vacated 8-byte slot and
+                    // advances *ap by one c5 slot. r13 = &ap on
+                    // entry. r13 becomes the slot pointer on
+                    // exit.
+                    emit_mov_r_mem(code, Reg::R10, Reg::R13, 0);
+                    // r11 = r10 + 16, the new cursor.
+                    emit_lea_r_mem(code, Reg::R11, Reg::R10, 16);
+                    emit_mov_mem_r(code, Reg::R13, 0, Reg::R11);
+                    // Return value = old cursor.
+                    emit_mov_rr(code, Reg::R13, Reg::R10);
+                }
+                crate::c5::op::Intrinsic::VaEnd => {
+                    // No-op on every supported host ABI; the
+                    // arg sits in r13 -- nothing to do.
+                }
+                crate::c5::op::Intrinsic::VaCopy => {
+                    // `__builtin_va_copy(&dst, &src)`. *dst = *src.
+                    emit_mov_r_mem(code, Reg::R10, Reg::RSP, 0);
+                    emit_add_rsp_imm32(code, 16);
+                    emit_mov_r_mem(code, Reg::R11, Reg::R13, 0);
+                    emit_mov_mem_r(code, Reg::R10, 0, Reg::R11);
                 }
             }
         }

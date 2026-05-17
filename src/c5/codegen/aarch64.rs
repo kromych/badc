@@ -2188,22 +2188,54 @@ fn lower_op(
                 crate::c5::op::Intrinsic::LongjmpAArch64 => {
                     emit_longjmp_aarch64(code, reg_state);
                 }
-                // TODO: per-target expansion. The four va_*
-                // intrinsics still route through the pool path's
-                // standard intrinsic-call shape until the
-                // host-ABI variadic prologue + per-target
-                // va_list layout lands. The frontend already
-                // emits them as `Op::Intrinsic` so call sites
-                // are stable; the lowering's job is to materialise
-                // the right per-target sequence.
-                crate::c5::op::Intrinsic::VaStart
-                | crate::c5::op::Intrinsic::VaArg
-                | crate::c5::op::Intrinsic::VaEnd
-                | crate::c5::op::Intrinsic::VaCopy => {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                        "native codegen (aarch64): __builtin_va_* intrinsics \
-                         require the host-ABI variadic prologue, not yet emitted",
-                    )));
+                crate::c5::op::Intrinsic::VaStart => {
+                    // `__builtin_va_start(&ap, &last)`. &ap was the
+                    // last argument pushed; x19 holds &last. The
+                    // analyzer may have left &ap either on the real
+                    // c5 stack (Op::Psh -> str x19, [sp,-16]!) or
+                    // promoted to a pool register (mov x9, x19) --
+                    // pop_lhs_reg handles both cases. Move the popped
+                    // value into x16 so the rest of the sequence has
+                    // a stable address base.
+                    let ap_src = pop_lhs_reg(code, reg_state);
+                    emit_mov_reg(code, Reg::X16, ap_src);
+                    // x17 = &last + 16 (next c5 slot).
+                    emit(code, enc_add_imm(Reg::X17, Reg::X19, 16));
+                    // *ap = x17.
+                    emit(code, enc_str_imm(Reg::X17, Reg::X16, 0));
+                }
+                crate::c5::op::Intrinsic::VaArg => {
+                    // `__builtin_va_arg(&ap)` returns the
+                    // pointer to the just-vacated 8-byte slot
+                    // and advances `*ap` by one c5 slot. The
+                    // <stdarg.h> macro casts the pointer to T
+                    // and dereferences. x19 holds &ap on entry.
+                    // x16 = *ap (cursor).
+                    emit(code, enc_ldr_imm(Reg::X16, Reg::X19, 0));
+                    // Result: x19 = cursor (pointer to slot
+                    // about to be vacated).
+                    emit_mov_reg(code, Reg::X17, Reg::X16);
+                    // Advance: x16 += 16.
+                    emit(code, enc_add_imm(Reg::X16, Reg::X16, 16));
+                    // Store: *ap = x16.
+                    emit(code, enc_str_imm(Reg::X16, Reg::X19, 0));
+                    // Move pointer-result into the accumulator.
+                    emit_mov_reg(code, Reg::X19, Reg::X17);
+                }
+                crate::c5::op::Intrinsic::VaEnd => {
+                    // `__builtin_va_end(&ap)` -- no-op. The
+                    // arg sits in x19; nothing to do.
+                }
+                crate::c5::op::Intrinsic::VaCopy => {
+                    // `__builtin_va_copy(&dst, &src)`. &dst was the
+                    // last argument pushed; x19 holds &src. On the
+                    // c5-cursor model va_list is one pointer, so the
+                    // copy is `*dst = *src`. pop_lhs_reg unifies the
+                    // pseudo / real push paths.
+                    let dst_src = pop_lhs_reg(code, reg_state);
+                    emit_mov_reg(code, Reg::X16, dst_src);
+                    emit(code, enc_ldr_imm(Reg::X17, Reg::X19, 0));
+                    emit(code, enc_str_imm(Reg::X17, Reg::X16, 0));
                 }
             }
         }

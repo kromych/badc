@@ -103,24 +103,30 @@ while still failing on a real build error (exit 1).
 
 ### Known Windows-only test failure (TODO)
 
-`math.lua:692` (`assert(math.ldexp(m, p) == x)` over a fixed
-vector of x values) fails on both Windows lanes for the
-positive- and negative-infinity inputs. The CI probe under
-`probe Windows libc number formatting + frexp/ldexp` shows the
-root cause:
+`math.lua:1137` fails on both Windows lanes. The assertion is
+the random-float round-trip `assert(tonumber(s) == n)` where
+`s = tostring(n)` over 400 random doubles, skipping the strings
+that don't look numeric via the regex `^%-?%d`.
 
-```
-RT[6] x=1.#INF m=-1.#IND e=-1 r=-1.#IND eq=0
-RT[7] x=-1.#INF m=-1.#IND e=-1 r=-1.#IND eq=0
-```
+The seed is fixed (`math.randomseed(1007)` at line 858) so the
+sequence is deterministic. On Windows one of the 400 floats
+lands on a NaN or infinity bit pattern; msvcrt's `snprintf`
+prints those as `1.#INF` / `-1.#INF` / `1.#IND` / `1.#QNAN`
+rather than the C99 spellings (`inf` / `nan`) used by glibc and
+Apple libm. The leading digit slips past the skip regex, the
+string feeds into `tonumber` which returns `nil`, and the
+assertion fires.
 
-C99 7.12.6.4 paragraph 2 says `frexp(+/-inf)` returns the
-argument and stores an unspecified exponent. glibc and Apple
-libm both return `+/-inf`. msvcrt returns NaN. The round-trip
-through `ldexp` therefore loses the input on Windows. The
-divergence is in msvcrt, not c5; closing it requires either
-binding `math.frexp` to ucrtbase's implementation or skipping
-the inf cases on Windows. Tracked under the TODO marker.
+The Universal CRT (`ucrtbase.dll`) switched to the C99
+spellings in VS2015 but does not export `snprintf` as a named
+DLL symbol -- the entry is an inline wrapper around
+`__stdio_common_vsnprintf` in the MSVC headers. The fix is the
+wholesale UCRT migration (bind the `__stdio_common_*` family
+and reproduce the inline wrapper at the c5 binding layer);
+tracked under the TODO marker. The earlier `math.lua:692`
+(`frexp(+/-inf)`) and `math.lua:1104` (`pow(2, -1023)` flushing
+to zero) divergences are already addressed via the surgical
+`ucrtbase::frexp` and `ucrtbase::pow` pins.
 
 ## Bumping Lua
 

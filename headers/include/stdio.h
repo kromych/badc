@@ -204,16 +204,18 @@ typedef struct __c5_FILE FILE;
 #pragma binding(msvcrt::wprintf,   "wprintf")
 #pragma binding(msvcrt::fprintf,   "fprintf")
 #pragma binding(msvcrt::sprintf,   "sprintf")
-// MSVC renamed the safe forms; the original `snprintf` only landed
-// in msvcrt circa VS2015. `_snprintf` is the universally available
-// spelling and behaves the same way for our usage (no NUL guarantee
-// on overflow, but neither does our other targets' `snprintf` once
-// the buffer fills).
-#pragma binding(msvcrt::snprintf,  "_snprintf")
-// Source that pre-rewrites snprintf -> _snprintf via a private
-// `#define` (common in cross-platform projects) reaches for the
-// underscored spelling directly; bind the alias to the same
-// msvcrt entry point.
+// msvcrt's `printf` family prints `inf` as `1.#INF` and NaN as
+// `1.#IND` / `1.#QNAN`; the Universal CRT switched to the C99
+// spellings (`inf`, `nan`) in VS2015. Programs that classify
+// formatted output via a digit-prefix regex (Lua's `tostring`
+// round-trip in math.lua at line 1137 is the canonical case)
+// silently misclassify the msvcrt output as numeric and feed it
+// back to `strtod`, which then fails. Route `snprintf` through
+// ucrtbase so the formatted output round-trips. `_snprintf` is
+// the legacy entry point and stays on msvcrt for callers that
+// reach for it by its underscored spelling.
+#pragma dylib(ucrtbase, "ucrtbase.dll")
+#pragma binding(ucrtbase::snprintf,  "snprintf")
 #pragma binding(msvcrt::_snprintf, "_snprintf")
 #pragma binding(msvcrt::vfprintf,  "vfprintf")
 #pragma binding(msvcrt::vsprintf,  "vsprintf")

@@ -44,7 +44,7 @@
 //! aborts the whole program on `false` under `BADC_USE_SSA_EMIT`
 //! so half-emitted output never reaches the writers.
 
-#![allow(dead_code)]
+#![allow(dead_code, clippy::too_many_arguments)]
 
 use alloc::vec::Vec;
 
@@ -52,10 +52,10 @@ use super::Target;
 use super::aarch64::{
     BranchKind, Cond, Fixup, PltCallFixup, Reg, emit, emit_add_sp_imm, emit_sub_sp_imm,
     enc_add_imm, enc_add_reg, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_cbnz, enc_cbz,
-    enc_cmp_reg, enc_cset, enc_eor_reg, enc_ldp_post, enc_ldr32_imm, enc_ldr_imm, enc_ldrb_imm,
+    enc_cmp_reg, enc_cset, enc_eor_reg, enc_ldp_post, enc_ldr_imm, enc_ldr32_imm, enc_ldrb_imm,
     enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm, enc_ldur, enc_lslv, enc_lsrv,
-    enc_mov_reg, enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_sdiv, enc_stp_pre, enc_str32_imm,
-    enc_str_imm, enc_str_pre, enc_strb_imm, enc_strh_imm, enc_stur, enc_sub_imm, enc_sub_reg,
+    enc_mov_reg, enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_sdiv, enc_stp_pre, enc_str_imm,
+    enc_str_pre, enc_str32_imm, enc_strb_imm, enc_strh_imm, enc_stur, enc_sub_imm, enc_sub_reg,
     enc_udiv, load_imm64,
 };
 use super::ssa::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
@@ -81,11 +81,8 @@ impl Frame {
         let alloc_spill_bytes = (alloc.spill_count * 8 + 15) & !15;
         let saved_gpr_bytes = ((alloc.gpr_used.len() as u32) * 8 + 15) & !15;
         let saved_fpr_bytes = ((alloc.fp_used.len() as u32) * 8 + 15) & !15;
-        let frame_bytes = locals_bytes
-            + vstack_bytes
-            + alloc_spill_bytes
-            + saved_gpr_bytes
-            + saved_fpr_bytes;
+        let frame_bytes =
+            locals_bytes + vstack_bytes + alloc_spill_bytes + saved_gpr_bytes + saved_fpr_bytes;
         Self {
             frame_bytes,
             alloc_spill_base: locals_bytes + vstack_bytes,
@@ -149,13 +146,17 @@ pub(super) fn emit_function(
         block_offsets[block_idx] = code.len();
         for v in block.inst_range.clone() {
             let inst = &func.insts[v as usize];
-            let place = alloc
-                .places
-                .get(v as usize)
-                .copied()
-                .unwrap_or(Place::None);
+            let place = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
             if !emit_inst(
-                code, inst, place, alloc, frame, &scratch, abi, fixups, plt_call_fixups,
+                code,
+                inst,
+                place,
+                alloc,
+                frame,
+                &scratch,
+                abi,
+                fixups,
+                plt_call_fixups,
                 imports,
             ) {
                 #[cfg(feature = "std")]
@@ -184,7 +185,11 @@ pub(super) fn emit_function(
                 target,
                 fall_through,
             } => {
-                let cond_place = alloc.places.get(cond as usize).copied().unwrap_or(Place::None);
+                let cond_place = alloc
+                    .places
+                    .get(cond as usize)
+                    .copied()
+                    .unwrap_or(Place::None);
                 let rt = match materialize_int(code, cond_place, scratch.primary, frame) {
                     Some(r) => r,
                     None => {
@@ -212,7 +217,11 @@ pub(super) fn emit_function(
                 target,
                 fall_through,
             } => {
-                let cond_place = alloc.places.get(cond as usize).copied().unwrap_or(Place::None);
+                let cond_place = alloc
+                    .places
+                    .get(cond as usize)
+                    .copied()
+                    .unwrap_or(Place::None);
                 let rt = match materialize_int(code, cond_place, scratch.primary, frame) {
                     Some(r) => r,
                     None => {
@@ -359,7 +368,7 @@ fn emit_prologue(
     // pool path through `emit_function`'s return-false escape.
     let save_base = alloc_save_base(frame, alloc);
     for (i, &r) in alloc.gpr_used.iter().enumerate() {
-        let off = -(((save_base + (i as u32) * 8 + 8) as i32));
+        let off = -((save_base + (i as u32) * 8 + 8) as i32);
         emit(code, enc_stur(Reg(r), Reg(29), off));
     }
 }
@@ -371,7 +380,9 @@ fn alloc_save_base(frame: Frame, alloc: &Allocation) -> u32 {
     let saved_fpr_bytes = ((alloc.fp_used.len() as u32) * 8 + 15) & !15;
     // fp is at frame top; the saved-reg region sits at the
     // bottom. Distance from fp = frame_bytes - saved-region size.
-    frame.frame_bytes.saturating_sub(saved_gpr_bytes + saved_fpr_bytes)
+    frame
+        .frame_bytes
+        .saturating_sub(saved_gpr_bytes + saved_fpr_bytes)
 }
 
 /// Emit one SSA instruction. Returns `false` for any op the thin
@@ -407,17 +418,17 @@ fn emit_inst(
         Inst::Store { addr, value, kind } => {
             emit_store(code, dst, *addr, *value, *kind, alloc, frame, scratch)
         }
-        Inst::Binop { op, lhs, rhs } => emit_binop(code, *op, dst, *lhs, *rhs, alloc, frame, scratch),
+        Inst::Binop { op, lhs, rhs } => {
+            emit_binop(code, *op, dst, *lhs, *rhs, alloc, frame, scratch)
+        }
         Inst::BinopI { op, lhs, rhs_imm } => {
             emit_binop_imm(code, *op, dst, *lhs, *rhs_imm, alloc, frame, scratch)
         }
-        Inst::Call { target_pc, args } => {
-            emit_call(code, dst, *target_pc, args, alloc, frame, scratch, abi, fixups)
-        }
+        Inst::Call { target_pc, args } => emit_call(
+            code, dst, *target_pc, args, alloc, frame, scratch, abi, fixups,
+        ),
         Inst::CallExt {
-            binding_idx,
-            args,
-            ..
+            binding_idx, args, ..
         } => emit_call_ext(
             code,
             dst,
@@ -503,7 +514,7 @@ fn emit_call_ext(
             emit(code, enc_mov_reg(rd, Reg(0)));
         }
     } else if let Place::Spill(slot) = dst {
-        let off = -(((frame.alloc_spill_base + (slot + 1) * 8) as i32));
+        let off = -((frame.alloc_spill_base + (slot + 1) * 8) as i32);
         emit(code, enc_stur(Reg(0), Reg(29), off));
     }
     true
@@ -584,7 +595,7 @@ fn emit_call(
             emit(code, enc_mov_reg(rd, Reg(0)));
         }
     } else if let Place::Spill(slot) = dst {
-        let off = -(((frame.alloc_spill_base + (slot + 1) * 8) as i32));
+        let off = -((frame.alloc_spill_base + (slot + 1) * 8) as i32);
         emit(code, enc_stur(Reg(0), Reg(29), off));
     }
     true
@@ -632,7 +643,11 @@ fn emit_load(
     let Some(rd) = int_reg(dst) else {
         return false;
     };
-    let addr_place = alloc.places.get(addr as usize).copied().unwrap_or(Place::None);
+    let addr_place = alloc
+        .places
+        .get(addr as usize)
+        .copied()
+        .unwrap_or(Place::None);
     let rn = match materialize_int(code, addr_place, scratch.primary, frame) {
         Some(r) => r,
         None => return false,
@@ -667,8 +682,16 @@ fn emit_store(
     // allocator wants the value parked in. We compute the value
     // in a register, store it through the address, then copy to
     // dst if it isn't already there.
-    let addr_place = alloc.places.get(addr as usize).copied().unwrap_or(Place::None);
-    let value_place = alloc.places.get(value as usize).copied().unwrap_or(Place::None);
+    let addr_place = alloc
+        .places
+        .get(addr as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let value_place = alloc
+        .places
+        .get(value as usize)
+        .copied()
+        .unwrap_or(Place::None);
     let rn = match materialize_int(code, addr_place, scratch.primary, frame) {
         Some(r) => r,
         None => return false,
@@ -689,7 +712,7 @@ fn emit_store(
             emit(code, enc_mov_reg(rd, rs));
         }
     } else if let Place::Spill(slot) = dst {
-        let off = -(((frame.alloc_spill_base + (slot + 1) * 8) as i32));
+        let off = -((frame.alloc_spill_base + (slot + 1) * 8) as i32);
         emit(code, enc_stur(rs, Reg(29), off));
     }
     true
@@ -708,8 +731,16 @@ fn emit_binop(
     let Some(rd) = int_reg(dst) else {
         return false;
     };
-    let lhs_place = alloc.places.get(lhs as usize).copied().unwrap_or(Place::None);
-    let rhs_place = alloc.places.get(rhs as usize).copied().unwrap_or(Place::None);
+    let lhs_place = alloc
+        .places
+        .get(lhs as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let rhs_place = alloc
+        .places
+        .get(rhs as usize)
+        .copied()
+        .unwrap_or(Place::None);
     let rn = match materialize_int(code, lhs_place, scratch.primary, frame) {
         Some(r) => r,
         None => return false,
@@ -782,7 +813,11 @@ fn emit_binop_imm(
     let Some(rd) = int_reg(dst) else {
         return false;
     };
-    let lhs_place = alloc.places.get(lhs as usize).copied().unwrap_or(Place::None);
+    let lhs_place = alloc
+        .places
+        .get(lhs as usize)
+        .copied()
+        .unwrap_or(Place::None);
     let rn = match materialize_int(code, lhs_place, scratch.primary, frame) {
         Some(r) => r,
         None => return false,
@@ -826,16 +861,11 @@ fn emit_binop_imm(
 /// Materialise a value's `Place` into a register the lowering
 /// can name in an instruction operand. Spills get loaded into
 /// `scratch`; register places are returned as-is.
-fn materialize_int(
-    code: &mut Vec<u8>,
-    place: Place,
-    scratch: Reg,
-    frame: Frame,
-) -> Option<Reg> {
+fn materialize_int(code: &mut Vec<u8>, place: Place, scratch: Reg, frame: Frame) -> Option<Reg> {
     match place {
         Place::IntReg(r) => Some(Reg(r)),
         Place::Spill(slot) => {
-            let off = -(((frame.alloc_spill_base + (slot + 1) * 8) as i32));
+            let off = -((frame.alloc_spill_base + (slot + 1) * 8) as i32);
             emit(code, enc_ldur(scratch, Reg(29), off));
             Some(scratch)
         }
@@ -856,17 +886,21 @@ fn emit_return(
     // an undefined return value is harmless because c5 calls
     // never read the result of a void-returning function.
     if value != super::ssa::NO_VALUE {
-        let place = alloc.places.get(value as usize).copied().unwrap_or(Place::None);
-        if let Some(src) = materialize_int(code, place, scratch.primary, frame) {
-            if src.0 != 0 {
-                emit(code, enc_mov_reg(Reg(0), src));
-            }
+        let place = alloc
+            .places
+            .get(value as usize)
+            .copied()
+            .unwrap_or(Place::None);
+        if let Some(src) = materialize_int(code, place, scratch.primary, frame)
+            && src.0 != 0
+        {
+            emit(code, enc_mov_reg(Reg(0), src));
         }
     }
     // Restore saved callee-saved GPRs (mirror of prologue).
     let save_base = alloc_save_base(frame, alloc);
     for (i, &r) in alloc.gpr_used.iter().enumerate() {
-        let off = -(((save_base + (i as u32) * 8 + 8) as i32));
+        let off = -((save_base + (i as u32) * 8 + 8) as i32);
         emit(code, enc_ldur(Reg(r), Reg(29), off));
     }
     // Tear down the frame.
@@ -906,15 +940,20 @@ mod tests {
     /// completes without falling back.
     #[test]
     fn emit_return_42() {
-        let (func, alloc) = lift_and_alloc(
-            "int main(void) { return 42; }",
-            Target::MacOSAarch64,
-        );
+        let (func, alloc) = lift_and_alloc("int main(void) { return 42; }", Target::MacOSAarch64);
         let mut code = Vec::new();
         let mut fx = Vec::new();
         let mut plt = Vec::new();
         let imps = super::super::ResolvedImports::default();
-        let ok = emit_function(&func, &alloc, Target::MacOSAarch64, &mut code, &mut fx, &mut plt, &imps);
+        let ok = emit_function(
+            &func,
+            &alloc,
+            Target::MacOSAarch64,
+            &mut code,
+            &mut fx,
+            &mut plt,
+            &imps,
+        );
         assert!(
             ok,
             "expected SSA emit to handle a single-return function; got fallback"
@@ -938,15 +977,21 @@ mod tests {
     /// but we run without -O here to keep the binop in play).
     #[test]
     fn emit_return_one_plus_two() {
-        let (func, alloc) = lift_and_alloc(
-            "int main(void) { return 1 + 2; }",
-            Target::MacOSAarch64,
-        );
+        let (func, alloc) =
+            lift_and_alloc("int main(void) { return 1 + 2; }", Target::MacOSAarch64);
         let mut code = Vec::new();
         let mut fx = Vec::new();
         let mut plt = Vec::new();
         let imps = super::super::ResolvedImports::default();
-        let ok = emit_function(&func, &alloc, Target::MacOSAarch64, &mut code, &mut fx, &mut plt, &imps);
+        let ok = emit_function(
+            &func,
+            &alloc,
+            Target::MacOSAarch64,
+            &mut code,
+            &mut fx,
+            &mut plt,
+            &imps,
+        );
         assert!(ok, "binop handler should cover Add + Shl + Shr");
         assert_eq!(code.len() % 4, 0);
     }
@@ -969,11 +1014,18 @@ mod tests {
         let mut fx = Vec::new();
         let mut plt = Vec::new();
         let imps = super::super::ResolvedImports::default();
-        let ok = emit_function(&func, &alloc, Target::MacOSAarch64, &mut code, &mut fx, &mut plt, &imps);
+        let ok = emit_function(
+            &func,
+            &alloc,
+            Target::MacOSAarch64,
+            &mut code,
+            &mut fx,
+            &mut plt,
+            &imps,
+        );
         assert!(
             ok,
             "`test` should emit via the thin slice (cmp + cset + cbz + ldr params)"
         );
     }
 }
-

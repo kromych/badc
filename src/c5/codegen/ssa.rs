@@ -111,7 +111,10 @@ pub(super) enum Inst {
     /// The call site marshals `args` per the host ABI (the planner
     /// in `super::plan_call_args` picks per-arg placements). The
     /// instruction's defined value is the call's return slot.
-    Call { target_pc: usize, args: Vec<ValueId> },
+    Call {
+        target_pc: usize,
+        args: Vec<ValueId>,
+    },
     /// Indirect call: the target's address comes from `target`
     /// (typically the loaded value of a function pointer). Args
     /// flow through the same planner.
@@ -382,10 +385,7 @@ pub(super) fn lift_function(
 
     // Walk each block sequentially, building SSA values.
     for (block_idx, &start_pc) in block_starts.iter().enumerate() {
-        let end_of_block = block_starts
-            .get(block_idx + 1)
-            .copied()
-            .unwrap_or(end_pc);
+        let end_of_block = block_starts.get(block_idx + 1).copied().unwrap_or(end_pc);
         let inst_start = insts.len() as u32;
         // Per-block state.
         let mut acc: ValueId = NO_VALUE;
@@ -644,11 +644,7 @@ pub(super) fn lift_function(
                         _ => unreachable!(),
                     };
                     let value = acc;
-                    def(
-                        &mut insts,
-                        Inst::Store { addr, value, kind },
-                        &mut acc,
-                    );
+                    def(&mut insts, Inst::Store { addr, value, kind }, &mut acc);
                     pc += op.word_size();
                 }
                 Op::StLocI => {
@@ -669,15 +665,41 @@ pub(super) fn lift_function(
                 }
                 op if matches!(
                     op,
-                    Op::Or | Op::Xor | Op::And
-                        | Op::Eq | Op::Ne | Op::Lt | Op::Gt | Op::Le | Op::Ge
-                        | Op::Ult | Op::Ugt | Op::Ule | Op::Uge
-                        | Op::Shl | Op::Shr | Op::Shru
-                        | Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Mod
-                        | Op::Divu | Op::Modu
-                        | Op::Fadd | Op::Fsub | Op::Fmul | Op::Fdiv
-                        | Op::Feq | Op::Fne | Op::Flt | Op::Fgt | Op::Fle | Op::Fge
-                ) => {
+                    Op::Or
+                        | Op::Xor
+                        | Op::And
+                        | Op::Eq
+                        | Op::Ne
+                        | Op::Lt
+                        | Op::Gt
+                        | Op::Le
+                        | Op::Ge
+                        | Op::Ult
+                        | Op::Ugt
+                        | Op::Ule
+                        | Op::Uge
+                        | Op::Shl
+                        | Op::Shr
+                        | Op::Shru
+                        | Op::Add
+                        | Op::Sub
+                        | Op::Mul
+                        | Op::Div
+                        | Op::Mod
+                        | Op::Divu
+                        | Op::Modu
+                        | Op::Fadd
+                        | Op::Fsub
+                        | Op::Fmul
+                        | Op::Fdiv
+                        | Op::Feq
+                        | Op::Fne
+                        | Op::Flt
+                        | Op::Fgt
+                        | Op::Fle
+                        | Op::Fge
+                ) =>
+                {
                     let bop = match op {
                         Op::Or => BinOp::Or,
                         Op::Xor => BinOp::Xor,
@@ -720,20 +742,32 @@ pub(super) fn lift_function(
                         ))
                     })?;
                     let rhs = acc;
-                    def(
-                        &mut insts,
-                        Inst::Binop { op: bop, lhs, rhs },
-                        &mut acc,
-                    );
+                    def(&mut insts, Inst::Binop { op: bop, lhs, rhs }, &mut acc);
                     pc += op.word_size();
                 }
                 op if matches!(
                     op,
-                    Op::AddI | Op::SubI | Op::MulI | Op::AndI | Op::OrI | Op::XorI
-                        | Op::ShlI | Op::ShrI | Op::ShruI
-                        | Op::EqI | Op::NeI | Op::LtI | Op::GtI | Op::LeI | Op::GeI
-                        | Op::UltI | Op::UgtI | Op::UleI | Op::UgeI
-                ) => {
+                    Op::AddI
+                        | Op::SubI
+                        | Op::MulI
+                        | Op::AndI
+                        | Op::OrI
+                        | Op::XorI
+                        | Op::ShlI
+                        | Op::ShrI
+                        | Op::ShruI
+                        | Op::EqI
+                        | Op::NeI
+                        | Op::LtI
+                        | Op::GtI
+                        | Op::LeI
+                        | Op::GeI
+                        | Op::UltI
+                        | Op::UgtI
+                        | Op::UleI
+                        | Op::UgeI
+                ) =>
+                {
                     let bop = match op {
                         Op::AddI => BinOp::Add,
                         Op::SubI => BinOp::Sub,
@@ -814,19 +848,12 @@ pub(super) fn lift_function(
                             ))
                         })?);
                     }
-                    def(
-                        &mut insts,
-                        Inst::Call { target_pc, args },
-                        &mut acc,
-                    );
+                    def(&mut insts, Inst::Call { target_pc, args }, &mut acc);
                     pc += op.word_size();
                     // Skip the trailing `Adj N` -- args are now
                     // owned by the Call inst; the stack-drop is
                     // implicit in the new shape.
-                    if nargs > 0
-                        && pc + 1 < text.len()
-                        && Op::from_i64(text[pc]) == Some(Op::Adj)
-                    {
+                    if nargs > 0 && pc + 1 < text.len() && Op::from_i64(text[pc]) == Some(Op::Adj) {
                         pc += Op::Adj.word_size();
                     }
                 }
@@ -841,16 +868,9 @@ pub(super) fn lift_function(
                             ))
                         })?);
                     }
-                    def(
-                        &mut insts,
-                        Inst::CallIndirect { target, args },
-                        &mut acc,
-                    );
+                    def(&mut insts, Inst::CallIndirect { target, args }, &mut acc);
                     pc += op.word_size();
-                    if nargs > 0
-                        && pc + 1 < text.len()
-                        && Op::from_i64(text[pc]) == Some(Op::Adj)
-                    {
+                    if nargs > 0 && pc + 1 < text.len() && Op::from_i64(text[pc]) == Some(Op::Adj) {
                         pc += Op::Adj.word_size();
                     }
                 }
@@ -885,10 +905,7 @@ pub(super) fn lift_function(
                         &mut acc,
                     );
                     pc += op.word_size();
-                    if nargs > 0
-                        && pc + 1 < text.len()
-                        && Op::from_i64(text[pc]) == Some(Op::Adj)
-                    {
+                    if nargs > 0 && pc + 1 < text.len() && Op::from_i64(text[pc]) == Some(Op::Adj) {
                         pc += Op::Adj.word_size();
                     }
                 }
@@ -911,11 +928,7 @@ pub(super) fn lift_function(
                         ))
                     })?;
                     let src = acc;
-                    def(
-                        &mut insts,
-                        Inst::Mcpy { dst, src, size },
-                        &mut acc,
-                    );
+                    def(&mut insts, Inst::Mcpy { dst, src, size }, &mut acc);
                     pc += op.word_size();
                 }
                 Op::Intrinsic => {
@@ -936,11 +949,7 @@ pub(super) fn lift_function(
                             ))
                         })?;
                     }
-                    def(
-                        &mut insts,
-                        Inst::Intrinsic { kind, arg },
-                        &mut acc,
-                    );
+                    def(&mut insts, Inst::Intrinsic { kind, arg }, &mut acc);
                     pc += op.word_size();
                 }
                 _ => {
@@ -1003,23 +1012,24 @@ fn compute_block_entry_depths(
     }
     depths[0] = Some(0);
 
-    let record = |target_pc: usize, depth: u32, depths: &mut [Option<u32>]| -> Result<(), C5Error> {
-        if let Some(&idx) = pc_to_block.get(&target_pc) {
-            match depths[idx] {
-                None => depths[idx] = Some(depth),
-                Some(existing) if existing == depth => {}
-                Some(existing) => {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                        &alloc::format!(
-                            "ssa lift: block at pc {target_pc} reached with mismatched \
+    let record =
+        |target_pc: usize, depth: u32, depths: &mut [Option<u32>]| -> Result<(), C5Error> {
+            if let Some(&idx) = pc_to_block.get(&target_pc) {
+                match depths[idx] {
+                    None => depths[idx] = Some(depth),
+                    Some(existing) if existing == depth => {}
+                    Some(existing) => {
+                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                            &alloc::format!(
+                                "ssa lift: block at pc {target_pc} reached with mismatched \
                              c5-vstack depths ({existing} vs {depth})"
-                        ),
-                    )));
+                            ),
+                        )));
+                    }
                 }
             }
-        }
-        Ok(())
-    };
+            Ok(())
+        };
 
     for (block_idx, &start_pc) in block_starts.iter().enumerate() {
         let entry_depth = depths[block_idx].unwrap_or(0);
@@ -1032,23 +1042,50 @@ fn compute_block_entry_depths(
             };
             match op {
                 Op::Psh => depth += 1,
-                Op::Or | Op::Xor | Op::And
-                | Op::Eq | Op::Ne | Op::Lt | Op::Gt | Op::Le | Op::Ge
-                | Op::Ult | Op::Ugt | Op::Ule | Op::Uge
-                | Op::Shl | Op::Shr | Op::Shru
-                | Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Mod
-                | Op::Divu | Op::Modu
-                | Op::Fadd | Op::Fsub | Op::Fmul | Op::Fdiv
-                | Op::Feq | Op::Fne | Op::Flt | Op::Fgt | Op::Fle | Op::Fge
-                | Op::Si | Op::Sc | Op::Sw | Op::Sh | Op::Sf
+                Op::Or
+                | Op::Xor
+                | Op::And
+                | Op::Eq
+                | Op::Ne
+                | Op::Lt
+                | Op::Gt
+                | Op::Le
+                | Op::Ge
+                | Op::Ult
+                | Op::Ugt
+                | Op::Ule
+                | Op::Uge
+                | Op::Shl
+                | Op::Shr
+                | Op::Shru
+                | Op::Add
+                | Op::Sub
+                | Op::Mul
+                | Op::Div
+                | Op::Mod
+                | Op::Divu
+                | Op::Modu
+                | Op::Fadd
+                | Op::Fsub
+                | Op::Fmul
+                | Op::Fdiv
+                | Op::Feq
+                | Op::Fne
+                | Op::Flt
+                | Op::Fgt
+                | Op::Fle
+                | Op::Fge
+                | Op::Si
+                | Op::Sc
+                | Op::Sw
+                | Op::Sh
+                | Op::Sf
                 | Op::Mcpy => {
-                    depth = depth
-                        .checked_sub(1)
-                        .ok_or_else(|| {
-                            C5Error::Compile(crate::c5::error::fmt_internal_err(
-                                "ssa lift: stack underflow during depth pre-walk",
-                            ))
-                        })?;
+                    depth = depth.checked_sub(1).ok_or_else(|| {
+                        C5Error::Compile(crate::c5::error::fmt_internal_err(
+                            "ssa lift: stack underflow during depth pre-walk",
+                        ))
+                    })?;
                 }
                 Op::Jsr | Op::Jsri | Op::JsrExt => {
                     // The SSA lift bundles the trailing `Adj N`
@@ -1057,9 +1094,7 @@ fn compute_block_entry_depths(
                     // into a single virtual op that pops N. Mirror
                     // that here: subtract N and skip past the Adj.
                     let after = pc + op.word_size();
-                    if after < end_of_block
-                        && Op::from_i64(text[after]) == Some(Op::Adj)
-                    {
+                    if after < end_of_block && Op::from_i64(text[after]) == Some(Op::Adj) {
                         let n = text[after + 1] as u32;
                         depth = depth.checked_sub(n).ok_or_else(|| {
                             C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -1203,8 +1238,12 @@ mod tests {
                     }
                     Terminator::Return(_) | Terminator::TailExt(_) => {}
                 }
-                if let Terminator::Bz { fall_through: ft, .. }
-                | Terminator::Bnz { fall_through: ft, .. } = b.terminator
+                if let Terminator::Bz {
+                    fall_through: ft, ..
+                }
+                | Terminator::Bnz {
+                    fall_through: ft, ..
+                } = b.terminator
                 {
                     assert!(
                         (ft as usize) < f.blocks.len(),

@@ -1602,8 +1602,7 @@ fn lower_op(
     // functions keep the c5-stack-based ABI: callers reach them
     // via the bare-call shape with args on the c5 stack, so the
     // prologue does no spill.
-    let entry_n_params_opt =
-        (!current_func.is_variadic).then_some(current_func.n_params);
+    let entry_n_params_opt = (!current_func.is_variadic).then_some(current_func.n_params);
     match op {
         // ---- Function frame ----
         Op::Ent => {
@@ -3083,9 +3082,7 @@ fn emit_prologue(
             let overflow_bytes = (n_stack as u32) * 16;
             emit_sub_rsp_imm32(code, overflow_bytes);
             for i in 0..n_stack {
-                let host_off = (overflow_bytes as i32)
-                    + (abi.shadow_space as i32)
-                    + (i as i32) * 8;
+                let host_off = (overflow_bytes as i32) + (abi.shadow_space as i32) + (i as i32) * 8;
                 emit_mov_r_mem(code, Reg::RAX, Reg::RSP, host_off);
                 emit_mov_mem_r(code, Reg::RSP, (i as i32) * 16, Reg::RAX);
             }

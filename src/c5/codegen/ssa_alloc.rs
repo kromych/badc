@@ -209,9 +209,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         // crosses a call; otherwise any free reg works.
         let chosen = if must_be_callee {
             // Filter `free` for not-caller-saved.
-            free.iter()
-                .copied()
-                .find(|r| !banks_caller.contains(r))
+            free.iter().copied().find(|r| !banks_caller.contains(r))
         } else {
             free.last().copied()
         };
@@ -284,7 +282,10 @@ fn result_kind(inst: &Inst) -> ResultKind {
             LoadKind::F32 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
-        Store { kind: StoreKind::F32, .. } => ResultKind::Fp,
+        Store {
+            kind: StoreKind::F32,
+            ..
+        } => ResultKind::Fp,
         Store { .. } => ResultKind::Int,
         Binop { op, .. } | BinopI { op, .. } => match op {
             BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv => ResultKind::Fp,
@@ -312,8 +313,11 @@ fn result_kind(inst: &Inst) -> ResultKind {
 fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
     let n = func.insts.len();
     let mut last_use: Vec<u32> = (0..n as u32).collect();
-    let mut bump = |target: ValueId, current_pc: u32, last_use: &mut [u32]| {
-        if target != NO_VALUE && (target as usize) < last_use.len() && last_use[target as usize] < current_pc {
+    let bump = |target: ValueId, current_pc: u32, last_use: &mut [u32]| {
+        if target != NO_VALUE
+            && (target as usize) < last_use.len()
+            && last_use[target as usize] < current_pc
+        {
             last_use[target as usize] = current_pc;
         }
     };
@@ -362,10 +366,8 @@ fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
     // it (Bz / Bnz / Return). Bump conservatively.
     for b in &func.blocks {
         let end_pc = b.inst_range.end;
-        if b.exit_acc != NO_VALUE {
-            if last_use[b.exit_acc as usize] < end_pc {
-                last_use[b.exit_acc as usize] = end_pc;
-            }
+        if b.exit_acc != NO_VALUE && last_use[b.exit_acc as usize] < end_pc {
+            last_use[b.exit_acc as usize] = end_pc;
         }
     }
     last_use
@@ -392,10 +394,10 @@ fn compute_calls_after_def(func: &FunctionSsa, last_use: &[u32]) -> Vec<bool> {
         let def = idx as u32;
         // Binary search for any call PC strictly between (def, end].
         let lo = call_pcs.binary_search(&(def + 1)).unwrap_or_else(|i| i);
-        if let Some(&first) = call_pcs.get(lo) {
-            if first <= end {
-                out[idx] = true;
-            }
+        if let Some(&first) = call_pcs.get(lo)
+            && first <= end
+        {
+            out[idx] = true;
         }
     }
     out
@@ -425,10 +427,8 @@ mod tests {
     use std::path::PathBuf;
 
     fn lift(path: &str) -> Vec<FunctionSsa> {
-        let src = std::fs::read_to_string(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(path),
-        )
-        .unwrap();
+        let src =
+            std::fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(path)).unwrap();
         let program = Compiler::new(src).compile().expect("compile");
         super::super::ssa::lift_program(&program).expect("lift")
     }

@@ -1242,8 +1242,8 @@ pub(super) fn lower(
     let mut ssa_lookup: alloc::collections::BTreeMap<usize, usize> =
         alloc::collections::BTreeMap::new();
     #[cfg(feature = "std")]
-    let use_ssa_emit =
-        matches!(native.regalloc, super::RegallocMode::Ssa) && std::env::var("BADC_USE_SSA_EMIT").is_ok();
+    let use_ssa_emit = matches!(native.regalloc, super::RegallocMode::Ssa)
+        && std::env::var("BADC_USE_SSA_EMIT").is_ok();
     #[cfg(not(feature = "std"))]
     let use_ssa_emit = false;
     if matches!(native.regalloc, super::RegallocMode::Ssa) {
@@ -1354,10 +1354,7 @@ pub(super) fn lower(
                 if !ok {
                     #[cfg(feature = "std")]
                     {
-                        eprint!(
-                            "{}",
-                            super::ssa_dump::dump_function(func_ssa, alloc_for),
-                        );
+                        eprint!("{}", super::ssa_dump::dump_function(func_ssa, alloc_for),);
                     }
                     return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                         &alloc::format!(
@@ -1623,8 +1620,7 @@ fn lower_op(
             // c5 functions keep the c5-stack-based ABI: callers reach
             // them via the bare-bl shape with args already on the
             // c5 stack, so no spill happens here.
-            let entry_n_params =
-                (!current_func.is_variadic).then_some(current_func.n_params);
+            let entry_n_params = (!current_func.is_variadic).then_some(current_func.n_params);
             emit_prologue(
                 code,
                 locals,
@@ -1635,8 +1631,7 @@ fn lower_op(
             );
         }
         Op::Lev => {
-            let entry_n_params =
-                (!current_func.is_variadic).then_some(current_func.n_params);
+            let entry_n_params = (!current_func.is_variadic).then_some(current_func.n_params);
             emit_epilogue(
                 code,
                 entry_n_params,

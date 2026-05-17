@@ -24,9 +24,8 @@ mod tests;
 #[allow(unused_imports)]
 pub use {
     codegen::{
-        NativeOptions, RegallocMode, Target, dump_native_listing,
-        dump_native_listing_with_options, emit_native, emit_native_with_options, jit_run,
-        jit_run_with_options,
+        NativeOptions, RegallocMode, Target, dump_native_listing, dump_native_listing_with_options,
+        emit_native, emit_native_with_options, jit_run, jit_run_with_options,
     },
     compiler::{CompileOptions, Compiler, StructDef, StructField},
     error::C5Error,

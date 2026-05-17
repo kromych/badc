@@ -50,10 +50,7 @@ pub(super) fn dump_function(func: &FunctionSsa, alloc: &Allocation) -> String {
         alloc.spill_count, alloc.gpr_used, alloc.fp_used,
     ));
     for (b_idx, block) in func.blocks.iter().enumerate() {
-        out.push_str(&format!(
-            "  block {b_idx}  start_pc={}\n",
-            block.start_pc,
-        ));
+        out.push_str(&format!("  block {b_idx}  start_pc={}\n", block.start_pc,));
         for v in block.inst_range.clone() {
             let inst = &func.insts[v as usize];
             let place = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
@@ -86,16 +83,17 @@ fn fmt_inst(inst: &Inst) -> String {
             "Store {{ addr=v{addr}, value=v{value}, kind={} }}",
             fmt_store_kind(*kind),
         ),
-        Binop { op, lhs, rhs } => format!("Binop {{ op={}, lhs=v{lhs}, rhs=v{rhs} }}", fmt_binop(*op)),
+        Binop { op, lhs, rhs } => {
+            format!("Binop {{ op={}, lhs=v{lhs}, rhs=v{rhs} }}", fmt_binop(*op))
+        }
         BinopI { op, lhs, rhs_imm } => format!(
             "BinopI {{ op={}, lhs=v{lhs}, rhs_imm={rhs_imm} }}",
             fmt_binop(*op),
         ),
         Fneg(v) => format!("Fneg(v{v})"),
-        FpCast { kind, value } => format!(
-            "FpCast {{ kind={}, value=v{value} }}",
-            fmt_fp_cast(*kind),
-        ),
+        FpCast { kind, value } => {
+            format!("FpCast {{ kind={}, value=v{value} }}", fmt_fp_cast(*kind),)
+        }
         Call { target_pc, args } => format!(
             "Call {{ target_pc={target_pc}, args=[{}] }}",
             fmt_value_list(args),
@@ -104,7 +102,9 @@ fn fmt_inst(inst: &Inst) -> String {
             "CallIndirect {{ target=v{target}, args=[{}] }}",
             fmt_value_list(args),
         ),
-        CallExt { binding_idx, args, .. } => format!(
+        CallExt {
+            binding_idx, args, ..
+        } => format!(
             "CallExt {{ binding_idx={binding_idx}, args=[{}] }}",
             fmt_value_list(args),
         ),
@@ -131,10 +131,18 @@ fn fmt_value_list(vs: &[u32]) -> String {
 fn fmt_terminator(t: Terminator) -> String {
     match t {
         Terminator::Jmp(b) => format!("Jmp(b{b})"),
-        Terminator::Bz { cond, target, fall_through } => {
+        Terminator::Bz {
+            cond,
+            target,
+            fall_through,
+        } => {
             format!("Bz {{ cond=v{cond}, target=b{target}, fall=b{fall_through} }}")
         }
-        Terminator::Bnz { cond, target, fall_through } => {
+        Terminator::Bnz {
+            cond,
+            target,
+            fall_through,
+        } => {
             format!("Bnz {{ cond=v{cond}, target=b{target}, fall=b{fall_through} }}")
         }
         Terminator::Return(v) => format!("Return(v{v})"),

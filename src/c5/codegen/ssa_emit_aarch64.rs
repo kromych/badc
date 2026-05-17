@@ -69,6 +69,10 @@ pub(super) struct Frame {
     /// entry. Includes locals, vstack region, allocator spills,
     /// and saved callee-saved regs.
     pub frame_bytes: u32,
+    /// Byte distance from fp down to the dedicated cross-block
+    /// accumulator slot. Single 8-byte slot, padded to 16 to
+    /// keep the next region aligned.
+    pub acc_slot_off: u32,
     /// Byte distance from fp down to the start of the
     /// allocator-managed spill region.
     pub alloc_spill_base: u32,
@@ -78,14 +82,20 @@ impl Frame {
     pub fn for_function(func: &FunctionSsa, alloc: &Allocation) -> Self {
         let locals_bytes = ((func.locals.max(0) as u32) * 8 + 15) & !15;
         let vstack_bytes = (func.vstack_slots * 8 + 15) & !15;
+        let acc_bytes = 16u32;
         let alloc_spill_bytes = (alloc.spill_count * 8 + 15) & !15;
         let saved_gpr_bytes = ((alloc.gpr_used.len() as u32) * 8 + 15) & !15;
         let saved_fpr_bytes = ((alloc.fp_used.len() as u32) * 8 + 15) & !15;
-        let frame_bytes =
-            locals_bytes + vstack_bytes + alloc_spill_bytes + saved_gpr_bytes + saved_fpr_bytes;
+        let frame_bytes = locals_bytes
+            + vstack_bytes
+            + acc_bytes
+            + alloc_spill_bytes
+            + saved_gpr_bytes
+            + saved_fpr_bytes;
         Self {
             frame_bytes,
-            alloc_spill_base: locals_bytes + vstack_bytes,
+            acc_slot_off: locals_bytes + vstack_bytes + 8,
+            alloc_spill_base: locals_bytes + vstack_bytes + acc_bytes,
         }
     }
 }
@@ -189,7 +199,7 @@ pub(super) fn emit_function(
             }
         }
         match block.terminator {
-            Terminator::Return(v) => emit_return(code, v, alloc, frame, &scratch),
+            Terminator::Return(v) => emit_return(code, v, alloc, frame, &scratch, func, abi),
             Terminator::Jmp(t) => {
                 branch_fixups.push(BranchFixup {
                     site: code.len(),
@@ -466,6 +476,54 @@ fn emit_inst(
             plt_call_fixups,
             imports,
         ),
+        Inst::AccSpill { value } => {
+            let value_place = alloc
+                .places
+                .get(*value as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let src = match materialize_int(code, value_place, scratch.primary, frame) {
+                Some(r) => r,
+                None => return false,
+            };
+            emit(code, enc_stur(src, Reg(29), -(frame.acc_slot_off as i32)));
+            true
+        }
+        Inst::AccReload => {
+            let Some(rd) = int_reg(dst) else {
+                bail_msg("AccReload: dst not int reg");
+                return false;
+            };
+            emit(code, enc_ldur(rd, Reg(29), -(frame.acc_slot_off as i32)));
+            true
+        }
+        Inst::VstackSpill { slot, value } => {
+            let value_place = alloc
+                .places
+                .get(*value as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let src = match materialize_int(code, value_place, scratch.primary, frame) {
+                Some(r) => r,
+                None => return false,
+            };
+            // vstack slot N lives at -[(vstack_base - locals_bytes is 0) + (N+1) * 8] from fp.
+            // Frame already accounts for the vstack region between
+            // `locals_bytes` and `acc_slot_off - 8`. Compute the
+            // exact byte offset:
+            let off = -((frame.acc_slot_off as i32) - 8 - (*slot as i32) * 8);
+            emit(code, enc_stur(src, Reg(29), off));
+            true
+        }
+        Inst::VstackReload { slot } => {
+            let Some(rd) = int_reg(dst) else {
+                bail_msg("VstackReload: dst not int reg");
+                return false;
+            };
+            let off = -((frame.acc_slot_off as i32) - 8 - (*slot as i32) * 8);
+            emit(code, enc_ldur(rd, Reg(29), off));
+            true
+        }
         _ => false,
     }
 }
@@ -641,17 +699,50 @@ fn emit_local_addr(code: &mut Vec<u8>, dst: Place, off: i64) -> bool {
     };
     let bytes = c5_slot_to_fp_offset(off);
     let abs = bytes.unsigned_abs();
-    if abs >= 4096 {
-        bail_msg(&alloc::format!("LocalAddr: offset {bytes} exceeds imm12"));
-        return false;
+    // Up to imm12 fits in a single add/sub-imm.
+    if abs < 4096 {
+        let imm = abs as u32;
+        if bytes >= 0 {
+            emit(code, enc_add_imm(rd, Reg(29), imm));
+        } else {
+            emit(code, enc_sub_imm(rd, Reg(29), imm));
+        }
+        return true;
     }
-    let imm = abs as u32;
-    if bytes >= 0 {
-        emit(code, enc_add_imm(rd, Reg(29), imm));
-    } else {
-        emit(code, enc_sub_imm(rd, Reg(29), imm));
+    // 24-bit reach via two add/sub-imm: shift-12 hi half + plain
+    // lo half.
+    if abs < (1u64 << 24) {
+        let hi = abs & !0xfff;
+        let lo = abs & 0xfff;
+        if bytes >= 0 {
+            if hi != 0 {
+                emit(
+                    code,
+                    super::aarch64::enc_add_imm_lsl12(rd, Reg(29), (hi >> 12) as u32),
+                );
+            }
+            if lo != 0 {
+                let base = if hi != 0 { rd } else { Reg(29) };
+                emit(code, enc_add_imm(rd, base, lo as u32));
+            }
+        } else {
+            if hi != 0 {
+                emit(
+                    code,
+                    super::aarch64::enc_sub_imm_lsl12(rd, Reg(29), (hi >> 12) as u32),
+                );
+            }
+            if lo != 0 {
+                let base = if hi != 0 { rd } else { Reg(29) };
+                emit(code, enc_sub_imm(rd, base, lo as u32));
+            }
+        }
+        return true;
     }
-    true
+    bail_msg(&alloc::format!(
+        "LocalAddr: offset {bytes} exceeds 24-bit reach"
+    ));
+    false
 }
 
 fn emit_load(
@@ -909,6 +1000,8 @@ fn emit_return(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
+    func: &FunctionSsa,
+    abi: super::Abi,
 ) {
     // Move the return value into x0. NO_VALUE means the bytecode
     // emitter's trailing synthetic Lev with no live accumulator;
@@ -937,6 +1030,13 @@ fn emit_return(
         emit_add_sp_imm(code, frame.frame_bytes);
     }
     emit(code, enc_ldp_post(Reg(29), Reg(30), Reg(31), 16));
+    // Drop the host-arg-reg spill slots the prologue laid down
+    // before the fp/lr stp. Both register-spilled and host-stack-
+    // overflow params occupy 16 bytes apiece.
+    if !func.is_variadic && func.n_params > 0 {
+        let _ = abi;
+        emit_add_sp_imm(code, (16 * func.n_params) as u32);
+    }
     emit(code, enc_ret(Reg(30)));
 }
 

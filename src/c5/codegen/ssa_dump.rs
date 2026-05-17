@@ -114,6 +114,8 @@ fn fmt_inst(inst: &Inst) -> String {
         AllocaInit(slot) => format!("AllocaInit({slot})"),
         VstackSpill { slot, value } => format!("VstackSpill {{ slot={slot}, value=v{value} }}"),
         VstackReload { slot } => format!("VstackReload {{ slot={slot} }}"),
+        AccSpill { value } => format!("AccSpill {{ value=v{value} }}"),
+        AccReload => "AccReload".into(),
     }
 }
 

@@ -157,6 +157,20 @@ pub(super) enum Inst {
     /// reloaded value; the block uses it on its local vstack
     /// without referencing the predecessor's writer.
     VstackReload { slot: u32 },
+    /// Spill the accumulator across a block boundary. The c5
+    /// bytecode model treats the accumulator as a single
+    /// function-wide value preserved across every control-flow
+    /// edge; the SSA lift instead materialises it as a fresh
+    /// value per block, so cross-block reads need a memory
+    /// round trip. Emitted at block exit before the terminator
+    /// whenever the block has a successor that reads the entry
+    /// accumulator without having written it first.
+    AccSpill { value: ValueId },
+    /// Reload the cross-block accumulator at block entry. The
+    /// instruction's id becomes the block's initial accumulator
+    /// value; subsequent ops that read `acc` (binops, stores,
+    /// terminators) reference it.
+    AccReload,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -379,6 +393,15 @@ pub(super) fn lift_function(
     // circuit) survive into the successor block.
     let block_entry_depths = compute_block_entry_depths(text, ent_pc, end_pc, &block_starts)?;
     let vstack_slots = block_entry_depths.iter().copied().max().unwrap_or(0);
+    // Pre-walk: which blocks read the accumulator before writing
+    // it? Such blocks need an `Inst::AccReload` at entry; every
+    // predecessor of such a block emits an `Inst::AccSpill`
+    // before its terminator. The c5 bytecode model treats the
+    // accumulator as a single function-wide value; SSA per-block
+    // value naming breaks that, so we round-trip through a
+    // dedicated frame slot.
+    let blocks_need_acc_reload =
+        compute_blocks_needing_acc_reload(text, ent_pc, end_pc, &block_starts);
 
     let mut insts: Vec<Inst> = Vec::new();
     let mut blocks: Vec<Block> = Vec::with_capacity(block_starts.len());
@@ -400,6 +423,15 @@ pub(super) fn lift_function(
             let id = insts.len() as ValueId;
             insts.push(Inst::VstackReload { slot });
             vstack.push(id);
+        }
+        // Cross-block accumulator: if this block reads `acc`
+        // before any inst writes it, reload from the dedicated
+        // accumulator slot the predecessor spilled to. The entry
+        // block (block 0) has no predecessor so we skip.
+        if block_idx > 0 && blocks_need_acc_reload[block_idx] {
+            let id = insts.len() as ValueId;
+            insts.push(Inst::AccReload);
+            acc = id;
         }
         let mut pc = start_pc;
         // The block's entry instruction is `Op::Ent` (only for
@@ -973,6 +1005,16 @@ pub(super) fn lift_function(
                 value,
             });
         }
+        // If any successor reloads the accumulator, spill it
+        // now. Conservative: spill whenever the block has a
+        // non-NO_VALUE exit_acc and any reachable block needs a
+        // reload. The optimizer / allocator can DCE redundant
+        // spills if they become dead.
+        if acc != NO_VALUE
+            && exit_reaches_acc_reload(&block_starts, block_idx, &blocks_need_acc_reload)
+        {
+            insts.push(Inst::AccSpill { value: acc });
+        }
         let inst_end = insts.len() as u32;
         blocks.push(Block {
             start_pc,
@@ -1199,6 +1241,155 @@ fn collect_block_starts(text: &[i64], ent_pc: usize, end_pc: usize) -> Vec<usize
         pc += op.word_size();
     }
     starts.into_iter().collect()
+}
+
+/// For each block, decide whether its body reads the accumulator
+/// before writing it. The lift inserts `Inst::AccReload` at the
+/// entry of blocks where this is true; every predecessor's
+/// terminator gets a matching `Inst::AccSpill` so the cross-edge
+/// value round-trips through the dedicated accumulator slot.
+///
+/// Reads-before-writes: any op whose lowering reads `a` (Op::Psh,
+/// Op::Si/Sc/Sw/Sh/Sf, Op::Li/Lc/Lcs/Lw/Lwu/Lh/Lhu/Lf load-from-
+/// acc, every binop's rhs, every store's value, every call op's
+/// trailing return-value sink, the conditional-branch terminator
+/// Op::Bz/Op::Bnz, every fixed-arg intrinsic, plus `Op::Lev`'s
+/// return value). The pre-walk simplifies: the block reads acc
+/// before writing iff the first acc-touching op in the body is
+/// a read (rather than a write).
+///
+/// Conservative shortcut: this pass marks any block whose first
+/// non-AllocaInit op is a load-from-acc (Op::Li / Lc / ...), a
+/// store, a binop, a push, a call-and-return, or a conditional
+/// branch terminator before any acc-writing op. Op::Imm / Op::Lea
+/// / Op::TlsLea write acc without reading it, so a block that
+/// opens with one of those doesn't need a reload.
+fn compute_blocks_needing_acc_reload(
+    text: &[i64],
+    ent_pc: usize,
+    end_pc: usize,
+    block_starts: &[usize],
+) -> Vec<bool> {
+    let mut needs = vec![false; block_starts.len()];
+    for (idx, &start) in block_starts.iter().enumerate() {
+        if idx == 0 {
+            continue;
+        }
+        let end = block_starts.get(idx + 1).copied().unwrap_or(end_pc);
+        if start >= end {
+            continue;
+        }
+        let Some(op) = Op::from_i64(text[start]) else {
+            continue;
+        };
+        needs[idx] = reads_acc_first(op);
+    }
+    let _ = ent_pc;
+    needs
+}
+
+/// Whether `op` reads the accumulator before any in-block write
+/// to it. The bytecode's first op in a block decides this: if
+/// the op consumes `a` (Op::Bz, Op::Si, a binop's rhs, ...) the
+/// block needs a cross-edge accumulator reload. If the op
+/// writes `a` first (Op::Imm, Op::Lea, fused loads, ...) the
+/// block is self-sufficient.
+fn reads_acc_first(op: Op) -> bool {
+    match op {
+        // Writes acc without reading.
+        Op::Imm
+        | Op::Lea
+        | Op::TlsLea
+        | Op::AllocaInit
+        | Op::Ent
+        | Op::LdLocI
+        | Op::LdLocC
+        | Op::Jsr
+        | Op::Jsri
+        | Op::JsrExt
+        | Op::TailExt
+        | Op::Jmp
+        | Op::Adj => false,
+        // Reads acc.
+        Op::Bz | Op::Bnz | Op::Lev | Op::Psh => true,
+        Op::Si | Op::Sc | Op::Sw | Op::Sh | Op::Sf | Op::Mcpy => true,
+        Op::Li | Op::Lc | Op::Lcs | Op::Lw | Op::Lwu | Op::Lh | Op::Lhu | Op::Lf => true,
+        Op::Or
+        | Op::Xor
+        | Op::And
+        | Op::Eq
+        | Op::Ne
+        | Op::Lt
+        | Op::Gt
+        | Op::Le
+        | Op::Ge
+        | Op::Ult
+        | Op::Ugt
+        | Op::Ule
+        | Op::Uge
+        | Op::Shl
+        | Op::Shr
+        | Op::Shru
+        | Op::Add
+        | Op::Sub
+        | Op::Mul
+        | Op::Div
+        | Op::Mod
+        | Op::Divu
+        | Op::Modu
+        | Op::Fadd
+        | Op::Fsub
+        | Op::Fmul
+        | Op::Fdiv
+        | Op::Feq
+        | Op::Fne
+        | Op::Flt
+        | Op::Fgt
+        | Op::Fle
+        | Op::Fge => true,
+        Op::AddI
+        | Op::SubI
+        | Op::MulI
+        | Op::AndI
+        | Op::OrI
+        | Op::XorI
+        | Op::ShlI
+        | Op::ShrI
+        | Op::ShruI
+        | Op::EqI
+        | Op::NeI
+        | Op::LtI
+        | Op::GtI
+        | Op::LeI
+        | Op::GeI
+        | Op::UltI
+        | Op::UgtI
+        | Op::UleI
+        | Op::UgeI => true,
+        Op::StLocI | Op::Fneg | Op::Fcvtfi | Op::Fcvtif | Op::Intrinsic => true,
+    }
+}
+
+/// Conservative successor check: does any reachable successor of
+/// `block_idx` need an acc reload at entry? Used at block-exit
+/// to decide whether to emit an `Inst::AccSpill`. Today's check
+/// just looks at the linear-next + branch target of the current
+/// block's terminator; a full successor walk would be cheap but
+/// not necessary for correctness (the spill is harmless on dead
+/// paths, just wasted bytes).
+fn exit_reaches_acc_reload(
+    block_starts: &[usize],
+    block_idx: usize,
+    needs: &[bool],
+) -> bool {
+    // Fall-through successor.
+    if block_idx + 1 < block_starts.len() && needs[block_idx + 1] {
+        return true;
+    }
+    // Any other successor in the function: be conservative and
+    // spill if any block in the function needs a reload. Cheap
+    // and avoids re-walking the terminator targets here.
+    needs.iter().any(|&b| b)
 }
 
 #[cfg(test)]

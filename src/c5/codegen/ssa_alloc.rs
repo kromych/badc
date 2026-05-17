@@ -304,6 +304,8 @@ fn result_kind(inst: &Inst) -> ResultKind {
         AllocaInit(_) => ResultKind::None,
         VstackSpill { .. } => ResultKind::None,
         VstackReload { .. } => ResultKind::Int,
+        AccSpill { .. } => ResultKind::None,
+        AccReload => ResultKind::Int,
     }
 }
 
@@ -329,7 +331,8 @@ fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
             | Inst::TlsAddr(_)
             | Inst::AllocaInit(_)
             | Inst::TailExt(_)
-            | Inst::VstackReload { .. } => {}
+            | Inst::VstackReload { .. }
+            | Inst::AccReload => {}
             Inst::Load { addr, .. } => bump(*addr, pc, &mut last_use),
             Inst::Store { addr, value, .. } => {
                 bump(*addr, pc, &mut last_use);
@@ -359,6 +362,7 @@ fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
             }
             Inst::Intrinsic { arg, .. } => bump(*arg, pc, &mut last_use),
             Inst::VstackSpill { value, .. } => bump(*value, pc, &mut last_use),
+            Inst::AccSpill { value } => bump(*value, pc, &mut last_use),
         }
     }
     // Also: each block's exit_acc keeps that value live to the

@@ -47,6 +47,7 @@
 
 #![allow(dead_code)]
 
+use alloc::vec;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
@@ -1410,11 +1411,7 @@ fn reads_acc_first(op: Op) -> bool {
 /// block's terminator; a full successor walk would be cheap but
 /// not necessary for correctness (the spill is harmless on dead
 /// paths, just wasted bytes).
-fn exit_reaches_acc_reload(
-    block_starts: &[usize],
-    block_idx: usize,
-    needs: &[bool],
-) -> bool {
+fn exit_reaches_acc_reload(block_starts: &[usize], block_idx: usize, needs: &[bool]) -> bool {
     // Fall-through successor.
     if block_idx + 1 < block_starts.len() && needs[block_idx + 1] {
         return true;

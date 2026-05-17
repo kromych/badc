@@ -48,16 +48,16 @@
 
 use alloc::vec::Vec;
 
-use super::Target;
 use super::DataFixup;
+use super::Target;
 use super::aarch64::{
     BranchKind, Cond, Fixup, PltCallFixup, Reg, emit, emit_add_sp_imm, emit_sub_sp_imm,
     enc_add_imm, enc_add_reg, enc_adrp, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_cbnz,
     enc_cbz, enc_cmp_reg, enc_cset, enc_eor_reg, enc_ldp_post, enc_ldr_imm, enc_ldr32_imm,
-    enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm, enc_ldur,
-    enc_lslv, enc_lsrv, enc_mov_reg, enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_sdiv,
-    enc_stp_pre, enc_str_imm, enc_str_pre, enc_str32_imm, enc_strb_imm, enc_strh_imm,
-    enc_stur, enc_sub_imm, enc_sub_reg, enc_udiv, load_imm64,
+    enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm, enc_ldur, enc_lslv,
+    enc_lsrv, enc_mov_reg, enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_sdiv, enc_stp_pre,
+    enc_str_imm, enc_str_pre, enc_str32_imm, enc_strb_imm, enc_strh_imm, enc_stur, enc_sub_imm,
+    enc_sub_reg, enc_udiv, load_imm64,
 };
 use super::ssa::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
 use super::ssa_alloc::{Allocation, Place};

@@ -50,11 +50,14 @@ use alloc::vec::Vec;
 
 use super::Target;
 use super::aarch64::{
-    Reg, emit, emit_add_sp_imm, emit_sub_sp_imm, enc_add_imm, enc_add_reg, enc_and_reg,
-    enc_asrv, enc_eor_reg, enc_ldp_post, enc_ldr_imm, enc_lslv, enc_lsrv, enc_mov_reg, enc_mul,
-    enc_orr_reg, enc_ret, enc_stp_pre, enc_str_imm, enc_str_pre, enc_sub_reg, load_imm64,
+    Cond, Reg, emit, emit_add_sp_imm, emit_sub_sp_imm, enc_add_imm, enc_add_reg, enc_and_reg,
+    enc_asrv, enc_b, enc_b_cond, enc_cbnz, enc_cbz, enc_cmp_reg, enc_cset, enc_eor_reg,
+    enc_ldp_post, enc_ldr32_imm, enc_ldr_imm, enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm,
+    enc_ldrsh_imm, enc_ldrsw_imm, enc_ldur, enc_lslv, enc_lsrv, enc_mov_reg, enc_mul,
+    enc_orr_reg, enc_ret, enc_stp_pre, enc_str32_imm, enc_str_imm, enc_str_pre, enc_strb_imm,
+    enc_strh_imm, enc_stur, enc_sub_imm, enc_sub_reg, load_imm64,
 };
-use super::ssa::{BinOp, FunctionSsa, Inst, Terminator};
+use super::ssa::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
 use super::ssa_alloc::{Allocation, Place};
 
 /// Per-function frame layout. Bytes are 16-aligned at every
@@ -89,6 +92,29 @@ impl Frame {
     }
 }
 
+/// Branch placeholder recorded mid-walk; resolved once every
+/// block's start offset is known.
+#[derive(Debug, Clone, Copy)]
+struct BranchFixup {
+    /// Byte offset in `code` of the placeholder instruction.
+    site: usize,
+    /// Target block in the function's `blocks` table.
+    target: BlockId,
+    kind: BranchKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BranchKind {
+    /// Unconditional B; `imm26` field, +/-128 MiB reach.
+    B,
+    /// CBZ Xt, label.
+    Cbz(Reg),
+    /// CBNZ Xt, label.
+    Cbnz(Reg),
+    /// B.cond label.
+    Bcc(Cond),
+}
+
 /// Public entry point. Returns `true` when every block + inst +
 /// terminator was lowered. Returns `false` (and leaves `code`
 /// unchanged) when the function contains an op outside the
@@ -107,7 +133,11 @@ pub(super) fn emit_function(
 
     emit_prologue(code, func, alloc, frame, abi);
 
+    let mut block_offsets: Vec<usize> = alloc::vec![0; func.blocks.len()];
+    let mut fixups: Vec<BranchFixup> = Vec::new();
+
     for (block_idx, block) in func.blocks.iter().enumerate() {
+        block_offsets[block_idx] = code.len();
         for v in block.inst_range.clone() {
             let inst = &func.insts[v as usize];
             let place = alloc
@@ -117,22 +147,133 @@ pub(super) fn emit_function(
                 .unwrap_or(Place::None);
             if !emit_inst(code, inst, place, alloc, frame, &scratch) {
                 code.truncate(snapshot);
-                let _ = block_idx;
                 return false;
             }
         }
         match block.terminator {
-            Terminator::Return(v) => {
-                emit_return(code, v, alloc, frame, &scratch);
+            Terminator::Return(v) => emit_return(code, v, alloc, frame, &scratch),
+            Terminator::Jmp(t) => {
+                fixups.push(BranchFixup {
+                    site: code.len(),
+                    target: t,
+                    kind: BranchKind::B,
+                });
+                emit(code, enc_b(0));
             }
-            // Anything else -- branches, tail calls, fall-through
-            // -- needs label fixups the thin slice doesn't yet
-            // produce. Fall back to the pool path.
-            _ => {
+            Terminator::Bz {
+                cond,
+                target,
+                fall_through,
+            } => {
+                let cond_place = alloc.places.get(cond as usize).copied().unwrap_or(Place::None);
+                let rt = match materialize_int(code, cond_place, scratch.primary, frame) {
+                    Some(r) => r,
+                    None => {
+                        code.truncate(snapshot);
+                        return false;
+                    }
+                };
+                fixups.push(BranchFixup {
+                    site: code.len(),
+                    target,
+                    kind: BranchKind::Cbz(rt),
+                });
+                emit(code, enc_cbz(rt, 0));
+                if fall_through as usize != block_idx + 1 {
+                    fixups.push(BranchFixup {
+                        site: code.len(),
+                        target: fall_through,
+                        kind: BranchKind::B,
+                    });
+                    emit(code, enc_b(0));
+                }
+            }
+            Terminator::Bnz {
+                cond,
+                target,
+                fall_through,
+            } => {
+                let cond_place = alloc.places.get(cond as usize).copied().unwrap_or(Place::None);
+                let rt = match materialize_int(code, cond_place, scratch.primary, frame) {
+                    Some(r) => r,
+                    None => {
+                        code.truncate(snapshot);
+                        return false;
+                    }
+                };
+                fixups.push(BranchFixup {
+                    site: code.len(),
+                    target,
+                    kind: BranchKind::Cbnz(rt),
+                });
+                emit(code, enc_cbnz(rt, 0));
+                if fall_through as usize != block_idx + 1 {
+                    fixups.push(BranchFixup {
+                        site: code.len(),
+                        target: fall_through,
+                        kind: BranchKind::B,
+                    });
+                    emit(code, enc_b(0));
+                }
+            }
+            Terminator::FallThrough(t) => {
+                if t as usize != block_idx + 1 {
+                    fixups.push(BranchFixup {
+                        site: code.len(),
+                        target: t,
+                        kind: BranchKind::B,
+                    });
+                    emit(code, enc_b(0));
+                }
+            }
+            // TailExt isn't covered by the thin slice; fall back.
+            Terminator::TailExt(_) => {
                 code.truncate(snapshot);
                 return false;
             }
         }
+    }
+    // Patch the recorded branches.
+    for fx in &fixups {
+        let target_off = block_offsets[fx.target as usize];
+        let rel = (target_off as i64) - (fx.site as i64);
+        if rel % 4 != 0 {
+            code.truncate(snapshot);
+            return false;
+        }
+        let imm = (rel / 4) as i32;
+        let word = match fx.kind {
+            BranchKind::B => {
+                if !(-(1 << 25)..(1 << 25)).contains(&imm) {
+                    code.truncate(snapshot);
+                    return false;
+                }
+                enc_b(imm)
+            }
+            BranchKind::Cbz(rt) => {
+                if !(-(1 << 18)..(1 << 18)).contains(&imm) {
+                    code.truncate(snapshot);
+                    return false;
+                }
+                enc_cbz(rt, imm)
+            }
+            BranchKind::Cbnz(rt) => {
+                if !(-(1 << 18)..(1 << 18)).contains(&imm) {
+                    code.truncate(snapshot);
+                    return false;
+                }
+                enc_cbnz(rt, imm)
+            }
+            BranchKind::Bcc(cond) => {
+                if !(-(1 << 18)..(1 << 18)).contains(&imm) {
+                    code.truncate(snapshot);
+                    return false;
+                }
+                enc_b_cond(cond, imm)
+            }
+        };
+        let bytes = word.to_le_bytes();
+        code[fx.site..fx.site + 4].copy_from_slice(&bytes);
     }
     true
 }
@@ -200,7 +341,7 @@ fn emit_prologue(
     let save_base = alloc_save_base(frame, alloc);
     for (i, &r) in alloc.gpr_used.iter().enumerate() {
         let off = -(((save_base + (i as u32) * 8 + 8) as i32));
-        emit(code, super::aarch64::enc_stur(Reg(r), Reg(29), off));
+        emit(code, enc_stur(Reg(r), Reg(29), off));
     }
 }
 
@@ -238,12 +379,122 @@ fn emit_inst(
             load_imm64(code, rd, *value as u64);
             true
         }
+        Inst::LocalAddr(off) => emit_local_addr(code, dst, *off),
+        Inst::Load { addr, kind } => emit_load(code, dst, *addr, *kind, alloc, frame, scratch),
+        Inst::Store { addr, value, kind } => {
+            emit_store(code, dst, *addr, *value, *kind, alloc, frame, scratch)
+        }
         Inst::Binop { op, lhs, rhs } => emit_binop(code, *op, dst, *lhs, *rhs, alloc, frame, scratch),
         Inst::BinopI { op, lhs, rhs_imm } => {
             emit_binop_imm(code, *op, dst, *lhs, *rhs_imm, alloc, frame, scratch)
         }
         _ => false,
     }
+}
+
+/// Translate a c5-stack slot index (`Op::Lea`'s operand) into a
+/// byte offset relative to fp. Mirror of the pool path's
+/// `lea_offset_bytes`: locals (off < 0) at off*8, params (off >=
+/// 2) at (off-1)*16.
+fn c5_slot_to_fp_offset(off: i64) -> i64 {
+    if off >= 2 { (off - 1) * 16 } else { off * 8 }
+}
+
+fn emit_local_addr(code: &mut Vec<u8>, dst: Place, off: i64) -> bool {
+    let Some(rd) = int_reg(dst) else {
+        return false;
+    };
+    let bytes = c5_slot_to_fp_offset(off);
+    let abs = bytes.unsigned_abs();
+    if abs >= 4096 {
+        // Thin slice covers the imm12-fits-in-add path; larger
+        // offsets need a multi-instruction sequence we'd rather
+        // route through the pool path until the SSA emit is
+        // sturdier.
+        return false;
+    }
+    let imm = abs as u32;
+    if bytes >= 0 {
+        emit(code, enc_add_imm(rd, Reg(29), imm));
+    } else {
+        emit(code, enc_sub_imm(rd, Reg(29), imm));
+    }
+    true
+}
+
+fn emit_load(
+    code: &mut Vec<u8>,
+    dst: Place,
+    addr: u32,
+    kind: LoadKind,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    let Some(rd) = int_reg(dst) else {
+        return false;
+    };
+    let addr_place = alloc.places.get(addr as usize).copied().unwrap_or(Place::None);
+    let rn = match materialize_int(code, addr_place, scratch.primary, frame) {
+        Some(r) => r,
+        None => return false,
+    };
+    match kind {
+        LoadKind::I64 => emit(code, enc_ldr_imm(rd, rn, 0)),
+        LoadKind::I32 => emit(code, enc_ldrsw_imm(rd, rn, 0)),
+        LoadKind::U32 => emit(code, enc_ldr32_imm(rd, rn, 0)),
+        LoadKind::I16 => emit(code, enc_ldrsh_imm(rd, rn, 0)),
+        LoadKind::U16 => emit(code, enc_ldrh_imm(rd, rn, 0)),
+        LoadKind::I8 => emit(code, enc_ldrsb_imm(rd, rn, 0)),
+        LoadKind::U8 => emit(code, enc_ldrb_imm(rd, rn, 0)),
+        // FP loads (4-byte float widened to f64) need the
+        // fmov + fcvt sequence; route through the pool path.
+        LoadKind::F32 => return false,
+    }
+    true
+}
+
+fn emit_store(
+    code: &mut Vec<u8>,
+    dst: Place,
+    addr: u32,
+    value: u32,
+    kind: StoreKind,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    // The c5 store ops leave the stored value in the accumulator
+    // afterward, so `dst` may be a register or spill slot the
+    // allocator wants the value parked in. We compute the value
+    // in a register, store it through the address, then copy to
+    // dst if it isn't already there.
+    let addr_place = alloc.places.get(addr as usize).copied().unwrap_or(Place::None);
+    let value_place = alloc.places.get(value as usize).copied().unwrap_or(Place::None);
+    let rn = match materialize_int(code, addr_place, scratch.primary, frame) {
+        Some(r) => r,
+        None => return false,
+    };
+    let rs = match materialize_int(code, value_place, scratch.secondary, frame) {
+        Some(r) => r,
+        None => return false,
+    };
+    match kind {
+        StoreKind::I64 => emit(code, enc_str_imm(rs, rn, 0)),
+        StoreKind::I32 => emit(code, enc_str32_imm(rs, rn, 0)),
+        StoreKind::I16 => emit(code, enc_strh_imm(rs, rn, 0)),
+        StoreKind::I8 => emit(code, enc_strb_imm(rs, rn, 0)),
+        StoreKind::F32 => return false,
+    }
+    if let Some(rd) = int_reg(dst) {
+        if rd.0 != rs.0 {
+            emit(code, enc_mov_reg(rd, rs));
+        }
+    } else if let Place::Spill(slot) = dst {
+        let off = -(((frame.alloc_spill_base + (slot + 1) * 8) as i32));
+        emit(code, enc_stur(rs, Reg(29), off));
+    }
+    true
 }
 
 fn emit_binop(
@@ -269,6 +520,11 @@ fn emit_binop(
         Some(r) => r,
         None => return false,
     };
+    if let Some(cond) = compare_cond(op) {
+        emit(code, enc_cmp_reg(rn, rm));
+        emit(code, enc_cset(rd, cond));
+        return true;
+    }
     let word = match op {
         BinOp::Add => enc_add_reg(rd, rn, rm),
         BinOp::Sub => enc_sub_reg(rd, rn, rm),
@@ -283,6 +539,24 @@ fn emit_binop(
     };
     emit(code, word);
     true
+}
+
+/// Map a comparison binop to the matching `Cond` for the
+/// cmp / cset pair.
+fn compare_cond(op: BinOp) -> Option<Cond> {
+    Some(match op {
+        BinOp::Eq => Cond::Eq,
+        BinOp::Ne => Cond::Ne,
+        BinOp::Lt => Cond::Lt,
+        BinOp::Gt => Cond::Gt,
+        BinOp::Le => Cond::Le,
+        BinOp::Ge => Cond::Ge,
+        BinOp::Ult => Cond::Lo,
+        BinOp::Ugt => Cond::Hi,
+        BinOp::Ule => Cond::Ls,
+        BinOp::Uge => Cond::Hs,
+        _ => return None,
+    })
 }
 
 fn emit_binop_imm(
@@ -305,6 +579,11 @@ fn emit_binop_imm(
     };
     load_imm64(code, scratch.secondary, rhs_imm as u64);
     let rm = scratch.secondary;
+    if let Some(cond) = compare_cond(op) {
+        emit(code, enc_cmp_reg(rn, rm));
+        emit(code, enc_cset(rd, cond));
+        return true;
+    }
     let word = match op {
         BinOp::Add => enc_add_reg(rd, rn, rm),
         BinOp::Sub => enc_sub_reg(rd, rn, rm),
@@ -334,7 +613,7 @@ fn materialize_int(
         Place::IntReg(r) => Some(Reg(r)),
         Place::Spill(slot) => {
             let off = -(((frame.alloc_spill_base + (slot + 1) * 8) as i32));
-            emit(code, super::aarch64::enc_ldur(scratch, Reg(29), off));
+            emit(code, enc_ldur(scratch, Reg(29), off));
             Some(scratch)
         }
         Place::FpReg(_) | Place::None => None,
@@ -365,7 +644,7 @@ fn emit_return(
     let save_base = alloc_save_base(frame, alloc);
     for (i, &r) in alloc.gpr_used.iter().enumerate() {
         let off = -(((save_base + (i as u32) * 8 + 8) as i32));
-        emit(code, super::aarch64::enc_ldur(Reg(r), Reg(29), off));
+        emit(code, enc_ldur(Reg(r), Reg(29), off));
     }
     // Tear down the frame.
     if frame.frame_bytes > 0 {
@@ -441,6 +720,28 @@ mod tests {
         let ok = emit_function(&func, &alloc, Target::MacOSAarch64, &mut code);
         assert!(ok, "binop handler should cover Add + Shl + Shr");
         assert_eq!(code.len() % 4, 0);
+    }
+
+    /// `if (x > 0) return 1; else return 0;` exercises the
+    /// comparison binop path (cmp + cset), the branch terminator
+    /// path (CBZ + fixup), and the multi-block walk.
+    #[test]
+    fn emit_if_else_returns() {
+        let (func, alloc) = lift_and_alloc(
+            "int test(int x) { if (x > 0) return 1; else return 0; } \
+             int main(void) { return test(5); }",
+            Target::MacOSAarch64,
+        );
+        // The first function is `test`; the lift order is
+        // declaration order, but `Inst::Call` for main isn't in
+        // the thin slice yet, so we only check that `test` emits
+        // cleanly. main will fall back.
+        let mut code = Vec::new();
+        let ok = emit_function(&func, &alloc, Target::MacOSAarch64, &mut code);
+        assert!(
+            ok,
+            "`test` should emit via the thin slice (cmp + cset + cbz + ldr params)"
+        );
     }
 }
 

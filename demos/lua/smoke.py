@@ -37,15 +37,19 @@ EXE_SUFFIX = ".exe" if WIN else ""
 
 # Tests that exit 0 against an upstream-built Lua under
 # `_port=true; _nomsg=true`, take well under a second each on a
-# laptop, and only touch the C99 surface c5 already implements.
+# laptop, and exercise the C99 surface c5 already implements.
 # Each one prints its own progress to stdout and asserts via
-# `assert(...)`; a non-zero exit code means a regression. The list
-# is the durable subset -- timing-driven (`heavy.lua`,
-# `verybig.lua`), `T`-internal (`api.lua`, `gc.lua`,
-# `tracegc.lua`, `memerr.lua`), `loadlib`-driven (`attrib.lua`),
-# `main.lua`-style spawn drivers, and `db.lua` debug-library
-# excursions are deliberately omitted.
+# `assert(...)`; a non-zero exit code means a regression. The
+# `T`-prefixed entries (`api`, `gc`, `gengc`, `memerr`,
+# `tracegc`) drive Lua's internal testing primitives from
+# `ltests.c` -- the build below adds that TU and threads
+# `LUA_USER_H='"ltests.h"'` into every source. The scripts
+# that exercise `loadlib` (`attrib`, `main`), the heavy-soak
+# triple (`big`, `heavy`, `verybig`), the bytecode-introspecting
+# `code.lua`, and the debug-library-line-counting `db.lua` are
+# deliberately omitted and tracked under TODO.
 SUITE = (
+    "api.lua",
     "bitwise.lua",
     "calls.lua",
     "closure.lua",
@@ -54,15 +58,19 @@ SUITE = (
     "cstack.lua",
     "errors.lua",
     "events.lua",
+    "gc.lua",
+    "gengc.lua",
     "goto.lua",
     "literals.lua",
     "locals.lua",
     "math.lua",
+    "memerr.lua",
     "nextvar.lua",
     "pm.lua",
     "sort.lua",
     "strings.lua",
     "tpack.lua",
+    "tracegc.lua",
     "utf8.lua",
     "vararg.lua",
 )
@@ -134,15 +142,27 @@ def resolve_badc() -> Path:
 
 def build_lua(badc: Path, out_path: Path, optimize: bool) -> None:
     """Compile + link the Lua sources through badc, producing an
-    interpreter binary at `out_path`. `-I` points at the vendored
-    `src/` so quoted `#include` directives resolve to the same
-    tree the source ships with."""
+    interpreter binary at `out_path`. `-I` covers both the
+    vendored `src/` (so quoted `#include` directives resolve to
+    the same tree the source ships with) and `tests/ltests/`
+    (so the `LUA_USER_H` injection in `lua.h` picks up
+    `ltests.h`). `ltests.c` is appended as the last TU; it
+    overrides `luai_openlibs` to register the internal `T`
+    library on every state creation."""
     src_dir = LUA_DIR / "src"
-    cmd: list[str | os.PathLike[str]] = [str(badc), "-q", "-I", str(src_dir)]
+    ltests_dir = LUA_DIR / "tests" / "ltests"
+    cmd: list[str | os.PathLike[str]] = [
+        str(badc),
+        "-q",
+        "-D", 'LUA_USER_H="ltests.h"',
+        "-I", str(src_dir),
+        "-I", str(ltests_dir),
+    ]
     if optimize:
         cmd.append("-O")
     cmd += ["-o", str(out_path)]
     cmd += [str(src_dir / name) for name in LUA_TUS]
+    cmd += [str(ltests_dir / "ltests.c")]
     subprocess.run(cmd, check=True)
 
 

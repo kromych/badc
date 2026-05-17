@@ -37,40 +37,44 @@ custom-built binary instead of `target/release/badc`.
 
 ## Selected tests
 
-The curated subset is the set of upstream test scripts that exit
-0 with `_port=true; _nomsg=true` against an upstream-built Lua
-and only exercise the C99-shaped subset of the standard library:
+24 of the upstream test scripts that exit 0 under
+`_port=true; _nomsg=true`. The build threads
+`LUA_USER_H='"ltests.h"'` into every TU and links
+`tests/ltests/ltests.c` so the `T` internal-testing library
+is registered on every state, which is what the `api`, `gc`,
+`gengc`, `memerr`, and `tracegc` scripts assert against.
 
-| Script         | Coverage                                                       |
-|----------------|----------------------------------------------------------------|
-| `bitwise.lua`  | shift / and / or / xor / not at full 64-bit width              |
-| `calls.lua`    | call semantics, `__call`, tail calls, binary chunks            |
-| `closure.lua`  | upvalues, GC interaction, closure equality                     |
-| `constructs.lua` | parser corner cases, statement layout                        |
-| `coroutine.lua`  | `coroutine.create` / `resume` / `yield` / `wrap`             |
-| `cstack.lua`   | recursion depth, error overflow handling                       |
-| `errors.lua`   | `pcall` / `xpcall`, tokenised error messages                   |
-| `events.lua`   | metatables, `__add` / `__index` / friends                      |
-| `goto.lua`     | block-scope `goto`, global declarations                        |
-| `literals.lua` | integer / hex / float / string escape coverage                 |
-| `locals.lua`   | to-be-closed variables, scope nesting                          |
-| `math.lua`     | `math.huge`, integer boundaries, rounding, `random`            |
-| `nextvar.lua`  | numeric for, generic for, table iteration                      |
-| `pm.lua`       | pattern matching (`string.match` / `gmatch` / `gsub`)          |
-| `sort.lua`     | `table.sort`, `table.move`                                     |
-| `strings.lua`  | `string.format`, `string.pack` / `unpack`                      |
-| `tpack.lua`    | binary pack / unpack across alignment shapes                   |
-| `utf8.lua`     | `utf8.char` / `utf8.len` / `utf8.offset`                       |
-| `vararg.lua`   | `...` propagation, `table.pack` / `unpack`                     |
+| Script           | Coverage                                                  |
+|------------------|-----------------------------------------------------------|
+| `api.lua`        | `T` internal API: stack manip, raw object access, GC peek |
+| `bitwise.lua`    | shift / and / or / xor / not at full 64-bit width         |
+| `calls.lua`      | call semantics, `__call`, tail calls, binary chunks       |
+| `closure.lua`    | upvalues, GC interaction, closure equality                |
+| `constructs.lua` | parser corner cases, statement layout                     |
+| `coroutine.lua`  | `coroutine.create` / `resume` / `yield` / `wrap`          |
+| `cstack.lua`     | recursion depth, error overflow handling                  |
+| `errors.lua`     | `pcall` / `xpcall`, tokenised error messages              |
+| `events.lua`     | metatables, `__add` / `__index` / friends                 |
+| `gc.lua`         | incremental GC sweeps + finalisers under `T` step control |
+| `gengc.lua`      | generational GC mode + minor/major cycle accounting       |
+| `goto.lua`       | block-scope `goto`, global declarations                   |
+| `literals.lua`   | integer / hex / float / string escape coverage            |
+| `locals.lua`     | to-be-closed variables, scope nesting                     |
+| `math.lua`       | `math.huge`, integer boundaries, rounding, `random`       |
+| `memerr.lua`     | allocation-failure injection at every internal mem site   |
+| `nextvar.lua`    | numeric for, generic for, table iteration                 |
+| `pm.lua`         | pattern matching (`string.match` / `gmatch` / `gsub`)     |
+| `sort.lua`       | `table.sort`, `table.move`                                |
+| `strings.lua`    | `string.format`, `string.pack` / `unpack`                 |
+| `tpack.lua`      | binary pack / unpack across alignment shapes              |
+| `tracegc.lua`    | per-step GC tracing via `T.tracegc`                       |
+| `utf8.lua`       | `utf8.char` / `utf8.len` / `utf8.offset`                  |
+| `vararg.lua`     | `...` propagation, `table.pack` / `unpack`                |
 
 Scripts outside this set are excluded for the reasons below;
 re-adding any of them is the natural follow-up once badc grows
 the missing surface:
 
-- `api.lua`, `gc.lua`, `gengc.lua`, `memerr.lua`, `tracegc.lua`
-  -- depend on the `T` library compiled from `ltests.c` with
-  `LUA_USER_H='"ltests.h"'`. The demo would need to bundle
-  `ltests.c` as a TU and define the symbol.
 - `attrib.lua`, `main.lua` -- shell out (`os.execute`) and load
   compiled C extensions through `package.loadlib`. The dynamic-
   link surface c5 ships today doesn't cover the upstream test

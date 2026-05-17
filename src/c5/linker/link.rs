@@ -359,6 +359,8 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
     let mut merged_code_imm_positions: Vec<usize> = Vec::new();
     let mut merged_data_imm_positions: Vec<usize> = Vec::new();
     let mut merged_call_fp_arg_masks: Vec<(usize, u32)> = Vec::new();
+    let mut merged_variadic_functions: alloc::collections::BTreeSet<usize> =
+        alloc::collections::BTreeSet::new();
     let mut merged_source_lines: Vec<u32> = Vec::new();
     let mut merged_source_functions: Vec<String> = Vec::new();
     let mut merged_source_file_indices: Vec<u16> = Vec::new();
@@ -491,6 +493,9 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         }
         for &(pc, mask) in &unit.call_fp_arg_masks {
             merged_call_fp_arg_masks.push((pc + text_off, mask));
+        }
+        for &pc in &unit.variadic_functions {
+            merged_variadic_functions.insert(pc + text_off);
         }
         // Variables: shift function_bc_pc.
         for v in &unit.variables {
@@ -731,6 +736,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         data_imm_positions: merged_data_imm_positions,
         code_imm_positions: merged_code_imm_positions,
         call_fp_arg_masks: merged_call_fp_arg_masks,
+        variadic_functions: merged_variadic_functions,
         tls_data: merged_tls,
         tls_init_size: merged_tls_init,
         exports: merged_exports,

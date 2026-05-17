@@ -367,6 +367,7 @@ impl Compiler {
             data_imm_positions: self.data_imm_positions,
             code_imm_positions: self.code_imm_positions,
             call_fp_arg_masks: self.call_fp_arg_masks,
+            variadic_functions: self.variadic_functions,
             source_lines: self.source_lines,
             source_functions: self.source_functions,
             source_files: self.source_files,

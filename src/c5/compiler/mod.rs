@@ -514,6 +514,17 @@ pub struct Compiler {
     /// for the all-integer case, which is most calls.
     call_fp_arg_masks: Vec<(usize, u32)>,
 
+    /// Bytecode PCs of every `Op::Ent` whose declarator ended in
+    /// `...`. Recorded at function emit time straight from the
+    /// `Symbol::is_variadic` flag the parser set on the matching
+    /// declarator. Threaded onto `Program::variadic_functions` so
+    /// the native codegen can decide call-site shape without
+    /// re-scanning the body for the c5 `va_start` macro
+    /// expansion -- a fingerprint the bytecode optimizer destroys
+    /// when it fuses the macro's `Psh; Imm 8; Mul` triple into a
+    /// single `MulI 8` op.
+    variadic_functions: Vec<usize>,
+
     /// Return type of the function whose body is currently being
     /// parsed (0 outside any function). Used by the `return s`
     /// path to emit a struct-copy through the hidden out-pointer
@@ -838,6 +849,7 @@ impl Compiler {
             code_relocs: Vec::new(),
             pending_exports,
             call_fp_arg_masks: Vec::new(),
+            variadic_functions: Vec::new(),
             current_func_return_ty: 0,
             current_func_returns_void: false,
             pending: Pending::default(),
@@ -981,6 +993,7 @@ impl Compiler {
             tls_data: self.tls_data,
             tls_init_size: self.tls_init_size,
             call_fp_arg_masks: self.call_fp_arg_masks,
+            variadic_functions: self.variadic_functions.into_iter().collect(),
             exports,
             data_relocs: self.data_relocs,
             code_relocs: self.code_relocs,

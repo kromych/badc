@@ -52,6 +52,12 @@ pub struct LinkUnit {
     /// Mirror of `Program::call_fp_arg_masks`. The PC is i64
     /// word index; remapped by `text_offset[unit]` at link.
     pub call_fp_arg_masks: Vec<(usize, u32)>,
+    /// Mirror of `Program::variadic_functions`. Each entry is the
+    /// unit-local `Op::Ent` PC of a c5 function whose declarator
+    /// ended in `...`. The linker re-bases each by
+    /// `text_offset[unit]` and unions them into the merged
+    /// program's `variadic_functions` set.
+    pub variadic_functions: Vec<usize>,
     /// Mirror of `Program::source_lines`, parallel to `text`.
     pub source_lines: Vec<u32>,
     /// Mirror of `Program::source_functions`, parallel to `text`.

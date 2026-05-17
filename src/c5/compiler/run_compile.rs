@@ -612,6 +612,9 @@ impl Compiler {
                     // forward declaration -- the function is now
                     // defined in this translation unit.
                     self.symbols[id_idx].is_extern_decl = false;
+                    if self.symbols[id_idx].is_variadic {
+                        self.variadic_functions.push(ent_pc);
+                    }
                     self.emit_op(Op::Ent);
                     self.emit_val(0); // patched below
                     // Placeholder AllocaInit. If the function body

@@ -111,6 +111,17 @@ pub struct Program {
     /// with no FP args don't appear here -- absence is "all
     /// integer", which keeps the per-call lookup cheap.
     pub call_fp_arg_masks: Vec<(usize, u32)>,
+    /// Bytecode PCs of every `Op::Ent` whose declarator ended in
+    /// `...`. The native codegen reads this to decide call-site
+    /// shape: callers of variadic c5 functions keep the c5-stack
+    /// arg passing the body's `va_start` walks; callers of
+    /// non-variadic functions marshal args into host-ABI
+    /// registers. Populated by the compiler at `Op::Ent` emit time
+    /// from `Symbol::is_variadic`; the bytecode optimizer remaps
+    /// PCs through its instruction-shift table so the set survives
+    /// peephole fusion. Empty for translation units with no
+    /// variadic function definitions.
+    pub variadic_functions: alloc::collections::BTreeSet<usize>,
     /// Initialised + zero-init thread-local data. Layout matches
     /// the way `data` does for ordinary globals: a flat byte array
     /// indexed by `Op::TlsLea`'s operand. The image writers copy

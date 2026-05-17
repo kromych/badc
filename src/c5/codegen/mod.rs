@@ -200,6 +200,91 @@ pub(crate) enum ReturnExt {
     Zero32,
 }
 
+/// Per-function metadata extracted from the bytecode and consumed by
+/// the per-arch lowering at `Op::Ent` (prologue shape), `Op::Lev`
+/// (epilogue undo), and `Op::Jsr` (caller-side argument marshalling).
+/// Indexed by the function's `Op::Ent` PC. Built once at the top of
+/// `lower()`.
+#[derive(Debug, Clone, Copy, Default)]
+pub(super) struct FuncMeta {
+    /// Declared parameter count, recovered by scanning the body's
+    /// `Op::Lea / Op::LdLocI / Op::LdLocC` operands. The c5 parser
+    /// hands the i'th declared parameter the slot index `i + 2`,
+    /// so the max operand `>= 2` seen minus one is the count.
+    pub n_params: usize,
+    /// True if the body matches the c5 `va_start(ap, last)` macro
+    /// expansion (a `Lea LAST; Psh; Imm 2; Psh; Imm 8; Mul; Add; Si`
+    /// sequence). Variadic functions keep the c5-stack-based ABI:
+    /// callers reach them via the bare-`bl` shape with args on the
+    /// c5 stack, the body reads each arg via `Op::Lea`, and
+    /// `va_start` walks the c5-stack arg slots directly. Non-
+    /// variadic functions instead receive args in host arg
+    /// registers per the host ABI.
+    pub is_variadic: bool,
+}
+
+/// Recover [`FuncMeta`] for every `Op::Ent` in `program.text`.
+/// Walks the bytecode once linearly; the parameter-count scan
+/// bounds at the next `Op::Ent` so the total cost is O(text.len()).
+/// The variadic flag comes from `program.variadic_functions`,
+/// populated by the compiler at declarator time and survived
+/// through the bytecode optimizer's PC remap (a byte-pattern
+/// match on `Psh; Imm 8; Mul` from the c5 `va_start` macro
+/// expansion would not survive the optimizer's immediate-arith
+/// fusion).
+pub(super) fn scan_func_meta(program: &Program) -> alloc::collections::BTreeMap<usize, FuncMeta> {
+    let text = &program.text;
+    let mut funcs = alloc::collections::BTreeMap::new();
+    let mut pc = 0usize;
+    while pc < text.len() {
+        let op = match Op::from_i64(text[pc]) {
+            Some(o) => o,
+            None => break,
+        };
+        if matches!(op, Op::Ent) {
+            funcs.insert(
+                pc,
+                FuncMeta {
+                    n_params: param_count_for_func(text, pc),
+                    is_variadic: program.variadic_functions.contains(&pc),
+                },
+            );
+        }
+        pc += op.word_size();
+    }
+    funcs
+}
+
+/// Number of parameter slots a function actually reads. The c5
+/// parser hands param `i` (0-indexed) the slot index `i + 2`; the
+/// optimizer's local-load fusion rewrites `Lea N; Li` / `Lea N; Lc`
+/// into `LdLocI N` / `LdLocC N`, so all three opcodes count. Walks
+/// the function body until the next `Op::Ent` (or end-of-text).
+pub(super) fn param_count_for_func(text: &[i64], ent_pc: usize) -> usize {
+    if ent_pc >= text.len() || Op::from_i64(text[ent_pc]) != Some(Op::Ent) {
+        return 0;
+    }
+    let mut max_param_offset: Option<i64> = None;
+    let mut pc = ent_pc + Op::Ent.word_size();
+    while pc < text.len() {
+        let op = match Op::from_i64(text[pc]) {
+            Some(o) => o,
+            None => break,
+        };
+        if matches!(op, Op::Ent) {
+            break;
+        }
+        if matches!(op, Op::Lea | Op::LdLocI | Op::LdLocC) {
+            let off = text[pc + 1];
+            if off >= 2 {
+                max_param_offset = Some(max_param_offset.map_or(off, |m| m.max(off)));
+            }
+        }
+        pc += op.word_size();
+    }
+    max_param_offset.map_or(0, |off| (off - 1) as usize)
+}
+
 /// Decide how to extend a libc return value into the c5
 /// accumulator. `target` is needed to decide the `long` width:
 /// LP64 (Linux / macOS) -- 8 bytes, no extension; LLP64 (Windows)

@@ -1229,154 +1229,6 @@ fn lea_offset_bytes(offset: i64) -> i64 {
 /// host-arg thunks built on top of this only spill the regs the
 /// function actually reads, so an unused declared param never reads
 /// garbage.
-/// See aarch64::function_is_variadic. The bytecode shape is
-/// platform-independent, but the helper lives per-arch alongside
-/// `param_count_for_func` for symmetry with the existing thunk
-/// decision.
-pub(super) fn function_is_variadic(text: &[i64], ent_pc: usize) -> bool {
-    if ent_pc >= text.len() || Op::from_i64(text[ent_pc]) != Some(Op::Ent) {
-        return false;
-    }
-    let mut pc = ent_pc + Op::Ent.word_size();
-    while pc < text.len() {
-        let op = match Op::from_i64(text[pc]) {
-            Some(o) => o,
-            None => break,
-        };
-        if matches!(op, Op::Ent) {
-            break;
-        }
-        if matches!(op, Op::Imm) && pc + 1 < text.len() && text[pc + 1] == 2 {
-            // See the aarch64 sibling: require the trailing
-            // `Add; Si` to disambiguate the c5 va_start expansion
-            // from a constant-2 index into an 8-byte-element
-            // array (`xs[2]` for `long *xs`), which shares the
-            // leading `Imm 2; Psh; Imm 8; Mul` but ends in a load.
-            let after_imm2 = pc + Op::Imm.word_size();
-            if after_imm2 < text.len() && Op::from_i64(text[after_imm2]) == Some(Op::Psh) {
-                let imm8_pc = after_imm2 + Op::Psh.word_size();
-                if imm8_pc + 1 < text.len()
-                    && Op::from_i64(text[imm8_pc]) == Some(Op::Imm)
-                    && text[imm8_pc + 1] == 8
-                {
-                    let mul_pc = imm8_pc + Op::Imm.word_size();
-                    if mul_pc < text.len() && Op::from_i64(text[mul_pc]) == Some(Op::Mul) {
-                        let add_pc = mul_pc + Op::Mul.word_size();
-                        if add_pc < text.len() && Op::from_i64(text[add_pc]) == Some(Op::Add) {
-                            let si_pc = add_pc + Op::Add.word_size();
-                            if si_pc < text.len() && Op::from_i64(text[si_pc]) == Some(Op::Si) {
-                                return true;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        pc += op.word_size();
-    }
-    false
-}
-
-pub(super) fn param_count_for_func(text: &[i64], ent_pc: usize) -> usize {
-    if ent_pc >= text.len() || Op::from_i64(text[ent_pc]) != Some(Op::Ent) {
-        return 0;
-    }
-    let mut max_param_offset: Option<i64> = None;
-    let mut pc = ent_pc + Op::Ent.word_size();
-    while pc < text.len() {
-        let op = match Op::from_i64(text[pc]) {
-            Some(o) => o,
-            None => break,
-        };
-        if matches!(op, Op::Ent) {
-            break;
-        }
-        if matches!(op, Op::Lea | Op::LdLocI | Op::LdLocC) {
-            let off = text[pc + 1];
-            if off >= 2 {
-                max_param_offset = Some(max_param_offset.map_or(off, |m| m.max(off)));
-            }
-        }
-        pc += op.word_size();
-    }
-    max_param_offset.map_or(0, |off| (off - 1) as usize)
-}
-
-/// Emit a host-ABI -> c5-ABI argument-shuffling thunk for a function
-/// at `target_offset` with `n_params` declared parameters. The
-/// platform call site (pthread_create's start_routine, CreateThread's
-/// lpStartAddress, qsort's compar, ...) hands us args in the ABI's
-/// integer arg registers (and on the host's stack past that); the c5
-/// callee reads them off the c5 stack at `[rbp + 16]`, `[rbp + 32]`,
-/// ... per `lea_offset_bytes`. This thunk bridges the two:
-///
-///   push rbp; mov rbp, rsp                ; standard frame
-///   sub rsp, 16 * N                       ; reserve N c5 arg slots
-///   ; reg args (i = 0 .. n_reg)
-///   mov [rbp - 16*(i+1)], <arg_reg[i]>
-///   ; stack args (i = n_reg .. N) -- copied from the host's stack
-///   mov rax, [rbp + host_stack_off(i)]
-///   mov [rbp - 16*(i+1)], rax
-///   call F_real                           ; pushes ret addr; F reads
-///                                         ;   args off the new stack
-///   mov rsp, rbp; pop rbp; ret            ; tear down + return to host
-///
-/// Stack-arg layout in the host's frame at thunk entry:
-///   * SysV  -- arg n_reg+i sits at [rbp + 16 + i*8]
-///     (16 = saved rbp + ret addr)
-///   * Win64 -- arg n_reg+i sits at [rbp + 16 + 32 + i*8]
-///     (16 + 32-byte shadow space)
-pub(super) fn emit_arg_thunk(
-    code: &mut Vec<u8>,
-    n_params: usize,
-    target_offset: usize,
-    abi: Abi,
-) -> usize {
-    let thunk_offset = code.len();
-    let n_reg = n_params.min(abi.int_arg_regs.len());
-    let n_stack = n_params - n_reg;
-    let host_stack_base = 16 + abi.shadow_space as i32;
-
-    emit_push_r(code, Reg::RBP);
-    emit_mov_rr(code, Reg::RBP, Reg::RSP);
-
-    if n_params > 0 {
-        emit_sub_rsp_imm32(code, (16 * n_params) as u32);
-        // C arg `i` is the i'th source-order parameter. With c5's
-        // cdecl push order, the i'th declared param has val = i + 2,
-        // so F-real reads it at `[rbp + 16*(i+1)]`. After F's
-        // `push rbp + mov rbp, rsp`, that's `thunk_rbp - 16*(N-i)`.
-        // Reg args (i = 0 .. n_reg).
-        for i in 0..n_reg {
-            let disp = -((16 * (n_params - i)) as i32);
-            emit_mov_mem_r(code, Reg::RBP, disp, Reg(abi.int_arg_regs[i]));
-        }
-        // Stack args (i = n_reg .. N) -- read from the host stack.
-        // RAX is caller-saved and not reserved at the thunk-entry
-        // point, so it works as a courier here.
-        for i in 0..n_stack {
-            let host_off = host_stack_base + (i as i32) * 8;
-            let disp = -((16 * (n_stack - i)) as i32);
-            emit_mov_r_mem(code, Reg::RAX, Reg::RBP, host_off);
-            emit_mov_mem_r(code, Reg::RBP, disp, Reg::RAX);
-        }
-    }
-
-    // call F_real (5-byte rel32)
-    let after_call = code.len() + 5;
-    let rel32 = (target_offset as i64) - (after_call as i64);
-    debug_assert!(
-        i32::try_from(rel32).is_ok(),
-        "arg thunk: call rel32 out of range"
-    );
-    emit_call_rel32(code, rel32 as i32);
-
-    emit_mov_rr(code, Reg::RSP, Reg::RBP);
-    emit_pop_r(code, Reg::RBP);
-    emit_ret(code);
-    thunk_offset
-}
-
 /// Mark every bytecode PC that is the target of some `Jmp` / `Bz`
 /// / `Bnz` / `Jsr`. The cmp+branch fusion peephole consults this
 /// to skip fusion when the matching `Bz`/`Bnz` PC is reachable
@@ -1504,21 +1356,19 @@ pub(super) fn lower(
     let data_imm_positions: &[usize] = &program.data_imm_positions;
     let code_imm_positions: &[usize] = &program.code_imm_positions;
 
-    // Parameter count of the entry function. The main-style
-    // prologue / epilogue uses this to spill host int-arg
-    // registers (rcx/rdx/r8/r9 on Win64; rdi/rsi/... on SysV)
-    // into the c5 frame and drop the matching slots on return.
-    // Returns 0 when `entry_pc` doesn't land on `Op::Ent` (DLL
-    // / exports-only builds); the loop's `op_pc == entry_pc`
-    // gate keeps the regular prologue in those cases.
-    let entry_n_params = if program.entry_pc < program.text.len()
-        && Op::from_i64(program.text[program.entry_pc]) == Some(Op::Ent)
-    {
-        param_count_for_func(&program.text, program.entry_pc)
-    } else {
-        0
-    };
+    // Per-function metadata (param count, variadic flag) keyed by
+    // each function's `Op::Ent` PC. Built once; consumed at
+    // `Op::Ent` (prologue host-arg-reg spill), `Op::Lev` (epilogue
+    // undo), and `Op::Jsr` (caller's host-ABI marshalling for
+    // non-variadic targets). Mirror of the aarch64 lowering.
+    let funcs = super::scan_func_meta(program);
+    let mut current_func: super::FuncMeta = super::FuncMeta::default();
 
+    // Tracks whether we're currently lowering the program's entry
+    // function. The BADC_SAVED_RBP_CHECK debug stamps skip that
+    // frame because the libc startup stub leaves rbp = 0 in the
+    // caller of `_start -> main`. Each `Op::Ent` refreshes this
+    // and it stays set until the next `Op::Ent`.
     let mut in_main = false;
     let mut pc = 0usize;
     while pc < program.text.len() {
@@ -1536,6 +1386,7 @@ pub(super) fn lower(
         })?;
         pc += 1;
         if matches!(op, Op::Ent) {
+            current_func = funcs.get(&op_pc).copied().unwrap_or_default();
             in_main = op_pc == program.entry_pc;
             // Clear cmp+branch fusion state at function boundaries
             // -- pending_cmp_cond is only legal for the gap between
@@ -1569,8 +1420,9 @@ pub(super) fn lower(
             &mut tls_index_fixups,
             data_imm_positions,
             code_imm_positions,
+            current_func,
+            &funcs,
             in_main,
-            entry_n_params,
             abi,
             &mut reg_state,
             op_pc,
@@ -1594,58 +1446,17 @@ pub(super) fn lower(
         emit_plt_trampolines(&mut code, &mut got_fixups, imports.imports.len());
     apply_plt_call_fixups(&mut code, &plt_call_fixups, &plt_trampoline_offsets)?;
 
-    // Emit per-function arg-shuffling thunks for any function whose
-    // address is taken (`fp = worker_main`). The thunk lets pthread /
-    // CreateThread / qsort / signal handlers etc. hand args in
-    // host-ABI registers and have the c5 callee see them at
-    // `[rbp + 16]`, `[rbp + 32]`, ... where lea_offset_bytes expects.
-    //
-    // Functions with zero params don't need a thunk -- the host call
-    // can land on the c5 entry directly; the function won't read the
-    // arg regs.
-    let mut thunk_for_func: alloc::collections::BTreeMap<usize, usize> =
+    // Function-pointer fixups land on the callee's body offset
+    // directly: every non-variadic function's prologue spills host
+    // arg registers into c5 cdecl slots before the body runs, so
+    // a host caller (`pthread_create`, `CreateThread`, `qsort`,
+    // a static dispatch table) can call the body straight. Variadic
+    // c5 functions keep the c5-stack-based ABI and reach only via
+    // `Op::Jsri` callers that lay args onto the c5 stack first;
+    // their fn-pointer fixups also land on the body, which keeps
+    // that contract intact.
+    let thunk_for_func: alloc::collections::BTreeMap<usize, usize> =
         alloc::collections::BTreeMap::new();
-    let mut addr_taken: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
-    for (_, target_bc_pc) in &pending_func_fixups {
-        addr_taken.insert(*target_bc_pc);
-    }
-    // Static-init function-pointer slots (`static fp_t fp = func;`,
-    // dispatch tables, etc.) also need a thunk on Win64: the slot's
-    // value gets called via Jsri, and the lowering allocates 32 bytes
-    // of shadow space before the call. Without a thunk to re-spill
-    // the host register args back onto the c5 stack, the callee's
-    // `[rbp+16]` reads the shadow region instead of the args. SysV
-    // and AAPCS64 work without thunks because their Jsri lowering
-    // doesn't disturb rsp, but the writers all share this map so the
-    // thunk gets baked into every initializer slot regardless.
-    for r in &program.code_relocs {
-        addr_taken.insert(r.target_bc_pc as usize);
-    }
-    for &func_pc in &addr_taken {
-        let n_params = param_count_for_func(&program.text, func_pc);
-        if n_params == 0 {
-            continue;
-        }
-        if func_pc >= bytecode_to_native.len() {
-            continue;
-        }
-        let target = bytecode_to_native[func_pc];
-        if target == usize::MAX {
-            continue;
-        }
-        // Variadic c5 functions skip the thunk -- see the matching
-        // comment in aarch64.rs.
-        if function_is_variadic(&program.text, func_pc) {
-            continue;
-        }
-        let thunk_offset = emit_arg_thunk(&mut code, n_params, target, abi);
-        thunk_for_func.insert(func_pc, thunk_offset);
-    }
-
-    // Resolve pending function-pointer fixups now that the bc-to-
-    // native map is complete. Prefer a thunk address if we emitted
-    // one for the target function; otherwise the literal points at
-    // the function's own native entry.
     let mut func_fixups: Vec<FuncFixup> = Vec::with_capacity(pending_func_fixups.len());
     for (instr_offset, target_bc_pc) in pending_func_fixups {
         if target_bc_pc > program.text.len() {
@@ -1655,20 +1466,14 @@ pub(super) fn lower(
                 ),
             )));
         }
-        let target = match thunk_for_func.get(&target_bc_pc).copied() {
-            Some(t) => t,
-            None => {
-                let t = bytecode_to_native[target_bc_pc];
-                if t == usize::MAX {
-                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                        &format!(
-                            "native codegen (x86_64): function pointer target {target_bc_pc} did not land on an instruction"
-                        ),
-                    )));
-                }
-                t
-            }
-        };
+        let target = bytecode_to_native[target_bc_pc];
+        if target == usize::MAX {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!(
+                    "native codegen (x86_64): function pointer target {target_bc_pc} did not land on an instruction"
+                ),
+            )));
+        }
         func_fixups.push(FuncFixup {
             adrp_offset: instr_offset,
             target_native_offset: target,
@@ -1774,8 +1579,9 @@ fn lower_op(
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     data_imm_positions: &[usize],
     code_imm_positions: &[usize],
+    current_func: super::FuncMeta,
+    funcs: &alloc::collections::BTreeMap<usize, super::FuncMeta>,
     in_main: bool,
-    entry_n_params: usize,
     abi: Abi,
     reg_state: &mut RegState<'_>,
     op_pc: usize,
@@ -1785,10 +1591,14 @@ fn lower_op(
     tls_total_size: usize,
     fp_arg_masks: &[(usize, u32)],
 ) -> Result<(), C5Error> {
-    // `None` for non-entry functions; `Some(n)` for the entry,
-    // so the prologue / epilogue spill `n` int-arg registers
-    // and drop the matching slots.
-    let entry_n_params_opt = in_main.then_some(entry_n_params);
+    // Non-variadic c5 functions receive their arguments in
+    // host-ABI registers; the prologue spills them into the c5
+    // cdecl slots the body reads via `Op::Lea`. Variadic c5
+    // functions keep the c5-stack-based ABI: callers reach them
+    // via the bare-call shape with args on the c5 stack, so the
+    // prologue does no spill.
+    let entry_n_params_opt =
+        (!current_func.is_variadic).then_some(current_func.n_params);
     match op {
         // ---- Function frame ----
         Op::Ent => {
@@ -2087,7 +1897,7 @@ fn lower_op(
             emit_jcc_rel32(code, cc, 0);
         }
         Op::Jsr => {
-            let target = read_operand(text, pc, "Jsr")? as usize;
+            let target_pc = read_operand(text, pc, "Jsr")? as usize;
             // BADC_SAVED_RBP_CHECK before every Jsr: verify both our
             // own saved-rbp slot AND our caller's saved-rbp slot
             // (1-up). Catches the corrupting function the moment it
@@ -2097,15 +1907,65 @@ fn lower_op(
                 emit_saved_rbp_check(code, op_pc, 0);
                 emit_saved_rbp_check(code, op_pc, 1);
             }
-            fixups.push(Fixup {
-                native_offset: code.len(),
-                target_bytecode_pc: target,
-                kind: BranchKind::Call,
-            });
-            emit_call_rel32(code, 0);
-            // Callee returned with rax = result; copy into the
-            // accumulator.
-            emit_mov_rr(code, Reg::R13, Reg::RAX);
+            let callee_is_variadic = funcs
+                .get(&target_pc)
+                .map(|m| m.is_variadic)
+                .unwrap_or(false);
+            // Variadic c5 callees keep the c5-stack-based ABI: their
+            // body reads args via `Op::Lea` from the slots the
+            // caller's preceding `Op::Psh`es laid down, and
+            // `va_start` walks the same slots. A bare `call` carries
+            // the args through untouched.
+            if callee_is_variadic {
+                fixups.push(Fixup {
+                    native_offset: code.len(),
+                    target_bytecode_pc: target_pc,
+                    kind: BranchKind::Call,
+                });
+                emit_call_rel32(code, 0);
+                emit_mov_rr(code, Reg::R13, Reg::RAX);
+            } else {
+                // Non-variadic target: marshal the preceding `Op::Psh`
+                // args from their c5-stack slots into host arg
+                // registers (SysV: rdi/rsi/rdx/rcx/r8/r9; Win64:
+                // rcx/rdx/r8/r9), with overflow onto the host stack
+                // past the reg cap (Win64 reserves 32 bytes of
+                // shadow space first). Mirrors `Op::Jsri`'s shape.
+                // The callee's prologue spills the same registers
+                // back into its own c5 slots; the caller's c5-stack
+                // slots stay where they are and the trailing
+                // `Op::Adj N` drops them.
+                let nargs = match Op::from_i64(text.get(*pc).copied().unwrap_or(0)) {
+                    Some(Op::Adj) => text[*pc + 1] as usize,
+                    _ => 0,
+                };
+                let n_reg = nargs.min(abi.int_arg_regs.len());
+                let n_stack = nargs - n_reg;
+                let scratch = (abi.shadow_space + (n_stack as u32) * 8 + 15) & !15;
+                if scratch > 0 {
+                    emit_sub_rsp_imm32(code, scratch);
+                }
+                for (i, &r) in abi.int_arg_regs.iter().take(n_reg).enumerate() {
+                    let src = (scratch as i32) + (i as i32) * 16;
+                    emit_mov_r_mem(code, Reg(r), Reg::RSP, src);
+                }
+                for i in 0..n_stack {
+                    let src = (scratch as i32) + ((n_reg + i) as i32) * 16;
+                    let dst = (abi.shadow_space as i32) + (i as i32) * 8;
+                    emit_mov_r_mem(code, Reg::RAX, Reg::RSP, src);
+                    emit_mov_mem_r(code, Reg::RSP, dst, Reg::RAX);
+                }
+                fixups.push(Fixup {
+                    native_offset: code.len(),
+                    target_bytecode_pc: target_pc,
+                    kind: BranchKind::Call,
+                });
+                emit_call_rel32(code, 0);
+                if scratch > 0 {
+                    emit_add_rsp_imm32(code, scratch);
+                }
+                emit_mov_rr(code, Reg::R13, Reg::RAX);
+            }
         }
         Op::Jsri => {
             // BADC_SAVED_RBP_CHECK before Jsri: catches the
@@ -3214,27 +3074,37 @@ fn emit_prologue(
     pool_depth: u8,
 ) {
     if let Some(n_params) = entry_n_params {
-        // The entry stub passed the entry's arguments in the
-        // platform's int-arg registers (SysV: rdi/rsi/rdx/rcx/r8/r9;
-        // Win64: rcx/rdx/r8/r9). Spill them into c5's cdecl
-        // 16-byte slots so the i'th declared parameter (val = i + 2)
-        // lands at `[rbp + 16*(i+1)]`.
-        //
-        // Sequence: pop the return address into a scratch register,
-        // push each int-arg register into its own 16-byte slot in
-        // reverse order (arg n-1 deepest, arg 0 on top), then
-        // push the return address back above the slots.
-        //
-        // For `main(int argc, char **argv)` that places argc at
-        // `rbp + 16` and argv at `rbp + 32`; for
-        // `WinMain(HINSTANCE, HINSTANCE, LPSTR, int)` `nShowCmd`
-        // ends up at `rbp + 64`.
-        //
-        // Stack-passed entry parameters (e.g. a 7th declared param
-        // on SysV) are unsupported; every entry signature wired up
-        // here fits inside the register set.
+        // Spill the host-passed arguments into c5's cdecl
+        // 16-byte slots so the i'th declared parameter (val =
+        // i + 2) lands at `[rbp + 16*(i+1)]`. The host ABI hands
+        // us the first `int_arg_regs.len()` int params in
+        // registers (SysV: rdi/rsi/rdx/rcx/r8/r9; Win64:
+        // rcx/rdx/r8/r9) and any overflow on the host stack at
+        // `[caller_rsp + shadow_space + i*8]`. After our `pop r10`
+        // strips the return address, that's `[rsp + shadow_space
+        // + i*8]`. The Win64 shadow region rides ABOVE the
+        // overflow tail in the caller's frame (`sub rsp, scratch;
+        // mov [rsp + 32 + i*8], <arg9+>`), so the same formula
+        // works on both ABIs once `shadow_space` is plugged in.
         let n_reg = n_params.min(abi.int_arg_regs.len());
+        let n_stack = n_params - n_reg;
         emit_pop_r(code, Reg::R10);
+        // Reserve all overflow c5 slots in one sub, then read
+        // each host stack arg into the matching slot. Using a
+        // single sub keeps rsp 16-aligned and lets the reads use
+        // constant offsets from current rsp (avoids tracking
+        // cumulative pushes mid-loop).
+        if n_stack > 0 {
+            let overflow_bytes = (n_stack as u32) * 16;
+            emit_sub_rsp_imm32(code, overflow_bytes);
+            for i in 0..n_stack {
+                let host_off = (overflow_bytes as i32)
+                    + (abi.shadow_space as i32)
+                    + (i as i32) * 8;
+                emit_mov_r_mem(code, Reg::RAX, Reg::RSP, host_off);
+                emit_mov_mem_r(code, Reg::RSP, (i as i32) * 16, Reg::RAX);
+            }
+        }
         for i in (0..n_reg).rev() {
             emit_sub_rsp_imm32(code, 16);
             emit_mov_mem_r(code, Reg::RSP, 0, Reg(abi.int_arg_regs[i]));
@@ -3298,7 +3168,7 @@ fn emit_epilogue(
     entry_n_params: Option<usize>,
     pool_depth: u8,
     locals_bytes: u32,
-    abi: Abi,
+    _abi: Abi,
 ) {
     // STACK-CHECK INSTRUMENT (#46 bisection). When BADC_RSP_CHECK is
     // set in the env, emit a runtime check at the start of every
@@ -3333,10 +3203,13 @@ fn emit_epilogue(
     emit_mov_rr(code, Reg::RSP, Reg::RBP);
     emit_pop_r(code, Reg::RBP);
     if let Some(n_params) = entry_n_params {
-        let n_reg = n_params.min(abi.int_arg_regs.len());
-        if n_reg > 0 {
+        // Drop all declared param slots (register-spilled +
+        // restriped host-stack overflow). The return address
+        // sits above them; pop, adjust, push to keep `ret`
+        // pointing at the right place.
+        if n_params > 0 {
             emit_pop_r(code, Reg::R10);
-            emit_add_rsp_imm32(code, (16 * n_reg) as u32);
+            emit_add_rsp_imm32(code, (16 * n_params) as u32);
             emit_push_r(code, Reg::R10);
         }
     }

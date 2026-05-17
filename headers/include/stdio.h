@@ -204,22 +204,19 @@ typedef struct __c5_FILE FILE;
 #pragma binding(msvcrt::wprintf,   "wprintf")
 #pragma binding(msvcrt::fprintf,   "fprintf")
 #pragma binding(msvcrt::sprintf,   "sprintf")
-// MSVC renamed the safe forms; the original `snprintf` only landed
-// in msvcrt circa VS2015. `_snprintf` is the universally available
-// spelling and behaves the same way for our usage (no NUL guarantee
-// on overflow, but neither does our other targets' `snprintf` once
-// the buffer fills). Note that msvcrt's `printf` family prints
-// `inf` / `NaN` as `1.#INF` / `1.#IND` / `1.#QNAN` rather than the
-// C99 spellings -- programs that classify formatted output by a
-// digit-prefix regex (e.g. Lua's math.lua line 1137 round-trip
-// guard `^%-?%d`) misclassify the msvcrt output as numeric. UCRT
-// does not export `snprintf` as a named symbol (the function is an
-// inline wrapper around `__stdio_common_vsnprintf` in the MSVC
-// headers), so the fix requires either an out-of-line ucrtbase
-// shim shipped alongside c5 or a wholesale UCRT migration that
-// also binds `__stdio_common_vsnprintf` and reproduces the inline
-// wrapper. Tracked under the TODO marker.
-#pragma binding(msvcrt::snprintf,  "_snprintf")
+// `snprintf` itself was added to msvcrt circa VS2015; older
+// builds and the legacy CRT only ship `_snprintf` (no NUL
+// guarantee on overflow). Route through the underscored entry
+// point everywhere -- both msvcrt and ucrtbase export it under
+// that exact name.
+//
+// Pick ucrtbase so the formatted output uses the C99 spellings
+// for infinity and NaN (`inf`, `nan`) instead of msvcrt's
+// legacy `1.#INF` / `1.#IND` / `1.#QNAN`. The latter slip past
+// numeric-prefix regexes (Lua's `^%-?%d` round-trip guard at
+// math.lua line 1137 is the canonical case), feed back into
+// `strtod`, and fail the round-trip assertion.
+#pragma binding(ucrtbase::snprintf,  "_snprintf")
 #pragma binding(msvcrt::_snprintf, "_snprintf")
 #pragma binding(msvcrt::vfprintf,  "vfprintf")
 #pragma binding(msvcrt::vsprintf,  "vsprintf")

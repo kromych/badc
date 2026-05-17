@@ -200,24 +200,27 @@ typedef struct __c5_FILE FILE;
 
 #ifdef _WIN32
 #pragma dylib(msvcrt, "msvcrt.dll")
-#pragma dylib(ucrtbase, "ucrtbase.dll")
 #pragma binding(msvcrt::printf,    "printf")
 #pragma binding(msvcrt::wprintf,   "wprintf")
 #pragma binding(msvcrt::fprintf,   "fprintf")
 #pragma binding(msvcrt::sprintf,   "sprintf")
-// `snprintf` itself was added to msvcrt circa VS2015; older
-// builds and the legacy CRT only ship `_snprintf` (no NUL
-// guarantee on overflow). Route through the underscored entry
-// point everywhere -- both msvcrt and ucrtbase export it under
-// that exact name.
-//
-// Pick ucrtbase so the formatted output uses the C99 spellings
-// for infinity and NaN (`inf`, `nan`) instead of msvcrt's
-// legacy `1.#INF` / `1.#IND` / `1.#QNAN`. The latter slip past
-// numeric-prefix regexes (Lua's `^%-?%d` round-trip guard at
-// math.lua line 1137 is the canonical case), feed back into
-// `strtod`, and fail the round-trip assertion.
-#pragma binding(ucrtbase::snprintf,  "_snprintf")
+// MSVC renamed the safe forms; the original `snprintf` only landed
+// in msvcrt circa VS2015. `_snprintf` is the universally available
+// spelling and behaves the same way for our usage (no NUL guarantee
+// on overflow, but neither does our other targets' `snprintf` once
+// the buffer fills). Note that msvcrt's printf family prints
+// infinity / NaN as `1.#INF` / `1.#IND` / `1.#QNAN` rather than
+// C99 `inf` / `nan`; programs that classify formatted output by
+// a digit-prefix regex (e.g. Lua's math.lua line 1137 round-trip
+// guard `^%-?%d`) misclassify the msvcrt output as numeric.
+// Routing through `ucrtbase._snprintf` would emit the C99
+// spelling but that entry point fails with
+// STATUS_ENTRYPOINT_NOT_FOUND at PE load time on the GitHub
+// Windows runners -- the documented UCRT import path is via the
+// `api-ms-win-crt-stdio-l1-1-0.dll` proxy set, not ucrtbase
+// directly. Tracked under the TODO marker until c5 grows
+// support for the UCRT proxy DLLs.
+#pragma binding(msvcrt::snprintf,  "_snprintf")
 #pragma binding(msvcrt::_snprintf, "_snprintf")
 #pragma binding(msvcrt::vfprintf,  "vfprintf")
 #pragma binding(msvcrt::vsprintf,  "vsprintf")

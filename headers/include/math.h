@@ -102,9 +102,20 @@
 #pragma binding(msvcrt::tanh,  "tanh")
 #pragma binding(msvcrt::ldexp, "ldexp")
 #pragma binding(msvcrt::ldexpl, "ldexp")
-#pragma binding(msvcrt::frexp, "frexp")
 #pragma binding(msvcrt::modf,  "modf")
 #pragma binding(msvcrt::trunc, "trunc")
+
+// C99 7.12.6.4 paragraph 2: `frexp(x, *exp)` returns x and
+// stores an unspecified value in `*exp` when x is infinite.
+// msvcrt.dll returns NaN instead, which breaks ldexp/frexp
+// round-trip programs (e.g. Lua's math.lua line 692). The
+// Universal CRT (`ucrtbase.dll`, shipped with Windows 10 and
+// later, redistributed back to Windows 7 SP1) implements the
+// C99-conformant behaviour. Pin `frexp` to ucrtbase so the
+// round-trip works regardless of which legacy CRT happens to
+// be on the import table.
+#pragma dylib(ucrtbase, "ucrtbase.dll")
+#pragma binding(ucrtbase::frexp, "frexp")
 #endif
 
 // IEEE-754 sentinel values. The c5 lexer accepts the typical

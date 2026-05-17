@@ -1276,6 +1276,17 @@ impl<H: Host> Vm<H> {
                                  specific and cannot run in the bytecode VM"
                             )));
                         }
+                        crate::c5::op::Intrinsic::VaStart
+                        | crate::c5::op::Intrinsic::VaArg
+                        | crate::c5::op::Intrinsic::VaEnd
+                        | crate::c5::op::Intrinsic::VaCopy => {
+                            return Err(C5Error::Runtime(alloc::format!(
+                                "VM: Op::Intrinsic({intrinsic:?}) is a native-ABI \
+                                 builtin and not implemented in the bytecode VM; \
+                                 c5 sources that need <stdarg.h> must run through \
+                                 the native lowering"
+                            )));
+                        }
                     }
                 }
                 Op::AllocaInit => {

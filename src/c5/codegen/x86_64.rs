@@ -2216,6 +2216,19 @@ fn lower_op(
                          AArch64 lane",
                     )));
                 }
+                // TODO: per-target expansion. See aarch64.rs for the
+                // matching arm; both arches are waiting on the
+                // host-ABI variadic prologue + per-target va_list
+                // layout work.
+                crate::c5::op::Intrinsic::VaStart
+                | crate::c5::op::Intrinsic::VaArg
+                | crate::c5::op::Intrinsic::VaEnd
+                | crate::c5::op::Intrinsic::VaCopy => {
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        "native codegen (x86_64): __builtin_va_* intrinsics \
+                         require the host-ABI variadic prologue, not yet emitted",
+                    )));
+                }
             }
         }
         Op::AllocaInit => {

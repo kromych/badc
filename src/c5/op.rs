@@ -496,6 +496,35 @@ pub enum Intrinsic {
     /// `val != 0 ? val : 1`, and branches to the saved return
     /// address. Does not return to its own caller.
     LongjmpAArch64 = 3,
+    /// `__builtin_va_start(ap, last)`. Args reach the op as
+    /// (`&ap` on the c5 eval stack, `&last` in accumulator).
+    /// The expansion initialises `*ap` to point at the variadic
+    /// region for the enclosing function. On AAPCS64 / SysV with
+    /// the host variadic ABI this fills a struct (`__gr_top`,
+    /// `__vr_top`, `__gr_offs`, `__vr_offs`, `__stack`); on
+    /// Win64 / Win-arm64 it stores a single cursor pointer.
+    /// Codegen consults the current function's variadic-save-area
+    /// frame layout to compute the initial values.
+    VaStart = 4,
+    /// `__builtin_va_arg(ap, type_kind, byte_size)` -- read the
+    /// next variadic argument. Args reach the op as (`&ap` on
+    /// the c5 eval stack, a packed `(kind << 16) | size`
+    /// descriptor in the accumulator). `kind` is 0 for integer /
+    /// pointer, 1 for float / double. The expansion advances
+    /// `*ap` per the host's variadic protocol and returns the
+    /// value in the accumulator.
+    VaArg = 5,
+    /// `__builtin_va_end(ap)` -- terminates a `va_list`. A no-op
+    /// on every supported host ABI but kept as an intrinsic so
+    /// future hosts (real-mode / segmented / capability) can
+    /// hook in.
+    VaEnd = 6,
+    /// `__builtin_va_copy(dst, src)` -- struct copy of one
+    /// `va_list` to another. On AAPCS64 / SysV that's a 24-byte
+    /// memcpy; on Win64 / Win-arm64 it's a pointer assignment.
+    /// Codegen picks the right size from the target's `va_list`
+    /// layout.
+    VaCopy = 7,
 }
 
 impl Intrinsic {
@@ -504,6 +533,10 @@ impl Intrinsic {
             1 => Some(Intrinsic::Alloca),
             2 => Some(Intrinsic::SetjmpAArch64),
             3 => Some(Intrinsic::LongjmpAArch64),
+            4 => Some(Intrinsic::VaStart),
+            5 => Some(Intrinsic::VaArg),
+            6 => Some(Intrinsic::VaEnd),
+            7 => Some(Intrinsic::VaCopy),
             _ => None,
         }
     }

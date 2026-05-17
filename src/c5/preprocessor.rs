@@ -1855,6 +1855,10 @@ impl Preprocessor {
             "alloca" | "__builtin_alloca" => super::op::Intrinsic::Alloca as i64,
             "__c5_aarch64_setjmp" => super::op::Intrinsic::SetjmpAArch64 as i64,
             "__c5_aarch64_longjmp" => super::op::Intrinsic::LongjmpAArch64 as i64,
+            "__builtin_va_start" => super::op::Intrinsic::VaStart as i64,
+            "__builtin_va_arg" => super::op::Intrinsic::VaArg as i64,
+            "__builtin_va_end" => super::op::Intrinsic::VaEnd as i64,
+            "__builtin_va_copy" => super::op::Intrinsic::VaCopy as i64,
             _ => {
                 return Err(C5Error::Compile(super::error::fmt_compile_err(
                     filename,
@@ -1863,7 +1867,9 @@ impl Preprocessor {
                         "`#pragma intrinsic(\"{name}\")` -- unknown \
                          intrinsic; supported today: alloca, \
                          __builtin_alloca, __c5_aarch64_setjmp, \
-                         __c5_aarch64_longjmp"
+                         __c5_aarch64_longjmp, __builtin_va_start, \
+                         __builtin_va_arg, __builtin_va_end, \
+                         __builtin_va_copy"
                     ),
                 )));
             }

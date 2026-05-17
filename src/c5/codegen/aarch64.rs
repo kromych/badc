@@ -2188,6 +2188,23 @@ fn lower_op(
                 crate::c5::op::Intrinsic::LongjmpAArch64 => {
                     emit_longjmp_aarch64(code, reg_state);
                 }
+                // TODO: per-target expansion. The four va_*
+                // intrinsics still route through the pool path's
+                // standard intrinsic-call shape until the
+                // host-ABI variadic prologue + per-target
+                // va_list layout lands. The frontend already
+                // emits them as `Op::Intrinsic` so call sites
+                // are stable; the lowering's job is to materialise
+                // the right per-target sequence.
+                crate::c5::op::Intrinsic::VaStart
+                | crate::c5::op::Intrinsic::VaArg
+                | crate::c5::op::Intrinsic::VaEnd
+                | crate::c5::op::Intrinsic::VaCopy => {
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        "native codegen (aarch64): __builtin_va_* intrinsics \
+                         require the host-ABI variadic prologue, not yet emitted",
+                    )));
+                }
             }
         }
         Op::AllocaInit => {

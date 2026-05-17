@@ -105,17 +105,23 @@
 #pragma binding(msvcrt::modf,  "modf")
 #pragma binding(msvcrt::trunc, "trunc")
 
-// C99 7.12.6.4 paragraph 2: `frexp(x, *exp)` returns x and
-// stores an unspecified value in `*exp` when x is infinite.
-// msvcrt.dll returns NaN instead, which breaks ldexp/frexp
-// round-trip programs (e.g. Lua's math.lua line 692). The
-// Universal CRT (`ucrtbase.dll`, shipped with Windows 10 and
-// later, redistributed back to Windows 7 SP1) implements the
-// C99-conformant behaviour. Pin `frexp` to ucrtbase so the
-// round-trip works regardless of which legacy CRT happens to
-// be on the import table.
+// msvcrt.dll's transcendental implementations underflow
+// aggressively and diverge from C99 at IEEE-754 edges:
+//   - `frexp(+/-inf)` returns NaN. C99 7.12.6.4 paragraph 2
+//     specifies that the argument is returned and `*exp` is
+//     unspecified.
+//   - `pow(2.0, -1023.0)` returns 0 instead of the largest
+//     subnormal double (~1.1125e-308). msvcrt flushes to zero
+//     well above the subnormal range, breaking any code that
+//     walks adjacent floats via `pow(2, i) + pow(2, i - 52)`.
+// The Universal CRT (`ucrtbase.dll`, shipped with Windows 10
+// and redistributed back to Windows 7 SP1) handles both. Pin
+// the affected entries to ucrtbase; the rest of the math
+// surface stays on msvcrt for now and migrates as new
+// divergences turn up under the TODO marker.
 #pragma dylib(ucrtbase, "ucrtbase.dll")
 #pragma binding(ucrtbase::frexp, "frexp")
+#pragma binding(ucrtbase::pow,   "pow")
 #endif
 
 // IEEE-754 sentinel values. The c5 lexer accepts the typical

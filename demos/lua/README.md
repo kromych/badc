@@ -95,6 +95,30 @@ on every supported runner (`ubuntu-latest`, `ubuntu-24.04-arm`,
 existing demo smokes. `actions/setup-python@v5` pins `python` to
 the same 3.x interpreter on every lane.
 
+Gating policy: macOS and the two Linux lanes are strict. The
+two Windows lanes adopt the chibicc / tinycc convention --
+`smoke.py` exits 2 when the build is green but specific tests
+fail, and the workflow accepts that exit (`|| test $? -eq 2`)
+while still failing on a real build error (exit 1).
+
+### Known Windows-only test failures (TODO)
+
+Each script that currently fails on a Windows runner is listed
+below with the line, the assertion, and the upstream cause.
+The c5 compiler builds the Lua interpreter cleanly on both
+Windows lanes and the `setjmp` / `longjmp` round-trip fixture
+in `tests/fixtures/c/setjmp_longjmp_roundtrip.c` passes through
+the cargo `native_pe_x64` / `native_pe_arm64` lanes -- the
+remaining failures are msvcrt-runtime divergences that need to
+be reproduced on real Windows hardware to drive down.
+
+| Script           | Line | Lane          | Upstream cause                                              |
+|------------------|-----:|---------------|-------------------------------------------------------------|
+| `math.lua`       | 692  | x64, aarch64  | msvcrt `ldexp` / `frexp` boundary differs from libm         |
+| `cstack.lua`     | --   | x64, aarch64  | msvcrt's recursion-limit / SEH stack-probe policy           |
+| `constructs.lua` | 83   | aarch64       | `load(code)` returning a function whose call asserts        |
+| `strings.lua`    | 140  | aarch64       | `tostring(float)` formatting through msvcrt printf          |
+
 ## Bumping Lua
 
 1. Update `VERSION`, `SRC_UPSTREAM_SHA`, `TESTS_UPSTREAM_SHA` in

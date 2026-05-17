@@ -418,16 +418,16 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     // instead of gs:[0x58].
     ("thread_local_basic.c", 0),
     ("thread_local_initializer.c", 0),
-    // Same header-surface lock as the x64 PE lane. Windows AArch64
-    // msvcrt doesn't export `_setjmp` and the header maps setjmp to
-    // a stub that returns 0, so `setjmp_misaligned.c` runs the
-    // non-Windows-x64 branch (compile-only main returning 0) and
-    // the basic stack-local probe also returns 0 directly. The
-    // round-trip fixture `setjmp_longjmp.c` cannot run on ARM64:
-    // the stub never populates env, so the longjmp side reads
-    // garbage.
+    // Windows AArch64 routes setjmp / longjmp through the
+    // `Intrinsic::SetjmpAArch64` / `Intrinsic::LongjmpAArch64`
+    // inline expansions because msvcrt's `longjmp` requires SEH
+    // unwind metadata c5 doesn't emit; the intrinsics save the
+    // callee-saved registers + SP + a captured resume PC into
+    // the user's `jmp_buf` and branch back from longjmp. The
+    // round-trip fixture exercises both sides.
     ("setjmp_basic_stack.c", 0),
     ("setjmp_misaligned.c", 0),
+    ("setjmp_longjmp_roundtrip.c", 0),
 ];
 
 #[test]

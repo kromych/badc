@@ -452,7 +452,6 @@ fn fp_nan_unordered_compare() {
     assert_eq!(run_fixture("fp_nan_unordered_compare.c"), 0);
 }
 
-
 #[test]
 fn sizeof_threads_through_malloc_write_and_return() {
     // sizeof(struct Packet) used in three positions in one program:

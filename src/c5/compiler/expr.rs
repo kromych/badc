@@ -241,9 +241,9 @@ impl Compiler {
                         self.expr(Token::Assign as i64)?;
                         self.emit_op(Op::Psh);
                         if self.lex.tk != ',' {
-                            return Err(self.compile_err(format!(
-                                "intrinsic `{fn_name}` takes (env, val)"
-                            )));
+                            return Err(
+                                self.compile_err(format!("intrinsic `{fn_name}` takes (env, val)"))
+                            );
                         }
                         self.next()?;
                         self.expr(Token::Assign as i64)?;

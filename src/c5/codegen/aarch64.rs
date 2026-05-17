@@ -2355,8 +2355,11 @@ const JB_D14_OFF: u32 = 152;
 /// every entry is one 4-byte AArch64 word. Used to compute the
 /// PC-relative offset the ADR captures so a matching longjmp
 /// branches to exactly the byte after the inline expansion.
-const SETJMP_AARCH64_INSN_COUNT: i32 = 26;
-const SETJMP_AARCH64_ADR_INSN_INDEX: i32 = 13;
+/// Layout: 1 mov + 10 str(x19-x28) + 1 str(x29) + 1 adr + 1
+/// str(pc) + 1 add(sp) + 1 str(sp) + 8 str(d8-d15) + 1 movz =
+/// 25 instructions; ADR sits at zero-based index 12.
+const SETJMP_AARCH64_INSN_COUNT: i32 = 25;
+const SETJMP_AARCH64_ADR_INSN_INDEX: i32 = 12;
 
 /// AArch64 setjmp inlined at the call site. The `env` pointer
 /// arrives in `x19` (c5's accumulator). On the initial call this
@@ -2387,8 +2390,7 @@ fn emit_setjmp_aarch64(code: &mut Vec<u8>) {
     // the byte after the inline expansion. The expansion is
     // SETJMP_AARCH64_INSN_COUNT instructions long, and the ADR
     // sits at index SETJMP_AARCH64_ADR_INSN_INDEX.
-    let adr_off_bytes =
-        (SETJMP_AARCH64_INSN_COUNT - SETJMP_AARCH64_ADR_INSN_INDEX) * 4;
+    let adr_off_bytes = (SETJMP_AARCH64_INSN_COUNT - SETJMP_AARCH64_ADR_INSN_INDEX) * 4;
     debug_assert_eq!(
         code.len() - start,
         (SETJMP_AARCH64_ADR_INSN_INDEX as usize) * 4,

@@ -1343,7 +1343,13 @@ pub(super) fn lower(
                 let alloc_for = &ssa_allocs[ssa_idx];
                 bytecode_to_native[op_pc] = code.len();
                 let ok = super::ssa_emit_aarch64::emit_function(
-                    func_ssa, alloc_for, target, &mut code, &mut fixups,
+                    func_ssa,
+                    alloc_for,
+                    target,
+                    &mut code,
+                    &mut fixups,
+                    &mut plt_call_fixups,
+                    imports,
                 );
                 if !ok {
                     #[cfg(feature = "std")]
@@ -2780,16 +2786,16 @@ fn emit_adrp_add_placeholder(code: &mut Vec<u8>) {
 /// Resolved by `lower()` once trampoline byte offsets are known --
 /// the call instruction's `imm26` is rewritten in place.
 #[derive(Debug, Clone, Copy)]
-struct PltCallFixup {
+pub(super) struct PltCallFixup {
     /// Byte offset within the lower-pass `code` of the BL/B
     /// instruction whose `imm26` we need to backfill.
-    instr_offset: usize,
+    pub(super) instr_offset: usize,
     /// Import slot the call should reach via its trampoline.
-    import_index: usize,
+    pub(super) import_index: usize,
     /// `true` -> emit `B <tramp>` (tail jump); `false` -> emit
     /// `BL <tramp>` (call). Both share the same imm26 encoding;
     /// only the link bit at 0x80000000 differs.
-    is_tail: bool,
+    pub(super) is_tail: bool,
 }
 
 /// Emit a 4-byte `BL <plt_trampoline>` placeholder + record a

@@ -50,12 +50,12 @@ use alloc::vec::Vec;
 
 use super::Target;
 use super::aarch64::{
-    BranchKind, Cond, Fixup, Reg, emit, emit_add_sp_imm, emit_sub_sp_imm, enc_add_imm,
-    enc_add_reg, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_cbnz, enc_cbz, enc_cmp_reg,
-    enc_cset, enc_eor_reg, enc_ldp_post, enc_ldr32_imm, enc_ldr_imm, enc_ldrb_imm, enc_ldrh_imm,
-    enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm, enc_ldur, enc_lslv, enc_lsrv, enc_mov_reg,
-    enc_mul, enc_orr_reg, enc_ret, enc_stp_pre, enc_str32_imm, enc_str_imm, enc_str_pre,
-    enc_strb_imm, enc_strh_imm, enc_stur, enc_sub_imm, enc_sub_reg, load_imm64,
+    BranchKind, Cond, Fixup, PltCallFixup, Reg, emit, emit_add_sp_imm, emit_sub_sp_imm,
+    enc_add_imm, enc_add_reg, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_cbnz, enc_cbz,
+    enc_cmp_reg, enc_cset, enc_eor_reg, enc_ldp_post, enc_ldr32_imm, enc_ldr_imm, enc_ldrb_imm,
+    enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm, enc_ldur, enc_lslv, enc_lsrv,
+    enc_mov_reg, enc_mul, enc_orr_reg, enc_ret, enc_stp_pre, enc_str32_imm, enc_str_imm,
+    enc_str_pre, enc_strb_imm, enc_strh_imm, enc_stur, enc_sub_imm, enc_sub_reg, load_imm64,
 };
 use super::ssa::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
 use super::ssa_alloc::{Allocation, Place};
@@ -131,6 +131,8 @@ pub(super) fn emit_function(
     target: Target,
     code: &mut Vec<u8>,
     fixups: &mut Vec<Fixup>,
+    plt_call_fixups: &mut Vec<PltCallFixup>,
+    imports: &super::ResolvedImports,
 ) -> bool {
     let frame = Frame::for_function(func, alloc);
     let abi = target.abi();
@@ -151,7 +153,10 @@ pub(super) fn emit_function(
                 .get(v as usize)
                 .copied()
                 .unwrap_or(Place::None);
-            if !emit_inst(code, inst, place, alloc, frame, &scratch, abi, fixups) {
+            if !emit_inst(
+                code, inst, place, alloc, frame, &scratch, abi, fixups, plt_call_fixups,
+                imports,
+            ) {
                 code.truncate(snapshot);
                 return false;
             }
@@ -372,6 +377,8 @@ fn emit_inst(
     scratch: &ScratchPool,
     abi: super::Abi,
     fixups: &mut Vec<Fixup>,
+    plt_call_fixups: &mut Vec<PltCallFixup>,
+    imports: &super::ResolvedImports,
 ) -> bool {
     match inst {
         Inst::AllocaInit(slot) => {
@@ -399,8 +406,99 @@ fn emit_inst(
         Inst::Call { target_pc, args } => {
             emit_call(code, dst, *target_pc, args, alloc, frame, scratch, abi, fixups)
         }
+        Inst::CallExt {
+            binding_idx,
+            args,
+            ..
+        } => emit_call_ext(
+            code,
+            dst,
+            *binding_idx,
+            args,
+            alloc,
+            frame,
+            scratch,
+            abi,
+            plt_call_fixups,
+            imports,
+        ),
         _ => false,
     }
+}
+
+/// External library call: arg marshalling identical to
+/// `emit_call`, but the branch target is a PLT trampoline rather
+/// than a c5 function. The trampoline gets a `PltCallFixup`
+/// recorded; the writer's post-pass patches the BL displacement
+/// once trampolines are laid out at the tail of the code blob.
+#[allow(clippy::too_many_arguments)]
+fn emit_call_ext(
+    code: &mut Vec<u8>,
+    dst: Place,
+    binding_idx: i64,
+    args: &[u32],
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+    abi: super::Abi,
+    plt_call_fixups: &mut Vec<PltCallFixup>,
+    imports: &super::ResolvedImports,
+) -> bool {
+    let import_index = match imports.index_of_binding(binding_idx) {
+        Some(i) => i,
+        None => return false,
+    };
+    let imp = &imports.imports[import_index];
+    // FP args + variadic calls aren't part of the thin slice;
+    // route through the pool path until those handlers land.
+    if imp.is_variadic {
+        return false;
+    }
+    let plan = super::plan_call_args(args.len(), args.len(), 0, abi);
+    if plan.scratch_bytes > 0 {
+        emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
+    }
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        let arg_id = args[i];
+        let arg_place = alloc
+            .places
+            .get(arg_id as usize)
+            .copied()
+            .unwrap_or(Place::None);
+        let src = match materialize_int(code, arg_place, scratch.primary, frame) {
+            Some(r) => r,
+            None => return false,
+        };
+        match placement {
+            super::ArgPlacement::IntReg(r) => {
+                if src.0 != r {
+                    emit(code, enc_mov_reg(Reg(r), src));
+                }
+            }
+            super::ArgPlacement::Stack(off) => {
+                emit(code, enc_str_imm(src, Reg(31), off));
+            }
+            super::ArgPlacement::FpReg(_) => return false,
+        }
+    }
+    plt_call_fixups.push(PltCallFixup {
+        instr_offset: code.len(),
+        import_index,
+        is_tail: false,
+    });
+    emit(code, enc_b(0));
+    if plan.scratch_bytes > 0 {
+        emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
+    }
+    if let Some(rd) = int_reg(dst) {
+        if rd.0 != 0 {
+            emit(code, enc_mov_reg(rd, Reg(0)));
+        }
+    } else if let Place::Spill(slot) = dst {
+        let off = -(((frame.alloc_spill_base + (slot + 1) * 8) as i32));
+        emit(code, enc_stur(Reg(0), Reg(29), off));
+    }
+    true
 }
 
 /// Direct call to a c5 user function at bytecode pc `target_pc`.
@@ -780,7 +878,10 @@ mod tests {
             Target::MacOSAarch64,
         );
         let mut code = Vec::new();
-        let mut fx = Vec::new(); let ok = emit_function(&func, &alloc, Target::MacOSAarch64, &mut code, &mut fx);
+        let mut fx = Vec::new();
+        let mut plt = Vec::new();
+        let imps = super::super::ResolvedImports::default();
+        let ok = emit_function(&func, &alloc, Target::MacOSAarch64, &mut code, &mut fx, &mut plt, &imps);
         assert!(
             ok,
             "expected SSA emit to handle a single-return function; got fallback"
@@ -809,7 +910,10 @@ mod tests {
             Target::MacOSAarch64,
         );
         let mut code = Vec::new();
-        let mut fx = Vec::new(); let ok = emit_function(&func, &alloc, Target::MacOSAarch64, &mut code, &mut fx);
+        let mut fx = Vec::new();
+        let mut plt = Vec::new();
+        let imps = super::super::ResolvedImports::default();
+        let ok = emit_function(&func, &alloc, Target::MacOSAarch64, &mut code, &mut fx, &mut plt, &imps);
         assert!(ok, "binop handler should cover Add + Shl + Shr");
         assert_eq!(code.len() % 4, 0);
     }
@@ -829,7 +933,10 @@ mod tests {
         // the thin slice yet, so we only check that `test` emits
         // cleanly. main will fall back.
         let mut code = Vec::new();
-        let mut fx = Vec::new(); let ok = emit_function(&func, &alloc, Target::MacOSAarch64, &mut code, &mut fx);
+        let mut fx = Vec::new();
+        let mut plt = Vec::new();
+        let imps = super::super::ResolvedImports::default();
+        let ok = emit_function(&func, &alloc, Target::MacOSAarch64, &mut code, &mut fx, &mut plt, &imps);
         assert!(
             ok,
             "`test` should emit via the thin slice (cmp + cset + cbz + ldr params)"

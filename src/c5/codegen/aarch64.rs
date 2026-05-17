@@ -2524,9 +2524,71 @@ fn emit_libc_call(
     // `printf`.
     let _ = local_name;
     let imp = &imports.imports[import_index];
+    let win_arm64_variadic =
+        imp.is_variadic && target == super::Target::WindowsAarch64;
     let is_variadic = imp.is_variadic && abi.variadic_on_stack;
 
-    if is_variadic {
+    if win_arm64_variadic {
+        // Windows AArch64 variadic ABI: fixed args follow
+        // standard AAPCS64 (ints in x0..x7, FP scalars in
+        // d0..d7); the variadic tail is passed through the
+        // integer registers x0..x7 and then on the stack at
+        // sp+0, sp+8, ..., with FP values transferred as their
+        // 8-byte bit pattern. Microsoft's va_arg(double) reads
+        // them from the integer side (`__gr_top`), not the FP
+        // side, which is why msvcrt's `snprintf` / `printf`
+        // see denormal garbage when AAPCS64-style d-reg
+        // placement is used.
+        let fixed = imp.fixed_args.min(arg_count);
+        let mut int_idx = 0usize;
+        let mut fp_idx = 0usize;
+        for i in 0..fixed {
+            let off = (i as u32) * 16;
+            let is_fp = (fp_arg_mask & (1u32 << i)) != 0;
+            if is_fp && fp_idx < 8 {
+                emit(code, enc_ldr_d_imm(fp_idx as u8, Reg::SP, off));
+                fp_idx += 1;
+            } else if !is_fp && int_idx < abi.int_arg_regs.len() {
+                let r = Reg(abi.int_arg_regs[int_idx]);
+                emit(code, enc_ldr_imm(r, Reg::SP, off));
+                int_idx += 1;
+            } else {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!(
+                        "windows arm64 variadic call: fixed arg {i} \
+                         exceeds register banks (int_idx={int_idx}, \
+                         fp_idx={fp_idx})"
+                    ),
+                )));
+            }
+        }
+        let n_var = arg_count - fixed;
+        // Variadic args after the fixed prefix use the
+        // remaining int-arg registers, then spill at
+        // sp+0, sp+8, ... regardless of c5's int / FP
+        // classification.
+        let var_int_regs = abi.int_arg_regs.len().saturating_sub(int_idx);
+        let n_var_in_regs = n_var.min(var_int_regs);
+        let n_var_on_stack = n_var - n_var_in_regs;
+        let scratch_bytes = ((n_var_on_stack as u32) * 8 + 15) & !15;
+        if scratch_bytes > 0 {
+            emit(code, enc_sub_imm(Reg::SP, Reg::SP, scratch_bytes));
+        }
+        for i in 0..n_var_in_regs {
+            let src = scratch_bytes + ((fixed + i) as u32) * 16;
+            let r = Reg(abi.int_arg_regs[int_idx + i]);
+            emit(code, enc_ldr_imm(r, Reg::SP, src));
+        }
+        for i in 0..n_var_on_stack {
+            let src = scratch_bytes + ((fixed + n_var_in_regs + i) as u32) * 16;
+            emit(code, enc_ldr_imm(Reg::X16, Reg::SP, src));
+            emit(code, enc_str_imm(Reg::X16, Reg::SP, (i * 8) as u32));
+        }
+        emit_got_call(code, plt_call_fixups, import_index);
+        if scratch_bytes > 0 {
+            emit(code, enc_add_imm(Reg::SP, Reg::SP, scratch_bytes));
+        }
+    } else if is_variadic {
         // macOS arm64 variadic ABI: the first `fixed_args`
         // arguments follow standard AAPCS64 (ints to x0..x7,
         // FP scalars to d0..d7); the variadic tail ALL spills

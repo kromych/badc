@@ -46,6 +46,7 @@ mod mach_o;
 mod pe;
 mod regalloc;
 mod ssa;
+mod ssa_alloc;
 mod x86_64;
 
 pub use jit::{jit_run, jit_run_with_options};

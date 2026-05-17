@@ -50,12 +50,12 @@ use alloc::vec::Vec;
 
 use super::Target;
 use super::aarch64::{
-    Cond, Reg, emit, emit_add_sp_imm, emit_sub_sp_imm, enc_add_imm, enc_add_reg, enc_and_reg,
-    enc_asrv, enc_b, enc_b_cond, enc_cbnz, enc_cbz, enc_cmp_reg, enc_cset, enc_eor_reg,
-    enc_ldp_post, enc_ldr32_imm, enc_ldr_imm, enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm,
-    enc_ldrsh_imm, enc_ldrsw_imm, enc_ldur, enc_lslv, enc_lsrv, enc_mov_reg, enc_mul,
-    enc_orr_reg, enc_ret, enc_stp_pre, enc_str32_imm, enc_str_imm, enc_str_pre, enc_strb_imm,
-    enc_strh_imm, enc_stur, enc_sub_imm, enc_sub_reg, load_imm64,
+    BranchKind, Cond, Fixup, Reg, emit, emit_add_sp_imm, emit_sub_sp_imm, enc_add_imm,
+    enc_add_reg, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_cbnz, enc_cbz, enc_cmp_reg,
+    enc_cset, enc_eor_reg, enc_ldp_post, enc_ldr32_imm, enc_ldr_imm, enc_ldrb_imm, enc_ldrh_imm,
+    enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm, enc_ldur, enc_lslv, enc_lsrv, enc_mov_reg,
+    enc_mul, enc_orr_reg, enc_ret, enc_stp_pre, enc_str32_imm, enc_str_imm, enc_str_pre,
+    enc_strb_imm, enc_strh_imm, enc_stur, enc_sub_imm, enc_sub_reg, load_imm64,
 };
 use super::ssa::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
 use super::ssa_alloc::{Allocation, Place};
@@ -100,11 +100,11 @@ struct BranchFixup {
     site: usize,
     /// Target block in the function's `blocks` table.
     target: BlockId,
-    kind: BranchKind,
+    kind: LocalBranchKind,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum BranchKind {
+enum LocalBranchKind {
     /// Unconditional B; `imm26` field, +/-128 MiB reach.
     B,
     /// CBZ Xt, label.
@@ -120,11 +120,17 @@ enum BranchKind {
 /// unchanged) when the function contains an op outside the
 /// implemented subset; the caller falls back or aborts per
 /// policy.
+///
+/// `fixups` is the function-pointer / direct-call fixup table the
+/// surrounding writer already maintains. The SSA emit appends one
+/// `Fixup::Bl` per `Inst::Call`; the pool path's `apply_fixups`
+/// post-pass resolves them once `bytecode_to_native` is final.
 pub(super) fn emit_function(
     func: &FunctionSsa,
     alloc: &Allocation,
     target: Target,
     code: &mut Vec<u8>,
+    fixups: &mut Vec<Fixup>,
 ) -> bool {
     let frame = Frame::for_function(func, alloc);
     let abi = target.abi();
@@ -134,7 +140,7 @@ pub(super) fn emit_function(
     emit_prologue(code, func, alloc, frame, abi);
 
     let mut block_offsets: Vec<usize> = alloc::vec![0; func.blocks.len()];
-    let mut fixups: Vec<BranchFixup> = Vec::new();
+    let mut branch_fixups: Vec<BranchFixup> = Vec::new();
 
     for (block_idx, block) in func.blocks.iter().enumerate() {
         block_offsets[block_idx] = code.len();
@@ -145,7 +151,7 @@ pub(super) fn emit_function(
                 .get(v as usize)
                 .copied()
                 .unwrap_or(Place::None);
-            if !emit_inst(code, inst, place, alloc, frame, &scratch) {
+            if !emit_inst(code, inst, place, alloc, frame, &scratch, abi, fixups) {
                 code.truncate(snapshot);
                 return false;
             }
@@ -153,10 +159,10 @@ pub(super) fn emit_function(
         match block.terminator {
             Terminator::Return(v) => emit_return(code, v, alloc, frame, &scratch),
             Terminator::Jmp(t) => {
-                fixups.push(BranchFixup {
+                branch_fixups.push(BranchFixup {
                     site: code.len(),
                     target: t,
-                    kind: BranchKind::B,
+                    kind: LocalBranchKind::B,
                 });
                 emit(code, enc_b(0));
             }
@@ -173,17 +179,17 @@ pub(super) fn emit_function(
                         return false;
                     }
                 };
-                fixups.push(BranchFixup {
+                branch_fixups.push(BranchFixup {
                     site: code.len(),
                     target,
-                    kind: BranchKind::Cbz(rt),
+                    kind: LocalBranchKind::Cbz(rt),
                 });
                 emit(code, enc_cbz(rt, 0));
                 if fall_through as usize != block_idx + 1 {
-                    fixups.push(BranchFixup {
+                    branch_fixups.push(BranchFixup {
                         site: code.len(),
                         target: fall_through,
-                        kind: BranchKind::B,
+                        kind: LocalBranchKind::B,
                     });
                     emit(code, enc_b(0));
                 }
@@ -201,27 +207,27 @@ pub(super) fn emit_function(
                         return false;
                     }
                 };
-                fixups.push(BranchFixup {
+                branch_fixups.push(BranchFixup {
                     site: code.len(),
                     target,
-                    kind: BranchKind::Cbnz(rt),
+                    kind: LocalBranchKind::Cbnz(rt),
                 });
                 emit(code, enc_cbnz(rt, 0));
                 if fall_through as usize != block_idx + 1 {
-                    fixups.push(BranchFixup {
+                    branch_fixups.push(BranchFixup {
                         site: code.len(),
                         target: fall_through,
-                        kind: BranchKind::B,
+                        kind: LocalBranchKind::B,
                     });
                     emit(code, enc_b(0));
                 }
             }
             Terminator::FallThrough(t) => {
                 if t as usize != block_idx + 1 {
-                    fixups.push(BranchFixup {
+                    branch_fixups.push(BranchFixup {
                         site: code.len(),
                         target: t,
-                        kind: BranchKind::B,
+                        kind: LocalBranchKind::B,
                     });
                     emit(code, enc_b(0));
                 }
@@ -234,7 +240,7 @@ pub(super) fn emit_function(
         }
     }
     // Patch the recorded branches.
-    for fx in &fixups {
+    for fx in &branch_fixups {
         let target_off = block_offsets[fx.target as usize];
         let rel = (target_off as i64) - (fx.site as i64);
         if rel % 4 != 0 {
@@ -243,28 +249,28 @@ pub(super) fn emit_function(
         }
         let imm = (rel / 4) as i32;
         let word = match fx.kind {
-            BranchKind::B => {
+            LocalBranchKind::B => {
                 if !(-(1 << 25)..(1 << 25)).contains(&imm) {
                     code.truncate(snapshot);
                     return false;
                 }
                 enc_b(imm)
             }
-            BranchKind::Cbz(rt) => {
+            LocalBranchKind::Cbz(rt) => {
                 if !(-(1 << 18)..(1 << 18)).contains(&imm) {
                     code.truncate(snapshot);
                     return false;
                 }
                 enc_cbz(rt, imm)
             }
-            BranchKind::Cbnz(rt) => {
+            LocalBranchKind::Cbnz(rt) => {
                 if !(-(1 << 18)..(1 << 18)).contains(&imm) {
                     code.truncate(snapshot);
                     return false;
                 }
                 enc_cbnz(rt, imm)
             }
-            BranchKind::Bcc(cond) => {
+            LocalBranchKind::Bcc(cond) => {
                 if !(-(1 << 18)..(1 << 18)).contains(&imm) {
                     code.truncate(snapshot);
                     return false;
@@ -364,6 +370,8 @@ fn emit_inst(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
+    abi: super::Abi,
+    fixups: &mut Vec<Fixup>,
 ) -> bool {
     match inst {
         Inst::AllocaInit(slot) => {
@@ -388,8 +396,92 @@ fn emit_inst(
         Inst::BinopI { op, lhs, rhs_imm } => {
             emit_binop_imm(code, *op, dst, *lhs, *rhs_imm, alloc, frame, scratch)
         }
+        Inst::Call { target_pc, args } => {
+            emit_call(code, dst, *target_pc, args, alloc, frame, scratch, abi, fixups)
+        }
         _ => false,
     }
+}
+
+/// Direct call to a c5 user function at bytecode pc `target_pc`.
+/// Marshalls args into the host-ABI int arg registers (the FP
+/// path isn't part of the thin slice yet -- bail out on any FP-
+/// kind arg), copies overflow args onto the host stack, BL the
+/// placeholder, and records a `Fixup::Bl` for the outer fixup
+/// pass to resolve. Result lands in x0; the SSA emit moves it to
+/// the inst's `dst` if needed.
+fn emit_call(
+    code: &mut Vec<u8>,
+    dst: Place,
+    target_pc: usize,
+    args: &[u32],
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+    abi: super::Abi,
+    fixups: &mut Vec<Fixup>,
+) -> bool {
+    // All-int args, no FP, no variadic: the planner returns
+    // IntReg placements for the prefix and Stack placements for
+    // the tail. The thin slice doesn't model FP-arg routing or
+    // variadic callees yet.
+    let plan = super::plan_call_args(args.len(), args.len(), 0, abi);
+    if plan.scratch_bytes > 0 {
+        emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
+    }
+    // Stage each arg in the corresponding host arg reg / stack
+    // slot. Reading a value through scratch keeps the case where
+    // arg i's source is already in some other host arg reg
+    // correct (the source may get clobbered by a later
+    // arg's mov-into-host-reg).
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        let arg_id = args[i];
+        let arg_place = alloc
+            .places
+            .get(arg_id as usize)
+            .copied()
+            .unwrap_or(Place::None);
+        // Load arg into scratch first, then move to its host
+        // position. Always going through scratch keeps the
+        // ordering correct without a parallel-copy analysis.
+        let src = match materialize_int(code, arg_place, scratch.primary, frame) {
+            Some(r) => r,
+            None => return false,
+        };
+        match placement {
+            super::ArgPlacement::IntReg(r) => {
+                if src.0 != r {
+                    emit(code, enc_mov_reg(Reg(r), src));
+                }
+            }
+            super::ArgPlacement::Stack(off) => {
+                emit(code, enc_str_imm(src, Reg(31), off));
+            }
+            super::ArgPlacement::FpReg(_) => return false,
+        }
+    }
+    // Branch placeholder + fixup. The pool path's apply_fixups
+    // resolves `target_bytecode_pc` -> `bytecode_to_native` once
+    // the map is final.
+    fixups.push(Fixup {
+        native_offset: code.len(),
+        target_bytecode_pc: target_pc,
+        kind: BranchKind::Bl,
+    });
+    emit(code, enc_b(0));
+    if plan.scratch_bytes > 0 {
+        emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
+    }
+    // Move the return value from x0 into the call's dst Place.
+    if let Some(rd) = int_reg(dst) {
+        if rd.0 != 0 {
+            emit(code, enc_mov_reg(rd, Reg(0)));
+        }
+    } else if let Place::Spill(slot) = dst {
+        let off = -(((frame.alloc_spill_base + (slot + 1) * 8) as i32));
+        emit(code, enc_stur(Reg(0), Reg(29), off));
+    }
+    true
 }
 
 /// Translate a c5-stack slot index (`Op::Lea`'s operand) into a
@@ -688,7 +780,7 @@ mod tests {
             Target::MacOSAarch64,
         );
         let mut code = Vec::new();
-        let ok = emit_function(&func, &alloc, Target::MacOSAarch64, &mut code);
+        let mut fx = Vec::new(); let ok = emit_function(&func, &alloc, Target::MacOSAarch64, &mut code, &mut fx);
         assert!(
             ok,
             "expected SSA emit to handle a single-return function; got fallback"
@@ -717,7 +809,7 @@ mod tests {
             Target::MacOSAarch64,
         );
         let mut code = Vec::new();
-        let ok = emit_function(&func, &alloc, Target::MacOSAarch64, &mut code);
+        let mut fx = Vec::new(); let ok = emit_function(&func, &alloc, Target::MacOSAarch64, &mut code, &mut fx);
         assert!(ok, "binop handler should cover Add + Shl + Shr");
         assert_eq!(code.len() % 4, 0);
     }
@@ -737,7 +829,7 @@ mod tests {
         // the thin slice yet, so we only check that `test` emits
         // cleanly. main will fall back.
         let mut code = Vec::new();
-        let ok = emit_function(&func, &alloc, Target::MacOSAarch64, &mut code);
+        let mut fx = Vec::new(); let ok = emit_function(&func, &alloc, Target::MacOSAarch64, &mut code, &mut fx);
         assert!(
             ok,
             "`test` should emit via the thin slice (cmp + cset + cbz + ldr params)"

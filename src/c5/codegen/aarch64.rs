@@ -1048,7 +1048,7 @@ pub(super) fn emit_mov_reg(code: &mut Vec<u8>, rd: Reg, rn: Reg) {
 //      after lowering completes.
 
 #[derive(Debug, Clone, Copy)]
-enum BranchKind {
+pub(super) enum BranchKind {
     /// Unconditional `B` (PC-relative, 26-bit signed offset).
     B,
     /// Conditional `CBZ <Xt>` (compare-and-branch on zero).
@@ -1064,12 +1064,12 @@ enum BranchKind {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct Fixup {
+pub(super) struct Fixup {
     /// Byte offset within `code` where the placeholder branch lives.
-    native_offset: usize,
+    pub(super) native_offset: usize,
     /// Bytecode PC the branch is supposed to land on.
-    target_bytecode_pc: usize,
-    kind: BranchKind,
+    pub(super) target_bytecode_pc: usize,
+    pub(super) kind: BranchKind,
 }
 
 /// Mark every bytecode PC that is the target of some `Jmp` / `Bz` /
@@ -1343,7 +1343,7 @@ pub(super) fn lower(
                 let alloc_for = &ssa_allocs[ssa_idx];
                 bytecode_to_native[op_pc] = code.len();
                 let ok = super::ssa_emit_aarch64::emit_function(
-                    func_ssa, alloc_for, target, &mut code,
+                    func_ssa, alloc_for, target, &mut code, &mut fixups,
                 );
                 if !ok {
                     #[cfg(feature = "std")]

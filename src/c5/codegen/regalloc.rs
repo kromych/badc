@@ -291,6 +291,27 @@ pub(crate) fn analyze(text: &[i64], pool: PoolSizes) -> Result<RegStackPlan, C5E
                 });
                 across_call[psh_pc] = ac;
             }
+            Op::Intrinsic => {
+                let id = text[pc + 1];
+                if id == crate::c5::op::Intrinsic::LongjmpAArch64 as i64 {
+                    // longjmp(env, val) -- env was pushed before val
+                    // was evaluated. The inline expansion pops that
+                    // slot, then BRs out (no fall-through). Tell the
+                    // analyzer the push is consumed here so it doesn't
+                    // remain pending at the next call / function end.
+                    let (psh_pc, ac) = pending.pop().ok_or_else(|| {
+                        C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
+                            "regalloc: Op::Intrinsic(LongjmpAArch64) at pc {pc} \
+                             on empty push stack"
+                        )))
+                    })?;
+                    push_kind[psh_pc] = Some(PushKind::Pseudo {
+                        slot: 0,
+                        bank: PoolBank::Callee,
+                    });
+                    across_call[psh_pc] = ac;
+                }
+            }
             _ => {} // no stack effect we care about
         }
         pc += op_width(op);

@@ -2437,9 +2437,12 @@ fn emit_longjmp_aarch64(code: &mut Vec<u8>, reg_state: &mut RegState<'_>) {
         emit(code, enc_ldr_imm(Reg(19 + i as u8), Reg::X16, off));
     }
     emit(code, enc_ldr_imm(Reg::X29, Reg::X16, JB_X29_OFF));
-    // Resume PC into x18 (callee-saved on Windows; on this lane
-    // c5 keeps it free so it's safe to clobber temporarily).
-    emit(code, enc_ldr_imm(Reg::X18, Reg::X16, JB_PC_OFF));
+    // Hoist the resume PC out of the env into x10 (a caller-
+    // saved AAPCS64 temp; setjmp's caller has no expectation
+    // that x10 survives). x18 is reserved on Windows AArch64
+    // for the TEB pointer, so anything that loads through it
+    // (TLS, msvcrt internals) must see TEB unmodified.
+    emit(code, enc_ldr_imm(Reg(10), Reg::X16, JB_PC_OFF));
     emit(code, enc_ldr_imm(Reg(9), Reg::X16, JB_SP_OFF));
     // mov sp, x9 -- ADD form because the destination is SP.
     emit(code, enc_add_imm(Reg::SP, Reg(9), 0));
@@ -2450,8 +2453,8 @@ fn emit_longjmp_aarch64(code: &mut Vec<u8>, reg_state: &mut RegState<'_>) {
     // else passes through. `subs xzr, x17, 0` is `cmp x17, #0`.
     emit(code, enc_subs_imm(Reg(31), Reg::X17, 0));
     emit(code, enc_cinc(Reg::X19, Reg::X17, Cond::Eq));
-    // Branch to the saved resume PC.
-    emit(code, enc_br(Reg::X18));
+    // Branch to the saved resume PC (loaded into x10 above).
+    emit(code, enc_br(Reg(10)));
 }
 
 /// FP comparison: `x19 = (top <cond> acc) ? 1 : 0`. d0/d1 hold

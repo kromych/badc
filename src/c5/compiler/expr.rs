@@ -281,12 +281,11 @@ impl Compiler {
                         self.uses_alloca_in_current_fn = true;
                     }
                     // Result type: alloca returns `void *`,
-                    // SetjmpAArch64 returns `int` (the 0 / val
-                    // boolean), LongjmpAArch64 has no real return
-                    // (control never reaches the next statement).
-                    if intrinsic_id == setjmp_id {
-                        self.ty = Ty::Int as i64;
-                    } else if intrinsic_id == longjmp_id {
+                    // SetjmpAArch64 returns `int`, LongjmpAArch64
+                    // has no real return (control never reaches
+                    // the next statement) but the parser still
+                    // typechecks downstream uses as `int`.
+                    if intrinsic_id == setjmp_id || intrinsic_id == longjmp_id {
                         self.ty = Ty::Int as i64;
                     } else {
                         self.ty = (Ty::Char as i64) + (Ty::Ptr as i64);

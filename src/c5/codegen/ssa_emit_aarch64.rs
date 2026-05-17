@@ -90,6 +90,24 @@ impl Frame {
     }
 }
 
+/// Emit a diagnostic when the SSA path falls back. Active only
+/// with `BADC_DUMP_SSA=1` so production builds stay quiet.
+fn bail_msg(reason: &str) {
+    #[cfg(feature = "std")]
+    if std::env::var("BADC_DUMP_SSA").is_ok() {
+        eprintln!("ssa emit: bailed -- {reason}");
+    }
+    let _ = reason;
+}
+
+fn bail(reason: &str, value: u32, place: Place) {
+    #[cfg(feature = "std")]
+    if std::env::var("BADC_DUMP_SSA").is_ok() {
+        eprintln!("ssa emit: bailed -- {reason} v{value} place={:?}", place);
+    }
+    let _ = (reason, value, place);
+}
+
 /// Branch placeholder recorded mid-walk; resolved once every
 /// block's start offset is known.
 #[derive(Debug, Clone, Copy)]
@@ -193,6 +211,7 @@ pub(super) fn emit_function(
                 let rt = match materialize_int(code, cond_place, scratch.primary, frame) {
                     Some(r) => r,
                     None => {
+                        bail("Bz/Bnz: cond Place not int", cond, cond_place);
                         code.truncate(snapshot);
                         return false;
                     }
@@ -225,6 +244,7 @@ pub(super) fn emit_function(
                 let rt = match materialize_int(code, cond_place, scratch.primary, frame) {
                     Some(r) => r,
                     None => {
+                        bail("Bz/Bnz: cond Place not int", cond, cond_place);
                         code.truncate(snapshot);
                         return false;
                     }
@@ -255,7 +275,8 @@ pub(super) fn emit_function(
                 }
             }
             // TailExt isn't covered by the thin slice; fall back.
-            Terminator::TailExt(_) => {
+            Terminator::TailExt(b) => {
+                bail_msg(&alloc::format!("TailExt({b}) terminator"));
                 code.truncate(snapshot);
                 return false;
             }
@@ -266,6 +287,7 @@ pub(super) fn emit_function(
         let target_off = block_offsets[fx.target as usize];
         let rel = (target_off as i64) - (fx.site as i64);
         if rel % 4 != 0 {
+            bail_msg("branch fixup: rel not 4-aligned");
             code.truncate(snapshot);
             return false;
         }
@@ -280,6 +302,7 @@ pub(super) fn emit_function(
             }
             LocalBranchKind::Cbz(rt) => {
                 if !(-(1 << 18)..(1 << 18)).contains(&imm) {
+                    bail_msg("branch fixup: imm19 out of range");
                     code.truncate(snapshot);
                     return false;
                 }
@@ -287,6 +310,7 @@ pub(super) fn emit_function(
             }
             LocalBranchKind::Cbnz(rt) => {
                 if !(-(1 << 18)..(1 << 18)).contains(&imm) {
+                    bail_msg("branch fixup: imm19 out of range");
                     code.truncate(snapshot);
                     return false;
                 }
@@ -294,6 +318,7 @@ pub(super) fn emit_function(
             }
             LocalBranchKind::Bcc(cond) => {
                 if !(-(1 << 18)..(1 << 18)).contains(&imm) {
+                    bail_msg("branch fixup: imm19 out of range");
                     code.truncate(snapshot);
                     return false;
                 }
@@ -611,15 +636,13 @@ fn c5_slot_to_fp_offset(off: i64) -> i64 {
 
 fn emit_local_addr(code: &mut Vec<u8>, dst: Place, off: i64) -> bool {
     let Some(rd) = int_reg(dst) else {
+        bail_msg("LocalAddr: dst not int reg");
         return false;
     };
     let bytes = c5_slot_to_fp_offset(off);
     let abs = bytes.unsigned_abs();
     if abs >= 4096 {
-        // Thin slice covers the imm12-fits-in-add path; larger
-        // offsets need a multi-instruction sequence we'd rather
-        // route through the pool path until the SSA emit is
-        // sturdier.
+        bail_msg(&alloc::format!("LocalAddr: offset {bytes} exceeds imm12"));
         return false;
     }
     let imm = abs as u32;
@@ -662,7 +685,10 @@ fn emit_load(
         LoadKind::U8 => emit(code, enc_ldrb_imm(rd, rn, 0)),
         // FP loads (4-byte float widened to f64) need the
         // fmov + fcvt sequence; route through the pool path.
-        LoadKind::F32 => return false,
+        LoadKind::F32 => {
+            bail_msg("Load: F32 not handled");
+            return false;
+        }
     }
     true
 }
@@ -705,7 +731,10 @@ fn emit_store(
         StoreKind::I32 => emit(code, enc_str32_imm(rs, rn, 0)),
         StoreKind::I16 => emit(code, enc_strh_imm(rs, rn, 0)),
         StoreKind::I8 => emit(code, enc_strb_imm(rs, rn, 0)),
-        StoreKind::F32 => return false,
+        StoreKind::F32 => {
+            bail_msg("Store: F32 not handled");
+            return false;
+        }
     }
     if let Some(rd) = int_reg(dst) {
         if rd.0 != rs.0 {

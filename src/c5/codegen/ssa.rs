@@ -65,11 +65,20 @@ pub(super) type BlockId = u32;
 /// re-walking the original bytecode.
 #[derive(Debug, Clone)]
 pub(super) enum Inst {
-    /// Integer immediate (`Op::Imm`). Includes function-pointer
-    /// literals (`CODE_BASE + pc`) and data-segment offsets; the
-    /// per-arch lowering distinguishes them via the program's
-    /// `data_imm_positions` / `code_imm_positions` side tables.
+    /// Plain integer immediate (`Op::Imm` with no data / code
+    /// segment provenance). Lowering uses `load_imm64`.
     Imm(i64),
+    /// `Op::Imm` whose operand is a data-segment byte offset.
+    /// The per-arch lowering emits an `adrp + add` placeholder
+    /// pair and records a `DataFixup` so the writer can patch
+    /// the page-relative immediate against `__data + offset`.
+    ImmData(i64),
+    /// `Op::Imm` whose operand is a function-pointer literal
+    /// (`CODE_BASE + target_bc_pc`). The per-arch lowering
+    /// emits an `adrp + add` placeholder pair and records a
+    /// pending func-fixup so the writer can patch against the
+    /// callee's body offset.
+    ImmCode(usize),
     /// Address of a local or parameter slot relative to the frame
     /// pointer (`Op::Lea N`). N is the c5-slot index; locals are
     /// negative, params >= 2.
@@ -352,7 +361,14 @@ pub(super) fn lift_program(program: &Program) -> Result<Vec<FunctionSsa>, C5Erro
     for (i, &ent_pc) in ent_pcs.iter().enumerate() {
         let next_pc = ent_pcs.get(i + 1).copied().unwrap_or(text.len());
         let meta = funcs_meta.get(&ent_pc).copied().unwrap_or_default();
-        let func = lift_function(text, ent_pc, next_pc, meta)?;
+        let func = lift_function(
+            text,
+            ent_pc,
+            next_pc,
+            meta,
+            &program.data_imm_positions,
+            &program.code_imm_positions,
+        )?;
         out.push(func);
     }
     Ok(out)
@@ -366,6 +382,8 @@ pub(super) fn lift_function(
     ent_pc: usize,
     end_pc: usize,
     meta: super::FuncMeta,
+    data_imm_positions: &[usize],
+    code_imm_positions: &[usize],
 ) -> Result<FunctionSsa, C5Error> {
     // Sanity check the entry.
     if Op::from_i64(text[ent_pc]) != Some(Op::Ent) {
@@ -528,7 +546,22 @@ pub(super) fn lift_function(
                 }
                 Op::Imm => {
                     let v = text[pc + 1];
-                    def(&mut insts, Inst::Imm(v), &mut acc);
+                    let operand_pc = pc + 1;
+                    let inst = if data_imm_positions.binary_search(&operand_pc).is_ok() {
+                        Inst::ImmData(v)
+                    } else if code_imm_positions.binary_search(&operand_pc).is_ok() {
+                        Inst::ImmCode((v as usize) - super::super::CODE_BASE)
+                    } else if code_imm_positions.is_empty()
+                        && (v as usize) >= super::super::CODE_BASE
+                        && ((v as usize) - super::super::CODE_BASE) < text.len()
+                    {
+                        // Optimizer-stripped position lists -- fall back
+                        // to the value-range heuristic the pool path uses.
+                        Inst::ImmCode((v as usize) - super::super::CODE_BASE)
+                    } else {
+                        Inst::Imm(v)
+                    };
+                    def(&mut insts, inst, &mut acc);
                     pc += op.word_size();
                 }
                 Op::Lea => {

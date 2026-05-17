@@ -277,7 +277,7 @@ enum ResultKind {
 fn result_kind(inst: &Inst) -> ResultKind {
     use Inst::*;
     match inst {
-        Imm(_) | LocalAddr(_) | TlsAddr(_) => ResultKind::Int,
+        Imm(_) | ImmData(_) | ImmCode(_) | LocalAddr(_) | TlsAddr(_) => ResultKind::Int,
         Load { kind, .. } => match kind {
             LoadKind::F32 => ResultKind::Fp,
             _ => ResultKind::Int,
@@ -327,6 +327,8 @@ fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
         let pc = idx as u32;
         match inst {
             Inst::Imm(_)
+            | Inst::ImmData(_)
+            | Inst::ImmCode(_)
             | Inst::LocalAddr(_)
             | Inst::TlsAddr(_)
             | Inst::AllocaInit(_)

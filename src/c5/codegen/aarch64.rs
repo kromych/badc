@@ -1349,6 +1349,8 @@ pub(super) fn lower(
                     &mut code,
                     &mut fixups,
                     &mut plt_call_fixups,
+                    &mut data_fixups,
+                    &mut pending_func_fixups,
                     imports,
                 );
                 if !ok {

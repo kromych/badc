@@ -49,14 +49,15 @@
 use alloc::vec::Vec;
 
 use super::Target;
+use super::DataFixup;
 use super::aarch64::{
     BranchKind, Cond, Fixup, PltCallFixup, Reg, emit, emit_add_sp_imm, emit_sub_sp_imm,
-    enc_add_imm, enc_add_reg, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_cbnz, enc_cbz,
-    enc_cmp_reg, enc_cset, enc_eor_reg, enc_ldp_post, enc_ldr_imm, enc_ldr32_imm, enc_ldrb_imm,
-    enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm, enc_ldur, enc_lslv, enc_lsrv,
-    enc_mov_reg, enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_sdiv, enc_stp_pre, enc_str_imm,
-    enc_str_pre, enc_str32_imm, enc_strb_imm, enc_strh_imm, enc_stur, enc_sub_imm, enc_sub_reg,
-    enc_udiv, load_imm64,
+    enc_add_imm, enc_add_reg, enc_adrp, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_cbnz,
+    enc_cbz, enc_cmp_reg, enc_cset, enc_eor_reg, enc_ldp_post, enc_ldr_imm, enc_ldr32_imm,
+    enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm, enc_ldur,
+    enc_lslv, enc_lsrv, enc_mov_reg, enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_sdiv,
+    enc_stp_pre, enc_str_imm, enc_str_pre, enc_str32_imm, enc_strb_imm, enc_strh_imm,
+    enc_stur, enc_sub_imm, enc_sub_reg, enc_udiv, load_imm64,
 };
 use super::ssa::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
 use super::ssa_alloc::{Allocation, Place};
@@ -158,6 +159,8 @@ pub(super) fn emit_function(
     code: &mut Vec<u8>,
     fixups: &mut Vec<Fixup>,
     plt_call_fixups: &mut Vec<PltCallFixup>,
+    data_fixups: &mut Vec<DataFixup>,
+    pending_func_fixups: &mut Vec<(usize, usize)>,
     imports: &super::ResolvedImports,
 ) -> bool {
     let frame = Frame::for_function(func, alloc);
@@ -185,6 +188,8 @@ pub(super) fn emit_function(
                 abi,
                 fixups,
                 plt_call_fixups,
+                data_fixups,
+                pending_func_fixups,
                 imports,
             ) {
                 #[cfg(feature = "std")]
@@ -432,6 +437,8 @@ fn emit_inst(
     abi: super::Abi,
     fixups: &mut Vec<Fixup>,
     plt_call_fixups: &mut Vec<PltCallFixup>,
+    data_fixups: &mut Vec<DataFixup>,
+    pending_func_fixups: &mut Vec<(usize, usize)>,
     imports: &super::ResolvedImports,
 ) -> bool {
     match inst {
@@ -446,6 +453,39 @@ fn emit_inst(
                 return false;
             };
             load_imm64(code, rd, *value as u64);
+            true
+        }
+        Inst::ImmData(offset) => {
+            let Some(rd) = int_reg(dst) else {
+                return false;
+            };
+            // The writer's patch_adrp_add hardcodes x19 as the
+            // adrp / add destination. Emit the placeholders with
+            // x19, then move the materialised address into the
+            // allocator's chosen register.
+            let adrp_offset = code.len();
+            emit(code, enc_adrp(Reg(19), 0));
+            emit(code, enc_add_imm(Reg(19), Reg(19), 0));
+            data_fixups.push(DataFixup {
+                adrp_offset,
+                data_offset: *offset as u64,
+            });
+            if rd.0 != 19 {
+                emit(code, enc_mov_reg(rd, Reg(19)));
+            }
+            true
+        }
+        Inst::ImmCode(target_bc_pc) => {
+            let Some(rd) = int_reg(dst) else {
+                return false;
+            };
+            let adrp_offset = code.len();
+            emit(code, enc_adrp(Reg(19), 0));
+            emit(code, enc_add_imm(Reg(19), Reg(19), 0));
+            pending_func_fixups.push((adrp_offset, *target_bc_pc));
+            if rd.0 != 19 {
+                emit(code, enc_mov_reg(rd, Reg(19)));
+            }
             true
         }
         Inst::LocalAddr(off) => emit_local_addr(code, dst, *off),
@@ -551,12 +591,18 @@ fn emit_call_ext(
         None => return false,
     };
     let imp = &imports.imports[import_index];
-    // FP args + variadic calls aren't part of the thin slice;
-    // route through the pool path until those handlers land.
-    if imp.is_variadic {
-        return false;
-    }
-    let plan = super::plan_call_args(args.len(), args.len(), 0, abi);
+    // Variadic calls feed `fixed_args` to the planner so it can
+    // place the variadic tail per the host's variadic ABI
+    // (macOS arm64: all on the stack; Win arm64 / Win64: int regs
+    // first, then stack; Linux: standard register sequence). FP
+    // placements are still out of the thin slice -- emit_call_ext
+    // bails on `FpReg` per-arg below.
+    let fixed = if imp.is_variadic {
+        imp.fixed_args.min(args.len())
+    } else {
+        args.len()
+    };
+    let plan = super::plan_call_args(args.len(), fixed, 0, abi);
     if plan.scratch_bytes > 0 {
         emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
     }
@@ -1073,6 +1119,8 @@ mod tests {
         let mut code = Vec::new();
         let mut fx = Vec::new();
         let mut plt = Vec::new();
+        let mut data_fx = Vec::new();
+        let mut pf_fx = Vec::new();
         let imps = super::super::ResolvedImports::default();
         let ok = emit_function(
             &func,
@@ -1081,6 +1129,8 @@ mod tests {
             &mut code,
             &mut fx,
             &mut plt,
+            &mut data_fx,
+            &mut pf_fx,
             &imps,
         );
         assert!(
@@ -1111,6 +1161,8 @@ mod tests {
         let mut code = Vec::new();
         let mut fx = Vec::new();
         let mut plt = Vec::new();
+        let mut data_fx = Vec::new();
+        let mut pf_fx = Vec::new();
         let imps = super::super::ResolvedImports::default();
         let ok = emit_function(
             &func,
@@ -1119,6 +1171,8 @@ mod tests {
             &mut code,
             &mut fx,
             &mut plt,
+            &mut data_fx,
+            &mut pf_fx,
             &imps,
         );
         assert!(ok, "binop handler should cover Add + Shl + Shr");
@@ -1142,6 +1196,8 @@ mod tests {
         let mut code = Vec::new();
         let mut fx = Vec::new();
         let mut plt = Vec::new();
+        let mut data_fx = Vec::new();
+        let mut pf_fx = Vec::new();
         let imps = super::super::ResolvedImports::default();
         let ok = emit_function(
             &func,
@@ -1150,6 +1206,8 @@ mod tests {
             &mut code,
             &mut fx,
             &mut plt,
+            &mut data_fx,
+            &mut pf_fx,
             &imps,
         );
         assert!(

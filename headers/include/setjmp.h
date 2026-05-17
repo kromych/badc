@@ -47,24 +47,30 @@ void longjmp(jmp_buf env, int val);
 // covers the 168-byte register save area with slack for any
 // future addition.
 typedef long long jmp_buf[32];
+
+// Plain prototypes -- bound to msvcrt's setjmp / longjmp so a
+// bare identifier (e.g. `&longjmp` passed as a function pointer
+// in tinycc's `_tcc_setjmp(s1, jb, f, longjmp)`) resolves at
+// compile time. Direct call-through of those addresses on
+// AArch64 still crashes because msvcrt's longjmp routes
+// through SEH; the supported path is the function-like macros
+// below, which inline the CRT-free intrinsic at each call
+// site.
+#pragma binding(msvcrt::setjmp, "_setjmp")
+#pragma binding(msvcrt::longjmp, "longjmp")
+int setjmp(long long *env);
+void longjmp(long long *env, int val);
+
+// CRT-free intrinsic pair. The expression parser turns each
+// call into `Op::Intrinsic <id>` and the AArch64 codegen lowers
+// it inline as hand-rolled asm that saves the AAPCS64 callee-
+// saved register set plus SP plus a captured resume PC.
 #pragma intrinsic("__c5_aarch64_setjmp")
 #pragma intrinsic("__c5_aarch64_longjmp")
 int __c5_aarch64_setjmp(long long *env);
 void __c5_aarch64_longjmp(long long *env, int val);
-
-// Real-function wrappers so code that takes the address of
-// setjmp / longjmp (tinycc's `_tcc_setjmp(..., longjmp)` passes
-// the longjmp pointer through to runtime code that calls back
-// through it) gets a PE-callable entry. Both bodies inline the
-// intrinsic; the wrapper itself is a thin call frame the
-// AArch64 setjmp resumes through cleanly. `static` so each TU
-// keeps its own definition without a linker dedup pass.
-static int setjmp(long long *env) {
-    return __c5_aarch64_setjmp(env);
-}
-static void longjmp(long long *env, int val) {
-    __c5_aarch64_longjmp(env, val);
-}
+#define setjmp(env)        __c5_aarch64_setjmp((long long *)(env))
+#define longjmp(env, val)  __c5_aarch64_longjmp((long long *)(env), (val))
 #else
 // Windows x86_64. msvcrt's `_setjmp` saves xmm6-xmm15 with
 // `movdqa [env+0x60..0xC0], xmm*`, which raises an access

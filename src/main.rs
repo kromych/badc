@@ -160,6 +160,7 @@ fn main() {
     let mut track_pointers = false;
     let mut trace = false;
     let mut optimize_flag = false;
+    let mut regalloc_mode: badc::RegallocMode = badc::RegallocMode::Pool;
     let mut emit_debug_info = true;
     let mut output_path: Option<PathBuf> = None;
     let mut target_spec: Option<String> = None;
@@ -216,6 +217,27 @@ fn main() {
             "--dump-headers" => claim(&mut mode, Mode::DumpHeaders),
             "--dump-pp" | "-E" => claim(&mut mode, Mode::DumpPp),
             "--optimize" | "-O" => optimize_flag = true,
+            arg if arg.starts_with("--regalloc=") => {
+                let value = &arg["--regalloc=".len()..];
+                regalloc_mode = match value {
+                    "pool" => badc::RegallocMode::Pool,
+                    "o0" => badc::RegallocMode::O0,
+                    "ssa" => badc::RegallocMode::Ssa,
+                    other => {
+                        eprintln!(
+                            "badc: --regalloc={other} not recognised (expected pool / o0 / ssa)"
+                        );
+                        std::process::exit(1);
+                    }
+                };
+                if matches!(regalloc_mode, badc::RegallocMode::Ssa) {
+                    eprintln!(
+                        "badc: --regalloc=ssa is not yet wired into the lowering; \
+                         falling back to pool"
+                    );
+                    regalloc_mode = badc::RegallocMode::Pool;
+                }
+            }
             "--no-debug" | "-g0" => emit_debug_info = false,
             "--dump-asm" => claim(&mut mode, Mode::DumpAsm),
             "--jit" => claim(&mut mode, Mode::Jit),
@@ -764,6 +786,7 @@ fn main() {
     } else {
         NativeOptions::new()
     };
+    native_opts = native_opts.with_regalloc(regalloc_mode);
     native_opts = native_opts.with_debug_info(emit_debug_info);
     if mode == Mode::SharedLibrary {
         native_opts = native_opts.with_shared_library();

@@ -1202,8 +1202,24 @@ pub(super) fn lower(
     // Run the regalloc analyzer once if `--optimize` is on. The
     // plan is consulted at each Op::Ent / Op::Psh / pop op so we
     // keep it in scope for the entire walk.
+    // Pool sizing follows the user-picked allocator mode:
+    //   * Pool: callee + caller bank, the full classifier (default).
+    //   * O0:   callee bank only -- caller-saved disabled, every
+    //           pseudo push lands in callee-saved. Drops the perf
+    //           win on short-lived nested arith but cuts the
+    //           allocator's bookkeeping surface in half.
+    //   * Ssa:  not yet routed here; falls back to Pool until the
+    //           SSA lowering lands. The CLI gate refuses --regalloc=ssa
+    //           before then, so this branch is currently unreachable.
+    let pool_sizes = match native.regalloc {
+        super::RegallocMode::Pool | super::RegallocMode::Ssa => POOL_SIZES,
+        super::RegallocMode::O0 => regalloc::PoolSizes {
+            callee: POOL_SIZES.callee,
+            caller: 0,
+        },
+    };
     let plan_storage: Option<RegStackPlan> = if native.optimize {
-        Some(regalloc::analyze(&program.text, POOL_SIZES)?)
+        Some(regalloc::analyze(&program.text, pool_sizes)?)
     } else {
         None
     };

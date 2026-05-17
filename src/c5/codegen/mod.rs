@@ -1065,6 +1065,34 @@ pub(crate) struct FuncFixup {
     pub target_native_offset: usize,
 }
 
+/// Register-allocator pick. Threaded through [`NativeOptions`] so
+/// the lowering can A/B between the pool-based regalloc (the
+/// historical pseudo-stack pool) and the SSA path (under
+/// construction). Default is [`RegallocMode::Pool`]; the `O0`
+/// variant disables the caller-saved bank so the codegen produces
+/// a simpler, slightly larger shape; the `Ssa` variant is gated
+/// behind a flag until it reaches parity on every CI lane.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RegallocMode {
+    /// Pool classifier with both callee-saved and caller-saved
+    /// banks. Driven by `--optimize`; off by default and the
+    /// lowering takes the no-pool path that lands every push on
+    /// the real stack.
+    #[default]
+    Pool,
+    /// Single callee-saved bank, no across-call taint logic. The
+    /// caller bank is disabled so a value spanning a call costs
+    /// the same as one that doesn't. Trades ~5% perf for a
+    /// simpler analyzer; useful as a debugging baseline when the
+    /// pool / SSA shape is suspect.
+    O0,
+    /// Per-function basic-block + SSA-value lift, fed into a
+    /// linear-scan allocator that pre-colours host arg registers
+    /// at call sites. Not yet wired into the lowering -- gated
+    /// behind tasks #7-#10 of the regalloc-replacement plan.
+    Ssa,
+}
+
 /// User-controllable knobs for the native lowering pass. Distinct
 /// from [`TargetOptions`] (which encodes platform ABI -- not user
 /// choosable). Threaded through [`emit_native_with_options`],
@@ -1094,6 +1122,14 @@ pub struct NativeOptions {
     /// described in the per-backend module docs -- run regardless
     /// of this flag, since neither has a tradeoff worth gating.
     pub optimize: bool,
+    /// Register allocator selection. The pool-based shape (default)
+    /// is what `--optimize` engages today; the simpler O0 shape
+    /// disables the caller-saved bank so every pseudo push lands
+    /// in the callee-saved bank; the SSA shape (under construction)
+    /// will build per-function basic blocks and run a linear-scan
+    /// allocator over them. See `regalloc.rs` for the pool
+    /// classifier and `ssa.rs` for the SSA infrastructure.
+    pub regalloc: RegallocMode,
     /// Pick the kind of binary the writer should produce.
     /// Default is [`OutputKind::Executable`] -- a normal
     /// runnable program. [`OutputKind::SharedLibrary`] swaps
@@ -1152,6 +1188,7 @@ impl NativeOptions {
     pub const fn new() -> Self {
         Self {
             optimize: false,
+            regalloc: RegallocMode::Pool,
             output_kind: OutputKind::Executable,
             debug_info: true,
         }
@@ -1160,6 +1197,12 @@ impl NativeOptions {
     /// Set [`Self::optimize`] = true and return self.
     pub const fn with_optimize(mut self) -> Self {
         self.optimize = true;
+        self
+    }
+
+    /// Pick a register-allocator mode. See [`RegallocMode`].
+    pub const fn with_regalloc(mut self, mode: RegallocMode) -> Self {
+        self.regalloc = mode;
         self
     }
 

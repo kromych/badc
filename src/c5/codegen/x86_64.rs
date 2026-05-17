@@ -1323,8 +1323,16 @@ pub(super) fn lower(
     let abi: Abi = target.abi();
 
     // Build the regalloc plan once if `--optimize` is on.
+    // See the aarch64 lowering for the mode -> pool-size mapping.
+    let pool_sizes = match native.regalloc {
+        super::RegallocMode::Pool | super::RegallocMode::Ssa => POOL_SIZES,
+        super::RegallocMode::O0 => regalloc::PoolSizes {
+            callee: POOL_SIZES.callee,
+            caller: 0,
+        },
+    };
     let plan_storage: Option<RegStackPlan> = if native.optimize {
-        Some(regalloc::analyze(&program.text, POOL_SIZES)?)
+        Some(regalloc::analyze(&program.text, pool_sizes)?)
     } else {
         None
     };

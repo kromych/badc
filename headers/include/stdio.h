@@ -200,6 +200,7 @@ typedef struct __c5_FILE FILE;
 
 #ifdef _WIN32
 #pragma dylib(msvcrt, "msvcrt.dll")
+#pragma dylib(ucrtbase, "ucrtbase.dll")
 #pragma binding(msvcrt::printf,    "printf")
 #pragma binding(msvcrt::wprintf,   "wprintf")
 #pragma binding(msvcrt::fprintf,   "fprintf")

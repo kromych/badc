@@ -302,17 +302,47 @@ jobs:
               # the two failure paths. The pool-emitted equivalent
               # would write the LE32 bytes byte-for-byte; a
               # divergence here pinpoints the SSA emit's bug.
+              # The local `u32 x[16]` lives at $rbp-0x40 inside
+              # crypto_eddsa_reduce. The function's input
+              # `expanded` was passed in via rsi at call entry;
+              # load32_le_buf doesn't write through rsi and the
+              # SSA emit preserves it across the body, so dumping
+              # 64 bytes from $rsi gives us a side-by-side view
+              # of the source buffer and the freshly-converted
+              # x[16].
+              #
+              # If load32_le_buf is correct, the two dumps are
+              # byte-identical (load32_le stores back into the
+              # same little-endian layout it reads from). A
+              # divergence implicates load32_le_buf; agreement
+              # shifts blame downstream to mod_l.
+              #
+              # The breakpoint fires twice: once for the
+              # `r = hash_reduce(...)` call and once for the
+              # subsequent `h = hash_reduce(...)`. Capture both.
               gdb -batch \
                   -ex 'set pagination off' \
                   -ex 'set print elements 256' \
                   -ex 'break *(crypto_eddsa_reduce + 0x98)' \
                   -ex 'break fprintf' \
                   -ex run \
+                  -ex 'printf "=== eddsa_reduce hit 1 ===\n"' \
                   -ex 'printf "--- x[16] just after load32_le_buf ---\n"' \
                   -ex 'x/64bx $rbp-0x40' \
+                  -ex 'printf "--- expanded (source) at $rsi ---\n"' \
+                  -ex 'x/64bx $rsi' \
                   -ex 'printf "--- registers ---\n"' \
                   -ex 'info registers rax rbx rdi rsi rdx rcx r10 r11 r12 r13 r14 r15' \
+                  -ex 'bt 4' \
                   -ex 'continue' \
+                  -ex 'printf "=== eddsa_reduce hit 2 ===\n"' \
+                  -ex 'printf "--- x[16] just after load32_le_buf ---\n"' \
+                  -ex 'x/64bx $rbp-0x40' \
+                  -ex 'printf "--- expanded (source) at $rsi ---\n"' \
+                  -ex 'x/64bx $rsi' \
+                  -ex 'bt 4' \
+                  -ex 'continue' \
+                  -ex 'printf "=== fprintf hit (signature mismatch) ===\n"' \
                   -ex 'frame 1' \
                   -ex 'printf "--- sig (got) ---\n"' \
                   -ex 'x/64bx $rbp-0x140' \

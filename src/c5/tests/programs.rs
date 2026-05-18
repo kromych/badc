@@ -409,6 +409,18 @@ fn large_int_literal_auto_promotes() {
 }
 
 #[test]
+fn mcpy_temp_aliases_src() {
+    // Locks the SSA emit's `Op::Mcpy` lowering against a
+    // regression where the per-iteration scratch register
+    // aliased the source pointer. Picking a temp that only
+    // avoided the destination corrupted the source base on the
+    // first `ldr` and read the rest of the struct from a garbage
+    // address. Surfaced by sqlite3's `*pItem = zeroItem;` shape
+    // under high register pressure.
+    assert_eq!(run_fixture("mcpy_temp_aliases_src.c"), 0);
+}
+
+#[test]
 fn return_int_widens_to_double() {
     // C99 6.8.6.4 paragraph 3: the value of a return
     // expression is converted as if by assignment to the

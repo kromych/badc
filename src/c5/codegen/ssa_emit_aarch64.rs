@@ -1635,15 +1635,17 @@ fn emit_mcpy(
     // x10 in active use. The slot is dropped before the next
     // instruction sees sp.
     //
-    // If either base already lives in x10, materialize_int
-    // returned it via the allocator's Place::IntReg(10); in that
-    // case we pick a different temp (x11) to avoid corrupting the
-    // base mid-copy. Same for src/dst aliasing x10 implicitly
-    // through the scratch fallback.
-    let temp = if dst_r.0 == 10 || src_r.0 == 10 {
+    // Pick a temp distinct from both bases. The save/restore
+    // protects whatever the allocator parked in the chosen reg;
+    // the aliasing check ensures we don't pick a temp that shares
+    // a number with `dst_r` or `src_r`, which would corrupt the
+    // base on the first ldr/str pair.
+    let temp = if dst_r.0 != 10 && src_r.0 != 10 {
+        Reg(10)
+    } else if dst_r.0 != 11 && src_r.0 != 11 {
         Reg(11)
     } else {
-        Reg(10)
+        Reg(12)
     };
     let bytes = size as u32;
     emit(code, enc_str_pre(temp, Reg(31), -16));

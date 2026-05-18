@@ -47,11 +47,14 @@ use alloc::vec::Vec;
 use super::DataFixup;
 use super::GotFixup;
 use super::Target;
-use super::ssa::{FunctionSsa, Inst, Terminator};
+use super::ssa::{BinOp, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
 use super::ssa_alloc::{Allocation, Place};
 use super::x86_64::{
-    Fixup, PltCallFixup, Reg, emit_add_rsp_imm32, emit_mov_r_imm64, emit_mov_rr, emit_pop_r,
-    emit_push_r, emit_ret, emit_sub_rsp_imm32,
+    Cc, Fixup, PltCallFixup, Reg, emit_add_rr, emit_add_rsp_imm32, emit_and_rr, emit_cmp_rr,
+    emit_imul_rr, emit_lea_r_mem, emit_mov_mem_r, emit_mov_r_imm64, emit_mov_r_mem, emit_mov_rr,
+    emit_movsx_r_mem16, emit_movsxd_r_mem, emit_movzx_r_mem16, emit_movzx_r_r8, emit_or_rr,
+    emit_pop_r, emit_push_r, emit_ret, emit_sar_r_cl, emit_setcc_r8, emit_shl_r_cl, emit_shr_r_cl,
+    emit_sub_rr, emit_sub_rsp_imm32, emit_xor_rr,
 };
 
 /// Per-function frame layout. Bytes are 16-aligned at every
@@ -241,8 +244,8 @@ fn emit_inst(
     code: &mut Vec<u8>,
     inst: &Inst,
     dst: Place,
-    _alloc: &Allocation,
-    _frame: Frame,
+    alloc: &Allocation,
+    frame: Frame,
 ) -> bool {
     match inst {
         Inst::AllocaInit(slot) => {
@@ -258,6 +261,30 @@ fn emit_inst(
             emit_mov_r_imm64(code, rd, *value);
             true
         }
+        Inst::LocalAddr(off) => {
+            let Some(rd) = int_reg(dst) else {
+                bail_msg("LocalAddr: dst not int reg");
+                return false;
+            };
+            // c5 cdecl: param i (i >= 2) sits at [rbp + 16*(i-1)];
+            // locals (i < 0) sit at [rbp + 8*i]. Compute the byte
+            // offset and emit `lea rd, [rbp + disp]`. The 32-bit
+            // signed `disp` covers any frame our compiler emits;
+            // larger frames bail.
+            let bytes = c5_slot_to_fp_offset(*off);
+            let disp = match i32::try_from(bytes) {
+                Ok(d) => d,
+                Err(_) => {
+                    bail_msg("LocalAddr: offset doesn't fit in disp32");
+                    return false;
+                }
+            };
+            emit_lea_r_mem(code, rd, Reg::RBP, disp);
+            true
+        }
+        Inst::Load { addr, kind } => emit_load(code, dst, *addr, *kind, alloc),
+        Inst::Store { addr, value, kind } => emit_store(code, dst, *addr, *value, *kind, alloc),
+        Inst::Binop { op, lhs, rhs } => emit_binop(code, *op, dst, *lhs, *rhs, alloc),
         Inst::AccSpill { .. } => {
             // Spill the accumulator across a block boundary. For
             // single-block functions the cross-block thread never
@@ -267,9 +294,198 @@ fn emit_inst(
         }
         _ => {
             bail_msg("inst variant not yet covered");
+            let _ = frame;
             false
         }
     }
+}
+
+/// Translate a c5-stack slot index (`Op::Lea`'s operand) into a
+/// byte offset relative to rbp. Mirror of the aarch64 module's
+/// helper: locals (`off < 0`) at `off*8`, params (`off >= 2`) at
+/// `(off-1)*16`.
+fn c5_slot_to_fp_offset(off: i64) -> i64 {
+    if off >= 2 { (off - 1) * 16 } else { off * 8 }
+}
+
+fn emit_load(
+    code: &mut Vec<u8>,
+    dst: Place,
+    addr: u32,
+    kind: LoadKind,
+    alloc: &Allocation,
+) -> bool {
+    let Some(rd) = int_reg(dst) else {
+        bail_msg("Load: dst not int reg");
+        return false;
+    };
+    let addr_place = alloc
+        .places
+        .get(addr as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let Some(base) = int_reg(addr_place) else {
+        bail_msg("Load: addr Place not int reg");
+        return false;
+    };
+    match kind {
+        LoadKind::I64 => emit_mov_r_mem(code, rd, base, 0),
+        LoadKind::I32 => emit_movsxd_r_mem(code, rd, base, 0),
+        LoadKind::U32 => super::x86_64::emit_mov_r32_mem(code, rd, base, 0),
+        LoadKind::I16 => emit_movsx_r_mem16(code, rd, base, 0),
+        LoadKind::U16 => emit_movzx_r_mem16(code, rd, base, 0),
+        LoadKind::I8 => super::x86_64::emit_movsx_r_mem8(code, rd, base, 0),
+        LoadKind::U8 => super::x86_64::emit_movzx_r_mem8(code, rd, base, 0),
+        LoadKind::F32 => {
+            bail_msg("Load: F32 not handled");
+            return false;
+        }
+    }
+    true
+}
+
+fn emit_store(
+    code: &mut Vec<u8>,
+    dst: Place,
+    addr: u32,
+    value: u32,
+    kind: StoreKind,
+    alloc: &Allocation,
+) -> bool {
+    let addr_place = alloc
+        .places
+        .get(addr as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let value_place = alloc
+        .places
+        .get(value as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let Some(base) = int_reg(addr_place) else {
+        bail_msg("Store: addr Place not int reg");
+        return false;
+    };
+    let Some(rs) = int_reg(value_place) else {
+        bail_msg("Store: value Place not int reg");
+        return false;
+    };
+    match kind {
+        StoreKind::I64 => emit_mov_mem_r(code, base, 0, rs),
+        StoreKind::I32 => super::x86_64::emit_mov_mem32_r(code, base, 0, rs),
+        StoreKind::I16 => super::x86_64::emit_mov_mem16_r(code, base, 0, rs),
+        StoreKind::I8 => super::x86_64::emit_mov_mem8_r(code, base, 0, rs),
+        StoreKind::F32 => {
+            bail_msg("Store: F32 not handled");
+            return false;
+        }
+    }
+    // The c5 store ops leave the stored value in the
+    // accumulator. Propagate rs into dst (int reg only at this
+    // stage).
+    if let Some(rd) = int_reg(dst) {
+        if rd.0 != rs.0 {
+            emit_mov_rr(code, rd, rs);
+        }
+    }
+    true
+}
+
+fn emit_binop(
+    code: &mut Vec<u8>,
+    op: BinOp,
+    dst: Place,
+    lhs: u32,
+    rhs: u32,
+    alloc: &Allocation,
+) -> bool {
+    let Some(rd) = int_reg(dst) else {
+        return false;
+    };
+    let lhs_place = alloc
+        .places
+        .get(lhs as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let rhs_place = alloc
+        .places
+        .get(rhs as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let Some(rn) = int_reg(lhs_place) else {
+        bail_msg("Binop: lhs not int reg");
+        return false;
+    };
+    let Some(rm) = int_reg(rhs_place) else {
+        bail_msg("Binop: rhs not int reg");
+        return false;
+    };
+    // x86_64's two-operand ops mutate the destination, so stage
+    // the LHS into rd first (preserves SSA semantics where the
+    // result is `lhs OP rhs`).
+    if rd.0 != rn.0 {
+        emit_mov_rr(code, rd, rn);
+    }
+    match op {
+        BinOp::Add => emit_add_rr(code, rd, rm),
+        BinOp::Sub => emit_sub_rr(code, rd, rm),
+        BinOp::Mul => emit_imul_rr(code, rd, rm),
+        BinOp::And => emit_and_rr(code, rd, rm),
+        BinOp::Or => emit_or_rr(code, rd, rm),
+        BinOp::Xor => emit_xor_rr(code, rd, rm),
+        BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge => {
+            // cmp lhs, rhs ; setcc cl ; movzx rd, cl. The `mov rd,
+            // rn` above clobbered rd to the lhs already; reverse
+            // that into a cmp directly off rn.
+            emit_cmp_rr(code, rn, rm);
+            let cc = match op {
+                BinOp::Eq => Cc::E,
+                BinOp::Ne => Cc::Ne,
+                BinOp::Lt => Cc::L,
+                BinOp::Gt => Cc::G,
+                BinOp::Le => Cc::Le,
+                BinOp::Ge => Cc::Ge,
+                _ => unreachable!(),
+            };
+            emit_setcc_r8(code, cc, Reg::RCX);
+            emit_movzx_r_r8(code, rd, Reg::RCX);
+        }
+        BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge => {
+            emit_cmp_rr(code, rn, rm);
+            let cc = match op {
+                BinOp::Ult => Cc::B,
+                BinOp::Ugt => Cc::A,
+                BinOp::Ule => Cc::Be,
+                BinOp::Uge => Cc::Ae,
+                _ => unreachable!(),
+            };
+            emit_setcc_r8(code, cc, Reg::RCX);
+            emit_movzx_r_r8(code, rd, Reg::RCX);
+        }
+        BinOp::Shl | BinOp::Shr | BinOp::Shru => {
+            // x86 shifts read the count from cl. Stage rhs into
+            // rcx first; if rd is already rcx, swap to a different
+            // dest -- skipped for now.
+            if rd.0 == Reg::RCX.0 {
+                bail_msg("Binop shift: dst aliases rcx");
+                return false;
+            }
+            if rm.0 != Reg::RCX.0 {
+                emit_mov_rr(code, Reg::RCX, rm);
+            }
+            match op {
+                BinOp::Shl => emit_shl_r_cl(code, rd),
+                BinOp::Shr => emit_sar_r_cl(code, rd),
+                BinOp::Shru => emit_shr_r_cl(code, rd),
+                _ => unreachable!(),
+            }
+        }
+        _ => {
+            bail_msg("Binop: variant not yet covered");
+            return false;
+        }
+    }
+    true
 }
 
 fn emit_return(

@@ -745,27 +745,24 @@ fn emit_load(
     addr: u32,
     kind: LoadKind,
     alloc: &Allocation,
-    frame: Frame,
+    _frame: Frame,
 ) -> bool {
+    // TODO: monocypher regresses when the spill-tolerant Load
+    // path is exercised across multiple SSA-emitted functions
+    // (root cause unidentified). Until that is resolved keep
+    // the handler restricted to int-register operands; spilled
+    // loads fall back to the pool path.
     let addr_place = alloc
         .places
         .get(addr as usize)
         .copied()
         .unwrap_or(Place::None);
-    // Materialise the base address. When the allocator picked a
-    // spill slot for addr, load it into the scratch reg; otherwise
-    // use the chosen int reg directly. The same scratch reg can
-    // hold the loaded value afterward because the addr is dead
-    // once the ldr executes.
-    let base = match materialize_int(code, addr_place, SCRATCH_R10, frame) {
-        Some(r) => r,
-        None => {
-            bail_msg("Load: addr Place not int reg / spill");
-            return false;
-        }
+    let Some(base) = int_reg(addr_place) else {
+        bail_msg("Load: addr Place not int reg");
+        return false;
     };
-    let Some(rd) = int_or_spill_dst(dst) else {
-        bail_msg("Load: dst not int reg / spill");
+    let Some(rd) = int_reg(dst) else {
+        bail_msg("Load: dst not int reg");
         return false;
     };
     match kind {
@@ -781,7 +778,6 @@ fn emit_load(
             return false;
         }
     }
-    spill_dst_to_slot(code, dst, rd, frame);
     true
 }
 
@@ -794,6 +790,12 @@ fn emit_store(
     alloc: &Allocation,
     frame: Frame,
 ) -> bool {
+    // TODO: monocypher regresses when the spill-tolerant Store
+    // path is exercised across multiple SSA-emitted functions
+    // (root cause unidentified). Until that is resolved keep
+    // the handler restricted to int-register operands; spilled
+    // stores fall back to the pool path.
+    let _ = frame;
     let addr_place = alloc
         .places
         .get(addr as usize)
@@ -804,35 +806,13 @@ fn emit_store(
         .get(value as usize)
         .copied()
         .unwrap_or(Place::None);
-    // Source value comes first because it stays live across the
-    // store; the addr scratch can be reused for dst spill.
-    let rs = match value_place {
-        Place::IntReg(r) => Reg(r),
-        Place::Spill(slot) => {
-            let sp_off = spill_slot_sp_offset(frame, slot);
-            emit_mov_r_mem(code, SCRATCH_R10, Reg::RSP, sp_off);
-            SCRATCH_R10
-        }
-        _ => {
-            bail_msg("Store: value Place not int reg / spill");
-            return false;
-        }
+    let Some(base) = int_reg(addr_place) else {
+        bail_msg("Store: addr Place not int reg");
+        return false;
     };
-    // For the address, pick a scratch that doesn't clash with rs
-    // when both sides are spilled. rcx is caller-saved, never an
-    // SSA-allocator pool member, and outside any pending
-    // arg-marshalling at this point (Store is not a call).
-    let addr_scratch = if rs.0 == SCRATCH_R10.0 {
-        Reg::RCX
-    } else {
-        SCRATCH_R10
-    };
-    let base = match materialize_int(code, addr_place, addr_scratch, frame) {
-        Some(r) => r,
-        None => {
-            bail_msg("Store: addr Place not int reg / spill");
-            return false;
-        }
+    let Some(rs) = int_reg(value_place) else {
+        bail_msg("Store: value Place not int reg");
+        return false;
     };
     match kind {
         StoreKind::I64 => emit_mov_mem_r(code, base, 0, rs),
@@ -844,19 +824,10 @@ fn emit_store(
             return false;
         }
     }
-    // c5 stores leave the written value in the accumulator;
-    // propagate `rs` into dst when the allocator wants it parked
-    // somewhere specific.
-    match dst {
-        Place::IntReg(r) => {
-            if r != rs.0 {
-                emit_mov_rr(code, Reg(r), rs);
-            }
+    if let Some(rd) = int_reg(dst) {
+        if rd.0 != rs.0 {
+            emit_mov_rr(code, rd, rs);
         }
-        Place::Spill(_) => {
-            spill_dst_to_slot(code, dst, rs, frame);
-        }
-        _ => {}
     }
     true
 }

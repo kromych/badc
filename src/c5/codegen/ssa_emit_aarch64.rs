@@ -178,6 +178,10 @@ pub(super) fn emit_function(
 
     let mut block_offsets: Vec<usize> = alloc::vec![0; func.blocks.len()];
     let mut branch_fixups: Vec<BranchFixup> = Vec::new();
+    // Per-function alloca bookkeeping. Set by `Inst::AllocaInit`
+    // and read by `Inst::Intrinsic { kind: Alloca }`; zero
+    // means the function doesn't use alloca.
+    let mut current_alloca_top: u32 = 0;
 
     for (block_idx, block) in func.blocks.iter().enumerate() {
         block_offsets[block_idx] = code.len();
@@ -202,6 +206,7 @@ pub(super) fn emit_function(
                 tls_index_fixups,
                 macho_tlv_fixups,
                 macho_tlv_descriptors,
+                &mut current_alloca_top,
             ) {
                 #[cfg(feature = "std")]
                 if std::env::var("BADC_DUMP_SSA").is_ok() {
@@ -462,13 +467,37 @@ fn emit_inst(
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
+    current_alloca_top: &mut u32,
 ) -> bool {
     match inst {
         Inst::AllocaInit(slot) => {
-            // Slot 0 means "this function doesn't use alloca" --
-            // pool path emits nothing. Non-zero requires the
-            // alloca arena setup the thin slice doesn't model.
-            *slot == 0
+            // Slot 0: this function doesn't use alloca; emit
+            // nothing (matches the pool path). Non-zero: the
+            // bookkeeping slot lives at `[fp - slot*8]` and the
+            // first alloca call subtracts from the value stored
+            // there. Initialise the slot with its own address so
+            // alloca(n) lands at `address - n`, the top of the
+            // arena reserved by `Op::Ent`.
+            if *slot == 0 {
+                return true;
+            }
+            let top_offset = (*slot as u32) * 8;
+            *current_alloca_top = top_offset;
+            if top_offset < 4096 {
+                emit(code, enc_sub_imm(Reg(16), Reg(29), top_offset));
+            } else {
+                let high = top_offset & !0xfff;
+                let low = top_offset & 0xfff;
+                emit(
+                    code,
+                    super::aarch64::enc_sub_imm_lsl12(Reg(16), Reg(29), high >> 12),
+                );
+                if low != 0 {
+                    emit(code, enc_sub_imm(Reg(16), Reg(16), low));
+                }
+            }
+            emit(code, enc_str_imm(Reg(16), Reg(16), 0));
+            true
         }
         Inst::Imm(value) => {
             let Some(rd) = int_reg(dst) else {
@@ -622,9 +651,16 @@ fn emit_inst(
             emit(code, enc_ldr_imm(rd, Reg(31), sp_off));
             true
         }
-        Inst::Intrinsic { kind, args } => {
-            emit_intrinsic(code, *kind, args, dst, alloc, frame, scratch)
-        }
+        Inst::Intrinsic { kind, args } => emit_intrinsic(
+            code,
+            *kind,
+            args,
+            dst,
+            alloc,
+            frame,
+            scratch,
+            *current_alloca_top,
+        ),
         Inst::Fneg(v) => {
             let src_place = alloc
                 .places
@@ -800,6 +836,7 @@ fn emit_intrinsic(
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
+    current_alloca_top: u32,
 ) -> bool {
     use crate::c5::op::Intrinsic as I;
     let intrinsic = match I::from_i64(kind) {
@@ -897,8 +934,63 @@ fn emit_intrinsic(
             emit(code, enc_str_imm(scratch.secondary, dst_r, 0));
             true
         }
-        I::Alloca | I::SetjmpAArch64 | I::LongjmpAArch64 => {
-            bail_msg("intrinsic: alloca / setjmp / longjmp not in thin slice");
+        I::Alloca => {
+            // alloca(n): round n up to 16-byte alignment, load
+            // the current arena top from the bookkeeping slot
+            // (initialised by `Inst::AllocaInit`), subtract n
+            // to get the new top, write it back, return the new
+            // top. `args[0]` carries the requested size; the
+            // result of the intrinsic is the new top pointer.
+            if current_alloca_top == 0 {
+                bail_msg("Alloca: AllocaInit didn't run for this function");
+                return false;
+            }
+            if args.len() != 1 {
+                bail_msg("Alloca: expected 1 arg");
+                return false;
+            }
+            let Some(rd) = int_reg(dst) else {
+                bail_msg("Alloca: dst not int reg");
+                return false;
+            };
+            let size_place = alloc
+                .places
+                .get(args[0] as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let n = match materialize_int(code, size_place, scratch.primary, frame) {
+                Some(r) => r,
+                None => return false,
+            };
+            // x17 = (n + 15) & ~15 -- the 16-byte-aligned size.
+            emit(code, enc_add_imm(scratch.secondary, n, 15));
+            emit(
+                code,
+                super::aarch64::enc_and_imm_neg16(scratch.secondary, scratch.secondary),
+            );
+            // x16 = &arena_top -- the bookkeeping slot's address.
+            let top_offset = current_alloca_top;
+            if top_offset < 4096 {
+                emit(code, enc_sub_imm(scratch.primary, Reg(29), top_offset));
+            } else {
+                let high = top_offset & !0xfff;
+                let low = top_offset & 0xfff;
+                emit(
+                    code,
+                    super::aarch64::enc_sub_imm_lsl12(scratch.primary, Reg(29), high >> 12),
+                );
+                if low != 0 {
+                    emit(code, enc_sub_imm(scratch.primary, scratch.primary, low));
+                }
+            }
+            // *x16 -= aligned_size; rd = new top.
+            emit(code, enc_ldr_imm(rd, scratch.primary, 0));
+            emit(code, enc_sub_reg(rd, rd, scratch.secondary));
+            emit(code, enc_str_imm(rd, scratch.primary, 0));
+            true
+        }
+        I::SetjmpAArch64 | I::LongjmpAArch64 => {
+            bail_msg("intrinsic: setjmp / longjmp not in thin slice");
             false
         }
     }
@@ -1322,42 +1414,82 @@ fn emit_call_indirect(
     if target_r.0 != 9 {
         emit(code, enc_mov_reg(Reg(9), target_r));
     }
-    let plan = super::plan_call_args(args.len(), args.len(), 0, abi);
-    if plan.scratch_bytes > 0 {
-        emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
-    }
-    for (i, &placement) in plan.placements.iter().enumerate() {
-        let arg_id = args[i];
+    // Indirect calls keep the c5-stack push shape regardless of
+    // whether the callee is variadic. Variadic c5 callees read
+    // their args off the 16-byte-stride stack (their prologue
+    // skips the host-arg-reg spill); non-variadic callees pull
+    // their args from x0..x7 + host stack overflow, ignoring the
+    // c5 stack pushes. Mirroring the pool path's `Op::Jsri`
+    // shape -- push every arg first, then load the prefix into
+    // host arg regs, then blr -- handles both at the indirect
+    // call site without needing the callee's variadic flag.
+    let fp_arg_mask = args.iter().enumerate().fold(0u32, |m, (i, &v)| {
+        let p = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
+        if matches!(p, Place::FpReg(_)) {
+            m | (1u32 << i)
+        } else {
+            m
+        }
+    });
+    for (i, &arg_id) in args.iter().rev().enumerate() {
         let arg_place = alloc
             .places
             .get(arg_id as usize)
             .copied()
             .unwrap_or(Place::None);
-        let src = match materialize_int_shifted(
-            code,
-            arg_place,
-            scratch.primary,
-            frame,
-            plan.scratch_bytes,
-        ) {
-            Some(r) => r,
-            None => return false,
+        let sp_shift = (i as u32) * 16;
+        let src = if let Place::FpReg(_) = arg_place {
+            // FP value: load into d-reg, then move bit pattern
+            // into x16 for the 16-byte stride push.
+            let dn = match materialize_fp_shifted(code, arg_place, 0, frame, sp_shift) {
+                Some(r) => r,
+                None => return false,
+            };
+            emit(code, enc_fmov_d_to_x(scratch.primary, dn));
+            scratch.primary
+        } else {
+            match materialize_int_shifted(code, arg_place, scratch.primary, frame, sp_shift) {
+                Some(r) => r,
+                None => return false,
+            }
         };
+        emit(code, enc_str_pre(src, Reg(31), -16));
+    }
+    let pushed_bytes = (args.len() as u32) * 16;
+    // Load the prefix into host arg regs from the c5-stride
+    // stack we just laid down. Non-variadic callees expect this
+    // shape; variadic callees ignore the host arg regs but read
+    // the same slots through `Op::Lea`. Stack overflow (args
+    // past 8) stays on the c5 stack at `[sp + i*16]`, which the
+    // callee prologue's overflow restripe loop also reads from.
+    let plan = super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
+    if plan.scratch_bytes > 0 {
+        emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
+    }
+    for (i, &placement) in plan.placements.iter().enumerate() {
         match placement {
             super::ArgPlacement::IntReg(r) => {
-                if src.0 != r {
-                    emit(code, enc_mov_reg(Reg(r), src));
-                }
+                let src_off = plan.scratch_bytes + (i as u32) * 16;
+                emit(code, enc_ldr_imm(Reg(r), Reg(31), src_off));
+            }
+            super::ArgPlacement::FpReg(r) => {
+                let src_off = plan.scratch_bytes + (i as u32) * 16;
+                emit(code, enc_ldr_d_imm(r, Reg(31), src_off));
             }
             super::ArgPlacement::Stack(off) => {
-                emit(code, enc_str_imm(src, Reg(31), off));
+                let src_off = plan.scratch_bytes + (i as u32) * 16;
+                emit(code, enc_ldr_imm(scratch.primary, Reg(31), src_off));
+                emit(code, enc_str_imm(scratch.primary, Reg(31), off));
             }
-            super::ArgPlacement::FpReg(_) => return false,
         }
     }
     emit(code, enc_blr(Reg(9)));
     if plan.scratch_bytes > 0 {
         emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
+    }
+    // Drop the 16-byte-stride argument pushes.
+    if pushed_bytes > 0 {
+        emit(code, enc_add_imm(Reg(31), Reg(31), pushed_bytes));
     }
     if let Some(rd) = int_reg(dst) {
         if rd.0 != 0 {

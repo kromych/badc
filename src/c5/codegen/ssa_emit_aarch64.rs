@@ -165,6 +165,9 @@ pub(super) fn emit_function(
     pending_func_fixups: &mut Vec<(usize, usize)>,
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
+    tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
+    macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
+    macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
 ) -> bool {
     let frame = Frame::for_function(func, alloc);
     let abi = target.abi();
@@ -189,12 +192,16 @@ pub(super) fn emit_function(
                 frame,
                 &scratch,
                 abi,
+                target,
                 fixups,
                 plt_call_fixups,
                 data_fixups,
                 pending_func_fixups,
                 imports,
                 variadic_targets,
+                tls_index_fixups,
+                macho_tlv_fixups,
+                macho_tlv_descriptors,
             ) {
                 #[cfg(feature = "std")]
                 if std::env::var("BADC_DUMP_SSA").is_ok() {
@@ -436,6 +443,7 @@ fn alloc_save_base(frame: Frame, alloc: &Allocation) -> u32 {
 
 /// Emit one SSA instruction. Returns `false` for any op the thin
 /// slice doesn't handle yet so the caller can fall back.
+#[allow(clippy::too_many_arguments)]
 fn emit_inst(
     code: &mut Vec<u8>,
     inst: &Inst,
@@ -444,12 +452,16 @@ fn emit_inst(
     frame: Frame,
     scratch: &ScratchPool,
     abi: super::Abi,
+    target: Target,
     fixups: &mut Vec<Fixup>,
     plt_call_fixups: &mut Vec<PltCallFixup>,
     data_fixups: &mut Vec<DataFixup>,
     pending_func_fixups: &mut Vec<(usize, usize)>,
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
+    tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
+    macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
+    macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
 ) -> bool {
     match inst {
         Inst::AllocaInit(slot) => {
@@ -676,7 +688,100 @@ fn emit_inst(
                 }
             }
         }
+        Inst::TlsAddr(offset) => emit_tls_addr(
+            code,
+            dst,
+            *offset,
+            target,
+            tls_index_fixups,
+            macho_tlv_fixups,
+            macho_tlv_descriptors,
+        ),
         _ => false,
+    }
+}
+
+/// `Op::TlsLea` lowering. Routes through the per-target TLS
+/// access shape -- Linux variant 1 (TPIDR_EL0 + tcb + offset),
+/// Windows TEB->TLS slot via `_tls_index` and the per-thread
+/// pointer table at `[x18, #0x58]`, or Apple's TLV descriptor
+/// table with the bootstrap getter. The 12-bit add immediate
+/// limit on the per-variable offset matches the pool path; any
+/// `_Thread_local` larger than 4080 bytes from `.tdata` falls
+/// back to the pool path through the false return.
+#[allow(clippy::too_many_arguments)]
+fn emit_tls_addr(
+    code: &mut Vec<u8>,
+    dst: Place,
+    offset: i64,
+    target: Target,
+    tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
+    macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
+    macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
+) -> bool {
+    use super::aarch64::{enc_blr, enc_ldr_reg_lsl3, enc_mrs_tpidr_el0};
+    let Some(rd) = int_reg(dst) else {
+        bail_msg("TlsAddr: dst not int reg");
+        return false;
+    };
+    match target {
+        Target::LinuxAarch64 => {
+            let imm = (offset + 16) as u32;
+            if imm >= 4096 {
+                bail_msg("TlsAddr: offset exceeds 12-bit add immediate");
+                return false;
+            }
+            emit(code, enc_mrs_tpidr_el0(rd));
+            emit(code, enc_add_imm(rd, rd, imm));
+            true
+        }
+        Target::WindowsAarch64 => {
+            if offset >= 4096 {
+                bail_msg("TlsAddr: offset exceeds 12-bit add immediate");
+                return false;
+            }
+            emit(code, enc_ldr_imm(Reg(16), Reg(18), 0x58));
+            let pair_off = code.len();
+            tls_index_fixups.push(super::TlsIndexFixup {
+                instr_offset: pair_off,
+            });
+            emit(code, enc_adrp(Reg(17), 0));
+            emit(code, enc_ldr32_imm(Reg(17), Reg(17), 0));
+            emit(code, enc_ldr_reg_lsl3(Reg(16), Reg(16), Reg(17)));
+            emit(code, enc_add_imm(rd, Reg(16), offset as u32));
+            true
+        }
+        Target::MacOSAarch64 => {
+            let descriptor_index = match macho_tlv_descriptors
+                .iter()
+                .position(|d| d.offset_in_block == offset as u64)
+            {
+                Some(i) => i,
+                None => {
+                    macho_tlv_descriptors.push(super::MachoTlvDescriptor {
+                        offset_in_block: offset as u64,
+                    });
+                    macho_tlv_descriptors.len() - 1
+                }
+            };
+            let adrp_off = code.len();
+            macho_tlv_fixups.push(super::MachoTlvFixup {
+                adrp_offset: adrp_off,
+                descriptor_index,
+            });
+            emit(code, enc_adrp(Reg(0), 0));
+            emit(code, enc_add_imm(Reg(0), Reg(0), 0));
+            emit(code, enc_ldr_imm(Reg(16), Reg(0), 0));
+            emit(code, enc_blr(Reg(16)));
+            if rd.0 != 0 {
+                emit(code, enc_mov_reg(rd, Reg(0)));
+            }
+            true
+        }
+        _ => {
+            bail_msg("TlsAddr: target not aarch64");
+            false
+        }
     }
 }
 
@@ -1847,6 +1952,9 @@ mod tests {
         let imps = super::super::ResolvedImports::default();
         let variadic_targets: alloc::collections::BTreeSet<usize> =
             alloc::collections::BTreeSet::new();
+        let mut tls_idx = Vec::new();
+        let mut tlv_fx = Vec::new();
+        let mut tlv_desc = Vec::new();
         let ok = emit_function(
             &func,
             &alloc,
@@ -1858,6 +1966,9 @@ mod tests {
             &mut pf_fx,
             &imps,
             &variadic_targets,
+            &mut tls_idx,
+            &mut tlv_fx,
+            &mut tlv_desc,
         );
         assert!(
             ok,
@@ -1892,6 +2003,9 @@ mod tests {
         let imps = super::super::ResolvedImports::default();
         let variadic_targets: alloc::collections::BTreeSet<usize> =
             alloc::collections::BTreeSet::new();
+        let mut tls_idx = Vec::new();
+        let mut tlv_fx = Vec::new();
+        let mut tlv_desc = Vec::new();
         let ok = emit_function(
             &func,
             &alloc,
@@ -1903,6 +2017,9 @@ mod tests {
             &mut pf_fx,
             &imps,
             &variadic_targets,
+            &mut tls_idx,
+            &mut tlv_fx,
+            &mut tlv_desc,
         );
         assert!(ok, "binop handler should cover Add + Shl + Shr");
         assert_eq!(code.len() % 4, 0);
@@ -1930,6 +2047,9 @@ mod tests {
         let imps = super::super::ResolvedImports::default();
         let variadic_targets: alloc::collections::BTreeSet<usize> =
             alloc::collections::BTreeSet::new();
+        let mut tls_idx = Vec::new();
+        let mut tlv_fx = Vec::new();
+        let mut tlv_desc = Vec::new();
         let ok = emit_function(
             &func,
             &alloc,
@@ -1941,6 +2061,9 @@ mod tests {
             &mut pf_fx,
             &imps,
             &variadic_targets,
+            &mut tls_idx,
+            &mut tlv_fx,
+            &mut tlv_desc,
         );
         assert!(
             ok,

@@ -1353,6 +1353,9 @@ pub(super) fn lower(
                     &mut pending_func_fixups,
                     imports,
                     &program.variadic_functions,
+                    &mut tls_index_fixups,
+                    &mut macho_tlv_fixups,
+                    &mut macho_tlv_descriptors,
                 );
                 if !ok {
                     #[cfg(feature = "std")]

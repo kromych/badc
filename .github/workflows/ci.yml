@@ -289,37 +289,35 @@ jobs:
           # back the signature buffer's address (rdi) plus the
           # call chain that produced it.
           if command -v gdb >/dev/null; then
-              # Frame layout (from the previous probe's DWARF
-              # dump) at the fprintf breakpoint inside
-              # `scenario_rfc8032`:
-              #   sig          = $rbp - 0x140  (64 bytes, broken)
-              #   seed_copy    = $rbp - 0x100  (32 bytes)
-              #   pk           = $rbp - 0xe0   (32 bytes)
-              #   sk           = $rbp - 0xc0   (64 bytes)
-              #   expected_sig = $rbp - 0x80   (64 bytes)
-              #   expected_pk  = $rbp - 0x40   (32 bytes)
-              #   seed         = $rbp - 0x20   (32 bytes)
-              # gdb walks up to the scenario frame after the
-              # libc fprintf breakpoint hits; from there each
-              # local has a fixed displacement from $rbp.
+              # Break inside crypto_eddsa_reduce just after the
+              # call to load32_le_buf returns and dump the
+              # 64-byte local `u32 x[16]` array. The return-from-
+              # call site lives at $rip = entry_va + 0x98 in
+              # both SSA-emitted variants; setting the breakpoint
+              # on the matching `mov %rax, %r15` instruction
+              # lets us snapshot the freshly-populated array.
+              #
+              # Also dump the same array from the second probe
+              # build (BADC_SSA_STORE_SPILL_ADDR=1) to contrast
+              # the two failure paths. The pool-emitted equivalent
+              # would write the LE32 bytes byte-for-byte; a
+              # divergence here pinpoints the SSA emit's bug.
               gdb -batch \
                   -ex 'set pagination off' \
-                  -ex 'set print frame-arguments all' \
                   -ex 'set print elements 256' \
+                  -ex 'break *(crypto_eddsa_reduce + 0x98)' \
                   -ex 'break fprintf' \
                   -ex run \
+                  -ex 'printf "--- x[16] just after load32_le_buf ---\n"' \
+                  -ex 'x/64bx $rbp-0x40' \
+                  -ex 'printf "--- registers ---\n"' \
+                  -ex 'info registers rax rbx rdi rsi rdx rcx r10 r11 r12 r13 r14 r15' \
+                  -ex 'continue' \
                   -ex 'frame 1' \
-                  -ex 'info frame' \
                   -ex 'printf "--- sig (got) ---\n"' \
                   -ex 'x/64bx $rbp-0x140' \
                   -ex 'printf "--- expected_sig ---\n"' \
                   -ex 'x/64bx $rbp-0x80' \
-                  -ex 'printf "--- sk ---\n"' \
-                  -ex 'x/64bx $rbp-0xc0' \
-                  -ex 'printf "--- pk ---\n"' \
-                  -ex 'x/32bx $rbp-0xe0' \
-                  -ex 'printf "--- expected_pk ---\n"' \
-                  -ex 'x/32bx $rbp-0x40' \
                   -ex 'bt 20' \
                   /tmp/mono_only \
                   > /tmp/gdb_post.log 2>&1 || true

@@ -949,19 +949,23 @@ fn emit_call(
         }
         return true;
     }
-    // Non-variadic: marshal through the host ABI. The planner
-    // returns IntReg placements for the prefix and Stack
-    // placements for the tail. FP-arg routing isn't part of the
-    // thin slice yet.
-    let plan = super::plan_call_args(args.len(), args.len(), 0, abi);
+    // Non-variadic: marshal through the host ABI. Compute the
+    // FP-arg mask from each value's Place -- the SSA model has
+    // no separate type channel, but an FpReg-placed value is
+    // necessarily f64. Feeding the mask to the planner routes
+    // those args to d0..d7 instead of x0..x7.
+    let fp_arg_mask = args.iter().enumerate().fold(0u32, |m, (i, &v)| {
+        let p = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
+        if matches!(p, Place::FpReg(_)) {
+            m | (1u32 << i)
+        } else {
+            m
+        }
+    });
+    let plan = super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
     if plan.scratch_bytes > 0 {
         emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
     }
-    // Stage each arg in the corresponding host arg reg / stack
-    // slot. Reading a value through scratch keeps the case where
-    // arg i's source is already in some other host arg reg
-    // correct (the source may get clobbered by a later
-    // arg's mov-into-host-reg).
     for (i, &placement) in plan.placements.iter().enumerate() {
         let arg_id = args[i];
         let arg_place = alloc
@@ -969,33 +973,62 @@ fn emit_call(
             .get(arg_id as usize)
             .copied()
             .unwrap_or(Place::None);
-        // Load arg into scratch first, then move to its host
-        // position. Always going through scratch keeps the
-        // ordering correct without a parallel-copy analysis.
-        // The `sp_shift` argument compensates for the
-        // outgoing-arg scratch region we already pushed sp down
-        // by; without it, sp-relative spill loads would read
-        // from the wrong frame slot.
-        let src = match materialize_int_shifted(
-            code,
-            arg_place,
-            scratch.primary,
-            frame,
-            plan.scratch_bytes,
-        ) {
-            Some(r) => r,
-            None => return false,
-        };
         match placement {
             super::ArgPlacement::IntReg(r) => {
+                let src = match materialize_int_shifted(
+                    code,
+                    arg_place,
+                    scratch.primary,
+                    frame,
+                    plan.scratch_bytes,
+                ) {
+                    Some(r) => r,
+                    None => return false,
+                };
                 if src.0 != r {
                     emit(code, enc_mov_reg(Reg(r), src));
                 }
             }
-            super::ArgPlacement::Stack(off) => {
-                emit(code, enc_str_imm(src, Reg(31), off));
+            super::ArgPlacement::FpReg(r) => {
+                let src =
+                    match materialize_fp_shifted(code, arg_place, 0u8, frame, plan.scratch_bytes) {
+                        Some(r) => r,
+                        None => return false,
+                    };
+                if src != r {
+                    // d-reg copy via x: c5 has no fmov.d direct
+                    // and the bit pattern is full 64-bit.
+                    emit(code, enc_fmov_d_to_x(scratch.primary, src));
+                    emit(code, enc_fmov_x_to_d(r, scratch.primary));
+                }
             }
-            super::ArgPlacement::FpReg(_) => return false,
+            super::ArgPlacement::Stack(off) => {
+                if let Place::FpReg(_) = arg_place {
+                    let dn = match materialize_fp_shifted(
+                        code,
+                        arg_place,
+                        0u8,
+                        frame,
+                        plan.scratch_bytes,
+                    ) {
+                        Some(r) => r,
+                        None => return false,
+                    };
+                    emit(code, enc_str_d_imm(dn, Reg(31), off));
+                } else {
+                    let src = match materialize_int_shifted(
+                        code,
+                        arg_place,
+                        scratch.primary,
+                        frame,
+                        plan.scratch_bytes,
+                    ) {
+                        Some(r) => r,
+                        None => return false,
+                    };
+                    emit(code, enc_str_imm(src, Reg(31), off));
+                }
+            }
         }
     }
     // Branch placeholder + fixup. The pool path's apply_fixups
@@ -1010,16 +1043,43 @@ fn emit_call(
     if plan.scratch_bytes > 0 {
         emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
     }
-    // Move the return value from x0 into the call's dst Place.
-    if let Some(rd) = int_reg(dst) {
-        if rd.0 != 0 {
-            emit(code, enc_mov_reg(rd, Reg(0)));
-        }
-    } else if let Place::Spill(slot) = dst {
-        let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
-        emit(code, enc_str_imm(Reg(0), Reg(31), sp_off));
-    }
+    // Move the return value into the call's dst Place. AAPCS64
+    // returns f64 in d0 and ints / pointers in x0. The dst's
+    // Place tells which bank the SSA allocator wants the value
+    // in.
+    move_call_result(code, dst, frame);
     true
+}
+
+/// Common return-value bridge shared by `emit_call`,
+/// `emit_call_ext`, and `emit_call_indirect`. Copies the AAPCS64
+/// return register into the call's SSA dst place. Returns are in
+/// d0 for f64, x0 otherwise; this routine handles both plus a
+/// spill destination.
+fn move_call_result(code: &mut Vec<u8>, dst: Place, frame: Frame) {
+    match dst {
+        Place::IntReg(r) => {
+            if r != 0 {
+                emit(code, enc_mov_reg(Reg(r), Reg(0)));
+            }
+        }
+        Place::FpReg(r) => {
+            if r != 0 {
+                // d-reg copy via x16 since we have no fmov.d
+                // direct.
+                emit(code, enc_fmov_d_to_x(Reg(16), 0));
+                emit(code, enc_fmov_x_to_d(r, Reg(16)));
+            }
+        }
+        Place::Spill(slot) => {
+            let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+            // The allocator gives Spill the same 8-byte slot
+            // regardless of result kind, so store the wide
+            // pattern via x0 directly.
+            emit(code, enc_str_imm(Reg(0), Reg(31), sp_off));
+        }
+        Place::None => {}
+    }
 }
 
 /// Indirect call through a function-pointer value. Mirrors the
@@ -1368,9 +1428,20 @@ fn emit_store(
         }
         return true;
     }
-    let rs = match materialize_int(code, value_place, scratch.secondary, frame) {
-        Some(r) => r,
-        None => return false,
+    // For an I64 store whose value lives in an FpReg (c5's f64
+    // store path uses StoreKind::I64 to write 8 raw bytes), bridge
+    // d-reg -> GPR via fmov. Lower-width stores from an FpReg
+    // aren't a shape c5 emits.
+    let rs = if let StoreKind::I64 = kind
+        && let Place::FpReg(dr) = value_place
+    {
+        emit(code, enc_fmov_d_to_x(scratch.secondary, dr));
+        scratch.secondary
+    } else {
+        match materialize_int(code, value_place, scratch.secondary, frame) {
+            Some(r) => r,
+            None => return false,
+        }
     };
     match kind {
         StoreKind::I64 => emit(code, enc_str_imm(rs, rn, 0)),

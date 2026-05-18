@@ -1147,8 +1147,14 @@ fn emit_load(
     frame: Frame,
     scratch: &ScratchPool,
 ) -> bool {
-    let Some(rd) = int_reg(dst) else {
-        return false;
+    // Load lands in a register; if the allocator chose a spill
+    // place for the result, materialise into scratch.secondary
+    // first then spill it after the load. scratch.primary is
+    // already taken for the addr-base materialisation.
+    let rd = match dst {
+        Place::IntReg(r) => Reg(r),
+        Place::Spill(_) => scratch.secondary,
+        Place::FpReg(_) | Place::None => return false,
     };
     let addr_place = alloc
         .places
@@ -1173,6 +1179,10 @@ fn emit_load(
             bail_msg("Load: F32 not handled");
             return false;
         }
+    }
+    if let Place::Spill(slot) = dst {
+        let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+        emit(code, enc_str_imm(rd, Reg(31), sp_off));
     }
     true
 }

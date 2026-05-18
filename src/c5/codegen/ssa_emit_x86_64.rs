@@ -457,11 +457,27 @@ fn emit_inst(
             emit_call_indirect(code, dst, *target, args, alloc, abi)
         }
         Inst::Intrinsic { kind, args } => emit_intrinsic(code, *kind, args, dst, alloc),
-        Inst::AccSpill { .. } => {
-            // Spill the accumulator across a block boundary. For
-            // single-block functions the cross-block thread never
-            // fires, so a no-op is correct. Bring the real
-            // handler across when multi-block lands.
+        Inst::AccSpill { value } => {
+            let value_place = alloc
+                .places
+                .get(*value as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let Some(rs) = int_reg(value_place) else {
+                bail_msg("AccSpill: value not in int reg");
+                return false;
+            };
+            let sp_off = (frame.frame_bytes - frame.acc_slot_off) as i32;
+            emit_mov_mem_r(code, Reg::RSP, sp_off, rs);
+            true
+        }
+        Inst::AccReload => {
+            let Some(rd) = int_reg(dst) else {
+                bail_msg("AccReload: dst not int reg");
+                return false;
+            };
+            let sp_off = (frame.frame_bytes - frame.acc_slot_off) as i32;
+            emit_mov_r_mem(code, rd, Reg::RSP, sp_off);
             true
         }
         _ => {
@@ -1216,22 +1232,34 @@ fn emit_return(
     frame: Frame,
     func: &FunctionSsa,
 ) {
-    if value != super::ssa::NO_VALUE {
+    // The SSA allocator's pool covers rax + r11 (SysV caller-
+    // saved), so the prologue may have saved rax. Park the
+    // return value in rcx (not in the pool) ahead of the
+    // restore loop and copy rcx -> rax after; otherwise the
+    // restore reloads rax with whatever the body parked there
+    // and the return value is lost.
+    let return_src = if value != super::ssa::NO_VALUE {
         let place = alloc
             .places
             .get(value as usize)
             .copied()
             .unwrap_or(Place::None);
-        if let Some(src) = int_reg(place) {
-            if src.0 != 0 {
-                emit_mov_rr(code, Reg::RAX, src);
-            }
+        int_reg(place)
+    } else {
+        None
+    };
+    if let Some(src) = return_src {
+        if src.0 != Reg::RCX.0 {
+            emit_mov_rr(code, Reg::RCX, src);
         }
     }
     // Restore callee-saved GPRs (mirror of the prologue's saves).
     for (i, &r) in alloc.gpr_used.iter().enumerate() {
         let off = (i as i32) * 8;
         super::x86_64::emit_mov_r_mem(code, Reg(r), Reg::RSP, off);
+    }
+    if return_src.is_some() {
+        emit_mov_rr(code, Reg::RAX, Reg::RCX);
     }
     if frame.frame_bytes > 0 {
         emit_add_rsp_imm32(code, frame.frame_bytes);

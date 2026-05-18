@@ -112,13 +112,13 @@ pub(super) fn emit_function(
     alloc: &Allocation,
     target: Target,
     code: &mut Vec<u8>,
-    _fixups: &mut Vec<Fixup>,
-    _plt_call_fixups: &mut Vec<PltCallFixup>,
+    fixups: &mut Vec<Fixup>,
+    plt_call_fixups: &mut Vec<PltCallFixup>,
     _got_fixups: &mut Vec<GotFixup>,
     _data_fixups: &mut Vec<DataFixup>,
     _pending_func_fixups: &mut Vec<(usize, usize)>,
-    _imports: &super::ResolvedImports,
-    _variadic_targets: &alloc::collections::BTreeSet<usize>,
+    imports: &super::ResolvedImports,
+    variadic_targets: &alloc::collections::BTreeSet<usize>,
     _tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     bytecode_to_native: &mut [usize],
 ) -> bool {
@@ -139,7 +139,18 @@ pub(super) fn emit_function(
         for v in block.inst_range.clone() {
             let inst = &func.insts[v as usize];
             let place = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
-            if !emit_inst(code, inst, place, alloc, frame) {
+            if !emit_inst(
+                code,
+                inst,
+                place,
+                alloc,
+                frame,
+                abi,
+                fixups,
+                plt_call_fixups,
+                imports,
+                variadic_targets,
+            ) {
                 #[cfg(feature = "std")]
                 if std::env::var("BADC_DUMP_SSA").is_ok() {
                     eprintln!(
@@ -359,6 +370,11 @@ fn emit_inst(
     dst: Place,
     alloc: &Allocation,
     frame: Frame,
+    abi: super::Abi,
+    fixups: &mut Vec<Fixup>,
+    plt_call_fixups: &mut Vec<PltCallFixup>,
+    imports: &super::ResolvedImports,
+    variadic_targets: &alloc::collections::BTreeSet<usize>,
 ) -> bool {
     match inst {
         Inst::AllocaInit(slot) => {
@@ -398,6 +414,32 @@ fn emit_inst(
         Inst::Load { addr, kind } => emit_load(code, dst, *addr, *kind, alloc),
         Inst::Store { addr, value, kind } => emit_store(code, dst, *addr, *value, *kind, alloc),
         Inst::Binop { op, lhs, rhs } => emit_binop(code, *op, dst, *lhs, *rhs, alloc),
+        Inst::BinopI { op, lhs, rhs_imm } => emit_binop_imm(code, *op, dst, *lhs, *rhs_imm, alloc),
+        Inst::Call { target_pc, args } => emit_call(
+            code,
+            dst,
+            *target_pc,
+            args,
+            alloc,
+            abi,
+            fixups,
+            variadic_targets.contains(target_pc),
+        ),
+        Inst::CallExt {
+            binding_idx,
+            args,
+            fp_arg_mask,
+        } => emit_call_ext(
+            code,
+            dst,
+            *binding_idx,
+            args,
+            *fp_arg_mask,
+            alloc,
+            abi,
+            plt_call_fixups,
+            imports,
+        ),
         Inst::AccSpill { .. } => {
             // Spill the accumulator across a block boundary. For
             // single-block functions the cross-block thread never
@@ -596,6 +638,257 @@ fn emit_binop(
         _ => {
             bail_msg("Binop: variant not yet covered");
             return false;
+        }
+    }
+    true
+}
+
+fn emit_binop_imm(
+    code: &mut Vec<u8>,
+    op: BinOp,
+    dst: Place,
+    lhs: u32,
+    rhs_imm: i64,
+    alloc: &Allocation,
+) -> bool {
+    let Some(rd) = int_reg(dst) else {
+        bail_msg("BinopI: dst not int reg");
+        return false;
+    };
+    let lhs_place = alloc
+        .places
+        .get(lhs as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let Some(rn) = int_reg(lhs_place) else {
+        bail_msg("BinopI: lhs not int reg");
+        return false;
+    };
+    // Materialise the immediate into rcx as a scratch. rcx is
+    // caller-saved on every x86_64 ABI we target, and the SSA
+    // allocator excludes it from the pool, so this can't clobber
+    // a live value.
+    super::x86_64::emit_mov_r_imm64(code, Reg::RCX, rhs_imm);
+    // Stage rd = lhs first (x86's two-operand form).
+    if rd.0 != rn.0 {
+        emit_mov_rr(code, rd, rn);
+    }
+    match op {
+        BinOp::Add => emit_add_rr(code, rd, Reg::RCX),
+        BinOp::Sub => emit_sub_rr(code, rd, Reg::RCX),
+        BinOp::Mul => emit_imul_rr(code, rd, Reg::RCX),
+        BinOp::And => emit_and_rr(code, rd, Reg::RCX),
+        BinOp::Or => emit_or_rr(code, rd, Reg::RCX),
+        BinOp::Xor => emit_xor_rr(code, rd, Reg::RCX),
+        BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge => {
+            emit_cmp_rr(code, rn, Reg::RCX);
+            let cc = match op {
+                BinOp::Eq => Cc::E,
+                BinOp::Ne => Cc::Ne,
+                BinOp::Lt => Cc::L,
+                BinOp::Gt => Cc::G,
+                BinOp::Le => Cc::Le,
+                BinOp::Ge => Cc::Ge,
+                _ => unreachable!(),
+            };
+            emit_setcc_r8(code, cc, Reg::RCX);
+            emit_movzx_r_r8(code, rd, Reg::RCX);
+        }
+        BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge => {
+            emit_cmp_rr(code, rn, Reg::RCX);
+            let cc = match op {
+                BinOp::Ult => Cc::B,
+                BinOp::Ugt => Cc::A,
+                BinOp::Ule => Cc::Be,
+                BinOp::Uge => Cc::Ae,
+                _ => unreachable!(),
+            };
+            emit_setcc_r8(code, cc, Reg::RCX);
+            emit_movzx_r_r8(code, rd, Reg::RCX);
+        }
+        BinOp::Shl | BinOp::Shr | BinOp::Shru => {
+            // Shift count already in cl via the `mov rcx, imm` above.
+            if rd.0 == Reg::RCX.0 {
+                bail_msg("BinopI shift: dst aliases rcx");
+                return false;
+            }
+            match op {
+                BinOp::Shl => emit_shl_r_cl(code, rd),
+                BinOp::Shr => emit_sar_r_cl(code, rd),
+                BinOp::Shru => emit_shr_r_cl(code, rd),
+                _ => unreachable!(),
+            }
+        }
+        _ => {
+            bail_msg("BinopI: variant not yet covered");
+            return false;
+        }
+    }
+    true
+}
+
+fn emit_call(
+    code: &mut Vec<u8>,
+    dst: Place,
+    target_pc: usize,
+    args: &[u32],
+    alloc: &Allocation,
+    abi: super::Abi,
+    fixups: &mut Vec<Fixup>,
+    callee_is_variadic: bool,
+) -> bool {
+    if callee_is_variadic {
+        bail_msg("Call: variadic target not yet handled");
+        return false;
+    }
+    // Compute fp_arg_mask from value places. FpReg-placed args
+    // are f64 and route through xmm regs.
+    let fp_arg_mask = args.iter().enumerate().fold(0u32, |m, (i, &v)| {
+        let p = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
+        if matches!(p, Place::FpReg(_)) {
+            m | (1u32 << i)
+        } else {
+            m
+        }
+    });
+    let plan = super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
+    if plan.scratch_bytes > 0 {
+        emit_sub_rsp_imm32(code, plan.scratch_bytes);
+    }
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        let arg_id = args[i];
+        let arg_place = alloc
+            .places
+            .get(arg_id as usize)
+            .copied()
+            .unwrap_or(Place::None);
+        match placement {
+            super::ArgPlacement::IntReg(r) => {
+                let Some(src) = int_reg(arg_place) else {
+                    bail_msg("Call: int arg not in int reg");
+                    return false;
+                };
+                if src.0 != r {
+                    emit_mov_rr(code, Reg(r), src);
+                }
+            }
+            super::ArgPlacement::Stack(off) => {
+                let Some(src) = int_reg(arg_place) else {
+                    bail_msg("Call: stack arg not in int reg");
+                    return false;
+                };
+                emit_mov_mem_r(code, Reg::RSP, off as i32, src);
+            }
+            super::ArgPlacement::FpReg(_) => {
+                bail_msg("Call: FpReg placement not yet handled");
+                return false;
+            }
+        }
+    }
+    // Record a fixup for the call's rel32 field. `emit_call_rel32`
+    // emits opcode 0xE8 then 4 bytes of rel32; `target_bytecode_pc`
+    // resolves to the function's native offset in the post-pass.
+    let call_site = code.len();
+    fixups.push(Fixup {
+        native_offset: call_site,
+        target_bytecode_pc: target_pc,
+        kind: super::x86_64::BranchKind::Call,
+    });
+    super::x86_64::emit_call_rel32(code, 0);
+    if plan.scratch_bytes > 0 {
+        emit_add_rsp_imm32(code, plan.scratch_bytes);
+    }
+    // Return value lands in rax. Propagate to dst.
+    if let Some(rd) = int_reg(dst) {
+        if rd.0 != 0 {
+            emit_mov_rr(code, rd, Reg::RAX);
+        }
+    }
+    true
+}
+
+fn emit_call_ext(
+    code: &mut Vec<u8>,
+    dst: Place,
+    binding_idx: i64,
+    args: &[u32],
+    fp_arg_mask: u32,
+    alloc: &Allocation,
+    abi: super::Abi,
+    plt_call_fixups: &mut Vec<PltCallFixup>,
+    imports: &super::ResolvedImports,
+) -> bool {
+    let import_index = match imports.index_of_binding(binding_idx) {
+        Some(i) => i,
+        None => return false,
+    };
+    let imp = &imports.imports[import_index];
+    let fixed = if imp.is_variadic {
+        imp.fixed_args.min(args.len())
+    } else {
+        args.len()
+    };
+    let plan = super::plan_call_args(args.len(), fixed, fp_arg_mask, abi);
+    if plan.scratch_bytes > 0 {
+        emit_sub_rsp_imm32(code, plan.scratch_bytes);
+    }
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        let arg_id = args[i];
+        let arg_place = alloc
+            .places
+            .get(arg_id as usize)
+            .copied()
+            .unwrap_or(Place::None);
+        match placement {
+            super::ArgPlacement::IntReg(r) => {
+                let Some(src) = int_reg(arg_place) else {
+                    bail_msg("CallExt: int arg not in int reg");
+                    return false;
+                };
+                if src.0 != r {
+                    emit_mov_rr(code, Reg(r), src);
+                }
+            }
+            super::ArgPlacement::Stack(off) => {
+                let Some(src) = int_reg(arg_place) else {
+                    bail_msg("CallExt: stack arg not in int reg");
+                    return false;
+                };
+                emit_mov_mem_r(code, Reg::RSP, off as i32, src);
+            }
+            super::ArgPlacement::FpReg(_) => {
+                bail_msg("CallExt: FpReg placement not yet handled");
+                return false;
+            }
+        }
+    }
+    let call_site = code.len();
+    plt_call_fixups.push(PltCallFixup {
+        instr_offset: call_site,
+        import_index,
+        is_tail: false,
+    });
+    super::x86_64::emit_call_rel32(code, 0);
+    if plan.scratch_bytes > 0 {
+        emit_add_rsp_imm32(code, plan.scratch_bytes);
+    }
+    // Sub-word integer returns get the standard sign / zero
+    // extension into rax. FP returns arrive in xmm0; the SSA emit
+    // doesn't yet bridge xmm0 -> rax here. Most c5 demos that
+    // call libc only consume integer-shaped returns, so the
+    // tighter bridge can wait.
+    use crate::c5::compiler::types as ty_helpers;
+    let return_type_tag = imp.return_type_tag;
+    let bare = ty_helpers::strip_unsigned(return_type_tag);
+    if ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare) {
+        bail_msg("CallExt: FP return not yet bridged to rax");
+        return false;
+    }
+    let ext = super::return_extension(return_type_tag, super::Target::LinuxX64);
+    super::x86_64::emit_extend_rax_for_return(code, ext);
+    if let Some(rd) = int_reg(dst) {
+        if rd.0 != 0 {
+            emit_mov_rr(code, rd, Reg::RAX);
         }
     }
     true

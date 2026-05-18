@@ -1186,7 +1186,7 @@ pub(super) fn emit_start_stub(
 // ------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy)]
-enum BranchKind {
+pub(super) enum BranchKind {
     Jmp,
     Jcc(Cc),
     Call,
@@ -1195,9 +1195,9 @@ enum BranchKind {
 #[derive(Debug, Clone, Copy)]
 pub(super) struct Fixup {
     /// Byte offset within `code` of the placeholder's first byte.
-    native_offset: usize,
-    target_bytecode_pc: usize,
-    kind: BranchKind,
+    pub(super) native_offset: usize,
+    pub(super) target_bytecode_pc: usize,
+    pub(super) kind: BranchKind,
 }
 
 /// Translate a c5 `Op::Lea` offset (in 8-byte VM-slot units) into
@@ -2699,14 +2699,14 @@ fn emit_libc_call(
 pub(super) struct PltCallFixup {
     /// Byte offset within `code` of the CALL/JMP instruction
     /// (the opcode byte, not the disp32 field).
-    instr_offset: usize,
+    pub(super) instr_offset: usize,
     /// Import slot the call should reach via its trampoline.
-    import_index: usize,
+    pub(super) import_index: usize,
     /// `true` -> emit `JMP rel32` (tail jump from `Op::TailExt`);
     /// `false` -> emit `CALL rel32` (regular `Op::JsrExt` site).
     /// Both are 5 bytes, both use the same disp32 measurement
     /// origin (one byte past the instruction).
-    is_tail: bool,
+    pub(super) is_tail: bool,
 }
 
 /// Append one PLT trampoline per import. Each trampoline is a

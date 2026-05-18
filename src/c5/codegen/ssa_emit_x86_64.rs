@@ -896,14 +896,8 @@ fn emit_store(
     // parked (Store ops leave the written value in the
     // accumulator per the c5 stack-machine semantics).
     match dst {
-        Place::IntReg(r) => {
-            if r != rs.0 {
-                emit_mov_rr(code, Reg(r), rs);
-            }
-        }
-        Place::Spill(_) => {
-            spill_dst_to_slot(code, dst, rs, frame);
-        }
+        Place::IntReg(r) if r != rs.0 => emit_mov_rr(code, Reg(r), rs),
+        Place::Spill(_) => spill_dst_to_slot(code, dst, rs, frame),
         _ => {}
     }
     true
@@ -1296,10 +1290,10 @@ fn emit_call(
         emit_add_rsp_imm32(code, plan.scratch_bytes);
     }
     // Return value lands in rax. Propagate to dst.
-    if let Some(rd) = int_reg(dst) {
-        if rd.0 != 0 {
-            emit_mov_rr(code, rd, Reg::RAX);
-        }
+    if let Some(rd) = int_reg(dst)
+        && rd.0 != 0
+    {
+        emit_mov_rr(code, rd, Reg::RAX);
     }
     true
 }
@@ -1380,10 +1374,10 @@ fn emit_call_ext(
     }
     let ext = super::return_extension(return_type_tag, super::Target::LinuxX64);
     super::x86_64::emit_extend_rax_for_return(code, ext);
-    if let Some(rd) = int_reg(dst) {
-        if rd.0 != 0 {
-            emit_mov_rr(code, rd, Reg::RAX);
-        }
+    if let Some(rd) = int_reg(dst)
+        && rd.0 != 0
+    {
+        emit_mov_rr(code, rd, Reg::RAX);
     }
     true
 }
@@ -1697,14 +1691,8 @@ fn emit_mcpy(
     emit_pop_r(code, temp);
     // memcpy returns dst; propagate into the inst's dst.
     match dst_place {
-        Place::IntReg(r) => {
-            if r != dst_r.0 {
-                emit_mov_rr(code, Reg(r), dst_r);
-            }
-        }
-        Place::Spill(_) => {
-            spill_dst_to_slot(code, dst_place, dst_r, frame);
-        }
+        Place::IntReg(r) if r != dst_r.0 => emit_mov_rr(code, Reg(r), dst_r),
+        Place::Spill(_) => spill_dst_to_slot(code, dst_place, dst_r, frame),
         _ => {}
     }
     true
@@ -1733,10 +1721,10 @@ fn emit_return(
     } else {
         None
     };
-    if let Some(src) = return_src {
-        if src.0 != Reg::RCX.0 {
-            emit_mov_rr(code, Reg::RCX, src);
-        }
+    if let Some(src) = return_src
+        && src.0 != Reg::RCX.0
+    {
+        emit_mov_rr(code, Reg::RCX, src);
     }
     // Restore callee-saved GPRs (mirror of the prologue's saves).
     for (i, &r) in alloc.gpr_used.iter().enumerate() {

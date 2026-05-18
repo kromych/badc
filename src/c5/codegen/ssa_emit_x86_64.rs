@@ -123,6 +123,10 @@ pub(super) fn emit_function(
     bytecode_to_native: &mut [usize],
 ) -> bool {
     let snapshot = code.len();
+    let fixups_snapshot = fixups.len();
+    let plt_call_fixups_snapshot = plt_call_fixups.len();
+    let data_fixups_snapshot = data_fixups.len();
+    let pending_func_fixups_snapshot = pending_func_fixups.len();
     let frame = Frame::for_function(func, alloc);
     let abi = target.abi();
 
@@ -161,6 +165,10 @@ pub(super) fn emit_function(
                     );
                 }
                 code.truncate(snapshot);
+                fixups.truncate(fixups_snapshot);
+                plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                data_fixups.truncate(data_fixups_snapshot);
+                pending_func_fixups.truncate(pending_func_fixups_snapshot);
                 return false;
             }
         }
@@ -187,6 +195,10 @@ pub(super) fn emit_function(
                 let Some(rc) = int_reg(cond_place) else {
                     bail_msg("Bz: cond Place not int reg");
                     code.truncate(snapshot);
+                    fixups.truncate(fixups_snapshot);
+                    plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                    data_fixups.truncate(data_fixups_snapshot);
+                    pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     return false;
                 };
                 // `cmp rc, 0` sets ZF=1 iff rc==0; je takes the
@@ -220,6 +232,10 @@ pub(super) fn emit_function(
                 let Some(rc) = int_reg(cond_place) else {
                     bail_msg("Bnz: cond Place not int reg");
                     code.truncate(snapshot);
+                    fixups.truncate(fixups_snapshot);
+                    plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                    data_fixups.truncate(data_fixups_snapshot);
+                    pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     return false;
                 };
                 super::x86_64::emit_cmp_r_imm32(code, rc, 0);
@@ -251,6 +267,10 @@ pub(super) fn emit_function(
             Terminator::TailExt(_) => {
                 bail_msg("TailExt terminator not yet handled");
                 code.truncate(snapshot);
+                fixups.truncate(fixups_snapshot);
+                plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                data_fixups.truncate(data_fixups_snapshot);
+                pending_func_fixups.truncate(pending_func_fixups_snapshot);
                 return false;
             }
         }
@@ -267,6 +287,10 @@ pub(super) fn emit_function(
             Err(_) => {
                 bail_msg("branch fixup: rel32 out of range");
                 code.truncate(snapshot);
+                fixups.truncate(fixups_snapshot);
+                plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                data_fixups.truncate(data_fixups_snapshot);
+                pending_func_fixups.truncate(pending_func_fixups_snapshot);
                 return false;
             }
         };
@@ -879,6 +903,14 @@ fn emit_call_ext(
                 return false;
             }
         }
+    }
+    // SysV AMD64 (System V AMD64 ABI, 3.2.3): for variadic
+    // callees `al` must hold the number of XMM argument
+    // registers used; this emit path passes all args in GPRs,
+    // so `al = 0`. Win64 has no such requirement and clears
+    // `variadic_zero_xmm_count`.
+    if abi.variadic_zero_xmm_count {
+        super::x86_64::emit_xor_eax_eax(code);
     }
     let call_site = code.len();
     plt_call_fixups.push(PltCallFixup {

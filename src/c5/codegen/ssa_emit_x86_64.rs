@@ -453,6 +453,10 @@ fn emit_inst(
             src: s,
             size,
         } => emit_mcpy(code, dst, *d, *s, *size, alloc),
+        Inst::CallIndirect { target, args } => {
+            emit_call_indirect(code, dst, *target, args, alloc, abi)
+        }
+        Inst::Intrinsic { kind, args } => emit_intrinsic(code, *kind, args, dst, alloc),
         Inst::AccSpill { .. } => {
             // Spill the accumulator across a block boundary. For
             // single-block functions the cross-block thread never
@@ -905,6 +909,176 @@ fn emit_call_ext(
         }
     }
     true
+}
+
+fn emit_call_indirect(
+    code: &mut Vec<u8>,
+    dst: Place,
+    target: u32,
+    args: &[u32],
+    alloc: &Allocation,
+    abi: super::Abi,
+) -> bool {
+    let target_place = alloc
+        .places
+        .get(target as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let Some(target_r) = int_reg(target_place) else {
+        bail_msg("CallIndirect: target not in int reg");
+        return false;
+    };
+    // Capture the target pointer into r11 before arg marshalling
+    // can clobber it. r11 is caller-saved on every x86_64 ABI we
+    // target and the SSA allocator excludes it from the pool.
+    if target_r.0 != Reg::R11.0 {
+        emit_mov_rr(code, Reg::R11, target_r);
+    }
+    let plan = super::plan_call_args(args.len(), args.len(), 0, abi);
+    if plan.scratch_bytes > 0 {
+        emit_sub_rsp_imm32(code, plan.scratch_bytes);
+    }
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        let arg_id = args[i];
+        let arg_place = alloc
+            .places
+            .get(arg_id as usize)
+            .copied()
+            .unwrap_or(Place::None);
+        match placement {
+            super::ArgPlacement::IntReg(r) => {
+                let Some(src) = int_reg(arg_place) else {
+                    bail_msg("CallIndirect: int arg not in int reg");
+                    return false;
+                };
+                if src.0 != r {
+                    emit_mov_rr(code, Reg(r), src);
+                }
+            }
+            super::ArgPlacement::Stack(off) => {
+                let Some(src) = int_reg(arg_place) else {
+                    bail_msg("CallIndirect: stack arg not in int reg");
+                    return false;
+                };
+                emit_mov_mem_r(code, Reg::RSP, off as i32, src);
+            }
+            super::ArgPlacement::FpReg(_) => {
+                bail_msg("CallIndirect: FpReg placement not yet handled");
+                return false;
+            }
+        }
+    }
+    super::x86_64::emit_call_r(code, Reg::R11);
+    if plan.scratch_bytes > 0 {
+        emit_add_rsp_imm32(code, plan.scratch_bytes);
+    }
+    if let Some(rd) = int_reg(dst) {
+        if rd.0 != 0 {
+            emit_mov_rr(code, rd, Reg::RAX);
+        }
+    }
+    true
+}
+
+fn emit_intrinsic(
+    code: &mut Vec<u8>,
+    kind: i64,
+    args: &[u32],
+    dst: Place,
+    alloc: &Allocation,
+) -> bool {
+    use crate::c5::op::Intrinsic as I;
+    let intrinsic = match I::from_i64(kind) {
+        Some(i) => i,
+        None => {
+            bail_msg("intrinsic: unknown discriminant");
+            return false;
+        }
+    };
+    match intrinsic {
+        I::VaStart => {
+            // __builtin_va_start(&ap, &last). args[0] = &ap,
+            // args[1] = &last. *ap = &last + 16 (next c5 slot,
+            // 16-byte stride mirroring the aarch64 path).
+            if args.len() != 2 {
+                bail_msg("VaStart: expected 2 args");
+                return false;
+            }
+            let ap = match alloc.places.get(args[0] as usize).copied() {
+                Some(Place::IntReg(r)) => Reg(r),
+                _ => {
+                    bail_msg("VaStart: &ap not in int reg");
+                    return false;
+                }
+            };
+            let last = match alloc.places.get(args[1] as usize).copied() {
+                Some(Place::IntReg(r)) => Reg(r),
+                _ => {
+                    bail_msg("VaStart: &last not in int reg");
+                    return false;
+                }
+            };
+            // rax = &last + 16 ; mov [ap], rax
+            emit_lea_r_mem(code, Reg::RAX, last, 16);
+            emit_mov_mem_r(code, ap, 0, Reg::RAX);
+            true
+        }
+        I::VaArg => {
+            // Returns *ap, advances *ap by 16. args[0] = &ap.
+            if args.len() != 1 {
+                bail_msg("VaArg: expected 1 arg");
+                return false;
+            }
+            let Some(rd) = int_reg(dst) else {
+                bail_msg("VaArg: dst not int reg");
+                return false;
+            };
+            let ap = match alloc.places.get(args[0] as usize).copied() {
+                Some(Place::IntReg(r)) => Reg(r),
+                _ => {
+                    bail_msg("VaArg: &ap not in int reg");
+                    return false;
+                }
+            };
+            // rd = *ap ; rax = rd + 16 ; *ap = rax
+            emit_mov_r_mem(code, rd, ap, 0);
+            emit_lea_r_mem(code, Reg::RAX, rd, 16);
+            emit_mov_mem_r(code, ap, 0, Reg::RAX);
+            true
+        }
+        I::VaEnd => {
+            // No teardown for the cursor model.
+            true
+        }
+        I::VaCopy => {
+            // __builtin_va_copy(&dst, &src). *dst = *src.
+            if args.len() != 2 {
+                bail_msg("VaCopy: expected 2 args");
+                return false;
+            }
+            let dst_p = match alloc.places.get(args[0] as usize).copied() {
+                Some(Place::IntReg(r)) => Reg(r),
+                _ => {
+                    bail_msg("VaCopy: &dst not in int reg");
+                    return false;
+                }
+            };
+            let src_p = match alloc.places.get(args[1] as usize).copied() {
+                Some(Place::IntReg(r)) => Reg(r),
+                _ => {
+                    bail_msg("VaCopy: &src not in int reg");
+                    return false;
+                }
+            };
+            emit_mov_r_mem(code, Reg::RAX, src_p, 0);
+            emit_mov_mem_r(code, dst_p, 0, Reg::RAX);
+            true
+        }
+        I::Alloca | I::SetjmpAArch64 | I::LongjmpAArch64 => {
+            bail_msg("intrinsic: alloca / setjmp / longjmp not yet handled on x86_64");
+            false
+        }
+    }
 }
 
 fn emit_imm_data(

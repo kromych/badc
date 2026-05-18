@@ -115,8 +115,8 @@ pub(super) fn emit_function(
     fixups: &mut Vec<Fixup>,
     plt_call_fixups: &mut Vec<PltCallFixup>,
     _got_fixups: &mut Vec<GotFixup>,
-    _data_fixups: &mut Vec<DataFixup>,
-    _pending_func_fixups: &mut Vec<(usize, usize)>,
+    data_fixups: &mut Vec<DataFixup>,
+    pending_func_fixups: &mut Vec<(usize, usize)>,
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
     _tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
@@ -148,6 +148,8 @@ pub(super) fn emit_function(
                 abi,
                 fixups,
                 plt_call_fixups,
+                data_fixups,
+                pending_func_fixups,
                 imports,
                 variadic_targets,
             ) {
@@ -373,6 +375,8 @@ fn emit_inst(
     abi: super::Abi,
     fixups: &mut Vec<Fixup>,
     plt_call_fixups: &mut Vec<PltCallFixup>,
+    data_fixups: &mut Vec<DataFixup>,
+    pending_func_fixups: &mut Vec<(usize, usize)>,
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
 ) -> bool {
@@ -440,6 +444,15 @@ fn emit_inst(
             plt_call_fixups,
             imports,
         ),
+        Inst::ImmData(offset) => emit_imm_data(code, dst, *offset, data_fixups),
+        Inst::ImmCode(target_bc_pc) => emit_imm_code(code, dst, *target_bc_pc, pending_func_fixups),
+        Inst::VstackSpill { slot, value } => emit_vstack_spill(code, *slot, *value, alloc, frame),
+        Inst::VstackReload { slot } => emit_vstack_reload(code, dst, *slot, frame),
+        Inst::Mcpy {
+            dst: d,
+            src: s,
+            size,
+        } => emit_mcpy(code, dst, *d, *s, *size, alloc),
         Inst::AccSpill { .. } => {
             // Spill the accumulator across a block boundary. For
             // single-block functions the cross-block thread never
@@ -889,6 +902,134 @@ fn emit_call_ext(
     if let Some(rd) = int_reg(dst) {
         if rd.0 != 0 {
             emit_mov_rr(code, rd, Reg::RAX);
+        }
+    }
+    true
+}
+
+fn emit_imm_data(
+    code: &mut Vec<u8>,
+    dst: Place,
+    offset: i64,
+    data_fixups: &mut Vec<DataFixup>,
+) -> bool {
+    let Some(rd) = int_reg(dst) else {
+        bail_msg("ImmData: dst not int reg");
+        return false;
+    };
+    let instr_offset = code.len();
+    data_fixups.push(DataFixup {
+        adrp_offset: instr_offset,
+        data_offset: offset as u64,
+    });
+    // `lea rd, [rip + 0]` placeholder; the writer patches the
+    // disp32 once the data segment's runtime address is known.
+    super::x86_64::emit_lea_r_rip32(code, rd, 0);
+    true
+}
+
+fn emit_imm_code(
+    code: &mut Vec<u8>,
+    dst: Place,
+    target_bc_pc: usize,
+    pending_func_fixups: &mut Vec<(usize, usize)>,
+) -> bool {
+    let Some(rd) = int_reg(dst) else {
+        bail_msg("ImmCode: dst not int reg");
+        return false;
+    };
+    let instr_offset = code.len();
+    pending_func_fixups.push((instr_offset, target_bc_pc));
+    super::x86_64::emit_lea_r_rip32(code, rd, 0);
+    true
+}
+
+fn emit_vstack_spill(
+    code: &mut Vec<u8>,
+    slot: u32,
+    value: u32,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    let value_place = alloc
+        .places
+        .get(value as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let Some(rs) = int_reg(value_place) else {
+        bail_msg("VstackSpill: value not in int reg");
+        return false;
+    };
+    let sp_off = (frame.frame_bytes - frame.acc_slot_off + 8 + slot * 8) as i32;
+    emit_mov_mem_r(code, Reg::RSP, sp_off, rs);
+    true
+}
+
+fn emit_vstack_reload(code: &mut Vec<u8>, dst: Place, slot: u32, frame: Frame) -> bool {
+    let Some(rd) = int_reg(dst) else {
+        bail_msg("VstackReload: dst not int reg");
+        return false;
+    };
+    let sp_off = (frame.frame_bytes - frame.acc_slot_off + 8 + slot * 8) as i32;
+    emit_mov_r_mem(code, rd, Reg::RSP, sp_off);
+    true
+}
+
+fn emit_mcpy(
+    code: &mut Vec<u8>,
+    dst_place: Place,
+    dst_val: u32,
+    src_val: u32,
+    size: i64,
+    alloc: &Allocation,
+) -> bool {
+    if size < 0 {
+        bail_msg("Mcpy: negative size");
+        return false;
+    }
+    let dst_in = alloc
+        .places
+        .get(dst_val as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let src_in = alloc
+        .places
+        .get(src_val as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let Some(dst_r) = int_reg(dst_in) else {
+        bail_msg("Mcpy: dst base not int reg");
+        return false;
+    };
+    let Some(src_r) = int_reg(src_in) else {
+        bail_msg("Mcpy: src base not int reg");
+        return false;
+    };
+    // Per-iteration temp must not alias either base. rax is
+    // caller-saved everywhere and excluded from the allocator
+    // pool when r13 is reserved; use it as the temp.
+    let temp = Reg::RAX;
+    if dst_r.0 == temp.0 || src_r.0 == temp.0 {
+        bail_msg("Mcpy: base aliases temp rax");
+        return false;
+    }
+    let bytes = size as u32;
+    let words = bytes / 8;
+    for w in 0..words {
+        let off = (w * 8) as i32;
+        emit_mov_r_mem(code, temp, src_r, off);
+        emit_mov_mem_r(code, dst_r, off, temp);
+    }
+    let tail_start = words * 8;
+    for i in 0..(bytes - tail_start) {
+        let off = (tail_start + i) as i32;
+        super::x86_64::emit_movzx_r_mem8(code, temp, src_r, off);
+        super::x86_64::emit_mov_mem8_r(code, dst_r, off, temp);
+    }
+    // memcpy returns dst; propagate into the inst's dst.
+    if let Some(rd) = int_reg(dst_place) {
+        if rd.0 != dst_r.0 {
+            emit_mov_rr(code, rd, dst_r);
         }
     }
     true

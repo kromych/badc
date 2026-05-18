@@ -598,9 +598,9 @@ fn emit_inst(
             dst: d,
             src: s,
             size,
-        } => emit_mcpy(code, dst, *d, *s, *size, alloc),
+        } => emit_mcpy(code, dst, *d, *s, *size, alloc, frame),
         Inst::CallIndirect { target, args } => {
-            emit_call_indirect(code, dst, *target, args, alloc, abi)
+            emit_call_indirect(code, dst, *target, args, alloc, frame, abi)
         }
         Inst::Intrinsic { kind, args } => emit_intrinsic(code, *kind, args, dst, alloc),
         Inst::AccSpill { value } => {
@@ -1061,8 +1061,50 @@ fn emit_call(
     callee_is_variadic: bool,
 ) -> bool {
     if callee_is_variadic {
-        bail_msg("Call: variadic target not yet handled");
-        return false;
+        // c5's variadic ABI keeps the c5 stack: each arg is pushed
+        // at a 16-byte stride matching `Op::Psh`. The callee's
+        // prologue (`emit_prologue` with `entry_spill = 0`) skips
+        // the host-arg-reg spill and reads its args through
+        // `Op::Lea N` -> `[rbp + 16*(N-1)]`; `va_start` continues
+        // the walk past the last named arg. Push args in reverse
+        // so args[0] -- the first declared arg -- lands on top of
+        // the stack at `[rbp + 16]`.
+        for (i, &arg_id) in args.iter().rev().enumerate() {
+            let arg_place = alloc
+                .places
+                .get(arg_id as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            // Each prior push moved rsp another 16 bytes down.
+            let sp_shift = (i as u32) * 16;
+            let src = match materialize_int_shifted(code, arg_place, SCRATCH_R10, frame, sp_shift)
+            {
+                Some(r) => r,
+                None => {
+                    bail_msg("Call (variadic): arg not in int reg / spill");
+                    return false;
+                }
+            };
+            emit_sub_rsp_imm32(code, 16);
+            emit_mov_mem_r(code, Reg::RSP, 0, src);
+        }
+        let call_site = code.len();
+        fixups.push(Fixup {
+            native_offset: call_site,
+            target_bytecode_pc: target_pc,
+            kind: super::x86_64::BranchKind::Call,
+        });
+        super::x86_64::emit_call_rel32(code, 0);
+        if !args.is_empty() {
+            emit_add_rsp_imm32(code, (args.len() as u32) * 16);
+        }
+        if let Some(rd) = int_or_spill_dst(dst) {
+            if rd.0 != Reg::RAX.0 {
+                emit_mov_rr(code, rd, Reg::RAX);
+            }
+            spill_dst_to_slot(code, dst, rd, frame);
+        }
+        return true;
     }
     // Compute fp_arg_mask from value places. FpReg-placed args
     // are f64 and route through xmm regs.
@@ -1194,6 +1236,7 @@ fn emit_call_indirect(
     target: u32,
     args: &[u32],
     alloc: &Allocation,
+    frame: Frame,
     abi: super::Abi,
 ) -> bool {
     let target_place = alloc
@@ -1201,13 +1244,18 @@ fn emit_call_indirect(
         .get(target as usize)
         .copied()
         .unwrap_or(Place::None);
-    let Some(target_r) = int_reg(target_place) else {
-        bail_msg("CallIndirect: target not in int reg");
-        return false;
-    };
     // Capture the target pointer into r11 before arg marshalling
     // can clobber it. r11 is caller-saved on every x86_64 ABI we
-    // target and the SSA allocator excludes it from the pool.
+    // target; the SSA allocator's pool includes r11 (caller_gprs)
+    // but the value held there can be no longer live than the
+    // target itself since the SSA emit hijacks r11 for the call.
+    let target_r = match materialize_int(code, target_place, Reg::R11, frame) {
+        Some(r) => r,
+        None => {
+            bail_msg("CallIndirect: target not int reg / spill");
+            return false;
+        }
+    };
     if target_r.0 != Reg::R11.0 {
         emit_mov_rr(code, Reg::R11, target_r);
     }
@@ -1222,37 +1270,26 @@ fn emit_call_indirect(
             .get(arg_id as usize)
             .copied()
             .unwrap_or(Place::None);
-        match placement {
-            super::ArgPlacement::IntReg(r) => {
-                let Some(src) = int_reg(arg_place) else {
-                    bail_msg("CallIndirect: int arg not in int reg");
-                    return false;
-                };
-                if src.0 != r {
-                    emit_mov_rr(code, Reg(r), src);
-                }
-            }
-            super::ArgPlacement::Stack(off) => {
-                let Some(src) = int_reg(arg_place) else {
-                    bail_msg("CallIndirect: stack arg not in int reg");
-                    return false;
-                };
-                emit_mov_mem_r(code, Reg::RSP, off as i32, src);
-            }
-            super::ArgPlacement::FpReg(_) => {
-                bail_msg("CallIndirect: FpReg placement not yet handled");
-                return false;
-            }
+        if !marshal_int_arg(
+            code,
+            arg_place,
+            placement,
+            frame,
+            plan.scratch_bytes,
+            "CallIndirect",
+        ) {
+            return false;
         }
     }
     super::x86_64::emit_call_r(code, Reg::R11);
     if plan.scratch_bytes > 0 {
         emit_add_rsp_imm32(code, plan.scratch_bytes);
     }
-    if let Some(rd) = int_reg(dst) {
-        if rd.0 != 0 {
+    if let Some(rd) = int_or_spill_dst(dst) {
+        if rd.0 != Reg::RAX.0 {
             emit_mov_rr(code, rd, Reg::RAX);
         }
+        spill_dst_to_slot(code, dst, rd, frame);
     }
     true
 }
@@ -1434,6 +1471,7 @@ fn emit_mcpy(
     src_val: u32,
     size: i64,
     alloc: &Allocation,
+    frame: Frame,
 ) -> bool {
     if size < 0 {
         bail_msg("Mcpy: negative size");
@@ -1449,12 +1487,20 @@ fn emit_mcpy(
         .get(src_val as usize)
         .copied()
         .unwrap_or(Place::None);
-    let Some(dst_r) = int_reg(dst_in) else {
-        bail_msg("Mcpy: dst base not int reg");
+    // Materialise both bases. r10 / rcx are caller-saved scratch
+    // regs outside the SSA allocator pool, so they can't clobber
+    // anything live.
+    let Some(dst_r) = materialize_int(code, dst_in, SCRATCH_R10, frame) else {
+        bail_msg("Mcpy: dst base not int reg / spill");
         return false;
     };
-    let Some(src_r) = int_reg(src_in) else {
-        bail_msg("Mcpy: src base not int reg");
+    let src_scratch = if dst_r.0 == SCRATCH_R10.0 {
+        Reg::RCX
+    } else {
+        SCRATCH_R10
+    };
+    let Some(src_r) = materialize_int(code, src_in, src_scratch, frame) else {
+        bail_msg("Mcpy: src base not int reg / spill");
         return false;
     };
     // Pick a per-iteration temp distinct from both bases, then
@@ -1466,8 +1512,13 @@ fn emit_mcpy(
         Reg::RAX
     } else if dst_r.0 != Reg::R11.0 && src_r.0 != Reg::R11.0 {
         Reg::R11
-    } else {
+    } else if dst_r.0 != Reg::RCX.0 && src_r.0 != Reg::RCX.0 {
         Reg::RCX
+    } else {
+        // Both r10 (one of the bases here -- only happens when
+        // either materialise loaded into r10) and rcx are taken.
+        // Fall back to rdx, which is also outside every pool.
+        Reg::RDX
     };
     emit_push_r(code, temp);
     let bytes = size as u32;
@@ -1487,10 +1538,16 @@ fn emit_mcpy(
     }
     emit_pop_r(code, temp);
     // memcpy returns dst; propagate into the inst's dst.
-    if let Some(rd) = int_reg(dst_place) {
-        if rd.0 != dst_r.0 {
-            emit_mov_rr(code, rd, dst_r);
+    match dst_place {
+        Place::IntReg(r) => {
+            if r != dst_r.0 {
+                emit_mov_rr(code, Reg(r), dst_r);
+            }
         }
+        Place::Spill(_) => {
+            spill_dst_to_slot(code, dst_place, dst_r, frame);
+        }
+        _ => {}
     }
     true
 }

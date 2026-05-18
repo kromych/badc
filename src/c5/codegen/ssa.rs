@@ -331,6 +331,12 @@ pub(super) struct FunctionSsa {
     /// [`super::FuncMeta::n_params`] / variadic via the codegen's
     /// per-function metadata.
     pub ent_pc: usize,
+    /// Bytecode PC one past the function's last op (the start of
+    /// whatever follows -- the next function's `Op::Ent`, a bare
+    /// `Op::TailExt` trampoline, or the end of the text segment).
+    /// The codegen's outer walk uses this to resume the pool path
+    /// for any non-function bytecode between SSA functions.
+    pub end_pc: usize,
     /// Local-slot count from `Op::Ent`'s operand.
     pub locals: i64,
     /// Declared parameter count.
@@ -397,6 +403,13 @@ pub(super) fn lift_function(
         )));
     }
     let locals = text[ent_pc + 1];
+
+    // The function's real end-of-body, computed as the inst loop
+    // advances past each terminator. The codegen's outer walk
+    // uses `function_end_pc` to know where to resume the pool
+    // path for any trailing bytecode (sys trampolines etc.) that
+    // the SSA lift did not absorb.
+    let mut function_end_pc = ent_pc;
 
     // Block-boundary marker: a PC is a block start iff it is the
     // function's entry, a branch target, or the instruction
@@ -474,6 +487,7 @@ pub(super) fn lift_function(
                     )));
                 }
                 terminator = Terminator::FallThrough(succ);
+                function_end_pc = function_end_pc.max(pc);
                 break;
             }
             let raw = text[pc];
@@ -509,6 +523,7 @@ pub(super) fn lift_function(
                 Op::Lev => {
                     // Return the current accumulator value.
                     terminator = Terminator::Return(acc);
+                    function_end_pc = function_end_pc.max(pc + op.word_size());
                     break;
                 }
                 Op::Jmp => {
@@ -519,6 +534,7 @@ pub(super) fn lift_function(
                         ))
                     })?;
                     terminator = Terminator::Jmp(target_block);
+                    function_end_pc = function_end_pc.max(pc + op.word_size());
                     break;
                 }
                 Op::Bz | Op::Bnz => {
@@ -547,6 +563,7 @@ pub(super) fn lift_function(
                             fall_through: fall_block,
                         }
                     };
+                    function_end_pc = function_end_pc.max(pc + op.word_size());
                     break;
                 }
                 Op::Imm => {
@@ -983,6 +1000,7 @@ pub(super) fn lift_function(
                 Op::TailExt => {
                     let binding_idx = text[pc + 1];
                     terminator = Terminator::TailExt(binding_idx);
+                    function_end_pc = function_end_pc.max(pc + op.word_size());
                     break;
                 }
                 Op::Adj => {
@@ -1062,6 +1080,7 @@ pub(super) fn lift_function(
 
     Ok(FunctionSsa {
         ent_pc,
+        end_pc: function_end_pc,
         locals,
         n_params: meta.n_params,
         is_variadic: meta.is_variadic,
@@ -1246,6 +1265,53 @@ fn peek_adj_n(text: &[i64], pc: usize) -> usize {
 }
 
 /// Walk `[ent_pc, end_pc)` of `text` and return the sorted set of
+/// Pc just past the function's last reachable op. Walks the full
+/// [ent_pc, bound) range tracking each forward branch target and
+/// every `Op::Lev` / `Op::TailExt` after-pc. The function's body
+/// extends to the latest of: the highest forward branch target,
+/// the highest after-Lev pc, the highest after-TailExt pc. The
+/// next op past that bound is either the next function's
+/// `Op::Ent` or a bare-`Op::TailExt` sys trampoline -- either
+/// way, not part of this function. Used to size the block-
+/// collection / lift walks so they don't absorb code that
+/// belongs elsewhere.
+fn compute_function_end(text: &[i64], ent_pc: usize, bound: usize) -> usize {
+    let mut end = ent_pc;
+    let mut pc = ent_pc;
+    while pc < bound {
+        let Some(op) = Op::from_i64(text[pc]) else {
+            break;
+        };
+        let after = pc + op.word_size();
+        match op {
+            Op::Lev | Op::TailExt => {
+                end = end.max(after);
+                // Only stop if the running `end` doesn't already
+                // sit past this terminator's after-pc (i.e. no
+                // earlier forward branch marked a higher pc).
+                if end == after {
+                    return end;
+                }
+            }
+            Op::Jmp | Op::Bz | Op::Bnz => {
+                let target = text[pc + 1] as usize;
+                if target > pc && target < bound {
+                    end = end.max(target);
+                }
+                end = end.max(after);
+                if matches!(op, Op::Jmp) && end == after {
+                    return end;
+                }
+            }
+            _ => {
+                end = end.max(after);
+            }
+        }
+        pc = after;
+    }
+    end.min(bound)
+}
+
 /// PCs that start a basic block. Block-start condition: the PC is
 /// `ent_pc`, the target of a `Jmp` / `Bz` / `Bnz` op, or the PC
 /// immediately after a terminator (`Jmp` / `Bz` / `Bnz` / `Lev` /

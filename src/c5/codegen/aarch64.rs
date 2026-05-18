@@ -1356,6 +1356,7 @@ pub(super) fn lower(
                     &mut tls_index_fixups,
                     &mut macho_tlv_fixups,
                     &mut macho_tlv_descriptors,
+                    &mut bytecode_to_native,
                 );
                 if !ok {
                     #[cfg(feature = "std")]
@@ -1373,6 +1374,11 @@ pub(super) fn lower(
                 // of this function. Advance pc past the function's
                 // bytecode range -- the next op the outer loop
                 // sees is the next function's `Op::Ent` (or end).
+                // The SSA emit recorded `bytecode_to_native` for
+                // every block start it produced, so any in-range
+                // pcs the SSA function lifted (including absorbed
+                // sys trampolines) have their native offsets
+                // registered for downstream relocations.
                 let next_ent_pc = ssa_funcs
                     .get(ssa_idx + 1)
                     .map(|f| f.ent_pc)
@@ -2867,7 +2873,7 @@ fn emit_got_call(code: &mut Vec<u8>, plt_call_fixups: &mut Vec<PltCallFixup>, im
 /// directly to the c5 caller of the trampoline, skipping
 /// both this `B` and the trampoline entirely on the way back.
 /// Used by `Op::TailExt`.
-fn emit_got_tail_jump(
+pub(super) fn emit_got_tail_jump(
     code: &mut Vec<u8>,
     plt_call_fixups: &mut Vec<PltCallFixup>,
     import_index: usize,

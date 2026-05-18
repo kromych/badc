@@ -160,7 +160,17 @@ fn main() {
     let mut track_pointers = false;
     let mut trace = false;
     let mut optimize_flag = false;
-    let mut regalloc_mode: badc::RegallocMode = badc::RegallocMode::Pool;
+    // The env var `BADC_USE_SSA_EMIT` opts into the SSA emit
+    // path. The codegen already gates emit on both the env var
+    // and `RegallocMode::Ssa`; setting the env var implies the
+    // mode here so external runners (demo smokes, CI matrix
+    // entries) don't also need to thread `--regalloc=ssa` through
+    // every badc invocation.
+    let mut regalloc_mode: badc::RegallocMode = if std::env::var("BADC_USE_SSA_EMIT").is_ok() {
+        badc::RegallocMode::Ssa
+    } else {
+        badc::RegallocMode::Pool
+    };
     let mut emit_debug_info = true;
     let mut output_path: Option<PathBuf> = None;
     let mut target_spec: Option<String> = None;

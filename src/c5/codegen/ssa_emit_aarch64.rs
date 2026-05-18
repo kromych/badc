@@ -168,6 +168,7 @@ pub(super) fn emit_function(
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
+    bytecode_to_native: &mut [usize],
 ) -> bool {
     let frame = Frame::for_function(func, alloc);
     let abi = target.abi();
@@ -185,6 +186,18 @@ pub(super) fn emit_function(
 
     for (block_idx, block) in func.blocks.iter().enumerate() {
         block_offsets[block_idx] = code.len();
+        // Record the block's start pc in the bytecode -> native
+        // map so external relocations (function-pointer code
+        // relocs into absorbed sys trampolines, intra-program
+        // branches) can resolve. Skip the entry block: the outer
+        // walk already recorded the function's `Op::Ent` pc
+        // pointing at the prologue start, and overwriting it
+        // with the post-prologue code offset would redirect
+        // every `bl <function>` into the function body past its
+        // own setup.
+        if block_idx > 0 && block.start_pc < bytecode_to_native.len() {
+            bytecode_to_native[block.start_pc] = code.len();
+        }
         for v in block.inst_range.clone() {
             let inst = &func.insts[v as usize];
             let place = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
@@ -305,11 +318,21 @@ pub(super) fn emit_function(
                     emit(code, enc_b(0));
                 }
             }
-            // TailExt isn't covered by the thin slice; fall back.
-            Terminator::TailExt(b) => {
-                bail_msg(&alloc::format!("TailExt({b}) terminator"));
-                code.truncate(snapshot);
-                return false;
+            Terminator::TailExt(binding_idx) => {
+                // Tail-jump through the GOT-patched trampoline:
+                // `adrp x16, _ ; ldr x16, [x16, _] ; br x16`.
+                // The writer fills the adrp / ldr immediates once
+                // the trampoline target's RVA is final, mirroring
+                // the pool path's `emit_got_tail_jump` shape.
+                let import_index = match imports.index_of_binding(binding_idx) {
+                    Some(i) => i,
+                    None => {
+                        bail_msg("TailExt: no import slot for binding");
+                        code.truncate(snapshot);
+                        return false;
+                    }
+                };
+                super::aarch64::emit_got_tail_jump(code, plt_call_fixups, import_index);
             }
         }
     }
@@ -500,20 +523,26 @@ fn emit_inst(
             true
         }
         Inst::Imm(value) => {
-            let Some(rd) = int_reg(dst) else {
-                return false;
+            let rd = match int_or_spill_scratch(dst, scratch) {
+                Some(r) => r,
+                None => return false,
             };
             load_imm64(code, rd, *value as u64);
+            if let Place::Spill(slot) = dst {
+                let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+                emit(code, enc_str_imm(rd, Reg(31), sp_off));
+            }
             true
         }
         Inst::ImmData(offset) => {
-            let Some(rd) = int_reg(dst) else {
-                return false;
+            let rd = match int_or_spill_scratch(dst, scratch) {
+                Some(r) => r,
+                None => return false,
             };
             // The writer's patch_adrp_add hardcodes x19 as the
             // adrp / add destination. Emit the placeholders with
             // x19, then move the materialised address into the
-            // allocator's chosen register.
+            // allocator's chosen register or spill slot.
             let adrp_offset = code.len();
             emit(code, enc_adrp(Reg(19), 0));
             emit(code, enc_add_imm(Reg(19), Reg(19), 0));
@@ -524,11 +553,16 @@ fn emit_inst(
             if rd.0 != 19 {
                 emit(code, enc_mov_reg(rd, Reg(19)));
             }
+            if let Place::Spill(slot) = dst {
+                let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+                emit(code, enc_str_imm(rd, Reg(31), sp_off));
+            }
             true
         }
         Inst::ImmCode(target_bc_pc) => {
-            let Some(rd) = int_reg(dst) else {
-                return false;
+            let rd = match int_or_spill_scratch(dst, scratch) {
+                Some(r) => r,
+                None => return false,
             };
             let adrp_offset = code.len();
             emit(code, enc_adrp(Reg(19), 0));
@@ -537,9 +571,13 @@ fn emit_inst(
             if rd.0 != 19 {
                 emit(code, enc_mov_reg(rd, Reg(19)));
             }
+            if let Place::Spill(slot) = dst {
+                let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+                emit(code, enc_str_imm(rd, Reg(31), sp_off));
+            }
             true
         }
-        Inst::LocalAddr(off) => emit_local_addr(code, dst, *off),
+        Inst::LocalAddr(off) => emit_local_addr(code, dst, *off, frame),
         Inst::Load { addr, kind } => emit_load(code, dst, *addr, *kind, alloc, frame, scratch),
         Inst::Store { addr, value, kind } => {
             emit_store(code, dst, *addr, *value, *kind, alloc, frame, scratch)
@@ -643,13 +681,31 @@ fn emit_inst(
             true
         }
         Inst::VstackReload { slot } => {
-            let Some(rd) = int_reg(dst) else {
-                bail_msg("VstackReload: dst not int reg");
-                return false;
-            };
             let sp_off = frame.frame_bytes - frame.acc_slot_off + 8 + (*slot) * 8;
-            emit(code, enc_ldr_imm(rd, Reg(31), sp_off));
-            true
+            // Reload lands in whatever bank the allocator chose
+            // for this value. A Spill destination shuffles the
+            // value through scratch.secondary into the alloc-
+            // spill slot; a register destination loads straight
+            // in. FpReg isn't a shape the lift produces for a
+            // VstackReload (the c5 vstack is integer-keyed) but
+            // route it through scratch for completeness.
+            match dst {
+                Place::IntReg(r) => {
+                    emit(code, enc_ldr_imm(Reg(r), Reg(31), sp_off));
+                    true
+                }
+                Place::Spill(target_slot) => {
+                    emit(code, enc_ldr_imm(scratch.secondary, Reg(31), sp_off));
+                    let spill_off =
+                        frame.frame_bytes - frame.alloc_spill_base - (target_slot + 1) * 8;
+                    emit(code, enc_str_imm(scratch.secondary, Reg(31), spill_off));
+                    true
+                }
+                _ => {
+                    bail_msg("VstackReload: unexpected dst place");
+                    false
+                }
+            }
         }
         Inst::Intrinsic { kind, args } => emit_intrinsic(
             code,
@@ -1592,10 +1648,18 @@ fn c5_slot_to_fp_offset(off: i64) -> i64 {
     if off >= 2 { (off - 1) * 16 } else { off * 8 }
 }
 
-fn emit_local_addr(code: &mut Vec<u8>, dst: Place, off: i64) -> bool {
-    let Some(rd) = int_reg(dst) else {
-        bail_msg("LocalAddr: dst not int reg");
-        return false;
+fn emit_local_addr(code: &mut Vec<u8>, dst: Place, off: i64, frame: Frame) -> bool {
+    // Materialise the address through scratch.primary when the
+    // allocator chose a spill slot for this LocalAddr, then store
+    // the computed value into the spill slot. Register places
+    // address straight into the chosen reg.
+    let rd = match dst {
+        Place::IntReg(r) => Reg(r),
+        Place::Spill(_) => Reg(16),
+        _ => {
+            bail_msg("LocalAddr: dst not int reg / spill");
+            return false;
+        }
     };
     let bytes = c5_slot_to_fp_offset(off);
     let abs = bytes.unsigned_abs();
@@ -1607,6 +1671,7 @@ fn emit_local_addr(code: &mut Vec<u8>, dst: Place, off: i64) -> bool {
         } else {
             emit(code, enc_sub_imm(rd, Reg(29), imm));
         }
+        spill_local_addr_to_dst(code, dst, rd, frame);
         return true;
     }
     // 24-bit reach via two add/sub-imm: shift-12 hi half + plain
@@ -1637,12 +1702,36 @@ fn emit_local_addr(code: &mut Vec<u8>, dst: Place, off: i64) -> bool {
                 emit(code, enc_sub_imm(rd, base, lo as u32));
             }
         }
+        spill_local_addr_to_dst(code, dst, rd, frame);
         return true;
     }
     bail_msg(&alloc::format!(
         "LocalAddr: offset {bytes} exceeds 24-bit reach"
     ));
     false
+}
+
+/// Pick the working register for a single-result int inst:
+/// the allocator's chosen reg when it picked one, or
+/// `scratch.primary` when the result will land in a spill slot.
+/// FpReg / None destinations return `None` so the caller can
+/// bail.
+fn int_or_spill_scratch(dst: Place, scratch: &ScratchPool) -> Option<Reg> {
+    match dst {
+        Place::IntReg(r) => Some(Reg(r)),
+        Place::Spill(_) => Some(scratch.primary),
+        Place::FpReg(_) | Place::None => None,
+    }
+}
+
+/// Persist the just-computed LocalAddr value into its spill slot
+/// when the allocator placed it there. No-op for register places
+/// (the address already landed in the chosen reg).
+fn spill_local_addr_to_dst(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
+    if let Place::Spill(slot) = dst {
+        let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+        emit(code, enc_str_imm(src, Reg(31), sp_off));
+    }
 }
 
 fn emit_load(
@@ -1867,8 +1956,17 @@ fn emit_binop(
         }
         return true;
     }
-    let Some(rd) = int_reg(dst) else {
-        return false;
+    // Integer binop path. The result lands in a GPR; if the
+    // allocator picked a spill slot, route through
+    // `scratch.primary` and store afterwards. Using
+    // scratch.primary as the rd is safe even when the lhs
+    // materialise wrote it there: `add rd, rn, rm` reads rn
+    // before writing rd, so a self-aliasing destination doesn't
+    // corrupt the operand.
+    let (rd, spill_to) = match dst {
+        Place::IntReg(r) => (Reg(r), None),
+        Place::Spill(slot) => (scratch.primary, Some(slot)),
+        _ => return false,
     };
     let rn = match materialize_int(code, lhs_place, scratch.primary, frame) {
         Some(r) => r,
@@ -1881,6 +1979,10 @@ fn emit_binop(
     if let Some(cond) = compare_cond(op) {
         emit(code, enc_cmp_reg(rn, rm));
         emit(code, enc_cset(rd, cond));
+        if let Some(slot) = spill_to {
+            let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+            emit(code, enc_str_imm(rd, Reg(31), sp_off));
+        }
         return true;
     }
     if matches!(op, BinOp::Mod | BinOp::Modu) {
@@ -1891,6 +1993,10 @@ fn emit_binop(
         };
         emit(code, divider);
         emit(code, enc_msub(rd, scratch.secondary, rm, rn));
+        if let Some(slot) = spill_to {
+            let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+            emit(code, enc_str_imm(rd, Reg(31), sp_off));
+        }
         return true;
     }
     let word = match op {
@@ -1908,6 +2014,10 @@ fn emit_binop(
         _ => return false,
     };
     emit(code, word);
+    if let Some(slot) = spill_to {
+        let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+        emit(code, enc_str_imm(rd, Reg(31), sp_off));
+    }
     true
 }
 
@@ -1967,8 +2077,10 @@ fn emit_binop_imm(
     frame: Frame,
     scratch: &ScratchPool,
 ) -> bool {
-    let Some(rd) = int_reg(dst) else {
-        return false;
+    let (rd, spill_to) = match dst {
+        Place::IntReg(r) => (Reg(r), None),
+        Place::Spill(slot) => (scratch.primary, Some(slot)),
+        _ => return false,
     };
     let lhs_place = alloc
         .places
@@ -1984,17 +2096,17 @@ fn emit_binop_imm(
     if let Some(cond) = compare_cond(op) {
         emit(code, enc_cmp_reg(rn, rm));
         emit(code, enc_cset(rd, cond));
+        if let Some(slot) = spill_to {
+            let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+            emit(code, enc_str_imm(rd, Reg(31), sp_off));
+        }
         return true;
     }
-    // Mod / Modu under BinopI doesn't naturally arise from the
-    // bytecode optimizer (it only fuses Psh; Imm N; <op> into
-    // <op>I N for a fixed whitelist), but handle them
-    // defensively in case a future pass produces them.
     if matches!(op, BinOp::Mod | BinOp::Modu) {
-        // Need a third scratch reg distinct from rn / rm.
-        // x16 holds rn (the materialised lhs); x17 = scratch.secondary
-        // holds the immediate. Use x18-equivalent isn't available
-        // (reserved on Windows); fall back to the pool path.
+        // Need a third scratch reg distinct from rn / rm; the
+        // pool path's `<op>I N` fusion guarantees the optimizer
+        // won't emit Mod / Modu under BinopI, so falling back is
+        // safe for now.
         return false;
     }
     let word = match op {
@@ -2012,6 +2124,10 @@ fn emit_binop_imm(
         _ => return false,
     };
     emit(code, word);
+    if let Some(slot) = spill_to {
+        let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+        emit(code, enc_str_imm(rd, Reg(31), sp_off));
+    }
     true
 }
 
@@ -2195,6 +2311,7 @@ mod tests {
         let mut tls_idx = Vec::new();
         let mut tlv_fx = Vec::new();
         let mut tlv_desc = Vec::new();
+        let mut bytecode_to_native = alloc::vec![usize::MAX; func.end_pc + 1];
         let ok = emit_function(
             &func,
             &alloc,
@@ -2209,6 +2326,7 @@ mod tests {
             &mut tls_idx,
             &mut tlv_fx,
             &mut tlv_desc,
+            &mut bytecode_to_native,
         );
         assert!(
             ok,
@@ -2246,6 +2364,7 @@ mod tests {
         let mut tls_idx = Vec::new();
         let mut tlv_fx = Vec::new();
         let mut tlv_desc = Vec::new();
+        let mut bytecode_to_native = alloc::vec![usize::MAX; func.end_pc + 1];
         let ok = emit_function(
             &func,
             &alloc,
@@ -2260,6 +2379,7 @@ mod tests {
             &mut tls_idx,
             &mut tlv_fx,
             &mut tlv_desc,
+            &mut bytecode_to_native,
         );
         assert!(ok, "binop handler should cover Add + Shl + Shr");
         assert_eq!(code.len() % 4, 0);
@@ -2290,6 +2410,7 @@ mod tests {
         let mut tls_idx = Vec::new();
         let mut tlv_fx = Vec::new();
         let mut tlv_desc = Vec::new();
+        let mut bytecode_to_native = alloc::vec![usize::MAX; func.end_pc + 1];
         let ok = emit_function(
             &func,
             &alloc,
@@ -2304,6 +2425,7 @@ mod tests {
             &mut tls_idx,
             &mut tlv_fx,
             &mut tlv_desc,
+            &mut bytecode_to_native,
         );
         assert!(
             ok,

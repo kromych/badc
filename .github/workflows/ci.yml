@@ -289,16 +289,38 @@ jobs:
           # back the signature buffer's address (rdi) plus the
           # call chain that produced it.
           if command -v gdb >/dev/null; then
+              # Frame layout (from the previous probe's DWARF
+              # dump) at the fprintf breakpoint inside
+              # `scenario_rfc8032`:
+              #   sig          = $rbp - 0x140  (64 bytes, broken)
+              #   seed_copy    = $rbp - 0x100  (32 bytes)
+              #   pk           = $rbp - 0xe0   (32 bytes)
+              #   sk           = $rbp - 0xc0   (64 bytes)
+              #   expected_sig = $rbp - 0x80   (64 bytes)
+              #   expected_pk  = $rbp - 0x40   (32 bytes)
+              #   seed         = $rbp - 0x20   (32 bytes)
+              # gdb walks up to the scenario frame after the
+              # libc fprintf breakpoint hits; from there each
+              # local has a fixed displacement from $rbp.
               gdb -batch \
                   -ex 'set pagination off' \
                   -ex 'set print frame-arguments all' \
                   -ex 'set print elements 256' \
                   -ex 'break fprintf' \
                   -ex run \
-                  -ex 'info registers' \
-                  -ex 'x/64bx $rdi' \
-                  -ex 'x/8gx $rbp-0x80' \
-                  -ex 'bt full 30' \
+                  -ex 'frame 1' \
+                  -ex 'info frame' \
+                  -ex 'printf "--- sig (got) ---\n"' \
+                  -ex 'x/64bx $rbp-0x140' \
+                  -ex 'printf "--- expected_sig ---\n"' \
+                  -ex 'x/64bx $rbp-0x80' \
+                  -ex 'printf "--- sk ---\n"' \
+                  -ex 'x/64bx $rbp-0xc0' \
+                  -ex 'printf "--- pk ---\n"' \
+                  -ex 'x/32bx $rbp-0xe0' \
+                  -ex 'printf "--- expected_pk ---\n"' \
+                  -ex 'x/32bx $rbp-0x40' \
+                  -ex 'bt 20' \
                   /tmp/mono_only \
                   > /tmp/gdb_post.log 2>&1 || true
               echo "--- gdb log ---"

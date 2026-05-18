@@ -795,14 +795,14 @@ fn emit_load(
     // Spill-tolerant base materialisation: load a spilled address
     // into r10 first, write into rd next, then spill rd to its
     // slot if the allocator wants it parked there. Matches the
-    // aarch64 module's shape. The Store counterpart stays narrow:
-    // materialising a spilled Store address regresses
-    // monocypher's Ed25519 path on x86_64 (aarch64 unaffected).
-    // Each x86_64 function emits byte-correct code in isolation,
-    // and the failure only surfaces with a particular pool / SSA
-    // mix -- default monocypher passes because almost every
-    // function lands on the SSA path. TODO: locate the
-    // cross-function state divergence.
+    // aarch64 module's shape. The Store counterpart stays
+    // narrow as a defensive measure: enabling the symmetric
+    // spilled-addr path masks the C99 6.7.9p21 zero-fill gap
+    // documented in c99-gaps.md ("Local array partial-
+    // initializer zero-fill"). Until the c5 lift emits the
+    // trailing zero-fill, the SSA emit's broader Store
+    // widening rearranges stack residue in ways that surface
+    // the latent bug as a monocypher Ed25519 miscompile.
     let base = match materialize_int(code, addr_place, SCRATCH_R10, frame) {
         Some(r) => r,
         None => {
@@ -850,15 +850,16 @@ fn emit_store(
         .get(value as usize)
         .copied()
         .unwrap_or(Place::None);
-    // BADC_SSA_STORE_SPILL_ADDR opts the diagnostic into the
-    // currently-broken spill-tolerant addr path. Without the env
-    // var the handler matches the aarch64 module's `int_reg`
-    // gates and bails to pool on any spilled operand, which
-    // keeps monocypher correct. With the env var set the addr
-    // path materialises a spilled address through r10 -- the
-    // same shape as the aarch64 emit -- and reproduces the
-    // x86_64 regression for the CI core-dump capture step. See
-    // the TODO at the top of emit_load.
+    // BADC_SSA_STORE_SPILL_ADDR re-enables the spill-tolerant
+    // addr path. Without the env var the handler bails to pool
+    // on any spilled operand, which masks the C99 6.7.9p21
+    // local-array zero-fill gap (see c99-gaps.md and the
+    // emit_load comment above). With the env var set the addr
+    // path materialises a spilled address through r10 and the
+    // c5 lift's missing zero-fill surfaces as a monocypher
+    // miscompile. Once c5 emits the trailing zero-fill the
+    // env var becomes unnecessary and the spill path can be
+    // re-enabled unconditionally.
     #[cfg(feature = "std")]
     let store_spill_addr = std::env::var("BADC_SSA_STORE_SPILL_ADDR").is_ok();
     #[cfg(not(feature = "std"))]

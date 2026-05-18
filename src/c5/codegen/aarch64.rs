@@ -1359,32 +1359,41 @@ pub(super) fn lower(
                     &mut bytecode_to_native,
                 );
                 if !ok {
+                    // The SSA emit truncated `code` back to the
+                    // pre-attempt snapshot on failure, so no bytes
+                    // leaked. Fall through to the pool path for
+                    // this function. `BADC_STRICT_SSA_EMIT` flips
+                    // the policy back to abort -- useful when
+                    // driving the SSA emit toward parity.
                     #[cfg(feature = "std")]
+                    if std::env::var("BADC_DUMP_SSA").is_ok()
+                        || std::env::var("BADC_STRICT_SSA_EMIT").is_ok()
                     {
                         eprint!("{}", super::ssa_dump::dump_function(func_ssa, alloc_for),);
                     }
-                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                        &alloc::format!(
-                            "ssa emit: function at ent_pc {} contains an op outside the implemented subset",
-                            op_pc,
-                        ),
-                    )));
+                    #[cfg(feature = "std")]
+                    if std::env::var("BADC_STRICT_SSA_EMIT").is_ok() {
+                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                            &alloc::format!(
+                                "ssa emit: function at ent_pc {op_pc} contains an op outside the implemented subset",
+                            ),
+                        )));
+                    }
+                } else {
+                    // SSA emit succeeded for this function: skip
+                    // the pool path's per-PC walk for the rest of
+                    // the function. The SSA emit recorded
+                    // `bytecode_to_native` for every block start
+                    // it produced, so any in-range pcs (including
+                    // absorbed sys trampolines) have their native
+                    // offsets registered for downstream relocations.
+                    let next_ent_pc = ssa_funcs
+                        .get(ssa_idx + 1)
+                        .map(|f| f.ent_pc)
+                        .unwrap_or(program.text.len());
+                    pc = next_ent_pc;
+                    continue;
                 }
-                // Skip the pool path's per-PC walk for the rest
-                // of this function. Advance pc past the function's
-                // bytecode range -- the next op the outer loop
-                // sees is the next function's `Op::Ent` (or end).
-                // The SSA emit recorded `bytecode_to_native` for
-                // every block start it produced, so any in-range
-                // pcs the SSA function lifted (including absorbed
-                // sys trampolines) have their native offsets
-                // registered for downstream relocations.
-                let next_ent_pc = ssa_funcs
-                    .get(ssa_idx + 1)
-                    .map(|f| f.ent_pc)
-                    .unwrap_or(program.text.len());
-                pc = next_ent_pc;
-                continue;
             }
             // Clear any cmp+branch fusion state; pending_cmp_cond
             // is only legal for the immediate gap between a compare

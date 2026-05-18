@@ -1193,7 +1193,7 @@ enum BranchKind {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct Fixup {
+pub(super) struct Fixup {
     /// Byte offset within `code` of the placeholder's first byte.
     native_offset: usize,
     target_bytecode_pc: usize,
@@ -1377,6 +1377,36 @@ pub(super) fn lower(
     // frame because the libc startup stub leaves rbp = 0 in the
     // caller of `_start -> main`. Each `Op::Ent` refreshes this
     // and it stays set until the next `Op::Ent`.
+    // SSA emit gate. Active when `--regalloc=ssa` runs alongside
+    // `BADC_USE_SSA_EMIT` in the environment. Lift the program
+    // into SSA + run the linear-scan allocator once; per-function
+    // dispatch happens at each `Op::Ent` in the main walk below.
+    // `BADC_STRICT_SSA_EMIT` flips a failing emit from
+    // pool-fallback to a hard error -- useful when driving the
+    // SSA path toward parity. Pool path remains the default for
+    // every shape the SSA emit doesn't yet cover.
+    let ssa_funcs: alloc::vec::Vec<super::ssa::FunctionSsa>;
+    let ssa_allocs: alloc::vec::Vec<super::ssa_alloc::Allocation>;
+    let mut ssa_lookup: alloc::collections::BTreeMap<usize, usize> =
+        alloc::collections::BTreeMap::new();
+    #[cfg(feature = "std")]
+    let use_ssa_emit = matches!(native.regalloc, super::RegallocMode::Ssa)
+        && std::env::var("BADC_USE_SSA_EMIT").is_ok();
+    #[cfg(not(feature = "std"))]
+    let use_ssa_emit = false;
+    if matches!(native.regalloc, super::RegallocMode::Ssa) {
+        ssa_funcs = super::ssa::lift_program(program)?;
+        ssa_allocs = ssa_funcs
+            .iter()
+            .map(|f| super::ssa_alloc::allocate(f, target))
+            .collect();
+        for (i, f) in ssa_funcs.iter().enumerate() {
+            ssa_lookup.insert(f.ent_pc, i);
+        }
+    } else {
+        ssa_funcs = alloc::vec::Vec::new();
+        ssa_allocs = alloc::vec::Vec::new();
+    }
     let mut in_main = false;
     let mut pc = 0usize;
     while pc < program.text.len() {
@@ -1396,6 +1426,62 @@ pub(super) fn lower(
         if matches!(op, Op::Ent) {
             current_func = funcs.get(&op_pc).copied().unwrap_or_default();
             in_main = op_pc == program.entry_pc;
+            // SSA emit replacement: when --regalloc=ssa is on AND
+            // BADC_USE_SSA_EMIT is in the environment, try the SSA
+            // path first. A failing function falls back to the
+            // pool walk for this `Op::Ent` so progress isn't
+            // gated on full SSA-emit coverage. Setting
+            // `BADC_STRICT_SSA_EMIT` flips the policy to a hard
+            // error -- used when driving the SSA path toward
+            // parity.
+            if use_ssa_emit {
+                let ssa_idx = ssa_lookup.get(&op_pc).copied().ok_or_else(|| {
+                    C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        "ssa emit: bytecode Op::Ent has no corresponding FunctionSsa",
+                    ))
+                })?;
+                let func_ssa = &ssa_funcs[ssa_idx];
+                let alloc_for = &ssa_allocs[ssa_idx];
+                bytecode_to_native[op_pc] = code.len();
+                let ok = super::ssa_emit_x86_64::emit_function(
+                    func_ssa,
+                    alloc_for,
+                    target,
+                    &mut code,
+                    &mut fixups,
+                    &mut plt_call_fixups,
+                    &mut got_fixups,
+                    &mut data_fixups,
+                    &mut pending_func_fixups,
+                    imports,
+                    &program.variadic_functions,
+                    &mut tls_index_fixups,
+                    &mut bytecode_to_native,
+                );
+                if !ok {
+                    #[cfg(feature = "std")]
+                    if std::env::var("BADC_DUMP_SSA").is_ok()
+                        || std::env::var("BADC_STRICT_SSA_EMIT").is_ok()
+                    {
+                        eprint!("{}", super::ssa_dump::dump_function(func_ssa, alloc_for),);
+                    }
+                    #[cfg(feature = "std")]
+                    if std::env::var("BADC_STRICT_SSA_EMIT").is_ok() {
+                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                            &alloc::format!(
+                                "ssa emit (x86_64): function at ent_pc {op_pc} contains an op outside the implemented subset",
+                            ),
+                        )));
+                    }
+                } else {
+                    let next_ent_pc = ssa_funcs
+                        .get(ssa_idx + 1)
+                        .map(|f| f.ent_pc)
+                        .unwrap_or(program.text.len());
+                    pc = next_ent_pc;
+                    continue;
+                }
+            }
             // Clear cmp+branch fusion state at function boundaries
             // -- pending_cmp_cond is only legal for the gap between
             // a compare op and its matching Bz/Bnz.
@@ -2610,7 +2696,7 @@ fn emit_libc_call(
 /// trampolines have been laid out at the tail of `code`. Mirror
 /// of the aarch64 type with the same name.
 #[derive(Debug, Clone, Copy)]
-struct PltCallFixup {
+pub(super) struct PltCallFixup {
     /// Byte offset within `code` of the CALL/JMP instruction
     /// (the opcode byte, not the disp32 field).
     instr_offset: usize,

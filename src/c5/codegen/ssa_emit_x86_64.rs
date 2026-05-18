@@ -100,6 +100,135 @@ fn int_reg(place: Place) -> Option<Reg> {
     }
 }
 
+/// Scratch register for handlers whose dst is a spill: r10 is
+/// caller-saved on SysV / Win64 and is excluded from the SSA
+/// allocator's caller_gprs pool (which is `[rax, r11]` on x86_64),
+/// so reusing it across an instruction can never clobber a value
+/// the allocator chose.
+const SCRATCH_R10: Reg = Reg(10);
+
+/// Pick the working register a single-result int-producing handler
+/// writes into: the allocator's chosen reg for `IntReg`, or
+/// `SCRATCH_R10` for `Spill`. Other place kinds (FpReg, None) are
+/// not legal for the handlers that call this helper.
+fn int_or_spill_dst(dst: Place) -> Option<Reg> {
+    match dst {
+        Place::IntReg(r) => Some(Reg(r)),
+        Place::Spill(_) => Some(SCRATCH_R10),
+        _ => None,
+    }
+}
+
+/// Byte offset from rsp of allocator spill slot `slot`. Spill
+/// slot 0 sits at the top of the allocator-spill region (next to
+/// the accumulator slot); slot N+1 sits 8 bytes below slot N. The
+/// region itself lives at `[rbp - alloc_spill_base ..
+/// rbp - alloc_spill_base - alloc_spill_bytes]`, and rsp =
+/// rbp - frame_bytes, so a slot at `rbp - alloc_spill_base
+/// - (N+1)*8` is `frame_bytes - alloc_spill_base - (N+1)*8` from
+/// rsp. Mirror of the aarch64 module's formula.
+fn spill_slot_sp_offset(frame: Frame, slot: u32) -> i32 {
+    (frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8) as i32
+}
+
+/// If `dst` is a `Spill` place, write the just-produced value in
+/// `src` into the spill slot. No-op for register places (the
+/// caller already wrote into the allocator's chosen reg).
+fn spill_dst_to_slot(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
+    if let Place::Spill(slot) = dst {
+        let sp_off = spill_slot_sp_offset(frame, slot);
+        emit_mov_mem_r(code, Reg::RSP, sp_off, src);
+    }
+}
+
+/// Read a value's `Place` into a usable register: returns the
+/// allocator's chosen reg directly for `IntReg`, or loads the
+/// spilled value into `scratch` and returns `scratch` for `Spill`.
+/// Returns `None` for `FpReg` / `None` so the caller can bail.
+fn materialize_int(code: &mut Vec<u8>, place: Place, scratch: Reg, frame: Frame) -> Option<Reg> {
+    materialize_int_shifted(code, place, scratch, frame, 0)
+}
+
+/// Like [`materialize_int`] but accounts for a temporary `rsp`
+/// adjustment that hasn't been undone yet (e.g. the call-args
+/// scratch frame). Spill offsets are computed from the
+/// post-prologue rsp, so callers that pushed extra bytes on top
+/// must pass that delta as `sp_shift` so the load reaches the
+/// correct slot.
+fn materialize_int_shifted(
+    code: &mut Vec<u8>,
+    place: Place,
+    scratch: Reg,
+    frame: Frame,
+    sp_shift: u32,
+) -> Option<Reg> {
+    match place {
+        Place::IntReg(r) => Some(Reg(r)),
+        Place::Spill(slot) => {
+            let sp_off = spill_slot_sp_offset(frame, slot) + sp_shift as i32;
+            emit_mov_r_mem(code, scratch, Reg::RSP, sp_off);
+            Some(scratch)
+        }
+        _ => None,
+    }
+}
+
+/// Marshal one int argument into the placement chosen by the
+/// shared `plan_call_args`. Spilled arg values are loaded into
+/// the destination arg-reg directly, or via r10 for stack slots.
+/// `scratch_bytes` is the rsp adjustment the caller already made
+/// for the call's stack scratch frame; the helper threads it
+/// into the spill-slot offset so the load reaches the right slot
+/// despite the moved rsp.
+fn marshal_int_arg(
+    code: &mut Vec<u8>,
+    arg_place: Place,
+    placement: super::ArgPlacement,
+    frame: Frame,
+    scratch_bytes: u32,
+    site: &str,
+) -> bool {
+    match placement {
+        super::ArgPlacement::IntReg(r) => {
+            let src = match materialize_int_shifted(code, arg_place, Reg(r), frame, scratch_bytes)
+            {
+                Some(s) => s,
+                None => {
+                    bail_msg(&alloc::format!("{site}: int arg not in int reg / spill"));
+                    return false;
+                }
+            };
+            if src.0 != r {
+                emit_mov_rr(code, Reg(r), src);
+            }
+            true
+        }
+        super::ArgPlacement::Stack(off) => {
+            let src = match materialize_int_shifted(
+                code,
+                arg_place,
+                SCRATCH_R10,
+                frame,
+                scratch_bytes,
+            ) {
+                Some(s) => s,
+                None => {
+                    bail_msg(&alloc::format!(
+                        "{site}: stack arg not in int reg / spill"
+                    ));
+                    return false;
+                }
+            };
+            emit_mov_mem_r(code, Reg::RSP, off as i32, src);
+            true
+        }
+        super::ArgPlacement::FpReg(_) => {
+            bail_msg(&alloc::format!("{site}: FpReg placement not yet handled"));
+            false
+        }
+    }
+}
+
 /// Public entry point. Returns `true` when every block + inst +
 /// terminator was lowered. Returns `false` (with `code`
 /// truncated back to the pre-attempt snapshot) when the function
@@ -396,16 +525,17 @@ fn emit_inst(
             *slot == 0
         }
         Inst::Imm(value) => {
-            let Some(rd) = int_reg(dst) else {
-                bail_msg("Imm: dst not int reg");
+            let Some(rd) = int_or_spill_dst(dst) else {
+                bail_msg("Imm: dst not int reg / spill");
                 return false;
             };
             emit_mov_r_imm64(code, rd, *value);
+            spill_dst_to_slot(code, dst, rd, frame);
             true
         }
         Inst::LocalAddr(off) => {
-            let Some(rd) = int_reg(dst) else {
-                bail_msg("LocalAddr: dst not int reg");
+            let Some(rd) = int_or_spill_dst(dst) else {
+                bail_msg("LocalAddr: dst not int reg / spill");
                 return false;
             };
             // c5 cdecl: param i (i >= 2) sits at [rbp + 16*(i-1)];
@@ -422,18 +552,24 @@ fn emit_inst(
                 }
             };
             emit_lea_r_mem(code, rd, Reg::RBP, disp);
+            spill_dst_to_slot(code, dst, rd, frame);
             true
         }
-        Inst::Load { addr, kind } => emit_load(code, dst, *addr, *kind, alloc),
-        Inst::Store { addr, value, kind } => emit_store(code, dst, *addr, *value, *kind, alloc),
-        Inst::Binop { op, lhs, rhs } => emit_binop(code, *op, dst, *lhs, *rhs, alloc),
-        Inst::BinopI { op, lhs, rhs_imm } => emit_binop_imm(code, *op, dst, *lhs, *rhs_imm, alloc),
+        Inst::Load { addr, kind } => emit_load(code, dst, *addr, *kind, alloc, frame),
+        Inst::Store { addr, value, kind } => {
+            emit_store(code, dst, *addr, *value, *kind, alloc, frame)
+        }
+        Inst::Binop { op, lhs, rhs } => emit_binop(code, *op, dst, *lhs, *rhs, alloc, frame),
+        Inst::BinopI { op, lhs, rhs_imm } => {
+            emit_binop_imm(code, *op, dst, *lhs, *rhs_imm, alloc, frame)
+        }
         Inst::Call { target_pc, args } => emit_call(
             code,
             dst,
             *target_pc,
             args,
             alloc,
+            frame,
             abi,
             fixups,
             variadic_targets.contains(target_pc),
@@ -449,6 +585,7 @@ fn emit_inst(
             args,
             *fp_arg_mask,
             alloc,
+            frame,
             abi,
             plt_call_fixups,
             imports,
@@ -511,18 +648,27 @@ fn emit_load(
     addr: u32,
     kind: LoadKind,
     alloc: &Allocation,
+    frame: Frame,
 ) -> bool {
-    let Some(rd) = int_reg(dst) else {
-        bail_msg("Load: dst not int reg");
-        return false;
-    };
     let addr_place = alloc
         .places
         .get(addr as usize)
         .copied()
         .unwrap_or(Place::None);
-    let Some(base) = int_reg(addr_place) else {
-        bail_msg("Load: addr Place not int reg");
+    // Materialise the base address. When the allocator picked a
+    // spill slot for addr, load it into the scratch reg; otherwise
+    // use the chosen int reg directly. The same scratch reg can
+    // hold the loaded value afterward because the addr is dead
+    // once the ldr executes.
+    let base = match materialize_int(code, addr_place, SCRATCH_R10, frame) {
+        Some(r) => r,
+        None => {
+            bail_msg("Load: addr Place not int reg / spill");
+            return false;
+        }
+    };
+    let Some(rd) = int_or_spill_dst(dst) else {
+        bail_msg("Load: dst not int reg / spill");
         return false;
     };
     match kind {
@@ -538,6 +684,7 @@ fn emit_load(
             return false;
         }
     }
+    spill_dst_to_slot(code, dst, rd, frame);
     true
 }
 
@@ -548,6 +695,7 @@ fn emit_store(
     value: u32,
     kind: StoreKind,
     alloc: &Allocation,
+    frame: Frame,
 ) -> bool {
     let addr_place = alloc
         .places
@@ -559,13 +707,35 @@ fn emit_store(
         .get(value as usize)
         .copied()
         .unwrap_or(Place::None);
-    let Some(base) = int_reg(addr_place) else {
-        bail_msg("Store: addr Place not int reg");
-        return false;
+    // Source value comes first because it stays live across the
+    // store; the addr scratch can be reused for dst spill.
+    let rs = match value_place {
+        Place::IntReg(r) => Reg(r),
+        Place::Spill(slot) => {
+            let sp_off = spill_slot_sp_offset(frame, slot);
+            emit_mov_r_mem(code, SCRATCH_R10, Reg::RSP, sp_off);
+            SCRATCH_R10
+        }
+        _ => {
+            bail_msg("Store: value Place not int reg / spill");
+            return false;
+        }
     };
-    let Some(rs) = int_reg(value_place) else {
-        bail_msg("Store: value Place not int reg");
-        return false;
+    // For the address, pick a scratch that doesn't clash with rs
+    // when both sides are spilled. rcx is caller-saved, never an
+    // SSA-allocator pool member, and outside any pending
+    // arg-marshalling at this point (Store is not a call).
+    let addr_scratch = if rs.0 == SCRATCH_R10.0 {
+        Reg::RCX
+    } else {
+        SCRATCH_R10
+    };
+    let base = match materialize_int(code, addr_place, addr_scratch, frame) {
+        Some(r) => r,
+        None => {
+            bail_msg("Store: addr Place not int reg / spill");
+            return false;
+        }
     };
     match kind {
         StoreKind::I64 => emit_mov_mem_r(code, base, 0, rs),
@@ -577,13 +747,19 @@ fn emit_store(
             return false;
         }
     }
-    // The c5 store ops leave the stored value in the
-    // accumulator. Propagate rs into dst (int reg only at this
-    // stage).
-    if let Some(rd) = int_reg(dst) {
-        if rd.0 != rs.0 {
-            emit_mov_rr(code, rd, rs);
+    // c5 stores leave the written value in the accumulator;
+    // propagate `rs` into dst when the allocator wants it parked
+    // somewhere specific.
+    match dst {
+        Place::IntReg(r) => {
+            if r != rs.0 {
+                emit_mov_rr(code, Reg(r), rs);
+            }
         }
+        Place::Spill(_) => {
+            spill_dst_to_slot(code, dst, rs, frame);
+        }
+        _ => {}
     }
     true
 }
@@ -595,8 +771,10 @@ fn emit_binop(
     lhs: u32,
     rhs: u32,
     alloc: &Allocation,
+    frame: Frame,
 ) -> bool {
-    let Some(rd) = int_reg(dst) else {
+    let Some(rd) = int_or_spill_dst(dst) else {
+        bail_msg("Binop: dst not int reg / spill");
         return false;
     };
     let lhs_place = alloc
@@ -609,12 +787,30 @@ fn emit_binop(
         .get(rhs as usize)
         .copied()
         .unwrap_or(Place::None);
-    let Some(rn) = int_reg(lhs_place) else {
-        bail_msg("Binop: lhs not int reg");
-        return false;
+    // Stage lhs into rd first, so the two-operand ops below can
+    // `op rd, rm` and land the result in rd. When lhs is a spill,
+    // load directly into rd to skip a redundant mov. When rhs is
+    // a spill, materialise via SCRATCH_R10. The conflict case
+    // (rd == r10 and rhs spilled) uses rcx as the rhs scratch.
+    let rn = match lhs_place {
+        Place::IntReg(r) => Reg(r),
+        Place::Spill(slot) => {
+            let sp_off = spill_slot_sp_offset(frame, slot);
+            emit_mov_r_mem(code, rd, Reg::RSP, sp_off);
+            rd
+        }
+        _ => {
+            bail_msg("Binop: lhs not int reg / spill");
+            return false;
+        }
     };
-    let Some(rm) = int_reg(rhs_place) else {
-        bail_msg("Binop: rhs not int reg");
+    let rhs_scratch = if rd.0 == SCRATCH_R10.0 {
+        Reg::RCX
+    } else {
+        SCRATCH_R10
+    };
+    let Some(rm) = materialize_int(code, rhs_place, rhs_scratch, frame) else {
+        bail_msg("Binop: rhs not int reg / spill");
         return false;
     };
     // x86_64's two-operand ops mutate the destination, so stage
@@ -682,6 +878,7 @@ fn emit_binop(
             return false;
         }
     }
+    spill_dst_to_slot(code, dst, rd, frame);
     true
 }
 
@@ -692,9 +889,10 @@ fn emit_binop_imm(
     lhs: u32,
     rhs_imm: i64,
     alloc: &Allocation,
+    frame: Frame,
 ) -> bool {
-    let Some(rd) = int_reg(dst) else {
-        bail_msg("BinopI: dst not int reg");
+    let Some(rd) = int_or_spill_dst(dst) else {
+        bail_msg("BinopI: dst not int reg / spill");
         return false;
     };
     let lhs_place = alloc
@@ -702,9 +900,17 @@ fn emit_binop_imm(
         .get(lhs as usize)
         .copied()
         .unwrap_or(Place::None);
-    let Some(rn) = int_reg(lhs_place) else {
-        bail_msg("BinopI: lhs not int reg");
-        return false;
+    let rn = match lhs_place {
+        Place::IntReg(r) => Reg(r),
+        Place::Spill(slot) => {
+            let sp_off = spill_slot_sp_offset(frame, slot);
+            emit_mov_r_mem(code, rd, Reg::RSP, sp_off);
+            rd
+        }
+        _ => {
+            bail_msg("BinopI: lhs not int reg / spill");
+            return false;
+        }
     };
     // Materialise the immediate into rcx as a scratch. rcx is
     // caller-saved on every x86_64 ABI we target, and the SSA
@@ -766,6 +972,7 @@ fn emit_binop_imm(
             return false;
         }
     }
+    spill_dst_to_slot(code, dst, rd, frame);
     true
 }
 
@@ -775,6 +982,7 @@ fn emit_call(
     target_pc: usize,
     args: &[u32],
     alloc: &Allocation,
+    frame: Frame,
     abi: super::Abi,
     fixups: &mut Vec<Fixup>,
     callee_is_variadic: bool,
@@ -804,27 +1012,8 @@ fn emit_call(
             .get(arg_id as usize)
             .copied()
             .unwrap_or(Place::None);
-        match placement {
-            super::ArgPlacement::IntReg(r) => {
-                let Some(src) = int_reg(arg_place) else {
-                    bail_msg("Call: int arg not in int reg");
-                    return false;
-                };
-                if src.0 != r {
-                    emit_mov_rr(code, Reg(r), src);
-                }
-            }
-            super::ArgPlacement::Stack(off) => {
-                let Some(src) = int_reg(arg_place) else {
-                    bail_msg("Call: stack arg not in int reg");
-                    return false;
-                };
-                emit_mov_mem_r(code, Reg::RSP, off as i32, src);
-            }
-            super::ArgPlacement::FpReg(_) => {
-                bail_msg("Call: FpReg placement not yet handled");
-                return false;
-            }
+        if !marshal_int_arg(code, arg_place, placement, frame, plan.scratch_bytes, "Call") {
+            return false;
         }
     }
     // Record a fixup for the call's rel32 field. `emit_call_rel32`
@@ -856,6 +1045,7 @@ fn emit_call_ext(
     args: &[u32],
     fp_arg_mask: u32,
     alloc: &Allocation,
+    frame: Frame,
     abi: super::Abi,
     plt_call_fixups: &mut Vec<PltCallFixup>,
     imports: &super::ResolvedImports,
@@ -881,27 +1071,8 @@ fn emit_call_ext(
             .get(arg_id as usize)
             .copied()
             .unwrap_or(Place::None);
-        match placement {
-            super::ArgPlacement::IntReg(r) => {
-                let Some(src) = int_reg(arg_place) else {
-                    bail_msg("CallExt: int arg not in int reg");
-                    return false;
-                };
-                if src.0 != r {
-                    emit_mov_rr(code, Reg(r), src);
-                }
-            }
-            super::ArgPlacement::Stack(off) => {
-                let Some(src) = int_reg(arg_place) else {
-                    bail_msg("CallExt: stack arg not in int reg");
-                    return false;
-                };
-                emit_mov_mem_r(code, Reg::RSP, off as i32, src);
-            }
-            super::ArgPlacement::FpReg(_) => {
-                bail_msg("CallExt: FpReg placement not yet handled");
-                return false;
-            }
+        if !marshal_int_arg(code, arg_place, placement, frame, plan.scratch_bytes, "CallExt") {
+            return false;
         }
     }
     // SysV AMD64 (System V AMD64 ABI, 3.2.3): for variadic
@@ -1173,12 +1344,13 @@ fn emit_vstack_spill(
 }
 
 fn emit_vstack_reload(code: &mut Vec<u8>, dst: Place, slot: u32, frame: Frame) -> bool {
-    let Some(rd) = int_reg(dst) else {
-        bail_msg("VstackReload: dst not int reg");
+    let Some(rd) = int_or_spill_dst(dst) else {
+        bail_msg("VstackReload: dst not int reg / spill");
         return false;
     };
     let sp_off = (frame.frame_bytes - frame.acc_slot_off + 8 + slot * 8) as i32;
     emit_mov_r_mem(code, rd, Reg::RSP, sp_off);
+    spill_dst_to_slot(code, dst, rd, frame);
     true
 }
 

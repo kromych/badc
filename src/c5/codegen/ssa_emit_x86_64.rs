@@ -126,44 +126,157 @@ pub(super) fn emit_function(
     let frame = Frame::for_function(func, alloc);
     let abi = target.abi();
 
-    // Single-block functions only at this stage. Multi-block
-    // shapes need the branch-fixup machinery the aarch64 emit
-    // already has; bring that across in a follow-on once the
-    // single-block path is exercised.
-    if func.blocks.len() != 1 {
-        bail_msg("multi-block functions not yet handled");
-        return false;
-    }
-
     emit_prologue(code, func, alloc, frame, abi);
 
-    let block = &func.blocks[0];
-    for v in block.inst_range.clone() {
-        let inst = &func.insts[v as usize];
-        let place = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
-        if !emit_inst(code, inst, place, alloc, frame) {
-            #[cfg(feature = "std")]
-            if std::env::var("BADC_DUMP_SSA").is_ok() {
-                eprintln!(
-                    "ssa emit x86_64: bailed on inst v{v}: {:?} (place {:?})",
-                    inst, place,
-                );
+    let mut block_offsets: Vec<usize> = alloc::vec![0; func.blocks.len()];
+    let mut branch_fixups: Vec<BranchFixup> = Vec::new();
+
+    for (block_idx, block) in func.blocks.iter().enumerate() {
+        block_offsets[block_idx] = code.len();
+        if block_idx > 0 && block.start_pc < bytecode_to_native.len() {
+            bytecode_to_native[block.start_pc] = code.len();
+        }
+        for v in block.inst_range.clone() {
+            let inst = &func.insts[v as usize];
+            let place = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
+            if !emit_inst(code, inst, place, alloc, frame) {
+                #[cfg(feature = "std")]
+                if std::env::var("BADC_DUMP_SSA").is_ok() {
+                    eprintln!(
+                        "ssa emit x86_64: bailed on inst v{v}: {:?} (place {:?})",
+                        inst, place,
+                    );
+                }
+                code.truncate(snapshot);
+                return false;
             }
-            code.truncate(snapshot);
-            return false;
+        }
+        match block.terminator {
+            Terminator::Return(v) => emit_return(code, v, alloc, frame, func),
+            Terminator::Jmp(t) => {
+                branch_fixups.push(BranchFixup {
+                    site: code.len() + 1, // rel32 follows the 1-byte opcode
+                    target: t,
+                    kind: LocalBranchKind::Jmp,
+                });
+                super::x86_64::emit_jmp_rel32(code, 0);
+            }
+            Terminator::Bz {
+                cond,
+                target,
+                fall_through,
+            } => {
+                let cond_place = alloc
+                    .places
+                    .get(cond as usize)
+                    .copied()
+                    .unwrap_or(Place::None);
+                let Some(rc) = int_reg(cond_place) else {
+                    bail_msg("Bz: cond Place not int reg");
+                    code.truncate(snapshot);
+                    return false;
+                };
+                // `cmp rc, 0` sets ZF=1 iff rc==0; je takes the
+                // branch on ZF=1.
+                super::x86_64::emit_cmp_r_imm32(code, rc, 0);
+                branch_fixups.push(BranchFixup {
+                    site: code.len() + 2, // 0x0F 0x8x + rel32
+                    target,
+                    kind: LocalBranchKind::Jcc(Cc::E),
+                });
+                super::x86_64::emit_jcc_rel32(code, Cc::E, 0);
+                if fall_through as usize != block_idx + 1 {
+                    branch_fixups.push(BranchFixup {
+                        site: code.len() + 1,
+                        target: fall_through,
+                        kind: LocalBranchKind::Jmp,
+                    });
+                    super::x86_64::emit_jmp_rel32(code, 0);
+                }
+            }
+            Terminator::Bnz {
+                cond,
+                target,
+                fall_through,
+            } => {
+                let cond_place = alloc
+                    .places
+                    .get(cond as usize)
+                    .copied()
+                    .unwrap_or(Place::None);
+                let Some(rc) = int_reg(cond_place) else {
+                    bail_msg("Bnz: cond Place not int reg");
+                    code.truncate(snapshot);
+                    return false;
+                };
+                super::x86_64::emit_cmp_r_imm32(code, rc, 0);
+                branch_fixups.push(BranchFixup {
+                    site: code.len() + 2,
+                    target,
+                    kind: LocalBranchKind::Jcc(Cc::Ne),
+                });
+                super::x86_64::emit_jcc_rel32(code, Cc::Ne, 0);
+                if fall_through as usize != block_idx + 1 {
+                    branch_fixups.push(BranchFixup {
+                        site: code.len() + 1,
+                        target: fall_through,
+                        kind: LocalBranchKind::Jmp,
+                    });
+                    super::x86_64::emit_jmp_rel32(code, 0);
+                }
+            }
+            Terminator::FallThrough(t) => {
+                if t as usize != block_idx + 1 {
+                    branch_fixups.push(BranchFixup {
+                        site: code.len() + 1,
+                        target: t,
+                        kind: LocalBranchKind::Jmp,
+                    });
+                    super::x86_64::emit_jmp_rel32(code, 0);
+                }
+            }
+            Terminator::TailExt(_) => {
+                bail_msg("TailExt terminator not yet handled");
+                code.truncate(snapshot);
+                return false;
+            }
         }
     }
-    match block.terminator {
-        Terminator::Return(v) => emit_return(code, v, alloc, frame, func),
-        _ => {
-            bail_msg("non-Return terminator on single-block fn");
-            code.truncate(snapshot);
-            return false;
-        }
+    // Patch recorded branches. `site` is the byte offset of the
+    // first rel32 byte; rel32 is computed from the byte *after*
+    // the rel32 field (which on x86_64 is `site + 4`).
+    for fx in &branch_fixups {
+        let target_off = block_offsets[fx.target as usize];
+        let next_pc = fx.site + 4;
+        let rel = (target_off as i64) - (next_pc as i64);
+        let imm = match i32::try_from(rel) {
+            Ok(v) => v,
+            Err(_) => {
+                bail_msg("branch fixup: rel32 out of range");
+                code.truncate(snapshot);
+                return false;
+            }
+        };
+        let bytes = imm.to_le_bytes();
+        code[fx.site..fx.site + 4].copy_from_slice(&bytes);
+        let _ = fx.kind;
     }
 
-    let _ = bytecode_to_native;
     true
+}
+
+#[derive(Debug, Clone, Copy)]
+struct BranchFixup {
+    /// Byte offset of the rel32 field in `code`.
+    site: usize,
+    target: super::ssa::BlockId,
+    kind: LocalBranchKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LocalBranchKind {
+    Jmp,
+    Jcc(Cc),
 }
 
 /// Spill the host-ABI argument registers into the c5 cdecl slots

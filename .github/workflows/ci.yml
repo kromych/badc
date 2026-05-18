@@ -243,12 +243,17 @@ jobs:
         #                     reproduces the same failure under
         #                     the default SSA function set.
         #
-        # `continue-on-error` because the probe is diagnostic.
-        if: matrix.os == 'ubuntu-latest'
+        # `if: always()` so the probe still runs after a prior
+        # step failure; `continue-on-error` because the probe is
+        # diagnostic, not a gate.
+        if: always() && matrix.os == 'ubuntu-latest'
         continue-on-error: true
         shell: bash
         run: |
           set -u
+          # Earlier `cargo test` may have failed before the
+          # release build runs, so build badc explicitly here.
+          cargo build --release --locked
           python demos/monocypher/setup.py
           python scripts/amalgamate.py -o /tmp/mono_full.c \
               demos/monocypher/monocypher.c \
@@ -295,7 +300,7 @@ jobs:
               head -300 /tmp/gdb_post.log
           fi
       - name: upload monocypher ssa probe artifacts (Linux x86_64 only)
-        if: matrix.os == 'ubuntu-latest'
+        if: always() && matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v4
         with:
           name: monocypher-ssa-probe

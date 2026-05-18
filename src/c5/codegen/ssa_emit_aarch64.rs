@@ -52,11 +52,11 @@ use super::DataFixup;
 use super::Target;
 use super::aarch64::{
     BranchKind, Cond, Fixup, PltCallFixup, Reg, emit, emit_add_sp_imm, emit_sub_sp_imm,
-    enc_add_imm, enc_add_reg, enc_adrp, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_cbnz,
-    enc_cbz, enc_cmp_reg, enc_cset, enc_eor_reg, enc_ldp_post, enc_ldr_imm, enc_ldr32_imm,
-    enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm, enc_ldur, enc_lslv,
-    enc_lsrv, enc_mov_reg, enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_sdiv, enc_stp_pre,
-    enc_str_imm, enc_str_pre, enc_str32_imm, enc_strb_imm, enc_strh_imm, enc_stur, enc_sub_imm,
+    enc_add_imm, enc_add_reg, enc_adrp, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_blr,
+    enc_cbnz, enc_cbz, enc_cmp_reg, enc_cset, enc_eor_reg, enc_ldp_post, enc_ldr_imm, enc_ldr_post,
+    enc_ldr32_imm, enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm,
+    enc_lslv, enc_lsrv, enc_mov_reg, enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_sdiv,
+    enc_stp_pre, enc_str_imm, enc_str_pre, enc_str32_imm, enc_strb_imm, enc_strh_imm, enc_sub_imm,
     enc_sub_reg, enc_udiv, load_imm64,
 };
 use super::ssa::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
@@ -403,15 +403,16 @@ fn emit_prologue(
         emit_sub_sp_imm(code, frame.frame_bytes);
     }
     // Save the allocator-reported callee-saved GPRs at the
-    // bottom of the frame. Each goes into its own 8-byte slot;
-    // restore order in the epilogue mirrors this. stur takes a
-    // signed 9-bit imm, sufficient for any save-region within
-    // 256 bytes of fp. Larger save regions fall back to the
-    // pool path through `emit_function`'s return-false escape.
-    let save_base = alloc_save_base(frame, alloc);
+    // bottom of the frame. The saved-reg region sits just above
+    // sp; addressing through sp with `enc_str_imm` keeps the
+    // 12-bit scaled immediate (range 0..32760 in multiples of 8)
+    // valid for any frame the compiler can produce. Using `stur`
+    // off fp would silently truncate the 9-bit immediate for
+    // frames larger than ~256 bytes.
+    let saved_fpr_bytes = ((alloc.fp_used.len() as u32) * 8 + 15) & !15;
     for (i, &r) in alloc.gpr_used.iter().enumerate() {
-        let off = -((save_base + (i as u32) * 8 + 8) as i32);
-        emit(code, enc_stur(Reg(r), Reg(29), off));
+        let off = saved_fpr_bytes + (i as u32) * 8;
+        emit(code, enc_str_imm(Reg(r), Reg(31), off));
     }
 }
 
@@ -528,6 +529,14 @@ fn emit_inst(
             plt_call_fixups,
             imports,
         ),
+        Inst::CallIndirect { target, args } => {
+            emit_call_indirect(code, dst, *target, args, alloc, frame, scratch, abi)
+        }
+        Inst::Mcpy {
+            dst: d,
+            src: s,
+            size,
+        } => emit_mcpy(code, dst, *d, *s, *size, alloc, frame, scratch),
         Inst::AccSpill { value } => {
             let value_place = alloc
                 .places
@@ -538,7 +547,8 @@ fn emit_inst(
                 Some(r) => r,
                 None => return false,
             };
-            emit(code, enc_stur(src, Reg(29), -(frame.acc_slot_off as i32)));
+            let sp_off = frame.frame_bytes - frame.acc_slot_off;
+            emit(code, enc_str_imm(src, Reg(31), sp_off));
             true
         }
         Inst::AccReload => {
@@ -546,7 +556,8 @@ fn emit_inst(
                 bail_msg("AccReload: dst not int reg");
                 return false;
             };
-            emit(code, enc_ldur(rd, Reg(29), -(frame.acc_slot_off as i32)));
+            let sp_off = frame.frame_bytes - frame.acc_slot_off;
+            emit(code, enc_ldr_imm(rd, Reg(31), sp_off));
             true
         }
         Inst::VstackSpill { slot, value } => {
@@ -559,12 +570,13 @@ fn emit_inst(
                 Some(r) => r,
                 None => return false,
             };
-            // vstack slot N lives at -[(vstack_base - locals_bytes is 0) + (N+1) * 8] from fp.
-            // Frame already accounts for the vstack region between
-            // `locals_bytes` and `acc_slot_off - 8`. Compute the
-            // exact byte offset:
-            let off = -((frame.acc_slot_off as i32) - 8 - (*slot as i32) * 8);
-            emit(code, enc_stur(src, Reg(29), off));
+            // Slot N of the vstack region sits one 8-byte slot
+            // above the acc slot, then `slot` more entries above
+            // that. Addressing through sp with the 12-bit scaled
+            // store keeps the immediate in range for any frame
+            // up to 32 KiB.
+            let sp_off = frame.frame_bytes - frame.acc_slot_off + 8 + (*slot) * 8;
+            emit(code, enc_str_imm(src, Reg(31), sp_off));
             true
         }
         Inst::VstackReload { slot } => {
@@ -572,8 +584,8 @@ fn emit_inst(
                 bail_msg("VstackReload: dst not int reg");
                 return false;
             };
-            let off = -((frame.acc_slot_off as i32) - 8 - (*slot as i32) * 8);
-            emit(code, enc_ldur(rd, Reg(29), off));
+            let sp_off = frame.frame_bytes - frame.acc_slot_off + 8 + (*slot) * 8;
+            emit(code, enc_ldr_imm(rd, Reg(31), sp_off));
             true
         }
         Inst::Intrinsic { kind, args } => {
@@ -774,8 +786,8 @@ fn emit_call_ext(
             emit(code, enc_mov_reg(rd, Reg(0)));
         }
     } else if let Place::Spill(slot) = dst {
-        let off = -((frame.alloc_spill_base + (slot + 1) * 8) as i32);
-        emit(code, enc_stur(Reg(0), Reg(29), off));
+        let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+        emit(code, enc_str_imm(Reg(0), Reg(31), sp_off));
     }
     true
 }
@@ -839,8 +851,8 @@ fn emit_call(
                 emit(code, enc_mov_reg(rd, Reg(0)));
             }
         } else if let Place::Spill(slot) = dst {
-            let off = -((frame.alloc_spill_base + (slot + 1) * 8) as i32);
-            emit(code, enc_stur(Reg(0), Reg(29), off));
+            let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+            emit(code, enc_str_imm(Reg(0), Reg(31), sp_off));
         }
         return true;
     }
@@ -901,8 +913,166 @@ fn emit_call(
             emit(code, enc_mov_reg(rd, Reg(0)));
         }
     } else if let Place::Spill(slot) = dst {
-        let off = -((frame.alloc_spill_base + (slot + 1) * 8) as i32);
-        emit(code, enc_stur(Reg(0), Reg(29), off));
+        let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+        emit(code, enc_str_imm(Reg(0), Reg(31), sp_off));
+    }
+    true
+}
+
+/// Indirect call through a function-pointer value. Mirrors the
+/// pool path's `Op::Jsri`: marshal args per the host ABI, capture
+/// the target into a callee-overwritable scratch register that
+/// arg marshalling won't clobber, `blr`, recover the return value.
+/// FP args and variadic indirect callees aren't part of the thin
+/// slice; either case returns false.
+fn emit_call_indirect(
+    code: &mut Vec<u8>,
+    dst: Place,
+    target: u32,
+    args: &[u32],
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+    abi: super::Abi,
+) -> bool {
+    let target_place = alloc
+        .places
+        .get(target as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    // Capture the function pointer into x9 before marshalling
+    // touches any of x0..x7 or scratch.primary (x16). AAPCS64
+    // doesn't assign x9 to int args, so the marshalling loop
+    // can't overwrite it. x9 is caller-saved, but the blr happens
+    // before the callee can do anything observable to x9, so the
+    // value reaches the indirect branch intact.
+    let target_r = match materialize_int(code, target_place, scratch.primary, frame) {
+        Some(r) => r,
+        None => return false,
+    };
+    if target_r.0 != 9 {
+        emit(code, enc_mov_reg(Reg(9), target_r));
+    }
+    let plan = super::plan_call_args(args.len(), args.len(), 0, abi);
+    if plan.scratch_bytes > 0 {
+        emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
+    }
+    for (i, &placement) in plan.placements.iter().enumerate() {
+        let arg_id = args[i];
+        let arg_place = alloc
+            .places
+            .get(arg_id as usize)
+            .copied()
+            .unwrap_or(Place::None);
+        let src = match materialize_int(code, arg_place, scratch.primary, frame) {
+            Some(r) => r,
+            None => return false,
+        };
+        match placement {
+            super::ArgPlacement::IntReg(r) => {
+                if src.0 != r {
+                    emit(code, enc_mov_reg(Reg(r), src));
+                }
+            }
+            super::ArgPlacement::Stack(off) => {
+                emit(code, enc_str_imm(src, Reg(31), off));
+            }
+            super::ArgPlacement::FpReg(_) => return false,
+        }
+    }
+    emit(code, enc_blr(Reg(9)));
+    if plan.scratch_bytes > 0 {
+        emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
+    }
+    if let Some(rd) = int_reg(dst) {
+        if rd.0 != 0 {
+            emit(code, enc_mov_reg(rd, Reg(0)));
+        }
+    } else if let Place::Spill(slot) = dst {
+        let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+        emit(code, enc_str_imm(Reg(0), Reg(31), sp_off));
+    }
+    true
+}
+
+/// Compile-time-unrolled struct copy. `size` bytes from [src] to
+/// [dst]; emits 8-byte ldr/str pairs for whole words and a
+/// ldrb/strb tail for any sub-word remainder. The defined value
+/// is `dst` -- mirrors C's `memcpy(dst, src, size)` return.
+fn emit_mcpy(
+    code: &mut Vec<u8>,
+    dst_place: Place,
+    dst_val: u32,
+    src_val: u32,
+    size: i64,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    if size < 0 {
+        bail_msg("Mcpy: negative size");
+        return false;
+    }
+    let dst_place_in = alloc
+        .places
+        .get(dst_val as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let src_place_in = alloc
+        .places
+        .get(src_val as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let dst_r = match materialize_int(code, dst_place_in, scratch.primary, frame) {
+        Some(r) => r,
+        None => return false,
+    };
+    let src_r = match materialize_int(code, src_place_in, scratch.secondary, frame) {
+        Some(r) => r,
+        None => return false,
+    };
+    // Mcpy needs a third register for each ldr/str pair. The
+    // allocator pool covers x9..x15 + x20..x27 (target-dependent)
+    // and may hold a live value in any of them; the SSA emit
+    // sees only `Place`s, not liveness past this inst. Reserve
+    // x10 unconditionally and save/restore it through one 16-byte
+    // stack slot so it doesn't matter whether the allocator has
+    // x10 in active use. The slot is dropped before the next
+    // instruction sees sp.
+    //
+    // If either base already lives in x10, materialize_int
+    // returned it via the allocator's Place::IntReg(10); in that
+    // case we pick a different temp (x11) to avoid corrupting the
+    // base mid-copy. Same for src/dst aliasing x10 implicitly
+    // through the scratch fallback.
+    let temp = if dst_r.0 == 10 || src_r.0 == 10 {
+        Reg(11)
+    } else {
+        Reg(10)
+    };
+    let bytes = size as u32;
+    emit(code, enc_str_pre(temp, Reg(31), -16));
+    let words = bytes / 8;
+    for w in 0..words {
+        let off = w * 8;
+        emit(code, enc_ldr_imm(temp, src_r, off));
+        emit(code, enc_str_imm(temp, dst_r, off));
+    }
+    let tail_start = words * 8;
+    for i in 0..(bytes - tail_start) {
+        let off = tail_start + i;
+        emit(code, enc_ldrb_imm(temp, src_r, off));
+        emit(code, enc_strb_imm(temp, dst_r, off));
+    }
+    emit(code, enc_ldr_post(temp, Reg(31), 16));
+    // memcpy returns dst -- propagate into the Inst's `dst_place`.
+    if let Some(rd) = int_reg(dst_place) {
+        if rd.0 != dst_r.0 {
+            emit(code, enc_mov_reg(rd, dst_r));
+        }
+    } else if let Place::Spill(slot) = dst_place {
+        let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+        emit(code, enc_str_imm(dst_r, Reg(31), sp_off));
     }
     true
 }
@@ -1055,8 +1225,8 @@ fn emit_store(
             emit(code, enc_mov_reg(rd, rs));
         }
     } else if let Place::Spill(slot) = dst {
-        let off = -((frame.alloc_spill_base + (slot + 1) * 8) as i32);
-        emit(code, enc_stur(rs, Reg(29), off));
+        let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+        emit(code, enc_str_imm(rs, Reg(31), sp_off));
     }
     true
 }
@@ -1203,13 +1373,17 @@ fn emit_binop_imm(
 
 /// Materialise a value's `Place` into a register the lowering
 /// can name in an instruction operand. Spills get loaded into
-/// `scratch`; register places are returned as-is.
+/// `scratch`; register places are returned as-is. Spill slots
+/// are addressed through sp with the 12-bit scaled immediate;
+/// fp-relative addressing through `ldur` would silently
+/// truncate the 9-bit immediate for frames > 256 bytes and read
+/// from the wrong slot.
 fn materialize_int(code: &mut Vec<u8>, place: Place, scratch: Reg, frame: Frame) -> Option<Reg> {
     match place {
         Place::IntReg(r) => Some(Reg(r)),
         Place::Spill(slot) => {
-            let off = -((frame.alloc_spill_base + (slot + 1) * 8) as i32);
-            emit(code, enc_ldur(scratch, Reg(29), off));
+            let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+            emit(code, enc_ldr_imm(scratch, Reg(31), sp_off));
             Some(scratch)
         }
         Place::FpReg(_) | Place::None => None,
@@ -1243,10 +1417,13 @@ fn emit_return(
         }
     }
     // Restore saved callee-saved GPRs (mirror of prologue).
-    let save_base = alloc_save_base(frame, alloc);
+    // Addressing through sp uses `enc_ldr_imm`'s 12-bit scaled
+    // immediate (range 0..32760 in multiples of 8); the matching
+    // prologue uses `enc_str_imm` at the same offsets.
+    let saved_fpr_bytes = ((alloc.fp_used.len() as u32) * 8 + 15) & !15;
     for (i, &r) in alloc.gpr_used.iter().enumerate() {
-        let off = -((save_base + (i as u32) * 8 + 8) as i32);
-        emit(code, enc_ldur(Reg(r), Reg(29), off));
+        let off = saved_fpr_bytes + (i as u32) * 8;
+        emit(code, enc_ldr_imm(Reg(r), Reg(31), off));
     }
     // Tear down the frame.
     if frame.frame_bytes > 0 {

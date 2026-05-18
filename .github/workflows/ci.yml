@@ -225,6 +225,92 @@ jobs:
         # Diffie-Hellman. Same build flavour matrix as the
         # other library demos.
         run: python demos/monocypher/smoke.py
+      - name: monocypher ssa cross-function probe (Linux x86_64 only)
+        # The SSA emit on x86_64 produces correct bytes for every
+        # function in isolation but miscompiles monocypher's
+        # Ed25519 chain when a specific pool / SSA function mix is
+        # in play. Aarch64 doesn't reproduce. This step builds
+        # the binary under two reproductions and captures the
+        # output so a future investigation has live artifacts:
+        #
+        #  /tmp/mono_only  -- BADC_SSA_ONLY_PC=62595,396 narrows
+        #                     SSA emit to two functions; the rest
+        #                     fall back to pool. Reproduces the
+        #                     Ed25519 signature mismatch.
+        #  /tmp/mono_store -- BADC_SSA_STORE_SPILL_ADDR=1 re-opens
+        #                     the spill-tolerant Store-addr path
+        #                     in every SSA-emitted function;
+        #                     reproduces the same failure under
+        #                     the default SSA function set.
+        #
+        # `continue-on-error` because the probe is diagnostic.
+        if: matrix.os == 'ubuntu-latest'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -u
+          python demos/monocypher/setup.py
+          python scripts/amalgamate.py -o /tmp/mono_full.c \
+              demos/monocypher/monocypher.c \
+              demos/monocypher/monocypher-ed25519.c \
+              demos/monocypher/smoke_main.c
+          BADC=target/release/badc
+          BADC_USE_SSA_EMIT=1 BADC_SSA_ONLY_PC=62595,396 \
+              "$BADC" -I demos/monocypher /tmp/mono_full.c -o /tmp/mono_only
+          BADC_USE_SSA_EMIT=1 BADC_SSA_STORE_SPILL_ADDR=1 \
+              "$BADC" -I demos/monocypher /tmp/mono_full.c -o /tmp/mono_store
+          ulimit -c unlimited || true
+          mkdir -p /tmp/cores
+          sudo bash -c 'echo "/tmp/cores/core.%p" > /proc/sys/kernel/core_pattern' || true
+          for bin in /tmp/mono_only /tmp/mono_store; do
+              echo "=== $bin ==="
+              set +e
+              "$bin" > "${bin}.out" 2> "${bin}.err"
+              echo "exit: $?"
+              set -e
+              echo "--- stdout ---"
+              cat "${bin}.out" || true
+              echo "--- stderr ---"
+              cat "${bin}.err" || true
+          done
+          # Run the failing binary under gdb. The smoke exits via
+          # a clean fprintf + return, not a fault, so set a
+          # one-shot breakpoint on `fprintf` and dump the
+          # surrounding stack frame at the first hit. That brings
+          # back the signature buffer's address (rdi) plus the
+          # call chain that produced it.
+          if command -v gdb >/dev/null; then
+              gdb -batch \
+                  -ex 'set pagination off' \
+                  -ex 'set print frame-arguments all' \
+                  -ex 'set print elements 256' \
+                  -ex 'break fprintf' \
+                  -ex run \
+                  -ex 'info registers' \
+                  -ex 'x/64bx $rdi' \
+                  -ex 'bt full 30' \
+                  /tmp/mono_only \
+                  > /tmp/gdb_post.log 2>&1 || true
+              echo "--- gdb log (head) ---"
+              head -300 /tmp/gdb_post.log
+          fi
+      - name: upload monocypher ssa probe artifacts (Linux x86_64 only)
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: monocypher-ssa-probe
+          path: |
+            /tmp/mono_only
+            /tmp/mono_only.out
+            /tmp/mono_only.err
+            /tmp/mono_store
+            /tmp/mono_store.out
+            /tmp/mono_store.err
+            /tmp/gdb_post.log
+            /tmp/cores
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: bearssl smoke (TU + archive + upstream KATs)
         # Builds every .c file under demos/bearssl/src into a
         # static archive, links it against the bundled

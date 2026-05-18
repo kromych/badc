@@ -190,8 +190,7 @@ fn marshal_int_arg(
 ) -> bool {
     match placement {
         super::ArgPlacement::IntReg(r) => {
-            let src = match materialize_int_shifted(code, arg_place, Reg(r), frame, scratch_bytes)
-            {
+            let src = match materialize_int_shifted(code, arg_place, Reg(r), frame, scratch_bytes) {
                 Some(s) => s,
                 None => {
                     bail_msg(&alloc::format!("{site}: int arg not in int reg / spill"));
@@ -204,21 +203,14 @@ fn marshal_int_arg(
             true
         }
         super::ArgPlacement::Stack(off) => {
-            let src = match materialize_int_shifted(
-                code,
-                arg_place,
-                SCRATCH_R10,
-                frame,
-                scratch_bytes,
-            ) {
-                Some(s) => s,
-                None => {
-                    bail_msg(&alloc::format!(
-                        "{site}: stack arg not in int reg / spill"
-                    ));
-                    return false;
-                }
-            };
+            let src =
+                match materialize_int_shifted(code, arg_place, SCRATCH_R10, frame, scratch_bytes) {
+                    Some(s) => s,
+                    None => {
+                        bail_msg(&alloc::format!("{site}: stack arg not in int reg / spill"));
+                        return false;
+                    }
+                };
             emit_mov_mem_r(code, Reg::RSP, off as i32, src);
             true
         }
@@ -259,6 +251,48 @@ pub(super) fn emit_function(
     let pending_func_fixups_snapshot = pending_func_fixups.len();
     let frame = Frame::for_function(func, alloc);
     let abi = target.abi();
+
+    // Per-function filters used to bisect the Store-spill-addr
+    // regression (see emit_load's TODO note). All three are
+    // diagnostic-only and accept comma-separated bytecode entry
+    // PCs; they have no effect when the variables are absent.
+    //   BADC_SSA_ONLY_PC -- limit SSA emit to these functions
+    //                       (every other function bails to pool).
+    //   BADC_SSA_SKIP_PC -- force these functions to bail.
+    //   BADC_SSA_MAX_FN  -- bail every function whose ent_pc
+    //                       exceeds the given threshold.
+    #[cfg(feature = "std")]
+    {
+        if let Ok(s) = std::env::var("BADC_SSA_ONLY_PC") {
+            let mut found = false;
+            for tok in s.split(',') {
+                if let Ok(only) = tok.parse::<usize>()
+                    && func.ent_pc == only
+                {
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                return false;
+            }
+        }
+        if let Ok(s) = std::env::var("BADC_SSA_SKIP_PC") {
+            for tok in s.split(',') {
+                if let Ok(skip) = tok.parse::<usize>()
+                    && func.ent_pc == skip
+                {
+                    return false;
+                }
+            }
+        }
+        if let Ok(s) = std::env::var("BADC_SSA_MAX_FN")
+            && let Ok(max) = s.parse::<usize>()
+            && func.ent_pc > max
+        {
+            return false;
+        }
+    }
 
     emit_prologue(code, func, alloc, frame, abi);
 
@@ -633,9 +667,15 @@ fn emit_inst(
             emit_mov_r_mem(code, rd, Reg::RSP, sp_off);
             true
         }
-        Inst::TlsAddr(offset) => {
-            emit_tls_addr(code, dst, *offset, target, tls_index_fixups, tls_total_size, frame)
-        }
+        Inst::TlsAddr(offset) => emit_tls_addr(
+            code,
+            dst,
+            *offset,
+            target,
+            tls_index_fixups,
+            tls_total_size,
+            frame,
+        ),
         _ => {
             bail_msg("inst variant not yet covered");
             let _ = frame;
@@ -810,13 +850,37 @@ fn emit_store(
         .get(value as usize)
         .copied()
         .unwrap_or(Place::None);
-    let Some(base) = int_reg(addr_place) else {
-        bail_msg("Store: addr Place not int reg");
-        return false;
-    };
+    // BADC_SSA_STORE_SPILL_ADDR opts the diagnostic into the
+    // currently-broken spill-tolerant addr path. Without the env
+    // var the handler matches the aarch64 module's `int_reg`
+    // gates and bails to pool on any spilled operand, which
+    // keeps monocypher correct. With the env var set the addr
+    // path materialises a spilled address through r10 -- the
+    // same shape as the aarch64 emit -- and reproduces the
+    // x86_64 regression for the CI core-dump capture step. See
+    // the TODO at the top of emit_load.
+    #[cfg(feature = "std")]
+    let store_spill_addr = std::env::var("BADC_SSA_STORE_SPILL_ADDR").is_ok();
+    #[cfg(not(feature = "std"))]
+    let store_spill_addr = false;
     let Some(rs) = int_reg(value_place) else {
         bail_msg("Store: value Place not int reg");
         return false;
+    };
+    let base = if store_spill_addr {
+        match materialize_int(code, addr_place, SCRATCH_R10, frame) {
+            Some(r) => r,
+            None => {
+                bail_msg("Store: addr Place not int reg / spill");
+                return false;
+            }
+        }
+    } else {
+        let Some(b) = int_reg(addr_place) else {
+            bail_msg("Store: addr Place not int reg");
+            return false;
+        };
+        b
     };
     match kind {
         StoreKind::I64 => emit_mov_mem_r(code, base, 0, rs),
@@ -1158,8 +1222,7 @@ fn emit_call(
                 .unwrap_or(Place::None);
             // Each prior push moved rsp another 16 bytes down.
             let sp_shift = (i as u32) * 16;
-            let src = match materialize_int_shifted(code, arg_place, SCRATCH_R10, frame, sp_shift)
-            {
+            let src = match materialize_int_shifted(code, arg_place, SCRATCH_R10, frame, sp_shift) {
                 Some(r) => r,
                 None => {
                     bail_msg("Call (variadic): arg not in int reg / spill");
@@ -1208,7 +1271,14 @@ fn emit_call(
             .get(arg_id as usize)
             .copied()
             .unwrap_or(Place::None);
-        if !marshal_int_arg(code, arg_place, placement, frame, plan.scratch_bytes, "Call") {
+        if !marshal_int_arg(
+            code,
+            arg_place,
+            placement,
+            frame,
+            plan.scratch_bytes,
+            "Call",
+        ) {
             return false;
         }
     }
@@ -1267,7 +1337,14 @@ fn emit_call_ext(
             .get(arg_id as usize)
             .copied()
             .unwrap_or(Place::None);
-        if !marshal_int_arg(code, arg_place, placement, frame, plan.scratch_bytes, "CallExt") {
+        if !marshal_int_arg(
+            code,
+            arg_place,
+            placement,
+            frame,
+            plan.scratch_bytes,
+            "CallExt",
+        ) {
             return false;
         }
     }

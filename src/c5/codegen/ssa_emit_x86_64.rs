@@ -308,47 +308,32 @@ fn emit_prologue(
     abi: super::Abi,
 ) {
     // Host-arg-reg spill. Skipped for variadic functions; the
-    // pool path's same prologue does this too.
+    // pool path's same prologue does this too. Mirrors the
+    // x86_64 pool emit_prologue's shape.
     let entry_spill = if func.is_variadic { 0 } else { func.n_params };
     if entry_spill > 0 {
-        // Pop the call's return address into r11. With the saved
-        // address out of the way we can push the c5 cdecl arg
-        // slots above where rbp will eventually land. The trailing
-        // push restores the call's return address on top of those
-        // slots so the eventual `ret` returns to the caller as
-        // normal. r11 is caller-saved on every x86_64 ABI we
-        // target, so the host won't notice it was used as scratch.
-        emit_pop_r(code, Reg::R11);
+        emit_pop_r(code, Reg::R10);
         let n_reg = entry_spill.min(abi.int_arg_regs.len());
         let n_stack = entry_spill - n_reg;
         if n_stack > 0 {
-            // Host stack overflow args sit at [rsp + 16 + i*8]
-            // after the pop above (the `+ 16` accounts for the
-            // return address slot the caller pushed plus the
-            // saved rbp slot we'll push later). Restripe them
-            // into 16-byte c5 cdecl slots.
-            bail_msg("prologue: > N-reg arg overflow not implemented yet");
-            return;
+            // Reserve every overflow c5 slot in one sub, then
+            // copy each host-stack overflow arg into its 16-byte
+            // c5 cdecl slot. `host_off` reads the caller-supplied
+            // 8-byte-stride argument bank that the `pop r10`
+            // above already stripped of the return address.
+            let overflow_bytes = (n_stack as u32) * 16;
+            emit_sub_rsp_imm32(code, overflow_bytes);
+            for i in 0..n_stack {
+                let host_off = (overflow_bytes as i32) + (abi.shadow_space as i32) + (i as i32) * 8;
+                emit_mov_r_mem(code, Reg::RAX, Reg::RSP, host_off);
+                emit_mov_mem_r(code, Reg::RSP, (i as i32) * 16, Reg::RAX);
+            }
         }
-        // Push the int arg regs in reverse declaration order so
-        // arg 0 ends up at the lowest pushed address (= [rbp + 16]
-        // once rbp is set), arg 1 at [rbp + 32], etc. The push
-        // sequence consumes 8 bytes per push but `Op::Lea` strides
-        // 16; cover the gap by pushing a zero alongside each arg.
-        // The pool path does this with `str_pre Reg::X19, [sp, -16]!`
-        // on aarch64; on x86_64 it pushes the arg + a zero word.
         for i in (0..n_reg).rev() {
-            // Push the slot's high half first (8 bytes of zero
-            // padding so `[rbp + 16i + 8]` reads as 0 -- matches
-            // the aarch64 ` str x_r, [sp, -16]!` shape's high
-            // half) followed by the arg itself.
-            emit_sub_rsp_imm32(code, 8);
-            emit_push_r(code, Reg(abi.int_arg_regs[i]));
+            emit_sub_rsp_imm32(code, 16);
+            emit_mov_mem_r(code, Reg::RSP, 0, Reg(abi.int_arg_regs[i]));
         }
-        // Restore the return address so the function's body sees
-        // a standard SysV / Win64 stack layout (with the c5 slots
-        // above it).
-        emit_push_r(code, Reg::R11);
+        emit_push_r(code, Reg::R10);
     }
 
     // Standard frame: push rbp; mov rbp, rsp; sub rsp, frame_bytes.
@@ -1195,17 +1180,24 @@ fn emit_mcpy(
         bail_msg("Mcpy: src base not int reg");
         return false;
     };
-    // Per-iteration temp must not alias either base. rax is
-    // caller-saved everywhere and excluded from the allocator
-    // pool when r13 is reserved; use it as the temp.
-    let temp = Reg::RAX;
-    if dst_r.0 == temp.0 || src_r.0 == temp.0 {
-        bail_msg("Mcpy: base aliases temp rax");
-        return false;
-    }
+    // Pick a per-iteration temp distinct from both bases, then
+    // save / restore it across the copy. The SSA allocator's
+    // pool for LinuxX64 includes rax and r11; the prologue may
+    // have parked a live value in either. A push/pop pair around
+    // the loop preserves whatever the allocator stashed there.
+    let temp = if dst_r.0 != Reg::RAX.0 && src_r.0 != Reg::RAX.0 {
+        Reg::RAX
+    } else if dst_r.0 != Reg::R11.0 && src_r.0 != Reg::R11.0 {
+        Reg::R11
+    } else {
+        Reg::RCX
+    };
+    emit_push_r(code, temp);
     let bytes = size as u32;
     let words = bytes / 8;
     for w in 0..words {
+        // After push, [base + off] still resolves correctly
+        // because the bases are register-typed (not sp-relative).
         let off = (w * 8) as i32;
         emit_mov_r_mem(code, temp, src_r, off);
         emit_mov_mem_r(code, dst_r, off, temp);
@@ -1216,6 +1208,7 @@ fn emit_mcpy(
         super::x86_64::emit_movzx_r_mem8(code, temp, src_r, off);
         super::x86_64::emit_mov_mem8_r(code, dst_r, off, temp);
     }
+    emit_pop_r(code, temp);
     // memcpy returns dst; propagate into the inst's dst.
     if let Some(rd) = int_reg(dst_place) {
         if rd.0 != dst_r.0 {

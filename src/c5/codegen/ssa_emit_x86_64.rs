@@ -248,7 +248,8 @@ pub(super) fn emit_function(
     pending_func_fixups: &mut Vec<(usize, usize)>,
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
-    _tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
+    tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
+    tls_total_size: usize,
     bytecode_to_native: &mut [usize],
 ) -> bool {
     let snapshot = code.len();
@@ -279,12 +280,15 @@ pub(super) fn emit_function(
                 alloc,
                 frame,
                 abi,
+                target,
                 fixups,
                 plt_call_fixups,
                 data_fixups,
                 pending_func_fixups,
                 imports,
                 variadic_targets,
+                tls_index_fixups,
+                tls_total_size,
             ) {
                 #[cfg(feature = "std")]
                 if std::env::var("BADC_DUMP_SSA").is_ok() {
@@ -511,12 +515,15 @@ fn emit_inst(
     alloc: &Allocation,
     frame: Frame,
     abi: super::Abi,
+    target: Target,
     fixups: &mut Vec<Fixup>,
     plt_call_fixups: &mut Vec<PltCallFixup>,
     data_fixups: &mut Vec<DataFixup>,
     pending_func_fixups: &mut Vec<(usize, usize)>,
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
+    tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
+    tls_total_size: usize,
 ) -> bool {
     match inst {
         Inst::AllocaInit(slot) => {
@@ -626,9 +633,99 @@ fn emit_inst(
             emit_mov_r_mem(code, rd, Reg::RSP, sp_off);
             true
         }
+        Inst::TlsAddr(offset) => {
+            emit_tls_addr(code, dst, *offset, target, tls_index_fixups, tls_total_size, frame)
+        }
         _ => {
             bail_msg("inst variant not yet covered");
             let _ = frame;
+            false
+        }
+    }
+}
+
+/// `Op::TlsLea` lowering. Routes through the per-target TLS
+/// access shape. Linux variant-2 layout: `var = fs:[0] - (tls_total
+/// - offset)`. The Windows path mirrors the pool emit -- TEB
+/// `gs:[0x58]` table indexed by `_tls_index` plus a final `lea` --
+/// and pushes the writer fixup so the linker can patch the
+/// `_tls_index` slot's RVA.
+fn emit_tls_addr(
+    code: &mut Vec<u8>,
+    dst: Place,
+    offset: i64,
+    target: Target,
+    tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
+    tls_total_size: usize,
+    frame: Frame,
+) -> bool {
+    let Some(rd) = int_or_spill_dst(dst) else {
+        bail_msg("TlsAddr: dst not int reg / spill");
+        return false;
+    };
+    match target {
+        Target::LinuxX64 => {
+            let tpoff = (tls_total_size as i64) - offset;
+            if !(0..=i32::MAX as i64).contains(&tpoff) {
+                bail_msg("TlsAddr: tpoff out of i32 range");
+                return false;
+            }
+            // mov rd, qword ptr fs:[0]
+            //   FS prefix 64; REX.W=1, REX.R = (rd >= 8);
+            //   opcode 8B; ModR/M mod=00 reg=rd.lo rm=100 (SIB);
+            //   SIB scale=00 index=100 (none) base=101 (disp32);
+            //   disp32 = 0.
+            let rex = 0x48 | (((rd.0 >> 3) & 1) << 2);
+            code.push(0x64);
+            code.push(rex);
+            code.push(0x8B);
+            code.push(0x04 | ((rd.0 & 7) << 3));
+            code.push(0x25);
+            code.extend_from_slice(&0u32.to_le_bytes());
+            // sub rd, imm32
+            //   REX.W=1, REX.B = (rd >= 8);
+            //   opcode 81 /5;
+            //   ModR/M mod=11 reg=5 rm=rd.lo;
+            //   imm32 = tpoff.
+            let rex_sub = 0x48 | ((rd.0 >> 3) & 1);
+            code.push(rex_sub);
+            code.push(0x81);
+            code.push(0xE8 | (rd.0 & 7));
+            code.extend_from_slice(&(tpoff as i32).to_le_bytes());
+            spill_dst_to_slot(code, dst, rd, frame);
+            true
+        }
+        Target::WindowsX64 => {
+            if !(i32::MIN as i64..=i32::MAX as i64).contains(&offset) {
+                bail_msg("TlsAddr: offset out of i32 range");
+                return false;
+            }
+            // The pool path hard-codes rax / rcx / r13 for this
+            // sequence; we mirror it but write the final lea into
+            // rd. rax + rcx are caller-saved scratch and outside
+            // the allocator pool.
+            code.extend_from_slice(&[0x65, 0x48, 0x8B, 0x04, 0x25, 0x58, 0, 0, 0]);
+            let mov_ecx_offset = code.len();
+            code.extend_from_slice(&[0x8B, 0x0D, 0, 0, 0, 0]);
+            tls_index_fixups.push(super::TlsIndexFixup {
+                instr_offset: mov_ecx_offset,
+            });
+            // mov rax, [rax + rcx*8]
+            code.extend_from_slice(&[0x48, 0x8B, 0x04, 0xC8]);
+            // lea rd, [rax + offset]
+            //   REX.W=1, REX.R = (rd >= 8);
+            //   opcode 8D;
+            //   ModR/M mod=10 (disp32), reg=rd.lo, rm=000 (rax).
+            let rex = 0x48 | (((rd.0 >> 3) & 1) << 2);
+            code.push(rex);
+            code.push(0x8D);
+            code.push(0x80 | ((rd.0 & 7) << 3));
+            code.extend_from_slice(&(offset as i32).to_le_bytes());
+            spill_dst_to_slot(code, dst, rd, frame);
+            true
+        }
+        _ => {
+            bail_msg("TlsAddr: target not x86_64");
             false
         }
     }

@@ -1456,6 +1456,7 @@ pub(super) fn lower(
                     imports,
                     &program.variadic_functions,
                     &mut tls_index_fixups,
+                    program.tls_data.len(),
                     &mut bytecode_to_native,
                 );
                 if !ok {

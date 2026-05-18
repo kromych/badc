@@ -252,12 +252,25 @@ pub(super) fn emit_function(
                     .get(cond as usize)
                     .copied()
                     .unwrap_or(Place::None);
-                let rt = match materialize_int(code, cond_place, scratch.primary, frame) {
-                    Some(r) => r,
-                    None => {
-                        bail("Bz/Bnz: cond Place not int", cond, cond_place);
-                        code.truncate(snapshot);
-                        return false;
+                // The c5 conditional-branch ops treat the
+                // accumulator as a 64-bit bit pattern: zero
+                // branches Bz, anything else branches Bnz. An
+                // FpReg-placed cond carries an f64 in d-reg
+                // form; bridge it through `fmov x, d` so the
+                // CBZ/CBNZ has an integer to compare. Matches
+                // the pool path's behaviour where the cond
+                // already sits in x19 with the raw bit pattern.
+                let rt = if let Place::FpReg(dr) = cond_place {
+                    emit(code, enc_fmov_d_to_x(scratch.primary, dr));
+                    scratch.primary
+                } else {
+                    match materialize_int(code, cond_place, scratch.primary, frame) {
+                        Some(r) => r,
+                        None => {
+                            bail("Bz/Bnz: cond Place not int", cond, cond_place);
+                            code.truncate(snapshot);
+                            return false;
+                        }
                     }
                 };
                 branch_fixups.push(BranchFixup {
@@ -285,12 +298,25 @@ pub(super) fn emit_function(
                     .get(cond as usize)
                     .copied()
                     .unwrap_or(Place::None);
-                let rt = match materialize_int(code, cond_place, scratch.primary, frame) {
-                    Some(r) => r,
-                    None => {
-                        bail("Bz/Bnz: cond Place not int", cond, cond_place);
-                        code.truncate(snapshot);
-                        return false;
+                // The c5 conditional-branch ops treat the
+                // accumulator as a 64-bit bit pattern: zero
+                // branches Bz, anything else branches Bnz. An
+                // FpReg-placed cond carries an f64 in d-reg
+                // form; bridge it through `fmov x, d` so the
+                // CBZ/CBNZ has an integer to compare. Matches
+                // the pool path's behaviour where the cond
+                // already sits in x19 with the raw bit pattern.
+                let rt = if let Place::FpReg(dr) = cond_place {
+                    emit(code, enc_fmov_d_to_x(scratch.primary, dr));
+                    scratch.primary
+                } else {
+                    match materialize_int(code, cond_place, scratch.primary, frame) {
+                        Some(r) => r,
+                        None => {
+                            bail("Bz/Bnz: cond Place not int", cond, cond_place);
+                            code.truncate(snapshot);
+                            return false;
+                        }
                     }
                 };
                 branch_fixups.push(BranchFixup {
@@ -667,16 +693,22 @@ fn emit_inst(
                 .get(*value as usize)
                 .copied()
                 .unwrap_or(Place::None);
-            let src = match materialize_int(code, value_place, scratch.primary, frame) {
-                Some(r) => r,
-                None => return false,
-            };
             // Slot N of the vstack region sits one 8-byte slot
             // above the acc slot, then `slot` more entries above
             // that. Addressing through sp with the 12-bit scaled
             // store keeps the immediate in range for any frame
-            // up to 32 KiB.
+            // up to 32 KiB. FpReg-placed values store the d-reg
+            // bit pattern directly; ints / spills route through
+            // the int materialise path.
             let sp_off = frame.frame_bytes - frame.acc_slot_off + 8 + (*slot) * 8;
+            if let Place::FpReg(dr) = value_place {
+                emit(code, enc_str_d_imm(dr, Reg(31), sp_off));
+                return true;
+            }
+            let src = match materialize_int(code, value_place, scratch.primary, frame) {
+                Some(r) => r,
+                None => return false,
+            };
             emit(code, enc_str_imm(src, Reg(31), sp_off));
             true
         }

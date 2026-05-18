@@ -371,6 +371,7 @@ pub(super) fn lift_program(program: &Program) -> Result<Vec<FunctionSsa>, C5Erro
             meta,
             &program.data_imm_positions,
             &program.code_imm_positions,
+            &program.call_fp_arg_masks,
         )?;
         out.push(func);
     }
@@ -387,6 +388,7 @@ pub(super) fn lift_function(
     meta: super::FuncMeta,
     data_imm_positions: &[usize],
     code_imm_positions: &[usize],
+    call_fp_arg_masks: &[(usize, u32)],
 ) -> Result<FunctionSsa, C5Error> {
     // Sanity check the entry.
     if Op::from_i64(text[ent_pc]) != Some(Op::Ent) {
@@ -953,22 +955,23 @@ pub(super) fn lift_function(
                             ))
                         })?);
                     }
+                    // Look up the FP-arg bit mask the compiler
+                    // filed at this `Op::JsrExt`'s PC. The pool
+                    // path reads the same side table; capturing
+                    // the mask in the SSA inst lets the emit
+                    // route FP args to d0..d7 without threading
+                    // the bytecode pc through the call helpers.
+                    let fp_arg_mask = call_fp_arg_masks
+                        .iter()
+                        .find(|(p, _)| *p == pc)
+                        .map(|(_, m)| *m)
+                        .unwrap_or(0);
                     def(
                         &mut insts,
                         Inst::CallExt {
                             binding_idx,
                             args,
-                            // FP-arg mask is looked up by the
-                            // lowering against the matching c5
-                            // JsrExt PC via program.call_fp_arg_masks.
-                            // The SSA pass doesn't carry the mask
-                            // -- it stays in the program side
-                            // table, indexed by the JsrExt op's
-                            // bytecode PC. The lowering passes
-                            // both the SSA inst's value id and
-                            // the original bytecode pc through
-                            // its emit helpers.
-                            fp_arg_mask: 0,
+                            fp_arg_mask,
                         },
                         &mut acc,
                     );

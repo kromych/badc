@@ -534,12 +534,15 @@ fn emit_inst(
             variadic_targets.contains(target_pc),
         ),
         Inst::CallExt {
-            binding_idx, args, ..
+            binding_idx,
+            args,
+            fp_arg_mask,
         } => emit_call_ext(
             code,
             dst,
             *binding_idx,
             args,
+            *fp_arg_mask,
             alloc,
             frame,
             scratch,
@@ -912,6 +915,7 @@ fn emit_call_ext(
     dst: Place,
     binding_idx: i64,
     args: &[u32],
+    fp_arg_mask: u32,
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
@@ -927,15 +931,16 @@ fn emit_call_ext(
     // Variadic calls feed `fixed_args` to the planner so it can
     // place the variadic tail per the host's variadic ABI
     // (macOS arm64: all on the stack; Win arm64 / Win64: int regs
-    // first, then stack; Linux: standard register sequence). FP
-    // placements are still out of the thin slice -- emit_call_ext
-    // bails on `FpReg` per-arg below.
+    // first, then stack; Linux: standard register sequence). The
+    // FP-arg bit mask flows from the lift (it was filed at the
+    // bytecode `Op::Si` for each declared FP arg) so the planner
+    // routes those args to d0..d7 instead of x0..x7.
     let fixed = if imp.is_variadic {
         imp.fixed_args.min(args.len())
     } else {
         args.len()
     };
-    let plan = super::plan_call_args(args.len(), fixed, 0, abi);
+    let plan = super::plan_call_args(args.len(), fixed, fp_arg_mask, abi);
     if plan.scratch_bytes > 0 {
         emit(code, enc_sub_imm(Reg(31), Reg(31), plan.scratch_bytes));
     }
@@ -946,26 +951,64 @@ fn emit_call_ext(
             .get(arg_id as usize)
             .copied()
             .unwrap_or(Place::None);
-        let src = match materialize_int_shifted(
-            code,
-            arg_place,
-            scratch.primary,
-            frame,
-            plan.scratch_bytes,
-        ) {
-            Some(r) => r,
-            None => return false,
-        };
         match placement {
             super::ArgPlacement::IntReg(r) => {
+                let src = match materialize_int_shifted(
+                    code,
+                    arg_place,
+                    scratch.primary,
+                    frame,
+                    plan.scratch_bytes,
+                ) {
+                    Some(r) => r,
+                    None => return false,
+                };
                 if src.0 != r {
                     emit(code, enc_mov_reg(Reg(r), src));
                 }
             }
-            super::ArgPlacement::Stack(off) => {
-                emit(code, enc_str_imm(src, Reg(31), off));
+            super::ArgPlacement::FpReg(r) => {
+                // Materialise directly into the target d-reg so
+                // earlier FP args (already in d0..d_{r-1}) aren't
+                // overwritten by the scratch reload of a later
+                // spilled / IntReg-encoded arg.
+                let src =
+                    match materialize_fp_shifted(code, arg_place, r, frame, plan.scratch_bytes) {
+                        Some(r) => r,
+                        None => return false,
+                    };
+                if src != r {
+                    emit(code, enc_fmov_d_to_x(scratch.primary, src));
+                    emit(code, enc_fmov_x_to_d(r, scratch.primary));
+                }
             }
-            super::ArgPlacement::FpReg(_) => return false,
+            super::ArgPlacement::Stack(off) => {
+                if let Place::FpReg(_) = arg_place {
+                    let dn = match materialize_fp_shifted(
+                        code,
+                        arg_place,
+                        0u8,
+                        frame,
+                        plan.scratch_bytes,
+                    ) {
+                        Some(r) => r,
+                        None => return false,
+                    };
+                    emit(code, enc_str_d_imm(dn, Reg(31), off));
+                } else {
+                    let src = match materialize_int_shifted(
+                        code,
+                        arg_place,
+                        scratch.primary,
+                        frame,
+                        plan.scratch_bytes,
+                    ) {
+                        Some(r) => r,
+                        None => return false,
+                    };
+                    emit(code, enc_str_imm(src, Reg(31), off));
+                }
+            }
         }
     }
     plt_call_fixups.push(PltCallFixup {
@@ -977,6 +1020,22 @@ fn emit_call_ext(
     if plan.scratch_bytes > 0 {
         emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
     }
+    // FP-returning libc fns hand the result back in d0 on
+    // AAPCS64; bridge it into x0 so the rest of the c5 model
+    // (which reads every return through the integer accumulator
+    // chain) sees the bit pattern. Sub-word integer returns get
+    // the signed / unsigned extension dance from the pool path
+    // applied to x0 likewise.
+    use crate::c5::compiler::types as ty_helpers;
+    let return_type_tag = imp.return_type_tag;
+    let bare = ty_helpers::strip_unsigned(return_type_tag);
+    let returns_fp = ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare);
+    if returns_fp {
+        emit(code, enc_fmov_d_to_x(Reg(0), 0));
+    } else {
+        let ext = super::return_extension(return_type_tag, target_for_ext(abi));
+        emit_extend_x0_for_return(code, ext);
+    }
     if let Some(rd) = int_reg(dst) {
         if rd.0 != 0 {
             emit(code, enc_mov_reg(rd, Reg(0)));
@@ -986,6 +1045,48 @@ fn emit_call_ext(
         emit(code, enc_str_imm(Reg(0), Reg(31), sp_off));
     }
     true
+}
+
+/// Emit the same sub-word sign / zero extension the pool path's
+/// `emit_extend_x19_for_return` issues, but targeted at x0 since
+/// the SSA emit's accumulator stays in x0 through the call's
+/// dst-place propagation. `ReturnExt::None` is a no-op.
+fn emit_extend_x0_for_return(code: &mut Vec<u8>, ext: super::ReturnExt) {
+    use super::ReturnExt;
+    // The four encodings below match the pool path's helper:
+    //   sxtb x0, w0    -- sign-extend byte
+    //   sxth x0, w0    -- sign-extend half
+    //   sxtw x0, w0    -- sign-extend word
+    //   uxtb w0, w0    -- zero-extend byte
+    //   uxth w0, w0    -- zero-extend half
+    //   mov  w0, w0    -- zero-extend word (clears upper bits)
+    let word = match ext {
+        ReturnExt::None => return,
+        ReturnExt::Sign8 => 0x93401C00,
+        ReturnExt::Sign16 => 0x93403C00,
+        ReturnExt::Sign32 => 0x93407C00,
+        ReturnExt::Zero8 => 0x53001C00,
+        ReturnExt::Zero16 => 0x53003C00,
+        ReturnExt::Zero32 => 0x2A0003E0,
+    };
+    emit(code, word);
+}
+
+/// Recover the codegen `Target` from the ABI struct so
+/// `return_extension` can compute the per-target extension shape.
+/// The ABI struct carries enough state to distinguish each
+/// target's variadic / arg-placement rules; the host-arg-reg list
+/// is what we discriminate on here because it's stable across
+/// every target's `Abi::for_target`.
+fn target_for_ext(abi: super::Abi) -> Target {
+    // Same arg-reg signature differentiates AAPCS64 vs the x86_64
+    // ABIs that share `Target` ids; the SSA emit only runs on
+    // aarch64 today so this is enough to compute the extension.
+    if abi.int_arg_regs.len() == 8 {
+        Target::MacOSAarch64
+    } else {
+        Target::LinuxAarch64
+    }
 }
 
 /// Direct call to a c5 user function at bytecode pc `target_pc`.
@@ -1869,17 +1970,24 @@ fn emit_return(
     func: &FunctionSsa,
     abi: super::Abi,
 ) {
-    // Move the return value into x0. NO_VALUE means the bytecode
-    // emitter's trailing synthetic Lev with no live accumulator;
-    // an undefined return value is harmless because c5 calls
-    // never read the result of a void-returning function.
+    // Move the return value into x0. c5's calling convention
+    // ferries every return value (including f64 bit patterns)
+    // through the int return register, matching the pool path's
+    // `mov x0, x19` epilogue. FpReg-placed values reach x0 via
+    // `fmov x, d`; int values flow through the standard
+    // materialise + mov. NO_VALUE is the bytecode emitter's
+    // trailing synthetic Lev with no live accumulator -- harmless
+    // because c5 calls never read the result of a void-returning
+    // function.
     if value != super::ssa::NO_VALUE {
         let place = alloc
             .places
             .get(value as usize)
             .copied()
             .unwrap_or(Place::None);
-        if let Some(src) = materialize_int(code, place, scratch.primary, frame)
+        if let Place::FpReg(r) = place {
+            emit(code, enc_fmov_d_to_x(Reg(0), r));
+        } else if let Some(src) = materialize_int(code, place, scratch.primary, frame)
             && src.0 != 0
         {
             emit(code, enc_mov_reg(Reg(0), src));

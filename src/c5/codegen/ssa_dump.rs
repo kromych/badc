@@ -105,9 +105,11 @@ fn fmt_inst(inst: &Inst) -> String {
             fmt_value_list(args),
         ),
         CallExt {
-            binding_idx, args, ..
+            binding_idx,
+            args,
+            fp_arg_mask,
         } => format!(
-            "CallExt {{ binding_idx={binding_idx}, args=[{}] }}",
+            "CallExt {{ binding_idx={binding_idx}, args=[{}], fp_arg_mask=0x{fp_arg_mask:x} }}",
             fmt_value_list(args),
         ),
         TailExt(b) => format!("TailExt({b})"),

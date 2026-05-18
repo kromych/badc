@@ -752,14 +752,17 @@ fn emit_load(
         .get(addr as usize)
         .copied()
         .unwrap_or(Place::None);
-    // Reinstating the spill-tolerant base materialisation: load
-    // a spilled address into r10 first, write into rd next, then
-    // spill rd to its slot if the allocator wants it parked
-    // there. Matches the aarch64 module's shape. The Store
-    // counterpart stays narrow for now -- materialising a
-    // spilled Store address regresses monocypher SHA-512
-    // through a cross-function corruption whose root cause
-    // is still under investigation.
+    // Spill-tolerant base materialisation: load a spilled address
+    // into r10 first, write into rd next, then spill rd to its
+    // slot if the allocator wants it parked there. Matches the
+    // aarch64 module's shape. The Store counterpart stays narrow:
+    // materialising a spilled Store address regresses
+    // monocypher's Ed25519 path on x86_64 (aarch64 unaffected).
+    // Each x86_64 function emits byte-correct code in isolation,
+    // and the failure only surfaces with a particular pool / SSA
+    // mix -- default monocypher passes because almost every
+    // function lands on the SSA path. TODO: locate the
+    // cross-function state divergence.
     let base = match materialize_int(code, addr_place, SCRATCH_R10, frame) {
         Some(r) => r,
         None => {

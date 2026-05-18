@@ -278,6 +278,10 @@ jobs:
               echo "--- stderr ---"
               cat "${bin}.err" || true
           done
+          # ubuntu-latest doesn't ship gdb by default; install
+          # it before the diagnostic run.
+          sudo apt-get update -y >/dev/null 2>&1 || true
+          sudo apt-get install -y gdb >/dev/null 2>&1 || true
           # Run the failing binary under gdb. The smoke exits via
           # a clean fprintf + return, not a fault, so set a
           # one-shot breakpoint on `fprintf` and dump the
@@ -293,11 +297,14 @@ jobs:
                   -ex run \
                   -ex 'info registers' \
                   -ex 'x/64bx $rdi' \
+                  -ex 'x/8gx $rbp-0x80' \
                   -ex 'bt full 30' \
                   /tmp/mono_only \
                   > /tmp/gdb_post.log 2>&1 || true
-              echo "--- gdb log (head) ---"
-              head -300 /tmp/gdb_post.log
+              echo "--- gdb log ---"
+              cat /tmp/gdb_post.log || true
+          else
+              echo "::warning::gdb not available after install attempt"
           fi
       - name: upload monocypher ssa probe artifacts (Linux x86_64 only)
         if: always() && matrix.os == 'ubuntu-latest'

@@ -320,26 +320,32 @@ jobs:
               # The breakpoint fires twice: once for the
               # `r = hash_reduce(...)` call and once for the
               # subsequent `h = hash_reduce(...)`. Capture both.
+              # crypto_eddsa_reduce passes `reduced` (out param) in
+              # r12 to mod_l (callee-saved, so r12 still holds
+              # the pointer after the call returns). The
+              # instruction right after the `call mod_l` is at
+              # offset 0xd3 inside crypto_eddsa_reduce.
+              # Breaking there lets us dump *reduced -- the
+              # 32-byte mod_l output.
               gdb -batch \
                   -ex 'set pagination off' \
                   -ex 'set print elements 256' \
-                  -ex 'break *(crypto_eddsa_reduce + 0x98)' \
+                  -ex 'break *(crypto_eddsa_reduce + 0xd3)' \
                   -ex 'break fprintf' \
                   -ex run \
-                  -ex 'printf "=== eddsa_reduce hit 1 ===\n"' \
-                  -ex 'printf "--- x[16] just after load32_le_buf ---\n"' \
+                  -ex 'printf "=== after mod_l hit 1 (computing r) ===\n"' \
+                  -ex 'printf "--- *reduced (mod_l output) ---\n"' \
+                  -ex 'x/32bx $r12' \
+                  -ex 'printf "--- x[16] (mod_l input) ---\n"' \
                   -ex 'x/64bx $rbp-0x40' \
-                  -ex 'printf "--- expanded (source) at $rsi ---\n"' \
-                  -ex 'x/64bx $rsi' \
-                  -ex 'printf "--- registers ---\n"' \
                   -ex 'info registers rax rbx rdi rsi rdx rcx r10 r11 r12 r13 r14 r15' \
                   -ex 'bt 4' \
                   -ex 'continue' \
-                  -ex 'printf "=== eddsa_reduce hit 2 ===\n"' \
-                  -ex 'printf "--- x[16] just after load32_le_buf ---\n"' \
+                  -ex 'printf "=== after mod_l hit 2 (computing h) ===\n"' \
+                  -ex 'printf "--- *reduced (mod_l output) ---\n"' \
+                  -ex 'x/32bx $r12' \
+                  -ex 'printf "--- x[16] (mod_l input) ---\n"' \
                   -ex 'x/64bx $rbp-0x40' \
-                  -ex 'printf "--- expanded (source) at $rsi ---\n"' \
-                  -ex 'x/64bx $rsi' \
                   -ex 'bt 4' \
                   -ex 'continue' \
                   -ex 'printf "=== fprintf hit (signature mismatch) ===\n"' \
@@ -351,6 +357,29 @@ jobs:
                   -ex 'bt 20' \
                   /tmp/mono_only \
                   > /tmp/gdb_post.log 2>&1 || true
+              # Also probe the passing-case binary (ONLY=62595)
+              # for contrast: same source data flows through
+              # pool-emitted load32_le_buf instead of SSA, and
+              # the resulting *reduced should be the RFC 8032
+              # reference value.
+              BADC_USE_SSA_EMIT=1 BADC_SSA_ONLY_PC=62595 \
+                  "$BADC" -I demos/monocypher /tmp/mono_full.c -o /tmp/mono_pass
+              gdb -batch \
+                  -ex 'set pagination off' \
+                  -ex 'set print elements 256' \
+                  -ex 'break *(crypto_eddsa_reduce + 0xd3)' \
+                  -ex run \
+                  -ex 'printf "=== passing case after mod_l hit 1 ===\n"' \
+                  -ex 'x/32bx $r12' \
+                  -ex 'x/64bx $rbp-0x40' \
+                  -ex 'continue' \
+                  -ex 'printf "=== passing case after mod_l hit 2 ===\n"' \
+                  -ex 'x/32bx $r12' \
+                  -ex 'x/64bx $rbp-0x40' \
+                  /tmp/mono_pass \
+                  > /tmp/gdb_pass.log 2>&1 || true
+              echo "--- gdb pass log ---"
+              cat /tmp/gdb_pass.log || true
               echo "--- gdb log ---"
               cat /tmp/gdb_post.log || true
           else
@@ -365,10 +394,12 @@ jobs:
             /tmp/mono_only
             /tmp/mono_only.out
             /tmp/mono_only.err
+            /tmp/mono_pass
             /tmp/mono_store
             /tmp/mono_store.out
             /tmp/mono_store.err
             /tmp/gdb_post.log
+            /tmp/gdb_pass.log
             /tmp/cores
           if-no-files-found: warn
           retention-days: 7

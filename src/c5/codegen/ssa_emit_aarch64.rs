@@ -53,11 +53,13 @@ use super::Target;
 use super::aarch64::{
     BranchKind, Cond, Fixup, PltCallFixup, Reg, emit, emit_add_sp_imm, emit_sub_sp_imm,
     enc_add_imm, enc_add_reg, enc_adrp, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_blr,
-    enc_cbnz, enc_cbz, enc_cmp_reg, enc_cset, enc_eor_reg, enc_ldp_post, enc_ldr_imm, enc_ldr_post,
+    enc_cbnz, enc_cbz, enc_cmp_reg, enc_cset, enc_eor_reg, enc_fadd_d, enc_fcmp_d, enc_fcvt_d_s,
+    enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fdiv_d, enc_fmov_d_to_x, enc_fmov_x_to_d, enc_fmul_d,
+    enc_fneg_d, enc_fsub_d, enc_ldp_post, enc_ldr_d_imm, enc_ldr_imm, enc_ldr_post, enc_ldr_s_imm,
     enc_ldr32_imm, enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm,
-    enc_lslv, enc_lsrv, enc_mov_reg, enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_sdiv,
-    enc_stp_pre, enc_str_imm, enc_str_pre, enc_str32_imm, enc_strb_imm, enc_strh_imm, enc_sub_imm,
-    enc_sub_reg, enc_udiv, load_imm64,
+    enc_lslv, enc_lsrv, enc_mov_reg, enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_scvtf_d_x,
+    enc_sdiv, enc_stp_pre, enc_str_d_imm, enc_str_imm, enc_str_pre, enc_str_s_imm, enc_str32_imm,
+    enc_strb_imm, enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_udiv, load_imm64,
 };
 use super::ssa::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
 use super::ssa_alloc::{Allocation, Place};
@@ -402,13 +404,17 @@ fn emit_prologue(
     if frame.frame_bytes > 0 {
         emit_sub_sp_imm(code, frame.frame_bytes);
     }
-    // Save the allocator-reported callee-saved GPRs at the
-    // bottom of the frame. The saved-reg region sits just above
-    // sp; addressing through sp with `enc_str_imm` keeps the
-    // 12-bit scaled immediate (range 0..32760 in multiples of 8)
-    // valid for any frame the compiler can produce. Using `stur`
-    // off fp would silently truncate the 9-bit immediate for
-    // frames larger than ~256 bytes.
+    // Save the allocator-reported callee-saved GPRs + FP regs at
+    // the bottom of the frame. The saved-reg region sits just
+    // above sp; addressing through sp with `enc_str_imm` keeps
+    // the 12-bit scaled immediate (range 0..32760 in multiples
+    // of 8) valid for any frame the compiler can produce. Using
+    // `stur` off fp would silently truncate the 9-bit immediate
+    // for frames larger than ~256 bytes.
+    for (i, &r) in alloc.fp_used.iter().enumerate() {
+        let off = (i as u32) * 8;
+        emit(code, enc_str_d_imm(r, Reg(31), off));
+    }
     let saved_fpr_bytes = ((alloc.fp_used.len() as u32) * 8 + 15) & !15;
     for (i, &r) in alloc.gpr_used.iter().enumerate() {
         let off = saved_fpr_bytes + (i as u32) * 8;
@@ -543,20 +549,33 @@ fn emit_inst(
                 .get(*value as usize)
                 .copied()
                 .unwrap_or(Place::None);
+            let sp_off = frame.frame_bytes - frame.acc_slot_off;
+            // The cross-block accumulator can be either an int or
+            // an f64; the slot is 8 bytes either way. FpReg sources
+            // store the d-reg bit pattern directly; everything
+            // else goes through the int materialise + 64-bit
+            // store.
+            if let Place::FpReg(dr) = value_place {
+                emit(code, enc_str_d_imm(dr, Reg(31), sp_off));
+                return true;
+            }
             let src = match materialize_int(code, value_place, scratch.primary, frame) {
                 Some(r) => r,
                 None => return false,
             };
-            let sp_off = frame.frame_bytes - frame.acc_slot_off;
             emit(code, enc_str_imm(src, Reg(31), sp_off));
             true
         }
         Inst::AccReload => {
+            let sp_off = frame.frame_bytes - frame.acc_slot_off;
+            if let Place::FpReg(dr) = dst {
+                emit(code, enc_ldr_d_imm(dr, Reg(31), sp_off));
+                return true;
+            }
             let Some(rd) = int_reg(dst) else {
-                bail_msg("AccReload: dst not int reg");
+                bail_msg("AccReload: dst not int reg / fp reg");
                 return false;
             };
-            let sp_off = frame.frame_bytes - frame.acc_slot_off;
             emit(code, enc_ldr_imm(rd, Reg(31), sp_off));
             true
         }
@@ -590,6 +609,72 @@ fn emit_inst(
         }
         Inst::Intrinsic { kind, args } => {
             emit_intrinsic(code, *kind, args, dst, alloc, frame, scratch)
+        }
+        Inst::Fneg(v) => {
+            let src_place = alloc
+                .places
+                .get(*v as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let dn = match materialize_fp(code, src_place, 0, frame) {
+                Some(r) => r,
+                None => return false,
+            };
+            let dd = match dst {
+                Place::FpReg(r) => r,
+                Place::Spill(_) => 0u8,
+                _ => return false,
+            };
+            emit(code, enc_fneg_d(dd, dn));
+            if let Place::Spill(slot) = dst {
+                let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+                emit(code, enc_str_d_imm(dd, Reg(31), sp_off));
+            }
+            true
+        }
+        Inst::FpCast { kind, value } => {
+            use super::ssa::FpCastKind;
+            let src_place = alloc
+                .places
+                .get(*value as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            match kind {
+                FpCastKind::IntToFp => {
+                    let rn = match materialize_int(code, src_place, scratch.primary, frame) {
+                        Some(r) => r,
+                        None => return false,
+                    };
+                    let dd = match dst {
+                        Place::FpReg(r) => r,
+                        Place::Spill(_) => 0u8,
+                        _ => return false,
+                    };
+                    emit(code, enc_scvtf_d_x(dd, rn));
+                    if let Place::Spill(slot) = dst {
+                        let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+                        emit(code, enc_str_d_imm(dd, Reg(31), sp_off));
+                    }
+                    true
+                }
+                FpCastKind::FpToInt => {
+                    let dn = match materialize_fp(code, src_place, 0, frame) {
+                        Some(r) => r,
+                        None => return false,
+                    };
+                    let rd = match dst {
+                        Place::IntReg(r) => Reg(r),
+                        Place::Spill(_) => scratch.primary,
+                        _ => return false,
+                    };
+                    emit(code, enc_fcvtzs_x_d(rd, dn));
+                    if let Place::Spill(slot) = dst {
+                        let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+                        emit(code, enc_str_imm(rd, Reg(31), sp_off));
+                    }
+                    true
+                }
+            }
         }
         _ => false,
     }
@@ -756,7 +841,13 @@ fn emit_call_ext(
             .get(arg_id as usize)
             .copied()
             .unwrap_or(Place::None);
-        let src = match materialize_int(code, arg_place, scratch.primary, frame) {
+        let src = match materialize_int_shifted(
+            code,
+            arg_place,
+            scratch.primary,
+            frame,
+            plan.scratch_bytes,
+        ) {
             Some(r) => r,
             None => return false,
         };
@@ -822,16 +913,18 @@ fn emit_call(
         // Push args in cdecl order: args[N-1] first (deepest), so
         // args[0] -- the first declared arg -- lands on top of the
         // stack and the callee's `Op::Lea 2` reads it.
-        for &arg_id in args.iter().rev() {
+        for (i, &arg_id) in args.iter().rev().enumerate() {
             let arg_place = alloc
                 .places
                 .get(arg_id as usize)
                 .copied()
                 .unwrap_or(Place::None);
-            let src = match materialize_int(code, arg_place, scratch.primary, frame) {
-                Some(r) => r,
-                None => return false,
-            };
+            let sp_shift = (i as u32) * 16;
+            let src =
+                match materialize_int_shifted(code, arg_place, scratch.primary, frame, sp_shift) {
+                    Some(r) => r,
+                    None => return false,
+                };
             emit(code, enc_str_pre(src, Reg(31), -16));
         }
         fixups.push(Fixup {
@@ -879,7 +972,17 @@ fn emit_call(
         // Load arg into scratch first, then move to its host
         // position. Always going through scratch keeps the
         // ordering correct without a parallel-copy analysis.
-        let src = match materialize_int(code, arg_place, scratch.primary, frame) {
+        // The `sp_shift` argument compensates for the
+        // outgoing-arg scratch region we already pushed sp down
+        // by; without it, sp-relative spill loads would read
+        // from the wrong frame slot.
+        let src = match materialize_int_shifted(
+            code,
+            arg_place,
+            scratch.primary,
+            frame,
+            plan.scratch_bytes,
+        ) {
             Some(r) => r,
             None => return false,
         };
@@ -964,7 +1067,13 @@ fn emit_call_indirect(
             .get(arg_id as usize)
             .copied()
             .unwrap_or(Place::None);
-        let src = match materialize_int(code, arg_place, scratch.primary, frame) {
+        let src = match materialize_int_shifted(
+            code,
+            arg_place,
+            scratch.primary,
+            frame,
+            plan.scratch_bytes,
+        ) {
             Some(r) => r,
             None => return false,
         };
@@ -1147,15 +1256,6 @@ fn emit_load(
     frame: Frame,
     scratch: &ScratchPool,
 ) -> bool {
-    // Load lands in a register; if the allocator chose a spill
-    // place for the result, materialise into scratch.secondary
-    // first then spill it after the load. scratch.primary is
-    // already taken for the addr-base materialisation.
-    let rd = match dst {
-        Place::IntReg(r) => Reg(r),
-        Place::Spill(_) => scratch.secondary,
-        Place::FpReg(_) | Place::None => return false,
-    };
     let addr_place = alloc
         .places
         .get(addr as usize)
@@ -1165,6 +1265,32 @@ fn emit_load(
         Some(r) => r,
         None => return false,
     };
+    // F32 loads land in a d-reg (widened to f64 via fcvt). All
+    // other widths land in a GPR.
+    if let LoadKind::F32 = kind {
+        let dd = match dst {
+            Place::FpReg(r) => r,
+            // The allocator never spills f64 into a GPR slot;
+            // bail and let the caller report.
+            Place::Spill(_) => 0u8, // scratch d0
+            _ => {
+                bail_msg("Load F32: dst not fp reg / spill");
+                return false;
+            }
+        };
+        emit(code, enc_ldr_s_imm(dd, rn, 0));
+        emit(code, enc_fcvt_d_s(dd, dd));
+        if let Place::Spill(slot) = dst {
+            let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+            emit(code, enc_str_d_imm(dd, Reg(31), sp_off));
+        }
+        return true;
+    }
+    let rd = match dst {
+        Place::IntReg(r) => Reg(r),
+        Place::Spill(_) => scratch.secondary,
+        Place::FpReg(_) | Place::None => return false,
+    };
     match kind {
         LoadKind::I64 => emit(code, enc_ldr_imm(rd, rn, 0)),
         LoadKind::I32 => emit(code, enc_ldrsw_imm(rd, rn, 0)),
@@ -1173,12 +1299,7 @@ fn emit_load(
         LoadKind::U16 => emit(code, enc_ldrh_imm(rd, rn, 0)),
         LoadKind::I8 => emit(code, enc_ldrsb_imm(rd, rn, 0)),
         LoadKind::U8 => emit(code, enc_ldrb_imm(rd, rn, 0)),
-        // FP loads (4-byte float widened to f64) need the
-        // fmov + fcvt sequence; route through the pool path.
-        LoadKind::F32 => {
-            bail_msg("Load: F32 not handled");
-            return false;
-        }
+        LoadKind::F32 => unreachable!(),
     }
     if let Place::Spill(slot) = dst {
         let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
@@ -1216,6 +1337,37 @@ fn emit_store(
         Some(r) => r,
         None => return false,
     };
+    if let StoreKind::F32 = kind {
+        // Stage the value as a d-reg holding the f64 pattern.
+        // For an FpReg source the materialise already gives us
+        // that; for an IntReg / Spill the source register holds
+        // the int-encoded f64 bit pattern (c5's Imm path), so
+        // an fmov x->d reinterprets the bits as f64.
+        let dn = match value_place {
+            Place::FpReg(r) => r,
+            Place::IntReg(_) | Place::Spill(_) => {
+                let rs = match materialize_int(code, value_place, scratch.secondary, frame) {
+                    Some(r) => r,
+                    None => return false,
+                };
+                emit(code, enc_fmov_x_to_d(0, rs));
+                0u8
+            }
+            Place::None => return false,
+        };
+        emit(code, enc_fcvt_s_d(0, dn));
+        emit(code, enc_str_s_imm(0, rn, 0));
+        if let Some(rd) = fp_reg(dst) {
+            if rd != dn {
+                emit(code, enc_fmov_d_to_x(scratch.primary, dn));
+                emit(code, enc_fmov_x_to_d(rd, scratch.primary));
+            }
+        } else if let Place::Spill(slot) = dst {
+            let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+            emit(code, enc_str_d_imm(dn, Reg(31), sp_off));
+        }
+        return true;
+    }
     let rs = match materialize_int(code, value_place, scratch.secondary, frame) {
         Some(r) => r,
         None => return false,
@@ -1225,10 +1377,7 @@ fn emit_store(
         StoreKind::I32 => emit(code, enc_str32_imm(rs, rn, 0)),
         StoreKind::I16 => emit(code, enc_strh_imm(rs, rn, 0)),
         StoreKind::I8 => emit(code, enc_strb_imm(rs, rn, 0)),
-        StoreKind::F32 => {
-            bail_msg("Store: F32 not handled");
-            return false;
-        }
+        StoreKind::F32 => unreachable!("F32 store handled in the F32 branch above"),
     }
     if let Some(rd) = int_reg(dst) {
         if rd.0 != rs.0 {
@@ -1251,9 +1400,6 @@ fn emit_binop(
     frame: Frame,
     scratch: &ScratchPool,
 ) -> bool {
-    let Some(rd) = int_reg(dst) else {
-        return false;
-    };
     let lhs_place = alloc
         .places
         .get(lhs as usize)
@@ -1264,6 +1410,57 @@ fn emit_binop(
         .get(rhs as usize)
         .copied()
         .unwrap_or(Place::None);
+    // FP arithmetic + comparison branch. Both operands live in
+    // d-regs; arithmetic produces a d-reg; comparisons produce a
+    // GPR (cset). The scratch d-regs (d0 / d1) reload spilled
+    // operands; the matching int scratch slots aren't disturbed
+    // because no int materialisation runs in this branch.
+    if let Some(arith) = fp_arith_enc(op) {
+        let dn = match materialize_fp(code, lhs_place, 0, frame) {
+            Some(r) => r,
+            None => return false,
+        };
+        let dm = match materialize_fp(code, rhs_place, 1, frame) {
+            Some(r) => r,
+            None => return false,
+        };
+        let dd = match dst {
+            Place::FpReg(r) => r,
+            Place::Spill(_) => 0u8,
+            _ => return false,
+        };
+        emit(code, arith(dd, dn, dm));
+        if let Place::Spill(slot) = dst {
+            let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+            emit(code, enc_str_d_imm(dd, Reg(31), sp_off));
+        }
+        return true;
+    }
+    if let Some(cond) = fp_compare_cond(op) {
+        let dn = match materialize_fp(code, lhs_place, 0, frame) {
+            Some(r) => r,
+            None => return false,
+        };
+        let dm = match materialize_fp(code, rhs_place, 1, frame) {
+            Some(r) => r,
+            None => return false,
+        };
+        let rd = match dst {
+            Place::IntReg(r) => Reg(r),
+            Place::Spill(_) => scratch.primary,
+            _ => return false,
+        };
+        emit(code, enc_fcmp_d(dn, dm));
+        emit(code, enc_cset(rd, cond));
+        if let Place::Spill(slot) = dst {
+            let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+            emit(code, enc_str_imm(rd, Reg(31), sp_off));
+        }
+        return true;
+    }
+    let Some(rd) = int_reg(dst) else {
+        return false;
+    };
     let rn = match materialize_int(code, lhs_place, scratch.primary, frame) {
         Some(r) => r,
         None => return false,
@@ -1303,6 +1500,34 @@ fn emit_binop(
     };
     emit(code, word);
     true
+}
+
+/// Map an FP arithmetic binop to its d-reg encoder. Returns
+/// `None` for non-arithmetic ops so the caller can try the
+/// comparison or integer paths.
+fn fp_arith_enc(op: BinOp) -> Option<fn(u8, u8, u8) -> u32> {
+    Some(match op {
+        BinOp::Fadd => enc_fadd_d,
+        BinOp::Fsub => enc_fsub_d,
+        BinOp::Fmul => enc_fmul_d,
+        BinOp::Fdiv => enc_fdiv_d,
+        _ => return None,
+    })
+}
+
+/// Map an FP comparison binop to the AArch64 condition code the
+/// matching fcmp + cset pair should use. Returns `None` for any
+/// non-FP-compare op.
+fn fp_compare_cond(op: BinOp) -> Option<Cond> {
+    Some(match op {
+        BinOp::Feq => Cond::Eq,
+        BinOp::Fne => Cond::Ne,
+        BinOp::Flt => Cond::Mi,
+        BinOp::Fgt => Cond::Gt,
+        BinOp::Fle => Cond::Ls,
+        BinOp::Fge => Cond::Ge,
+        _ => return None,
+    })
 }
 
 /// Map a comparison binop to the matching `Cond` for the
@@ -1387,16 +1612,74 @@ fn emit_binop_imm(
 /// are addressed through sp with the 12-bit scaled immediate;
 /// fp-relative addressing through `ldur` would silently
 /// truncate the 9-bit immediate for frames > 256 bytes and read
-/// from the wrong slot.
+/// from the wrong slot. `sp_shift` is any amount the caller has
+/// temporarily pushed sp down by (e.g. emit_call's outgoing-arg
+/// scratch region) -- it gets added to the in-frame offset so the
+/// load still hits the correct spill slot.
 fn materialize_int(code: &mut Vec<u8>, place: Place, scratch: Reg, frame: Frame) -> Option<Reg> {
+    materialize_int_shifted(code, place, scratch, frame, 0)
+}
+
+fn materialize_int_shifted(
+    code: &mut Vec<u8>,
+    place: Place,
+    scratch: Reg,
+    frame: Frame,
+    sp_shift: u32,
+) -> Option<Reg> {
     match place {
         Place::IntReg(r) => Some(Reg(r)),
         Place::Spill(slot) => {
-            let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+            let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8 + sp_shift;
             emit(code, enc_ldr_imm(scratch, Reg(31), sp_off));
             Some(scratch)
         }
         Place::FpReg(_) | Place::None => None,
+    }
+}
+
+/// Materialise a floating-point value's `Place` into a d-reg.
+/// Spilled FP values land in the 8-byte spill region as 64-bit
+/// patterns (the SSA model's only FP width is f64 since c5
+/// widens every load through `fcvt`).
+fn materialize_fp(code: &mut Vec<u8>, place: Place, scratch_d: u8, frame: Frame) -> Option<u8> {
+    materialize_fp_shifted(code, place, scratch_d, frame, 0)
+}
+
+fn materialize_fp_shifted(
+    code: &mut Vec<u8>,
+    place: Place,
+    scratch_d: u8,
+    frame: Frame,
+    sp_shift: u32,
+) -> Option<u8> {
+    match place {
+        Place::FpReg(r) => Some(r),
+        Place::Spill(slot) => {
+            let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8 + sp_shift;
+            emit(code, enc_ldr_d_imm(scratch_d, Reg(31), sp_off));
+            Some(scratch_d)
+        }
+        // c5's constant-folder emits FP values as `Imm` of the
+        // int-encoded f64 bit pattern; the allocator places those
+        // in IntRegs. Reinterpret the bit pattern as an f64 via
+        // `fmov d, x` and return the scratch d-reg.
+        Place::IntReg(r) => {
+            emit(code, enc_fmov_x_to_d(scratch_d, Reg(r)));
+            Some(scratch_d)
+        }
+        Place::None => None,
+    }
+}
+
+/// Extract the d-reg number from a `Place::FpReg`, or `None` for
+/// any other place. The d-reg index is the same as the s-reg
+/// index (single-precision uses the low 32 bits of the same
+/// physical register).
+fn fp_reg(place: Place) -> Option<u8> {
+    match place {
+        Place::FpReg(r) => Some(r),
+        _ => None,
     }
 }
 
@@ -1426,14 +1709,19 @@ fn emit_return(
             emit(code, enc_mov_reg(Reg(0), src));
         }
     }
-    // Restore saved callee-saved GPRs (mirror of prologue).
-    // Addressing through sp uses `enc_ldr_imm`'s 12-bit scaled
-    // immediate (range 0..32760 in multiples of 8); the matching
-    // prologue uses `enc_str_imm` at the same offsets.
+    // Restore saved callee-saved GPRs + FP regs (mirror of
+    // prologue). Addressing through sp uses `enc_ldr_imm`'s
+    // 12-bit scaled immediate (range 0..32760 in multiples of
+    // 8); the matching prologue uses `enc_str_imm` at the same
+    // offsets.
     let saved_fpr_bytes = ((alloc.fp_used.len() as u32) * 8 + 15) & !15;
     for (i, &r) in alloc.gpr_used.iter().enumerate() {
         let off = saved_fpr_bytes + (i as u32) * 8;
         emit(code, enc_ldr_imm(Reg(r), Reg(31), off));
+    }
+    for (i, &r) in alloc.fp_used.iter().enumerate() {
+        let off = (i as u32) * 8;
+        emit(code, enc_ldr_d_imm(r, Reg(31), off));
     }
     // Tear down the frame.
     if frame.frame_bytes > 0 {

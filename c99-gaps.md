@@ -36,7 +36,10 @@ fields sharing a storage unit of `sizeof(base_type)` per
 C99 6.7.2.1p11), `#pragma pack(N)`, anonymous struct / union
 members; struct designated initializers (`{.x = 1}`) at file
 and function scope, including non-constant runtime values;
-array designated initializers (`[N] = ...`); `static` /
+array designated initializers (`[N] = ...`); partial brace
+initializers for function-scope arrays zero-fill the trailing
+range per C99 6.7.9p21 (both the constant Mcpy-from-data fast
+path and the per-element runtime store path); `static` /
 `extern` / `_Thread_local`; varargs at the c5-internal
 calling convention; the C99 for-init declaration
 (`for (int i = 0; ...; ...)`); switch with `case` /
@@ -155,31 +158,6 @@ high-half garbage.
 ### `_Bool` 0/1 normalisation, severity 4
 
 `_Bool` tokenizes and stores; loads don't mask to 0/1.
-
-### Local array partial-initializer zero-fill, severity 2
-
-C99 6.7.9p21 requires that when an array's brace-enclosed
-initializer specifies fewer elements than the array's
-declared size, the remaining elements receive
-static-storage-duration initialization (i.e. zero for
-arithmetic types). The c5 lift honors the explicit
-initializer prefix (an `Mcpy` from a data-segment template
-into the local) but leaves the trailing bytes as whatever the
-stack frame held on entry.
-
-A function like
-
-```c
-u32 xr[25] = {0};
-```
-
-ends up with `xr[0]` zeroed and `xr[1..24]` holding stack
-residue from the previous call frame. Programs that depend on
-the zero-fill -- monocypher's `mod_l` is the smoking gun --
-miscompute as soon as the caller's stack contents change
-shape (a function being SSA-emitted instead of pool-emitted
-is enough). Fix scope: emit a zero-fill of the trailing
-range as part of the local-array initializer lowering.
 
 ### Compound literals (`(struct Foo){.x=1}`), severity 3
 

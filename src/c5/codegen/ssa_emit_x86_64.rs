@@ -795,14 +795,7 @@ fn emit_load(
     // Spill-tolerant base materialisation: load a spilled address
     // into r10 first, write into rd next, then spill rd to its
     // slot if the allocator wants it parked there. Matches the
-    // aarch64 module's shape. The Store counterpart stays
-    // narrow as a defensive measure: enabling the symmetric
-    // spilled-addr path masks the C99 6.7.9p21 zero-fill gap
-    // documented in c99-gaps.md ("Local array partial-
-    // initializer zero-fill"). Until the c5 lift emits the
-    // trailing zero-fill, the SSA emit's broader Store
-    // widening rearranges stack residue in ways that surface
-    // the latent bug as a monocypher Ed25519 miscompile.
+    // aarch64 module's primary-scratch shape.
     let base = match materialize_int(code, addr_place, SCRATCH_R10, frame) {
         Some(r) => r,
         None => {
@@ -850,38 +843,21 @@ fn emit_store(
         .get(value as usize)
         .copied()
         .unwrap_or(Place::None);
-    // BADC_SSA_STORE_SPILL_ADDR re-enables the spill-tolerant
-    // addr path. Without the env var the handler bails to pool
-    // on any spilled operand, which masks the C99 6.7.9p21
-    // local-array zero-fill gap (see c99-gaps.md and the
-    // emit_load comment above). With the env var set the addr
-    // path materialises a spilled address through r10 and the
-    // c5 lift's missing zero-fill surfaces as a monocypher
-    // miscompile. Once c5 emits the trailing zero-fill the
-    // env var becomes unnecessary and the spill path can be
-    // re-enabled unconditionally.
-    #[cfg(feature = "std")]
-    let store_spill_addr = std::env::var("BADC_SSA_STORE_SPILL_ADDR").is_ok();
-    #[cfg(not(feature = "std"))]
-    let store_spill_addr = false;
+    // Both operands must already live in allocator-chosen int
+    // registers; a spilled addr or value bails to the pool path.
+    // Widening this to materialise spills through r10 + rcx
+    // (matching aarch64's primary/secondary scratch shape) is
+    // tracked under TODO -- the broader Store widening exposes a
+    // separate SSA-emit miscompile on x86_64 Linux (monocypher
+    // SHA-512 digest divergence) that is independent of the C99
+    // 6.7.9p21 zero-fill gap fixed in the lift.
     let Some(rs) = int_reg(value_place) else {
         bail_msg("Store: value Place not int reg");
         return false;
     };
-    let base = if store_spill_addr {
-        match materialize_int(code, addr_place, SCRATCH_R10, frame) {
-            Some(r) => r,
-            None => {
-                bail_msg("Store: addr Place not int reg / spill");
-                return false;
-            }
-        }
-    } else {
-        let Some(b) = int_reg(addr_place) else {
-            bail_msg("Store: addr Place not int reg");
-            return false;
-        };
-        b
+    let Some(base) = int_reg(addr_place) else {
+        bail_msg("Store: addr Place not int reg");
+        return false;
     };
     match kind {
         StoreKind::I64 => emit_mov_mem_r(code, base, 0, rs),

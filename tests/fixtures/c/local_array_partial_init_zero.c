@@ -1,21 +1,16 @@
 // C99 6.7.9p21: a brace-enclosed array initializer with fewer
 // elements than the declared array size zero-fills the rest
-// (static-storage-duration semantics). c5's local-array lift
-// emits Mcpy of the explicit prefix from a data-segment
-// template but leaves the trailing bytes as whatever the
-// stack frame held on entry; monocypher's mod_l miscomputes
-// because of this gap.
+// (static-storage-duration semantics). The c5 lift stages the
+// explicit prefix into a data-segment template padded with
+// trailing zeros to the declared dimension, so the single
+// Mcpy populates every position of the local.
 //
 // The fixture pushes a recognisable pattern onto the prior
 // stack frame, then declares a partially-initialised local
 // array and walks every element. A C99-conforming
-// implementation returns 0; current c5 returns the sum of the
-// residual bytes seeded by clobber.
-//
-// TODO: c5 lift must emit zero-fill of the trailing range
-// for local arrays with partial brace initializers (C99
-// 6.7.9p21). The c99-gaps.md "Local array partial-initializer
-// zero-fill" entry tracks the divergence.
+// implementation returns 0; before the fix, the residual
+// bytes seeded by clobber would survive in the trailing
+// positions and the sum would diverge.
 
 // Force a distinctive byte pattern onto the stack region the
 // trailing array elements will land on. The `volatile` sink

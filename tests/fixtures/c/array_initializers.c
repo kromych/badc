@@ -8,9 +8,9 @@
 //
 // At file scope, the data segment is pre-zeroed and the initializer
 // overwrites the leading bytes. At function scope, an Mcpy from a
-// data-segment template populates the array; bytes past the
-// initializer's length are left as whatever the stack frame held on
-// entry.
+// data-segment template populates the array; the staged template is
+// padded with trailing zeros to the declared dimension per C99
+// 6.7.9p21 so the omitted positions read as zero.
 
 char g_msg[] = "hello";
 int g_primes[] = {2, 3, 5, 7, 11};
@@ -22,6 +22,7 @@ int main() {
     char msg[] = "world";
     int xs[] = {100, 200, 300};
     char buf2[8] = "ok";
+    int xs2[5] = {100, 200, 300};
 
     // File-scope arrays.
     if (g_msg[0] != 'h') return 1;
@@ -62,6 +63,15 @@ int main() {
     if (buf2[0] != 'o') return 25;
     if (buf2[1] != 'k') return 26;
     if (buf2[2] != 0) return 27;
+
+    // C99 6.7.9p21: trailing positions of a partial brace
+    // initializer for a function-scope array are zeroed.
+    if (xs2[0] != 100) return 28;
+    if (xs2[2] != 300) return 29;
+    if (xs2[3] != 0) return 30;
+    if (xs2[4] != 0) return 31;
+    if (buf2[3] != 0) return 32;
+    if (buf2[7] != 0) return 33;
 
     return 0;
 }

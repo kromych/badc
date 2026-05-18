@@ -500,7 +500,20 @@ impl Compiler {
                 // the per-element runtime store path. Pure-constant
                 // initializers keep the Mcpy-from-data fast path
                 // and the staged on-disk image stays compact.
+                let elem_size = self.size_of_type(ty);
+                let full_bytes = elem_size * declared_array_size as usize;
                 if self.lex.tk == '{' && self.array_init_needs_runtime()? {
+                    // C99 6.7.9p21: trailing positions in a
+                    // partially-initialized array receive
+                    // static-storage zero-init. Seed the slot
+                    // with a Mcpy from a staged zero block
+                    // before the per-element runtime stores
+                    // overlay the explicit prefix.
+                    let zero_off = self.data.len();
+                    for _ in 0..full_bytes {
+                        self.data.push(0);
+                    }
+                    self.emit_local_array_init(local_val, zero_off, full_bytes);
                     self.emit_local_array_init_runtime(
                         local_val,
                         ty,
@@ -520,7 +533,20 @@ impl Compiler {
                         var_name, init_count, max
                     )));
                 }
-                let (start_addr, total_bytes) = self.pack_initializer_into_data(ty, &elements);
+                let (start_addr, packed_bytes) = self.pack_initializer_into_data(ty, &elements);
+                // C99 6.7.9p21: when the brace list specifies
+                // fewer elements than the declared dimension, the
+                // remaining positions receive static-storage
+                // zero-init. Pad the staged block with zeros so
+                // the single Mcpy covers the entire array.
+                let total_bytes = if packed_bytes < full_bytes {
+                    for _ in 0..(full_bytes - packed_bytes) {
+                        self.data.push(0);
+                    }
+                    full_bytes
+                } else {
+                    packed_bytes
+                };
                 self.emit_local_array_init(local_val, start_addr, total_bytes);
             } else if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 && self.lex.tk == '{' {
                 // Local struct value with brace-list initializer.

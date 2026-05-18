@@ -804,6 +804,13 @@ fn emit_binop(
             return false;
         }
     };
+    // Div / Mod hijack rax + rdx (SDM: IDIV's implicit operand
+    // is rdx:rax and the result is rax (quot), rdx (rem)). They
+    // need their own marshalling separate from the two-operand
+    // path below.
+    if matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu) {
+        return emit_binop_divmod(code, op, dst, rd, rn, rhs_place, frame);
+    }
     let rhs_scratch = if rd.0 == SCRATCH_R10.0 {
         Reg::RCX
     } else {
@@ -877,6 +884,72 @@ fn emit_binop(
             bail_msg("Binop: variant not yet covered");
             return false;
         }
+    }
+    spill_dst_to_slot(code, dst, rd, frame);
+    true
+}
+
+/// Lower `BinOp::{Div,Mod,Divu,Modu}` on x86_64. IDIV / DIV
+/// require the dividend in rdx:rax (low half in rax) and write
+/// the quotient back to rax and remainder to rdx, so the
+/// surrounding allocator-chosen value in rax (if any) must be
+/// preserved across the divide. The 8-byte preserve uses
+/// `push %rax` / `pop %rax`; the temporary 8-byte misalignment
+/// is fine -- IDIV doesn't read/write the stack, and SysV /
+/// Win64 only require 16-byte alignment at `call` sites.
+///
+/// `rn` is the already-materialised dividend; `rhs_place` is the
+/// divisor's place so we can route it directly into r10 (which
+/// IDIV's reg/mem operand can name, and which is never in any
+/// allocator pool).
+fn emit_binop_divmod(
+    code: &mut Vec<u8>,
+    op: BinOp,
+    dst: Place,
+    rd: Reg,
+    rn: Reg,
+    rhs_place: Place,
+    frame: Frame,
+) -> bool {
+    let want_remainder = matches!(op, BinOp::Mod | BinOp::Modu);
+    let is_unsigned = matches!(op, BinOp::Divu | BinOp::Modu);
+
+    // Materialise the divisor into r10. r10 is not in any
+    // allocator pool and IDIV r/m64 can name it.
+    let Some(div_src) = materialize_int(code, rhs_place, SCRATCH_R10, frame) else {
+        bail_msg("Binop divmod: rhs not int reg / spill");
+        return false;
+    };
+    if div_src.0 != SCRATCH_R10.0 {
+        emit_mov_rr(code, SCRATCH_R10, div_src);
+    }
+    // Preserve rax: the allocator can park a live value there
+    // that has to be intact after this op. If rd is rax we don't
+    // need to preserve -- the result will land in rax anyway.
+    let preserve_rax = rd.0 != Reg::RAX.0;
+    if preserve_rax {
+        emit_push_r(code, Reg::RAX);
+    }
+    // rax := dividend low half.
+    if rn.0 != Reg::RAX.0 {
+        emit_mov_rr(code, Reg::RAX, rn);
+    }
+    // rdx := dividend high half. Signed uses CQO to sign-extend
+    // rax; unsigned zero-extends with `xor edx, edx`.
+    if is_unsigned {
+        emit_xor_rr(code, Reg::RDX, Reg::RDX);
+        super::x86_64::emit_div_r(code, SCRATCH_R10);
+    } else {
+        super::x86_64::emit_cqo(code);
+        super::x86_64::emit_idiv_r(code, SCRATCH_R10);
+    }
+    // Capture result into rd before restoring rax.
+    let result_src = if want_remainder { Reg::RDX } else { Reg::RAX };
+    if rd.0 != result_src.0 {
+        emit_mov_rr(code, rd, result_src);
+    }
+    if preserve_rax {
+        emit_pop_r(code, Reg::RAX);
     }
     spill_dst_to_slot(code, dst, rd, frame);
     true

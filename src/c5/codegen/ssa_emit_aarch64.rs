@@ -785,6 +785,7 @@ fn emit_inst(
             frame,
             scratch,
             abi,
+            target,
             plt_call_fixups,
             imports,
         ),
@@ -1015,7 +1016,7 @@ fn emit_tls_addr(
             // flip; bail to the pool walk until the SSA emit
             // covers the full Windows TLS shape.
             bail_msg("TlsAddr: WindowsAarch64 -- fall back to pool path");
-            return false;
+            false
         }
         Target::MacOSAarch64 => {
             let descriptor_index = match macho_tlv_descriptors
@@ -1239,6 +1240,7 @@ fn emit_call_ext(
     frame: Frame,
     scratch: &ScratchPool,
     abi: super::Abi,
+    target: Target,
     plt_call_fixups: &mut Vec<PltCallFixup>,
     imports: &super::ResolvedImports,
 ) -> bool {
@@ -1346,8 +1348,7 @@ fn emit_call_ext(
     // `Op::JsrExt` -> bl __trunctfdf2 sequence. macOS / Windows
     // AArch64 alias `long double` to `double`, so v0 is already
     // FP64 on those targets.
-    let target_for_call = target_for_ext(abi);
-    if imp.returns_long_double && target_for_call == Target::LinuxAarch64 {
+    if imp.returns_long_double && target == Target::LinuxAarch64 {
         let trunc_idx = imports
             .imports
             .iter()
@@ -1380,7 +1381,7 @@ fn emit_call_ext(
     if returns_fp || imp.returns_long_double {
         emit(code, enc_fmov_d_to_x(Reg(0), 0));
     } else {
-        let ext = super::return_extension(return_type_tag, target_for_call);
+        let ext = super::return_extension(return_type_tag, target);
         emit_extend_x0_for_return(code, ext);
     }
     if let Some(rd) = int_reg(dst) {

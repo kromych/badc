@@ -902,7 +902,7 @@ fn emit_tls_addr(
             // its own rax / rcx reservation. The macOS aarch64 +
             // Linux x86_64 paths above stay on the SSA emit.
             bail_msg("TlsAddr: WindowsX64 -- fall back to pool path");
-            return false;
+            false
         }
         _ => {
             bail_msg("TlsAddr: target not x86_64");

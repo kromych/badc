@@ -1,8 +1,8 @@
 //! AArch64 native emit consuming the SSA lift + allocator output.
-//! Active when `NativeOptions::regalloc = RegallocMode::Ssa` and
-//! the env var `BADC_USE_SSA_EMIT` is set. The env-var gate keeps
-//! the SSA path strictly opt-in while it grows handler coverage;
-//! the pool path remains the default emit until parity is reached.
+//! Active when `NativeOptions::regalloc = RegallocMode::Ssa`
+//! (the default; `--regalloc=pool` opts out). Per-function bails
+//! fall back to the pool walk so coverage gaps don't gate progress;
+//! `BADC_STRICT_SSA_EMIT` flips a failing emit to a hard error.
 //!
 //! ## Pass shape
 //!
@@ -41,8 +41,9 @@
 //! [`emit_function`] returns `true` when the SSA emit handled the
 //! function end-to-end and `false` when any encountered op is
 //! outside the implemented subset. The caller (`aarch64::lower`)
-//! aborts the whole program on `false` under `BADC_USE_SSA_EMIT`
-//! so half-emitted output never reaches the writers.
+//! falls back to the pool walk for that function on `false` so
+//! progress isn't gated on full SSA coverage. Set
+//! `BADC_STRICT_SSA_EMIT` to turn that fallback into a hard error.
 
 #![allow(dead_code, clippy::too_many_arguments)]
 
@@ -239,6 +240,17 @@ pub(super) fn emit_function(
     }
 
     emit_prologue(code, func, alloc, frame, abi);
+    // Record the post-prologue offset against the bytecode word
+    // that follows `Op::Ent` (its single operand). The DWARF CFI
+    // pass reads this to encode `DW_CFA_advance_loc <prologue
+    // bytes>` so the post-prologue rule (CFA = fp + 16, fp/lr at
+    // CFA-16/-8) installs at the right PC; the pool walker leaves
+    // the same word populated via its per-op bytecode_to_native
+    // update.
+    let post_prologue_pc = func.ent_pc + crate::c5::op::Op::Ent.word_size();
+    if post_prologue_pc < bytecode_to_native.len() {
+        bytecode_to_native[post_prologue_pc] = code.len();
+    }
 
     let mut block_offsets: Vec<usize> = alloc::vec![0; func.blocks.len()];
     let mut branch_fixups: Vec<BranchFixup> = Vec::new();

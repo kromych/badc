@@ -1,6 +1,6 @@
 //! x86_64 native emit consuming the SSA lift + allocator output.
-//! Active when `NativeOptions::regalloc = RegallocMode::Ssa` and
-//! the env var `BADC_USE_SSA_EMIT` is set. Mirrors the aarch64
+//! Active when `NativeOptions::regalloc = RegallocMode::Ssa`
+//! (the default; `--regalloc=pool` opts out). Mirrors the aarch64
 //! counterpart's structure; the difference is the per-target
 //! instruction encodings and the SysV / Win64 ABI shape applied
 //! to argument and return placement.
@@ -192,19 +192,37 @@ fn fp_arith_enc(op: BinOp) -> Option<fn(&mut Vec<u8>, Reg, Reg)> {
     })
 }
 
+/// How a `setcc` result needs to be combined with the parity flag
+/// for the IEEE-754 NaN semantics required by C99 6.5.9 / 6.5.8.
+/// `ucomisd` sets ZF=PF=CF=1 on an unordered (NaN) comparison;
+/// a bare `setcc` on Cc::B / Cc::E / Cc::Be / Cc::Ne would then
+/// disagree with `!(NaN < x)` / `(NaN != x)`.
+#[derive(Clone, Copy)]
+enum FpCmpNanFix {
+    /// CC already evaluates to 0 on an unordered compare (Cc::A
+    /// and Cc::Ae both require CF=0, which NaN never satisfies).
+    None,
+    /// AND with `setnp` (PF=0) to clear the result when NaN.
+    /// Used by `==`, `<`, `<=` per C99 6.5.9p3 / 6.5.8p6.
+    AndNotP,
+    /// OR with `setp` (PF=1) so the result is 1 on NaN. Used by
+    /// `!=` per C99 6.5.9p3.
+    OrP,
+}
+
 /// Map an FP comparison [`BinOp`] to the x86_64 condition code the
-/// matching `ucomisd` + `setcc` pair should use. Returns `None` for
-/// any non-FP-compare op. The mapping mirrors the pool path's
-/// [`super::x86_64`] lowering: `Feq` uses `Eq`, `Flt` uses `Ult`
-/// (the unsigned variant pairs with `ucomisd`'s CF/PF flags), etc.
-fn fp_compare_cc(op: BinOp) -> Option<Cc> {
+/// matching `ucomisd` + `setcc` pair should use plus the NaN-fix
+/// needed after the `setcc`. Returns `None` for any non-FP-compare
+/// op. Mirrors the pool path's `emit_fp_cmp` / `emit_fp_cmp_ordered`
+/// / `emit_fp_cmp_ne` split in `super::x86_64`.
+fn fp_compare_cc(op: BinOp) -> Option<(Cc, FpCmpNanFix)> {
     Some(match op {
-        BinOp::Feq => Cc::E,
-        BinOp::Fne => Cc::Ne,
-        BinOp::Flt => Cc::B,
-        BinOp::Fgt => Cc::A,
-        BinOp::Fle => Cc::Be,
-        BinOp::Fge => Cc::Ae,
+        BinOp::Feq => (Cc::E, FpCmpNanFix::AndNotP),
+        BinOp::Fne => (Cc::Ne, FpCmpNanFix::OrP),
+        BinOp::Flt => (Cc::B, FpCmpNanFix::AndNotP),
+        BinOp::Fgt => (Cc::A, FpCmpNanFix::None),
+        BinOp::Fle => (Cc::Be, FpCmpNanFix::AndNotP),
+        BinOp::Fge => (Cc::Ae, FpCmpNanFix::None),
         _ => return None,
     })
 }
@@ -271,7 +289,16 @@ fn materialize_int_shifted(
             emit_mov_r_mem(code, scratch, Reg::RSP, sp_off);
             Some(scratch)
         }
-        _ => None,
+        Place::FpReg(r) => {
+            // Reinterpret the xmm-resident f64 as its 8-byte bit
+            // pattern via `movq scratch, xmm[r]`. Used at c5-internal
+            // call sites that route every argument through the
+            // integer arg bank (the callee's prologue spills only
+            // int_arg_regs into the c5 cdecl slots).
+            super::x86_64::emit_movq_r_xmm(code, scratch, Reg(r));
+            Some(scratch)
+        }
+        Place::None => None,
     }
 }
 
@@ -412,6 +439,17 @@ pub(super) fn emit_function(
     }
 
     emit_prologue(code, func, alloc, frame, abi);
+    // Record the post-prologue offset against the bytecode word
+    // that follows `Op::Ent` (its single operand). The DWARF CFI
+    // pass reads this to encode `DW_CFA_advance_loc <prologue
+    // bytes>` so the post-prologue rule (CFA = rbp + 16, rbp at
+    // CFA-16, ret-addr at CFA-8) installs at the right PC; the
+    // pool walker populates the same word via its per-op
+    // bytecode_to_native update.
+    let post_prologue_pc = func.ent_pc + crate::c5::op::Op::Ent.word_size();
+    if post_prologue_pc < bytecode_to_native.len() {
+        bytecode_to_native[post_prologue_pc] = code.len();
+    }
 
     let mut block_offsets: Vec<usize> = alloc::vec![0; func.blocks.len()];
     let mut branch_fixups: Vec<BranchFixup> = Vec::new();
@@ -745,6 +783,7 @@ fn emit_inst(
             alloc,
             frame,
             abi,
+            target,
             plt_call_fixups,
             imports,
         ),
@@ -1187,12 +1226,15 @@ fn emit_binop(
         fp_spill_dst_to_slot(code, dst, dd, frame);
         return true;
     }
-    // FP comparison: ucomisd + setcc on the result reg. ucomisd
-    // sets ZF / CF / PF; the SETcc encoding from fp_compare_cc
-    // already accounts for the ucomisd-specific NaN -> PF semantics.
-    // NaN behavior matches the pool emit: an unordered compare
-    // yields 0 for ==/<=/</>=/> and 1 for !=.
-    if let Some(cc) = fp_compare_cc(op) {
+    // FP comparison: ucomisd + setcc + (optional parity-fix
+    // setcc + AND/OR) on the result reg. `ucomisd` sets ZF / CF
+    // / PF; PF=1 signals an unordered (NaN) compare. C99 6.5.9p3
+    // / 6.5.8p6 require `==`, `<`, `<=` to yield 0 on NaN and
+    // `!=` to yield 1, so the cc-only `setb` / `sete` / `setbe`
+    // / `setne` paths get an explicit AND-with-`setnp` /
+    // OR-with-`setp` fixup. Mirrors `emit_fp_cmp_ordered` /
+    // `emit_fp_cmp_ne` in the pool path.
+    if let Some((cc, nan_fix)) = fp_compare_cc(op) {
         let dn = match materialize_fp(code, lhs_place, SCRATCH_XMM14, frame) {
             Some(r) => r,
             None => {
@@ -1214,6 +1256,35 @@ fn emit_binop(
         };
         emit_setcc_r8(code, cc, rd);
         emit_movzx_r_r8(code, rd, rd);
+        match nan_fix {
+            FpCmpNanFix::None => {}
+            FpCmpNanFix::AndNotP | FpCmpNanFix::OrP => {
+                // Need a 64-bit scratch distinct from `rd` for the
+                // parity-fix setcc. SCRATCH_R10 is outside the pool;
+                // pick rcx as a fallback when `rd` already aliases
+                // SCRATCH_R10 (the Place::Spill case). rcx is the
+                // 4th SysV int arg reg and the 1st Win64 one, but
+                // we're not at a call site so no live arg can
+                // occupy it.
+                let scratch = if rd.0 == SCRATCH_R10.0 {
+                    Reg(1)
+                } else {
+                    SCRATCH_R10
+                };
+                let fix_cc = if matches!(nan_fix, FpCmpNanFix::AndNotP) {
+                    super::x86_64::Cc::Np
+                } else {
+                    super::x86_64::Cc::P
+                };
+                emit_setcc_r8(code, fix_cc, scratch);
+                emit_movzx_r_r8(code, scratch, scratch);
+                if matches!(nan_fix, FpCmpNanFix::AndNotP) {
+                    emit_and_rr(code, rd, scratch);
+                } else {
+                    emit_or_rr(code, rd, scratch);
+                }
+            }
+        }
         spill_dst_to_slot(code, dst, rd, frame);
         return true;
     }
@@ -1539,17 +1610,15 @@ fn emit_call(
         }
         return true;
     }
-    // Compute fp_arg_mask from value places. FpReg-placed args
-    // are f64 and route through xmm regs.
-    let fp_arg_mask = args.iter().enumerate().fold(0u32, |m, (i, &v)| {
-        let p = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
-        if matches!(p, Place::FpReg(_)) {
-            m | (1u32 << i)
-        } else {
-            m
-        }
-    });
-    let plan = super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
+    // c5-internal call convention: every argument rides an int
+    // register (or stack slot), even for f64 -- the callee's
+    // prologue (`emit_prologue`) spills `int_arg_regs[0..n_params]`
+    // into the c5 cdecl slots without distinguishing FP / int
+    // params, so an FP arg routed through xmm would land in an
+    // uninitialised slot. The pool path follows the same shape at
+    // `Op::Jsr` / `Op::Jsri`. `fp_arg_mask = 0` keeps
+    // `plan_call_args` on the int-reg path.
+    let plan = super::plan_call_args(args.len(), args.len(), 0, abi);
     if plan.scratch_bytes > 0 {
         emit_sub_rsp_imm32(code, plan.scratch_bytes);
     }
@@ -1584,13 +1653,26 @@ fn emit_call(
     if plan.scratch_bytes > 0 {
         emit_add_rsp_imm32(code, plan.scratch_bytes);
     }
-    // Return value lands in rax. Propagate to dst, which may be
-    // an int register or a spill slot.
-    if let Some(rd) = int_or_spill_dst(dst) {
-        if rd.0 != Reg::RAX.0 {
-            emit_mov_rr(code, rd, Reg::RAX);
+    // c5 internal call return convention: the bit pattern lives
+    // in rax (int-shaped dst reads rax); f64 returns additionally
+    // live in xmm0 (FpReg-shaped dst reads xmm0). `emit_return`
+    // mirrors xmm0 into rax for f64 returns so an int-shaped
+    // caller reads it uniformly.
+    match dst {
+        Place::FpReg(r) => {
+            if r != Reg::XMM0.0 {
+                emit_movapd_xmm_xmm(code, Reg(r), Reg::XMM0);
+            }
         }
-        spill_dst_to_slot(code, dst, rd, frame);
+        Place::IntReg(r) => {
+            if r != Reg::RAX.0 {
+                emit_mov_rr(code, Reg(r), Reg::RAX);
+            }
+        }
+        Place::Spill(_) => {
+            spill_dst_to_slot(code, dst, Reg::RAX, frame);
+        }
+        Place::None => {}
     }
     true
 }
@@ -1604,6 +1686,7 @@ fn emit_call_ext(
     alloc: &Allocation,
     frame: Frame,
     abi: super::Abi,
+    target: Target,
     plt_call_fixups: &mut Vec<PltCallFixup>,
     imports: &super::ResolvedImports,
 ) -> bool {
@@ -1618,6 +1701,11 @@ fn emit_call_ext(
         args.len()
     };
     let plan = super::plan_call_args(args.len(), fixed, fp_arg_mask, abi);
+    let xmm_used = plan
+        .placements
+        .iter()
+        .filter(|p| matches!(p, super::ArgPlacement::FpReg(_)))
+        .count() as u8;
     if plan.scratch_bytes > 0 {
         emit_sub_rsp_imm32(code, plan.scratch_bytes);
     }
@@ -1639,13 +1727,19 @@ fn emit_call_ext(
             return false;
         }
     }
-    // SysV AMD64 (System V AMD64 ABI, 3.2.3): for variadic
-    // callees `al` must hold the number of XMM argument
-    // registers used; this emit path passes all args in GPRs,
-    // so `al = 0`. Win64 has no such requirement and clears
-    // `variadic_zero_xmm_count`.
+    // System V AMD64 ABI 3.2.3: when the callee is variadic, `al`
+    // must hold the number of XMM argument registers used (printf
+    // and friends consult `al` in their prologue to decide whether
+    // to spill xmm0..xmm7 into the va-save area). Non-variadic
+    // SysV callees treat `al` as don't-care; zero it to match the
+    // pool path. Win64 has no such requirement and clears
+    // `variadic_zero_xmm_count` in its `Abi`.
     if abi.variadic_zero_xmm_count {
-        super::x86_64::emit_xor_eax_eax(code);
+        if imp.is_variadic {
+            super::x86_64::emit_mov_al_imm8(code, xmm_used);
+        } else {
+            super::x86_64::emit_xor_eax_eax(code);
+        }
     }
     let call_site = code.len();
     plt_call_fixups.push(PltCallFixup {
@@ -1658,18 +1752,66 @@ fn emit_call_ext(
         emit_add_rsp_imm32(code, plan.scratch_bytes);
     }
     // Sub-word integer returns get the standard sign / zero
-    // extension into rax. FP returns arrive in xmm0; the SSA emit
-    // doesn't yet bridge xmm0 -> rax here. Most c5 demos that
-    // call libc only consume integer-shaped returns, so the
-    // tighter bridge can wait.
+    // extension into rax. FP returns arrive in xmm0 (SysV 3.2.3,
+    // Win64 returns scalars/SSE in xmm0); route into the
+    // allocator's chosen Place, which may be an FpReg, an IntReg
+    // (holding the f64 bit pattern -- c5's accumulator is one big
+    // 8-byte slot), or a spill slot.
+    //
+    // SysV long-double sits in x87 st0 (binary128 mantissa
+    // truncated to the x87 80-bit format). c5 stores long double
+    // in an 8-byte slot, so emit `fstp QWORD PTR [rsp]` to round
+    // st0 to f64 and route the f64 bit pattern through the same
+    // dst dispatch.
     use crate::c5::compiler::types as ty_helpers;
     let return_type_tag = imp.return_type_tag;
     let bare = ty_helpers::strip_unsigned(return_type_tag);
-    if ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare) {
-        bail_msg("CallExt: FP return not yet bridged to rax");
-        return false;
+    let returns_long_double = imp.returns_long_double;
+    if returns_long_double && matches!(target, Target::LinuxX64) {
+        emit_sub_rsp_imm32(code, 16);
+        // fstp QWORD PTR [rsp] -- `DD /3`, mod=00, rm=100 (SIB
+        // follows), SIB = 0x24 (base = rsp, no index).
+        code.extend_from_slice(&[0xDD, 0x1C, 0x24]);
+        let scratch = match dst {
+            Place::IntReg(r) if r != Reg::RAX.0 => Reg(r),
+            _ => SCRATCH_R10,
+        };
+        emit_mov_r_mem(code, scratch, Reg::RSP, 0);
+        emit_add_rsp_imm32(code, 16);
+        match dst {
+            Place::IntReg(r) => {
+                if Reg(r).0 != scratch.0 {
+                    emit_mov_rr(code, Reg(r), scratch);
+                }
+            }
+            Place::Spill(_) => {
+                spill_dst_to_slot(code, dst, scratch, frame);
+            }
+            Place::FpReg(r) => {
+                super::x86_64::emit_movq_xmm_r(code, Reg(r), scratch);
+            }
+            Place::None => {}
+        }
+        return true;
     }
-    let ext = super::return_extension(return_type_tag, super::Target::LinuxX64);
+    if ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare) {
+        match dst {
+            Place::FpReg(r) => {
+                if r != Reg::XMM0.0 {
+                    emit_movapd_xmm_xmm(code, Reg(r), Reg::XMM0);
+                }
+            }
+            Place::IntReg(r) => {
+                super::x86_64::emit_movq_r_xmm(code, Reg(r), Reg::XMM0);
+            }
+            Place::Spill(_) => {
+                fp_spill_dst_to_slot(code, dst, Reg::XMM0, frame);
+            }
+            Place::None => {}
+        }
+        return true;
+    }
+    let ext = super::return_extension(return_type_tag, target);
     super::x86_64::emit_extend_rax_for_return(code, ext);
     if let Some(rd) = int_or_spill_dst(dst) {
         if rd.0 != Reg::RAX.0 {
@@ -1735,11 +1877,21 @@ fn emit_call_indirect(
     if plan.scratch_bytes > 0 {
         emit_add_rsp_imm32(code, plan.scratch_bytes);
     }
-    if let Some(rd) = int_or_spill_dst(dst) {
-        if rd.0 != Reg::RAX.0 {
-            emit_mov_rr(code, rd, Reg::RAX);
+    match dst {
+        Place::FpReg(r) => {
+            if r != Reg::XMM0.0 {
+                emit_movapd_xmm_xmm(code, Reg(r), Reg::XMM0);
+            }
         }
-        spill_dst_to_slot(code, dst, rd, frame);
+        Place::IntReg(r) => {
+            if r != Reg::RAX.0 {
+                emit_mov_rr(code, Reg(r), Reg::RAX);
+            }
+        }
+        Place::Spill(_) => {
+            spill_dst_to_slot(code, dst, Reg::RAX, frame);
+        }
+        Place::None => {}
     }
     true
 }
@@ -2038,8 +2190,9 @@ fn emit_return(
         emit_mov_rr(code, Reg::RCX, src);
     }
     if return_is_fp {
-        // Materialize the f64 into xmm0 ahead of the restore.
-        // SCRATCH_XMM14 is outside the allocator's pool so a
+        // Materialize the f64 into xmm0 ahead of the restore. The
+        // restore loop only writes GPRs, so xmm0 survives it.
+        // SCRATCH_XMM14 is outside the allocator's pool, so a
         // spilled f64 lands there without clobbering an
         // allocator-held xmm.
         if let Some(dn) = materialize_fp(code, return_place, SCRATCH_XMM14, frame)
@@ -2055,6 +2208,12 @@ fn emit_return(
     }
     if return_src.is_some() {
         emit_mov_rr(code, Reg::RAX, Reg::RCX);
+    } else if return_is_fp {
+        // Mirror the f64 bit pattern into rax so an int-shaped
+        // caller dst (IntReg / Spill) can read rax uniformly. The
+        // value still lives in xmm0 for FpReg-shaped callers and
+        // for any host-ABI consumer that reads xmm0 directly.
+        super::x86_64::emit_movq_r_xmm(code, Reg::RAX, Reg::XMM0);
     }
     if frame.frame_bytes > 0 {
         emit_add_rsp_imm32(code, frame.frame_bytes);

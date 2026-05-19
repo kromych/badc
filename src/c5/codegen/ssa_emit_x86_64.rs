@@ -930,11 +930,14 @@ fn emit_tls_addr(
                 instr_offset: mov_idx_offset,
             });
             // mov r10, [r10 + rd*8]:
-            //   REX = 0x4A | (rd.high ? 0x02 : 0)  (W=1, X = rd>=8,
+            //   REX = 0x4D | (rd.high ? 0x02 : 0)  (W=1, R=1 to
+            //                                       reach r10 dest,
+            //                                       X = rd>=8,
             //                                       B=1 for r10 base)
-            //   opcode 8B; ModR/M mod=00 reg=010 rm=100 (SIB);
-            //   SIB scale=11 (*8), index=rd.lo, base=010 (r10).
-            let rex_idx_sib = 0x4A | (if rd.0 >= 8 { 0x02 } else { 0 });
+            //   opcode 8B; ModR/M mod=00 reg=010 (r10.lo)
+            //                       rm=100 (SIB);
+            //   SIB scale=11 (*8), index=rd.lo, base=010 (r10.lo).
+            let rex_idx_sib = 0x4D | (if rd.0 >= 8 { 0x02 } else { 0 });
             code.push(rex_idx_sib);
             code.push(0x8B);
             code.push(0x14);

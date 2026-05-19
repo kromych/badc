@@ -138,6 +138,40 @@ impl RegBanks {
     }
 }
 
+/// Read optional bank-size caps from the environment. Returns
+/// `(callee_gprs_cap, caller_gprs_cap, callee_fprs_cap,
+/// caller_fprs_cap)`; `usize::MAX` means no cap. The caps are
+/// diagnostic-only and exist to stress-test the spill paths on
+/// targets whose default banks are wide enough to keep most
+/// values in registers.
+///   BADC_SSA_MAX_CALLEE_GPRS=N -- keep only the first N callee
+///                                 GPRs available to the
+///                                 allocator.
+///   BADC_SSA_MAX_CALLER_GPRS=N -- same for caller-saved GPRs.
+///   BADC_SSA_MAX_CALLEE_FPRS=N -- same for callee-saved FP regs.
+///   BADC_SSA_MAX_CALLER_FPRS=N -- same for caller-saved FP regs.
+fn read_pool_caps() -> (usize, usize, usize, usize) {
+    #[cfg(feature = "std")]
+    {
+        let read = |name: &str| -> usize {
+            std::env::var(name)
+                .ok()
+                .and_then(|s| s.parse::<usize>().ok())
+                .unwrap_or(usize::MAX)
+        };
+        (
+            read("BADC_SSA_MAX_CALLEE_GPRS"),
+            read("BADC_SSA_MAX_CALLER_GPRS"),
+            read("BADC_SSA_MAX_CALLEE_FPRS"),
+            read("BADC_SSA_MAX_CALLER_FPRS"),
+        )
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        (usize::MAX, usize::MAX, usize::MAX, usize::MAX)
+    }
+}
+
 /// Allocate physical placements for every value in `func`. See
 /// the module docs for the algorithm.
 pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
@@ -159,16 +193,19 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     // Active intervals: (value id, last-use index, register).
     let mut active_int: Vec<(ValueId, u32, u8)> = Vec::new();
     let mut active_fp: Vec<(ValueId, u32, u8)> = Vec::new();
+    let (callee_cap, caller_cap, fp_callee_cap, fp_caller_cap) = read_pool_caps();
     let mut free_int: Vec<u8> = banks
         .callee_gprs
         .iter()
-        .chain(banks.caller_gprs.iter())
+        .take(callee_cap)
+        .chain(banks.caller_gprs.iter().take(caller_cap))
         .copied()
         .collect();
     let mut free_fp: Vec<u8> = banks
         .callee_fprs
         .iter()
-        .chain(banks.caller_fprs.iter())
+        .take(fp_callee_cap)
+        .chain(banks.caller_fprs.iter().take(fp_caller_cap))
         .copied()
         .collect();
     let mut spill_count: u32 = 0;

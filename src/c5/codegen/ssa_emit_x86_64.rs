@@ -843,26 +843,25 @@ fn emit_store(
         .get(value as usize)
         .copied()
         .unwrap_or(Place::None);
-    // Both operands must already live in allocator-chosen int
-    // registers; a spilled addr or value bails to the pool path.
-    // Widening this to materialise spills through r10 + rcx
-    // (matching aarch64's primary/secondary scratch shape) is
-    // tracked under TODO -- the wider path itself looks correct
-    // in isolation (the `stress` micro-fixture passes under
-    // SSA emit with a spill-tolerant Store widening enabled) but
-    // unmasks a latent monocypher sha512_compress miscompile
-    // that bites only when this function lands on the SSA emit
-    // path. The byte 0 of the SHA-512 digest diverges; bisecting
-    // with BADC_SSA_ONLY_PC=791 isolates sha512_compress as the
-    // offender. Investigation needed in the broader SSA emit's
-    // handling of high-register-pressure functions (sha512_compress
-    // has gpr_used = 6, spill_count = 10) before the widen lands.
-    let Some(rs) = int_reg(value_place) else {
-        bail_msg("Store: value Place not int reg");
-        return false;
+    // Spill-tolerant materialisation: addr goes into r10 (primary
+    // scratch); value goes into rcx when addr already claimed r10
+    // by a spill load, else also r10. rcx is excluded from the
+    // SSA allocator's GPR pools on both SysV and Win64, so it
+    // never clobbers an allocator-held value.
+    let base = match materialize_int(code, addr_place, SCRATCH_R10, frame) {
+        Some(r) => r,
+        None => {
+            bail_msg("Store: addr Place not int reg / spill");
+            return false;
+        }
     };
-    let Some(base) = int_reg(addr_place) else {
-        bail_msg("Store: addr Place not int reg");
+    let value_scratch = if base.0 == SCRATCH_R10.0 {
+        Reg::RCX
+    } else {
+        SCRATCH_R10
+    };
+    let Some(rs) = materialize_int(code, value_place, value_scratch, frame) else {
+        bail_msg("Store: value Place not int reg / spill");
         return false;
     };
     match kind {
@@ -1272,11 +1271,13 @@ fn emit_call(
     if plan.scratch_bytes > 0 {
         emit_add_rsp_imm32(code, plan.scratch_bytes);
     }
-    // Return value lands in rax. Propagate to dst.
-    if let Some(rd) = int_reg(dst)
-        && rd.0 != 0
-    {
-        emit_mov_rr(code, rd, Reg::RAX);
+    // Return value lands in rax. Propagate to dst, which may be
+    // an int register or a spill slot.
+    if let Some(rd) = int_or_spill_dst(dst) {
+        if rd.0 != Reg::RAX.0 {
+            emit_mov_rr(code, rd, Reg::RAX);
+        }
+        spill_dst_to_slot(code, dst, rd, frame);
     }
     true
 }
@@ -1357,10 +1358,11 @@ fn emit_call_ext(
     }
     let ext = super::return_extension(return_type_tag, super::Target::LinuxX64);
     super::x86_64::emit_extend_rax_for_return(code, ext);
-    if let Some(rd) = int_reg(dst)
-        && rd.0 != 0
-    {
-        emit_mov_rr(code, rd, Reg::RAX);
+    if let Some(rd) = int_or_spill_dst(dst) {
+        if rd.0 != Reg::RAX.0 {
+            emit_mov_rr(code, rd, Reg::RAX);
+        }
+        spill_dst_to_slot(code, dst, rd, frame);
     }
     true
 }

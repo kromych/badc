@@ -133,6 +133,65 @@ mod jit_impl {
     use alloc::vec::Vec;
     use std::ffi::CString;
     use std::os::raw::{c_char, c_int, c_void};
+    use std::sync::Mutex;
+
+    /// atexit handlers registered by JIT'd code. C11 7.22.4.2
+    /// requires atexit handlers to run in LIFO order. The JIT
+    /// runtime drains this Vec in reverse after the JIT'd `main`
+    /// returns and before the code region is unmapped, so the
+    /// handler PCs (which point into the mmap'd JIT region) stay
+    /// valid for the call.
+    ///
+    /// Process-global rather than per-jit_run because libc's
+    /// atexit() is process-global too; if two jit_runs happen
+    /// concurrently they share the chain. The Mutex prevents
+    /// corruption; the drain-on-completion shape means each
+    /// jit_run only sees its own handlers in practice.
+    static JIT_ATEXIT_CHAIN: Mutex<Vec<extern "C" fn()>> = Mutex::new(Vec::new());
+
+    /// Replacement for libc's `atexit` when invoked from JIT'd
+    /// code. Pushes the handler onto `JIT_ATEXIT_CHAIN`; returns
+    /// 0 on success per C11 7.22.4.2p3.
+    extern "C" fn jit_atexit_thunk(handler: extern "C" fn()) -> c_int {
+        if let Ok(mut chain) = JIT_ATEXIT_CHAIN.lock() {
+            chain.push(handler);
+            0
+        } else {
+            // Lock poisoned by another thread's panic; report
+            // failure rather than corrupting the chain. C11
+            // permits a non-zero return.
+            -1
+        }
+    }
+
+    /// Return the JIT-side atexit thunk address when `name` is
+    /// any libc atexit-shape symbol, otherwise 0. The host's libc
+    /// atexit registers handler PCs into the host's own
+    /// `__cxa_finalize` list, but those PCs sit in the JIT mmap
+    /// region that `JitRegion::drop` unmaps before the host
+    /// process exits -- so handing the host's atexit address to
+    /// JIT'd code yields a dangling pointer at process teardown.
+    /// Intercepting the binding at JIT bind_imports time means
+    /// every JIT'd `atexit` call lands on our thunk instead.
+    fn atexit_thunk_addr(name: &str) -> u64 {
+        match name {
+            "atexit" => jit_atexit_thunk as *const () as usize as u64,
+            _ => 0,
+        }
+    }
+
+    /// Drain and invoke every atexit handler registered during
+    /// the current `jit_run`. Called after JIT'd `main` returns
+    /// and before the code region is unmapped.
+    fn drain_jit_atexit_chain() {
+        let handlers: Vec<extern "C" fn()> = match JIT_ATEXIT_CHAIN.lock() {
+            Ok(mut chain) => chain.drain(..).collect(),
+            Err(_) => return,
+        };
+        for f in handlers.into_iter().rev() {
+            f();
+        }
+    }
 
     pub fn jit_run(
         program: &Program,
@@ -263,6 +322,12 @@ mod jit_impl {
         let main_fn: extern "C" fn(c_int, *const *const c_char) -> c_int =
             unsafe { std::mem::transmute(entry_ptr) };
         let exit_code = main_fn(args.len() as c_int, argv_ptrs.as_ptr());
+        // Run atexit() handlers registered by JIT'd code while the
+        // code region is still mapped. The handler PCs point into
+        // the mmap'd region; once `region` drops (munmap), they
+        // become dangling. C11 7.22.4.2p1: handlers fire in LIFO
+        // order.
+        drain_jit_atexit_chain();
         Ok(exit_code as i32)
     }
 
@@ -837,16 +902,18 @@ mod jit_impl {
                 } else {
                     imp.real_symbol.as_str()
                 };
-                let cs = match CString::new(lookup_name) {
-                    Ok(cs) => cs,
-                    Err(_) => continue, // unreachable: symbol names are static ASCII
-                };
-                let mut addr: u64 = 0;
-                for h in &self.lib_handles {
-                    let a = unsafe { dlsym(*h, cs.as_ptr()) } as u64;
-                    if a != 0 {
-                        addr = a;
-                        break;
+                let mut addr: u64 = atexit_thunk_addr(lookup_name);
+                if addr == 0 {
+                    let cs = match CString::new(lookup_name) {
+                        Ok(cs) => cs,
+                        Err(_) => continue, // unreachable: symbol names are static ASCII
+                    };
+                    for h in &self.lib_handles {
+                        let a = unsafe { dlsym(*h, cs.as_ptr()) } as u64;
+                        if a != 0 {
+                            addr = a;
+                            break;
+                        }
                     }
                 }
                 let slot_off = i * 8;
@@ -903,12 +970,15 @@ mod jit_impl {
                 }
             }
             for (i, imp) in imports.imports.iter().enumerate() {
-                let cs = match CString::new(imp.real_symbol.as_str()) {
-                    Ok(cs) => cs,
-                    Err(_) => continue, // unreachable: symbol names are static ASCII
-                };
-                let h = handles[imp.dylib_index];
-                let addr = unsafe { GetProcAddress(h, cs.as_ptr()) } as u64;
+                let mut addr = atexit_thunk_addr(imp.real_symbol.as_str());
+                if addr == 0 {
+                    let cs = match CString::new(imp.real_symbol.as_str()) {
+                        Ok(cs) => cs,
+                        Err(_) => continue, // unreachable: symbol names are static ASCII
+                    };
+                    let h = handles[imp.dylib_index];
+                    addr = unsafe { GetProcAddress(h, cs.as_ptr()) } as u64;
+                }
                 let slot_off = i * 8;
                 unsafe {
                     let dst = self.ptr.add(slot_off) as *mut u64;

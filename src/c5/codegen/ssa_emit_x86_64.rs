@@ -847,10 +847,16 @@ fn emit_store(
     // registers; a spilled addr or value bails to the pool path.
     // Widening this to materialise spills through r10 + rcx
     // (matching aarch64's primary/secondary scratch shape) is
-    // tracked under TODO -- the broader Store widening exposes a
-    // separate SSA-emit miscompile on x86_64 Linux (monocypher
-    // SHA-512 digest divergence) that is independent of the C99
-    // 6.7.9p21 zero-fill gap fixed in the lift.
+    // tracked under TODO -- the wider path itself looks correct
+    // in isolation (the `stress` micro-fixture passes under
+    // SSA emit with a spill-tolerant Store widening enabled) but
+    // unmasks a latent monocypher sha512_compress miscompile
+    // that bites only when this function lands on the SSA emit
+    // path. The byte 0 of the SHA-512 digest diverges; bisecting
+    // with BADC_SSA_ONLY_PC=791 isolates sha512_compress as the
+    // offender. Investigation needed in the broader SSA emit's
+    // handling of high-register-pressure functions (sha512_compress
+    // has gpr_used = 6, spill_count = 10) before the widen lands.
     let Some(rs) = int_reg(value_place) else {
         bail_msg("Store: value Place not int reg");
         return false;

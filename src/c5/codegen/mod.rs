@@ -1173,11 +1173,23 @@ pub enum OutputKind {
 }
 
 impl Default for NativeOptions {
-    /// Defaults: optimizer off, executable output, DWARF on.
-    /// Matches the implicit-`-g` behaviour of gcc / clang and
-    /// the pre-#62 codegen.
+    /// Defaults: optimizer off, executable output, DWARF on, SSA
+    /// emit. The regalloc default honours the
+    /// `BADC_DEFAULT_REGALLOC` env var when present
+    /// (`pool` / `o0` / `ssa`) so a CI lane can flip the entire
+    /// build to the pool emitter without recompiling badc.
     fn default() -> Self {
-        Self::new()
+        let mut opts = Self::new();
+        #[cfg(feature = "std")]
+        if let Ok(v) = std::env::var("BADC_DEFAULT_REGALLOC") {
+            opts.regalloc = match v.as_str() {
+                "pool" => RegallocMode::Pool,
+                "o0" => RegallocMode::O0,
+                "ssa" => RegallocMode::Ssa,
+                _ => opts.regalloc,
+            };
+        }
+        opts
     }
 }
 

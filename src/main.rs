@@ -162,8 +162,15 @@ fn main() {
     let mut optimize_flag = false;
     // SSA-lift + linear-scan emit is the default; `--regalloc=pool`
     // opts back into the original pool emitter, `--regalloc=o0`
-    // forces single-bank pool allocation.
-    let mut regalloc_mode: badc::RegallocMode = badc::RegallocMode::Ssa;
+    // forces single-bank pool allocation. The CI pool lane sets
+    // `BADC_DEFAULT_REGALLOC=pool` to flip the default without
+    // touching every smoke script's argv.
+    let mut regalloc_mode: badc::RegallocMode =
+        match std::env::var("BADC_DEFAULT_REGALLOC").ok().as_deref() {
+            Some("pool") => badc::RegallocMode::Pool,
+            Some("o0") => badc::RegallocMode::O0,
+            _ => badc::RegallocMode::Ssa,
+        };
     let mut dump_ssa = false;
     let mut strict_ssa_emit = false;
     let mut emit_debug_info = true;

@@ -174,6 +174,60 @@ pub(super) fn emit_function(
     let abi = target.abi();
     let scratch = ScratchPool::new();
     let snapshot = code.len();
+    // Snapshot every fixup vector at function entry so a partial
+    // emit can be rolled back cleanly. Without this, a bailed SSA
+    // emit leaves queued fixups pointing into the truncated code
+    // region; the pool fallback's re-emit appends its own fixups
+    // on top, and the stale entries patch later code with the
+    // wrong offsets.
+    let fixups_snapshot = fixups.len();
+    let plt_call_fixups_snapshot = plt_call_fixups.len();
+    let data_fixups_snapshot = data_fixups.len();
+    let pending_func_fixups_snapshot = pending_func_fixups.len();
+    let tls_index_fixups_snapshot = tls_index_fixups.len();
+    let macho_tlv_fixups_snapshot = macho_tlv_fixups.len();
+    let macho_tlv_descriptors_snapshot = macho_tlv_descriptors.len();
+
+    // Per-function filters used for bisecting cross-function
+    // miscompiles. All three are diagnostic-only and accept
+    // comma-separated bytecode entry PCs; they have no effect
+    // when the variables are absent.
+    //   BADC_SSA_ONLY_PC -- limit SSA emit to these functions
+    //   BADC_SSA_SKIP_PC -- force these functions to bail.
+    //   BADC_SSA_MAX_FN  -- bail every function whose ent_pc
+    //                       exceeds the threshold.
+    #[cfg(feature = "std")]
+    {
+        if let Ok(s) = std::env::var("BADC_SSA_ONLY_PC") {
+            let mut found = false;
+            for tok in s.split(',') {
+                if let Ok(only) = tok.parse::<usize>()
+                    && func.ent_pc == only
+                {
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                return false;
+            }
+        }
+        if let Ok(s) = std::env::var("BADC_SSA_SKIP_PC") {
+            for tok in s.split(',') {
+                if let Ok(skip) = tok.parse::<usize>()
+                    && func.ent_pc == skip
+                {
+                    return false;
+                }
+            }
+        }
+        if let Ok(s) = std::env::var("BADC_SSA_MAX_FN")
+            && let Ok(max) = s.parse::<usize>()
+            && func.ent_pc > max
+        {
+            return false;
+        }
+    }
 
     emit_prologue(code, func, alloc, frame, abi);
 
@@ -229,6 +283,13 @@ pub(super) fn emit_function(
                     );
                 }
                 code.truncate(snapshot);
+                fixups.truncate(fixups_snapshot);
+                plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                data_fixups.truncate(data_fixups_snapshot);
+                pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
+                macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                 return false;
             }
         }
@@ -269,6 +330,13 @@ pub(super) fn emit_function(
                         None => {
                             bail("Bz/Bnz: cond Place not int", cond, cond_place);
                             code.truncate(snapshot);
+                            fixups.truncate(fixups_snapshot);
+                            plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                            data_fixups.truncate(data_fixups_snapshot);
+                            pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                            tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                            macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
+                            macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                             return false;
                         }
                     }
@@ -315,6 +383,13 @@ pub(super) fn emit_function(
                         None => {
                             bail("Bz/Bnz: cond Place not int", cond, cond_place);
                             code.truncate(snapshot);
+                            fixups.truncate(fixups_snapshot);
+                            plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                            data_fixups.truncate(data_fixups_snapshot);
+                            pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                            tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                            macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
+                            macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                             return false;
                         }
                     }
@@ -355,6 +430,13 @@ pub(super) fn emit_function(
                     None => {
                         bail_msg("TailExt: no import slot for binding");
                         code.truncate(snapshot);
+                        fixups.truncate(fixups_snapshot);
+                        plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                        data_fixups.truncate(data_fixups_snapshot);
+                        pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                        tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                        macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
+                        macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                         return false;
                     }
                 };
@@ -369,6 +451,13 @@ pub(super) fn emit_function(
         if rel % 4 != 0 {
             bail_msg("branch fixup: rel not 4-aligned");
             code.truncate(snapshot);
+            fixups.truncate(fixups_snapshot);
+            plt_call_fixups.truncate(plt_call_fixups_snapshot);
+            data_fixups.truncate(data_fixups_snapshot);
+            pending_func_fixups.truncate(pending_func_fixups_snapshot);
+            tls_index_fixups.truncate(tls_index_fixups_snapshot);
+            macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
+            macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
             return false;
         }
         let imm = (rel / 4) as i32;
@@ -376,6 +465,13 @@ pub(super) fn emit_function(
             LocalBranchKind::B => {
                 if !(-(1 << 25)..(1 << 25)).contains(&imm) {
                     code.truncate(snapshot);
+                    fixups.truncate(fixups_snapshot);
+                    plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                    data_fixups.truncate(data_fixups_snapshot);
+                    pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                    tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                    macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
+                    macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                     return false;
                 }
                 enc_b(imm)
@@ -384,6 +480,13 @@ pub(super) fn emit_function(
                 if !(-(1 << 18)..(1 << 18)).contains(&imm) {
                     bail_msg("branch fixup: imm19 out of range");
                     code.truncate(snapshot);
+                    fixups.truncate(fixups_snapshot);
+                    plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                    data_fixups.truncate(data_fixups_snapshot);
+                    pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                    tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                    macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
+                    macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                     return false;
                 }
                 enc_cbz(rt, imm)
@@ -392,6 +495,13 @@ pub(super) fn emit_function(
                 if !(-(1 << 18)..(1 << 18)).contains(&imm) {
                     bail_msg("branch fixup: imm19 out of range");
                     code.truncate(snapshot);
+                    fixups.truncate(fixups_snapshot);
+                    plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                    data_fixups.truncate(data_fixups_snapshot);
+                    pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                    tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                    macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
+                    macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                     return false;
                 }
                 enc_cbnz(rt, imm)
@@ -400,6 +510,13 @@ pub(super) fn emit_function(
                 if !(-(1 << 18)..(1 << 18)).contains(&imm) {
                     bail_msg("branch fixup: imm19 out of range");
                     code.truncate(snapshot);
+                    fixups.truncate(fixups_snapshot);
+                    plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                    data_fixups.truncate(data_fixups_snapshot);
+                    pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                    tls_index_fixups.truncate(tls_index_fixups_snapshot);
+                    macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
+                    macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                     return false;
                 }
                 enc_b_cond(cond, imm)

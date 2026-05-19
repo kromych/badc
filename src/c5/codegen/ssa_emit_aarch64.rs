@@ -987,11 +987,11 @@ fn emit_tls_addr(
     dst: Place,
     offset: i64,
     target: Target,
-    tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
+    _tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
 ) -> bool {
-    use super::aarch64::{enc_blr, enc_ldr_reg_lsl3, enc_mrs_tpidr_el0};
+    use super::aarch64::{enc_blr, enc_mrs_tpidr_el0};
     let Some(rd) = int_reg(dst) else {
         bail_msg("TlsAddr: dst not int reg");
         return false;
@@ -1008,20 +1008,14 @@ fn emit_tls_addr(
             true
         }
         Target::WindowsAarch64 => {
-            if offset >= 4096 {
-                bail_msg("TlsAddr: offset exceeds 12-bit add immediate");
-                return false;
-            }
-            emit(code, enc_ldr_imm(Reg(16), Reg(18), 0x58));
-            let pair_off = code.len();
-            tls_index_fixups.push(super::TlsIndexFixup {
-                instr_offset: pair_off,
-            });
-            emit(code, enc_adrp(Reg(17), 0));
-            emit(code, enc_ldr32_imm(Reg(17), Reg(17), 0));
-            emit(code, enc_ldr_reg_lsl3(Reg(16), Reg(16), Reg(17)));
-            emit(code, enc_add_imm(rd, Reg(16), offset as u32));
-            true
+            // Windows/aarch64 TLS uses a TEB[0x58] table indexed
+            // by `_tls_index` plus a final lea, with x16/x17 as
+            // scratch and x18 as the TEB pointer. The thread_local
+            // fixture failed on this lane during the SSA default
+            // flip; bail to the pool walk until the SSA emit
+            // covers the full Windows TLS shape.
+            bail_msg("TlsAddr: WindowsAarch64 -- fall back to pool path");
+            return false;
         }
         Target::MacOSAarch64 => {
             let descriptor_index = match macho_tlv_descriptors
@@ -1342,6 +1336,34 @@ fn emit_call_ext(
         is_tail: false,
     });
     emit(code, enc_b(0));
+    // AAPCS64 returns `long double` (IEEE binary128) in v0 as a
+    // single 128-bit Q register. c5 stores `long double` in an
+    // 8-byte FP64 slot, so a `long double` libc return needs a
+    // truncation pass before it becomes the c5 accumulator. The
+    // libgcc helper `__trunctfdf2` takes binary128 in v0 and
+    // returns FP64 in d0; the codegen pre-includes it on
+    // LinuxAarch64. Mirrors the pool path's
+    // `Op::JsrExt` -> bl __trunctfdf2 sequence. macOS / Windows
+    // AArch64 alias `long double` to `double`, so v0 is already
+    // FP64 on those targets.
+    let target_for_call = target_for_ext(abi);
+    if imp.returns_long_double && target_for_call == Target::LinuxAarch64 {
+        let trunc_idx = imports
+            .imports
+            .iter()
+            .position(|i| i.local_name == "__trunctfdf2")
+            .unwrap_or(usize::MAX);
+        if trunc_idx == usize::MAX {
+            bail_msg("CallExt: returns_long_double but __trunctfdf2 not in imports");
+            return false;
+        }
+        plt_call_fixups.push(PltCallFixup {
+            instr_offset: code.len(),
+            import_index: trunc_idx,
+            is_tail: false,
+        });
+        emit(code, enc_b(0));
+    }
     if plan.scratch_bytes > 0 {
         emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
     }
@@ -1355,10 +1377,10 @@ fn emit_call_ext(
     let return_type_tag = imp.return_type_tag;
     let bare = ty_helpers::strip_unsigned(return_type_tag);
     let returns_fp = ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare);
-    if returns_fp {
+    if returns_fp || imp.returns_long_double {
         emit(code, enc_fmov_d_to_x(Reg(0), 0));
     } else {
-        let ext = super::return_extension(return_type_tag, target_for_ext(abi));
+        let ext = super::return_extension(return_type_tag, target_for_call);
         emit_extend_x0_for_return(code, ext);
     }
     if let Some(rd) = int_reg(dst) {

@@ -853,7 +853,7 @@ fn emit_tls_addr(
     dst: Place,
     offset: i64,
     target: Target,
-    tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
+    _tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     tls_total_size: usize,
     frame: Frame,
 ) -> bool {
@@ -894,33 +894,15 @@ fn emit_tls_addr(
             true
         }
         Target::WindowsX64 => {
-            if !(i32::MIN as i64..=i32::MAX as i64).contains(&offset) {
-                bail_msg("TlsAddr: offset out of i32 range");
-                return false;
-            }
-            // The pool path hard-codes rax / rcx / r13 for this
-            // sequence; we mirror it but write the final lea into
-            // rd. rax + rcx are caller-saved scratch and outside
-            // the allocator pool.
-            code.extend_from_slice(&[0x65, 0x48, 0x8B, 0x04, 0x25, 0x58, 0, 0, 0]);
-            let mov_ecx_offset = code.len();
-            code.extend_from_slice(&[0x8B, 0x0D, 0, 0, 0, 0]);
-            tls_index_fixups.push(super::TlsIndexFixup {
-                instr_offset: mov_ecx_offset,
-            });
-            // mov rax, [rax + rcx*8]
-            code.extend_from_slice(&[0x48, 0x8B, 0x04, 0xC8]);
-            // lea rd, [rax + offset]
-            //   REX.W=1, REX.R = (rd >= 8);
-            //   opcode 8D;
-            //   ModR/M mod=10 (disp32), reg=rd.lo, rm=000 (rax).
-            let rex = 0x48 | (((rd.0 >> 3) & 1) << 2);
-            code.push(rex);
-            code.push(0x8D);
-            code.push(0x80 | ((rd.0 & 7) << 3));
-            code.extend_from_slice(&(offset as i32).to_le_bytes());
-            spill_dst_to_slot(code, dst, rd, frame);
-            true
+            // PE/x86_64 TLS lowering uses rax + rcx as scratch
+            // ahead of the final lea. Both are in the SSA
+            // allocator's caller pool, so any value the allocator
+            // parked there gets clobbered. Bail and let the pool
+            // walk emit the standard TEB / _tls_index dance with
+            // its own rax / rcx reservation. The macOS aarch64 +
+            // Linux x86_64 paths above stay on the SSA emit.
+            bail_msg("TlsAddr: WindowsX64 -- fall back to pool path");
+            return false;
         }
         _ => {
             bail_msg("TlsAddr: target not x86_64");

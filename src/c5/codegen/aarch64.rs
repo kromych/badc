@@ -1248,7 +1248,7 @@ pub(super) fn lower(
             .map(|f| super::ssa_alloc::allocate(f, target))
             .collect();
         #[cfg(feature = "std")]
-        if super::ssa_dump::enabled() {
+        if super::ssa_dump::enabled(native) {
             for (f, a) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
                 eprint!("{}", super::ssa_dump::dump_function(f, a));
             }
@@ -1357,17 +1357,19 @@ pub(super) fn lower(
                     // The SSA emit truncated `code` back to the
                     // pre-attempt snapshot on failure, so no bytes
                     // leaked. Fall through to the pool path for
-                    // this function. `BADC_STRICT_SSA_EMIT` flips
+                    // this function. `--strict-ssa-emit` (or the
+                    // legacy `BADC_STRICT_SSA_EMIT` env var) flips
                     // the policy back to abort -- useful when
                     // driving the SSA emit toward parity.
                     #[cfg(feature = "std")]
-                    if std::env::var("BADC_DUMP_SSA").is_ok()
-                        || std::env::var("BADC_STRICT_SSA_EMIT").is_ok()
-                    {
+                    let strict_ssa =
+                        native.strict_ssa_emit || std::env::var("BADC_STRICT_SSA_EMIT").is_ok();
+                    #[cfg(feature = "std")]
+                    if super::ssa_dump::enabled(native) || strict_ssa {
                         eprint!("{}", super::ssa_dump::dump_function(func_ssa, alloc_for),);
                     }
                     #[cfg(feature = "std")]
-                    if std::env::var("BADC_STRICT_SSA_EMIT").is_ok() {
+                    if strict_ssa {
                         return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                             &alloc::format!(
                                 "ssa emit: function at ent_pc {op_pc} contains an op outside the implemented subset",

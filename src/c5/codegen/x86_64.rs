@@ -1500,7 +1500,7 @@ pub(super) fn lower(
                     &mut bytecode_to_native,
                 );
                 #[cfg(feature = "std")]
-                if std::env::var("BADC_DUMP_SSA").is_ok() {
+                if super::ssa_dump::enabled(native) {
                     eprintln!(
                         "; --- SSA dump (ok={ok}) ent_pc={ent_pc} ---",
                         ok = ok,
@@ -1510,7 +1510,7 @@ pub(super) fn lower(
                 }
                 if !ok {
                     #[cfg(feature = "std")]
-                    if std::env::var("BADC_STRICT_SSA_EMIT").is_ok() {
+                    if native.strict_ssa_emit || std::env::var("BADC_STRICT_SSA_EMIT").is_ok() {
                         return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                             &alloc::format!(
                                 "ssa emit (x86_64): function at ent_pc {op_pc} contains an op outside the implemented subset",

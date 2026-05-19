@@ -1138,6 +1138,15 @@ pub struct NativeOptions {
     /// path is the DWARF blob -- gives byte-identical
     /// production binaries useful for golden-hash bisection.
     pub debug_info: bool,
+    /// Print each SSA function's IR + allocator output to stderr
+    /// before lowering. Same as `--dump-asm` for native code: a
+    /// diagnostic emitted alongside the build. Off by default.
+    pub dump_ssa: bool,
+    /// Treat any SSA-emit per-function bail as a hard error
+    /// instead of falling back to the pool walker. Useful when
+    /// driving the SSA path toward parity on a fresh target so
+    /// coverage gaps surface immediately. Off by default.
+    pub strict_ssa_emit: bool,
 }
 
 /// Distinguishes "produce an executable" from "produce a
@@ -1180,7 +1189,23 @@ impl NativeOptions {
             regalloc: RegallocMode::Ssa,
             output_kind: OutputKind::Executable,
             debug_info: true,
+            dump_ssa: false,
+            strict_ssa_emit: false,
         }
+    }
+
+    /// Print the SSA IR + allocation for every function. Same
+    /// observability shape as `--dump-asm`.
+    pub const fn with_dump_ssa(mut self) -> Self {
+        self.dump_ssa = true;
+        self
+    }
+
+    /// Treat any per-function SSA-emit bail as a hard error
+    /// instead of falling back to the pool walker.
+    pub const fn with_strict_ssa_emit(mut self) -> Self {
+        self.strict_ssa_emit = true;
+        self
     }
 
     /// Set [`Self::optimize`] = true and return self.

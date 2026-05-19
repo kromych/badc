@@ -164,6 +164,8 @@ fn main() {
     // opts back into the original pool emitter, `--regalloc=o0`
     // forces single-bank pool allocation.
     let mut regalloc_mode: badc::RegallocMode = badc::RegallocMode::Ssa;
+    let mut dump_ssa = false;
+    let mut strict_ssa_emit = false;
     let mut emit_debug_info = true;
     let mut output_path: Option<PathBuf> = None;
     let mut target_spec: Option<String> = None;
@@ -239,10 +241,12 @@ fn main() {
                 // bail falls back to the pool walk. --regalloc=pool
                 // forces the pool emitter for the whole program;
                 // --regalloc=o0 forces the single-bank pool shape.
-                // `BADC_DUMP_SSA` prints the IR + allocation for
-                // each function; `BADC_STRICT_SSA_EMIT` upgrades a
-                // bail to a hard error.
+                // `--dump-ssa` prints the IR + allocation for each
+                // function; `--strict-ssa-emit` upgrades a bail to
+                // a hard error.
             }
+            "--dump-ssa" => dump_ssa = true,
+            "--strict-ssa-emit" => strict_ssa_emit = true,
             "--no-debug" | "-g0" => emit_debug_info = false,
             "--dump-asm" => claim(&mut mode, Mode::DumpAsm),
             "--jit" => claim(&mut mode, Mode::Jit),
@@ -793,6 +797,12 @@ fn main() {
     };
     native_opts = native_opts.with_regalloc(regalloc_mode);
     native_opts = native_opts.with_debug_info(emit_debug_info);
+    if dump_ssa {
+        native_opts = native_opts.with_dump_ssa();
+    }
+    if strict_ssa_emit {
+        native_opts = native_opts.with_strict_ssa_emit();
+    }
     if mode == Mode::SharedLibrary {
         native_opts = native_opts.with_shared_library();
     }

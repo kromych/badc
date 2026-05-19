@@ -1782,9 +1782,12 @@ fn emit_intrinsic(
                     return false;
                 }
             };
-            // rax = &last + 16 ; mov [ap], rax
-            emit_lea_r_mem(code, Reg::RAX, last, 16);
-            emit_mov_mem_r(code, ap, 0, Reg::RAX);
+            // r10 = &last + 16 ; mov [ap], r10. SCRATCH_R10 sits
+            // outside the SSA allocator's gpr pool, so the
+            // computed address survives even when the allocator
+            // picked rax / r11 for ap or last.
+            emit_lea_r_mem(code, SCRATCH_R10, last, 16);
+            emit_mov_mem_r(code, ap, 0, SCRATCH_R10);
             true
         }
         I::VaArg => {
@@ -1804,10 +1807,14 @@ fn emit_intrinsic(
                     return false;
                 }
             };
-            // rd = *ap ; rax = rd + 16 ; *ap = rax
+            // rd = *ap (old cursor) ; r10 = rd + 16 ; *ap = r10.
+            // Use SCRATCH_R10 (outside the SSA allocator's gpr pool)
+            // for the advance so the allocator picking rax / r11 /
+            // any pool reg as rd doesn't get its old-cursor value
+            // overwritten by the `lea` before the store.
             emit_mov_r_mem(code, rd, ap, 0);
-            emit_lea_r_mem(code, Reg::RAX, rd, 16);
-            emit_mov_mem_r(code, ap, 0, Reg::RAX);
+            emit_lea_r_mem(code, SCRATCH_R10, rd, 16);
+            emit_mov_mem_r(code, ap, 0, SCRATCH_R10);
             true
         }
         I::VaEnd => {
@@ -1834,8 +1841,10 @@ fn emit_intrinsic(
                     return false;
                 }
             };
-            emit_mov_r_mem(code, Reg::RAX, src_p, 0);
-            emit_mov_mem_r(code, dst_p, 0, Reg::RAX);
+            // SCRATCH_R10 is outside the SSA allocator's gpr pool
+            // so neither dst_p nor src_p aliases it.
+            emit_mov_r_mem(code, SCRATCH_R10, src_p, 0);
+            emit_mov_mem_r(code, dst_p, 0, SCRATCH_R10);
             true
         }
         I::Alloca | I::SetjmpAArch64 | I::LongjmpAArch64 => {

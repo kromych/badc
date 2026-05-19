@@ -1504,13 +1504,16 @@ pub(super) fn lower(
                     program.tls_data.len(),
                     &mut bytecode_to_native,
                 );
+                #[cfg(feature = "std")]
+                if std::env::var("BADC_DUMP_SSA").is_ok() {
+                    eprintln!(
+                        "; --- SSA dump (ok={ok}) ent_pc={ent_pc} ---",
+                        ok = ok,
+                        ent_pc = func_ssa.ent_pc,
+                    );
+                    eprint!("{}", super::ssa_dump::dump_function(func_ssa, alloc_for),);
+                }
                 if !ok {
-                    #[cfg(feature = "std")]
-                    if std::env::var("BADC_DUMP_SSA").is_ok()
-                        || std::env::var("BADC_STRICT_SSA_EMIT").is_ok()
-                    {
-                        eprint!("{}", super::ssa_dump::dump_function(func_ssa, alloc_for),);
-                    }
                     #[cfg(feature = "std")]
                     if std::env::var("BADC_STRICT_SSA_EMIT").is_ok() {
                         return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(

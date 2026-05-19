@@ -853,7 +853,7 @@ fn emit_tls_addr(
     dst: Place,
     offset: i64,
     target: Target,
-    _tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
+    tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     tls_total_size: usize,
     frame: Frame,
 ) -> bool {
@@ -894,15 +894,62 @@ fn emit_tls_addr(
             true
         }
         Target::WindowsX64 => {
-            // PE/x86_64 TLS lowering uses rax + rcx as scratch
-            // ahead of the final lea. Both are in the SSA
-            // allocator's caller pool, so any value the allocator
-            // parked there gets clobbered. Bail and let the pool
-            // walk emit the standard TEB / _tls_index dance with
-            // its own rax / rcx reservation. The macOS aarch64 +
-            // Linux x86_64 paths above stay on the SSA emit.
-            bail_msg("TlsAddr: WindowsX64 -- fall back to pool path");
-            false
+            if !(i32::MIN as i64..=i32::MAX as i64).contains(&offset) {
+                bail_msg("TlsAddr: offset out of i32 range");
+                return false;
+            }
+            // PE/x86_64 TLS reads gs:[0x58] (the TEB) for the TLS
+            // array, indexes it by `_tls_index`, and adds the
+            // per-variable offset. The SSA allocator's pool covers
+            // rax + r11; the pool emitter's open-coded sequence
+            // uses rax + rcx as scratches, both reachable for the
+            // allocator. Use SCRATCH_R10 (r10, outside the pool)
+            // for the TEB pointer and `rd` itself for the index
+            // load -- the index is only live across one mov so
+            // reusing the destination is safe.
+            //
+            // mov r10, gs:[0x58]           ; TEB
+            // mov rd_w, [rip+disp32]       ; _tls_index slot
+            //                              ;   (zero-extends to rd)
+            // mov r10, [r10 + rd*8]        ; tls_array[idx]
+            // lea rd, [r10 + offset]
+            code.extend_from_slice(&[0x65, 0x4C, 0x8B, 0x14, 0x25, 0x58, 0, 0, 0]);
+            let mov_idx_offset = code.len();
+            // mov rd.lo_dword, [rip+disp32]:
+            //   REX.R = (rd >= 8); opcode 8B;
+            //   ModR/M mod=00 reg=rd.lo rm=101 (rip-relative);
+            //   disp32 = 0 (patched).
+            let rex_idx = if rd.0 >= 8 { 0x44 } else { 0x00 };
+            if rex_idx != 0 {
+                code.push(rex_idx);
+            }
+            code.push(0x8B);
+            code.push(0x05 | ((rd.0 & 7) << 3));
+            code.extend_from_slice(&0i32.to_le_bytes());
+            tls_index_fixups.push(super::TlsIndexFixup {
+                instr_offset: mov_idx_offset,
+            });
+            // mov r10, [r10 + rd*8]:
+            //   REX = 0x4A | (rd.high ? 0x02 : 0)  (W=1, X = rd>=8,
+            //                                       B=1 for r10 base)
+            //   opcode 8B; ModR/M mod=00 reg=010 rm=100 (SIB);
+            //   SIB scale=11 (*8), index=rd.lo, base=010 (r10).
+            let rex_idx_sib = 0x4A | (if rd.0 >= 8 { 0x02 } else { 0 });
+            code.push(rex_idx_sib);
+            code.push(0x8B);
+            code.push(0x14);
+            code.push(0xC2 | ((rd.0 & 7) << 3));
+            // lea rd, [r10 + offset]:
+            //   REX.W=1, REX.R = (rd >= 8), REX.B=1 (r10 base);
+            //   opcode 8D;
+            //   ModR/M mod=10 (disp32), reg=rd.lo, rm=010 (r10).
+            let rex_lea = 0x49 | (if rd.0 >= 8 { 0x04 } else { 0 });
+            code.push(rex_lea);
+            code.push(0x8D);
+            code.push(0x82 | ((rd.0 & 7) << 3));
+            code.extend_from_slice(&(offset as i32).to_le_bytes());
+            spill_dst_to_slot(code, dst, rd, frame);
+            true
         }
         _ => {
             bail_msg("TlsAddr: target not x86_64");

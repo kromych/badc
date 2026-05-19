@@ -988,11 +988,11 @@ fn emit_tls_addr(
     dst: Place,
     offset: i64,
     target: Target,
-    _tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
+    tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
 ) -> bool {
-    use super::aarch64::{enc_blr, enc_mrs_tpidr_el0};
+    use super::aarch64::{enc_blr, enc_ldr_reg_lsl3, enc_mrs_tpidr_el0};
     let Some(rd) = int_reg(dst) else {
         bail_msg("TlsAddr: dst not int reg");
         return false;
@@ -1009,14 +1009,26 @@ fn emit_tls_addr(
             true
         }
         Target::WindowsAarch64 => {
-            // Windows/aarch64 TLS uses a TEB[0x58] table indexed
-            // by `_tls_index` plus a final lea, with x16/x17 as
-            // scratch and x18 as the TEB pointer. The thread_local
-            // fixture failed on this lane during the SSA default
-            // flip; bail to the pool walk until the SSA emit
-            // covers the full Windows TLS shape.
-            bail_msg("TlsAddr: WindowsAarch64 -- fall back to pool path");
-            false
+            if offset >= 4096 {
+                bail_msg("TlsAddr: offset exceeds 12-bit add immediate");
+                return false;
+            }
+            // Windows/aarch64 TLS: x18 is the TEB pointer per the
+            // platform ABI; TEB+0x58 holds the per-thread TLS
+            // array. Index by `_tls_index` (loaded into x17) and
+            // pick the slot for our module. x16 and x17 are
+            // AAPCS64 scratches outside the SSA allocator pool
+            // (callee=[20..27], caller=[9..15]).
+            emit(code, enc_ldr_imm(Reg(16), Reg(18), 0x58));
+            let pair_off = code.len();
+            tls_index_fixups.push(super::TlsIndexFixup {
+                instr_offset: pair_off,
+            });
+            emit(code, enc_adrp(Reg(17), 0));
+            emit(code, enc_ldr32_imm(Reg(17), Reg(17), 0));
+            emit(code, enc_ldr_reg_lsl3(Reg(16), Reg(16), Reg(17)));
+            emit(code, enc_add_imm(rd, Reg(16), offset as u32));
+            true
         }
         Target::MacOSAarch64 => {
             let descriptor_index = match macho_tlv_descriptors

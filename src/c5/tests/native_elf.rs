@@ -295,6 +295,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("local_array_partial_init_zero.c", 0),
     ("ssa_call_result_spill.c", 0),
     ("ssa_bail_fixup_rollback.c", 0),
+    ("ssa_fp_routing.c", 0),
     ("struct_initializers.c", 0),
     ("enum_tag_types.c", 0),
     ("bitfields.c", 0),

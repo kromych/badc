@@ -615,6 +615,51 @@ pub(super) fn emit_movq_xmm_r_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp:
     emit_i32(code, disp);
 }
 
+/// `MOVSD xmm, [base+disp32]` -- load 8 bytes (scalar double) into
+/// the low quad of an XMM register, zeroing the rest. Encoding:
+/// `F2 0F 10 /r`. SIB-driven mod=10/disp32 form matches the other
+/// xmm memory helpers.
+pub(super) fn emit_movsd_xmm_mem(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: i32) {
+    emit_byte(code, 0xF2);
+    if xmm.high() || base.high() {
+        emit_byte(code, rex(false, xmm.high(), false, base.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x10);
+    emit_byte(code, modrm(0b10, xmm.lo(), 0b100));
+    emit_byte(code, sib(0, 0b100, base.lo()));
+    emit_i32(code, disp);
+}
+
+/// `MOVSD [base+disp32], xmm` -- store 8 bytes from the low quad of
+/// an XMM register. Encoding: `F2 0F 11 /r`.
+pub(super) fn emit_movsd_mem_xmm(code: &mut Vec<u8>, base: Reg, disp: i32, xmm: Reg) {
+    emit_byte(code, 0xF2);
+    if xmm.high() || base.high() {
+        emit_byte(code, rex(false, xmm.high(), false, base.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x11);
+    emit_byte(code, modrm(0b10, xmm.lo(), 0b100));
+    emit_byte(code, sib(0, 0b100, base.lo()));
+    emit_i32(code, disp);
+}
+
+/// `MOVAPD xmm, xmm` -- register-to-register copy of a 128-bit
+/// SSE2 packed-double. The scalar form is overkill but
+/// instruction-size identical to MOVSD and avoids the
+/// merge-with-upper-half semantics of `MOVSD reg, reg`.
+/// Encoding: `66 0F 28 /r`.
+pub(super) fn emit_movapd_xmm_xmm(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_byte(code, 0x66);
+    if dst.high() || src.high() {
+        emit_byte(code, rex(false, dst.high(), false, src.high()));
+    }
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0x28);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
 /// `MOV AL, imm8` -- set the low byte of rax to a constant. Used
 /// to seed the SysV variadic-ABI XMM-register count in AL just
 /// before a `printf`-style call.

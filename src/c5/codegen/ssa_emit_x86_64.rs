@@ -914,7 +914,6 @@ fn emit_tls_addr(
             // mov r10, [r10 + rd*8]        ; tls_array[idx]
             // lea rd, [r10 + offset]
             code.extend_from_slice(&[0x65, 0x4C, 0x8B, 0x14, 0x25, 0x58, 0, 0, 0]);
-            let mov_idx_offset = code.len();
             // mov rd.lo_dword, [rip+disp32]:
             //   REX.R = (rd >= 8); opcode 8B;
             //   ModR/M mod=00 reg=rd.lo rm=101 (rip-relative);
@@ -923,6 +922,13 @@ fn emit_tls_addr(
             if rex_idx != 0 {
                 code.push(rex_idx);
             }
+            // The writer's TLS-index fixup patches the 4-byte
+            // displacement at `instr_offset + 2`. With a REX
+            // prefix the disp32 lives at `instr_offset + 3` if
+            // we anchor to the REX, so anchor to the opcode byte
+            // instead -- `instr_offset + 2` then lands on the
+            // disp32 regardless of whether a REX was emitted.
+            let mov_idx_offset = code.len();
             code.push(0x8B);
             code.push(0x05 | ((rd.0 & 7) << 3));
             code.extend_from_slice(&0i32.to_le_bytes());

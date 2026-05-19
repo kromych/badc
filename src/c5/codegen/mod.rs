@@ -1178,9 +1178,9 @@ impl Default for NativeOptions {
     /// `BADC_DEFAULT_REGALLOC` env var when present
     /// (`pool` / `o0` / `ssa`) so a CI lane can flip the entire
     /// build to the pool emitter without recompiling badc.
+    #[cfg(feature = "std")]
     fn default() -> Self {
         let mut opts = Self::new();
-        #[cfg(feature = "std")]
         if let Ok(v) = std::env::var("BADC_DEFAULT_REGALLOC") {
             opts.regalloc = match v.as_str() {
                 "pool" => RegallocMode::Pool,
@@ -1190,6 +1190,10 @@ impl Default for NativeOptions {
             };
         }
         opts
+    }
+    #[cfg(not(feature = "std"))]
+    fn default() -> Self {
+        Self::new()
     }
 }
 

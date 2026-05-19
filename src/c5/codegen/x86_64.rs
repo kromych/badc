@@ -1422,23 +1422,19 @@ pub(super) fn lower(
     // frame because the libc startup stub leaves rbp = 0 in the
     // caller of `_start -> main`. Each `Op::Ent` refreshes this
     // and it stays set until the next `Op::Ent`.
-    // SSA emit gate. Active when `--regalloc=ssa` runs alongside
-    // `BADC_USE_SSA_EMIT` in the environment. Lift the program
+    // SSA emit gate. Active when `--regalloc=ssa` is in effect
+    // (the default; `--regalloc=pool` opts out). Lift the program
     // into SSA + run the linear-scan allocator once; per-function
     // dispatch happens at each `Op::Ent` in the main walk below.
     // `BADC_STRICT_SSA_EMIT` flips a failing emit from
     // pool-fallback to a hard error -- useful when driving the
-    // SSA path toward parity. Pool path remains the default for
-    // every shape the SSA emit doesn't yet cover.
+    // SSA path toward parity. Pool path remains the per-function
+    // fallback for any shape the SSA emit doesn't yet cover.
     let ssa_funcs: alloc::vec::Vec<super::ssa::FunctionSsa>;
     let ssa_allocs: alloc::vec::Vec<super::ssa_alloc::Allocation>;
     let mut ssa_lookup: alloc::collections::BTreeMap<usize, usize> =
         alloc::collections::BTreeMap::new();
-    #[cfg(feature = "std")]
-    let use_ssa_emit = matches!(native.regalloc, super::RegallocMode::Ssa)
-        && std::env::var("BADC_USE_SSA_EMIT").is_ok();
-    #[cfg(not(feature = "std"))]
-    let use_ssa_emit = false;
+    let use_ssa_emit = matches!(native.regalloc, super::RegallocMode::Ssa);
     if matches!(native.regalloc, super::RegallocMode::Ssa) {
         ssa_funcs = super::ssa::lift_program(program)?;
         ssa_allocs = ssa_funcs
@@ -1471,14 +1467,13 @@ pub(super) fn lower(
         if matches!(op, Op::Ent) {
             current_func = funcs.get(&op_pc).copied().unwrap_or_default();
             in_main = op_pc == program.entry_pc;
-            // SSA emit replacement: when --regalloc=ssa is on AND
-            // BADC_USE_SSA_EMIT is in the environment, try the SSA
-            // path first. A failing function falls back to the
-            // pool walk for this `Op::Ent` so progress isn't
-            // gated on full SSA-emit coverage. Setting
-            // `BADC_STRICT_SSA_EMIT` flips the policy to a hard
-            // error -- used when driving the SSA path toward
-            // parity.
+            // SSA emit replacement: when --regalloc=ssa is on
+            // (the default), try the SSA path first. A failing
+            // function falls back to the pool walk for this
+            // `Op::Ent` so progress isn't gated on full SSA-emit
+            // coverage. Setting `BADC_STRICT_SSA_EMIT` flips the
+            // policy to a hard error -- used when driving the
+            // SSA path toward parity.
             if use_ssa_emit {
                 let ssa_idx = ssa_lookup.get(&op_pc).copied().ok_or_else(|| {
                     C5Error::Compile(crate::c5::error::fmt_internal_err(

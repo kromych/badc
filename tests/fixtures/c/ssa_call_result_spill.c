@@ -6,8 +6,8 @@
 // stack residue. Mirrors aarch64's `move_call_result`, which
 // already handled the Spill case.
 //
-// The fixture compiles cleanly under both the pool path and the
-// SSA emit path. Run with BADC_USE_SSA_EMIT=1 BADC_SSA_MAX_CALLEE_GPRS=2
+// The fixture compiles cleanly under both `--regalloc=pool` and
+// the default SSA emit. Set BADC_SSA_MAX_CALLEE_GPRS=2 and
 // BADC_SSA_MAX_CALLER_GPRS=1 to force every call return through a
 // spill slot.
 

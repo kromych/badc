@@ -1202,15 +1202,17 @@ pub(super) fn lower(
     // Run the regalloc analyzer once if `--optimize` is on. The
     // plan is consulted at each Op::Ent / Op::Psh / pop op so we
     // keep it in scope for the entire walk.
-    // Pool sizing follows the user-picked allocator mode:
-    //   * Pool: callee + caller bank, the full classifier (default).
+    // Pool sizing follows the user-picked allocator mode. The pool
+    // sizes still matter under Ssa: a per-function SSA-emit bail
+    // falls back to the pool walk for that function, which reads
+    // these sizes.
+    //   * Ssa:  callee + caller bank (default). The pool path is
+    //           the per-function fallback.
+    //   * Pool: callee + caller bank, the full classifier.
     //   * O0:   callee bank only -- caller-saved disabled, every
     //           pseudo push lands in callee-saved. Drops the perf
     //           win on short-lived nested arith but cuts the
     //           allocator's bookkeeping surface in half.
-    //   * Ssa:  not yet routed here; falls back to Pool until the
-    //           SSA lowering lands. The CLI gate refuses --regalloc=ssa
-    //           before then, so this branch is currently unreachable.
     let pool_sizes = match native.regalloc {
         super::RegallocMode::Pool | super::RegallocMode::Ssa => POOL_SIZES,
         super::RegallocMode::O0 => regalloc::PoolSizes {
@@ -1226,26 +1228,19 @@ pub(super) fn lower(
     let plan: Option<&RegStackPlan> = plan_storage.as_ref();
     let mut reg_state = RegState::new(native.optimize, plan);
 
-    // SSA observability: when --regalloc=ssa is requested, run
-    // the lift + allocator on every function and dump the result
-    // if BADC_DUMP_SSA is set. When `BADC_USE_SSA_EMIT` is also
-    // set, the SSA emit replaces the pool path per function: at
-    // each `Op::Ent`, the wire-in below tries `emit_function`;
-    // on success it records the SSA bytes and skips the pool
-    // walk for that function's PC range. The current handler
-    // coverage isn't wide enough for real programs, so the gate
-    // panics on any function the SSA emit can't lower -- the
-    // failure message + the dump are how the next handler gap
-    // gets surfaced.
+    // SSA emit gate. Active when `--regalloc=ssa` is in effect
+    // (the default; `--regalloc=pool` opts out). The lift + the
+    // allocator run on every function and the result feeds
+    // `emit_function` at each `Op::Ent`; on success the SSA bytes
+    // replace the pool walk for that function's PC range. Setting
+    // `BADC_DUMP_SSA` prints each function's IR + allocation;
+    // `BADC_STRICT_SSA_EMIT` flips a failing emit from
+    // pool-fallback to a hard error.
     let ssa_funcs: alloc::vec::Vec<super::ssa::FunctionSsa>;
     let ssa_allocs: alloc::vec::Vec<super::ssa_alloc::Allocation>;
     let mut ssa_lookup: alloc::collections::BTreeMap<usize, usize> =
         alloc::collections::BTreeMap::new();
-    #[cfg(feature = "std")]
-    let use_ssa_emit = matches!(native.regalloc, super::RegallocMode::Ssa)
-        && std::env::var("BADC_USE_SSA_EMIT").is_ok();
-    #[cfg(not(feature = "std"))]
-    let use_ssa_emit = false;
+    let use_ssa_emit = matches!(native.regalloc, super::RegallocMode::Ssa);
     if matches!(native.regalloc, super::RegallocMode::Ssa) {
         ssa_funcs = super::ssa::lift_program(program)?;
         ssa_allocs = ssa_funcs
@@ -1327,12 +1322,12 @@ pub(super) fn lower(
         pc += 1;
         if matches!(op, Op::Ent) {
             current_func = funcs.get(&op_pc).copied().unwrap_or_default();
-            // SSA emit replacement: when --regalloc=ssa is on AND
-            // BADC_USE_SSA_EMIT is in the environment, replace the
-            // pool path's bytecode walk for this function with the
-            // SSA emit's output. A failure here panics with the
-            // SSA dump rendered to stderr -- the gate is opt-in,
-            // and silent fallback would obscure the gap.
+            // SSA emit replacement: when --regalloc=ssa is on
+            // (the default), replace the pool path's bytecode
+            // walk for this function with the SSA emit's output.
+            // A failing function falls back to the pool walk for
+            // this `Op::Ent`; `BADC_STRICT_SSA_EMIT` flips the
+            // policy to a hard error.
             if use_ssa_emit {
                 let ssa_idx = ssa_lookup.get(&op_pc).copied().ok_or_else(|| {
                     C5Error::Compile(crate::c5::error::fmt_internal_err(

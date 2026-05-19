@@ -10,10 +10,8 @@
 // crypto_stream_salsa20_xor: it forces enough fixups in the
 // bailed function (an SSA Mcpy that the emit doesn't yet handle
 // under tight register caps) that the rollback path's
-// completeness matters. Run with the cap knobs to exercise:
-//   BADC_USE_SSA_EMIT=1
-//   BADC_SSA_MAX_CALLEE_GPRS=2
-//   BADC_SSA_MAX_CALLER_GPRS=1
+// completeness matters. Run under the cap knobs to exercise:
+//   BADC_SSA_MAX_CALLEE_GPRS=2 BADC_SSA_MAX_CALLER_GPRS=1
 
 typedef unsigned char u8;
 typedef unsigned int u32;

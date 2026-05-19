@@ -1057,19 +1057,23 @@ pub(crate) struct FuncFixup {
 }
 
 /// Register-allocator pick. Threaded through [`NativeOptions`] so
-/// the lowering can A/B between the pool-based regalloc (the
-/// historical pseudo-stack pool) and the SSA path (under
-/// construction). Default is [`RegallocMode::Pool`]; the `O0`
-/// variant disables the caller-saved bank so the codegen produces
-/// a simpler, slightly larger shape; the `Ssa` variant is gated
-/// behind a flag until it reaches parity on every CI lane.
+/// the lowering can A/B between the SSA-lift + linear-scan path
+/// (default) and the pool-based regalloc (the historical
+/// pseudo-stack pool). The `O0` variant disables the caller-saved
+/// bank in the pool emitter so the codegen produces a simpler,
+/// slightly larger shape.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum RegallocMode {
-    /// Pool classifier with both callee-saved and caller-saved
-    /// banks. Driven by `--optimize`; off by default and the
-    /// lowering takes the no-pool path that lands every push on
-    /// the real stack.
+    /// Per-function basic-block + SSA-value lift, fed into a
+    /// linear-scan allocator that pre-colours host arg registers
+    /// at call sites. Default since the SSA emit reached parity
+    /// with the pool path on every CI lane.
     #[default]
+    Ssa,
+    /// Pool classifier with both callee-saved and caller-saved
+    /// banks. Engaged by `--regalloc=pool`; the lowering walks the
+    /// bytecode op-by-op and lands every push on the real stack
+    /// when the pool runs out.
     Pool,
     /// Single callee-saved bank, no across-call taint logic. The
     /// caller bank is disabled so a value spanning a call costs
@@ -1077,11 +1081,6 @@ pub enum RegallocMode {
     /// simpler analyzer; useful as a debugging baseline when the
     /// pool / SSA shape is suspect.
     O0,
-    /// Per-function basic-block + SSA-value lift, fed into a
-    /// linear-scan allocator that pre-colours host arg registers
-    /// at call sites. Not yet wired into the lowering -- gated
-    /// behind tasks #7-#10 of the regalloc-replacement plan.
-    Ssa,
 }
 
 /// User-controllable knobs for the native lowering pass. Distinct
@@ -1113,12 +1112,11 @@ pub struct NativeOptions {
     /// described in the per-backend module docs -- run regardless
     /// of this flag, since neither has a tradeoff worth gating.
     pub optimize: bool,
-    /// Register allocator selection. The pool-based shape (default)
-    /// is what `--optimize` engages today; the simpler O0 shape
-    /// disables the caller-saved bank so every pseudo push lands
-    /// in the callee-saved bank; the SSA shape (under construction)
-    /// will build per-function basic blocks and run a linear-scan
-    /// allocator over them. See `regalloc.rs` for the pool
+    /// Register allocator selection. The SSA shape (default)
+    /// lifts the bytecode into per-function basic blocks and runs
+    /// a linear-scan allocator; the pool-based shape engages the
+    /// per-op pseudo-stack pool; the O0 shape disables the
+    /// pool's caller-saved bank. See `regalloc.rs` for the pool
     /// classifier and `ssa.rs` for the SSA infrastructure.
     pub regalloc: RegallocMode,
     /// Pick the kind of binary the writer should produce.
@@ -1179,7 +1177,7 @@ impl NativeOptions {
     pub const fn new() -> Self {
         Self {
             optimize: false,
-            regalloc: RegallocMode::Pool,
+            regalloc: RegallocMode::Ssa,
             output_kind: OutputKind::Executable,
             debug_info: true,
         }

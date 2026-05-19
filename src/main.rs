@@ -160,17 +160,10 @@ fn main() {
     let mut track_pointers = false;
     let mut trace = false;
     let mut optimize_flag = false;
-    // The env var `BADC_USE_SSA_EMIT` opts into the SSA emit
-    // path. The codegen already gates emit on both the env var
-    // and `RegallocMode::Ssa`; setting the env var implies the
-    // mode here so external runners (demo smokes, CI matrix
-    // entries) don't also need to thread `--regalloc=ssa` through
-    // every badc invocation.
-    let mut regalloc_mode: badc::RegallocMode = if std::env::var("BADC_USE_SSA_EMIT").is_ok() {
-        badc::RegallocMode::Ssa
-    } else {
-        badc::RegallocMode::Pool
-    };
+    // SSA-lift + linear-scan emit is the default; `--regalloc=pool`
+    // opts back into the original pool emitter, `--regalloc=o0`
+    // forces single-bank pool allocation.
+    let mut regalloc_mode: badc::RegallocMode = badc::RegallocMode::Ssa;
     let mut emit_debug_info = true;
     let mut output_path: Option<PathBuf> = None;
     let mut target_spec: Option<String> = None;
@@ -240,13 +233,15 @@ fn main() {
                         std::process::exit(1);
                     }
                 };
-                // --regalloc=ssa runs the SSA lift + allocator
-                // on every function (gated by BADC_DUMP_SSA for
-                // human-readable output) and emits native bytes
-                // via the pool path until the SSA emit reaches
-                // parity. Code is identical to --regalloc=pool;
-                // the extra work is observable but invisible to
-                // the final binary.
+                // --regalloc=ssa (default) runs the SSA lift +
+                // linear-scan allocator on every function and emits
+                // native bytes through `ssa_emit_*`. A per-function
+                // bail falls back to the pool walk. --regalloc=pool
+                // forces the pool emitter for the whole program;
+                // --regalloc=o0 forces the single-bank pool shape.
+                // `BADC_DUMP_SSA` prints the IR + allocation for
+                // each function; `BADC_STRICT_SSA_EMIT` upgrades a
+                // bail to a hard error.
             }
             "--no-debug" | "-g0" => emit_debug_info = false,
             "--dump-asm" => claim(&mut mode, Mode::DumpAsm),

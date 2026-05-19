@@ -2304,25 +2304,33 @@ fn lower_op(
                     )));
                 }
                 crate::c5::op::Intrinsic::VaStart => {
-                    // `__builtin_va_start(&ap, &last)`. c5 stack
-                    // top = &ap (last Op::Psh), r13 = &last.
-                    // *ap = &last + 16 (next c5 slot).
-                    emit_mov_r_mem(code, Reg::R10, Reg::RSP, 0);
-                    emit_add_rsp_imm32(code, 16);
-                    emit_lea_r_mem(code, Reg::R11, Reg::R13, 16);
-                    emit_mov_mem_r(code, Reg::R10, 0, Reg::R11);
+                    // `__builtin_va_start(&ap, &last)`. &ap was the
+                    // last argument pushed; r13 holds &last. The
+                    // analyzer under -O may have left &ap either on
+                    // the real c5 stack (Op::Psh -> push) or
+                    // promoted to a pool register; pop_lhs_reg
+                    // handles both cases and keeps the pseudo-stack
+                    // tracking balanced across function boundaries.
+                    let ap_src = pop_lhs_reg(code, reg_state);
+                    // *ap = &last + 16 (next c5 slot). rax is not
+                    // in the pool reg set pop_lhs_reg can hand
+                    // back, so the lea / store sequence cannot
+                    // clobber ap_src.
+                    emit_lea_r_mem(code, Reg::RAX, Reg::R13, 16);
+                    emit_mov_mem_r(code, ap_src, 0, Reg::RAX);
                 }
                 crate::c5::op::Intrinsic::VaArg => {
                     // `__builtin_va_arg(&ap)` returns a pointer
                     // to the just-vacated 8-byte slot and
                     // advances *ap by one c5 slot. r13 = &ap on
                     // entry. r13 becomes the slot pointer on
-                    // exit.
+                    // exit. r11 is in the caller-saved pool used
+                    // for pseudo-promoted Psh values under -O, so
+                    // use rax as the second scratch -- rax is
+                    // outside both pool banks.
                     emit_mov_r_mem(code, Reg::R10, Reg::R13, 0);
-                    // r11 = r10 + 16, the new cursor.
-                    emit_lea_r_mem(code, Reg::R11, Reg::R10, 16);
-                    emit_mov_mem_r(code, Reg::R13, 0, Reg::R11);
-                    // Return value = old cursor.
+                    emit_lea_r_mem(code, Reg::RAX, Reg::R10, 16);
+                    emit_mov_mem_r(code, Reg::R13, 0, Reg::RAX);
                     emit_mov_rr(code, Reg::R13, Reg::R10);
                 }
                 crate::c5::op::Intrinsic::VaEnd => {
@@ -2330,11 +2338,16 @@ fn lower_op(
                     // arg sits in r13 -- nothing to do.
                 }
                 crate::c5::op::Intrinsic::VaCopy => {
-                    // `__builtin_va_copy(&dst, &src)`. *dst = *src.
-                    emit_mov_r_mem(code, Reg::R10, Reg::RSP, 0);
-                    emit_add_rsp_imm32(code, 16);
-                    emit_mov_r_mem(code, Reg::R11, Reg::R13, 0);
-                    emit_mov_mem_r(code, Reg::R10, 0, Reg::R11);
+                    // `__builtin_va_copy(&dst, &src)`. &dst was the
+                    // last argument pushed; r13 holds &src. On the
+                    // c5-cursor model va_list is one pointer, so
+                    // the copy is `*dst = *src`. pop_lhs_reg
+                    // unifies the pseudo / real push paths; rax is
+                    // outside the pool reg set pop_lhs_reg can hand
+                    // back.
+                    let dst_src = pop_lhs_reg(code, reg_state);
+                    emit_mov_r_mem(code, Reg::RAX, Reg::R13, 0);
+                    emit_mov_mem_r(code, dst_src, 0, Reg::RAX);
                 }
             }
         }

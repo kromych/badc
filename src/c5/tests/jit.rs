@@ -186,7 +186,14 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("ssa_call_result_spill.c", 0),
     ("ssa_bail_fixup_rollback.c", 0),
     ("ssa_fp_routing.c", 0),
-    ("ssa_callee_saved_x19.c", 0),
+    // ssa_callee_saved_x19.c uses atexit() to drive the regression
+    // -- its onExit handler must run for the broken x19 save to
+    // surface. Under JIT the handler's PC is in mmap'd code that
+    // the JIT framework unmaps on `jit_run` return; the test
+    // process's `__cxa_finalize` then dereferences a dead pointer
+    // at exit and SIGSEGVs. The native ELF / Mach-O / PE parity
+    // tables exercise the same fixture as a child process where
+    // the atexit chain stays valid.
     ("ssa_va_arg_loop.c", 0),
     ("ssa_variadic_fp_arg.c", 0),
     ("ssa_fp_compare_nan.c", 0),

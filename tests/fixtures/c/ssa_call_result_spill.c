@@ -11,7 +11,10 @@
 // BADC_SSA_MAX_CALLER_GPRS=1 to force every call return through a
 // spill slot.
 
-typedef unsigned long u64;
+// `unsigned long` is 4 bytes on LLP64 (Win64) and 8 on LP64 (every
+// 64-bit Unix); use `unsigned long long` so the SHA-512-shaped
+// 64-bit arithmetic survives every target.
+typedef unsigned long long u64;
 
 static u64 rot(u64 x, int c) { return (x >> c) | (x << (64 - c)); }
 static u64 ch(u64 x, u64 y, u64 z) { return (x & y) ^ (~x & z); }
@@ -33,7 +36,7 @@ int main(void) {
     // Computed by the pool-path build; locks in the exact arithmetic
     // result so a Call-result truncation or addition skip would
     // surface as a non-zero exit code.
-    if (a != 0x30a55d88de61bb19UL) return 1;
-    if (h != 0x440000080000c800UL) return 2;
+    if (a != 0x30a55d88de61bb19ULL) return 1;
+    if (h != 0x440000080000c800ULL) return 2;
     return 0;
 }

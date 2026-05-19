@@ -348,12 +348,12 @@ fn marshal_int_arg(
             // Materialize the value into the destination xmm
             // directly when possible; route a spill or an int-reg
             // f64 bit pattern through the scratch first.
-            let src = match materialize_fp_shifted(
-                code, arg_place, Reg(r), frame, scratch_bytes,
-            ) {
+            let src = match materialize_fp_shifted(code, arg_place, Reg(r), frame, scratch_bytes) {
                 Some(s) => s,
                 None => {
-                    bail_msg(&alloc::format!("{site}: fp arg not in fp reg / spill / int reg"));
+                    bail_msg(&alloc::format!(
+                        "{site}: fp arg not in fp reg / spill / int reg"
+                    ));
                     return false;
                 }
             };
@@ -1081,13 +1081,7 @@ fn emit_store(
 /// xmm1; here we build the mask on the fly into `SCRATCH_XMM15`
 /// (movq xmm, r10 after loading the 1 << 63 immediate into r10)
 /// and xor in place.
-fn emit_fneg(
-    code: &mut Vec<u8>,
-    dst: Place,
-    value: u32,
-    alloc: &Allocation,
-    frame: Frame,
-) -> bool {
+fn emit_fneg(code: &mut Vec<u8>, dst: Place, value: u32, alloc: &Allocation, frame: Frame) -> bool {
     let src_place = alloc
         .places
         .get(value as usize)

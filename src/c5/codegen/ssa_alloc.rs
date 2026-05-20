@@ -277,11 +277,29 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         }
     }
 
+    // Only callee-saved registers need prologue / epilogue
+    // save and restore. Caller-saved registers are preserved
+    // by the caller across the function's call sites (via the
+    // `must_be_callee` filter above the allocator only places
+    // live-across-call values into callee-saved registers, so a
+    // caller-saved register's value never needs to survive past
+    // the function's own emit). Filtering here keeps the
+    // prologue's `str xN, [sp, ...]` sequence to exactly the
+    // registers AAPCS64 / SysV / Win64 require the callee to
+    // preserve.
+    let gpr_used_callee: Vec<u8> = gpr_used
+        .into_iter()
+        .filter(|r| banks.callee_gprs.contains(r))
+        .collect();
+    let fp_used_callee: Vec<u8> = fp_used
+        .into_iter()
+        .filter(|r| banks.callee_fprs.contains(r))
+        .collect();
     Allocation {
         places,
         spill_count,
-        gpr_used: gpr_used.into_iter().collect(),
-        fp_used: fp_used.into_iter().collect(),
+        gpr_used: gpr_used_callee,
+        fp_used: fp_used_callee,
     }
 }
 

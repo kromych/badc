@@ -111,22 +111,24 @@ impl Frame {
     }
 }
 
-/// Emit a diagnostic when the SSA path falls back. Active only
-/// with `BADC_DUMP_SSA=1` so production builds stay quiet.
 fn bail_msg(reason: &str) {
-    #[cfg(feature = "std")]
-    if std::env::var("BADC_DUMP_SSA").is_ok() {
-        eprintln!("ssa emit: bailed -- {reason}");
-    }
-    let _ = reason;
+    super::ssa_emit_common::bail_msg("aarch64", reason);
 }
 
 fn bail(reason: &str, value: u32, place: Place) {
     #[cfg(feature = "std")]
     if std::env::var("BADC_DUMP_SSA").is_ok() {
-        eprintln!("ssa emit: bailed -- {reason} v{value} place={:?}", place);
+        eprintln!("ssa emit aarch64: bailed -- {reason} v{value} place={:?}", place);
     }
     let _ = (reason, value, place);
+}
+
+/// SP-relative byte offset of allocator spill `slot` in the
+/// current function's frame. Thin wrapper over the cross-target
+/// math helper so the per-call sites read as `spill_off(frame,
+/// slot)` rather than the four-argument call.
+fn spill_off(frame: Frame, slot: u32) -> u32 {
+    super::ssa_emit_common::spill_slot_sp_offset(frame.frame_bytes, frame.alloc_spill_base, slot)
 }
 
 /// Branch placeholder recorded mid-walk; resolved once every
@@ -657,7 +659,7 @@ fn emit_inst(
             };
             load_imm64(code, rd, *value as u64);
             if let Place::Spill(slot) = dst {
-                let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+                let sp_off = spill_off(frame, slot);
                 emit(code, enc_str_imm(rd, Reg(31), sp_off));
             }
             true
@@ -682,7 +684,7 @@ fn emit_inst(
                 emit(code, enc_mov_reg(rd, Reg(19)));
             }
             if let Place::Spill(slot) = dst {
-                let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+                let sp_off = spill_off(frame, slot);
                 emit(code, enc_str_imm(rd, Reg(31), sp_off));
             }
             true
@@ -700,7 +702,7 @@ fn emit_inst(
                 emit(code, enc_mov_reg(rd, Reg(19)));
             }
             if let Place::Spill(slot) = dst {
-                let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+                let sp_off = spill_off(frame, slot);
                 emit(code, enc_str_imm(rd, Reg(31), sp_off));
             }
             true
@@ -832,7 +834,7 @@ fn emit_inst(
                 Place::Spill(target_slot) => {
                     emit(code, enc_ldr_imm(scratch.secondary, Reg(31), sp_off));
                     let spill_off =
-                        frame.frame_bytes - frame.alloc_spill_base - (target_slot + 1) * 8;
+                        spill_off(frame, target_slot);
                     emit(code, enc_str_imm(scratch.secondary, Reg(31), spill_off));
                     true
                 }
@@ -869,7 +871,7 @@ fn emit_inst(
             };
             emit(code, enc_fneg_d(dd, dn));
             if let Place::Spill(slot) = dst {
-                let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+                let sp_off = spill_off(frame, slot);
                 emit(code, enc_str_d_imm(dd, Reg(31), sp_off));
             }
             true
@@ -894,7 +896,7 @@ fn emit_inst(
                     };
                     emit(code, enc_scvtf_d_x(dd, rn));
                     if let Place::Spill(slot) = dst {
-                        let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+                        let sp_off = spill_off(frame, slot);
                         emit(code, enc_str_d_imm(dd, Reg(31), sp_off));
                     }
                     true
@@ -911,7 +913,7 @@ fn emit_inst(
                     };
                     emit(code, enc_fcvtzs_x_d(rd, dn));
                     if let Place::Spill(slot) = dst {
-                        let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+                        let sp_off = spill_off(frame, slot);
                         emit(code, enc_str_imm(rd, Reg(31), sp_off));
                     }
                     true
@@ -1460,7 +1462,7 @@ fn emit_call_ext(
             emit(code, enc_mov_reg(rd, Reg(0)));
         }
     } else if let Place::Spill(slot) = dst {
-        let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+        let sp_off = spill_off(frame, slot);
         emit(code, enc_str_imm(Reg(0), Reg(31), sp_off));
     }
     true
@@ -1569,7 +1571,7 @@ fn emit_call(
                 emit(code, enc_mov_reg(rd, Reg(0)));
             }
         } else if let Place::Spill(slot) = dst {
-            let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+            let sp_off = spill_off(frame, slot);
             emit(code, enc_str_imm(Reg(0), Reg(31), sp_off));
         }
         return true;
@@ -1697,7 +1699,7 @@ fn move_call_result(code: &mut Vec<u8>, dst: Place, frame: Frame) {
             }
         }
         Place::Spill(slot) => {
-            let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+            let sp_off = spill_off(frame, slot);
             // The allocator gives Spill the same 8-byte slot
             // regardless of result kind, so store the wide
             // pattern via x0 directly.
@@ -1823,7 +1825,7 @@ fn emit_call_indirect(
             emit(code, enc_mov_reg(rd, Reg(0)));
         }
     } else if let Place::Spill(slot) = dst {
-        let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+        let sp_off = spill_off(frame, slot);
         emit(code, enc_str_imm(Reg(0), Reg(31), sp_off));
     }
     true
@@ -1907,7 +1909,7 @@ fn emit_mcpy(
             emit(code, enc_mov_reg(rd, dst_r));
         }
     } else if let Place::Spill(slot) = dst_place {
-        let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+        let sp_off = spill_off(frame, slot);
         emit(code, enc_str_imm(dst_r, Reg(31), sp_off));
     }
     true
@@ -1915,11 +1917,7 @@ fn emit_mcpy(
 
 /// Translate a c5-stack slot index (`Op::Lea`'s operand) into a
 /// byte offset relative to fp. Mirror of the pool path's
-/// `lea_offset_bytes`: locals (off < 0) at off*8, params (off >=
-/// 2) at (off-1)*16.
-fn c5_slot_to_fp_offset(off: i64) -> i64 {
-    if off >= 2 { (off - 1) * 16 } else { off * 8 }
-}
+use super::ssa_emit_common::c5_slot_to_fp_offset;
 
 fn emit_local_addr(code: &mut Vec<u8>, dst: Place, off: i64, frame: Frame) -> bool {
     // Materialise the address through scratch.primary when the
@@ -2002,7 +2000,7 @@ fn int_or_spill_scratch(dst: Place, scratch: &ScratchPool) -> Option<Reg> {
 /// (the address already landed in the chosen reg).
 fn spill_local_addr_to_dst(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) {
     if let Place::Spill(slot) = dst {
-        let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+        let sp_off = spill_off(frame, slot);
         emit(code, enc_str_imm(src, Reg(31), sp_off));
     }
 }
@@ -2041,7 +2039,7 @@ fn emit_load(
         emit(code, enc_ldr_s_imm(dd, rn, 0));
         emit(code, enc_fcvt_d_s(dd, dd));
         if let Place::Spill(slot) = dst {
-            let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+            let sp_off = spill_off(frame, slot);
             emit(code, enc_str_d_imm(dd, Reg(31), sp_off));
         }
         return true;
@@ -2062,7 +2060,7 @@ fn emit_load(
         LoadKind::F32 => unreachable!(),
     }
     if let Place::Spill(slot) = dst {
-        let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+        let sp_off = spill_off(frame, slot);
         emit(code, enc_str_imm(rd, Reg(31), sp_off));
     }
     true
@@ -2123,7 +2121,7 @@ fn emit_store(
                 emit(code, enc_fmov_x_to_d(rd, scratch.primary));
             }
         } else if let Place::Spill(slot) = dst {
-            let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+            let sp_off = spill_off(frame, slot);
             emit(code, enc_str_d_imm(dn, Reg(31), sp_off));
         }
         return true;
@@ -2155,7 +2153,7 @@ fn emit_store(
             emit(code, enc_mov_reg(rd, rs));
         }
     } else if let Place::Spill(slot) = dst {
-        let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+        let sp_off = spill_off(frame, slot);
         emit(code, enc_str_imm(rs, Reg(31), sp_off));
     }
     true
@@ -2202,7 +2200,7 @@ fn emit_binop(
         };
         emit(code, arith(dd, dn, dm));
         if let Place::Spill(slot) = dst {
-            let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+            let sp_off = spill_off(frame, slot);
             emit(code, enc_str_d_imm(dd, Reg(31), sp_off));
         }
         return true;
@@ -2224,7 +2222,7 @@ fn emit_binop(
         emit(code, enc_fcmp_d(dn, dm));
         emit(code, enc_cset(rd, cond));
         if let Place::Spill(slot) = dst {
-            let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+            let sp_off = spill_off(frame, slot);
             emit(code, enc_str_imm(rd, Reg(31), sp_off));
         }
         return true;
@@ -2253,7 +2251,7 @@ fn emit_binop(
         emit(code, enc_cmp_reg(rn, rm));
         emit(code, enc_cset(rd, cond));
         if let Some(slot) = spill_to {
-            let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+            let sp_off = spill_off(frame, slot);
             emit(code, enc_str_imm(rd, Reg(31), sp_off));
         }
         return true;
@@ -2267,7 +2265,7 @@ fn emit_binop(
         emit(code, divider);
         emit(code, enc_msub(rd, scratch.secondary, rm, rn));
         if let Some(slot) = spill_to {
-            let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+            let sp_off = spill_off(frame, slot);
             emit(code, enc_str_imm(rd, Reg(31), sp_off));
         }
         return true;
@@ -2288,7 +2286,7 @@ fn emit_binop(
     };
     emit(code, word);
     if let Some(slot) = spill_to {
-        let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+        let sp_off = spill_off(frame, slot);
         emit(code, enc_str_imm(rd, Reg(31), sp_off));
     }
     true
@@ -2370,7 +2368,7 @@ fn emit_binop_imm(
         emit(code, enc_cmp_reg(rn, rm));
         emit(code, enc_cset(rd, cond));
         if let Some(slot) = spill_to {
-            let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+            let sp_off = spill_off(frame, slot);
             emit(code, enc_str_imm(rd, Reg(31), sp_off));
         }
         return true;
@@ -2398,7 +2396,7 @@ fn emit_binop_imm(
     };
     emit(code, word);
     if let Some(slot) = spill_to {
-        let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8;
+        let sp_off = spill_off(frame, slot);
         emit(code, enc_str_imm(rd, Reg(31), sp_off));
     }
     true
@@ -2428,7 +2426,7 @@ fn materialize_int_shifted(
     match place {
         Place::IntReg(r) => Some(Reg(r)),
         Place::Spill(slot) => {
-            let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8 + sp_shift;
+            let sp_off = spill_off(frame, slot) + sp_shift;
             emit(code, enc_ldr_imm(scratch, Reg(31), sp_off));
             Some(scratch)
         }
@@ -2454,7 +2452,7 @@ fn materialize_fp_shifted(
     match place {
         Place::FpReg(r) => Some(r),
         Place::Spill(slot) => {
-            let sp_off = frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8 + sp_shift;
+            let sp_off = spill_off(frame, slot) + sp_shift;
             emit(code, enc_ldr_d_imm(scratch_d, Reg(31), sp_off));
             Some(scratch_d)
         }

@@ -85,11 +85,7 @@ impl Frame {
 }
 
 fn bail_msg(reason: &str) {
-    #[cfg(feature = "std")]
-    if std::env::var("BADC_DUMP_SSA").is_ok() {
-        eprintln!("ssa emit x86_64: bailed -- {reason}");
-    }
-    let _ = reason;
+    super::ssa_emit_common::bail_msg("x86_64", reason);
 }
 
 /// Extract the int reg from a `Place`, or `None` if it's not an
@@ -246,7 +242,8 @@ fn int_or_spill_dst(dst: Place) -> Option<Reg> {
 /// - (N+1)*8` is `frame_bytes - alloc_spill_base - (N+1)*8` from
 /// rsp. Mirror of the aarch64 module's formula.
 fn spill_slot_sp_offset(frame: Frame, slot: u32) -> i32 {
-    (frame.frame_bytes - frame.alloc_spill_base - (slot + 1) * 8) as i32
+    super::ssa_emit_common::spill_slot_sp_offset(frame.frame_bytes, frame.alloc_spill_base, slot)
+        as i32
 }
 
 /// If `dst` is a `Spill` place, write the just-produced value in
@@ -997,13 +994,7 @@ fn emit_tls_addr(
     }
 }
 
-/// Translate a c5-stack slot index (`Op::Lea`'s operand) into a
-/// byte offset relative to rbp. Mirror of the aarch64 module's
-/// helper: locals (`off < 0`) at `off*8`, params (`off >= 2`) at
-/// `(off-1)*16`.
-fn c5_slot_to_fp_offset(off: i64) -> i64 {
-    if off >= 2 { (off - 1) * 16 } else { off * 8 }
-}
+use super::ssa_emit_common::c5_slot_to_fp_offset;
 
 fn emit_load(
     code: &mut Vec<u8>,

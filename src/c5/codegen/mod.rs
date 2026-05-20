@@ -49,6 +49,7 @@ mod ssa_alloc;
 #[cfg(feature = "std")]
 mod ssa_dump;
 mod ssa_emit_aarch64;
+mod ssa_emit_common;
 mod ssa_emit_x86_64;
 mod x86_64;
 

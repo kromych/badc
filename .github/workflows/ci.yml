@@ -668,13 +668,21 @@ jobs:
         run: python demos/lua/smoke.py || test $? -eq 2
 
   strict-ssa-emit:
-    name: strict-ssa-emit (ubuntu-latest)
+    name: strict-ssa-emit (${{ matrix.os }})
     # The SSA emit must cover every shape the demo smokes
-    # produce. This lane sets BADC_STRICT_SSA_EMIT so any
+    # produce. This matrix sets BADC_STRICT_SSA_EMIT so any
     # per-function bail becomes a hard compile error, catching
-    # coverage regressions immediately. Once every demo holds
-    # strict, the pool emit can be removed.
-    runs-on: ubuntu-latest
+    # coverage regressions on each supported target.
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+          - macos-latest
+          - windows-latest
+          - windows-11-arm
+    runs-on: ${{ matrix.os }}
     env:
       BADC_STRICT_SSA_EMIT: '1'
     steps:
@@ -685,7 +693,7 @@ jobs:
           python-version: '3.x'
       - uses: Swatinem/rust-cache@v2
         with:
-          key: strict-ssa-emit
+          key: strict-ssa-emit-${{ matrix.os }}
       - name: cargo test (strict ssa)
         run: cargo test --locked --verbose
       - name: build release (strict ssa)
@@ -695,6 +703,10 @@ jobs:
       - name: miniz smoke (strict ssa)
         run: python demos/miniz/smoke.py
       - name: lua smoke (strict ssa)
+        # lua's smoke exits 2 to flag the "tests built, ran" path.
+        # PowerShell on Windows has its own exit-code idiom -- the
+        # POSIX-style `||` shape works on bash and pwsh alike.
+        shell: bash
         run: python demos/lua/smoke.py || test $? -eq 2
       - name: stb smoke (strict ssa)
         run: python demos/stb/smoke.py

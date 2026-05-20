@@ -666,3 +666,37 @@ jobs:
         run: python demos/miniz/smoke.py
       - name: lua smoke (pool default)
         run: python demos/lua/smoke.py || test $? -eq 2
+
+  strict-ssa-emit:
+    name: strict-ssa-emit (ubuntu-latest)
+    # The SSA emit must cover every shape the demo smokes
+    # produce. This lane sets BADC_STRICT_SSA_EMIT so any
+    # per-function bail becomes a hard compile error, catching
+    # coverage regressions immediately. Once every demo holds
+    # strict, the pool emit can be removed.
+    runs-on: ubuntu-latest
+    env:
+      BADC_STRICT_SSA_EMIT: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: strict-ssa-emit
+      - name: cargo test (strict ssa)
+        run: cargo test --locked --verbose
+      - name: build release (strict ssa)
+        run: cargo build --release --locked
+      - name: sqlite3 smoke (strict ssa)
+        run: python demos/sqlite3/smoke.py
+      - name: miniz smoke (strict ssa)
+        run: python demos/miniz/smoke.py
+      - name: lua smoke (strict ssa)
+        run: python demos/lua/smoke.py || test $? -eq 2
+      - name: stb smoke (strict ssa)
+        run: python demos/stb/smoke.py
+      - name: bearssl smoke (strict ssa)
+        run: python demos/bearssl/smoke.py

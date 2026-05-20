@@ -415,8 +415,8 @@ pub(super) fn lift_function(
     // immediately after a terminator.
     let block_starts = collect_block_starts(text, ent_pc, end_pc);
     // PC -> block index (only set for PCs that start a block).
-    let mut pc_to_block: alloc::collections::BTreeMap<usize, BlockId> =
-        alloc::collections::BTreeMap::new();
+    let mut pc_to_block: super::ssa_emit_common::FxIntMap<usize, BlockId> =
+        super::ssa_emit_common::FxIntMap::default();
     for (i, &pc) in block_starts.iter().enumerate() {
         pc_to_block.insert(pc, i as BlockId);
     }
@@ -1101,8 +1101,8 @@ fn compute_block_entry_depths(
     block_starts: &[usize],
 ) -> Result<Vec<u32>, C5Error> {
     let mut depths = vec![None::<u32>; block_starts.len()];
-    let mut pc_to_block: alloc::collections::BTreeMap<usize, usize> =
-        alloc::collections::BTreeMap::new();
+    let mut pc_to_block: super::ssa_emit_common::FxIntMap<usize, usize> =
+        super::ssa_emit_common::FxIntMap::default();
     for (i, &pc) in block_starts.iter().enumerate() {
         pc_to_block.insert(pc, i);
     }

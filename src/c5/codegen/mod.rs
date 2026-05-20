@@ -238,9 +238,9 @@ pub(super) struct FuncMeta {
 /// match on `Psh; Imm 8; Mul` from the c5 `va_start` macro
 /// expansion would not survive the optimizer's immediate-arith
 /// fusion).
-pub(super) fn scan_func_meta(program: &Program) -> alloc::collections::BTreeMap<usize, FuncMeta> {
+pub(super) fn scan_func_meta(program: &Program) -> ssa_emit_common::FxIntMap<usize, FuncMeta> {
     let text = &program.text;
-    let mut funcs = alloc::collections::BTreeMap::new();
+    let mut funcs = ssa_emit_common::FxIntMap::default();
     let mut pc = 0usize;
     while pc < text.len() {
         let op = match Op::from_i64(text[pc]) {

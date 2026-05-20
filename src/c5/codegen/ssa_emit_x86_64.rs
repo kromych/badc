@@ -396,48 +396,6 @@ pub(super) fn emit_function(
     let frame = Frame::for_function(func, alloc);
     let abi = target.abi();
 
-    // Per-function filters used to bisect the Store-spill-addr
-    // regression (see emit_load's TODO note). All three are
-    // diagnostic-only and accept comma-separated bytecode entry
-    // PCs; they have no effect when the variables are absent.
-    //   BADC_SSA_ONLY_PC -- limit SSA emit to these functions
-    //                       (every other function bails to pool).
-    //   BADC_SSA_SKIP_PC -- force these functions to bail.
-    //   BADC_SSA_MAX_FN  -- bail every function whose ent_pc
-    //                       exceeds the given threshold.
-    #[cfg(feature = "std")]
-    {
-        if let Ok(s) = std::env::var("BADC_SSA_ONLY_PC") {
-            let mut found = false;
-            for tok in s.split(',') {
-                if let Ok(only) = tok.parse::<usize>()
-                    && func.ent_pc == only
-                {
-                    found = true;
-                    break;
-                }
-            }
-            if !found {
-                return false;
-            }
-        }
-        if let Ok(s) = std::env::var("BADC_SSA_SKIP_PC") {
-            for tok in s.split(',') {
-                if let Ok(skip) = tok.parse::<usize>()
-                    && func.ent_pc == skip
-                {
-                    return false;
-                }
-            }
-        }
-        if let Ok(s) = std::env::var("BADC_SSA_MAX_FN")
-            && let Ok(max) = s.parse::<usize>()
-            && func.ent_pc > max
-        {
-            return false;
-        }
-    }
-
     emit_prologue(code, func, alloc, frame, abi);
     // Record the post-prologue offset against the bytecode word
     // that follows `Op::Ent` (its single operand). The DWARF CFI

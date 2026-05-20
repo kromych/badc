@@ -7,9 +7,7 @@
 // already handled the Spill case.
 //
 // The fixture compiles cleanly under both `--regalloc=pool` and
-// the default SSA emit. Set BADC_SSA_MAX_CALLEE_GPRS=2 and
-// BADC_SSA_MAX_CALLER_GPRS=1 to force every call return through a
-// spill slot.
+// the default SSA emit.
 
 // `unsigned long` is 4 bytes on LLP64 (Win64) and 8 on LP64 (every
 // 64-bit Unix); use `unsigned long long` so the SHA-512-shaped

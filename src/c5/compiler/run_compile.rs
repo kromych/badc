@@ -378,6 +378,10 @@ impl Compiler {
                 if self.lex.tk == '(' || preconsumed_params.is_some() {
                     if !was_sys {
                         self.symbols[id_idx].class = Token::Fun as i64;
+                        if self.symbols[id_idx].decl_line == 0 {
+                            self.symbols[id_idx].decl_line = self.lex.line;
+                            self.symbols[id_idx].decl_in_main_source = self.in_main_source();
+                        }
                         // C99 6.2.2 linkage: `static` at file scope
                         // is internal; everything else (bare or
                         // `extern`) is external. `static` on either
@@ -810,6 +814,43 @@ impl Compiler {
                             });
                         }
                     }
+                    // Collect unused-parameter and unused-local
+                    // diagnostics for the function's top-level
+                    // bindings. Inner-block locals were already
+                    // checked in `parse_block_stmt` at their
+                    // block exit. Must run before the loop below
+                    // restores the outer binding -- once `class`
+                    // is overwritten the Token::Loc test no
+                    // longer holds. Names starting with `_` are
+                    // suppressed (gcc / clang `-Wunused`
+                    // convention).
+                    let mut unused: Vec<(usize, String, usize, bool)> = Vec::new();
+                    for (i, sym) in self.symbols.iter().enumerate() {
+                        if sym.class != Token::Loc as i64
+                            || sym.was_referenced
+                            || !sym.decl_in_main_source
+                            || sym.name.is_empty()
+                            || sym.name.starts_with('_')
+                        {
+                            continue;
+                        }
+                        let is_param = param_set.contains(&i);
+                        // sym.val < 0 -> stack-frame local
+                        // sym.val >= 2 -> parameter slot
+                        // (slots 0/1 are reserved for caller's
+                        // saved rbp / saved-ret-addr; never
+                        // user-visible names)
+                        if is_param || sym.val < 0 {
+                            unused.push((sym.decl_line, sym.name.clone(), i, is_param));
+                        }
+                    }
+                    for (line, name, _i, is_param) in unused {
+                        if is_param {
+                            self.warn_at(line, alloc::format!("unused parameter `{name}`"));
+                        } else {
+                            self.warn_at(line, alloc::format!("unused variable `{name}`"));
+                        }
+                    }
                     for sym in self.symbols.iter_mut() {
                         if sym.class == Token::Loc as i64 {
                             Self::restore_shadowed_symbol(sym);
@@ -1111,6 +1152,41 @@ impl Compiler {
             }
             self.next()?;
         }
+        self.warn_unused_static_functions();
         Ok(())
+    }
+
+    /// Emit one `unused function` diagnostic per defined-here
+    /// Token::Fun whose `was_referenced` flag is still false and
+    /// whose `linkage` is `Internal`. C99 6.2.2: a `static`
+    /// file-scope function is reachable only from the current
+    /// translation unit, so an unreferenced one really is dead
+    /// code. External-linkage functions cannot be flagged here --
+    /// another TU may call them through the link-unit symbol
+    /// table; the linker is responsible for the cross-TU
+    /// reachability check. Names starting with `_` are suppressed
+    /// (gcc / clang `-Wunused-function` convention). `main` is
+    /// suppressed regardless of linkage: it is the program's
+    /// entry, called by the runtime stub the codegen emits.
+    fn warn_unused_static_functions(&mut self) {
+        use crate::c5::symbol::Linkage;
+        let mut unused: Vec<(usize, String)> = Vec::new();
+        for sym in self.symbols.iter() {
+            if sym.class != Token::Fun as i64
+                || !sym.defined_here
+                || sym.linkage != Linkage::Internal
+                || sym.was_referenced
+                || !sym.decl_in_main_source
+                || sym.name.is_empty()
+                || sym.name.starts_with('_')
+                || sym.name == "main"
+            {
+                continue;
+            }
+            unused.push((sym.decl_line, sym.name.clone()));
+        }
+        for (line, name) in unused {
+            self.warn_at(line, alloc::format!("unused function `{name}`"));
+        }
     }
 }

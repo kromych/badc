@@ -132,6 +132,9 @@ impl Compiler {
             } else {
                 self.symbols[loc_idx].class = Token::Loc as i64;
                 self.symbols[loc_idx].type_ = ty;
+                self.symbols[loc_idx].was_referenced = false;
+                self.symbols[loc_idx].decl_line = self.lex.line;
+                self.symbols[loc_idx].decl_in_main_source = self.in_main_source();
                 self.allocate_local_with_init(loc_idx, ty, array_size)?;
             }
             // Unconditional write: a stale fn-ptr lineage from a

@@ -600,6 +600,14 @@ pub struct Compiler {
     /// claim every PC came from the user's translation unit even
     /// when it actually originated inside a header.
     source_file_indices: Vec<u16>,
+    /// Label of the primary translation-unit source as supplied
+    /// through [`CompileOptions::source_label`]. Compared against
+    /// [`lexer::Lexer::file`] at declaration sites so unused-symbol
+    /// diagnostics can skip declarations that landed via
+    /// `#include`d headers (which the user can't act on from
+    /// this TU). Empty when the caller didn't set a label; the
+    /// preprocessor's `"<source>"` placeholder then stands in.
+    source_label: String,
     /// Per-function locals + parameters captured at body close,
     /// before the c5 shadow-symbol restore unwinds the binding.
     /// The DWARF emitter walks this list to attach
@@ -857,6 +865,7 @@ impl Compiler {
             source_functions: Vec::new(),
             source_files: Vec::new(),
             source_file_indices: Vec::new(),
+            source_label: opts.source_label.clone(),
             variables: Vec::new(),
             current_function_name: String::new(),
             fn_call_fixups: Vec::new(),

@@ -120,6 +120,7 @@ impl Compiler {
             if self.symbols[sym_idx].class == Token::Sys as i64 {
                 sym_idx = self.ensure_sys_trampoline_sym(sym_idx);
             }
+            self.symbols[sym_idx].was_referenced = true;
             let bc_pc = self.symbols[sym_idx].val;
             self.next()?;
             let bytes = (bc_pc as u64).to_le_bytes();

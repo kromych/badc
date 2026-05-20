@@ -36,6 +36,23 @@ impl Compiler {
             .push(alloc::format!("{file}:{line}: warning: {message}"));
     }
 
+    /// Whether the lexer's current file matches the primary
+    /// translation-unit source. Used at declaration sites to set
+    /// `Symbol::decl_in_main_source` so the unused-symbol
+    /// diagnostics emitted at block / TU exit can skip
+    /// declarations that landed via `#include`d headers. When the
+    /// caller (`CompileOptions::source_label`) didn't supply a
+    /// label, the preprocessor's `"<source>"` placeholder stands
+    /// in for the primary file.
+    pub(super) fn in_main_source(&self) -> bool {
+        let main = if self.source_label.is_empty() {
+            "<source>"
+        } else {
+            self.source_label.as_str()
+        };
+        self.lex.file == main
+    }
+
     /// Build a `C5Error::Compile` whose message follows the
     /// gcc / clang-shape convention everything else in this codebase
     /// uses for diagnostics:

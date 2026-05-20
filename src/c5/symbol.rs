@@ -166,6 +166,31 @@ pub(crate) struct Symbol {
     /// from a tentative definition that the parser is still
     /// waiting to resolve.
     pub is_extern_decl: bool,
+
+    /// True once the parser has emitted any reference to this
+    /// symbol after its declaration -- a read, a write, an
+    /// address-of, or a decay. Set by the expression parser's
+    /// identifier resolution path; consulted at block / function
+    /// exit to emit a C99-style "unused variable" diagnostic for
+    /// block-scope locals and parameters that were never
+    /// mentioned in the body.
+    pub was_referenced: bool,
+
+    /// Source line where this declaration was parsed. Captured at
+    /// declaration time so unused-variable diagnostics can point
+    /// at the declaration rather than the surrounding block's
+    /// closing brace.
+    pub decl_line: usize,
+
+    /// True if the declaration was parsed while the lexer was
+    /// reading the primary source (matched against
+    /// `Compiler::source_label`); false when the declaration came
+    /// from a header pulled in by `#include`. Used to suppress
+    /// unused-symbol diagnostics on header-internal static
+    /// helpers -- those are only dead with respect to the current
+    /// translation unit, and the header is the wrong place to
+    /// flag them.
+    pub decl_in_main_source: bool,
 }
 
 /// C99 6.2.2 linkage class. `None` is the default for block-scope

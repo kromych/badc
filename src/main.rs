@@ -479,7 +479,6 @@ fn main() {
     // Compile sources to LinkUnits.
     let mut units: Vec<badc::LinkUnit> = Vec::with_capacity(sources.len() + objects.len());
     let mut unit_source_paths: Vec<String> = Vec::with_capacity(sources.len());
-    let mut accumulated_warnings: Vec<String> = Vec::new();
     let mut accumulated_include_trace: Vec<String> = Vec::new();
     let multi_tu = sources.len() > 1;
     for src_path in &sources {
@@ -553,7 +552,6 @@ fn main() {
             }
         };
         unit.source_path = label.clone();
-        accumulated_warnings.extend(unit.warnings.iter().cloned());
         unit_source_paths.push(label);
         units.push(unit);
     }
@@ -727,7 +725,6 @@ fn main() {
             std::process::exit(1);
         }
     };
-    program.warnings.extend(accumulated_warnings);
     let _ = stdin_was_input;
     if program.source_path.is_empty() {
         program.source_path = path.clone();

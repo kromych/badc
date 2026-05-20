@@ -346,6 +346,9 @@ impl Compiler {
             } else {
                 self.symbols[loc_idx].class = Token::Loc as i64;
                 self.symbols[loc_idx].type_ = ty;
+                self.symbols[loc_idx].was_referenced = false;
+                self.symbols[loc_idx].decl_line = self.lex.line;
+                self.symbols[loc_idx].decl_in_main_source = self.in_main_source();
                 self.allocate_local_with_init(loc_idx, ty, array_size)?;
             }
 
@@ -379,6 +382,29 @@ impl Compiler {
             }
         }
         self.next()?;
+
+        // Emit the `unused variable` diagnostic for each Token::Loc
+        // declared in this block whose `was_referenced` flag is
+        // still false. Run before the loop below restores the
+        // outer bindings -- once `class` is overwritten the
+        // Token::Loc test no longer holds. Parameter slots
+        // (val >= 2) cannot be declared inside a `{ ... }` block;
+        // their diagnostic is emitted at function exit. Names
+        // starting with `_` are suppressed (gcc / clang
+        // `-Wunused` convention).
+        for (idx, _, _, _) in &block_symbols {
+            let sym = &self.symbols[*idx];
+            if sym.class == Token::Loc as i64
+                && sym.val < 0
+                && !sym.was_referenced
+                && sym.decl_in_main_source
+                && !sym.name.starts_with('_')
+            {
+                let name = sym.name.clone();
+                let line = sym.decl_line;
+                self.warn_at(line, alloc::format!("unused variable `{name}`"));
+            }
+        }
 
         // Restore shadowed bindings on block exit.
         for (idx, class, ty, val) in block_symbols.into_iter().rev() {

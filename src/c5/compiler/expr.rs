@@ -549,6 +549,7 @@ impl Compiler {
                             self.call_fp_arg_masks.push((jsrext_pc, mask));
                         }
                     } else if self.symbols[id_idx].class == Token::Fun as i64 {
+                        self.symbols[id_idx].was_referenced = true;
                         self.emit_op(Op::Jsr);
                         // Record a fixup so the operand gets re-resolved
                         // after the callee's body lands. `val == 0`
@@ -570,6 +571,7 @@ impl Compiler {
                         || self.symbols[id_idx].class == Token::Glo as i64
                     {
                         if self.symbols[id_idx].class == Token::Loc as i64 {
+                            self.symbols[id_idx].was_referenced = true;
                             self.emit_lea(self.symbols[id_idx].val);
                         } else {
                             self.emit_data_imm(self.symbols[id_idx].val);
@@ -627,6 +629,7 @@ impl Compiler {
                 self.emit_imm(self.symbols[id_idx].val);
                 self.ty = Ty::Int as i64;
             } else if self.symbols[id_idx].class == Token::Fun as i64 {
+                self.symbols[id_idx].was_referenced = true;
                 // Bare function reference (e.g. `fp = add;`). The value
                 // becomes a user-visible pointer, so it gets the CODE_BASE
                 // bias -- that lets the VM tell apart "function pointer"
@@ -668,6 +671,7 @@ impl Compiler {
                 self.ty = Ty::Int as i64 + Ty::Ptr as i64;
             } else {
                 if self.symbols[id_idx].class == Token::Loc as i64 {
+                    self.symbols[id_idx].was_referenced = true;
                     self.emit_lea(self.symbols[id_idx].val);
                 } else if self.symbols[id_idx].class == Token::Glo as i64
                     && self.symbols[id_idx].is_thread_local

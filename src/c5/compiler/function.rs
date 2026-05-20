@@ -181,6 +181,9 @@ impl Compiler {
             self.symbols[param_idx].class = Token::Loc as i64;
             self.symbols[param_idx].type_ = full_ty;
             self.symbols[param_idx].array_size = 0;
+            self.symbols[param_idx].was_referenced = false;
+            self.symbols[param_idx].decl_line = self.lex.line;
+            self.symbols[param_idx].decl_in_main_source = self.in_main_source();
             // Unconditional write: a regular scalar/pointer
             // parameter must not inherit a stale fn-ptr lineage
             // from a prior binding of the same name (the

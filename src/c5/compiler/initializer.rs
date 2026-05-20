@@ -542,6 +542,7 @@ impl Compiler {
                 let target_idx = self.lex.curr_id_idx;
                 let class = self.symbols[target_idx].class;
                 if class == Token::Fun as i64 {
+                    self.symbols[target_idx].was_referenced = true;
                     let bc_pc = self.symbols[target_idx].val;
                     self.next()?;
                     return Ok((bc_pc, InitElemReloc::Code(target_idx)));
@@ -580,10 +581,12 @@ impl Compiler {
             {
                 self.symbols[idx].class = Token::Fun as i64;
                 self.symbols[idx].type_ = Ty::Int as i64;
+                self.symbols[idx].was_referenced = true;
                 self.next()?;
                 return Ok((0, InitElemReloc::Code(idx)));
             }
             if class == Token::Fun as i64 {
+                self.symbols[idx].was_referenced = true;
                 let bc_pc = self.symbols[idx].val;
                 self.next()?;
                 return Ok((bc_pc, InitElemReloc::Code(idx)));

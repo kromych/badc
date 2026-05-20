@@ -38,3 +38,36 @@ pub(super) fn c5_slot_to_fp_offset(off: i64) -> i64 {
 pub(super) fn spill_slot_sp_offset(frame_bytes: u32, alloc_spill_base: u32, slot: u32) -> u32 {
     frame_bytes - alloc_spill_base - (slot + 1) * 8
 }
+
+/// Record the byte offset of the first post-prologue
+/// instruction against the bytecode word that follows
+/// `Op::Ent`. The DWARF CFI pass reads this to encode
+/// `DW_CFA_advance_loc <prologue bytes>` so the post-prologue
+/// CFA / saved-reg rule installs at the right PC.
+pub(super) fn record_post_prologue_pc(
+    func: &super::ssa::FunctionSsa,
+    bytecode_to_native: &mut [usize],
+    code_len: usize,
+) {
+    let post_prologue_pc = func.ent_pc + crate::c5::op::Op::Ent.word_size();
+    if post_prologue_pc < bytecode_to_native.len() {
+        bytecode_to_native[post_prologue_pc] = code_len;
+    }
+}
+
+/// Record the native byte offset of a block's first
+/// instruction against its bytecode PC. Skips the entry block
+/// because the outer codegen walk already pinned the
+/// function's `Op::Ent` PC to the prologue start; overwriting
+/// it would redirect every `bl <function>` to land past the
+/// prologue's setup.
+pub(super) fn record_block_start_pc(
+    block_idx: usize,
+    block_start_pc: usize,
+    bytecode_to_native: &mut [usize],
+    code_len: usize,
+) {
+    if block_idx > 0 && block_start_pc < bytecode_to_native.len() {
+        bytecode_to_native[block_start_pc] = code_len;
+    }
+}

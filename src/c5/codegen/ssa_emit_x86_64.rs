@@ -91,10 +91,7 @@ fn bail_msg(reason: &str) {
 /// Extract the int reg from a `Place`, or `None` if it's not an
 /// integer register.
 fn int_reg(place: Place) -> Option<Reg> {
-    match place {
-        Place::IntReg(r) => Some(Reg(r)),
-        _ => None,
-    }
+    place.int_reg_u8().map(Reg)
 }
 
 /// Scratch register for handlers whose dst is a spill: r10 is
@@ -115,10 +112,7 @@ const SCRATCH_XMM15: Reg = Reg(15);
 /// Extract the FP reg from a `Place`, or `None` if it's not an
 /// xmm register.
 fn fp_reg(place: Place) -> Option<Reg> {
-    match place {
-        Place::FpReg(r) => Some(Reg(r)),
-        _ => None,
-    }
+    place.fp_reg_u8().map(Reg)
 }
 
 /// Pick the working xmm a single-result FP-producing handler writes
@@ -392,17 +386,7 @@ pub(super) fn emit_function(
     let abi = target.abi();
 
     emit_prologue(code, func, alloc, frame, abi);
-    // Record the post-prologue offset against the bytecode word
-    // that follows `Op::Ent` (its single operand). The DWARF CFI
-    // pass reads this to encode `DW_CFA_advance_loc <prologue
-    // bytes>` so the post-prologue rule (CFA = rbp + 16, rbp at
-    // CFA-16, ret-addr at CFA-8) installs at the right PC; the
-    // pool walker populates the same word via its per-op
-    // bytecode_to_native update.
-    let post_prologue_pc = func.ent_pc + crate::c5::op::Op::Ent.word_size();
-    if post_prologue_pc < bytecode_to_native.len() {
-        bytecode_to_native[post_prologue_pc] = code.len();
-    }
+    super::ssa_emit_common::record_post_prologue_pc(func, bytecode_to_native, code.len());
 
     let mut block_offsets: Vec<usize> = alloc::vec![0; func.blocks.len()];
     let mut branch_fixups: Vec<BranchFixup> = Vec::new();
@@ -413,9 +397,12 @@ pub(super) fn emit_function(
 
     for (block_idx, block) in func.blocks.iter().enumerate() {
         block_offsets[block_idx] = code.len();
-        if block_idx > 0 && block.start_pc < bytecode_to_native.len() {
-            bytecode_to_native[block.start_pc] = code.len();
-        }
+        super::ssa_emit_common::record_block_start_pc(
+            block_idx,
+            block.start_pc,
+            bytecode_to_native,
+            code.len(),
+        );
         for v in block.inst_range.clone() {
             let inst = &func.insts[v as usize];
             let place = alloc.places.get(v as usize).copied().unwrap_or(Place::None);

@@ -199,17 +199,7 @@ pub(super) fn emit_function(
     let macho_tlv_descriptors_snapshot = macho_tlv_descriptors.len();
 
     emit_prologue(code, func, alloc, frame, abi);
-    // Record the post-prologue offset against the bytecode word
-    // that follows `Op::Ent` (its single operand). The DWARF CFI
-    // pass reads this to encode `DW_CFA_advance_loc <prologue
-    // bytes>` so the post-prologue rule (CFA = fp + 16, fp/lr at
-    // CFA-16/-8) installs at the right PC; the pool walker leaves
-    // the same word populated via its per-op bytecode_to_native
-    // update.
-    let post_prologue_pc = func.ent_pc + crate::c5::op::Op::Ent.word_size();
-    if post_prologue_pc < bytecode_to_native.len() {
-        bytecode_to_native[post_prologue_pc] = code.len();
-    }
+    super::ssa_emit_common::record_post_prologue_pc(func, bytecode_to_native, code.len());
 
     let mut block_offsets: Vec<usize> = alloc::vec![0; func.blocks.len()];
     let mut branch_fixups: Vec<BranchFixup> = Vec::new();
@@ -220,18 +210,12 @@ pub(super) fn emit_function(
 
     for (block_idx, block) in func.blocks.iter().enumerate() {
         block_offsets[block_idx] = code.len();
-        // Record the block's start pc in the bytecode -> native
-        // map so external relocations (function-pointer code
-        // relocs into absorbed sys trampolines, intra-program
-        // branches) can resolve. Skip the entry block: the outer
-        // walk already recorded the function's `Op::Ent` pc
-        // pointing at the prologue start, and overwriting it
-        // with the post-prologue code offset would redirect
-        // every `bl <function>` into the function body past its
-        // own setup.
-        if block_idx > 0 && block.start_pc < bytecode_to_native.len() {
-            bytecode_to_native[block.start_pc] = code.len();
-        }
+        super::ssa_emit_common::record_block_start_pc(
+            block_idx,
+            block.start_pc,
+            bytecode_to_native,
+            code.len(),
+        );
         for v in block.inst_range.clone() {
             let inst = &func.insts[v as usize];
             let place = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
@@ -2473,10 +2457,7 @@ fn materialize_fp_shifted(
 /// index (single-precision uses the low 32 bits of the same
 /// physical register).
 fn fp_reg(place: Place) -> Option<u8> {
-    match place {
-        Place::FpReg(r) => Some(r),
-        _ => None,
-    }
+    place.fp_reg_u8()
 }
 
 /// Emit the function epilogue + `ret` for a Return terminator.
@@ -2549,10 +2530,7 @@ fn emit_return(
 /// Extract the int reg from a `Place`, or None if it's not an
 /// int placement.
 fn int_reg(p: Place) -> Option<Reg> {
-    match p {
-        Place::IntReg(r) => Some(Reg(r)),
-        _ => None,
-    }
+    p.int_reg_u8().map(Reg)
 }
 
 #[cfg(test)]

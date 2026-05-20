@@ -55,6 +55,25 @@ pub(super) enum Place {
     None,
 }
 
+impl Place {
+    /// Integer-register index when the place is `IntReg`, else
+    /// `None`. The per-arch backends wrap the returned `u8` in
+    /// their own `Reg` newtype before encoding.
+    pub(super) fn int_reg_u8(self) -> Option<u8> {
+        if let Place::IntReg(r) = self { Some(r) } else { None }
+    }
+
+    /// FP-register index when the place is `FpReg`, else `None`.
+    pub(super) fn fp_reg_u8(self) -> Option<u8> {
+        if let Place::FpReg(r) = self { Some(r) } else { None }
+    }
+
+    /// Spill-slot index when the place is `Spill`, else `None`.
+    pub(super) fn spill_slot(self) -> Option<u32> {
+        if let Place::Spill(s) = self { Some(s) } else { None }
+    }
+}
+
 /// Per-function allocation result. Indexed by `ValueId`.
 #[derive(Debug, Clone)]
 pub(super) struct Allocation {

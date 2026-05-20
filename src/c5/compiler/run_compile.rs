@@ -824,11 +824,17 @@ impl Compiler {
                     // longer holds. Names starting with `_` are
                     // suppressed (gcc / clang `-Wunused`
                     // convention).
-                    let mut unused: Vec<(usize, String, usize, bool)> = Vec::new();
+                    enum UnusedKind {
+                        Variable,
+                        Parameter,
+                        ValueSet,
+                    }
+                    let mut unused: Vec<(usize, String, UnusedKind)> = Vec::new();
                     for (i, sym) in self.symbols.iter().enumerate() {
                         if sym.class != Token::Loc as i64
-                            || sym.was_referenced
                             || !sym.decl_in_main_source
+                            || sym.address_escaped
+                            || sym.was_read
                             || sym.name.is_empty()
                             || sym.name.starts_with('_')
                         {
@@ -840,16 +846,38 @@ impl Compiler {
                         // (slots 0/1 are reserved for caller's
                         // saved rbp / saved-ret-addr; never
                         // user-visible names)
-                        if is_param || sym.val < 0 {
-                            unused.push((sym.decl_line, sym.name.clone(), i, is_param));
+                        if !is_param && sym.val >= 0 {
+                            continue;
                         }
-                    }
-                    for (line, name, _i, is_param) in unused {
-                        if is_param {
-                            self.warn_at(line, alloc::format!("unused parameter `{name}`"));
+                        // `was_referenced` distinguishes "never
+                        // mentioned in any expression" (the only
+                        // write, if any, was the declaration
+                        // initializer) from "mentioned, but every
+                        // mention was a write". The latter is the
+                        // dead-store case. Parameters skip the
+                        // ValueSet diagnostic -- a parameter is
+                        // always implicitly written at call entry,
+                        // and warning "set but never used" on
+                        // every unused parameter would just be
+                        // noise.
+                        let kind = if sym.was_referenced && sym.was_written && !is_param {
+                            UnusedKind::ValueSet
+                        } else if is_param {
+                            UnusedKind::Parameter
                         } else {
-                            self.warn_at(line, alloc::format!("unused variable `{name}`"));
-                        }
+                            UnusedKind::Variable
+                        };
+                        unused.push((sym.decl_line, sym.name.clone(), kind));
+                    }
+                    for (line, name, kind) in unused {
+                        let msg = match kind {
+                            UnusedKind::Variable => alloc::format!("unused variable `{name}`"),
+                            UnusedKind::Parameter => alloc::format!("unused parameter `{name}`"),
+                            UnusedKind::ValueSet => {
+                                alloc::format!("variable `{name}` set but never used")
+                            }
+                        };
+                        self.warn_at(line, msg);
                     }
                     for sym in self.symbols.iter_mut() {
                         if sym.class == Token::Loc as i64 {

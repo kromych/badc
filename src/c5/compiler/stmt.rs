@@ -383,27 +383,39 @@ impl Compiler {
         }
         self.next()?;
 
-        // Emit the `unused variable` diagnostic for each Token::Loc
-        // declared in this block whose `was_referenced` flag is
-        // still false. Run before the loop below restores the
-        // outer bindings -- once `class` is overwritten the
-        // Token::Loc test no longer holds. Parameter slots
-        // (val >= 2) cannot be declared inside a `{ ... }` block;
-        // their diagnostic is emitted at function exit. Names
-        // starting with `_` are suppressed (gcc / clang
-        // `-Wunused` convention).
+        // Emit the unused-variable / unused-value diagnostics for
+        // each Token::Loc declared in this block. Run before the
+        // loop below restores the outer bindings -- once `class`
+        // is overwritten the Token::Loc test no longer holds.
+        // Parameter slots (val >= 2) cannot be declared inside a
+        // `{ ... }` block; their diagnostic is emitted at function
+        // exit. Names starting with `_` are suppressed (gcc /
+        // clang `-Wunused` convention).
         for (idx, _, _, _) in &block_symbols {
             let sym = &self.symbols[*idx];
-            if sym.class == Token::Loc as i64
-                && sym.val < 0
-                && !sym.was_referenced
-                && sym.decl_in_main_source
-                && !sym.name.starts_with('_')
+            if sym.class != Token::Loc as i64
+                || sym.val >= 0
+                || !sym.decl_in_main_source
+                || sym.address_escaped
+                || sym.was_read
+                || sym.name.starts_with('_')
             {
-                let name = sym.name.clone();
-                let line = sym.decl_line;
-                self.warn_at(line, alloc::format!("unused variable `{name}`"));
+                continue;
             }
+            let name = sym.name.clone();
+            let line = sym.decl_line;
+            // `was_referenced` is true when the parser emitted any
+            // expression mention (assignment LHS, increment, ...).
+            // Without it the only "write" possible is the
+            // declaration initializer, which the dead-store
+            // diagnostic should treat as "unused" rather than
+            // "set but never used".
+            let msg = if sym.was_referenced && sym.was_written {
+                alloc::format!("variable `{name}` set but never used")
+            } else {
+                alloc::format!("unused variable `{name}`")
+            };
+            self.warn_at(line, msg);
         }
 
         // Restore shadowed bindings on block exit.

@@ -62,6 +62,20 @@ impl Compiler {
         // result is in fn-ptr lineage (see
         // `fn_ptr_chain_depth`).
         self.pending.fn_ptr_chain_depth = -1;
+        // Any scalar load whose source is *not* the
+        // identifier-rvalue path (field access through `->` /
+        // `.`, array indexing through `Op::Brak`, deref through
+        // `*`, bitfield extraction) invalidates the tracked
+        // identifier whose load was previously trailing. Once
+        // the trailing Li belongs to a non-identifier address,
+        // a downstream `pop_trailing_scalar_load` /
+        // `rewrite_trailing_load_as_psh` must not retract
+        // `was_read` from the prior identifier. The
+        // identifier-rvalue path in `expr.rs` re-sets the field
+        // explicitly after its own load emit.
+        if is_scalar_load_op_val(op as i64) {
+            self.pending.last_loaded_local = None;
+        }
         self.text.push(op as i64);
         // Mirror text.len() one-for-one in source_lines /
         // source_functions / source_file_indices so a bc_pc
@@ -222,6 +236,26 @@ impl Compiler {
         Some(reload_op)
     }
 
+    /// Take the symbol index of the most recently emitted scalar
+    /// load of a `Token::Loc` and restore the symbol's
+    /// `was_read` flag to the value it held immediately before
+    /// the identifier-rvalue path tentatively set it. The
+    /// assignment / compound-assign / increment paths call this
+    /// after `rewrite_trailing_load_as_psh` (or
+    /// `pop_trailing_scalar_load`) so they can mark the lvalue
+    /// as written; paths that re-emit the load (compound assign,
+    /// post-/pre-increment) also force `was_read` back to true
+    /// after the call to reflect the surviving load. Returns
+    /// `None` when the trailing load wasn't a local (a global, a
+    /// dereferenced pointer rvalue, a field load through `->` /
+    /// `.`) -- the unused-symbol analysis tracks `Token::Loc`
+    /// only.
+    pub(super) fn take_last_loaded_local(&mut self) -> Option<usize> {
+        let idx = self.pending.last_loaded_local.take()?;
+        self.symbols[idx].was_read = self.pending.last_loaded_local_prior_was_read;
+        Some(idx)
+    }
+
     /// If the most recently emitted op is a scalar load (`Op::Lc`
     /// / `Op::Lw` / `Op::Li`), pop it -- the load's address-
     /// producing source op then sits at the new tail, ready to
@@ -239,6 +273,19 @@ impl Compiler {
             self.source_lines.pop();
             self.source_functions.pop();
             self.source_file_indices.pop();
+            // The load is gone -- the symbol's value never gets
+            // read at runtime through this path. Revert the
+            // tentative `was_read` the identifier-rvalue path
+            // set (preserving any genuine read recorded by an
+            // earlier expression) and record `address_escaped`:
+            // the caller (currently the unary `&` operator) is
+            // converting the rvalue load chain into an
+            // lvalue-address chain, and the resulting pointer
+            // can escape into surrounding code that the
+            // unused-symbol analysis can't follow.
+            if let Some(idx) = self.take_last_loaded_local() {
+                self.symbols[idx].address_escaped = true;
+            }
             true
         } else {
             false

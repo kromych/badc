@@ -571,7 +571,13 @@ impl Compiler {
                         || self.symbols[id_idx].class == Token::Glo as i64
                     {
                         if self.symbols[id_idx].class == Token::Loc as i64 {
+                            // Indirect call through a local function
+                            // pointer: the upcoming Li loads the
+                            // function address into the accumulator,
+                            // Jsri then consumes it. The load is a
+                            // real read of the local's value.
                             self.symbols[id_idx].was_referenced = true;
+                            self.symbols[id_idx].was_read = true;
                             self.emit_lea(self.symbols[id_idx].val);
                         } else {
                             self.emit_data_imm(self.symbols[id_idx].val);
@@ -670,7 +676,8 @@ impl Compiler {
                 self.emit_val(CODE_BASE as i64);
                 self.ty = Ty::Int as i64 + Ty::Ptr as i64;
             } else {
-                if self.symbols[id_idx].class == Token::Loc as i64 {
+                let identifier_is_local = self.symbols[id_idx].class == Token::Loc as i64;
+                if identifier_is_local {
                     self.symbols[id_idx].was_referenced = true;
                     self.emit_lea(self.symbols[id_idx].val);
                 } else if self.symbols[id_idx].class == Token::Glo as i64
@@ -703,6 +710,18 @@ impl Compiler {
                 // because the `.field` operator needs the struct's
                 // value type to look up offsets.
                 if is_array_var {
+                    if identifier_is_local {
+                        // Array decay produces the array's
+                        // address rather than a scalar value, so
+                        // the load-op path below never runs. The
+                        // address can be indexed, passed to a
+                        // helper, or stored into a pointer; none
+                        // of those are tracked here. Mark
+                        // `address_escaped` so the unused-symbol
+                        // analysis at scope exit conservatively
+                        // treats the array as read.
+                        self.symbols[id_idx].address_escaped = true;
+                    }
                     self.ty += Ty::Ptr as i64;
                     // Stash the array's element count so a
                     // surrounding `sizeof(<arr>)` can compute
@@ -726,10 +745,35 @@ impl Compiler {
                     let elem_size = self.size_of_type(elem_ty) as i64;
                     let dims = self.symbols[id_idx].array_dims.clone();
                     self.seed_multi_dim_strides(&dims, elem_size);
-                } else if !is_struct_value {
+                } else if is_struct_value {
+                    if identifier_is_local {
+                        // Struct value rvalue: the symbol's
+                        // address is the rvalue, no Li runs. Field
+                        // access through `.f` emits its own Li
+                        // against the field offset; treat the
+                        // struct itself as address-escaped so the
+                        // unused-symbol analysis stays conservative.
+                        self.symbols[id_idx].address_escaped = true;
+                    }
+                } else {
                     // Pointers to structs and every scalar type go
                     // through the normal load_op_for path.
                     self.emit_op(load_op_for(self.ty, self.target));
+                    if identifier_is_local {
+                        // Tentative: the load survives by default,
+                        // so the symbol's value is being read. The
+                        // assignment / address-of helpers revert
+                        // `was_read` to its prior state (preserving
+                        // genuine earlier reads) if they remove
+                        // the load from the bytecode before it
+                        // executes. `last_loaded_local` lets those
+                        // helpers know which symbol the trailing
+                        // load belonged to.
+                        self.pending.last_loaded_local = Some(id_idx);
+                        self.pending.last_loaded_local_prior_was_read =
+                            self.symbols[id_idx].was_read;
+                        self.symbols[id_idx].was_read = true;
+                    }
                     // Seed the fn-pointer chain depth from
                     // the symbol's recorded indirection. emit_op
                     // just cleared the field; re-set it now so the
@@ -1205,6 +1249,14 @@ impl Compiler {
             let reload = self
                 .rewrite_trailing_load_as_psh()
                 .ok_or_else(|| self.compile_err("bad lvalue in pre-increment"))?;
+            // ++/-- reads the prior value and stores a new one.
+            // `take_last_loaded_local` restored was_read to its
+            // pre-load state; force it true because the reload
+            // below re-emits the load.
+            if let Some(idx) = self.take_last_loaded_local() {
+                self.symbols[idx].was_read = true;
+                self.symbols[idx].was_written = true;
+            }
             self.emit_op(reload);
             if is_floating_scalar(self.ty) {
                 return Err(self.compile_err("floating-point ++/-- not yet implemented"));
@@ -1384,6 +1436,13 @@ impl Compiler {
                     // Scalar / pointer assignment: trailing load
                     // rewritten to a push so the address is
                     // preserved on the stack while the RHS evaluates.
+                    // `take_last_loaded_local` reverts the tentative
+                    // `was_read` the identifier-rvalue path set so
+                    // that prior real reads in the function are not
+                    // forgotten. Record the matching `was_written`.
+                    if let Some(idx) = self.take_last_loaded_local() {
+                        self.symbols[idx].was_written = true;
+                    }
                     let line = self.lex.line;
                     self.expr(Token::Assign as i64)?;
                     let rhs_is_zero = self.last_emit_is_zero();
@@ -1430,6 +1489,16 @@ impl Compiler {
                 let reload = self
                     .rewrite_trailing_load_as_psh()
                     .ok_or_else(|| self.compile_err("bad lvalue in compound assignment"))?;
+                // Compound assignment reads the prior value
+                // (`reload` re-emits the load below) and stores a
+                // new one. `take_last_loaded_local` reverted
+                // was_read to its prior state; force it true
+                // because the reload below survives, and add
+                // was_written.
+                if let Some(idx) = self.take_last_loaded_local() {
+                    self.symbols[idx].was_read = true;
+                    self.symbols[idx].was_written = true;
+                }
                 self.emit_op(reload);
                 // Push the current value so the binop can pop it.
                 self.emit_op(Op::Psh);
@@ -1824,6 +1893,15 @@ impl Compiler {
                 let reload = self
                     .rewrite_trailing_load_as_psh()
                     .ok_or_else(|| self.compile_err("bad lvalue in post-increment"))?;
+                // Post ++/-- reads the prior value and stores a
+                // new one. Same shape as the compound-assign
+                // path: revert via `take_last_loaded_local`,
+                // then force was_read true (reload re-emits the
+                // load) and was_written true.
+                if let Some(idx) = self.take_last_loaded_local() {
+                    self.symbols[idx].was_read = true;
+                    self.symbols[idx].was_written = true;
+                }
                 self.emit_op(reload);
                 if is_floating_scalar(self.ty) {
                     return Err(self.compile_err("floating-point ++/-- not yet implemented"));

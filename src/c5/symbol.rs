@@ -176,6 +176,33 @@ pub(crate) struct Symbol {
     /// mentioned in the body.
     pub was_referenced: bool,
 
+    /// True once a scalar load (`Op::Li` / `Op::Lc` / ...) of
+    /// this symbol's value survives in the bytecode -- i.e., the
+    /// runtime would actually read the stored value. Distinct
+    /// from `was_referenced`: the identifier-rvalue path
+    /// tentatively sets `was_read` when it emits the load, and
+    /// the assignment / address-of helpers retract the bit if
+    /// they remove the load before the program text is finalised.
+    /// Consulted alongside `was_written` to emit the "value
+    /// assigned but never used" diagnostic for dead stores.
+    pub was_read: bool,
+
+    /// True once a store (`Op::Si` / `Op::Sc` / ...) of this
+    /// symbol's lvalue surface has been emitted, or a declaration
+    /// initializer wrote the storage. Set by the assignment /
+    /// compound-assignment / increment paths in the expression
+    /// parser and by `allocate_local_with_init` for declarations
+    /// with `= ...`. Consulted alongside `was_read` to emit the
+    /// dead-store diagnostic.
+    pub was_written: bool,
+
+    /// True once the symbol's address has been taken (`&local`
+    /// or array decay). The address might escape to an unknown
+    /// callee that reads or writes the storage, so the
+    /// unused-symbol diagnostics suppress themselves
+    /// conservatively when this flag is set.
+    pub address_escaped: bool,
+
     /// Source line where this declaration was parsed. Captured at
     /// declaration time so unused-variable diagnostics can point
     /// at the declaration rather than the surrounding block's

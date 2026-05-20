@@ -292,6 +292,15 @@ impl Compiler {
         ty: i64,
         declared_array_size: i64,
     ) -> Result<(), C5Error> {
+        // C99 6.7.9: an initializer at the declaration site counts
+        // as a store from the perspective of the dead-store
+        // analysis. Mark before parsing the initializer so
+        // every shape below (scalar, array, struct, deferred-
+        // size) routes through the same flag without per-branch
+        // bookkeeping.
+        if self.lex.tk == Token::Assign {
+            self.symbols[loc_idx].was_written = true;
+        }
         if declared_array_size == -1 {
             if self.lex.tk != Token::Assign {
                 return Err(self.compile_err(format!(

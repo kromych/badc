@@ -63,7 +63,16 @@ fn warn_unused_variable_parameter_function() {
             Some(&w[backtick + 1..backtick + 1 + end])
         })
         .collect();
-    let expect = ["dead_static", "unused_arg", "unused_local", "main_unused", "main_unused_init", "inner_unused"];
+    let expect = [
+        "dead_static",
+        "unused_arg",
+        "unused_local",
+        "main_unused",
+        "main_unused_init",
+        "inner_unused",
+        "dead_assigned",
+        "touched_then_overwritten",
+    ];
     for name in expect {
         assert!(
             names_warned.contains(&name),
@@ -71,7 +80,16 @@ fn warn_unused_variable_parameter_function() {
             p.warnings
         );
     }
-    let suppress = ["live_static", "x", "used_local", "_silenced_local", "_silenced", "used", "main", "inner_used"];
+    let suppress = [
+        "live_static",
+        "x",
+        "used_local",
+        "_silenced_local",
+        "_silenced",
+        "used",
+        "main",
+        "inner_used",
+    ];
     for name in suppress {
         assert!(
             !names_warned.contains(&name),
@@ -79,6 +97,23 @@ fn warn_unused_variable_parameter_function() {
             p.warnings
         );
     }
+    let set_but_unused: alloc::vec::Vec<&String> = p
+        .warnings
+        .iter()
+        .filter(|w| w.contains("set but never used"))
+        .collect();
+    assert!(
+        set_but_unused.iter().any(|w| w.contains("`dead_assigned`")),
+        "expected `set but never used` for dead_assigned, got: {:?}",
+        p.warnings
+    );
+    assert!(
+        set_but_unused
+            .iter()
+            .any(|w| w.contains("`touched_then_overwritten`")),
+        "expected `set but never used` for touched_then_overwritten, got: {:?}",
+        p.warnings
+    );
 }
 
 /// `typedef HANDLE *PHANDLE;` with no prior `HANDLE` typedef

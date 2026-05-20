@@ -333,6 +333,31 @@ pub(in crate::c5::compiler) struct Pending {
     /// (so the post-`*` type still satisfies `is_pointer_ty` and
     /// the call-site fallback can't fire).
     pub fn_ptr_chain_depth: i64,
+
+    /// Symbol index of the Token::Loc whose value was loaded by
+    /// the most recently emitted scalar `Op::Li` / `Op::Lc` /
+    /// `Op::Lh` / `Op::Lw` (or fused `Op::LdLoc*`) in the
+    /// identifier-rvalue path. The assignment / address-of
+    /// callers consult this when they pop or rewrite that
+    /// trailing load: if the load is removed before the
+    /// program text is finalised, the symbol's was_read flag
+    /// must be reverted to its prior state -- the load never
+    /// ran, but the symbol may still have been read by an
+    /// earlier expression. Cleared by `emit_op` whenever a
+    /// scalar load lands at the tail through a path that is
+    /// not the identifier-rvalue branch (field access, array
+    /// indexing, deref, bitfield extraction) so a downstream
+    /// pop/rewrite does not retract was_read from a symbol
+    /// whose load is no longer trailing.
+    pub last_loaded_local: Option<usize>,
+
+    /// `was_read` value the most recently parsed identifier
+    /// load saw on the symbol immediately before flipping it
+    /// to true. Captured in lockstep with `last_loaded_local`
+    /// so `take_last_loaded_local` can restore the prior state
+    /// when the load gets popped or rewritten -- preserving
+    /// reads recorded by earlier expressions in the function.
+    pub last_loaded_local_prior_was_read: bool,
 }
 
 impl Default for Pending {
@@ -354,6 +379,8 @@ impl Default for Pending {
             // `-1` means "not in a fn-ptr-tracked chain"; see field
             // docs above.
             fn_ptr_chain_depth: -1,
+            last_loaded_local: None,
+            last_loaded_local_prior_was_read: false,
         }
     }
 }

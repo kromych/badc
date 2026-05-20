@@ -53,6 +53,95 @@ impl Compiler {
         self.lex.file == main
     }
 
+    /// Record that the parser just emitted a store to local
+    /// symbol `idx`. The push appends `line` to the symbol's
+    /// `pending_stores` list and registers the symbol index in
+    /// the function-level `pending_store_symbols` set when it
+    /// wasn't already present. If the symbol already had pending
+    /// stores, the prior values were overwritten without an
+    /// intervening read and each line is emitted as a dead-store
+    /// diagnostic before the new entry is pushed.
+    pub(super) fn record_local_store(&mut self, idx: usize, line: usize) {
+        if !self.warn_dead_store
+            || !self.symbols[idx].decl_in_main_source
+            || self.symbols[idx].address_escaped
+            || self.symbols[idx].name.is_empty()
+            || self.symbols[idx].name.starts_with('_')
+        {
+            return;
+        }
+        let was_empty = self.symbols[idx].pending_stores.is_empty();
+        let prior = core::mem::take(&mut self.symbols[idx].pending_stores);
+        let name = self.symbols[idx].name.clone();
+        for prior_line in prior {
+            self.warn_at(
+                prior_line,
+                alloc::format!("dead store: value assigned to `{name}` is never read"),
+            );
+        }
+        self.symbols[idx].pending_stores.push(line);
+        if was_empty && !self.pending_store_symbols.contains(&idx) {
+            self.pending_store_symbols.push(idx);
+        }
+    }
+
+    /// Record that a load of local symbol `idx` reached the
+    /// bytecode tail. Drops the symbol's pending-store list --
+    /// the value the most recent store wrote was just consumed.
+    pub(super) fn record_local_read(&mut self, idx: usize) {
+        if !self.warn_dead_store {
+            return;
+        }
+        if !self.symbols[idx].pending_stores.is_empty() {
+            self.symbols[idx].pending_stores.clear();
+        }
+    }
+
+    /// Conservatively drop every symbol's pending-store list at
+    /// a non-terminal control-flow boundary (branch, call).
+    /// Without flow analysis, a store followed by a branch may
+    /// be live or dead depending on which successor runs;
+    /// dropping the entries silently avoids false positives.
+    pub(super) fn flush_pending_stores(&mut self) {
+        if !self.warn_dead_store {
+            return;
+        }
+        for idx in core::mem::take(&mut self.pending_store_symbols) {
+            self.symbols[idx].pending_stores.clear();
+        }
+    }
+
+    /// Emit one dead-store diagnostic per pending entry, then
+    /// clear. Called at function-terminating ops (`Op::Lev`,
+    /// `Op::TailExt`) where no successor exists -- every
+    /// pending store is unambiguously dead because nothing
+    /// further runs to read the value.
+    pub(super) fn emit_dead_stores_and_flush(&mut self) {
+        if !self.warn_dead_store {
+            return;
+        }
+        let drained = core::mem::take(&mut self.pending_store_symbols);
+        for idx in drained {
+            let sym = &self.symbols[idx];
+            if sym.address_escaped
+                || sym.name.is_empty()
+                || sym.name.starts_with('_')
+                || sym.pending_stores.is_empty()
+            {
+                self.symbols[idx].pending_stores.clear();
+                continue;
+            }
+            let name = sym.name.clone();
+            let lines = core::mem::take(&mut self.symbols[idx].pending_stores);
+            for line in lines {
+                self.warn_at(
+                    line,
+                    alloc::format!("dead store: value assigned to `{name}` is never read"),
+                );
+            }
+        }
+    }
+
     /// Build a `C5Error::Compile` whose message follows the
     /// gcc / clang-shape convention everything else in this codebase
     /// uses for diagnostics:

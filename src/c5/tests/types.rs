@@ -116,6 +116,60 @@ fn warn_unused_variable_parameter_function() {
     );
 }
 
+/// Per-store dead-store analysis: when `-Wdead-store` is on, each
+/// store whose value never reaches a read fires a `dead store:
+/// value assigned to X is never read` diagnostic at the store's
+/// source line. Off by default; the per-symbol `set but never
+/// used` warning still fires unconditionally.
+#[test]
+fn warn_dead_store_per_store_when_enabled() {
+    use crate::CompileOptions;
+    use crate::Compiler;
+    use crate::Target;
+    let src = super::with_prelude(&super::load_fixture("warn_dead_store.c"));
+    let opts = CompileOptions::default().with_warn_dead_store(true);
+    let p = Compiler::with_options(src, Target::host(), opts)
+        .compile()
+        .unwrap();
+    let dead: alloc::vec::Vec<&String> = p
+        .warnings
+        .iter()
+        .filter(|w| w.contains("dead store:"))
+        .collect();
+    // `int a = 1; a = 2; return 1;` -> both stores dead.
+    let a_warns: alloc::vec::Vec<&&String> =
+        dead.iter().filter(|w| w.contains("`a`")).collect();
+    assert_eq!(
+        a_warns.len(),
+        2,
+        "expected two dead-store warnings on `a` (initializer + a = 2;), got: {:?}",
+        dead
+    );
+    // No false positives: branch-straddling, self-referencing
+    // RHS, and address-escape cases must not fire.
+    for w in &dead {
+        assert!(
+            !w.contains("`b`") && !w.contains("`c`") && !w.contains("`d`"),
+            "unexpected dead-store warning: {w}"
+        );
+    }
+}
+
+#[test]
+fn warn_dead_store_off_by_default() {
+    let p = compile_fixture("warn_dead_store.c");
+    let dead: alloc::vec::Vec<&String> = p
+        .warnings
+        .iter()
+        .filter(|w| w.contains("dead store:"))
+        .collect();
+    assert!(
+        dead.is_empty(),
+        "dead-store warnings should not fire without -Wdead-store: {:?}",
+        dead
+    );
+}
+
 /// `typedef HANDLE *PHANDLE;` with no prior `HANDLE` typedef
 /// must error at the declaration site, not silently default
 /// to `int *`.

@@ -142,6 +142,13 @@ pub struct CompileOptions {
     /// pushes one line per `#include` resolve into the include
     /// trace, drainable via [`Compiler::take_include_trace`].
     pub show_includes: bool,
+    /// `-Wdead-store` -- when true the compiler emits a
+    /// per-store `dead store: value assigned to ...` diagnostic
+    /// alongside the per-symbol `unused variable` / `set but
+    /// never used` warnings. Off by default, matching gcc and
+    /// clang's policy of shipping only the per-symbol form on by
+    /// default.
+    pub warn_dead_store: bool,
 }
 
 impl CompileOptions {
@@ -173,6 +180,12 @@ impl CompileOptions {
     /// Flip the gcc-style `-H` include trace on or off.
     pub fn with_show_includes(mut self, on: bool) -> Self {
         self.show_includes = on;
+        self
+    }
+    /// Enable per-store dead-store diagnostics. See
+    /// [`Self::warn_dead_store`].
+    pub fn with_warn_dead_store(mut self, on: bool) -> Self {
+        self.warn_dead_store = on;
         self
     }
 }
@@ -358,6 +371,15 @@ pub(in crate::c5::compiler) struct Pending {
     /// when the load gets popped or rewritten -- preserving
     /// reads recorded by earlier expressions in the function.
     pub last_loaded_local_prior_was_read: bool,
+
+    /// `pending_stores` value the most recently parsed
+    /// identifier load saw on the symbol immediately before
+    /// clearing it. Captured in lockstep with
+    /// `last_loaded_local` so a tentative load that the
+    /// surrounding assignment / address-of rewrites does not
+    /// permanently drop the dead-store entries -- they restore
+    /// alongside `was_read`.
+    pub last_loaded_local_prior_pending: Vec<usize>,
 }
 
 impl Default for Pending {
@@ -381,6 +403,7 @@ impl Default for Pending {
             fn_ptr_chain_depth: -1,
             last_loaded_local: None,
             last_loaded_local_prior_was_read: false,
+            last_loaded_local_prior_pending: Vec::new(),
         }
     }
 }
@@ -602,6 +625,18 @@ pub struct Compiler {
     /// carrier so `Compiler` doesn't grow per parser-feature.
     /// Reset to `Pending::default()` at compiler construction.
     pending: Pending,
+
+    /// Symbols with at least one entry in `Symbol::pending_stores`.
+    /// Tracked separately so the branch / call handlers in
+    /// `emit_op` can flush every pending store without walking
+    /// the full symbol table on each control-flow op. Cleared in
+    /// lockstep with the per-symbol vectors.
+    pending_store_symbols: Vec<usize>,
+
+    /// Mirror of [`CompileOptions::warn_dead_store`]. Stashed on
+    /// the compiler so the parser's dead-store helpers don't
+    /// have to thread the option through every call site.
+    warn_dead_store: bool,
 
     /// Per-bytecode-PC source line, parallel to `text`. Updated
     /// on every emit_op / emit_val / emit_data_imm so each
@@ -888,6 +923,8 @@ impl Compiler {
             current_func_return_ty: 0,
             current_func_returns_void: false,
             pending: Pending::default(),
+            pending_store_symbols: Vec::new(),
+            warn_dead_store: opts.warn_dead_store,
             source_lines: Vec::new(),
             source_functions: Vec::new(),
             source_files: Vec::new(),

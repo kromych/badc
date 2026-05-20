@@ -300,6 +300,7 @@ impl Compiler {
         // bookkeeping.
         if self.lex.tk == Token::Assign {
             self.symbols[loc_idx].was_written = true;
+            self.record_local_store(loc_idx, self.lex.line);
         }
         if declared_array_size == -1 {
             if self.lex.tk != Token::Assign {

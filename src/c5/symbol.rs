@@ -203,6 +203,18 @@ pub(crate) struct Symbol {
     /// conservatively when this flag is set.
     pub address_escaped: bool,
 
+    /// Source lines of stores to this symbol that have not yet
+    /// been followed by a read. Pushed by the assignment paths
+    /// in the expression parser and by
+    /// `allocate_local_with_init` for declarations with `= ...`.
+    /// Cleared when an identifier-rvalue load of the symbol
+    /// reaches the bytecode tail. Branches and function calls
+    /// also clear the list (conservatively; the analysis is
+    /// intra-segment to avoid flow-sensitivity false positives).
+    /// Drained at function exit to emit the dead-store
+    /// diagnostic for any line still present.
+    pub pending_stores: Vec<usize>,
+
     /// Source line where this declaration was parsed. Captured at
     /// declaration time so unused-variable diagnostics can point
     /// at the declaration rather than the surrounding block's

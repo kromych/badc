@@ -175,6 +175,11 @@ fn main() {
     // here" or "why didn't this header resolve" without poking the
     // amalgamated `__BADC_DUMP_PP` output.
     let mut show_includes = false;
+    // `-Wdead-store` opts into the per-store dead-store
+    // diagnostic. Off by default; the per-symbol
+    // `unused variable` / `set but never used` warnings still
+    // fire regardless.
+    let mut warn_dead_store = false;
     // `-q` / `--quiet` suppresses `info:` chatter on stderr. The
     // per-source `info: compiling <path>` progress line in
     // multi-TU mode and the `info: wrote file <path>` lines that
@@ -291,6 +296,11 @@ fn main() {
             // marking nesting depth. `--show-includes` is the
             // descriptive long form (also matches MSVC's spelling).
             "-H" | "--show-includes" => show_includes = true,
+            // gcc-shape `-Wdead-store` -- enable the per-store
+            // dead-store diagnostic. `-Wno-dead-store` is the
+            // opt-out spelling.
+            "-Wdead-store" => warn_dead_store = true,
+            "-Wno-dead-store" => warn_dead_store = false,
             // Quiet mode -- silence informational output (per-source
             // progress, `info: wrote file <path>` lines). Errors
             // and warnings remain on stderr unchanged.
@@ -539,7 +549,8 @@ fn main() {
                 .with_include_paths(include_paths.clone())
                 .with_force_includes(force_includes.clone())
                 .with_source_label(label.clone())
-                .with_show_includes(show_includes),
+                .with_show_includes(show_includes)
+                .with_warn_dead_store(warn_dead_store),
         );
         if show_includes {
             accumulated_include_trace.extend(compiler.take_include_trace());

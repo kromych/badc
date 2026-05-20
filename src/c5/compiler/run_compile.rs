@@ -879,6 +879,11 @@ impl Compiler {
                         };
                         self.warn_at(line, msg);
                     }
+                    // Drain dead-store entries for this function's
+                    // locals via the shared helper -- a store that
+                    // reaches function exit without an intervening
+                    // read or branch is unambiguously dead.
+                    self.emit_dead_stores_and_flush();
                     for sym in self.symbols.iter_mut() {
                         if sym.class == Token::Loc as i64 {
                             Self::restore_shadowed_symbol(sym);

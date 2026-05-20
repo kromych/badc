@@ -76,6 +76,21 @@ impl Compiler {
         if is_scalar_load_op_val(op as i64) {
             self.pending.last_loaded_local = None;
         }
+        // Control-flow boundaries flush the dead-store tracker.
+        // Function-terminating ops (`Op::Lev`, `Op::TailExt`)
+        // have no successor, so any pending store is
+        // unambiguously dead and gets reported. Non-terminal
+        // boundaries (branches, calls) silently drop the
+        // entries because a store straddling such an op may be
+        // live in a successor that the analysis can't follow
+        // without flow data.
+        match op {
+            Op::Lev | Op::TailExt => self.emit_dead_stores_and_flush(),
+            Op::Jmp | Op::Bz | Op::Bnz | Op::Jsr | Op::JsrExt | Op::Jsri => {
+                self.flush_pending_stores();
+            }
+            _ => {}
+        }
         self.text.push(op as i64);
         // Mirror text.len() one-for-one in source_lines /
         // source_functions / source_file_indices so a bc_pc
@@ -253,6 +268,16 @@ impl Compiler {
     pub(super) fn take_last_loaded_local(&mut self) -> Option<usize> {
         let idx = self.pending.last_loaded_local.take()?;
         self.symbols[idx].was_read = self.pending.last_loaded_local_prior_was_read;
+        self.symbols[idx].pending_stores =
+            core::mem::take(&mut self.pending.last_loaded_local_prior_pending);
+        // If the restored list is non-empty, make sure the
+        // symbol is back on the function-level pending list so a
+        // later control-flow op can flush it.
+        if !self.symbols[idx].pending_stores.is_empty()
+            && !self.pending_store_symbols.contains(&idx)
+        {
+            self.pending_store_symbols.push(idx);
+        }
         Some(idx)
     }
 

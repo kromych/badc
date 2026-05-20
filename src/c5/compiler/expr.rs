@@ -763,15 +763,18 @@ impl Compiler {
                         // Tentative: the load survives by default,
                         // so the symbol's value is being read. The
                         // assignment / address-of helpers revert
-                        // `was_read` to its prior state (preserving
-                        // genuine earlier reads) if they remove
-                        // the load from the bytecode before it
-                        // executes. `last_loaded_local` lets those
-                        // helpers know which symbol the trailing
-                        // load belonged to.
+                        // `was_read` and `pending_stores` to their
+                        // prior state (preserving genuine earlier
+                        // reads and prior dead-store entries) if
+                        // they remove the load from the bytecode
+                        // before it executes. `last_loaded_local`
+                        // lets those helpers know which symbol the
+                        // trailing load belonged to.
                         self.pending.last_loaded_local = Some(id_idx);
                         self.pending.last_loaded_local_prior_was_read =
                             self.symbols[id_idx].was_read;
+                        self.pending.last_loaded_local_prior_pending =
+                            core::mem::take(&mut self.symbols[id_idx].pending_stores);
                         self.symbols[id_idx].was_read = true;
                     }
                     // Seed the fn-pointer chain depth from
@@ -1252,10 +1255,15 @@ impl Compiler {
             // ++/-- reads the prior value and stores a new one.
             // `take_last_loaded_local` restored was_read to its
             // pre-load state; force it true because the reload
-            // below re-emits the load.
+            // below re-emits the load. The read clears any
+            // pending dead-store entries; the subsequent store
+            // pushes a fresh one.
+            let line = self.lex.line;
             if let Some(idx) = self.take_last_loaded_local() {
                 self.symbols[idx].was_read = true;
                 self.symbols[idx].was_written = true;
+                self.record_local_read(idx);
+                self.record_local_store(idx, line);
             }
             self.emit_op(reload);
             if is_floating_scalar(self.ty) {
@@ -1439,11 +1447,16 @@ impl Compiler {
                     // `take_last_loaded_local` reverts the tentative
                     // `was_read` the identifier-rvalue path set so
                     // that prior real reads in the function are not
-                    // forgotten. Record the matching `was_written`.
-                    if let Some(idx) = self.take_last_loaded_local() {
+                    // forgotten. The dead-store record runs after
+                    // the RHS is parsed -- a self-referencing RHS
+                    // like `x = x + 1` reads the prior value and
+                    // must not be charged against the store about
+                    // to land.
+                    let line = self.lex.line;
+                    let assigned_local = self.take_last_loaded_local();
+                    if let Some(idx) = assigned_local {
                         self.symbols[idx].was_written = true;
                     }
-                    let line = self.lex.line;
                     self.expr(Token::Assign as i64)?;
                     let rhs_is_zero = self.last_emit_is_zero();
                     let rhs_is_untyped = self.last_emit_was_indirect_call();
@@ -1466,6 +1479,9 @@ impl Compiler {
                     self.convert_assign_rhs(t);
                     self.ty = t;
                     self.emit_op(store_op_for(self.ty, self.target));
+                    if let Some(idx) = assigned_local {
+                        self.record_local_store(idx, line);
+                    }
                 } else {
                     return Err(self.compile_err("bad lvalue in assignment"));
                 }
@@ -1494,10 +1510,15 @@ impl Compiler {
                 // new one. `take_last_loaded_local` reverted
                 // was_read to its prior state; force it true
                 // because the reload below survives, and add
-                // was_written.
-                if let Some(idx) = self.take_last_loaded_local() {
+                // was_written. The dead-store record is deferred
+                // until after the binop emits so a self-
+                // referencing RHS does not cancel its own store.
+                let line = self.lex.line;
+                let assigned_local = self.take_last_loaded_local();
+                if let Some(idx) = assigned_local {
                     self.symbols[idx].was_read = true;
                     self.symbols[idx].was_written = true;
+                    self.record_local_read(idx);
                 }
                 self.emit_op(reload);
                 // Push the current value so the binop can pop it.
@@ -1596,6 +1617,9 @@ impl Compiler {
                 self.emit_op(op);
                 self.ty = lhs_ty;
                 self.emit_op(store_op_for(self.ty, self.target));
+                if let Some(idx) = assigned_local {
+                    self.record_local_store(idx, line);
+                }
             } else if self.lex.tk == Token::Cond {
                 self.next()?;
                 self.emit_op(Op::Bz);
@@ -1897,10 +1921,14 @@ impl Compiler {
                 // new one. Same shape as the compound-assign
                 // path: revert via `take_last_loaded_local`,
                 // then force was_read true (reload re-emits the
-                // load) and was_written true.
+                // load), was_written true, and refresh the
+                // dead-store tracker.
+                let line = self.lex.line;
                 if let Some(idx) = self.take_last_loaded_local() {
                     self.symbols[idx].was_read = true;
                     self.symbols[idx].was_written = true;
+                    self.record_local_read(idx);
+                    self.record_local_store(idx, line);
                 }
                 self.emit_op(reload);
                 if is_floating_scalar(self.ty) {

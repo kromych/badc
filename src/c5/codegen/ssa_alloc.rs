@@ -1,7 +1,7 @@
 //! Linear-scan register allocator over the [`FunctionSsa`] output
 //! of [`super::ssa`]. Produces a per-`Inst` [`Place`] (a host
-//! register or a spill slot) that the per-arch lowering
-//! (aarch64.rs / x86_64.rs, tasks #9 and #10) consumes when
+//! register or a spill slot) that the per-arch SSA emit
+//! (`ssa_emit_aarch64.rs` / `ssa_emit_x86_64.rs`) consumes when
 //! emitting native instructions for `RegallocMode::Ssa`.
 //!
 //! ## Algorithm

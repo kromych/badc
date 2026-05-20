@@ -1,10 +1,10 @@
 //! SSA lift over the stack-based c5 bytecode.
 //!
 //! Takes a [`Program::text`] and produces, per function, a basic-block
-//! graph of SSA-style [`Inst`]s. The allocator
-//! (`linear_scan_allocate`, task #8) and per-arch lowering
-//! (`aarch64::lower_ssa` / `x86_64::lower_ssa`, tasks #9-#10) consume
-//! the result. Selected by `NativeOptions::regalloc = RegallocMode::Ssa`.
+//! graph of SSA-style [`Inst`]s. The allocator (`ssa_alloc::allocate`)
+//! and per-arch SSA emit (`ssa_emit_aarch64` / `ssa_emit_x86_64`)
+//! consume the result. Selected by
+//! `NativeOptions::regalloc = RegallocMode::Ssa` (the default).
 //!
 //! ## Lift shape
 //!

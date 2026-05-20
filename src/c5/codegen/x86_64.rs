@@ -1208,11 +1208,19 @@ pub(super) fn lower(
     // `ssa_emit_x86_64::emit_function`; a per-function emit bail
     // is a hard error so any IR + emit coverage gap surfaces
     // immediately.
-    let ssa_funcs: alloc::vec::Vec<super::ssa::FunctionSsa> = super::ssa::lift_program(program)?;
-    let ssa_allocs: alloc::vec::Vec<super::ssa_alloc::Allocation> = ssa_funcs
-        .iter()
-        .map(|f| super::ssa_alloc::allocate(f, target))
-        .collect();
+    let ssa_funcs: alloc::vec::Vec<super::ssa::FunctionSsa> =
+        super::ssa_emit_common::time_pass("ssa::lift_program (x86_64)", || {
+            super::ssa::lift_program(program)
+        })?;
+    let ssa_allocs: alloc::vec::Vec<super::ssa_alloc::Allocation> =
+        super::ssa_emit_common::time_pass("ssa_alloc::allocate (x86_64)", || {
+            ssa_funcs
+                .iter()
+                .map(|f| super::ssa_alloc::allocate(f, target))
+                .collect()
+        });
+    #[cfg(feature = "std")]
+    let _ssa_emit_pass_start = std::time::Instant::now();
     for (func_ssa, alloc_for) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
         let ent_pc = func_ssa.ent_pc;
         bytecode_to_native[ent_pc] = code.len();
@@ -1248,6 +1256,11 @@ pub(super) fn lower(
                 ),
             )));
         }
+    }
+    #[cfg(feature = "std")]
+    if super::ssa_emit_common::time_passes_enabled() {
+        let us = _ssa_emit_pass_start.elapsed().as_micros();
+        eprintln!("pass: ssa_emit_x86_64 (block walk) -- {us}us");
     }
     bytecode_to_native[program.text.len()] = code.len();
 

@@ -438,7 +438,12 @@ pub(super) fn lift_function(
     let blocks_need_acc_reload =
         compute_blocks_needing_acc_reload(text, ent_pc, end_pc, &block_starts);
 
-    let mut insts: Vec<Inst> = Vec::new();
+    // Preallocate `insts` to roughly the bytecode word count of
+    // the function -- an upper bound on the number of Inst rows
+    // we'll push. Avoids the realloc cascade as the per-block
+    // walk grows the vector op by op; observed in profiling on
+    // sqlite3.c (lift_program dominant in the SSA pipeline).
+    let mut insts: Vec<Inst> = Vec::with_capacity(end_pc.saturating_sub(ent_pc));
     let mut blocks: Vec<Block> = Vec::with_capacity(block_starts.len());
 
     // Walk each block sequentially, building SSA values.

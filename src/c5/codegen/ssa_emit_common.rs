@@ -13,6 +13,38 @@
 /// where order does not matter.
 pub(super) type FxIntMap<K, V> = hashbrown::HashMap<K, V, rustc_hash::FxBuildHasher>;
 
+/// Whether the `BADC_TIME_PASSES` environment variable is set.
+/// Gates the wall-clock timer instrumentation in the codegen
+/// pipeline so a default release build pays no per-pass
+/// std::time::Instant cost.
+#[cfg(feature = "std")]
+pub(super) fn time_passes_enabled() -> bool {
+    std::env::var("BADC_TIME_PASSES").is_ok()
+}
+
+/// Run `f`, measure wall-clock with `Instant::elapsed`, and
+/// print one `pass: <label> -- <us>us` line on stderr when
+/// `BADC_TIME_PASSES` is set. Returns whatever `f` returned so
+/// the caller can wrap a value-producing closure in place.
+/// No-op when the feature is off or the env var is unset
+/// (the closure still runs).
+#[cfg(feature = "std")]
+pub(super) fn time_pass<R>(label: &str, f: impl FnOnce() -> R) -> R {
+    if !time_passes_enabled() {
+        return f();
+    }
+    let start = std::time::Instant::now();
+    let r = f();
+    let us = start.elapsed().as_micros();
+    eprintln!("pass: {label} -- {us}us");
+    r
+}
+
+#[cfg(not(feature = "std"))]
+pub(super) fn time_pass<R>(_label: &str, f: impl FnOnce() -> R) -> R {
+    f()
+}
+
 /// Diagnostic surface for a per-function SSA-emit fallback. The
 /// per-arch emit paths call this when they hit a shape they
 /// don't cover; the message lands on stderr only when

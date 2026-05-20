@@ -411,6 +411,10 @@ pub(super) fn emit_function(
 
     let mut block_offsets: Vec<usize> = alloc::vec![0; func.blocks.len()];
     let mut branch_fixups: Vec<BranchFixup> = Vec::new();
+    // Set by `Inst::AllocaInit` (slot != 0) and read by the
+    // matching `Inst::Intrinsic(Alloca)`. Zero means the
+    // function doesn't use alloca.
+    let mut current_alloca_top: u32 = 0;
 
     for (block_idx, block) in func.blocks.iter().enumerate() {
         block_offsets[block_idx] = code.len();
@@ -436,6 +440,7 @@ pub(super) fn emit_function(
                 variadic_targets,
                 tls_index_fixups,
                 tls_total_size,
+                &mut current_alloca_top,
             ) {
                 #[cfg(feature = "std")]
                 if std::env::var("BADC_DUMP_SSA").is_ok() {
@@ -472,8 +477,8 @@ pub(super) fn emit_function(
                     .get(cond as usize)
                     .copied()
                     .unwrap_or(Place::None);
-                let Some(rc) = int_reg(cond_place) else {
-                    bail_msg("Bz: cond Place not int reg");
+                let Some(rc) = materialize_int(code, cond_place, SCRATCH_R10, frame) else {
+                    bail_msg("Bz: cond Place not int reg / spill / fp");
                     code.truncate(snapshot);
                     fixups.truncate(fixups_snapshot);
                     plt_call_fixups.truncate(plt_call_fixups_snapshot);
@@ -509,8 +514,8 @@ pub(super) fn emit_function(
                     .get(cond as usize)
                     .copied()
                     .unwrap_or(Place::None);
-                let Some(rc) = int_reg(cond_place) else {
-                    bail_msg("Bnz: cond Place not int reg");
+                let Some(rc) = materialize_int(code, cond_place, SCRATCH_R10, frame) else {
+                    bail_msg("Bnz: cond Place not int reg / spill / fp");
                     code.truncate(snapshot);
                     fixups.truncate(fixups_snapshot);
                     plt_call_fixups.truncate(plt_call_fixups_snapshot);
@@ -544,14 +549,31 @@ pub(super) fn emit_function(
                     super::x86_64::emit_jmp_rel32(code, 0);
                 }
             }
-            Terminator::TailExt(_) => {
-                bail_msg("TailExt terminator not yet handled");
-                code.truncate(snapshot);
-                fixups.truncate(fixups_snapshot);
-                plt_call_fixups.truncate(plt_call_fixups_snapshot);
-                data_fixups.truncate(data_fixups_snapshot);
-                pending_func_fixups.truncate(pending_func_fixups_snapshot);
-                return false;
+            Terminator::TailExt(binding_idx) => {
+                // c5 emits `Op::TailExt` for the sys-trampoline
+                // bodies: the matching `Op::Jsri` already placed
+                // every arg in the host ABI's argument registers
+                // / shadow-space slots, so we just forward control
+                // through the PLT trampoline and let the libc fn's
+                // `ret` carry us back to the original caller.
+                let import_index = match imports.index_of_binding(binding_idx) {
+                    Some(i) => i,
+                    None => {
+                        bail_msg("TailExt: no import slot for binding");
+                        code.truncate(snapshot);
+                        fixups.truncate(fixups_snapshot);
+                        plt_call_fixups.truncate(plt_call_fixups_snapshot);
+                        data_fixups.truncate(data_fixups_snapshot);
+                        pending_func_fixups.truncate(pending_func_fixups_snapshot);
+                        return false;
+                    }
+                };
+                plt_call_fixups.push(PltCallFixup {
+                    instr_offset: code.len(),
+                    import_index,
+                    is_tail: true,
+                });
+                super::x86_64::emit_jmp_rel32(code, 0);
             }
         }
     }
@@ -671,12 +693,27 @@ fn emit_inst(
     variadic_targets: &alloc::collections::BTreeSet<usize>,
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     tls_total_size: usize,
+    current_alloca_top: &mut u32,
 ) -> bool {
     match inst {
         Inst::AllocaInit(slot) => {
-            // Zero slot -> no alloca, emit nothing (matches the
-            // pool path). Non-zero alloca isn't covered yet.
-            *slot == 0
+            // Slot 0: this function doesn't use alloca; emit
+            // nothing (matches the pool path). Non-zero: the
+            // bookkeeping slot lives at `[rbp - slot*8]`; the
+            // matching `Op::Intrinsic(Alloca)` reads + writes it
+            // to allocate from a per-frame arena. Initialise the
+            // slot with its own address so `alloca(n)` lands at
+            // `address - n`, the top of the arena `Op::Ent` already
+            // reserved.
+            if *slot == 0 {
+                return true;
+            }
+            let top_offset = (*slot as u32) * 8;
+            *current_alloca_top = top_offset;
+            let disp = -(top_offset as i32);
+            emit_lea_r_mem(code, SCRATCH_R10, Reg::RBP, disp);
+            emit_mov_mem_r(code, SCRATCH_R10, 0, SCRATCH_R10);
+            true
         }
         Inst::Imm(value) => {
             let Some(rd) = int_or_spill_dst(dst) else {
@@ -745,8 +782,10 @@ fn emit_inst(
             plt_call_fixups,
             imports,
         ),
-        Inst::ImmData(offset) => emit_imm_data(code, dst, *offset, data_fixups),
-        Inst::ImmCode(target_bc_pc) => emit_imm_code(code, dst, *target_bc_pc, pending_func_fixups),
+        Inst::ImmData(offset) => emit_imm_data(code, dst, *offset, data_fixups, frame),
+        Inst::ImmCode(target_bc_pc) => {
+            emit_imm_code(code, dst, *target_bc_pc, pending_func_fixups, frame)
+        }
         Inst::VstackSpill { slot, value } => emit_vstack_spill(code, *slot, *value, alloc, frame),
         Inst::VstackReload { slot } => emit_vstack_reload(code, dst, *slot, frame),
         Inst::Mcpy {
@@ -757,29 +796,64 @@ fn emit_inst(
         Inst::CallIndirect { target, args } => {
             emit_call_indirect(code, dst, *target, args, alloc, frame, abi)
         }
-        Inst::Intrinsic { kind, args } => emit_intrinsic(code, *kind, args, dst, alloc),
+        Inst::Intrinsic { kind, args } => {
+            emit_intrinsic(code, *kind, args, dst, alloc, frame, *current_alloca_top)
+        }
         Inst::AccSpill { value } => {
             let value_place = alloc
                 .places
                 .get(*value as usize)
                 .copied()
                 .unwrap_or(Place::None);
-            let Some(rs) = int_reg(value_place) else {
-                bail_msg("AccSpill: value not in int reg");
-                return false;
-            };
             let sp_off = (frame.frame_bytes - frame.acc_slot_off) as i32;
+            let rs = match value_place {
+                Place::IntReg(r) => Reg(r),
+                Place::Spill(_) => {
+                    // Source already spilled. Load into SCRATCH_R10
+                    // and then store to the acc slot.
+                    let Some(r) = materialize_int(code, value_place, SCRATCH_R10, frame) else {
+                        bail_msg("AccSpill: value materialize failed");
+                        return false;
+                    };
+                    r
+                }
+                Place::FpReg(r) => {
+                    // f64 bit pattern lives in xmm[r]; movq into the
+                    // acc slot via SCRATCH_R10.
+                    super::x86_64::emit_movq_r_xmm(code, SCRATCH_R10, Reg(r));
+                    SCRATCH_R10
+                }
+                Place::None => {
+                    bail_msg("AccSpill: value Place::None");
+                    return false;
+                }
+            };
             emit_mov_mem_r(code, Reg::RSP, sp_off, rs);
             true
         }
         Inst::AccReload => {
-            let Some(rd) = int_reg(dst) else {
-                bail_msg("AccReload: dst not int reg");
-                return false;
-            };
             let sp_off = (frame.frame_bytes - frame.acc_slot_off) as i32;
-            emit_mov_r_mem(code, rd, Reg::RSP, sp_off);
-            true
+            match dst {
+                Place::IntReg(r) => {
+                    emit_mov_r_mem(code, Reg(r), Reg::RSP, sp_off);
+                    true
+                }
+                Place::Spill(_) => {
+                    // Reload via SCRATCH_R10, then store to dst's
+                    // spill slot.
+                    emit_mov_r_mem(code, SCRATCH_R10, Reg::RSP, sp_off);
+                    spill_dst_to_slot(code, dst, SCRATCH_R10, frame);
+                    true
+                }
+                Place::FpReg(r) => {
+                    // Acc slot holds an integer-encoded bit pattern;
+                    // reinterpret into xmm[r] via movq.
+                    emit_mov_r_mem(code, SCRATCH_R10, Reg::RSP, sp_off);
+                    super::x86_64::emit_movq_xmm_r(code, Reg(r), SCRATCH_R10);
+                    true
+                }
+                Place::None => true,
+            }
         }
         Inst::Fneg(value) => emit_fneg(code, dst, *value, alloc, frame),
         Inst::FpCast { kind, value } => emit_fp_cast(code, dst, *kind, *value, alloc, frame),
@@ -1892,6 +1966,8 @@ fn emit_intrinsic(
     args: &[u32],
     dst: Place,
     alloc: &Allocation,
+    frame: Frame,
+    current_alloca_top: u32,
 ) -> bool {
     use crate::c5::op::Intrinsic as I;
     let intrinsic = match I::from_i64(kind) {
@@ -1989,8 +2065,68 @@ fn emit_intrinsic(
             emit_mov_mem_r(code, dst_p, 0, SCRATCH_R10);
             true
         }
-        I::Alloca | I::SetjmpAArch64 | I::LongjmpAArch64 => {
-            bail_msg("intrinsic: alloca / setjmp / longjmp not yet handled on x86_64");
+        I::Alloca => {
+            // alloca(n): bump the per-frame arena's top down by
+            // `n` rounded up to 16 bytes. The bookkeeping slot
+            // lives at `[rbp - current_alloca_top]` (initialised
+            // by the matching `Inst::AllocaInit`); the new top is
+            // returned in `dst`.
+            if current_alloca_top == 0 {
+                bail_msg("Alloca: AllocaInit didn't run for this function");
+                return false;
+            }
+            if args.len() != 1 {
+                bail_msg("Alloca: expected 1 arg");
+                return false;
+            }
+            let Some(rd) = int_or_spill_dst(dst) else {
+                bail_msg("Alloca: dst not int reg / spill");
+                return false;
+            };
+            let size_place = alloc
+                .places
+                .get(args[0] as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            // Stage the size into SCRATCH_R10 (outside the
+            // allocator pool) and round up to a 16-byte multiple.
+            let n = match materialize_int(code, size_place, SCRATCH_R10, frame) {
+                Some(r) => r,
+                None => {
+                    bail_msg("Alloca: size not int reg / spill / fp");
+                    return false;
+                }
+            };
+            if n.0 != SCRATCH_R10.0 {
+                emit_mov_rr(code, SCRATCH_R10, n);
+            }
+            super::x86_64::emit_add_r_imm32(code, SCRATCH_R10, 15);
+            super::x86_64::emit_and_r_imm32(code, SCRATCH_R10, -16);
+            // rcx = address of bookkeeping slot. rcx sits outside
+            // the SSA allocator pool on both ABIs (it's
+            // int_arg_regs[3]/int_arg_regs[0] but never in pool),
+            // so reusing it as scratch can't clobber an allocator
+            // value live across this op.
+            let disp = -(current_alloca_top as i32);
+            emit_lea_r_mem(code, Reg::RCX, Reg::RBP, disp);
+            // rd_or_scratch = *bookkeeping_slot - n -- recompute the
+            // arena top, write it back, and return it.
+            let rd_phys = if matches!(dst, Place::Spill(_)) {
+                SCRATCH_R10
+            } else {
+                rd
+            };
+            emit_mov_r_mem(code, rd_phys, Reg::RCX, 0);
+            super::x86_64::emit_sub_rr(code, rd_phys, SCRATCH_R10);
+            emit_mov_mem_r(code, Reg::RCX, 0, rd_phys);
+            if rd_phys.0 != rd.0 && !matches!(dst, Place::Spill(_)) {
+                emit_mov_rr(code, rd, rd_phys);
+            }
+            spill_dst_to_slot(code, dst, rd_phys, frame);
+            true
+        }
+        I::SetjmpAArch64 | I::LongjmpAArch64 => {
+            bail_msg("intrinsic: AArch64 setjmp / longjmp on non-AArch64 target");
             false
         }
     }
@@ -2001,9 +2137,10 @@ fn emit_imm_data(
     dst: Place,
     offset: i64,
     data_fixups: &mut Vec<DataFixup>,
+    frame: Frame,
 ) -> bool {
-    let Some(rd) = int_reg(dst) else {
-        bail_msg("ImmData: dst not int reg");
+    let Some(rd) = int_or_spill_dst(dst) else {
+        bail_msg("ImmData: dst not int reg / spill");
         return false;
     };
     let instr_offset = code.len();
@@ -2014,6 +2151,7 @@ fn emit_imm_data(
     // `lea rd, [rip + 0]` placeholder; the writer patches the
     // disp32 once the data segment's runtime address is known.
     super::x86_64::emit_lea_r_rip32(code, rd, 0);
+    spill_dst_to_slot(code, dst, rd, frame);
     true
 }
 
@@ -2022,14 +2160,16 @@ fn emit_imm_code(
     dst: Place,
     target_bc_pc: usize,
     pending_func_fixups: &mut Vec<(usize, usize)>,
+    frame: Frame,
 ) -> bool {
-    let Some(rd) = int_reg(dst) else {
-        bail_msg("ImmCode: dst not int reg");
+    let Some(rd) = int_or_spill_dst(dst) else {
+        bail_msg("ImmCode: dst not int reg / spill");
         return false;
     };
     let instr_offset = code.len();
     pending_func_fixups.push((instr_offset, target_bc_pc));
     super::x86_64::emit_lea_r_rip32(code, rd, 0);
+    spill_dst_to_slot(code, dst, rd, frame);
     true
 }
 
@@ -2045,24 +2185,48 @@ fn emit_vstack_spill(
         .get(value as usize)
         .copied()
         .unwrap_or(Place::None);
-    let Some(rs) = int_reg(value_place) else {
-        bail_msg("VstackSpill: value not in int reg");
-        return false;
-    };
     let sp_off = (frame.frame_bytes - frame.acc_slot_off + 8 + slot * 8) as i32;
+    let rs = match value_place {
+        Place::IntReg(r) => Reg(r),
+        Place::Spill(_) => {
+            let Some(r) = materialize_int(code, value_place, SCRATCH_R10, frame) else {
+                bail_msg("VstackSpill: materialize failed");
+                return false;
+            };
+            r
+        }
+        Place::FpReg(r) => {
+            super::x86_64::emit_movq_r_xmm(code, SCRATCH_R10, Reg(r));
+            SCRATCH_R10
+        }
+        Place::None => {
+            bail_msg("VstackSpill: value Place::None");
+            return false;
+        }
+    };
     emit_mov_mem_r(code, Reg::RSP, sp_off, rs);
     true
 }
 
 fn emit_vstack_reload(code: &mut Vec<u8>, dst: Place, slot: u32, frame: Frame) -> bool {
-    let Some(rd) = int_or_spill_dst(dst) else {
-        bail_msg("VstackReload: dst not int reg / spill");
-        return false;
-    };
     let sp_off = (frame.frame_bytes - frame.acc_slot_off + 8 + slot * 8) as i32;
-    emit_mov_r_mem(code, rd, Reg::RSP, sp_off);
-    spill_dst_to_slot(code, dst, rd, frame);
-    true
+    match dst {
+        Place::IntReg(r) => {
+            emit_mov_r_mem(code, Reg(r), Reg::RSP, sp_off);
+            true
+        }
+        Place::Spill(_) => {
+            emit_mov_r_mem(code, SCRATCH_R10, Reg::RSP, sp_off);
+            spill_dst_to_slot(code, dst, SCRATCH_R10, frame);
+            true
+        }
+        Place::FpReg(r) => {
+            emit_mov_r_mem(code, SCRATCH_R10, Reg::RSP, sp_off);
+            super::x86_64::emit_movq_xmm_r(code, Reg(r), SCRATCH_R10);
+            true
+        }
+        Place::None => true,
+    }
 }
 
 fn emit_mcpy(

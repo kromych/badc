@@ -139,3 +139,6 @@ __pycache__/
 # source copy, the per-compiler driver binaries, and the trace
 # diffs. Regenerated on demand; not source of truth.
 /.diff_vorbis/
+
+# Local helper scripts (not part of the repo)
+run_demos.sh

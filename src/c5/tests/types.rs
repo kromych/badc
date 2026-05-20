@@ -137,8 +137,7 @@ fn warn_dead_store_per_store_when_enabled() {
         .filter(|w| w.contains("dead store:"))
         .collect();
     // `int a = 1; a = 2; return 1;` -> both stores dead.
-    let a_warns: alloc::vec::Vec<&&String> =
-        dead.iter().filter(|w| w.contains("`a`")).collect();
+    let a_warns: alloc::vec::Vec<&&String> = dead.iter().filter(|w| w.contains("`a`")).collect();
     assert_eq!(
         a_warns.len(),
         2,

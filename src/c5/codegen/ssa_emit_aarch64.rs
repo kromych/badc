@@ -118,7 +118,10 @@ fn bail_msg(reason: &str) {
 fn bail(reason: &str, value: u32, place: Place) {
     #[cfg(feature = "std")]
     if std::env::var("BADC_DUMP_SSA").is_ok() {
-        eprintln!("ssa emit aarch64: bailed -- {reason} v{value} place={:?}", place);
+        eprintln!(
+            "ssa emit aarch64: bailed -- {reason} v{value} place={:?}",
+            place
+        );
     }
     let _ = (reason, value, place);
 }
@@ -817,8 +820,7 @@ fn emit_inst(
                 }
                 Place::Spill(target_slot) => {
                     emit(code, enc_ldr_imm(scratch.secondary, Reg(31), sp_off));
-                    let spill_off =
-                        spill_off(frame, target_slot);
+                    let spill_off = spill_off(frame, target_slot);
                     emit(code, enc_str_imm(scratch.secondary, Reg(31), spill_off));
                     true
                 }

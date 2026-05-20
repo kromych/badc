@@ -17,6 +17,8 @@
 //! `Token::Extern`, `Token::Static`, `Token::ThreadLocal`).
 
 use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
 
 use super::super::error::C5Error;
 use super::super::op::Op;

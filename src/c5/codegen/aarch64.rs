@@ -65,7 +65,6 @@ use super::super::error::C5Error;
 use super::super::program::Program;
 use super::{Build, DataFixup, FuncFixup, GotFixup, NativeOptions, Target};
 
-
 /// AArch64 register name. Wraps the 5-bit register field that nearly
 /// every instruction needs in some position; using a newtype prevents
 /// the "I passed `1` for a register and `1` for an immediate to the
@@ -987,7 +986,6 @@ pub(super) struct Fixup {
     pub(super) kind: BranchKind,
 }
 
-
 /// Lower a bytecode [`Program`] to AArch64 machine code. Walks the
 /// bytecode once, emitting native code for each op; control-flow ops
 /// emit a placeholder branch and record a fixup to be patched after
@@ -1011,7 +1009,7 @@ pub(super) struct Fixup {
 pub(super) fn lower(
     program: &Program,
     target: Target,
-    native: NativeOptions,
+    #[cfg_attr(not(feature = "std"), allow(unused_variables))] native: NativeOptions,
     imports: &super::ResolvedImports,
 ) -> Result<Build, C5Error> {
     let mut code = Vec::new();
@@ -1176,7 +1174,6 @@ pub(super) fn lower(
         plt_trampoline_offsets,
     })
 }
-
 
 /// Walk through the patch list, computing the actual native offset
 /// of each branch's target and writing the encoded instruction back

@@ -50,7 +50,6 @@ use super::super::error::C5Error;
 use super::super::program::Program;
 use super::{Abi, Build, DataFixup, FuncFixup, GotFixup, NativeOptions, Target};
 
-
 // ------------------------------------------------------------------
 // Register encoding.
 //
@@ -1176,7 +1175,6 @@ fn lea_offset_bytes(offset: i64) -> i64 {
     }
 }
 
-
 // ------------------------------------------------------------------
 // Lowering pass. Walks the bytecode once, emits native code per Op,
 // records branch fixups for later patching. Mirrors aarch64::lower.
@@ -1185,7 +1183,7 @@ fn lea_offset_bytes(offset: i64) -> i64 {
 pub(super) fn lower(
     program: &Program,
     target: Target,
-    native: NativeOptions,
+    #[cfg_attr(not(feature = "std"), allow(unused_variables))] native: NativeOptions,
     imports: &super::ResolvedImports,
 ) -> Result<Build, C5Error> {
     let mut code: Vec<u8> = Vec::new();
@@ -1457,7 +1455,6 @@ fn apply_plt_call_fixups(
     }
     Ok(())
 }
-
 
 // ------------------------------------------------------------------
 // Encoder unit tests. Expected byte sequences cross-checked against

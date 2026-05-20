@@ -40,3 +40,15 @@ linker = []
 # purely internal keys (macro names) and avoids the small extra cost
 # of the `aHashMap` initialisation.
 hashbrown = { version = "0.17", default-features = false, features = ["default-hasher"] }
+
+[lints.rust]
+# Promote the default-warn unused lints to deny so dead state can't
+# accumulate across refactors. CI already runs `-D warnings`, but
+# pinning the floor in Cargo.toml means a local `cargo build`
+# matches CI behaviour without RUSTFLAGS plumbing.
+unused_variables = "deny"
+unused_assignments = "deny"
+unused_imports = "deny"
+unused_must_use = "deny"
+unused_mut = "deny"
+dead_code = "deny"

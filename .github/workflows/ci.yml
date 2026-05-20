@@ -712,3 +712,15 @@ jobs:
         run: python demos/stb/smoke.py
       - name: bearssl smoke (strict ssa)
         run: python demos/bearssl/smoke.py
+      - name: chibicc bringup smoke (strict ssa)
+        # chibicc skips with exit 2 on lanes whose libc surface
+        # doesn't cover the demo's POSIX expectations.
+        shell: bash
+        run: python demos/chibicc/smoke.py || test $? -eq 2
+      - name: tinycc bringup smoke (strict ssa)
+        run: python demos/tinycc/smoke.py
+      - name: tinycc self-host parity (strict ssa)
+        # `tinycc/self_host.py` exits 2 on lanes that lack one of
+        # the toolchain prerequisites (e.g. system tcc).
+        shell: bash
+        run: python demos/tinycc/self_host.py || test $? -eq 2

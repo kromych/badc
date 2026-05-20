@@ -2501,15 +2501,15 @@ fn emit_fp_binop(
 /// resume PC, SP, and 8 callee-saved d-regs. Total 168 bytes;
 /// the `<setjmp.h>` typedef reserves 256 to leave slack for
 /// future additions.
-const JB_X19_OFF: u32 = 0;
+pub(super) const JB_X19_OFF: u32 = 0;
 const JB_X21_OFF: u32 = 16;
 const JB_X23_OFF: u32 = 32;
 const JB_X25_OFF: u32 = 48;
 const JB_X27_OFF: u32 = 64;
-const JB_X29_OFF: u32 = 80;
-const JB_PC_OFF: u32 = 88;
-const JB_SP_OFF: u32 = 96;
-const JB_D8_OFF: u32 = 104;
+pub(super) const JB_X29_OFF: u32 = 80;
+pub(super) const JB_PC_OFF: u32 = 88;
+pub(super) const JB_SP_OFF: u32 = 96;
+pub(super) const JB_D8_OFF: u32 = 104;
 const JB_D10_OFF: u32 = 120;
 const JB_D12_OFF: u32 = 136;
 const JB_D14_OFF: u32 = 152;
@@ -2520,8 +2520,8 @@ const JB_D14_OFF: u32 = 152;
 /// Layout: 1 mov + 10 str(x19-x28) + 1 str(x29) + 1 adr + 1
 /// str(pc) + 1 add(sp) + 1 str(sp) + 8 str(d8-d15) + 1 movz =
 /// 25 instructions; ADR sits at zero-based index 12.
-const SETJMP_AARCH64_INSN_COUNT: i32 = 25;
-const SETJMP_AARCH64_ADR_INSN_INDEX: i32 = 12;
+pub(super) const SETJMP_AARCH64_INSN_COUNT: i32 = 25;
+pub(super) const SETJMP_AARCH64_ADR_INSN_INDEX: i32 = 12;
 
 /// AArch64 setjmp inlined at the call site. The `env` pointer
 /// arrives in `x19` (c5's accumulator). On the initial call this
@@ -2533,7 +2533,7 @@ const SETJMP_AARCH64_ADR_INSN_INDEX: i32 = 12;
 /// msvcrt `longjmp` routes through SEH and refuses an SEH-free
 /// `jmp_buf`. The Linux / macOS bindings continue to use the
 /// host libc setjmp -- that's already CRT-independent.
-fn emit_setjmp_aarch64(code: &mut Vec<u8>) {
+pub(super) fn emit_setjmp_aarch64(code: &mut Vec<u8>) {
     let start = code.len();
     // Move env from x19 into x16 (the existing IP0 scratch the
     // surrounding code already treats as a compiler temp) so the

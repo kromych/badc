@@ -52,15 +52,16 @@ use alloc::vec::Vec;
 use super::DataFixup;
 use super::Target;
 use super::aarch64::{
-    BranchKind, Cond, Fixup, PltCallFixup, Reg, emit, emit_add_sp_imm, emit_sub_sp_imm,
-    enc_add_imm, enc_add_reg, enc_adrp, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_blr,
-    enc_cbnz, enc_cbz, enc_cmp_reg, enc_cset, enc_eor_reg, enc_fadd_d, enc_fcmp_d, enc_fcvt_d_s,
+    BranchKind, Cond, Fixup, JB_D8_OFF, JB_PC_OFF, JB_SP_OFF, JB_X19_OFF, JB_X29_OFF, PltCallFixup,
+    Reg, emit, emit_add_sp_imm, emit_setjmp_aarch64, emit_sub_sp_imm, enc_add_imm, enc_add_reg,
+    enc_adrp, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_blr, enc_br, enc_cbnz, enc_cbz,
+    enc_cinc, enc_cmp_reg, enc_cset, enc_eor_reg, enc_fadd_d, enc_fcmp_d, enc_fcvt_d_s,
     enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fdiv_d, enc_fmov_d_to_x, enc_fmov_x_to_d, enc_fmul_d,
     enc_fneg_d, enc_fsub_d, enc_ldp_post, enc_ldr_d_imm, enc_ldr_imm, enc_ldr_post, enc_ldr_s_imm,
     enc_ldr32_imm, enc_ldrb_imm, enc_ldrh_imm, enc_ldrsb_imm, enc_ldrsh_imm, enc_ldrsw_imm,
     enc_lslv, enc_lsrv, enc_mov_reg, enc_msub, enc_mul, enc_orr_reg, enc_ret, enc_scvtf_d_x,
     enc_sdiv, enc_stp_pre, enc_str_d_imm, enc_str_imm, enc_str_pre, enc_str_s_imm, enc_str32_imm,
-    enc_strb_imm, enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_udiv, load_imm64,
+    enc_strb_imm, enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_udiv, load_imm64,
 };
 use super::ssa::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
 use super::ssa_alloc::{Allocation, Place};
@@ -1188,9 +1189,111 @@ fn emit_intrinsic(
             emit(code, enc_str_imm(rd, scratch.primary, 0));
             true
         }
-        I::SetjmpAArch64 | I::LongjmpAArch64 => {
-            bail_msg("intrinsic: setjmp / longjmp not in thin slice");
-            false
+        I::SetjmpAArch64 => {
+            // c5 binds <setjmp.h>'s setjmp() to this intrinsic on
+            // Windows aarch64 because msvcrt's longjmp routes
+            // through SEH and refuses a CRT-free `jmp_buf`. The
+            // inline expansion mirrors the pool path: 25 AArch64
+            // words that save x19-x28, x29, the resume PC, sp,
+            // and d8-d15 into [env].
+            if args.len() != 1 {
+                bail_msg("Setjmp: expected 1 arg");
+                return false;
+            }
+            let env_place = alloc
+                .places
+                .get(args[0] as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let env_r = match materialize_int(code, env_place, scratch.primary, frame) {
+                Some(r) => r,
+                None => {
+                    bail_msg("Setjmp: env not int reg / spill / fp");
+                    return false;
+                }
+            };
+            // The helper reads env from x19; route it there.
+            if env_r.0 != 19 {
+                emit(code, enc_mov_reg(Reg(19), env_r));
+            }
+            emit_setjmp_aarch64(code);
+            // After the helper, x19 holds 0 on the initial pass and
+            // the longjmp val on a matching longjmp return. Route
+            // x19 into dst (or spill to the dst slot) -- the
+            // helper's saved-PC points past the helper's last
+            // instruction, so the longjmp BR lands here.
+            let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+                bail_msg("Setjmp: dst not int reg / spill");
+                return false;
+            };
+            if rd.0 != 19 {
+                emit(code, enc_mov_reg(rd, Reg(19)));
+            }
+            spill_local_addr_to_dst(code, dst, rd, frame);
+            true
+        }
+        I::LongjmpAArch64 => {
+            // c5 binds <setjmp.h>'s longjmp() to this intrinsic on
+            // Windows aarch64. args[0] = env, args[1] = val. The
+            // helper restores the saved register set, materializes
+            // x19 = (val != 0) ? val : 1 per C99 7.13.2.1p2, and
+            // branches to the saved PC.
+            if args.len() != 2 {
+                bail_msg("Longjmp: expected 2 args");
+                return false;
+            }
+            let env_place = alloc
+                .places
+                .get(args[0] as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let val_place = alloc
+                .places
+                .get(args[1] as usize)
+                .copied()
+                .unwrap_or(Place::None);
+            let env_r = match materialize_int(code, env_place, Reg(16), frame) {
+                Some(r) => r,
+                None => {
+                    bail_msg("Longjmp: env not int reg / spill / fp");
+                    return false;
+                }
+            };
+            if env_r.0 != 16 {
+                emit(code, enc_mov_reg(Reg(16), env_r));
+            }
+            // Stash val in x17 (the secondary scratch in this
+            // module) before the upcoming restores clobber x19.
+            let val_r = match materialize_int(code, val_place, Reg(17), frame) {
+                Some(r) => r,
+                None => {
+                    bail_msg("Longjmp: val not int reg / spill / fp");
+                    return false;
+                }
+            };
+            if val_r.0 != 17 {
+                emit(code, enc_mov_reg(Reg(17), val_r));
+            }
+            // Restore x19-x28 + x29 from [x16 + offset].
+            for (i, off) in (JB_X19_OFF..JB_X29_OFF).step_by(8).enumerate() {
+                emit(code, enc_ldr_imm(Reg(19 + i as u8), Reg(16), off));
+            }
+            emit(code, enc_ldr_imm(Reg(29), Reg(16), JB_X29_OFF));
+            // Resume PC into x10, sp into x9. x10 is caller-saved
+            // (setjmp's caller doesn't expect it preserved); x18
+            // is the Windows TEB pointer and stays untouched.
+            emit(code, enc_ldr_imm(Reg(10), Reg(16), JB_PC_OFF));
+            emit(code, enc_ldr_imm(Reg(9), Reg(16), JB_SP_OFF));
+            emit(code, enc_add_imm(Reg(31), Reg(9), 0));
+            for (i, off) in (JB_D8_OFF..JB_D8_OFF + 64).step_by(8).enumerate() {
+                emit(code, enc_ldr_d_imm(8 + i as u8, Reg(16), off));
+            }
+            // cmp val, #0 ; cinc x19, val, eq -- 0 becomes 1,
+            // anything else passes through unchanged.
+            emit(code, enc_subs_imm(Reg(31), Reg(17), 0));
+            emit(code, enc_cinc(Reg(19), Reg(17), Cond::Eq));
+            emit(code, enc_br(Reg(10)));
+            true
         }
     }
 }

@@ -186,15 +186,7 @@ const JIT_FIXTURES: &[(&str, i32)] = &[
     ("ssa_call_result_spill.c", 0),
     ("ssa_bail_fixup_rollback.c", 0),
     ("ssa_fp_routing.c", 0),
-    // ssa_callee_saved_x19.c relies on libc's atexit chain
-    // firing as part of normal program exit; the JIT runtime
-    // intercepts atexit() and drains the chain before munmap,
-    // which works on macOS but trips a separate glibc cleanup
-    // path on Linux x86_64 (still under investigation).
-    // The native ELF / Mach-O / PE parity tables exercise the
-    // fixture as a child process where the atexit chain stays
-    // valid.
-    // TODO: re-add once the Linux-side post-drain crash is fixed.
+    ("ssa_callee_saved_x19.c", 0),
     ("ssa_va_arg_loop.c", 0),
     ("ssa_variadic_fp_arg.c", 0),
     ("ssa_fp_compare_nan.c", 0),

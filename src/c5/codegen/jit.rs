@@ -135,26 +135,56 @@ mod jit_impl {
     use std::os::raw::{c_char, c_int, c_void};
     use std::sync::Mutex;
 
-    /// atexit handlers registered by JIT'd code. C11 7.22.4.2
-    /// requires atexit handlers to run in LIFO order. The JIT
-    /// runtime drains this Vec in reverse after the JIT'd `main`
-    /// returns and before the code region is unmapped, so the
-    /// handler PCs (which point into the mmap'd JIT region) stay
-    /// valid for the call.
+    /// atexit handlers registered by JIT'd code, in registration
+    /// order. C11 7.22.4.2p1 requires them to fire in LIFO order;
+    /// the drain walks the Vec in reverse.
     ///
-    /// Process-global rather than per-jit_run because libc's
-    /// atexit() is process-global too; if two jit_runs happen
-    /// concurrently they share the chain. The Mutex prevents
-    /// corruption; the drain-on-completion shape means each
-    /// jit_run only sees its own handlers in practice.
-    static JIT_ATEXIT_CHAIN: Mutex<Vec<extern "C" fn()>> = Mutex::new(Vec::new());
+    /// Each entry carries the raw handler pointer plus an argument
+    /// word. C89-style `atexit(handler)` stores the handler as a
+    /// `(void)` function and ignores the arg; `__cxa_atexit(handler,
+    /// arg, dso)` stores the handler as a `(void*)` function and
+    /// the arg word it was given. Both shapes are ABI-compatible
+    /// with `extern "C" fn(*mut c_void)` on every supported target:
+    /// the extra register on a no-arg handler call is harmless.
+    ///
+    /// Process-global because libc's atexit chain is process-global
+    /// too; the drain happens at the end of every `jit_run` so
+    /// successive runs don't leak.
+    static JIT_ATEXIT_CHAIN: Mutex<Vec<(extern "C" fn(*mut c_void), usize)>> =
+        Mutex::new(Vec::new());
 
-    /// Replacement for libc's `atexit` when invoked from JIT'd
-    /// code. Pushes the handler onto `JIT_ATEXIT_CHAIN`; returns
-    /// 0 on success per C11 7.22.4.2p3.
+    /// Replacement for libc's `atexit` when JIT'd code resolves
+    /// the symbol through `dlsym`. C89 signature: handler takes
+    /// no args. We coerce it to the `(void*)` shape and store a
+    /// NULL arg so the drain path can run both shapes uniformly.
     extern "C" fn jit_atexit_thunk(handler: extern "C" fn()) -> c_int {
+        let handler_with_arg: extern "C" fn(*mut c_void) =
+            unsafe { core::mem::transmute(handler as *const ()) };
+        push_atexit_entry(handler_with_arg, core::ptr::null_mut())
+    }
+
+    /// Replacement for libc's `__cxa_atexit` when JIT'd code
+    /// resolves the symbol through `dlsym`. glibc's `atexit()` is
+    /// a header-side inline that forwards to `__cxa_atexit(fn,
+    /// NULL, &__dso_handle)`, so on Linux the JIT-side `atexit`
+    /// call lands here instead of on `jit_atexit_thunk`. The
+    /// `dso_handle` arg is ignored: the JIT runtime owns the
+    /// lifetime of the handler region.
+    extern "C" fn jit_cxa_atexit_thunk(
+        handler: extern "C" fn(*mut c_void),
+        arg: *mut c_void,
+        _dso_handle: *mut c_void,
+    ) -> c_int {
+        push_atexit_entry(handler, arg)
+    }
+
+    fn push_atexit_entry(handler: extern "C" fn(*mut c_void), arg: *mut c_void) -> c_int {
         if let Ok(mut chain) = JIT_ATEXIT_CHAIN.lock() {
-            chain.push(handler);
+            // Stash arg as usize so the Mutex<Vec<...>> stays Sync.
+            // The pointer survives the round-trip because the JIT
+            // runtime owns the arg's lifetime (callers pass NULL
+            // or a `&__dso_handle` from the JIT data region).
+            chain.push((handler, arg as usize));
             0
         } else {
             // Lock poisoned by another thread's panic; report
@@ -164,18 +194,19 @@ mod jit_impl {
         }
     }
 
-    /// Return the JIT-side atexit thunk address when `name` is
-    /// any libc atexit-shape symbol, otherwise 0. The host's libc
-    /// atexit registers handler PCs into the host's own
-    /// `__cxa_finalize` list, but those PCs sit in the JIT mmap
-    /// region that `JitRegion::drop` unmaps before the host
-    /// process exits -- so handing the host's atexit address to
-    /// JIT'd code yields a dangling pointer at process teardown.
-    /// Intercepting the binding at JIT bind_imports time means
-    /// every JIT'd `atexit` call lands on our thunk instead.
+    /// Return the JIT-side thunk address for any libc atexit-shape
+    /// symbol, otherwise 0. The host's libc atexit registers
+    /// handler PCs into the host's own `__cxa_finalize` list, but
+    /// those PCs sit in the JIT mmap region that `JitRegion::drop`
+    /// unmaps before the host process exits -- so handing the
+    /// host's atexit address to JIT'd code yields a dangling
+    /// pointer at process teardown. Intercepting the binding at
+    /// JIT bind_imports time means every JIT'd `atexit` /
+    /// `__cxa_atexit` call lands on our thunk instead.
     fn atexit_thunk_addr(name: &str) -> u64 {
         match name {
             "atexit" => jit_atexit_thunk as *const () as usize as u64,
+            "__cxa_atexit" => jit_cxa_atexit_thunk as *const () as usize as u64,
             _ => 0,
         }
     }
@@ -184,12 +215,12 @@ mod jit_impl {
     /// the current `jit_run`. Called after JIT'd `main` returns
     /// and before the code region is unmapped.
     fn drain_jit_atexit_chain() {
-        let handlers: Vec<extern "C" fn()> = match JIT_ATEXIT_CHAIN.lock() {
+        let entries: Vec<(extern "C" fn(*mut c_void), usize)> = match JIT_ATEXIT_CHAIN.lock() {
             Ok(mut chain) => chain.drain(..).collect(),
             Err(_) => return,
         };
-        for f in handlers.into_iter().rev() {
-            f();
+        for (handler, arg) in entries.into_iter().rev() {
+            handler(arg as *mut c_void);
         }
     }
 

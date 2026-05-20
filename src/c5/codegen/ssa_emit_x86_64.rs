@@ -36,9 +36,9 @@
 //!
 //! [`emit_function`] returns `true` when the SSA emit handled the
 //! function end-to-end and `false` when any encountered op is
-//! outside the implemented subset. Under the default dispatch
-//! the caller falls back to the pool path for that function;
-//! setting `BADC_STRICT_SSA_EMIT=1` flips the policy to abort.
+//! outside the implemented subset. The caller (`x86_64::lower`)
+//! turns `false` into a hard compile error -- the IR + emit
+//! contract has to cover every shape the lift produces.
 
 #![allow(dead_code, clippy::too_many_arguments)]
 

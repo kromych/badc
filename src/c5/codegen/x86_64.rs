@@ -1467,13 +1467,10 @@ pub(super) fn lower(
         if matches!(op, Op::Ent) {
             current_func = funcs.get(&op_pc).copied().unwrap_or_default();
             in_main = op_pc == program.entry_pc;
-            // SSA emit replacement: when --regalloc=ssa is on
-            // (the default), try the SSA path first. A failing
-            // function falls back to the pool walk for this
-            // `Op::Ent` so progress isn't gated on full SSA-emit
-            // coverage. Setting `BADC_STRICT_SSA_EMIT` flips the
-            // policy to a hard error -- used when driving the
-            // SSA path toward parity.
+            // SSA emit dispatch. The SSA path lowers every
+            // function in the program; a bail aborts the build
+            // with the offending ent_pc so the IR + emit coverage
+            // gap surfaces immediately.
             if use_ssa_emit {
                 let ssa_idx = ssa_lookup.get(&op_pc).copied().ok_or_else(|| {
                     C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -1509,22 +1506,18 @@ pub(super) fn lower(
                     eprint!("{}", super::ssa_dump::dump_function(func_ssa, alloc_for),);
                 }
                 if !ok {
-                    #[cfg(feature = "std")]
-                    if native.strict_ssa_emit || std::env::var("BADC_STRICT_SSA_EMIT").is_ok() {
-                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                            &alloc::format!(
-                                "ssa emit (x86_64): function at ent_pc {op_pc} contains an op outside the implemented subset",
-                            ),
-                        )));
-                    }
-                } else {
-                    let next_ent_pc = ssa_funcs
-                        .get(ssa_idx + 1)
-                        .map(|f| f.ent_pc)
-                        .unwrap_or(program.text.len());
-                    pc = next_ent_pc;
-                    continue;
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        &alloc::format!(
+                            "ssa emit (x86_64): function at ent_pc {op_pc} contains an op outside the implemented subset",
+                        ),
+                    )));
                 }
+                let next_ent_pc = ssa_funcs
+                    .get(ssa_idx + 1)
+                    .map(|f| f.ent_pc)
+                    .unwrap_or(program.text.len());
+                pc = next_ent_pc;
+                continue;
             }
             // Clear cmp+branch fusion state at function boundaries
             // -- pending_cmp_cond is only legal for the gap between

@@ -1322,12 +1322,10 @@ pub(super) fn lower(
         pc += 1;
         if matches!(op, Op::Ent) {
             current_func = funcs.get(&op_pc).copied().unwrap_or_default();
-            // SSA emit replacement: when --regalloc=ssa is on
-            // (the default), replace the pool path's bytecode
-            // walk for this function with the SSA emit's output.
-            // A failing function falls back to the pool walk for
-            // this `Op::Ent`; `BADC_STRICT_SSA_EMIT` flips the
-            // policy to a hard error.
+            // SSA emit dispatch. Every function lowers through
+            // the SSA path; a bail aborts the build with the
+            // offending ent_pc so any IR + emit coverage gap
+            // surfaces immediately.
             if use_ssa_emit {
                 let ssa_idx = ssa_lookup.get(&op_pc).copied().ok_or_else(|| {
                     C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -1353,44 +1351,28 @@ pub(super) fn lower(
                     &mut macho_tlv_descriptors,
                     &mut bytecode_to_native,
                 );
-                if !ok {
-                    // The SSA emit truncated `code` back to the
-                    // pre-attempt snapshot on failure, so no bytes
-                    // leaked. Fall through to the pool path for
-                    // this function. `--strict-ssa-emit` (or the
-                    // legacy `BADC_STRICT_SSA_EMIT` env var) flips
-                    // the policy back to abort -- useful when
-                    // driving the SSA emit toward parity.
-                    #[cfg(feature = "std")]
-                    let strict_ssa =
-                        native.strict_ssa_emit || std::env::var("BADC_STRICT_SSA_EMIT").is_ok();
-                    #[cfg(feature = "std")]
-                    if super::ssa_dump::enabled(native) || strict_ssa {
-                        eprint!("{}", super::ssa_dump::dump_function(func_ssa, alloc_for),);
-                    }
-                    #[cfg(feature = "std")]
-                    if strict_ssa {
-                        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
-                            &alloc::format!(
-                                "ssa emit: function at ent_pc {op_pc} contains an op outside the implemented subset",
-                            ),
-                        )));
-                    }
-                } else {
-                    // SSA emit succeeded for this function: skip
-                    // the pool path's per-PC walk for the rest of
-                    // the function. The SSA emit recorded
-                    // `bytecode_to_native` for every block start
-                    // it produced, so any in-range pcs (including
-                    // absorbed sys trampolines) have their native
-                    // offsets registered for downstream relocations.
-                    let next_ent_pc = ssa_funcs
-                        .get(ssa_idx + 1)
-                        .map(|f| f.ent_pc)
-                        .unwrap_or(program.text.len());
-                    pc = next_ent_pc;
-                    continue;
+                #[cfg(feature = "std")]
+                if super::ssa_dump::enabled(native) {
+                    eprintln!(
+                        "; --- SSA dump (ok={ok}) ent_pc={ent_pc} ---",
+                        ok = ok,
+                        ent_pc = func_ssa.ent_pc,
+                    );
+                    eprint!("{}", super::ssa_dump::dump_function(func_ssa, alloc_for),);
                 }
+                if !ok {
+                    return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                        &alloc::format!(
+                            "ssa emit (aarch64): function at ent_pc {op_pc} contains an op outside the implemented subset",
+                        ),
+                    )));
+                }
+                let next_ent_pc = ssa_funcs
+                    .get(ssa_idx + 1)
+                    .map(|f| f.ent_pc)
+                    .unwrap_or(program.text.len());
+                pc = next_ent_pc;
+                continue;
             }
             // Clear any cmp+branch fusion state; pending_cmp_cond
             // is only legal for the immediate gap between a compare

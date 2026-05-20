@@ -1,8 +1,8 @@
 //! AArch64 native emit consuming the SSA lift + allocator output.
 //! Active when `NativeOptions::regalloc = RegallocMode::Ssa`
-//! (the default; `--regalloc=pool` opts out). Per-function bails
-//! fall back to the pool walk so coverage gaps don't gate progress;
-//! `BADC_STRICT_SSA_EMIT` flips a failing emit to a hard error.
+//! (the default; `--regalloc=pool` opts out). A per-function bail
+//! is a hard error -- the IR + emit contract has to cover every
+//! shape the lift produces.
 //!
 //! ## Pass shape
 //!
@@ -41,9 +41,8 @@
 //! [`emit_function`] returns `true` when the SSA emit handled the
 //! function end-to-end and `false` when any encountered op is
 //! outside the implemented subset. The caller (`aarch64::lower`)
-//! falls back to the pool walk for that function on `false` so
-//! progress isn't gated on full SSA coverage. Set
-//! `BADC_STRICT_SSA_EMIT` to turn that fallback into a hard error.
+//! turns `false` into a hard compile error -- the IR + emit
+//! contract has to cover every shape the lift produces.
 
 #![allow(dead_code, clippy::too_many_arguments)]
 

@@ -1367,17 +1367,12 @@ pub(super) fn lower(
 ) -> Result<Build, C5Error> {
     let abi: Abi = target.abi();
 
-    // Build the regalloc plan once if `--optimize` is on.
-    // See the aarch64 lowering for the mode -> pool-size mapping.
-    let pool_sizes = match native.regalloc {
-        super::RegallocMode::Pool | super::RegallocMode::Ssa => POOL_SIZES,
-        super::RegallocMode::O0 => regalloc::PoolSizes {
-            callee: POOL_SIZES.callee,
-            caller: 0,
-        },
-    };
+    // Pool-allocator plan, retained while the per-op walker is
+    // still compiled in. The SSA dispatch consumes its own
+    // allocation; this exists for the pool fallback's pseudo-stack
+    // analyzer and goes away with the pool walker itself.
     let plan_storage: Option<RegStackPlan> = if native.optimize {
-        Some(regalloc::analyze(&program.text, pool_sizes)?)
+        Some(regalloc::analyze(&program.text, POOL_SIZES)?)
     } else {
         None
     };
@@ -1417,36 +1412,19 @@ pub(super) fn lower(
     let funcs = super::scan_func_meta(program);
     let mut current_func: super::FuncMeta = super::FuncMeta::default();
 
-    // Tracks whether we're currently lowering the program's entry
-    // function. The BADC_SAVED_RBP_CHECK debug stamps skip that
-    // frame because the libc startup stub leaves rbp = 0 in the
-    // caller of `_start -> main`. Each `Op::Ent` refreshes this
-    // and it stays set until the next `Op::Ent`.
-    // SSA emit gate. Active when `--regalloc=ssa` is in effect
-    // (the default; `--regalloc=pool` opts out). Lift the program
-    // into SSA + run the linear-scan allocator once; per-function
-    // dispatch happens at each `Op::Ent` in the main walk below.
-    // `BADC_STRICT_SSA_EMIT` flips a failing emit from
-    // pool-fallback to a hard error -- useful when driving the
-    // SSA path toward parity. Pool path remains the per-function
-    // fallback for any shape the SSA emit doesn't yet cover.
-    let ssa_funcs: alloc::vec::Vec<super::ssa::FunctionSsa>;
-    let ssa_allocs: alloc::vec::Vec<super::ssa_alloc::Allocation>;
+    // Lift the program into SSA once and run the linear-scan
+    // allocator per function; the main walk below dispatches each
+    // `Op::Ent` into `ssa_emit_x86_64::emit_function`. A per-function
+    // emit bail is a hard error.
+    let ssa_funcs: alloc::vec::Vec<super::ssa::FunctionSsa> = super::ssa::lift_program(program)?;
+    let ssa_allocs: alloc::vec::Vec<super::ssa_alloc::Allocation> = ssa_funcs
+        .iter()
+        .map(|f| super::ssa_alloc::allocate(f, target))
+        .collect();
     let mut ssa_lookup: alloc::collections::BTreeMap<usize, usize> =
         alloc::collections::BTreeMap::new();
-    let use_ssa_emit = matches!(native.regalloc, super::RegallocMode::Ssa);
-    if matches!(native.regalloc, super::RegallocMode::Ssa) {
-        ssa_funcs = super::ssa::lift_program(program)?;
-        ssa_allocs = ssa_funcs
-            .iter()
-            .map(|f| super::ssa_alloc::allocate(f, target))
-            .collect();
-        for (i, f) in ssa_funcs.iter().enumerate() {
-            ssa_lookup.insert(f.ent_pc, i);
-        }
-    } else {
-        ssa_funcs = alloc::vec::Vec::new();
-        ssa_allocs = alloc::vec::Vec::new();
+    for (i, f) in ssa_funcs.iter().enumerate() {
+        ssa_lookup.insert(f.ent_pc, i);
     }
     let mut in_main = false;
     let mut pc = 0usize;
@@ -1471,7 +1449,7 @@ pub(super) fn lower(
             // function in the program; a bail aborts the build
             // with the offending ent_pc so the IR + emit coverage
             // gap surfaces immediately.
-            if use_ssa_emit {
+            {
                 let ssa_idx = ssa_lookup.get(&op_pc).copied().ok_or_else(|| {
                     C5Error::Compile(crate::c5::error::fmt_internal_err(
                         "ssa emit: bytecode Op::Ent has no corresponding FunctionSsa",
@@ -1518,25 +1496,6 @@ pub(super) fn lower(
                     .unwrap_or(program.text.len());
                 pc = next_ent_pc;
                 continue;
-            }
-            // Clear cmp+branch fusion state at function boundaries
-            // -- pending_cmp_cond is only legal for the gap between
-            // a compare op and its matching Bz/Bnz.
-            reg_state.pending_cmp_cond = None;
-            // Refresh per-function regalloc state. With no plan,
-            // both stay at their default (use_pool=false, depth=0).
-            if let Some(p) = reg_state.plan {
-                if let Some(f) = p.function_at(op_pc) {
-                    reg_state.use_pool = f.use_pool;
-                    reg_state.current_callee_depth = if f.use_pool { f.callee_depth } else { 0 };
-                } else {
-                    reg_state.use_pool = false;
-                    reg_state.current_callee_depth = 0;
-                }
-                debug_assert!(
-                    reg_state.pseudo_stack.is_empty(),
-                    "pseudo stack non-empty at fn entry"
-                );
             }
         }
         lower_op(

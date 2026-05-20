@@ -1,8 +1,6 @@
 //! AArch64 native emit consuming the SSA lift + allocator output.
-//! Active when `NativeOptions::regalloc = RegallocMode::Ssa`
-//! (the default; `--regalloc=pool` opts out). A per-function bail
-//! is a hard error -- the IR + emit contract has to cover every
-//! shape the lift produces.
+//! A per-function bail is a hard error -- the IR + emit contract
+//! has to cover every shape the lift produces.
 //!
 //! ## Pass shape
 //!

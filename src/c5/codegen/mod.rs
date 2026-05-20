@@ -1056,31 +1056,16 @@ pub(crate) struct FuncFixup {
     pub target_native_offset: usize,
 }
 
-/// Register-allocator pick. Threaded through [`NativeOptions`] so
-/// the lowering can A/B between the SSA-lift + linear-scan path
-/// (default) and the pool-based regalloc (the historical
-/// pseudo-stack pool). The `O0` variant disables the caller-saved
-/// bank in the pool emitter so the codegen produces a simpler,
-/// slightly larger shape.
+/// Register-allocator pick. Single variant today; the enum stays
+/// around so future modes (linear-scan with different heuristics,
+/// graph-colouring) can land without churning every call site.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum RegallocMode {
     /// Per-function basic-block + SSA-value lift, fed into a
     /// linear-scan allocator that pre-colours host arg registers
-    /// at call sites. Default since the SSA emit reached parity
-    /// with the pool path on every CI lane.
+    /// at call sites.
     #[default]
     Ssa,
-    /// Pool classifier with both callee-saved and caller-saved
-    /// banks. Engaged by `--regalloc=pool`; the lowering walks the
-    /// bytecode op-by-op and lands every push on the real stack
-    /// when the pool runs out.
-    Pool,
-    /// Single callee-saved bank, no across-call taint logic. The
-    /// caller bank is disabled so a value spanning a call costs
-    /// the same as one that doesn't. Trades ~5% perf for a
-    /// simpler analyzer; useful as a debugging baseline when the
-    /// pool / SSA shape is suspect.
-    O0,
 }
 
 /// User-controllable knobs for the native lowering pass. Distinct
@@ -1169,24 +1154,7 @@ pub enum OutputKind {
 
 impl Default for NativeOptions {
     /// Defaults: optimizer off, executable output, DWARF on, SSA
-    /// emit. The regalloc default honours the
-    /// `BADC_DEFAULT_REGALLOC` env var when present
-    /// (`pool` / `o0` / `ssa`) so a CI lane can flip the entire
-    /// build to the pool emitter without recompiling badc.
-    #[cfg(feature = "std")]
-    fn default() -> Self {
-        let mut opts = Self::new();
-        if let Ok(v) = std::env::var("BADC_DEFAULT_REGALLOC") {
-            opts.regalloc = match v.as_str() {
-                "pool" => RegallocMode::Pool,
-                "o0" => RegallocMode::O0,
-                "ssa" => RegallocMode::Ssa,
-                _ => opts.regalloc,
-            };
-        }
-        opts
-    }
-    #[cfg(not(feature = "std"))]
+    /// emit.
     fn default() -> Self {
         Self::new()
     }

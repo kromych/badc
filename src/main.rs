@@ -160,17 +160,6 @@ fn main() {
     let mut track_pointers = false;
     let mut trace = false;
     let mut optimize_flag = false;
-    // SSA-lift + linear-scan emit is the default; `--regalloc=pool`
-    // opts back into the original pool emitter, `--regalloc=o0`
-    // forces single-bank pool allocation. The CI pool lane sets
-    // `BADC_DEFAULT_REGALLOC=pool` to flip the default without
-    // touching every smoke script's argv.
-    let mut regalloc_mode: badc::RegallocMode =
-        match std::env::var("BADC_DEFAULT_REGALLOC").ok().as_deref() {
-            Some("pool") => badc::RegallocMode::Pool,
-            Some("o0") => badc::RegallocMode::O0,
-            _ => badc::RegallocMode::Ssa,
-        };
     let mut dump_ssa = false;
     let mut emit_debug_info = true;
     let mut output_path: Option<PathBuf> = None;
@@ -228,28 +217,6 @@ fn main() {
             "--dump-headers" => claim(&mut mode, Mode::DumpHeaders),
             "--dump-pp" | "-E" => claim(&mut mode, Mode::DumpPp),
             "--optimize" | "-O" => optimize_flag = true,
-            arg if arg.starts_with("--regalloc=") => {
-                let value = &arg["--regalloc=".len()..];
-                regalloc_mode = match value {
-                    "pool" => badc::RegallocMode::Pool,
-                    "o0" => badc::RegallocMode::O0,
-                    "ssa" => badc::RegallocMode::Ssa,
-                    other => {
-                        eprintln!(
-                            "badc: --regalloc={other} not recognised (expected pool / o0 / ssa)"
-                        );
-                        std::process::exit(1);
-                    }
-                };
-                // --regalloc=ssa (default) runs the SSA lift +
-                // linear-scan allocator on every function and emits
-                // native bytes through `ssa_emit_*`. A per-function
-                // bail is a hard error. --regalloc=pool forces the
-                // pool emitter for the whole program;
-                // --regalloc=o0 forces the single-bank pool shape.
-                // `--dump-ssa` prints the IR + allocation for each
-                // function.
-            }
             "--dump-ssa" => dump_ssa = true,
             "--no-debug" | "-g0" => emit_debug_info = false,
             "--dump-asm" => claim(&mut mode, Mode::DumpAsm),
@@ -799,7 +766,6 @@ fn main() {
     } else {
         NativeOptions::new()
     };
-    native_opts = native_opts.with_regalloc(regalloc_mode);
     native_opts = native_opts.with_debug_info(emit_debug_info);
     if dump_ssa {
         native_opts = native_opts.with_dump_ssa();

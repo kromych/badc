@@ -1,9 +1,7 @@
 //! x86_64 native emit consuming the SSA lift + allocator output.
-//! Active when `NativeOptions::regalloc = RegallocMode::Ssa`
-//! (the default; `--regalloc=pool` opts out). Mirrors the aarch64
-//! counterpart's structure; the difference is the per-target
-//! instruction encodings and the SysV / Win64 ABI shape applied
-//! to argument and return placement.
+//! Mirrors the aarch64 counterpart's structure; the difference is
+//! the per-target instruction encodings and the SysV / Win64 ABI
+//! shape applied to argument and return placement.
 //!
 //! ## Pass shape
 //!

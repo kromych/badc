@@ -3,8 +3,7 @@
 //! Takes a [`Program::text`] and produces, per function, a basic-block
 //! graph of SSA-style [`Inst`]s. The allocator (`ssa_alloc::allocate`)
 //! and per-arch SSA emit (`ssa_emit_aarch64` / `ssa_emit_x86_64`)
-//! consume the result. Selected by
-//! `NativeOptions::regalloc = RegallocMode::Ssa` (the default).
+//! consume the result.
 //!
 //! ## Lift shape
 //!

@@ -93,50 +93,10 @@ fn fmt_bytecode_window(text: &[i64], pc: usize) -> alloc::string::String {
     ctx
 }
 
-/// Helper: produce a rich ICE diagnostic for a bytecode-scanner
-/// failure (an op slot the codegen / optimizer didn't expect at
-/// `pc`). The output names the function and source line the
-/// instruction was attributed to and dumps the surrounding
-/// bytecode slots -- decoded as `Op` names when they fall inside
-/// the enum's range, raw integer otherwise -- so the failure can
-/// be diagnosed without re-running the compile under a debugger.
-///
-/// Use this in `lower_program` passes that walk `program.text`
-/// linearly with access to the full source-attribution columns;
-/// the per-slot context is the most useful clue when the
-/// scanner drifts off the op/operand boundary mid-function.
-pub(crate) fn fmt_ice_bytecode(
-    message: &str,
-    program: &crate::c5::program::Program,
-    pc: usize,
-) -> String {
-    use alloc::format;
-
-    let raw = program.text.get(pc).copied().unwrap_or(0);
-    let line = program.source_lines.get(pc).copied().unwrap_or(0);
-    let func = program
-        .source_functions
-        .get(pc)
-        .cloned()
-        .unwrap_or_default();
-    let file_idx = program.source_file_indices.get(pc).copied().unwrap_or(0);
-    let fname = program
-        .source_files
-        .get(file_idx as usize)
-        .cloned()
-        .unwrap_or_default();
-    let ctx = fmt_bytecode_window(&program.text, pc);
-    format!(
-        "error: internal compiler error: {message} \
-        (pc={pc} raw={raw} func={func} file={fname} line={line} ctx:{ctx})"
-    )
-}
-
 /// Helper: rich ICE diagnostic for a bytecode-scanner failure
-/// that only has access to the raw text slice -- the optimizer
-/// runs before source-attribution is wired through, so it can't
-/// use [`fmt_ice_bytecode`]. Reports the surrounding op window
-/// and the raw word at `pc` without a function / file / line.
+/// that only has access to the raw text slice. Reports the
+/// surrounding op window and the raw word at `pc` without a
+/// function / file / line.
 pub(crate) fn fmt_ice_text(message: &str, text: &[i64], pc: usize) -> String {
     use alloc::format;
     let raw = text.get(pc).copied().unwrap_or(0);

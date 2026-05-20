@@ -2,7 +2,7 @@
 //! of [`super::ssa`]. Produces a per-`Inst` [`Place`] (a host
 //! register or a spill slot) that the per-arch SSA emit
 //! (`ssa_emit_aarch64.rs` / `ssa_emit_x86_64.rs`) consumes when
-//! emitting native instructions for `RegallocMode::Ssa`.
+//! emitting native instructions.
 //!
 //! ## Algorithm
 //!

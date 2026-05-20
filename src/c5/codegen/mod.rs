@@ -44,7 +44,6 @@ mod elf;
 mod jit;
 mod mach_o;
 mod pe;
-mod regalloc;
 mod ssa;
 mod ssa_alloc;
 #[cfg(feature = "std")]
@@ -1056,18 +1055,6 @@ pub(crate) struct FuncFixup {
     pub target_native_offset: usize,
 }
 
-/// Register-allocator pick. Single variant today; the enum stays
-/// around so future modes (linear-scan with different heuristics,
-/// graph-colouring) can land without churning every call site.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum RegallocMode {
-    /// Per-function basic-block + SSA-value lift, fed into a
-    /// linear-scan allocator that pre-colours host arg registers
-    /// at call sites.
-    #[default]
-    Ssa,
-}
-
 /// User-controllable knobs for the native lowering pass. Distinct
 /// from [`TargetOptions`] (which encodes platform ABI -- not user
 /// choosable). Threaded through [`emit_native_with_options`],
@@ -1077,33 +1064,14 @@ pub enum RegallocMode {
 /// delegate.
 #[derive(Debug, Clone, Copy)]
 pub struct NativeOptions {
-    /// Run the per-function register allocator. The c5 bytecode
-    /// pushes the left operand of every binary op onto the stack;
-    /// the regalloc routes most of those pushes through registers
-    /// instead (x20..x27 + x9..x15 on aarch64; rbx/r12/r14/r15 on
-    /// x86_64) so the matching binary op / `Si` / `Sc` reads its
-    /// operand from a register. The prologue saves only the
-    /// callee-saved slots actually used, and any function whose
-    /// max depth exceeds the per-arch pool capacity falls back to
-    /// real-stack pushes verbatim.
-    ///
-    /// Off by default. `--optimize` / `-O` flips it on, alongside
-    /// the bytecode optimizer. The two passes are independent --
-    /// each is correct on the other's input -- but together they
-    /// produce the fastest emitted code.
-    ///
-    /// The two always-on peepholes -- self-mov elision (in
-    /// `emit_mov_reg` / `emit_mov_rr`) and the cmp+branch fusion
-    /// described in the per-backend module docs -- run regardless
-    /// of this flag, since neither has a tradeoff worth gating.
+    /// Run the bytecode optimizer + the SSA allocator's
+    /// peephole-friendly arrangement (constant folding, dead-store
+    /// elimination, fusion of compare + branch). Off by default;
+    /// `--optimize` / `-O` flips it on. The optimizer and the SSA
+    /// allocator are independent -- each is correct on the other's
+    /// input -- but together they produce the fastest emitted
+    /// code.
     pub optimize: bool,
-    /// Register allocator selection. The SSA shape (default)
-    /// lifts the bytecode into per-function basic blocks and runs
-    /// a linear-scan allocator; the pool-based shape engages the
-    /// per-op pseudo-stack pool; the O0 shape disables the
-    /// pool's caller-saved bank. See `regalloc.rs` for the pool
-    /// classifier and `ssa.rs` for the SSA infrastructure.
-    pub regalloc: RegallocMode,
     /// Pick the kind of binary the writer should produce.
     /// Default is [`OutputKind::Executable`] -- a normal
     /// runnable program. [`OutputKind::SharedLibrary`] swaps
@@ -1153,8 +1121,7 @@ pub enum OutputKind {
 }
 
 impl Default for NativeOptions {
-    /// Defaults: optimizer off, executable output, DWARF on, SSA
-    /// emit.
+    /// Defaults: optimizer off, executable output, DWARF on.
     fn default() -> Self {
         Self::new()
     }
@@ -1165,7 +1132,6 @@ impl NativeOptions {
     pub const fn new() -> Self {
         Self {
             optimize: false,
-            regalloc: RegallocMode::Ssa,
             output_kind: OutputKind::Executable,
             debug_info: true,
             dump_ssa: false,
@@ -1182,12 +1148,6 @@ impl NativeOptions {
     /// Set [`Self::optimize`] = true and return self.
     pub const fn with_optimize(mut self) -> Self {
         self.optimize = true;
-        self
-    }
-
-    /// Pick a register-allocator mode. See [`RegallocMode`].
-    pub const fn with_regalloc(mut self, mode: RegallocMode) -> Self {
-        self.regalloc = mode;
         self
     }
 

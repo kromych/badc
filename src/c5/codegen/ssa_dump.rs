@@ -93,6 +93,25 @@ fn fmt_inst(inst: &Inst) -> String {
             "StoreLocal {{ off={off}, value=v{value}, kind={} }}",
             fmt_store_kind(*kind),
         ),
+        LoadIndexed {
+            base,
+            index,
+            scale,
+            kind,
+        } => format!(
+            "LoadIndexed {{ base=v{base}, index=v{index}, scale={scale}, kind={} }}",
+            fmt_load_kind(*kind),
+        ),
+        StoreIndexed {
+            base,
+            index,
+            scale,
+            value,
+            kind,
+        } => format!(
+            "StoreIndexed {{ base=v{base}, index=v{index}, scale={scale}, value=v{value}, kind={} }}",
+            fmt_store_kind(*kind),
+        ),
         Binop { op, lhs, rhs } => {
             format!("Binop {{ op={}, lhs=v{lhs}, rhs=v{rhs} }}", fmt_binop(*op))
         }

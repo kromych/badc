@@ -703,6 +703,23 @@ fn emit_inst(
         Inst::StoreLocal { off, value, kind } => {
             emit_store_local(code, dst, *off, *value, *kind, alloc, frame, scratch)
         }
+        Inst::LoadIndexed {
+            base,
+            index,
+            scale,
+            kind,
+        } => emit_load_indexed(
+            code, dst, *base, *index, *scale, *kind, alloc, frame, scratch,
+        ),
+        Inst::StoreIndexed {
+            base,
+            index,
+            scale,
+            value,
+            kind,
+        } => emit_store_indexed(
+            code, dst, *base, *index, *scale, *value, *kind, alloc, frame, scratch,
+        ),
         Inst::Binop { op, lhs, rhs } => {
             emit_binop(code, *op, dst, *lhs, *rhs, alloc, frame, scratch)
         }
@@ -2233,6 +2250,171 @@ fn emit_store_local_large_disp(
         return false;
     }
     emit(code, super::aarch64::enc_str_imm(rv, scratch.secondary, 0));
+    true
+}
+
+/// Lower `Inst::LoadIndexed`: `dst = *(kind*)(base + index * scale)`.
+/// Emitted as one scaled-indexed load (`ldr Xt, [Xn, Xm, lsl #N]`)
+/// when `scale` matches the natural width of `kind`. F32 indexed
+/// loads aren't a shape the c5 lift produces today (no `float arr[]`
+/// access path goes through the indexed fold yet); the FP variant
+/// would need a separate `ldr St, [Xn, Xm, lsl #2]` + `fcvt d, s`.
+#[allow(clippy::too_many_arguments)]
+fn emit_load_indexed(
+    code: &mut Vec<u8>,
+    dst: Place,
+    base: u32,
+    index: u32,
+    scale: u8,
+    kind: LoadKind,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    if matches!(kind, LoadKind::F32) {
+        bail_msg("LoadIndexed: F32 not implemented");
+        return false;
+    }
+    let base_place = alloc
+        .places
+        .get(base as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let index_place = alloc
+        .places
+        .get(index as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let rn = match materialize_int(code, base_place, scratch.primary, frame) {
+        Some(r) => r,
+        None => return false,
+    };
+    let rm = match materialize_int(code, index_place, scratch.secondary, frame) {
+        Some(r) => r,
+        None => return false,
+    };
+    let rd = match dst {
+        Place::IntReg(r) => Reg(r),
+        Place::Spill(_) => scratch.secondary,
+        Place::FpReg(_) | Place::None => return false,
+    };
+    let expected_scale: u8 = match kind {
+        LoadKind::I64 => 8,
+        LoadKind::I32 | LoadKind::U32 => 4,
+        LoadKind::I16 | LoadKind::U16 => 2,
+        LoadKind::I8 | LoadKind::U8 => 1,
+        LoadKind::F32 => unreachable!(),
+    };
+    if scale != expected_scale {
+        bail_msg("LoadIndexed: scale doesn't match access width");
+        return false;
+    }
+    let word = match kind {
+        LoadKind::I64 => super::aarch64::enc_ldr_reg_lsl3(rd, rn, rm),
+        LoadKind::I32 => super::aarch64::enc_ldrsw_reg_lsl2(rd, rn, rm),
+        LoadKind::U32 => super::aarch64::enc_ldr32_reg_lsl2(rd, rn, rm),
+        LoadKind::I16 => super::aarch64::enc_ldrsh_reg_lsl1(rd, rn, rm),
+        LoadKind::U16 => super::aarch64::enc_ldrh_reg_lsl1(rd, rn, rm),
+        LoadKind::I8 => super::aarch64::enc_ldrsb_reg(rd, rn, rm),
+        LoadKind::U8 => super::aarch64::enc_ldrb_reg(rd, rn, rm),
+        LoadKind::F32 => unreachable!(),
+    };
+    emit(code, word);
+    if let Place::Spill(slot) = dst {
+        let sp_off = spill_off(frame, slot);
+        emit(code, enc_str_imm(rd, Reg(31), sp_off));
+    }
+    true
+}
+
+/// Lower `Inst::StoreIndexed`: `*(kind*)(base + index * scale) = value`.
+#[allow(clippy::too_many_arguments)]
+fn emit_store_indexed(
+    code: &mut Vec<u8>,
+    dst: Place,
+    base: u32,
+    index: u32,
+    scale: u8,
+    value: u32,
+    kind: StoreKind,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    if matches!(kind, StoreKind::F32) {
+        bail_msg("StoreIndexed: F32 not implemented");
+        return false;
+    }
+    let base_place = alloc
+        .places
+        .get(base as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let index_place = alloc
+        .places
+        .get(index as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let value_place = alloc
+        .places
+        .get(value as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let rn = match materialize_int(code, base_place, scratch.primary, frame) {
+        Some(r) => r,
+        None => return false,
+    };
+    let rm = match materialize_int(code, index_place, scratch.secondary, frame) {
+        Some(r) => r,
+        None => return false,
+    };
+    // The store value needs its own scratch; reuse the FP-bridge
+    // path from `emit_store_local` for the I64-store-of-FpReg shape.
+    let rv = if let StoreKind::I64 = kind
+        && let Place::FpReg(dr) = value_place
+    {
+        emit(code, super::aarch64::enc_fmov_d_to_x(Reg(16), dr));
+        Reg(16)
+    } else {
+        match materialize_int(code, value_place, Reg(16), frame) {
+            Some(r) => r,
+            None => return false,
+        }
+    };
+    let expected_scale: u8 = match kind {
+        StoreKind::I64 => 8,
+        StoreKind::I32 => 4,
+        StoreKind::I16 => 2,
+        StoreKind::I8 => 1,
+        StoreKind::F32 => unreachable!(),
+    };
+    if scale != expected_scale {
+        bail_msg("StoreIndexed: scale doesn't match access width");
+        return false;
+    }
+    let word = match kind {
+        StoreKind::I64 => super::aarch64::enc_str_reg_lsl3(rv, rn, rm),
+        StoreKind::I32 => super::aarch64::enc_str32_reg_lsl2(rv, rn, rm),
+        StoreKind::I16 => super::aarch64::enc_strh_reg_lsl1(rv, rn, rm),
+        StoreKind::I8 => super::aarch64::enc_strb_reg(rv, rn, rm),
+        StoreKind::F32 => unreachable!(),
+    };
+    emit(code, word);
+    // c5 store-op leaves the stored value in the accumulator.
+    match dst {
+        Place::IntReg(r) => {
+            let rd = Reg(r);
+            if rd.0 != rv.0 {
+                emit(code, super::aarch64::enc_mov_reg(rd, rv));
+            }
+        }
+        Place::Spill(slot) => {
+            let sp_off = spill_off(frame, slot);
+            emit(code, enc_str_imm(rv, Reg(31), sp_off));
+        }
+        Place::None => {}
+        Place::FpReg(_) => return false,
+    }
     true
 }
 

@@ -100,6 +100,15 @@ fn int_reg(place: Place) -> Option<Reg> {
 /// so reusing it across an instruction can never clobber a value
 /// the allocator chose.
 const SCRATCH_R10: Reg = Reg(10);
+/// Secondary / tertiary int scratches for ops that need more than
+/// one. rcx and rdx are caller-saved on SysV and excluded from the
+/// allocator's `caller_gprs` pool (`[rax, r11]`), so they can be
+/// clobbered freely between insts without colliding with allocator-
+/// held values. Used by emit handlers that work over a base, an
+/// index, and a value (indexed stores) where one register isn't
+/// enough.
+const SCRATCH_RCX: Reg = Reg(1);
+const SCRATCH_RDX: Reg = Reg(2);
 
 /// Scratch XMM registers for FP handlers. The SSA allocator's
 /// caller_fprs pool covers `xmm0..xmm7` and callee_fprs is empty
@@ -736,6 +745,19 @@ fn emit_inst(
         Inst::StoreLocal { off, value, kind } => {
             emit_store_local(code, dst, *off, *value, *kind, alloc, frame)
         }
+        Inst::LoadIndexed {
+            base,
+            index,
+            scale,
+            kind,
+        } => emit_load_indexed(code, dst, *base, *index, *scale, *kind, alloc, frame),
+        Inst::StoreIndexed {
+            base,
+            index,
+            scale,
+            value,
+            kind,
+        } => emit_store_indexed(code, dst, *base, *index, *scale, *value, *kind, alloc, frame),
         Inst::Binop { op, lhs, rhs } => emit_binop(code, *op, dst, *lhs, *rhs, alloc, frame),
         Inst::BinopI { op, lhs, rhs_imm } => {
             emit_binop_imm(code, *op, dst, *lhs, *rhs_imm, alloc, frame)
@@ -1081,6 +1103,166 @@ fn emit_store_local(
     };
     emit_mov_mem_r(code, Reg::RBP, disp, rv);
     // Mirror the store value into the destination Place.
+    if let Some(rd) = int_or_spill_dst(dst) {
+        if rd.0 != rv.0 {
+            emit_mov_rr(code, rd, rv);
+        }
+        spill_dst_to_slot(code, dst, rd, frame);
+    }
+    true
+}
+
+/// Lower `Inst::LoadIndexed`: `dst = *(kind*)(base + index * scale)`.
+/// Emitted as a single MOVSXD/MOV/MOVSX/MOVZX with SIB-byte
+/// addressing (`[base + index * scale]`). F32 indexed loads aren't a
+/// shape the c5 lift produces today.
+#[allow(clippy::too_many_arguments)]
+fn emit_load_indexed(
+    code: &mut Vec<u8>,
+    dst: Place,
+    base: u32,
+    index: u32,
+    scale: u8,
+    kind: LoadKind,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    if matches!(kind, LoadKind::F32) {
+        bail_msg("LoadIndexed: F32 not implemented");
+        return false;
+    }
+    let expected_scale: u8 = match kind {
+        LoadKind::I64 => 8,
+        LoadKind::I32 | LoadKind::U32 => 4,
+        LoadKind::I16 | LoadKind::U16 => 2,
+        LoadKind::I8 | LoadKind::U8 => 1,
+        LoadKind::F32 => unreachable!(),
+    };
+    if scale != expected_scale {
+        bail_msg("LoadIndexed: scale doesn't match access width");
+        return false;
+    }
+    let base_place = alloc
+        .places
+        .get(base as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let index_place = alloc
+        .places
+        .get(index as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let rbase = match materialize_int(code, base_place, SCRATCH_R10, frame) {
+        Some(r) => r,
+        None => {
+            bail_msg("LoadIndexed: base Place not int reg / spill");
+            return false;
+        }
+    };
+    let rindex = match materialize_int(code, index_place, SCRATCH_RCX, frame) {
+        Some(r) => r,
+        None => {
+            bail_msg("LoadIndexed: index Place not int reg / spill");
+            return false;
+        }
+    };
+    let Some(rd) = int_or_spill_dst(dst) else {
+        bail_msg("LoadIndexed: dst not int reg / spill");
+        return false;
+    };
+    match kind {
+        LoadKind::I64 => super::x86_64::emit_mov_r_sib(code, rd, rbase, rindex, scale),
+        LoadKind::I32 => super::x86_64::emit_movsxd_r_sib(code, rd, rbase, rindex, scale),
+        LoadKind::U32 => super::x86_64::emit_mov_r32_sib(code, rd, rbase, rindex, scale),
+        LoadKind::I16 => super::x86_64::emit_movsx_r_sib16(code, rd, rbase, rindex, scale),
+        LoadKind::U16 => super::x86_64::emit_movzx_r_sib16(code, rd, rbase, rindex, scale),
+        LoadKind::I8 => super::x86_64::emit_movsx_r_sib8(code, rd, rbase, rindex, scale),
+        LoadKind::U8 => super::x86_64::emit_movzx_r_sib8(code, rd, rbase, rindex, scale),
+        LoadKind::F32 => unreachable!(),
+    }
+    spill_dst_to_slot(code, dst, rd, frame);
+    true
+}
+
+/// Lower `Inst::StoreIndexed`: `*(kind*)(base + index * scale) = value`.
+#[allow(clippy::too_many_arguments)]
+fn emit_store_indexed(
+    code: &mut Vec<u8>,
+    dst: Place,
+    base: u32,
+    index: u32,
+    scale: u8,
+    value: u32,
+    kind: StoreKind,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    if matches!(kind, StoreKind::F32) {
+        bail_msg("StoreIndexed: F32 not implemented");
+        return false;
+    }
+    let expected_scale: u8 = match kind {
+        StoreKind::I64 => 8,
+        StoreKind::I32 => 4,
+        StoreKind::I16 => 2,
+        StoreKind::I8 => 1,
+        StoreKind::F32 => unreachable!(),
+    };
+    if scale != expected_scale {
+        bail_msg("StoreIndexed: scale doesn't match access width");
+        return false;
+    }
+    let base_place = alloc
+        .places
+        .get(base as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let index_place = alloc
+        .places
+        .get(index as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let value_place = alloc
+        .places
+        .get(value as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    let rbase = match materialize_int(code, base_place, SCRATCH_R10, frame) {
+        Some(r) => r,
+        None => {
+            bail_msg("StoreIndexed: base Place not int reg / spill");
+            return false;
+        }
+    };
+    let rindex = match materialize_int(code, index_place, SCRATCH_RCX, frame) {
+        Some(r) => r,
+        None => {
+            bail_msg("StoreIndexed: index Place not int reg / spill");
+            return false;
+        }
+    };
+    let rv = if let Place::FpReg(xr) = value_place
+        && matches!(kind, StoreKind::I64)
+    {
+        super::x86_64::emit_movq_r_xmm(code, SCRATCH_RDX, Reg(xr));
+        SCRATCH_RDX
+    } else {
+        match materialize_int(code, value_place, SCRATCH_RDX, frame) {
+            Some(r) => r,
+            None => {
+                bail_msg("StoreIndexed: value Place not int reg / spill");
+                return false;
+            }
+        }
+    };
+    match kind {
+        StoreKind::I64 => super::x86_64::emit_mov_sib_r(code, rbase, rindex, scale, rv),
+        StoreKind::I32 => super::x86_64::emit_mov_sib_r32(code, rbase, rindex, scale, rv),
+        StoreKind::I16 => super::x86_64::emit_mov_sib_r16(code, rbase, rindex, scale, rv),
+        StoreKind::I8 => super::x86_64::emit_mov_sib_r8(code, rbase, rindex, scale, rv),
+        StoreKind::F32 => unreachable!(),
+    }
+    // c5 store-op leaves the value in the accumulator.
     if let Some(rd) = int_or_spill_dst(dst) {
         if rd.0 != rv.0 {
             emit_mov_rr(code, rd, rv);

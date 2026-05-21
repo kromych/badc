@@ -1013,6 +1013,252 @@ pub(super) fn emit_xor_eax_eax(code: &mut Vec<u8>) {
 //     mod=00, fits-in-i8 for mod=01, full 32-bit for mod=10.
 // ------------------------------------------------------------------
 
+/// Emit the ModR/M + SIB + displacement bytes for a memory operand
+/// of the form `[base + index * scale + disp]`. `scale` must be 1,
+/// 2, 4, or 8. When `disp == 0` and `base` isn't RBP/R13, emits
+/// the mod=00 short form (no displacement byte); for RBP/R13 base
+/// the form requires mod=01 with disp8=0 because mod=00 means
+/// RIP-relative addressing.
+fn emit_modrm_sib_mem(
+    code: &mut Vec<u8>,
+    reg: Reg,
+    base: Reg,
+    index: Reg,
+    scale: u8,
+    disp: i32,
+) {
+    let bp_form = base.lo() == 5; // RBP/R13
+    let scale_bits: u8 = match scale {
+        1 => 0,
+        2 => 1,
+        4 => 2,
+        8 => 3,
+        _ => panic!("emit_modrm_sib_mem: invalid scale {scale}"),
+    };
+    let (mod_, want_disp8, want_disp32) = if disp == 0 && !bp_form {
+        (0b00, false, false)
+    } else if (-128..=127).contains(&disp) {
+        (0b01, true, false)
+    } else {
+        (0b10, false, true)
+    };
+    // mod=..., reg=reg.lo(), r/m=100 (SIB follows).
+    emit_byte(code, modrm(mod_, reg.lo(), 4));
+    // scale=scale_bits, index=index.lo(), base=base.lo().
+    emit_byte(code, sib(scale_bits, index.lo(), base.lo()));
+    if want_disp8 {
+        emit_byte(code, disp as i8 as u8);
+    } else if want_disp32 {
+        emit_i32(code, disp);
+    }
+}
+
+/// `MOVSXD r64, [base + index * scale]` -- 32-bit signed indexed load.
+pub(super) fn emit_movsxd_r_sib(
+    code: &mut Vec<u8>,
+    dst: Reg,
+    base: Reg,
+    index: Reg,
+    scale: u8,
+) {
+    emit_byte(
+        code,
+        rex(true, dst.high(), index.high(), base.high()),
+    );
+    emit_byte(code, 0x63);
+    emit_modrm_sib_mem(code, dst, base, index, scale, 0);
+}
+
+/// `MOV r64, [base + index * scale]` -- 64-bit indexed load.
+pub(super) fn emit_mov_r_sib(
+    code: &mut Vec<u8>,
+    dst: Reg,
+    base: Reg,
+    index: Reg,
+    scale: u8,
+) {
+    emit_byte(
+        code,
+        rex(true, dst.high(), index.high(), base.high()),
+    );
+    emit_byte(code, 0x8B);
+    emit_modrm_sib_mem(code, dst, base, index, scale, 0);
+}
+
+/// `MOV r32, [base + index * scale]` -- 32-bit zero-extending indexed
+/// load.
+pub(super) fn emit_mov_r32_sib(
+    code: &mut Vec<u8>,
+    dst: Reg,
+    base: Reg,
+    index: Reg,
+    scale: u8,
+) {
+    let needs_rex = dst.high() || index.high() || base.high();
+    if needs_rex {
+        emit_byte(
+            code,
+            rex(false, dst.high(), index.high(), base.high()),
+        );
+    }
+    emit_byte(code, 0x8B);
+    emit_modrm_sib_mem(code, dst, base, index, scale, 0);
+}
+
+/// `MOVSX r64, [base + index * scale]` (16-bit) -- 16-bit signed
+/// indexed load.
+pub(super) fn emit_movsx_r_sib16(
+    code: &mut Vec<u8>,
+    dst: Reg,
+    base: Reg,
+    index: Reg,
+    scale: u8,
+) {
+    emit_byte(
+        code,
+        rex(true, dst.high(), index.high(), base.high()),
+    );
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0xBF);
+    emit_modrm_sib_mem(code, dst, base, index, scale, 0);
+}
+
+/// `MOVZX r64, [base + index * scale]` (16-bit) -- 16-bit unsigned
+/// indexed load.
+pub(super) fn emit_movzx_r_sib16(
+    code: &mut Vec<u8>,
+    dst: Reg,
+    base: Reg,
+    index: Reg,
+    scale: u8,
+) {
+    emit_byte(
+        code,
+        rex(true, dst.high(), index.high(), base.high()),
+    );
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0xB7);
+    emit_modrm_sib_mem(code, dst, base, index, scale, 0);
+}
+
+/// `MOVSX r64, [base + index * scale]` (8-bit) -- 8-bit signed
+/// indexed load.
+pub(super) fn emit_movsx_r_sib8(
+    code: &mut Vec<u8>,
+    dst: Reg,
+    base: Reg,
+    index: Reg,
+    scale: u8,
+) {
+    emit_byte(
+        code,
+        rex(true, dst.high(), index.high(), base.high()),
+    );
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0xBE);
+    emit_modrm_sib_mem(code, dst, base, index, scale, 0);
+}
+
+/// `MOVZX r64, [base + index * scale]` (8-bit) -- 8-bit unsigned
+/// indexed load.
+pub(super) fn emit_movzx_r_sib8(
+    code: &mut Vec<u8>,
+    dst: Reg,
+    base: Reg,
+    index: Reg,
+    scale: u8,
+) {
+    emit_byte(
+        code,
+        rex(true, dst.high(), index.high(), base.high()),
+    );
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0xB6);
+    emit_modrm_sib_mem(code, dst, base, index, scale, 0);
+}
+
+/// `MOV [base + index * scale], r64` -- 64-bit indexed store.
+pub(super) fn emit_mov_sib_r(
+    code: &mut Vec<u8>,
+    base: Reg,
+    index: Reg,
+    scale: u8,
+    src: Reg,
+) {
+    emit_byte(
+        code,
+        rex(true, src.high(), index.high(), base.high()),
+    );
+    emit_byte(code, 0x89);
+    emit_modrm_sib_mem(code, src, base, index, scale, 0);
+}
+
+/// `MOV [base + index * scale], r32` -- 32-bit indexed store.
+pub(super) fn emit_mov_sib_r32(
+    code: &mut Vec<u8>,
+    base: Reg,
+    index: Reg,
+    scale: u8,
+    src: Reg,
+) {
+    let needs_rex = src.high() || index.high() || base.high();
+    if needs_rex {
+        emit_byte(
+            code,
+            rex(false, src.high(), index.high(), base.high()),
+        );
+    }
+    emit_byte(code, 0x89);
+    emit_modrm_sib_mem(code, src, base, index, scale, 0);
+}
+
+/// `MOV [base + index * scale], r16` -- 16-bit indexed store.
+/// Operand-size prefix 66h selects 16-bit, then the standard REX is
+/// optional based on register banks.
+pub(super) fn emit_mov_sib_r16(
+    code: &mut Vec<u8>,
+    base: Reg,
+    index: Reg,
+    scale: u8,
+    src: Reg,
+) {
+    emit_byte(code, 0x66);
+    let needs_rex = src.high() || index.high() || base.high();
+    if needs_rex {
+        emit_byte(
+            code,
+            rex(false, src.high(), index.high(), base.high()),
+        );
+    }
+    emit_byte(code, 0x89);
+    emit_modrm_sib_mem(code, src, base, index, scale, 0);
+}
+
+/// `MOV [base + index * scale], r8` -- 8-bit indexed store.
+/// Uses opcode 88h (MOV r/m8, r8). Any high-bank operand forces a
+/// REX byte (which also picks the new-8-bit subreg encoding for
+/// rsi/rdi/rbp/rsp instead of their legacy AH/BH/CH/DH halves).
+pub(super) fn emit_mov_sib_r8(
+    code: &mut Vec<u8>,
+    base: Reg,
+    index: Reg,
+    scale: u8,
+    src: Reg,
+) {
+    let needs_rex = src.high()
+        || index.high()
+        || base.high()
+        || src.lo() >= 4;
+    if needs_rex {
+        emit_byte(
+            code,
+            rex(false, src.high(), index.high(), base.high()),
+        );
+    }
+    emit_byte(code, 0x88);
+    emit_modrm_sib_mem(code, src, base, index, scale, 0);
+}
+
 fn emit_modrm_mem(code: &mut Vec<u8>, reg: Reg, base: Reg, disp: i32) {
     let needs_sib = base.lo() == 4; // rsp or r12
     let bp_form = base.lo() == 5; // rbp or r13 -- mod=00 is RIP-rel, must use mod=01

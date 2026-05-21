@@ -341,7 +341,11 @@ fn result_kind(inst: &Inst) -> ResultKind {
             kind: StoreKind::F32,
             ..
         } => ResultKind::Fp,
-        Store { .. } | StoreLocal { .. } => ResultKind::Int,
+        Store { .. } | StoreLocal { .. } | StoreIndexed { .. } => ResultKind::Int,
+        LoadIndexed { kind, .. } => match kind {
+            LoadKind::F32 => ResultKind::Fp,
+            _ => ResultKind::Int,
+        },
         Binop { op, .. } | BinopI { op, .. } => match op {
             BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv => ResultKind::Fp,
             // FP comparisons return an integer 0/1.
@@ -397,6 +401,17 @@ fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
             }
             Inst::LoadLocal { .. } => {}
             Inst::StoreLocal { value, .. } => bump(*value, pc, &mut last_use),
+            Inst::LoadIndexed { base, index, .. } => {
+                bump(*base, pc, &mut last_use);
+                bump(*index, pc, &mut last_use);
+            }
+            Inst::StoreIndexed {
+                base, index, value, ..
+            } => {
+                bump(*base, pc, &mut last_use);
+                bump(*index, pc, &mut last_use);
+                bump(*value, pc, &mut last_use);
+            }
             Inst::Binop { lhs, rhs, .. } => {
                 bump(*lhs, pc, &mut last_use);
                 bump(*rhs, pc, &mut last_use);

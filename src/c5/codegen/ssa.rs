@@ -372,91 +372,35 @@ pub(super) fn lift_function(
                     pc += op.word_size();
                 }
                 Op::Li => {
-                    def(
-                        &mut insts,
-                        Inst::Load {
-                            addr: acc,
-                            kind: LoadKind::I64,
-                        },
-                        &mut acc,
-                    );
+                    emit_scalar_load(&mut insts, &vstack, &mut acc, LoadKind::I64);
                     pc += op.word_size();
                 }
                 Op::Lc => {
-                    def(
-                        &mut insts,
-                        Inst::Load {
-                            addr: acc,
-                            kind: LoadKind::U8,
-                        },
-                        &mut acc,
-                    );
+                    emit_scalar_load(&mut insts, &vstack, &mut acc, LoadKind::U8);
                     pc += op.word_size();
                 }
                 Op::Lcs => {
-                    def(
-                        &mut insts,
-                        Inst::Load {
-                            addr: acc,
-                            kind: LoadKind::I8,
-                        },
-                        &mut acc,
-                    );
+                    emit_scalar_load(&mut insts, &vstack, &mut acc, LoadKind::I8);
                     pc += op.word_size();
                 }
                 Op::Lw => {
-                    def(
-                        &mut insts,
-                        Inst::Load {
-                            addr: acc,
-                            kind: LoadKind::I32,
-                        },
-                        &mut acc,
-                    );
+                    emit_scalar_load(&mut insts, &vstack, &mut acc, LoadKind::I32);
                     pc += op.word_size();
                 }
                 Op::Lwu => {
-                    def(
-                        &mut insts,
-                        Inst::Load {
-                            addr: acc,
-                            kind: LoadKind::U32,
-                        },
-                        &mut acc,
-                    );
+                    emit_scalar_load(&mut insts, &vstack, &mut acc, LoadKind::U32);
                     pc += op.word_size();
                 }
                 Op::Lh => {
-                    def(
-                        &mut insts,
-                        Inst::Load {
-                            addr: acc,
-                            kind: LoadKind::I16,
-                        },
-                        &mut acc,
-                    );
+                    emit_scalar_load(&mut insts, &vstack, &mut acc, LoadKind::I16);
                     pc += op.word_size();
                 }
                 Op::Lhu => {
-                    def(
-                        &mut insts,
-                        Inst::Load {
-                            addr: acc,
-                            kind: LoadKind::U16,
-                        },
-                        &mut acc,
-                    );
+                    emit_scalar_load(&mut insts, &vstack, &mut acc, LoadKind::U16);
                     pc += op.word_size();
                 }
                 Op::Lf => {
-                    def(
-                        &mut insts,
-                        Inst::Load {
-                            addr: acc,
-                            kind: LoadKind::F32,
-                        },
-                        &mut acc,
-                    );
+                    emit_scalar_load(&mut insts, &vstack, &mut acc, LoadKind::F32);
                     pc += op.word_size();
                 }
                 Op::LdLocI => {
@@ -928,6 +872,241 @@ pub(super) fn lift_function(
 /// branch edges; the c5 emitter guarantees every predecessor of
 /// a block agrees on the entry depth (the bytecode is a
 /// well-balanced stream).
+/// Emit either a plain `Inst::Load` or its fused `Inst::LoadIndexed`
+/// form depending on whether the upstream Add + Mul/Shl pattern is
+/// recognisable. Used by every scalar load handler so the fold is
+/// applied uniformly.
+fn emit_scalar_load(insts: &mut Vec<Inst>, vstack: &[ValueId], acc: &mut ValueId, kind: LoadKind) {
+    let pushed = if let Some((base, index, scale)) =
+        try_fuse_indexed_load(insts, *acc, kind, vstack)
+    {
+        // Drop the now-dead Add and BinopI insts. Their value ids
+        // were single-use (only the load consumed them), so this is
+        // safe.
+        insts.truncate(insts.len() - 2);
+        Inst::LoadIndexed {
+            base,
+            index,
+            scale,
+            kind,
+        }
+    } else {
+        Inst::Load { addr: *acc, kind }
+    };
+    let id = insts.len() as ValueId;
+    insts.push(pushed);
+    *acc = id;
+}
+
+/// Try to recognise `Inst::Binop(Add, base, scaled) + Load(kind)` as
+/// an indexed memory access. Returns `Some((base, index, scale))` if
+/// the pattern applies and the surrounding flow allows the upstream
+/// Add + Mul/Shl to be elided. `addr` is the would-be load's address
+/// value (typically `acc`); `acc_is_last` says whether `addr` is the
+/// most recently defined value in `insts` (the load handler invariant).
+///
+/// Returns None and leaves `insts` untouched when the pattern doesn't
+/// hold; the caller falls back to emitting a plain `Load`.
+fn try_fuse_indexed_load(
+    insts: &[Inst],
+    addr: ValueId,
+    kind: LoadKind,
+    vstack: &[ValueId],
+) -> Option<(ValueId, ValueId, u8)> {
+    if matches!(kind, LoadKind::F32) {
+        return None;
+    }
+    let expected_scale: u8 = match kind {
+        LoadKind::I64 => 8,
+        LoadKind::I32 | LoadKind::U32 => 4,
+        LoadKind::I16 | LoadKind::U16 => 2,
+        LoadKind::I8 | LoadKind::U8 => 1,
+        LoadKind::F32 => unreachable!(),
+    };
+    let add_idx = addr as usize;
+    if add_idx + 1 != insts.len() {
+        return None;
+    }
+    if vstack.contains(&addr) {
+        return None;
+    }
+    let (a, b) = match insts.get(add_idx)? {
+        Inst::Binop {
+            op: BinOp::Add,
+            lhs,
+            rhs,
+        } => (*lhs, *rhs),
+        _ => return None,
+    };
+    // Try both orderings: `base + scaled` and `scaled + base`. Each
+    // candidate must be the immediately-preceding inst (so it's
+    // safe to truncate) and the BinopI's `lhs` must not be the
+    // other operand (the index can't double as the base).
+    for &(base, scaled) in &[(a, b), (b, a)] {
+        let scaled_idx = scaled as usize;
+        if scaled_idx + 1 != add_idx {
+            continue;
+        }
+        if vstack.contains(&scaled) {
+            continue;
+        }
+        let (index, byte_scale) = match insts.get(scaled_idx)? {
+            Inst::BinopI {
+                op: BinOp::Mul,
+                lhs,
+                rhs_imm,
+            } => (*lhs, *rhs_imm),
+            Inst::BinopI {
+                op: BinOp::Shl,
+                lhs,
+                rhs_imm,
+            } => {
+                if !(0..=3).contains(rhs_imm) {
+                    continue;
+                }
+                (*lhs, 1i64 << *rhs_imm)
+            }
+            _ => continue,
+        };
+        if !matches!(byte_scale, 1 | 2 | 4 | 8) || (byte_scale as u8) != expected_scale {
+            continue;
+        }
+        return Some((base, index, byte_scale as u8));
+    }
+    None
+}
+
+/// Companion to `try_fuse_indexed_load` for the store path. Same
+/// shape (`Binop(Add, base, scaled) + BinopI(Mul|Shl, idx, K)`), but
+/// the consumer is `Inst::Store` instead of `Inst::Load`. Because
+/// the c5 store shape evaluates the value AFTER the address, the
+/// Add lives on the virtual stack between its def and the matching
+/// store -- so the recogniser allows `addr` to be anywhere in `insts`
+/// AS LONG AS no other live consumer references it. With single-use
+/// addresses (the c5 common case) the simple `add_idx+1 == insts.len()`
+/// test stops being valid, so we instead require: (1) `addr` is on
+/// `vstack` exactly once (the store's pop will consume it), (2) no
+/// later inst references it, and (3) the BinopI is the inst
+/// immediately preceding the Add.
+fn try_fuse_indexed_store(
+    insts: &[Inst],
+    addr: ValueId,
+    kind: StoreKind,
+    vstack: &[ValueId],
+    acc: ValueId,
+) -> Option<(ValueId, ValueId, u8)> {
+    if matches!(kind, StoreKind::F32) {
+        return None;
+    }
+    let expected_scale: u8 = match kind {
+        StoreKind::I64 => 8,
+        StoreKind::I32 => 4,
+        StoreKind::I16 => 2,
+        StoreKind::I8 => 1,
+        StoreKind::F32 => unreachable!(),
+    };
+    let add_idx = addr as usize;
+    let add_inst = insts.get(add_idx)?;
+    let (a, b) = match add_inst {
+        Inst::Binop {
+            op: BinOp::Add,
+            lhs,
+            rhs,
+        } => (*lhs, *rhs),
+        _ => return None,
+    };
+    // The address must be consumed only by this store -- it's on
+    // vstack exactly once (the just-popped entry) and not referenced
+    // by any later inst. Walk insts[add_idx+1..] to verify.
+    if vstack.iter().filter(|&&v| v == addr).count() != 0 {
+        // After the pop the caller already removed it from vstack;
+        // a non-zero remaining count means another pending consumer.
+        return None;
+    }
+    if addr == acc {
+        // The Add's result is also the current accumulator; that
+        // means a load was about to read it, not a store.
+        return None;
+    }
+    for inst in insts.iter().skip(add_idx + 1) {
+        if references_value(inst, addr) {
+            return None;
+        }
+    }
+    for &(base, scaled) in &[(a, b), (b, a)] {
+        let scaled_idx = scaled as usize;
+        if scaled_idx + 1 != add_idx {
+            continue;
+        }
+        if vstack.contains(&scaled) {
+            continue;
+        }
+        for inst in insts.iter().skip(scaled_idx + 1) {
+            if inst as *const _ != add_inst as *const _ && references_value(inst, scaled) {
+                continue;
+            }
+        }
+        let (index, byte_scale) = match insts.get(scaled_idx)? {
+            Inst::BinopI {
+                op: BinOp::Mul,
+                lhs,
+                rhs_imm,
+            } => (*lhs, *rhs_imm),
+            Inst::BinopI {
+                op: BinOp::Shl,
+                lhs,
+                rhs_imm,
+            } => {
+                if !(0..=3).contains(rhs_imm) {
+                    continue;
+                }
+                (*lhs, 1i64 << *rhs_imm)
+            }
+            _ => continue,
+        };
+        if !matches!(byte_scale, 1 | 2 | 4 | 8) || (byte_scale as u8) != expected_scale {
+            continue;
+        }
+        return Some((base, index, byte_scale as u8));
+    }
+    None
+}
+
+/// Cheap reference check for the indexed-fold elision predicates.
+/// Counts a reference if any operand `ValueId` in `inst` equals `v`.
+fn references_value(inst: &Inst, v: ValueId) -> bool {
+    match inst {
+        Inst::Imm(_)
+        | Inst::ImmData(_)
+        | Inst::ImmCode(_)
+        | Inst::LocalAddr(_)
+        | Inst::TlsAddr(_)
+        | Inst::AllocaInit(_)
+        | Inst::TailExt(_)
+        | Inst::VstackReload { .. }
+        | Inst::AccReload => false,
+        Inst::Load { addr, .. } => *addr == v,
+        Inst::LoadLocal { .. } => false,
+        Inst::Store { addr, value, .. } => *addr == v || *value == v,
+        Inst::StoreLocal { value, .. } => *value == v,
+        Inst::LoadIndexed { base, index, .. } => *base == v || *index == v,
+        Inst::StoreIndexed {
+            base, index, value, ..
+        } => *base == v || *index == v || *value == v,
+        Inst::Binop { lhs, rhs, .. } => *lhs == v || *rhs == v,
+        Inst::BinopI { lhs, .. } => *lhs == v,
+        Inst::Fneg(x) => *x == v,
+        Inst::FpCast { value, .. } => *value == v,
+        Inst::Call { args, .. }
+        | Inst::CallIndirect { args, .. }
+        | Inst::CallExt { args, .. }
+        | Inst::Intrinsic { args, .. } => args.contains(&v),
+        Inst::Mcpy { dst, src, .. } => *dst == v || *src == v,
+        Inst::VstackSpill { value, .. } => *value == v,
+        Inst::AccSpill { value } => *value == v,
+    }
+}
+
 /// True when the value's defining instruction lands in an FP
 /// register under the allocator's bank classification. Mirrors the
 /// `result_kind` switch in `ssa_alloc::result_kind` for the cases

@@ -744,6 +744,71 @@ pub(super) fn enc_ldr_reg_lsl3(rt: Reg, rn: Reg, rm: Reg) -> u32 {
     0xF860_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
+/// `LDRSW Xt, [Xn, Xm, LSL #2]` -- sign-extending 32-bit load with
+/// scaled register index. The c5 indexed-load fold uses this for
+/// `int arr[]; arr[i]` reads.
+pub(super) fn enc_ldrsw_reg_lsl2(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+    // size=10 (word), opc=10 (LDRS, sign-extend to 64-bit),
+    // option=011 (LSL/UXTX), S=1 (scale by access_size=4).
+    0xB8A0_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LDR Wt, [Xn, Xm, LSL #2]` -- 32-bit zero-extending load with
+/// scaled register index. Used by the indexed-load fold for
+/// `unsigned int arr[]; arr[i]`.
+pub(super) fn enc_ldr32_reg_lsl2(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+    // size=10, opc=01 (LDR), option=011, S=1.
+    0xB860_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LDRSH Xt, [Xn, Xm, LSL #1]` -- 16-bit sign-extending load.
+pub(super) fn enc_ldrsh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+    // size=01, opc=10, option=011, S=1.
+    0x78A0_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LDRH Wt, [Xn, Xm, LSL #1]` -- 16-bit zero-extending load.
+pub(super) fn enc_ldrh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+    // size=01, opc=01, option=011, S=1.
+    0x7860_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LDRSB Xt, [Xn, Xm]` -- 8-bit sign-extending load. No scale.
+pub(super) fn enc_ldrsb_reg(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+    // size=00, opc=10, option=011, S=0 (byte access has no shift).
+    0x38A0_6800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LDRB Wt, [Xn, Xm]` -- 8-bit zero-extending load. No scale.
+pub(super) fn enc_ldrb_reg(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+    // size=00, opc=01, option=011, S=0.
+    0x3860_6800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STR Xt, [Xn, Xm, LSL #3]` -- 8-byte store with scaled index.
+pub(super) fn enc_str_reg_lsl3(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+    // size=11, opc=00 (STR), option=011, S=1.
+    0xF820_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STR Wt, [Xn, Xm, LSL #2]` -- 4-byte store with scaled index.
+pub(super) fn enc_str32_reg_lsl2(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+    // size=10, opc=00, option=011, S=1.
+    0xB820_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STRH Wt, [Xn, Xm, LSL #1]` -- 2-byte store with scaled index.
+pub(super) fn enc_strh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+    // size=01, opc=00, option=011, S=1.
+    0x7820_7800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STRB Wt, [Xn, Xm]` -- 1-byte store, no scale.
+pub(super) fn enc_strb_reg(rt: Reg, rn: Reg, rm: Reg) -> u32 {
+    // size=00, opc=00, option=011, S=0.
+    0x3820_6800 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
 /// `LDRSH <Xt>, [<Xn|SP>, #imm]` -- 16-bit load sign-extended into
 /// the full 64-bit `Xt`, immediate offset scaled by 2. Used by
 /// [`Op::Lh`] for `short` lvalue reads. Encoding: opc=10

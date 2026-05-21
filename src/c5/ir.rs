@@ -77,6 +77,30 @@ pub(crate) enum Inst {
         value: ValueId,
         kind: StoreKind,
     },
+    /// Load from `base + index * scale`. Folded form of
+    /// `Add(base, Mul/Shl(index, scale))` followed by a `Load`,
+    /// emitted as a single scaled-indexed memory instruction
+    /// (`ldr Wt, [Xn, Xm, lsl #log2(scale)]` on aarch64, scaled
+    /// SIB on x86_64). `scale` is in bytes and matches the
+    /// natural width of `kind` (1 for I8/U8, 2 for I16/U16, 4 for
+    /// I32/U32, 8 for I64). The lift only produces this when the
+    /// upstream `Add` and `Mul/Shl` are immediately consumed by
+    /// this load.
+    LoadIndexed {
+        base: ValueId,
+        index: ValueId,
+        scale: u8,
+        kind: LoadKind,
+    },
+    /// Store to `base + index * scale`. Companion to
+    /// [`Self::LoadIndexed`].
+    StoreIndexed {
+        base: ValueId,
+        index: ValueId,
+        scale: u8,
+        value: ValueId,
+        kind: StoreKind,
+    },
     /// Binary arithmetic / comparison / shift. `lhs` is the value
     /// that was on top of the c5 stack at the op; `rhs` is the
     /// current accumulator (matches `a = pop() <op> a` semantics).

@@ -315,6 +315,21 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         .filter(|r| banks.callee_fprs.contains(r))
         .collect();
     let use_counts = compute_use_counts(func);
+    // Drop the "value-also-in-acc" propagate slot for stores whose
+    // defined value is unread. c5 store ops leave the stored value
+    // in the accumulator; if nothing downstream reads it, the emit
+    // path's mov-to-dst is dead work. Setting the Place to None
+    // makes int_or_spill_dst short-circuit and skip the propagate.
+    for (v, inst) in func.insts.iter().enumerate() {
+        if use_counts[v] == 0
+            && matches!(
+                inst,
+                Inst::Store { .. } | Inst::StoreLocal { .. } | Inst::StoreIndexed { .. }
+            )
+        {
+            places[v] = Place::None;
+        }
+    }
     Allocation {
         places,
         spill_count,
@@ -684,12 +699,21 @@ mod tests {
             assert_eq!(alloc.places.len(), f.insts.len());
             for (i, p) in alloc.places.iter().enumerate() {
                 // Every Inst that produces a value must have a
-                // non-None place. The result-kind helper tells
-                // us which insts produce.
+                // non-None place, except for store-class insts
+                // whose "side-output" value (the propagated acc)
+                // is unread -- the allocator nulls those out so
+                // the emit pass skips the dst-propagate step.
                 let kind = result_kind(&f.insts[i]);
+                let store_with_dead_dst = matches!(
+                    f.insts[i],
+                    Inst::Store { .. } | Inst::StoreLocal { .. } | Inst::StoreIndexed { .. }
+                ) && alloc.use_counts.get(i).copied().unwrap_or(0) == 0;
                 match kind {
                     ResultKind::None => assert_eq!(*p, Place::None),
                     ResultKind::Int | ResultKind::Fp => {
+                        if store_with_dead_dst {
+                            continue;
+                        }
                         assert!(
                             !matches!(p, Place::None),
                             "inst {i} produced a value but got Place::None"

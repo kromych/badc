@@ -3,6 +3,7 @@ mod compiler;
 mod error;
 mod headers;
 mod host;
+mod ir;
 mod lexer;
 #[cfg(feature = "linker")]
 mod linker;

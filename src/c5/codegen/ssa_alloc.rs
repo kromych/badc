@@ -37,7 +37,9 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use super::Target;
-use super::ssa::{BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, ValueId};
+use super::super::ir::{
+    BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, ValueId,
+};
 
 /// Where the allocator placed an SSA value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

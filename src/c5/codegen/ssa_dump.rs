@@ -33,7 +33,7 @@
 use alloc::format;
 use alloc::string::String;
 
-use super::ssa::{
+use super::super::ir::{
     BinOp, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator,
 };
 use super::ssa_alloc::{Allocation, Place};

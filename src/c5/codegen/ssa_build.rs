@@ -36,7 +36,7 @@
 
 use alloc::vec::Vec;
 
-use super::ssa::{
+use super::super::ir::{
     BinOp, Block, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind,
     Terminator, ValueId,
 };

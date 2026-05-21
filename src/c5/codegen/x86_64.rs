@@ -1202,7 +1202,7 @@ pub(super) fn lower(
     // `ssa_emit_x86_64::emit_function`; a per-function emit bail
     // is a hard error so any IR + emit coverage gap surfaces
     // immediately.
-    let ssa_funcs: alloc::vec::Vec<super::ssa::FunctionSsa> =
+    let ssa_funcs: alloc::vec::Vec<super::super::ir::FunctionSsa> =
         super::ssa_emit_common::time_pass("ssa::lift_program (x86_64)", || {
             super::ssa::lift_program(program)
         })?;

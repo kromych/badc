@@ -60,7 +60,7 @@ use super::aarch64::{
     enc_sdiv, enc_stp_pre, enc_str_d_imm, enc_str_imm, enc_str_pre, enc_str_s_imm, enc_str32_imm,
     enc_strb_imm, enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_udiv, load_imm64,
 };
-use super::ssa::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
+use super::super::ir::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
 use super::ssa_alloc::{Allocation, Place};
 
 /// Per-function frame layout. Bytes are 16-aligned at every
@@ -867,7 +867,7 @@ fn emit_inst(
             true
         }
         Inst::FpCast { kind, value } => {
-            use super::ssa::FpCastKind;
+            use super::super::ir::FpCastKind;
             let src_place = alloc
                 .places
                 .get(*value as usize)
@@ -2703,7 +2703,7 @@ fn emit_return(
     // trailing synthetic Lev with no live accumulator -- harmless
     // because c5 calls never read the result of a void-returning
     // function.
-    if value != super::ssa::NO_VALUE {
+    if value != super::super::ir::NO_VALUE {
         let place = alloc
             .places
             .get(value as usize)
@@ -2762,7 +2762,10 @@ mod tests {
     use super::*;
     use crate::Compiler;
 
-    fn lift_and_alloc(src: &str, target: Target) -> (super::super::ssa::FunctionSsa, Allocation) {
+    fn lift_and_alloc(
+        src: &str,
+        target: Target,
+    ) -> (crate::c5::ir::FunctionSsa, Allocation) {
         let program = Compiler::new(src.into()).compile().expect("compile");
         let funcs = super::super::ssa::lift_program(&program).expect("lift");
         let main = funcs.into_iter().next().expect("at least one function");

@@ -85,7 +85,7 @@ pub(super) fn spill_slot_sp_offset(frame_bytes: u32, alloc_spill_base: u32, slot
 /// `DW_CFA_advance_loc <prologue bytes>` so the post-prologue
 /// CFA / saved-reg rule installs at the right PC.
 pub(super) fn record_post_prologue_pc(
-    func: &super::ssa::FunctionSsa,
+    func: &super::super::ir::FunctionSsa,
     bytecode_to_native: &mut [usize],
     code_len: usize,
 ) {

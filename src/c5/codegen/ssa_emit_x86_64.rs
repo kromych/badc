@@ -45,7 +45,7 @@ use alloc::vec::Vec;
 use super::DataFixup;
 use super::GotFixup;
 use super::Target;
-use super::ssa::{BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
+use super::super::ir::{BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
 use super::ssa_alloc::{Allocation, Place};
 use super::x86_64::{
     Cc, Fixup, PltCallFixup, Reg, emit_add_rr, emit_add_rsp_imm32, emit_addsd, emit_and_rr,
@@ -590,7 +590,7 @@ pub(super) fn emit_function(
 struct BranchFixup {
     /// Byte offset of the rel32 field in `code`.
     site: usize,
-    target: super::ssa::BlockId,
+    target: super::super::ir::BlockId,
     kind: LocalBranchKind,
 }
 
@@ -2489,7 +2489,7 @@ fn emit_return(
     // rax entirely: f64 returns ride xmm0, which the SSA
     // allocator's pool covers but the prologue does not save
     // (no callee-saved xmm on SysV).
-    let return_place = if value != super::ssa::NO_VALUE {
+    let return_place = if value != super::super::ir::NO_VALUE {
         alloc
             .places
             .get(value as usize)

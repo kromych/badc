@@ -1530,6 +1530,58 @@ fn emit_binop_imm(
             return false;
         }
     };
+    // Per-op peepholes for immediate-form binops. These avoid
+    // the 10-byte `mov rcx, imm64` materialisation when the
+    // immediate fits a shorter form. Fall back to the rcx-scratch
+    // path below for anything that doesn't.
+    //
+    //   * Mul by power of two -> shl rd, log2(imm).
+    //   * Add / Sub / And / Or / Xor with i32-fitting imm -> the
+    //     existing immediate-form encoders (`emit_*_r_imm32`).
+    let imm_fits_i32 = i32::try_from(rhs_imm).is_ok();
+    let imm_is_pow2 = rhs_imm > 0 && (rhs_imm as u64).is_power_of_two();
+    let used_peephole = match op {
+        BinOp::Mul if imm_is_pow2 => {
+            if rd.0 != rn.0 {
+                emit_mov_rr(code, rd, rn);
+            }
+            super::x86_64::emit_shl_r_imm8(code, rd, (rhs_imm as u64).trailing_zeros() as u8);
+            true
+        }
+        BinOp::Add if imm_fits_i32 => {
+            if rd.0 != rn.0 {
+                emit_mov_rr(code, rd, rn);
+            }
+            super::x86_64::emit_add_r_imm32(code, rd, rhs_imm as i32);
+            true
+        }
+        BinOp::Sub if imm_fits_i32 => {
+            if rd.0 != rn.0 {
+                emit_mov_rr(code, rd, rn);
+            }
+            super::x86_64::emit_sub_r_imm32(code, rd, rhs_imm as i32);
+            true
+        }
+        BinOp::And if imm_fits_i32 => {
+            if rd.0 != rn.0 {
+                emit_mov_rr(code, rd, rn);
+            }
+            super::x86_64::emit_and_r_imm32(code, rd, rhs_imm as i32);
+            true
+        }
+        BinOp::Or if imm_fits_i32 => {
+            if rd.0 != rn.0 {
+                emit_mov_rr(code, rd, rn);
+            }
+            super::x86_64::emit_or_r_imm32(code, rd, rhs_imm as i32);
+            true
+        }
+        _ => false,
+    };
+    if used_peephole {
+        spill_dst_to_slot(code, dst, rd, frame);
+        return true;
+    }
     // Materialise the immediate into rcx as a scratch. rcx is
     // caller-saved on every x86_64 ABI we target, and the SSA
     // allocator excludes it from the pool, so this can't clobber

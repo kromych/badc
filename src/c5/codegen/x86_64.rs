@@ -238,10 +238,27 @@ pub(super) fn emit_extend_rax_for_return(code: &mut Vec<u8>, ext: super::ReturnE
     }
 }
 
-/// `MOV r64, imm64` -- 10-byte absolute load.
-/// Encoding: `REX.W + B8+rd io` -- the register goes into the low 3
-/// bits of the opcode byte (REX.B carries the high bit).
+/// `MOV r64, imm64`. Picks the smallest encoding that holds
+/// the constant exactly:
+/// * `imm == 0`              -> `xor rd, rd` (3 bytes).
+/// * `0 <= imm <= u32::MAX`  -> `mov r32, imm32` (5 bytes; the
+///                              32-bit operand-size MOV
+///                              implicitly zero-extends to 64
+///                              bits, per the Intel SDM).
+/// * otherwise               -> `REX.W + B8+rd io` (10 bytes).
 pub(super) fn emit_mov_r_imm64(code: &mut Vec<u8>, dst: Reg, imm: i64) {
+    if imm == 0 {
+        emit_xor_rr(code, dst, dst);
+        return;
+    }
+    if (0..=u32::MAX as i64).contains(&imm) {
+        if dst.high() {
+            emit_byte(code, rex(false, false, false, true));
+        }
+        emit_byte(code, 0xB8 | dst.lo());
+        emit_u32(code, imm as u32);
+        return;
+    }
     emit_byte(code, rex(true, false, false, dst.high()));
     emit_byte(code, 0xB8 | dst.lo());
     emit_i64(code, imm);
@@ -1540,10 +1557,32 @@ mod tests {
 
     #[test]
     fn mov_r13_imm64() {
-        // mov r13, 42  ->  49 BD 2A 00 00 00 00 00 00 00
+        // mov r13, 42 -> short form (5 bytes, zero-extends).
+        // 41 BD 2A 00 00 00
         assert_eq!(
             assemble(|c| emit_mov_r_imm64(c, Reg::R13, 42)),
-            vec![0x49, 0xBD, 0x2A, 0, 0, 0, 0, 0, 0, 0]
+            vec![0x41, 0xBD, 0x2A, 0, 0, 0]
+        );
+    }
+
+    #[test]
+    fn mov_r_imm64_zero_uses_xor() {
+        // mov rax, 0 -> xor rax, rax (3 bytes through the shared
+        // 64-bit alu encoder).
+        assert_eq!(
+            assemble(|c| emit_mov_r_imm64(c, Reg::RAX, 0)),
+            vec![0x48, 0x31, 0xC0]
+        );
+    }
+
+    #[test]
+    fn mov_r_imm64_negative_keeps_long_form() {
+        // mov rax, -1 -> 48 B8 FF FF FF FF FF FF FF FF
+        // Negative immediates need the 10-byte REX.W form so the
+        // sign-extension reaches the top of rax.
+        assert_eq!(
+            assemble(|c| emit_mov_r_imm64(c, Reg::RAX, -1)),
+            vec![0x48, 0xB8, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]
         );
     }
 

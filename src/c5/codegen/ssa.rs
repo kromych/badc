@@ -512,10 +512,55 @@ pub(super) fn lift_function(
                         _ => unreachable!(),
                     };
                     let value = acc;
-                    def(&mut insts, Inst::Store { addr, value, kind }, &mut acc);
-                    // Indirect store may alias any local through
-                    // the pointer; drop the per-slot value cache.
-                    slot_value.clear();
+                    // When the address came from a `LocalAddr(n)` def
+                    // the store touches one known slot, not arbitrary
+                    // memory. Fuse to `StoreLocal` so the per-arch emit
+                    // folds the address into the store, and update the
+                    // per-slot value cache so a subsequent read of the
+                    // same slot reuses the value instead of reloading.
+                    // This is the c5 parser's call-arg shape (`Op::Lea
+                    // temp; Op::Psh; (expr); Op::Si`) -- without the
+                    // fuse, each arg setup costs two redundant memory
+                    // ops plus an unused-LocalAddr register.
+                    // Fuse only the I64 store-through-LocalAddr shape;
+                    // the per-arch StoreLocal emit currently only
+                    // supports I64. Narrower widths still emit
+                    // Inst::Store with a clear-the-cache invalidation.
+                    let local_off = if matches!(kind, StoreKind::I64)
+                        && let Some(Inst::LocalAddr(n)) = insts.get(addr as usize)
+                    {
+                        Some(*n)
+                    } else {
+                        None
+                    };
+                    if let Some(off) = local_off {
+                        def(
+                            &mut insts,
+                            Inst::StoreLocal { off, value, kind },
+                            &mut acc,
+                        );
+                        // The c5 store leaves the bit pattern in the
+                        // slot; a subsequent I64 load consumes the
+                        // raw 8 bytes. Cache-hit aliasing only works
+                        // when the stored value lives in an int reg;
+                        // for an FP-producing value the cache hit
+                        // would deliver an FpReg to a consumer that
+                        // expects an int reg (call-arg marshalling
+                        // goes through x0..x7, not d0..d7). Skip
+                        // the cache update for FP-producing values;
+                        // the load still works -- it just goes
+                        // through memory like the unfused path.
+                        if !is_fp_producing(&insts, value) {
+                            slot_value.insert(off, (LoadKind::I64, value));
+                        } else {
+                            slot_value.remove(&off);
+                        }
+                    } else {
+                        def(&mut insts, Inst::Store { addr, value, kind }, &mut acc);
+                        // Indirect store may alias any local through
+                        // the pointer; drop the per-slot value cache.
+                        slot_value.clear();
+                    }
                     pc += op.word_size();
                 }
                 Op::StLocI => {
@@ -883,6 +928,42 @@ pub(super) fn lift_function(
 /// branch edges; the c5 emitter guarantees every predecessor of
 /// a block agrees on the entry depth (the bytecode is a
 /// well-balanced stream).
+/// True when the value's defining instruction lands in an FP
+/// register under the allocator's bank classification. Mirrors the
+/// `result_kind` switch in `ssa_alloc::result_kind` for the cases
+/// the store-fuse cache cares about (only int-producing values can
+/// alias a subsequent I64 load through the cache).
+fn is_fp_producing(insts: &[Inst], v: ValueId) -> bool {
+    match insts.get(v as usize) {
+        Some(Inst::Load {
+            kind: LoadKind::F32,
+            ..
+        }) => true,
+        Some(Inst::LoadLocal {
+            kind: LoadKind::F32,
+            ..
+        }) => true,
+        Some(Inst::Store {
+            kind: StoreKind::F32,
+            ..
+        }) => true,
+        Some(Inst::StoreLocal {
+            kind: StoreKind::F32,
+            ..
+        }) => true,
+        Some(Inst::Binop { op, .. }) | Some(Inst::BinopI { op, .. }) => matches!(
+            op,
+            BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv
+        ),
+        Some(Inst::Fneg(_)) => true,
+        Some(Inst::FpCast {
+            kind: FpCastKind::IntToFp,
+            ..
+        }) => true,
+        _ => false,
+    }
+}
+
 fn compute_block_entry_depths(
     text: &[i64],
     _ent_pc: usize,

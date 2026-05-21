@@ -42,6 +42,7 @@ mod mach_o;
 mod pe;
 mod ssa;
 mod ssa_alloc;
+mod ssa_build;
 #[cfg(feature = "std")]
 mod ssa_dump;
 mod ssa_emit_aarch64;

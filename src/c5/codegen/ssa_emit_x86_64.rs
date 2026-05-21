@@ -1643,16 +1643,43 @@ fn emit_binop_imm(
     // path below for anything that doesn't.
     //
     //   * Mul by power of two -> shl rd, log2(imm).
+    //   * Shl / Shr / Shru by 0..63 -> shl / sar / shr by imm8.
     //   * Add / Sub / And / Or / Xor with i32-fitting imm -> the
     //     existing immediate-form encoders (`emit_*_r_imm32`).
     let imm_fits_i32 = i32::try_from(rhs_imm).is_ok();
     let imm_is_pow2 = rhs_imm > 0 && (rhs_imm as u64).is_power_of_two();
+    let shift_amount = if (0..64).contains(&rhs_imm) {
+        Some(rhs_imm as u8)
+    } else {
+        None
+    };
     let used_peephole = match op {
         BinOp::Mul if imm_is_pow2 => {
             if rd.0 != rn.0 {
                 emit_mov_rr(code, rd, rn);
             }
             super::x86_64::emit_shl_r_imm8(code, rd, (rhs_imm as u64).trailing_zeros() as u8);
+            true
+        }
+        BinOp::Shl if shift_amount.is_some() => {
+            if rd.0 != rn.0 {
+                emit_mov_rr(code, rd, rn);
+            }
+            super::x86_64::emit_shl_r_imm8(code, rd, shift_amount.unwrap());
+            true
+        }
+        BinOp::Shr if shift_amount.is_some() => {
+            if rd.0 != rn.0 {
+                emit_mov_rr(code, rd, rn);
+            }
+            super::x86_64::emit_sar_r_imm8(code, rd, shift_amount.unwrap());
+            true
+        }
+        BinOp::Shru if shift_amount.is_some() => {
+            if rd.0 != rn.0 {
+                emit_mov_rr(code, rd, rn);
+            }
+            super::x86_64::emit_shr_r_imm8(code, rd, shift_amount.unwrap());
             true
         }
         BinOp::Add if imm_fits_i32 => {

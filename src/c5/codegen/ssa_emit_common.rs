@@ -95,6 +95,42 @@ pub(super) fn record_post_prologue_pc(
     }
 }
 
+/// True when an SSA inst can be skipped entirely because its
+/// result has no consumers and the inst itself has no side effects.
+/// Per-arch emit dispatch checks this before invoking `emit_inst`;
+/// dead pure values produce no machine code. Side-effectful insts
+/// (stores, calls, intrinsics, alloca init, vstack spills) are
+/// always emitted regardless of use count.
+pub(super) fn is_dead_pure(
+    inst: &super::super::ir::Inst,
+    v: super::super::ir::ValueId,
+    alloc: &super::ssa_alloc::Allocation,
+) -> bool {
+    use super::super::ir::Inst::*;
+    let pure = matches!(
+        inst,
+        Imm(_)
+            | ImmData(_)
+            | ImmCode(_)
+            | LocalAddr(_)
+            | TlsAddr(_)
+            | Load { .. }
+            | LoadLocal { .. }
+            | LoadIndexed { .. }
+            | Binop { .. }
+            | BinopI { .. }
+            | Fneg(_)
+            | FpCast { .. }
+            | VstackReload { .. }
+            | AccReload
+    );
+    if !pure {
+        return false;
+    }
+    let idx = v as usize;
+    alloc.use_counts.get(idx).copied().unwrap_or(0) == 0
+}
+
 /// Record the native byte offset of a block's first
 /// instruction against its bytecode PC. Skips the entry block
 /// because the outer codegen walk already pinned the

@@ -415,6 +415,9 @@ pub(super) fn emit_function(
         for v in block.inst_range.clone() {
             let inst = &func.insts[v as usize];
             let place = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
+            if super::ssa_emit_common::is_dead_pure(inst, v, alloc) {
+                continue;
+            }
             if !emit_inst(
                 code,
                 inst,

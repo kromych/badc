@@ -102,6 +102,10 @@ pub(super) struct Allocation {
     pub gpr_used: Vec<u8>,
     /// FP regs the allocator actually used.
     pub fp_used: Vec<u8>,
+    /// Number of consumers of each value. Used by the emit pass to
+    /// skip pure-with-no-uses insts (dead-code elimination). A value
+    /// with zero uses and no side effects produces no machine code.
+    pub use_counts: Vec<u32>,
 }
 
 /// Set of available registers for the host target. The emit pass
@@ -182,6 +186,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             spill_count: 0,
             gpr_used: Vec::new(),
             fp_used: Vec::new(),
+            use_counts: Vec::new(),
         };
     }
 
@@ -309,12 +314,95 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         .into_iter()
         .filter(|r| banks.callee_fprs.contains(r))
         .collect();
+    let use_counts = compute_use_counts(func);
     Allocation {
         places,
         spill_count,
         gpr_used: gpr_used_callee,
         fp_used: fp_used_callee,
+        use_counts,
     }
+}
+
+/// Count consumers for every SSA value. Drives the emit pass's
+/// dead-code skip for pure-with-no-uses insts.
+fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
+    let n = func.insts.len();
+    let mut counts: Vec<u32> = vec![0; n];
+    let mut bump = |v: ValueId| {
+        if v != NO_VALUE && (v as usize) < n {
+            counts[v as usize] += 1;
+        }
+    };
+    for inst in &func.insts {
+        match inst {
+            Inst::Imm(_)
+            | Inst::ImmData(_)
+            | Inst::ImmCode(_)
+            | Inst::LocalAddr(_)
+            | Inst::TlsAddr(_)
+            | Inst::AllocaInit(_)
+            | Inst::TailExt(_)
+            | Inst::VstackReload { .. }
+            | Inst::AccReload
+            | Inst::LoadLocal { .. } => {}
+            Inst::Load { addr, .. } => bump(*addr),
+            Inst::Store { addr, value, .. } => {
+                bump(*addr);
+                bump(*value);
+            }
+            Inst::StoreLocal { value, .. } => bump(*value),
+            Inst::LoadIndexed { base, index, .. } => {
+                bump(*base);
+                bump(*index);
+            }
+            Inst::StoreIndexed {
+                base, index, value, ..
+            } => {
+                bump(*base);
+                bump(*index);
+                bump(*value);
+            }
+            Inst::Binop { lhs, rhs, .. } => {
+                bump(*lhs);
+                bump(*rhs);
+            }
+            Inst::BinopI { lhs, .. } => bump(*lhs),
+            Inst::Fneg(v) => bump(*v),
+            Inst::FpCast { value, .. } => bump(*value),
+            Inst::Call { args, .. }
+            | Inst::CallIndirect { args, .. }
+            | Inst::CallExt { args, .. }
+            | Inst::Intrinsic { args, .. } => {
+                for &a in args {
+                    bump(a);
+                }
+            }
+            Inst::Mcpy { dst, src, .. } => {
+                bump(*dst);
+                bump(*src);
+            }
+            Inst::VstackSpill { value, .. } => bump(*value),
+            Inst::AccSpill { value } => bump(*value),
+        }
+    }
+    // Also count CallIndirect's target: not in the args list but a
+    // value reference. Same for terminator-borne values (cond /
+    // Return) -- the per-block terminator references count too.
+    for inst in &func.insts {
+        if let Inst::CallIndirect { target, .. } = inst {
+            bump(*target);
+        }
+    }
+    for block in &func.blocks {
+        match block.terminator {
+            super::super::ir::Terminator::Bz { cond, .. } => bump(cond),
+            super::super::ir::Terminator::Bnz { cond, .. } => bump(cond),
+            super::super::ir::Terminator::Return(v) => bump(v),
+            _ => {}
+        }
+    }
+    counts
 }
 
 /// Whether an instruction defines an int / FP value or none at all.

@@ -11,10 +11,22 @@
 //! target (`Op::Jmp` / `Op::Bz` / `Op::Bnz` operand) and at the
 //! instruction after every terminator. Within a block:
 //!
-//! * `Op::Imm`, `Op::Lea`, `Op::LdLocI`, `Op::LdLocC`, `Op::TlsLea`
-//!   define a fresh [`Inst::Imm`] / `Inst::LocalAddr` / `Inst::Load` /
+//! * `Op::Imm`, `Op::TlsLea` define a fresh [`Inst::Imm`] /
 //!   `Inst::TlsAddr` value. The accumulator's current value becomes
 //!   the new instruction's id.
+//! * `Op::Lea N` followed by a scalar load (`Op::Li` / `Op::Lc` /
+//!   `Op::Lw` / `Op::Lwu` / `Op::Lh` / `Op::Lhu` / `Op::Lcs` /
+//!   `Op::Lf`) is fused into a single [`Inst::LoadLocal`] with the
+//!   matching `LoadKind`. The standalone `Op::Lea` (with no
+//!   matching load to fuse with) lifts to an [`Inst::LocalAddr`].
+//!   The optimizer's `Op::LdLocI` / `Op::LdLocC` shape lifts to the
+//!   same [`Inst::LoadLocal`]; `Op::StLocI` lifts to
+//!   [`Inst::StoreLocal`].
+//! * A per-block cache aliases repeated reads of the same slot to
+//!   the prior SSA value when the access width matches. The cache
+//!   clears at ops whose semantics could write to a local through a
+//!   pointer (function calls, intrinsics, `Op::Mcpy`, indirect
+//!   stores).
 //! * `Op::Psh` records the accumulator's value onto a virtual
 //!   per-block stack; it produces no SSA value.
 //! * Binary ops (`Op::Add`, ...) consume one virtual-stack entry

@@ -1,54 +1,32 @@
-//! AArch64 instruction encoder + bytecode -> AArch64 lowering.
+//! AArch64 instruction encoder + per-function lowering shell.
 //!
 //! All AArch64 instructions are 32 bits wide and little-endian on every
 //! supported OS, which makes the encoder a flat catalogue of
-//! `fn enc_xxx(...) -> u32`. The lowering walks a [`Program`]'s bytecode
-//! once and emits a stream of those.
-//!
-//! ## Register convention
-//!
-//! Phase 1 keeps it simple, with the goal of "obviously correct" over
-//! "fast":
-//!
-//! * `x19` -- VM accumulator (`a` in the bytecode model). Callee-saved,
-//!   so we don't have to spill it across `bl` calls.
-//! * `sp`  -- VM stack pointer. We use the real native stack for VM
-//!   pushes (`Op::Psh` becomes `str x19, [sp, #-16]!`).
-//! * `x29` -- frame pointer (AAPCS64-mandated for unwinding).
-//! * `x30` -- link register (saved/restored on entry/exit).
-//! * `x0..x7` -- argument-passing registers, used at call sites.
-//!
-//! Anything more sophisticated (real allocation, dead-store elimination)
-//! happens in the optimizer pass before we get here.
+//! `fn enc_xxx(...) -> u32`. Per-function code generation routes
+//! through [`super::ssa::lift_program`] +
+//! [`super::ssa_alloc::allocate`] + `super::ssa_emit_aarch64`; this
+//! module's `lower()` is the shell that drives the SSA pipeline and
+//! the post-pass fixups (PLT trampolines, branch fixups,
+//! data-relocation patching).
 //!
 //! ## Always-on peepholes
 //!
-//! Two rewrites the lowering applies regardless of any flag,
-//! since both are strict wins.
+//! [`emit_mov_reg`] drops `mov xd, xd` instead of emitting it. Used
+//! by both the SSA emit and the start-stub for the few reg-to-reg
+//! moves the lowering produces with potentially-coinciding source
+//! and destination.
 //!
-//! [`emit_mov_reg`] drops `mov xd, xd` instead of emitting it.
-//! Today's lowering doesn't actually produce a self-mov, but the
-//! check costs nothing and protects future refactors -- if a
-//! regalloc tweak ever lets source and destination coincide, it
-//! collapses to zero bytes automatically.
+//! ## What lives here
 //!
-//! The bigger one is compare-and-branch fusion. When a compare op
-//! (`Lt`, `Eq`, ..., or one of the immediate forms `EqI`, `NeI`,
-//! ...) feeds directly into `Op::Bz` / `Op::Bnz`, the compare emits
-//! just `cmp` and the branch emits `b.cond` instead of `cbz` /
-//! `cbnz`. The eliminated `cset` plus the eliminated comparison
-//! against zero buy us 4 bytes and one uop per pattern. The rewrite
-//! is gated by [`fusion_candidate`], which refuses to fuse if any
-//! other branch lands on the `Bz`/`Bnz` PC -- that path would
-//! arrive without our `cmp` having set the flags -- or if either
-//! the taken-target op or the fall-through op reads `x19` before
-//! writing it. The whitelist matters because the elided `cset`
-//! leaves `x19` holding the rhs of the compare instead of the
-//! 0/1 boolean, and c4's `a && b` short-circuit pattern is exactly
-//! a sequence where one `Bz` lands on another `Bz` that wants to
-//! read that boolean. Without the gate the compiler quietly
-//! miscompiles short-circuits; with it we caught the bug while
-//! bringing up the c4 self-host.
+//! * The `enc_*` instruction encoders (used by the SSA emit, the
+//!   start stub, and the PLT trampoline emit).
+//! * [`emit_setjmp_aarch64`] -- a CRT-free setjmp inlined at the call
+//!   site so Windows AArch64 (where msvcrt's longjmp routes through
+//!   SEH) can be supported uniformly with macOS / Linux.
+//! * The lowering shell `lower()` -- frame layout, post-pass fixup
+//!   walks, and the per-arch sticking points the SSA emit can't see
+//!   (PLT trampoline placement, x19 reservation, branch placeholder
+//!   patching).
 
 // Encoder catalogue: a few entries (e.g. unused arithmetic forms,
 // MSR/MRS variants we'd reach for if we ever grow scheduling) sit

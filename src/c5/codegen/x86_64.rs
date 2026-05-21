@@ -1,45 +1,22 @@
-//! x86_64 instruction encoder + bytecode -> x86_64 lowering.
+//! x86_64 instruction encoder + per-function lowering shell.
 //!
-//! Covers every non-intrinsic Op (arithmetic, control flow,
-//! comparisons, loads/stores, locals, function calls direct and
-//! indirect), libc binding through the GOT, and data-segment +
-//! function-pointer fixups.
-//!
-//! ## Register convention
-//!
-//! Mirrors the AArch64 backend's choices, retargeted to x86_64:
-//!
-//! * `r13` -- VM accumulator (`a` in the bytecode model). Callee-saved
-//!   in the System V ABI, so libc calls can't trample it.
-//! * `rsp` -- VM stack pointer; we ride on the native stack.
-//! * `rbp` -- frame pointer (and the c4 bp).
-//! * `rdi/rsi/rdx/rcx/r8/r9` -- argument-passing registers, used at
-//!   libc call sites (System V ABI).
-//! * `r10/r11` -- caller-saved scratch.
+//! Mirrors the structure of [`super::aarch64`]. Per-function code
+//! generation routes through [`super::ssa::lift_program`] +
+//! [`super::ssa_alloc::allocate`] + `super::ssa_emit_x86_64`; this
+//! module owns the encoder catalogue, the start-stub, the PLT
+//! trampoline emit, and the post-pass fixup walks that the SSA emit
+//! defers to.
 //!
 //! ## Always-on peepholes
 //!
-//! Same two rewrites as the aarch64 backend, applied unconditionally
-//! because both are strict wins.
+//! [`emit_mov_rr`] drops `mov rd, rd` instead of emitting it. Used
+//! by the SSA emit, the start stub, and `emit_libc_call`-shaped
+//! helpers where source and destination can coincide.
 //!
-//! [`emit_mov_rr`] drops `mov rd, rd` instead of emitting it. Every
-//! reg-to-reg move in the lowering goes through this helper, so the
-//! check catches dynamically-chosen pool registers too without
-//! sprinkling guards across the lowering.
-//!
-//! Compare-and-branch fusion is more impactful here than on
-//! aarch64. Naive lowering of `<cmp>; Bz` is `cmp; setcc r10b;
-//! movzx r13, r10b; cmp r13, 0; jcc rel32` -- 24 bytes and four
-//! uops. Fused, the compare emits just `cmp` and the branch emits
-//! `jcc rel32` reading the flags, for a total of 9 bytes and two
-//! uops. The same safety gates as aarch64 apply: refuse to fuse
-//! if another branch lands on the `Bz`/`Bnz` PC, or if the
-//! taken-target or fall-through op reads `r13` before writing it.
-//! The latter check matters because the elided `setcc + movzx`
-//! leaves `r13` holding the rhs of the compare instead of the 0/1
-//! boolean, which would miscompile c4's short-circuit `a && b`
-//! pattern (one `Bz` lands on another `Bz` expecting that
-//! boolean).
+//! [`emit_mov_r_imm64`] picks the smallest encoding for the
+//! constant: `xor rd, rd` for zero, 5-byte `mov r32, imm32` for
+//! 0..u32::MAX (which zero-extends to 64 per the SDM), 10-byte
+//! `REX.W + B8+rd io` otherwise.
 
 #![allow(dead_code)] // Encoders ahead of lowering coverage.
 

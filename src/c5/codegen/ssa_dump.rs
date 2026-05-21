@@ -1,5 +1,6 @@
 //! Human-readable rendering of the SSA lift + allocator output.
-//! Active when the env var `BADC_DUMP_SSA` is set; the per-arch
+//! Active when the `--dump-ssa` CLI flag is set (or the
+//! `BADC_DUMP_SSA` env var on a library caller); the per-arch
 //! lowering invokes [`dump_function`] before emitting native code
 //! so a failing emit can be cross-referenced against the SSA
 //! the lowering was asked to consume.

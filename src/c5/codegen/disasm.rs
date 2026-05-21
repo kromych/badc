@@ -1,10 +1,10 @@
 //! Textual listing of the lowered code.
 //!
 //! Walks `Program::text` and `Build::bytecode_to_native` together to
-//! print each c4 op with the native bytes it lowered to. Output is
+//! print each c5 op with the native bytes it lowered to. Output is
 //! grouped per-op so the bytecode-to-machine mapping is obvious;
-//! within each op we just dump hex bytes (no mnemonics, since
-//! disassembling x86_64 in particular is a project on its own).
+//! within each op we dump hex bytes (no mnemonics, since
+//! disassembling x86_64 in particular is a separate project).
 //! Users who want full mnemonics can pipe a binary through
 //! `objdump -d --disassemble`.
 //!

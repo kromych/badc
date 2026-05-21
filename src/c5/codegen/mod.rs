@@ -3,17 +3,13 @@
 //! without involving the VM. The default for the badc CLI; see also
 //! [`jit::jit_run`] for the in-process variant.
 //!
-//! The story is intentionally simple: lower the existing stack-machine
-//! bytecode straight to native instructions, then wrap the bytes in
-//! whatever executable container the OS wants. Lowering is one pass
-//! per arch; an opt-in register-pool analyzer ([`regalloc`]) routes
-//! short-lived push/pop pairs through real registers when `-O` is on.
-//!
 //! ## Pipeline
 //!
-//! [`Program`] -> per-arch lowering -> raw machine code -> per-OS
-//! image writer -> bytes on disk -> (Apple Silicon only) shell to
-//! `codesign --sign -`.
+//! [`Program`] -> [`ssa::lift_program`] (per-function SSA + CFG) ->
+//! [`ssa_alloc::allocate`] (linear-scan register allocation) ->
+//! per-arch SSA emit (`ssa_emit_aarch64` / `ssa_emit_x86_64`) ->
+//! raw machine code -> per-OS image writer -> bytes on disk ->
+//! (Apple Silicon only) shell to `codesign --sign -`.
 //!
 //! ## What we trade away
 //!

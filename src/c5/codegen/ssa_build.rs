@@ -429,4 +429,98 @@ mod tests {
             );
         }
     }
+
+    /// Hand-build a counted loop with a back-edge into the loop
+    /// header:
+    ///
+    /// ```c
+    /// long count_to(long limit) {
+    ///     long i = 0;
+    ///     while (i < limit) i += 1;
+    ///     return i;
+    /// }
+    /// ```
+    ///
+    /// Validates that the builder produces a CFG with a back-edge
+    /// (loop-body → loop-header) and that the linear-scan allocator
+    /// computes live ranges across the back-edge without diagnostics.
+    /// Loop-header reads of `i` reach via the local slot rather
+    /// than a phi -- mirrors the SSA shape the lift produces for
+    /// `address_escaped`-style locals today; mem2reg promotion is
+    /// tracked separately (TODO).
+    #[test]
+    fn loop_back_edge_round_trip() {
+        let mut b = SsaBuilder::new(0, 1, false);
+        // Local layout: `i` is the only true local; reserve one
+        // 8-byte slot. c5 ABI: `limit` is the declared parameter
+        // at slot 2 (caller pushed an 8-byte value).
+        b.set_locals(8);
+        let i_off: i64 = -1; // c5 slot index; codegen multiplies by 8.
+
+        let _entry = b.entry_block();
+        let header = b.new_block();
+        let body = b.new_block();
+        let exit = b.new_block();
+
+        // Entry: i = 0; jmp header.
+        let v_zero = b.imm(0);
+        let _ = b.store_local(i_off, v_zero, StoreKind::I64);
+        b.jmp(header);
+
+        // Header: cond = i < limit; if zero (false) -> exit, else
+        // fall through to body.
+        b.switch_to(header);
+        let v_i = b.load_local(i_off, LoadKind::I64);
+        let v_limit = b.load_local(2, LoadKind::I64);
+        let v_cond = b.binop(BinOp::Lt, v_i, v_limit);
+        b.branch_zero(v_cond, exit, body);
+
+        // Body: i = i + 1; jmp header (back-edge).
+        b.switch_to(body);
+        let v_i_body = b.load_local(i_off, LoadKind::I64);
+        let v_i_plus_1 = b.binop_imm(BinOp::Add, v_i_body, 1);
+        let _ = b.store_local(i_off, v_i_plus_1, StoreKind::I64);
+        b.jmp(header);
+
+        // Exit: return i.
+        b.switch_to(exit);
+        let v_i_exit = b.load_local(i_off, LoadKind::I64);
+        b.return_(v_i_exit);
+
+        let func = b.finish();
+
+        // Structural assertions.
+        assert_eq!(func.blocks.len(), 4);
+        for i in 1..func.blocks.len() {
+            assert_eq!(
+                func.blocks[i - 1].inst_range.end,
+                func.blocks[i].inst_range.start,
+            );
+        }
+        // Header terminator targets exit (zero branch) and body
+        // (fall-through); body terminator jumps back to header.
+        match func.blocks[1].terminator {
+            Terminator::Bz {
+                target,
+                fall_through,
+                ..
+            } => {
+                assert_eq!(target, exit);
+                assert_eq!(fall_through, body);
+            }
+            t => panic!("header terminator must be Bz, got {t:?}"),
+        }
+        match func.blocks[2].terminator {
+            Terminator::Jmp(t) => assert_eq!(t, header),
+            t => panic!("body terminator must be Jmp(header), got {t:?}"),
+        }
+
+        // Allocator: the back-edge extends the live range of `v_i`
+        // and `v_limit` across the loop body. Linear scan must
+        // place every value.
+        for target in [super::super::Target::LinuxX64, super::super::Target::LinuxAarch64] {
+            let alloc = super::super::ssa_alloc::allocate(&func, target);
+            assert_eq!(alloc.places.len(), func.insts.len());
+        }
+    }
 }

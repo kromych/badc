@@ -43,7 +43,7 @@ use super::super::ir::{
 
 /// Builder over a [`FunctionSsa`]. Each method that defines a value
 /// returns its [`ValueId`]; terminators close the current block.
-pub(super) struct SsaBuilder {
+pub(crate) struct SsaBuilder {
     func: FunctionSsa,
     /// Block currently receiving inst pushes. `None` after a
     /// terminator closes the block until [`Self::switch_to`] picks
@@ -67,7 +67,7 @@ impl SsaBuilder {
     /// Create a builder for a function with the given identity and
     /// initial entry block (block 0). The entry block is the
     /// builder's initial focus; the first push lands there.
-    pub(super) fn new(ent_pc: usize, n_params: usize, is_variadic: bool) -> Self {
+    pub(crate) fn new(ent_pc: usize, n_params: usize, is_variadic: bool) -> Self {
         let func = FunctionSsa {
             ent_pc,
             end_pc: ent_pc,
@@ -94,14 +94,14 @@ impl SsaBuilder {
     /// Record that the function reserves `n` natural-width local
     /// bytes (the value Op::Ent's operand would carry under the c5
     /// path). Consumed by the per-arch emit's frame layout.
-    pub(super) fn set_locals(&mut self, n: i64) {
+    pub(crate) fn set_locals(&mut self, n: i64) {
         self.func.locals = n;
     }
 
     /// Reserve a new basic block and return its id. The new block
     /// is not made current; the caller drives that via
     /// [`Self::switch_to`].
-    pub(super) fn new_block(&mut self) -> BlockId {
+    pub(crate) fn new_block(&mut self) -> BlockId {
         let id = self.block_starts.len() as BlockId;
         self.block_starts
             .push(self.func.insts.len() as u32);
@@ -112,7 +112,7 @@ impl SsaBuilder {
 
     /// Make `block` the current insertion point. Subsequent pushes
     /// land in this block until a terminator closes it.
-    pub(super) fn switch_to(&mut self, block: BlockId) {
+    pub(crate) fn switch_to(&mut self, block: BlockId) {
         // Re-anchor the block's inst-start to the current end of
         // the inst list. This handles the natural construction
         // order where new_block reserves an id before the prior
@@ -124,7 +124,7 @@ impl SsaBuilder {
     }
 
     /// The implicit entry block (block 0). Always exists.
-    pub(super) fn entry_block(&self) -> BlockId {
+    pub(crate) fn entry_block(&self) -> BlockId {
         0
     }
 
@@ -140,59 +140,59 @@ impl SsaBuilder {
     }
 
     /// `Inst::Imm`.
-    pub(super) fn imm(&mut self, v: i64) -> ValueId {
+    pub(crate) fn imm(&mut self, v: i64) -> ValueId {
         self.push(Inst::Imm(v))
     }
 
     /// `Inst::ImmData` (data-segment offset).
-    pub(super) fn imm_data(&mut self, off: i64) -> ValueId {
+    pub(crate) fn imm_data(&mut self, off: i64) -> ValueId {
         self.push(Inst::ImmData(off))
     }
 
     /// `Inst::ImmCode` (function-pointer literal).
-    pub(super) fn imm_code(&mut self, target_pc: usize) -> ValueId {
+    pub(crate) fn imm_code(&mut self, target_pc: usize) -> ValueId {
         self.push(Inst::ImmCode(target_pc))
     }
 
     /// `Inst::LocalAddr`.
-    pub(super) fn local_addr(&mut self, off: i64) -> ValueId {
+    pub(crate) fn local_addr(&mut self, off: i64) -> ValueId {
         self.push(Inst::LocalAddr(off))
     }
 
     /// `Inst::TlsAddr`.
-    pub(super) fn tls_addr(&mut self, off: i64) -> ValueId {
+    pub(crate) fn tls_addr(&mut self, off: i64) -> ValueId {
         self.push(Inst::TlsAddr(off))
     }
 
     /// `Inst::Load` through a precomputed address.
-    pub(super) fn load(&mut self, addr: ValueId, kind: LoadKind) -> ValueId {
+    pub(crate) fn load(&mut self, addr: ValueId, kind: LoadKind) -> ValueId {
         self.push(Inst::Load { addr, kind })
     }
 
     /// `Inst::Store` through a precomputed address. Returns the
     /// stored value's id (matches c5 semantics: a `Op::Si` leaves
     /// the stored value in the accumulator).
-    pub(super) fn store(&mut self, addr: ValueId, value: ValueId, kind: StoreKind) -> ValueId {
+    pub(crate) fn store(&mut self, addr: ValueId, value: ValueId, kind: StoreKind) -> ValueId {
         self.push(Inst::Store { addr, value, kind })
     }
 
     /// `Inst::LoadLocal` -- fused [`Inst::LocalAddr`] + [`Inst::Load`].
-    pub(super) fn load_local(&mut self, off: i64, kind: LoadKind) -> ValueId {
+    pub(crate) fn load_local(&mut self, off: i64, kind: LoadKind) -> ValueId {
         self.push(Inst::LoadLocal { off, kind })
     }
 
     /// `Inst::StoreLocal` -- fused [`Inst::LocalAddr`] + [`Inst::Store`].
-    pub(super) fn store_local(&mut self, off: i64, value: ValueId, kind: StoreKind) -> ValueId {
+    pub(crate) fn store_local(&mut self, off: i64, value: ValueId, kind: StoreKind) -> ValueId {
         self.push(Inst::StoreLocal { off, value, kind })
     }
 
     /// `Inst::Binop`.
-    pub(super) fn binop(&mut self, op: BinOp, lhs: ValueId, rhs: ValueId) -> ValueId {
+    pub(crate) fn binop(&mut self, op: BinOp, lhs: ValueId, rhs: ValueId) -> ValueId {
         self.push(Inst::Binop { op, lhs, rhs })
     }
 
     /// `Inst::BinopI`.
-    pub(super) fn binop_imm(&mut self, op: BinOp, lhs: ValueId, rhs_imm: i64) -> ValueId {
+    pub(crate) fn binop_imm(&mut self, op: BinOp, lhs: ValueId, rhs_imm: i64) -> ValueId {
         self.push(Inst::BinopI {
             op,
             lhs,
@@ -201,27 +201,27 @@ impl SsaBuilder {
     }
 
     /// `Inst::Fneg`.
-    pub(super) fn fneg(&mut self, v: ValueId) -> ValueId {
+    pub(crate) fn fneg(&mut self, v: ValueId) -> ValueId {
         self.push(Inst::Fneg(v))
     }
 
     /// `Inst::FpCast`.
-    pub(super) fn fp_cast(&mut self, kind: FpCastKind, value: ValueId) -> ValueId {
+    pub(crate) fn fp_cast(&mut self, kind: FpCastKind, value: ValueId) -> ValueId {
         self.push(Inst::FpCast { kind, value })
     }
 
     /// `Inst::Call` -- direct user-function call.
-    pub(super) fn call(&mut self, target_pc: usize, args: Vec<ValueId>) -> ValueId {
+    pub(crate) fn call(&mut self, target_pc: usize, args: Vec<ValueId>) -> ValueId {
         self.push(Inst::Call { target_pc, args })
     }
 
     /// `Inst::CallIndirect` -- function-pointer call.
-    pub(super) fn call_indirect(&mut self, target: ValueId, args: Vec<ValueId>) -> ValueId {
+    pub(crate) fn call_indirect(&mut self, target: ValueId, args: Vec<ValueId>) -> ValueId {
         self.push(Inst::CallIndirect { target, args })
     }
 
     /// `Inst::CallExt` -- libc / external call.
-    pub(super) fn call_ext(
+    pub(crate) fn call_ext(
         &mut self,
         binding_idx: i64,
         args: Vec<ValueId>,
@@ -235,14 +235,14 @@ impl SsaBuilder {
     }
 
     /// Close the current block with `Terminator::Jmp`.
-    pub(super) fn jmp(&mut self, target: BlockId) {
+    pub(crate) fn jmp(&mut self, target: BlockId) {
         self.close(Terminator::Jmp(target), self.last_def);
     }
 
     /// Close the current block with `Terminator::Bz`. `cond` is the
     /// value tested; control transfers to `target` when zero, else
     /// falls through to `fall_through`.
-    pub(super) fn branch_zero(
+    pub(crate) fn branch_zero(
         &mut self,
         cond: ValueId,
         target: BlockId,
@@ -259,7 +259,7 @@ impl SsaBuilder {
     }
 
     /// Close the current block with `Terminator::Bnz`.
-    pub(super) fn branch_nonzero(
+    pub(crate) fn branch_nonzero(
         &mut self,
         cond: ValueId,
         target: BlockId,
@@ -276,7 +276,7 @@ impl SsaBuilder {
     }
 
     /// Close the current block with `Terminator::Return`.
-    pub(super) fn return_(&mut self, value: ValueId) {
+    pub(crate) fn return_(&mut self, value: ValueId) {
         self.close(Terminator::Return(value), value);
     }
 
@@ -297,7 +297,7 @@ impl SsaBuilder {
 
     /// Finalise the builder and return the populated [`FunctionSsa`].
     /// Panics if any block was opened but not terminated.
-    pub(super) fn finish(mut self) -> FunctionSsa {
+    pub(crate) fn finish(mut self) -> FunctionSsa {
         let n = self.block_starts.len();
         let mut blocks: Vec<Block> = Vec::with_capacity(n);
         for i in 0..n {

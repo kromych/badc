@@ -324,85 +324,137 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
     }
 }
 
-/// Count consumers for every SSA value. Drives the emit pass's
-/// dead-code skip for pure-with-no-uses insts.
+/// Count consumers for every SSA value, then iterate to fixed point
+/// so transitively-dead pure insts also drop to use_count == 0.
+/// Drives the emit pass's dead-code skip.
 fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
     let n = func.insts.len();
     let mut counts: Vec<u32> = vec![0; n];
-    let mut bump = |v: ValueId| {
+    let bump_into = |counts: &mut Vec<u32>, v: ValueId| {
         if v != NO_VALUE && (v as usize) < n {
             counts[v as usize] += 1;
         }
     };
-    for inst in &func.insts {
-        match inst {
-            Inst::Imm(_)
-            | Inst::ImmData(_)
-            | Inst::ImmCode(_)
-            | Inst::LocalAddr(_)
-            | Inst::TlsAddr(_)
-            | Inst::AllocaInit(_)
-            | Inst::TailExt(_)
-            | Inst::VstackReload { .. }
-            | Inst::AccReload
-            | Inst::LoadLocal { .. } => {}
-            Inst::Load { addr, .. } => bump(*addr),
-            Inst::Store { addr, value, .. } => {
-                bump(*addr);
-                bump(*value);
-            }
-            Inst::StoreLocal { value, .. } => bump(*value),
-            Inst::LoadIndexed { base, index, .. } => {
-                bump(*base);
-                bump(*index);
-            }
-            Inst::StoreIndexed {
-                base, index, value, ..
-            } => {
-                bump(*base);
-                bump(*index);
-                bump(*value);
-            }
-            Inst::Binop { lhs, rhs, .. } => {
-                bump(*lhs);
-                bump(*rhs);
-            }
-            Inst::BinopI { lhs, .. } => bump(*lhs),
-            Inst::Fneg(v) => bump(*v),
-            Inst::FpCast { value, .. } => bump(*value),
-            Inst::Call { args, .. }
-            | Inst::CallIndirect { args, .. }
-            | Inst::CallExt { args, .. }
-            | Inst::Intrinsic { args, .. } => {
-                for &a in args {
-                    bump(a);
-                }
-            }
-            Inst::Mcpy { dst, src, .. } => {
-                bump(*dst);
-                bump(*src);
-            }
-            Inst::VstackSpill { value, .. } => bump(*value),
-            Inst::AccSpill { value } => bump(*value),
+    let decrement = |counts: &mut Vec<u32>, v: ValueId| {
+        if v != NO_VALUE && (v as usize) < n && counts[v as usize] > 0 {
+            counts[v as usize] -= 1;
         }
+    };
+    for inst in &func.insts {
+        for_each_operand(inst, |op| bump_into(&mut counts, op));
     }
-    // Also count CallIndirect's target: not in the args list but a
-    // value reference. Same for terminator-borne values (cond /
-    // Return) -- the per-block terminator references count too.
     for inst in &func.insts {
         if let Inst::CallIndirect { target, .. } = inst {
-            bump(*target);
+            bump_into(&mut counts, *target);
         }
     }
     for block in &func.blocks {
         match block.terminator {
-            super::super::ir::Terminator::Bz { cond, .. } => bump(cond),
-            super::super::ir::Terminator::Bnz { cond, .. } => bump(cond),
-            super::super::ir::Terminator::Return(v) => bump(v),
+            super::super::ir::Terminator::Bz { cond, .. } => bump_into(&mut counts, cond),
+            super::super::ir::Terminator::Bnz { cond, .. } => bump_into(&mut counts, cond),
+            super::super::ir::Terminator::Return(v) => bump_into(&mut counts, v),
             _ => {}
         }
     }
+    // Iterate to fixed point: a pure inst with zero uses is dead;
+    // its operand references stop counting. Worst case O(n^2)
+    // but n is typically small (per-function inst count) and the
+    // fixed point converges in few passes (chain length).
+    let mut killed: Vec<bool> = vec![false; n];
+    loop {
+        let mut changed = false;
+        for (i, inst) in func.insts.iter().enumerate() {
+            if killed[i] || !is_pure_inst(inst) {
+                continue;
+            }
+            if counts[i] == 0 {
+                killed[i] = true;
+                changed = true;
+                for_each_operand(inst, |op| decrement(&mut counts, op));
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
     counts
+}
+
+/// True when the inst has no side effects and can be DCE'd if its
+/// result is unread. Mirrors `is_dead_pure` in ssa_emit_common but
+/// kept here to drive the allocator's use-count fixed-point pass.
+fn is_pure_inst(inst: &Inst) -> bool {
+    matches!(
+        inst,
+        Inst::Imm(_)
+            | Inst::ImmData(_)
+            | Inst::ImmCode(_)
+            | Inst::LocalAddr(_)
+            | Inst::TlsAddr(_)
+            | Inst::Load { .. }
+            | Inst::LoadLocal { .. }
+            | Inst::LoadIndexed { .. }
+            | Inst::Binop { .. }
+            | Inst::BinopI { .. }
+            | Inst::Fneg(_)
+            | Inst::FpCast { .. }
+            | Inst::VstackReload { .. }
+            | Inst::AccReload
+    )
+}
+
+/// Invoke `f` for each operand `ValueId` referenced by `inst`.
+fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
+    match inst {
+        Inst::Imm(_)
+        | Inst::ImmData(_)
+        | Inst::ImmCode(_)
+        | Inst::LocalAddr(_)
+        | Inst::TlsAddr(_)
+        | Inst::AllocaInit(_)
+        | Inst::TailExt(_)
+        | Inst::VstackReload { .. }
+        | Inst::AccReload
+        | Inst::LoadLocal { .. } => {}
+        Inst::Load { addr, .. } => f(*addr),
+        Inst::Store { addr, value, .. } => {
+            f(*addr);
+            f(*value);
+        }
+        Inst::StoreLocal { value, .. } => f(*value),
+        Inst::LoadIndexed { base, index, .. } => {
+            f(*base);
+            f(*index);
+        }
+        Inst::StoreIndexed {
+            base, index, value, ..
+        } => {
+            f(*base);
+            f(*index);
+            f(*value);
+        }
+        Inst::Binop { lhs, rhs, .. } => {
+            f(*lhs);
+            f(*rhs);
+        }
+        Inst::BinopI { lhs, .. } => f(*lhs),
+        Inst::Fneg(v) => f(*v),
+        Inst::FpCast { value, .. } => f(*value),
+        Inst::Call { args, .. }
+        | Inst::CallIndirect { args, .. }
+        | Inst::CallExt { args, .. }
+        | Inst::Intrinsic { args, .. } => {
+            for &a in args {
+                f(a);
+            }
+        }
+        Inst::Mcpy { dst, src, .. } => {
+            f(*dst);
+            f(*src);
+        }
+        Inst::VstackSpill { value, .. } => f(*value),
+        Inst::AccSpill { value } => f(*value),
+    }
 }
 
 /// Whether an instruction defines an int / FP value or none at all.

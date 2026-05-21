@@ -456,6 +456,36 @@ pub(super) fn lift_function(
                         _ => unreachable!(),
                     };
                     let value = acc;
+                    // First try the indexed-store fuse:
+                    // `Binop(Add, base, scaled)` where scaled is a
+                    // `BinopI(Mul|Shl, idx, K)` collapses into one
+                    // SIB-mode store. The Add + BinopI become dead
+                    // and the DCE pass removes them; the per-arch
+                    // emit reads the StoreIndexed inst's base/idx
+                    // values directly. Falls through to the
+                    // LocalAddr fuse when the shape doesn't match.
+                    if let Some((base, index, scale)) =
+                        try_fuse_indexed_store(&insts, addr, kind, &vstack)
+                    {
+                        def(
+                            &mut insts,
+                            Inst::StoreIndexed {
+                                base,
+                                index,
+                                scale,
+                                value,
+                                kind,
+                            },
+                            &mut acc,
+                        );
+                        // Indexed stores write through a pointer-
+                        // arithmetic expression; the c5 alias
+                        // assumption (any *p = v may touch any
+                        // local) still applies.
+                        slot_value.clear();
+                        pc += op.word_size();
+                        continue;
+                    }
                     // When the address came from a `LocalAddr(n)` def
                     // the store touches one known slot, not arbitrary
                     // memory. Fuse to `StoreLocal` so the per-arch emit
@@ -976,24 +1006,22 @@ fn try_fuse_indexed_load(
     None
 }
 
-/// Companion to `try_fuse_indexed_load` for the store path. Same
-/// shape (`Binop(Add, base, scaled) + BinopI(Mul|Shl, idx, K)`), but
-/// the consumer is `Inst::Store` instead of `Inst::Load`. Because
-/// the c5 store shape evaluates the value AFTER the address, the
-/// Add lives on the virtual stack between its def and the matching
-/// store -- so the recogniser allows `addr` to be anywhere in `insts`
-/// AS LONG AS no other live consumer references it. With single-use
-/// addresses (the c5 common case) the simple `add_idx+1 == insts.len()`
-/// test stops being valid, so we instead require: (1) `addr` is on
-/// `vstack` exactly once (the store's pop will consume it), (2) no
-/// later inst references it, and (3) the BinopI is the inst
-/// immediately preceding the Add.
+/// Companion to `try_fuse_indexed_load` for the store path. The
+/// c5 store shape is `(expr): addr; Psh; (expr): value; Si`, so by
+/// the time the lift sees `Si` the `addr` has been popped off
+/// `vstack` and the value is in acc. The recogniser requires:
+/// (1) `addr` is the result of `Binop(Add, base, scaled)`;
+/// (2) `addr` has no remaining consumers (not on `vstack`, not
+/// referenced by any later inst);
+/// (3) `scaled` is the immediately-preceding inst, a
+/// `BinopI(Mul|Shl, idx, K)` with K matching the store width;
+/// (4) `scaled` has no consumers besides the Add (vstack-clean and
+/// not referenced by anything after the Add).
 fn try_fuse_indexed_store(
     insts: &[Inst],
     addr: ValueId,
     kind: StoreKind,
     vstack: &[ValueId],
-    acc: ValueId,
 ) -> Option<(ValueId, ValueId, u8)> {
     if matches!(kind, StoreKind::F32) {
         return None;
@@ -1006,8 +1034,7 @@ fn try_fuse_indexed_store(
         StoreKind::F32 => unreachable!(),
     };
     let add_idx = addr as usize;
-    let add_inst = insts.get(add_idx)?;
-    let (a, b) = match add_inst {
+    let (a, b) = match insts.get(add_idx)? {
         Inst::Binop {
             op: BinOp::Add,
             lhs,
@@ -1015,17 +1042,7 @@ fn try_fuse_indexed_store(
         } => (*lhs, *rhs),
         _ => return None,
     };
-    // The address must be consumed only by this store -- it's on
-    // vstack exactly once (the just-popped entry) and not referenced
-    // by any later inst. Walk insts[add_idx+1..] to verify.
-    if vstack.iter().filter(|&&v| v == addr).count() != 0 {
-        // After the pop the caller already removed it from vstack;
-        // a non-zero remaining count means another pending consumer.
-        return None;
-    }
-    if addr == acc {
-        // The Add's result is also the current accumulator; that
-        // means a load was about to read it, not a store.
+    if vstack.contains(&addr) {
         return None;
     }
     for inst in insts.iter().skip(add_idx + 1) {
@@ -1041,10 +1058,18 @@ fn try_fuse_indexed_store(
         if vstack.contains(&scaled) {
             continue;
         }
-        for inst in insts.iter().skip(scaled_idx + 1) {
-            if inst as *const _ != add_inst as *const _ && references_value(inst, scaled) {
+        let mut other_use = false;
+        for (j, inst) in insts.iter().enumerate().skip(scaled_idx + 1) {
+            if j == add_idx {
                 continue;
             }
+            if references_value(inst, scaled) {
+                other_use = true;
+                break;
+            }
+        }
+        if other_use {
+            continue;
         }
         let (index, byte_scale) = match insts.get(scaled_idx)? {
             Inst::BinopI {

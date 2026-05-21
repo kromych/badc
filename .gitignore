@@ -142,3 +142,5 @@ __pycache__/
 
 # Local helper scripts (not part of the repo)
 run_demos.sh
+
+quicksort-elf-x64

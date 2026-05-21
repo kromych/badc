@@ -286,6 +286,25 @@ pub(super) fn emit_function(
                 target,
                 fall_through,
             } => {
+                if let Some(bcc) =
+                    fused_branch_cond(func, alloc, cond, /* negate */ true)
+                {
+                    branch_fixups.push(BranchFixup {
+                        site: code.len(),
+                        target,
+                        kind: LocalBranchKind::Bcc(bcc),
+                    });
+                    emit(code, enc_b_cond(bcc, 0));
+                    if fall_through as usize != block_idx + 1 {
+                        branch_fixups.push(BranchFixup {
+                            site: code.len(),
+                            target: fall_through,
+                            kind: LocalBranchKind::B,
+                        });
+                        emit(code, enc_b(0));
+                    }
+                    continue;
+                }
                 let cond_place = alloc
                     .places
                     .get(cond as usize)
@@ -339,6 +358,25 @@ pub(super) fn emit_function(
                 target,
                 fall_through,
             } => {
+                if let Some(bcc) =
+                    fused_branch_cond(func, alloc, cond, /* negate */ false)
+                {
+                    branch_fixups.push(BranchFixup {
+                        site: code.len(),
+                        target,
+                        kind: LocalBranchKind::Bcc(bcc),
+                    });
+                    emit(code, enc_b_cond(bcc, 0));
+                    if fall_through as usize != block_idx + 1 {
+                        branch_fixups.push(BranchFixup {
+                            site: code.len(),
+                            target: fall_through,
+                            kind: LocalBranchKind::B,
+                        });
+                        emit(code, enc_b(0));
+                    }
+                    continue;
+                }
                 let cond_place = alloc
                     .places
                     .get(cond as usize)
@@ -597,6 +635,56 @@ fn alloc_save_base(frame: Frame, alloc: &Allocation) -> u32 {
         .saturating_sub(saved_gpr_bytes + saved_fpr_bytes)
 }
 
+/// Return the aarch64 condition code to use for a `B.cond` when
+/// `cond` was flagged as branch-fused by the allocator. `negate`
+/// is true for `Bz` (branch when comparison failed); false for
+/// `Bnz`. Returns `None` when fusion doesn't apply (caller falls
+/// back to the unfused `cbz` / `cbnz` path).
+fn fused_branch_cond(
+    func: &super::super::ir::FunctionSsa,
+    alloc: &Allocation,
+    cond: super::super::ir::ValueId,
+    negate: bool,
+) -> Option<super::aarch64::Cond> {
+    use super::aarch64::Cond;
+    if !alloc.branch_fused.get(cond as usize).copied().unwrap_or(false) {
+        return None;
+    }
+    let op = match func.insts.get(cond as usize)? {
+        Inst::Binop { op, .. } | Inst::BinopI { op, .. } => *op,
+        _ => return None,
+    };
+    let positive = match op {
+        BinOp::Eq => Cond::Eq,
+        BinOp::Ne => Cond::Ne,
+        BinOp::Lt => Cond::Lt,
+        BinOp::Gt => Cond::Gt,
+        BinOp::Le => Cond::Le,
+        BinOp::Ge => Cond::Ge,
+        BinOp::Ult => Cond::Lo,
+        BinOp::Ugt => Cond::Hi,
+        BinOp::Ule => Cond::Ls,
+        BinOp::Uge => Cond::Hs,
+        _ => return None,
+    };
+    if !negate {
+        return Some(positive);
+    }
+    Some(match positive {
+        Cond::Eq => Cond::Ne,
+        Cond::Ne => Cond::Eq,
+        Cond::Lt => Cond::Ge,
+        Cond::Gt => Cond::Le,
+        Cond::Le => Cond::Gt,
+        Cond::Ge => Cond::Lt,
+        Cond::Lo => Cond::Hs,
+        Cond::Hi => Cond::Ls,
+        Cond::Ls => Cond::Hi,
+        Cond::Hs => Cond::Lo,
+        _ => return None,
+    })
+}
+
 /// Emit one SSA instruction. Returns `false` for any op the thin
 /// slice doesn't handle yet so the caller can fall back.
 #[allow(clippy::too_many_arguments)]
@@ -733,7 +821,7 @@ fn emit_inst(
             code, dst, *base, *index, *scale, *value, *kind, alloc, frame, scratch,
         ),
         Inst::Binop { op, lhs, rhs } => {
-            emit_binop(code, *op, dst, *lhs, *rhs, alloc, frame, scratch)
+            emit_binop(code, *op, v, dst, *lhs, *rhs, alloc, frame, scratch)
         }
         Inst::BinopI { op, lhs, rhs_imm } => {
             emit_binop_imm(code, *op, v, dst, *lhs, *rhs_imm, alloc, frame, scratch)
@@ -2523,9 +2611,11 @@ fn emit_store(
     true
 }
 
+#[allow(clippy::too_many_arguments)]
 fn emit_binop(
     code: &mut Vec<u8>,
     op: BinOp,
+    v: super::super::ir::ValueId,
     dst: Place,
     lhs: u32,
     rhs: u32,
@@ -2613,6 +2703,9 @@ fn emit_binop(
     };
     if let Some(cond) = compare_cond(op) {
         emit(code, enc_cmp_reg(rn, rm));
+        if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
+            return true;
+        }
         emit(code, enc_cset(rd, cond));
         if let Some(slot) = spill_to {
             let sp_off = spill_off(frame, slot);
@@ -2801,8 +2894,15 @@ fn emit_binop_imm(
     }
     load_imm64(code, scratch.secondary, rhs_imm as u64);
     let rm = scratch.secondary;
-    if let Some(cond) = compare_cond(op) {
+    if compare_cond(op).is_some() {
         emit(code, enc_cmp_reg(rn, rm));
+        // When the terminator's b.cond will consume the flags
+        // directly, drop the cset materialisation -- the
+        // comparison value is dead.
+        if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
+            return true;
+        }
+        let cond = compare_cond(op).unwrap();
         emit(code, enc_cset(rd, cond));
         if let Some(slot) = spill_to {
             let sp_off = spill_off(frame, slot);

@@ -115,6 +115,14 @@ pub(super) struct Allocation {
     /// consumer through the matching use_count decrement, so DCE
     /// kills it.
     pub sxtw_source: Vec<ValueId>,
+    /// True for `Binop` / `BinopI` comparison insts that the
+    /// allocator recognised as the source of a `Bz` / `Bnz`
+    /// terminator's cond, with cond consumed only by that
+    /// terminator and the inst sitting in the last slot of its
+    /// block. The emit pass skips the `cset` materialisation and
+    /// the terminator emits `b.cond` (aarch64) or `j.cond`
+    /// (x86_64) directly off the flags set by `cmp`.
+    pub branch_fused: Vec<bool>,
 }
 
 /// Set of available registers for the host target. The emit pass
@@ -197,6 +205,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             fp_used: Vec::new(),
             use_counts: Vec::new(),
             sxtw_source: Vec::new(),
+            branch_fused: Vec::new(),
         };
     }
 
@@ -349,6 +358,41 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             use_counts[*lhs as usize] = 0;
         }
     }
+    // Recognise comparison-feeding-branch sites. The terminator's
+    // cond must be the immediately-preceding inst in its block,
+    // be a Binop / BinopI with a comparison op, and have a single
+    // consumer (the terminator). Mark it; the emit pass drops the
+    // `cset` and the terminator picks `b.cond` instead of `cbz`.
+    let mut branch_fused: Vec<bool> = vec![false; func.insts.len()];
+    for block in &func.blocks {
+        let cond = match block.terminator {
+            super::super::ir::Terminator::Bz { cond, .. }
+            | super::super::ir::Terminator::Bnz { cond, .. } => cond,
+            _ => continue,
+        };
+        if cond == NO_VALUE {
+            continue;
+        }
+        if (cond as u32) + 1 != block.inst_range.end {
+            continue;
+        }
+        if use_counts.get(cond as usize).copied().unwrap_or(0) != 1 {
+            continue;
+        }
+        let is_compare = matches!(
+            func.insts.get(cond as usize),
+            Some(Inst::Binop { op, .. }) | Some(Inst::BinopI { op, .. })
+                if matches!(
+                    op,
+                    BinOp::Eq | BinOp::Ne
+                        | BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge
+                        | BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge
+                )
+        );
+        if is_compare {
+            branch_fused[cond as usize] = true;
+        }
+    }
     // Drop the "value-also-in-acc" propagate slot for stores whose
     // defined value is unread. c5 store ops leave the stored value
     // in the accumulator; if nothing downstream reads it, the emit
@@ -371,6 +415,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         fp_used: fp_used_callee,
         use_counts,
         sxtw_source,
+        branch_fused,
     }
 }
 

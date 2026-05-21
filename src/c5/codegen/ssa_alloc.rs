@@ -123,6 +123,11 @@ pub(super) struct Allocation {
     /// the terminator emits `b.cond` (aarch64) or `j.cond`
     /// (x86_64) directly off the flags set by `cmp`.
     pub branch_fused: Vec<bool>,
+    /// True for `StoreLocal` insts the allocator identified as
+    /// dead within their block -- another StoreLocal to the same
+    /// (escape-clean) slot follows before any read. The emit
+    /// skips them entirely.
+    pub dead_stores: Vec<bool>,
 }
 
 /// Set of available registers for the host target. The emit pass
@@ -206,6 +211,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             use_counts: Vec::new(),
             sxtw_source: Vec::new(),
             branch_fused: Vec::new(),
+            dead_stores: Vec::new(),
         };
     }
 
@@ -408,6 +414,15 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             places[v] = Place::None;
         }
     }
+    // Within-block dead-store elimination for escape-clean slots.
+    // A slot is escape-clean when no LIVE LocalAddr to it exists in
+    // the function -- every access goes through StoreLocal /
+    // LoadLocal, so the address never reaches a callee or an
+    // indirect access. Among clean slots, a StoreLocal that's
+    // followed by another StoreLocal to the same slot (no
+    // intervening LoadLocal) within the same block is dead and
+    // gets skipped by emit.
+    let dead_stores = compute_dead_stores(func, &use_counts);
     Allocation {
         places,
         spill_count,
@@ -416,7 +431,79 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         use_counts,
         sxtw_source,
         branch_fused,
+        dead_stores,
     }
+}
+
+/// Identify dead `StoreLocal` insts. A slot is escape-clean when
+/// the function contains no live `LocalAddr(off)` def for it
+/// (use_count > 0); among clean slots, walk each block in order,
+/// track the latest StoreLocal per slot, and mark the prior one
+/// dead when a fresh StoreLocal to the same slot lands without an
+/// intervening read.
+fn compute_dead_stores(func: &FunctionSsa, use_counts: &[u32]) -> Vec<bool> {
+    use alloc::collections::BTreeSet;
+    let n = func.insts.len();
+    let mut dead = vec![false; n];
+    let mut escaped: BTreeSet<i64> = BTreeSet::new();
+    for (i, inst) in func.insts.iter().enumerate() {
+        if let Inst::LocalAddr(off) = inst
+            && use_counts.get(i).copied().unwrap_or(0) > 0
+        {
+            escaped.insert(*off);
+        }
+    }
+    for block in &func.blocks {
+        // Slot -> index of the most recent StoreLocal to that slot
+        // that may still be dead.
+        let mut pending: alloc::collections::BTreeMap<i64, usize> =
+            alloc::collections::BTreeMap::new();
+        for v in block.inst_range.clone() {
+            let idx = v as usize;
+            match &func.insts[idx] {
+                Inst::StoreLocal { off, .. } if !escaped.contains(off) => {
+                    if let Some(prev) = pending.insert(*off, idx) {
+                        dead[prev] = true;
+                    }
+                }
+                Inst::StoreLocal { off, .. } => {
+                    // Escaped slot: indirect access could observe the
+                    // intermediate value. Drop tracking for it.
+                    pending.remove(off);
+                }
+                Inst::LoadLocal { off, .. } => {
+                    // The load consumes the previously-stored value;
+                    // the prior StoreLocal is live.
+                    pending.remove(off);
+                }
+                Inst::LoadIndexed { .. }
+                | Inst::StoreIndexed { .. }
+                | Inst::Load { .. }
+                | Inst::Store { .. } => {
+                    // Indirect memory accesses could touch any
+                    // slot whose address has escaped. Clean slots
+                    // are unaffected -- their address never reached
+                    // a pointer the access could use -- so keep
+                    // tracking them.
+                }
+                Inst::Mcpy { .. } => {
+                    // Byte-copy through pointers; same reasoning as
+                    // indirect access -- clean slots are unaffected.
+                }
+                _ => {}
+            }
+        }
+        // At a Return terminator the function exits; any pending
+        // stores to clean slots have no live consumer and are dead.
+        // Other terminators may flow to successors that read the
+        // slot, so the conservative answer is to leave them alive.
+        if matches!(block.terminator, super::super::ir::Terminator::Return(_)) {
+            for (_, idx) in pending {
+                dead[idx] = true;
+            }
+        }
+    }
+    dead
 }
 
 /// Count consumers for every SSA value, then iterate to fixed point

@@ -467,6 +467,25 @@ pub(super) fn emit_function(
                 target,
                 fall_through,
             } => {
+                if let Some(cc) =
+                    fused_branch_cc(func, alloc, cond, /* negate */ true)
+                {
+                    branch_fixups.push(BranchFixup {
+                        site: code.len() + 2,
+                        target,
+                        kind: LocalBranchKind::Jcc(cc),
+                    });
+                    super::x86_64::emit_jcc_rel32(code, cc, 0);
+                    if fall_through as usize != block_idx + 1 {
+                        branch_fixups.push(BranchFixup {
+                            site: code.len() + 1,
+                            target: fall_through,
+                            kind: LocalBranchKind::Jmp,
+                        });
+                        super::x86_64::emit_jmp_rel32(code, 0);
+                    }
+                    continue;
+                }
                 let cond_place = alloc
                     .places
                     .get(cond as usize)
@@ -504,6 +523,25 @@ pub(super) fn emit_function(
                 target,
                 fall_through,
             } => {
+                if let Some(cc) =
+                    fused_branch_cc(func, alloc, cond, /* negate */ false)
+                {
+                    branch_fixups.push(BranchFixup {
+                        site: code.len() + 2,
+                        target,
+                        kind: LocalBranchKind::Jcc(cc),
+                    });
+                    super::x86_64::emit_jcc_rel32(code, cc, 0);
+                    if fall_through as usize != block_idx + 1 {
+                        branch_fixups.push(BranchFixup {
+                            site: code.len() + 1,
+                            target: fall_through,
+                            kind: LocalBranchKind::Jmp,
+                        });
+                        super::x86_64::emit_jmp_rel32(code, 0);
+                    }
+                    continue;
+                }
                 let cond_place = alloc
                     .places
                     .get(cond as usize)
@@ -672,6 +710,53 @@ fn emit_prologue(
     }
 }
 
+/// Return the x86_64 condition code to use for `Jcc` when the
+/// terminator's cond was flagged as branch-fused by the allocator.
+/// `negate` is true for `Bz` (branch when comparison failed).
+fn fused_branch_cc(
+    func: &super::super::ir::FunctionSsa,
+    alloc: &Allocation,
+    cond: super::super::ir::ValueId,
+    negate: bool,
+) -> Option<Cc> {
+    if !alloc.branch_fused.get(cond as usize).copied().unwrap_or(false) {
+        return None;
+    }
+    let op = match func.insts.get(cond as usize)? {
+        Inst::Binop { op, .. } | Inst::BinopI { op, .. } => *op,
+        _ => return None,
+    };
+    let positive = match op {
+        BinOp::Eq => Cc::E,
+        BinOp::Ne => Cc::Ne,
+        BinOp::Lt => Cc::L,
+        BinOp::Gt => Cc::G,
+        BinOp::Le => Cc::Le,
+        BinOp::Ge => Cc::Ge,
+        BinOp::Ult => Cc::B,
+        BinOp::Ugt => Cc::A,
+        BinOp::Ule => Cc::Be,
+        BinOp::Uge => Cc::Ae,
+        _ => return None,
+    };
+    if !negate {
+        return Some(positive);
+    }
+    Some(match positive {
+        Cc::E => Cc::Ne,
+        Cc::Ne => Cc::E,
+        Cc::L => Cc::Ge,
+        Cc::G => Cc::Le,
+        Cc::Le => Cc::G,
+        Cc::Ge => Cc::L,
+        Cc::B => Cc::Ae,
+        Cc::A => Cc::Be,
+        Cc::Be => Cc::A,
+        Cc::Ae => Cc::B,
+        _ => return None,
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 fn emit_inst(
     code: &mut Vec<u8>,
@@ -764,7 +849,7 @@ fn emit_inst(
             value,
             kind,
         } => emit_store_indexed(code, dst, *base, *index, *scale, *value, *kind, alloc, frame),
-        Inst::Binop { op, lhs, rhs } => emit_binop(code, *op, dst, *lhs, *rhs, alloc, frame),
+        Inst::Binop { op, lhs, rhs } => emit_binop(code, *op, v, dst, *lhs, *rhs, alloc, frame),
         Inst::BinopI { op, lhs, rhs_imm } => {
             emit_binop_imm(code, *op, v, dst, *lhs, *rhs_imm, alloc, frame)
         }
@@ -1510,9 +1595,11 @@ fn emit_fp_cast(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn emit_binop(
     code: &mut Vec<u8>,
     op: BinOp,
+    v: super::super::ir::ValueId,
     dst: Place,
     lhs: u32,
     rhs: u32,
@@ -1678,6 +1765,9 @@ fn emit_binop(
             // rn` above clobbered rd to the lhs already; reverse
             // that into a cmp directly off rn.
             emit_cmp_rr(code, rn, rm);
+            if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
+                return true;
+            }
             let cc = match op {
                 BinOp::Eq => Cc::E,
                 BinOp::Ne => Cc::Ne,
@@ -1692,6 +1782,9 @@ fn emit_binop(
         }
         BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge => {
             emit_cmp_rr(code, rn, rm);
+            if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
+                return true;
+            }
             let cc = match op {
                 BinOp::Ult => Cc::B,
                 BinOp::Ugt => Cc::A,
@@ -1957,6 +2050,9 @@ fn emit_binop_imm(
         BinOp::Xor => emit_xor_rr(code, rd, Reg::RCX),
         BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge => {
             emit_cmp_rr(code, rn, Reg::RCX);
+            if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
+                return true;
+            }
             let cc = match op {
                 BinOp::Eq => Cc::E,
                 BinOp::Ne => Cc::Ne,
@@ -1971,6 +2067,9 @@ fn emit_binop_imm(
         }
         BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge => {
             emit_cmp_rr(code, rn, Reg::RCX);
+            if alloc.branch_fused.get(v as usize).copied().unwrap_or(false) {
+                return true;
+            }
             let cc = match op {
                 BinOp::Ult => Cc::B,
                 BinOp::Ugt => Cc::A,

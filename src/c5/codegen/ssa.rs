@@ -471,6 +471,18 @@ pub(super) fn lift_function(
         // Per-block state.
         let mut acc: ValueId = NO_VALUE;
         let mut vstack: Vec<ValueId> = Vec::new();
+        // Most recently produced SSA value for each local slot
+        // touched in this block. Lookup-keyed by the c5 slot
+        // offset. A subsequent `Op::LdLocI N` with the slot still
+        // present in this map aliases to the cached value and
+        // emits no `Inst::LoadLocal`; the matching `Op::StLocI N`
+        // updates the entry. Cleared at ops whose semantics could
+        // write to the local through a pointer (function calls,
+        // intrinsics, `Op::Mcpy`, indirect stores), since this
+        // pass does not consult the parser's address-escape
+        // tracking.
+        let mut slot_value: alloc::collections::BTreeMap<i64, ValueId> =
+            alloc::collections::BTreeMap::new();
         // Block entry: reload any cross-block vstack values from
         // their spill slots. Slot 0 holds the value that was at
         // the bottom of the vstack at the predecessor's spill;
@@ -712,14 +724,19 @@ pub(super) fn lift_function(
                 }
                 Op::LdLocI => {
                     let n = text[pc + 1];
-                    def(
-                        &mut insts,
-                        Inst::LoadLocal {
-                            off: n,
-                            kind: LoadKind::I64,
-                        },
-                        &mut acc,
-                    );
+                    if let Some(&cached) = slot_value.get(&n) {
+                        acc = cached;
+                    } else {
+                        def(
+                            &mut insts,
+                            Inst::LoadLocal {
+                                off: n,
+                                kind: LoadKind::I64,
+                            },
+                            &mut acc,
+                        );
+                        slot_value.insert(n, acc);
+                    }
                     pc += op.word_size();
                 }
                 Op::LdLocC => {
@@ -752,6 +769,9 @@ pub(super) fn lift_function(
                     };
                     let value = acc;
                     def(&mut insts, Inst::Store { addr, value, kind }, &mut acc);
+                    // Indirect store may alias any local through
+                    // the pointer; drop the per-slot value cache.
+                    slot_value.clear();
                     pc += op.word_size();
                 }
                 Op::StLocI => {
@@ -766,6 +786,7 @@ pub(super) fn lift_function(
                         },
                         &mut acc,
                     );
+                    slot_value.insert(n, value);
                     pc += op.word_size();
                 }
                 op if matches!(
@@ -954,6 +975,7 @@ pub(super) fn lift_function(
                         })?);
                     }
                     def(&mut insts, Inst::Call { target_pc, args }, &mut acc);
+                    slot_value.clear();
                     pc += op.word_size();
                     // Skip the trailing `Adj N` -- args are now
                     // owned by the Call inst; the stack-drop is
@@ -974,6 +996,7 @@ pub(super) fn lift_function(
                         })?);
                     }
                     def(&mut insts, Inst::CallIndirect { target, args }, &mut acc);
+                    slot_value.clear();
                     pc += op.word_size();
                     if nargs > 0 && pc + 1 < text.len() && Op::from_i64(text[pc]) == Some(Op::Adj) {
                         pc += Op::Adj.word_size();
@@ -1010,6 +1033,7 @@ pub(super) fn lift_function(
                         },
                         &mut acc,
                     );
+                    slot_value.clear();
                     pc += op.word_size();
                     if nargs > 0 && pc + 1 < text.len() && Op::from_i64(text[pc]) == Some(Op::Adj) {
                         pc += Op::Adj.word_size();
@@ -1036,6 +1060,7 @@ pub(super) fn lift_function(
                     })?;
                     let src = acc;
                     def(&mut insts, Inst::Mcpy { dst, src, size }, &mut acc);
+                    slot_value.clear();
                     pc += op.word_size();
                 }
                 Op::Intrinsic => {
@@ -1054,6 +1079,7 @@ pub(super) fn lift_function(
                         vec![acc]
                     };
                     def(&mut insts, Inst::Intrinsic { kind, args }, &mut acc);
+                    slot_value.clear();
                     pc += op.word_size();
                 }
                 _ => {

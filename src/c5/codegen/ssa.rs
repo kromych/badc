@@ -97,6 +97,24 @@ pub(super) enum Inst {
         value: ValueId,
         kind: StoreKind,
     },
+    /// Load from a local / parameter slot. Equivalent to a
+    /// `LocalAddr(off)` followed by `Load { kind }`, but
+    /// represented as a single instruction so the per-arch emit
+    /// folds the address into the load's addressing mode and
+    /// the allocator does not need to assign a register to the
+    /// intermediate address. Produced by the lift for the
+    /// optimizer's fused `Op::LdLocI` / `Op::LdLocC` ops.
+    LoadLocal { off: i64, kind: LoadKind },
+    /// Store to a local / parameter slot. Same shape as
+    /// [`Self::Store`] but with the address represented as a
+    /// constant slot offset, so the emit folds it into the
+    /// store's addressing mode. Produced by the lift for the
+    /// optimizer's fused `Op::StLocI` op.
+    StoreLocal {
+        off: i64,
+        value: ValueId,
+        kind: StoreKind,
+    },
     /// Binary arithmetic / comparison / shift. `lhs` is the value
     /// that was on top of the c5 stack at the op; `rhs` is the
     /// current accumulator (matches `a = pop() <op> a` semantics).
@@ -694,12 +712,10 @@ pub(super) fn lift_function(
                 }
                 Op::LdLocI => {
                     let n = text[pc + 1];
-                    let lea = insts.len() as ValueId;
-                    insts.push(Inst::LocalAddr(n));
                     def(
                         &mut insts,
-                        Inst::Load {
-                            addr: lea,
+                        Inst::LoadLocal {
+                            off: n,
                             kind: LoadKind::I64,
                         },
                         &mut acc,
@@ -740,13 +756,11 @@ pub(super) fn lift_function(
                 }
                 Op::StLocI => {
                     let n = text[pc + 1];
-                    let lea = insts.len() as ValueId;
-                    insts.push(Inst::LocalAddr(n));
                     let value = acc;
                     def(
                         &mut insts,
-                        Inst::Store {
-                            addr: lea,
+                        Inst::StoreLocal {
+                            off: n,
                             value,
                             kind: StoreKind::I64,
                         },

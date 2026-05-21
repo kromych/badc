@@ -732,6 +732,10 @@ fn emit_inst(
         Inst::Store { addr, value, kind } => {
             emit_store(code, dst, *addr, *value, *kind, alloc, frame)
         }
+        Inst::LoadLocal { off, kind } => emit_load_local(code, dst, *off, *kind, frame),
+        Inst::StoreLocal { off, value, kind } => {
+            emit_store_local(code, dst, *off, *value, *kind, alloc, frame)
+        }
         Inst::Binop { op, lhs, rhs } => emit_binop(code, *op, dst, *lhs, *rhs, alloc, frame),
         Inst::BinopI { op, lhs, rhs_imm } => {
             emit_binop_imm(code, *op, dst, *lhs, *rhs_imm, alloc, frame)
@@ -982,6 +986,91 @@ fn emit_tls_addr(
 }
 
 use super::ssa_emit_common::c5_slot_to_fp_offset;
+
+/// Single-instruction rbp-relative load for the lift's fused
+/// `Inst::LoadLocal`. The c5 slot offset folds into the load's
+/// ModR/M disp directly, skipping the `LocalAddr`
+/// materialisation the `LocalAddr` + `Load` pair would have
+/// required. The lift only emits LoadLocal with `kind = I64`
+/// (`Op::LdLocI`); other widths stay on the unfused
+/// `LocalAddr` + `Load` path and never reach this helper.
+fn emit_load_local(code: &mut Vec<u8>, dst: Place, off: i64, kind: LoadKind, frame: Frame) -> bool {
+    if !matches!(kind, LoadKind::I64) {
+        bail_msg("LoadLocal: only I64 supported");
+        return false;
+    }
+    let disp = match i32::try_from(c5_slot_to_fp_offset(off)) {
+        Ok(v) => v,
+        Err(_) => {
+            bail_msg("LoadLocal: offset doesn't fit in disp32");
+            return false;
+        }
+    };
+    let Some(rd) = int_or_spill_dst(dst) else {
+        bail_msg("LoadLocal: dst not int reg / spill");
+        return false;
+    };
+    emit_mov_r_mem(code, rd, Reg::RBP, disp);
+    spill_dst_to_slot(code, dst, rd, frame);
+    true
+}
+
+/// Single-instruction rbp-relative store for the lift's fused
+/// `Inst::StoreLocal`. Mirrors [`emit_load_local`]; the c5 store
+/// ops leave the stored value in the accumulator, so the
+/// destination `Place` receives a copy after the store lands.
+fn emit_store_local(
+    code: &mut Vec<u8>,
+    dst: Place,
+    off: i64,
+    value: u32,
+    kind: StoreKind,
+    alloc: &Allocation,
+    frame: Frame,
+) -> bool {
+    if !matches!(kind, StoreKind::I64) {
+        bail_msg("StoreLocal: only I64 supported");
+        return false;
+    }
+    let disp = match i32::try_from(c5_slot_to_fp_offset(off)) {
+        Ok(v) => v,
+        Err(_) => {
+            bail_msg("StoreLocal: offset doesn't fit in disp32");
+            return false;
+        }
+    };
+    let value_place = alloc
+        .places
+        .get(value as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    // c5 spills an FP-typed accumulator into a local temp via
+    // `Op::StLocI` (the bit pattern fits 8 bytes either way), so
+    // an FpReg value bridges through `movq r, xmm` into a GPR
+    // before the store; otherwise it routes through the normal
+    // int materialisation.
+    let rv = if let Place::FpReg(xr) = value_place {
+        super::x86_64::emit_movq_r_xmm(code, SCRATCH_R10, Reg(xr));
+        SCRATCH_R10
+    } else {
+        match materialize_int(code, value_place, SCRATCH_R10, frame) {
+            Some(r) => r,
+            None => {
+                bail_msg("StoreLocal: value not int reg / spill");
+                return false;
+            }
+        }
+    };
+    emit_mov_mem_r(code, Reg::RBP, disp, rv);
+    // Mirror the store value into the destination Place.
+    if let Some(rd) = int_or_spill_dst(dst) {
+        if rd.0 != rv.0 {
+            emit_mov_rr(code, rd, rv);
+        }
+        spill_dst_to_slot(code, dst, rd, frame);
+    }
+    true
+}
 
 fn emit_load(
     code: &mut Vec<u8>,

@@ -327,15 +327,19 @@ fn result_kind(inst: &Inst) -> ResultKind {
     use Inst::*;
     match inst {
         Imm(_) | ImmData(_) | ImmCode(_) | LocalAddr(_) | TlsAddr(_) => ResultKind::Int,
-        Load { kind, .. } => match kind {
+        Load { kind, .. } | LoadLocal { kind, .. } => match kind {
             LoadKind::F32 => ResultKind::Fp,
             _ => ResultKind::Int,
         },
         Store {
             kind: StoreKind::F32,
             ..
+        }
+        | StoreLocal {
+            kind: StoreKind::F32,
+            ..
         } => ResultKind::Fp,
-        Store { .. } => ResultKind::Int,
+        Store { .. } | StoreLocal { .. } => ResultKind::Int,
         Binop { op, .. } | BinopI { op, .. } => match op {
             BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv => ResultKind::Fp,
             // FP comparisons return an integer 0/1.
@@ -389,6 +393,8 @@ fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
                 bump(*addr, pc, &mut last_use);
                 bump(*value, pc, &mut last_use);
             }
+            Inst::LoadLocal { .. } => {}
+            Inst::StoreLocal { value, .. } => bump(*value, pc, &mut last_use),
             Inst::Binop { lhs, rhs, .. } => {
                 bump(*lhs, pc, &mut last_use);
                 bump(*rhs, pc, &mut last_use);

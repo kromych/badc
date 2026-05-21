@@ -699,6 +699,10 @@ fn emit_inst(
         Inst::Store { addr, value, kind } => {
             emit_store(code, dst, *addr, *value, *kind, alloc, frame, scratch)
         }
+        Inst::LoadLocal { off, kind } => emit_load_local(code, dst, *off, *kind, frame, scratch),
+        Inst::StoreLocal { off, value, kind } => {
+            emit_store_local(code, dst, *off, *value, *kind, alloc, frame, scratch)
+        }
         Inst::Binop { op, lhs, rhs } => {
             emit_binop(code, *op, dst, *lhs, *rhs, alloc, frame, scratch)
         }
@@ -2049,6 +2053,137 @@ fn emit_load(
         let sp_off = spill_off(frame, slot);
         emit(code, enc_str_imm(rd, Reg(31), sp_off));
     }
+    true
+}
+
+/// Single-instruction fp-relative load for the lift's fused
+/// `Inst::LoadLocal`. The c5 slot offset converts to a signed
+/// byte displacement; `ldur` covers the unscaled 9-bit field
+/// `[-256, 255]` directly. Falls back to the general path when
+/// the displacement doesn't fit, since the lift only emits this
+/// inst with `kind = I64` (`Op::LdLocI`).
+fn emit_load_local(
+    code: &mut Vec<u8>,
+    dst: Place,
+    off: i64,
+    kind: LoadKind,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    if !matches!(kind, LoadKind::I64) {
+        bail_msg("LoadLocal: only I64 supported");
+        return false;
+    }
+    let rd = match dst {
+        Place::IntReg(r) => Reg(r),
+        Place::Spill(_) => scratch.secondary,
+        Place::FpReg(_) | Place::None => return false,
+    };
+    let bytes = c5_slot_to_fp_offset(off);
+    if let Ok(disp) = i32::try_from(bytes)
+        && (-256..256).contains(&disp)
+    {
+        // Fits the unscaled 9-bit signed field; load directly.
+        emit(code, super::aarch64::enc_ldur(rd, Reg(29), disp));
+        if let Place::Spill(slot) = dst {
+            let sp_off = spill_off(frame, slot);
+            emit(code, enc_str_imm(rd, Reg(31), sp_off));
+        }
+        return true;
+    }
+    // Large displacement: materialise the address into a scratch
+    // through the standard `LocalAddr` lowering, then load
+    // through it. Same byte cost as the unfused path.
+    if !emit_local_addr(code, Place::IntReg(scratch.primary.0), off, frame) {
+        return false;
+    }
+    emit(code, super::aarch64::enc_ldr_imm(rd, scratch.primary, 0));
+    if let Place::Spill(slot) = dst {
+        let sp_off = spill_off(frame, slot);
+        emit(code, enc_str_imm(rd, Reg(31), sp_off));
+    }
+    true
+}
+
+/// Single-instruction fp-relative store for the lift's fused
+/// `Inst::StoreLocal`. Mirrors [`emit_load_local`].
+fn emit_store_local(
+    code: &mut Vec<u8>,
+    dst: Place,
+    off: i64,
+    value: u32,
+    kind: StoreKind,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> bool {
+    if !matches!(kind, StoreKind::I64) {
+        bail_msg("StoreLocal: only I64 supported");
+        return false;
+    }
+    let value_place = alloc
+        .places
+        .get(value as usize)
+        .copied()
+        .unwrap_or(Place::None);
+    // Materialise the value first; the address path below picks a
+    // scratch register based on whether the displacement fits the
+    // unscaled 9-bit field. c5 spills an FP-typed accumulator into
+    // a local temp via `Op::StLocI` (the bit pattern fits 8 bytes
+    // regardless of type), so an FpReg value bridges through
+    // `fmov d -> x` into a GPR before the store; otherwise it
+    // routes through the normal int materialisation.
+    let rv = if let Place::FpReg(dr) = value_place {
+        emit(code, super::aarch64::enc_fmov_d_to_x(scratch.primary, dr));
+        scratch.primary
+    } else {
+        match materialize_int(code, value_place, scratch.primary, frame) {
+            Some(r) => r,
+            None => return false,
+        }
+    };
+    let bytes = c5_slot_to_fp_offset(off);
+    if let Ok(disp) = i32::try_from(bytes) {
+        if (-256..256).contains(&disp) {
+            emit(code, super::aarch64::enc_stur(rv, Reg(29), disp));
+        } else if !emit_store_local_large_disp(code, off, rv, scratch, frame) {
+            return false;
+        }
+    } else if !emit_store_local_large_disp(code, off, rv, scratch, frame) {
+        return false;
+    }
+    // c5 store ops leave the stored value in the accumulator;
+    // propagate to dst if the allocator parked it elsewhere.
+    match dst {
+        Place::IntReg(r) => {
+            let rd = Reg(r);
+            if rd.0 != rv.0 {
+                emit(code, super::aarch64::enc_mov_reg(rd, rv));
+            }
+        }
+        Place::Spill(slot) => {
+            let sp_off = spill_off(frame, slot);
+            emit(code, enc_str_imm(rv, Reg(31), sp_off));
+        }
+        Place::None => {}
+        Place::FpReg(_) => return false,
+    }
+    true
+}
+
+/// Address-via-scratch fallback for [`emit_store_local`] when the
+/// fp displacement exceeds the unscaled 9-bit field.
+fn emit_store_local_large_disp(
+    code: &mut Vec<u8>,
+    off: i64,
+    rv: Reg,
+    scratch: &ScratchPool,
+    frame: Frame,
+) -> bool {
+    if !emit_local_addr(code, Place::IntReg(scratch.secondary.0), off, frame) {
+        return false;
+    }
+    emit(code, super::aarch64::enc_str_imm(rv, scratch.secondary, 0));
     true
 }
 

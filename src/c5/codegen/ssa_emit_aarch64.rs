@@ -2070,9 +2070,37 @@ fn emit_load_local(
     frame: Frame,
     scratch: &ScratchPool,
 ) -> bool {
-    if !matches!(kind, LoadKind::I64) {
-        bail_msg("LoadLocal: only I64 supported");
-        return false;
+    // F32 lands in a d-reg via a 32-bit FP load + fcvt-to-f64.
+    if matches!(kind, LoadKind::F32) {
+        let dd = match dst {
+            Place::FpReg(r) => r,
+            Place::Spill(_) => 0u8,
+            _ => {
+                bail_msg("LoadLocal F32: dst not fp reg / spill");
+                return false;
+            }
+        };
+        let bytes = c5_slot_to_fp_offset(off);
+        if let Ok(disp) = i32::try_from(bytes)
+            && disp >= 0
+            && (disp as u32) % 4 == 0
+            && (disp as u32) <= 16380
+        {
+            emit(
+                code,
+                super::aarch64::enc_ldr_s_imm(dd, Reg(29), disp as u32),
+            );
+        } else if !emit_local_addr(code, Place::IntReg(scratch.primary.0), off, frame) {
+            return false;
+        } else {
+            emit(code, super::aarch64::enc_ldr_s_imm(dd, scratch.primary, 0));
+        }
+        emit(code, super::aarch64::enc_fcvt_d_s(dd, dd));
+        if let Place::Spill(slot) = dst {
+            let sp_off = spill_off(frame, slot);
+            emit(code, super::aarch64::enc_str_d_imm(dd, Reg(31), sp_off));
+        }
+        return true;
     }
     let rd = match dst {
         Place::IntReg(r) => Reg(r),
@@ -2083,8 +2111,19 @@ fn emit_load_local(
     if let Ok(disp) = i32::try_from(bytes)
         && (-256..256).contains(&disp)
     {
-        // Fits the unscaled 9-bit signed field; load directly.
-        emit(code, super::aarch64::enc_ldur(rd, Reg(29), disp));
+        // Fits the unscaled 9-bit signed field; load directly
+        // with the kind-specific unscaled encoder.
+        let word = match kind {
+            LoadKind::I64 => super::aarch64::enc_ldur(rd, Reg(29), disp),
+            LoadKind::I32 => super::aarch64::enc_ldursw(rd, Reg(29), disp),
+            LoadKind::U32 => super::aarch64::enc_ldur32(rd, Reg(29), disp),
+            LoadKind::I16 => super::aarch64::enc_ldursh(rd, Reg(29), disp),
+            LoadKind::U16 => super::aarch64::enc_ldurh(rd, Reg(29), disp),
+            LoadKind::I8 => super::aarch64::enc_ldursb(rd, Reg(29), disp),
+            LoadKind::U8 => super::aarch64::enc_ldurb(rd, Reg(29), disp),
+            LoadKind::F32 => unreachable!(),
+        };
+        emit(code, word);
         if let Place::Spill(slot) = dst {
             let sp_off = spill_off(frame, slot);
             emit(code, enc_str_imm(rd, Reg(31), sp_off));
@@ -2097,7 +2136,17 @@ fn emit_load_local(
     if !emit_local_addr(code, Place::IntReg(scratch.primary.0), off, frame) {
         return false;
     }
-    emit(code, super::aarch64::enc_ldr_imm(rd, scratch.primary, 0));
+    let word = match kind {
+        LoadKind::I64 => super::aarch64::enc_ldr_imm(rd, scratch.primary, 0),
+        LoadKind::I32 => super::aarch64::enc_ldrsw_imm(rd, scratch.primary, 0),
+        LoadKind::U32 => super::aarch64::enc_ldr32_imm(rd, scratch.primary, 0),
+        LoadKind::I16 => super::aarch64::enc_ldrsh_imm(rd, scratch.primary, 0),
+        LoadKind::U16 => super::aarch64::enc_ldrh_imm(rd, scratch.primary, 0),
+        LoadKind::I8 => super::aarch64::enc_ldrsb_imm(rd, scratch.primary, 0),
+        LoadKind::U8 => super::aarch64::enc_ldrb_imm(rd, scratch.primary, 0),
+        LoadKind::F32 => unreachable!(),
+    };
+    emit(code, word);
     if let Place::Spill(slot) = dst {
         let sp_off = spill_off(frame, slot);
         emit(code, enc_str_imm(rd, Reg(31), sp_off));
@@ -2483,6 +2532,44 @@ fn emit_binop_imm(
         Some(r) => r,
         None => return false,
     };
+    // Per-op peepholes for immediate-form binops. Avoid the
+    // `load_imm64 -> reg-form op` pair when the immediate fits a
+    // direct encoding.
+    //   * Shl / Shr / Shru by 0..63 -> single-op LSL / ASR / LSR
+    //     by immediate (UBFM / SBFM aliases).
+    //   * Mul by a power of two in 0..63 -> LSL by log2.
+    //   * Add / Sub with 12-bit imm -> direct enc_add_imm /
+    //     enc_sub_imm.
+    let imm_u64 = rhs_imm as u64;
+    let imm_pow2_shift = if rhs_imm > 0 && imm_u64.is_power_of_two() {
+        let s = imm_u64.trailing_zeros();
+        if s < 64 { Some(s as u8) } else { None }
+    } else {
+        None
+    };
+    let shift_amount = if (0..64).contains(&rhs_imm) {
+        Some(rhs_imm as u8)
+    } else {
+        None
+    };
+    let imm12 = u32::try_from(rhs_imm).ok().filter(|v| *v < (1u32 << 12));
+    let used_peephole = match op {
+        BinOp::Shl => shift_amount.map(|s| super::aarch64::enc_lsl_imm(rd, rn, s)),
+        BinOp::Shr => shift_amount.map(|s| super::aarch64::enc_asr_imm(rd, rn, s)),
+        BinOp::Shru => shift_amount.map(|s| super::aarch64::enc_lsr_imm(rd, rn, s)),
+        BinOp::Mul => imm_pow2_shift.map(|s| super::aarch64::enc_lsl_imm(rd, rn, s)),
+        BinOp::Add => imm12.map(|v| enc_add_imm(rd, rn, v)),
+        BinOp::Sub => imm12.map(|v| enc_sub_imm(rd, rn, v)),
+        _ => None,
+    };
+    if let Some(word) = used_peephole {
+        emit(code, word);
+        if let Some(slot) = spill_to {
+            let sp_off = spill_off(frame, slot);
+            emit(code, enc_str_imm(rd, Reg(31), sp_off));
+        }
+        return true;
+    }
     load_imm64(code, scratch.secondary, rhs_imm as u64);
     let rm = scratch.secondary;
     if let Some(cond) = compare_cond(op) {

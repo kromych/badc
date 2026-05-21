@@ -845,6 +845,100 @@ pub(super) fn enc_stur(rt: Reg, rn: Reg, imm: i32) -> u32 {
     0xF800_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
+/// `LDURSW <Xt>, [<Xn|SP>, #imm]` -- load 4 bytes, sign-extend to
+/// 64. Unscaled 9-bit signed offset.
+pub(super) fn enc_ldursw(rt: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!((-256..256).contains(&imm), "ldursw imm: {imm} out of range");
+    let imm9 = (imm as u32) & 0x1FF;
+    0xB880_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LDUR <Wt>, [<Xn|SP>, #imm]` -- load 4 bytes into a 32-bit
+/// register, zero-extending to the full 64-bit Xt.
+pub(super) fn enc_ldur32(rt: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!((-256..256).contains(&imm), "ldur32 imm: {imm} out of range");
+    let imm9 = (imm as u32) & 0x1FF;
+    0xB840_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LDURSH <Xt>, [<Xn|SP>, #imm]` -- load 2 bytes, sign-extend to
+/// 64. Unscaled 9-bit signed offset.
+pub(super) fn enc_ldursh(rt: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!((-256..256).contains(&imm), "ldursh imm: {imm} out of range");
+    let imm9 = (imm as u32) & 0x1FF;
+    0x7880_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LDURH <Wt>, [<Xn|SP>, #imm]` -- load 2 bytes, zero-extend
+/// (to 32 bits, implicitly to 64). Unscaled 9-bit signed offset.
+pub(super) fn enc_ldurh(rt: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!((-256..256).contains(&imm), "ldurh imm: {imm} out of range");
+    let imm9 = (imm as u32) & 0x1FF;
+    0x7840_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LDURSB <Xt>, [<Xn|SP>, #imm]` -- load 1 byte, sign-extend to
+/// 64. Unscaled 9-bit signed offset.
+pub(super) fn enc_ldursb(rt: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!((-256..256).contains(&imm), "ldursb imm: {imm} out of range");
+    let imm9 = (imm as u32) & 0x1FF;
+    0x3880_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LDURB <Wt>, [<Xn|SP>, #imm]` -- load 1 byte, zero-extend
+/// (to 32 bits, implicitly to 64). Unscaled 9-bit signed offset.
+pub(super) fn enc_ldurb(rt: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!((-256..256).contains(&imm), "ldurb imm: {imm} out of range");
+    let imm9 = (imm as u32) & 0x1FF;
+    0x3840_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STUR <Wt>, [<Xn|SP>, #imm]` -- store low 32 bits of Xt.
+pub(super) fn enc_stur32(rt: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!((-256..256).contains(&imm), "stur32 imm: {imm} out of range");
+    let imm9 = (imm as u32) & 0x1FF;
+    0xB800_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STURH <Wt>, [<Xn|SP>, #imm]` -- store low 16 bits of Xt.
+pub(super) fn enc_sturh(rt: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!((-256..256).contains(&imm), "sturh imm: {imm} out of range");
+    let imm9 = (imm as u32) & 0x1FF;
+    0x7800_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `STURB <Wt>, [<Xn|SP>, #imm]` -- store low 8 bits of Xt.
+pub(super) fn enc_sturb(rt: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!((-256..256).contains(&imm), "sturb imm: {imm} out of range");
+    let imm9 = (imm as u32) & 0x1FF;
+    0x3800_0000 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+}
+
+/// `LSL <Xd>, <Xn>, #shift` -- logical shift left by immediate.
+/// Encoded as `UBFM Xd, Xn, #(-shift mod 64), #(63-shift)`.
+pub(super) fn enc_lsl_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
+    debug_assert!(shift < 64, "lsl imm: {shift} >= 64");
+    let immr = ((64 - shift as u32) & 63) << 16;
+    let imms = ((63 - shift as u32) & 63) << 10;
+    0xD340_0000 | immr | imms | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `LSR <Xd>, <Xn>, #shift` -- logical shift right by immediate.
+/// Encoded as `UBFM Xd, Xn, #shift, #63`.
+pub(super) fn enc_lsr_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
+    debug_assert!(shift < 64, "lsr imm: {shift} >= 64");
+    let immr = ((shift as u32) & 63) << 16;
+    0xD340_FC00 | immr | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `ASR <Xd>, <Xn>, #shift` -- arithmetic shift right by immediate.
+/// Encoded as `SBFM Xd, Xn, #shift, #63`.
+pub(super) fn enc_asr_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
+    debug_assert!(shift < 64, "asr imm: {shift} >= 64");
+    let immr = ((shift as u32) & 63) << 16;
+    0x9340_FC00 | immr | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
 // ---- Pre-/post-indexed loads & stores. The c5 VM stack push/pop
 //      compiles to these because they update sp in the same instruction.
 

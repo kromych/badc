@@ -472,16 +472,17 @@ pub(super) fn lift_function(
         let mut acc: ValueId = NO_VALUE;
         let mut vstack: Vec<ValueId> = Vec::new();
         // Most recently produced SSA value for each local slot
-        // touched in this block. Lookup-keyed by the c5 slot
-        // offset. A subsequent `Op::LdLocI N` with the slot still
-        // present in this map aliases to the cached value and
-        // emits no `Inst::LoadLocal`; the matching `Op::StLocI N`
-        // updates the entry. Cleared at ops whose semantics could
-        // write to the local through a pointer (function calls,
-        // intrinsics, `Op::Mcpy`, indirect stores), since this
-        // pass does not consult the parser's address-escape
-        // tracking.
-        let mut slot_value: alloc::collections::BTreeMap<i64, ValueId> =
+        // touched in this block, tagged with the access kind that
+        // produced it. A subsequent fused load of the same slot
+        // aliases to the cached value when the kinds match (so
+        // the cached 64-bit value's extension semantics match
+        // what the new load would have produced). Mismatched
+        // kinds re-load from memory. Cleared at ops whose
+        // semantics could write to the local through a pointer
+        // (function calls, intrinsics, `Op::Mcpy`, indirect
+        // stores); this pass does not consult the parser's
+        // address-escape tracking.
+        let mut slot_value: alloc::collections::BTreeMap<i64, (LoadKind, ValueId)> =
             alloc::collections::BTreeMap::new();
         // Block entry: reload any cross-block vstack values from
         // their spill slots. Slot 0 holds the value that was at
@@ -622,8 +623,48 @@ pub(super) fn lift_function(
                 }
                 Op::Lea => {
                     let n = text[pc + 1];
-                    def(&mut insts, Inst::LocalAddr(n), &mut acc);
-                    pc += op.word_size();
+                    // Peek at the next op. The bytecode optimizer
+                    // already fuses `Op::Lea + Op::Li / Op::Lc`
+                    // into `Op::LdLocI / Op::LdLocC`; recognize
+                    // the analogous shape for the other widths
+                    // (`Op::Lw`, `Op::Lwu`, `Op::Lh`, `Op::Lhu`,
+                    // `Op::Lcs`, `Op::Lf`) and the unfused
+                    // `Op::Lea + Op::Li / Op::Lc` shape that
+                    // shows up without `-O`. Emit a single
+                    // `Inst::LoadLocal` so the per-arch emit can
+                    // fold the slot address into the load's
+                    // displacement field.
+                    let next_pc = pc + op.word_size();
+                    let next_op = if next_pc < end_of_block {
+                        Op::from_i64(text[next_pc])
+                    } else {
+                        None
+                    };
+                    let fused_kind = match next_op {
+                        Some(Op::Li) => Some(LoadKind::I64),
+                        Some(Op::Lc) => Some(LoadKind::U8),
+                        Some(Op::Lcs) => Some(LoadKind::I8),
+                        Some(Op::Lw) => Some(LoadKind::I32),
+                        Some(Op::Lwu) => Some(LoadKind::U32),
+                        Some(Op::Lh) => Some(LoadKind::I16),
+                        Some(Op::Lhu) => Some(LoadKind::U16),
+                        Some(Op::Lf) => Some(LoadKind::F32),
+                        _ => None,
+                    };
+                    if let Some(kind) = fused_kind {
+                        if let Some(&(cached_kind, cached)) = slot_value.get(&n)
+                            && cached_kind == kind
+                        {
+                            acc = cached;
+                        } else {
+                            def(&mut insts, Inst::LoadLocal { off: n, kind }, &mut acc);
+                            slot_value.insert(n, (kind, acc));
+                        }
+                        pc = next_pc + Op::from_i64(text[next_pc]).unwrap().word_size();
+                    } else {
+                        def(&mut insts, Inst::LocalAddr(n), &mut acc);
+                        pc += op.word_size();
+                    }
                 }
                 Op::TlsLea => {
                     let off = text[pc + 1];
@@ -724,7 +765,9 @@ pub(super) fn lift_function(
                 }
                 Op::LdLocI => {
                     let n = text[pc + 1];
-                    if let Some(&cached) = slot_value.get(&n) {
+                    if let Some(&(kind, cached)) = slot_value.get(&n)
+                        && kind == LoadKind::I64
+                    {
                         acc = cached;
                     } else {
                         def(
@@ -735,22 +778,27 @@ pub(super) fn lift_function(
                             },
                             &mut acc,
                         );
-                        slot_value.insert(n, acc);
+                        slot_value.insert(n, (LoadKind::I64, acc));
                     }
                     pc += op.word_size();
                 }
                 Op::LdLocC => {
                     let n = text[pc + 1];
-                    let lea = insts.len() as ValueId;
-                    insts.push(Inst::LocalAddr(n));
-                    def(
-                        &mut insts,
-                        Inst::Load {
-                            addr: lea,
-                            kind: LoadKind::U8,
-                        },
-                        &mut acc,
-                    );
+                    if let Some(&(cached_kind, cached)) = slot_value.get(&n)
+                        && cached_kind == LoadKind::U8
+                    {
+                        acc = cached;
+                    } else {
+                        def(
+                            &mut insts,
+                            Inst::LoadLocal {
+                                off: n,
+                                kind: LoadKind::U8,
+                            },
+                            &mut acc,
+                        );
+                        slot_value.insert(n, (LoadKind::U8, acc));
+                    }
                     pc += op.word_size();
                 }
                 Op::Si | Op::Sc | Op::Sw | Op::Sh | Op::Sf => {
@@ -786,7 +834,7 @@ pub(super) fn lift_function(
                         },
                         &mut acc,
                     );
-                    slot_value.insert(n, value);
+                    slot_value.insert(n, (LoadKind::I64, value));
                     pc += op.word_size();
                 }
                 op if matches!(

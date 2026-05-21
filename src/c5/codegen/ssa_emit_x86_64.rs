@@ -995,10 +995,6 @@ use super::ssa_emit_common::c5_slot_to_fp_offset;
 /// (`Op::LdLocI`); other widths stay on the unfused
 /// `LocalAddr` + `Load` path and never reach this helper.
 fn emit_load_local(code: &mut Vec<u8>, dst: Place, off: i64, kind: LoadKind, frame: Frame) -> bool {
-    if !matches!(kind, LoadKind::I64) {
-        bail_msg("LoadLocal: only I64 supported");
-        return false;
-    }
     let disp = match i32::try_from(c5_slot_to_fp_offset(off)) {
         Ok(v) => v,
         Err(_) => {
@@ -1006,11 +1002,33 @@ fn emit_load_local(code: &mut Vec<u8>, dst: Place, off: i64, kind: LoadKind, fra
             return false;
         }
     };
+    if matches!(kind, LoadKind::F32) {
+        let dd = match fp_or_spill_dst(dst) {
+            Some(r) => r,
+            None => {
+                bail_msg("LoadLocal F32: dst not fp reg / spill");
+                return false;
+            }
+        };
+        emit_movss_xmm_mem(code, dd, Reg::RBP, disp);
+        emit_cvtss2sd(code, dd, dd);
+        fp_spill_dst_to_slot(code, dst, dd, frame);
+        return true;
+    }
     let Some(rd) = int_or_spill_dst(dst) else {
         bail_msg("LoadLocal: dst not int reg / spill");
         return false;
     };
-    emit_mov_r_mem(code, rd, Reg::RBP, disp);
+    match kind {
+        LoadKind::I64 => emit_mov_r_mem(code, rd, Reg::RBP, disp),
+        LoadKind::I32 => emit_movsxd_r_mem(code, rd, Reg::RBP, disp),
+        LoadKind::U32 => super::x86_64::emit_mov_r32_mem(code, rd, Reg::RBP, disp),
+        LoadKind::I16 => emit_movsx_r_mem16(code, rd, Reg::RBP, disp),
+        LoadKind::U16 => emit_movzx_r_mem16(code, rd, Reg::RBP, disp),
+        LoadKind::I8 => super::x86_64::emit_movsx_r_mem8(code, rd, Reg::RBP, disp),
+        LoadKind::U8 => super::x86_64::emit_movzx_r_mem8(code, rd, Reg::RBP, disp),
+        LoadKind::F32 => unreachable!(),
+    }
     spill_dst_to_slot(code, dst, rd, frame);
     true
 }

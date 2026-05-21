@@ -982,6 +982,28 @@ pub(super) fn enc_asr_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
     0x9340_FC00 | immr | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+/// `SXTW <Xd>, <Wn>` -- sign-extend low 32 bits of `Wn` into `Xd`.
+/// Alias of `SBFM Xd, Xn, #0, #31`. Used by the sxtw peephole that
+/// folds c5's `Shl 32; Shr 32` sign-narrow shape into one inst.
+pub(super) fn enc_sxtw(rd: Reg, rn: Reg) -> u32 {
+    // sf=1, opc=00 (SBFM), immr=0, imms=31, Rn, Rd.
+    0x9340_7C00 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `SXTH <Xd>, <Wn>` -- sign-extend low 16 bits of `Wn` into `Xd`.
+/// Alias of `SBFM Xd, Xn, #0, #15`. Companion to `enc_sxtw` for the
+/// short-narrow shape (`Shl 48; Shr 48`).
+pub(super) fn enc_sxth(rd: Reg, rn: Reg) -> u32 {
+    0x9340_3C00 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
+/// `SXTB <Xd>, <Wn>` -- sign-extend low 8 bits of `Wn` into `Xd`.
+/// Alias of `SBFM Xd, Xn, #0, #7`. Companion to `enc_sxtw` for the
+/// char-narrow shape (`Shl 56; Shr 56`).
+pub(super) fn enc_sxtb(rd: Reg, rn: Reg) -> u32 {
+    0x9340_1C00 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
 // ---- Pre-/post-indexed loads & stores. The c5 VM stack push/pop
 //      compiles to these because they update sp in the same instruction.
 

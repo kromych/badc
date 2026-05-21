@@ -235,6 +235,7 @@ pub(super) fn emit_function(
             if !emit_inst(
                 code,
                 inst,
+                v,
                 place,
                 alloc,
                 frame,
@@ -602,6 +603,7 @@ fn alloc_save_base(frame: Frame, alloc: &Allocation) -> u32 {
 fn emit_inst(
     code: &mut Vec<u8>,
     inst: &Inst,
+    v: super::super::ir::ValueId,
     dst: Place,
     alloc: &Allocation,
     frame: Frame,
@@ -734,7 +736,7 @@ fn emit_inst(
             emit_binop(code, *op, dst, *lhs, *rhs, alloc, frame, scratch)
         }
         Inst::BinopI { op, lhs, rhs_imm } => {
-            emit_binop_imm(code, *op, dst, *lhs, *rhs_imm, alloc, frame, scratch)
+            emit_binop_imm(code, *op, v, dst, *lhs, *rhs_imm, alloc, frame, scratch)
         }
         Inst::Call { target_pc, args } => emit_call(
             code,
@@ -2700,9 +2702,11 @@ fn compare_cond(op: BinOp) -> Option<Cond> {
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn emit_binop_imm(
     code: &mut Vec<u8>,
     op: BinOp,
+    v: super::super::ir::ValueId,
     dst: Place,
     lhs: u32,
     rhs_imm: i64,
@@ -2720,6 +2724,39 @@ fn emit_binop_imm(
         .get(lhs as usize)
         .copied()
         .unwrap_or(Place::None);
+    // sxtw / sxth / sxtb fold: the allocator pre-flagged this
+    // `BinopI(Shr, _, K)` as the upper half of a sign-narrow pair
+    // (`Shl K; Shr K`). The matching Shl was decremented to zero
+    // uses and DCE'd; we emit a single sign-extend whose source is
+    // the Shl's lhs (the original pre-narrow value).
+    let sxtw_source = alloc
+        .sxtw_source
+        .get(v as usize)
+        .copied()
+        .unwrap_or(super::super::ir::NO_VALUE);
+    if sxtw_source != super::super::ir::NO_VALUE {
+        let src_place = alloc
+            .places
+            .get(sxtw_source as usize)
+            .copied()
+            .unwrap_or(Place::None);
+        let rn = match materialize_int(code, src_place, scratch.primary, frame) {
+            Some(r) => r,
+            None => return false,
+        };
+        let word = match rhs_imm {
+            32 => super::aarch64::enc_sxtw(rd, rn),
+            48 => super::aarch64::enc_sxth(rd, rn),
+            56 => super::aarch64::enc_sxtb(rd, rn),
+            _ => unreachable!(),
+        };
+        emit(code, word);
+        if let Some(slot) = spill_to {
+            let sp_off = spill_off(frame, slot);
+            emit(code, enc_str_imm(rd, Reg(31), sp_off));
+        }
+        return true;
+    }
     let rn = match materialize_int(code, lhs_place, scratch.primary, frame) {
         Some(r) => r,
         None => return false,

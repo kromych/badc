@@ -1013,6 +1013,32 @@ pub(super) fn emit_xor_eax_eax(code: &mut Vec<u8>) {
 //     mod=00, fits-in-i8 for mod=01, full 32-bit for mod=10.
 // ------------------------------------------------------------------
 
+/// `MOVSXD r64, r32` -- sign-extend a 32-bit register to 64 bits.
+/// Reg-to-reg form of [`emit_movsxd_r_mem`].
+pub(super) fn emit_movsxd_r_r(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_byte(code, rex(true, dst.high(), false, src.high()));
+    emit_byte(code, 0x63);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
+/// `MOVSX r64, r/m16` (register form) -- sign-extend low 16 bits.
+pub(super) fn emit_movsx_r_r16(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_byte(code, rex(true, dst.high(), false, src.high()));
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0xBF);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
+/// `MOVSX r64, r/m8` (register form) -- sign-extend low 8 bits.
+/// REX is always emitted to access the new-encoding 8-bit subregs
+/// (`sil` / `dil` / `bpl` / `spl`) instead of the legacy AH/CH/etc.
+pub(super) fn emit_movsx_r_r8(code: &mut Vec<u8>, dst: Reg, src: Reg) {
+    emit_byte(code, rex(true, dst.high(), false, src.high()));
+    emit_byte(code, 0x0F);
+    emit_byte(code, 0xBE);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
 /// Emit the ModR/M + SIB + displacement bytes for a memory operand
 /// of the form `[base + index * scale + disp]`. `scale` must be 1,
 /// 2, 4, or 8. When `disp == 0` and `base` isn't RBP/R13, emits

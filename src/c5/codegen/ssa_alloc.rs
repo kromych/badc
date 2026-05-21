@@ -106,6 +106,15 @@ pub(super) struct Allocation {
     /// skip pure-with-no-uses insts (dead-code elimination). A value
     /// with zero uses and no side effects produces no machine code.
     pub use_counts: Vec<u32>,
+    /// For `BinopI(Shr, X, K)` insts the allocator recognised as
+    /// the upper half of a sign-narrow `Shl K; Shr K` pair (K in
+    /// {32, 48, 56}), the original pre-narrow value (the Shl's
+    /// lhs). NO_VALUE for any other inst. The emit pass collapses
+    /// the pair into a single sxtw / sxth / sxtb (aarch64) or
+    /// movsxd / movsx (x86_64); the upstream Shl loses its only
+    /// consumer through the matching use_count decrement, so DCE
+    /// kills it.
+    pub sxtw_source: Vec<ValueId>,
 }
 
 /// Set of available registers for the host target. The emit pass
@@ -187,6 +196,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             gpr_used: Vec::new(),
             fp_used: Vec::new(),
             use_counts: Vec::new(),
+            sxtw_source: Vec::new(),
         };
     }
 
@@ -314,7 +324,31 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         .into_iter()
         .filter(|r| banks.callee_fprs.contains(r))
         .collect();
-    let use_counts = compute_use_counts(func);
+    let mut use_counts = compute_use_counts(func);
+    // Recognise `BinopI(Shl, X, K); BinopI(Shr, _, K)` adjacent
+    // pairs with K in {32, 48, 56} as the c5 sign-narrow shape.
+    // Decrement the Shl's use_count so DCE removes it; the Shr's
+    // emit picks the sxtw/sxth/sxtb path via the recorded source.
+    let mut sxtw_source: Vec<ValueId> = vec![NO_VALUE; func.insts.len()];
+    for (i, inst) in func.insts.iter().enumerate() {
+        if let Inst::BinopI {
+            op: BinOp::Shr,
+            lhs,
+            rhs_imm,
+        } = inst
+            && matches!(rhs_imm, 32 | 48 | 56)
+            && let Some(Inst::BinopI {
+                op: BinOp::Shl,
+                lhs: shl_src,
+                rhs_imm: shl_imm,
+            }) = func.insts.get(*lhs as usize)
+            && *shl_imm == *rhs_imm
+            && use_counts.get(*lhs as usize).copied().unwrap_or(0) == 1
+        {
+            sxtw_source[i] = *shl_src;
+            use_counts[*lhs as usize] = 0;
+        }
+    }
     // Drop the "value-also-in-acc" propagate slot for stores whose
     // defined value is unread. c5 store ops leave the stored value
     // in the accumulator; if nothing downstream reads it, the emit
@@ -336,6 +370,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         gpr_used: gpr_used_callee,
         fp_used: fp_used_callee,
         use_counts,
+        sxtw_source,
     }
 }
 

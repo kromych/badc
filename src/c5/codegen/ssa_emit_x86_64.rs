@@ -421,6 +421,7 @@ pub(super) fn emit_function(
             if !emit_inst(
                 code,
                 inst,
+                v,
                 place,
                 alloc,
                 frame,
@@ -671,9 +672,11 @@ fn emit_prologue(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn emit_inst(
     code: &mut Vec<u8>,
     inst: &Inst,
+    v: super::super::ir::ValueId,
     dst: Place,
     alloc: &Allocation,
     frame: Frame,
@@ -763,7 +766,7 @@ fn emit_inst(
         } => emit_store_indexed(code, dst, *base, *index, *scale, *value, *kind, alloc, frame),
         Inst::Binop { op, lhs, rhs } => emit_binop(code, *op, dst, *lhs, *rhs, alloc, frame),
         Inst::BinopI { op, lhs, rhs_imm } => {
-            emit_binop_imm(code, *op, dst, *lhs, *rhs_imm, alloc, frame)
+            emit_binop_imm(code, *op, v, dst, *lhs, *rhs_imm, alloc, frame)
         }
         Inst::Call { target_pc, args } => emit_call(
             code,
@@ -1792,9 +1795,11 @@ fn emit_binop_divmod(
     true
 }
 
+#[allow(clippy::too_many_arguments)]
 fn emit_binop_imm(
     code: &mut Vec<u8>,
     op: BinOp,
+    v: super::super::ir::ValueId,
     dst: Place,
     lhs: u32,
     rhs_imm: i64,
@@ -1822,6 +1827,39 @@ fn emit_binop_imm(
             return false;
         }
     };
+    // sxtw fold via movsxd / movsx -- mirrors the aarch64 path.
+    let sxtw_source = alloc
+        .sxtw_source
+        .get(v as usize)
+        .copied()
+        .unwrap_or(super::super::ir::NO_VALUE);
+    if sxtw_source != super::super::ir::NO_VALUE {
+        let src_place = alloc
+            .places
+            .get(sxtw_source as usize)
+            .copied()
+            .unwrap_or(Place::None);
+        let src_reg = match src_place {
+            Place::IntReg(r) => Reg(r),
+            Place::Spill(slot) => {
+                let sp_off = spill_slot_sp_offset(frame, slot);
+                emit_mov_r_mem(code, rd, Reg::RSP, sp_off);
+                rd
+            }
+            _ => {
+                bail_msg("BinopI sxtw: src not int reg / spill");
+                return false;
+            }
+        };
+        match rhs_imm {
+            32 => super::x86_64::emit_movsxd_r_r(code, rd, src_reg),
+            48 => super::x86_64::emit_movsx_r_r16(code, rd, src_reg),
+            56 => super::x86_64::emit_movsx_r_r8(code, rd, src_reg),
+            _ => unreachable!(),
+        }
+        spill_dst_to_slot(code, dst, rd, frame);
+        return true;
+    }
     // Per-op peepholes for immediate-form binops. These avoid
     // the 10-byte `mov rcx, imm64` materialisation when the
     // immediate fits a shorter form. Fall back to the rcx-scratch

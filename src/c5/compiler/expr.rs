@@ -2075,12 +2075,18 @@ impl Compiler {
                         let scale = self.pointee_size(t);
                         self.emit_binop_with_imm(Op::Mul, scale);
                     }
-                    self.emit_op(Op::Add);
+                    // Pre-compute the common type so the dual-
+                    // emit binop tracker captures the result-
+                    // shape `ty` rather than the rhs's pre-
+                    // conversion tag.
                     if is_pointer_ty(t) {
                         self.ty = t;
                     } else {
-                        self.maybe_mask_to_unsigned_width(t, rhs_ty);
                         self.ty = usual_arith_common_ty(t, rhs_ty, self.target);
+                    }
+                    self.emit_op(Op::Add);
+                    if !is_pointer_ty(t) {
+                        self.maybe_mask_to_unsigned_width(t, rhs_ty);
                     }
                 }
             } else if self.lex.tk == Token::SubOp {
@@ -2109,12 +2115,17 @@ impl Compiler {
                     self.ty = t;
                 } else {
                     let rhs_ty = self.ty;
-                    self.emit_op(Op::Sub);
+                    // Pre-set the post-conversion result type so
+                    // the dual-emit binop tracker captures the
+                    // C99 6.3.1.8 common type.
                     if is_pointer_ty(t) {
                         self.ty = t;
                     } else {
-                        self.maybe_mask_to_unsigned_width(t, rhs_ty);
                         self.ty = usual_arith_common_ty(t, rhs_ty, self.target);
+                    }
+                    self.emit_op(Op::Sub);
+                    if !is_pointer_ty(t) {
+                        self.maybe_mask_to_unsigned_width(t, rhs_ty);
                     }
                 }
             } else if self.lex.tk == Token::MulOp {
@@ -2127,9 +2138,15 @@ impl Compiler {
                     self.ty = fp_result_ty(t, self.ty);
                 } else {
                     let rhs_ty = self.ty;
+                    // Pre-compute the C99 6.3.1.8 common type so
+                    // the dual-emit binop tracker (which reads
+                    // `self.ty` for `Expr::Binary { ty }`) sees
+                    // the post-conversion type, not the rhs's
+                    // pre-conversion tag. Walker's post-op
+                    // narrowing keys off `ty`.
+                    self.ty = usual_arith_common_ty(t, rhs_ty, self.target);
                     self.emit_op(Op::Mul);
                     self.maybe_mask_to_unsigned_width(t, rhs_ty);
-                    self.ty = usual_arith_common_ty(t, rhs_ty, self.target);
                 }
             } else if self.lex.tk == Token::DivOp {
                 self.next()?;

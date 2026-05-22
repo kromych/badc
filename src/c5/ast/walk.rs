@@ -623,19 +623,33 @@ impl<'a> Walker<'a> {
                     rv = b.binop_imm(BinOp::And, rv, mask);
                 }
                 let result = b.binop(*op, lv, rv);
-                // C99 6.5p4 + 6.3.1.8: integer Add / Sub / Mul at
-                // an unsigned narrower-than-register common type
-                // must wrap modulo 2^N. The accumulator's
-                // sign-extended high half stays set after a
-                // 64-bit Binop; mask the result so downstream
-                // comparisons, shifts, or casts see the standard-
-                // mandated value. Mirrors
-                // `convert.rs::maybe_mask_to_unsigned_width`.
-                if mask != 0 && matches!(*op, BinOp::Add | BinOp::Sub | BinOp::Mul) {
-                    Ok(b.binop_imm(BinOp::And, result, mask))
-                } else {
-                    Ok(result)
+                // C99 6.5p4 + 6.3.1.8: integer Add / Sub / Mul
+                // result must live at the common type's storage
+                // width.
+                //   * unsigned narrow common -> `(1 << N) - 1`
+                //     mask wraps modulo 2^N (C99 6.5p4).
+                //   * signed narrow common -> UB per C99 6.5p5;
+                //     follow clang / gcc and truncate via
+                //     `Shl K; Shr K` so the high bit sign-extends
+                //     back.
+                if matches!(*op, BinOp::Add | BinOp::Sub | BinOp::Mul) {
+                    if mask != 0 {
+                        return Ok(b.binop_imm(BinOp::And, result, mask));
+                    }
+                    let stripped = *ty & !UNSIGNED_BIT;
+                    let signed_narrow = (*ty & UNSIGNED_BIT) == 0
+                        && (stripped == Ty::Char as i64
+                            || stripped == Ty::Short as i64
+                            || stripped == Ty::Int as i64);
+                    if signed_narrow {
+                        let bits = 64i64 - (type_size_bytes(*ty, self.target) as i64) * 8;
+                        if bits > 0 {
+                            let shifted = b.binop_imm(BinOp::Shl, result, bits);
+                            return Ok(b.binop_imm(BinOp::Shr, shifted, bits));
+                        }
+                    }
                 }
+                Ok(result)
             }
             Expr::Assign { lhs, rhs, ty } => {
                 // Local-target shortcut: a Token::Loc-class
@@ -807,11 +821,46 @@ impl<'a> Walker<'a> {
                 let target_is_fp = is_floating_scalar(*to_ty);
                 let source_is_fp = is_floating_scalar(src_ty);
                 if target_is_fp && !source_is_fp {
-                    Ok(b.fp_cast(super::super::ir::FpCastKind::IntToFp, v))
+                    return Ok(b.fp_cast(super::super::ir::FpCastKind::IntToFp, v));
                 } else if !target_is_fp && source_is_fp {
-                    Ok(b.fp_cast(super::super::ir::FpCastKind::FpToInt, v))
+                    return Ok(b.fp_cast(super::super::ir::FpCastKind::FpToInt, v));
+                }
+                // Integer-to-integer cast. C99 6.3.1.3:
+                //   * narrowing -> unsigned target: mask to the
+                //     target storage width.
+                //   * narrowing -> signed target (or same-width
+                //     signed conversion of an unsigned source):
+                //     shift-pair Shl K; Shr K to sign-extend the
+                //     truncated value (clang / gcc-compatible UB
+                //     handling).
+                // Mirrors the bytecode tier's
+                // `expr.rs::Token::LP` cast site so the walker
+                // produces the same in-register pattern.
+                let target_size = type_size_bytes(*to_ty, self.target);
+                let source_size = type_size_bytes(src_ty, self.target);
+                if target_size == 0 || target_size >= 8 {
+                    return Ok(v);
+                }
+                let source_unsigned = (src_ty & UNSIGNED_BIT) != 0;
+                let target_unsigned = (*to_ty & UNSIGNED_BIT) != 0;
+                if target_unsigned {
+                    let mask: i64 = match target_size {
+                        1 => 0xff,
+                        2 => 0xffff,
+                        4 => 0xffff_ffff,
+                        _ => return Ok(v),
+                    };
+                    Ok(b.binop_imm(BinOp::And, v, mask))
                 } else {
-                    Ok(v)
+                    let needs_extend = target_size < source_size
+                        || (target_size == source_size && source_unsigned);
+                    if needs_extend {
+                        let bits = 64i64 - (target_size as i64) * 8;
+                        let shifted = b.binop_imm(BinOp::Shl, v, bits);
+                        Ok(b.binop_imm(BinOp::Shr, shifted, bits))
+                    } else {
+                        Ok(v)
+                    }
                 }
             }
             Expr::CompoundAssign { op, lhs, rhs, ty } => {
@@ -1195,6 +1244,35 @@ const UNSIGNED_BIT: i64 = 1 << 30;
 /// can classify struct values without crossing the module boundary.
 const STRUCT_BASE: i64 = 1000;
 const STRUCT_STRIDE: i64 = 1000;
+
+/// Byte size of a C type tag at the active target. Mirrors
+/// `compiler::types::size_of_type` for the scalar / pointer / FP
+/// cases the walker handles. Returns 0 for types whose width
+/// the walker can't compute (struct types, function types -- the
+/// walker doesn't currently consume those in cast positions).
+fn type_size_bytes(ty: i64, target: Target) -> usize {
+    let stripped = ty & !UNSIGNED_BIT;
+    if is_pointer_ty(ty) {
+        return 8;
+    }
+    if stripped == Ty::Char as i64 {
+        1
+    } else if stripped == Ty::Short as i64 {
+        2
+    } else if stripped == Ty::Int as i64 {
+        4
+    } else if stripped == Ty::Float as i64 {
+        4
+    } else if stripped == Ty::Double as i64 {
+        8
+    } else if stripped == Ty::Long as i64 {
+        if target.is_windows() { 4 } else { 8 }
+    } else if stripped == Ty::LongLong as i64 {
+        8
+    } else {
+        0
+    }
+}
 
 /// Return the AND mask needed to narrow an unsigned-typed
 /// operand of an integer divide / modulo to its declared storage

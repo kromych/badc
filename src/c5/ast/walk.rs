@@ -238,7 +238,39 @@ impl<'a> Walker<'a> {
                 id,
                 kind: "Ternary",
             }),
-            Expr::Call { .. } => Err(WalkError::UnsupportedExpr { id, kind: "Call" }),
+            Expr::Call { callee, args, .. } => {
+                // Lower each arg as an rvalue, then dispatch
+                // through the callee's class. Direct
+                // c5-internal (`Token::Fun`) calls go through
+                // `b.call(target_pc, args)`; libc bindings
+                // (`Token::Sys`) go through `b.call_ext`;
+                // anything else routes through
+                // `b.call_indirect` with the callee's value.
+                let mut arg_vals: alloc::vec::Vec<super::super::ir::ValueId> =
+                    alloc::vec::Vec::with_capacity(args.len());
+                for a in args {
+                    arg_vals.push(self.walk_expr_rvalue(b, *a)?);
+                }
+                if let Expr::Ident { class, val, .. } = self.ast.expr(*callee) {
+                    if *class == Token::Fun as i64 {
+                        return Ok(b.call(*val as usize, arg_vals));
+                    }
+                    if *class == Token::Sys as i64 {
+                        // The Ident's `val` is the binding's
+                        // flat index across all `#pragma
+                        // binding(...)` directives -- exactly
+                        // what `Inst::CallExt::binding_idx`
+                        // wants. The `fp_arg_mask` for variadic
+                        // FP packing isn't tracked on the AST
+                        // yet; pass 0 (no FP args). The flip
+                        // pass (Phase C5) will recompute the
+                        // mask from each arg's type. TODO.
+                        return Ok(b.call_ext(*val, arg_vals, 0));
+                    }
+                }
+                let target = self.walk_expr_rvalue(b, *callee)?;
+                Ok(b.call_indirect(target, arg_vals))
+            }
             Expr::Member { .. } => Err(WalkError::UnsupportedExpr { id, kind: "Member" }),
             Expr::Index { .. } => Err(WalkError::UnsupportedExpr { id, kind: "Index" }),
             Expr::Cast { .. } => Err(WalkError::UnsupportedExpr { id, kind: "Cast" }),

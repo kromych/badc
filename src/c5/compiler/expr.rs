@@ -387,6 +387,13 @@ impl Compiler {
                     // (`printf("%f", x)` etc.). Order matches
                     // `temp_offsets`: index 0 = first declared arg.
                     let mut arg_is_fp: Vec<bool> = Vec::new();
+                    // Per-arg AST ExprId, captured at evaluation time
+                    // (post-conversion, pre-store). Empty slot when
+                    // the dual-emit hasn't wired the arg expression
+                    // yet; the call-site Call node accepts only the
+                    // wired ones today and skips Call build if any
+                    // arg is unwired.
+                    let mut ast_arg_ids: Vec<Option<super::super::ast::ExprId>> = Vec::new();
                     while self.lex.tk != ')' {
                         let arg_line = self.lex.line;
                         // Allocate a temp slot for this arg.
@@ -476,6 +483,12 @@ impl Compiler {
                                 ),
                             ));
                         }
+                        // Snapshot the arg's AST ExprId before the
+                        // Si consumes both vstack and acc. The Call
+                        // node built below uses these in source
+                        // order regardless of the c5 right-to-left
+                        // push.
+                        ast_arg_ids.push(self.ast_acc);
                         self.emit_op(Op::Si);
                         nargs += 1;
                         if self.lex.tk == ',' {
@@ -607,6 +620,18 @@ impl Compiler {
                     if total_pushed > 0 {
                         self.emit_op(Op::Adj);
                         self.emit_val(total_pushed);
+                    }
+                    // Dual-emit the call's AST: build a callee
+                    // Ident node from the call-site symbol idx and
+                    // pair with the per-arg ExprIds captured above.
+                    // Struct-returning calls skip the AST build for
+                    // now; the hidden out-pointer doesn't fit the
+                    // canonical `Call { callee, args, ty }` shape.
+                    if !callee_returns_struct {
+                        let callee_ty = self.symbols[id_idx].type_;
+                        let callee_id = self.ast_synthesize_callee(id_idx as u32, callee_ty);
+                        let return_ty = callee_ret_ty;
+                        self.ast_emit_call(callee_id, ast_arg_ids.clone(), return_ty);
                     }
                     // For struct-returning callees, the result lives
                     // in the caller-allocated temp. After the call,

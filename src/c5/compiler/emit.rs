@@ -848,6 +848,69 @@ impl Compiler {
         self.ast_acc = Some(id);
     }
 
+    /// Push an `Expr::Call` and set it as the new accumulator.
+    /// Called by the function-call parser site after the bytecode
+    /// dance (per-arg temp store + reverse push + Jsr/JsrExt/Jsri
+    /// + Adj cleanup) lands. `callee` is the callee's AST
+    /// expression (synthesised here for direct calls via
+    /// `ast.push_expr(Ident { ... })`; the indirect-call path
+    /// passes the already-built function-pointer ExprId). `args`
+    /// holds each declared argument's ExprId in source order;
+    /// `None` slots mean the argument's AST wasn't captured.
+    /// If any slot is `None` the helper drops the Call build and
+    /// resets `ast_acc` to `None` -- the walker would otherwise
+    /// emit an incomplete call.
+    pub(super) fn ast_emit_call(
+        &mut self,
+        callee: ExprId,
+        args: alloc::vec::Vec<Option<ExprId>>,
+        ty: i64,
+    ) {
+        let mut resolved: alloc::vec::Vec<ExprId> = alloc::vec::Vec::with_capacity(args.len());
+        for a in args {
+            match a {
+                Some(id) => resolved.push(id),
+                None => {
+                    self.ast_acc = None;
+                    return;
+                }
+            }
+        }
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(
+            Expr::Call {
+                callee,
+                args: resolved,
+                ty,
+            },
+            pos,
+        );
+        self.ast_acc = Some(id);
+    }
+
+    /// Synthesise an `Expr::Ident` for a direct-call callee. The
+    /// parser's call site looks up `id_idx` (a symbol-table index
+    /// for a `Token::Fun` / `Token::Sys` symbol); the AST needs
+    /// a matching Ident node so [`Self::ast_emit_call`] can fill
+    /// the `callee` field without re-running symbol resolution.
+    pub(super) fn ast_synthesize_callee(&mut self, sym: u32, ty: i64) -> ExprId {
+        let pos = self.ast_src_pos();
+        let s = &self.symbols[sym as usize];
+        let class = s.class;
+        let val = s.val;
+        let is_thread_local = s.is_thread_local;
+        self.ast.push_expr(
+            Expr::Ident {
+                sym,
+                ty,
+                class,
+                val,
+                is_thread_local,
+            },
+            pos,
+        )
+    }
+
     /// Push a `Stmt::Return(value)` node into the per-function
     /// AST. Called from the explicit-return statement parser
     /// site (stmt.rs) right before the bytecode `Op::Lev`. The
@@ -1138,6 +1201,41 @@ mod tests {
                 }
             }
             panic!("did not reach Mul through Add rhs masking chain");
+        }
+    }
+
+    /// `int callee(int x) { return x + 1; } int main(void) {
+    /// return callee(5); }` -- the call site should land one
+    /// `Expr::Call { callee: Ident(callee), args: [IntLit(5)] }`
+    /// in main's AST.
+    #[test]
+    fn direct_call_captures_call_expr() {
+        use super::super::super::ast::Expr;
+
+        let src = alloc::string::String::from(
+            "int callee(int x) { return x + 1; }\nint main(void) { return callee(5); }\n",
+        );
+        let program = Compiler::new(src).compile().expect("compile");
+        // `main` is the second finished function.
+        let ast = &program.finished_functions[1].ast;
+        let calls: alloc::vec::Vec<&Expr> = ast
+            .exprs
+            .iter()
+            .filter(|e| matches!(e, Expr::Call { .. }))
+            .collect();
+        assert_eq!(calls.len(), 1, "expected one Call expr, got {calls:?}");
+        if let Expr::Call { callee, args, .. } = calls[0] {
+            assert_eq!(args.len(), 1, "expected 1 arg in callee(5)");
+            assert!(
+                matches!(&ast.exprs[*callee as usize], Expr::Ident { .. }),
+                "callee node not Ident: {:?}",
+                ast.exprs[*callee as usize],
+            );
+            assert!(
+                matches!(&ast.exprs[args[0] as usize], Expr::IntLit { val: 5, .. },),
+                "arg not IntLit(5): {:?}",
+                ast.exprs[args[0] as usize],
+            );
         }
     }
 

@@ -2552,7 +2552,13 @@ impl Compiler {
                     && let Some(obj) = obj_ast
                 {
                     let mty = self.ty;
-                    self.ast_emit_member(obj, field.offset as i64, None, mty);
+                    self.ast_emit_member(
+                        obj,
+                        field.offset as i64,
+                        None,
+                        mty,
+                        field.array_size,
+                    );
                 }
             } else {
                 return Err(self.compile_err(format!(

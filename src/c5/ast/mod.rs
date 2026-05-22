@@ -186,6 +186,13 @@ pub(crate) enum Expr {
         field_off: i64,
         bitfield: Option<BitfieldDesc>,
         ty: i64,
+        /// Non-zero when the field's declared shape is an array
+        /// (`T name[N]` inside the struct). Per C99 6.3.2.1p3 +
+        /// the c5 address-as-value rule the field's address IS
+        /// its rvalue and no load runs at the access site; the
+        /// walker keys off this to suppress the trailing load
+        /// that scalar / pointer fields take.
+        array_size: i64,
     },
     /// `array[idx]` -- the parser has already lowered pointer
     /// arithmetic to `*(array + idx * sizeof(*array))` in older

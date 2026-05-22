@@ -964,6 +964,7 @@ impl Compiler {
         field_off: i64,
         bitfield: Option<super::super::ast::BitfieldDesc>,
         ty: i64,
+        array_size: i64,
     ) {
         let pos = self.ast_src_pos();
         let id = self.ast.push_expr(
@@ -972,6 +973,7 @@ impl Compiler {
                 field_off,
                 bitfield,
                 ty,
+                array_size,
             },
             pos,
         );

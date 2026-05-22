@@ -744,11 +744,12 @@ impl<'a> Walker<'a> {
                 field_off,
                 bitfield,
                 ty,
+                array_size,
             } => {
                 if bitfield.is_some() {
                     // Bitfield read needs the load+shift+mask
                     // pattern the bytecode tier emits; the walker
-                    // doesn't reconstruct it yet.
+                    // doesn't reconstruct it yet. TODO.
                     return Err(WalkError::UnsupportedExpr {
                         id,
                         kind: "Member(bitfield)",
@@ -760,6 +761,16 @@ impl<'a> Walker<'a> {
                 } else {
                     base
                 };
+                // C99 6.3.2.1p3: an array-typed field decays to a
+                // pointer to its first element; the field's
+                // address IS the rvalue. Same address-as-value
+                // rule for a struct-value field (no `*` on the
+                // declared type).
+                if *array_size != 0
+                    || (is_struct_ty(*ty) && struct_ptr_depth(*ty) == 0)
+                {
+                    return Ok(addr);
+                }
                 let kind = load_kind_for(*ty, self.target);
                 Ok(b.load(addr, kind))
             }

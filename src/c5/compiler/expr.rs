@@ -1326,7 +1326,8 @@ impl Compiler {
             // integer-shaped operand.
             if self.lex.tk == Token::Num {
                 let val = self.lex.ival;
-                self.emit_imm(val.wrapping_neg());
+                let negated = val.wrapping_neg();
+                self.emit_imm(negated);
                 // C99 6.5.3.3p3: unary `-` returns the integer-
                 // promoted operand type. The literal's type comes
                 // from C99 6.4.4.1p5 (first of int / long / long
@@ -1336,6 +1337,13 @@ impl Compiler {
                 // a downstream `-MAX - 1` back to 32 bits and
                 // yields 0 instead of `INT64_MIN`.
                 self.ty = self.literal_auto_promoted_type(val);
+                // Dual-emit: the constant-folded `-N` collapses
+                // the unary-minus on the AST side too. Seed
+                // `ast_acc` with the matching IntLit so a
+                // wrapping expression (cast, call-arg, assignment)
+                // finds the folded value on the accumulator
+                // instead of whatever stale id the caller left.
+                self.ast_emit_int_lit(negated, self.ty);
                 self.next()?;
             } else {
                 self.expr(Token::Inc as i64)?;

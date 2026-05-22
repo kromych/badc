@@ -191,7 +191,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         structs,
         entry_name,
         subsystem,
-        finished_asts,
+        finished_functions,
     } = program;
 
     let mut insns = decode(&text, &data_imm_positions, &in_code_imm_positions)?;
@@ -483,7 +483,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         structs,
         entry_name,
         subsystem,
-        finished_asts,
+        finished_functions,
     })
 }
 
@@ -1341,7 +1341,7 @@ mod tests {
             structs: Vec::new(),
             entry_name: None,
             subsystem: None,
-            finished_asts: Vec::new(),
+            finished_functions: Vec::new(),
         }
     }
 
@@ -1650,7 +1650,7 @@ mod tests {
             structs: Vec::new(),
             entry_name: None,
             subsystem: None,
-            finished_asts: Vec::new(),
+            finished_functions: Vec::new(),
         };
         let opt = optimize(p).unwrap();
         // Main returns 5; if the ImmCode operand remapped wrong, the

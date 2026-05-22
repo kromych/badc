@@ -846,6 +846,15 @@ fn main() {
             // straight to stdout instead of disk. The
             // mark-executable + codesign + per-target nag messages
             // are skipped -- the caller knows what they're doing.
+            //
+            // Compile-time warnings (type mismatch, AST validator,
+            // dead-store analysis) go to stderr here too -- the
+            // JIT path above already prints them; the AOT path
+            // missed them before this hook.
+            let stderr_is_tty = std::io::stderr().is_terminal();
+            for w in &program.warnings {
+                eprintln!("{}", colorize_diagnostic(w, stderr_is_tty));
+            }
             let pipe_to_stdout = match output_path.as_deref() {
                 Some(p) => p == std::path::Path::new("-"),
                 None => !std::io::stdout().is_terminal(),

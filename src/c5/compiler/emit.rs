@@ -563,14 +563,59 @@ impl Compiler {
         self.ast_vstack.clear();
     }
 
-    /// Capture the just-finished function's AST into the per-TU
-    /// snapshot vector. Called from the end-of-function-body hook
-    /// in `run_compile`, right after the trailing `Op::Lev`. The
-    /// `ast_acc` / `ast_vstack` parser-side state is left alone --
-    /// the next function's `ast_reset` zeroes it.
-    pub(super) fn ast_finish_function(&mut self) {
-        let finished = core::mem::take(&mut self.ast);
-        self.finished_asts.push(finished);
+    /// Capture the just-finished function's AST + the metadata
+    /// the SSA walker needs (ent_pc, param count, variadic flag,
+    /// post-parse local high-water mark, function name) into the
+    /// per-TU snapshot vector. Called from the end-of-function-
+    /// body hook in `run_compile`, right after the trailing
+    /// `Op::Lev`. The `ast_acc` / `ast_vstack` parser-side state
+    /// is left alone -- the next function's `ast_reset` zeroes it.
+    pub(super) fn ast_finish_function(
+        &mut self,
+        ent_pc: usize,
+        n_params: usize,
+        is_variadic: bool,
+    ) {
+        let finished = super::super::ast::FinishedFunction {
+            ast: core::mem::take(&mut self.ast),
+            ent_pc,
+            n_params,
+            is_variadic,
+            n_locals: self.max_loc_offs,
+            name: self.current_function_name.clone(),
+        };
+        self.finished_functions.push(finished);
+    }
+
+    /// Run the AST walker against every captured function and
+    /// append walker diagnostics to `self.warnings`. Used by the
+    /// `BADC_VALIDATE_AST` gate in `compile()`; never fails the
+    /// build, so a Phase C2 wiring gap surfaces as a warning
+    /// pointing at the offending expr/stmt id rather than
+    /// blocking the compile. The walker's `Unsupported{Expr,Stmt}`
+    /// arms surface as `ast::walk: <function>: ...` lines so a
+    /// developer scanning warnings can map gaps to specific
+    /// parser sites.
+    pub(super) fn validate_finished_asts(&mut self) {
+        let target = self.target;
+        for func in &self.finished_functions {
+            if let Err(e) = super::super::ast::walk::walk_function(
+                &func.ast,
+                &self.symbols,
+                target,
+                func.ent_pc,
+                func.n_params,
+                func.is_variadic,
+                func.n_locals,
+            ) {
+                self.warnings.push(alloc::format!(
+                    "ast::walk: function `{}` (ent_pc={}): {}",
+                    func.name,
+                    func.ent_pc,
+                    e,
+                ));
+            }
+        }
     }
 
     /// Current source position. Mirrors the bytecode tier's
@@ -807,8 +852,8 @@ mod tests {
         // dual-emit + finish hook even though there's no libc.
         let src = alloc::string::String::from("int main(void) { return 7; }\n");
         let program = Compiler::new(src).compile().expect("compile int main");
-        assert_eq!(program.finished_asts.len(), 1);
-        let ast = &program.finished_asts[0];
+        assert_eq!(program.finished_functions.len(), 1);
+        let ast = &program.finished_functions[0].ast;
         let lit_count = ast
             .exprs
             .iter()
@@ -839,8 +884,8 @@ mod tests {
 
         let src = alloc::string::String::from("int main(void) { return 7 + 3 * 2; }\n");
         let program = Compiler::new(src).compile().expect("compile");
-        assert_eq!(program.finished_asts.len(), 1);
-        let ast = &program.finished_asts[0];
+        assert_eq!(program.finished_functions.len(), 1);
+        let ast = &program.finished_functions[0].ast;
 
         let source_lits: alloc::vec::Vec<i64> = ast
             .exprs
@@ -899,6 +944,32 @@ mod tests {
         }
     }
 
+    /// The shadow-validator walks every captured AST. For shapes
+    /// the dual-emit already wires (return-an-int-literal), the
+    /// walker returns `Ok` and `self.warnings` stays clean of
+    /// `ast::walk` lines.
+    #[test]
+    fn validator_clean_on_return_literal() {
+        let src = alloc::string::String::from("int main(void) { return 5; }\n");
+        let mut compiler = Compiler::new(src);
+        // Run the validator path directly. `validate_finished_asts`
+        // needs `finished_functions` populated, which only happens
+        // after run_compile, so drive the whole compile + invoke
+        // the validator explicitly (bypassing the env-var gate
+        // that the test harness can't toggle reliably).
+        compiler.run_compile().expect("run_compile");
+        compiler.validate_finished_asts();
+        let walker_warns: alloc::vec::Vec<&alloc::string::String> = compiler
+            .warnings
+            .iter()
+            .filter(|w| w.contains("ast::walk:"))
+            .collect();
+        assert!(
+            walker_warns.is_empty(),
+            "expected no walker warnings, got {walker_warns:?}",
+        );
+    }
+
     /// `int main(void) { return 5; }` should land exactly one
     /// `Stmt::Return(Some(IntLit{5}))` in the function's AST.
     #[test]
@@ -907,7 +978,7 @@ mod tests {
 
         let src = alloc::string::String::from("int main(void) { return 5; }\n");
         let program = Compiler::new(src).compile().expect("compile");
-        let ast = &program.finished_asts[0];
+        let ast = &program.finished_functions[0].ast;
         let returns: alloc::vec::Vec<&Stmt> = ast
             .stmts
             .iter()
@@ -943,7 +1014,7 @@ mod tests {
             "int assign(int a) { int x; x = a; return x; }\nint main(void) { return assign(7); }\n",
         );
         let program = Compiler::new(src).compile().expect("compile");
-        let ast = &program.finished_asts[0];
+        let ast = &program.finished_functions[0].ast;
         let assign = ast
             .exprs
             .iter()
@@ -976,7 +1047,7 @@ mod tests {
             "int addr(int a) { int *p; p = &a; return a; }\nint main(void) { return addr(3); }\n",
         );
         let program = Compiler::new(src).compile().expect("compile");
-        let ast = &program.finished_asts[0];
+        let ast = &program.finished_functions[0].ast;
         let addr_of = ast
             .exprs
             .iter()
@@ -1016,8 +1087,8 @@ mod tests {
         let program = Compiler::new(src).compile().expect("compile");
         // Two finished functions: `add` then `main`. Identifier
         // captures are checked on `add`'s AST.
-        assert_eq!(program.finished_asts.len(), 2);
-        let ast = &program.finished_asts[0];
+        assert_eq!(program.finished_functions.len(), 2);
+        let ast = &program.finished_functions[0].ast;
 
         let idents: alloc::vec::Vec<u32> = ast
             .exprs

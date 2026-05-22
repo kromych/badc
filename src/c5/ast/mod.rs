@@ -289,6 +289,23 @@ pub(crate) enum Decl {
     Vla { sym: u32, dim: ExprId },
 }
 
+/// Per-function AST snapshot captured at function-end. Carries
+/// the metadata the SSA walker needs alongside the node arenas:
+/// the bytecode entry PC for symbol-PC remapping, the param
+/// count + variadic flag for the function prologue, and the
+/// post-parse local slot high-water mark for frame sizing. The
+/// shadow-validator (Phase C4) reads these to run
+/// [`walk::walk_function`] against each finished function.
+#[derive(Debug, Clone)]
+pub(crate) struct FinishedFunction {
+    pub ast: Ast,
+    pub ent_pc: usize,
+    pub n_params: usize,
+    pub is_variadic: bool,
+    pub n_locals: i64,
+    pub name: alloc::string::String,
+}
+
 /// Per-function AST. One instance lives on the active function in
 /// [`super::compiler::Compiler`]; dropped at function exit.
 #[derive(Debug, Default, Clone)]

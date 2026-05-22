@@ -757,7 +757,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         // is a per-function shadow consumed by the parser-side
         // shadow-validator before linking. Linker reload starts
         // fresh.
-        finished_asts: alloc::vec::Vec::new(),
+        finished_functions: alloc::vec::Vec::new(),
     })
 }
 

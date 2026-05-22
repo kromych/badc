@@ -2141,7 +2141,7 @@ mod tests {
             structs: Vec::new(),
             entry_name: None,
             subsystem: None,
-            finished_asts: alloc::vec::Vec::new(),
+            finished_functions: alloc::vec::Vec::new(),
         }
     }
 

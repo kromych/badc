@@ -473,12 +473,11 @@ pub struct Compiler {
 
     /// Per-function AST snapshots, captured at every function's
     /// closing `Op::Lev`. The shadow-validator (Phase C4) reads
-    /// from here to compare the SSA each AST walks to against the
-    /// SSA the bytecode lift produces from `self.text`. Order
-    /// matches function-definition order; the index into
-    /// `finished_asts` aligns with the function's symbol-table
-    /// `class == Token::Fun` ent_pc.
-    pub(super) finished_asts: Vec<super::ast::Ast>,
+    /// from here to run the AST -> SSA walker on each function;
+    /// the eventual flip (Phase C5) hands these straight to the
+    /// codegen entry instead of the bytecode lift. Order matches
+    /// function-definition order.
+    pub(super) finished_functions: Vec<super::ast::FinishedFunction>,
 
     // --- Patch lists ---
     loop_breaks: Vec<Vec<usize>>,
@@ -932,7 +931,7 @@ impl Compiler {
             ast: super::ast::Ast::new(),
             ast_acc: None,
             ast_vstack: Vec::new(),
-            finished_asts: Vec::new(),
+            finished_functions: Vec::new(),
             loop_breaks: Vec::new(),
             loop_continues: Vec::new(),
             labels: Vec::new(),
@@ -1088,6 +1087,14 @@ impl Compiler {
         // operands and `target_bc_pc` slots.
         self.emit_sys_trampolines();
         self.apply_fn_call_fixups()?;
+        // Shadow-validate the captured AST against the walker
+        // when the env var asks for it. Reports walker errors as
+        // warnings on the returned Program -- never fails the
+        // compile while Phase C2 wiring is still incomplete.
+        #[cfg(feature = "std")]
+        if std::env::var("BADC_VALIDATE_AST").is_ok() {
+            self.validate_finished_asts();
+        }
         let (entry_pc, dllmain_pc, resolved_entry_name) = self.resolve_entry_and_dllmain_pcs()?;
         let exports = self.resolve_exports()?;
         Ok(Program {
@@ -1126,7 +1133,7 @@ impl Compiler {
             // `wWinMain`) chosen when `main` is absent.
             entry_name: resolved_entry_name,
             subsystem: self.pp_subsystem,
-            finished_asts: self.finished_asts,
+            finished_functions: self.finished_functions,
         })
     }
 }

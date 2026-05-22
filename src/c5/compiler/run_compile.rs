@@ -758,7 +758,9 @@ impl Compiler {
                         self.emit_val(0);
                     }
                     self.emit_op(Op::Lev);
-                    self.ast_finish_function();
+                    let n_params = params.indices.len();
+                    let is_variadic = params.is_variadic;
+                    self.ast_finish_function(ent_pc, n_params, is_variadic);
                     self.current_function_name.clear();
                     self.current_func_returns_void = false;
 

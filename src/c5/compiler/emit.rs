@@ -102,6 +102,16 @@ impl Compiler {
         self.source_functions
             .push(self.current_function_name.clone());
         self.source_file_indices.push(file_idx);
+        // Dual-emit hook -- keep the AST in lockstep with the
+        // bytecode for ops whose AST shape is determined by `op`
+        // alone (push / pop of the parser-side vstack, arithmetic
+        // and comparison binops, unary fneg). Ops that carry an
+        // operand word (Imm, Lea, ...) wire their AST through the
+        // helper that owns the operand value (`emit_imm`,
+        // `emit_lea`, ...); control-flow ops (Jmp / Bz / Bnz /
+        // Jsr / Lev / ...) wire at the stmt parser sites that
+        // know the matching AST shape.
+        self.ast_track_emit_op(op);
     }
 
     pub(super) fn emit_val(&mut self, val: i64) {
@@ -173,6 +183,14 @@ impl Compiler {
     pub(super) fn emit_binop_with_imm(&mut self, op: Op, val: i64) {
         self.emit_op(Op::Psh);
         self.emit_imm(val);
+        // emit_imm is the low-level bytecode primitive and does
+        // not touch the AST. Seed `ast_acc` with the matching
+        // IntLit so the next emit_op's binop sees a paired rhs.
+        // The synthetic literal is always C99 `int`-typed --
+        // pointer scaling / mask / shift step constants all fit
+        // in the 32-bit signed range C99 6.4.4.1 gives an
+        // unsuffixed decimal literal.
+        self.ast_emit_int_lit(val, Ty::Int as i64);
         self.emit_op(op);
     }
 
@@ -572,6 +590,114 @@ impl Compiler {
         self.ast_acc = Some(id);
         id
     }
+
+    /// AST-side reaction to an emit_op of an operand-free op.
+    /// `Op::Psh` records the current accumulator on the parser-
+    /// side vstack; binops pop the saved lhs from the vstack,
+    /// pair it with the accumulator's rhs ExprId, and replace
+    /// the accumulator with the resulting `Expr::Binary`; the
+    /// unary `Op::Fneg` rewraps the accumulator with
+    /// `Expr::Unary { op: Neg }`.
+    ///
+    /// Ops outside this set are left alone -- their AST shape
+    /// flows through the operand-aware helpers (`emit_imm`,
+    /// `emit_lea`, ...) or through the statement-level parser
+    /// sites that own control-flow shapes.
+    ///
+    /// During Phase C2 the AST is shadow data; if an emit_op
+    /// fires before a wired-up operand-aware site has populated
+    /// `ast_acc`, the binop drops the AST node and leaves the
+    /// vstack in sync with whatever the next wired site
+    /// produces. The validator (Phase C4) flags the gap.
+    pub(super) fn ast_track_emit_op(&mut self, op: Op) {
+        use super::super::ir::BinOp as B;
+        match op {
+            Op::Psh => {
+                if let Some(acc) = self.ast_acc.take() {
+                    self.ast_vstack.push(acc);
+                }
+            }
+            Op::Fneg => self.ast_apply_unary(super::super::ast::UnOp::Neg),
+            // Integer arithmetic + comparison. Each case maps the
+            // bytecode op to the matching `ir::BinOp`; the AST
+            // walker uses the same enum.
+            Op::Add => self.ast_apply_binop(B::Add),
+            Op::Sub => self.ast_apply_binop(B::Sub),
+            Op::Mul => self.ast_apply_binop(B::Mul),
+            Op::Div => self.ast_apply_binop(B::Div),
+            Op::Mod => self.ast_apply_binop(B::Mod),
+            Op::Divu => self.ast_apply_binop(B::Divu),
+            Op::Modu => self.ast_apply_binop(B::Modu),
+            Op::Or => self.ast_apply_binop(B::Or),
+            Op::Xor => self.ast_apply_binop(B::Xor),
+            Op::And => self.ast_apply_binop(B::And),
+            Op::Shl => self.ast_apply_binop(B::Shl),
+            Op::Shr => self.ast_apply_binop(B::Shr),
+            Op::Shru => self.ast_apply_binop(B::Shru),
+            Op::Eq => self.ast_apply_binop(B::Eq),
+            Op::Ne => self.ast_apply_binop(B::Ne),
+            Op::Lt => self.ast_apply_binop(B::Lt),
+            Op::Gt => self.ast_apply_binop(B::Gt),
+            Op::Le => self.ast_apply_binop(B::Le),
+            Op::Ge => self.ast_apply_binop(B::Ge),
+            Op::Ult => self.ast_apply_binop(B::Ult),
+            Op::Ugt => self.ast_apply_binop(B::Ugt),
+            Op::Ule => self.ast_apply_binop(B::Ule),
+            Op::Uge => self.ast_apply_binop(B::Uge),
+            // Floating-point arithmetic + comparison. Same shape;
+            // the BinOp tag drives the walker's add-vs-fadd pick.
+            Op::Fadd => self.ast_apply_binop(B::Fadd),
+            Op::Fsub => self.ast_apply_binop(B::Fsub),
+            Op::Fmul => self.ast_apply_binop(B::Fmul),
+            Op::Fdiv => self.ast_apply_binop(B::Fdiv),
+            Op::Feq => self.ast_apply_binop(B::Feq),
+            Op::Fne => self.ast_apply_binop(B::Fne),
+            Op::Flt => self.ast_apply_binop(B::Flt),
+            Op::Fgt => self.ast_apply_binop(B::Fgt),
+            Op::Fle => self.ast_apply_binop(B::Fle),
+            Op::Fge => self.ast_apply_binop(B::Fge),
+            _ => {}
+        }
+    }
+
+    /// Helper for the [`Self::ast_track_emit_op`] binop arm: pops
+    /// the lhs from the parser-side vstack, takes the rhs from
+    /// the accumulator, pushes a new `Expr::Binary`, and replaces
+    /// the accumulator with its ExprId. Result `ty` is whatever
+    /// `self.ty` currently holds -- the parser pre-computed the
+    /// usual-arithmetic-conversion result type immediately before
+    /// the emit. Drops the node if either operand is missing
+    /// (the surrounding emit site isn't AST-wired yet).
+    fn ast_apply_binop(&mut self, op: super::super::ir::BinOp) {
+        let Some(rhs) = self.ast_acc.take() else {
+            return;
+        };
+        let Some(lhs) = self.ast_vstack.pop() else {
+            self.ast_acc = Some(rhs);
+            return;
+        };
+        let pos = self.ast_src_pos();
+        let ty = self.ty;
+        let id = self
+            .ast
+            .push_expr(super::super::ast::Expr::Binary { op, lhs, rhs, ty }, pos);
+        self.ast_acc = Some(id);
+    }
+
+    /// Helper for the unary arms: wraps the accumulator with the
+    /// given `UnOp` and replaces it. Drops the node if the
+    /// accumulator is empty (the operand wasn't AST-wired yet).
+    fn ast_apply_unary(&mut self, op: super::super::ast::UnOp) {
+        let Some(child) = self.ast_acc.take() else {
+            return;
+        };
+        let pos = self.ast_src_pos();
+        let ty = self.ty;
+        let id = self
+            .ast
+            .push_expr(super::super::ast::Expr::Unary { op, child, ty }, pos);
+        self.ast_acc = Some(id);
+    }
 }
 
 #[cfg(test)]
@@ -602,5 +728,83 @@ mod tests {
             "expected exactly one IntLit{{val:7}}, ast.exprs = {:?}",
             ast.exprs,
         );
+    }
+
+    /// `int main(void) { return 7 + 3 * 2; }` -- the parser emits
+    /// `Imm 7; Psh; Imm 3; Psh; Imm 2; Mul; [mask]; Add; [mask]`.
+    /// `[mask]` is the C99 6.3.1.8 signed-int width truncation
+    /// pair `Psh; Imm 32; Shl; Psh; Imm 32; Shr` the parser drops
+    /// after every signed arithmetic op. Confirm the AST captures:
+    ///   * three source-level IntLits (7, 3, 2) in source order,
+    ///   * a `Binary{Mul, IntLit(3), IntLit(2)}` for the inner `*`,
+    ///   * a `Binary{Add, IntLit(7), <masked-Mul-result>}` for the
+    ///     outer `+`,
+    /// and that the parser-side vstack didn't drift across the
+    /// intervening mask sequences.
+    #[test]
+    fn binop_three_operand_capture() {
+        use super::super::super::ast::Expr;
+        use super::super::super::ir::BinOp;
+
+        let src = alloc::string::String::from("int main(void) { return 7 + 3 * 2; }\n");
+        let program = Compiler::new(src).compile().expect("compile");
+        assert_eq!(program.finished_asts.len(), 1);
+        let ast = &program.finished_asts[0];
+
+        let source_lits: alloc::vec::Vec<i64> = ast
+            .exprs
+            .iter()
+            .filter_map(|e| match e {
+                Expr::IntLit { val, .. } if *val != 32 => Some(*val),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            source_lits,
+            alloc::vec![7i64, 3, 2],
+            "source int literals not captured in order: {:?}",
+            ast.exprs,
+        );
+
+        let mul = ast
+            .exprs
+            .iter()
+            .find(|e| matches!(e, Expr::Binary { op: BinOp::Mul, .. }))
+            .expect("Mul node missing");
+        if let Expr::Binary { lhs, rhs, .. } = mul {
+            match (&ast.exprs[*lhs as usize], &ast.exprs[*rhs as usize]) {
+                (Expr::IntLit { val: 3, .. }, Expr::IntLit { val: 2, .. }) => {}
+                other => panic!("Mul children not (3, 2): {other:?}"),
+            }
+        }
+
+        let add = ast
+            .exprs
+            .iter()
+            .find(|e| matches!(e, Expr::Binary { op: BinOp::Add, .. }))
+            .expect("Add node missing");
+        if let Expr::Binary { lhs, rhs, .. } = add {
+            assert!(
+                matches!(&ast.exprs[*lhs as usize], Expr::IntLit { val: 7, .. }),
+                "Add lhs not IntLit(7): {:?}",
+                ast.exprs[*lhs as usize],
+            );
+            // The Add rhs reaches the inner Mul through one or
+            // more Shl/Shr masking binops -- chase the binop chain
+            // and confirm the leaf is the Mul.
+            let mut current = *rhs;
+            for _ in 0..6 {
+                match &ast.exprs[current as usize] {
+                    Expr::Binary { op: BinOp::Mul, .. } => return,
+                    Expr::Binary {
+                        op: BinOp::Shl | BinOp::Shr,
+                        lhs,
+                        ..
+                    } => current = *lhs,
+                    other => panic!("unexpected node walking Add rhs: {other:?}"),
+                }
+            }
+            panic!("did not reach Mul through Add rhs masking chain");
+        }
     }
 }

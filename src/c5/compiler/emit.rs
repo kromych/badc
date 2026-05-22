@@ -870,6 +870,23 @@ impl Compiler {
         id
     }
 
+    /// Push a string literal. C99 6.4.5p6: the literal has type
+    /// `char[N+1]` (NUL terminator included); in any expression
+    /// context outside `sizeof` it decays to `char *` per
+    /// 6.3.2.1p3. `data_off` is the byte offset where the
+    /// literal lives in the program's data segment. `ty` is the
+    /// post-decay `char *` so the walker emits the matching
+    /// `imm_data` without a trailing load (same shape arrays
+    /// follow).
+    pub(super) fn ast_emit_str_lit(&mut self, data_off: i64, ty: i64) -> ExprId {
+        let pos = self.ast_src_pos();
+        let id = self
+            .ast
+            .push_expr(Expr::StrLit { data_off, ty }, pos);
+        self.ast_acc = Some(id);
+        id
+    }
+
     /// Push an identifier reference. The bytecode emits a
     /// `Lea / data-Imm` address producer followed by a scalar
     /// load; the AST collapses that into a single `Expr::Ident`

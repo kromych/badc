@@ -185,6 +185,11 @@ impl Compiler {
             self.data.push(0);
             self.pending.last_array_decay_bytes = (self.data.len() as i64) - start_offset;
             self.ty = Ty::Ptr as i64;
+            // Dual-emit: capture the decayed `char *` rvalue so
+            // the wrapping expression (typically a call argument,
+            // initializer, or assignment) finds the address on
+            // `ast_acc`.
+            self.ast_emit_str_lit(start_offset, self.ty);
         } else if self.lex.tk == Token::Sizeof {
             // C99 6.5.3.4: `sizeof(<type>)`, `sizeof(<expr>)`, or
             // `sizeof <unary-expr>`. The shared helper handles
@@ -195,6 +200,12 @@ impl Compiler {
             let total_bytes = self.sizeof_operand_bytes()?;
             self.emit_imm(total_bytes);
             self.ty = Ty::Int as i64;
+            // Dual-emit: sizeof is a compile-time constant per
+            // 6.5.3.4p2. Seed the accumulator with the matching
+            // IntLit so a wrapping expression (call argument,
+            // binary op, assignment) finds the value on
+            // `ast_acc`.
+            self.ast_emit_int_lit(total_bytes, self.ty);
         } else if self.lex.tk == Token::Id
             && !self.current_function_name.is_empty()
             && matches!(

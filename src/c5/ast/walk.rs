@@ -89,39 +89,55 @@ pub(crate) fn walk_function(
     if n_locals != 0 {
         b.set_locals(n_locals);
     }
-    let ctx = Walker {
+    let mut ctx = Walker {
         ast,
         symbols,
         target,
+        loop_ctx: alloc::vec::Vec::new(),
+        label_blocks: alloc::vec::Vec::new(),
     };
-    // Stmt walker is structured to terminate when it sees a
-    // `Stmt::Return`; everything before that contributes side
-    // effects. A function with no Return falls off the end -- we
-    // synthesize a `return 0` to keep the FunctionSsa well-formed
-    // (every block needs a terminator; the entry block stays open
-    // otherwise).
-    let mut returned = false;
-    for (i, _) in ast.stmts.iter().enumerate() {
-        let terminated = ctx.walk_stmt(&mut b, i as StmtId)?;
-        if terminated {
-            returned = true;
-            break;
-        }
-    }
-    if !returned {
+    // Walk the function body's root statement (a Compound built
+    // at function-end by the parser's `parse_block_stmt` /
+    // function-body loop). If absent (no body was parsed),
+    // synthesize a `return 0` for a well-formed FunctionSsa.
+    let terminated = match ast.body {
+        Some(root) => ctx.walk_stmt(&mut b, root)?,
+        None => false,
+    };
+    // If the body fell off the end (no Return reached), the
+    // current block is still open; close it with `return 0`
+    // per C99 5.1.2.2.3 (main returning 0 by default) and the
+    // general "well-formed FunctionSsa" guarantee.
+    if !terminated && b.is_block_open() {
         let zero = b.imm(0);
         b.return_(zero);
     }
+    // Pre-allocated branch / loop targets (after-If with both
+    // arms terminating, dead post-Break tails, label blocks
+    // that nothing ever reached) close with a synthetic
+    // `return 0` so `finish()` doesn't panic on an open block.
+    // Unreachable in practice; the SSA DCE folds the dead arm
+    // away.
+    b.close_dead_blocks();
     Ok(b.finish())
 }
 
-/// Per-walk read-only context: the AST + symbol table + target,
-/// passed by reference into the recursive walkers so the
-/// SsaBuilder borrow stays exclusive to one method.
+/// Per-walk context. Mutable so the walker can stack break /
+/// continue targets across nested loops + switches and intern
+/// `LabelId -> BlockId` for cross-stmt gotos.
 struct Walker<'a> {
     ast: &'a super::Ast,
     symbols: &'a [Symbol],
     target: Target,
+    /// Stack of `(break_target, continue_target)` block ids, one
+    /// frame per enclosing loop / switch. Break/Continue stmts
+    /// jump to the top-of-stack entries.
+    loop_ctx: alloc::vec::Vec<(super::super::ir::BlockId, super::super::ir::BlockId)>,
+    /// Interned mapping from AST `LabelId` to the SSA `BlockId`
+    /// reserved for that label's body. Allocated lazily by either
+    /// a Goto's forward reference or the matching Labeled stmt --
+    /// both sides see the same block.
+    label_blocks: alloc::vec::Vec<(super::super::ast::LabelId, super::super::ir::BlockId)>,
 }
 
 impl<'a> Walker<'a> {
@@ -130,7 +146,7 @@ impl<'a> Walker<'a> {
     /// jmp), letting the caller stop iterating siblings that
     /// would otherwise emit dead code.
     fn walk_stmt(
-        &self,
+        &mut self,
         b: &mut super::super::codegen::ssa_build::SsaBuilder,
         id: StmtId,
     ) -> Result<bool, WalkError> {
@@ -172,38 +188,176 @@ impl<'a> Walker<'a> {
                 }
                 Ok(false)
             }
-            Stmt::If { .. } => Err(WalkError::UnsupportedStmt { id, kind: "If" }),
-            Stmt::While { .. } => Err(WalkError::UnsupportedStmt { id, kind: "While" }),
-            Stmt::DoWhile { .. } => Err(WalkError::UnsupportedStmt {
-                id,
-                kind: "DoWhile",
-            }),
-            Stmt::For { .. } => Err(WalkError::UnsupportedStmt { id, kind: "For" }),
+            Stmt::If {
+                cond,
+                then_s,
+                else_s,
+            } => {
+                let cond_v = self.walk_expr_rvalue(b, *cond)?;
+                let then_blk = b.new_block();
+                let after_blk = b.new_block();
+                let else_blk = if else_s.is_some() {
+                    b.new_block()
+                } else {
+                    after_blk
+                };
+                // C99 6.8.4.1: branch-when-zero to the else (or
+                // after) block; fall through to then.
+                b.branch_zero(cond_v, else_blk, then_blk);
+                b.switch_to(then_blk);
+                let then_id = *then_s;
+                let else_id = *else_s;
+                let then_terminated = self.walk_stmt(b, then_id)?;
+                if !then_terminated {
+                    b.jmp(after_blk);
+                }
+                if let Some(else_id) = else_id {
+                    b.switch_to(else_blk);
+                    let else_terminated = self.walk_stmt(b, else_id)?;
+                    if !else_terminated {
+                        b.jmp(after_blk);
+                    }
+                }
+                b.switch_to(after_blk);
+                Ok(false)
+            }
+            Stmt::While { cond, body } => {
+                let header = b.new_block();
+                let body_blk = b.new_block();
+                let after = b.new_block();
+                b.jmp(header);
+                b.switch_to(header);
+                let cond_v = self.walk_expr_rvalue(b, *cond)?;
+                b.branch_zero(cond_v, after, body_blk);
+                let body_id = *body;
+                b.switch_to(body_blk);
+                self.loop_ctx.push((after, header));
+                let terminated = self.walk_stmt(b, body_id)?;
+                self.loop_ctx.pop();
+                if !terminated {
+                    b.jmp(header);
+                }
+                b.switch_to(after);
+                Ok(false)
+            }
+            Stmt::DoWhile { body, cond } => {
+                let body_blk = b.new_block();
+                let cond_blk = b.new_block();
+                let after = b.new_block();
+                b.jmp(body_blk);
+                b.switch_to(body_blk);
+                let body_id = *body;
+                self.loop_ctx.push((after, cond_blk));
+                let terminated = self.walk_stmt(b, body_id)?;
+                self.loop_ctx.pop();
+                if !terminated {
+                    b.jmp(cond_blk);
+                }
+                b.switch_to(cond_blk);
+                let cond_v = self.walk_expr_rvalue(b, *cond)?;
+                b.branch_nonzero(cond_v, body_blk, after);
+                b.switch_to(after);
+                Ok(false)
+            }
+            Stmt::For {
+                init,
+                cond,
+                post,
+                body,
+            } => {
+                let init_clone = *init;
+                let cond_clone = *cond;
+                let post_clone = *post;
+                let body_clone = *body;
+                if let Some(super::BlockItem::Stmt(s)) = init_clone {
+                    let _ = self.walk_stmt(b, s)?;
+                }
+                let header = b.new_block();
+                let body_blk = b.new_block();
+                let post_blk = b.new_block();
+                let after = b.new_block();
+                b.jmp(header);
+                b.switch_to(header);
+                let cond_v = match cond_clone {
+                    Some(c) => self.walk_expr_rvalue(b, c)?,
+                    None => b.imm(1),
+                };
+                b.branch_zero(cond_v, after, body_blk);
+                b.switch_to(body_blk);
+                self.loop_ctx.push((after, post_blk));
+                let body_terminated = self.walk_stmt(b, body_clone)?;
+                self.loop_ctx.pop();
+                if !body_terminated {
+                    b.jmp(post_blk);
+                }
+                b.switch_to(post_blk);
+                if let Some(p) = post_clone {
+                    let _ = self.walk_expr_rvalue(b, p)?;
+                }
+                b.jmp(header);
+                b.switch_to(after);
+                Ok(false)
+            }
+            Stmt::Break => {
+                let Some(&(brk, _)) = self.loop_ctx.last() else {
+                    return Err(WalkError::UnsupportedStmt { id, kind: "Break" });
+                };
+                b.jmp(brk);
+                Ok(true)
+            }
+            Stmt::Continue => {
+                let Some(&(_, cont)) = self.loop_ctx.last() else {
+                    return Err(WalkError::UnsupportedStmt {
+                        id,
+                        kind: "Continue",
+                    });
+                };
+                b.jmp(cont);
+                Ok(true)
+            }
+            Stmt::Goto(label) => {
+                let target = self.block_for_label(b, *label);
+                b.jmp(target);
+                Ok(true)
+            }
+            Stmt::Labeled { label, body } => {
+                let label_blk = self.block_for_label(b, *label);
+                b.jmp(label_blk);
+                b.switch_to(label_blk);
+                let body_id = *body;
+                self.walk_stmt(b, body_id)
+            }
             Stmt::Switch { .. } => Err(WalkError::UnsupportedStmt { id, kind: "Switch" }),
             Stmt::Case { .. } => Err(WalkError::UnsupportedStmt { id, kind: "Case" }),
             Stmt::Default { .. } => Err(WalkError::UnsupportedStmt {
                 id,
                 kind: "Default",
             }),
-            Stmt::Break => Err(WalkError::UnsupportedStmt { id, kind: "Break" }),
-            Stmt::Continue => Err(WalkError::UnsupportedStmt {
-                id,
-                kind: "Continue",
-            }),
-            Stmt::Goto(_) => Err(WalkError::UnsupportedStmt { id, kind: "Goto" }),
-            Stmt::Labeled { .. } => Err(WalkError::UnsupportedStmt {
-                id,
-                kind: "Labeled",
-            }),
             Stmt::Asm { .. } => Err(WalkError::UnsupportedStmt { id, kind: "Asm" }),
         }
+    }
+
+    /// Allocate or reuse the SSA block reserved for the given AST
+    /// label id. Goto's forward reference and the matching Labeled
+    /// stmt both look up through this so they share the same block.
+    fn block_for_label(
+        &mut self,
+        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        label: super::super::ast::LabelId,
+    ) -> super::super::ir::BlockId {
+        if let Some(&(_, blk)) = self.label_blocks.iter().find(|(l, _)| *l == label) {
+            return blk;
+        }
+        let blk = b.new_block();
+        self.label_blocks.push((label, blk));
+        blk
     }
 
     /// Walk an expression in rvalue position. Returns the
     /// `ValueId` whose runtime value matches what the bytecode
     /// tier would have left in the c5 accumulator.
     fn walk_expr_rvalue(
-        &self,
+        &mut self,
         b: &mut super::super::codegen::ssa_build::SsaBuilder,
         id: ExprId,
     ) -> Result<super::super::ir::ValueId, WalkError> {
@@ -308,7 +462,7 @@ impl<'a> Walker<'a> {
     /// `Unary{AddrOf}` cases drive into this path; the rvalue
     /// walker re-enters from this address with a matching load.
     fn walk_expr_lvalue(
-        &self,
+        &mut self,
         b: &mut super::super::codegen::ssa_build::SsaBuilder,
         id: ExprId,
     ) -> Result<super::super::ir::ValueId, WalkError> {
@@ -340,7 +494,7 @@ impl<'a> Walker<'a> {
     /// Neg / BitNot / LogNot lower to a binop against an
     /// immediate.
     fn walk_unary(
-        &self,
+        &mut self,
         b: &mut super::super::codegen::ssa_build::SsaBuilder,
         op: UnOp,
         child: ExprId,
@@ -382,7 +536,7 @@ impl<'a> Walker<'a> {
     /// Token::Sys and TLS variants surface as unsupported until
     /// their walker arms land.
     fn ident_address(
-        &self,
+        &mut self,
         b: &mut super::super::codegen::ssa_build::SsaBuilder,
         id: ExprId,
     ) -> Result<super::super::ir::ValueId, WalkError> {
@@ -425,7 +579,7 @@ impl<'a> Walker<'a> {
     /// so a post-parse scope-exit that restored the symbol's
     /// pre-declaration tag doesn't invalidate the walker.
     fn load_ident_rvalue(
-        &self,
+        &mut self,
         b: &mut super::super::codegen::ssa_build::SsaBuilder,
         sym: u32,
         ty: i64,
@@ -596,7 +750,8 @@ mod tests {
             },
             src,
         );
-        ast.push_stmt(Stmt::Return(Some(add)), src);
+        let __ret = ast.push_stmt(Stmt::Return(Some(add)), src);
+        ast.body = Some(__ret);
 
         let func = walk_function(&ast, &empty_symbols(), Target::LinuxAarch64, 0, 0, false, 0)
             .expect("walk");
@@ -645,7 +800,8 @@ mod tests {
             },
             src,
         );
-        ast.push_stmt(Stmt::Return(Some(x)), src);
+        let __ret = ast.push_stmt(Stmt::Return(Some(x)), src);
+        ast.body = Some(__ret);
 
         let func = walk_function(&ast, &syms, Target::LinuxAarch64, 0, 0, false, 8).expect("walk");
         let loads: alloc::vec::Vec<_> = func
@@ -698,7 +854,8 @@ mod tests {
             },
             src,
         );
-        ast.push_stmt(Stmt::Return(Some(assign)), src);
+        let __ret = ast.push_stmt(Stmt::Return(Some(assign)), src);
+        ast.body = Some(__ret);
 
         let func = walk_function(&ast, &syms, Target::LinuxAarch64, 0, 0, false, 8).expect("walk");
         let store_kinds: alloc::vec::Vec<_> = func
@@ -745,7 +902,8 @@ mod tests {
             },
             src,
         );
-        ast.push_stmt(Stmt::Return(Some(neg)), src);
+        let __ret = ast.push_stmt(Stmt::Return(Some(neg)), src);
+        ast.body = Some(__ret);
 
         let func = walk_function(&ast, &empty_symbols(), Target::LinuxAarch64, 0, 0, false, 0)
             .expect("walk");
@@ -760,10 +918,9 @@ mod tests {
         assert_eq!(binops, alloc::vec![BinOp::Sub]);
     }
 
-    /// An unsupported statement (e.g. `If`) surfaces as a
-    /// `WalkError::UnsupportedStmt` so the validator can route the
-    /// gap back to a parser site. The unsupported stmt must
-    /// precede any terminator so the walker actually visits it.
+    /// An unsupported statement (Switch / Case / Default / Asm)
+    /// surfaces as a `WalkError::UnsupportedStmt` so the
+    /// validator can route the gap back to a parser site.
     #[test]
     fn unsupported_stmt_returns_error() {
         let mut ast = Ast::new();
@@ -775,26 +932,15 @@ mod tests {
             },
             src,
         );
-        // Body of the If first, then the If itself; the If sits
-        // ahead of any Return statement so the walker's
-        // terminator-shortcut doesn't skip past it.
         let body = ast.push_stmt(Stmt::Return(Some(z)), src);
-        let if_id = ast.push_stmt(
-            Stmt::If {
-                cond: z,
-                then_s: body,
-                else_s: None,
-            },
-            src,
-        );
-        // The walker iterates `ast.stmts` in declaration order;
-        // since we appended `body` before `if_id` the body's
-        // return would terminate first. Swap their slots so the
-        // walker reaches the If before any Return.
-        ast.stmts.swap(body as usize, if_id as usize);
+        let switch_id = ast.push_stmt(Stmt::Switch { disc: z, body }, src);
+        ast.body = Some(switch_id);
 
         let err = walk_function(&ast, &empty_symbols(), Target::LinuxAarch64, 0, 0, false, 0)
-            .expect_err("If must surface as unsupported");
-        assert!(matches!(err, WalkError::UnsupportedStmt { kind: "If", .. }));
+            .expect_err("Switch must surface as unsupported");
+        assert!(matches!(
+            err,
+            WalkError::UnsupportedStmt { kind: "Switch", .. }
+        ));
     }
 }

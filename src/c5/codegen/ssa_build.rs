@@ -265,6 +265,33 @@ impl SsaBuilder {
         self.close(Terminator::Return(value), value);
     }
 
+    /// True if a block is currently open (the caller can still
+    /// emit instructions or close it). False between a
+    /// terminator and the next `switch_to`. Used by the AST
+    /// walker to decide whether to synthesize a fallthrough
+    /// terminator at function-end.
+    pub(crate) fn is_block_open(&self) -> bool {
+        self.current.is_some()
+    }
+
+    /// Close every block that's still open with a synthetic
+    /// `return 0` terminator. Called by the AST walker at
+    /// function-end to absorb dead blocks left behind by
+    /// pre-allocated branch / loop targets that no flow ever
+    /// reached. Without this, `finish()` would panic on an open
+    /// block; the synthetic return is unreachable in practice
+    /// but keeps the SSA well-formed.
+    pub(crate) fn close_dead_blocks(&mut self) {
+        let n = self.block_terminators.len();
+        for i in 0..n {
+            if self.block_terminators[i].is_none() {
+                self.switch_to(i as BlockId);
+                let zero = self.imm(0);
+                self.return_(zero);
+            }
+        }
+    }
+
     fn close(&mut self, term: Terminator, exit_acc: ValueId) {
         let id = self
             .current

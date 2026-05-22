@@ -729,7 +729,9 @@ impl Compiler {
                     )
                 })
                 .count()
-                + self.count_ast_exprs(&func, |e| matches!(e, Expr::Ternary { .. }));
+                + self.count_ast_exprs(&func, |e| {
+                    matches!(e, Expr::Ternary { .. } | Expr::ShortCircuit { .. },)
+                });
             let bc_mcpy = self.count_op_in_region(Op::Mcpy, func.ent_pc, bytecode_end);
             let bc_intrinsic = self.count_op_in_region(Op::Intrinsic, func.ent_pc, bytecode_end);
             let ast_intrinsic =
@@ -920,6 +922,25 @@ impl Compiler {
         let id = self
             .ast
             .push_expr(Expr::CompoundAssign { op, lhs, rhs, ty }, pos);
+        self.ast_acc = Some(id);
+    }
+
+    /// Push `Expr::ShortCircuit { op, lhs, rhs, ty }`. C99
+    /// 6.5.13 / 6.5.14: `&&` and `||` short-circuit -- rhs is
+    /// evaluated only when lhs hasn't already decided the
+    /// result. The walker emits the matching branch / per-arm
+    /// spill / after-block reload pattern.
+    pub(super) fn ast_emit_short_circuit(
+        &mut self,
+        op: super::super::ast::ShortCircuitOp,
+        lhs: ExprId,
+        rhs: ExprId,
+        ty: i64,
+    ) {
+        let pos = self.ast_src_pos();
+        let id = self
+            .ast
+            .push_expr(Expr::ShortCircuit { op, lhs, rhs, ty }, pos);
         self.ast_acc = Some(id);
     }
 

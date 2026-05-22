@@ -55,6 +55,16 @@ pub(crate) struct SrcPos {
     pub file: u16,
 }
 
+/// Short-circuit logical operator. C99 6.5.13 / 6.5.14:
+/// `Lan` is `&&`, `Lor` is `||`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ShortCircuitOp {
+    /// `lhs && rhs` -- rhs is evaluated only when lhs is non-zero.
+    Lan,
+    /// `lhs || rhs` -- rhs is evaluated only when lhs is zero.
+    Lor,
+}
+
 /// Unary operator. Pre/post-increment carry their step value
 /// separately on the [`Expr::PreInc`] / [`Expr::PostInc`] variants
 /// because pointer arithmetic scales the step by `sizeof(*ptr)`,
@@ -206,6 +216,18 @@ pub(crate) enum Expr {
     /// `lhs, rhs`. C99 6.5.17 -- evaluate `lhs` for side effects,
     /// the value of the comma expression is `rhs`.
     Comma { lhs: ExprId, rhs: ExprId, ty: i64 },
+    /// `lhs && rhs` (C99 6.5.13) / `lhs || rhs` (6.5.14). Both
+    /// short-circuit: the rhs is evaluated only when the lhs
+    /// doesn't already determine the result. `ir::BinOp` carries
+    /// only the bitwise And / Or / Xor; the logical pair lives
+    /// here so the walker can emit the proper branch + value-
+    /// merge sequence.
+    ShortCircuit {
+        op: ShortCircuitOp,
+        lhs: ExprId,
+        rhs: ExprId,
+        ty: i64,
+    },
     /// Compiler-builtin call (alloca, memset, setjmp, longjmp,
     /// ...). `kind` is the same integer tag the bytecode tier
     /// uses for `Op::Intrinsic`; the walker forwards it to

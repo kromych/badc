@@ -223,6 +223,17 @@ impl SsaBuilder {
         self.push(Inst::Mcpy { dst, src, size });
     }
 
+    /// Reserve a fresh per-function 8-byte stack slot for the
+    /// walker (short-circuit merge, ternary spill, etc.) and
+    /// return its c5-style negative offset (`-N` for the Nth
+    /// slot). Used as a phi substitute since the SSA model
+    /// carries values through a single accumulator + block-
+    /// exit-acc rather than explicit phi instructions.
+    pub(crate) fn alloc_synthetic_local(&mut self) -> i64 {
+        self.func.locals += 1;
+        -self.func.locals
+    }
+
     /// `Inst::CallExt` -- libc / external call.
     pub(crate) fn call_ext(
         &mut self,

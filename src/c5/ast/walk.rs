@@ -699,7 +699,8 @@ impl<'a> Walker<'a> {
                     | Expr::CompoundAssign { ty, .. }
                     | Expr::PreInc { ty, .. }
                     | Expr::PostInc { ty, .. }
-                    | Expr::Comma { ty, .. } => *ty,
+                    | Expr::Comma { ty, .. }
+                    | Expr::ShortCircuit { ty, .. } => *ty,
                     Expr::Cast { to_ty: t, .. } => *t,
                     Expr::Sizeof(s) => s.result_ty,
                     Expr::StrLit { ty, .. } => *ty,
@@ -754,6 +755,40 @@ impl<'a> Walker<'a> {
             Expr::Comma { lhs, rhs, .. } => {
                 let _ = self.walk_expr_rvalue(b, *lhs)?;
                 self.walk_expr_rvalue(b, *rhs)
+            }
+            Expr::ShortCircuit { op, lhs, rhs, .. } => {
+                // C99 6.5.13 / 6.5.14. Evaluate lhs; if it
+                // already determines the result, skip rhs and
+                // jump to the merge block. Otherwise evaluate
+                // rhs and jump to merge with rhs's value. Use a
+                // synthetic local slot as a phi substitute --
+                // both arms `store_local` into it and the merge
+                // block `load_local`s the result. The slot
+                // bumps `func.locals` so the per-arch frame
+                // emit reserves it.
+                let slot = b.alloc_synthetic_local();
+                let kind_l = super::super::ir::LoadKind::I64;
+                let kind_s = super::super::ir::StoreKind::I64;
+                let lhs_val = self.walk_expr_rvalue(b, *lhs)?;
+                b.store_local(slot, lhs_val, kind_s);
+                let rhs_blk = b.new_block();
+                let after_blk = b.new_block();
+                match *op {
+                    super::ShortCircuitOp::Lan => {
+                        // `a && b`: skip rhs when lhs == 0.
+                        b.branch_zero(lhs_val, after_blk, rhs_blk);
+                    }
+                    super::ShortCircuitOp::Lor => {
+                        // `a || b`: skip rhs when lhs != 0.
+                        b.branch_nonzero(lhs_val, after_blk, rhs_blk);
+                    }
+                }
+                b.switch_to(rhs_blk);
+                let rhs_val = self.walk_expr_rvalue(b, *rhs)?;
+                b.store_local(slot, rhs_val, kind_s);
+                b.jmp(after_blk);
+                b.switch_to(after_blk);
+                Ok(b.load_local(slot, kind_l))
             }
             Expr::Intrinsic { .. } => Err(WalkError::UnsupportedExpr {
                 id,
@@ -1041,6 +1076,7 @@ fn lvalue_shape_label(expr: &Expr) -> &'static str {
         Expr::Sizeof(_) => "Sizeof",
         Expr::Comma { .. } => "Comma",
         Expr::Intrinsic { .. } => "Intrinsic",
+        Expr::ShortCircuit { .. } => "ShortCircuit",
     }
 }
 

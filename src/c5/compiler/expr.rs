@@ -1768,21 +1768,41 @@ impl Compiler {
                     self.ast_acc = Some(id);
                 }
             } else if self.lex.tk == Token::Lor {
+                let lhs_ast = self.ast_acc;
                 self.next()?;
                 self.emit_op(Op::Bnz);
                 let b = self.text.len();
                 self.emit_val(0);
                 self.expr(Token::Lan as i64)?;
+                let rhs_ast = self.ast_acc;
                 self.text[b] = self.text.len() as i64;
                 self.ty = Ty::Int as i64;
+                if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
+                    self.ast_emit_short_circuit(
+                        super::super::ast::ShortCircuitOp::Lor,
+                        lhs,
+                        rhs,
+                        Ty::Int as i64,
+                    );
+                }
             } else if self.lex.tk == Token::Lan {
+                let lhs_ast = self.ast_acc;
                 self.next()?;
                 self.emit_op(Op::Bz);
                 let b = self.text.len();
                 self.emit_val(0);
                 self.expr(Token::OrOp as i64)?;
+                let rhs_ast = self.ast_acc;
                 self.text[b] = self.text.len() as i64;
                 self.ty = Ty::Int as i64;
+                if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
+                    self.ast_emit_short_circuit(
+                        super::super::ast::ShortCircuitOp::Lan,
+                        lhs,
+                        rhs,
+                        Ty::Int as i64,
+                    );
+                }
             } else if self.lex.tk == Token::OrOp {
                 // C99 6.5.12: result of `|` is the common type
                 // produced by the usual arithmetic conversions on

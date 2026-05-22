@@ -851,6 +851,15 @@ impl Compiler {
                         // unused-symbol analysis stays conservative.
                         self.symbols[id_idx].address_escaped = true;
                     }
+                    // Dual-emit: like the array-decay branch, the
+                    // address is the rvalue (C99 6.7.2.1 struct
+                    // assignment semantics + c5's
+                    // address-as-value rule). Push the Ident so
+                    // wrapping shapes (`.field`, call-arg copy,
+                    // struct-to-struct assign) see the producer
+                    // on `ast_acc`. Walker treats Ident-of-struct
+                    // as an address-only producer (no load).
+                    self.ast_emit_ident(id_idx as u32, self.ty);
                 } else {
                     // Pointers to structs and every scalar type go
                     // through the normal load_op_for path.

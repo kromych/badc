@@ -980,16 +980,19 @@ impl<'a> Walker<'a> {
         // Wrap the snapshot fields in a synthetic Symbol-shaped
         // tuple by branching directly on `class`; the function
         // is purely a fan-out over the recognised classes.
-        // C99 6.3.2.1p3: an lvalue of array type is converted to
-        // a pointer to its first element. The address itself is
-        // the rvalue -- no trailing load. The symbol carries
-        // `array_size != 0` for arrays; route those through the
+        // C99 6.3.2.1p3 + c5's address-as-value rule: an lvalue
+        // of array type, or a struct value (non-pointer struct
+        // type), is consumed as its address rather than its
+        // contents -- no trailing load. The symbol carries
+        // `array_size != 0` for arrays; the type tag indicates
+        // a struct value when `is_struct_ty(ty) &&
+        // struct_ptr_depth(ty) == 0`. Route both through the
         // lvalue helper so the walker emits just the address
-        // producer and skips the spurious `load(addr, kind)`
-        // that scalar / pointer rvalues need.
-        if (sym as usize) < self.symbols.len()
-            && self.symbols[sym as usize].array_size != 0
-        {
+        // producer.
+        let address_only = ((sym as usize) < self.symbols.len()
+            && self.symbols[sym as usize].array_size != 0)
+            || (is_struct_ty(ty) && struct_ptr_depth(ty) == 0);
+        if address_only {
             if class == Token::Loc as i64 {
                 return Ok(b.local_addr(val));
             } else if class == Token::Glo as i64 && !is_thread_local {
@@ -1114,6 +1117,25 @@ fn is_floating_scalar(ty: i64) -> bool {
 /// `pub(super)`-visible to the parser module only; the walker
 /// keeps a local copy to avoid coupling to the compiler module.
 const UNSIGNED_BIT: i64 = 1 << 30;
+
+/// Struct-type band base + stride. Mirrors
+/// `compiler::types::{STRUCT_BASE, STRUCT_STRIDE}` so the walker
+/// can classify struct values without crossing the module boundary.
+const STRUCT_BASE: i64 = 1000;
+const STRUCT_STRIDE: i64 = 1000;
+
+/// Test whether `ty` lands in the struct band.
+fn is_struct_ty(ty: i64) -> bool {
+    (ty & !UNSIGNED_BIT) >= STRUCT_BASE
+}
+
+/// Pointer-depth count inside the struct band. Mirrors
+/// `compiler::types::struct_ptr_depth`. Zero means struct value;
+/// >= 1 means a pointer to the struct (or deeper indirection).
+fn struct_ptr_depth(ty: i64) -> i64 {
+    let stripped = ty & !UNSIGNED_BIT;
+    ((stripped - STRUCT_BASE) % STRUCT_STRIDE) / Ty::Ptr as i64
+}
 
 fn lvalue_shape_label(expr: &Expr) -> &'static str {
     match expr {

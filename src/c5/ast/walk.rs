@@ -907,6 +907,15 @@ impl<'a> Walker<'a> {
                 } else if !target_is_fp && source_is_fp {
                     return Ok(b.fp_cast(super::super::ir::FpCastKind::FpToInt, v));
                 }
+                // FP-to-FP (float <-> double) is bit-pattern-
+                // compatible in the accumulator -- the c5
+                // accumulator carries f64 bits; narrowing /
+                // widening between float and double happens at
+                // the `Op::Sf` / `Op::Lf` boundary. No inline
+                // conversion required.
+                if target_is_fp && source_is_fp {
+                    return Ok(v);
+                }
                 // Integer-to-integer cast. C99 6.3.1.3:
                 //   * narrowing -> unsigned target: mask to the
                 //     target storage width.

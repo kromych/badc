@@ -746,6 +746,12 @@ impl Compiler {
                 // conventional `int *fp = some_function;` idiom and
                 // keeps the type-check loose-but-not-wrong.
                 self.ty = Ty::Int as i64 + Ty::Ptr as i64;
+                // Dual-emit: an Ident node so the wrapping shape
+                // (call-arg, assignment, cast) sees the function
+                // reference on `ast_acc`. The walker's
+                // `load_ident_rvalue` for `Token::Fun` emits the
+                // matching `imm_code(val)`.
+                self.ast_emit_ident(id_idx as u32, self.ty);
             } else if self.symbols[id_idx].class == Token::Sys as i64 {
                 // Bare libc reference -- `fp = readlink;`. We can't
                 // fold in the real GOT/IAT address at compile time,

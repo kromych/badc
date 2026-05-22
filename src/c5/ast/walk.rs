@@ -609,24 +609,33 @@ impl<'a> Walker<'a> {
             Expr::Binary { op, lhs, rhs, ty } => {
                 let mut lv = self.walk_expr_rvalue(b, *lhs)?;
                 let mut rv = self.walk_expr_rvalue(b, *rhs)?;
+                let mask = unsigned_narrow_mask(*ty);
                 // C99 6.3.1.3 + 6.3.1.8: unsigned divide / modulo
                 // at a narrower-than-register common type needs
-                // each operand masked to that width first. A
-                // signed operand promoted to the unsigned common
-                // type carries its sign-extended high half in
-                // the 64-bit register; without the mask, `udiv`
-                // / `umod` operate on the wider pattern and
-                // produce the wrong order of magnitude. The
-                // bytecode tier emits the mask through a scratch
-                // local + `Op::And`; here it collapses to two
-                // `BinopI(And, _, mask)` instructions on the
-                // operands.
-                let mask = unsigned_narrow_mask(*ty);
+                // each operand masked to that width *before* the
+                // op. A signed operand promoted to the unsigned
+                // common type carries its sign-extended high
+                // half in the 64-bit register; without the mask,
+                // `udiv` / `umod` operate on the wider pattern
+                // and produce the wrong order of magnitude.
                 if mask != 0 && matches!(*op, BinOp::Divu | BinOp::Modu) {
                     lv = b.binop_imm(BinOp::And, lv, mask);
                     rv = b.binop_imm(BinOp::And, rv, mask);
                 }
-                Ok(b.binop(*op, lv, rv))
+                let result = b.binop(*op, lv, rv);
+                // C99 6.5p4 + 6.3.1.8: integer Add / Sub / Mul at
+                // an unsigned narrower-than-register common type
+                // must wrap modulo 2^N. The accumulator's
+                // sign-extended high half stays set after a
+                // 64-bit Binop; mask the result so downstream
+                // comparisons, shifts, or casts see the standard-
+                // mandated value. Mirrors
+                // `convert.rs::maybe_mask_to_unsigned_width`.
+                if mask != 0 && matches!(*op, BinOp::Add | BinOp::Sub | BinOp::Mul) {
+                    Ok(b.binop_imm(BinOp::And, result, mask))
+                } else {
+                    Ok(result)
+                }
             }
             Expr::Assign { lhs, rhs, ty } => {
                 // Local-target shortcut: a Token::Loc-class

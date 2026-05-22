@@ -50,9 +50,17 @@ pub(crate) struct SsaBuilder {
     /// another one.
     current: Option<BlockId>,
     /// Per-block start indices in `func.insts`. Index is `BlockId`
-    /// as `usize`. Updated on [`Self::new_block`] and consumed by
-    /// [`Self::finish`].
+    /// as `usize`. Set on [`Self::new_block`] and re-anchored by
+    /// [`Self::switch_to`] -- the latter is what guarantees the
+    /// start matches the actual first inst of the block when
+    /// nested control flow (`if` inside `do { ... } while (0)`)
+    /// inserts blocks out of ID order.
     block_starts: Vec<u32>,
+    /// Per-block end indices in `func.insts`. Recorded on
+    /// [`Self::close`] so `finish()` knows the exact half-open
+    /// range `start..end` regardless of the surrounding control
+    /// flow's allocation order.
+    block_ends: Vec<u32>,
     /// Per-block terminator. Mirrors [`Block::terminator`] until
     /// [`Self::finish`] folds it into the final block list.
     block_terminators: Vec<Option<Terminator>>,
@@ -82,6 +90,7 @@ impl SsaBuilder {
             func,
             current: None,
             block_starts: Vec::new(),
+            block_ends: Vec::new(),
             block_terminators: Vec::new(),
             block_exit_accs: Vec::new(),
             last_def: NO_VALUE,
@@ -104,6 +113,7 @@ impl SsaBuilder {
     pub(crate) fn new_block(&mut self) -> BlockId {
         let id = self.block_starts.len() as BlockId;
         self.block_starts.push(self.func.insts.len() as u32);
+        self.block_ends.push(self.func.insts.len() as u32);
         self.block_terminators.push(None);
         self.block_exit_accs.push(NO_VALUE);
         id
@@ -330,22 +340,33 @@ impl SsaBuilder {
         );
         self.block_terminators[idx] = Some(term);
         self.block_exit_accs[idx] = exit_acc;
+        self.block_ends[idx] = self.func.insts.len() as u32;
         self.current = None;
         self.last_def = NO_VALUE;
     }
 
     /// Finalise the builder and return the populated [`FunctionSsa`].
     /// Panics if any block was opened but not terminated.
+    ///
+    /// Block ranges come from the `block_starts` / `block_ends`
+    /// pair recorded by `switch_to` / `close` respectively. The
+    /// previous derived-from-next-start scheme produced overlapping
+    /// or negative ranges when a nested control structure (`if`
+    /// inside `do { ... } while (0)`) caused blocks to be filled
+    /// out of ID order: an early-allocated block id finishes
+    /// after a later-allocated block's `switch_to` re-anchors its
+    /// own start, so the ID-pair-walk loses track of where each
+    /// block actually lives in the flat inst vector.
     pub(crate) fn finish(mut self) -> FunctionSsa {
         let n = self.block_starts.len();
         let mut blocks: Vec<Block> = Vec::with_capacity(n);
         for i in 0..n {
             let start = self.block_starts[i];
-            let end = if i + 1 < n {
-                self.block_starts[i + 1]
-            } else {
-                self.func.insts.len() as u32
-            };
+            let end = self.block_ends[i];
+            debug_assert!(
+                end >= start,
+                "SsaBuilder: block {i} has end {end} < start {start}",
+            );
             let terminator = self.block_terminators[i]
                 .unwrap_or_else(|| panic!("SsaBuilder: block {i} finished without a terminator"));
             blocks.push(Block {

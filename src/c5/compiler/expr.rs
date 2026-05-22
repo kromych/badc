@@ -239,6 +239,8 @@ impl Compiler {
                     let va_arg_id = crate::c5::op::Intrinsic::VaArg as i64;
                     let va_end_id = crate::c5::op::Intrinsic::VaEnd as i64;
                     let va_copy_id = crate::c5::op::Intrinsic::VaCopy as i64;
+                    let mut ast_intrinsic_args: alloc::vec::Vec<super::super::ast::ExprId> =
+                        alloc::vec::Vec::new();
                     if intrinsic_id == longjmp_id
                         || intrinsic_id == va_start_id
                         || intrinsic_id == va_copy_id
@@ -249,6 +251,9 @@ impl Compiler {
                         // pop env and read val without extra
                         // shuffling.
                         self.expr(Token::Assign as i64)?;
+                        if let Some(a) = self.ast_acc {
+                            ast_intrinsic_args.push(a);
+                        }
                         self.emit_op(Op::Psh);
                         if self.lex.tk != ',' {
                             return Err(
@@ -257,12 +262,18 @@ impl Compiler {
                         }
                         self.next()?;
                         self.expr(Token::Assign as i64)?;
+                        if let Some(a) = self.ast_acc {
+                            ast_intrinsic_args.push(a);
+                        }
                         if is_floating_scalar(self.ty) {
                             self.emit_op(Op::Fcvtfi);
                             self.ty = Ty::Int as i64;
                         }
                     } else {
                         self.expr(Token::Assign as i64)?;
+                        if let Some(a) = self.ast_acc {
+                            ast_intrinsic_args.push(a);
+                        }
                         // Coerce a float argument to int when the
                         // intrinsic expects an integer size (alloca
                         // and SetjmpAArch64 are both pointer-shape
@@ -316,6 +327,22 @@ impl Compiler {
                     } else {
                         self.ty = (Ty::Char as i64) + (Ty::Ptr as i64);
                     }
+                    // Dual-emit `Expr::Intrinsic { kind, args, ty }`.
+                    // The walker dispatches by `kind` to the matching
+                    // `Inst::Intrinsic` op. Args carry through in
+                    // source order regardless of the c5 stack/acc
+                    // shuffle the bytecode tier did.
+                    let intr_ty = self.ty;
+                    let pos = self.ast_src_pos();
+                    let id = self.ast.push_expr(
+                        super::super::ast::Expr::Intrinsic {
+                            kind: intrinsic_id,
+                            args: ast_intrinsic_args,
+                            ty: intr_ty,
+                        },
+                        pos,
+                    );
+                    self.ast_acc = Some(id);
                 } else {
                     // Snapshot the declared signature up front: the per-arg
                     // type checks read from `expected_params` and `is_variadic`,

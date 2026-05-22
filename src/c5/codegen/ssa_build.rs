@@ -223,6 +223,14 @@ impl SsaBuilder {
         self.push(Inst::Mcpy { dst, src, size });
     }
 
+    /// `Inst::Intrinsic` -- compiler-builtin (alloca / setjmp /
+    /// longjmp / va_*). The `kind` is the discriminant from
+    /// `crate::c5::op::Intrinsic`; the per-arch SSA emit reads it
+    /// to pick the right lowering.
+    pub(crate) fn intrinsic(&mut self, kind: i64, args: Vec<ValueId>) -> ValueId {
+        self.push(Inst::Intrinsic { kind, args })
+    }
+
     /// Reserve a fresh per-function 8-byte stack slot for the
     /// walker (short-circuit merge, ternary spill, etc.) and
     /// return its c5-style negative offset (`-N` for the Nth

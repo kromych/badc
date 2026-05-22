@@ -790,10 +790,15 @@ impl<'a> Walker<'a> {
                 b.switch_to(after_blk);
                 Ok(b.load_local(slot, kind_l))
             }
-            Expr::Intrinsic { .. } => Err(WalkError::UnsupportedExpr {
-                id,
-                kind: "Intrinsic",
-            }),
+            Expr::Intrinsic { kind, args, .. } => {
+                let intr_kind = *kind;
+                let mut arg_vals: alloc::vec::Vec<super::super::ir::ValueId> =
+                    alloc::vec::Vec::with_capacity(args.len());
+                for a in args.clone() {
+                    arg_vals.push(self.walk_expr_rvalue(b, a)?);
+                }
+                Ok(b.intrinsic(intr_kind, arg_vals))
+            }
         }
     }
 

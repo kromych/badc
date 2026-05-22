@@ -143,7 +143,18 @@ pub(super) fn record_block_start_pc(
     bytecode_to_native: &mut [usize],
     code_len: usize,
 ) {
-    if block_idx > 0 && block_start_pc < bytecode_to_native.len() {
+    // Skip `block_start_pc == 0` to avoid clobbering the
+    // function-entry slot (`bytecode_to_native[ent_pc]`)
+    // written before this routine runs. The lift's inner
+    // blocks always carry a non-zero bytecode PC (the entry
+    // block holds 0 but `block_idx > 0` filters it). The
+    // walker leaves `start_pc` at 0 for every block because
+    // its IR doesn't have bytecode PCs at all -- without the
+    // 0-guard, walker output would overwrite
+    // `bytecode_to_native[0]` once per inner block and the
+    // post-emit entry-offset resolution would land in the
+    // middle (or end) of `main` instead of its prologue.
+    if block_idx > 0 && block_start_pc != 0 && block_start_pc < bytecode_to_native.len() {
         bytecode_to_native[block_start_pc] = code_len;
     }
 }

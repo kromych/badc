@@ -804,6 +804,21 @@ impl Compiler {
                         self.symbols[id_idx].address_escaped = true;
                     }
                     self.ty += Ty::Ptr as i64;
+                    // C99 6.3.2.1p3 array-to-pointer decay: the
+                    // symbol's address IS the rvalue; no trailing
+                    // load runs. Dual-emit an `Expr::Ident` typed
+                    // at the decayed pointer level so a wrapping
+                    // index / call-arg / assignment site finds the
+                    // array on `ast_acc`. Walker's
+                    // `load_ident_rvalue` for Loc / Glo with this
+                    // shape still routes through `load_local` /
+                    // `imm_data` + load, which is wrong for arrays
+                    // -- the array AST tag is the address-as-value
+                    // rule; the walker's Index / call-arg arms
+                    // re-walk the same Ident and need just the
+                    // address. Push the node; the walker arm fix
+                    // lives separately.
+                    self.ast_emit_ident(id_idx as u32, self.ty);
                     // Stash the array's element count so a
                     // surrounding `sizeof(<arr>)` can compute
                     // `count * sizeof(elem)` instead of the

@@ -980,6 +980,24 @@ impl<'a> Walker<'a> {
         // Wrap the snapshot fields in a synthetic Symbol-shaped
         // tuple by branching directly on `class`; the function
         // is purely a fan-out over the recognised classes.
+        // C99 6.3.2.1p3: an lvalue of array type is converted to
+        // a pointer to its first element. The address itself is
+        // the rvalue -- no trailing load. The symbol carries
+        // `array_size != 0` for arrays; route those through the
+        // lvalue helper so the walker emits just the address
+        // producer and skips the spurious `load(addr, kind)`
+        // that scalar / pointer rvalues need.
+        if (sym as usize) < self.symbols.len()
+            && self.symbols[sym as usize].array_size != 0
+        {
+            if class == Token::Loc as i64 {
+                return Ok(b.local_addr(val));
+            } else if class == Token::Glo as i64 && !is_thread_local {
+                return Ok(b.imm_data(val));
+            } else if class == Token::Glo as i64 && is_thread_local {
+                return Ok(b.tls_addr(val));
+            }
+        }
         if class == Token::Loc as i64 {
             let kind = load_kind_for(ty, self.target);
             Ok(b.load_local(val, kind))

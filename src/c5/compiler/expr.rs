@@ -1305,7 +1305,20 @@ impl Compiler {
             // already in `a` and we leave the IR alone. Only the
             // remaining scalar / pointer-rvalue cases pop the
             // trailing load.
-            if is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0 {
+            // Bump `self.ty` by one pointer level FIRST so the
+            // dual-emit helper called from
+            // `pop_trailing_scalar_load` captures the post-`&`
+            // type. Without the pre-bump the AST `Expr::Unary {
+            // op: AddrOf, ty }` carried the pre-`&` scalar /
+            // pointer type, and a wrapping `(T *)&x` cast saw
+            // the wrong source kind in the walker (e.g. `float`
+            // instead of `float *`, which made the cast walker
+            // pick `FpCast(FpToInt)` instead of the integer
+            // pass-through).
+            let pre_addr_ty = self.ty;
+            let _ = pre_addr_ty;
+            self.ty += Ty::Ptr as i64;
+            if is_struct_ty(pre_addr_ty) && struct_ptr_depth(pre_addr_ty) == 0 {
                 // Struct value -- the parser already left the
                 // address in `a` (no final-load Li). `&s` just
                 // raises the type by one pointer level; no IR
@@ -1313,7 +1326,7 @@ impl Compiler {
             } else if self.pop_trailing_scalar_load() {
                 // Scalar / pointer lvalue: dropped the trailing
                 // load so what's left is the address-producing op.
-            } else if is_pointer_ty(self.ty) {
+            } else if is_pointer_ty(pre_addr_ty) {
                 // Array-decay shape: `&arr` and `&pPager->dbFileVers`
                 // when `dbFileVers` is a `char[16]` field. The
                 // expression already yielded the array's address as
@@ -1323,7 +1336,9 @@ impl Compiler {
             } else {
                 return Err(self.compile_err("bad address-of"));
             }
-            self.ty += Ty::Ptr as i64;
+            // The pointer-level bump was applied above before
+            // `pop_trailing_scalar_load` so the dual-emit
+            // captured the post-`&` type.
             // `&` adds one pointer level toward the fn-ptr
             // for any chain we were tracking. -1 (untracked) stays
             // -1.

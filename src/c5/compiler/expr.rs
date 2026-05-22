@@ -1227,6 +1227,11 @@ impl Compiler {
                 // the address from `a` directly.
                 let result_is_struct_value =
                     is_struct_ty(self.ty) && struct_ptr_depth(self.ty) == 0;
+                // Dual-emit: capture the operand snapshot before
+                // the load op runs `ast_track_emit_op` (which is
+                // a no-op for load ops today, but capturing here
+                // matches the assignment / cast pattern).
+                let deref_child_ast = self.ast_acc;
                 if !result_is_struct_value {
                     let prior_depth = self.pending.fn_ptr_chain_depth;
                     self.emit_op(load_op_for(self.ty, self.target));
@@ -1237,6 +1242,24 @@ impl Compiler {
                     if prior_depth > 0 {
                         self.pending.fn_ptr_chain_depth = prior_depth - 1;
                     }
+                }
+                // Push `Expr::Unary { op: Deref, child, ty }`. For
+                // struct-value `*p` the result type is the struct
+                // and the address-as-value rule means no load
+                // happened; the same Unary node still lets a
+                // wrapping `.field` / `= rhs` lookup the AST shape.
+                if let Some(child) = deref_child_ast {
+                    let result_ty = self.ty;
+                    let pos = self.ast_src_pos();
+                    let id = self.ast.push_expr(
+                        super::super::ast::Expr::Unary {
+                            op: super::super::ast::UnOp::Deref,
+                            child,
+                            ty: result_ty,
+                        },
+                        pos,
+                    );
+                    self.ast_acc = Some(id);
                 }
                 // The operand may have been an array-decayed pointer
                 // (e.g. `*arr` where `arr` is `T arr[N]`), in which

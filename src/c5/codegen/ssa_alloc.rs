@@ -36,10 +36,10 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use super::Target;
 use super::super::ir::{
     BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, ValueId,
 };
+use super::Target;
 
 /// Where the allocator placed an SSA value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -379,7 +379,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         if cond == NO_VALUE {
             continue;
         }
-        if (cond as u32) + 1 != block.inst_range.end {
+        if cond + 1 != block.inst_range.end {
             continue;
         }
         if use_counts.get(cond as usize).copied().unwrap_or(0) != 1 {

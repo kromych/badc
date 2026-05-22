@@ -103,8 +103,7 @@ impl SsaBuilder {
     /// [`Self::switch_to`].
     pub(crate) fn new_block(&mut self) -> BlockId {
         let id = self.block_starts.len() as BlockId;
-        self.block_starts
-            .push(self.func.insts.len() as u32);
+        self.block_starts.push(self.func.insts.len() as u32);
         self.block_terminators.push(None);
         self.block_exit_accs.push(NO_VALUE);
         id
@@ -193,11 +192,7 @@ impl SsaBuilder {
 
     /// `Inst::BinopI`.
     pub(crate) fn binop_imm(&mut self, op: BinOp, lhs: ValueId, rhs_imm: i64) -> ValueId {
-        self.push(Inst::BinopI {
-            op,
-            lhs,
-            rhs_imm,
-        })
+        self.push(Inst::BinopI { op, lhs, rhs_imm })
     }
 
     /// `Inst::Fneg`.
@@ -242,12 +237,7 @@ impl SsaBuilder {
     /// Close the current block with `Terminator::Bz`. `cond` is the
     /// value tested; control transfers to `target` when zero, else
     /// falls through to `fall_through`.
-    pub(crate) fn branch_zero(
-        &mut self,
-        cond: ValueId,
-        target: BlockId,
-        fall_through: BlockId,
-    ) {
+    pub(crate) fn branch_zero(&mut self, cond: ValueId, target: BlockId, fall_through: BlockId) {
         self.close(
             Terminator::Bz {
                 cond,
@@ -259,12 +249,7 @@ impl SsaBuilder {
     }
 
     /// Close the current block with `Terminator::Bnz`.
-    pub(crate) fn branch_nonzero(
-        &mut self,
-        cond: ValueId,
-        target: BlockId,
-        fall_through: BlockId,
-    ) {
+    pub(crate) fn branch_nonzero(&mut self, cond: ValueId, target: BlockId, fall_through: BlockId) {
         self.close(
             Terminator::Bnz {
                 cond,
@@ -307,9 +292,8 @@ impl SsaBuilder {
             } else {
                 self.func.insts.len() as u32
             };
-            let terminator = self.block_terminators[i].unwrap_or_else(|| {
-                panic!("SsaBuilder: block {i} finished without a terminator")
-            });
+            let terminator = self.block_terminators[i]
+                .unwrap_or_else(|| panic!("SsaBuilder: block {i} finished without a terminator"));
             blocks.push(Block {
                 start_pc: 0,
                 inst_range: start..end,
@@ -391,18 +375,9 @@ mod tests {
             func.insts.len(),
             "last block runs to end of inst list",
         );
-        assert!(matches!(
-            func.blocks[0].terminator,
-            Terminator::Bz { .. },
-        ));
-        assert!(matches!(
-            func.blocks[1].terminator,
-            Terminator::Return(_),
-        ));
-        assert!(matches!(
-            func.blocks[2].terminator,
-            Terminator::Return(_),
-        ));
+        assert!(matches!(func.blocks[0].terminator, Terminator::Bz { .. },));
+        assert!(matches!(func.blocks[1].terminator, Terminator::Return(_),));
+        assert!(matches!(func.blocks[2].terminator, Terminator::Return(_),));
 
         // Verify the recursive block's calls reference the same
         // ent_pc (self-recursion). target_pc check is a sanity guard
@@ -420,7 +395,10 @@ mod tests {
         // FunctionSsa shape; a malformed CFG would panic. Run it on
         // both supported targets so any per-arch divergence in the
         // bank pools surfaces here.
-        for target in [super::super::Target::LinuxX64, super::super::Target::LinuxAarch64] {
+        for target in [
+            super::super::Target::LinuxX64,
+            super::super::Target::LinuxAarch64,
+        ] {
             let alloc = super::super::ssa_alloc::allocate(&func, target);
             assert_eq!(
                 alloc.places.len(),
@@ -518,7 +496,10 @@ mod tests {
         // Allocator: the back-edge extends the live range of `v_i`
         // and `v_limit` across the loop body. Linear scan must
         // place every value.
-        for target in [super::super::Target::LinuxX64, super::super::Target::LinuxAarch64] {
+        for target in [
+            super::super::Target::LinuxX64,
+            super::super::Target::LinuxAarch64,
+        ] {
             let alloc = super::super::ssa_alloc::allocate(&func, target);
             assert_eq!(alloc.places.len(), func.insts.len());
         }

@@ -69,7 +69,6 @@ use super::super::ir::{
 use super::super::op::Op;
 use super::super::program::Program;
 
-
 /// Lift every function in `program.text` into a [`FunctionSsa`].
 /// Returns one entry per `Op::Ent`. The lift is independent of
 /// the per-arch lowering; both backends consume the same output.
@@ -508,11 +507,7 @@ pub(super) fn lift_function(
                         None
                     };
                     if let Some(off) = local_off {
-                        def(
-                            &mut insts,
-                            Inst::StoreLocal { off, value, kind },
-                            &mut acc,
-                        );
+                        def(&mut insts, Inst::StoreLocal { off, value, kind }, &mut acc);
                         // The c5 store leaves the bit pattern in the
                         // slot; a subsequent I64 load consumes the
                         // raw 8 bytes. Cache-hit aliasing only works
@@ -907,22 +902,21 @@ pub(super) fn lift_function(
 /// recognisable. Used by every scalar load handler so the fold is
 /// applied uniformly.
 fn emit_scalar_load(insts: &mut Vec<Inst>, vstack: &[ValueId], acc: &mut ValueId, kind: LoadKind) {
-    let pushed = if let Some((base, index, scale)) =
-        try_fuse_indexed_load(insts, *acc, kind, vstack)
-    {
-        // Drop the now-dead Add and BinopI insts. Their value ids
-        // were single-use (only the load consumed them), so this is
-        // safe.
-        insts.truncate(insts.len() - 2);
-        Inst::LoadIndexed {
-            base,
-            index,
-            scale,
-            kind,
-        }
-    } else {
-        Inst::Load { addr: *acc, kind }
-    };
+    let pushed =
+        if let Some((base, index, scale)) = try_fuse_indexed_load(insts, *acc, kind, vstack) {
+            // Drop the now-dead Add and BinopI insts. Their value ids
+            // were single-use (only the load consumed them), so this is
+            // safe.
+            insts.truncate(insts.len() - 2);
+            Inst::LoadIndexed {
+                base,
+                index,
+                scale,
+                kind,
+            }
+        } else {
+            Inst::Load { addr: *acc, kind }
+        };
     let id = insts.len() as ValueId;
     insts.push(pushed);
     *acc = id;
@@ -1155,10 +1149,9 @@ fn is_fp_producing(insts: &[Inst], v: ValueId) -> bool {
             kind: StoreKind::F32,
             ..
         }) => true,
-        Some(Inst::Binop { op, .. }) | Some(Inst::BinopI { op, .. }) => matches!(
-            op,
-            BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv
-        ),
+        Some(Inst::Binop { op, .. }) | Some(Inst::BinopI { op, .. }) => {
+            matches!(op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv)
+        }
         Some(Inst::Fneg(_)) => true,
         Some(Inst::FpCast {
             kind: FpCastKind::IntToFp,

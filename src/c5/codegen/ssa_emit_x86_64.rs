@@ -42,10 +42,10 @@
 
 use alloc::vec::Vec;
 
+use super::super::ir::{BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
 use super::DataFixup;
 use super::GotFixup;
 use super::Target;
-use super::super::ir::{BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
 use super::ssa_alloc::{Allocation, Place};
 use super::x86_64::{
     Cc, Fixup, PltCallFixup, Reg, emit_add_rr, emit_add_rsp_imm32, emit_addsd, emit_and_rr,
@@ -467,9 +467,7 @@ pub(super) fn emit_function(
                 target,
                 fall_through,
             } => {
-                if let Some(cc) =
-                    fused_branch_cc(func, alloc, cond, /* negate */ true)
-                {
+                if let Some(cc) = fused_branch_cc(func, alloc, cond, /* negate */ true) {
                     branch_fixups.push(BranchFixup {
                         site: code.len() + 2,
                         target,
@@ -523,9 +521,7 @@ pub(super) fn emit_function(
                 target,
                 fall_through,
             } => {
-                if let Some(cc) =
-                    fused_branch_cc(func, alloc, cond, /* negate */ false)
-                {
+                if let Some(cc) = fused_branch_cc(func, alloc, cond, /* negate */ false) {
                     branch_fixups.push(BranchFixup {
                         site: code.len() + 2,
                         target,
@@ -719,7 +715,12 @@ fn fused_branch_cc(
     cond: super::super::ir::ValueId,
     negate: bool,
 ) -> Option<Cc> {
-    if !alloc.branch_fused.get(cond as usize).copied().unwrap_or(false) {
+    if !alloc
+        .branch_fused
+        .get(cond as usize)
+        .copied()
+        .unwrap_or(false)
+    {
         return None;
     }
     let op = match func.insts.get(cond as usize)? {
@@ -848,7 +849,9 @@ fn emit_inst(
             scale,
             value,
             kind,
-        } => emit_store_indexed(code, dst, *base, *index, *scale, *value, *kind, alloc, frame),
+        } => emit_store_indexed(
+            code, dst, *base, *index, *scale, *value, *kind, alloc, frame,
+        ),
         Inst::Binop { op, lhs, rhs } => emit_binop(code, *op, v, dst, *lhs, *rhs, alloc, frame),
         Inst::BinopI { op, lhs, rhs_imm } => {
             emit_binop_imm(code, *op, v, dst, *lhs, *rhs_imm, alloc, frame)

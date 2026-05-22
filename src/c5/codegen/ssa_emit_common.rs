@@ -111,9 +111,7 @@ pub(super) fn is_dead_pure(
 ) -> bool {
     use super::super::ir::Inst::*;
     let idx = v as usize;
-    if matches!(inst, StoreLocal { .. })
-        && alloc.dead_stores.get(idx).copied().unwrap_or(false)
-    {
+    if matches!(inst, StoreLocal { .. }) && alloc.dead_stores.get(idx).copied().unwrap_or(false) {
         return true;
     }
     let pure = matches!(

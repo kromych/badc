@@ -46,6 +46,7 @@
 
 use alloc::vec::Vec;
 
+use super::super::ir::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
 use super::DataFixup;
 use super::Target;
 use super::aarch64::{
@@ -60,7 +61,6 @@ use super::aarch64::{
     enc_sdiv, enc_stp_pre, enc_str_d_imm, enc_str_imm, enc_str_pre, enc_str_s_imm, enc_str32_imm,
     enc_strb_imm, enc_strh_imm, enc_sub_imm, enc_sub_reg, enc_subs_imm, enc_udiv, load_imm64,
 };
-use super::super::ir::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, StoreKind, Terminator};
 use super::ssa_alloc::{Allocation, Place};
 
 /// Per-function frame layout. Bytes are 16-aligned at every
@@ -286,9 +286,7 @@ pub(super) fn emit_function(
                 target,
                 fall_through,
             } => {
-                if let Some(bcc) =
-                    fused_branch_cond(func, alloc, cond, /* negate */ true)
-                {
+                if let Some(bcc) = fused_branch_cond(func, alloc, cond, /* negate */ true) {
                     branch_fixups.push(BranchFixup {
                         site: code.len(),
                         target,
@@ -358,9 +356,7 @@ pub(super) fn emit_function(
                 target,
                 fall_through,
             } => {
-                if let Some(bcc) =
-                    fused_branch_cond(func, alloc, cond, /* negate */ false)
-                {
+                if let Some(bcc) = fused_branch_cond(func, alloc, cond, /* negate */ false) {
                     branch_fixups.push(BranchFixup {
                         site: code.len(),
                         target,
@@ -647,7 +643,12 @@ fn fused_branch_cond(
     negate: bool,
 ) -> Option<super::aarch64::Cond> {
     use super::aarch64::Cond;
-    if !alloc.branch_fused.get(cond as usize).copied().unwrap_or(false) {
+    if !alloc
+        .branch_fused
+        .get(cond as usize)
+        .copied()
+        .unwrap_or(false)
+    {
         return None;
     }
     let op = match func.insts.get(cond as usize)? {
@@ -2200,7 +2201,7 @@ fn emit_load_local(
         let bytes = c5_slot_to_fp_offset(off);
         if let Ok(disp) = i32::try_from(bytes)
             && disp >= 0
-            && (disp as u32) % 4 == 0
+            && (disp as u32).is_multiple_of(4)
             && (disp as u32) <= 16380
         {
             emit(
@@ -3091,10 +3092,7 @@ mod tests {
     use super::*;
     use crate::Compiler;
 
-    fn lift_and_alloc(
-        src: &str,
-        target: Target,
-    ) -> (crate::c5::ir::FunctionSsa, Allocation) {
+    fn lift_and_alloc(src: &str, target: Target) -> (crate::c5::ir::FunctionSsa, Allocation) {
         let program = Compiler::new(src.into()).compile().expect("compile");
         let funcs = super::super::ssa::lift_program(&program).expect("lift");
         let main = funcs.into_iter().next().expect("at least one function");

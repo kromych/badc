@@ -113,7 +113,7 @@ pub(crate) fn walk_program(
     for i in ordered {
         let f = &program.finished_functions[i];
         walker_pcs.insert(f.ent_pc);
-        let func = crate::c5::ast::walk::walk_function(
+        let mut func = crate::c5::ast::walk::walk_function(
             &f.ast,
             &program.symbols,
             target,
@@ -130,6 +130,17 @@ pub(crate) fn walk_program(
                 e,
             )))
         })?;
+        // `n_params` on FinishedFunction is the parser's declared
+        // count; the codegen prologue treats it as "param slots
+        // the function body reads from", per
+        // `codegen::param_count_for_func`. For e.g.
+        // `int main(int argc, char **argv) { return argc; }`,
+        // declared = 2 but only slot 2 is referenced. Mismatch
+        // produces an off-by-one spill / pop pair that
+        // SIGBUSes at the function's return path. Rewrite the
+        // walker's `n_params` to the max param slot it touches
+        // through `LoadLocal` / `StoreLocal`, matching the lift.
+        func.n_params = walker_param_count(&func);
         out.push(func);
     }
     // Recover bytecode-only functions (Sys trampolines, synthetic
@@ -181,6 +192,37 @@ fn use_ast_ssa() -> bool {
 #[cfg(not(feature = "std"))]
 fn use_ast_ssa() -> bool {
     false
+}
+
+/// Maximum param slot the function reads or writes. C5's
+/// calling convention places declared param `i` (0-indexed) at
+/// frame slot `i + 2`; the codegen prologue spills the matching
+/// argument register into that slot. Returns the *touched*
+/// count -- a declared-but-unused param is dropped so the frame
+/// stays in step with `codegen::param_count_for_func`, the
+/// bytecode-side equivalent the lift produces.
+fn walker_param_count(func: &FunctionSsa) -> usize {
+    use crate::c5::ir::Inst;
+    let mut max_seen: Option<i64> = None;
+    for inst in &func.insts {
+        let slot = match inst {
+            Inst::LoadLocal { off, .. } => Some(*off),
+            Inst::StoreLocal { off, .. } => Some(*off),
+            Inst::LocalAddr(off) => Some(*off),
+            _ => None,
+        };
+        if let Some(s) = slot
+            && s >= 2
+        {
+            max_seen = Some(max_seen.map_or(s, |m| m.max(s)));
+        }
+    }
+    // Param `i` (0-indexed) sits at slot `i + 2`, so the count
+    // is `max_slot - 1` (e.g. only slot 2 touched -> 1 param).
+    match max_seen {
+        Some(s) => (s - 1).max(0) as usize,
+        None => 0,
+    }
 }
 
 /// Walk `func.insts` + `func.blocks` and produce a category

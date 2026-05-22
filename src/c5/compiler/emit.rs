@@ -267,6 +267,16 @@ impl Compiler {
         }
         let reload_op = reemit_scalar_load(*slot);
         *slot = Op::Psh as i64;
+        // Dual-emit: the bytecode rewrite turns `<addr>; Li` into
+        // `<addr>; Psh`, meaning the address producer's value
+        // ends up on the c5 stack. Mirror that move on the AST
+        // side -- push the current `ast_acc` (the lvalue's
+        // Ident / Deref / Member / Index node) onto the parser
+        // vstack and clear the accumulator. The downstream store
+        // op pops vstack as the lhs of `Expr::Assign`.
+        if let Some(acc) = self.ast_acc.take() {
+            self.ast_vstack.push(acc);
+        }
         Some(reload_op)
     }
 
@@ -330,6 +340,12 @@ impl Compiler {
             if let Some(idx) = self.take_last_loaded_local() {
                 self.symbols[idx].address_escaped = true;
             }
+            // Dual-emit: the bytecode drops the trailing load so
+            // the address producer's value stays in the
+            // accumulator; the AST wraps that producer in
+            // `Expr::Unary { op: AddrOf, child }` so the walker
+            // emits the address path rather than a load.
+            self.ast_apply_unary(super::super::ast::UnOp::AddrOf);
             true
         } else {
             false
@@ -672,6 +688,14 @@ impl Compiler {
             Op::Fgt => self.ast_apply_binop(B::Fgt),
             Op::Fle => self.ast_apply_binop(B::Fle),
             Op::Fge => self.ast_apply_binop(B::Fge),
+            // Scalar stores: vstack-top holds the lvalue address
+            // producer (set by `rewrite_trailing_load_as_psh` from
+            // the lhs Ident / Deref / Member / Index node); the
+            // accumulator holds the rhs value. Pair them into
+            // `Expr::Assign` and leave the result in the
+            // accumulator -- C99 6.5.16p3 says an assignment
+            // expression evaluates to the value stored.
+            Op::Si | Op::Sc | Op::Sh | Op::Sw => self.ast_apply_assign(),
             _ => {}
         }
     }
@@ -712,6 +736,32 @@ impl Compiler {
         let id = self
             .ast
             .push_expr(super::super::ast::Expr::Unary { op, child, ty }, pos);
+        self.ast_acc = Some(id);
+    }
+
+    /// Helper for the scalar-store arms: pops the lvalue
+    /// (address-producing expression) from the parser-side
+    /// vstack, takes the rhs from the accumulator, and pushes an
+    /// `Expr::Assign` whose id becomes the new accumulator. The
+    /// `ty` is the rhs's type -- the C99 6.5.16 value of the
+    /// assignment is the value stored, after any conversion the
+    /// surrounding code already applied. Drops the node if either
+    /// operand is missing (the surrounding store site emits Si in
+    /// a non-canonical shape -- bitfield write, aggregate copy --
+    /// that the dedicated AST helpers haven't wired yet).
+    fn ast_apply_assign(&mut self) {
+        let Some(rhs) = self.ast_acc.take() else {
+            return;
+        };
+        let Some(lhs) = self.ast_vstack.pop() else {
+            self.ast_acc = Some(rhs);
+            return;
+        };
+        let pos = self.ast_src_pos();
+        let ty = self.ty;
+        let id = self
+            .ast
+            .push_expr(super::super::ast::Expr::Assign { lhs, rhs, ty }, pos);
         self.ast_acc = Some(id);
     }
 }
@@ -821,6 +871,76 @@ mod tests {
                 }
             }
             panic!("did not reach Mul through Add rhs masking chain");
+        }
+    }
+
+    /// `int assign(int a) { int x; x = a; return x; }` -- a
+    /// scalar assignment becomes `Expr::Assign{lhs=Ident(x),
+    /// rhs=Ident(a)}` after `rewrite_trailing_load_as_psh`
+    /// + a trailing Si. Confirms the lvalue ends up on the
+    /// parser-side vstack and the store pairs it with the rhs
+    /// accumulator value.
+    #[test]
+    fn assign_local_from_param() {
+        use super::super::super::ast::Expr;
+
+        let src = alloc::string::String::from(
+            "int assign(int a) { int x; x = a; return x; }\nint main(void) { return assign(7); }\n",
+        );
+        let program = Compiler::new(src).compile().expect("compile");
+        let ast = &program.finished_asts[0];
+        let assign = ast
+            .exprs
+            .iter()
+            .find(|e| matches!(e, Expr::Assign { .. }))
+            .expect("Assign node missing");
+        if let Expr::Assign { lhs, rhs, .. } = assign {
+            assert!(
+                matches!(&ast.exprs[*lhs as usize], Expr::Ident { .. }),
+                "Assign lhs not an Ident: {:?}",
+                ast.exprs[*lhs as usize],
+            );
+            assert!(
+                matches!(&ast.exprs[*rhs as usize], Expr::Ident { .. }),
+                "Assign rhs not an Ident: {:?}",
+                ast.exprs[*rhs as usize],
+            );
+        }
+    }
+
+    /// `int addr(int a) { int *p = &a; return *p; }` -- `&a`
+    /// triggers `pop_trailing_scalar_load`, which drops the
+    /// trailing Li and wraps the lvalue producer in
+    /// `Expr::Unary{AddrOf, Ident}`. The result feeds the
+    /// pointer initializer's assignment to `p`.
+    #[test]
+    fn address_of_local_wraps_ident() {
+        use super::super::super::ast::{Expr, UnOp};
+
+        let src = alloc::string::String::from(
+            "int addr(int a) { int *p; p = &a; return a; }\nint main(void) { return addr(3); }\n",
+        );
+        let program = Compiler::new(src).compile().expect("compile");
+        let ast = &program.finished_asts[0];
+        let addr_of = ast
+            .exprs
+            .iter()
+            .find(|e| {
+                matches!(
+                    e,
+                    Expr::Unary {
+                        op: UnOp::AddrOf,
+                        ..
+                    }
+                )
+            })
+            .expect("AddrOf node missing");
+        if let Expr::Unary { child, .. } = addr_of {
+            assert!(
+                matches!(&ast.exprs[*child as usize], Expr::Ident { .. }),
+                "AddrOf child not an Ident: {:?}",
+                ast.exprs[*child as usize],
+            );
         }
     }
 

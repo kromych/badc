@@ -327,12 +327,135 @@ impl<'a> Walker<'a> {
                 let body_id = *body;
                 self.walk_stmt(b, body_id)
             }
-            Stmt::Switch { .. } => Err(WalkError::UnsupportedStmt { id, kind: "Switch" }),
-            Stmt::Case { .. } => Err(WalkError::UnsupportedStmt { id, kind: "Case" }),
-            Stmt::Default { .. } => Err(WalkError::UnsupportedStmt {
-                id,
-                kind: "Default",
-            }),
+            Stmt::Switch { disc, body } => {
+                let disc_val = self.walk_expr_rvalue(b, *disc)?;
+                let body_id = *body;
+
+                // Flatten the body's top-level items into a list
+                // for partitioning. A Compound's items become the
+                // list directly; a singleton stmt becomes a one-
+                // element list.
+                let items: alloc::vec::Vec<super::BlockItem> = match self.ast.stmt(body_id) {
+                    Stmt::Compound(its) => its.clone(),
+                    _ => alloc::vec![super::BlockItem::Stmt(body_id)],
+                };
+
+                // Partition the items into (label, stmts) tuples
+                // where `label` is `Some(Some(val))` for a Case
+                // marker, `Some(None)` for Default, and `None`
+                // for the pre-first-case fall-in region. C99
+                // 6.8.4.2: pre-first-case stmts are reachable
+                // only by goto-into-switch -- the walker still
+                // emits a block for them so an outer goto can
+                // target the body's start.
+                #[allow(clippy::type_complexity)]
+                let mut partitions: alloc::vec::Vec<(
+                    Option<Option<i64>>,
+                    alloc::vec::Vec<super::BlockItem>,
+                )> = alloc::vec::Vec::new();
+                let mut current_label: Option<Option<i64>> = None;
+                let mut current: alloc::vec::Vec<super::BlockItem> = alloc::vec::Vec::new();
+                for item in &items {
+                    if let super::BlockItem::Stmt(s) = item {
+                        match self.ast.stmt(*s) {
+                            Stmt::Case {
+                                val,
+                                body: case_body,
+                            } => {
+                                if !current.is_empty() || current_label.is_some() {
+                                    partitions.push((current_label, core::mem::take(&mut current)));
+                                }
+                                current_label = Some(Some(*val));
+                                current = alloc::vec![super::BlockItem::Stmt(*case_body)];
+                                continue;
+                            }
+                            Stmt::Default { body: def_body } => {
+                                if !current.is_empty() || current_label.is_some() {
+                                    partitions.push((current_label, core::mem::take(&mut current)));
+                                }
+                                current_label = Some(None);
+                                current = alloc::vec![super::BlockItem::Stmt(*def_body)];
+                                continue;
+                            }
+                            _ => {}
+                        }
+                    }
+                    current.push(*item);
+                }
+                partitions.push((current_label, current));
+
+                let after_blk = b.new_block();
+                let blocks: alloc::vec::Vec<super::super::ir::BlockId> =
+                    (0..partitions.len()).map(|_| b.new_block()).collect();
+                let default_idx = partitions
+                    .iter()
+                    .position(|(lbl, _)| matches!(lbl, Some(None)));
+
+                // Dispatcher chain: for each Case partition, cmp
+                // disc against its val and branch to the case's
+                // block when equal; fall through to the next
+                // comparison otherwise. After the chain, jmp to
+                // default (if present) or to after_blk.
+                let mut next_dispatcher_blk = b.new_block();
+                b.jmp(next_dispatcher_blk);
+                for (i, (label, _)) in partitions.iter().enumerate() {
+                    if let Some(Some(val)) = label {
+                        b.switch_to(next_dispatcher_blk);
+                        let val_v = b.imm(*val);
+                        let eq = b.binop(BinOp::Eq, disc_val, val_v);
+                        let next = b.new_block();
+                        b.branch_nonzero(eq, blocks[i], next);
+                        next_dispatcher_blk = next;
+                    }
+                }
+                b.switch_to(next_dispatcher_blk);
+                let final_target = match default_idx {
+                    Some(idx) => blocks[idx],
+                    None => after_blk,
+                };
+                b.jmp(final_target);
+
+                // Push loop_ctx for break. Continue is invalid
+                // inside a bare switch; propagate the outer
+                // loop's continue target so nested switch-in-loop
+                // works.
+                let prev_continue = self.loop_ctx.last().map(|&(_, c)| c).unwrap_or(after_blk);
+                self.loop_ctx.push((after_blk, prev_continue));
+
+                // Walk each partition's stmts into its block;
+                // fallthrough lands on the next partition's
+                // block (or after_blk for the last partition).
+                let n = partitions.len();
+                for (i, (_, stmts)) in partitions.into_iter().enumerate() {
+                    b.switch_to(blocks[i]);
+                    let mut terminated = false;
+                    for item in stmts {
+                        if let super::BlockItem::Stmt(s) = item
+                            && self.walk_stmt(b, s)?
+                        {
+                            terminated = true;
+                            break;
+                        }
+                    }
+                    if !terminated {
+                        let next_block = if i + 1 < n { blocks[i + 1] } else { after_blk };
+                        b.jmp(next_block);
+                    }
+                }
+
+                self.loop_ctx.pop();
+                b.switch_to(after_blk);
+                Ok(false)
+            }
+            // Case / Default markers normally get consumed by the
+            // enclosing Switch's partition pass. If a stray one
+            // reaches the walker (e.g. inside a non-switch
+            // Compound -- which would be a parser bug), treat it
+            // as a transparent wrapper around its body.
+            Stmt::Case { body, .. } | Stmt::Default { body, .. } => {
+                let body_id = *body;
+                self.walk_stmt(b, body_id)
+            }
             Stmt::Asm { .. } => Err(WalkError::UnsupportedStmt { id, kind: "Asm" }),
         }
     }
@@ -501,10 +624,21 @@ impl<'a> Walker<'a> {
                     Ok(v)
                 }
             }
-            Expr::CompoundAssign { .. } => Err(WalkError::UnsupportedExpr {
-                id,
-                kind: "CompoundAssign",
-            }),
+            Expr::CompoundAssign { op, lhs, rhs, ty } => {
+                // C99 6.5.16.2p3: `E1 op= E2` is `E1 = E1 op E2`
+                // with E1 evaluated once. Spill the lhs address,
+                // load through it, apply the binop with rhs,
+                // store back. The expression's value is the new
+                // (post-op) value per the same clause.
+                let addr = self.walk_expr_lvalue(b, *lhs)?;
+                let load_kind = load_kind_for(*ty, self.target);
+                let old = b.load(addr, load_kind);
+                let rhs_val = self.walk_expr_rvalue(b, *rhs)?;
+                let new_val = b.binop(*op, old, rhs_val);
+                let store_kind = store_kind_for(*ty, self.target);
+                b.store(addr, new_val, store_kind);
+                Ok(new_val)
+            }
             Expr::PreInc { lvalue, by, ty } => {
                 let addr = self.walk_expr_lvalue(b, *lvalue)?;
                 let kind = load_kind_for(*ty, self.target);
@@ -572,9 +706,7 @@ impl<'a> Walker<'a> {
             // Member lvalue: `s.f = v` / `p->f = v`. Address is
             // the object's address-producer plus the field
             // offset; no trailing load.
-            Expr::Member {
-                obj, field_off, ..
-            } => {
+            Expr::Member { obj, field_off, .. } => {
                 let obj_id = *obj;
                 let off = *field_off;
                 let base = self.walk_expr_rvalue(b, obj_id)?;
@@ -1020,29 +1152,27 @@ mod tests {
         assert_eq!(binops, alloc::vec![BinOp::Sub]);
     }
 
-    /// An unsupported statement (Switch / Case / Default / Asm)
-    /// surfaces as a `WalkError::UnsupportedStmt` so the
-    /// validator can route the gap back to a parser site.
+    /// An unsupported statement (`Asm`) surfaces as a
+    /// `WalkError::UnsupportedStmt` so the validator can route
+    /// the gap back to a parser site.
     #[test]
     fn unsupported_stmt_returns_error() {
         let mut ast = Ast::new();
         let src = SrcPos { line: 1, file: 0 };
-        let z = ast.push_expr(
-            Expr::IntLit {
-                val: 0,
-                ty: Ty::Int as i64,
+        let asm_id = ast.push_stmt(
+            Stmt::Asm {
+                text: alloc::string::String::new(),
+                clobbers: alloc::string::String::new(),
             },
             src,
         );
-        let body = ast.push_stmt(Stmt::Return(Some(z)), src);
-        let switch_id = ast.push_stmt(Stmt::Switch { disc: z, body }, src);
-        ast.body = Some(switch_id);
+        ast.body = Some(asm_id);
 
         let err = walk_function(&ast, &empty_symbols(), Target::LinuxAarch64, 0, 0, false, 0)
-            .expect_err("Switch must surface as unsupported");
+            .expect_err("Asm must surface as unsupported");
         assert!(matches!(
             err,
-            WalkError::UnsupportedStmt { kind: "Switch", .. }
+            WalkError::UnsupportedStmt { kind: "Asm", .. }
         ));
     }
 }

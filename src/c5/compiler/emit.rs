@@ -905,6 +905,24 @@ impl Compiler {
         self.ast_acc = Some(id);
     }
 
+    /// Push `Expr::CompoundAssign { op, lhs, rhs, ty }`. C99
+    /// 6.5.16.2p3: `E1 op= E2` is `E1 = E1 op E2` with E1
+    /// evaluated once; the walker spills the lhs address, loads
+    /// it, applies the binop with rhs, and stores back.
+    pub(super) fn ast_emit_compound_assign(
+        &mut self,
+        op: super::super::ir::BinOp,
+        lhs: ExprId,
+        rhs: ExprId,
+        ty: i64,
+    ) {
+        let pos = self.ast_src_pos();
+        let id = self
+            .ast
+            .push_expr(Expr::CompoundAssign { op, lhs, rhs, ty }, pos);
+        self.ast_acc = Some(id);
+    }
+
     /// Push an `Expr::Call` and set it as the new accumulator.
     /// Called by the function-call parser site after the bytecode
     /// dance (per-arg temp store + reverse push + Jsr/JsrExt/Jsri

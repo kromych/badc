@@ -1560,6 +1560,7 @@ impl Compiler {
                 // lvalues qualify -- structs and bitfields don't
                 // accept compound assignment in c5.
                 let binop = self.lex.ival;
+                let compound_lhs_ast = self.ast_acc;
                 self.next()?;
                 // Rewrite the trailing load into a Psh so the
                 // address sits on the c5 stack across the compound
@@ -1593,6 +1594,7 @@ impl Compiler {
                 // expr().
                 let lhs_ty = self.ty;
                 self.expr(Token::Assign as i64)?;
+                let compound_rhs_ast = self.ast_acc;
                 if (binop == Token::AddOp as i64 || binop == Token::SubOp as i64)
                     && is_pointer_ty(lhs_ty)
                     && !is_floating_scalar(lhs_ty)
@@ -1683,6 +1685,37 @@ impl Compiler {
                 self.emit_op(store_op_for(self.ty, self.target));
                 if let Some(idx) = assigned_local {
                     self.record_local_store(idx, line);
+                }
+                // Dual-emit `Expr::CompoundAssign`. Map the
+                // selected bytecode `Op` to the matching `BinOp`
+                // so the walker can reproduce the binop without
+                // re-running the FP-vs-int dispatch.
+                use super::super::ir::BinOp as B;
+                let ast_binop = match op {
+                    Op::Add => Some(B::Add),
+                    Op::Sub => Some(B::Sub),
+                    Op::Mul => Some(B::Mul),
+                    Op::Div => Some(B::Div),
+                    Op::Mod => Some(B::Mod),
+                    Op::Divu => Some(B::Divu),
+                    Op::Modu => Some(B::Modu),
+                    Op::Or => Some(B::Or),
+                    Op::Xor => Some(B::Xor),
+                    Op::And => Some(B::And),
+                    Op::Shl => Some(B::Shl),
+                    Op::Shr => Some(B::Shr),
+                    Op::Shru => Some(B::Shru),
+                    Op::Fadd => Some(B::Fadd),
+                    Op::Fsub => Some(B::Fsub),
+                    Op::Fmul => Some(B::Fmul),
+                    Op::Fdiv => Some(B::Fdiv),
+                    _ => None,
+                };
+                if let (Some(lhs), Some(rhs), Some(bop)) =
+                    (compound_lhs_ast, compound_rhs_ast, ast_binop)
+                {
+                    let ca_ty = self.ty;
+                    self.ast_emit_compound_assign(bop, lhs, rhs, ca_ty);
                 }
             } else if self.lex.tk == Token::Cond {
                 let cond_ast = self.ast_acc;

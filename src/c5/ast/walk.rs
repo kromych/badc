@@ -814,6 +814,33 @@ impl<'a> Walker<'a> {
                 }
                 if let Expr::Ident { class, val, .. } = self.ast.expr(*callee) {
                     if *class == Token::Fun as i64 {
+                        // c5-internal calls pass every arg in
+                        // an integer register slot (the callee
+                        // reads them out of positive frame
+                        // slots as i64 regardless of their
+                        // C-level type). For FP args, the bit
+                        // pattern has to round-trip through the
+                        // int register class -- StoreLocal /
+                        // LoadLocal -- so the codegen places
+                        // the value in x0..x7 instead of
+                        // d0..d7. Mirror what the lift
+                        // produces for FP args at c5-internal
+                        // call sites.
+                        for (i, a) in args.iter().enumerate() {
+                            let arg_is_fp = expr_ty(self.ast.expr(*a))
+                                .map(is_floating_scalar)
+                                .unwrap_or(false);
+                            if arg_is_fp {
+                                let slot = b.alloc_synthetic_local();
+                                b.store_local(
+                                    slot,
+                                    arg_vals[i],
+                                    super::super::ir::StoreKind::I64,
+                                );
+                                arg_vals[i] =
+                                    b.load_local(slot, super::super::ir::LoadKind::I64);
+                            }
+                        }
                         return Ok(b.call(*val as usize, arg_vals));
                     }
                     if *class == Token::Sys as i64 {

@@ -755,7 +755,7 @@ impl Compiler {
                     gap_intrinsic,
                 ));
             }
-            if let Err(e) = super::super::ast::walk::walk_function(
+            let walker_res = super::super::ast::walk::walk_function(
                 &func.ast,
                 &self.symbols,
                 target,
@@ -763,13 +763,75 @@ impl Compiler {
                 func.n_params,
                 func.is_variadic,
                 func.n_locals,
-            ) {
-                self.warnings.push(alloc::format!(
-                    "ast::walk: function `{}` (ent_pc={}): {}",
-                    func.name,
-                    func.ent_pc,
-                    e,
-                ));
+            );
+            match walker_res {
+                Err(e) => {
+                    self.warnings.push(alloc::format!(
+                        "ast::walk: function `{}` (ent_pc={}): {}",
+                        func.name,
+                        func.ent_pc,
+                        e,
+                    ));
+                }
+                Ok(walker_fn) => {
+                    // Shadow compare: lift the same bytecode
+                    // region and diff per-category instruction
+                    // counts. Categories that systematically
+                    // differ (vstack/acc spill/reload -- lift
+                    // bridges stack-machine state with these;
+                    // walker doesn't) are excluded so only
+                    // meaningful divergences land in the
+                    // warning stream.
+                    let lift = super::super::codegen::ssa_shadow::lift_single(
+                        &self.text,
+                        func.ent_pc,
+                        bytecode_end,
+                        func.n_params,
+                        func.is_variadic,
+                        &self.data_imm_positions,
+                        &self.code_imm_positions,
+                        &self.call_fp_arg_masks,
+                    );
+                    if let Ok(lift_fn) = lift {
+                        let wc = super::super::codegen::ssa_shadow::count_insts(&walker_fn);
+                        let lc = super::super::codegen::ssa_shadow::count_insts(&lift_fn);
+                        let mut diffs: alloc::vec::Vec<alloc::string::String> =
+                            alloc::vec::Vec::new();
+                        macro_rules! diff {
+                            ($cat:ident) => {
+                                if wc.$cat != lc.$cat {
+                                    diffs.push(alloc::format!(
+                                        "{}={}/{}",
+                                        stringify!($cat),
+                                        wc.$cat,
+                                        lc.$cat
+                                    ));
+                                }
+                            };
+                        }
+                        diff!(imm);
+                        diff!(local_addr);
+                        diff!(load);
+                        diff!(store);
+                        diff!(load_local);
+                        diff!(store_local);
+                        diff!(binop);
+                        diff!(binop_imm);
+                        diff!(call);
+                        diff!(call_ext);
+                        diff!(call_indirect);
+                        diff!(mcpy);
+                        diff!(intrinsic);
+                        if !diffs.is_empty() {
+                            self.warnings.push(alloc::format!(
+                                "ast::walk: function `{}` (ent_pc={}) shadow diff walker/lift: {}",
+                                func.name,
+                                func.ent_pc,
+                                diffs.join(" "),
+                            ));
+                        }
+                    }
+                }
             }
         }
     }
@@ -1054,18 +1116,49 @@ impl Compiler {
         self.ast.stmts.len()
     }
 
-    /// Wrap the stmts added since `before` into a single body
-    /// `StmtId`. One added stmt becomes the body directly; zero
-    /// or many become a `Stmt::Compound`. The wrapper / items
-    /// are appended to `ast.stmts` -- only the LAST stmt is meant
-    /// to be referenced by the outer control-flow node.
+    /// Return the body `StmtId` produced by a single
+    /// `self.stmt()` call that pushed at least one statement
+    /// since `before`. C99 6.8 statements form a tree, and the
+    /// canonical top-level statement parsed by an inner
+    /// `self.stmt()` is the LAST arena entry: any earlier
+    /// entries are sub-statements that the last one already
+    /// references (e.g. an inner `if`'s then-body is a
+    /// `Stmt::Expr` pushed just before the `Stmt::If` that
+    /// embeds it). Returning the last id avoids building a fresh
+    /// outer `Stmt::Compound` that would re-list the
+    /// already-referenced sub-stmts and cause the walker to
+    /// double-visit them. For empty statements (`;`) the helper
+    /// synthesises an empty `Stmt::Compound` so the caller has a
+    /// valid id to bind.
     pub(super) fn ast_wrap_stmts_since(&mut self, before: usize) -> super::super::ast::StmtId {
         let after = self.ast.stmts.len();
-        if after == before + 1 {
+        if after > before {
             return (after - 1) as super::super::ast::StmtId;
         }
-        let items: alloc::vec::Vec<super::super::ast::BlockItem> = (before..after)
-            .map(|i| super::super::ast::BlockItem::Stmt(i as super::super::ast::StmtId))
+        let pos = self.ast_src_pos();
+        self.ast.push_stmt(
+            super::super::ast::Stmt::Compound(alloc::vec::Vec::new()),
+            pos,
+        )
+    }
+
+    /// Wrap an explicit set of top-level stmt ids into a
+    /// `Stmt::Compound`. Unlike `ast_wrap_stmts_since`, the
+    /// caller hand-curates the list -- nested compounds get one
+    /// entry per source-level statement, not one per pushed-into-
+    /// arena stmt, so the walker visits each source stmt once.
+    /// `parse_block_stmt` and the function-body parse loop use
+    /// this to avoid double-walking inner-wrapped stmts.
+    pub(super) fn ast_wrap_block_items(
+        &mut self,
+        item_ids: &[super::super::ast::StmtId],
+    ) -> super::super::ast::StmtId {
+        if item_ids.len() == 1 {
+            return item_ids[0];
+        }
+        let items: alloc::vec::Vec<super::super::ast::BlockItem> = item_ids
+            .iter()
+            .map(|&id| super::super::ast::BlockItem::Stmt(id))
             .collect();
         let pos = self.ast_src_pos();
         self.ast

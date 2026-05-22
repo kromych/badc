@@ -437,7 +437,7 @@ impl Compiler {
         self.next()?;
         let mut block_symbols = Vec::new();
 
-        let block_before = self.ast_stmts_snapshot();
+        let mut top_level_ids: alloc::vec::Vec<super::super::ast::StmtId> = alloc::vec::Vec::new();
         while self.lex.tk != '}' {
             if self.lex.tk == Token::Typedef {
                 self.parse_block_typedef(&mut block_symbols)?;
@@ -446,24 +446,39 @@ impl Compiler {
                 // declaration may appear -- including block scope.
                 self.parse_static_assert()?;
             } else if self.lex_is_type_start() {
+                let item_before = self.ast_stmts_snapshot();
                 self.parse_block_local_decl(&mut block_symbols)?;
+                let item_after = self.ast.stmts.len();
+                // A local decl pushes one stmt-id-wrapping Decl
+                // per declarator; capture every one as a top-
+                // level item.
+                for id in item_before..item_after {
+                    top_level_ids.push(id as super::super::ast::StmtId);
+                }
             } else {
                 let item_before = self.ast_stmts_snapshot();
                 self.stmt()?;
-                // Wrap any multi-stmt body the inner parse pushed
-                // into a single block item so the Compound below
-                // sees one StmtId per source-level statement.
                 let item_after = self.ast.stmts.len();
-                if item_after > item_before + 1 {
-                    let _ = self.ast_wrap_stmts_since(item_before);
-                }
+                let item_id = if item_after > item_before + 1 {
+                    self.ast_wrap_stmts_since(item_before)
+                } else if item_after > item_before {
+                    (item_after - 1) as super::super::ast::StmtId
+                } else {
+                    // Inner parse pushed nothing (e.g. `;` empty
+                    // statement) -- nothing to bind to the
+                    // surrounding Compound either. Skip.
+                    continue;
+                };
+                top_level_ids.push(item_id);
             }
         }
-        // Wrap every top-level stmt added during this block parse
-        // into a `Stmt::Compound { items }`. The wrapper is
-        // appended at the end so the function-end snapshot still
-        // sees the outermost block as the function body's root.
-        let _ = self.ast_wrap_stmts_since(block_before);
+        // Wrap the collected top-level stmt ids into a
+        // `Stmt::Compound`. Only this Compound references the
+        // top-level stmts -- inner wrappers are dead AST entries
+        // that the walker never visits (it iterates the
+        // Compound's items, which point at the canonical top-
+        // level ids).
+        let _ = self.ast_wrap_block_items(&top_level_ids);
         self.next()?;
 
         // Emit the unused-variable / unused-value diagnostics for

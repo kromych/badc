@@ -730,7 +730,8 @@ impl Compiler {
                     // either parses a local decl (with optional
                     // initializer) into the function's symbol
                     // frame, or parses a statement.
-                    let body_before = self.ast_stmts_snapshot();
+                    let mut top_level_ids: alloc::vec::Vec<super::super::ast::StmtId> =
+                        alloc::vec::Vec::new();
                     while self.lex.tk != '}' {
                         if self.lex.tk == Token::StaticAssert {
                             // C11 6.7.10 lets static_assert sit
@@ -740,27 +741,31 @@ impl Compiler {
                             // through parse_block_stmt).
                             self.parse_static_assert()?;
                         } else if self.lex_is_type_start() {
+                            let item_before = self.ast_stmts_snapshot();
                             self.parse_function_body_local_decl()?;
+                            let item_after = self.ast.stmts.len();
+                            for id in item_before..item_after {
+                                top_level_ids.push(id as super::super::ast::StmtId);
+                            }
                         } else {
                             let item_before = self.ast_stmts_snapshot();
                             self.stmt()?;
-                            // Wrap any multi-stmt body the inner
-                            // parse pushed into a single block
-                            // item so the function-body Compound
-                            // below sees one StmtId per source-
-                            // level statement.
                             let item_after = self.ast.stmts.len();
-                            if item_after > item_before + 1 {
-                                let _ = self.ast_wrap_stmts_since(item_before);
-                            }
+                            let item_id = if item_after > item_before + 1 {
+                                self.ast_wrap_stmts_since(item_before)
+                            } else if item_after > item_before {
+                                (item_after - 1) as super::super::ast::StmtId
+                            } else {
+                                continue;
+                            };
+                            top_level_ids.push(item_id);
                         }
                     }
                     // Wrap the function's top-level stmts into a
                     // Compound and pin it as `ast.body` so the
                     // walker has a single tree root to descend
-                    // rather than iterating `ast.stmts` flat (which
-                    // would double-walk control-flow bodies).
-                    let body_root = self.ast_wrap_stmts_since(body_before);
+                    // without double-walking inner-wrapped stmts.
+                    let body_root = self.ast_wrap_block_items(&top_level_ids);
                     self.ast.body = Some(body_root);
                     // C99 6.8.6.4p3: a `void`-returning function
                     // doesn't produce a value. Zero the accumulator

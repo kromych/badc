@@ -99,7 +99,7 @@ pub(super) fn lift_program(program: &Program) -> Result<Vec<FunctionSsa>, C5Erro
 /// Lift a single function's body (from `ent_pc` to the next
 /// `Op::Ent` or end-of-text) into an SSA program. See module
 /// docs for the lift shape.
-pub(super) fn lift_function(
+pub(crate) fn lift_function(
     text: &[i64],
     ent_pc: usize,
     end_pc: usize,

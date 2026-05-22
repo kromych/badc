@@ -40,7 +40,7 @@ mod elf;
 mod jit;
 mod mach_o;
 mod pe;
-mod ssa;
+pub(crate) mod ssa;
 mod ssa_alloc;
 pub(crate) mod ssa_build;
 #[cfg(feature = "std")]
@@ -49,6 +49,7 @@ mod ssa_emit_aarch64;
 mod ssa_emit_common;
 mod ssa_emit_x86_64;
 mod ssa_native;
+pub(crate) mod ssa_shadow;
 mod x86_64;
 
 pub use jit::{jit_run, jit_run_with_options};
@@ -210,12 +211,12 @@ pub(crate) enum ReturnExt {
 /// Indexed by the function's `Op::Ent` PC. Built once at the top of
 /// `lower()`.
 #[derive(Debug, Clone, Copy, Default)]
-pub(super) struct FuncMeta {
+pub(crate) struct FuncMeta {
     /// Declared parameter count, recovered by scanning the body's
     /// `Op::Lea / Op::LdLocI / Op::LdLocC` operands. The c5 parser
     /// hands the i'th declared parameter the slot index `i + 2`,
     /// so the max operand `>= 2` seen minus one is the count.
-    pub n_params: usize,
+    pub(crate) n_params: usize,
     /// True if the body matches the c5 `va_start(ap, last)` macro
     /// expansion (a `Lea LAST; Psh; Imm 2; Psh; Imm 8; Mul; Add; Si`
     /// sequence). Variadic functions keep the c5-stack-based ABI:
@@ -224,7 +225,7 @@ pub(super) struct FuncMeta {
     /// `va_start` walks the c5-stack arg slots directly. Non-
     /// variadic functions instead receive args in host arg
     /// registers per the host ABI.
-    pub is_variadic: bool,
+    pub(crate) is_variadic: bool,
 }
 
 /// Recover [`FuncMeta`] for every `Op::Ent` in `program.text`.

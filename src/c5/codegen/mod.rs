@@ -48,6 +48,7 @@ mod ssa_dump;
 mod ssa_emit_aarch64;
 mod ssa_emit_common;
 mod ssa_emit_x86_64;
+mod ssa_native;
 mod x86_64;
 
 pub use jit::{jit_run, jit_run_with_options};

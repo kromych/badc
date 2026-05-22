@@ -571,6 +571,7 @@ impl Compiler {
             let ret_ty = self.current_func_return_ty;
             let returns_struct = is_struct_ty(ret_ty) && struct_ptr_depth(ret_ty) == 0;
             let returns_void = self.current_func_returns_void;
+            let mut return_value: Option<super::super::ast::ExprId> = None;
             if self.lex.tk != ';' {
                 if returns_void {
                     // C99 6.8.6.4p1: `return <expr>;` in a function
@@ -615,6 +616,7 @@ impl Compiler {
                     // lifts via `Op::Fcvtif` rather than landing
                     // the integer's bit pattern in the FP slot.
                     self.convert_assign_rhs(ret_ty);
+                    return_value = self.ast_acc;
                 }
             } else if returns_void {
                 // Bare `return;` in a void function. Zero the
@@ -625,6 +627,7 @@ impl Compiler {
                 self.emit_val(0);
             }
             self.emit_op(Op::Lev);
+            self.ast_emit_return(return_value);
             self.consume(b';', "semicolon expected")?;
         } else if self.lex.tk == '{' {
             self.parse_block_stmt()?;

@@ -623,6 +623,31 @@ impl Compiler {
         id
     }
 
+    /// Push a `Stmt::Return(value)` node into the per-function
+    /// AST. Called from the explicit-return statement parser
+    /// site (stmt.rs) right before the bytecode `Op::Lev`. The
+    /// `value` is `Some(ast_acc)` when the source spelled out a
+    /// value and `None` for a bare `return;` in a void function;
+    /// caller decides by passing the right shape. The Stmt's id
+    /// is returned in case a future parent (a labelled stmt, a
+    /// surrounding compound block) wants to chain it.
+    pub(super) fn ast_emit_return(
+        &mut self,
+        value: Option<super::super::ast::ExprId>,
+    ) -> super::super::ast::StmtId {
+        let pos = self.ast_src_pos();
+        let id = self
+            .ast
+            .push_stmt(super::super::ast::Stmt::Return(value), pos);
+        // C99 6.8.6.4: a return statement has no value as an
+        // expression; clear `ast_acc` so a stray surrounding op
+        // doesn't pair the function's last value with whatever
+        // emits next.
+        self.ast_acc = None;
+        self.ast_vstack.clear();
+        id
+    }
+
     /// AST-side reaction to an emit_op of an operand-free op.
     /// `Op::Psh` records the current accumulator on the parser-
     /// side vstack; binops pop the saved lhs from the vstack,
@@ -871,6 +896,36 @@ mod tests {
                 }
             }
             panic!("did not reach Mul through Add rhs masking chain");
+        }
+    }
+
+    /// `int main(void) { return 5; }` should land exactly one
+    /// `Stmt::Return(Some(IntLit{5}))` in the function's AST.
+    #[test]
+    fn return_statement_captures_value() {
+        use super::super::super::ast::{Expr, Stmt};
+
+        let src = alloc::string::String::from("int main(void) { return 5; }\n");
+        let program = Compiler::new(src).compile().expect("compile");
+        let ast = &program.finished_asts[0];
+        let returns: alloc::vec::Vec<&Stmt> = ast
+            .stmts
+            .iter()
+            .filter(|s| matches!(s, Stmt::Return(_)))
+            .collect();
+        assert_eq!(
+            returns.len(),
+            1,
+            "expected one Return stmt, got {returns:?}"
+        );
+        if let Stmt::Return(Some(id)) = returns[0] {
+            assert!(
+                matches!(&ast.exprs[*id as usize], Expr::IntLit { val: 5, .. }),
+                "Return value not IntLit(5): {:?}",
+                ast.exprs[*id as usize],
+            );
+        } else {
+            panic!("Return without value: {:?}", returns[0]);
         }
     }
 

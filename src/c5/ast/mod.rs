@@ -24,6 +24,8 @@
 // only reached from the unit tests at the bottom of this file.
 #![allow(dead_code)]
 
+pub(crate) mod walk;
+
 use alloc::vec::Vec;
 
 use super::ir::BinOp;

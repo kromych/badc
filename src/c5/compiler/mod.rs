@@ -464,12 +464,18 @@ pub struct Compiler {
     /// path yet (during the incremental Phase C2 wiring).
     pub(super) ast_acc: Option<super::ast::ExprId>,
 
-    /// ExprIds matching values on the c5 stack-machine stack -- the
-    /// stack push (`Op::Psh`) records the current `ast_acc` here,
-    /// arithmetic pops the top entry as its left operand. `Vec` is
-    /// per-function, never grows past the deepest expression
-    /// nesting in any one function.
-    pub(super) ast_vstack: Vec<super::ast::ExprId>,
+    /// ExprIds matching values on the c5 stack-machine stack --
+    /// the stack push (`Op::Psh`) records the current `ast_acc`
+    /// here, arithmetic / store ops pop the top entry. `Option`
+    /// because some parser sites push bytecode-only addresses
+    /// (`Op::Lea <temp>`, `Op::Imm <data_off>` for an address
+    /// producer) that aren't AST-wired yet; pushing `None` keeps
+    /// the vstack depth in lockstep with the c5 stack so a
+    /// later pop hits the right slot rather than a stale value
+    /// from a previous statement. `Vec` is per-function, never
+    /// grows past the deepest expression nesting in any one
+    /// function.
+    pub(super) ast_vstack: Vec<Option<super::ast::ExprId>>,
 
     /// Per-function AST snapshots, captured at every function's
     /// closing `Op::Lev`. The shadow-validator (Phase C4) reads

@@ -603,6 +603,17 @@ fn main() {
     // LinkUnit to disk as a `.o` and exit. Archives / `-l`
     // inputs aren't meaningful here -- the caller is asking
     // for the per-source object emit, not a link.
+    //
+    // Each unit carries its own warnings (parser type-mismatch,
+    // AST validator, dead-store); print them to stderr so they
+    // surface in the per-TU build the way they would on the
+    // JIT / native-emit paths.
+    let stderr_is_tty = std::io::stderr().is_terminal();
+    for unit in &units {
+        for w in &unit.warnings {
+            eprintln!("{}", colorize_diagnostic(w, stderr_is_tty));
+        }
+    }
     if compile_only {
         if !archives.is_empty() || !lib_names.is_empty() {
             eprintln!(

@@ -287,6 +287,15 @@ impl<'a> Walker<'a> {
                 child,
                 ..
             } => self.walk_expr_rvalue(b, *child),
+            // Pointer-arithmetic-derived lvalues: `t->f = v` lowers
+            // to `*(t + field_off) = v`, the parser absorbs the
+            // Deref into the address expression, and the Assign's
+            // lhs reaches the walker as `Binary{Add, t, off}` (or
+            // an `Index` for `arr[i]`). The Binary's value IS the
+            // address per C99 6.5.6 pointer-plus-integer; storing
+            // through it matches the bytecode tier's address
+            // computation followed by `Op::Si`/etc.
+            Expr::Binary { .. } | Expr::Index { .. } => self.walk_expr_rvalue(b, id),
             other => Err(WalkError::UnsupportedExpr {
                 id,
                 kind: lvalue_shape_label(other),

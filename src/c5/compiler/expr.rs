@@ -1258,6 +1258,13 @@ impl Compiler {
             t = self.lex.tk.raw();
             self.next()?;
             self.expr(Token::Inc as i64)?;
+            // Snapshot the lvalue's AST node before the bytecode
+            // dance below: rewrite + reload + Psh + Imm + Add/Sub
+            // + store_op all run through `ast_apply_*` helpers
+            // that pop the vstack regardless of whether the build
+            // succeeded, so by the time `ast_emit_pre_inc` fires
+            // the lvalue would otherwise be gone.
+            let pre_inc_lvalue = self.ast_acc;
             let reload = self
                 .rewrite_trailing_load_as_psh()
                 .ok_or_else(|| self.compile_err("bad lvalue in pre-increment"))?;
@@ -1297,7 +1304,9 @@ impl Compiler {
             // rewrite.
             let pre_inc_step = if t == Token::Inc as i64 { step } else { -step };
             let pre_inc_ty = self.ty;
-            self.ast_emit_pre_inc(pre_inc_step, pre_inc_ty);
+            if let Some(lvalue) = pre_inc_lvalue {
+                self.ast_emit_pre_inc(lvalue, pre_inc_step, pre_inc_ty);
+            }
         } else {
             // The parse-error message includes the enclosing function
             // name and (for `Token::Id`) the identifier name -- those

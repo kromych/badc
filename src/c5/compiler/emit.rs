@@ -270,13 +270,12 @@ impl Compiler {
         // Dual-emit: the bytecode rewrite turns `<addr>; Li` into
         // `<addr>; Psh`, meaning the address producer's value
         // ends up on the c5 stack. Mirror that move on the AST
-        // side -- push the current `ast_acc` (the lvalue's
-        // Ident / Deref / Member / Index node) onto the parser
-        // vstack and clear the accumulator. The downstream store
-        // op pops vstack as the lhs of `Expr::Assign`.
-        if let Some(acc) = self.ast_acc.take() {
-            self.ast_vstack.push(acc);
-        }
+        // side -- push the current `ast_acc` slot onto the
+        // parser vstack and clear the accumulator. `None` here
+        // represents an address producer whose AST counterpart
+        // hasn't been wired yet; the downstream store op then
+        // sees a `None` lvalue and skips the Assign build.
+        self.ast_vstack.push(self.ast_acc.take());
         Some(reload_op)
     }
 
@@ -726,10 +725,7 @@ impl Compiler {
     /// vstack entry. `by` is the step value the parser already
     /// scaled for pointers (+sizeof(*p) / -sizeof(*p)) so the
     /// walker doesn't have to recompute it.
-    pub(super) fn ast_emit_pre_inc(&mut self, by: i64, ty: i64) {
-        let Some(lvalue) = self.ast_vstack.pop() else {
-            return;
-        };
+    pub(super) fn ast_emit_pre_inc(&mut self, lvalue: ExprId, by: i64, ty: i64) {
         let pos = self.ast_src_pos();
         let id = self.ast.push_expr(Expr::PreInc { lvalue, by, ty }, pos);
         self.ast_acc = Some(id);
@@ -782,9 +778,15 @@ impl Compiler {
         use super::super::ir::BinOp as B;
         match op {
             Op::Psh => {
-                if let Some(acc) = self.ast_acc.take() {
-                    self.ast_vstack.push(acc);
-                }
+                // Always push a slot so the parser-side vstack
+                // depth stays in lockstep with the c5
+                // stack-machine vstack. When `ast_acc` is None
+                // (an op-aware parser site pushed an address
+                // through `Op::Lea` / `emit_data_imm` without
+                // wiring its AST counterpart), the slot holds
+                // `None` and downstream pops know to skip the
+                // node build.
+                self.ast_vstack.push(self.ast_acc.take());
             }
             Op::Fneg => self.ast_apply_unary(super::super::ast::UnOp::Neg),
             // Integer arithmetic + comparison. Each case maps the
@@ -833,6 +835,18 @@ impl Compiler {
             // accumulator -- C99 6.5.16p3 says an assignment
             // expression evaluates to the value stored.
             Op::Si | Op::Sc | Op::Sh | Op::Sw => self.ast_apply_assign(),
+            // Call ops destroy the c5 accumulator (the call
+            // overwrites it with the callee's return value). The
+            // dual-emit doesn't yet build `Expr::Call` AST nodes,
+            // so clear `ast_acc` here to keep stale data from a
+            // previous statement's Assign / Binary from polluting
+            // the next store / push. Same for the indirect call
+            // op and the Sys-binding external call. Adj is the
+            // post-call stack cleanup; it has no acc effect on
+            // either side.
+            Op::Jsr | Op::JsrExt | Op::Jsri => {
+                self.ast_acc = None;
+            }
             _ => {}
         }
     }
@@ -846,11 +860,12 @@ impl Compiler {
     /// the emit. Drops the node if either operand is missing
     /// (the surrounding emit site isn't AST-wired yet).
     fn ast_apply_binop(&mut self, op: super::super::ir::BinOp) {
-        let Some(rhs) = self.ast_acc.take() else {
-            return;
-        };
-        let Some(lhs) = self.ast_vstack.pop() else {
-            self.ast_acc = Some(rhs);
+        let rhs_slot = self.ast_acc.take();
+        let lhs_slot = self.ast_vstack.pop().flatten();
+        let (Some(lhs), Some(rhs)) = (lhs_slot, rhs_slot) else {
+            // One side wasn't AST-wired; can't build the node.
+            // Drop the AST acc so a downstream consumer doesn't
+            // pair a stale value with the next op.
             return;
         };
         let pos = self.ast_src_pos();
@@ -887,11 +902,9 @@ impl Compiler {
     /// a non-canonical shape -- bitfield write, aggregate copy --
     /// that the dedicated AST helpers haven't wired yet).
     fn ast_apply_assign(&mut self) {
-        let Some(rhs) = self.ast_acc.take() else {
-            return;
-        };
-        let Some(lhs) = self.ast_vstack.pop() else {
-            self.ast_acc = Some(rhs);
+        let rhs_slot = self.ast_acc.take();
+        let lhs_slot = self.ast_vstack.pop().flatten();
+        let (Some(lhs), Some(rhs)) = (lhs_slot, rhs_slot) else {
             return;
         };
         let pos = self.ast_src_pos();

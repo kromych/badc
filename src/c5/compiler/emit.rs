@@ -575,6 +575,8 @@ impl Compiler {
         ent_pc: usize,
         n_params: usize,
         is_variadic: bool,
+        param_tys: alloc::vec::Vec<i64>,
+        param_local_slots: alloc::vec::Vec<i64>,
     ) {
         let finished = super::super::ast::FinishedFunction {
             ast: core::mem::take(&mut self.ast),
@@ -583,6 +585,8 @@ impl Compiler {
             is_variadic,
             n_locals: self.max_loc_offs,
             name: self.current_function_name.clone(),
+            param_tys,
+            param_local_slots,
         };
         self.finished_functions.push(finished);
     }
@@ -764,6 +768,8 @@ impl Compiler {
                 func.n_params,
                 func.is_variadic,
                 func.n_locals,
+                &func.param_tys,
+                &func.param_local_slots,
             );
             match walker_res {
                 Err(e) => {

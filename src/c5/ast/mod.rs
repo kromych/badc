@@ -412,6 +412,19 @@ pub(crate) struct FinishedFunction {
     pub n_params: usize,
     pub is_variadic: bool,
     pub n_locals: i64,
+    /// Per-parameter type tags in declared order. The walker
+    /// reads these to emit the C99 6.2.4 / 6.5.2.2-mandated
+    /// entry-Mcpy for struct-by-value parameters: the caller
+    /// passes the struct's address in `arg_reg[i]`, and the
+    /// callee copies the bytes into its own local slot before
+    /// the body runs. Empty when there were no parameters.
+    pub param_tys: alloc::vec::Vec<i64>,
+    /// Per-parameter local-slot offsets the parser allocated
+    /// for the callee's local copy of each struct-by-value
+    /// param. Slot `0` (= no offset) means the param is a
+    /// scalar / pointer / unhandled shape -- the walker
+    /// skips the entry-Mcpy for those.
+    pub param_local_slots: alloc::vec::Vec<i64>,
     pub name: alloc::string::String,
 }
 

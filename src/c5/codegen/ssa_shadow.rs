@@ -122,6 +122,8 @@ pub(crate) fn walk_program(
             f.n_params,
             f.is_variadic,
             f.n_locals,
+            &f.param_tys,
+            &f.param_local_slots,
         )
         .map_err(|e| {
             C5Error::Compile(crate::c5::error::fmt_internal_err(&alloc::format!(
@@ -131,17 +133,18 @@ pub(crate) fn walk_program(
                 e,
             )))
         })?;
-        // `n_params` on FinishedFunction is the parser's declared
-        // count; the codegen prologue treats it as "param slots
-        // the function body reads from", per
-        // `codegen::param_count_for_func`. For e.g.
-        // `int main(int argc, char **argv) { return argc; }`,
-        // declared = 2 but only slot 2 is referenced. Mismatch
-        // produces an off-by-one spill / pop pair that
-        // SIGBUSes at the function's return path. Rewrite the
-        // walker's `n_params` to the max param slot it touches
-        // through `LoadLocal` / `StoreLocal`, matching the lift.
-        func.n_params = walker_param_count(&func);
+        // `n_params` on FinishedFunction is the parser's
+        // declared count. The codegen prologue spills the
+        // matching host-arg regs into slots [2, 2+n). Use the
+        // max of the declared count and the touched count
+        // (`walker_param_count`): a struct-by-value param
+        // wraps its slot-2 read inside the entry-Mcpy whose
+        // dst is `slot -N`, so the touched scan would miss
+        // slot 2 and the codegen wouldn't spill the host arg
+        // -- the callee then reads junk for the struct
+        // address.
+        let touched = walker_param_count(&func);
+        func.n_params = touched.max(f.n_params);
         out.push(func);
     }
     // Recover bytecode-only functions (Sys trampolines, synthetic

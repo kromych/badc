@@ -783,7 +783,36 @@ impl Compiler {
                     self.emit_op(Op::Lev);
                     let n_params = params.indices.len();
                     let is_variadic = params.is_variadic;
-                    self.ast_finish_function(ent_pc, n_params, is_variadic);
+                    // Snapshot per-param types + the local-copy
+                    // slot the parser allocated for each
+                    // struct-by-value parameter. The walker
+                    // replays the C99 6.5.2.2 entry-Mcpy from
+                    // these so the callee operates on its own
+                    // copy. Scalar / pointer params end up
+                    // with `0` in `param_local_slots`; the
+                    // walker checks the slot and the type both.
+                    let param_tys: alloc::vec::Vec<i64> =
+                        params.types.iter().copied().collect();
+                    let param_local_slots: alloc::vec::Vec<i64> = params
+                        .indices
+                        .iter()
+                        .map(|&idx| {
+                            let v = self.symbols[idx].val;
+                            // `val < 0` -> local slot reassigned
+                            // by the entry-Mcpy emit; preserve
+                            // it. `val >= 0` -> scalar param
+                            // still sits in its original slot;
+                            // record 0 so the walker skips.
+                            if v < 0 { v } else { 0 }
+                        })
+                        .collect();
+                    self.ast_finish_function(
+                        ent_pc,
+                        n_params,
+                        is_variadic,
+                        param_tys,
+                        param_local_slots,
+                    );
                     self.current_function_name.clear();
                     self.current_func_returns_void = false;
 

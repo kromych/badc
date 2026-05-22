@@ -76,6 +76,7 @@ impl WalkError {
 /// and many expression shapes are missing. The walker iterates
 /// `ast.stmts` flat (no nested blocks) and returns the first
 /// unsupported shape rather than fabricating a value.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn walk_function(
     ast: &super::Ast,
     symbols: &[Symbol],
@@ -85,6 +86,8 @@ pub(crate) fn walk_function(
     n_params: usize,
     is_variadic: bool,
     n_locals: i64,
+    param_tys: &[i64],
+    param_local_slots: &[i64],
 ) -> Result<FunctionSsa, WalkError> {
     let mut b = super::super::codegen::ssa_build::SsaBuilder::new(ent_pc, n_params, is_variadic);
     if n_locals != 0 {
@@ -97,6 +100,38 @@ pub(crate) fn walk_function(
     // tracking initialises and the function's frame layout
     // matches the lift's shape.
     b.alloca_init(0);
+    // C99 6.5.2.2 + the c5 calling convention: for each
+    // struct-by-value parameter, the caller passes the
+    // source's address in slot `i + base` (base = 2, or 3
+    // when a struct-returning callee uses slot 2 as the
+    // hidden out-pointer). The callee's prologue copies the
+    // struct into a fresh local; the parser allocated the
+    // local and recorded its offset in `param_local_slots[i]`,
+    // shifted the symbol's `val` to point at it, and emitted
+    // the matching Mcpy on the bytecode side. Walker replays
+    // the Mcpy so the AST-driven SSA matches.
+    for i in 0..param_tys.len() {
+        let pty = param_tys[i];
+        let local_slot = param_local_slots[i];
+        if local_slot >= 0 {
+            continue;
+        }
+        if !((pty & !(1i64 << 30)) >= STRUCT_BASE
+            && (((pty & !(1i64 << 30)) - STRUCT_BASE) % STRUCT_STRIDE) / 2 == 0)
+        {
+            continue;
+        }
+        let stripped = pty & !(1i64 << 30);
+        let id = ((stripped - STRUCT_BASE) / STRUCT_STRIDE) as usize;
+        if id >= structs.len() {
+            continue;
+        }
+        let size = structs[id].size as i64;
+        let arg_slot = (i as i64) + 2;
+        let dst = b.local_addr(local_slot);
+        let src = b.load_local(arg_slot, super::super::ir::LoadKind::I64);
+        b.mcpy(dst, src, size);
+    }
     let mut ctx = Walker {
         ast,
         symbols,
@@ -1546,7 +1581,7 @@ mod tests {
         let __ret = ast.push_stmt(Stmt::Return(Some(add)), src);
         ast.body = Some(__ret);
 
-        let func = walk_function(&ast, &empty_symbols(), &[], Target::LinuxAarch64, 0, 0, false, 0)
+        let func = walk_function(&ast, &empty_symbols(), &[], Target::LinuxAarch64, 0, 0, false, 0, &[], &[])
             .expect("walk");
         let immediates: alloc::vec::Vec<i64> = func
             .insts
@@ -1597,7 +1632,7 @@ mod tests {
         let __ret = ast.push_stmt(Stmt::Return(Some(x)), src);
         ast.body = Some(__ret);
 
-        let func = walk_function(&ast, &syms, &[], Target::LinuxAarch64, 0, 0, false, 8).expect("walk");
+        let func = walk_function(&ast, &syms, &[], Target::LinuxAarch64, 0, 0, false, 8, &[], &[]).expect("walk");
         let loads: alloc::vec::Vec<_> = func
             .insts
             .iter()
@@ -1652,7 +1687,7 @@ mod tests {
         let __ret = ast.push_stmt(Stmt::Return(Some(assign)), src);
         ast.body = Some(__ret);
 
-        let func = walk_function(&ast, &syms, &[], Target::LinuxAarch64, 0, 0, false, 8).expect("walk");
+        let func = walk_function(&ast, &syms, &[], Target::LinuxAarch64, 0, 0, false, 8, &[], &[]).expect("walk");
         let store_kinds: alloc::vec::Vec<_> = func
             .insts
             .iter()
@@ -1700,7 +1735,7 @@ mod tests {
         let __ret = ast.push_stmt(Stmt::Return(Some(neg)), src);
         ast.body = Some(__ret);
 
-        let func = walk_function(&ast, &empty_symbols(), &[], Target::LinuxAarch64, 0, 0, false, 0)
+        let func = walk_function(&ast, &empty_symbols(), &[], Target::LinuxAarch64, 0, 0, false, 0, &[], &[])
             .expect("walk");
         let binops: alloc::vec::Vec<BinOp> = func
             .insts
@@ -1729,7 +1764,7 @@ mod tests {
         );
         ast.body = Some(asm_id);
 
-        let err = walk_function(&ast, &empty_symbols(), &[], Target::LinuxAarch64, 0, 0, false, 0)
+        let err = walk_function(&ast, &empty_symbols(), &[], Target::LinuxAarch64, 0, 0, false, 0, &[], &[])
             .expect_err("Asm must surface as unsupported");
         assert!(matches!(
             err,

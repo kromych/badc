@@ -163,6 +163,18 @@ impl SsaBuilder {
         self.push(Inst::ImmCode(target_pc))
     }
 
+    /// `Inst::AllocaInit` -- per-function alloca bookkeeping
+    /// slot. Slot 0 means "no alloca in this function"; the
+    /// per-arch emit short-circuits and writes nothing for the
+    /// zero case. The bytecode tier emits one per function
+    /// (right after `Op::Ent`); the walker mirrors that so the
+    /// codegen's per-function state (`current_alloca_top`)
+    /// initialises the same way regardless of which SSA source
+    /// the backend received.
+    pub(crate) fn alloca_init(&mut self, slot: i64) -> ValueId {
+        self.push(Inst::AllocaInit(slot))
+    }
+
     /// `Inst::LocalAddr`.
     pub(crate) fn local_addr(&mut self, off: i64) -> ValueId {
         self.push(Inst::LocalAddr(off))

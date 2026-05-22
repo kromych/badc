@@ -89,6 +89,13 @@ pub(crate) fn walk_function(
     if n_locals != 0 {
         b.set_locals(n_locals);
     }
+    // Mirror the bytecode tier's per-function `Op::AllocaInit
+    // 0`. Slot 0 means "no alloca", which the per-arch emit
+    // short-circuits without writing native code, but it leaves
+    // a sentinel inst in block 0 so the emit's `alloca_top`
+    // tracking initialises and the function's frame layout
+    // matches the lift's shape.
+    b.alloca_init(0);
     let mut ctx = Walker {
         ast,
         symbols,

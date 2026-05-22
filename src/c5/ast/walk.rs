@@ -465,11 +465,14 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Walk a local declaration. Emits `store_local(slot_off,
-    /// init_value, store_kind)` when the decl has an initializer;
-    /// no-op for uninitialized locals (C99 6.7.8p10 leaves the
-    /// initial value indeterminate). Symbols are looked up
-    /// through `self.symbols` for the store kind's type.
+    /// Walk a local declaration. Lowers based on the
+    /// initializer's shape:
+    /// * `LocalInit::None` -- no instruction (C99 6.7.8p10).
+    /// * `LocalInit::Scalar(expr)` -- evaluate, `store_local`.
+    /// * `LocalInit::Aggregate { src_data_off, size_bytes }` --
+    ///   emit `Inst::Mcpy { dst = local_addr, src = imm_data,
+    ///   size }` matching the bytecode tier's constant brace-
+    ///   list path.
     fn walk_decl(
         &mut self,
         b: &mut super::super::codegen::ssa_build::SsaBuilder,
@@ -481,16 +484,27 @@ impl<'a> Walker<'a> {
                 slot_off,
                 init,
             } => {
-                let Some(init_id) = *init else {
-                    return Ok(());
-                };
                 let slot = *slot_off;
                 let sym_idx = *sym;
                 let ty = self.symbols[sym_idx as usize].type_;
-                let v = self.walk_expr_rvalue(b, init_id)?;
-                let kind = store_kind_for(ty, self.target);
-                b.store_local(slot, v, kind);
-                Ok(())
+                match *init {
+                    super::super::ast::LocalInit::None => Ok(()),
+                    super::super::ast::LocalInit::Scalar(init_id) => {
+                        let v = self.walk_expr_rvalue(b, init_id)?;
+                        let kind = store_kind_for(ty, self.target);
+                        b.store_local(slot, v, kind);
+                        Ok(())
+                    }
+                    super::super::ast::LocalInit::Aggregate {
+                        src_data_off,
+                        size_bytes,
+                    } => {
+                        let dst = b.local_addr(slot);
+                        let src = b.imm_data(src_data_off);
+                        b.mcpy(dst, src, size_bytes);
+                        Ok(())
+                    }
+                }
             }
             super::super::ast::Decl::Vla { .. } => Err(WalkError::UnsupportedStmt {
                 id: 0,

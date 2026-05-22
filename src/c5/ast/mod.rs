@@ -287,6 +287,25 @@ pub(crate) enum Stmt {
     Decl(DeclId),
 }
 
+/// Initializer shape on a `Decl::Local`. C99 6.7.8 admits three
+/// flavours the AST distinguishes:
+/// * `None` -- no initializer; C99 6.7.8p10 leaves the value
+///   indeterminate.
+/// * `Scalar(ExprId)` -- a single initializer expression for an
+///   arithmetic / pointer / single-value local. Walker emits one
+///   `store_local`.
+/// * `Aggregate { src_data_off, size_bytes }` -- a brace-list
+///   initializer whose every element folded to a compile-time
+///   constant. The bytecode tier staged the bytes at
+///   `src_data_off` inside `Program.data`; the walker emits
+///   `Inst::Mcpy` to copy them into the local's slot.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum LocalInit {
+    None,
+    Scalar(ExprId),
+    Aggregate { src_data_off: i64, size_bytes: i64 },
+}
+
 /// Declaration node. Captures variable / function declarations
 /// that the AST needs to surface to the walker as side-effecting
 /// (e.g. local variables with initializers, VLAs with a runtime
@@ -294,14 +313,14 @@ pub(crate) enum Stmt {
 /// the symbol table; only the bits the walker needs land here.
 #[derive(Debug, Clone)]
 pub(crate) enum Decl {
-    /// Local variable declaration with an optional initializer.
-    /// The slot offset is captured at parse time; the initializer
-    /// (if present) is evaluated and assigned at the declaration
-    /// site per C99 6.7.8.
+    /// Local variable declaration. The slot offset is captured at
+    /// parse time; the initializer (if any) is one of the shapes
+    /// in [`LocalInit`] and is evaluated / Mcpy'd at the
+    /// declaration site per C99 6.7.8.
     Local {
         sym: u32,
         slot_off: i64,
-        init: Option<ExprId>,
+        init: LocalInit,
     },
     /// Variable-length array declaration. `dim` is the runtime
     /// dimension expression; the walker emits `Inst::AllocaInit`

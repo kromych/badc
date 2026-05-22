@@ -495,10 +495,18 @@ pub struct Compiler {
 
     /// Cross-helper carry: `emit_local_init_store` stashes the
     /// initializer's ExprId here so the calling `parse_*_local_decl`
-    /// can wrap it in `Decl::Local { init: Some(_) }`. Always cleared
-    /// to None by the consumer; None on entry means an uninitialized
-    /// local declaration.
+    /// can wrap it in `Decl::Local { init: Scalar(_) }`. Always
+    /// cleared to None by the consumer; None on entry means an
+    /// uninitialized local declaration.
     pub(super) pending_local_init_ast: Option<super::ast::ExprId>,
+
+    /// Cross-helper carry for aggregate (constant brace-list)
+    /// local initializers: `emit_local_array_init` stashes the
+    /// staged `(src_data_off, size_bytes)` here so the decl site
+    /// can build `Decl::Local { init: Aggregate(_) }`. Holds the
+    /// Mcpy source descriptor; `None` means the decl is scalar /
+    /// uninitialized.
+    pub(super) pending_local_aggregate_ast: Option<(i64, i64)>,
 
     // --- Patch lists ---
     loop_breaks: Vec<Vec<usize>>,
@@ -955,6 +963,7 @@ impl Compiler {
             finished_functions: Vec::new(),
             ast_labels: Vec::new(),
             pending_local_init_ast: None,
+            pending_local_aggregate_ast: None,
             loop_breaks: Vec::new(),
             loop_continues: Vec::new(),
             labels: Vec::new(),

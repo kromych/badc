@@ -972,6 +972,11 @@ impl Compiler {
         self.emit_data_imm(src_data_addr as i64);
         self.emit_op(Op::Mcpy);
         self.emit_val(total_bytes as i64);
+        // Dual-emit: record the Mcpy source descriptor so the
+        // surrounding decl-site caller can build
+        // `Decl::Local { init: Aggregate { src_data_off,
+        // size_bytes } }`.
+        self.pending_local_aggregate_ast = Some((src_data_addr as i64, total_bytes as i64));
     }
 
     /// Emit the store sequence for a local-variable initializer:

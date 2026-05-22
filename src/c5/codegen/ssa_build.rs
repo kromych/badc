@@ -215,6 +215,14 @@ impl SsaBuilder {
         self.push(Inst::CallIndirect { target, args })
     }
 
+    /// `Inst::Mcpy` -- whole-struct / aggregate memory copy of
+    /// `size` bytes from `src` to `dst`. Used by the AST walker's
+    /// `LocalInit::Aggregate` lowering when a brace-list
+    /// initializer's bytes were staged in `.data`.
+    pub(crate) fn mcpy(&mut self, dst: ValueId, src: ValueId, size: i64) {
+        self.push(Inst::Mcpy { dst, src, size });
+    }
+
     /// `Inst::CallExt` -- libc / external call.
     pub(crate) fn call_ext(
         &mut self,

@@ -388,13 +388,24 @@ impl Compiler {
                 self.symbols[loc_idx].decl_line = self.lex.line;
                 self.symbols[loc_idx].decl_in_main_source = self.in_main_source();
                 self.pending_local_init_ast = None;
+                self.pending_local_aggregate_ast = None;
                 self.allocate_local_with_init(loc_idx, ty, array_size)?;
-                if self.symbols[loc_idx].class == Token::Loc as i64 && array_size == 0 {
+                if self.symbols[loc_idx].class == Token::Loc as i64 {
                     let slot_off = self.symbols[loc_idx].val;
-                    let init = self.pending_local_init_ast.take();
+                    let scalar = self.pending_local_init_ast.take();
+                    let aggregate = self.pending_local_aggregate_ast.take();
+                    let init = match (scalar, aggregate) {
+                        (Some(e), _) => super::super::ast::LocalInit::Scalar(e),
+                        (None, Some((src, size))) => super::super::ast::LocalInit::Aggregate {
+                            src_data_off: src,
+                            size_bytes: size,
+                        },
+                        (None, None) => super::super::ast::LocalInit::None,
+                    };
                     self.ast_emit_local_decl(loc_idx as u32, slot_off, init);
                 } else {
                     self.pending_local_init_ast = None;
+                    self.pending_local_aggregate_ast = None;
                 }
             }
 

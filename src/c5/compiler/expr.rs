@@ -2289,6 +2289,22 @@ impl Compiler {
                         let scale = self.pointee_size(t);
                         self.emit_binop_with_imm(Op::Mul, scale);
                     }
+                    // Re-snapshot `idx_ast` after the scale `Mul`.
+                    // `emit_binop_with_imm` ran through
+                    // `ast_track_emit_op`, which wrapped the
+                    // earlier `idx_ast` into a fresh
+                    // `Binary { Mul, idx, IntLit(scale) }` whose
+                    // id is now on `ast_acc`. Using the post-scale
+                    // expression here means the walker can emit a
+                    // single `b.binop(Add, array, idx)` (the idx
+                    // already carries the C99 6.5.6 stride
+                    // multiplication) without re-deriving the
+                    // pointee size from `ty`.
+                    let idx_ast_scaled = if self.is_ptr_scaling_nontrivial(t) {
+                        self.ast_acc.or(idx_ast)
+                    } else {
+                        idx_ast
+                    };
                     self.emit_op(Op::Add);
                     self.ty = t - Ty::Ptr as i64;
                     // `xs[i]` where `xs` is a `struct Foo *` yields a
@@ -2307,7 +2323,7 @@ impl Compiler {
                     // + Add + load sequence; the AST collapses to
                     // one node so the walker emits a single
                     // address+load through `Expr::Index`.
-                    if let (Some(array), Some(idx)) = (array_ast, idx_ast) {
+                    if let (Some(array), Some(idx)) = (array_ast, idx_ast_scaled) {
                         let idx_ty = self.ty;
                         self.ast_emit_index(array, idx, idx_ty);
                     }

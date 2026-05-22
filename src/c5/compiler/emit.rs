@@ -1454,7 +1454,7 @@ impl Compiler {
             // `Expr::Assign` and leave the result in the
             // accumulator -- C99 6.5.16p3 says an assignment
             // expression evaluates to the value stored.
-            Op::Si | Op::Sc | Op::Sh | Op::Sw => self.ast_apply_assign(),
+            Op::Si | Op::Sc | Op::Sh | Op::Sw | Op::Sf => self.ast_apply_assign(),
             // Call ops destroy the c5 accumulator (the call
             // overwrites it with the callee's return value). The
             // dual-emit doesn't yet build `Expr::Call` AST nodes,

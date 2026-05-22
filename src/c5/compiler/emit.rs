@@ -591,6 +591,22 @@ impl Compiler {
         id
     }
 
+    /// Push an identifier reference. The bytecode emits a
+    /// `Lea / data-Imm` address producer followed by a scalar
+    /// load; the AST collapses that into a single `Expr::Ident`
+    /// whose `sym` indexes the symbol table and whose `ty` matches
+    /// what the load would have left in `self.ty`. The address-of
+    /// (`&x`) and assignment (`x = ...`) paths look up the same
+    /// `Ident` node and switch lvalue / rvalue interpretation at
+    /// the surrounding parent node -- C99 6.3.2.1 lvalue-to-rvalue
+    /// conversion is implicit in the AST shape.
+    pub(super) fn ast_emit_ident(&mut self, sym: u32, ty: i64) -> ExprId {
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(Expr::Ident { sym, ty }, pos);
+        self.ast_acc = Some(id);
+        id
+    }
+
     /// AST-side reaction to an emit_op of an operand-free op.
     /// `Op::Psh` records the current accumulator on the parser-
     /// side vstack; binops pop the saved lhs from the vstack,
@@ -805,6 +821,72 @@ mod tests {
                 }
             }
             panic!("did not reach Mul through Add rhs masking chain");
+        }
+    }
+
+    /// `int add(int a, int b) { return a + b; }` -- the bytecode
+    /// emits `Lea 2; Li; Psh; Lea 3; Li; Add; [mask]` for the body.
+    /// The dual-emit should land two distinct `Expr::Ident` nodes
+    /// (one per parameter), with an outer `Binary{Add, Ident, Ident}`
+    /// that reaches the rhs Ident through the post-Add width-mask
+    /// chain.
+    #[test]
+    fn ident_load_captures_two_params() {
+        use super::super::super::ast::Expr;
+        use super::super::super::ir::BinOp;
+
+        let src = alloc::string::String::from(
+            "int add(int a, int b) { return a + b; }\nint main(void) { return add(1, 2); }\n",
+        );
+        let program = Compiler::new(src).compile().expect("compile");
+        // Two finished functions: `add` then `main`. Identifier
+        // captures are checked on `add`'s AST.
+        assert_eq!(program.finished_asts.len(), 2);
+        let ast = &program.finished_asts[0];
+
+        let idents: alloc::vec::Vec<u32> = ast
+            .exprs
+            .iter()
+            .filter_map(|e| match e {
+                Expr::Ident { sym, .. } => Some(*sym),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            idents.len(),
+            2,
+            "expected exactly two Ident nodes, got {:?}",
+            ast.exprs,
+        );
+        assert_ne!(
+            idents[0], idents[1],
+            "the two Ident nodes must reference distinct symbols",
+        );
+
+        let add = ast
+            .exprs
+            .iter()
+            .find(|e| matches!(e, Expr::Binary { op: BinOp::Add, .. }))
+            .expect("Add node missing");
+        if let Expr::Binary { lhs, rhs, .. } = add {
+            assert!(
+                matches!(&ast.exprs[*lhs as usize], Expr::Ident { .. }),
+                "Add lhs not an Ident: {:?}",
+                ast.exprs[*lhs as usize],
+            );
+            let mut current = *rhs;
+            for _ in 0..6 {
+                match &ast.exprs[current as usize] {
+                    Expr::Ident { .. } => return,
+                    Expr::Binary {
+                        op: BinOp::Shl | BinOp::Shr,
+                        lhs,
+                        ..
+                    } => current = *lhs,
+                    other => panic!("unexpected node walking Add rhs: {other:?}"),
+                }
+            }
+            panic!("did not reach Ident through Add rhs masking chain");
         }
     }
 }

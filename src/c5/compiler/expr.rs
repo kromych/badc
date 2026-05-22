@@ -762,6 +762,12 @@ impl Compiler {
                     // Pointers to structs and every scalar type go
                     // through the normal load_op_for path.
                     self.emit_op(load_op_for(self.ty, self.target));
+                    // Dual-emit: the bytecode `Lea / data-Imm` +
+                    // scalar load collapses into a single AST
+                    // `Expr::Ident` keyed on the symbol-table
+                    // index. The address-of / assignment paths
+                    // re-interpret the same node as an lvalue.
+                    self.ast_emit_ident(id_idx as u32, self.ty);
                     if identifier_is_local {
                         // Tentative: the load survives by default,
                         // so the symbol's value is being read. The

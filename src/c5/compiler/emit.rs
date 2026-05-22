@@ -668,6 +668,23 @@ impl Compiler {
         id
     }
 
+    /// Push an `Expr::PreInc` node and set it as the new
+    /// `ast_acc`. The bytecode tier emits the six-op increment
+    /// sequence (rewrite + reload + Psh + Imm step + Add/Sub +
+    /// store_op) before this call lands; the AST collapses the
+    /// shape into one node whose `lvalue` is the just-popped
+    /// vstack entry. `by` is the step value the parser already
+    /// scaled for pointers (+sizeof(*p) / -sizeof(*p)) so the
+    /// walker doesn't have to recompute it.
+    pub(super) fn ast_emit_pre_inc(&mut self, by: i64, ty: i64) {
+        let Some(lvalue) = self.ast_vstack.pop() else {
+            return;
+        };
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(Expr::PreInc { lvalue, by, ty }, pos);
+        self.ast_acc = Some(id);
+    }
+
     /// Push a `Stmt::Return(value)` node into the per-function
     /// AST. Called from the explicit-return statement parser
     /// site (stmt.rs) right before the bytecode `Op::Lev`. The
@@ -942,6 +959,29 @@ mod tests {
             }
             panic!("did not reach Mul through Add rhs masking chain");
         }
+    }
+
+    /// `int main(int a) { ++a; return a; }` -- the prefix `++`
+    /// collapses into a single `Expr::PreInc{lvalue: Ident, by: 1}`.
+    /// Confirms the bytecode's six-op increment dance leaves the
+    /// AST with exactly one PreInc node.
+    #[test]
+    fn pre_inc_local_captures_pre_inc() {
+        use super::super::super::ast::Expr;
+
+        let src = alloc::string::String::from("int main(int a) { ++a; return a; }\n");
+        let program = Compiler::new(src).compile().expect("compile");
+        let ast = &program.finished_functions[0].ast;
+        let pre_inc_count = ast
+            .exprs
+            .iter()
+            .filter(|e| matches!(e, Expr::PreInc { by: 1, .. }))
+            .count();
+        assert_eq!(
+            pre_inc_count, 1,
+            "expected exactly one PreInc{{by:1}}, ast.exprs = {:?}",
+            ast.exprs,
+        );
     }
 
     /// The shadow-validator walks every captured AST. For shapes

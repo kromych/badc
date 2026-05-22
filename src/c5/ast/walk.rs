@@ -240,7 +240,15 @@ impl<'a> Walker<'a> {
                 id,
                 kind: "CompoundAssign",
             }),
-            Expr::PreInc { .. } => Err(WalkError::UnsupportedExpr { id, kind: "PreInc" }),
+            Expr::PreInc { lvalue, by, ty } => {
+                let addr = self.walk_expr_lvalue(b, *lvalue)?;
+                let kind = load_kind_for(*ty, self.target);
+                let old = b.load(addr, kind);
+                let stepped = b.binop_imm(BinOp::Add, old, *by);
+                let store_kind = store_kind_for(*ty, self.target);
+                b.store(addr, stepped, store_kind);
+                Ok(stepped)
+            }
             Expr::PostInc { .. } => Err(WalkError::UnsupportedExpr {
                 id,
                 kind: "PostInc",

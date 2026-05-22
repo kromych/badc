@@ -1279,13 +1279,25 @@ impl Compiler {
                 return Err(self.compile_err("floating-point ++/-- not yet implemented"));
             }
             self.emit_op(Op::Psh);
-            self.emit_imm(self.pointee_step(self.ty));
+            let step = self.pointee_step(self.ty);
+            self.emit_imm(step);
             self.emit_op(if t == Token::Inc as i64 {
                 Op::Add
             } else {
                 Op::Sub
             });
             self.emit_op(store_op_for(self.ty, self.target));
+            // Dual-emit: the bytecode tier just ran the six-op
+            // increment sequence; collapse it into one
+            // `Expr::PreInc` whose `by` is signed by the op
+            // direction so the walker can route to a single
+            // `binop_imm(Add, lvalue, by)` rather than match the
+            // sign separately. The lvalue producer is already on
+            // the parser-side vstack from the trailing-load
+            // rewrite.
+            let pre_inc_step = if t == Token::Inc as i64 { step } else { -step };
+            let pre_inc_ty = self.ty;
+            self.ast_emit_pre_inc(pre_inc_step, pre_inc_ty);
         } else {
             // The parse-error message includes the enclosing function
             // name and (for `Token::Id`) the identifier name -- those

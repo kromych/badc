@@ -1688,8 +1688,10 @@ impl Compiler {
                     // `last == Op::Li` would otherwise misroute us
                     // into the scalar path and rewrite the wrong Li
                     // into a Psh.
+                    let struct_lhs_ast = self.ast_acc.take();
                     self.emit_op(Op::Psh);
                     self.expr(Token::Assign as i64)?;
+                    let struct_rhs_ast = self.ast_acc;
                     if !is_struct_ty(self.ty) || struct_ptr_depth(self.ty) != 0 {
                         return Err(self.compile_err("cannot assign non-struct value to a struct"));
                     }
@@ -1705,6 +1707,21 @@ impl Compiler {
                     self.emit_op(Op::Mcpy);
                     self.emit_val(size as i64);
                     self.ty = t;
+                    // Dual-emit `Expr::Assign { lhs, rhs, ty }`
+                    // with the struct type; the walker keys on
+                    // `is_struct_ty(ty) && struct_ptr_depth(ty)
+                    // == 0` to emit `Inst::Mcpy` instead of the
+                    // scalar store.
+                    if let (Some(lhs), Some(rhs)) = (struct_lhs_ast, struct_rhs_ast) {
+                        let pos = self.ast_src_pos();
+                        let id = self.ast.push_expr(
+                            super::super::ast::Expr::Assign { lhs, rhs, ty: t },
+                            pos,
+                        );
+                        self.ast_acc = Some(id);
+                    } else {
+                        self.ast_acc = None;
+                    }
                 } else if self.rewrite_trailing_load_as_psh().is_some() {
                     // Scalar / pointer assignment: trailing load
                     // rewritten to a push so the address is

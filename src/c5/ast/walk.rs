@@ -699,6 +699,22 @@ impl<'a> Walker<'a> {
                 Ok(b.binop(*op, lv, rv))
             }
             Expr::Assign { lhs, rhs, ty } => {
+                // C99 6.5.16.1p1 + the c5 address-as-value rule:
+                // a struct-typed assignment copies the bytes from
+                // the source struct into the destination. The
+                // walker walks both sides as lvalue / rvalue
+                // address producers (struct rvalues land their
+                // address on `ast_acc`, not a load) and emits
+                // `Inst::Mcpy { dst, src, size }`. Returns the
+                // dst address as the expression's value
+                // (mirroring libc `memcpy`).
+                if is_struct_ty(*ty) && struct_ptr_depth(*ty) == 0 {
+                    let dst = self.walk_expr_lvalue(b, *lhs)?;
+                    let src = self.walk_expr_rvalue(b, *rhs)?;
+                    let size = self.struct_size(*ty);
+                    b.mcpy(dst, src, size);
+                    return Ok(dst);
+                }
                 // Local-target shortcut: a Token::Loc-class
                 // Ident lvalue lowers to a single `StoreLocal`
                 // instead of `LocalAddr` + `Store`, but only for

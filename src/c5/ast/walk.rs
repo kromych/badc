@@ -181,19 +181,46 @@ impl<'a> Walker<'a> {
                 for item in items {
                     match item {
                         super::BlockItem::Stmt(s) => {
+                            // A previous item closed the current
+                            // block (Return / Goto / Break /
+                            // Continue / If-both-arms-return). If
+                            // this item is a `Stmt::Labeled`,
+                            // resume at its label block so any
+                            // earlier `goto label` lands somewhere
+                            // walkable. Non-label dead code is
+                            // skipped per C99 6.8.6 (unreachable
+                            // statements don't constrain control
+                            // flow).
+                            if !b.is_block_open()
+                                && matches!(self.ast.stmt(*s), Stmt::Labeled { .. })
+                            {
+                                let lab = match self.ast.stmt(*s) {
+                                    Stmt::Labeled { label, .. } => *label,
+                                    _ => unreachable!(),
+                                };
+                                let label_blk = self.block_for_label(b, lab);
+                                b.switch_to(label_blk);
+                            }
+                            if !b.is_block_open() {
+                                continue;
+                            }
                             if self.walk_stmt(b, *s)? {
-                                return Ok(true);
+                                continue;
                             }
                         }
-                        super::BlockItem::Decl(_) => {
-                            return Err(WalkError::UnsupportedStmt {
-                                id,
-                                kind: "Compound{Decl}",
-                            });
+                        super::BlockItem::Decl(d) => {
+                            // Skip Decls in dead-code regions (a
+                            // post-terminator declarator declares
+                            // no live storage).
+                            if !b.is_block_open() {
+                                continue;
+                            }
+                            let d = *d;
+                            self.walk_decl(b, d)?;
                         }
                     }
                 }
-                Ok(false)
+                Ok(!b.is_block_open())
             }
             Stmt::If {
                 cond,

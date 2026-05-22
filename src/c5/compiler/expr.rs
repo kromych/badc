@@ -724,8 +724,16 @@ impl Compiler {
                     };
                 } // close intrinsic-vs-normal-call else branch
             } else if self.symbols[id_idx].class == Token::Num as i64 {
-                self.emit_imm(self.symbols[id_idx].val);
+                let val = self.symbols[id_idx].val;
+                self.emit_imm(val);
                 self.ty = Ty::Int as i64;
+                // Dual-emit the resolved constant so a wrapping
+                // expression (assignment, call argument, binop)
+                // captures the value on `ast_acc`. Enum
+                // constants and `#define`-via-const-decl idioms
+                // both go through this path; the walker's
+                // `IntLit` arm emits `Inst::Imm(val)`.
+                self.ast_emit_int_lit(val, self.ty);
             } else if self.symbols[id_idx].class == Token::Fun as i64 {
                 self.symbols[id_idx].was_referenced = true;
                 // Bare function reference (e.g. `fp = add;`). The value

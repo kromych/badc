@@ -772,6 +772,15 @@ impl<'a> Walker<'a> {
                 // resulting child `Binary{Mul, idx, scale}` rides
                 // through `walk_expr_rvalue`; we just add.
                 let addr = b.binop(BinOp::Add, arr, i);
+                // C99 6.5.2.1p2 + the c5 address-as-value rule:
+                // when `ty` is a struct value (non-pointer
+                // struct), `arr[i]` produces the element's
+                // address as its rvalue and no load runs. The
+                // wrapping `.field` / `= rhs` site handles the
+                // bytes from there.
+                if is_struct_ty(*ty) && struct_ptr_depth(*ty) == 0 {
+                    return Ok(addr);
+                }
                 let kind = load_kind_for(*ty, self.target);
                 Ok(b.load(addr, kind))
             }

@@ -629,34 +629,15 @@ impl<'a> Walker<'a> {
                     lv = b.binop_imm(BinOp::And, lv, mask);
                     rv = b.binop_imm(BinOp::And, rv, mask);
                 }
-                let result = b.binop(*op, lv, rv);
-                // C99 6.5p4 + 6.3.1.8: integer Add / Sub / Mul
-                // result must live at the common type's storage
-                // width.
-                //   * unsigned narrow common -> `(1 << N) - 1`
-                //     mask wraps modulo 2^N (C99 6.5p4).
-                //   * signed narrow common -> UB per C99 6.5p5;
-                //     follow clang / gcc and truncate via
-                //     `Shl K; Shr K` so the high bit sign-extends
-                //     back.
-                if matches!(*op, BinOp::Add | BinOp::Sub | BinOp::Mul) {
-                    if mask != 0 {
-                        return Ok(b.binop_imm(BinOp::And, result, mask));
-                    }
-                    let stripped = *ty & !UNSIGNED_BIT;
-                    let signed_narrow = (*ty & UNSIGNED_BIT) == 0
-                        && (stripped == Ty::Char as i64
-                            || stripped == Ty::Short as i64
-                            || stripped == Ty::Int as i64);
-                    if signed_narrow {
-                        let bits = 64i64 - (type_size_bytes(*ty, self.target) as i64) * 8;
-                        if bits > 0 {
-                            let shifted = b.binop_imm(BinOp::Shl, result, bits);
-                            return Ok(b.binop_imm(BinOp::Shr, shifted, bits));
-                        }
-                    }
-                }
-                Ok(result)
+                // The parser's `maybe_mask_to_unsigned_width`
+                // already pushes the explicit narrow mask /
+                // signed `Shl K; Shr K` pair as additional
+                // `Expr::Binary` nodes through the dual-emit
+                // binop tracker. Re-applying the narrowing here
+                // would double-shift (or double-mask) the
+                // result; walker just emits the raw `Binop` and
+                // lets those wrapping Binary nodes do the rest.
+                Ok(b.binop(*op, lv, rv))
             }
             Expr::Assign { lhs, rhs, ty } => {
                 // Local-target shortcut: a Token::Loc-class

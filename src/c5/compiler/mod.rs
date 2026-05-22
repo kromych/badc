@@ -1177,6 +1177,12 @@ impl Compiler {
             entry_name: resolved_entry_name,
             subsystem: self.pp_subsystem,
             finished_functions: self.finished_functions,
+            // Snapshot the symbol table for the AST walker (Phase C5
+            // and Phase C4 shadow-validation paths). Only the
+            // `array_size` and `type_` fields are read today, but
+            // cloning the full Symbol keeps the walker's view in
+            // sync with any later field additions.
+            symbols: self.symbols,
         })
     }
 }

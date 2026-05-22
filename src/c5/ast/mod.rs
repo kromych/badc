@@ -141,6 +141,11 @@ pub(crate) enum Expr {
         class: i64,
         val: i64,
         is_thread_local: bool,
+        /// Snapshot of `Symbol::array_size` at parse time. Non-zero
+        /// for an array-shaped symbol (`T name[N];` -- the decay
+        /// happens in the rvalue path). Captured here so the walker
+        /// doesn't have to re-index the symbol table post-shadow.
+        array_size: i64,
     },
     /// `op child`, where `child` is the operand. Increment /
     /// decrement go through [`Expr::PreInc`] / [`Expr::PostInc`]
@@ -361,9 +366,13 @@ pub(crate) enum Decl {
     /// Local variable declaration. The slot offset is captured at
     /// parse time; the initializer (if any) is one of the shapes
     /// in [`LocalInit`] and is evaluated / Mcpy'd at the
-    /// declaration site per C99 6.7.8.
+    /// declaration site per C99 6.7.8. `ty` is snapshotted at the
+    /// declaration site so the walker picks the right
+    /// load/store width even after the symbol's outer-scope
+    /// binding is restored at function-end.
     Local {
         sym: u32,
+        ty: i64,
         slot_off: i64,
         init: LocalInit,
     },
@@ -490,6 +499,7 @@ mod tests {
                 class: Token::Loc as i64,
                 val: -1,
                 is_thread_local: false,
+                array_size: 0,
             },
             src,
         );

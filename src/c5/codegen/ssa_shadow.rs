@@ -16,6 +16,9 @@
 
 use crate::c5::error::C5Error;
 use crate::c5::ir::FunctionSsa;
+use crate::c5::program::Program;
+use crate::c5::Target;
+use alloc::vec::Vec;
 
 /// Lift a single function's bytecode region into a `FunctionSsa`.
 /// `text` is the program's full bytecode vector; `[ent_pc,
@@ -82,6 +85,93 @@ pub(crate) struct InstCounts {
     pub acc_spill: u32,
     pub acc_reload: u32,
     pub blocks: u32,
+}
+
+/// AST-driven counterpart to [`super::ssa::lift_program`]. Walks
+/// every entry in `program.finished_functions` through
+/// [`crate::c5::ast::walk::walk_function`] and returns one
+/// `FunctionSsa` per source function in `ent_pc` order.
+///
+/// The walker needs the symbol-table snapshot kept on the
+/// program (`array_size` for the C99 6.3.2.1p3 array-decay
+/// detection + `type_` for the local-decl width). If the
+/// snapshot is empty (linker / optimizer reload), the caller is
+/// expected to keep using `lift_program` instead.
+pub(crate) fn walk_program(
+    program: &Program,
+    target: Target,
+) -> Result<Vec<FunctionSsa>, C5Error> {
+    let mut out = Vec::with_capacity(program.finished_functions.len());
+    let mut ordered: Vec<usize> = (0..program.finished_functions.len()).collect();
+    ordered.sort_by_key(|&i| program.finished_functions[i].ent_pc);
+    for i in ordered {
+        let f = &program.finished_functions[i];
+        let func = crate::c5::ast::walk::walk_function(
+            &f.ast,
+            &program.symbols,
+            target,
+            f.ent_pc,
+            f.n_params,
+            f.is_variadic,
+            f.n_locals,
+        )
+        .map_err(|e| {
+            C5Error::Compile(crate::c5::error::fmt_internal_err(&alloc::format!(
+                "ast::walk: function `{}` (ent_pc={}): {}",
+                f.name,
+                f.ent_pc,
+                e,
+            )))
+        })?;
+        out.push(func);
+    }
+    Ok(out)
+}
+
+/// SSA-source pick for the codegen backends. Honors the
+/// environment variable `BADC_USE_AST_SSA`:
+///
+///   * unset / `0` / `false` -> bytecode lift
+///     ([`super::ssa::lift_program`]).
+///   * `1` / `true`           -> AST walk ([`walk_program`]).
+///
+/// The fall-through is `lift_program`, so an env-less build keeps
+/// the bytecode-tier path until Phase C5 retires it. The flag is
+/// `std`-only because the env API requires it; `no_std` builds
+/// always fall through.
+pub(crate) fn produce_ssa_funcs(
+    program: &Program,
+    target: Target,
+) -> Result<Vec<FunctionSsa>, C5Error> {
+    if use_ast_ssa() && !program.finished_functions.is_empty() {
+        #[cfg(feature = "std")]
+        eprintln!(
+            "ssa source: walker ({} fns)",
+            program.finished_functions.len()
+        );
+        walk_program(program, target)
+    } else {
+        #[cfg(feature = "std")]
+        if use_ast_ssa() {
+            eprintln!(
+                "ssa source: lift fallback (finished_functions empty -- linker / optimizer reload)"
+            );
+        }
+        super::ssa::lift_program(program)
+    }
+}
+
+#[cfg(feature = "std")]
+fn use_ast_ssa() -> bool {
+    match std::env::var("BADC_USE_AST_SSA") {
+        Ok(s) => matches!(s.as_str(), "1" | "true" | "TRUE" | "yes"),
+        Err(_) => false,
+    }
+}
+
+#[cfg(not(feature = "std"))]
+fn use_ast_ssa() -> bool {
+    false
 }
 
 /// Walk `func.insts` + `func.blocks` and produce a category

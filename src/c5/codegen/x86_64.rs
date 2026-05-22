@@ -1366,8 +1366,8 @@ pub(super) fn lower(
     // is a hard error so any IR + emit coverage gap surfaces
     // immediately.
     let ssa_funcs: alloc::vec::Vec<super::super::ir::FunctionSsa> =
-        super::ssa_emit_common::time_pass("ssa::lift_program (x86_64)", || {
-            super::ssa::lift_program(program)
+        super::ssa_emit_common::time_pass("ssa::produce_ssa_funcs (x86_64)", || {
+            super::ssa_shadow::produce_ssa_funcs(program, target)
         })?;
     let ssa_allocs: alloc::vec::Vec<super::ssa_alloc::Allocation> =
         super::ssa_emit_common::time_pass("ssa_alloc::allocate (x86_64)", || {

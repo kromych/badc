@@ -2429,6 +2429,7 @@ mod tests {
             entry_name: None,
             subsystem: None,
             finished_functions: alloc::vec::Vec::new(),
+            symbols: alloc::vec::Vec::new(),
         }
     }
 

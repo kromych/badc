@@ -30,6 +30,7 @@ fn run(text: Vec<i64>) -> i64 {
         entry_name: None,
         subsystem: None,
         finished_functions: alloc::vec::Vec::new(),
+            symbols: alloc::vec::Vec::new(),
     };
     Vm::new(program).run().unwrap()
 }
@@ -140,6 +141,7 @@ fn invalid_opcode_is_a_runtime_error() {
         entry_name: None,
         subsystem: None,
         finished_functions: alloc::vec::Vec::new(),
+            symbols: alloc::vec::Vec::new(),
     };
     let err = Vm::new(program).run().unwrap_err();
     assert!(
@@ -176,6 +178,7 @@ fn empty_program_errors_cleanly() {
         entry_name: None,
         subsystem: None,
         finished_functions: alloc::vec::Vec::new(),
+            symbols: alloc::vec::Vec::new(),
     };
     let err = Vm::new(program).run().unwrap_err();
     assert!(

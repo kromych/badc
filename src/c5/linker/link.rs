@@ -758,6 +758,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         // shadow-validator before linking. Linker reload starts
         // fresh.
         finished_functions: alloc::vec::Vec::new(),
+        symbols: alloc::vec::Vec::new(),
     })
 }
 

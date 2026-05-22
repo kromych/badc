@@ -1203,8 +1203,8 @@ pub(super) fn lower(
     // immediately. `--dump-ssa` prints the IR + allocation for
     // each function.
     let ssa_funcs: alloc::vec::Vec<super::super::ir::FunctionSsa> =
-        super::ssa_emit_common::time_pass("ssa::lift_program (aarch64)", || {
-            super::ssa::lift_program(program)
+        super::ssa_emit_common::time_pass("ssa::produce_ssa_funcs (aarch64)", || {
+            super::ssa_shadow::produce_ssa_funcs(program, target)
         })?;
     let ssa_allocs: alloc::vec::Vec<super::ssa_alloc::Allocation> =
         super::ssa_emit_common::time_pass("ssa_alloc::allocate (aarch64)", || {

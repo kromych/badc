@@ -902,6 +902,7 @@ impl Compiler {
         let class = s.class;
         let val = s.val;
         let is_thread_local = s.is_thread_local;
+        let array_size = s.array_size;
         let id = self.ast.push_expr(
             Expr::Ident {
                 sym,
@@ -909,6 +910,7 @@ impl Compiler {
                 class,
                 val,
                 is_thread_local,
+                array_size,
             },
             pos,
         );
@@ -1050,9 +1052,11 @@ impl Compiler {
         init: super::super::ast::LocalInit,
     ) -> super::super::ast::StmtId {
         let pos = self.ast_src_pos();
+        let ty = self.symbols[sym as usize].type_;
         let decl_id = self.ast.push_decl(
             super::super::ast::Decl::Local {
                 sym,
+                ty,
                 slot_off,
                 init,
             },
@@ -1113,6 +1117,7 @@ impl Compiler {
         let class = s.class;
         let val = s.val;
         let is_thread_local = s.is_thread_local;
+        let array_size = s.array_size;
         self.ast.push_expr(
             Expr::Ident {
                 sym,
@@ -1120,6 +1125,7 @@ impl Compiler {
                 class,
                 val,
                 is_thread_local,
+                array_size,
             },
             pos,
         )

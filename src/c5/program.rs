@@ -292,6 +292,14 @@ pub struct Program {
     /// for builds that didn't go through the parser path (linker
     /// / optimizer reload).
     pub(crate) finished_functions: alloc::vec::Vec<crate::c5::ast::FinishedFunction>,
+    /// Symbol-table snapshot taken at `compile()` close. The AST
+    /// walker reads `array_size` (for the C99 6.3.2.1p3
+    /// array-to-pointer decay detection) and `type_` (for
+    /// `Decl::Local` width selection) off this slice. Empty for
+    /// builds that didn't go through the parser (linker /
+    /// optimizer reload), in which case the walker path can't
+    /// run and the codegen falls back to the bytecode lift.
+    pub(crate) symbols: alloc::vec::Vec<crate::c5::symbol::Symbol>,
 }
 
 /// A single local variable or formal parameter belonging to a

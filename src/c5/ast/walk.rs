@@ -480,20 +480,30 @@ impl<'a> Walker<'a> {
     ) -> Result<(), WalkError> {
         match self.ast.decl(id) {
             super::super::ast::Decl::Local {
-                sym,
+                sym: _,
+                ty,
                 slot_off,
                 init,
             } => {
                 let slot = *slot_off;
-                let sym_idx = *sym;
-                let ty = self.symbols[sym_idx as usize].type_;
+                let ty = *ty;
                 let init_clone = init.clone();
                 match init_clone {
                     super::super::ast::LocalInit::None => Ok(()),
                     super::super::ast::LocalInit::Scalar(init_id) => {
                         let v = self.walk_expr_rvalue(b, init_id)?;
                         let kind = store_kind_for(ty, self.target);
-                        b.store_local(slot, v, kind);
+                        // Match `lift_function`'s StoreLocal fuse:
+                        // only I64 fuses into StoreLocal because
+                        // the per-arch emit's StoreLocal handles
+                        // only the 8-byte width. Narrower widths
+                        // go through LocalAddr + Store.
+                        if matches!(kind, super::super::ir::StoreKind::I64) {
+                            b.store_local(slot, v, kind);
+                        } else {
+                            let addr = b.local_addr(slot);
+                            b.store(addr, v, kind);
+                        }
                         Ok(())
                     }
                     super::super::ast::LocalInit::Aggregate {
@@ -585,11 +595,37 @@ impl<'a> Walker<'a> {
                 class,
                 val,
                 is_thread_local,
-            } => self.load_ident_rvalue(b, *sym, *ty, *class, *val, *is_thread_local),
+                array_size,
+            } => self.load_ident_rvalue(
+                b,
+                *sym,
+                *ty,
+                *class,
+                *val,
+                *is_thread_local,
+                *array_size,
+            ),
             Expr::Unary { op, child, ty } => self.walk_unary(b, *op, *child, *ty),
-            Expr::Binary { op, lhs, rhs, .. } => {
-                let lv = self.walk_expr_rvalue(b, *lhs)?;
-                let rv = self.walk_expr_rvalue(b, *rhs)?;
+            Expr::Binary { op, lhs, rhs, ty } => {
+                let mut lv = self.walk_expr_rvalue(b, *lhs)?;
+                let mut rv = self.walk_expr_rvalue(b, *rhs)?;
+                // C99 6.3.1.3 + 6.3.1.8: unsigned divide / modulo
+                // at a narrower-than-register common type needs
+                // each operand masked to that width first. A
+                // signed operand promoted to the unsigned common
+                // type carries its sign-extended high half in
+                // the 64-bit register; without the mask, `udiv`
+                // / `umod` operate on the wider pattern and
+                // produce the wrong order of magnitude. The
+                // bytecode tier emits the mask through a scratch
+                // local + `Op::And`; here it collapses to two
+                // `BinopI(And, _, mask)` instructions on the
+                // operands.
+                let mask = unsigned_narrow_mask(*ty);
+                if mask != 0 && matches!(*op, BinOp::Divu | BinOp::Modu) {
+                    lv = b.binop_imm(BinOp::And, lv, mask);
+                    rv = b.binop_imm(BinOp::And, rv, mask);
+                }
                 Ok(b.binop(*op, lv, rv))
             }
             Expr::Assign { lhs, rhs, ty } => {
@@ -999,27 +1035,26 @@ impl<'a> Walker<'a> {
     fn load_ident_rvalue(
         &mut self,
         b: &mut super::super::codegen::ssa_build::SsaBuilder,
-        sym: u32,
+        _sym: u32,
         ty: i64,
         class: i64,
         val: i64,
         is_thread_local: bool,
+        array_size: i64,
     ) -> Result<super::super::ir::ValueId, WalkError> {
-        // Wrap the snapshot fields in a synthetic Symbol-shaped
-        // tuple by branching directly on `class`; the function
-        // is purely a fan-out over the recognised classes.
         // C99 6.3.2.1p3 + c5's address-as-value rule: an lvalue
         // of array type, or a struct value (non-pointer struct
         // type), is consumed as its address rather than its
-        // contents -- no trailing load. The symbol carries
-        // `array_size != 0` for arrays; the type tag indicates
-        // a struct value when `is_struct_ty(ty) &&
-        // struct_ptr_depth(ty) == 0`. Route both through the
-        // lvalue helper so the walker emits just the address
-        // producer.
-        let address_only = ((sym as usize) < self.symbols.len()
-            && self.symbols[sym as usize].array_size != 0)
-            || (is_struct_ty(ty) && struct_ptr_depth(ty) == 0);
+        // contents -- no trailing load. `array_size != 0` flags
+        // arrays; the type tag indicates a struct value when
+        // `is_struct_ty(ty) && struct_ptr_depth(ty) == 0`. Both
+        // shapes route through the lvalue helper so the walker
+        // emits just the address producer. The fields are
+        // snapshotted at parse time on `Expr::Ident` so this
+        // path keeps working after the function-end shadow
+        // restoration unbinds the symbol's outer-scope value.
+        let address_only =
+            array_size != 0 || (is_struct_ty(ty) && struct_ptr_depth(ty) == 0);
         if address_only {
             if class == Token::Loc as i64 {
                 return Ok(b.local_addr(val));
@@ -1048,7 +1083,7 @@ impl<'a> Walker<'a> {
             // holds the resolved integer constant.
             Ok(b.imm(val))
         } else {
-            Err(WalkError::UnknownSymbolClass { sym, class })
+            Err(WalkError::UnknownSymbolClass { sym: _sym, class })
         }
     }
 }
@@ -1151,6 +1186,30 @@ const UNSIGNED_BIT: i64 = 1 << 30;
 /// can classify struct values without crossing the module boundary.
 const STRUCT_BASE: i64 = 1000;
 const STRUCT_STRIDE: i64 = 1000;
+
+/// Return the AND mask needed to narrow an unsigned-typed
+/// operand of an integer divide / modulo to its declared storage
+/// width. Returns `0` (no mask) for I64-wide types and for any
+/// signed type. Mirrors `convert.rs::maybe_mask_operands_to_unsigned_common`
+/// but takes only the common type tag and lets the walker apply
+/// the mask through `BinopI(And, _, mask)` rather than the c5
+/// scratch-local sequence the bytecode tier uses.
+fn unsigned_narrow_mask(ty: i64) -> i64 {
+    let stripped = ty & !UNSIGNED_BIT;
+    let unsigned = (ty & UNSIGNED_BIT) != 0;
+    if !unsigned {
+        return 0;
+    }
+    if stripped == Ty::Char as i64 {
+        0xff
+    } else if stripped == Ty::Short as i64 {
+        0xffff
+    } else if stripped == Ty::Int as i64 {
+        0xffff_ffff
+    } else {
+        0
+    }
+}
 
 /// Test whether `ty` lands in the struct band.
 fn is_struct_ty(ty: i64) -> bool {
@@ -1267,6 +1326,7 @@ mod tests {
                 class: Token::Loc as i64,
                 val: -1,
                 is_thread_local: false,
+                array_size: 0,
             },
             src,
         );
@@ -1306,6 +1366,7 @@ mod tests {
                 class: Token::Loc as i64,
                 val: -1,
                 is_thread_local: false,
+                array_size: 0,
             },
             src,
         );

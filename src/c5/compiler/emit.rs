@@ -923,6 +923,21 @@ impl Compiler {
         self.ast_acc = Some(id);
     }
 
+    /// Push `Decl::StaticLocal { sym }` + `Stmt::Decl` wrapper.
+    /// Used at the block-scope `static T name = ...;` site; the
+    /// storage + init reach the data segment through the c5
+    /// global path, not the function body, so the walker has no
+    /// per-decl work. Pushing the AST node keeps the dual-emit
+    /// surface complete for the eventual flip.
+    pub(super) fn ast_emit_static_local_decl(&mut self, sym: u32) -> super::super::ast::StmtId {
+        let pos = self.ast_src_pos();
+        let decl_id = self
+            .ast
+            .push_decl(super::super::ast::Decl::StaticLocal { sym }, pos);
+        self.ast
+            .push_stmt(super::super::ast::Stmt::Decl(decl_id), pos)
+    }
+
     /// Push `Decl::Local { sym, slot_off, init }` and a wrapping
     /// `Stmt::Decl(decl_id)` so the enclosing block's stmt-range
     /// wrapper picks the declaration up alongside ordinary stmts.

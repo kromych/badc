@@ -129,6 +129,7 @@ impl Compiler {
                 self.symbols[loc_idx].class = Token::Glo as i64;
                 self.symbols[loc_idx].type_ = ty;
                 self.allocate_static_local(loc_idx, ty, array_size)?;
+                self.ast_emit_static_local_decl(loc_idx as u32);
             } else {
                 self.symbols[loc_idx].class = Token::Loc as i64;
                 self.symbols[loc_idx].type_ = ty;

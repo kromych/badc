@@ -538,6 +538,16 @@ impl<'a> Walker<'a> {
                 id: 0,
                 kind: "Decl::Vla",
             }),
+            super::super::ast::Decl::StaticLocal { .. } => {
+                // C99 6.2.4p3 + 6.7.8p4: storage + initializer
+                // live in the data segment; nothing to emit in
+                // the function body. The matching symbol-table
+                // entry survives through `self.symbols`, so any
+                // ident reference still resolves through the Glo
+                // path in `load_ident_rvalue` /
+                // `ident_address`.
+                Ok(())
+            }
         }
     }
 

@@ -349,6 +349,15 @@ pub(crate) enum Decl {
     /// dimension expression; the walker emits `Inst::AllocaInit`
     /// to reserve the matching stack region. C99 6.7.6.2p4.
     Vla { sym: u32, dim: ExprId },
+    /// Block-scope `static T name [= init];` declaration. C99
+    /// 6.2.4p3 (lifetime is whole program) + 6.7.8p4 (init must
+    /// be constant). The bytecode tier promotes the symbol to
+    /// the `Glo` class with persistent storage in `.data`; the
+    /// initializer is staged at TU load time, not at the
+    /// declaration site. The AST records the binding for
+    /// completeness; the walker emits nothing because the
+    /// storage + init live outside the function body.
+    StaticLocal { sym: u32 },
 }
 
 /// Per-function AST snapshot captured at function-end. Carries

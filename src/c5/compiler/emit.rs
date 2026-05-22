@@ -588,17 +588,54 @@ impl Compiler {
     }
 
     /// Run the AST walker against every captured function and
-    /// append walker diagnostics to `self.warnings`. Used by the
-    /// `BADC_VALIDATE_AST` gate in `compile()`; never fails the
-    /// build, so a Phase C2 wiring gap surfaces as a warning
-    /// pointing at the offending expr/stmt id rather than
-    /// blocking the compile. The walker's `Unsupported{Expr,Stmt}`
-    /// arms surface as `ast::walk: <function>: ...` lines so a
-    /// developer scanning warnings can map gaps to specific
-    /// parser sites.
+    /// emit per-function diagnostics. Two flavors land:
+    ///
+    /// * Walker-error lines for shapes the parser pushed but the
+    ///   walker can't lower yet.
+    /// * Coverage lines comparing the function's AST node count
+    ///   to its bytecode word count -- a low ratio flags
+    ///   shapes the parser silently dropped (the walker would
+    ///   otherwise miss them because the AST never carried the
+    ///   node).
+    ///
+    /// Gated by `BADC_VALIDATE_AST` in `compile()`; never fails
+    /// the build. Pushed onto `self.warnings` so the CLI emits
+    /// them on stderr at the end of compilation.
     pub(super) fn validate_finished_asts(&mut self) {
         let target = self.target;
-        for func in &self.finished_functions {
+        // Sorted ent_pc list lets us bracket each function's
+        // bytecode region by the next entry's ent_pc -- the
+        // bytecode laid them out in declaration order so the
+        // sort is mostly a no-op, but synthetic trampolines
+        // append at the end and shouldn't fold into the last
+        // user function's region.
+        let mut ent_pcs: alloc::vec::Vec<usize> =
+            self.finished_functions.iter().map(|f| f.ent_pc).collect();
+        ent_pcs.sort_unstable();
+        ent_pcs.push(self.text.len());
+        for func in self.finished_functions.clone() {
+            let bytecode_end = ent_pcs
+                .iter()
+                .copied()
+                .find(|&pc| pc > func.ent_pc)
+                .unwrap_or(self.text.len());
+            let bytecode_words = bytecode_end.saturating_sub(func.ent_pc);
+            let ast_nodes = func.ast.exprs.len() + func.ast.stmts.len() + func.ast.decls.len();
+            // Coverage ratio: percent of (heuristic) "AST nodes
+            // per bytecode word" -- a fully wired function lands
+            // around 30-50% (one AST node per 2-3 bytecode
+            // words, since each op + operand pair is one ExprId
+            // most of the time). Sub-5% means the parser
+            // silently dropped most shapes.
+            let pct = (ast_nodes * 100).checked_div(bytecode_words).unwrap_or(0);
+            self.warnings.push(alloc::format!(
+                "ast::walk: function `{}` (ent_pc={}) coverage {}/{} bytecode words = {}%",
+                func.name,
+                func.ent_pc,
+                ast_nodes,
+                bytecode_words,
+                pct,
+            ));
             if let Err(e) = super::super::ast::walk::walk_function(
                 &func.ast,
                 &self.symbols,
@@ -999,14 +1036,20 @@ mod tests {
         // that the test harness can't toggle reliably).
         compiler.run_compile().expect("run_compile");
         compiler.validate_finished_asts();
-        let walker_warns: alloc::vec::Vec<&alloc::string::String> = compiler
+        // Filter to actual walker errors -- the per-function
+        // coverage lines ("ast::walk: ... coverage X/Y bytecode
+        // words = Z%") always land, but a wired-up function
+        // shouldn't surface any `Unsupported`/`UnknownSymbolClass`
+        // lines. The "ast::walk: ...: ast::walk: " double-prefix
+        // shape distinguishes walker errors from coverage entries.
+        let walker_errs: alloc::vec::Vec<&alloc::string::String> = compiler
             .warnings
             .iter()
-            .filter(|w| w.contains("ast::walk:"))
+            .filter(|w| w.contains("): ast::walk:"))
             .collect();
         assert!(
-            walker_warns.is_empty(),
-            "expected no walker warnings, got {walker_warns:?}",
+            walker_errs.is_empty(),
+            "expected no walker errors, got {walker_errs:?}",
         );
     }
 

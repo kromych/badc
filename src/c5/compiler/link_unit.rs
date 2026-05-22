@@ -52,6 +52,14 @@ impl Compiler {
         // Trampolines land before fixups so their bc_pcs are
         // resolved when the local fixup pass runs.
         self.emit_sys_trampolines();
+        // Mirror `compile()`'s shadow-validator hook so the
+        // CLI's multi-TU / single-TU paths (which go through
+        // `compile_to_link_unit`) surface the same diagnostics
+        // a `Compiler::compile()` consumer would see.
+        #[cfg(feature = "std")]
+        if std::env::var("BADC_VALIDATE_AST").is_ok() {
+            self.validate_finished_asts();
+        }
 
         // Re-classify `extern T x;` Glo declarations whose
         // body never landed in this TU. The single-TU

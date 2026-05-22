@@ -586,6 +586,57 @@ impl Compiler {
         self.finished_functions.push(finished);
     }
 
+    /// Count occurrences of `op` in the bytecode region
+    /// `[start, end)`. Skips operand words by stepping through
+    /// `Op::word_size()`; ops outside the known set count as
+    /// 1-word for safety, which is correct for every op the
+    /// compiler currently emits.
+    fn count_op_in_region(&self, op: super::super::op::Op, start: usize, end: usize) -> usize {
+        let mut count = 0usize;
+        let mut pc = start;
+        while pc < end {
+            if pc < self.text.len() && self.text[pc] == op as i64 {
+                count += 1;
+            }
+            // Step by the op's word size. If the slot doesn't
+            // hold a recognised op (likely the operand word of
+            // a multi-word op), advance one to stay aligned.
+            let step = super::super::op::Op::from_i64(self.text[pc])
+                .map(|o| o.word_size())
+                .unwrap_or(1);
+            pc += step.max(1);
+        }
+        count
+    }
+
+    /// Count occurrences of any op in `ops` in the bytecode
+    /// region `[start, end)`.
+    fn count_ops_in_region(&self, ops: &[super::super::op::Op], start: usize, end: usize) -> usize {
+        let mut count = 0usize;
+        let mut pc = start;
+        while pc < end {
+            let opcode = self.text.get(pc).copied().unwrap_or(0);
+            if let Some(op) = super::super::op::Op::from_i64(opcode) {
+                if ops.contains(&op) {
+                    count += 1;
+                }
+                pc += op.word_size().max(1);
+            } else {
+                pc += 1;
+            }
+        }
+        count
+    }
+
+    /// Count AST `Expr` variants matching `pred` in `func.ast`.
+    fn count_ast_exprs(
+        &self,
+        func: &super::super::ast::FinishedFunction,
+        pred: impl Fn(&super::super::ast::Expr) -> bool,
+    ) -> usize {
+        func.ast.exprs.iter().filter(|e| pred(e)).count()
+    }
+
     /// Run the AST walker against every captured function and
     /// emit per-function diagnostics. Two flavors land:
     ///
@@ -635,6 +686,72 @@ impl Compiler {
                 bytecode_words,
                 pct,
             ));
+            // Blind-spot diff: count specific bytecode-op
+            // categories against the matching AST shape. Each
+            // category that fires in the bytecode but lands fewer
+            // AST nodes flags a parser site the dual-emit hasn't
+            // wired. Categories track the high-value shapes:
+            // calls (Jsr/JsrExt/Jsri/TailExt), conditional
+            // branches (Bz/Bnz), unconditional jumps (Jmp), array
+            // indexing (Brak), struct memcpy (Mcpy), intrinsics
+            // (Intrinsic). The bytecode side is the upper bound;
+            // the AST side is the lower bound; the delta is the
+            // silent drop.
+            use super::super::ast::Expr;
+            use super::super::op::Op;
+            let bc_calls = self.count_ops_in_region(
+                &[Op::Jsr, Op::JsrExt, Op::Jsri, Op::TailExt],
+                func.ent_pc,
+                bytecode_end,
+            );
+            let ast_calls = self.count_ast_exprs(&func, |e| matches!(e, Expr::Call { .. }));
+            let bc_branches =
+                self.count_ops_in_region(&[Op::Bz, Op::Bnz], func.ent_pc, bytecode_end);
+            // AST shapes for branches cover both statement-level
+            // (If/While/DoWhile/For/Switch) and expression-level
+            // (Ternary, the short-circuit && / || lowered to a
+            // Ternary or a sequence) -- count Ternary as the
+            // expr-side proxy until those statements land.
+            let ast_branches = func
+                .ast
+                .stmts
+                .iter()
+                .filter(|s| {
+                    use super::super::ast::Stmt;
+                    matches!(
+                        s,
+                        Stmt::If { .. }
+                            | Stmt::While { .. }
+                            | Stmt::DoWhile { .. }
+                            | Stmt::For { .. }
+                            | Stmt::Switch { .. }
+                    )
+                })
+                .count()
+                + self.count_ast_exprs(&func, |e| matches!(e, Expr::Ternary { .. }));
+            let bc_mcpy = self.count_op_in_region(Op::Mcpy, func.ent_pc, bytecode_end);
+            let bc_intrinsic = self.count_op_in_region(Op::Intrinsic, func.ent_pc, bytecode_end);
+            let ast_intrinsic =
+                self.count_ast_exprs(&func, |e| matches!(e, Expr::Intrinsic { .. }));
+            // Only emit a diff line when at least one category
+            // has a non-zero gap -- silent successes don't need
+            // to clutter the log.
+            let gap_call = bc_calls.saturating_sub(ast_calls);
+            let gap_branch = bc_branches.saturating_sub(ast_branches);
+            let gap_mcpy = bc_mcpy;
+            let gap_intrinsic = bc_intrinsic.saturating_sub(ast_intrinsic);
+            let any_gap = gap_call + gap_branch + gap_mcpy + gap_intrinsic > 0;
+            if any_gap {
+                self.warnings.push(alloc::format!(
+                    "ast::walk: function `{}` (ent_pc={}) drops call={} branch={} mcpy={} intrinsic={}",
+                    func.name,
+                    func.ent_pc,
+                    gap_call,
+                    gap_branch,
+                    gap_mcpy,
+                    gap_intrinsic,
+                ));
+            }
             if let Err(e) = super::super::ast::walk::walk_function(
                 &func.ast,
                 &self.symbols,

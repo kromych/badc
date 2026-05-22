@@ -101,11 +101,18 @@ pub(crate) fn walk_program(
     program: &Program,
     target: Target,
 ) -> Result<Vec<FunctionSsa>, C5Error> {
-    let mut out = Vec::with_capacity(program.finished_functions.len());
+    // Walker entries from AST snapshots, keyed by ent_pc. Sys
+    // trampolines, the synthetic CRT entry, and any other
+    // post-parser function bodies don't go through the dual-emit
+    // and are recovered from the bytecode lift below.
+    let mut walker_pcs: alloc::collections::BTreeSet<usize> =
+        alloc::collections::BTreeSet::new();
+    let mut out: Vec<FunctionSsa> = Vec::with_capacity(program.finished_functions.len());
     let mut ordered: Vec<usize> = (0..program.finished_functions.len()).collect();
     ordered.sort_by_key(|&i| program.finished_functions[i].ent_pc);
     for i in ordered {
         let f = &program.finished_functions[i];
+        walker_pcs.insert(f.ent_pc);
         let func = crate::c5::ast::walk::walk_function(
             &f.ast,
             &program.symbols,
@@ -125,6 +132,19 @@ pub(crate) fn walk_program(
         })?;
         out.push(func);
     }
+    // Recover bytecode-only functions (Sys trampolines, synthetic
+    // helpers) by lifting them. Each `Op::Ent` in the bytecode
+    // that didn't show up in `finished_functions` is one of
+    // these. The lift produces the same `FunctionSsa` shape the
+    // walker would have, so the rest of the codegen sees them
+    // identically.
+    let lift_funcs = super::ssa::lift_program(program)?;
+    for f in lift_funcs {
+        if !walker_pcs.contains(&f.ent_pc) {
+            out.push(f);
+        }
+    }
+    out.sort_by_key(|f| f.ent_pc);
     Ok(out)
 }
 

@@ -1074,7 +1074,22 @@ impl<'a> Walker<'a> {
                 Ok(b.imm_data(*val))
             }
         } else if *class == Token::Fun as i64 {
-            Ok(b.imm_code(*val as usize))
+            // Sys-trampoline symbols are added late and have
+            // their `val` filled in by `emit_sys_trampolines`
+            // -- AFTER `ast_emit_ident` snapshotted 0. Read
+            // the live value off the symbol table (Token::Fun
+            // is not shadowable so this is safe). The walker
+            // sym is the same index the parser stored, so the
+            // lookup hits the same entry the trampoline emit
+            // updated.
+            let live_val = if (*sym as usize) < self.symbols.len()
+                && self.symbols[*sym as usize].class == Token::Fun as i64
+            {
+                self.symbols[*sym as usize].val
+            } else {
+                *val
+            };
+            Ok(b.imm_code(live_val as usize))
         } else {
             Err(WalkError::UnknownSymbolClass {
                 sym: *sym,

@@ -773,6 +773,14 @@ impl Compiler {
                 self.code_imm_positions.push(operand_pc);
                 self.emit_val(CODE_BASE as i64);
                 self.ty = Ty::Int as i64 + Ty::Ptr as i64;
+                // Dual-emit: the trampoline symbol is Token::Fun
+                // class; the walker reads `Symbol::val` live at
+                // walk time (post-`emit_sys_trampolines`) to get
+                // the trampoline's ent_pc. Push an Ident keyed on
+                // the trampoline symbol so wrapping shapes
+                // (static-init, assign, call-arg) see the address
+                // producer on `ast_acc`.
+                self.ast_emit_ident(tr_idx as u32, self.ty);
             } else {
                 let identifier_is_local = self.symbols[id_idx].class == Token::Loc as i64;
                 if identifier_is_local {

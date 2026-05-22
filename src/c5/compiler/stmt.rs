@@ -62,12 +62,31 @@ impl Compiler {
         // consumes its own trailing `;`; the expression branch
         // does it explicitly.
         let mut for_init_symbols: Vec<(usize, i64, i64, i64)> = Vec::new();
+        let mut init_ast: Option<super::super::ast::BlockItem> = None;
         if self.lex.tk == ';' {
             self.next()?;
         } else if self.lex_is_type_start() {
             self.parse_block_local_decl(&mut for_init_symbols)?;
         } else {
+            let init_before = self.ast_stmts_snapshot();
             self.parse_full_expr()?;
+            let init_expr = self.ast_acc;
+            // Treat the init expression as an Expr statement.
+            if let Some(e) = init_expr {
+                let pos = self.ast_src_pos();
+                let stmt_id = self.ast.push_stmt(super::super::ast::Stmt::Expr(e), pos);
+                init_ast = Some(super::super::ast::BlockItem::Stmt(stmt_id));
+            } else {
+                // Drain any stmts the init expression pushed
+                // (e.g. a sub-call inside the comma chain) into
+                // a Compound so the for-init slot has a single
+                // BlockItem.
+                let added = self.ast.stmts.len().saturating_sub(init_before);
+                if added > 0 {
+                    let id = self.ast_wrap_stmts_since(init_before);
+                    init_ast = Some(super::super::ast::BlockItem::Stmt(id));
+                }
+            }
             self.consume(b';', "semicolon expected after for-init")?;
         }
 
@@ -76,11 +95,13 @@ impl Compiler {
         // is legal here too -- the value of the last subexpression
         // becomes the loop predicate.
         let cond_pc = self.text.len();
-        if self.lex.tk != ';' {
+        let cond_ast: Option<super::super::ast::ExprId> = if self.lex.tk != ';' {
             self.parse_full_expr()?;
+            self.ast_acc
         } else {
             self.emit_imm(1);
-        }
+            None
+        };
         self.emit_op(Op::Bz);
         let end_jmp_pc = self.text.len();
         self.emit_val(0);
@@ -95,9 +116,12 @@ impl Compiler {
         // back to it; the body itself is reached via the `body_jmp_pc`
         // patched a few lines below. Comma operator: `i++, k--`.
         let step_pc = self.text.len();
-        if self.lex.tk != ')' {
+        let post_ast: Option<super::super::ast::ExprId> = if self.lex.tk != ')' {
             self.parse_full_expr()?;
-        }
+            self.ast_acc
+        } else {
+            None
+        };
         self.emit_jmp(cond_pc as i64);
 
         self.consume(b')', "close paren expected")?;
@@ -105,7 +129,9 @@ impl Compiler {
         // Body -- patched to start at the current PC.
         self.text[body_jmp_pc] = self.text.len() as i64;
         self.enter_loop();
+        let body_before = self.ast_stmts_snapshot();
         self.stmt()?;
+        let body_s = self.ast_wrap_stmts_since(body_before);
 
         self.patch_loop_continues(step_pc);
         self.emit_jmp(step_pc as i64);
@@ -113,6 +139,12 @@ impl Compiler {
         self.text[end_jmp_pc] = self.text.len() as i64;
         let end_pc = self.text.len();
         self.patch_loop_breaks(end_pc);
+
+        if let Some(cond) = cond_ast {
+            self.ast_emit_for(init_ast, Some(cond), post_ast, body_s);
+        } else if init_ast.is_some() || post_ast.is_some() {
+            self.ast_emit_for(init_ast, None, post_ast, body_s);
+        }
 
         // Restore symbols shadowed by the for-init declaration so
         // the binding's scope ends with the for statement
@@ -142,6 +174,7 @@ impl Compiler {
         self.emit_op(Op::Psh);
 
         self.parse_full_expr()?;
+        let disc_ast = self.ast_acc;
         self.consume(b')', "close paren expected")?;
 
         self.emit_op(Op::Si);
@@ -155,7 +188,9 @@ impl Compiler {
         self.switch_defaults.push(None);
         self.enter_switch();
 
+        let body_before = self.ast_stmts_snapshot();
         self.stmt()?;
+        let body_s = self.ast_wrap_stmts_since(body_before);
 
         // Fall-through past the body skips the dispatcher entirely.
         self.emit_op(Op::Jmp);
@@ -192,6 +227,9 @@ impl Compiler {
         self.text[end_switch_patch] = self.text.len() as i64;
         let end_pc = self.text.len();
         self.patch_loop_breaks(end_pc);
+        if let Some(disc) = disc_ast {
+            self.ast_emit_switch(disc, body_s);
+        }
         Ok(())
     }
 
@@ -368,6 +406,7 @@ impl Compiler {
         self.next()?;
         let mut block_symbols = Vec::new();
 
+        let block_before = self.ast_stmts_snapshot();
         while self.lex.tk != '}' {
             if self.lex.tk == Token::Typedef {
                 self.parse_block_typedef(&mut block_symbols)?;
@@ -378,9 +417,22 @@ impl Compiler {
             } else if self.lex_is_type_start() {
                 self.parse_block_local_decl(&mut block_symbols)?;
             } else {
+                let item_before = self.ast_stmts_snapshot();
                 self.stmt()?;
+                // Wrap any multi-stmt body the inner parse pushed
+                // into a single block item so the Compound below
+                // sees one StmtId per source-level statement.
+                let item_after = self.ast.stmts.len();
+                if item_after > item_before + 1 {
+                    let _ = self.ast_wrap_stmts_since(item_before);
+                }
             }
         }
+        // Wrap every top-level stmt added during this block parse
+        // into a `Stmt::Compound { items }`. The wrapper is
+        // appended at the end so the function-end snapshot still
+        // sees the outermost block as the function body's root.
+        let _ = self.ast_wrap_stmts_since(block_before);
         self.next()?;
 
         // Emit the unused-variable / unused-value diagnostics for
@@ -430,10 +482,14 @@ impl Compiler {
     pub(super) fn stmt(&mut self) -> Result<(), C5Error> {
         if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b':') {
             let name = self.symbols[self.lex.curr_id_idx].name.clone();
-            self.labels.push((name, self.text.len()));
+            self.labels.push((name.clone(), self.text.len()));
+            let label = self.ast_label_by_name(&name);
             self.next()?; // consume Id
             self.next()?; // consume ':'
+            let body_before = self.ast_stmts_snapshot();
             self.stmt()?;
+            let body_s = self.ast_wrap_stmts_since(body_before);
+            self.ast_emit_labeled(label, body_s);
             return Ok(());
         }
 
@@ -441,34 +497,47 @@ impl Compiler {
             self.next()?;
             self.consume(b'(', "open paren expected")?;
             self.parse_full_expr()?;
+            let cond_id = self.ast_acc;
             self.consume(b')', "close paren expected")?;
             self.emit_op(Op::Bz);
             let b = self.text.len();
             self.emit_val(0);
+            let then_before = self.ast_stmts_snapshot();
             self.stmt()?;
-            if self.lex.tk == Token::Else {
+            let then_s = self.ast_wrap_stmts_since(then_before);
+            let else_s = if self.lex.tk == Token::Else {
                 self.text[b] = (self.text.len() + 2) as i64;
                 self.emit_op(Op::Jmp);
                 let b_else = self.text.len();
                 self.emit_val(0);
                 self.next()?;
+                let else_before = self.ast_stmts_snapshot();
                 self.stmt()?;
+                let id = self.ast_wrap_stmts_since(else_before);
                 self.text[b_else] = self.text.len() as i64;
+                Some(id)
             } else {
                 self.text[b] = self.text.len() as i64;
+                None
+            };
+            if let Some(cond) = cond_id {
+                self.ast_emit_if(cond, then_s, else_s);
             }
         } else if self.lex.tk == Token::While {
             self.next()?;
             let cond_pc = self.text.len();
             self.consume(b'(', "open paren expected")?;
             self.parse_full_expr()?;
+            let cond_id = self.ast_acc;
             self.consume(b')', "close paren expected")?;
             self.emit_op(Op::Bz);
             let bz_pc = self.text.len();
             self.emit_val(0);
 
             self.enter_loop();
+            let body_before = self.ast_stmts_snapshot();
             self.stmt()?;
+            let body_s = self.ast_wrap_stmts_since(body_before);
             self.patch_loop_continues(cond_pc);
 
             self.emit_jmp(cond_pc as i64);
@@ -476,12 +545,17 @@ impl Compiler {
             self.text[bz_pc] = self.text.len() as i64;
             let end_pc = self.text.len();
             self.patch_loop_breaks(end_pc);
+            if let Some(cond) = cond_id {
+                self.ast_emit_while(cond, body_s);
+            }
         } else if self.lex.tk == Token::Do {
             self.next()?;
             let start_pc = self.text.len();
 
             self.enter_loop();
+            let body_before = self.ast_stmts_snapshot();
             self.stmt()?;
+            let body_s = self.ast_wrap_stmts_since(body_before);
 
             if self.lex.tk == Token::While {
                 self.next()?;
@@ -494,6 +568,7 @@ impl Compiler {
 
             self.consume(b'(', "open paren expected")?;
             self.parse_full_expr()?;
+            let cond_id = self.ast_acc;
             self.consume(b')', "close paren expected")?;
 
             self.emit_op(Op::Bnz);
@@ -503,6 +578,9 @@ impl Compiler {
 
             let end_pc = self.text.len();
             self.patch_loop_breaks(end_pc);
+            if let Some(cond) = cond_id {
+                self.ast_emit_do_while(body_s, cond);
+            }
         } else if self.lex.tk == Token::For {
             self.parse_for_stmt()?;
         } else if self.lex.tk == Token::Switch {
@@ -519,7 +597,10 @@ impl Compiler {
                 return Err(self.compile_err("case outside switch"));
             };
             cases.push((val, self.text.len()));
+            let body_before = self.ast_stmts_snapshot();
             self.stmt()?;
+            let body_s = self.ast_wrap_stmts_since(body_before);
+            self.ast_emit_case(val, body_s);
         } else if self.lex.tk == Token::Default {
             self.next()?;
             self.consume(b':', "expected colon after default")?;
@@ -527,7 +608,10 @@ impl Compiler {
                 return Err(self.compile_err("default outside switch"));
             };
             *def = Some(self.text.len());
+            let body_before = self.ast_stmts_snapshot();
             self.stmt()?;
+            let body_s = self.ast_wrap_stmts_since(body_before);
+            self.ast_emit_default(body_s);
         } else if self.lex.tk == Token::Goto {
             self.next()?;
             if self.lex.tk != Token::Id {
@@ -542,10 +626,12 @@ impl Compiler {
 
             match self.labels.iter().find(|(n, _)| n == &target_name) {
                 Some(&(_, target)) => self.text[pc] = target as i64,
-                None => self.unresolved_gotos.push((target_name, pc)),
+                None => self.unresolved_gotos.push((target_name.clone(), pc)),
             }
 
             self.consume(b';', "semicolon expected after goto")?;
+            let label = self.ast_label_by_name(&target_name);
+            self.ast_emit_goto(label);
         } else if self.lex.tk == Token::Break {
             self.next()?;
             if self.loop_breaks.is_empty() {
@@ -556,6 +642,7 @@ impl Compiler {
             self.emit_val(0);
             self.record_break_jmp(pc);
             self.consume(b';', "semicolon expected after break")?;
+            self.ast_emit_break();
         } else if self.lex.tk == Token::Continue {
             self.next()?;
             if self.loop_continues.is_empty() {
@@ -566,6 +653,7 @@ impl Compiler {
             self.emit_val(0);
             self.record_continue_jmp(pc);
             self.consume(b';', "semicolon expected after continue")?;
+            self.ast_emit_continue();
         } else if self.lex.tk == Token::Return {
             self.next()?;
             let ret_ty = self.current_func_return_ty;

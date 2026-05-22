@@ -560,6 +560,7 @@ impl Compiler {
         self.ast = super::super::ast::Ast::new();
         self.ast_acc = None;
         self.ast_vstack.clear();
+        self.ast_labels.clear();
     }
 
     /// Capture the just-finished function's AST + the metadata
@@ -909,6 +910,177 @@ impl Compiler {
             },
             pos,
         )
+    }
+
+    /// Snapshot the current `ast.stmts` length. Used by the
+    /// control-flow parser sites to bracket the stmt-range a
+    /// sub-statement parse contributes, so the outer stmt can
+    /// reference it by id without double-walking.
+    pub(super) fn ast_stmts_snapshot(&self) -> usize {
+        self.ast.stmts.len()
+    }
+
+    /// Wrap the stmts added since `before` into a single body
+    /// `StmtId`. One added stmt becomes the body directly; zero
+    /// or many become a `Stmt::Compound`. The wrapper / items
+    /// are appended to `ast.stmts` -- only the LAST stmt is meant
+    /// to be referenced by the outer control-flow node.
+    pub(super) fn ast_wrap_stmts_since(&mut self, before: usize) -> super::super::ast::StmtId {
+        let after = self.ast.stmts.len();
+        if after == before + 1 {
+            return (after - 1) as super::super::ast::StmtId;
+        }
+        let items: alloc::vec::Vec<super::super::ast::BlockItem> = (before..after)
+            .map(|i| super::super::ast::BlockItem::Stmt(i as super::super::ast::StmtId))
+            .collect();
+        let pos = self.ast_src_pos();
+        self.ast
+            .push_stmt(super::super::ast::Stmt::Compound(items), pos)
+    }
+
+    /// Push `Stmt::If { cond, then_s, else_s }`.
+    pub(super) fn ast_emit_if(
+        &mut self,
+        cond: super::super::ast::ExprId,
+        then_s: super::super::ast::StmtId,
+        else_s: Option<super::super::ast::StmtId>,
+    ) -> super::super::ast::StmtId {
+        let pos = self.ast_src_pos();
+        self.ast.push_stmt(
+            super::super::ast::Stmt::If {
+                cond,
+                then_s,
+                else_s,
+            },
+            pos,
+        )
+    }
+
+    /// Push `Stmt::While { cond, body }`.
+    pub(super) fn ast_emit_while(
+        &mut self,
+        cond: super::super::ast::ExprId,
+        body: super::super::ast::StmtId,
+    ) -> super::super::ast::StmtId {
+        let pos = self.ast_src_pos();
+        self.ast
+            .push_stmt(super::super::ast::Stmt::While { cond, body }, pos)
+    }
+
+    /// Push `Stmt::DoWhile { body, cond }`.
+    pub(super) fn ast_emit_do_while(
+        &mut self,
+        body: super::super::ast::StmtId,
+        cond: super::super::ast::ExprId,
+    ) -> super::super::ast::StmtId {
+        let pos = self.ast_src_pos();
+        self.ast
+            .push_stmt(super::super::ast::Stmt::DoWhile { body, cond }, pos)
+    }
+
+    /// Push `Stmt::For { init, cond, post, body }`.
+    pub(super) fn ast_emit_for(
+        &mut self,
+        init: Option<super::super::ast::BlockItem>,
+        cond: Option<super::super::ast::ExprId>,
+        post: Option<super::super::ast::ExprId>,
+        body: super::super::ast::StmtId,
+    ) -> super::super::ast::StmtId {
+        let pos = self.ast_src_pos();
+        self.ast.push_stmt(
+            super::super::ast::Stmt::For {
+                init,
+                cond,
+                post,
+                body,
+            },
+            pos,
+        )
+    }
+
+    /// Push `Stmt::Break`.
+    pub(super) fn ast_emit_break(&mut self) -> super::super::ast::StmtId {
+        let pos = self.ast_src_pos();
+        self.ast.push_stmt(super::super::ast::Stmt::Break, pos)
+    }
+
+    /// Push `Stmt::Continue`.
+    pub(super) fn ast_emit_continue(&mut self) -> super::super::ast::StmtId {
+        let pos = self.ast_src_pos();
+        self.ast.push_stmt(super::super::ast::Stmt::Continue, pos)
+    }
+
+    /// Push a `Stmt::Goto`. `label` is the AST-side label id;
+    /// the AST table tracks pending fixups so `goto L` before
+    /// `L:` is parsed still resolves at function-end.
+    pub(super) fn ast_emit_goto(
+        &mut self,
+        label: super::super::ast::LabelId,
+    ) -> super::super::ast::StmtId {
+        let pos = self.ast_src_pos();
+        self.ast
+            .push_stmt(super::super::ast::Stmt::Goto(label), pos)
+    }
+
+    /// Push a `Stmt::Labeled` wrapping the just-parsed body.
+    pub(super) fn ast_emit_labeled(
+        &mut self,
+        label: super::super::ast::LabelId,
+        body: super::super::ast::StmtId,
+    ) -> super::super::ast::StmtId {
+        let pos = self.ast_src_pos();
+        self.ast.resolve_label(label, body);
+        self.ast
+            .push_stmt(super::super::ast::Stmt::Labeled { label, body }, pos)
+    }
+
+    /// Push a `Stmt::Switch { disc, body }`.
+    pub(super) fn ast_emit_switch(
+        &mut self,
+        disc: super::super::ast::ExprId,
+        body: super::super::ast::StmtId,
+    ) -> super::super::ast::StmtId {
+        let pos = self.ast_src_pos();
+        self.ast
+            .push_stmt(super::super::ast::Stmt::Switch { disc, body }, pos)
+    }
+
+    /// Push a `Stmt::Case { val, body }`.
+    pub(super) fn ast_emit_case(
+        &mut self,
+        val: i64,
+        body: super::super::ast::StmtId,
+    ) -> super::super::ast::StmtId {
+        let pos = self.ast_src_pos();
+        self.ast
+            .push_stmt(super::super::ast::Stmt::Case { val, body }, pos)
+    }
+
+    /// Push a `Stmt::Default { body }`.
+    pub(super) fn ast_emit_default(
+        &mut self,
+        body: super::super::ast::StmtId,
+    ) -> super::super::ast::StmtId {
+        let pos = self.ast_src_pos();
+        self.ast
+            .push_stmt(super::super::ast::Stmt::Default { body }, pos)
+    }
+
+    /// Allocate a fresh AST label slot. The bytecode tier tracks
+    /// goto fixups by name in `self.labels` / `self.unresolved_gotos`;
+    /// the AST mirror keeps a flat per-function id space tied back
+    /// through `Compiler::ast_label_by_name` so both sides see the
+    /// same label.
+    pub(super) fn ast_label_by_name(&mut self, name: &str) -> super::super::ast::LabelId {
+        for (lname, lid) in &self.ast_labels {
+            if lname == name {
+                return *lid;
+            }
+        }
+        let id = self.ast.alloc_label();
+        self.ast_labels
+            .push((alloc::string::String::from(name), id));
+        id
     }
 
     /// Push a `Stmt::Return(value)` node into the per-function

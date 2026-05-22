@@ -1676,6 +1676,7 @@ impl Compiler {
                     self.record_local_store(idx, line);
                 }
             } else if self.lex.tk == Token::Cond {
+                let cond_ast = self.ast_acc;
                 self.next()?;
                 self.emit_op(Op::Bz);
                 let b_else = self.text.len();
@@ -1692,6 +1693,7 @@ impl Compiler {
                     self.next()?;
                     self.expr(Token::Assign as i64)?;
                 }
+                let then_ast = self.ast_acc;
                 if self.lex.tk == ':' {
                     self.next()?;
                 } else {
@@ -1703,7 +1705,26 @@ impl Compiler {
                 let b_end = self.text.len();
                 self.emit_val(0);
                 self.expr(Token::Cond as i64)?;
+                let else_ast = self.ast_acc;
                 self.text[b_end] = self.text.len() as i64;
+                // Dual-emit Expr::Ternary. The branch fixups above
+                // resolve forward into the bytecode; the AST
+                // captures the three sub-expressions for the
+                // walker to lower with branch + phi-like join.
+                if let (Some(cond), Some(then_e), Some(else_e)) = (cond_ast, then_ast, else_ast) {
+                    let pos = self.ast_src_pos();
+                    let ty = self.ty;
+                    let id = self.ast.push_expr(
+                        super::super::ast::Expr::Ternary {
+                            cond,
+                            then_e,
+                            else_e,
+                            ty,
+                        },
+                        pos,
+                    );
+                    self.ast_acc = Some(id);
+                }
             } else if self.lex.tk == Token::Lor {
                 self.next()?;
                 self.emit_op(Op::Bnz);

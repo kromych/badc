@@ -485,6 +485,14 @@ pub struct Compiler {
     /// function-definition order.
     pub(super) finished_functions: Vec<super::ast::FinishedFunction>,
 
+    /// Per-function map from goto label name -> AST `LabelId`.
+    /// Reset at every function entry (alongside `ast_reset`).
+    /// Keeps the AST's flat per-function label-id space in sync
+    /// with the bytecode tier's name-keyed `self.labels` /
+    /// `self.unresolved_gotos`, so `goto L; ... L:` resolves on
+    /// both sides regardless of source order.
+    pub(super) ast_labels: Vec<(String, super::ast::LabelId)>,
+
     // --- Patch lists ---
     loop_breaks: Vec<Vec<usize>>,
     loop_continues: Vec<Vec<usize>>,
@@ -938,6 +946,7 @@ impl Compiler {
             ast_acc: None,
             ast_vstack: Vec::new(),
             finished_functions: Vec::new(),
+            ast_labels: Vec::new(),
             loop_breaks: Vec::new(),
             loop_continues: Vec::new(),
             labels: Vec::new(),

@@ -385,6 +385,25 @@ impl Compiler {
                         )));
                     }
                     let mut nargs = 0;
+                    // Snapshot the AST parser-side vstack depth so
+                    // the call's bytecode dance (per-arg `Op::Lea +
+                    // Op::Psh` arg-temp setup, the right-to-left
+                    // `Op::Lea + Op::Li + Op::Psh` re-push, the
+                    // optional struct-return out-pointer push) can
+                    // leak transient pushes without polluting the
+                    // outer expression's lvalue stack. The bytecode
+                    // side's matching pops happen inside the same
+                    // sequence; on the AST side the matching pops
+                    // are routed through `ast_apply_assign` for the
+                    // per-arg `*temp = arg` shape (the only Op::Si
+                    // in this region), which consumes ONE vstack
+                    // slot per Op::Si. The right-to-left re-push
+                    // and the out-pointer push are pure leaks --
+                    // truncate the vstack back to this depth right
+                    // before `ast_emit_call` so the outer scalar
+                    // assign's `ast_apply_assign` sees the lvalue
+                    // it pushed.
+                    let saved_ast_vstack_depth = self.ast_vstack.len();
                     // For struct returns, allocate a result temp now
                     // so its address can be pushed before the
                     // declared-arg pushes.
@@ -648,6 +667,13 @@ impl Compiler {
                         self.emit_op(Op::Adj);
                         self.emit_val(total_pushed);
                     }
+                    // Drop the AST parser-side vstack pushes the
+                    // call's bytecode dance leaked (right-to-left
+                    // re-push, optional struct-return out-pointer
+                    // push) before the outer expression's
+                    // `ast_apply_assign` runs. See the matching
+                    // `saved_ast_vstack_depth` snapshot above.
+                    self.ast_vstack.truncate(saved_ast_vstack_depth);
                     // Dual-emit the call's AST: build a callee
                     // Ident node from the call-site symbol idx and
                     // pair with the per-arg ExprIds captured above.

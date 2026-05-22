@@ -769,6 +769,11 @@ impl Compiler {
             self.next()?;
         } else {
             self.parse_full_expr()?;
+            // C99 6.8.3 expression statement: bind the parsed
+            // expression's id to a `Stmt::Expr` so the walker
+            // descends through it. No-op when the expression
+            // shape has no AST-side dual-emit yet.
+            let _ = self.ast_emit_expr_stmt();
             self.consume(b';', "semicolon expected")?;
         }
         Ok(())

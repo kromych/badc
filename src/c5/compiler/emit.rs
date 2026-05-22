@@ -1225,6 +1225,22 @@ impl Compiler {
         )
     }
 
+    /// Push a `Stmt::Expr` wrapping the current `ast_acc`. C99
+    /// 6.8.3: expression statement evaluates the expression for
+    /// side effects and discards the value. Returns `None` and
+    /// pushes nothing when `ast_acc` is `None` -- the parser
+    /// hasn't dual-emitted that expression shape yet, so binding
+    /// a `Stmt::Expr` to a stale id would mis-walk.
+    pub(super) fn ast_emit_expr_stmt(&mut self) -> Option<super::super::ast::StmtId> {
+        let e = self.ast_acc?;
+        let pos = self.ast_src_pos();
+        let id = self
+            .ast
+            .push_stmt(super::super::ast::Stmt::Expr(e), pos);
+        self.ast_acc = None;
+        Some(id)
+    }
+
     /// Push `Stmt::Break`.
     pub(super) fn ast_emit_break(&mut self) -> super::super::ast::StmtId {
         let pos = self.ast_src_pos();

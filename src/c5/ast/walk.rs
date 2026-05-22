@@ -593,9 +593,34 @@ impl<'a> Walker<'a> {
                 Ok(b.binop(*op, lv, rv))
             }
             Expr::Assign { lhs, rhs, ty } => {
+                // Local-target shortcut: a Token::Loc-class
+                // Ident lvalue lowers to a single `StoreLocal`
+                // instead of `LocalAddr` + `Store`, but only for
+                // the I64 width. `ssa::lift_function` performs
+                // the same fuse on the bytecode side
+                // (`Op::Lea N; Op::Psh; ...; Op::Si` -> a single
+                // `StoreLocal { slot: N }`) and keeps narrower
+                // widths as `Inst::Store` because the per-arch
+                // emit's `StoreLocal` only handles 8-byte stores.
+                // Mirroring the same gate keeps walker and lift
+                // category histograms aligned.
+                let kind = store_kind_for(*ty, self.target);
+                if matches!(kind, StoreKind::I64)
+                    && let Expr::Ident {
+                        class,
+                        val,
+                        is_thread_local: false,
+                        ..
+                    } = self.ast.expr(*lhs)
+                    && *class == Token::Loc as i64
+                {
+                    let slot = *val;
+                    let value = self.walk_expr_rvalue(b, *rhs)?;
+                    b.store_local(slot, value, kind);
+                    return Ok(value);
+                }
                 let addr = self.walk_expr_lvalue(b, *lhs)?;
                 let value = self.walk_expr_rvalue(b, *rhs)?;
-                let kind = store_kind_for(*ty, self.target);
                 b.store(addr, value, kind);
                 // C99 6.5.16p3: the assignment's value is the
                 // value stored, after any conversion the rhs walker
@@ -1037,17 +1062,28 @@ fn store_kind_for(ty: i64, target: Target) -> StoreKind {
     }
 }
 
-/// Test for a pointer-shaped type tag. Pointer levels add to the
-/// base in the C99-aligned encoding `compiler::types::is_pointer_ty`
-/// uses; mirroring it here keeps the walker self-contained.
+/// Test for a pointer-shaped type tag. Mirrors
+/// `compiler::types::is_pointer_ty` -- each non-integer family
+/// (float, double, long, short, long long) reserves its own band
+/// and adds +2 per pointer level; the integer family (char / int)
+/// shares the base band so `char*` is encoded as `Ty::Ptr` (2),
+/// `int*` as `Ty::Int + Ty::Ptr` (3), `char**` as 4, `int**` as 5,
+/// and any `ty >= Ty::Ptr` in the base band is a pointer
+/// regardless of the parity. Earlier `(off % 2) == 0` test
+/// misclassified `int*` (off=3) as a non-pointer.
 fn is_pointer_ty(ty: i64) -> bool {
     let stripped = ty & !UNSIGNED_BIT;
-    // The token::Ty band scheme reserves [base, base+100) per
-    // type family; a stripped `ty` whose remainder mod 100 is >= 2
-    // is a pointer at depth (remainder / 2).
     let base = stripped - (stripped % 100);
     let off = stripped - base;
-    off >= 2 && (off % 2) == 0
+    if base == 0 {
+        // char / int family: any tag at or beyond `Ty::Ptr` is a
+        // pointer (`char*`=2, `int*`=3, `char**`=4, `int**`=5, ...).
+        off >= Ty::Ptr as i64
+    } else {
+        // float / double / long / short / longlong: pointer levels
+        // are even offsets >= 2 from the band base.
+        off >= 2 && (off % 2) == 0
+    }
 }
 
 /// Test for floating-point scalar types.

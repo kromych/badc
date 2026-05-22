@@ -758,6 +758,7 @@ impl Compiler {
             let walker_res = super::super::ast::walk::walk_function(
                 &func.ast,
                 &self.symbols,
+                &self.structs,
                 target,
                 func.ent_pc,
                 func.n_params,

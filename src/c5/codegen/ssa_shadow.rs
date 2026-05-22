@@ -116,6 +116,7 @@ pub(crate) fn walk_program(
         let mut func = crate::c5::ast::walk::walk_function(
             &f.ast,
             &program.symbols,
+            &program.structs,
             target,
             f.ent_pc,
             f.n_params,

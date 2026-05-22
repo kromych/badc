@@ -79,6 +79,7 @@ impl WalkError {
 pub(crate) fn walk_function(
     ast: &super::Ast,
     symbols: &[Symbol],
+    structs: &[crate::c5::compiler::StructDef],
     target: Target,
     ent_pc: usize,
     n_params: usize,
@@ -99,6 +100,7 @@ pub(crate) fn walk_function(
     let mut ctx = Walker {
         ast,
         symbols,
+        structs,
         target,
         loop_ctx: alloc::vec::Vec::new(),
         label_blocks: alloc::vec::Vec::new(),
@@ -135,6 +137,7 @@ pub(crate) fn walk_function(
 struct Walker<'a> {
     ast: &'a super::Ast,
     symbols: &'a [Symbol],
+    structs: &'a [crate::c5::compiler::StructDef],
     target: Target,
     /// Stack of `(break_target, continue_target)` block ids, one
     /// frame per enclosing loop / switch. Break/Continue stmts
@@ -148,6 +151,23 @@ struct Walker<'a> {
 }
 
 impl<'a> Walker<'a> {
+    /// Byte size of the struct type encoded by `ty`. Looks up
+    /// the struct id (via the same band scheme the parser uses)
+    /// in the propagated `structs` slice. Returns 0 when the
+    /// struct id is out of range (defensive -- the parser
+    /// shouldn't emit such a type).
+    fn struct_size(&self, ty: i64) -> i64 {
+        let stripped = ty & !UNSIGNED_BIT;
+        if stripped < STRUCT_BASE {
+            return 0;
+        }
+        let id = ((stripped - STRUCT_BASE) / STRUCT_STRIDE) as usize;
+        if id < self.structs.len() {
+            self.structs[id].size as i64
+        } else {
+            0
+        }
+    }
     /// Walk a statement. Returns `true` when the statement
     /// terminates the current block (an unconditional return /
     /// jmp), letting the caller stop iterating siblings that
@@ -526,6 +546,18 @@ impl<'a> Walker<'a> {
                     super::super::ast::LocalInit::None => Ok(()),
                     super::super::ast::LocalInit::Scalar(init_id) => {
                         let v = self.walk_expr_rvalue(b, init_id)?;
+                        // C99 6.7.8p13 struct-value initializer:
+                        // copy the source's bytes into the local
+                        // slot via Mcpy. `v` is the source
+                        // address (the walker's address-as-value
+                        // routing for struct rvalues). Size comes
+                        // from the local's declared struct type.
+                        if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+                            let dst = b.local_addr(slot);
+                            let size = self.struct_size(ty);
+                            b.mcpy(dst, v, size);
+                            return Ok(());
+                        }
                         let kind = store_kind_for(ty, self.target);
                         // Match `lift_function`'s StoreLocal fuse:
                         // only I64 fuses into StoreLocal because
@@ -1462,7 +1494,7 @@ mod tests {
         let __ret = ast.push_stmt(Stmt::Return(Some(add)), src);
         ast.body = Some(__ret);
 
-        let func = walk_function(&ast, &empty_symbols(), Target::LinuxAarch64, 0, 0, false, 0)
+        let func = walk_function(&ast, &empty_symbols(), &[], Target::LinuxAarch64, 0, 0, false, 0)
             .expect("walk");
         let immediates: alloc::vec::Vec<i64> = func
             .insts
@@ -1513,7 +1545,7 @@ mod tests {
         let __ret = ast.push_stmt(Stmt::Return(Some(x)), src);
         ast.body = Some(__ret);
 
-        let func = walk_function(&ast, &syms, Target::LinuxAarch64, 0, 0, false, 8).expect("walk");
+        let func = walk_function(&ast, &syms, &[], Target::LinuxAarch64, 0, 0, false, 8).expect("walk");
         let loads: alloc::vec::Vec<_> = func
             .insts
             .iter()
@@ -1568,7 +1600,7 @@ mod tests {
         let __ret = ast.push_stmt(Stmt::Return(Some(assign)), src);
         ast.body = Some(__ret);
 
-        let func = walk_function(&ast, &syms, Target::LinuxAarch64, 0, 0, false, 8).expect("walk");
+        let func = walk_function(&ast, &syms, &[], Target::LinuxAarch64, 0, 0, false, 8).expect("walk");
         let store_kinds: alloc::vec::Vec<_> = func
             .insts
             .iter()
@@ -1616,7 +1648,7 @@ mod tests {
         let __ret = ast.push_stmt(Stmt::Return(Some(neg)), src);
         ast.body = Some(__ret);
 
-        let func = walk_function(&ast, &empty_symbols(), Target::LinuxAarch64, 0, 0, false, 0)
+        let func = walk_function(&ast, &empty_symbols(), &[], Target::LinuxAarch64, 0, 0, false, 0)
             .expect("walk");
         let binops: alloc::vec::Vec<BinOp> = func
             .insts
@@ -1645,7 +1677,7 @@ mod tests {
         );
         ast.body = Some(asm_id);
 
-        let err = walk_function(&ast, &empty_symbols(), Target::LinuxAarch64, 0, 0, false, 0)
+        let err = walk_function(&ast, &empty_symbols(), &[], Target::LinuxAarch64, 0, 0, false, 0)
             .expect_err("Asm must surface as unsupported");
         assert!(matches!(
             err,

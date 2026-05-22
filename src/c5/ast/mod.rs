@@ -278,6 +278,13 @@ pub(crate) enum Stmt {
         text: alloc::string::String,
         clobbers: alloc::string::String,
     },
+    /// Local declaration that lives inline in a block. C99 6.8.2
+    /// allows `block-item-list` to interleave declarations and
+    /// statements; the parser wraps each block-scope declaration
+    /// in this variant so the existing snapshot/range-wrapping
+    /// `parse_block_stmt` can capture decls alongside stmts via a
+    /// single stmt-id sequence.
+    Decl(DeclId),
 }
 
 /// Declaration node. Captures variable / function declarations

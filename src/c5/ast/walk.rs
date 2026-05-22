@@ -457,6 +457,45 @@ impl<'a> Walker<'a> {
                 self.walk_stmt(b, body_id)
             }
             Stmt::Asm { .. } => Err(WalkError::UnsupportedStmt { id, kind: "Asm" }),
+            Stmt::Decl(d) => {
+                let decl_id = *d;
+                self.walk_decl(b, decl_id)?;
+                Ok(false)
+            }
+        }
+    }
+
+    /// Walk a local declaration. Emits `store_local(slot_off,
+    /// init_value, store_kind)` when the decl has an initializer;
+    /// no-op for uninitialized locals (C99 6.7.8p10 leaves the
+    /// initial value indeterminate). Symbols are looked up
+    /// through `self.symbols` for the store kind's type.
+    fn walk_decl(
+        &mut self,
+        b: &mut super::super::codegen::ssa_build::SsaBuilder,
+        id: super::super::ast::DeclId,
+    ) -> Result<(), WalkError> {
+        match self.ast.decl(id) {
+            super::super::ast::Decl::Local {
+                sym,
+                slot_off,
+                init,
+            } => {
+                let Some(init_id) = *init else {
+                    return Ok(());
+                };
+                let slot = *slot_off;
+                let sym_idx = *sym;
+                let ty = self.symbols[sym_idx as usize].type_;
+                let v = self.walk_expr_rvalue(b, init_id)?;
+                let kind = store_kind_for(ty, self.target);
+                b.store_local(slot, v, kind);
+                Ok(())
+            }
+            super::super::ast::Decl::Vla { .. } => Err(WalkError::UnsupportedStmt {
+                id: 0,
+                kind: "Decl::Vla",
+            }),
         }
     }
 

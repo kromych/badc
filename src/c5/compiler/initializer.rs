@@ -982,6 +982,14 @@ impl Compiler {
         self.emit_lea(local_val);
         self.emit_op(Op::Psh);
         self.expr(Token::Assign as i64)?;
+        // Dual-emit: capture the init expression's ExprId for
+        // `Decl::Local { init: Some(...) }`. The Si below
+        // already runs through `ast_apply_assign`, but the
+        // lvalue is `emit_lea`-shaped (no AST counterpart), so
+        // the assign drops. The caller pushes a `Decl::Local`
+        // wrapping `init_ast` so the walker can issue the
+        // canonical `store_local` directly.
+        self.pending_local_init_ast = self.ast_acc;
         // C99 6.5.16.1p2: the RHS of an assignment is converted
         // to the unqualified LHS type. For a float / double
         // destination with an integer-typed initializer (a

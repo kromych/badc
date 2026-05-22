@@ -923,6 +923,32 @@ impl Compiler {
         self.ast_acc = Some(id);
     }
 
+    /// Push `Decl::Local { sym, slot_off, init }` and a wrapping
+    /// `Stmt::Decl(decl_id)` so the enclosing block's stmt-range
+    /// wrapper picks the declaration up alongside ordinary stmts.
+    /// `init` is `None` for an uninitialized local. The walker
+    /// emits `store_local(slot_off, init_value, store_kind)` for
+    /// initialized locals; uninitialized ones emit nothing
+    /// (matching C99 6.7.8p10 indeterminate initial value).
+    pub(super) fn ast_emit_local_decl(
+        &mut self,
+        sym: u32,
+        slot_off: i64,
+        init: Option<ExprId>,
+    ) -> super::super::ast::StmtId {
+        let pos = self.ast_src_pos();
+        let decl_id = self.ast.push_decl(
+            super::super::ast::Decl::Local {
+                sym,
+                slot_off,
+                init,
+            },
+            pos,
+        );
+        self.ast
+            .push_stmt(super::super::ast::Stmt::Decl(decl_id), pos)
+    }
+
     /// Push an `Expr::Call` and set it as the new accumulator.
     /// Called by the function-call parser site after the bytecode
     /// dance (per-arg temp store + reverse push + Jsr/JsrExt/Jsri

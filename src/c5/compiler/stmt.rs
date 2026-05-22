@@ -387,7 +387,15 @@ impl Compiler {
                 self.symbols[loc_idx].was_referenced = false;
                 self.symbols[loc_idx].decl_line = self.lex.line;
                 self.symbols[loc_idx].decl_in_main_source = self.in_main_source();
+                self.pending_local_init_ast = None;
                 self.allocate_local_with_init(loc_idx, ty, array_size)?;
+                if self.symbols[loc_idx].class == Token::Loc as i64 && array_size == 0 {
+                    let slot_off = self.symbols[loc_idx].val;
+                    let init = self.pending_local_init_ast.take();
+                    self.ast_emit_local_decl(loc_idx as u32, slot_off, init);
+                } else {
+                    self.pending_local_init_ast = None;
+                }
             }
 
             if self.lex.tk == ',' {

@@ -493,6 +493,13 @@ pub struct Compiler {
     /// both sides regardless of source order.
     pub(super) ast_labels: Vec<(String, super::ast::LabelId)>,
 
+    /// Cross-helper carry: `emit_local_init_store` stashes the
+    /// initializer's ExprId here so the calling `parse_*_local_decl`
+    /// can wrap it in `Decl::Local { init: Some(_) }`. Always cleared
+    /// to None by the consumer; None on entry means an uninitialized
+    /// local declaration.
+    pub(super) pending_local_init_ast: Option<super::ast::ExprId>,
+
     // --- Patch lists ---
     loop_breaks: Vec<Vec<usize>>,
     loop_continues: Vec<Vec<usize>>,
@@ -947,6 +954,7 @@ impl Compiler {
             ast_vstack: Vec::new(),
             finished_functions: Vec::new(),
             ast_labels: Vec::new(),
+            pending_local_init_ast: None,
             loop_breaks: Vec::new(),
             loop_continues: Vec::new(),
             labels: Vec::new(),

@@ -753,12 +753,43 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         structs: merged_structs,
         entry_name,
         subsystem,
-        // Linker merges multiple compiled units; the AST tier
-        // is a per-function shadow consumed by the parser-side
-        // shadow-validator before linking. Linker reload starts
-        // fresh.
-        finished_functions: alloc::vec::Vec::new(),
-        symbols: alloc::vec::Vec::new(),
+        // Linker propagates the AST tier so the post-link
+        // codegen can drive SSA from the walker (Phase C5
+        // `BADC_USE_AST_SSA=1`). Each unit's `finished_functions`
+        // has unit-local `ent_pc`s; rebase by the unit's
+        // `text_base` so the codegen-side ent_pc remains
+        // consistent with the merged bytecode. `Expr::Ident.sym`
+        // remains a unit-local index for now -- multi-TU
+        // symbol-base remapping would need a parallel
+        // `sym_base[unit]` walk on every AST Ident; defer that
+        // to when multi-TU lands an AST-driven flip. Single-unit
+        // links are the immediate target and concatenate
+        // verbatim.
+        finished_functions: {
+            let mut all: alloc::vec::Vec<crate::c5::ast::FinishedFunction> =
+                alloc::vec::Vec::new();
+            for (i, unit) in units.iter().enumerate() {
+                let base = text_base[i];
+                for f in &unit.finished_functions {
+                    let mut clone = f.clone();
+                    clone.ent_pc += base;
+                    all.push(clone);
+                }
+            }
+            all
+        },
+        symbols: {
+            // Single-unit: just clone the parser symbols. Multi-
+            // unit links currently can't drive the walker --
+            // `Expr::Ident.sym` is unit-local. Until that's
+            // rebased, only the first unit's symbols are
+            // preserved; this matches the constraint above.
+            if units.len() == 1 {
+                units[0].parser_symbols.clone()
+            } else {
+                alloc::vec::Vec::new()
+            }
+        },
     })
 }
 

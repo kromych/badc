@@ -144,19 +144,8 @@ pub(crate) fn produce_ssa_funcs(
     target: Target,
 ) -> Result<Vec<FunctionSsa>, C5Error> {
     if use_ast_ssa() && !program.finished_functions.is_empty() {
-        #[cfg(feature = "std")]
-        eprintln!(
-            "ssa source: walker ({} fns)",
-            program.finished_functions.len()
-        );
         walk_program(program, target)
     } else {
-        #[cfg(feature = "std")]
-        if use_ast_ssa() {
-            eprintln!(
-                "ssa source: lift fallback (finished_functions empty -- linker / optimizer reload)"
-            );
-        }
         super::ssa::lift_program(program)
     }
 }

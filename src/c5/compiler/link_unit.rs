@@ -393,6 +393,8 @@ impl Compiler {
             warnings: self.warnings,
             symbols,
             relocs,
+            finished_functions: self.finished_functions,
+            parser_symbols: self.symbols,
         })
     }
 }

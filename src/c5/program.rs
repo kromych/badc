@@ -284,6 +284,14 @@ pub struct Program {
     /// writers; non-PE targets (Mach-O / ELF) ignore this
     /// field.
     pub subsystem: Option<crate::c5::preprocessor::Subsystem>,
+    /// Per-function AST snapshots, one per function definition in
+    /// declaration order. Populated by the parser's dual-emit
+    /// during Phase C of the IR transition; the shadow-validator
+    /// reads from here to compare the SSA each AST walks to
+    /// against the SSA the bytecode lift produces. Empty for
+    /// builds that didn't go through the parser path (linker /
+    /// optimizer reload).
+    pub(crate) finished_asts: alloc::vec::Vec<crate::c5::ast::Ast>,
 }
 
 /// A single local variable or formal parameter belonging to a

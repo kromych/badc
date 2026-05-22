@@ -450,6 +450,36 @@ pub struct Compiler {
     /// stays at 0 and the codegen treats AllocaInit as a no-op.
     alloca_init_operand_pc: usize,
 
+    /// Per-function AST built in parallel with the bytecode emit
+    /// during Phase C of the IR transition. The arena is reset at
+    /// every function entry. While dual-emit is in flight no
+    /// consumer reads from it; the SSA walker (Phase C3) and the
+    /// shadow-validator (Phase C4) wire in next.
+    pub(super) ast: super::ast::Ast,
+
+    /// ExprId of the value currently in the c5 accumulator, mirroring
+    /// the bytecode tier's invariant that every expression leaves
+    /// its result in `a`. `None` between statements or when the
+    /// accumulator's contents haven't been produced through the AST
+    /// path yet (during the incremental Phase C2 wiring).
+    pub(super) ast_acc: Option<super::ast::ExprId>,
+
+    /// ExprIds matching values on the c5 stack-machine stack -- the
+    /// stack push (`Op::Psh`) records the current `ast_acc` here,
+    /// arithmetic pops the top entry as its left operand. `Vec` is
+    /// per-function, never grows past the deepest expression
+    /// nesting in any one function.
+    pub(super) ast_vstack: Vec<super::ast::ExprId>,
+
+    /// Per-function AST snapshots, captured at every function's
+    /// closing `Op::Lev`. The shadow-validator (Phase C4) reads
+    /// from here to compare the SSA each AST walks to against the
+    /// SSA the bytecode lift produces from `self.text`. Order
+    /// matches function-definition order; the index into
+    /// `finished_asts` aligns with the function's symbol-table
+    /// `class == Token::Fun` ent_pc.
+    pub(super) finished_asts: Vec<super::ast::Ast>,
+
     // --- Patch lists ---
     loop_breaks: Vec<Vec<usize>>,
     loop_continues: Vec<Vec<usize>>,
@@ -899,6 +929,10 @@ impl Compiler {
             max_loc_offs: 0,
             uses_alloca_in_current_fn: false,
             alloca_init_operand_pc: 0,
+            ast: super::ast::Ast::new(),
+            ast_acc: None,
+            ast_vstack: Vec::new(),
+            finished_asts: Vec::new(),
             loop_breaks: Vec::new(),
             loop_continues: Vec::new(),
             labels: Vec::new(),
@@ -1092,6 +1126,7 @@ impl Compiler {
             // `wWinMain`) chosen when `main` is absent.
             entry_name: resolved_entry_name,
             subsystem: self.pp_subsystem,
+            finished_asts: self.finished_asts,
         })
     }
 }

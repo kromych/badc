@@ -604,6 +604,7 @@ impl Compiler {
                     self.labels.clear();
                     self.unresolved_gotos.clear();
                     self.uses_alloca_in_current_fn = false;
+                    self.ast_reset();
 
                     let ent_pc = self.text.len();
                     // Now that the body is being emitted, point the
@@ -757,6 +758,7 @@ impl Compiler {
                         self.emit_val(0);
                     }
                     self.emit_op(Op::Lev);
+                    self.ast_finish_function();
                     self.current_function_name.clear();
                     self.current_func_returns_void = false;
 

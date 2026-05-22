@@ -753,6 +753,11 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         structs: merged_structs,
         entry_name,
         subsystem,
+        // Linker merges multiple compiled units; the AST tier
+        // is a per-function shadow consumed by the parser-side
+        // shadow-validator before linking. Linker reload starts
+        // fresh.
+        finished_asts: alloc::vec::Vec::new(),
     })
 }
 

@@ -148,20 +148,23 @@ impl Compiler {
         if self.lex.tk == 0 {
             return Err(self.compile_err("unexpected eof in expression"));
         } else if self.lex.tk == Token::Num {
-            self.emit_imm(self.lex.ival);
-            self.ty = self.literal_auto_promoted_type(self.lex.ival);
+            let val = self.lex.ival;
+            self.emit_imm(val);
+            self.ty = self.literal_auto_promoted_type(val);
+            self.ast_emit_int_lit(val, self.ty);
             self.next()?;
         } else if self.lex.tk == Token::FloatNum {
-            // The lexer parsed `1.5` etc. into f64 and stored
-            // `f64::to_bits()` cast to i64 in `ival`. The byte
-            // pattern flows through Op::Imm unmodified -- a future
-            // float codegen reads it back with `f64::from_bits`.
-            // Until then, the `is_floating_scalar` self-ty marks
-            // the value so it can't accidentally feed into integer
-            // arithmetic (the binary-op handlers gate on this).
+            // C99 6.4.4.2: floating constant. The lexer parsed
+            // `1.5` etc. into f64 and stored `f64::to_bits()` cast
+            // to i64 in `ival`. The byte pattern flows through
+            // Op::Imm unmodified; the codegen reads it back via
+            // `f64::from_bits` when the surrounding `self.ty`
+            // marks the value as floating.
+            let bits = self.lex.ival as u64;
             self.emit_imm(self.lex.ival);
-            self.next()?;
             self.ty = Ty::Double as i64;
+            self.ast_emit_float_lit(bits, self.ty);
+            self.next()?;
         } else if self.lex.tk == '"' {
             // C99 6.4.5 paragraph 6: a string literal has type
             // `char[N+1]` where the +1 is the trailing NUL. The

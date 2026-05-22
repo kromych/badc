@@ -289,7 +289,7 @@ pub(crate) enum Decl {
 
 /// Per-function AST. One instance lives on the active function in
 /// [`super::compiler::Compiler`]; dropped at function exit.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub(crate) struct Ast {
     pub exprs: Vec<Expr>,
     pub stmts: Vec<Stmt>,

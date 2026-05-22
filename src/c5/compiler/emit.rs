@@ -14,6 +14,7 @@
 //! from an rvalue load to a stack push or address. Both keep the
 //! parallel debug-info columns in sync.
 
+use super::super::ast::{Expr, ExprId, SrcPos};
 use super::super::error::C5Error;
 use super::super::op::Op;
 use super::super::symbol::Symbol;
@@ -507,5 +508,99 @@ impl Compiler {
         sym.array_size = sym.h_array_size;
         sym.inner_array_size = sym.h_inner_array_size;
         sym.array_dims = core::mem::take(&mut sym.h_array_dims);
+    }
+
+    // ---- AST dual-emit helpers ----
+    //
+    // The parser's Op::* emit sites pair with the AST helpers below
+    // so a function's bytecode and AST are produced in lockstep.
+    // The bytecode remains the source of truth during Phase C2;
+    // Phase C4 wires the validator that asserts the AST walker
+    // produces the same SSA as the bytecode lift.
+
+    /// Reset the AST + parser-side value stack at the start of a
+    /// function body. The arena drops the previous function's
+    /// nodes wholesale; the accumulator and vstack go empty
+    /// because no expression has produced a value yet at function
+    /// entry.
+    pub(super) fn ast_reset(&mut self) {
+        self.ast = super::super::ast::Ast::new();
+        self.ast_acc = None;
+        self.ast_vstack.clear();
+    }
+
+    /// Capture the just-finished function's AST into the per-TU
+    /// snapshot vector. Called from the end-of-function-body hook
+    /// in `run_compile`, right after the trailing `Op::Lev`. The
+    /// `ast_acc` / `ast_vstack` parser-side state is left alone --
+    /// the next function's `ast_reset` zeroes it.
+    pub(super) fn ast_finish_function(&mut self) {
+        let finished = core::mem::take(&mut self.ast);
+        self.finished_asts.push(finished);
+    }
+
+    /// Current source position. Mirrors the bytecode tier's
+    /// `source_lines` / `intern_source_file` columns so every AST
+    /// node carries the line / file the matching Op::* would have
+    /// gotten.
+    pub(super) fn ast_src_pos(&mut self) -> SrcPos {
+        let file = self.intern_source_file();
+        SrcPos {
+            line: self.lex.line as u32,
+            file,
+        }
+    }
+
+    /// Push an integer-literal expression and stash it in
+    /// `ast_acc`. Pairs with the bytecode tier's
+    /// `emit_imm(self.lex.ival)` at the integer-literal /
+    /// enum-constant / `Token::Num`-class identifier sites.
+    pub(super) fn ast_emit_int_lit(&mut self, val: i64, ty: i64) -> ExprId {
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(Expr::IntLit { val, ty }, pos);
+        self.ast_acc = Some(id);
+        id
+    }
+
+    /// Push a floating-point-literal expression. The lexer already
+    /// stored `f64::to_bits()` cast to `i64` in `lex.ival`; the AST
+    /// keeps the bit pattern in a `u64` so it round-trips through
+    /// the walker without re-casting.
+    pub(super) fn ast_emit_float_lit(&mut self, bits: u64, ty: i64) -> ExprId {
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(Expr::FloatLit { bits, ty }, pos);
+        self.ast_acc = Some(id);
+        id
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::super::ast::Expr;
+    use super::super::Compiler;
+
+    /// Compile `int main(void) { return 7; }` and confirm the
+    /// dual-emit captured exactly one finished function whose AST
+    /// contains an `IntLit { val: 7 }`. Locks the integer-literal
+    /// wiring + the function-end snapshot hook.
+    #[test]
+    fn int_main_return_7_captures_int_lit() {
+        // Bare `int main(void)` source: no headers, no #pragma. The
+        // parser still produces a complete function and trips the
+        // dual-emit + finish hook even though there's no libc.
+        let src = alloc::string::String::from("int main(void) { return 7; }\n");
+        let program = Compiler::new(src).compile().expect("compile int main");
+        assert_eq!(program.finished_asts.len(), 1);
+        let ast = &program.finished_asts[0];
+        let lit_count = ast
+            .exprs
+            .iter()
+            .filter(|e| matches!(e, Expr::IntLit { val: 7, .. }))
+            .count();
+        assert_eq!(
+            lit_count, 1,
+            "expected exactly one IntLit{{val:7}}, ast.exprs = {:?}",
+            ast.exprs,
+        );
     }
 }

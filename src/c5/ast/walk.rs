@@ -627,10 +627,38 @@ impl<'a> Walker<'a> {
                 // already applied.
                 Ok(value)
             }
-            Expr::Ternary { .. } => Err(WalkError::UnsupportedExpr {
-                id,
-                kind: "Ternary",
-            }),
+            Expr::Ternary {
+                cond,
+                then_e,
+                else_e,
+                ..
+            } => {
+                // C99 6.5.15: evaluate cond; depending on the
+                // value, evaluate exactly one of then_e / else_e
+                // and the conditional expression's value is that
+                // arm's value. Same synthetic-local-slot phi
+                // substitute the `ShortCircuit` arm uses -- both
+                // arms `store_local` the arm result and the
+                // merge block `load_local`s.
+                let cond_v = self.walk_expr_rvalue(b, *cond)?;
+                let then_blk = b.new_block();
+                let else_blk = b.new_block();
+                let after_blk = b.new_block();
+                b.branch_zero(cond_v, else_blk, then_blk);
+                let slot = b.alloc_synthetic_local();
+                let kind_l = super::super::ir::LoadKind::I64;
+                let kind_s = super::super::ir::StoreKind::I64;
+                b.switch_to(then_blk);
+                let then_v = self.walk_expr_rvalue(b, *then_e)?;
+                b.store_local(slot, then_v, kind_s);
+                b.jmp(after_blk);
+                b.switch_to(else_blk);
+                let else_v = self.walk_expr_rvalue(b, *else_e)?;
+                b.store_local(slot, else_v, kind_s);
+                b.jmp(after_blk);
+                b.switch_to(after_blk);
+                Ok(b.load_local(slot, kind_l))
+            }
             Expr::Call { callee, args, .. } => {
                 // Lower each arg as an rvalue, then dispatch
                 // through the callee's class. Direct

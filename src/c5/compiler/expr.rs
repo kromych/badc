@@ -1525,6 +1525,15 @@ impl Compiler {
             self.pending.last_array_decay_size = 0;
             self.pending.last_array_decay_bytes = 0;
             if self.lex.tk == '(' {
+                // Snapshot the callee AST + vstack depth before
+                // any of the call's bytecode emit sites perturb
+                // the dual-emit state. The indirect-call dual-
+                // emit at the end of this branch builds an
+                // `Expr::Call { callee, args, ty }` from these.
+                let callee_ast = self.ast_acc;
+                let ast_vstack_snapshot = self.ast_vstack.len();
+                let mut indirect_arg_ids: alloc::vec::Vec<Option<super::super::ast::ExprId>> =
+                    alloc::vec::Vec::new();
                 // Postfix indirect call: the expression so far put a
                 // function-pointer value in `a`. Examples:
                 //   `s.fp(args)` -- function-pointer struct field
@@ -1598,6 +1607,7 @@ impl Compiler {
                     self.emit_lea(temp_off);
                     self.emit_op(Op::Psh);
                     self.expr(Token::Assign as i64)?;
+                    indirect_arg_ids.push(self.ast_acc);
                     self.emit_op(Op::Si);
                     nargs += 1;
                     if self.lex.tk == ',' {
@@ -1622,6 +1632,41 @@ impl Compiler {
                 // register value carries the full 8-byte return
                 // regardless of the tag.
                 self.ty = Ty::Int as i64;
+                // Dual-emit the indirect call. Drop the AST
+                // vstack pushes the bytecode dance leaked,
+                // mirror of the direct-call truncation.
+                self.ast_vstack.truncate(ast_vstack_snapshot);
+                let return_ty = self.ty;
+                if let Some(callee_id) = callee_ast {
+                    let pos = self.ast_src_pos();
+                    let mut resolved: alloc::vec::Vec<super::super::ast::ExprId> =
+                        alloc::vec::Vec::with_capacity(indirect_arg_ids.len());
+                    let mut all_some = true;
+                    for a in indirect_arg_ids {
+                        match a {
+                            Some(id) => resolved.push(id),
+                            None => {
+                                all_some = false;
+                                break;
+                            }
+                        }
+                    }
+                    if all_some {
+                        let id = self.ast.push_expr(
+                            super::super::ast::Expr::Call {
+                                callee: callee_id,
+                                args: resolved,
+                                ty: return_ty,
+                            },
+                            pos,
+                        );
+                        self.ast_acc = Some(id);
+                    } else {
+                        self.ast_acc = None;
+                    }
+                } else {
+                    self.ast_acc = None;
+                }
             } else if self.lex.tk == Token::Assign {
                 self.next()?;
                 let lhs_is_struct_value = is_struct_ty(t) && struct_ptr_depth(t) == 0;

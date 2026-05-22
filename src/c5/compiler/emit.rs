@@ -953,6 +953,22 @@ impl Compiler {
         self.ast_acc = Some(id);
     }
 
+    /// Wrap the current `ast_acc` in an `Expr::Cast { to_ty }`.
+    /// Used by `convert_assign_rhs` and other implicit-conversion
+    /// sites where the bytecode tier already emitted the FP
+    /// conversion op (`Fcvtif` / `Fcvtfi`) and the AST needs the
+    /// matching `Expr::Cast` so the walker emits the right
+    /// `Inst::FpCast`. No-op when the accumulator is empty (the
+    /// child expression hadn't been wired by the dual-emit yet).
+    pub(super) fn ast_apply_assign_conv(&mut self, to_ty: i64) {
+        let Some(child) = self.ast_acc.take() else {
+            return;
+        };
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(Expr::Cast { child, to_ty }, pos);
+        self.ast_acc = Some(id);
+    }
+
     /// Push `Expr::Member { obj, field_off, bitfield, ty }`.
     /// `obj` is the address-producing expression (struct value or
     /// pointer); `field_off` is the byte offset within the struct;

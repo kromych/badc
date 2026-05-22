@@ -716,8 +716,26 @@ impl<'a> Walker<'a> {
                 // `b.call_indirect` with the callee's value.
                 let mut arg_vals: alloc::vec::Vec<super::super::ir::ValueId> =
                     alloc::vec::Vec::with_capacity(args.len());
-                for a in args {
+                // C99 6.5.2.2p7 + ABI: each FP-typed argument
+                // routes through d0..d7 (or the host's variadic
+                // FP slot). Encode the per-arg FP-ness as a bit
+                // mask so the codegen's `plan_call_args` places
+                // each arg in the right register class. Walker
+                // reads the arg's snapshotted `ty`; the post-
+                // conversion type captured by the dual-emit
+                // binop tracker already reflects the implicit
+                // int->double lift the parser emitted at this
+                // call site.
+                let mut fp_arg_mask: u32 = 0;
+                for (i, a) in args.iter().enumerate() {
                     arg_vals.push(self.walk_expr_rvalue(b, *a)?);
+                    if expr_ty(self.ast.expr(*a))
+                        .map(is_floating_scalar)
+                        .unwrap_or(false)
+                        && i < 32
+                    {
+                        fp_arg_mask |= 1u32 << i;
+                    }
                 }
                 if let Expr::Ident { class, val, .. } = self.ast.expr(*callee) {
                     if *class == Token::Fun as i64 {
@@ -728,12 +746,9 @@ impl<'a> Walker<'a> {
                         // flat index across all `#pragma
                         // binding(...)` directives -- exactly
                         // what `Inst::CallExt::binding_idx`
-                        // wants. The `fp_arg_mask` for variadic
-                        // FP packing isn't tracked on the AST
-                        // yet; pass 0 (no FP args). The flip
-                        // pass (Phase C5) will recompute the
-                        // mask from each arg's type. TODO.
-                        return Ok(b.call_ext(*val, arg_vals, 0));
+                        // wants. `fp_arg_mask` is the per-arg
+                        // FP-ness bit set we built above.
+                        return Ok(b.call_ext(*val, arg_vals, fp_arg_mask));
                     }
                 }
                 let target = self.walk_expr_rvalue(b, *callee)?;
@@ -1267,6 +1282,34 @@ const UNSIGNED_BIT: i64 = 1 << 30;
 /// can classify struct values without crossing the module boundary.
 const STRUCT_BASE: i64 = 1000;
 const STRUCT_STRIDE: i64 = 1000;
+
+/// Read the type tag off an expression node. Returns `None` for
+/// shapes that don't carry one (`Sizeof` is constant-evaluated
+/// and the walker doesn't peek into the result; intrinsics carry
+/// their own `ty`).
+fn expr_ty(e: &Expr) -> Option<i64> {
+    match e {
+        Expr::IntLit { ty, .. }
+        | Expr::FloatLit { ty, .. }
+        | Expr::StrLit { ty, .. }
+        | Expr::Ident { ty, .. }
+        | Expr::Unary { ty, .. }
+        | Expr::Binary { ty, .. }
+        | Expr::Ternary { ty, .. }
+        | Expr::Call { ty, .. }
+        | Expr::Member { ty, .. }
+        | Expr::Index { ty, .. }
+        | Expr::Assign { ty, .. }
+        | Expr::CompoundAssign { ty, .. }
+        | Expr::PreInc { ty, .. }
+        | Expr::PostInc { ty, .. }
+        | Expr::Comma { ty, .. }
+        | Expr::ShortCircuit { ty, .. }
+        | Expr::Intrinsic { ty, .. } => Some(*ty),
+        Expr::Cast { to_ty, .. } => Some(*to_ty),
+        Expr::Sizeof(s) => Some(s.result_ty),
+    }
+}
 
 /// Byte size of a C type tag at the active target. Mirrors
 /// `compiler::types::size_of_type` for the scalar / pointer / FP

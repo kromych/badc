@@ -100,20 +100,13 @@ pub(super) fn record_post_prologue_pc(
 /// Per-arch emit dispatch checks this before invoking `emit_inst`;
 /// dead pure values produce no machine code. Side-effectful insts
 /// (stores, calls, intrinsics, alloca init, vstack spills) are
-/// always emitted regardless of use count. The exception is
-/// `StoreLocal` insts the allocator flagged as `dead_stores` --
-/// within-block analysis proved a later StoreLocal overwrites the
-/// same slot before any read.
+/// always emitted regardless of use count.
 pub(super) fn is_dead_pure(
     inst: &super::super::ir::Inst,
     v: super::super::ir::ValueId,
     alloc: &super::ssa_alloc::Allocation,
 ) -> bool {
     use super::super::ir::Inst::*;
-    let idx = v as usize;
-    if matches!(inst, StoreLocal { .. }) && alloc.dead_stores.get(idx).copied().unwrap_or(false) {
-        return true;
-    }
     let pure = matches!(
         inst,
         Imm(_)
@@ -134,6 +127,7 @@ pub(super) fn is_dead_pure(
     if !pure {
         return false;
     }
+    let idx = v as usize;
     alloc.use_counts.get(idx).copied().unwrap_or(0) == 0
 }
 

@@ -474,6 +474,49 @@ impl Ast {
         &self.stmts[id as usize]
     }
 
+    /// Add `data_base` to every data-segment offset stored on
+    /// AST nodes. Used by the linker after each unit's data
+    /// segment is placed in the merged image: parser-time
+    /// `data_off` / `val` snapshots are unit-local; the merged
+    /// image places the unit at `data_base` bytes from the
+    /// segment's start (and beyond the leading NULL guard).
+    /// Touches:
+    ///   * `Expr::StrLit { data_off }`
+    ///   * `Expr::Ident { class: Glo, val }` -- `val` is the
+    ///     symbol's data-segment byte offset.
+    ///   * `LocalInit::Aggregate { src_data_off }` and the
+    ///     `Runtime { zero_init: (src_data_off, _) }` prelude.
+    pub(crate) fn rebase_data_offsets(&mut self, data_base: i64) {
+        use crate::c5::token::Token;
+        if data_base == 0 {
+            return;
+        }
+        for expr in &mut self.exprs {
+            match expr {
+                Expr::StrLit { data_off, .. } => *data_off += data_base,
+                Expr::Ident { class, val, is_thread_local, .. } => {
+                    if *class == Token::Glo as i64 && !*is_thread_local {
+                        *val += data_base;
+                    }
+                }
+                _ => {}
+            }
+        }
+        for decl in &mut self.decls {
+            if let Decl::Local { init, .. } = decl {
+                match init {
+                    LocalInit::Aggregate { src_data_off, .. } => *src_data_off += data_base,
+                    LocalInit::Runtime { zero_init, .. } => {
+                        if let Some((off, _)) = zero_init {
+                            *off += data_base;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
     pub(crate) fn decl(&self, id: DeclId) -> &Decl {
         &self.decls[id as usize]
     }

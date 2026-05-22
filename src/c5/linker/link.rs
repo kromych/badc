@@ -770,9 +770,19 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                 alloc::vec::Vec::new();
             for (i, unit) in units.iter().enumerate() {
                 let base = text_base[i];
+                let d_base = data_base[i] as i64;
                 for f in &unit.finished_functions {
                     let mut clone = f.clone();
                     clone.ent_pc += base;
+                    // Parser-time `data_off` / Glo `val` snapshots
+                    // are relative to this unit's own data segment
+                    // start (post-`compile_to_link_unit`, before
+                    // the linker placed the unit at `data_base[i]`
+                    // in the merged image, which itself sits past
+                    // the leading 8-byte NULL guard). Rebase each
+                    // node so the walker emits the right absolute
+                    // offset.
+                    clone.ast.rebase_data_offsets(d_base);
                     all.push(clone);
                 }
             }

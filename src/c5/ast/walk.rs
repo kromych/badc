@@ -425,9 +425,82 @@ impl<'a> Walker<'a> {
                 let target = self.walk_expr_rvalue(b, *callee)?;
                 Ok(b.call_indirect(target, arg_vals))
             }
-            Expr::Member { .. } => Err(WalkError::UnsupportedExpr { id, kind: "Member" }),
-            Expr::Index { .. } => Err(WalkError::UnsupportedExpr { id, kind: "Index" }),
-            Expr::Cast { .. } => Err(WalkError::UnsupportedExpr { id, kind: "Cast" }),
+            Expr::Member {
+                obj,
+                field_off,
+                bitfield,
+                ty,
+            } => {
+                if bitfield.is_some() {
+                    // Bitfield read needs the load+shift+mask
+                    // pattern the bytecode tier emits; the walker
+                    // doesn't reconstruct it yet.
+                    return Err(WalkError::UnsupportedExpr {
+                        id,
+                        kind: "Member(bitfield)",
+                    });
+                }
+                let base = self.walk_expr_rvalue(b, *obj)?;
+                let addr = if *field_off != 0 {
+                    b.binop_imm(BinOp::Add, base, *field_off)
+                } else {
+                    base
+                };
+                let kind = load_kind_for(*ty, self.target);
+                Ok(b.load(addr, kind))
+            }
+            Expr::Index { array, idx, ty } => {
+                let arr = self.walk_expr_rvalue(b, *array)?;
+                let i = self.walk_expr_rvalue(b, *idx)?;
+                // The parser already scaled `idx` by the element
+                // size (via `emit_binop_with_imm(Op::Mul, scale)`)
+                // when the pointee size is non-trivial. The
+                // resulting child `Binary{Mul, idx, scale}` rides
+                // through `walk_expr_rvalue`; we just add.
+                let addr = b.binop(BinOp::Add, arr, i);
+                let kind = load_kind_for(*ty, self.target);
+                Ok(b.load(addr, kind))
+            }
+            Expr::Cast { child, to_ty } => {
+                let v = self.walk_expr_rvalue(b, *child)?;
+                // C99 6.5.4: a cast performs a value-changing
+                // conversion when the source/destination differ
+                // in fp-ness. Same-class casts (int<->ptr,
+                // float<->double) are bit-pattern-compatible and
+                // need no op. Width-narrowing on integers is a
+                // truncation the SSA emitter already handles
+                // through the Store / Load kinds at the
+                // surrounding sites.
+                let src_ty = match self.ast.expr(*child) {
+                    Expr::IntLit { ty, .. }
+                    | Expr::FloatLit { ty, .. }
+                    | Expr::Ident { ty, .. }
+                    | Expr::Unary { ty, .. }
+                    | Expr::Binary { ty, .. }
+                    | Expr::Ternary { ty, .. }
+                    | Expr::Call { ty, .. }
+                    | Expr::Member { ty, .. }
+                    | Expr::Index { ty, .. }
+                    | Expr::Assign { ty, .. }
+                    | Expr::CompoundAssign { ty, .. }
+                    | Expr::PreInc { ty, .. }
+                    | Expr::PostInc { ty, .. }
+                    | Expr::Comma { ty, .. } => *ty,
+                    Expr::Cast { to_ty: t, .. } => *t,
+                    Expr::Sizeof(s) => s.result_ty,
+                    Expr::StrLit { ty, .. } => *ty,
+                    Expr::Intrinsic { ty, .. } => *ty,
+                };
+                let target_is_fp = is_floating_scalar(*to_ty);
+                let source_is_fp = is_floating_scalar(src_ty);
+                if target_is_fp && !source_is_fp {
+                    Ok(b.fp_cast(super::super::ir::FpCastKind::IntToFp, v))
+                } else if !target_is_fp && source_is_fp {
+                    Ok(b.fp_cast(super::super::ir::FpCastKind::FpToInt, v))
+                } else {
+                    Ok(v)
+                }
+            }
             Expr::CompoundAssign { .. } => Err(WalkError::UnsupportedExpr {
                 id,
                 kind: "CompoundAssign",
@@ -441,10 +514,17 @@ impl<'a> Walker<'a> {
                 b.store(addr, stepped, store_kind);
                 Ok(stepped)
             }
-            Expr::PostInc { .. } => Err(WalkError::UnsupportedExpr {
-                id,
-                kind: "PostInc",
-            }),
+            Expr::PostInc { lvalue, by, ty } => {
+                let addr = self.walk_expr_lvalue(b, *lvalue)?;
+                let kind = load_kind_for(*ty, self.target);
+                let old = b.load(addr, kind);
+                let stepped = b.binop_imm(BinOp::Add, old, *by);
+                let store_kind = store_kind_for(*ty, self.target);
+                b.store(addr, stepped, store_kind);
+                // C99 6.5.2.4p3: the expression's value is the
+                // pre-update value (`old`).
+                Ok(old)
+            }
             Expr::Sizeof(s) => Ok(b.imm(s.size_bytes)),
             Expr::Comma { lhs, rhs, .. } => {
                 let _ = self.walk_expr_rvalue(b, *lhs)?;
@@ -476,12 +556,34 @@ impl<'a> Walker<'a> {
             // Pointer-arithmetic-derived lvalues: `t->f = v` lowers
             // to `*(t + field_off) = v`, the parser absorbs the
             // Deref into the address expression, and the Assign's
-            // lhs reaches the walker as `Binary{Add, t, off}` (or
-            // an `Index` for `arr[i]`). The Binary's value IS the
-            // address per C99 6.5.6 pointer-plus-integer; storing
-            // through it matches the bytecode tier's address
-            // computation followed by `Op::Si`/etc.
-            Expr::Binary { .. } | Expr::Index { .. } => self.walk_expr_rvalue(b, id),
+            // lhs reaches the walker as `Binary{Add, t, off}`.
+            // The Binary's value IS the address per C99 6.5.6
+            // pointer-plus-integer.
+            Expr::Binary { .. } => self.walk_expr_rvalue(b, id),
+            // Indexed lvalue: `arr[i] = v`. Compute the address
+            // (`arr + i`) without the trailing load that
+            // `walk_expr_rvalue` would emit.
+            Expr::Index { array, idx, .. } => {
+                let (array_id, idx_id) = (*array, *idx);
+                let arr = self.walk_expr_rvalue(b, array_id)?;
+                let i = self.walk_expr_rvalue(b, idx_id)?;
+                Ok(b.binop(BinOp::Add, arr, i))
+            }
+            // Member lvalue: `s.f = v` / `p->f = v`. Address is
+            // the object's address-producer plus the field
+            // offset; no trailing load.
+            Expr::Member {
+                obj, field_off, ..
+            } => {
+                let obj_id = *obj;
+                let off = *field_off;
+                let base = self.walk_expr_rvalue(b, obj_id)?;
+                if off != 0 {
+                    Ok(b.binop_imm(BinOp::Add, base, off))
+                } else {
+                    Ok(base)
+                }
+            }
             other => Err(WalkError::UnsupportedExpr {
                 id,
                 kind: lvalue_shape_label(other),

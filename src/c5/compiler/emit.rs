@@ -849,6 +849,62 @@ impl Compiler {
         self.ast_acc = Some(id);
     }
 
+    /// Push `Expr::PostInc { lvalue, by, ty }`. Same shape as
+    /// PreInc; the walker captures the pre-update value as the
+    /// expression's result per C99 6.5.2.4p3.
+    pub(super) fn ast_emit_post_inc(&mut self, lvalue: ExprId, by: i64, ty: i64) {
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(Expr::PostInc { lvalue, by, ty }, pos);
+        self.ast_acc = Some(id);
+    }
+
+    /// Push `Expr::Cast { child, to_ty }`. Called from the C-style
+    /// cast site once `(type)expr` finishes parsing; the bytecode
+    /// tier's conversion ops (Fcvtif / Fcvtfi / Shl / Shr / And)
+    /// already left intermediate Binary nodes on `ast_acc`. The
+    /// Cast overwrites those with a single canonical node whose
+    /// `child` is the pre-cast expression captured by the caller.
+    pub(super) fn ast_emit_cast(&mut self, child: ExprId, to_ty: i64) {
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(Expr::Cast { child, to_ty }, pos);
+        self.ast_acc = Some(id);
+    }
+
+    /// Push `Expr::Member { obj, field_off, bitfield, ty }`.
+    /// `obj` is the address-producing expression (struct value or
+    /// pointer); `field_off` is the byte offset within the struct;
+    /// `bitfield` is `Some` only for bitfields. The walker treats
+    /// the node as an lvalue producer + load combination.
+    pub(super) fn ast_emit_member(
+        &mut self,
+        obj: ExprId,
+        field_off: i64,
+        bitfield: Option<super::super::ast::BitfieldDesc>,
+        ty: i64,
+    ) {
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(
+            Expr::Member {
+                obj,
+                field_off,
+                bitfield,
+                ty,
+            },
+            pos,
+        );
+        self.ast_acc = Some(id);
+    }
+
+    /// Push `Expr::Index { array, idx, ty }`. `array` is the
+    /// pointer / array-decayed-pointer; `idx` is the post-scale
+    /// index expression. Same shape the walker uses for indexed
+    /// loads.
+    pub(super) fn ast_emit_index(&mut self, array: ExprId, idx: ExprId, ty: i64) {
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(Expr::Index { array, idx, ty }, pos);
+        self.ast_acc = Some(id);
+    }
+
     /// Push an `Expr::Call` and set it as the new accumulator.
     /// Called by the function-call parser site after the bytecode
     /// dance (per-arg temp store + reverse push + Jsr/JsrExt/Jsri

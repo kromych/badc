@@ -957,6 +957,7 @@ impl Compiler {
                     return Err(self.compile_err("bad cast"));
                 }
                 self.expr(Token::Inc as i64)?;
+                let cast_child_ast = self.ast_acc;
                 // FP-vs-int casts emit conversion ops so the bit
                 // pattern in r13 is consistent with the new type.
                 // Same-class casts (int<->ptr, float<->double) are
@@ -1022,6 +1023,14 @@ impl Compiler {
                     }
                 }
                 self.ty = t;
+                // Overwrite the AST acc with a canonical Cast
+                // node so the intermediate Binary nodes the
+                // bytecode conversion dance pushed don't surface
+                // as the cast's value. The dropped nodes have no
+                // consumers; the SSA walker won't visit them.
+                if let Some(child) = cast_child_ast {
+                    self.ast_emit_cast(child, t);
+                }
                 // Re-seed the fn-ptr chain depth from the
                 // cast destination so a unary `*` chain that
                 // follows a `(fn_t*)expr` cast (e.g.
@@ -1990,6 +1999,7 @@ impl Compiler {
                 }
                 self.ty = common;
             } else if self.lex.tk == Token::Inc || self.lex.tk == Token::Dec {
+                let post_inc_lvalue = self.ast_acc;
                 let reload = self
                     .rewrite_trailing_load_as_psh()
                     .ok_or_else(|| self.compile_err("bad lvalue in post-increment"))?;
@@ -2025,9 +2035,26 @@ impl Compiler {
                 } else {
                     Op::Add
                 });
+                // Dual-emit `Expr::PostInc { lvalue, by, ty }`.
+                // The bytecode left the post-update bias in the
+                // accumulator; the AST replaces that with the
+                // canonical post-inc node so the walker emits
+                // load -> binop_imm(Add, by) -> store -> return
+                // the pre-update value per C99 6.5.2.4p3.
+                let post_step = self.pointee_step(self.ty);
+                let post_signed = if self.lex.tk == Token::Inc {
+                    post_step
+                } else {
+                    -post_step
+                };
+                let post_ty = self.ty;
+                if let Some(lvalue) = post_inc_lvalue {
+                    self.ast_emit_post_inc(lvalue, post_signed, post_ty);
+                }
                 self.next()?;
             } else if self.lex.tk == Token::Brak {
                 self.next()?;
+                let array_ast = self.ast_acc;
                 // Read-and-park the multi-dim stride queue. The
                 // identifier / param / field-decay branches seed
                 // strides for each of the N-1 multi-dim subscript
@@ -2041,6 +2068,7 @@ impl Compiler {
                 self.pending.index_stride = 0;
                 self.emit_op(Op::Psh);
                 self.expr(Token::Assign as i64)?;
+                let idx_ast = self.ast_acc;
                 // Restore the queue and shift one level down so
                 // the next `[i]` sees the stride for that level
                 // in `pending_index_stride` and the rest in the
@@ -2102,6 +2130,15 @@ impl Compiler {
                     if !elem_is_struct_value {
                         self.emit_op(load_op_for(self.ty, self.target));
                     }
+                    // Dual-emit a canonical `Expr::Index { array,
+                    // idx, ty }`. The bytecode tier ran the scale
+                    // + Add + load sequence; the AST collapses to
+                    // one node so the walker emits a single
+                    // address+load through `Expr::Index`.
+                    if let (Some(array), Some(idx)) = (array_ast, idx_ast) {
+                        let idx_ty = self.ty;
+                        self.ast_emit_index(array, idx, idx_ty);
+                    }
                 }
             } else if self.lex.tk == Token::Arrow || self.lex.tk == Token::Dot {
                 // p->field / s.field. Both shapes resolve a struct
@@ -2111,6 +2148,7 @@ impl Compiler {
                 // while `.` runs on a struct value, where the parser
                 // suppressed the load and `a` already holds the
                 // struct's address.
+                let obj_ast = self.ast_acc;
                 let is_dot = self.lex.tk == Token::Dot;
                 let valid = if is_dot {
                     is_struct_ty(t) && struct_ptr_depth(t) == 0
@@ -2233,6 +2271,18 @@ impl Compiler {
                             self.seed_multi_dim_strides(&dims, elem_size);
                         }
                     }
+                }
+                // Dual-emit `Expr::Member` collapsing the address +
+                // load (or just the address for struct-value /
+                // bitfield) into one node. `bitfield: None` for
+                // regular fields; bitfields use the existing
+                // `emit_bitfield_access` shape and skip Member
+                // synthesis (TODO once the bitfield shape lands).
+                if field.bit_width == 0
+                    && let Some(obj) = obj_ast
+                {
+                    let mty = self.ty;
+                    self.ast_emit_member(obj, field.offset as i64, None, mty);
                 }
             } else {
                 return Err(self.compile_err(format!(

@@ -1795,7 +1795,7 @@ impl Compiler {
                 // expr().
                 let lhs_ty = self.ty;
                 self.expr(Token::Assign as i64)?;
-                let compound_rhs_ast = self.ast_acc;
+                let pre_scale_rhs_ast = self.ast_acc;
                 if (binop == Token::AddOp as i64 || binop == Token::SubOp as i64)
                     && is_pointer_ty(lhs_ty)
                     && !is_floating_scalar(lhs_ty)
@@ -1806,6 +1806,14 @@ impl Compiler {
                         self.emit_binop_with_imm(Op::Mul, elem_size);
                     }
                 }
+                // Capture rhs after the pointer-arithmetic
+                // scale ran; the scale is a wrapping `Binary {
+                // Mul, rhs, IntLit(scale) }` node and the
+                // walker's `CompoundAssign` arm uses the
+                // captured id verbatim, so the walker re-emits
+                // the same `Mul` chain (rather than letting the
+                // walker apply its own pointer scaling).
+                let compound_rhs_ast = self.ast_acc.or(pre_scale_rhs_ast);
                 // Floating-point lvalue (`double x; x *= 2.0;`) needs
                 // the FP variant of the binop, not the integer one.
                 // Without this, `x *= y` lowered to `Op::Mul` which

@@ -137,34 +137,45 @@ impl Compiler {
                 self.symbols[loc_idx].decl_in_main_source = self.in_main_source();
                 self.pending_local_init_ast = None;
                 self.pending_local_aggregate_ast = None;
+                self.pending_local_runtime_elements.clear();
                 self.allocate_local_with_init(loc_idx, ty, array_size)?;
                 // Dual-emit: push `Decl::Local { sym, slot_off,
-                // init }`. The scalar init carries an ExprId from
-                // the cross-helper carry filled by
-                // `emit_local_init_store`; an aggregate
-                // (brace-list, struct-init, array-init) carries
-                // the staged `(src_data_off, size_bytes)`
-                // descriptor from `emit_local_array_init`. Static
-                // locals (promoted to Glo class) and aggregate
-                // initializers whose per-element values aren't
-                // compile-time constants still skip -- those need
-                // a richer Decl shape than the walker models today.
+                // init }`. The init flavour comes from whichever
+                // cross-helper carry the inner allocator filled:
+                // * scalar carry  -> `LocalInit::Scalar(ExprId)`
+                // * aggregate     -> `LocalInit::Aggregate`     (Mcpy)
+                // * runtime elems -> `LocalInit::Runtime`       (per-element stores,
+                //                                                 plus the optional
+                //                                                 Mcpy-zero prelude
+                //                                                 from `aggregate`)
+                // Static locals (promoted to Glo class) still skip
+                // -- their bytecode-side allocation diverges.
                 if self.symbols[loc_idx].class == Token::Loc as i64 {
                     let slot_off = self.symbols[loc_idx].val;
                     let scalar = self.pending_local_init_ast.take();
                     let aggregate = self.pending_local_aggregate_ast.take();
-                    let init = match (scalar, aggregate) {
-                        (Some(e), _) => super::super::ast::LocalInit::Scalar(e),
-                        (None, Some((src, size))) => super::super::ast::LocalInit::Aggregate {
+                    let runtime_elements =
+                        core::mem::take(&mut self.pending_local_runtime_elements);
+                    let init = if let Some(e) = scalar {
+                        super::super::ast::LocalInit::Scalar(e)
+                    } else if !runtime_elements.is_empty() {
+                        super::super::ast::LocalInit::Runtime {
+                            zero_init: aggregate,
+                            elements: runtime_elements,
+                        }
+                    } else if let Some((src, size)) = aggregate {
+                        super::super::ast::LocalInit::Aggregate {
                             src_data_off: src,
                             size_bytes: size,
-                        },
-                        (None, None) => super::super::ast::LocalInit::None,
+                        }
+                    } else {
+                        super::super::ast::LocalInit::None
                     };
                     self.ast_emit_local_decl(loc_idx as u32, slot_off, init);
                 } else {
                     self.pending_local_init_ast = None;
                     self.pending_local_aggregate_ast = None;
+                    self.pending_local_runtime_elements.clear();
                 }
             }
             // Unconditional write: a stale fn-ptr lineage from a
@@ -762,6 +773,11 @@ impl Compiler {
             // precedence; the comma between elements is the
             // delimiter, not a comma-expression operator.
             self.expr(Token::Assign as i64)?;
+            // Capture the element's AST node for the matching
+            // `LocalInit::Runtime { elements: ... }` entry so the
+            // walker can emit one `store_local(offset, value)`
+            // per element.
+            let elem_ast = self.ast_acc;
             // Float / double init into a non-float slot would
             // need a conversion op here; today c5's only narrow
             // FP storage is in struct fields (handled elsewhere),
@@ -781,6 +797,14 @@ impl Compiler {
                 self.emit_op(Op::Si);
             } else {
                 self.emit_op(store_op);
+            }
+            if let Some(value) = elem_ast {
+                self.pending_local_runtime_elements
+                    .push(super::super::ast::RuntimeInitElement {
+                        offset: i * elem_size,
+                        value,
+                        ty,
+                    });
             }
             i += 1;
             if self.lex.tk == ',' {
@@ -890,6 +914,7 @@ impl Compiler {
             }
             self.emit_op(Op::Psh);
             self.expr(Token::Assign as i64)?;
+            let field_ast = self.ast_acc;
             let elem_size = self.size_of_type(field.ty);
             let store_op = match elem_size {
                 1 => Op::Sc,
@@ -898,6 +923,14 @@ impl Compiler {
                 _ => Op::Si,
             };
             self.emit_op(store_op);
+            if let Some(value) = field_ast {
+                self.pending_local_runtime_elements
+                    .push(super::super::ast::RuntimeInitElement {
+                        offset: total_offset,
+                        value,
+                        ty: field.ty,
+                    });
+            }
             pos = field_idx + 1;
             if self.lex.tk == ',' {
                 self.next()?;

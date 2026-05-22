@@ -287,7 +287,18 @@ pub(crate) enum Stmt {
     Decl(DeclId),
 }
 
-/// Initializer shape on a `Decl::Local`. C99 6.7.8 admits three
+/// One stored element in a runtime aggregate initializer.
+/// `offset` is the byte offset into the local; `value` is the
+/// element's expression; `ty` is the destination type that
+/// drives the walker's `store_kind_for` pick.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct RuntimeInitElement {
+    pub offset: i64,
+    pub value: ExprId,
+    pub ty: i64,
+}
+
+/// Initializer shape on a `Decl::Local`. C99 6.7.8 admits four
 /// flavours the AST distinguishes:
 /// * `None` -- no initializer; C99 6.7.8p10 leaves the value
 ///   indeterminate.
@@ -299,11 +310,23 @@ pub(crate) enum Stmt {
 ///   constant. The bytecode tier staged the bytes at
 ///   `src_data_off` inside `Program.data`; the walker emits
 ///   `Inst::Mcpy` to copy them into the local's slot.
-#[derive(Debug, Clone, Copy)]
+/// * `Runtime { zero_init, elements }` -- a brace-list
+///   initializer with at least one non-constant element. C99
+///   6.7.8p13. `zero_init` is the optional Mcpy-from-staged-zero
+///   prelude that implements the "omitted entries are zero" rule
+///   (6.7.8p19); `elements` is the per-position store sequence.
+#[derive(Debug, Clone)]
 pub(crate) enum LocalInit {
     None,
     Scalar(ExprId),
-    Aggregate { src_data_off: i64, size_bytes: i64 },
+    Aggregate {
+        src_data_off: i64,
+        size_bytes: i64,
+    },
+    Runtime {
+        zero_init: Option<(i64, i64)>,
+        elements: Vec<RuntimeInitElement>,
+    },
 }
 
 /// Declaration node. Captures variable / function declarations

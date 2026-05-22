@@ -487,7 +487,8 @@ impl<'a> Walker<'a> {
                 let slot = *slot_off;
                 let sym_idx = *sym;
                 let ty = self.symbols[sym_idx as usize].type_;
-                match *init {
+                let init_clone = init.clone();
+                match init_clone {
                     super::super::ast::LocalInit::None => Ok(()),
                     super::super::ast::LocalInit::Scalar(init_id) => {
                         let v = self.walk_expr_rvalue(b, init_id)?;
@@ -502,6 +503,33 @@ impl<'a> Walker<'a> {
                         let dst = b.local_addr(slot);
                         let src = b.imm_data(src_data_off);
                         b.mcpy(dst, src, size_bytes);
+                        Ok(())
+                    }
+                    super::super::ast::LocalInit::Runtime {
+                        zero_init,
+                        elements,
+                    } => {
+                        // C99 6.7.8p19 zero prelude (if the parser
+                        // emitted one): Mcpy staged zero bytes
+                        // before the per-element stores.
+                        if let Some((src_data_off, size_bytes)) = zero_init {
+                            let dst = b.local_addr(slot);
+                            let src = b.imm_data(src_data_off);
+                            b.mcpy(dst, src, size_bytes);
+                        }
+                        // Per-element stores: address = local_addr
+                        // + offset, store(walked-value, kind).
+                        for elem in &elements {
+                            let v = self.walk_expr_rvalue(b, elem.value)?;
+                            let base = b.local_addr(slot);
+                            let addr = if elem.offset == 0 {
+                                base
+                            } else {
+                                b.binop_imm(BinOp::Add, base, elem.offset)
+                            };
+                            let kind = store_kind_for(elem.ty, self.target);
+                            b.store(addr, v, kind);
+                        }
                         Ok(())
                     }
                 }

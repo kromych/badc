@@ -508,6 +508,16 @@ pub struct Compiler {
     /// uninitialized.
     pub(super) pending_local_aggregate_ast: Option<(i64, i64)>,
 
+    /// Cross-helper carry for runtime brace-list local
+    /// initializers: `emit_local_array_init_runtime` and
+    /// `emit_struct_local_init_runtime` append one entry per
+    /// element-store, so the decl site can build
+    /// `Decl::Local { init: Runtime { zero_init, elements } }`.
+    /// The optional `zero_init` is filled by the preceding
+    /// `emit_local_array_init` Mcpy-zero prelude (struct path);
+    /// the array path has no zero prelude today.
+    pub(super) pending_local_runtime_elements: Vec<super::ast::RuntimeInitElement>,
+
     // --- Patch lists ---
     loop_breaks: Vec<Vec<usize>>,
     loop_continues: Vec<Vec<usize>>,
@@ -964,6 +974,7 @@ impl Compiler {
             ast_labels: Vec::new(),
             pending_local_init_ast: None,
             pending_local_aggregate_ast: None,
+            pending_local_runtime_elements: Vec::new(),
             loop_breaks: Vec::new(),
             loop_continues: Vec::new(),
             labels: Vec::new(),

@@ -211,7 +211,13 @@ impl<'a> Walker<'a> {
             Expr::IntLit { val, .. } => Ok(b.imm(*val)),
             Expr::FloatLit { bits, .. } => Ok(b.imm(*bits as i64)),
             Expr::StrLit { data_off, .. } => Ok(b.imm_data(*data_off)),
-            Expr::Ident { sym, ty } => self.load_ident_rvalue(b, *sym, *ty),
+            Expr::Ident {
+                sym,
+                ty,
+                class,
+                val,
+                is_thread_local,
+            } => self.load_ident_rvalue(b, *sym, *ty, *class, *val, *is_thread_local),
             Expr::Unary { op, child, ty } => self.walk_unary(b, *op, *child, *ty),
             Expr::Binary { op, lhs, rhs, .. } => {
                 let lv = self.walk_expr_rvalue(b, *lhs)?;
@@ -275,7 +281,7 @@ impl<'a> Walker<'a> {
         id: ExprId,
     ) -> Result<super::super::ir::ValueId, WalkError> {
         match self.ast.expr(id) {
-            Expr::Ident { sym, .. } => self.ident_address(b, *sym),
+            Expr::Ident { .. } => self.ident_address(b, id),
             Expr::Unary {
                 op: UnOp::Deref,
                 child,
@@ -337,23 +343,35 @@ impl<'a> Walker<'a> {
     fn ident_address(
         &self,
         b: &mut super::super::codegen::ssa_build::SsaBuilder,
-        sym: u32,
+        id: ExprId,
     ) -> Result<super::super::ir::ValueId, WalkError> {
-        let s = &self.symbols[sym as usize];
-        if s.class == Token::Loc as i64 {
-            Ok(b.local_addr(s.val))
-        } else if s.class == Token::Glo as i64 {
-            if s.is_thread_local {
-                Ok(b.tls_addr(s.val))
+        let Expr::Ident {
+            sym,
+            class,
+            val,
+            is_thread_local,
+            ..
+        } = self.ast.expr(id)
+        else {
+            return Err(WalkError::UnsupportedExpr {
+                id,
+                kind: lvalue_shape_label(self.ast.expr(id)),
+            });
+        };
+        if *class == Token::Loc as i64 {
+            Ok(b.local_addr(*val))
+        } else if *class == Token::Glo as i64 {
+            if *is_thread_local {
+                Ok(b.tls_addr(*val))
             } else {
-                Ok(b.imm_data(s.val))
+                Ok(b.imm_data(*val))
             }
-        } else if s.class == Token::Fun as i64 {
-            Ok(b.imm_code(s.val as usize))
+        } else if *class == Token::Fun as i64 {
+            Ok(b.imm_code(*val as usize))
         } else {
             Err(WalkError::UnknownSymbolClass {
-                sym,
-                class: s.class,
+                sym: *sym,
+                class: *class,
             })
         }
     }
@@ -361,37 +379,42 @@ impl<'a> Walker<'a> {
     /// Identifier rvalue: take the address, load through the
     /// type-appropriate `LoadKind`. The bytecode tier's `Op::Lea
     /// N; Op::Li` (etc.) collapses into this one address + load
-    /// pair on the SSA side.
+    /// pair on the SSA side. Reads `class` / `val` /
+    /// `is_thread_local` straight off the snapshotted Ident node
+    /// so a post-parse scope-exit that restored the symbol's
+    /// pre-declaration tag doesn't invalidate the walker.
     fn load_ident_rvalue(
         &self,
         b: &mut super::super::codegen::ssa_build::SsaBuilder,
         sym: u32,
         ty: i64,
+        class: i64,
+        val: i64,
+        is_thread_local: bool,
     ) -> Result<super::super::ir::ValueId, WalkError> {
-        let s = &self.symbols[sym as usize];
-        if s.class == Token::Loc as i64 {
+        // Wrap the snapshot fields in a synthetic Symbol-shaped
+        // tuple by branching directly on `class`; the function
+        // is purely a fan-out over the recognised classes.
+        if class == Token::Loc as i64 {
             let kind = load_kind_for(ty, self.target);
-            Ok(b.load_local(s.val, kind))
-        } else if s.class == Token::Glo as i64 && !s.is_thread_local {
-            let addr = b.imm_data(s.val);
-            let kind = load_kind_for(ty, self.target);
-            Ok(b.load(addr, kind))
-        } else if s.class == Token::Glo as i64 && s.is_thread_local {
-            let addr = b.tls_addr(s.val);
+            Ok(b.load_local(val, kind))
+        } else if class == Token::Glo as i64 && !is_thread_local {
+            let addr = b.imm_data(val);
             let kind = load_kind_for(ty, self.target);
             Ok(b.load(addr, kind))
-        } else if s.class == Token::Fun as i64 {
-            Ok(b.imm_code(s.val as usize))
-        } else if s.class == Token::Num as i64 {
+        } else if class == Token::Glo as i64 && is_thread_local {
+            let addr = b.tls_addr(val);
+            let kind = load_kind_for(ty, self.target);
+            Ok(b.load(addr, kind))
+        } else if class == Token::Fun as i64 {
+            Ok(b.imm_code(val as usize))
+        } else if class == Token::Num as i64 {
             // Enum constants and `#define`-via-const-decl idioms
             // both surface as `Token::Num`-class symbols; `val`
             // holds the resolved integer constant.
-            Ok(b.imm(s.val))
+            Ok(b.imm(val))
         } else {
-            Err(WalkError::UnknownSymbolClass {
-                sym,
-                class: s.class,
-            })
+            Err(WalkError::UnknownSymbolClass { sym, class })
         }
     }
 }
@@ -575,6 +598,9 @@ mod tests {
             Expr::Ident {
                 sym: 0,
                 ty: Ty::Int as i64,
+                class: Token::Loc as i64,
+                val: -1,
+                is_thread_local: false,
             },
             src,
         );
@@ -610,6 +636,9 @@ mod tests {
             Expr::Ident {
                 sym: 0,
                 ty: Ty::Int as i64,
+                class: Token::Loc as i64,
+                val: -1,
+                is_thread_local: false,
             },
             src,
         );

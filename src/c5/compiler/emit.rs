@@ -700,7 +700,20 @@ impl Compiler {
     /// conversion is implicit in the AST shape.
     pub(super) fn ast_emit_ident(&mut self, sym: u32, ty: i64) -> ExprId {
         let pos = self.ast_src_pos();
-        let id = self.ast.push_expr(Expr::Ident { sym, ty }, pos);
+        let s = &self.symbols[sym as usize];
+        let class = s.class;
+        let val = s.val;
+        let is_thread_local = s.is_thread_local;
+        let id = self.ast.push_expr(
+            Expr::Ident {
+                sym,
+                ty,
+                class,
+                val,
+                is_thread_local,
+            },
+            pos,
+        );
         self.ast_acc = Some(id);
         id
     }

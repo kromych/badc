@@ -116,9 +116,22 @@ pub(crate) enum Expr {
     /// character inside the program's data segment.
     StrLit { data_off: i64, ty: i64 },
     /// Reference to a declared identifier. `sym` indexes the
-    /// symbol table; the walker reads class / val from there to
-    /// pick LocalAddr / ImmData / ImmCode.
-    Ident { sym: u32, ty: i64 },
+    /// symbol table for diagnostics + identity; `class` and
+    /// `val` are snapshotted at parse time so a later scope
+    /// exit (C99 6.8.5.3 for-init scope; nested block locals)
+    /// that restores the symbol's pre-declaration tag doesn't
+    /// invalidate the AST. `class` is the Token tag the parser
+    /// classified the identifier with (Loc / Glo / Sys / Fun /
+    /// Num); `val` is the slot offset / data offset / ent_pc
+    /// matching that class. `is_thread_local` mirrors the
+    /// symbol's flag at parse time.
+    Ident {
+        sym: u32,
+        ty: i64,
+        class: i64,
+        val: i64,
+        is_thread_local: bool,
+    },
     /// `op child`, where `child` is the operand. Increment /
     /// decrement go through [`Expr::PreInc`] / [`Expr::PostInc`]
     /// instead.
@@ -381,6 +394,7 @@ impl Ast {
 mod tests {
     use super::*;
     use crate::c5::ir::BinOp;
+    use crate::c5::token::Token;
 
     /// Hand-build `return a + 1;`: Ident + IntLit -> Binary ->
     /// Return statement. Confirms the arena indices line up and
@@ -389,7 +403,16 @@ mod tests {
     fn return_a_plus_one() {
         let mut ast = Ast::new();
         let src = SrcPos { line: 7, file: 0 };
-        let a = ast.push_expr(Expr::Ident { sym: 42, ty: 1 }, src);
+        let a = ast.push_expr(
+            Expr::Ident {
+                sym: 42,
+                ty: 1,
+                class: Token::Loc as i64,
+                val: -1,
+                is_thread_local: false,
+            },
+            src,
+        );
         let one = ast.push_expr(Expr::IntLit { val: 1, ty: 1 }, src);
         let sum = ast.push_expr(
             Expr::Binary {

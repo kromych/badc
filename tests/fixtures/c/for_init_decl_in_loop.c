@@ -9,14 +9,6 @@
 // against a stale upper-loop counter and the inner loop body
 // silently turned into a no-op on every outer iteration past
 // the first.
-//
-// Surfaced by monocypher's `sha512_compress`: the outer
-// `FOR(i, 1, 5)` and inner `FOR(j, 0, 16)` both expand to
-// `for (size_t var = N; var < M; var++)`. Without the init
-// walk the inner `j` kept the previous iteration's exit
-// value (16), the inner body executed zero times on outer
-// iterations 2..5, and the SHA-512 digest didn't match the
-// FIPS 180-2 vector.
 
 #include <stdio.h>
 

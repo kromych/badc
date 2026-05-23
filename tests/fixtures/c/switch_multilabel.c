@@ -8,11 +8,10 @@
 // label's value gets dispatched and the rest go to the
 // default arm.
 //
-// Surfaced by tcc: its lexer dispatch switches on the input
-// character with the ASCII letters and digits laid out as
-// fall-through chains. With only the first label dispatched,
-// the lexer rejected `d` (and every other non-first letter)
-// with "unrecognized character".
+// A lexer-style dispatch laid out as
+//   case 'a': case 'b': case 'c': case 'd': ...
+// is the standard repro shape: only the first label getting
+// dispatched would route every later case to the default arm.
 
 int classify(int c) {
     switch (c) {

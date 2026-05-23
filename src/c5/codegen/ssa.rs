@@ -153,9 +153,9 @@ pub(crate) fn lift_function(
 
     // Preallocate `insts` to roughly the bytecode word count of
     // the function -- an upper bound on the number of Inst rows
-    // we'll push. Avoids the realloc cascade as the per-block
-    // walk grows the vector op by op; observed in profiling on
-    // sqlite3.c (lift_program dominant in the SSA pipeline).
+    // pushed. Avoids the realloc cascade as the per-block walk
+    // grows the vector op by op; observed in profiling of
+    // large TUs whose hot path is dominated by `lift_program`.
     let mut insts: Vec<Inst> = Vec::with_capacity(end_pc.saturating_sub(ent_pc));
     let mut blocks: Vec<Block> = Vec::with_capacity(block_starts.len());
 

@@ -216,12 +216,12 @@ impl Compiler {
             // distinction is carried out-of-band via
             // `pending_base_was_void`: the function-decl path
             // reads it after the declarator runs to mark the
-            // function symbol's `returns_void`. The earlier
-            // attempt to give `void` its own band collided with
-            // sqlite3's `void (*xFunc)(...)` dispatch tables (the
-            // band number leaked into the call-through-fn-ptr type
-            // comparison) -- keeping the encoding here untouched
-            // sidesteps that trap.
+            // function symbol's `returns_void`. A prior attempt
+            // to give `void` its own type band leaked into the
+            // call-through-fn-ptr type comparison and rejected
+            // `void (*p)(...)` dispatch tables, so the encoding
+            // here stays unchanged and `returns_void` propagates
+            // through the side channel instead.
             self.pending.base_was_void = true;
             Ty::Char as i64 | UNSIGNED_BIT
         } else if self.lex.tk == Token::Float {

@@ -7,7 +7,7 @@
 // temp lands) corrupted the base on the first `ldr` and the rest
 // of the struct was read from a garbage address.
 //
-// Repros the sqlite3 demo's `*pItem = zeroItem;` shape:
+// Repros a `*p = constant_struct;` shape:
 // LocalAddr (dst) -> Psh; ImmData (global src) -> Mcpy. With
 // enough surrounding live values the allocator parks src in the
 // caller-saved scratch range, exposing the aliasing.

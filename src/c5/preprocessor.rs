@@ -255,9 +255,9 @@ pub(crate) struct Preprocessor {
     /// Monotonically-increasing per-translation-unit counter for
     /// the MSVC / GCC `__COUNTER__` predefine. Each expansion
     /// produces the current value as an integer literal and
-    /// post-increments. Used by demos to mint unique identifiers
-    /// at macro-expansion time. Lives in a `Cell` because the
-    /// substitution path takes `&self`.
+    /// post-increments, letting macros mint unique identifiers
+    /// per call site. Lives in a `Cell` because the substitution
+    /// path takes `&self`.
     pub(crate) counter: Cell<i64>,
     /// MSVC-style `#pragma warning(disable : N)` IDs currently
     /// suppressed. Push/pop variants nest via `warning_stack`.

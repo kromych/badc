@@ -451,13 +451,13 @@ const OPS: [Op; 88] = [
     Op::AllocaInit,
 ];
 
-/// Per-function alloca arena size, in 8-byte slots. Chosen
-/// large enough to cover stb_vorbis's `inverse_mdct` (~4 KB
-/// of float scratch) and the smaller `decode_residue` block-array
-/// temporaries with headroom, without bloating every alloca-using
-/// frame by a megabyte. Functions that need more than this end
-/// up corrupting the saved-x19 / pool area below the arena --
-/// bounds-checking is a future-work item.
+/// Per-function alloca arena size, in 8-byte slots. Sized to
+/// cover the FFT-class scratch buffer (~4 KB of float
+/// temporaries) and smaller block-array workspaces with
+/// headroom, without bloating every alloca-using frame to a
+/// megabyte. Functions that need more than this end up
+/// corrupting the saved-x19 / pool area below the arena.
+/// TODO: bounds-check the alloca cursor against the arena.
 pub const ALLOCA_ARENA_SLOTS: i64 = 1024;
 
 /// Compiler-builtin intrinsic discriminant. Each lowering target

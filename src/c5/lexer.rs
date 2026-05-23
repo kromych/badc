@@ -1449,8 +1449,8 @@ const KEYWORDS: &[(&str, Token)] = &[
     // a no-op function specifier so user code that pulls in
     // <stdnoreturn.h> (which defines `noreturn` as `_Noreturn`)
     // compiles unchanged. `noreturn` itself is the macro spelling
-    // and is recognised under the same token so source that omits
-    // the header (chibicc, for instance) still parses.
+    // and is recognised under the same token so source that uses
+    // the keyword without the header still parses.
     ("_Noreturn", Token::FuncSpec),
     ("noreturn", Token::FuncSpec),
     // typedef -- drives the parser's type-alias registration.

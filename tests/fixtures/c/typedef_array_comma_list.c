@@ -1,9 +1,7 @@
-// C99 6.7.7p3: a typedef name designates a type. When the typedef
-// alias is an array, every declarator in the same declaration
-// inherits the array dimension -- not just the first one in a
-// comma-separated list.
-//
-// Surface shape from tweetnacl.c:
+// C99 6.7.7p3: a typedef name designates a type. When the
+// typedef alias is an array, every declarator in the same
+// declaration inherits the array dimension -- not just the
+// first one in a comma-separated list. Pin shape:
 //
 //     typedef long long i64;
 //     typedef i64 gf[16];

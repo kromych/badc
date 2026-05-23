@@ -6,10 +6,11 @@
 // code with offsets relative to the discarded SSA-emit byte
 // stream and downstream calls jump into nonsense.
 //
-// The five-argument shape with `m == NULL` mirrors tweetnacl's
-// crypto_stream_salsa20_xor: it forces enough fixups in the
-// bailed function (an SSA Mcpy that the emit doesn't yet handle)
-// that the rollback path's completeness matters.
+// A five-argument function with a NULL-fast-path branch and
+// a wide u32 ld32 / st32 helper set is enough to force several
+// fixups in the bailed function (the SSA Mcpy shape the emit
+// doesn't yet handle) so the rollback path's completeness
+// matters.
 
 typedef unsigned char u8;
 typedef unsigned int u32;

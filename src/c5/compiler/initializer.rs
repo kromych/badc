@@ -126,12 +126,12 @@ impl Compiler {
         // value first, then narrow to f32 for the `Ty::Float` case.
         // The 4-byte single-precision storage slot can only hold the
         // narrowed bits -- a direct truncation of the f64 pattern
-        // (the bug this branch fixes) would zero out the entire low
-        // mantissa for any non-tiny value, e.g. `1.0` ->
-        // `0x3FF0_0000_0000_0000` -> low 4 bytes = `0x0000_0000` =
-        // `+0.0f`, which made every entry of `static float
-        // basis[12][4] = { {1, 1, 0}, ... }` in stb_perlin collapse
-        // to zero.
+        // (the bug this branch fixes) would zero out the entire
+        // low mantissa for any non-tiny value, e.g. `1.0` ->
+        // `0x3FF0_0000_0000_0000` -> low 4 bytes = `0x0000_0000`
+        // = `+0.0f`. Any `static float arr[N] = { 1.0f, ... }`
+        // initializer would collapse every non-zero entry to
+        // `+0.0f` under that path.
         let f64_bits = match reloc {
             InitElemReloc::Float64Bits => value,
             InitElemReloc::None => (value as f64).to_bits() as i64,

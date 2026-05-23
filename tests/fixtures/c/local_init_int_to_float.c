@@ -13,12 +13,11 @@
 // bit pattern of the byte value -- a tiny denormal that
 // effectively zeroes the float.
 //
-// stb_image_write's JPEG encoder reads `float r = dataR[p];`
-// in its YCbCr loop, multiplies by DCT coefficients, runs
-// quantization, and emits the entropy-coded scan. With r/g/b
-// all near-zero floats the entire image became the JPEG zero-
-// energy DC encoding; the round-trip pixel error climbed to
-// 116/channel (vs the 32 threshold).
+// Any code path that reads an integer pixel value into a
+// float local (`float r = u8_pixel;`) hits this: the float
+// local collapses to a denormal near zero instead of the
+// integer's IEEE-754 conversion, and any subsequent
+// floating-point arithmetic produces near-zero output.
 //
 // The pin: declare a float local with each conversion shape
 // in the C99 menu and verify the resulting bit pattern.

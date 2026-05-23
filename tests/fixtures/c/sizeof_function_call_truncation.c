@@ -12,14 +12,12 @@
  * "bad opcode" once the scanner reached the corrupted byte.
  *
  * Repro shape: `(void)sizeof(call(arg))` followed by any
- * real bytecode. stb_image hits this via
- *   #define STBI_NOTUSED(v) (void)sizeof(v)
- * which expands `STBI_NOTUSED(stbi__get32be(s))` into
- * exactly this construct, and the PSD probe function used
- * it twice before the actual `get16be` it cared about.
- * Verify both that the code compiles AND that no fixup
- * landed on the real instruction stream by exercising
- * the surrounding assignments through every call slot.
+ * real bytecode. The standard NOTUSED-style macro
+ *   #define NOTUSED(v) (void)sizeof(v)
+ * expands a use of `v` into exactly this construct. Verify
+ * both that the code compiles AND that no fixup landed on the
+ * real instruction stream by exercising the surrounding
+ * assignments through every call slot.
  */
 
 static int doubled(int x) { return x * 2; }

@@ -1,16 +1,11 @@
-// Compound assignment (`+=`, `-=`) on an unsigned integer lvalue
-// must NOT scale the right-hand side by element size. Surfaced
-// inside sqlite3's LEMON-generated parser, which holds states in
-// `unsigned short int` cells and adjusts them as
-//
-//     yyNewState += YY_MIN_REDUCE - YY_MIN_SHIFTREDUCE;
-//
-// The compound-assign lowering used `lhs_ty > Ty::Ptr` to decide
-// "is this a pointer that needs index scaling"; an unsigned tag's
-// high-bit flag tripped that check and the constant `415` got
-// silently multiplied by 8 (the default pointee size). That
-// trashed every shift-then-reduce state and crashed inside the
-// `cmd ::= select` reduction.
+// C99 6.5.16.2: a compound assignment (`+=`, `-=`) on an
+// integer lvalue adds the right-hand side verbatim; only
+// pointer arithmetic (6.5.6) scales by the pointed-to type's
+// size. The compound-assign lowering used `lhs_ty > Ty::Ptr`
+// to decide "is this a pointer that needs index scaling"; an
+// unsigned tag's high-bit flag tripped that check, and the
+// constant was silently multiplied by the default pointee
+// size on every `unsigned short += K` line.
 #include <stdio.h>
 
 int main() {

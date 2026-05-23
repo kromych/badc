@@ -11,9 +11,9 @@
 // missing on the AST.
 //
 // The walker then emitted no code for the assignment, leaving
-// the destination local uninitialised. Surfaced by kissfft's
-// `kiss_fft_alloc`: the `double phase = -2 * pi * idx;` line
-// produced garbage and every twiddle factor came out wrong.
+// the destination local uninitialised. A
+// `double phase = -2 * pi * idx;` line with a non-FP outer
+// expression around the multiply triggered the bug.
 
 #include <stdio.h>
 

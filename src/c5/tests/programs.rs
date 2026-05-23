@@ -331,9 +331,9 @@ fn bitfield_signed_read_sign_extends() {
     // C99 6.7.2.1p4: a signed bitfield of width N holds values in
     // [-2^(N-1), 2^(N-1)-1]; the read path must sign-extend so the
     // bit pattern `11...1` for width N reads as -1, not the
-    // unsigned `(1 << N) - 1`. Surfaced by stb_connected_components
-    // where a `signed short:2 cluster_dx` storing -1 read back as
-    // 3 and `dx + base_x` produced an out-of-range cluster index.
+    // unsigned `(1 << N) - 1`. A `signed short:2 cluster_dx`
+    // storing -1 must read back as -1, otherwise downstream
+    // signed arithmetic on the field falls out of range.
     assert_eq!(run_fixture("bitfield_signed_read.c"), 0);
 }
 
@@ -415,8 +415,8 @@ fn mcpy_temp_aliases_src() {
     // aliased the source pointer. Picking a temp that only
     // avoided the destination corrupted the source base on the
     // first `ldr` and read the rest of the struct from a garbage
-    // address. Surfaced by sqlite3's `*pItem = zeroItem;` shape
-    // under high register pressure.
+    // address. Reproduces under high register pressure on a
+    // whole-struct assignment shape (`*p = constant_struct;`).
     assert_eq!(run_fixture("mcpy_temp_aliases_src.c"), 0);
 }
 

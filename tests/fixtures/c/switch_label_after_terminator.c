@@ -8,13 +8,11 @@
 // fallthrough to the next partition stays suppressed when
 // the trailing statement is a real terminator.
 //
-// Surfaced by tcc's parse_btype: the `case TOK_EXTERN` /
-// `case TOK_STATIC` / `case TOK_TYPEDEF` arms each ended in
-// `goto storage;`, with `storage: if (...) tcc_error(...); ...`
-// sitting in the same compound block as the last case's body.
-// Without the post-terminator walk the storage label block
-// stayed empty and tcc skipped the storage-class handling
-// for every storage keyword.
+// Repro shape: a chain of `case X: ...; goto common;` arms
+// where the `common: ...` label sits in the same compound
+// block as the last case's body. Without the post-terminator
+// walk the labeled block stays empty and the goto's target
+// is missing from the SSA CFG.
 
 int outer(int tok) {
     int u = 0;

@@ -8,13 +8,12 @@
 // goes missing on the AST side. The walker then emits nothing for
 // the assignment and the destination local stays uninitialised.
 //
-// Surfaced as tcc's `nb_syms = s->data_offset / sizeof(ElfW(Sym))`
-// in sort_syms; the uninitialised `nb_syms` flowed into
-// `tcc_malloc(nb_syms * sizeof(...))` and the resulting bogus
-// allocation tripped a SIGSEGV in the iteration loop.
+// Reproduces on a `long_local = struct_field_ul / int_const`
+// shape -- the uninitialised lhs flows into a downstream
+// allocator argument and trips SIGSEGV later in the program.
 //
-// Also exercises `%` (Op::Modu) since the same masking dance is
-// shared with the unsigned-modulus path.
+// Also exercises `%` (Op::Modu) since the same masking path is
+// shared with the unsigned-modulus arm.
 
 struct S {
     unsigned long off;

@@ -76,10 +76,9 @@ typedef struct __c5_FILE FILE;
 // `printf` / `fprintf(stderr, ...)` / `setvbuf(stdout, ...)`
 // without any extra ceremony.
 //
-// `&stdout` / `&stderr` won't typecheck through this path; the
-// few standard-library users that need an addressable lvalue
-// (none seen in sqlite3.c, shell.c, or the test fixtures) will
-// have to fall back to `fdopen(...)`.
+// `&stdout` / `&stderr` won't typecheck through this path;
+// callers that need an addressable `FILE *` lvalue have to
+// fall back to `fdopen(...)`.
 //
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
@@ -131,8 +130,8 @@ typedef struct __c5_FILE FILE;
 // POSIX `popen` / `pclose` -- not in C89 but universally
 // available on macOS / BSD. A source that opens its own
 // `extern FILE *popen(const char *, const char *);` prototype
-// (sqlite3 shell.c does this) now binds through this entry
-// instead of leaving the call as an unresolved Token::Fun.
+// binds through this entry instead of leaving the call as an
+// unresolved Token::Fun.
 #pragma binding(libc::popen,     "_popen")
 #pragma binding(libc::pclose,    "_pclose")
 // POSIX `fdopen` -- wraps an already-open file descriptor as a
@@ -188,8 +187,8 @@ typedef struct __c5_FILE FILE;
 // POSIX `popen` / `pclose` -- not in C89 but universally
 // available on glibc / musl. A source that opens its own
 // `extern FILE *popen(const char *, const char *);` prototype
-// (sqlite3 shell.c does this) now binds through this entry
-// instead of leaving the call as an unresolved Token::Fun.
+// binds through this entry instead of leaving the call as an
+// unresolved Token::Fun.
 #pragma binding(libc::popen,     "popen")
 #pragma binding(libc::pclose,    "pclose")
 // POSIX `fdopen` -- wraps an already-open file descriptor as a
@@ -210,9 +209,9 @@ typedef struct __c5_FILE FILE;
 // on overflow, but neither does our other targets' `snprintf` once
 // the buffer fills). Note that msvcrt's printf family prints
 // infinity / NaN as `1.#INF` / `1.#IND` / `1.#QNAN` rather than
-// C99 `inf` / `nan`; programs that classify formatted output by
-// a digit-prefix regex (e.g. Lua's math.lua line 1137 round-trip
-// guard `^%-?%d`) misclassify the msvcrt output as numeric.
+// C99 `inf` / `nan`; programs that classify formatted output
+// by a digit-prefix regex misclassify the msvcrt output as
+// numeric.
 // Routing through `ucrtbase._snprintf` would emit the C99
 // spelling but that entry point fails with
 // STATUS_ENTRYPOINT_NOT_FOUND at PE load time on the GitHub
@@ -315,10 +314,10 @@ typedef struct __c5_FILE FILE;
 #pragma binding(msvcrt::wcsncat,        "wcsncat")
 #pragma binding(msvcrt::wcsdup,         "_wcsdup")
 #pragma binding(msvcrt::_wcsicmp,       "_wcsicmp")
-// MSVC "safe" CRT variants (`_s` suffix) sqlite reaches for under
-// `_MSC_VER`. Behaviour matches the bare form for the call sites
-// sqlite uses; the "safe" prefix is a Microsoft naming convention
-// for the bounded-buffer rewrite of the legacy entry points.
+// MSVC "safe" CRT variants (`_s` suffix). MSVC-only sources
+// reach for these under `_MSC_VER`; the `_s` form is the
+// bounded-buffer rewrite of the legacy entry point and behaves
+// the same way for in-bounds inputs.
 #pragma binding(msvcrt::localtime_s,    "localtime_s")
 #pragma binding(msvcrt::gmtime_s,       "gmtime_s")
 #pragma binding(msvcrt::ctime_s,        "ctime_s")
@@ -648,9 +647,8 @@ char *dlsym(char *handle, char *name);
 // structs -- left as a TODO for the Windows port.
 //
 // `&stdout` / `&stderr` won't typecheck through the macros
-// below; the few standard-library users that need an
-// addressable lvalue (none seen in sqlite3.c, shell.c, or the
-// test fixtures) will have to fall back to `fdopen(...)`.
+// below; callers that need an addressable `FILE *` lvalue
+// have to fall back to `fdopen(...)`.
 // Lazy resolver. char* return (rather than FILE*) keeps c5's
 // type system from tangling on a struct-pointer return value
 // inside a header. The macros below cast to `FILE *` at the
@@ -715,9 +713,11 @@ static char *__c5_lazy_stream(int idx) {
 // needed there. Only the v* variants need the c5 detour.
 //
 // User-side syntax doesn't change: source still calls
-// `vfprintf(stream, fmt, ap)` etc.; the macros below redirect the
-// call to the c5-side implementation. The upstream sqlite shell
-// `#define sqlite3_vfprintf vfprintf` transitively follows.
+// `vfprintf(stream, fmt, ap)` etc.; the macros below redirect
+// the call to the c5-side implementation. A downstream
+// `#define foo_vfprintf vfprintf` style alias transitively
+// follows the redirect because the v* macros are object-like
+// (see the note below).
 #include <c5io.h>
 
 static int c5_vfprintf_FILE(FILE *out, char *fmt, va_list ap) {
@@ -742,15 +742,15 @@ static int c5_vsprintf_unbounded(char *buf, char *fmt, va_list ap) {
 
 // Object-like aliases (rather than function-like) so the
 // substitution chain works even through an intermediate
-// object-like alias like sqlite's
-// `#define sqlite3_vfprintf vfprintf`. c5's preprocessor
-// rescans only the expansion text for further macro names, not
-// the surrounding tokens (C99 6.10.3.4 strictly requires both),
-// so a function-like `#define vfprintf(s,f,a) ...` would only
-// expand at direct `vfprintf(...)` call sites and leave
-// `sqlite3_vfprintf(...)`-derived `vfprintf` tokens unresolved.
-// Object-like aliases sidestep the rescan-window issue: the
-// substitution doesn't depend on a `(` check.
+// object-like alias like `#define foo_vfprintf vfprintf`. c5's
+// preprocessor rescans only the expansion text for further
+// macro names, not the surrounding tokens (C99 6.10.3.4
+// strictly requires both), so a function-like
+// `#define vfprintf(s,f,a) ...` would only expand at direct
+// `vfprintf(...)` call sites and leave the alias-derived
+// `vfprintf` tokens unresolved. Object-like aliases sidestep
+// the rescan-window issue: the substitution doesn't depend on
+// a `(` check.
 //
 // vsprintf passes 0x7FFFFFFF as the size cap (= effectively
 // unlimited) so the unbounded shape matches libc semantics; in

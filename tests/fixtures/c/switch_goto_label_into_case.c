@@ -8,13 +8,10 @@
 // block on the goto site and execution would fall off the
 // switch entirely.
 //
-// Surfaced by tcc's tccgen.c `precedence(int tok)`: its
-// `default:` arm does `goto relat;` where `relat:` sits before
-// `case TOK_ULT: case TOK_UGE:`. With the bug, `precedence(t)`
-// returned garbage for relational tokens, the `expr_const`
-// driver bailed before consuming `tok`, and every `#if`
-// expression in tccdefs.h was rejected with `bad preprocessor
-// expression`.
+// Repro shape: a `default:` arm that does `goto relat;` where
+// `relat:` sits before a `case` chain. Without the alias
+// registration the goto routes to an orphan block and execution
+// falls off the switch entirely.
 
 int classify(int n) {
     switch (n) {

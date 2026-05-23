@@ -833,6 +833,17 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                     for ty in &mut clone.param_tys {
                         *ty = crate::c5::ast::remap_struct_ty(*ty, &struct_remap_per_unit[i]);
                     }
+                    // Source-file indices on `expr_src` / `stmt_src`
+                    // / `decl_src` are unit-local; the linker
+                    // concatenates each unit's `source_files` into
+                    // one merged table starting at
+                    // `source_file_offset_per_unit[i]`. Shift the
+                    // AST's parallel position arrays so DWARF rows
+                    // emitted by the walker land on the correct
+                    // file entry post-merge.
+                    clone
+                        .ast
+                        .rebase_source_file_indices(source_file_offset_per_unit[i]);
                     all.push(clone);
                 }
             }

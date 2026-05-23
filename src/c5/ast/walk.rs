@@ -303,6 +303,8 @@ impl<'a> Walker<'a> {
         b: &mut super::super::codegen::ssa_build::SsaBuilder,
         id: StmtId,
     ) -> Result<bool, WalkError> {
+        let src = self.ast.stmt_src[id as usize];
+        b.set_src(src.line, src.file as u32);
         match self.ast.stmt(id) {
             Stmt::Return(Some(e)) => {
                 if self.returns_struct {

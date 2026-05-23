@@ -1173,6 +1173,7 @@ pub(super) fn lower(
 ) -> Result<Build, C5Error> {
     let mut code = Vec::new();
     let mut bytecode_to_native: Vec<usize> = vec![usize::MAX; program.text.len() + 1];
+    let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
     let mut fixups: Vec<Fixup> = Vec::new();
     let mut got_fixups: Vec<GotFixup> = Vec::new();
     // Each `JsrExt` / `TailExt` site emits a placeholder
@@ -1247,6 +1248,7 @@ pub(super) fn lower(
             &mut macho_tlv_fixups,
             &mut macho_tlv_descriptors,
             &mut bytecode_to_native,
+            &mut ssa_line_rows,
         );
         if !ok {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
@@ -1333,6 +1335,7 @@ pub(super) fn lower(
         data_fixups,
         func_fixups,
         bytecode_to_native,
+        ssa_line_rows,
         // `imports` is set by `lower_for` after this returns; the
         // resolver runs once up there and the value is shared with
         // both the lowering and the writer. Default-empty here keeps

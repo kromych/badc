@@ -47,6 +47,7 @@ pub(crate) fn compile_function_to_bytes(
     let variadic_targets: BTreeSet<usize> = BTreeSet::new();
     let post_prologue_pc = func.ent_pc + crate::c5::op::Op::Ent.word_size();
     let mut bytecode_to_native: Vec<usize> = alloc::vec![0usize; post_prologue_pc + 1];
+    let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
 
     match target {
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
@@ -74,6 +75,7 @@ pub(crate) fn compile_function_to_bytes(
                 &mut macho_tlv_fixups,
                 &mut macho_tlv_descriptors,
                 &mut bytecode_to_native,
+                &mut ssa_line_rows,
             );
             if !ok {
                 return Err("ssa_native: emit_function bailed".to_string());
@@ -116,6 +118,7 @@ pub(crate) fn compile_function_to_bytes(
                 &mut tls_index_fixups,
                 0,
                 &mut bytecode_to_native,
+                &mut ssa_line_rows,
             );
             if !ok {
                 return Err("ssa_native: emit_function bailed".to_string());

@@ -370,6 +370,7 @@ fn marshal_int_arg(
 /// set is intentionally minimal at this stage; the aarch64 SSA
 /// emit grew bottom-up from the same shape and the x86_64 path
 /// follows that trajectory.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn emit_function(
     func: &FunctionSsa,
     alloc: &Allocation,
@@ -385,6 +386,7 @@ pub(super) fn emit_function(
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     tls_total_size: usize,
     bytecode_to_native: &mut [usize],
+    ssa_line_rows: &mut Vec<(usize, u32, u32)>,
 ) -> bool {
     let snapshot = code.len();
     let fixups_snapshot = fixups.len();
@@ -418,6 +420,7 @@ pub(super) fn emit_function(
             if super::ssa_emit_common::is_dead_pure(inst, v, alloc) {
                 continue;
             }
+            super::ssa_emit_common::record_inst_src(func, v, code.len(), ssa_line_rows);
             if !emit_inst(
                 code,
                 inst,

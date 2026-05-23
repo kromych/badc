@@ -349,6 +349,14 @@ pub(crate) struct FunctionSsa {
     /// by [`ValueId`]. Each [`Block::inst_range`] is a contiguous
     /// slice of this list.
     pub insts: Vec<Inst>,
+    /// Source position per `Inst`, parallel to `insts`. `(line,
+    /// file_idx)` -- file_idx is an index into
+    /// `Program::source_files`. `(0, 0)` means "no source
+    /// information"; the DWARF line table skips those rows. Filled
+    /// in by the walker as it lowers AST nodes; empty for SSA
+    /// produced outside the walker (sys-trampolines, archive
+    /// reloads).
+    pub inst_src: Vec<(u32, u32)>,
     /// Basic blocks in source / execution order. Block 0 is the
     /// entry block.
     pub blocks: Vec<Block>,

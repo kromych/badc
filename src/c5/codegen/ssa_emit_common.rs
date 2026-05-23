@@ -79,6 +79,42 @@ pub(super) fn spill_slot_sp_offset(frame_bytes: u32, alloc_spill_base: u32, slot
     frame_bytes - alloc_spill_base - (slot + 1) * 8
 }
 
+/// Record a `.debug_line` row for the instruction `v`. The
+/// walker stamps each SSA inst with the source position of the
+/// statement that produced it (`FunctionSsa::inst_src`); the
+/// per-arch emit calls this once before lowering the inst so
+/// the DWARF builder can map every byte of emitted code back to
+/// a source line. Suppresses zero entries (insts the walker
+/// didn't stamp, e.g. lift-produced functions) and adjacent
+/// duplicates (consecutive insts that came from the same
+/// statement compress into one row).
+pub(super) fn record_inst_src(
+    func: &super::super::ir::FunctionSsa,
+    v: super::super::ir::ValueId,
+    code_len: usize,
+    ssa_line_rows: &mut alloc::vec::Vec<(usize, u32, u32)>,
+) {
+    let idx = v as usize;
+    let (line, file_idx) = func.inst_src.get(idx).copied().unwrap_or((0, 0));
+    if line == 0 {
+        return;
+    }
+    if let Some(&(last_pc, last_line, last_file)) = ssa_line_rows.last()
+        && last_line == line
+        && last_file == file_idx
+        && last_pc == code_len
+    {
+        return;
+    }
+    if let Some(&(_, last_line, last_file)) = ssa_line_rows.last()
+        && last_line == line
+        && last_file == file_idx
+    {
+        return;
+    }
+    ssa_line_rows.push((code_len, line, file_idx));
+}
+
 /// Record the byte offset of the first post-prologue
 /// instruction against the bytecode word that follows
 /// `Op::Ent`. The DWARF CFI pass reads this to encode

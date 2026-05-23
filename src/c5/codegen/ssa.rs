@@ -880,6 +880,7 @@ pub(crate) fn lift_function(
         });
     }
 
+    let inst_count = insts.len();
     Ok(FunctionSsa {
         ent_pc,
         end_pc: function_end_pc,
@@ -887,6 +888,7 @@ pub(crate) fn lift_function(
         n_params: meta.n_params,
         is_variadic: meta.is_variadic,
         insts,
+        inst_src: alloc::vec![(0u32, 0u32); inst_count],
         blocks,
         vstack_slots,
     })

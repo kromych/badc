@@ -659,6 +659,34 @@ impl Ast {
     /// `Op::Mcpy <size>` at parse time with `size_of_type(ty)`;
     /// the bytecode never re-consults the struct table after
     /// linking.
+    /// Linker-side fixup for multi-TU builds: shift every
+    /// `SrcPos::file` carried on the parallel `expr_src` /
+    /// `stmt_src` / `decl_src` arrays by `file_offset`. The
+    /// linker concatenates per-unit `source_files` into one
+    /// merged table; each unit's parser-time file indices start
+    /// at the unit's offset in the merged table. Without this
+    /// shift the walker stamps SSA insts with unit-local file
+    /// indices, the DWARF line program emits `DW_LNS_set_file`
+    /// rows pointing at the wrong entry, and a debugger
+    /// attributes the PC to the file from another TU.
+    pub(crate) fn rebase_source_file_indices(&mut self, file_offset: u16) {
+        if file_offset == 0 {
+            return;
+        }
+        let bump = |pos: &mut SrcPos| {
+            pos.file = pos.file.saturating_add(file_offset);
+        };
+        for pos in &mut self.expr_src {
+            bump(pos);
+        }
+        for pos in &mut self.stmt_src {
+            bump(pos);
+        }
+        for pos in &mut self.decl_src {
+            bump(pos);
+        }
+    }
+
     pub(crate) fn rebase_struct_ids(&mut self, remap: &[usize]) {
         if remap.is_empty() {
             return;

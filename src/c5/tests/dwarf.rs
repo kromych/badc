@@ -565,3 +565,58 @@ fn multi_tu_lldb_step_crosses_translation_unit_boundary() {
     );
     let _ = std::fs::remove_file(&path);
 }
+
+/// Per-statement granularity in the line program: a function with
+/// N straight-line statements must produce at least N distinct
+/// `(addr, line)` rows so a debugger can stop on each one. Before
+/// the SSA emit started recording per-`Inst` source positions, the
+/// walker-driven path produced exactly one row per function and
+/// `lldb step` walked straight out of the body in one go.
+#[test]
+fn debug_line_has_per_statement_rows() {
+    let path = build_signed_mach_o(
+        r#"
+        int main(void) {
+            int a;
+            int b;
+            int c;
+            int d;
+            a = 1;
+            b = 2;
+            c = 3;
+            d = 4;
+            return a + b + c + d;
+        }
+        "#,
+        "per_stmt_rows",
+    );
+    let Some(out) = dwarfdump_debug_line(&path) else {
+        eprintln!("dwarfdump not on PATH -- skipping per-statement row test");
+        let _ = std::fs::remove_file(&path);
+        return;
+    };
+    // The exact line numbers in the output depend on the prelude's
+    // length, so count distinct source-line values appearing in
+    // line-program rows instead of asserting against absolute
+    // numbers. A function with 5 user-visible statements (4
+    // assignments + return) needs at least 5 distinct lines.
+    let mut distinct: alloc::collections::BTreeSet<u32> = alloc::collections::BTreeSet::new();
+    for line in out.lines() {
+        let parts: alloc::vec::Vec<&str> = line.split_whitespace().collect();
+        // dwarfdump rows start with the address column (0x...).
+        if parts.len() < 2 || !parts[0].starts_with("0x") {
+            continue;
+        }
+        if let Ok(line_no) = parts[1].parse::<u32>()
+            && line_no > 0
+        {
+            distinct.insert(line_no);
+        }
+    }
+    assert!(
+        distinct.len() >= 5,
+        "expected at least 5 distinct line-program rows (one per statement), got {}:\n{out}",
+        distinct.len(),
+    );
+    let _ = std::fs::remove_file(&path);
+}

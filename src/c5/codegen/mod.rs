@@ -859,6 +859,15 @@ pub(crate) struct Build {
     /// last entry is the total code length, so `[i+1] - [i]` gives
     /// the byte length of the op at PC `i`.
     pub bytecode_to_native: Vec<usize>,
+    /// SSA-side `.debug_line` rows: each `(native_pc, line,
+    /// file_idx)` entry says "the instruction whose first byte
+    /// lives at `native_pc` in `Build::text` corresponds to source
+    /// line `line` of file `file_idx`". Populated by the per-arch
+    /// SSA emit each time the walker-recorded source position
+    /// changes between consecutive `Inst`s. `file_idx` is an index
+    /// into `Program::source_files`. Empty for builds whose SSA
+    /// has no source info attached (lift-produced functions).
+    pub ssa_line_rows: Vec<(usize, u32, u32)>,
     /// Per-Build resolved import set. Built by lowering once it knows
     /// which libc ops the program uses; consumed by the wire-format
     /// writer to populate the IAT / dynsym / __got tables.

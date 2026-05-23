@@ -167,6 +167,7 @@ enum LocalBranchKind {
 /// surrounding writer already maintains. The SSA emit appends one
 /// `Fixup::Bl` per `Inst::Call`; the pool path's `apply_fixups`
 /// post-pass resolves them once `bytecode_to_native` is final.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn emit_function(
     func: &FunctionSsa,
     alloc: &Allocation,
@@ -182,6 +183,7 @@ pub(super) fn emit_function(
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
     bytecode_to_native: &mut [usize],
+    ssa_line_rows: &mut Vec<(usize, u32, u32)>,
 ) -> bool {
     let frame = Frame::for_function(func, alloc);
     let abi = target.abi();
@@ -232,6 +234,7 @@ pub(super) fn emit_function(
             if super::ssa_emit_common::is_dead_pure(inst, v, alloc) {
                 continue;
             }
+            super::ssa_emit_common::record_inst_src(func, v, code.len(), ssa_line_rows);
             if !emit_inst(
                 code,
                 inst,
@@ -3120,6 +3123,7 @@ mod tests {
         let mut tlv_fx = Vec::new();
         let mut tlv_desc = Vec::new();
         let mut bytecode_to_native = alloc::vec![usize::MAX; func.end_pc + 1];
+        let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
         let ok = emit_function(
             &func,
             &alloc,
@@ -3135,6 +3139,7 @@ mod tests {
             &mut tlv_fx,
             &mut tlv_desc,
             &mut bytecode_to_native,
+            &mut ssa_line_rows,
         );
         assert!(
             ok,
@@ -3173,6 +3178,7 @@ mod tests {
         let mut tlv_fx = Vec::new();
         let mut tlv_desc = Vec::new();
         let mut bytecode_to_native = alloc::vec![usize::MAX; func.end_pc + 1];
+        let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
         let ok = emit_function(
             &func,
             &alloc,
@@ -3188,6 +3194,7 @@ mod tests {
             &mut tlv_fx,
             &mut tlv_desc,
             &mut bytecode_to_native,
+            &mut ssa_line_rows,
         );
         assert!(ok, "binop handler should cover Add + Shl + Shr");
         assert_eq!(code.len() % 4, 0);
@@ -3219,6 +3226,7 @@ mod tests {
         let mut tlv_fx = Vec::new();
         let mut tlv_desc = Vec::new();
         let mut bytecode_to_native = alloc::vec![usize::MAX; func.end_pc + 1];
+        let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
         let ok = emit_function(
             &func,
             &alloc,
@@ -3234,6 +3242,7 @@ mod tests {
             &mut tlv_fx,
             &mut tlv_desc,
             &mut bytecode_to_native,
+            &mut ssa_line_rows,
         );
         assert!(
             ok,

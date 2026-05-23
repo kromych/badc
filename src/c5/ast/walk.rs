@@ -1401,6 +1401,15 @@ impl<'a> Walker<'a> {
             UnOp::AddrOf => self.walk_expr_lvalue(b, child),
             UnOp::Deref => {
                 let addr = self.walk_expr_rvalue(b, child)?;
+                // C99 6.5.3.2p4 + the c5 address-as-value rule:
+                // dereferencing a pointer to a struct value
+                // produces an rvalue whose representation is the
+                // struct's address. Skip the trailing load --
+                // the enclosing site (struct Assign / Mcpy /
+                // Member chain) consumes the address.
+                if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 {
+                    return Ok(addr);
+                }
                 let kind = load_kind_for(ty, self.target);
                 Ok(b.load(addr, kind))
             }

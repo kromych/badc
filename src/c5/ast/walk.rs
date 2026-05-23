@@ -540,72 +540,104 @@ impl<'a> Walker<'a> {
                     _ => alloc::vec![super::BlockItem::Stmt(body_id)],
                 };
 
-                // Partition the items into (label, stmts) tuples
-                // where `label` is `Some(Some(val))` for a Case
-                // marker, `Some(None)` for Default, and `None`
-                // for the pre-first-case fall-in region. C99
-                // 6.8.4.2: pre-first-case stmts are reachable
-                // only by goto-into-switch -- the walker still
-                // emits a block for them so an outer goto can
-                // target the body's start.
+                // Partition the items into (labels, stmts)
+                // tuples. `labels` is empty for the pre-first-
+                // case fall-in region (C99 6.8.4.2: reachable
+                // only by goto-into-switch; the walker still
+                // emits a block so outer goto has a target),
+                // or a list of `Some(val)` (Case markers) and
+                // `None` (Default marker) entries when one or
+                // more case labels share the body that follows.
+                // C99 6.8.4.2: a Case / Default marker labels
+                // the following statement, so a chain like
+                // `case 'a': case 'b': case 'c': body;` puts
+                // three labels on the same body. The parser
+                // builds those as nested `Stmt::Case`s on the
+                // body field; peel them off so the dispatcher
+                // emits one comparison per label that all
+                // branch to the same case block.
                 #[allow(clippy::type_complexity)]
                 let mut partitions: alloc::vec::Vec<(
-                    Option<Option<i64>>,
+                    alloc::vec::Vec<Option<i64>>,
                     alloc::vec::Vec<super::BlockItem>,
                 )> = alloc::vec::Vec::new();
-                let mut current_label: Option<Option<i64>> = None;
+                let mut current_labels: alloc::vec::Vec<Option<i64>> = alloc::vec::Vec::new();
                 let mut current: alloc::vec::Vec<super::BlockItem> = alloc::vec::Vec::new();
+                let flush = |partitions: &mut alloc::vec::Vec<(
+                    alloc::vec::Vec<Option<i64>>,
+                    alloc::vec::Vec<super::BlockItem>,
+                )>,
+                             current_labels: &mut alloc::vec::Vec<Option<i64>>,
+                             current: &mut alloc::vec::Vec<super::BlockItem>| {
+                    if !current.is_empty() || !current_labels.is_empty() {
+                        partitions.push((
+                            core::mem::take(current_labels),
+                            core::mem::take(current),
+                        ));
+                    }
+                };
                 for item in &items {
                     if let super::BlockItem::Stmt(s) = item {
-                        match self.ast.stmt(*s) {
-                            Stmt::Case {
-                                val,
-                                body: case_body,
-                            } => {
-                                if !current.is_empty() || current_label.is_some() {
-                                    partitions.push((current_label, core::mem::take(&mut current)));
+                        let mut s_id = *s;
+                        let mut saw_marker = false;
+                        // Peel nested Case / Default markers
+                        // off the head until we hit a real
+                        // statement.
+                        loop {
+                            match self.ast.stmt(s_id) {
+                                Stmt::Case { val, body } => {
+                                    if !saw_marker {
+                                        flush(&mut partitions, &mut current_labels, &mut current);
+                                        saw_marker = true;
+                                    }
+                                    current_labels.push(Some(*val));
+                                    s_id = *body;
                                 }
-                                current_label = Some(Some(*val));
-                                current = alloc::vec![super::BlockItem::Stmt(*case_body)];
-                                continue;
-                            }
-                            Stmt::Default { body: def_body } => {
-                                if !current.is_empty() || current_label.is_some() {
-                                    partitions.push((current_label, core::mem::take(&mut current)));
+                                Stmt::Default { body } => {
+                                    if !saw_marker {
+                                        flush(&mut partitions, &mut current_labels, &mut current);
+                                        saw_marker = true;
+                                    }
+                                    current_labels.push(None);
+                                    s_id = *body;
                                 }
-                                current_label = Some(None);
-                                current = alloc::vec![super::BlockItem::Stmt(*def_body)];
-                                continue;
+                                _ => break,
                             }
-                            _ => {}
+                        }
+                        if saw_marker {
+                            current.push(super::BlockItem::Stmt(s_id));
+                            continue;
                         }
                     }
                     current.push(*item);
                 }
-                partitions.push((current_label, current));
+                flush(&mut partitions, &mut current_labels, &mut current);
 
                 let after_blk = b.new_block();
                 let blocks: alloc::vec::Vec<super::super::ir::BlockId> =
                     (0..partitions.len()).map(|_| b.new_block()).collect();
                 let default_idx = partitions
                     .iter()
-                    .position(|(lbl, _)| matches!(lbl, Some(None)));
+                    .position(|(lbls, _)| lbls.iter().any(|l| l.is_none()));
 
-                // Dispatcher chain: for each Case partition, cmp
-                // disc against its val and branch to the case's
-                // block when equal; fall through to the next
-                // comparison otherwise. After the chain, jmp to
-                // default (if present) or to after_blk.
+                // Dispatcher chain: for each Case label across
+                // all partitions, cmp disc against its val and
+                // branch to the matching case block when equal;
+                // fall through to the next comparison otherwise.
+                // After the chain, jmp to default (if present)
+                // or to after_blk.
                 let mut next_dispatcher_blk = b.new_block();
                 b.jmp(next_dispatcher_blk);
-                for (i, (label, _)) in partitions.iter().enumerate() {
-                    if let Some(Some(val)) = label {
-                        b.switch_to(next_dispatcher_blk);
-                        let val_v = b.imm(*val);
-                        let eq = b.binop(BinOp::Eq, disc_val, val_v);
-                        let next = b.new_block();
-                        b.branch_nonzero(eq, blocks[i], next);
-                        next_dispatcher_blk = next;
+                for (i, (labels, _)) in partitions.iter().enumerate() {
+                    for label in labels {
+                        if let Some(val) = label {
+                            b.switch_to(next_dispatcher_blk);
+                            let val_v = b.imm(*val);
+                            let eq = b.binop(BinOp::Eq, disc_val, val_v);
+                            let next = b.new_block();
+                            b.branch_nonzero(eq, blocks[i], next);
+                            next_dispatcher_blk = next;
+                        }
                     }
                 }
                 b.switch_to(next_dispatcher_blk);

@@ -146,8 +146,16 @@ fn invalid_opcode_is_a_runtime_error() {
         symbols: alloc::vec::Vec::new(),
     };
     let err = Vm::new(program).run().unwrap_err();
+    // Bytecode VM rejects the garbage word during the
+    // instruction-fetch step (`Invalid instruction <op> at PC`).
+    // The SSA interpreter never sees the bytecode tape -- the
+    // lift catches the bad opcode at construction time and
+    // surfaces it through a `Compile` error
+    // (`ssa lift: bad opcode mid-function`). Either diagnosis
+    // is acceptable; both refuse to execute the program.
+    let msg = err.to_string();
     assert!(
-        err.to_string().contains("Invalid instruction"),
+        msg.contains("Invalid instruction") || msg.contains("bad opcode mid-function"),
         "unexpected error: {err}"
     );
 }

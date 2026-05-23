@@ -616,7 +616,14 @@ impl<H: Host> Vm<H> {
         }
 
         #[cfg(feature = "std")]
-        if std::env::var("BADC_VM_SSA").is_ok_and(|v| !v.is_empty() && v != "0") {
+        if std::env::var("BADC_VM_SSA").is_ok_and(|v| !v.is_empty() && v != "0")
+            // Pointer-tracking is bytecode-side state (allocations
+            // table + per-load access checks); the SSA interpreter
+            // doesn't yet carry that surface. Fall back to the
+            // bytecode VM when tracking is on so the dangling-
+            // pointer regressions keep passing under either default.
+            && !self.track_pointers
+        {
             // SSA interpreter path. `with_host` already pre-lifted
             // every function; surface lift errors here so callers
             // see a clean `Result` boundary instead of a panic.

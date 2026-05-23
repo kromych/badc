@@ -164,8 +164,14 @@ fn jsri_through_a_dlsym_pointer_is_rejected_in_vm_mode() {
         .unwrap();
     let err = crate::Vm::new(p).run().unwrap_err();
     let msg = format!("{err}");
+    // The bytecode VM and the SSA interpreter diagnose the
+    // forged-pointer case with different wording. Both convey
+    // the same condition: the jump target wasn't a recognised
+    // code address.
     assert!(
-        msg.contains("non-code address"),
-        "expected non-code-address rejection, got: {msg}"
+        msg.contains("non-code address")
+            || msg.contains("is not a code pointer")
+            || msg.contains("no function at ent_pc"),
+        "expected non-code-pointer rejection, got: {msg}"
     );
 }

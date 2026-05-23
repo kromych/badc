@@ -492,7 +492,10 @@ fn run_inst(
         }
         Inst::CallExt { .. } => "CallExt",
         Inst::TailExt(_) => "TailExt",
-        Inst::Intrinsic { .. } => "Intrinsic",
+        Inst::Intrinsic { kind, args } => {
+            run_intrinsic(mem, frame, v, *kind, args)?;
+            return Ok(());
+        }
         Inst::AllocaInit(_) => {
             // No-op for v0 == AllocaInit(0); the alloca arena
             // lives in the bytecode VM's stack. SSA-VM doesn't
@@ -506,6 +509,79 @@ fn run_inst(
         Inst::AccReload => "AccReload",
     };
     Err(C5Error::Runtime(format!("vm_ssa: {name} not implemented",)))
+}
+
+/// Dispatch a compiler-builtin `Intrinsic`. `kind` matches the
+/// discriminant of `crate::c5::op::Intrinsic`; the SSA-VM
+/// implements the targets that survive on every host:
+///
+/// * `Alloca(n)` -- bumps the per-frame `Memory::stack_top` by
+///   `n` (16-byte rounded) and returns the previous top as the
+///   new pointer. The arena auto-releases when `release_frame`
+///   restores `stack_top` at the enclosing function's return.
+/// * `VaStart(&ap, &last)` -- writes `&last + 8` into `*&ap`.
+///   c5 stages variadic args at an 8-byte stride above the
+///   last fixed arg.
+/// * `VaArg(&ap)` -- reads `*&ap`, advances `*&ap` by 8, returns
+///   the captured cursor as the variadic value.
+/// * `VaEnd(&ap)` -- no-op on every supported host.
+/// * `VaCopy(&dst, &src)` -- `*dst = *src`.
+/// * AArch64 setjmp / longjmp intrinsics return "not implemented"
+///   because the bytecode VM also rejects them; they only land
+///   in JIT / AOT output.
+fn run_intrinsic(
+    mem: &mut Memory,
+    frame: &mut Frame<'_>,
+    v: ValueId,
+    kind: i64,
+    args: &[ValueId],
+) -> Result<(), C5Error> {
+    use crate::c5::op::Intrinsic;
+    let intr = Intrinsic::from_i64(kind).ok_or_else(|| {
+        C5Error::Runtime(format!("vm_ssa: unknown Intrinsic discriminant {kind}"))
+    })?;
+    match intr {
+        Intrinsic::Alloca => {
+            let n_raw = args
+                .first()
+                .map(|&a| frame.regs[a as usize])
+                .ok_or_else(|| C5Error::Runtime("vm_ssa: Alloca expects 1 argument".to_string()))?;
+            if n_raw < 0 {
+                return Err(C5Error::Runtime(format!(
+                    "vm_ssa: Alloca: negative size {n_raw}",
+                )));
+            }
+            let rounded = ((n_raw as usize) + 15) & !15;
+            let base = mem.alloc_frame(rounded)?;
+            frame.regs[v as usize] = base as i64;
+            Ok(())
+        }
+        Intrinsic::VaStart => {
+            let ap_addr = frame.regs[args[0] as usize] as usize;
+            let last_addr = frame.regs[args[1] as usize];
+            store_to_memory(mem, ap_addr, last_addr + 8, StoreKind::I64)
+        }
+        Intrinsic::VaArg => {
+            let ap_addr = frame.regs[args[0] as usize] as usize;
+            let cursor = load_from_memory(mem, ap_addr, LoadKind::I64)?;
+            store_to_memory(mem, ap_addr, cursor + 8, StoreKind::I64)?;
+            // Walker doesn't pass the value width through args
+            // here; the SSA-VM returns the cursor itself, mirroring
+            // the bytecode VM. Downstream casts truncate as needed.
+            frame.regs[v as usize] = load_from_memory(mem, cursor as usize, LoadKind::I64)?;
+            Ok(())
+        }
+        Intrinsic::VaEnd => Ok(()),
+        Intrinsic::VaCopy => {
+            let dst_addr = frame.regs[args[0] as usize] as usize;
+            let src_addr = frame.regs[args[1] as usize] as usize;
+            let cursor = load_from_memory(mem, src_addr, LoadKind::I64)?;
+            store_to_memory(mem, dst_addr, cursor, StoreKind::I64)
+        }
+        Intrinsic::SetjmpAArch64 | Intrinsic::LongjmpAArch64 => Err(C5Error::Runtime(format!(
+            "vm_ssa: Intrinsic::{intr:?} is AArch64-specific and not supported here",
+        ))),
+    }
 }
 
 /// Read a typed value out of byte-addressed memory at `addr`.
@@ -741,6 +817,29 @@ mod tests {
                  int main(void) {
                      int (*fp)(int) = double_it;
                      return fp(21);
+                 }",
+            ),
+            42,
+        );
+    }
+
+    #[test]
+    fn alloca_bumps_stack_and_returns_writable_pointer() {
+        // C99 doesn't standardize `alloca`, but the c5 compiler
+        // emits `Intrinsic { kind: Alloca, args: [size] }` for
+        // any identifier the preprocessor tagged via
+        // `#pragma intrinsic("...")`. <alloca.h> registers
+        // `alloca`. The SSA-VM bumps the per-frame stack region
+        // and returns a real byte address.
+        assert_eq!(
+            run_full_program(
+                "#pragma intrinsic(\"alloca\")
+                 int *alloca(int);
+                 int main(void) {
+                     int *p = alloca(16);
+                     p[0] = 17;
+                     p[1] = 25;
+                     return p[0] + p[1];
                  }",
             ),
             42,

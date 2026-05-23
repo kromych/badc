@@ -35,6 +35,7 @@ use alloc::string::ToString;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
+use super::super::host::Host;
 use super::super::ir::{
     BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, StoreKind, Terminator, ValueId,
 };
@@ -252,12 +253,13 @@ impl Frame<'_> {
 }
 
 /// Single-function entry: wrap `func` in a one-element `Program`
-/// with an empty data segment. `Inst::Call` in this shape fails
-/// with a "not found" runtime error because there's only one
-/// function.
+/// with an empty data segment and a `NullHost`. `Inst::Call` in
+/// this shape fails with a "not found" runtime error because
+/// there's only one function.
 pub(super) fn run_ssa(func: &FunctionSsa) -> Result<i64, C5Error> {
     let funcs = core::slice::from_ref(func);
-    run_program(funcs, &[], &[], func.ent_pc)
+    let mut host = NullHost;
+    run_program(funcs, &[], &[], func.ent_pc, &mut host)
 }
 
 /// Multi-function entry: pick the function at `entry_pc` and run
@@ -265,12 +267,14 @@ pub(super) fn run_ssa(func: &FunctionSsa) -> Result<i64, C5Error> {
 /// `funcs`' `ent_pc` lookup; `Inst::ImmData(off)` indexes into
 /// `data` for string-literal / global reads;
 /// `Inst::CallExt(binding_idx, ...)` resolves `binding_idx`
-/// into `binding_names` and dispatches to a libc shim.
-pub(super) fn run_program(
+/// into `binding_names` and dispatches to a libc shim that
+/// either operates purely on `mem` or pumps IO through `host`.
+pub(super) fn run_program<H: Host>(
     funcs: &[FunctionSsa],
     data: &[u8],
     binding_names: &[alloc::string::String],
     entry_pc: usize,
+    host: &mut H,
 ) -> Result<i64, C5Error> {
     let prog = Program::new(funcs).with_bindings(binding_names);
     let mut mem = Memory::new(data);
@@ -279,15 +283,53 @@ pub(super) fn run_program(
             "vm_ssa: run_program: no function at ent_pc {entry_pc}",
         ))
     })?;
-    run_func(&prog, &mut mem, entry, &[])
+    run_func(&prog, &mut mem, host, entry, &[])
+}
+
+/// Host trait stand-in for SSA-VM call sites that don't route
+/// IO -- the regression tests for pure-math fixtures. Returns
+/// EBADF-shaped errors on every syscall so a stray call surfaces
+/// loudly.
+struct NullHost;
+
+impl Host for NullHost {
+    fn read(&mut self, _fd: i64, _buf: &mut [u8]) -> i64 {
+        -1
+    }
+    fn write(&mut self, _fd: i64, _buf: &[u8]) -> i64 {
+        -1
+    }
+    fn open(&mut self, _path: &str) -> i64 {
+        -1
+    }
+    fn close(&mut self, _fd: i64) -> i64 {
+        -1
+    }
+    fn getenv(&mut self, _name: &str) -> Option<alloc::string::String> {
+        None
+    }
+    fn setenv(&mut self, _name: &str, _value: &str, _overwrite: super::super::host::Overwrite) {}
+    fn dlopen(&mut self, _path: Option<&str>, _flags: i64) -> i64 {
+        0
+    }
+    fn dlsym(&mut self, _handle: i64, _name: &str) -> i64 {
+        0
+    }
+    fn dlclose(&mut self, _handle: i64) -> i64 {
+        -1
+    }
+    fn dlerror(&mut self) -> Option<alloc::string::String> {
+        None
+    }
 }
 
 /// Run one function in the program context. `args` lands in the
 /// parameter byte slots per the c5 cdecl: arg `i` at
 /// `stack_base + (locals + i) * 8`.
-fn run_func(
+fn run_func<H: Host>(
     prog: &Program<'_>,
     mem: &mut Memory,
+    host: &mut H,
     func: &FunctionSsa,
     args: &[i64],
 ) -> Result<i64, C5Error> {
@@ -311,7 +353,7 @@ fn run_func(
         let block = &frame.func.blocks[frame.block_idx];
         let mut step_err: Option<C5Error> = None;
         for v in block.inst_range.clone() {
-            if let Err(e) = run_inst(prog, mem, &mut frame, v) {
+            if let Err(e) = run_inst(prog, mem, host, &mut frame, v) {
                 step_err = Some(e);
                 break;
             }
@@ -369,9 +411,10 @@ fn run_func(
     result
 }
 
-fn run_inst(
+fn run_inst<H: Host>(
     prog: &Program<'_>,
     mem: &mut Memory,
+    host: &mut H,
     frame: &mut Frame<'_>,
     v: ValueId,
 ) -> Result<(), C5Error> {
@@ -495,7 +538,7 @@ fn run_inst(
             for &a in args {
                 arg_vals.push(frame.regs[a as usize]);
             }
-            let ret = run_func(prog, mem, callee, &arg_vals)?;
+            let ret = run_func(prog, mem, host, callee, &arg_vals)?;
             frame.regs[v as usize] = ret;
             return Ok(());
         }
@@ -516,7 +559,7 @@ fn run_inst(
             for &a in args {
                 arg_vals.push(frame.regs[a as usize]);
             }
-            let ret = run_func(prog, mem, callee, &arg_vals)?;
+            let ret = run_func(prog, mem, host, callee, &arg_vals)?;
             frame.regs[v as usize] = ret;
             return Ok(());
         }
@@ -528,7 +571,7 @@ fn run_inst(
             for &a in args {
                 arg_vals.push(frame.regs[a as usize]);
             }
-            let ret = dispatch_callext(name, &arg_vals, mem)?;
+            let ret = dispatch_callext(name, &arg_vals, mem, host)?;
             frame.regs[v as usize] = ret;
             return Ok(());
         }
@@ -558,7 +601,12 @@ fn run_inst(
 /// `Vm<H>` host-bridge into the byte-addressed `Memory` model.
 /// Unimplemented bindings return a runtime error so the caller
 /// sees which shim needs writing next.
-fn dispatch_callext(name: &str, args: &[i64], mem: &mut Memory) -> Result<i64, C5Error> {
+fn dispatch_callext<H: Host>(
+    name: &str,
+    args: &[i64],
+    mem: &mut Memory,
+    host: &mut H,
+) -> Result<i64, C5Error> {
     match name {
         // `exit(int code)` terminates the host process in libc;
         // inside the SSA-VM we route it through a sentinel error
@@ -610,6 +658,57 @@ fn dispatch_callext(name: &str, args: &[i64], mem: &mut Memory) -> Result<i64, C
                 }
             }
             Ok(0)
+        }
+        // `ssize_t write(int fd, const void *buf, size_t count)`.
+        // Routes through `host.write`; fd 1 / 2 land on stdout /
+        // stderr by convention.
+        "write" => {
+            if args.len() < 3 {
+                return Err(C5Error::Runtime("vm_ssa: write expects 3 args".to_string()));
+            }
+            let fd = args[0];
+            let buf_addr = args[1];
+            let n = libc_size(name, Some(args[2]))?;
+            if buf_addr < 0 {
+                return Err(C5Error::Runtime(format!(
+                    "vm_ssa: write: negative buf addr 0x{buf_addr:x}",
+                )));
+            }
+            let slice = mem.read_bytes(buf_addr as usize, n)?;
+            // `host.write` returns an i64; we trust its sign convention.
+            // Take a small detour through an owned Vec to drop the
+            // borrow on `mem` before any &mut-touching follow-on
+            // (none today, but it keeps the borrow checker tame as
+            // the dispatch grows).
+            let owned: alloc::vec::Vec<u8> = slice.to_vec();
+            Ok(host.write(fd, &owned))
+        }
+        // `ssize_t read(int fd, void *buf, size_t count)`.
+        "read" => {
+            if args.len() < 3 {
+                return Err(C5Error::Runtime("vm_ssa: read expects 3 args".to_string()));
+            }
+            let fd = args[0];
+            let buf_addr = args[1];
+            let n = libc_size(name, Some(args[2]))?;
+            if buf_addr < 0 {
+                return Err(C5Error::Runtime(format!(
+                    "vm_ssa: read: negative buf addr 0x{buf_addr:x}",
+                )));
+            }
+            let mut buf = alloc::vec![0u8; n];
+            let read_bytes = host.read(fd, &mut buf);
+            if read_bytes < 0 {
+                return Ok(read_bytes);
+            }
+            let actual = (read_bytes as usize).min(n);
+            mem.write_bytes(buf_addr as usize, &buf[..actual])?;
+            Ok(read_bytes)
+        }
+        // `int close(int fd)` -- pure host bridge.
+        "close" => {
+            let fd = args.first().copied().unwrap_or(-1);
+            Ok(host.close(fd))
         }
         _ => Err(C5Error::Runtime(format!(
             "vm_ssa: CallExt `{name}` not implemented (port from vm/intrinsics.rs)",
@@ -887,7 +986,15 @@ mod tests {
             .iter()
             .flat_map(|d| d.bindings.iter().map(|b| b.local_name.clone()))
             .collect();
-        run_program(&funcs, &program.data, &binding_names, program.entry_pc).expect("ssa run")
+        let mut host = super::super::super::host::StdHost::default();
+        run_program(
+            &funcs,
+            &program.data,
+            &binding_names,
+            program.entry_pc,
+            &mut host,
+        )
+        .expect("ssa run")
     }
 
     #[test]
@@ -1036,8 +1143,15 @@ mod tests {
             .iter()
             .flat_map(|d| d.bindings.iter().map(|b| b.local_name.clone()))
             .collect();
-        let err = run_program(&funcs, &program.data, &binding_names, program.entry_pc)
-            .expect_err("printf should land in the unimplemented arm");
+        let mut host = super::super::super::host::StdHost::default();
+        let err = run_program(
+            &funcs,
+            &program.data,
+            &binding_names,
+            program.entry_pc,
+            &mut host,
+        )
+        .expect_err("printf should land in the unimplemented arm");
         match err {
             crate::C5Error::Runtime(msg) => {
                 assert!(

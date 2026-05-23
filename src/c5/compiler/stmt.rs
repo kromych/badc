@@ -591,6 +591,10 @@ impl Compiler {
         }
 
         if self.lex.tk == Token::If {
+            // Capture the `if` keyword position before consuming
+            // the rest of the statement; `ast_src_pos()` advances
+            // with the lexer.
+            let if_pos = self.ast_src_pos();
             self.next()?;
             self.consume(b'(', "open paren expected")?;
             self.parse_full_expr()?;
@@ -618,7 +622,7 @@ impl Compiler {
                 None
             };
             if let Some(cond) = cond_id {
-                self.ast_emit_if(cond, then_s, else_s);
+                self.ast_emit_if(cond, then_s, else_s, if_pos);
             }
         } else if self.lex.tk == Token::While {
             self.next()?;

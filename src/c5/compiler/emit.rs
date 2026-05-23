@@ -1002,14 +1002,18 @@ impl Compiler {
             .push_stmt(super::super::ast::Stmt::Compound(items), pos)
     }
 
-    /// Push `Stmt::If { cond, then_s, else_s }`.
+    /// Push `Stmt::If { cond, then_s, else_s }`. The caller passes
+    /// the source position captured at the `if` keyword so the
+    /// walker's `set_src` lands on the line a debugger user types
+    /// when they say `b function`, not on the line the lexer
+    /// reached after parsing the then-body.
     pub(super) fn ast_emit_if(
         &mut self,
         cond: super::super::ast::ExprId,
         then_s: super::super::ast::StmtId,
         else_s: Option<super::super::ast::StmtId>,
+        pos: super::super::ast::SrcPos,
     ) -> super::super::ast::StmtId {
-        let pos = self.ast_src_pos();
         self.ast.push_stmt(
             super::super::ast::Stmt::If {
                 cond,

@@ -54,6 +54,11 @@ const CODE_ADDR_MASK: i64 = 0x4000_0000_0000_0000;
 ///                                     `Frame::stack_base` /
 ///                                     `Frame::frame_size` bound
 ///                                     each call's slot bytes.
+///   bytes[heap_base..heap_top]      -- bump-pointer heap;
+///                                     `malloc` advances
+///                                     `heap_top`, `free` is a
+///                                     no-op (the SSA-VM is
+///                                     short-lived).
 ///
 /// `Inst::LocalAddr(off)` returns a real byte address into
 /// `bytes`. `Inst::ImmData(off)` returns `off` (which lands in
@@ -67,24 +72,59 @@ struct Memory {
     /// return. Each frame's locals + params occupy
     /// `(locals + n_params) * 8` bytes starting at this offset.
     stack_top: usize,
+    /// First byte of the heap region (`data_end + STACK_BYTES`).
+    /// Fixed at construction; `malloc` allocations start here
+    /// and grow upward. Retained so a future `free`/`realloc`
+    /// can resolve a pointer back to its allocator origin.
+    #[allow(dead_code)]
+    heap_base: usize,
+    /// Next free byte in the heap. C99 7.20.3.3 leaves `malloc`'s
+    /// alignment unspecified except that it must suffice for any
+    /// object; we round each allocation up to 16 bytes to match
+    /// what host malloc implementations typically guarantee.
+    heap_top: usize,
 }
 
 impl Memory {
     fn new(data: &[u8]) -> Self {
-        // Reserve a fixed 256 KiB stack region. C99 doesn't pin
-        // a stack limit; this matches the bytecode VM's
-        // `STACK_CAPACITY` order of magnitude and is plenty for
-        // every cargo fixture today.
+        // Reserve a fixed 256 KiB stack region + 256 KiB heap.
+        // C99 doesn't pin either limit; matches the bytecode
+        // VM's `STACK_CAPACITY` order of magnitude and is plenty
+        // for every cargo fixture today.
         const STACK_BYTES: usize = 256 * 1024;
+        const HEAP_BYTES: usize = 256 * 1024;
         let data_end = data.len();
-        let mut bytes = Vec::with_capacity(data_end + STACK_BYTES);
+        let total = data_end + STACK_BYTES + HEAP_BYTES;
+        let mut bytes = Vec::with_capacity(total);
         bytes.extend_from_slice(data);
-        bytes.resize(data_end + STACK_BYTES, 0);
+        bytes.resize(total, 0);
+        let heap_base = data_end + STACK_BYTES;
         Self {
             bytes,
             data_end,
             stack_top: data_end,
+            heap_base,
+            heap_top: heap_base,
         }
+    }
+
+    /// Bump-pointer `malloc`. Returns 0 (the C99 null pointer) on
+    /// out-of-heap so callers see the standard failure shape.
+    fn heap_alloc(&mut self, n: usize) -> usize {
+        let aligned = (n + 15) & !15;
+        let base = self.heap_top;
+        let next = base.saturating_add(aligned);
+        if next > self.bytes.len() {
+            return 0;
+        }
+        // Zero the new region so a `malloc` caller doesn't read
+        // a previous allocation's leftovers (C99 doesn't promise
+        // zeroed memory but it's friendlier than uninitialised).
+        for b in &mut self.bytes[base..next] {
+            *b = 0;
+        }
+        self.heap_top = next;
+        base
     }
 
     fn alloc_frame(&mut self, frame_bytes: usize) -> Result<usize, C5Error> {
@@ -710,10 +750,135 @@ fn dispatch_callext<H: Host>(
             let fd = args.first().copied().unwrap_or(-1);
             Ok(host.close(fd))
         }
+        // `void *malloc(size_t n)` -- bump-pointer heap.
+        // Returns 0 on out-of-heap (C99 null pointer).
+        "malloc" => {
+            let n = libc_size(name, args.first().copied())?;
+            Ok(mem.heap_alloc(n) as i64)
+        }
+        // `void free(void *p)` -- no-op until the SSA-VM grows a
+        // real allocator. Mirrors what the bytecode VM does for
+        // single-shot fixture programs that never approach the
+        // 256 KiB heap cap.
+        "free" => Ok(0),
+        // `int printf(const char *fmt, ...)` -- minimal subset
+        // (%d / %u / %x / %c / %s / %%). Walks the variadic
+        // tail in `args[1..]`, formats into a String, and writes
+        // it to stdout via the host. Returns 0 (printf returns
+        // bytes written; no caller depends on the exact value
+        // in the current fixture set).
+        "printf" => {
+            let fmt_addr = *args
+                .first()
+                .ok_or_else(|| C5Error::Runtime("vm_ssa: printf: missing fmt".to_string()))?;
+            if fmt_addr < 0 {
+                return Err(C5Error::Runtime(format!(
+                    "vm_ssa: printf: bad fmt addr 0x{fmt_addr:x}",
+                )));
+            }
+            let fmt = read_cstring(mem, fmt_addr as usize)?;
+            let out = format_printf(&fmt, &args[1..], mem)?;
+            let _ = host.write(1, out.as_bytes());
+            Ok(0)
+        }
+        // `int putchar(int c)` -- write one byte to stdout, returns
+        // the byte (or EOF on error; we return the byte unconditionally).
+        "putchar" => {
+            let c = args.first().copied().unwrap_or(-1);
+            let byte = c as u8;
+            let _ = host.write(1, &[byte]);
+            Ok(c)
+        }
         _ => Err(C5Error::Runtime(format!(
             "vm_ssa: CallExt `{name}` not implemented (port from vm/intrinsics.rs)",
         ))),
     }
+}
+
+/// Read a NUL-terminated C string out of memory. Bounds-checks
+/// up to the data segment / stack / heap end so a stray pointer
+/// returns a runtime error rather than reading past the buffer.
+fn read_cstring(mem: &Memory, addr: usize) -> Result<alloc::string::String, C5Error> {
+    let mut s = alloc::string::String::new();
+    let mut i = addr;
+    while i < mem.bytes.len() && mem.bytes[i] != 0 {
+        s.push(mem.bytes[i] as char);
+        i += 1;
+    }
+    if i >= mem.bytes.len() {
+        return Err(C5Error::Runtime(format!(
+            "vm_ssa: read_cstring: missing NUL terminator past addr 0x{addr:x}",
+        )));
+    }
+    Ok(s)
+}
+
+/// Minimal printf formatter. Walks `fmt`'s `%c / %d / %u / %x /
+/// %s / %%` conversions and pulls one i64 from `args` per
+/// non-literal conversion. Width / precision / flags are not
+/// honoured. Returns the formatted string for the caller to
+/// hand to `host.write`.
+fn format_printf(fmt: &str, args: &[i64], mem: &Memory) -> Result<alloc::string::String, C5Error> {
+    use core::fmt::Write;
+    let mut out = alloc::string::String::new();
+    let mut arg_idx = 0usize;
+    let mut chars = fmt.chars();
+    while let Some(c) = chars.next() {
+        if c != '%' {
+            out.push(c);
+            continue;
+        }
+        let Some(spec) = chars.next() else {
+            break;
+        };
+        if spec == '%' {
+            out.push('%');
+            continue;
+        }
+        let Some(val) = args.get(arg_idx).copied() else {
+            return Err(C5Error::Runtime(format!(
+                "vm_ssa: printf: format wants arg #{arg_idx} but only {} supplied",
+                args.len(),
+            )));
+        };
+        arg_idx += 1;
+        match spec {
+            'd' | 'i' => {
+                let _ = write!(out, "{}", val as i32 as i64);
+            }
+            'u' => {
+                let _ = write!(out, "{}", val as u32 as u64);
+            }
+            'x' => {
+                let _ = write!(out, "{:x}", val as u32);
+            }
+            'X' => {
+                let _ = write!(out, "{:X}", val as u32);
+            }
+            'c' => {
+                out.push(val as u8 as char);
+            }
+            's' => {
+                if val < 0 {
+                    return Err(C5Error::Runtime(format!(
+                        "vm_ssa: printf %s: bad ptr 0x{val:x}",
+                    )));
+                }
+                let s = read_cstring(mem, val as usize)?;
+                out.push_str(&s);
+            }
+            'p' => {
+                let _ = write!(out, "0x{:x}", val as u64);
+            }
+            other => {
+                // Unrecognised conversion: emit the literal
+                // `%X` so the caller sees what was wrong.
+                out.push('%');
+                out.push(other);
+            }
+        }
+    }
+    Ok(out)
 }
 
 /// Parse `(dst/buf, src/buf, n)` argument triples used by
@@ -1100,6 +1265,28 @@ mod tests {
     }
 
     #[test]
+    fn malloc_then_round_trip() {
+        // C99 7.20.3.3 + 7.21.2.1: `malloc(16)` returns a real
+        // writable pointer; we write two ints and assert the
+        // sum matches.
+        assert_eq!(
+            run_full_program(
+                "#include <stdlib.h>
+                 int main(void) {
+                     int *p = malloc(16);
+                     if (p == 0) return 1;
+                     p[0] = 17;
+                     p[1] = 25;
+                     int sum = p[0] + p[1];
+                     free(p);
+                     return sum;
+                 }",
+            ),
+            42,
+        );
+    }
+
+    #[test]
     fn memcpy_memset_memcmp_round_trip() {
         // Exercises the three pure-memory libc shims through
         // `Inst::CallExt`. <string.h> registers the bindings;
@@ -1122,14 +1309,14 @@ mod tests {
 
     #[test]
     fn callext_unimplemented_returns_runtime_error() {
-        // `printf` lands as `Inst::CallExt { binding_idx, ... }`;
-        // the SSA-VM's dispatch table only has `exit` wired so
-        // far, so any other binding name surfaces as a runtime
-        // error pointing at the next port target. Programs that
-        // don't touch libc keep running.
+        // `getenv` isn't in the SSA-VM dispatch yet; the
+        // unimplemented arm surfaces a runtime error pointing
+        // at the next port target. Programs that don't touch
+        // libc keep running.
         use crate::Compiler;
         let program = Compiler::new(
-            "#include <stdio.h>\nint main(void) { printf(\"hi\\n\"); return 0; }".to_string(),
+            "#include <stdlib.h>\nint main(void) { return getenv(\"PATH\") != 0; }"
+                .to_string(),
         )
         .compile()
         .expect("compile fixture");
@@ -1151,13 +1338,13 @@ mod tests {
             program.entry_pc,
             &mut host,
         )
-        .expect_err("printf should land in the unimplemented arm");
+        .expect_err("getenv should land in the unimplemented arm");
         match err {
             crate::C5Error::Runtime(msg) => {
                 assert!(
-                    msg.contains("CallExt `printf` not implemented")
-                        || msg.contains("CallExt `_printf` not implemented"),
-                    "expected printf in the error, got: {msg}",
+                    msg.contains("CallExt `getenv` not implemented")
+                        || msg.contains("CallExt `_getenv` not implemented"),
+                    "expected getenv in the error, got: {msg}",
                 );
             }
             other => panic!("expected Runtime, got {other:?}"),

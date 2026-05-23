@@ -226,6 +226,64 @@ fn object_round_trip_through_elf_wrapper() {
 }
 
 #[test]
+fn synthetic_ssa_funcs_round_trip_through_object() {
+    use crate::c5::{read_object, write_object};
+    // A TU that calls libc forces `emit_sys_trampolines` to
+    // synthesise one or more `FunctionSsa` entries for the
+    // address-take trampoline. The `.o` writer encodes them via
+    // `TAG_SYNTHETIC_SSA_FUNCS`; the reader must reconstruct
+    // them byte-for-byte equivalent on shape (ent_pc, end_pc,
+    // n_params, is_variadic, terminator binding index).
+    // Sys-trampolines fire when a libc symbol is address-taken.
+    // The synthesised callback below forces one; a plain call
+    // is lowered as a direct `Op::JsrExt` and doesn't go
+    // through a trampoline.
+    let a = compile_unit(
+        "
+        #include <unistd.h>
+        int call_via_ptr(int (*fp)(int, void*, int)) { return fp(1, \"hi\\n\", 3); }
+        int main(void) { return call_via_ptr(write); }
+        ",
+    );
+    if a.synthetic_ssa_funcs.is_empty() {
+        // Sanity guard: if no sys-trampoline is generated, the
+        // test isn't exercising what it claims. The libc call
+        // above should always force one.
+        panic!("expected at least one sys-trampoline");
+    }
+    let bytes = write_object(&a);
+    let parsed = read_object(&bytes).expect("read_object");
+    assert_eq!(
+        parsed.synthetic_ssa_funcs.len(),
+        a.synthetic_ssa_funcs.len(),
+        "synthetic_ssa_funcs count round-trip",
+    );
+    for (orig, decoded) in a
+        .synthetic_ssa_funcs
+        .iter()
+        .zip(parsed.synthetic_ssa_funcs.iter())
+    {
+        assert_eq!(orig.ent_pc, decoded.ent_pc, "ent_pc");
+        assert_eq!(orig.end_pc, decoded.end_pc, "end_pc");
+        assert_eq!(orig.n_params, decoded.n_params, "n_params");
+        assert_eq!(orig.is_variadic, decoded.is_variadic, "is_variadic");
+        // The terminator shape (TailExt vs Return) and binding
+        // index drives the body; check the terminator on block
+        // 0 directly so the round-trip pins the shape tag.
+        let orig_term = orig.blocks[0].terminator;
+        let dec_term = decoded.blocks[0].terminator;
+        match (orig_term, dec_term) {
+            (
+                crate::c5::ir::Terminator::TailExt(a_idx),
+                crate::c5::ir::Terminator::TailExt(b_idx),
+            ) => assert_eq!(a_idx, b_idx, "TailExt binding_idx"),
+            (crate::c5::ir::Terminator::Return(_), crate::c5::ir::Terminator::Return(_)) => {}
+            other => panic!("terminator shape mismatch: {other:?}"),
+        }
+    }
+}
+
+#[test]
 fn link_uses_object_via_round_trip() {
     use crate::c5::{read_object, write_object};
     // Same end-to-end as `extern_function_call_across_two_units`

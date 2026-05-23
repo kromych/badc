@@ -369,6 +369,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("many_args_host_stack_overflow.c", 0),
     ("variadic_optimizer_survives.c", 0),
     ("struct_2d_array_field.c", 27),
+    ("struct_deref_va_arg.c", 0),
     ("anonymous_aggregates.c", 0),
     ("static_locals.c", 0),
     ("large_stack_frame.c", 42),

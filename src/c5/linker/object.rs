@@ -663,6 +663,13 @@ const TAG_ENTRY_NAME: u8 = 16;
 const TAG_SUBSYSTEM: u8 = 17;
 const TAG_SOURCE_PATH: u8 = 18;
 const TAG_WARNINGS: u8 = 19;
+/// Sys-trampoline `FunctionSsa` blob (one entry per trampoline).
+/// Encodes the minimal shape `emit_sys_trampolines` produces:
+/// `ent_pc`, `end_pc`, `n_params`, `is_variadic`, a shape tag
+/// (0 = `TailExt(idx)`, 1 = LoadLocal..n_params + CallExt + Return),
+/// and the libc binding index the body reaches. The reader
+/// reconstructs the FunctionSsa via `SsaBuilder`.
+const TAG_SYNTHETIC_SSA_FUNCS: u8 = 20;
 
 fn encode_meta(unit: &LinkUnit) -> Vec<u8> {
     let mut buf = Vec::new();
@@ -819,6 +826,24 @@ fn encode_meta(unit: &LinkUnit) -> Vec<u8> {
         write_tag_header(&mut buf, TAG_WARNINGS, body_len);
         write_string_vec(&mut buf, &unit.warnings);
     }
+    {
+        // Each entry: 8 ent_pc + 8 end_pc + 4 n_params + 1
+        // is_variadic + 1 shape_tag + 8 binding_idx = 30 bytes.
+        const ENTRY_BYTES: u32 = 30;
+        let n = unit.synthetic_ssa_funcs.len();
+        let body_len = 4 + (n as u32) * ENTRY_BYTES;
+        write_tag_header(&mut buf, TAG_SYNTHETIC_SSA_FUNCS, body_len);
+        write_u32(&mut buf, n as u32);
+        for f in &unit.synthetic_ssa_funcs {
+            let (shape, binding_idx) = synth_shape(f);
+            write_u64(&mut buf, f.ent_pc as u64);
+            write_u64(&mut buf, f.end_pc as u64);
+            write_u32(&mut buf, f.n_params as u32);
+            buf.push(u8::from(f.is_variadic));
+            buf.push(shape);
+            write_u64(&mut buf, binding_idx as u64);
+        }
+    }
 
     write_tag_header(&mut buf, TAG_END, 0);
     buf
@@ -954,6 +979,33 @@ fn exports_len(es: &[crate::c5::program::ExportedFunction]) -> u32 {
         total += 8;
     }
     total
+}
+
+/// Recover the canonical sys-trampoline shape from a
+/// `FunctionSsa` produced by `emit_sys_trampolines`. Returns
+/// `(shape_tag, binding_idx)` where `shape_tag` is 0 for the
+/// `TailExt`-terminated body and 1 for the
+/// LoadLocal..CallExt..Return body. The binding index is read
+/// off the `Terminator::TailExt(idx)` or the single
+/// `Inst::CallExt::binding_idx` the trampoline body carries.
+/// Panics on any other shape; sys-trampolines are the only
+/// expected producer.
+fn synth_shape(f: &crate::c5::ir::FunctionSsa) -> (u8, i64) {
+    use crate::c5::ir::{Inst, Terminator};
+    if let Some(blk) = f.blocks.first()
+        && let Terminator::TailExt(idx) = blk.terminator
+    {
+        return (0, idx);
+    }
+    for inst in &f.insts {
+        if let Inst::CallExt { binding_idx, .. } = inst {
+            return (1, *binding_idx);
+        }
+    }
+    panic!(
+        "synth_shape: unrecognised sys-trampoline shape at ent_pc {} (no CallExt or TailExt)",
+        f.ent_pc,
+    );
 }
 
 fn write_u32(buf: &mut Vec<u8>, v: u32) {
@@ -1487,6 +1539,9 @@ fn decode_meta(meta: &[u8], unit: &mut LinkUnit) -> Result<(), C5Error> {
                 unit.source_path = read_string(body, &mut local)?;
             }
             TAG_WARNINGS => unit.warnings = read_string_vec(body)?,
+            TAG_SYNTHETIC_SSA_FUNCS => {
+                unit.synthetic_ssa_funcs = read_synthetic_ssa_funcs(body)?;
+            }
             _ => {
                 // Unknown tag -- skip silently to preserve
                 // forward compatibility.
@@ -1537,6 +1592,45 @@ fn read_vec_u16(body: &[u8]) -> Result<Vec<u16>, C5Error> {
     let mut out = Vec::with_capacity(n);
     for i in 0..n {
         out.push(u16_at(body, 4 + i * 2));
+    }
+    Ok(out)
+}
+
+fn read_synthetic_ssa_funcs(body: &[u8]) -> Result<Vec<crate::c5::ir::FunctionSsa>, C5Error> {
+    use crate::c5::codegen::ssa_build::SsaBuilder;
+    use crate::c5::ir::LoadKind;
+    if body.len() < 4 {
+        return Err(err("synthetic_ssa_funcs body too short"));
+    }
+    let n = u32_at(body, 0) as usize;
+    const ENTRY_BYTES: usize = 30;
+    if body.len() < 4 + n * ENTRY_BYTES {
+        return Err(err("synthetic_ssa_funcs body truncated"));
+    }
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        let off = 4 + i * ENTRY_BYTES;
+        let ent_pc = u64_at(body, off) as usize;
+        let end_pc = u64_at(body, off + 8) as usize;
+        let n_params = u32_at(body, off + 16) as usize;
+        let is_variadic = body[off + 20] != 0;
+        let shape = body[off + 21];
+        let binding_idx = u64_at(body, off + 22) as i64;
+        let mut sb = SsaBuilder::new(ent_pc, n_params, is_variadic);
+        sb.set_locals(0);
+        let _ = sb.alloca_init(0);
+        if shape == 0 {
+            sb.tail_ext(binding_idx);
+        } else {
+            let arg_vals: Vec<_> = (0..n_params)
+                .map(|i| sb.load_local((i + 2) as i64, LoadKind::I64))
+                .collect();
+            let r = sb.call_ext(binding_idx, arg_vals, 0);
+            sb.return_(r);
+        }
+        let mut func = sb.finish();
+        func.end_pc = end_pc;
+        out.push(func);
     }
     Ok(out)
 }

@@ -771,8 +771,7 @@ impl<'a> Walker<'a> {
                 for (i, (labels, _)) in partitions.iter().enumerate() {
                     for val in labels.iter().flatten() {
                         b.switch_to(next_dispatcher_blk);
-                        let val_v = b.imm(*val);
-                        let eq = b.binop(BinOp::Eq, disc_val, val_v);
+                        let eq = b.binop_imm(BinOp::Eq, disc_val, *val);
                         let next = b.new_block();
                         b.branch_nonzero(eq, blocks[i], next);
                         next_dispatcher_blk = next;
@@ -1502,9 +1501,33 @@ impl<'a> Walker<'a> {
                 let addr = self.walk_expr_lvalue(b, *lhs)?;
                 let load_kind = load_kind_for(*ty, self.target);
                 let old = b.load(addr, load_kind);
-                let rhs_val = self.walk_expr_rvalue(b, *rhs)?;
-                let new_val = b.binop(*op, old, rhs_val);
                 let store_kind = store_kind_for(*ty, self.target);
+                // Constant-rhs short-circuit (mirror of the
+                // `Expr::Binary` path): an integer-literal rhs
+                // routes through `binop_imm` so the per-arch
+                // immediate-form peepholes fire and the literal
+                // doesn't get materialised into a scratch first.
+                // FP / Div / Divu / Mod / Modu stay on the
+                // register-rhs path because the per-arch BinopI
+                // lowering bails on them.
+                let imm_safe = matches!(
+                    *op,
+                    BinOp::Add
+                        | BinOp::Sub
+                        | BinOp::Mul
+                        | BinOp::And
+                        | BinOp::Or
+                        | BinOp::Xor
+                        | BinOp::Shl
+                        | BinOp::Shr
+                        | BinOp::Shru
+                );
+                let new_val = if imm_safe && let Expr::IntLit { val, .. } = self.ast.expr(*rhs) {
+                    b.binop_imm(*op, old, *val)
+                } else {
+                    let rhs_val = self.walk_expr_rvalue(b, *rhs)?;
+                    b.binop(*op, old, rhs_val)
+                };
                 b.store(addr, new_val, store_kind);
                 Ok(new_val)
             }
@@ -1654,13 +1677,11 @@ impl<'a> Walker<'a> {
             }
             UnOp::BitNot => {
                 let v = self.walk_expr_rvalue(b, child)?;
-                let all_ones = b.imm(-1);
-                Ok(b.binop(BinOp::Xor, v, all_ones))
+                Ok(b.binop_imm(BinOp::Xor, v, -1))
             }
             UnOp::LogNot => {
                 let v = self.walk_expr_rvalue(b, child)?;
-                let zero = b.imm(0);
-                Ok(b.binop(BinOp::Eq, v, zero))
+                Ok(b.binop_imm(BinOp::Eq, v, 0))
             }
             UnOp::AddrOf => self.walk_expr_lvalue(b, child),
             UnOp::Deref => {

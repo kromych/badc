@@ -232,6 +232,10 @@ fn main() {
                 println!("{USAGE}");
                 return;
             }
+            "-v" | "--version" => {
+                println!("{}", badc::BUILD_INFO);
+                return;
+            }
             "-o" => match iter.next() {
                 Some(p) => output_path = Some(PathBuf::from(p)),
                 None => {
@@ -473,7 +477,7 @@ fn main() {
         stdin_was_input = true;
     }
     if sources.is_empty() && objects.is_empty() {
-        eprintln!("{USAGE}");
+        eprint_diagnostic("badc: error: no files");
         std::process::exit(1);
     }
 

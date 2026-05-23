@@ -812,15 +812,17 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
             all
         },
         symbols: {
-            // Multi-TU: concatenate each unit's `parser_symbols`
-            // verbatim and shift each `Token::Fun` symbol's `val`
-            // by the unit's `text_base`. `Expr::Ident.sym` indices
-            // in the per-unit AST are still unit-local; the
-            // walker tolerates an empty / mismatched lookup and
-            // falls back to the AST-snapshotted `val`, which was
-            // rebased above. Cross-unit forward references (val=0
-            // in the caller unit, defined in another unit) are
-            // not yet resolved here.
+            // Multi-TU: concatenate each unit's `parser_symbols`,
+            // shift each defining `Token::Fun` symbol's `val` by
+            // the unit's `text_base`, then patch every
+            // forward-declared `Token::Fun` symbol (`val == 0`)
+            // to the post-link PC of its definition in another
+            // unit. The lookup is by `Symbol::name`; the same
+            // shape `apply_reloc` uses to resolve `Op::Jsr`
+            // operands across units, restated here so the
+            // walker's `live_fun_val(sym)` lands on the correct
+            // PC instead of staying at 0 (which collides with
+            // the first emitted function).
             let mut merged: alloc::vec::Vec<crate::c5::symbol::Symbol> =
                 alloc::vec::Vec::new();
             let fun_class = crate::c5::token::Token::Fun as i64;
@@ -832,6 +834,27 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                         s.val += base;
                     }
                     merged.push(s);
+                }
+            }
+            // Index the resolved definitions by name so the
+            // forward-decl pass below is O(N) over the symbol
+            // table. Only `Token::Fun` symbols with `val > 0`
+            // qualify -- a Sys binding's `val` is the
+            // binding-flat index, not a PC.
+            let mut def_by_name: alloc::collections::BTreeMap<
+                alloc::string::String,
+                i64,
+            > = alloc::collections::BTreeMap::new();
+            for s in &merged {
+                if s.class == fun_class && s.val > 0 {
+                    def_by_name.insert(s.name.clone(), s.val);
+                }
+            }
+            for s in &mut merged {
+                if s.class == fun_class && s.val == 0
+                    && let Some(&resolved) = def_by_name.get(&s.name)
+                {
+                    s.val = resolved;
                 }
             }
             merged

@@ -570,6 +570,7 @@ impl Compiler {
     /// body hook in `run_compile`, right after the trailing
     /// `Op::Lev`. The `ast_acc` / `ast_vstack` parser-side state
     /// is left alone -- the next function's `ast_reset` zeroes it.
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn ast_finish_function(
         &mut self,
         ent_pc: usize,
@@ -577,6 +578,9 @@ impl Compiler {
         is_variadic: bool,
         param_tys: alloc::vec::Vec<i64>,
         param_local_slots: alloc::vec::Vec<i64>,
+        returns_struct: bool,
+        return_struct_size: i64,
+        alloca_top_slot: i64,
     ) {
         let finished = super::super::ast::FinishedFunction {
             ast: core::mem::take(&mut self.ast),
@@ -587,6 +591,9 @@ impl Compiler {
             name: self.current_function_name.clone(),
             param_tys,
             param_local_slots,
+            returns_struct,
+            return_struct_size,
+            alloca_top_slot,
         };
         self.finished_functions.push(finished);
     }
@@ -770,6 +777,9 @@ impl Compiler {
                 func.n_locals,
                 &func.param_tys,
                 &func.param_local_slots,
+                func.returns_struct,
+                func.return_struct_size,
+                func.alloca_top_slot,
             );
             match walker_res {
                 Err(e) => {

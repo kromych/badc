@@ -88,18 +88,33 @@ pub(crate) fn walk_function(
     n_locals: i64,
     param_tys: &[i64],
     param_local_slots: &[i64],
+    returns_struct: bool,
+    return_struct_size: i64,
+    alloca_top_slot: i64,
 ) -> Result<FunctionSsa, WalkError> {
     let mut b = super::super::codegen::ssa_build::SsaBuilder::new(ent_pc, n_params, is_variadic);
-    if n_locals != 0 {
-        b.set_locals(n_locals);
+    // C99 6.8: the function's stack frame holds the declared
+    // locals plus, when the body calls `alloca`, the per-frame
+    // arena. The arena occupies the slots above the alloca-top
+    // bookkeeping slot; its size is `ALLOCA_ARENA_SLOTS` per the
+    // parser's Ent patch in `run_compile`. Without this addition
+    // the codegen prologue reserves too little stack and alloca
+    // writes scribble over the caller's frame.
+    let effective_locals = if alloca_top_slot > 0 {
+        alloca_top_slot + super::super::op::ALLOCA_ARENA_SLOTS
+    } else {
+        n_locals
+    };
+    if effective_locals != 0 {
+        b.set_locals(effective_locals);
     }
-    // Mirror the bytecode tier's per-function `Op::AllocaInit
-    // 0`. Slot 0 means "no alloca", which the per-arch emit
-    // short-circuits without writing native code, but it leaves
-    // a sentinel inst in block 0 so the emit's `alloca_top`
-    // tracking initialises and the function's frame layout
-    // matches the lift's shape.
-    b.alloca_init(0);
+    // Mirror the bytecode tier's per-function `Op::AllocaInit`.
+    // `alloca_top_slot == 0` means the body has no `alloca` call;
+    // the per-arch emit short-circuits a zero slot without
+    // writing native code. A non-zero slot tells the codegen to
+    // reserve the per-frame arena and store the running top into
+    // the named local slot per the bytecode-tier shape.
+    b.alloca_init(alloca_top_slot);
     // C99 6.5.2.2 + the c5 calling convention: for each
     // struct-by-value parameter, the caller passes the
     // source's address in slot `i + base` (base = 2, or 3
@@ -110,6 +125,13 @@ pub(crate) fn walk_function(
     // shifted the symbol's `val` to point at it, and emitted
     // the matching Mcpy on the bytecode side. Walker replays
     // the Mcpy so the AST-driven SSA matches.
+    // Argument-slot base: 2 for ordinary callees, 3 when the
+    // function returns a struct value (slot 2 holds the hidden
+    // out-pointer the caller pushed in front of the declared
+    // args). The parser's symbol-table assignment uses the same
+    // base, so this index matches the `val` the parser stored
+    // for each declared param.
+    let arg_slot_base: i64 = if returns_struct { 3 } else { 2 };
     for i in 0..param_tys.len() {
         let pty = param_tys[i];
         let local_slot = param_local_slots[i];
@@ -127,7 +149,7 @@ pub(crate) fn walk_function(
             continue;
         }
         let size = structs[id].size as i64;
-        let arg_slot = (i as i64) + 2;
+        let arg_slot = (i as i64) + arg_slot_base;
         let dst = b.local_addr(local_slot);
         let src = b.load_local(arg_slot, super::super::ir::LoadKind::I64);
         b.mcpy(dst, src, size);
@@ -139,6 +161,8 @@ pub(crate) fn walk_function(
         target,
         loop_ctx: alloc::vec::Vec::new(),
         label_blocks: alloc::vec::Vec::new(),
+        returns_struct,
+        return_struct_size,
     };
     // Walk the function body's root statement (a Compound built
     // at function-end by the parser's `parse_block_stmt` /
@@ -183,6 +207,16 @@ struct Walker<'a> {
     /// a Goto's forward reference or the matching Labeled stmt --
     /// both sides see the same block.
     label_blocks: alloc::vec::Vec<(super::super::ast::LabelId, super::super::ir::BlockId)>,
+    /// True when the function's declared return type is a struct
+    /// value. `return s;` lowers as: load the hidden out-pointer
+    /// from `slot 2`, Mcpy `return_struct_size` bytes from `s`'s
+    /// address into it, then return the out-pointer -- matching
+    /// the bytecode-tier shape the parser emits in
+    /// `Stmt::Return`.
+    returns_struct: bool,
+    /// Byte size of the struct return type when `returns_struct`
+    /// is true. Zero otherwise.
+    return_struct_size: i64,
 }
 
 impl<'a> Walker<'a> {
@@ -214,6 +248,24 @@ impl<'a> Walker<'a> {
     ) -> Result<bool, WalkError> {
         match self.ast.stmt(id) {
             Stmt::Return(Some(e)) => {
+                if self.returns_struct {
+                    // C99 6.8.6.4 + the c5 ABI: a struct-returning
+                    // callee receives the caller's result-temp
+                    // address in `slot 2`. `return s;` copies
+                    // `sizeof(struct T)` bytes from `s`'s address
+                    // into that out-pointer and returns the
+                    // out-pointer so the call site has a stable
+                    // value to chain into the surrounding
+                    // assignment / Mcpy.
+                    let out_ptr = b
+                        .load_local(2, super::super::ir::LoadKind::I64);
+                    let src = self.walk_expr_rvalue(b, *e)?;
+                    if self.return_struct_size > 0 {
+                        b.mcpy(out_ptr, src, self.return_struct_size);
+                    }
+                    b.return_(out_ptr);
+                    return Ok(true);
+                }
                 let v = self.walk_expr_rvalue(b, *e)?;
                 b.return_(v);
                 Ok(true)
@@ -239,24 +291,16 @@ impl<'a> Walker<'a> {
                             // A previous item closed the current
                             // block (Return / Goto / Break /
                             // Continue / If-both-arms-return). If
-                            // this item is a `Stmt::Labeled`,
-                            // resume at its label block so any
-                            // earlier `goto label` lands somewhere
-                            // walkable. Non-label dead code is
-                            // skipped per C99 6.8.6 (unreachable
-                            // statements don't constrain control
-                            // flow).
+                            // this item is a `Stmt::Labeled`, the
+                            // walker below resumes at its label
+                            // block so any earlier `goto label`
+                            // lands somewhere walkable. Non-label
+                            // dead code is skipped per C99 6.8.6
+                            // (unreachable statements don't
+                            // constrain control flow).
                             if !b.is_block_open()
-                                && matches!(self.ast.stmt(*s), Stmt::Labeled { .. })
+                                && !matches!(self.ast.stmt(*s), Stmt::Labeled { .. })
                             {
-                                let lab = match self.ast.stmt(*s) {
-                                    Stmt::Labeled { label, .. } => *label,
-                                    _ => unreachable!(),
-                                };
-                                let label_blk = self.block_for_label(b, lab);
-                                b.switch_to(label_blk);
-                            }
-                            if !b.is_block_open() {
                                 continue;
                             }
                             if self.walk_stmt(b, *s)? {
@@ -411,7 +455,17 @@ impl<'a> Walker<'a> {
             }
             Stmt::Labeled { label, body } => {
                 let label_blk = self.block_for_label(b, *label);
-                b.jmp(label_blk);
+                // C99 6.8.1: a labeled statement is reachable from
+                // both fall-through and any matching goto. When the
+                // current block is open, splice it into the label
+                // block with a jmp + switch_to. When it is closed
+                // (the immediately-preceding stmt terminated --
+                // typically a `goto label;` or a return), just
+                // switch the cursor; the label block already has
+                // its predecessors recorded by their jmps.
+                if b.is_block_open() {
+                    b.jmp(label_blk);
+                }
                 b.switch_to(label_blk);
                 let body_id = *body;
                 self.walk_stmt(b, body_id)
@@ -816,7 +870,42 @@ impl<'a> Walker<'a> {
                 b.switch_to(after_blk);
                 Ok(b.load_local(slot, kind_l))
             }
-            Expr::Call { callee, args, .. } => {
+            Expr::Call { callee, args, ty } => {
+                // Struct-returning c5-internal callee: allocate
+                // a result temp on this frame, prepend its
+                // address as the hidden out-pointer arg 0, run
+                // the call, and return the temp's address as
+                // the expression's value (the c5 ABI's
+                // address-as-value rule for struct rvalues).
+                if is_struct_ty(*ty) && struct_ptr_depth(*ty) == 0 {
+                    if let Expr::Ident { class, val, .. } = self.ast.expr(*callee) {
+                        if *class == Token::Fun as i64 {
+                            let result_slot = b.alloc_synthetic_local();
+                            // Spill the out-pointer through an
+                            // int-typed temp so the codegen
+                            // routes it via the host int arg
+                            // register (matches what the lift
+                            // does for FP / pointer args).
+                            let addr = b.local_addr(result_slot);
+                            let temp = b.alloc_synthetic_local();
+                            b.store_local(
+                                temp,
+                                addr,
+                                super::super::ir::StoreKind::I64,
+                            );
+                            let out_arg =
+                                b.load_local(temp, super::super::ir::LoadKind::I64);
+                            let mut all_args: alloc::vec::Vec<super::super::ir::ValueId> =
+                                alloc::vec::Vec::with_capacity(args.len() + 1);
+                            all_args.push(out_arg);
+                            for a in args {
+                                all_args.push(self.walk_expr_rvalue(b, *a)?);
+                            }
+                            let _ = b.call(*val as usize, all_args);
+                            return Ok(b.local_addr(result_slot));
+                        }
+                    }
+                }
                 // Lower each arg as an rvalue, then dispatch
                 // through the callee's class. Direct
                 // c5-internal (`Token::Fun`) calls go through
@@ -1581,7 +1670,7 @@ mod tests {
         let __ret = ast.push_stmt(Stmt::Return(Some(add)), src);
         ast.body = Some(__ret);
 
-        let func = walk_function(&ast, &empty_symbols(), &[], Target::LinuxAarch64, 0, 0, false, 0, &[], &[])
+        let func = walk_function(&ast, &empty_symbols(), &[], Target::LinuxAarch64, 0, 0, false, 0, &[], &[], false, 0, 0)
             .expect("walk");
         let immediates: alloc::vec::Vec<i64> = func
             .insts
@@ -1632,7 +1721,7 @@ mod tests {
         let __ret = ast.push_stmt(Stmt::Return(Some(x)), src);
         ast.body = Some(__ret);
 
-        let func = walk_function(&ast, &syms, &[], Target::LinuxAarch64, 0, 0, false, 8, &[], &[]).expect("walk");
+        let func = walk_function(&ast, &syms, &[], Target::LinuxAarch64, 0, 0, false, 8, &[], &[], false, 0, 0).expect("walk");
         let loads: alloc::vec::Vec<_> = func
             .insts
             .iter()
@@ -1687,7 +1776,7 @@ mod tests {
         let __ret = ast.push_stmt(Stmt::Return(Some(assign)), src);
         ast.body = Some(__ret);
 
-        let func = walk_function(&ast, &syms, &[], Target::LinuxAarch64, 0, 0, false, 8, &[], &[]).expect("walk");
+        let func = walk_function(&ast, &syms, &[], Target::LinuxAarch64, 0, 0, false, 8, &[], &[], false, 0, 0).expect("walk");
         let store_kinds: alloc::vec::Vec<_> = func
             .insts
             .iter()
@@ -1735,7 +1824,7 @@ mod tests {
         let __ret = ast.push_stmt(Stmt::Return(Some(neg)), src);
         ast.body = Some(__ret);
 
-        let func = walk_function(&ast, &empty_symbols(), &[], Target::LinuxAarch64, 0, 0, false, 0, &[], &[])
+        let func = walk_function(&ast, &empty_symbols(), &[], Target::LinuxAarch64, 0, 0, false, 0, &[], &[], false, 0, 0)
             .expect("walk");
         let binops: alloc::vec::Vec<BinOp> = func
             .insts
@@ -1764,7 +1853,7 @@ mod tests {
         );
         ast.body = Some(asm_id);
 
-        let err = walk_function(&ast, &empty_symbols(), &[], Target::LinuxAarch64, 0, 0, false, 0, &[], &[])
+        let err = walk_function(&ast, &empty_symbols(), &[], Target::LinuxAarch64, 0, 0, false, 0, &[], &[], false, 0, 0)
             .expect_err("Asm must surface as unsupported");
         assert!(matches!(
             err,

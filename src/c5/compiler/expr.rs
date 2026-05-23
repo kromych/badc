@@ -696,6 +696,18 @@ impl Compiler {
                         let callee_id = self.ast_synthesize_callee(id_idx as u32, callee_ty);
                         let return_ty = callee_ret_ty;
                         self.ast_emit_call(callee_id, ast_arg_ids.clone(), return_ty);
+                    } else {
+                        // Struct-returning callee: dual-emit a
+                        // `Expr::Call { ty: <struct> }` so the
+                        // walker allocates a synthetic local for
+                        // the hidden out-pointer, prepends its
+                        // address to the arg list, and returns
+                        // the address as the call's value (the
+                        // c5 ABI's address-as-value rule).
+                        let callee_ty = self.symbols[id_idx].type_;
+                        let callee_id = self.ast_synthesize_callee(id_idx as u32, callee_ty);
+                        let return_ty = callee_ret_ty;
+                        self.ast_emit_call(callee_id, ast_arg_ids.clone(), return_ty);
                     }
                     // For struct-returning callees, the result lives
                     // in the caller-allocated temp. After the call,

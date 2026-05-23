@@ -806,15 +806,14 @@ impl Compiler {
                             if v < 0 { v } else { 0 }
                         })
                         .collect();
-                    self.ast_finish_function(
-                        ent_pc,
-                        n_params,
-                        is_variadic,
-                        param_tys,
-                        param_local_slots,
-                    );
-                    self.current_function_name.clear();
-                    self.current_func_returns_void = false;
+                    let ret_ty_for_finish = self.current_func_return_ty;
+                    let returns_struct_finish = is_struct_ty(ret_ty_for_finish)
+                        && struct_ptr_depth(ret_ty_for_finish) == 0;
+                    let return_struct_size_finish = if returns_struct_finish {
+                        self.size_of_type(ret_ty_for_finish) as i64
+                    } else {
+                        0
+                    };
 
                     // Patch Ent's local-slot count. With alloca,
                     // bump it by 1 (the alloca-top bookkeeping
@@ -825,14 +824,30 @@ impl Compiler {
                     // regular locals); the arena occupies indices
                     // `[max_loc_offs + 2, max_loc_offs + 1 + ARENA_SLOTS]`.
                     let regular_locals = self.max_loc_offs.max(self.loc_offs);
+                    let alloca_top_slot_finish: i64;
                     if self.uses_alloca_in_current_fn {
                         let alloca_top_slot = regular_locals + 1;
                         self.text[ent_pc + 1] =
                             regular_locals + 1 + crate::c5::op::ALLOCA_ARENA_SLOTS;
                         self.text[self.alloca_init_operand_pc] = alloca_top_slot;
+                        alloca_top_slot_finish = alloca_top_slot;
                     } else {
                         self.text[ent_pc + 1] = regular_locals;
+                        alloca_top_slot_finish = 0;
                     }
+
+                    self.ast_finish_function(
+                        ent_pc,
+                        n_params,
+                        is_variadic,
+                        param_tys,
+                        param_local_slots,
+                        returns_struct_finish,
+                        return_struct_size_finish,
+                        alloca_top_slot_finish,
+                    );
+                    self.current_function_name.clear();
+                    self.current_func_returns_void = false;
 
                     for (name, pc) in &self.unresolved_gotos {
                         match self.labels.iter().find(|(n, _)| n == name) {

@@ -757,6 +757,14 @@ impl Compiler {
                     let size = self.size_of_type(ret_ty);
                     self.emit_op(Op::Mcpy);
                     self.emit_val(size as i64);
+                    // Mirror the rhs expression into the walker's
+                    // `Stmt::Return(Some(_))` so the AST-driven SSA
+                    // sees the source struct and can re-emit the
+                    // Mcpy into the slot-2 out-pointer. The walker
+                    // matches the bytecode shape: load slot 2,
+                    // copy `size_of(ret_ty)` bytes from the source
+                    // expression's address into it, then return.
+                    return_value = self.ast_acc;
                 } else {
                     self.parse_full_expr()?;
                     // C99 6.8.6.4p3: the value is converted to the

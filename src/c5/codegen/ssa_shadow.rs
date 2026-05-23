@@ -124,6 +124,9 @@ pub(crate) fn walk_program(
             f.n_locals,
             &f.param_tys,
             &f.param_local_slots,
+            f.returns_struct,
+            f.return_struct_size,
+            f.alloca_top_slot,
         )
         .map_err(|e| {
             C5Error::Compile(crate::c5::error::fmt_internal_err(&alloc::format!(

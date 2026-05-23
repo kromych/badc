@@ -425,6 +425,22 @@ pub(crate) struct FinishedFunction {
     /// scalar / pointer / unhandled shape -- the walker
     /// skips the entry-Mcpy for those.
     pub param_local_slots: alloc::vec::Vec<i64>,
+    /// True when the declared return type is a struct value
+    /// (`struct T` rather than `struct T *`). Walker uses
+    /// this to lower `return s;` as the C99 ABI's
+    /// out-pointer Mcpy: load the hidden out-pointer from
+    /// `slot 2`, copy `sizeof(T)` bytes from `s` into it,
+    /// then return.
+    pub returns_struct: bool,
+    /// Byte size of the returned struct when `returns_struct`
+    /// is true. Zero otherwise.
+    pub return_struct_size: i64,
+    /// `slot` operand for the function's `Op::AllocaInit`. Non-
+    /// zero when the body contains an `alloca` call: codegen
+    /// reserves a per-frame arena and uses this local slot for
+    /// the running top. Zero when `alloca` is unused, in which
+    /// case codegen treats AllocaInit as a no-op.
+    pub alloca_top_slot: i64,
     pub name: alloc::string::String,
 }
 

@@ -10,6 +10,8 @@ use super::op::Op;
 use super::program::Program;
 
 mod intrinsics;
+#[cfg(test)]
+mod ssa;
 
 const STACK_CAPACITY: usize = 256 * 1024;
 const STACK_BASE: usize = 0x1000_0000;

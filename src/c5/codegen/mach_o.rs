@@ -2445,6 +2445,7 @@ mod tests {
             data_fixups: Vec::new(),
             func_fixups: Vec::new(),
             bytecode_to_native: Vec::new(),
+            func_ent_pcs: Vec::new(),
             ssa_line_rows: Vec::new(),
             imports: ResolvedImports {
                 imports: vec![ResolvedImport {

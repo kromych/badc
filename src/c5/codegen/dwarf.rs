@@ -592,25 +592,22 @@ fn collect_subprograms(
 ) -> Vec<Subprog> {
     let mut out: Vec<Subprog> = Vec::new();
 
-    // Walk every Ent in bc-pc order. The native start is
-    // `bytecode_to_native[bc_pc]`; the native end is the start of
-    // the *next* Ent (or the total code length for the last
-    // function). A function's name lives at
-    // `program.source_functions[bc_pc]` -- empty when the
-    // optimizer dropped the map (pre-#39) or for functions
-    // emitted before any user code (e.g. trampolines).
-    let mut ent_pcs: Vec<usize> = Vec::new();
-    let mut bc_pc = 0usize;
-    while bc_pc < program.text.len() {
-        let raw = program.text[bc_pc];
-        let Some(op) = Op::from_i64(raw) else {
-            break;
-        };
-        if matches!(op, Op::Ent) {
-            ent_pcs.push(bc_pc);
-        }
-        bc_pc += op.word_size();
-    }
+    // Iterate the per-function ent_pcs the lowering recorded
+    // in emission order. Native start is
+    // `bytecode_to_native[bc_pc]`; native end is the start of the
+    // next function's emission (or `total_native` for the last).
+    // A function's source name lives at
+    // `program.source_functions[bc_pc]`, indexed by the bytecode
+    // entry-PC; empty when the optimizer dropped the map or for
+    // synthesised trampolines.
+    let mut ent_pcs: Vec<usize> = build.func_ent_pcs.clone();
+    ent_pcs.sort_unstable_by_key(|&pc| {
+        build
+            .bytecode_to_native
+            .get(pc)
+            .copied()
+            .unwrap_or(usize::MAX)
+    });
     // Sentinel for end-of-last-function range. The PLT trampoline
     // pool is appended to `build.text` after the last user
     // function; addresses inside the pool must NOT fall inside any

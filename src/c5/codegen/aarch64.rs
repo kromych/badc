@@ -1173,6 +1173,7 @@ pub(super) fn lower(
 ) -> Result<Build, C5Error> {
     let mut code = Vec::new();
     let mut bytecode_to_native: Vec<usize> = vec![usize::MAX; program.text.len() + 1];
+    let mut func_ent_pcs: Vec<usize> = Vec::new();
     let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
     let mut fixups: Vec<Fixup> = Vec::new();
     let mut got_fixups: Vec<GotFixup> = Vec::new();
@@ -1233,6 +1234,7 @@ pub(super) fn lower(
     for (func_ssa, alloc_for) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
         let ent_pc = func_ssa.ent_pc;
         bytecode_to_native[ent_pc] = code.len();
+        func_ent_pcs.push(ent_pc);
         let ok = super::ssa_emit_aarch64::emit_function(
             func_ssa,
             alloc_for,
@@ -1335,6 +1337,7 @@ pub(super) fn lower(
         data_fixups,
         func_fixups,
         bytecode_to_native,
+        func_ent_pcs,
         ssa_line_rows,
         // `imports` is set by `lower_for` after this returns; the
         // resolver runs once up there and the value is shared with

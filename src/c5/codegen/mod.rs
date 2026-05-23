@@ -663,72 +663,82 @@ impl ResolvedImports {
         Ok(())
     }
 
-    /// Walk `program.text`, collect every `Op::JsrExt` binding-idx
-    /// the bytecode reaches for, look each one up in
-    /// `program.dylibs`, and return the resolved set.
+    /// Collect every libc binding the program reaches for and
+    /// look each one up in `program.dylibs`. The dylib list is
+    /// built by deduplicating against `program.dylibs` ordering,
+    /// so a program that calls `printf` (in `libc`) and
+    /// `LoadLibraryA` (in `kernel32`) gets two dylibs in that
+    /// declaration order.
     ///
-    /// The dylib list is built by deduplicating against
-    /// `program.dylibs` ordering, so a program that calls `printf`
-    /// (in `libc`) and `LoadLibraryA` (in `kernel32`) gets two
-    /// dylibs in that declaration order.
+    /// Source: walker AST (`Expr::Call` with `Sys` callee) +
+    /// synthesised sys-trampolines (`Inst::CallExt` /
+    /// `Terminator::TailExt`). Archive reloads have neither (the
+    /// .o format doesn't round-trip the AST or the synth list)
+    /// so they fall back to the bytecode walk.
     pub fn resolve(program: &Program) -> Result<Self, C5Error> {
-        // Walk bytecode, collecting used binding-flat indices in
-        // first-encounter order. The order determines GOT slot
-        // indices; within a single compilation it just needs to be
-        // deterministic.
-        //
-        // The walker has to skip every operand-bearing op's operand
-        // word so the next iteration lands on a real opcode rather
-        // than a stray operand value. The optimizer's
-        // immediate-arith ops (`AddI`, `LdLocI`, ...) carry one
-        // operand each; missing them in the skip set used to make
-        // the walk drift onto operand bytes after the first
-        // optimized site, decoding garbage and stopping early --
-        // any `Op::JsrExt` past that point would then be invisible
-        // and the codegen would fail with "no import slot for
-        // binding N".
         let mut seen: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
         let mut used: Vec<i64> = Vec::new();
-        let mut pc = 0;
-        while pc < program.text.len() {
-            let Some(op) = Op::from_i64(program.text[pc]) else {
-                // Unknown opcode -- not our problem here; the
-                // optimizer / VM will surface it.
-                break;
-            };
-            if matches!(op, Op::JsrExt | Op::TailExt) {
-                let idx = program.text[pc + 1];
-                if seen.insert(idx) {
-                    used.push(idx);
+        let has_ssa =
+            !program.finished_functions.is_empty() || !program.synthetic_ssa_funcs.is_empty();
+        if has_ssa {
+            // Parsed-program path: every `Token::Sys` call goes
+            // through `Expr::Call` in the per-function AST.
+            // Sys-trampolines carry their binding-idx as
+            // `Inst::CallExt::binding_idx` or
+            // `Terminator::TailExt(idx)`.
+            for func in &program.finished_functions {
+                for expr in &func.ast.exprs {
+                    let super::ast::Expr::Call { callee, .. } = expr else {
+                        continue;
+                    };
+                    let callee_idx = *callee as usize;
+                    if callee_idx >= func.ast.exprs.len() {
+                        continue;
+                    }
+                    let super::ast::Expr::Ident { class, val, .. } = &func.ast.exprs[callee_idx]
+                    else {
+                        continue;
+                    };
+                    if *class != super::token::Token::Sys as i64 {
+                        continue;
+                    }
+                    if seen.insert(*val) {
+                        used.push(*val);
+                    }
                 }
             }
-            pc += op.word_size();
-        }
-
-        // An `Expr::Call` whose callee is a `Token::Sys` ident
-        // lowers to `Inst::CallExt`. Walk the per-function AST
-        // snapshots so each such call's binding-flat index reaches
-        // the resolved set, regardless of whether the
-        // bytecode-tier `Op::JsrExt` survived an optimizer DCE
-        // pass.
-        for func in &program.finished_functions {
-            for expr in &func.ast.exprs {
-                let super::ast::Expr::Call { callee, .. } = expr else {
-                    continue;
+            for func in &program.synthetic_ssa_funcs {
+                for inst in &func.insts {
+                    if let crate::c5::ir::Inst::CallExt { binding_idx, .. } = inst
+                        && seen.insert(*binding_idx)
+                    {
+                        used.push(*binding_idx);
+                    }
+                }
+                for blk in &func.blocks {
+                    if let crate::c5::ir::Terminator::TailExt(idx) = blk.terminator
+                        && seen.insert(idx)
+                    {
+                        used.push(idx);
+                    }
+                }
+            }
+        } else {
+            // Archive reload: no AST snapshots, no synthesised
+            // SSA. Walk the bytecode tape for `Op::JsrExt` /
+            // `Op::TailExt` to recover binding-flat indices.
+            let mut pc = 0;
+            while pc < program.text.len() {
+                let Some(op) = Op::from_i64(program.text[pc]) else {
+                    break;
                 };
-                let callee_idx = *callee as usize;
-                if callee_idx >= func.ast.exprs.len() {
-                    continue;
+                if matches!(op, Op::JsrExt | Op::TailExt) {
+                    let idx = program.text[pc + 1];
+                    if seen.insert(idx) {
+                        used.push(idx);
+                    }
                 }
-                let super::ast::Expr::Ident { class, val, .. } = &func.ast.exprs[callee_idx] else {
-                    continue;
-                };
-                if *class != super::token::Token::Sys as i64 {
-                    continue;
-                }
-                if seen.insert(*val) {
-                    used.push(*val);
-                }
+                pc += op.word_size();
             }
         }
 
@@ -859,6 +869,11 @@ pub(crate) struct Build {
     /// last entry is the total code length, so `[i+1] - [i]` gives
     /// the byte length of the op at PC `i`.
     pub bytecode_to_native: Vec<usize>,
+    /// Bytecode entry-PCs of every function the lowering emitted,
+    /// in lowering (= emission) order. The DWARF builder iterates
+    /// this to produce one `Subprog` per function without walking
+    /// the bytecode tape for `Op::Ent`.
+    pub func_ent_pcs: Vec<usize>,
     /// SSA-side `.debug_line` rows: each `(native_pc, line,
     /// file_idx)` entry says "the instruction whose first byte
     /// lives at `native_pc` in `Build::text` corresponds to source

@@ -664,3 +664,75 @@ jobs:
             echo ""
             cat /tmp/perf.md
           } >> "$GITHUB_STEP_SUMMARY"
+
+  test-walker:
+    name: test (walker, ${{ matrix.os }})
+    # AST walker (`BADC_USE_AST_SSA=1`) ratchet job: runs the cargo
+    # test suite under the walker path so any regression in
+    # `c5::ast::walk` / dual-emit lockstep / linker AST rebase
+    # shows up alongside the default `test` job. Demos are gated
+    # behind `continue-on-error: true` so the walker can land
+    # incrementally: cargo parity is the hard gate, the demos
+    # flag which next bug to chase.
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+    env:
+      BADC_USE_AST_SSA: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: walker-${{ matrix.os }}
+      - name: cargo test (default features)
+        run: cargo test --locked --verbose
+      - name: cargo build --release
+        run: cargo build --release --locked
+      # The smokes below mirror the default `test` job's demo
+      # surface, but only on the host triple (no PE-via-wine
+      # variants -- the walker support is currently
+      # macOS-aarch64 / Linux-x86_64 focused). Each step is
+      # gated `continue-on-error: true` so the green ones
+      # remain visible while the SIGSEGV / SIGBUS ones drive
+      # the next walker fix.
+      - name: tweetnacl smoke (walker)
+        continue-on-error: true
+        run: python demos/tweetnacl/smoke.py
+      - name: miniz smoke (walker)
+        continue-on-error: true
+        run: python demos/miniz/smoke.py
+      - name: kissfft smoke (walker)
+        continue-on-error: true
+        run: python demos/kissfft/smoke.py
+      - name: bzip2 smoke (walker)
+        continue-on-error: true
+        run: python demos/bzip2/smoke.py
+      - name: monocypher smoke (walker)
+        continue-on-error: true
+        run: python demos/monocypher/smoke.py
+      - name: bearssl smoke (walker)
+        continue-on-error: true
+        run: python demos/bearssl/smoke.py
+      - name: chibicc smoke (walker)
+        continue-on-error: true
+        run: python demos/chibicc/smoke.py
+      - name: tinycc smoke (walker)
+        continue-on-error: true
+        run: python demos/tinycc/smoke.py
+      - name: sqlite3 smoke (walker)
+        continue-on-error: true
+        run: python demos/sqlite3/smoke.py
+      - name: lua smoke (walker)
+        continue-on-error: true
+        run: python demos/lua/smoke.py || test $? -eq 2
+      - name: stb smoke (walker)
+        continue-on-error: true
+        run: python demos/stb/smoke.py

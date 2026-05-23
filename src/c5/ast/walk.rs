@@ -561,8 +561,24 @@ impl<'a> Walker<'a> {
                     alloc::vec::Vec<Option<i64>>,
                     alloc::vec::Vec<super::BlockItem>,
                 )> = alloc::vec::Vec::new();
+                // C99 6.8.1: a `goto`-target label that wraps a
+                // Case / Default marker resolves to the same
+                // statement as the marker. The peel loop records
+                // every such label id keyed by the partition it
+                // ends up in; after the partitions' SSA blocks
+                // are allocated below we register
+                // `label_id -> block` so a downstream
+                // `Stmt::Goto(label)` lands on the case block
+                // instead of an orphan block that
+                // `block_for_label` would otherwise materialise.
+                let mut peeled_label_partition: alloc::vec::Vec<(
+                    super::super::ast::LabelId,
+                    usize,
+                )> = alloc::vec::Vec::new();
                 let mut current_labels: alloc::vec::Vec<Option<i64>> = alloc::vec::Vec::new();
                 let mut current: alloc::vec::Vec<super::BlockItem> = alloc::vec::Vec::new();
+                let mut pending_goto_labels: alloc::vec::Vec<super::super::ast::LabelId> =
+                    alloc::vec::Vec::new();
                 let flush = |partitions: &mut alloc::vec::Vec<(
                     alloc::vec::Vec<Option<i64>>,
                     alloc::vec::Vec<super::BlockItem>,
@@ -583,14 +599,14 @@ impl<'a> Walker<'a> {
                         // Peel nested Case / Default markers
                         // off the head until we hit a real
                         // statement. `Stmt::Labeled` is also
-                        // unwrapped here: tcc-style `foo:
-                        // default:` puts a regular goto target
-                        // immediately before a Default marker;
-                        // the label block is allocated lazily
-                        // by `block_for_label` so a stray
-                        // `goto foo;` still lands somewhere
-                        // walkable, and the inner Default
-                        // joins the current partition.
+                        // unwrapped here when its body is itself
+                        // a Case / Default marker (C99 6.8.1: a
+                        // label labels the next statement, so
+                        // `foo: case X:` makes `foo` an alias
+                        // for the Case body). The label id is
+                        // recorded; the case's SSA block is
+                        // registered as the label's target after
+                        // the partitions array is finalised.
                         loop {
                             match self.ast.stmt(s_id) {
                                 Stmt::Case { val, body } => {
@@ -609,16 +625,10 @@ impl<'a> Walker<'a> {
                                     current_labels.push(None);
                                     s_id = *body;
                                 }
-                                Stmt::Labeled { body, .. } => {
-                                    // Only descend when the
-                                    // wrapped statement is itself
-                                    // a Case / Default marker;
-                                    // otherwise the labeled stmt
-                                    // is a regular statement that
-                                    // belongs in the current
-                                    // partition's body.
+                                Stmt::Labeled { label, body } => {
                                     let inner = self.ast.stmt(*body);
                                     if matches!(inner, Stmt::Case { .. } | Stmt::Default { .. }) {
+                                        pending_goto_labels.push(*label);
                                         s_id = *body;
                                     } else {
                                         break;
@@ -628,9 +638,21 @@ impl<'a> Walker<'a> {
                             }
                         }
                         if saw_marker {
+                            // Any goto-labels peeled in this
+                            // partition's head now belong to the
+                            // partition we're about to push.
+                            let target_idx = partitions.len();
+                            for lab in pending_goto_labels.drain(..) {
+                                peeled_label_partition.push((lab, target_idx));
+                            }
                             current.push(super::BlockItem::Stmt(s_id));
                             continue;
                         }
+                        // Labeled-wrapping-non-marker fell out
+                        // of the peel loop; the goto-label
+                        // accumulator stays empty in that case
+                        // because the break was taken on the
+                        // first iteration without recording one.
                     }
                     current.push(*item);
                 }
@@ -639,6 +661,11 @@ impl<'a> Walker<'a> {
                 let after_blk = b.new_block();
                 let blocks: alloc::vec::Vec<super::super::ir::BlockId> =
                     (0..partitions.len()).map(|_| b.new_block()).collect();
+                for (label, idx) in &peeled_label_partition {
+                    if idx < &blocks.len() {
+                        self.label_blocks.push((*label, blocks[*idx]));
+                    }
+                }
                 let default_idx = partitions
                     .iter()
                     .position(|(lbls, _)| lbls.iter().any(|l| l.is_none()));

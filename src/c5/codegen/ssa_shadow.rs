@@ -110,8 +110,51 @@ pub(crate) fn walk_program(
     let mut out: Vec<FunctionSsa> = Vec::with_capacity(program.finished_functions.len());
     let mut ordered: Vec<usize> = (0..program.finished_functions.len()).collect();
     ordered.sort_by_key(|&i| program.finished_functions[i].ent_pc);
+    // Bisection knobs: a function whose name matches
+    // `BADC_AST_SKIP_FN` (comma-separated list, exact match)
+    // falls back to the bytecode lift; one whose name appears
+    // in `BADC_AST_ONLY_FN` is the only walker entry, every
+    // other function falls back to lift. Both are
+    // `std`-feature-gated; absence keeps the walker driving
+    // every function.
+    let skip_fns: alloc::collections::BTreeSet<alloc::string::String> = {
+        #[cfg(feature = "std")]
+        {
+            match std::env::var("BADC_AST_SKIP_FN") {
+                Ok(s) => s.split(',').map(|x| x.trim().to_string()).collect(),
+                Err(_) => alloc::collections::BTreeSet::new(),
+            }
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            alloc::collections::BTreeSet::new()
+        }
+    };
+    let only_fns: alloc::collections::BTreeSet<alloc::string::String> = {
+        #[cfg(feature = "std")]
+        {
+            match std::env::var("BADC_AST_ONLY_FN") {
+                Ok(s) => s.split(',').map(|x| x.trim().to_string()).collect(),
+                Err(_) => alloc::collections::BTreeSet::new(),
+            }
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            alloc::collections::BTreeSet::new()
+        }
+    };
     for i in ordered {
         let f = &program.finished_functions[i];
+        if skip_fns.contains(&f.name) {
+            #[cfg(feature = "std")]
+            if std::env::var("BADC_DEBUG_SKIP_FN").is_ok() {
+                eprintln!("ast::walk: skipping `{}` per BADC_AST_SKIP_FN", f.name);
+            }
+            continue;
+        }
+        if !only_fns.is_empty() && !only_fns.contains(&f.name) {
+            continue;
+        }
         walker_pcs.insert(f.ent_pc);
         let mut func = crate::c5::ast::walk::walk_function(
             &f.ast,

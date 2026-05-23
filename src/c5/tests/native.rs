@@ -378,6 +378,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("paren_comma_side_effect.c", 0),
     ("for_init_decl_in_loop.c", 0),
     ("int_times_double_into_local.c", 0),
+    ("ptr_diff_plus_ptr.c", 0),
     ("anonymous_aggregates.c", 0),
     ("static_locals.c", 0),
     ("large_stack_frame.c", 42),

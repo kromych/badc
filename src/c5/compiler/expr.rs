@@ -2184,7 +2184,24 @@ impl Compiler {
                     // the byte add is already correct -- we just
                     // need to set the result type to ptr.
                     let rhs_ty = self.ty;
+                    let lhs_ty = t;
                     if self.is_ptr_scaling_nontrivial(rhs_ty) {
+                        // Snapshot the AST operands before the
+                        // bytecode dance: lhs (int) sits on the
+                        // parser-side vstack, rhs (ptr) is in
+                        // `ast_acc`. The `Op::StLocI` / `Op::Imm` /
+                        // `Op::Or` / `Op::Mul` / `Op::Psh` /
+                        // `Op::Lea` / `Op::Li` sequence routes
+                        // through `ast_track_emit_op` and pops
+                        // the AST vstack on each `Op::Or` /
+                        // `Op::Li`. Drain the outer vstack, push
+                        // a sentinel for the inner ops to
+                        // consume, run the dance, then restore.
+                        let lhs_ast = self.ast_vstack.pop().flatten();
+                        let rhs_ast = self.ast_acc.take();
+                        let saved_vstack: alloc::vec::Vec<_> =
+                            self.ast_vstack.drain(..).collect();
+                        self.ast_vstack.push(None);
                         let scale = self.pointee_size(rhs_ty);
                         self.loc_offs += 1;
                         if self.loc_offs > self.max_loc_offs {
@@ -2193,17 +2210,57 @@ impl Compiler {
                         let rhs_temp = -self.loc_offs;
                         self.emit_op(Op::StLocI);
                         self.emit_val(rhs_temp);
-                        // Pop the int LHS off the c5 stack into
-                        // `a` via `Imm 0; Or` (Or pops stack-top).
                         self.emit_imm(0);
                         self.emit_op(Op::Or);
                         self.emit_binop_with_imm(Op::Mul, scale);
                         self.emit_op(Op::Psh);
                         self.emit_lea(rhs_temp);
                         self.emit_op(Op::Li);
+                        self.emit_op(Op::Add);
+                        self.ast_vstack.clear();
+                        self.ast_vstack.extend(saved_vstack);
+                        // Rebuild AST: `Binary { Add, Binary { Mul,
+                        // lhs_int, scale }, rhs_ptr }`. Type is
+                        // the pointer (C99 6.5.6p8: integer added
+                        // to a pointer keeps the pointer type).
+                        self.ty = rhs_ty;
+                        if let (Some(lhs), Some(rhs)) =
+                            (lhs_ast, rhs_ast)
+                        {
+                            let pos = self.ast_src_pos();
+                            let scale_lit = self.ast.push_expr(
+                                super::super::ast::Expr::IntLit {
+                                    val: scale,
+                                    ty: super::super::token::Ty::Int as i64,
+                                },
+                                pos,
+                            );
+                            let scaled = self.ast.push_expr(
+                                super::super::ast::Expr::Binary {
+                                    op: super::super::ir::BinOp::Mul,
+                                    lhs,
+                                    rhs: scale_lit,
+                                    ty: lhs_ty,
+                                },
+                                pos,
+                            );
+                            let added = self.ast.push_expr(
+                                super::super::ast::Expr::Binary {
+                                    op: super::super::ir::BinOp::Add,
+                                    lhs: scaled,
+                                    rhs,
+                                    ty: rhs_ty,
+                                },
+                                pos,
+                            );
+                            self.ast_acc = Some(added);
+                        } else {
+                            self.ast_acc = None;
+                        }
+                    } else {
+                        self.emit_op(Op::Add);
+                        self.ty = rhs_ty;
                     }
-                    self.emit_op(Op::Add);
-                    self.ty = rhs_ty;
                 } else {
                     let rhs_ty = self.ty;
                     if self.is_ptr_scaling_nontrivial(t) {

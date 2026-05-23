@@ -1481,6 +1481,19 @@ impl<'a> Walker<'a> {
         is_thread_local: bool,
         array_size: i64,
     ) -> Result<super::super::ir::ValueId, WalkError> {
+        // The parser snapshotted `val` as the `Op::Ent` PC the
+        // pre-optimizer saw. The bytecode optimizer can shift
+        // `Op::Ent`; for `Token::Fun` references the live PC
+        // lives on `self.symbols[sym].val`. Other classes
+        // (`Token::Loc` / `Token::Glo` / `Token::Num`) carry
+        // a stable per-frame slot / data offset / constant the
+        // optimizer never rewrites, so the snapshot stays
+        // correct.
+        let val: i64 = if class == Token::Fun as i64 {
+            self.live_fun_val(_sym, val)
+        } else {
+            val
+        };
         // C99 6.3.2.1p3 + c5's address-as-value rule: an lvalue
         // of array type, or a struct value (non-pointer struct
         // type), is consumed as its address rather than its

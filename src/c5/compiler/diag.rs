@@ -10,6 +10,7 @@
 //! (`NULL = 0`, `void *` ~ `char *`) would otherwise drown the
 //! output. Errors short-circuit through `C5Error::Compile`.
 
+use super::super::ast::Expr;
 use super::super::error::C5Error;
 use super::super::op::Op;
 use super::super::token::Ty;
@@ -313,6 +314,23 @@ impl Compiler {
             return Ok(());
         }
         // !lhs_is_fp && rhs_is_fp -- spill float RHS, lift int LHS.
+        // Snapshot the AST operands first: lhs is the int sitting
+        // on the parser-side vstack, rhs is the float currently
+        // in `ast_acc`. The bytecode dance emits `Op::StLocI` /
+        // `Op::Imm` / `Op::Or` / `Op::Fcvtif` / `Op::Psh` /
+        // `Op::Lea` / `Op::Li` -- the OR / PSH / LI route through
+        // `ast_track_emit_op` and pop / push the vstack we need
+        // to preserve. Drain the outer vstack into a side buffer,
+        // push a single `None` sentinel for the inner ops to
+        // consume, run the dance, then restore. Finally rebuild
+        // the AST so the walker sees `Expr::Cast { lhs_int_ast,
+        // to_ty = rhs_fp }` on the vstack and the rhs float ast
+        // back on `ast_acc`.
+        let lhs_ast = self.ast_vstack.pop().flatten();
+        let rhs_ast = self.ast_acc.take();
+        let saved_vstack: alloc::vec::Vec<_> =
+            self.ast_vstack.drain(..).collect();
+        self.ast_vstack.push(None);
         self.loc_offs += 1;
         if self.loc_offs > self.max_loc_offs {
             self.max_loc_offs = self.loc_offs;
@@ -330,6 +348,22 @@ impl Compiler {
         self.emit_lea(rhs_temp);
         self.emit_op(Op::Li);
         self.ty = rhs_ty;
+        self.ast_vstack.clear();
+        self.ast_vstack.extend(saved_vstack);
+        if let Some(lhs_int) = lhs_ast {
+            let pos = self.ast_src_pos();
+            let casted = self.ast.push_expr(
+                Expr::Cast {
+                    child: lhs_int,
+                    to_ty: rhs_ty,
+                },
+                pos,
+            );
+            self.ast_vstack.push(Some(casted));
+        } else {
+            self.ast_vstack.push(None);
+        }
+        self.ast_acc = rhs_ast;
         Ok(())
     }
 }

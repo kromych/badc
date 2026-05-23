@@ -4,13 +4,14 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use super::CODE_BASE;
+use super::Target;
 use super::error::C5Error;
 use super::host::Host;
+use super::ir::FunctionSsa;
 use super::op::Op;
 use super::program::Program;
 
 mod intrinsics;
-#[cfg(test)]
 mod ssa;
 
 const STACK_CAPACITY: usize = 256 * 1024;
@@ -110,6 +111,13 @@ pub struct Vm<H: Host> {
     /// per-thread semantics need to drive the native lowering via
     /// `--jit` / native binary.
     tls_base: usize,
+    /// Pre-lifted SSA functions, populated by `with_host` so
+    /// `Vm::run` can dispatch to the SSA interpreter when
+    /// `BADC_VM_SSA=1` is set. The lift may legitimately fail for
+    /// in-progress lowering paths; the error is deferred to
+    /// `run` so existing `with_host` callers don't have to
+    /// thread a Result through their builder chain.
+    ssa_funcs: Result<Vec<FunctionSsa>, C5Error>,
 }
 
 /// `Vm::new` is only available with the `std` feature; it picks the
@@ -129,6 +137,12 @@ impl<H: Host> Vm<H> {
     /// where there's no default; convenient in `std` for tests that
     /// want to stub IO. Trace defaults to off.
     pub fn with_host(program: Program, host: H) -> Self {
+        // Lift the program to SSA up front -- cheap relative to
+        // running the VM and lets `Vm::run` dispatch into the
+        // SSA interpreter when `BADC_VM_SSA=1`. Failures here
+        // (walker compile errors, etc.) are deferred to `run`
+        // because `with_host` doesn't return `Result`.
+        let ssa_funcs = super::codegen::ssa_shadow::produce_ssa_funcs(&program, Target::host());
         let binding_names = program
             .dylibs
             .iter()
@@ -165,6 +179,7 @@ impl<H: Host> Vm<H> {
             static_end: 0,
             track_pointers: false,
             tls_base,
+            ssa_funcs,
         }
     }
 
@@ -598,6 +613,22 @@ impl<H: Host> Vm<H> {
     pub fn run(mut self) -> Result<i64, C5Error> {
         if self.text.is_empty() {
             return Err(C5Error::Runtime("empty program".to_string()));
+        }
+
+        #[cfg(feature = "std")]
+        if std::env::var("BADC_VM_SSA").is_ok_and(|v| !v.is_empty() && v != "0") {
+            // SSA interpreter path. `with_host` already pre-lifted
+            // every function; surface lift errors here so callers
+            // see a clean `Result` boundary instead of a panic.
+            let funcs = self.ssa_funcs.as_ref().map_err(|e| e.clone())?;
+            return ssa::run_program_with_args(
+                funcs,
+                &self.data,
+                &self.binding_names,
+                self.entry_pc,
+                &mut self.host,
+                &self.args,
+            );
         }
 
         let mut sp = STACK_BASE + STACK_CAPACITY * 8;

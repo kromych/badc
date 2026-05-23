@@ -30,6 +30,12 @@
 //! the only caller -- so production builds don't pay any code
 //! size for the in-progress interpreter.
 
+// `Vm::run` calls `run_program` only when `BADC_VM_SSA=1`; the
+// rest of the module's helpers light up at that entry point.
+// They're tagged dead-code-tolerant module-wide so a default
+// (bytecode) build doesn't flag the unreached SSA pieces.
+#![allow(dead_code)]
+
 use alloc::format;
 use alloc::string::ToString;
 use alloc::vec::Vec;
@@ -123,14 +129,17 @@ impl Memory {
         base
     }
 
-    /// Bump-pointer `malloc`. Returns 0 (the C99 null pointer) on
-    /// out-of-heap so callers see the standard failure shape.
+    /// Bump-pointer `malloc`. Grows `bytes` on demand so c4-shaped
+    /// fixtures that ask for multi-MB text/data/stack/sym pools
+    /// don't run out before they finish self-compiling. The stack
+    /// region below `heap_top` stays in place, so existing pointers
+    /// keep their addresses across grows.
     fn heap_alloc(&mut self, n: usize) -> usize {
         let aligned = (n + 15) & !15;
         let base = self.heap_top;
         let next = base.saturating_add(aligned);
         if next > self.bytes.len() {
-            return 0;
+            self.bytes.resize(next, 0);
         }
         // Zero the new region so a `malloc` caller doesn't read
         // a previous allocation's leftovers (C99 doesn't promise
@@ -180,12 +189,15 @@ impl Memory {
     }
 
     fn write_bytes(&mut self, addr: usize, src: &[u8]) -> Result<(), C5Error> {
-        if addr < self.data_end || addr + src.len() > self.bytes.len() {
+        // C99 doesn't mandate that the data segment be read-only;
+        // global / static / BSS objects are writable. String
+        // literals are UB-protected at the language level, not by
+        // the runtime. Only out-of-bounds writes trip a runtime
+        // error here, mirroring the bytecode VM.
+        if addr + src.len() > self.bytes.len() {
             return Err(C5Error::Runtime(format!(
-                "vm_ssa: store: addr 0x{addr:x}..0x{:x} out of writable stack range \
-                 (data_end={}, mem_len={})",
+                "vm_ssa: store: addr 0x{addr:x}..0x{:x} past memory len {}",
                 addr + src.len(),
-                self.data_end,
                 self.bytes.len(),
             )));
         }
@@ -289,6 +301,16 @@ struct Frame<'a> {
     /// Number of declared locals (slot offsets `-1..=-locals`).
     locals: usize,
     block_idx: usize,
+    /// Function-wide spill slots for `Inst::VstackSpill` /
+    /// `Inst::VstackReload`. Sized by `FunctionSsa::vstack_slots`;
+    /// stores i64 values that the walker spilled at block exits
+    /// and reloads at successor block entries.
+    vstack: Vec<i64>,
+    /// Cross-block accumulator spill. The c5 bytecode model
+    /// preserves the accumulator across edges, so a successor
+    /// block whose entry-acc isn't materialised by a writer in
+    /// the predecessor reads through here via `Inst::AccReload`.
+    acc_spill: i64,
 }
 
 impl Frame<'_> {
@@ -331,14 +353,68 @@ pub(super) fn run_program<H: Host>(
     entry_pc: usize,
     host: &mut H,
 ) -> Result<i64, C5Error> {
+    run_program_with_args(funcs, data, binding_names, entry_pc, host, &[])
+}
+
+/// Multi-function entry that stages `args` as `argv` for the
+/// entry function. Per C99 5.1.2.2.1, `main` may be declared
+/// either as `int main(void)` or `int main(int argc, char *argv[])`;
+/// the parser emits the latter shape with `argc` at param slot 0
+/// (frame slot 2) and `argv` at param slot 1 (frame slot 3).
+/// When `args` is empty both pass through as 0, matching the
+/// bytecode VM's behavior for `main()` calls without argv.
+pub(super) fn run_program_with_args<H: Host>(
+    funcs: &[FunctionSsa],
+    data: &[u8],
+    binding_names: &[alloc::string::String],
+    entry_pc: usize,
+    host: &mut H,
+    args: &[alloc::string::String],
+) -> Result<i64, C5Error> {
     let prog = Program::new(funcs).with_bindings(binding_names);
-    let mut mem = Memory::new(data);
+    let (data_with_argv, argc, argv_addr) = stage_argv(data, args);
+    let mut mem = Memory::new(&data_with_argv);
     let entry = prog.lookup(entry_pc).ok_or_else(|| {
         C5Error::Runtime(format!(
             "vm_ssa: run_program: no function at ent_pc {entry_pc}",
         ))
     })?;
-    run_func(&prog, &mut mem, host, entry, &[])
+    let entry_args: [i64; 2] = [argc, argv_addr];
+    let slice: &[i64] = if entry.n_params == 0 {
+        &[]
+    } else {
+        &entry_args
+    };
+    run_func(&prog, &mut mem, host, entry, slice)
+}
+
+/// Lay out the argv strings + the argv pointer array at the end
+/// of the data segment and return (data_with_argv, argc, argv_addr).
+/// argc and argv_addr are both 0 when `args` is empty; a `main`
+/// declared without parameters ignores them either way.
+fn stage_argv(data: &[u8], args: &[alloc::string::String]) -> (Vec<u8>, i64, i64) {
+    let mut out = data.to_vec();
+    if args.is_empty() {
+        return (out, 0, 0);
+    }
+    if out.is_empty() {
+        out.resize(8, 0);
+    }
+    let argc = args.len();
+    let argv_addr = out.len();
+    out.resize(argv_addr + (argc + 1) * 8, 0);
+    let mut entries: Vec<i64> = Vec::with_capacity(argc);
+    for arg in args {
+        let start = out.len();
+        out.extend_from_slice(arg.as_bytes());
+        out.push(0);
+        entries.push(start as i64);
+    }
+    for (i, &addr) in entries.iter().enumerate() {
+        let slot = argv_addr + i * 8;
+        out[slot..slot + 8].copy_from_slice(&addr.to_le_bytes());
+    }
+    (out, argc as i64, argv_addr as i64)
 }
 
 /// Host trait stand-in for SSA-VM call sites that don't route
@@ -403,6 +479,8 @@ fn run_func<H: Host>(
         frame_bytes,
         locals,
         block_idx: 0,
+        vstack: alloc::vec![0; func.vstack_slots as usize],
+        acc_spill: 0,
     };
     let result: Result<i64, C5Error> = loop {
         let block = &frame.func.blocks[frame.block_idx];
@@ -642,10 +720,36 @@ fn run_inst<H: Host>(
             // arena get the "not implemented" path below.
             return Ok(());
         }
-        Inst::VstackSpill { .. } => "VstackSpill",
-        Inst::VstackReload { .. } => "VstackReload",
-        Inst::AccSpill { .. } => "AccSpill",
-        Inst::AccReload => "AccReload",
+        Inst::VstackSpill { slot, value } => {
+            let s = *slot as usize;
+            if s >= frame.vstack.len() {
+                return Err(C5Error::Runtime(format!(
+                    "vm_ssa: VstackSpill: slot {s} out of {len}",
+                    len = frame.vstack.len(),
+                )));
+            }
+            frame.vstack[s] = frame.regs[*value as usize];
+            return Ok(());
+        }
+        Inst::VstackReload { slot } => {
+            let s = *slot as usize;
+            if s >= frame.vstack.len() {
+                return Err(C5Error::Runtime(format!(
+                    "vm_ssa: VstackReload: slot {s} out of {len}",
+                    len = frame.vstack.len(),
+                )));
+            }
+            frame.regs[v as usize] = frame.vstack[s];
+            return Ok(());
+        }
+        Inst::AccSpill { value } => {
+            frame.acc_spill = frame.regs[*value as usize];
+            return Ok(());
+        }
+        Inst::AccReload => {
+            frame.regs[v as usize] = frame.acc_spill;
+            return Ok(());
+        }
     };
     Err(C5Error::Runtime(format!("vm_ssa: {name} not implemented",)))
 }
@@ -690,9 +794,9 @@ fn dispatch_callext<H: Host>(
                 .ok_or_else(|| C5Error::Runtime("vm_ssa: memset: missing dst".to_string()))?;
             let val = args.get(1).copied().unwrap_or(0) as u8;
             let n = libc_size(name, args.get(2).copied())?;
-            if (dst as usize) < mem.data_end || dst < 0 {
+            if dst < 0 {
                 return Err(C5Error::Runtime(format!(
-                    "vm_ssa: memset: dst 0x{:x} in read-only data region",
+                    "vm_ssa: memset: negative dst 0x{:x}",
                     dst as usize,
                 )));
             }

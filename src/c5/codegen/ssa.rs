@@ -72,7 +72,7 @@ use super::super::program::Program;
 /// Lift every function in `program.text` into a [`FunctionSsa`].
 /// Returns one entry per `Op::Ent`. The lift is independent of
 /// the per-arch lowering; both backends consume the same output.
-pub(super) fn lift_program(program: &Program) -> Result<Vec<FunctionSsa>, C5Error> {
+pub(crate) fn lift_program(program: &Program) -> Result<Vec<FunctionSsa>, C5Error> {
     let text = &program.text;
     let funcs_meta = super::scan_func_meta(program);
     // First pass: identify each function's PC range [ent_pc, next_ent_pc).

@@ -991,10 +991,31 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
             }
             merged
         },
-        // Archive reloads don't carry synthesised SSA helpers --
-        // sys-trampolines get re-recovered from the merged
-        // bytecode tape via `lift_program`.
+        // Populated below from the merged bytecode tape so the
+        // codegen-side `produce_ssa_funcs` no longer needs its
+        // own lift-recovery loop for sys-trampolines that came
+        // through an archive boundary.
         synthetic_ssa_funcs: alloc::vec::Vec::new(),
+    })
+    .and_then(|mut program| {
+        // Recover sys-trampolines from the merged bytecode into
+        // `synthetic_ssa_funcs`. The walker covers every
+        // user-declared function via `finished_functions`; any
+        // remaining lift output is a sys-trampoline (or other
+        // post-parser helper). Pre-collect the walker-covered
+        // ent_pcs so duplicate entries don't end up in the list.
+        let walker_pcs: alloc::collections::BTreeSet<usize> = program
+            .finished_functions
+            .iter()
+            .map(|f| f.ent_pc)
+            .collect();
+        let lifted = crate::c5::codegen::ssa::lift_program(&program)?;
+        for f in lifted {
+            if !walker_pcs.contains(&f.ent_pc) {
+                program.synthetic_ssa_funcs.push(f);
+            }
+        }
+        Ok(program)
     })
 }
 

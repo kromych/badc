@@ -71,20 +71,13 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
     }
     // Parser-emitted helpers (sys-trampolines) come through
     // `program.synthetic_ssa_funcs`; the parser builds them via
-    // `SsaBuilder` alongside their bytecode counterpart. Anything
-    // bytecode-only that didn't make it into the synthetic list
-    // (a future post-parser pass that only emits bytecode) gets
-    // picked up by the lift fallback below.
+    // `SsaBuilder` and the linker recovers them post-concat via
+    // `lift_program`. Either way the field arrives populated
+    // here, so no lift fallback is needed.
     let mut covered_pcs: alloc::collections::BTreeSet<usize> = walker_pcs.iter().copied().collect();
     for f in &program.synthetic_ssa_funcs {
         if covered_pcs.insert(f.ent_pc) {
             out.push(f.clone());
-        }
-    }
-    let lift_funcs = super::ssa::lift_program(program)?;
-    for f in lift_funcs {
-        if !covered_pcs.contains(&f.ent_pc) {
-            out.push(f);
         }
     }
     out.sort_by_key(|f| f.ent_pc);

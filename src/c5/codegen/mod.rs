@@ -1221,6 +1221,13 @@ pub fn emit_native(program: &Program, target: Target) -> Result<Vec<u8>, C5Error
 
 /// Variant of [`emit_native`] that accepts user-controllable
 /// optimization knobs.
+///
+/// `options.optimize` is informational: the CLI's `-O` path
+/// runs the bytecode optimizer separately via `optimize()`
+/// before calling here, and re-running the optimizer on
+/// already-optimized bytecode is not idempotent. Tests that
+/// want `-O` codegen must call `optimize()` themselves and
+/// hand the result to this function.
 pub fn emit_native_with_options(
     program: &Program,
     target: Target,

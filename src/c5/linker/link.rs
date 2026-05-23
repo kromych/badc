@@ -767,6 +767,9 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         structs: merged_structs,
         entry_name,
         subsystem,
+        // The linker concatenates pre-optimizer object bytes;
+        // the merged Program has not been through `optimize()`.
+        optimized: false,
         // Linker propagates the AST tier so the post-link
         // codegen can drive SSA from the walker. Each unit's
         // `finished_functions` has unit-local `ent_pc`s; rebase

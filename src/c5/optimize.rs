@@ -164,8 +164,16 @@ impl Insn {
 }
 
 /// Public entry point: take a compiled `Program` and return an
-/// optimized one. Warnings are preserved verbatim.
+/// optimized one. Warnings are preserved verbatim. The
+/// optimizer's fused output uses op variants the parser doesn't
+/// emit (`LdLocI`, the `*I` binop family); running optimize() a
+/// second time would walk those fused ops as input and trip the
+/// decoder. Calls after the first are no-ops: the input is
+/// returned unchanged.
 pub fn optimize(program: Program) -> Result<Program, C5Error> {
+    if program.optimized {
+        return Ok(program);
+    }
     let Program {
         text,
         data,
@@ -191,6 +199,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         structs,
         entry_name,
         subsystem,
+        optimized: _,
         finished_functions,
         symbols,
     } = program;
@@ -533,6 +542,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         structs,
         entry_name,
         subsystem,
+        optimized: true,
         finished_functions: remapped_finished_functions,
         symbols,
     })
@@ -1392,6 +1402,7 @@ mod tests {
             structs: Vec::new(),
             entry_name: None,
             subsystem: None,
+            optimized: false,
             finished_functions: Vec::new(),
             symbols: Vec::new(),
         }
@@ -1703,6 +1714,7 @@ mod tests {
             structs: Vec::new(),
             entry_name: None,
             subsystem: None,
+            optimized: false,
             finished_functions: Vec::new(),
             symbols: Vec::new(),
         };

@@ -124,6 +124,26 @@ fn optimizer_actually_shrinks_typical_fixtures() {
 }
 
 #[test]
+fn optimize_is_idempotent() {
+    // Calling `optimize()` twice must produce a program identical
+    // to one pass. The fused output ops (`LdLocI`, the `*I` binop
+    // family) used to trip the decoder on a second pass; the
+    // `Program::optimized` flag short-circuits the repeat call.
+    // Pick a fixture with both shifts and local-load patterns so
+    // the optimizer's fusion passes actually rewrite the text.
+    let once = optimize(compile_fixture("arithmetic.c")).expect("optimize once");
+    let twice = optimize(once.clone()).expect("optimize twice");
+    assert_eq!(
+        once.text, twice.text,
+        "second optimize() pass changed the bytecode tape"
+    );
+    assert!(
+        twice.optimized,
+        "optimize() must set the `optimized` flag on its output"
+    );
+}
+
+#[test]
 fn optimizer_handles_c4_self_host() {
     // The big one -- c4.c parsing hello.c. Optimization must not break
     // self-host compilation; this is the canonical end-to-end check.

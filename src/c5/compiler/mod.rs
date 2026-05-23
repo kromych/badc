@@ -1176,6 +1176,9 @@ impl Compiler {
             // `wWinMain`) chosen when `main` is absent.
             entry_name: resolved_entry_name,
             subsystem: self.pp_subsystem,
+            // Compile output is pre-optimizer; only the explicit
+            // `optimize()` step flips this on.
+            optimized: false,
             finished_functions: self.finished_functions,
             // Snapshot the symbol table for the SSA walker. Only
             // the `array_size` and `type_` fields are read today,

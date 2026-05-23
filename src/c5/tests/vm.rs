@@ -29,6 +29,7 @@ fn run(text: Vec<i64>) -> i64 {
         structs: Vec::new(),
         entry_name: None,
         subsystem: None,
+        optimized: false,
         finished_functions: alloc::vec::Vec::new(),
         symbols: alloc::vec::Vec::new(),
     };
@@ -140,6 +141,7 @@ fn invalid_opcode_is_a_runtime_error() {
         structs: Vec::new(),
         entry_name: None,
         subsystem: None,
+        optimized: false,
         finished_functions: alloc::vec::Vec::new(),
         symbols: alloc::vec::Vec::new(),
     };
@@ -177,6 +179,7 @@ fn empty_program_errors_cleanly() {
         structs: Vec::new(),
         entry_name: None,
         subsystem: None,
+        optimized: false,
         finished_functions: alloc::vec::Vec::new(),
         symbols: alloc::vec::Vec::new(),
     };

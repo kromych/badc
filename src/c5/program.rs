@@ -284,6 +284,15 @@ pub struct Program {
     /// writers; non-PE targets (Mach-O / ELF) ignore this
     /// field.
     pub subsystem: Option<crate::c5::preprocessor::Subsystem>,
+    /// `true` once `optimize()` has finished rewriting `text`.
+    /// The optimizer's fused output uses op variants (`LdLocI`,
+    /// the `*I` binop family) that the parser doesn't emit, so
+    /// running the optimizer a second time would walk those
+    /// fused ops as input -- the decoder's `operand_count`
+    /// table doesn't fully cover the post-optimizer shape and
+    /// the second pass trips. `optimize()` checks this flag and
+    /// returns the program untouched on a repeat call.
+    pub optimized: bool,
     /// Per-function AST snapshots paired with their function-
     /// shaped metadata (ent_pc, n_params, is_variadic, n_locals,
     /// name). Populated by the parser's dual-emit; the SSA walker

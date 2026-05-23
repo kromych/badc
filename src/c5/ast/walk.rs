@@ -240,6 +240,43 @@ impl<'a> Walker<'a> {
         }
     }
 
+    /// Live data offset for a `Token::Glo` symbol. The linker
+    /// has patched the merged `Symbol::val` to the canonical
+    /// defining unit's absolute offset (see
+    /// `linker::link.rs::merge`); the AST snapshot from a
+    /// caller-unit `extern` decl carries the unit-local
+    /// placeholder rebased by `Ast::rebase_data_offsets` and
+    /// would land in the caller's data segment instead of the
+    /// shared one. Trigger only when:
+    ///   * `is_extern_decl == true` -- C99 6.7.1 extern
+    ///     reference, no in-unit storage. A static local
+    ///     (`linkage == None`) or a file-scope `static`
+    ///     (`linkage == Internal`) never hits this path, so
+    ///     the parser's shadow of `Symbol::val` across
+    ///     same-named per-function statics doesn't reach the
+    ///     walker through this read.
+    ///   * `linkage == External`.
+    ///   * `val != 0` -- the linker found a defining sibling
+    ///     and rewrote `val`. If no def exists (the program
+    ///     has only declarations and the linker would have
+    ///     flagged a missing definition anyway), the AST
+    ///     snapshot is no worse a guess than `0`.
+    fn live_glo_val(&self, sym: u32, fallback_val: i64) -> i64 {
+        use crate::c5::symbol::Linkage;
+        let idx = sym as usize;
+        if idx < self.symbols.len() {
+            let s = &self.symbols[idx];
+            if s.class == Token::Glo as i64
+                && s.is_extern_decl
+                && s.linkage == Linkage::External
+                && s.val != 0
+            {
+                return s.val;
+            }
+        }
+        fallback_val
+    }
+
     /// Byte size of the struct type encoded by `ty`. Looks up
     /// the struct id (via the same band scheme the parser uses)
     /// in the propagated `structs` slice. Returns 0 when the
@@ -1446,7 +1483,8 @@ impl<'a> Walker<'a> {
             if *is_thread_local {
                 Ok(b.tls_addr(*val))
             } else {
-                Ok(b.imm_data(*val))
+                let live_val = self.live_glo_val(*sym, *val);
+                Ok(b.imm_data(live_val))
             }
         } else if *class == Token::Fun as i64 {
             // Sys-trampoline symbols are added late and have
@@ -1500,6 +1538,8 @@ impl<'a> Walker<'a> {
         // correct.
         let val: i64 = if class == Token::Fun as i64 {
             self.live_fun_val(_sym, val)
+        } else if class == Token::Glo as i64 && !is_thread_local {
+            self.live_glo_val(_sym, val)
         } else {
             val
         };

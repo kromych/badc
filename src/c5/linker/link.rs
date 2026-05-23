@@ -823,9 +823,22 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
             // walker's `live_fun_val(sym)` lands on the correct
             // PC instead of staying at 0 (which collides with
             // the first emitted function).
+            // Concatenate each unit's `parser_symbols`. Token::Fun
+            // gets a `text_base` shift on defining entries (val > 0);
+            // forward-declared siblings (val == 0) are patched
+            // below from the defining sibling's resolved PC.
+            // Token::Glo entries are left at their parser-time val
+            // here; the cross-unit fixup below uses the merger's
+            // `defined: HashMap<String, GlobalSymbol>` so a
+            // tentative-def shape (C99 6.9.2 -- `extern T x;` in
+            // every TU with no syntactic definition) still
+            // resolves through the `LinkUnit::symbols` canonical
+            // entry, the same way `apply_reloc` patches
+            // bytecode-tier `Op::Imm <data_off>` operands.
             let mut merged: alloc::vec::Vec<crate::c5::symbol::Symbol> =
                 alloc::vec::Vec::new();
             let fun_class = crate::c5::token::Token::Fun as i64;
+            let glo_class = crate::c5::token::Token::Glo as i64;
             for (i, unit) in units.iter().enumerate() {
                 let base = text_base[i] as i64;
                 for sym in &unit.parser_symbols {
@@ -836,25 +849,54 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                     merged.push(s);
                 }
             }
-            // Index the resolved definitions by name so the
-            // forward-decl pass below is O(N) over the symbol
-            // table. Only `Token::Fun` symbols with `val > 0`
-            // qualify -- a Sys binding's `val` is the
-            // binding-flat index, not a PC.
-            let mut def_by_name: alloc::collections::BTreeMap<
+            // Forward-decl resolution for Token::Fun. A Sys
+            // binding's `val` is the binding-flat index, not a
+            // PC, so the class check excludes it.
+            use crate::c5::symbol::Linkage;
+            let mut fun_def_by_name: alloc::collections::BTreeMap<
                 alloc::string::String,
                 i64,
             > = alloc::collections::BTreeMap::new();
             for s in &merged {
-                if s.class == fun_class && s.val > 0 {
-                    def_by_name.insert(s.name.clone(), s.val);
+                if s.class == fun_class
+                    && s.val > 0
+                    && s.linkage == Linkage::External
+                {
+                    fun_def_by_name.insert(s.name.clone(), s.val);
                 }
             }
             for s in &mut merged {
-                if s.class == fun_class && s.val == 0
-                    && let Some(&resolved) = def_by_name.get(&s.name)
+                if s.class == fun_class
+                    && s.val == 0
+                    && s.linkage == Linkage::External
+                    && let Some(&resolved) = fun_def_by_name.get(&s.name)
                 {
                     s.val = resolved;
+                }
+            }
+            // Cross-unit Token::Glo resolution. Walker reads
+            // `live_glo_val(sym)` for externally-linked
+            // `is_extern_decl` Globals so it must find the
+            // post-link absolute offset on the merged symbol.
+            // The merger's `defined` map already knows the
+            // canonical defining unit -- query it for every
+            // qualifying entry. Static locals (`linkage == None`)
+            // and file-scope `static` (`linkage == Internal`)
+            // are excluded by the linkage check; only true
+            // `extern` references with no in-unit storage get
+            // their val rewritten.
+            for s in &mut merged {
+                if s.class != glo_class
+                    || !s.is_extern_decl
+                    || s.is_thread_local
+                    || s.linkage != Linkage::External
+                {
+                    continue;
+                }
+                let Some(g) = defined.get(&s.name) else { continue; };
+                let Some(target) = units[g.unit_idx].symbols.get(g.sym_idx) else { continue; };
+                if matches!(target.kind, SymbolKind::Data) {
+                    s.val = (data_base[g.unit_idx] as i64) + target.value as i64;
                 }
             }
             merged

@@ -1394,8 +1394,8 @@ pub(crate) enum Arch {
 /// make: which registers carry integer arguments, how much
 /// shadow space the caller reserves, whether variadic calls go
 /// through the macOS-flavoured stack-packing path, and whether
-/// the System V `xor eax, eax` (zero XMM count) pre-call dance
-/// is required.
+/// the System V `xor eax, eax` (zero XMM count) pre-call
+/// instruction is required.
 ///
 /// Each native backend reads only the fields it needs; adding a
 /// target is one new row in [`Target::abi`]. Register lists are

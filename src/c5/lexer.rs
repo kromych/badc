@@ -576,7 +576,8 @@ impl Lexer {
     /// a digit (the `.5` form). Used by the constant-initializer
     /// parser to recognise `-LITERAL` (where the next token will
     /// be Num or FloatNum) without consuming the `-` until it
-    /// knows what shape follows. Saves a snapshot/restore dance.
+    /// knows what shape follows. Avoids a snapshot/restore round
+    /// trip through the lexer state.
     pub fn peek_after_whitespace_starts_digit(&self) -> bool {
         let mut p = self.pos;
         while p < self.src.len() && self.src[p].is_ascii_whitespace() {
@@ -1579,10 +1580,10 @@ pub(crate) fn init_symbols(
         }
     }
 
-    // Make sure `main` is registered so the compiler's later lookup sees it.
-    // This is an internal invariant of `init_symbols` itself; if it ever
-    // fires we want it to surface loudly, but a debug_assert is enough --
-    // release builds don't pay the lookup cost.
+    // `main` must be registered so the compiler's later lookup
+    // sees it. This is an internal invariant of `init_symbols`;
+    // a violation here is a build-time bug, so a debug_assert is
+    // sufficient and release builds don't pay the lookup cost.
     debug_assert!(
         find_symbol(symbols, index, "main").is_some(),
         "init_symbols must register `main`"

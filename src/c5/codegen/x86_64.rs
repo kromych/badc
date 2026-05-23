@@ -372,8 +372,8 @@ pub(super) fn emit_lea_r_mem(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32)
 pub(super) fn emit_lea_r_rip32(code: &mut Vec<u8>, dst: Reg, disp32: i32) {
     emit_byte(code, rex(true, dst.high(), false, false));
     emit_byte(code, 0x8D);
-    // mod=00, reg=dst.lo(), r/m=101 -- the magic "RIP-relative"
-    // r/m encoding under mod=00.
+    // mod=00, reg=dst.lo(), r/m=101 -- the RIP-relative r/m
+    // encoding (Intel SDM Vol. 2A, Table 2-7).
     emit_byte(code, modrm(0b00, dst.lo(), 0b101));
     emit_i32(code, disp32);
 }
@@ -717,8 +717,8 @@ pub(super) fn emit_cvtsd2ss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
 }
 
-/// `CQO` (`CDQE` for 32-bit; we want the 64-bit form) -- sign-extend
-/// rax into rdx:rax. Encoding: `REX.W + 99`.
+/// `CQO` -- sign-extend rax into rdx:rax (the 64-bit form;
+/// `CDQE` is the 32-bit counterpart). Encoding: `REX.W + 99`.
 pub(super) fn emit_cqo(code: &mut Vec<u8>) {
     emit_byte(code, rex(true, false, false, false));
     emit_byte(code, 0x99);
@@ -855,10 +855,10 @@ pub(super) enum Cc {
 }
 
 impl Cc {
-    /// Logical complement of the condition. Used by the cmp+branch
-    /// fusion peephole when `Op::Bz` (test for boolean zero) lands
-    /// on a compare op whose `setcc` was elided -- we need the
-    /// branch to fire on the inverted predicate. Mirror of
+    /// Logical complement of the condition. The cmp+branch
+    /// fusion peephole calls this when `Op::Bz` (test for boolean
+    /// zero) lands on a compare op whose `setcc` was elided: the
+    /// branch must fire on the inverted predicate. Mirror of
     /// [`super::aarch64::Cond::flip`].
     fn flip(self) -> Cc {
         match self {
@@ -879,12 +879,13 @@ impl Cc {
 }
 
 /// `SETcc r/m8` -- write byte = 1 if condition holds, else 0. The
-/// upper bits of the destination are *not* zeroed -- the caller is
-/// expected to zero the register first (we use `xor r, r`).
+/// upper bits of the destination are *not* zeroed; the caller is
+/// expected to pre-zero the register (the emit path uses
+/// `xor r, r`).
 pub(super) fn emit_setcc_r8(code: &mut Vec<u8>, cc: Cc, dst: Reg) {
     // SET<cc> r/m8 needs a REX prefix to address SPL/BPL/SIL/DIL or
-    // R8B..R15B; using REX with the low GPRs disables the
-    // AH/CH/DH/BH high-byte aliases, which is exactly what we want.
+    // R8B..R15B; REX with the low GPRs disables the AH/CH/DH/BH
+    // high-byte aliases, which matches the encoder's requirement.
     emit_byte(code, rex(false, false, false, dst.high()));
     emit_byte(code, 0x0F);
     emit_byte(code, 0x90 | (cc as u8));
@@ -959,10 +960,10 @@ pub(super) fn emit_call_r(code: &mut Vec<u8>, target: Reg) {
 
 /// `CALL qword ptr [rip + disp32]` -- PC-relative indirect call
 /// through a memory operand. Encoding: `FF /2` with ModR/M
-/// `mod=00 reg=2 r/m=101` (the magic "RIP-relative" encoding under
-/// mod=00) + disp32. 6 bytes total. Used for GOT calls on Linux
-/// x86_64; the writer patches `disp32` so the load points at the
-/// right `.got` slot.
+/// `mod=00 reg=2 r/m=101` (the RIP-relative addressing form,
+/// Intel SDM Vol. 2A, Table 2-7) + disp32. 6 bytes total. Used
+/// for GOT calls on Linux x86_64; the writer patches `disp32` so
+/// the load points at the right `.got` slot.
 pub(super) fn emit_call_qword_rip32(code: &mut Vec<u8>, disp32: i32) {
     emit_byte(code, 0xFF);
     emit_byte(code, modrm(0b00, 2, 0b101));

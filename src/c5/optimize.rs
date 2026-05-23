@@ -1416,10 +1416,11 @@ mod tests {
         ]);
         let opt = optimize(p).unwrap();
         // The interpreter doesn't go through the codegen disambig
-        // path, but it does walk `Insn::ImmCode` if we wrongly
-        // promoted -- and on a hand-built input with empty
-        // `code_imm_positions`, that's the regression we want to
-        // pin. Run via VM and assert the constant came through.
+        // path, but it does walk `Insn::ImmCode` when the input
+        // promoted an integer literal into a code reference. On a
+        // hand-built input with empty `code_imm_positions` that
+        // promotion is the regression this test pins. Run via VM
+        // and assert the constant came through unchanged.
         assert_eq!(Vm::new(opt).run().unwrap(), CODE_BASE as i64);
     }
 

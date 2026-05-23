@@ -579,9 +579,9 @@ impl Cond {
 
     /// Logical complement of the condition as another [`Cond`]
     /// variant. Used by the cmp+branch fusion peephole: when a
-    /// compare op `Op::Lt` is followed by `Op::Bz target`, we want
-    /// to "branch when (lhs < rhs) is false" which is "branch when
-    /// lhs >= rhs" -- i.e., `Cond::Lt.flip() == Cond::Ge`.
+    /// compare op `Op::Lt` is followed by `Op::Bz target`, the
+    /// branch fires on "(lhs < rhs) is false", i.e. "lhs >= rhs"
+    /// -- so `Cond::Lt.flip() == Cond::Ge`.
     fn flip(self) -> Cond {
         match self {
             Cond::Eq => Cond::Ne,

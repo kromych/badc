@@ -1555,9 +1555,9 @@ fn emit_call_ext(
     // FP-returning libc fns hand the result back in d0 on
     // AAPCS64; bridge it into x0 so the rest of the c5 model
     // (which reads every return through the integer accumulator
-    // chain) sees the bit pattern. Sub-word integer returns get
-    // the signed / unsigned extension dance from the pool path
-    // applied to x0 likewise.
+    // chain) sees the bit pattern. Sub-word integer returns
+    // receive the same signed / unsigned extension sequence on
+    // x0 that the pool path applies.
     use crate::c5::compiler::types as ty_helpers;
     let return_type_tag = imp.return_type_tag;
     let bare = ty_helpers::strip_unsigned(return_type_tag);

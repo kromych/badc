@@ -401,9 +401,9 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
     let mut merged_dylibs: Vec<DylibSpec> = Vec::new();
     let mut binding_remap_per_unit: Vec<Vec<i64>> = Vec::with_capacity(n);
     // Per-unit, per-binding: (merged_dylib_idx, within_dylib_pos).
-    // Same shape as the parser's flat binding indices but split
-    // into the two pieces we need post-merge to compute the
-    // final flat offset.
+    // Same shape as the parser's flat binding indices, split into
+    // the two pieces required post-merge to compute the final flat
+    // offset.
     let mut binding_positions_per_unit: Vec<Vec<(usize, usize)>> = Vec::with_capacity(n);
 
     for unit in &units {

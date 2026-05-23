@@ -444,7 +444,8 @@ mod tests {
         b.branch_zero(v_test, recurse, base);
 
         // Base case: return n widened to long. Lt/etc produce 0/1;
-        // we want the value of n itself, not the test.
+        // the test result is discarded -- the return value is the
+        // loaded n.
         b.switch_to(base);
         let v_n_again = b.load_local(2, LoadKind::I32);
         b.return_(v_n_again);

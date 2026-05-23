@@ -233,8 +233,8 @@ mod jit_impl {
         let build = lower_for_jit(program, target, options)?;
 
         // Allocate a writable data region, copy `build.data` in. The
-        // page is RW (no exec permission); programs that try to
-        // execute through it would fault, which is what we want.
+        // page is RW (no exec permission); an attempt to execute
+        // through it faults with the expected SIGSEGV / EXCEPTION.
         let mut data_region = if !build.data.is_empty() {
             Some(DataRegion::new(&build.data)?)
         } else {
@@ -413,8 +413,8 @@ mod jit_impl {
     #[cfg(target_os = "macos")]
     const MAP_ANONYMOUS: c_int = 0x1000;
 
-    /// macOS-only `MAP_JIT`. Required for any region we want to be
-    /// both writable and executable on Apple Silicon -- without it,
+    /// macOS-only `MAP_JIT`. Required for any region that must be
+    /// both writable and executable on Apple Silicon; without it,
     /// asking for `PROT_EXEC` on a writable mapping is rejected by
     /// the kernel. The hardware-enforced W^X toggle that gates each
     /// access lives in `pthread_jit_write_protect_np`.
@@ -504,7 +504,7 @@ mod jit_impl {
 
         /// Windows allocates RW first, copies the code in, then
         /// flips to PAGE_EXECUTE_READ via `make_executable`. No
-        /// W^X-toggle dance; VirtualProtect is a one-shot.
+        /// per-access W^X toggle; VirtualProtect is a one-shot.
         #[cfg(target_os = "windows")]
         fn new(code: &[u8]) -> Result<Self, C5Error> {
             let len = round_up_to_page(code.len());
@@ -1311,10 +1311,10 @@ mod jit_impl {
 
     // ----------------------------------------------------------------
     // I-cache coherence after writing JIT code. x86_64 has a coherent
-    // I-cache so the function is a no-op there; aarch64 needs an
-    // explicit clean+invalidate dance per cache-line, capped with
-    // dsb+isb to ensure the instruction stream sees the new bytes
-    // before we branch into them.
+    // I-cache so the function is a no-op there; aarch64 requires an
+    // explicit clean + invalidate per cache line, terminated by dsb +
+    // isb, so the instruction stream sees the new bytes before
+    // control branches into them.
     // ----------------------------------------------------------------
 
     #[cfg(all(target_arch = "x86_64", any(target_os = "linux", target_os = "macos"),))]
@@ -1322,8 +1322,8 @@ mod jit_impl {
 
     /// macOS arm64: defer to Apple's published API. `sys_icache_invalidate`
     /// is in libSystem (always linked) and is the supported interface
-    /// for JITs on Apple Silicon -- it does the dc cvau / ic ivau /
-    /// dsb / isb dance with the right cache-line size for the host.
+    /// for JITs on Apple Silicon -- it issues dc cvau / ic ivau / dsb
+    /// / isb with the cache-line size reported by the running CPU.
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     fn flush_icache(ptr: *const u8, len: usize) {
         unsafe extern "C" {
@@ -1344,9 +1344,10 @@ mod jit_impl {
         }
     }
 
-    /// Linux aarch64: roll the dance by hand. ARM ARM allows D-cache
-    /// and I-cache to have different line sizes; the smallest possible
-    /// per spec is 16 bytes. Using 16 means more iterations than
+    /// Linux aarch64: issue the cache-maintenance sequence
+    /// directly. ARM ARM allows D-cache and I-cache to have
+    /// different line sizes; the smallest the architecture
+    /// permits is 16 bytes. Using 16 emits more iterations than
     /// necessary on most cores (typical line is 64) but is always
     /// correct.
     #[cfg(all(target_os = "linux", target_arch = "aarch64"))]

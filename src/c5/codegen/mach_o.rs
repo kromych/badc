@@ -1325,10 +1325,9 @@ fn apply_macho_tlv_fixups(
     for fx in fixups {
         let descriptor_vmaddr =
             thread_vars_vmaddr + (fx.descriptor_index as u64) * TLV_DESCRIPTOR_SIZE;
-        // Reuse the existing `patch_adrp_add` helper; the codegen
-        // emitted the adrp/add with rd = x0, but the helper writes
-        // x19. We can't rely on x19 here -- we need x0. Patch the
-        // word directly.
+        // The codegen emitted the adrp/add with rd = x0, but
+        // `patch_adrp_add` writes x19. Patch the words directly
+        // so the encoded rd field stays as the codegen wrote it.
         let adrp_file_off = code_base_in_file + fx.adrp_offset;
         let add_file_off = adrp_file_off + 4;
         let adrp_vmaddr = code_vmaddr_base + fx.adrp_offset as u64;

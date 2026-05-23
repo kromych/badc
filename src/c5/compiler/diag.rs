@@ -316,16 +316,16 @@ impl Compiler {
         // !lhs_is_fp && rhs_is_fp -- spill float RHS, lift int LHS.
         // Snapshot the AST operands first: lhs is the int sitting
         // on the parser-side vstack, rhs is the float currently
-        // in `ast_acc`. The bytecode dance emits `Op::StLocI` /
+        // in `ast_acc`. The bytecode sequence emits `Op::StLocI` /
         // `Op::Imm` / `Op::Or` / `Op::Fcvtif` / `Op::Psh` /
-        // `Op::Lea` / `Op::Li` -- the OR / PSH / LI route through
-        // `ast_track_emit_op` and pop / push the vstack we need
-        // to preserve. Drain the outer vstack into a side buffer,
-        // push a single `None` sentinel for the inner ops to
-        // consume, run the dance, then restore. Finally rebuild
-        // the AST so the walker sees `Expr::Cast { lhs_int_ast,
-        // to_ty = rhs_fp }` on the vstack and the rhs float ast
-        // back on `ast_acc`.
+        // `Op::Lea` / `Op::Li` -- OR / PSH / LI route through
+        // `ast_track_emit_op` and pop / push the AST vstack the
+        // outer call must preserve. Drain the outer vstack into a
+        // side buffer, push a single `None` sentinel for the
+        // inner ops to consume, emit the sequence, then restore.
+        // Finally rebuild the AST so the walker sees
+        // `Expr::Cast { lhs_int_ast, to_ty = rhs_fp }` on the
+        // vstack and the rhs float ast back on `ast_acc`.
         let lhs_ast = self.ast_vstack.pop().flatten();
         let rhs_ast = self.ast_acc.take();
         let saved_vstack: alloc::vec::Vec<_> = self.ast_vstack.drain(..).collect();

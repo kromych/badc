@@ -882,8 +882,8 @@ impl Compiler {
 
     /// Push an `Expr::Call` and set it as the new accumulator.
     /// Called by the function-call parser site after the bytecode
-    /// dance (per-arg temp store + reverse push + Jsr/JsrExt/Jsri
-    /// + Adj cleanup) lands. `callee` is the callee's AST
+    /// sequence (per-arg temp store + reverse push + Jsr/JsrExt
+    /// /Jsri + Adj cleanup) lands. `callee` is the callee's AST
     /// expression (synthesised here for direct calls via
     /// `ast.push_expr(Ident { ... })`; the indirect-call path
     /// passes the already-built function-pointer ExprId). `args`
@@ -1512,8 +1512,8 @@ mod tests {
 
     /// `int main(int a) { ++a; return a; }` -- the prefix `++`
     /// collapses into a single `Expr::PreInc{lvalue: Ident, by: 1}`.
-    /// Confirms the bytecode's six-op increment dance leaves the
-    /// AST with exactly one PreInc node.
+    /// Confirms the bytecode's six-op increment sequence leaves
+    /// the AST with exactly one PreInc node.
     #[test]
     fn pre_inc_local_captures_pre_inc() {
         use super::super::super::ast::Expr;

@@ -357,10 +357,11 @@ impl Compiler {
             // reserve one stack frame slot block and Mcpy the
             // staged bytes into it.
             if is_struct_ty(ty) && struct_ptr_depth(ty) == 0 && self.lex.tk == '{' {
-                // Local deferred-size struct array. Same scan-then-
-                // pre-allocate dance as the file-scope path so an
-                // element's string-literal field doesn't shift the
-                // next element off its expected offset.
+                // Local deferred-size struct array. Same
+                // scan-then-pre-allocate sequence as the
+                // file-scope path so an element's string-literal
+                // field doesn't shift the next element off its
+                // expected offset.
                 let elem_size = self.size_of_type(ty);
                 let count = self.lex.count_top_level_groups_in_array() as i64;
                 let staged_off = self.data.len();

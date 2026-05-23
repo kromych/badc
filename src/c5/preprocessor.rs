@@ -2,10 +2,9 @@
 //!
 //! The c5 dialect's lexer used to silently skip lines starting with
 //! `#`, leaving every `#define` / `#ifdef` in the source as a
-//! no-op. That worked when the compiler hardcoded a fixed set of
-//! constants and libc bindings into the symbol table -- as soon as
-//! per-target headers want to declare those, we need a real
-//! preprocessor.
+//! no-op. Once per-target headers started declaring constants and
+//! libc bindings, that placeholder shape stopped serving and was
+//! replaced with the implementation below.
 //!
 //! What's supported:
 //!
@@ -96,11 +95,11 @@ pub struct Binding {
     /// `true` if the function's prototype ended with `, ...)` --
     /// e.g. `int printf(char *fmt, ...);`. The lowering reads
     /// this to decide whether the call site needs the
-    /// platform's variadic-ABI dance (macOS arm64
-    /// stack-packing, SysV `xor eax, eax`). Set by the parser
-    /// when it folds a Sys symbol's prototype onto the binding;
-    /// the preprocessor doesn't know about prototypes so it
-    /// leaves this `false`.
+    /// platform's variadic-ABI handling (macOS arm64 stack
+    /// packing, SysV `xor eax, eax`). Set by the parser when it
+    /// folds a Sys symbol's prototype onto the binding; the
+    /// preprocessor doesn't know about prototypes so it leaves
+    /// this `false`.
     pub is_variadic: bool,
     /// Number of fixed (non-variadic) parameters from the
     /// prototype. macOS arm64 passes those in registers per

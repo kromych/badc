@@ -143,11 +143,12 @@ pub(crate) fn walk_function(
         // entry the local stays uninitialised and every `x`
         // reference reads stack garbage. C99 6.5.2.2 says the
         // call passed a 4-byte float; the c5 cdecl widens to
-        // 8 bytes in the host arg slot, so we read the slot as
-        // I64 (preserves the bit pattern) and narrow back via a
+        // 8 bytes in the host arg slot. Read the slot as I64
+        // (preserves the bit pattern) and narrow back via a
         // `Store { kind: F32 }` into the local. F64 / `double`
-        // shares the I64 storage width (8 bytes both inbound
-        // and on the local), so it doesn't need this dance.
+        // shares the I64 storage width (8 bytes both inbound and
+        // on the local), so this widen-then-narrow step does not
+        // apply.
         let is_float = stripped == crate::c5::token::Ty::Float as i64;
         if is_float {
             let arg_slot = (i as i64) + arg_slot_base;

@@ -187,13 +187,12 @@ pub(crate) enum Token {
     /// load of the pointer slot.
     Dot,
     /// `_Thread_local` storage-class specifier (C11). Marks the
-    /// following global as having per-thread storage. Recognised
-    /// at the parser surface; the codegen still emits a clean
-    /// "not yet implemented" error -- ELF .tdata/.tbss + PE TLS
-    /// directory + Mach-O __thread_* sections are a future
-    /// milestone (the codegen lowering needs `mrs x0, tpidr_el0`
-    /// on aarch64 and `mov rax, %fs:0` on x86_64 plus the
-    /// per-target dyld initializer).
+    /// following global as having per-thread storage. Lowering
+    /// uses `mrs x0, tpidr_el0` on aarch64 and `mov rax, %fs:0`
+    /// on x86_64 to recover the thread-local block base; the
+    /// post-link target writers (ELF .tdata/.tbss, PE TLS
+    /// directory, Mach-O __thread_*) place the symbol within
+    /// the runtime block.
     ThreadLocal,
     /// `extern` keyword. Accepted as a no-op storage-class
     /// prefix in declarations (global, function, parameter,

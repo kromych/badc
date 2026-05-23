@@ -18,10 +18,10 @@
 //! stored as a symbol-table index, so the walker never re-runs name
 //! lookup.
 
-// Phase C1 lands the node definitions ahead of any consumer; the
-// parser dual-emit (Phase C2) and the SSA walker (Phase C3) drive
-// real use sites in follow-on patches. Until then every node is
-// only reached from the unit tests at the bottom of this file.
+// Several node variants are produced by the parser but consumed
+// only by the walker. The dead-code lint flags any unused-arm
+// reachability that depends on parser sites we haven't wired
+// yet; allow it module-wide rather than per-variant.
 #![allow(dead_code)]
 
 pub(crate) mod walk;
@@ -417,9 +417,7 @@ pub(crate) enum Decl {
 /// the metadata the SSA walker needs alongside the node arenas:
 /// the bytecode entry PC for symbol-PC remapping, the param
 /// count + variadic flag for the function prologue, and the
-/// post-parse local slot high-water mark for frame sizing. The
-/// shadow-validator (Phase C4) reads these to run
-/// [`walk::walk_function`] against each finished function.
+/// post-parse local slot high-water mark for frame sizing.
 #[derive(Debug, Clone)]
 pub(crate) struct FinishedFunction {
     pub ast: Ast,

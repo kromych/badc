@@ -553,9 +553,10 @@ impl Compiler {
     //
     // The parser's Op::* emit sites pair with the AST helpers below
     // so a function's bytecode and AST are produced in lockstep.
-    // The bytecode remains the source of truth during Phase C2;
-    // Phase C4 wires the validator that asserts the AST walker
-    // produces the same SSA as the bytecode lift.
+    // The walker is the production SSA source; the bytecode tier
+    // is kept alive only for the VM tape and for Sys-trampoline
+    // synthesis. See `project_bridge_burn_plan` for the plan to
+    // retire the bytecode emit entirely.
 
     /// Reset the AST + parser-side value stack at the start of a
     /// function body. The arena drops the previous function's
@@ -1203,11 +1204,10 @@ impl Compiler {
     /// `emit_lea`, ...) or through the statement-level parser
     /// sites that own control-flow shapes.
     ///
-    /// During Phase C2 the AST is shadow data; if an emit_op
-    /// fires before a wired-up operand-aware site has populated
-    /// `ast_acc`, the binop drops the AST node and leaves the
-    /// vstack in sync with whatever the next wired site
-    /// produces. The validator (Phase C4) flags the gap.
+    /// If an emit_op fires before a wired operand-aware site has
+    /// populated `ast_acc`, the binop drops the AST node and
+    /// leaves the vstack in sync with whatever the next wired
+    /// site produces.
     pub(super) fn ast_track_emit_op(&mut self, op: Op) {
         use super::super::ir::BinOp as B;
         match op {

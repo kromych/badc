@@ -461,18 +461,17 @@ pub struct Compiler {
     /// stays at 0 and the codegen treats AllocaInit as a no-op.
     alloca_init_operand_pc: usize,
 
-    /// Per-function AST built in parallel with the bytecode emit
-    /// during Phase C of the IR transition. The arena is reset at
-    /// every function entry. While dual-emit is in flight no
-    /// consumer reads from it; the SSA walker (Phase C3) and the
-    /// shadow-validator (Phase C4) wire in next.
+    /// Per-function AST built in parallel with the bytecode emit.
+    /// The arena is reset at every function entry. The SSA walker
+    /// reads from these snapshots at codegen entry.
     pub(super) ast: super::ast::Ast,
 
     /// ExprId of the value currently in the c5 accumulator, mirroring
     /// the bytecode tier's invariant that every expression leaves
     /// its result in `a`. `None` between statements or when the
-    /// accumulator's contents haven't been produced through the AST
-    /// path yet (during the incremental Phase C2 wiring).
+    /// expression site doesn't produce an AST node (bytecode-only
+    /// address producers that the call-site path consumes through
+    /// the bytecode tier only).
     pub(super) ast_acc: Option<super::ast::ExprId>,
 
     /// ExprIds matching values on the c5 stack-machine stack --
@@ -489,11 +488,9 @@ pub struct Compiler {
     pub(super) ast_vstack: Vec<Option<super::ast::ExprId>>,
 
     /// Per-function AST snapshots, captured at every function's
-    /// closing `Op::Lev`. The shadow-validator (Phase C4) reads
-    /// from here to run the AST -> SSA walker on each function;
-    /// the eventual flip (Phase C5) hands these straight to the
-    /// codegen entry instead of the bytecode lift. Order matches
-    /// function-definition order.
+    /// closing `Op::Lev`. The codegen entry walks these in order
+    /// to produce one `FunctionSsa` per source function. Order
+    /// matches function-definition order.
     pub(super) finished_functions: Vec<super::ast::FinishedFunction>,
 
     /// Per-function map from goto label name -> AST `LabelId`.
@@ -1180,11 +1177,10 @@ impl Compiler {
             entry_name: resolved_entry_name,
             subsystem: self.pp_subsystem,
             finished_functions: self.finished_functions,
-            // Snapshot the symbol table for the AST walker (Phase C5
-            // and Phase C4 shadow-validation paths). Only the
-            // `array_size` and `type_` fields are read today, but
-            // cloning the full Symbol keeps the walker's view in
-            // sync with any later field additions.
+            // Snapshot the symbol table for the SSA walker. Only
+            // the `array_size` and `type_` fields are read today,
+            // but cloning the full Symbol keeps the walker's view
+            // in sync with any later field additions.
             symbols: self.symbols,
         })
     }

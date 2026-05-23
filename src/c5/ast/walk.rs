@@ -1,21 +1,10 @@
 //! `Ast` -> `FunctionSsa` walker.
 //!
-//! Drives `SsaBuilder` from a per-function AST. Stops at the first
-//! unsupported shape and surfaces the offending node through
-//! `WalkError` so the shadow-validator can tag exactly which AST
-//! shape the dual-emit hasn't wired yet.
-//!
-//! Covers every expression variant the parser already populates in
-//! Phase C2 (literals, identifiers, unary, binary, assignment) and
-//! the matching `Stmt::Return`. Variants that the parser hasn't
-//! wired yet -- Call, Member, Index, Cast, Ternary, PreInc /
-//! PostInc, CompoundAssign, Sizeof, Comma, Intrinsic, plus every
-//! statement other than Return -- come back as `Unsupported`.
-//!
-//! The walker doesn't manage control-flow blocks beyond what the
-//! Phase C2 surface needs; the for / while / if / switch
-//! lowerings land alongside their parser-side dual-emit in
-//! follow-on patches.
+//! Drives `SsaBuilder` from a per-function AST. The walker is the
+//! production SSA source for every parsed function. An AST shape
+//! the walker can't lower comes back as `WalkError` so the
+//! caller (`codegen::ssa_shadow::produce_ssa_funcs`) can surface
+//! the offending node.
 
 #![allow(dead_code)]
 
@@ -29,8 +18,7 @@ use super::{Expr, ExprId, Stmt, StmtId, UnOp};
 
 /// Diagnostic for a shape the walker can't lower yet. Carries
 /// enough context to point at the offending AST node so the
-/// shadow-validator can route the dual-emit gap back to a parser
-/// site.
+/// caller can route the gap back to a parser site.
 #[derive(Debug)]
 pub(crate) enum WalkError {
     UnsupportedExpr { id: ExprId, kind: &'static str },
@@ -68,14 +56,9 @@ impl WalkError {
 /// resulting `FunctionSsa`. `n_params` and `is_variadic` come from
 /// the function's declarator; `n_locals` is the post-parse local
 /// slot count (`max_loc_offs`). `ent_pc` is the function's
-/// bytecode-tier entry PC -- the SSA emit threads it through to
-/// keep call-site fixups byte-for-byte compatible with the lift.
-///
-/// During Phase C2 the AST is incomplete: stmts other than
-/// `Return` aren't pushed yet, control-flow nesting isn't built,
-/// and many expression shapes are missing. The walker iterates
-/// `ast.stmts` flat (no nested blocks) and returns the first
-/// unsupported shape rather than fabricating a value.
+/// bytecode-tier entry PC -- the SSA emit threads it through so
+/// the post-link codegen can resolve call-site fixups against
+/// the same PC the linker rebased.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn walk_function(
     ast: &super::Ast,

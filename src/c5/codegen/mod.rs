@@ -705,6 +705,38 @@ impl ResolvedImports {
             pc += op.word_size();
         }
 
+        // When the AST-driven SSA walker is the source of truth
+        // (`BADC_USE_AST_SSA=1`), an `Expr::Call` whose callee is
+        // a `Token::Sys` ident lowers to `Inst::CallExt` even if
+        // the bytecode-side `Op::JsrExt` got DCE'd by the
+        // optimizer. Walk the per-function AST snapshots so each
+        // such call's binding-flat index reaches the resolved set
+        // -- without it the SSA emit bails on the CallExt and the
+        // function falls back to the pool path (which the codebase
+        // no longer carries).
+        for func in &program.finished_functions {
+            for expr in &func.ast.exprs {
+                let super::ast::Expr::Call { callee, .. } = expr else {
+                    continue;
+                };
+                let callee_idx = *callee as usize;
+                if callee_idx >= func.ast.exprs.len() {
+                    continue;
+                }
+                let super::ast::Expr::Ident { class, val, .. } =
+                    &func.ast.exprs[callee_idx]
+                else {
+                    continue;
+                };
+                if *class != super::token::Token::Sys as i64 {
+                    continue;
+                }
+                if seen.insert(*val) {
+                    used.push(*val);
+                }
+            }
+        }
+
         // Resolve each used binding-idx through `program.dylibs`.
         // Build the dylib list lazily: each new dylib gets
         // appended once and its index is reused for any further

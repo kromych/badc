@@ -621,6 +621,23 @@ impl<H: Host> Vm<H> {
             // every function; surface lift errors here so callers
             // see a clean `Result` boundary instead of a panic.
             let funcs = self.ssa_funcs.as_ref().map_err(|e| e.clone())?;
+            if std::env::var("BADC_DUMP_VM_SSA").is_ok() {
+                for f in funcs {
+                    eprintln!(
+                        "fn ent_pc={} n_params={} locals={} vstack_slots={}",
+                        f.ent_pc, f.n_params, f.locals, f.vstack_slots
+                    );
+                    for (b, blk) in f.blocks.iter().enumerate() {
+                        eprintln!(
+                            "  block {b}: insts {:?} term {:?}",
+                            blk.inst_range, blk.terminator
+                        );
+                        for v in blk.inst_range.clone() {
+                            eprintln!("    v{v}: {:?}", f.insts[v as usize]);
+                        }
+                    }
+                }
+            }
             return ssa::run_program_with_args(
                 funcs,
                 &self.data,

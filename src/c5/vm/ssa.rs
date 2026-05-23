@@ -315,10 +315,19 @@ struct Frame<'a> {
 
 impl Frame<'_> {
     /// c5-slot offset -> byte address in `Memory::bytes`.
+    ///
+    /// The c5 cdecl assigns local slot `-N` (N >= 1) to byte
+    /// address `bp - N*8` in the bytecode VM. Translating to the
+    /// SSA-VM's frame (which grows up from `stack_base`, with bp
+    /// conceptually at `stack_base + locals*8`) gives
+    /// `stack_base + (locals - N) * 8`. The previous direction
+    /// (`base + (N-1)*8`) inverted the order so a multi-slot
+    /// array's footprint overlapped the next-declared local.
     fn slot_addr(&self, off: i64) -> Option<usize> {
         if off < 0 {
-            let idx = (-off - 1) as usize;
-            (idx < self.locals).then_some(self.stack_base + idx * 8)
+            let slot_n = (-off) as usize;
+            (slot_n >= 1 && slot_n <= self.locals)
+                .then_some(self.stack_base + (self.locals - slot_n) * 8)
         } else if off >= 2 {
             let i = (off - 2) as usize;
             let frame_slots = self.frame_bytes / 8;
@@ -677,12 +686,21 @@ fn run_inst<H: Host>(
         }
         Inst::CallIndirect { target, args } => {
             let raw = frame.regs[*target as usize];
-            if raw & CODE_ADDR_MASK == 0 {
+            // Code pointers may be tagged two ways: SSA-VM bit 62
+            // (set by `Inst::ImmCode`) or the bytecode VM's
+            // `CODE_BASE`-biased pointer (set by `with_host` when
+            // it patches the data segment's `CodeReloc` entries
+            // so existing fixtures can carry function pointers as
+            // initialised globals without an SSA-aware fix-up).
+            let target_pc = if raw & CODE_ADDR_MASK != 0 {
+                (raw & !CODE_ADDR_MASK) as usize
+            } else if (raw as usize) >= super::super::CODE_BASE {
+                (raw as usize) - super::super::CODE_BASE
+            } else {
                 return Err(C5Error::Runtime(format!(
                     "vm_ssa: CallIndirect: target raw=0x{raw:016x} is not a code pointer",
                 )));
-            }
-            let target_pc = (raw & !CODE_ADDR_MASK) as usize;
+            };
             let callee = prog.lookup(target_pc).ok_or_else(|| {
                 C5Error::Runtime(format!(
                     "vm_ssa: CallIndirect: no function at ent_pc {target_pc}",

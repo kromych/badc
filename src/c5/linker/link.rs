@@ -991,6 +991,10 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
             }
             merged
         },
+        // Archive reloads don't carry synthesised SSA helpers --
+        // sys-trampolines get re-recovered from the merged
+        // bytecode tape via `lift_program`.
+        synthetic_ssa_funcs: alloc::vec::Vec::new(),
     })
 }
 

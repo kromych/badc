@@ -308,6 +308,12 @@ pub struct Program {
     /// optimizer reload), in which case the walker path can't
     /// run and the codegen falls back to the bytecode lift.
     pub(crate) symbols: alloc::vec::Vec<crate::c5::symbol::Symbol>,
+    /// Synthesised `FunctionSsa` entries the parser produces
+    /// outside the AST walker (sys-trampolines). The codegen
+    /// reads these directly so `lift_program` isn't needed for
+    /// the parsed-program path. Empty for archive reloads;
+    /// `produce_ssa_funcs` still calls `lift_program` there.
+    pub(crate) synthetic_ssa_funcs: alloc::vec::Vec<crate::c5::ir::FunctionSsa>,
 }
 
 /// A single local variable or formal parameter belonging to a

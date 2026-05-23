@@ -2430,6 +2430,7 @@ mod tests {
             optimized: false,
             finished_functions: alloc::vec::Vec::new(),
             symbols: alloc::vec::Vec::new(),
+            synthetic_ssa_funcs: alloc::vec::Vec::new(),
         }
     }
 

@@ -500,6 +500,13 @@ pub struct Compiler {
     /// matches function-definition order.
     pub(super) finished_functions: Vec<super::ast::FinishedFunction>,
 
+    /// Synthesised `FunctionSsa` entries for parser-emitted
+    /// helpers that aren't built from source (sys-trampolines).
+    /// The codegen reads these directly via `produce_ssa_funcs`
+    /// so the lift step doesn't need to recover them from the
+    /// bytecode tape.
+    pub(super) synthetic_ssa_funcs: Vec<super::ir::FunctionSsa>,
+
     /// Per-function map from goto label name -> AST `LabelId`.
     /// Reset at every function entry (alongside `ast_reset`).
     /// Keeps the AST's flat per-function label-id space in sync
@@ -986,6 +993,7 @@ impl Compiler {
             ast_acc: None,
             ast_vstack: Vec::new(),
             finished_functions: Vec::new(),
+            synthetic_ssa_funcs: Vec::new(),
             ast_labels: Vec::new(),
             pending_local_init_ast: None,
             pending_local_aggregate_ast: None,
@@ -1192,6 +1200,7 @@ impl Compiler {
             // but cloning the full Symbol keeps the walker's view
             // in sync with any later field additions.
             symbols: self.symbols,
+            synthetic_ssa_funcs: self.synthetic_ssa_funcs,
         })
     }
 }

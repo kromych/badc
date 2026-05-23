@@ -202,6 +202,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         optimized: _,
         finished_functions,
         symbols,
+        synthetic_ssa_funcs,
     } = program;
 
     let mut insns = decode(&text, &data_imm_positions, &in_code_imm_positions)?;
@@ -545,6 +546,12 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         optimized: true,
         finished_functions: remapped_finished_functions,
         symbols,
+        // Optimizer doesn't rebase synthesised SSA helpers
+        // today (sys-trampolines aren't fused with the optimizer
+        // PC remap pass). Keep them as-is from the input
+        // program; if a future pass rewrites their PCs, walk
+        // these entries and update `ent_pc` / `end_pc`.
+        synthetic_ssa_funcs,
     })
 }
 
@@ -1405,6 +1412,7 @@ mod tests {
             optimized: false,
             finished_functions: Vec::new(),
             symbols: Vec::new(),
+            synthetic_ssa_funcs: alloc::vec::Vec::new(),
         }
     }
 
@@ -1722,6 +1730,7 @@ mod tests {
             optimized: false,
             finished_functions: Vec::new(),
             symbols: Vec::new(),
+            synthetic_ssa_funcs: alloc::vec::Vec::new(),
         };
         let opt = optimize(p).unwrap();
         // Main returns 5; if the ImmCode operand remapped wrong, the

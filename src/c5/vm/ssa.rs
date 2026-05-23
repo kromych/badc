@@ -44,6 +44,13 @@ use super::super::ir::{BinOp, FunctionSsa, Inst, LoadKind, StoreKind, Terminator
 /// future `malloc` shim) would use a different tag.
 const LOCAL_ADDR_TAG: i64 = 0x4000_0000_0000_0000;
 
+/// Tagged-address marker for `ImmData` results: bit 62 set,
+/// bit 61 clear (distinguishes from `LOCAL_ADDR_TAG` which sets
+/// bit 62 too). The low bits hold the data-segment byte offset.
+const DATA_ADDR_TAG: i64 = 0x2000_0000_0000_0000;
+const ADDR_TAG_MASK: i64 = 0x6000_0000_0000_0000;
+const ADDR_OFFSET_MASK: i64 = 0x0fff_ffff_ffff_ffff;
+
 /// Multi-function program context. The SSA-VM walks
 /// `Vec<FunctionSsa>`; `Inst::Call` resolves a callee by
 /// `target_pc` through `ent_pc_to_idx`. Kept as a struct so the
@@ -55,6 +62,12 @@ struct Program<'a> {
     /// `ent_pc` -> index into `funcs`. Built once at program
     /// entry; `Inst::Call` does a constant-time lookup.
     ent_pc_to_idx: alloc::collections::BTreeMap<usize, usize>,
+    /// Initial-data bytes (string literals + zero-initialised
+    /// globals). `Inst::ImmData(off)` returns a tagged address
+    /// that decodes to a slice of this buffer. `None` when the
+    /// SSA-VM is invoked without a `Program` (e.g. the
+    /// single-function `run_ssa` shape used by unit tests).
+    data: &'a [u8],
 }
 
 impl<'a> Program<'a> {
@@ -67,7 +80,13 @@ impl<'a> Program<'a> {
         Self {
             funcs,
             ent_pc_to_idx,
+            data: &[],
         }
+    }
+
+    fn with_data(mut self, data: &'a [u8]) -> Self {
+        self.data = data;
+        self
     }
 
     fn lookup(&self, ent_pc: usize) -> Option<&'a FunctionSsa> {
@@ -123,9 +142,14 @@ pub(super) fn run_ssa(func: &FunctionSsa) -> Result<i64, C5Error> {
 
 /// Multi-function entry: pick the function at `entry_pc` and run
 /// it with no arguments. `Inst::Call` resolves callees through
-/// `funcs`' `ent_pc` lookup.
-pub(super) fn run_program(funcs: &[FunctionSsa], entry_pc: usize) -> Result<i64, C5Error> {
-    let prog = Program::new(funcs);
+/// `funcs`' `ent_pc` lookup; `Inst::ImmData(off)` indexes into
+/// `data` for string-literal / global reads.
+pub(super) fn run_program(
+    funcs: &[FunctionSsa],
+    data: &[u8],
+    entry_pc: usize,
+) -> Result<i64, C5Error> {
+    let prog = Program::new(funcs).with_data(data);
     let entry = prog.lookup(entry_pc).ok_or_else(|| {
         C5Error::Runtime(format!(
             "vm_ssa: run_program: no function at ent_pc {entry_pc}",
@@ -207,7 +231,15 @@ fn run_inst(prog: &Program<'_>, frame: &mut Frame<'_>, v: ValueId) -> Result<(),
             frame.regs[v as usize] = *k;
             return Ok(());
         }
-        Inst::ImmData(_) => "ImmData",
+        Inst::ImmData(off) => {
+            // Tag a data-segment byte offset so a downstream
+            // `Load` / `Store` can decode it back. `Store` to
+            // ImmData currently fails -- the data segment is
+            // read-only in the SSA-VM (matches what the bytecode
+            // VM's pointer-tracking would flag).
+            frame.regs[v as usize] = DATA_ADDR_TAG | (*off & ADDR_OFFSET_MASK);
+            return Ok(());
+        }
         Inst::ImmCode(_) => "ImmCode",
         Inst::LocalAddr(off) => {
             // Encode the c5-slot offset into a tagged i64 so a
@@ -221,26 +253,34 @@ fn run_inst(prog: &Program<'_>, frame: &mut Frame<'_>, v: ValueId) -> Result<(),
         Inst::TlsAddr(_) => "TlsAddr",
         Inst::Load { addr, kind } => {
             let raw = frame.regs[*addr as usize];
-            if raw & LOCAL_ADDR_TAG == 0 {
-                return Err(C5Error::Runtime(
-                    "vm_ssa: Load through non-LocalAddr pointer not implemented".to_string(),
-                ));
+            match raw & ADDR_TAG_MASK {
+                t if t == LOCAL_ADDR_TAG => {
+                    let off = sign_extend_56(raw & ADDR_OFFSET_MASK);
+                    let idx = frame.slot_index(off).ok_or_else(|| {
+                        C5Error::Runtime(format!("vm_ssa: Load: slot {off} out of range"))
+                    })?;
+                    frame.regs[v as usize] = narrow_load(frame.slots[idx], *kind);
+                }
+                t if t == DATA_ADDR_TAG => {
+                    let off = (raw & ADDR_OFFSET_MASK) as usize;
+                    frame.regs[v as usize] = load_from_data(prog.data, off, *kind)?;
+                }
+                _ => {
+                    return Err(C5Error::Runtime(format!(
+                        "vm_ssa: Load through untagged pointer (raw=0x{raw:016x}) not implemented",
+                    )));
+                }
             }
-            let off = sign_extend_56(raw & 0x0fff_ffff_ffff_ffff);
-            let idx = frame.slot_index(off).ok_or_else(|| {
-                C5Error::Runtime(format!("vm_ssa: Load: slot {off} out of range"))
-            })?;
-            frame.regs[v as usize] = narrow_load(frame.slots[idx], *kind);
             return Ok(());
         }
         Inst::Store { addr, value, kind } => {
             let raw = frame.regs[*addr as usize];
-            if raw & LOCAL_ADDR_TAG == 0 {
-                return Err(C5Error::Runtime(
-                    "vm_ssa: Store through non-LocalAddr pointer not implemented".to_string(),
-                ));
+            if raw & ADDR_TAG_MASK != LOCAL_ADDR_TAG {
+                return Err(C5Error::Runtime(format!(
+                    "vm_ssa: Store through non-LocalAddr pointer (raw=0x{raw:016x}) not implemented",
+                )));
             }
-            let off = sign_extend_56(raw & 0x0fff_ffff_ffff_ffff);
+            let off = sign_extend_56(raw & ADDR_OFFSET_MASK);
             let idx = frame.slot_index(off).ok_or_else(|| {
                 C5Error::Runtime(format!("vm_ssa: Store: slot {off} out of range"))
             })?;
@@ -312,6 +352,37 @@ fn run_inst(prog: &Program<'_>, frame: &mut Frame<'_>, v: ValueId) -> Result<(),
         Inst::AccReload => "AccReload",
     };
     Err(C5Error::Runtime(format!("vm_ssa: {name} not implemented",)))
+}
+
+/// Read a typed value out of the data segment. Width / sign
+/// behaviour matches `narrow_load`. Out-of-range offsets trip
+/// a runtime error rather than reading uninitialised memory.
+fn load_from_data(data: &[u8], off: usize, kind: LoadKind) -> Result<i64, C5Error> {
+    let need = match kind {
+        LoadKind::I64 => 8,
+        LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
+        LoadKind::I16 | LoadKind::U16 => 2,
+        LoadKind::I8 | LoadKind::U8 => 1,
+    };
+    if off + need > data.len() {
+        return Err(C5Error::Runtime(format!(
+            "vm_ssa: Load: data offset {off}..{} past data segment len {}",
+            off + need,
+            data.len(),
+        )));
+    }
+    let slice = &data[off..off + need];
+    let val: i64 = match kind {
+        LoadKind::I64 => i64::from_le_bytes(slice.try_into().unwrap()),
+        LoadKind::I32 => i32::from_le_bytes(slice.try_into().unwrap()) as i64,
+        LoadKind::U32 => u32::from_le_bytes(slice.try_into().unwrap()) as i64,
+        LoadKind::F32 => u32::from_le_bytes(slice.try_into().unwrap()) as i64,
+        LoadKind::I16 => i16::from_le_bytes(slice.try_into().unwrap()) as i64,
+        LoadKind::U16 => u16::from_le_bytes(slice.try_into().unwrap()) as i64,
+        LoadKind::I8 => slice[0] as i8 as i64,
+        LoadKind::U8 => slice[0] as i64,
+    };
+    Ok(val)
 }
 
 /// Sign-extend a 56-bit value back to a full i64. `LocalAddr`
@@ -426,7 +497,7 @@ mod tests {
             super::super::super::Target::MacOSAarch64,
         )
         .expect("ssa lift");
-        run_program(&funcs, program.entry_pc).expect("ssa run")
+        run_program(&funcs, &program.data, program.entry_pc).expect("ssa run")
     }
 
     #[test]
@@ -487,6 +558,21 @@ mod tests {
                  int main(void) { return fact(5); }",
             ),
             120,
+        );
+    }
+
+    #[test]
+    fn data_segment_string_literal_byte() {
+        // `"X"[0]` exercises `Inst::ImmData(off)` + `Inst::Load`
+        // through the data-segment tag path. The walker emits
+        // `StrLit -> ImmData(<offset>); LoadIndexed{base, idx, scale=1, kind=I8}`,
+        // but the index-fold path collapses to
+        // `BinopI(Add, ImmData, 0); Load { kind: I8 }` -- the
+        // identity fold then drops the `Add 0`, so the Load
+        // reads byte 0 of the data segment.
+        assert_eq!(
+            run_full_program("int main(void) { return \"X\"[0]; }"),
+            'X' as i64,
         );
     }
 

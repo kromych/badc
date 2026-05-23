@@ -138,21 +138,40 @@ pub(crate) fn walk_function(
         if local_slot >= 0 {
             continue;
         }
-        if !((pty & !(1i64 << 30)) >= STRUCT_BASE
-            && (((pty & !(1i64 << 30)) - STRUCT_BASE) % STRUCT_STRIDE) / 2 == 0)
-        {
-            continue;
-        }
         let stripped = pty & !(1i64 << 30);
-        let id = ((stripped - STRUCT_BASE) / STRUCT_STRIDE) as usize;
-        if id >= structs.len() {
+        let is_struct_value = stripped >= STRUCT_BASE
+            && ((stripped - STRUCT_BASE) % STRUCT_STRIDE) / 2 == 0;
+        if is_struct_value {
+            let id = ((stripped - STRUCT_BASE) / STRUCT_STRIDE) as usize;
+            if id >= structs.len() {
+                continue;
+            }
+            let size = structs[id].size as i64;
+            let arg_slot = (i as i64) + arg_slot_base;
+            let dst = b.local_addr(local_slot);
+            let src = b.load_local(arg_slot, super::super::ir::LoadKind::I64);
+            b.mcpy(dst, src, size);
             continue;
         }
-        let size = structs[id].size as i64;
-        let arg_slot = (i as i64) + arg_slot_base;
-        let dst = b.local_addr(local_slot);
-        let src = b.load_local(arg_slot, super::super::ir::LoadKind::I64);
-        b.mcpy(dst, src, size);
+        // FP-by-value param. The parser allocated a local slot
+        // for `x` so the body can read it back through the
+        // standard `LoadLocal { kind: F32 }` path; without
+        // re-narrowing the host-arg-register value at function
+        // entry the local stays uninitialised and every `x`
+        // reference reads stack garbage. C99 6.5.2.2 says the
+        // call passed a 4-byte float; the c5 cdecl widens to
+        // 8 bytes in the host arg slot, so we read the slot as
+        // I64 (preserves the bit pattern) and narrow back via a
+        // `Store { kind: F32 }` into the local. F64 / `double`
+        // shares the I64 storage width (8 bytes both inbound
+        // and on the local), so it doesn't need this dance.
+        let is_float = stripped == crate::c5::token::Ty::Float as i64;
+        if is_float {
+            let arg_slot = (i as i64) + arg_slot_base;
+            let val = b.load_local(arg_slot, super::super::ir::LoadKind::I64);
+            let dst = b.local_addr(local_slot);
+            b.store(dst, val, super::super::ir::StoreKind::F32);
+        }
     }
     let mut ctx = Walker {
         ast,
@@ -1050,33 +1069,53 @@ impl<'a> Walker<'a> {
                 cond,
                 then_e,
                 else_e,
-                ..
+                ty,
             } => {
                 // C99 6.5.15: evaluate cond; depending on the
                 // value, evaluate exactly one of then_e / else_e
                 // and the conditional expression's value is that
                 // arm's value. Same synthetic-local-slot phi
                 // substitute the `ShortCircuit` arm uses -- both
-                // arms `store_local` the arm result and the
-                // merge block `load_local`s.
+                // arms store the arm result and the merge block
+                // loads it. Width is taken from the result type:
+                // FP-typed ternary uses `Store { kind: F32 }` /
+                // `LoadLocal { kind: F32 }` so the codegen routes
+                // through the FP register class; everything else
+                // stays on the I64 `StoreLocal` / `LoadLocal` fast
+                // path the emit lowers in a single `stur` / `ldur`.
                 let cond_v = self.walk_expr_rvalue(b, *cond)?;
                 let then_blk = b.new_block();
                 let else_blk = b.new_block();
                 let after_blk = b.new_block();
                 b.branch_zero(cond_v, else_blk, then_blk);
                 let slot = b.alloc_synthetic_local();
-                let kind_l = super::super::ir::LoadKind::I64;
-                let kind_s = super::super::ir::StoreKind::I64;
+                let load_kind = load_kind_for(*ty, self.target);
+                let is_fp = matches!(load_kind, super::super::ir::LoadKind::F32);
+                let store_kind = store_kind_for(*ty, self.target);
                 b.switch_to(then_blk);
                 let then_v = self.walk_expr_rvalue(b, *then_e)?;
-                b.store_local(slot, then_v, kind_s);
+                if is_fp {
+                    let addr = b.local_addr(slot);
+                    b.store(addr, then_v, store_kind);
+                } else {
+                    b.store_local(slot, then_v, super::super::ir::StoreKind::I64);
+                }
                 b.jmp(after_blk);
                 b.switch_to(else_blk);
                 let else_v = self.walk_expr_rvalue(b, *else_e)?;
-                b.store_local(slot, else_v, kind_s);
+                if is_fp {
+                    let addr = b.local_addr(slot);
+                    b.store(addr, else_v, store_kind);
+                } else {
+                    b.store_local(slot, else_v, super::super::ir::StoreKind::I64);
+                }
                 b.jmp(after_blk);
                 b.switch_to(after_blk);
-                Ok(b.load_local(slot, kind_l))
+                if is_fp {
+                    Ok(b.load_local(slot, load_kind))
+                } else {
+                    Ok(b.load_local(slot, super::super::ir::LoadKind::I64))
+                }
             }
             Expr::Call { callee, args, ty } => {
                 // Struct-returning c5-internal callee: allocate

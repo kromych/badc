@@ -1985,17 +1985,39 @@ impl Compiler {
                 self.emit_val(0);
                 self.expr(Token::Assign as i64)?;
                 // Comma operator in the middle of a ternary:
-                // `cond ? (side_effect, value) : alt`. C allows
-                // `e1, e2, ..., eN` in the ternary's then-arm
-                // because the spec says it's an *expression*, not
-                // an assignment-expression. expr(Assign) stops at
-                // `,`; resume the chain here so the colon search
-                // finds its match.
+                // `cond ? (side_effect, value) : alt`. C99 6.5.15
+                // makes the middle slot an `expression`, not an
+                // assignment-expression, so a comma chain is
+                // legal there. `expr(Assign)` stops at `,`; the
+                // chain is resumed here so the colon search finds
+                // its match. Each rhs becomes the new accumulator
+                // value; the lhs side effects evaluate first.
+                // Build an `Expr::Comma { lhs, rhs }` chain so the
+                // walker preserves the lhs side effects; without
+                // the chain, only the rhs reaches the Ternary AST
+                // and the lhs's stores / calls disappear at the
+                // walker tier. The bytecode side has the same
+                // ordering naturally because the parser already
+                // emitted the lhs's ops before resuming here.
+                let mut then_ast = self.ast_acc;
                 while self.lex.tk == ',' {
                     self.next()?;
+                    let lhs_ast = then_ast;
                     self.expr(Token::Assign as i64)?;
+                    let rhs_ast = self.ast_acc;
+                    if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
+                        let pos = self.ast_src_pos();
+                        let ty = self.ty;
+                        let id = self.ast.push_expr(
+                            super::super::ast::Expr::Comma { lhs, rhs, ty },
+                            pos,
+                        );
+                        self.ast_acc = Some(id);
+                        then_ast = Some(id);
+                    } else {
+                        then_ast = self.ast_acc;
+                    }
                 }
-                let then_ast = self.ast_acc;
                 if self.lex.tk == ':' {
                     self.next()?;
                 } else {

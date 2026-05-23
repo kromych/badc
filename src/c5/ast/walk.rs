@@ -478,8 +478,20 @@ impl<'a> Walker<'a> {
                 let cond_clone = *cond;
                 let post_clone = *post;
                 let body_clone = *body;
-                if let Some(super::BlockItem::Stmt(s)) = init_clone {
-                    let _ = self.walk_stmt(b, s)?;
+                // C99 6.8.5.3: for-init is either an expression
+                // (`BlockItem::Stmt`) or a declaration
+                // (`BlockItem::Decl`). The init runs once before
+                // the cond / body / post loop; without walking
+                // the declaration path the loop counter stays
+                // uninitialised on every iteration.
+                match init_clone {
+                    Some(super::BlockItem::Stmt(s)) => {
+                        let _ = self.walk_stmt(b, s)?;
+                    }
+                    Some(super::BlockItem::Decl(d)) => {
+                        self.walk_decl(b, d)?;
+                    }
+                    None => {}
                 }
                 let header = b.new_block();
                 let body_blk = b.new_block();

@@ -82,7 +82,21 @@ impl Compiler {
         if self.lex.tk == ';' {
             self.next()?;
         } else if self.lex_is_type_start() {
+            // C99 6.8.5.3p1 admits `declaration` as the for-init.
+            // `parse_block_local_decl` pushes one or more
+            // `Stmt::Decl(d)` wrappers onto the AST stmt arena;
+            // capture them into a single BlockItem so the walker
+            // gets the same shape it would for an expression
+            // init. Without this the walker sees `init: None`
+            // and the declared counter never reaches the
+            // SSA prologue.
+            let init_before = self.ast_stmts_snapshot();
             self.parse_block_local_decl(&mut for_init_symbols)?;
+            let added = self.ast.stmts.len().saturating_sub(init_before);
+            if added > 0 {
+                let id = self.ast_wrap_stmts_since(init_before);
+                init_ast = Some(super::super::ast::BlockItem::Stmt(id));
+            }
         } else {
             let init_before = self.ast_stmts_snapshot();
             self.parse_full_expr()?;

@@ -289,3 +289,49 @@ fn constant_fold_evaluates_binops_at_translation_time() {
         "constant-fold values must match standard arithmetic"
     );
 }
+
+/// Algebraic peepholes inside `SsaBuilder::binop_imm`: identity
+/// rhs values (`Add/Sub/Or/Xor/Shift` with 0, `Mul` with 1,
+/// `And` with -1) return the lhs unchanged; zero-collapse rhs
+/// values (`Mul/And` with 0) produce `Imm(0)`. The compiler
+/// always reaches these through `binop_imm` so each shape lands
+/// in the SSA stream as either the lhs or a single Imm, and
+/// the JIT exit confirms the value matches standard arithmetic.
+#[test]
+fn ssa_build_binop_imm_identity_and_zero_collapse() {
+    use crate::{Compiler, jit_run};
+    let src = "
+        int identity_add(int x) { return x + 0; }
+        int identity_sub(int x) { return x - 0; }
+        int identity_or(int x)  { return x | 0; }
+        int identity_xor(int x) { return x ^ 0; }
+        int identity_shl(int x) { return x << 0; }
+        int identity_shr(int x) { return x >> 0; }
+        int identity_mul(int x) { return x * 1; }
+        int identity_and(int x) { return x & -1; }
+        int collapse_mul(int x) { return x * 0; }
+        int collapse_and(int x) { return x & 0; }
+        int main(void) {
+            if (identity_add(42)  != 42) return 1;
+            if (identity_sub(42)  != 42) return 2;
+            if (identity_or(42)   != 42) return 3;
+            if (identity_xor(42)  != 42) return 4;
+            if (identity_shl(42)  != 42) return 5;
+            if (identity_shr(42)  != 42) return 6;
+            if (identity_mul(42)  != 42) return 7;
+            if (identity_and(42)  != 42) return 8;
+            if (collapse_mul(42)  != 0)  return 9;
+            if (collapse_and(42)  != 0)  return 10;
+            return 0;
+        }
+    ";
+    let program = Compiler::new(src.into())
+        .compile()
+        .expect("identity/collapse fixture compiles");
+    let exit = jit_run(&program, &["identity_collapse".to_string()])
+        .expect("identity/collapse fixture runs under JIT");
+    assert_eq!(
+        exit, 0,
+        "binop_imm identity / zero-collapse folds must preserve C99 semantics"
+    );
+}

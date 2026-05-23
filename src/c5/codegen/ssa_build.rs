@@ -241,13 +241,16 @@ impl SsaBuilder {
         }
     }
 
-    /// `Inst::BinopI`. Folds out the trivial identity cases so
-    /// no emit cycle is spent on a no-op `add rd, rn, #0` /
-    /// `sub rd, rn, #0` / `or rd, rn, #0` / `xor rd, rn, #0` /
-    /// `shift rd, rn, #0`. C99 6.5 leaves these well-defined as
-    /// returning `lhs` unchanged. `Mul` by 1 is the same shape;
-    /// `Mul` by 0 isn't an identity (the result is the constant
-    /// 0), so the caller still constant-folds that case.
+    /// `Inst::BinopI` with on-the-fly algebraic peepholes.
+    ///
+    /// * Identity rhs (no-op on `lhs`, returns the lhs unchanged):
+    ///   `Add/Sub/Or/Xor/Shl/Shr/Shru` with 0, `Mul` with 1,
+    ///   `And` with -1.
+    /// * Zero-collapse rhs (the result is the constant 0
+    ///   regardless of `lhs`): `Mul/And` with 0. C99 6.5
+    ///   requires no side effects from the elided `lhs`
+    ///   evaluation, but `lhs` is already an SSA value at this
+    ///   point so the evaluation is complete and its discardable.
     pub(crate) fn binop_imm(&mut self, op: BinOp, lhs: ValueId, rhs_imm: i64) -> ValueId {
         let identity = match op {
             BinOp::Add | BinOp::Sub | BinOp::Or | BinOp::Xor => rhs_imm == 0,
@@ -258,6 +261,10 @@ impl SsaBuilder {
         };
         if identity {
             return lhs;
+        }
+        let zero_collapses = matches!(op, BinOp::Mul | BinOp::And) && rhs_imm == 0;
+        if zero_collapses {
+            return self.imm(0);
         }
         self.push(Inst::BinopI { op, lhs, rhs_imm })
     }

@@ -707,17 +707,28 @@ impl<'a> Walker<'a> {
                 // Walk each partition's stmts into its block;
                 // fallthrough lands on the next partition's
                 // block (or after_blk for the last partition).
+                // C99 6.8.1: a `Stmt::Labeled` is reachable via
+                // its label even when the textually preceding
+                // stmt terminated, so the partition keeps walking
+                // past a terminator to give every embedded label
+                // its block. The terminator flag still suppresses
+                // an implicit fallthrough at the partition's tail
+                // when the last walked statement closed the block
+                // itself (Goto / Return / Break / Continue).
                 let n = partitions.len();
                 for (i, (_, stmts)) in partitions.into_iter().enumerate() {
                     b.switch_to(blocks[i]);
                     let mut terminated = false;
                     for item in stmts {
-                        if let super::BlockItem::Stmt(s) = item
-                            && self.walk_stmt(b, s)?
+                        let super::BlockItem::Stmt(s) = item else {
+                            continue;
+                        };
+                        if terminated
+                            && !matches!(self.ast.stmt(s), Stmt::Labeled { .. })
                         {
-                            terminated = true;
-                            break;
+                            continue;
                         }
+                        terminated = self.walk_stmt(b, s)?;
                     }
                     if !terminated {
                         let next_block = if i + 1 < n { blocks[i + 1] } else { after_blk };

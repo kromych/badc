@@ -2292,18 +2292,23 @@ impl Compiler {
                         // `Op::And + mask`) that route through
                         // `ast_track_emit_op` and corrupt the AST
                         // vstack/accumulator. Snapshot the AST
-                        // operands first, then run the bytecode
-                        // dance, then rebuild the Binary AST node
+                        // operands first, save the rest of the AST
+                        // vstack, run the bytecode dance against a
+                        // sentinel-padded vstack so the inner
+                        // `Op::Divu`'s embedded pop consumes the
+                        // sentinel rather than an outer expression's
+                        // lvalue, then rebuild the Binary node
                         // manually. The walker re-derives the
                         // masking from the operand type.
                         let lhs_ast = self.ast_vstack.pop().flatten();
-                        let rhs_ast = self.ast_acc;
-                        let ast_acc_save = self.ast_acc;
-                        let vstack_depth = self.ast_vstack.len();
+                        let rhs_ast = self.ast_acc.take();
+                        let saved_vstack: alloc::vec::Vec<_> =
+                            self.ast_vstack.drain(..).collect();
+                        self.ast_vstack.push(None);
                         self.maybe_mask_operands_to_unsigned_common(t, self.ty);
                         self.emit_op(Op::Divu);
-                        self.ast_vstack.truncate(vstack_depth);
-                        self.ast_acc = ast_acc_save;
+                        self.ast_vstack.clear();
+                        self.ast_vstack.extend(saved_vstack);
                         if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
                             let pos = self.ast_src_pos();
                             let id = self.ast.push_expr(
@@ -2337,13 +2342,14 @@ impl Compiler {
                 let common = usual_arith_common_ty(t, self.ty, self.target);
                 if is_unsigned_ty(common) {
                     let lhs_ast = self.ast_vstack.pop().flatten();
-                    let rhs_ast = self.ast_acc;
-                    let ast_acc_save = self.ast_acc;
-                    let vstack_depth = self.ast_vstack.len();
+                    let rhs_ast = self.ast_acc.take();
+                    let saved_vstack: alloc::vec::Vec<_> =
+                        self.ast_vstack.drain(..).collect();
+                    self.ast_vstack.push(None);
                     self.maybe_mask_operands_to_unsigned_common(t, self.ty);
                     self.emit_op(Op::Modu);
-                    self.ast_vstack.truncate(vstack_depth);
-                    self.ast_acc = ast_acc_save;
+                    self.ast_vstack.clear();
+                    self.ast_vstack.extend(saved_vstack);
                     if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
                         let pos = self.ast_src_pos();
                         let id = self.ast.push_expr(

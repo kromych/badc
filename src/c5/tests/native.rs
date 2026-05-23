@@ -373,6 +373,7 @@ const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("switch_multilabel.c", 0),
     ("switch_goto_label_into_case.c", 0),
     ("switch_label_after_terminator.c", 0),
+    ("unsigned_div_in_assign.c", 0),
     ("anonymous_aggregates.c", 0),
     ("static_locals.c", 0),
     ("large_stack_frame.c", 42),

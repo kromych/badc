@@ -1215,7 +1215,15 @@ pub(super) fn lower(
         });
     #[cfg(feature = "std")]
     if super::ssa_dump::enabled(native) {
+        let name_by_ent: alloc::collections::BTreeMap<usize, &str> = program
+            .finished_functions
+            .iter()
+            .map(|ff| (ff.ent_pc, ff.name.as_str()))
+            .collect();
         for (f, a) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
+            if let Some(name) = name_by_ent.get(&f.ent_pc) {
+                eprintln!("; name={name}");
+            }
             eprint!("{}", super::ssa_dump::dump_function(f, a));
         }
     }

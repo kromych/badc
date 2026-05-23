@@ -39,41 +39,132 @@ use super::super::ir::{
     BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, StoreKind, Terminator, ValueId,
 };
 
-/// Tagged-address marker for `LocalAddr` results. The interpreter
-/// has no real address space yet; `LocalAddr(off)` encodes the
-/// c5-slot offset into the high bits so a downstream `Load` /
-/// `Store` can decode it back. Real heap pointers (set by a
-/// future `malloc` shim) would use a different tag.
-const LOCAL_ADDR_TAG: i64 = 0x4000_0000_0000_0000;
+/// `Inst::ImmCode` results are tagged with this bit set so
+/// `Inst::CallIndirect` can distinguish a function pointer from
+/// a real memory address. The low bits hold the callee's
+/// `ent_pc`; the tag is cleared before `Program::lookup`.
+const CODE_ADDR_TAG: i64 = 0x4000_0000_0000_0000;
+const CODE_ADDR_MASK: i64 = 0x4000_0000_0000_0000;
 
-/// Tagged-address marker for `ImmData` results: bit 62 set,
-/// bit 61 clear (distinguishes from `LOCAL_ADDR_TAG` which sets
-/// bit 62 too). The low bits hold the data-segment byte offset.
-const DATA_ADDR_TAG: i64 = 0x2000_0000_0000_0000;
-/// Tagged-address marker for `ImmCode` results: bits 62+61 both
-/// set. The low bits hold the callee's `ent_pc` so
-/// `Inst::CallIndirect` can dispatch through `Program::lookup`.
-const CODE_ADDR_TAG: i64 = 0x6000_0000_0000_0000;
-const ADDR_TAG_MASK: i64 = 0x6000_0000_0000_0000;
-const ADDR_OFFSET_MASK: i64 = 0x0fff_ffff_ffff_ffff;
+/// Byte-addressed memory backing the SSA-VM. Layout:
+///
+///   bytes[0..data_end]              -- read-only data segment
+///   bytes[data_end..stack_end]      -- per-frame stack region;
+///                                     `Frame::stack_base` /
+///                                     `Frame::frame_size` bound
+///                                     each call's slot bytes.
+///
+/// `Inst::LocalAddr(off)` returns a real byte address into
+/// `bytes`. `Inst::ImmData(off)` returns `off` (which lands in
+/// the data region). `Inst::ImmCode` is the only address that
+/// stays tagged because code addresses don't map to bytes.
+struct Memory {
+    bytes: Vec<u8>,
+    data_end: usize,
+    /// Bump-pointer next-frame-allocation cursor. Pushed by
+    /// `alloc_frame` on call entry; reset to the saved base on
+    /// return. Each frame's locals + params occupy
+    /// `(locals + n_params) * 8` bytes starting at this offset.
+    stack_top: usize,
+}
+
+impl Memory {
+    fn new(data: &[u8]) -> Self {
+        // Reserve a fixed 256 KiB stack region. C99 doesn't pin
+        // a stack limit; this matches the bytecode VM's
+        // `STACK_CAPACITY` order of magnitude and is plenty for
+        // every cargo fixture today.
+        const STACK_BYTES: usize = 256 * 1024;
+        let data_end = data.len();
+        let mut bytes = Vec::with_capacity(data_end + STACK_BYTES);
+        bytes.extend_from_slice(data);
+        bytes.resize(data_end + STACK_BYTES, 0);
+        Self {
+            bytes,
+            data_end,
+            stack_top: data_end,
+        }
+    }
+
+    fn alloc_frame(&mut self, frame_bytes: usize) -> Result<usize, C5Error> {
+        let base = self.stack_top;
+        let next = base.checked_add(frame_bytes).ok_or_else(|| {
+            C5Error::Runtime(format!(
+                "vm_ssa: stack overflow allocating {frame_bytes} bytes from {base}",
+            ))
+        })?;
+        if next > self.bytes.len() {
+            return Err(C5Error::Runtime(format!(
+                "vm_ssa: stack overflow ({next} > {})",
+                self.bytes.len(),
+            )));
+        }
+        // Zero the new frame's bytes so undefined reads observe
+        // the C standard's static-storage initial value.
+        for b in &mut self.bytes[base..next] {
+            *b = 0;
+        }
+        self.stack_top = next;
+        Ok(base)
+    }
+
+    fn release_frame(&mut self, base: usize) {
+        self.stack_top = base;
+    }
+
+    fn read_bytes(&self, addr: usize, n: usize) -> Result<&[u8], C5Error> {
+        if addr + n > self.bytes.len() {
+            return Err(C5Error::Runtime(format!(
+                "vm_ssa: load: addr 0x{addr:x}..0x{:x} past memory len {}",
+                addr + n,
+                self.bytes.len(),
+            )));
+        }
+        Ok(&self.bytes[addr..addr + n])
+    }
+
+    fn write_bytes(&mut self, addr: usize, src: &[u8]) -> Result<(), C5Error> {
+        if addr < self.data_end || addr + src.len() > self.bytes.len() {
+            return Err(C5Error::Runtime(format!(
+                "vm_ssa: store: addr 0x{addr:x}..0x{:x} out of writable stack range \
+                 (data_end={}, mem_len={})",
+                addr + src.len(),
+                self.data_end,
+                self.bytes.len(),
+            )));
+        }
+        self.bytes[addr..addr + src.len()].copy_from_slice(src);
+        Ok(())
+    }
+
+    fn copy_within(&mut self, dst: usize, src: usize, n: usize) -> Result<(), C5Error> {
+        if dst + n > self.bytes.len() || src + n > self.bytes.len() {
+            return Err(C5Error::Runtime(format!(
+                "vm_ssa: Mcpy: src=0x{src:x}..0x{:x} / dst=0x{dst:x}..0x{:x} \
+                 past memory len {}",
+                src + n,
+                dst + n,
+                self.bytes.len(),
+            )));
+        }
+        if dst < self.data_end {
+            return Err(C5Error::Runtime(format!(
+                "vm_ssa: Mcpy: dst 0x{dst:x} in read-only data region",
+            )));
+        }
+        self.bytes.copy_within(src..src + n, dst);
+        Ok(())
+    }
+}
 
 /// Multi-function program context. The SSA-VM walks
 /// `Vec<FunctionSsa>`; `Inst::Call` resolves a callee by
-/// `target_pc` through `ent_pc_to_idx`. Kept as a struct so the
-/// per-arch JIT shim, the host-call bridge, and the c5
-/// trampoline pool can later attach without changing `run_func`'s
-/// signature.
+/// `target_pc` through `ent_pc_to_idx`.
 struct Program<'a> {
     funcs: &'a [FunctionSsa],
     /// `ent_pc` -> index into `funcs`. Built once at program
     /// entry; `Inst::Call` does a constant-time lookup.
     ent_pc_to_idx: alloc::collections::BTreeMap<usize, usize>,
-    /// Initial-data bytes (string literals + zero-initialised
-    /// globals). `Inst::ImmData(off)` returns a tagged address
-    /// that decodes to a slice of this buffer. `None` when the
-    /// SSA-VM is invoked without a `Program` (e.g. the
-    /// single-function `run_ssa` shape used by unit tests).
-    data: &'a [u8],
 }
 
 impl<'a> Program<'a> {
@@ -86,13 +177,7 @@ impl<'a> Program<'a> {
         Self {
             funcs,
             ent_pc_to_idx,
-            data: &[],
         }
-    }
-
-    fn with_data(mut self, data: &'a [u8]) -> Self {
-        self.data = data;
-        self
     }
 
     fn lookup(&self, ent_pc: usize) -> Option<&'a FunctionSsa> {
@@ -101,36 +186,38 @@ impl<'a> Program<'a> {
 }
 
 /// Per-call frame the SSA interpreter walks. Holds the value-ID
-/// register file, the basic-block cursor, and the per-frame slot
-/// array that backs `LocalAddr` / `LoadLocal` / `Store`.
+/// register file, the basic-block cursor, and the byte range
+/// inside `Memory::bytes` that backs this frame's locals + params.
 struct Frame<'a> {
     func: &'a FunctionSsa,
     /// Indexed by `ValueId`. `i64::MIN` sentinel means "not yet
     /// written" -- harmless because the SSA tier never reads a
     /// value before its def emits.
     regs: Vec<i64>,
-    /// c5-slot-indexed local storage. Negative slot `-N` maps to
-    /// `slots[(N - 1) as usize]`; parameter slot `i + 2` maps to
-    /// `slots[locals + i]`. Sized at frame entry from
-    /// `func.locals` + `func.n_params` so the indexing never
-    /// reallocates.
-    slots: Vec<i64>,
+    /// Byte offset into `Memory::bytes` where this frame's
+    /// locals + params start. Slot `-N` lives at
+    /// `stack_base + (N - 1) * 8`; param `i + 2` lives at
+    /// `stack_base + (locals + i) * 8`.
+    stack_base: usize,
+    /// Total bytes the frame allocated; saved here so
+    /// `release_frame` lines up with the alloc_frame returned by
+    /// `Memory::alloc_frame`.
+    frame_bytes: usize,
     /// Number of declared locals (slot offsets `-1..=-locals`).
-    /// Parameters land at `slots[locals..]` so the mapping stays
-    /// trivial in `slot_index`.
     locals: usize,
     block_idx: usize,
 }
 
 impl Frame<'_> {
-    fn slot_index(&self, off: i64) -> Option<usize> {
+    /// c5-slot offset -> byte address in `Memory::bytes`.
+    fn slot_addr(&self, off: i64) -> Option<usize> {
         if off < 0 {
             let idx = (-off - 1) as usize;
-            (idx < self.locals).then_some(idx)
+            (idx < self.locals).then_some(self.stack_base + idx * 8)
         } else if off >= 2 {
             let i = (off - 2) as usize;
-            let p = self.locals + i;
-            (p < self.slots.len()).then_some(p)
+            let frame_slots = self.frame_bytes / 8;
+            (self.locals + i < frame_slots).then_some(self.stack_base + (self.locals + i) * 8)
         } else {
             None
         }
@@ -138,12 +225,12 @@ impl Frame<'_> {
 }
 
 /// Single-function entry: wrap `func` in a one-element `Program`
-/// and run it. `Inst::Call` in this shape will fail with a
-/// "not found" runtime error because there's only one function.
+/// with an empty data segment. `Inst::Call` in this shape fails
+/// with a "not found" runtime error because there's only one
+/// function.
 pub(super) fn run_ssa(func: &FunctionSsa) -> Result<i64, C5Error> {
     let funcs = core::slice::from_ref(func);
-    let prog = Program::new(funcs);
-    run_func(&prog, func, &[])
+    run_program(funcs, &[], func.ent_pc)
 }
 
 /// Multi-function entry: pick the function at `entry_pc` and run
@@ -155,41 +242,61 @@ pub(super) fn run_program(
     data: &[u8],
     entry_pc: usize,
 ) -> Result<i64, C5Error> {
-    let prog = Program::new(funcs).with_data(data);
+    let prog = Program::new(funcs);
+    let mut mem = Memory::new(data);
     let entry = prog.lookup(entry_pc).ok_or_else(|| {
         C5Error::Runtime(format!(
             "vm_ssa: run_program: no function at ent_pc {entry_pc}",
         ))
     })?;
-    run_func(&prog, entry, &[])
+    run_func(&prog, &mut mem, entry, &[])
 }
 
 /// Run one function in the program context. `args` lands in the
-/// parameter slots per the c5 cdecl: arg `i` at slot `i + 2`.
-fn run_func(prog: &Program<'_>, func: &FunctionSsa, args: &[i64]) -> Result<i64, C5Error> {
+/// parameter byte slots per the c5 cdecl: arg `i` at
+/// `stack_base + (locals + i) * 8`.
+fn run_func(
+    prog: &Program<'_>,
+    mem: &mut Memory,
+    func: &FunctionSsa,
+    args: &[i64],
+) -> Result<i64, C5Error> {
     let locals = func.locals.max(0) as usize;
-    let mut slots = alloc::vec![0i64; locals + args.len().max(func.n_params)];
+    let n_params = func.n_params.max(args.len());
+    let frame_bytes = (locals + n_params) * 8;
+    let stack_base = mem.alloc_frame(frame_bytes)?;
     for (i, &v) in args.iter().enumerate() {
-        slots[locals + i] = v;
+        let addr = stack_base + (locals + i) * 8;
+        mem.write_bytes(addr, &v.to_le_bytes())?;
     }
     let mut frame = Frame {
         func,
         regs: alloc::vec![i64::MIN; func.insts.len()],
-        slots,
+        stack_base,
+        frame_bytes,
         locals,
         block_idx: 0,
     };
-    loop {
+    let result: Result<i64, C5Error> = loop {
         let block = &frame.func.blocks[frame.block_idx];
+        let mut step_err: Option<C5Error> = None;
         for v in block.inst_range.clone() {
-            run_inst(prog, &mut frame, v)?;
+            if let Err(e) = run_inst(prog, mem, &mut frame, v) {
+                step_err = Some(e);
+                break;
+            }
+        }
+        if let Some(e) = step_err {
+            break Err(e);
         }
         match block.terminator {
             Terminator::Return(rv) => {
-                if rv == super::super::ir::NO_VALUE {
-                    return Ok(0);
-                }
-                return Ok(frame.regs[rv as usize]);
+                let r = if rv == super::super::ir::NO_VALUE {
+                    0
+                } else {
+                    frame.regs[rv as usize]
+                };
+                break Ok(r);
             }
             Terminator::Jmp(target) => {
                 frame.block_idx = target as usize;
@@ -222,15 +329,22 @@ fn run_func(prog: &Program<'_>, func: &FunctionSsa, args: &[i64]) -> Result<i64,
                 frame.block_idx = target as usize;
             }
             Terminator::TailExt(_) => {
-                return Err(C5Error::Runtime(
+                break Err(C5Error::Runtime(
                     "vm_ssa: Terminator::TailExt not implemented".to_string(),
                 ));
             }
         }
-    }
+    };
+    mem.release_frame(stack_base);
+    result
 }
 
-fn run_inst(prog: &Program<'_>, frame: &mut Frame<'_>, v: ValueId) -> Result<(), C5Error> {
+fn run_inst(
+    prog: &Program<'_>,
+    mem: &mut Memory,
+    frame: &mut Frame<'_>,
+    v: ValueId,
+) -> Result<(), C5Error> {
     let inst = &frame.func.insts[v as usize];
     let name = match inst {
         Inst::Imm(k) => {
@@ -238,82 +352,82 @@ fn run_inst(prog: &Program<'_>, frame: &mut Frame<'_>, v: ValueId) -> Result<(),
             return Ok(());
         }
         Inst::ImmData(off) => {
-            // Tag a data-segment byte offset so a downstream
-            // `Load` / `Store` can decode it back. `Store` to
-            // ImmData currently fails -- the data segment is
-            // read-only in the SSA-VM (matches what the bytecode
-            // VM's pointer-tracking would flag).
-            frame.regs[v as usize] = DATA_ADDR_TAG | (*off & ADDR_OFFSET_MASK);
+            // Data-segment offset lands directly in the
+            // byte-addressed memory; `ImmData(off)` returns the
+            // real address (which sits below `mem.data_end`).
+            frame.regs[v as usize] = *off;
             return Ok(());
         }
         Inst::ImmCode(target_pc) => {
-            frame.regs[v as usize] = CODE_ADDR_TAG | ((*target_pc as i64) & ADDR_OFFSET_MASK);
+            // Code pointers don't map to bytes; tag with
+            // `CODE_ADDR_TAG` so `CallIndirect` recognises them.
+            frame.regs[v as usize] = CODE_ADDR_TAG | (*target_pc as i64);
             return Ok(());
         }
         Inst::LocalAddr(off) => {
-            // Encode the c5-slot offset into a tagged i64 so a
-            // downstream `Load` / `Store` can decode it back.
-            // The interpreter has no real address space yet;
-            // `LocalAddr` results are valid only inside the
-            // current frame.
-            frame.regs[v as usize] = LOCAL_ADDR_TAG | (*off & 0x0fff_ffff_ffff_ffff);
+            let addr = frame.slot_addr(*off).ok_or_else(|| {
+                C5Error::Runtime(format!("vm_ssa: LocalAddr: slot {off} out of range"))
+            })?;
+            frame.regs[v as usize] = addr as i64;
             return Ok(());
         }
         Inst::TlsAddr(_) => "TlsAddr",
         Inst::Load { addr, kind } => {
-            let raw = frame.regs[*addr as usize];
-            match raw & ADDR_TAG_MASK {
-                t if t == LOCAL_ADDR_TAG => {
-                    let off = sign_extend_56(raw & ADDR_OFFSET_MASK);
-                    let idx = frame.slot_index(off).ok_or_else(|| {
-                        C5Error::Runtime(format!("vm_ssa: Load: slot {off} out of range"))
-                    })?;
-                    frame.regs[v as usize] = narrow_load(frame.slots[idx], *kind);
-                }
-                t if t == DATA_ADDR_TAG => {
-                    let off = (raw & ADDR_OFFSET_MASK) as usize;
-                    frame.regs[v as usize] = load_from_data(prog.data, off, *kind)?;
-                }
-                _ => {
-                    return Err(C5Error::Runtime(format!(
-                        "vm_ssa: Load through untagged pointer (raw=0x{raw:016x}) not implemented",
-                    )));
-                }
+            let a = frame.regs[*addr as usize];
+            if a & CODE_ADDR_MASK != 0 || a < 0 {
+                return Err(C5Error::Runtime(format!(
+                    "vm_ssa: Load: addr 0x{a:016x} is not a data pointer",
+                )));
             }
+            frame.regs[v as usize] = load_from_memory(mem, a as usize, *kind)?;
             return Ok(());
         }
         Inst::Store { addr, value, kind } => {
-            let raw = frame.regs[*addr as usize];
-            if raw & ADDR_TAG_MASK != LOCAL_ADDR_TAG {
+            let a = frame.regs[*addr as usize];
+            if a & CODE_ADDR_MASK != 0 || a < 0 {
                 return Err(C5Error::Runtime(format!(
-                    "vm_ssa: Store through non-LocalAddr pointer (raw=0x{raw:016x}) not implemented",
+                    "vm_ssa: Store: addr 0x{a:016x} is not a data pointer",
                 )));
             }
-            let off = sign_extend_56(raw & ADDR_OFFSET_MASK);
-            let idx = frame.slot_index(off).ok_or_else(|| {
-                C5Error::Runtime(format!("vm_ssa: Store: slot {off} out of range"))
-            })?;
             let stored = narrow_store(frame.regs[*value as usize], *kind);
-            frame.slots[idx] = stored;
+            store_to_memory(mem, a as usize, stored, *kind)?;
             // c5 Store leaves the stored value in the accumulator;
             // downstream uses of this Inst id read that value.
             frame.regs[v as usize] = stored;
             return Ok(());
         }
         Inst::LoadLocal { off, kind } => {
-            let idx = frame.slot_index(*off).ok_or_else(|| {
+            let addr = frame.slot_addr(*off).ok_or_else(|| {
                 C5Error::Runtime(format!("vm_ssa: LoadLocal: slot {off} out of range"))
             })?;
-            frame.regs[v as usize] = narrow_load(frame.slots[idx], *kind);
+            frame.regs[v as usize] = load_from_memory(mem, addr, *kind)?;
             return Ok(());
         }
         Inst::StoreLocal { off, value, kind } => {
-            let idx = frame.slot_index(*off).ok_or_else(|| {
+            let addr = frame.slot_addr(*off).ok_or_else(|| {
                 C5Error::Runtime(format!("vm_ssa: StoreLocal: slot {off} out of range"))
             })?;
             let stored = narrow_store(frame.regs[*value as usize], *kind);
-            frame.slots[idx] = stored;
+            store_to_memory(mem, addr, stored, *kind)?;
             frame.regs[v as usize] = stored;
+            return Ok(());
+        }
+        Inst::Mcpy { dst, src, size } => {
+            let dst_addr = frame.regs[*dst as usize];
+            let src_addr = frame.regs[*src as usize];
+            if dst_addr & CODE_ADDR_MASK != 0 || src_addr & CODE_ADDR_MASK != 0 {
+                return Err(C5Error::Runtime(
+                    "vm_ssa: Mcpy: src or dst is a code pointer".to_string(),
+                ));
+            }
+            if dst_addr < 0 || src_addr < 0 || *size < 0 {
+                return Err(C5Error::Runtime(format!(
+                    "vm_ssa: Mcpy: bad operands (dst=0x{dst_addr:x}, src=0x{src_addr:x}, size={size})",
+                )));
+            }
+            mem.copy_within(dst_addr as usize, src_addr as usize, *size as usize)?;
+            // Mcpy returns the destination address (c5 model).
+            frame.regs[v as usize] = dst_addr;
             return Ok(());
         }
         Inst::LoadIndexed { .. } => "LoadIndexed",
@@ -351,18 +465,18 @@ fn run_inst(prog: &Program<'_>, frame: &mut Frame<'_>, v: ValueId) -> Result<(),
             for &a in args {
                 arg_vals.push(frame.regs[a as usize]);
             }
-            let ret = run_func(prog, callee, &arg_vals)?;
+            let ret = run_func(prog, mem, callee, &arg_vals)?;
             frame.regs[v as usize] = ret;
             return Ok(());
         }
         Inst::CallIndirect { target, args } => {
             let raw = frame.regs[*target as usize];
-            if raw & ADDR_TAG_MASK != CODE_ADDR_TAG {
+            if raw & CODE_ADDR_MASK == 0 {
                 return Err(C5Error::Runtime(format!(
                     "vm_ssa: CallIndirect: target raw=0x{raw:016x} is not a code pointer",
                 )));
             }
-            let target_pc = (raw & ADDR_OFFSET_MASK) as usize;
+            let target_pc = (raw & !CODE_ADDR_MASK) as usize;
             let callee = prog.lookup(target_pc).ok_or_else(|| {
                 C5Error::Runtime(format!(
                     "vm_ssa: CallIndirect: no function at ent_pc {target_pc}",
@@ -372,13 +486,12 @@ fn run_inst(prog: &Program<'_>, frame: &mut Frame<'_>, v: ValueId) -> Result<(),
             for &a in args {
                 arg_vals.push(frame.regs[a as usize]);
             }
-            let ret = run_func(prog, callee, &arg_vals)?;
+            let ret = run_func(prog, mem, callee, &arg_vals)?;
             frame.regs[v as usize] = ret;
             return Ok(());
         }
         Inst::CallExt { .. } => "CallExt",
         Inst::TailExt(_) => "TailExt",
-        Inst::Mcpy { .. } => "Mcpy",
         Inst::Intrinsic { .. } => "Intrinsic",
         Inst::AllocaInit(_) => {
             // No-op for v0 == AllocaInit(0); the alloca arena
@@ -395,29 +508,22 @@ fn run_inst(prog: &Program<'_>, frame: &mut Frame<'_>, v: ValueId) -> Result<(),
     Err(C5Error::Runtime(format!("vm_ssa: {name} not implemented",)))
 }
 
-/// Read a typed value out of the data segment. Width / sign
-/// behaviour matches `narrow_load`. Out-of-range offsets trip
-/// a runtime error rather than reading uninitialised memory.
-fn load_from_data(data: &[u8], off: usize, kind: LoadKind) -> Result<i64, C5Error> {
-    let need = match kind {
+/// Read a typed value out of byte-addressed memory at `addr`.
+/// Sign / zero extension follows C99 6.3.1.3 per the LoadKind's
+/// signedness. Bounds errors trip a runtime error so a stray
+/// pointer doesn't read uninitialised state.
+fn load_from_memory(mem: &Memory, addr: usize, kind: LoadKind) -> Result<i64, C5Error> {
+    let n = match kind {
         LoadKind::I64 => 8,
         LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
         LoadKind::I16 | LoadKind::U16 => 2,
         LoadKind::I8 | LoadKind::U8 => 1,
     };
-    if off + need > data.len() {
-        return Err(C5Error::Runtime(format!(
-            "vm_ssa: Load: data offset {off}..{} past data segment len {}",
-            off + need,
-            data.len(),
-        )));
-    }
-    let slice = &data[off..off + need];
+    let slice = mem.read_bytes(addr, n)?;
     let val: i64 = match kind {
         LoadKind::I64 => i64::from_le_bytes(slice.try_into().unwrap()),
         LoadKind::I32 => i32::from_le_bytes(slice.try_into().unwrap()) as i64,
-        LoadKind::U32 => u32::from_le_bytes(slice.try_into().unwrap()) as i64,
-        LoadKind::F32 => u32::from_le_bytes(slice.try_into().unwrap()) as i64,
+        LoadKind::U32 | LoadKind::F32 => u32::from_le_bytes(slice.try_into().unwrap()) as i64,
         LoadKind::I16 => i16::from_le_bytes(slice.try_into().unwrap()) as i64,
         LoadKind::U16 => u16::from_le_bytes(slice.try_into().unwrap()) as i64,
         LoadKind::I8 => slice[0] as i8 as i64,
@@ -426,39 +532,26 @@ fn load_from_data(data: &[u8], off: usize, kind: LoadKind) -> Result<i64, C5Erro
     Ok(val)
 }
 
-/// Sign-extend a 56-bit value back to a full i64. `LocalAddr`
-/// stuffs the c5-slot offset into the low 56 bits; the high
-/// bit of that range (bit 55) tells signed-vs-unsigned. Slot
-/// offsets are i64 in the SSA inst but in practice fit in i32.
-fn sign_extend_56(v: i64) -> i64 {
-    let masked = v & 0x00ff_ffff_ffff_ffff;
-    if masked & (1 << 55) != 0 {
-        masked | !0x00ff_ffff_ffff_ffff
-    } else {
-        masked
-    }
-}
-
-/// Narrow a stored i64 down to the requested kind's width, then
-/// sign- or zero-extend back to i64 per the kind's signedness.
-/// Mirrors what the per-arch emit's load instructions do
-/// (`ldrsw` / `ldursw` sign-extend; `ldur` / `movzx` zero-extend).
-fn narrow_load(stored: i64, kind: LoadKind) -> i64 {
+/// Write a typed value into byte-addressed memory. `value` is
+/// already narrowed via `narrow_store` so the low `n` bytes
+/// carry the storable bit pattern.
+fn store_to_memory(
+    mem: &mut Memory,
+    addr: usize,
+    value: i64,
+    kind: StoreKind,
+) -> Result<(), C5Error> {
     match kind {
-        LoadKind::I64 => stored,
-        LoadKind::I32 => stored as i32 as i64,
-        LoadKind::U32 => (stored as u32) as i64,
-        LoadKind::I16 => stored as i16 as i64,
-        LoadKind::U16 => (stored as u16) as i64,
-        LoadKind::I8 => stored as i8 as i64,
-        LoadKind::U8 => (stored as u8) as i64,
-        LoadKind::F32 => stored,
+        StoreKind::I64 => mem.write_bytes(addr, &value.to_le_bytes()),
+        StoreKind::I32 => mem.write_bytes(addr, &(value as i32).to_le_bytes()),
+        StoreKind::I16 => mem.write_bytes(addr, &(value as i16).to_le_bytes()),
+        StoreKind::I8 => mem.write_bytes(addr, &(value as i8).to_le_bytes()),
+        StoreKind::F32 => mem.write_bytes(addr, &(value as u32).to_le_bytes()),
     }
 }
 
-/// Truncate a value to the store kind's width; the high bits of
-/// the slot keep their previous contents but no test today
-/// observes the difference.
+/// Truncate a value to the store kind's width; the high bits
+/// the byte write doesn't touch keep their previous contents.
 fn narrow_store(value: i64, kind: StoreKind) -> i64 {
     match kind {
         StoreKind::I64 => value,
@@ -648,6 +741,28 @@ mod tests {
                  int main(void) {
                      int (*fp)(int) = double_it;
                      return fp(21);
+                 }",
+            ),
+            42,
+        );
+    }
+
+    #[test]
+    fn mcpy_struct_assignment() {
+        // C99 6.5.16.1: `s = t` for a struct value copies
+        // `sizeof(struct)` bytes through `Inst::Mcpy`. The
+        // SSA-VM dispatches Mcpy through `Memory::copy_within`
+        // on real byte addresses.
+        assert_eq!(
+            run_full_program(
+                "struct P { int x; int y; };
+                 int main(void) {
+                     struct P a;
+                     struct P b;
+                     a.x = 11;
+                     a.y = 31;
+                     b = a;
+                     return b.x + b.y;
                  }",
             ),
             42,

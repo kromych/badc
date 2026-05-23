@@ -623,70 +623,148 @@ impl<'a> Walker<'a> {
                         ));
                     }
                 };
-                for item in &items {
-                    if let super::BlockItem::Stmt(s) = item {
-                        let mut s_id = *s;
-                        let mut saw_marker = false;
-                        // Peel nested Case / Default markers
-                        // off the head until we hit a real
-                        // statement. `Stmt::Labeled` is also
-                        // unwrapped here when its body is itself
-                        // a Case / Default marker (C99 6.8.1: a
-                        // label labels the next statement, so
-                        // `foo: case X:` makes `foo` an alias
-                        // for the Case body). The label id is
-                        // recorded; the case's SSA block is
-                        // registered as the label's target after
-                        // the partitions array is finalised.
-                        loop {
-                            match self.ast.stmt(s_id) {
-                                Stmt::Case { val, body } => {
-                                    if !saw_marker {
-                                        flush(&mut partitions, &mut current_labels, &mut current);
-                                        saw_marker = true;
-                                    }
-                                    current_labels.push(Some(*val));
-                                    s_id = *body;
-                                }
-                                Stmt::Default { body } => {
-                                    if !saw_marker {
-                                        flush(&mut partitions, &mut current_labels, &mut current);
-                                        saw_marker = true;
-                                    }
-                                    current_labels.push(None);
-                                    s_id = *body;
-                                }
-                                Stmt::Labeled { label, body } => {
-                                    let inner = self.ast.stmt(*body);
-                                    if matches!(inner, Stmt::Case { .. } | Stmt::Default { .. }) {
-                                        pending_goto_labels.push(*label);
+                // Process a slice of switch-body items into the
+                // partitions / current accumulator pair. Recurses
+                // into any Compound whose body contains a case or
+                // default marker so a Duff's-device shape like
+                // `case A: { int x; ...; case B: body; }` partitions
+                // the same way as `case A: ...; case B: body;` --
+                // C99 6.8.4.2p4 scopes case labels to the nearest
+                // enclosing switch regardless of nesting depth.
+                // Locals are slot-allocated at function-prologue
+                // time, so inlining a compound's items preserves
+                // execution semantics; the Decl statements still
+                // run their initialisers at the per-partition
+                // position they sit at.
+                fn partition_items(
+                    walker: &Walker,
+                    items: &[super::BlockItem],
+                    partitions: &mut alloc::vec::Vec<(
+                        alloc::vec::Vec<Option<i64>>,
+                        alloc::vec::Vec<super::BlockItem>,
+                    )>,
+                    peeled_label_partition: &mut alloc::vec::Vec<(
+                        super::super::ast::LabelId,
+                        usize,
+                    )>,
+                    current_labels: &mut alloc::vec::Vec<Option<i64>>,
+                    current: &mut alloc::vec::Vec<super::BlockItem>,
+                    pending_goto_labels: &mut alloc::vec::Vec<super::super::ast::LabelId>,
+                ) {
+                    let do_flush = |partitions: &mut alloc::vec::Vec<(
+                        alloc::vec::Vec<Option<i64>>,
+                        alloc::vec::Vec<super::BlockItem>,
+                    )>,
+                                    current_labels: &mut alloc::vec::Vec<Option<i64>>,
+                                    current: &mut alloc::vec::Vec<super::BlockItem>| {
+                        if !current.is_empty() || !current_labels.is_empty() {
+                            partitions.push((
+                                core::mem::take(current_labels),
+                                core::mem::take(current),
+                            ));
+                        }
+                    };
+                    for item in items {
+                        if let super::BlockItem::Stmt(s) = item {
+                            let mut s_id = *s;
+                            let mut saw_marker = false;
+                            loop {
+                                match walker.ast.stmt(s_id) {
+                                    Stmt::Case { val, body } => {
+                                        if !saw_marker {
+                                            do_flush(partitions, current_labels, current);
+                                            saw_marker = true;
+                                        }
+                                        current_labels.push(Some(*val));
                                         s_id = *body;
-                                    } else {
-                                        break;
                                     }
+                                    Stmt::Default { body } => {
+                                        if !saw_marker {
+                                            do_flush(partitions, current_labels, current);
+                                            saw_marker = true;
+                                        }
+                                        current_labels.push(None);
+                                        s_id = *body;
+                                    }
+                                    Stmt::Labeled { label, body } => {
+                                        let inner = walker.ast.stmt(*body);
+                                        if matches!(
+                                            inner,
+                                            Stmt::Case { .. } | Stmt::Default { .. }
+                                        ) {
+                                            pending_goto_labels.push(*label);
+                                            s_id = *body;
+                                        } else {
+                                            break;
+                                        }
+                                    }
+                                    _ => break,
                                 }
-                                _ => break,
+                            }
+                            if saw_marker {
+                                let target_idx = partitions.len();
+                                for lab in pending_goto_labels.drain(..) {
+                                    peeled_label_partition.push((lab, target_idx));
+                                }
+                                // C99 6.8.4.2p4 + the Duff's-device
+                                // shape sqlite's `case OP_ReopenIdx:
+                                // { ... case OP_OpenRead: ... }` uses:
+                                // when a case's body is itself a
+                                // Compound, descend so any case
+                                // labels at the next depth still
+                                // become partition boundaries.
+                                if let Stmt::Compound(inner_items) = walker.ast.stmt(s_id) {
+                                    let inner_items_owned = inner_items.clone();
+                                    partition_items(
+                                        walker,
+                                        &inner_items_owned,
+                                        partitions,
+                                        peeled_label_partition,
+                                        current_labels,
+                                        current,
+                                        pending_goto_labels,
+                                    );
+                                } else {
+                                    current.push(super::BlockItem::Stmt(s_id));
+                                }
+                                continue;
                             }
                         }
-                        if saw_marker {
-                            // Any goto-labels peeled in this
-                            // partition's head now belong to the
-                            // partition we're about to push.
-                            let target_idx = partitions.len();
-                            for lab in pending_goto_labels.drain(..) {
-                                peeled_label_partition.push((lab, target_idx));
+                        // A non-case-marked Compound at this level
+                        // may still embed a case label at an inner
+                        // depth (Duff's device with the case sitting
+                        // inside a plain `{}` block, no enclosing
+                        // case marker). Descend so those labels still
+                        // partition correctly; if no case is reached,
+                        // the recursion no-ops and the items end up
+                        // pushed in order into the current partition.
+                        if let super::BlockItem::Stmt(s) = item {
+                            if let Stmt::Compound(inner_items) = walker.ast.stmt(*s) {
+                                let inner_items_owned = inner_items.clone();
+                                partition_items(
+                                    walker,
+                                    &inner_items_owned,
+                                    partitions,
+                                    peeled_label_partition,
+                                    current_labels,
+                                    current,
+                                    pending_goto_labels,
+                                );
+                                continue;
                             }
-                            current.push(super::BlockItem::Stmt(s_id));
-                            continue;
                         }
-                        // Labeled-wrapping-non-marker fell out
-                        // of the peel loop; the goto-label
-                        // accumulator stays empty in that case
-                        // because the break was taken on the
-                        // first iteration without recording one.
+                        current.push(*item);
                     }
-                    current.push(*item);
                 }
+                partition_items(
+                    self,
+                    &items,
+                    &mut partitions,
+                    &mut peeled_label_partition,
+                    &mut current_labels,
+                    &mut current,
+                    &mut pending_goto_labels,
+                );
                 flush(&mut partitions, &mut current_labels, &mut current);
 
                 let after_blk = b.new_block();

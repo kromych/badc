@@ -108,6 +108,21 @@ impl Memory {
         }
     }
 
+    /// Copy a byte slice into the heap, append a NUL byte, and
+    /// return the base address of the resulting C string. Used by
+    /// `getenv` / `dlerror`, which need to hand back a pointer
+    /// into VM-addressable memory rather than into the host's
+    /// process address space. Returns 0 if the heap is exhausted.
+    fn install_cstring(&mut self, src: &[u8]) -> usize {
+        let base = self.heap_alloc(src.len() + 1);
+        if base == 0 {
+            return 0;
+        }
+        self.bytes[base..base + src.len()].copy_from_slice(src);
+        self.bytes[base + src.len()] = 0;
+        base
+    }
+
     /// Bump-pointer `malloc`. Returns 0 (the C99 null pointer) on
     /// out-of-heap so callers see the standard failure shape.
     fn heap_alloc(&mut self, n: usize) -> usize {
@@ -789,6 +804,121 @@ fn dispatch_callext<H: Host>(
             let _ = host.write(1, &[byte]);
             Ok(c)
         }
+        // `int open(const char *path, int flags)` -- routes through
+        // the host. C99 doesn't model the POSIX flag set; the host
+        // adapter decides what `flags` mean.
+        "open" => {
+            let path_addr = args
+                .first()
+                .copied()
+                .ok_or_else(|| C5Error::Runtime("vm_ssa: open: missing path".to_string()))?;
+            if path_addr < 0 {
+                return Err(C5Error::Runtime(format!(
+                    "vm_ssa: open: bad path addr 0x{path_addr:x}",
+                )));
+            }
+            let path = read_cstring(mem, path_addr as usize)?;
+            Ok(host.open(&path))
+        }
+        // `char *getenv(const char *name)` -- on hit, the host's
+        // value is copied into the heap so the returned pointer
+        // stays valid through subsequent allocations (the host's
+        // own buffer may not).
+        "getenv" => {
+            let name_addr = args
+                .first()
+                .copied()
+                .ok_or_else(|| C5Error::Runtime("vm_ssa: getenv: missing name".to_string()))?;
+            if name_addr < 0 {
+                return Err(C5Error::Runtime(format!(
+                    "vm_ssa: getenv: bad name addr 0x{name_addr:x}",
+                )));
+            }
+            let env_name = read_cstring(mem, name_addr as usize)?;
+            Ok(match host.getenv(&env_name) {
+                Some(value) => mem.install_cstring(value.as_bytes()) as i64,
+                None => 0,
+            })
+        }
+        // `int setenv(const char *name, const char *value, int overwrite)`.
+        // C99 doesn't standardise setenv; this matches POSIX.
+        // The `int overwrite` is normalised through the `Overwrite`
+        // enum at the trait boundary.
+        "setenv" => {
+            if args.len() < 3 {
+                return Err(C5Error::Runtime(
+                    "vm_ssa: setenv expects 3 args".to_string(),
+                ));
+            }
+            let name_addr = args[0];
+            let val_addr = args[1];
+            let overwrite = if args[2] != 0 {
+                super::super::host::Overwrite::Force
+            } else {
+                super::super::host::Overwrite::Skip
+            };
+            if name_addr < 0 || val_addr < 0 {
+                return Err(C5Error::Runtime(format!(
+                    "vm_ssa: setenv: bad addrs name=0x{name_addr:x} val=0x{val_addr:x}",
+                )));
+            }
+            let env_name = read_cstring(mem, name_addr as usize)?;
+            let env_val = read_cstring(mem, val_addr as usize)?;
+            host.setenv(&env_name, &env_val, overwrite);
+            Ok(0)
+        }
+        // `void *dlopen(const char *filename, int flags)` -- a NULL
+        // filename maps to `Option::None` so the host can produce
+        // dlopen(NULL, ...) (the global symbol table).
+        "dlopen" => {
+            if args.len() < 2 {
+                return Err(C5Error::Runtime(
+                    "vm_ssa: dlopen expects 2 args".to_string(),
+                ));
+            }
+            let path_addr = args[0];
+            let flags = args[1];
+            let path = if path_addr == 0 {
+                None
+            } else if path_addr < 0 {
+                return Err(C5Error::Runtime(format!(
+                    "vm_ssa: dlopen: bad path addr 0x{path_addr:x}",
+                )));
+            } else {
+                Some(read_cstring(mem, path_addr as usize)?)
+            };
+            Ok(host.dlopen(path.as_deref(), flags))
+        }
+        // `void *dlsym(void *handle, const char *name)` -- returns
+        // a raw host-process address; the c5 side treats it as an
+        // opaque integer.
+        "dlsym" => {
+            if args.len() < 2 {
+                return Err(C5Error::Runtime("vm_ssa: dlsym expects 2 args".to_string()));
+            }
+            let handle = args[0];
+            let name_addr = args[1];
+            if name_addr < 0 {
+                return Err(C5Error::Runtime(format!(
+                    "vm_ssa: dlsym: bad name addr 0x{name_addr:x}",
+                )));
+            }
+            let sym = read_cstring(mem, name_addr as usize)?;
+            Ok(host.dlsym(handle, &sym))
+        }
+        // `int dlclose(void *handle)` -- pure host bridge.
+        "dlclose" => {
+            let handle = args.first().copied().unwrap_or(0);
+            Ok(host.dlclose(handle))
+        }
+        // `char *dlerror(void)` -- copy the most recent loader
+        // error into the heap so the returned pointer outlives
+        // any subsequent dl-family call (whose host-side static
+        // buffer would otherwise be clobbered).
+        "dlerror" => Ok(match host.dlerror() {
+            Some(msg) => mem.install_cstring(msg.as_bytes()) as i64,
+            None => 0,
+        }),
         _ => Err(C5Error::Runtime(format!(
             "vm_ssa: CallExt `{name}` not implemented (port from vm/intrinsics.rs)",
         ))),
@@ -1265,6 +1395,47 @@ mod tests {
     }
 
     #[test]
+    fn getenv_round_trips_through_heap() {
+        // POSIX `getenv`: the SSA-VM copies the host's value into
+        // its heap so the returned pointer outlives further allocs.
+        // Set the var via the host adapter so the test is hermetic.
+        let src = "#include <stdlib.h>
+                   int main(void) {
+                       char *p = getenv(\"BADC_SSA_TEST\");
+                       if (p == 0) return -1;
+                       return (int)p[0];
+                   }";
+        let program = Compiler::new(src.to_string())
+            .compile()
+            .expect("compile fixture");
+        let funcs = super::super::super::codegen::ssa_shadow::produce_ssa_funcs(
+            &program,
+            super::super::super::Target::MacOSAarch64,
+        )
+        .expect("ssa lift");
+        let binding_names: alloc::vec::Vec<alloc::string::String> = program
+            .dylibs
+            .iter()
+            .flat_map(|d| d.bindings.iter().map(|b| b.local_name.clone()))
+            .collect();
+        let mut host = super::super::super::host::StdHost::default();
+        host.setenv(
+            "BADC_SSA_TEST",
+            "Z",
+            super::super::super::host::Overwrite::Force,
+        );
+        let rc = run_program(
+            &funcs,
+            &program.data,
+            &binding_names,
+            program.entry_pc,
+            &mut host,
+        )
+        .expect("ssa run");
+        assert_eq!(rc, 'Z' as i64);
+    }
+
+    #[test]
     fn malloc_then_round_trip() {
         // C99 7.20.3.3 + 7.21.2.1: `malloc(16)` returns a real
         // writable pointer; we write two ints and assert the
@@ -1309,14 +1480,13 @@ mod tests {
 
     #[test]
     fn callext_unimplemented_returns_runtime_error() {
-        // `getenv` isn't in the SSA-VM dispatch yet; the
+        // `strlen` isn't in the SSA-VM dispatch yet; the
         // unimplemented arm surfaces a runtime error pointing
         // at the next port target. Programs that don't touch
         // libc keep running.
         use crate::Compiler;
         let program = Compiler::new(
-            "#include <stdlib.h>\nint main(void) { return getenv(\"PATH\") != 0; }"
-                .to_string(),
+            "#include <string.h>\nint main(void) { return strlen(\"hi\"); }".to_string(),
         )
         .compile()
         .expect("compile fixture");
@@ -1338,13 +1508,13 @@ mod tests {
             program.entry_pc,
             &mut host,
         )
-        .expect_err("getenv should land in the unimplemented arm");
+        .expect_err("strlen should land in the unimplemented arm");
         match err {
             crate::C5Error::Runtime(msg) => {
                 assert!(
-                    msg.contains("CallExt `getenv` not implemented")
-                        || msg.contains("CallExt `_getenv` not implemented"),
-                    "expected getenv in the error, got: {msg}",
+                    msg.contains("CallExt `strlen` not implemented")
+                        || msg.contains("CallExt `_strlen` not implemented"),
+                    "expected strlen in the error, got: {msg}",
                 );
             }
             other => panic!("expected Runtime, got {other:?}"),

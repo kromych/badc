@@ -568,6 +568,57 @@ impl Ast {
         }
     }
 
+    /// Linker-side fixup for multi-TU builds: shift every
+    /// `Token::Fun` ident's `val` (the callee's pre-link `Op::Ent`
+    /// PC) by `text_base`, matching how the bytecode's `Op::Jsr`
+    /// operands are rebased through `apply_reloc`. The walker
+    /// reads `val` directly when the merged `Symbol` table is
+    /// empty (the multi-TU path), so without this fixup an
+    /// in-unit `Expr::Call` to a defined-in-the-same-unit
+    /// function lowers to `Inst::Call { target_pc = pre-link PC }`
+    /// and the SSA emit's `bytecode_to_native[target_pc]` lookup
+    /// hits an unmapped slot. Cross-unit references (forward
+    /// `extern` calls into another unit) carry `val == 0` and are
+    /// handled by the symbol-table fixup pass on the linker side.
+    pub(crate) fn rebase_function_pcs(&mut self, text_base: i64) {
+        use crate::c5::token::Token;
+        if text_base == 0 {
+            return;
+        }
+        for expr in &mut self.exprs {
+            if let Expr::Ident { class, val, .. } = expr
+                && *class == Token::Fun as i64
+                && *val > 0
+            {
+                *val += text_base;
+            }
+        }
+    }
+
+    /// Linker-side fixup for multi-TU builds: shift every `sym`
+    /// index stored on AST nodes by `sym_base`. The linker
+    /// concatenates per-unit `parser_symbols` so unit `i`'s
+    /// indices start at `sym_base[i]`; without this shift the
+    /// walker's `live_fun_val` reads the wrong symbol entry.
+    pub(crate) fn rebase_sym_indices(&mut self, sym_base: u32) {
+        if sym_base == 0 {
+            return;
+        }
+        for expr in &mut self.exprs {
+            match expr {
+                Expr::Ident { sym, .. } => *sym += sym_base,
+                _ => {}
+            }
+        }
+        for decl in &mut self.decls {
+            match decl {
+                Decl::Local { sym, .. } => *sym += sym_base,
+                Decl::Vla { sym, .. } => *sym += sym_base,
+                Decl::StaticLocal { sym, .. } => *sym += sym_base,
+            }
+        }
+    }
+
     pub(crate) fn decl(&self, id: DeclId) -> &Decl {
         &self.decls[id as usize]
     }

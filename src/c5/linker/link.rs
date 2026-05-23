@@ -766,11 +766,21 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         // links are the immediate target and concatenate
         // verbatim.
         finished_functions: {
+            // Cumulative sym-base per unit so multi-TU AST
+            // snapshots see the merged `parser_symbols` table.
+            let mut sym_base: alloc::vec::Vec<u32> = alloc::vec::Vec::with_capacity(units.len());
+            let mut cum: u32 = 0;
+            for unit in units.iter() {
+                sym_base.push(cum);
+                cum += unit.parser_symbols.len() as u32;
+            }
             let mut all: alloc::vec::Vec<crate::c5::ast::FinishedFunction> =
                 alloc::vec::Vec::new();
             for (i, unit) in units.iter().enumerate() {
                 let base = text_base[i];
                 let d_base = data_base[i] as i64;
+                let t_base = base as i64;
+                let s_base = sym_base[i];
                 for f in &unit.finished_functions {
                     let mut clone = f.clone();
                     clone.ent_pc += base;
@@ -783,22 +793,48 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                     // node so the walker emits the right absolute
                     // offset.
                     clone.ast.rebase_data_offsets(d_base);
+                    // Token::Fun `val` snapshots are also unit-
+                    // local pre-link PCs. The walker reads them
+                    // for in-unit `Expr::Call` targets when the
+                    // merged `Symbol` table can't resolve the
+                    // ident. Shift by the same `text_base`
+                    // `Op::Jsr` operands get under `apply_reloc`.
+                    clone.ast.rebase_function_pcs(t_base);
+                    // Sym indices stored on AST Idents / Decls
+                    // are unit-local; the linker concatenates
+                    // each unit's `parser_symbols` below, so
+                    // every ident has to point at its slot in
+                    // the merged table.
+                    clone.ast.rebase_sym_indices(s_base);
                     all.push(clone);
                 }
             }
             all
         },
         symbols: {
-            // Single-unit: just clone the parser symbols. Multi-
-            // unit links currently can't drive the walker --
-            // `Expr::Ident.sym` is unit-local. Until that's
-            // rebased, only the first unit's symbols are
-            // preserved; this matches the constraint above.
-            if units.len() == 1 {
-                units[0].parser_symbols.clone()
-            } else {
-                alloc::vec::Vec::new()
+            // Multi-TU: concatenate each unit's `parser_symbols`
+            // verbatim and shift each `Token::Fun` symbol's `val`
+            // by the unit's `text_base`. `Expr::Ident.sym` indices
+            // in the per-unit AST are still unit-local; the
+            // walker tolerates an empty / mismatched lookup and
+            // falls back to the AST-snapshotted `val`, which was
+            // rebased above. Cross-unit forward references (val=0
+            // in the caller unit, defined in another unit) are
+            // not yet resolved here.
+            let mut merged: alloc::vec::Vec<crate::c5::symbol::Symbol> =
+                alloc::vec::Vec::new();
+            let fun_class = crate::c5::token::Token::Fun as i64;
+            for (i, unit) in units.iter().enumerate() {
+                let base = text_base[i] as i64;
+                for sym in &unit.parser_symbols {
+                    let mut s = sym.clone();
+                    if s.class == fun_class && s.val > 0 {
+                        s.val += base;
+                    }
+                    merged.push(s);
+                }
             }
+            merged
         },
     })
 }

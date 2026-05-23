@@ -584,7 +584,6 @@ fn array_typedef_dimensions_propagate() {
 }
 
 #[test]
-#[ignore = "TODO: VM walks variadic args in reverse order under explicit per-slot va_arg reads (separate from the native fn-ptr-thunk bug). The fixture verifies the native fn-ptr path through NATIVE_FIXTURES."]
 fn variadic_call_through_fnptr_delivers_all_args() {
     // C99 6.5.2.2: a call through a function pointer must
     // deliver every fixed and variadic argument to the callee.

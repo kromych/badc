@@ -1595,6 +1595,18 @@ impl Compiler {
         let (Some(lhs), Some(rhs)) = (lhs_slot, rhs_slot) else {
             return;
         };
+        // C99 6.5.16p2: an assignment's left operand must be a
+        // modifiable lvalue. An `Expr::Assign` node never is --
+        // its value is the stored rhs, an rvalue. When the
+        // parser-vstack handoff lands one in the lhs slot, the
+        // top of the stack belongs to a different chain (a
+        // nested assignment's value pushed for an enclosing
+        // operator) and pairing it with the current rhs would
+        // synthesise a non-C99 shape the walker rejects. Drop
+        // the build instead.
+        if matches!(self.ast.expr(lhs), super::super::ast::Expr::Assign { .. }) {
+            return;
+        }
         let pos = self.ast_src_pos();
         let ty = self.ty;
         let id = self

@@ -448,6 +448,28 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         })
         .collect();
 
+    // Remap each FinishedFunction's `ent_pc` through the same
+    // pre-opt -> post-opt PC table. The parser captured ent_pc
+    // at the original `Op::Ent` PC; DCE and peephole fusions
+    // shift the Ent forward / drop entire functions. The walker
+    // drives codegen off these snapshots, so without the remap
+    // every entry would still point at a pre-opt PC -- the SSA
+    // emit's `bytecode_to_native[ent_pc] = code.len()` then
+    // either indexes past the new text length (panic) or
+    // overwrites the wrong slot (silent miscompile).
+    let remapped_finished_functions: Vec<crate::c5::ast::FinishedFunction> = finished_functions
+        .into_iter()
+        .filter_map(|mut f| {
+            let idx = *pc_at_idx_for_pc.get(&(f.ent_pc as u64))?;
+            let new_bc_pc = new_pc.get(idx).copied()?;
+            if new_bc_pc == usize::MAX {
+                return None;
+            }
+            f.ent_pc = new_bc_pc;
+            Some(f)
+        })
+        .collect();
+
     Ok(Program {
         text,
         data,
@@ -484,7 +506,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         structs,
         entry_name,
         subsystem,
-        finished_functions,
+        finished_functions: remapped_finished_functions,
         symbols,
     })
 }

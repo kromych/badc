@@ -156,11 +156,15 @@ impl Compiler {
         let end_pc = self.text.len();
         self.patch_loop_breaks(end_pc);
 
-        if let Some(cond) = cond_ast {
-            self.ast_emit_for(init_ast, Some(cond), post_ast, body_s);
-        } else if init_ast.is_some() || post_ast.is_some() {
-            self.ast_emit_for(init_ast, None, post_ast, body_s);
-        }
+        // C99 6.8.5.3: a `for` with no controlling expression has
+        // `1` as its condition (an infinite loop terminated by
+        // `break` / `return` / `goto`). Emit `Stmt::For` even when
+        // every header slot is empty so the walker sees the loop
+        // wrapper and pushes the matching break / continue
+        // context. Without it, a Break inside the body would
+        // bubble up to the enclosing function as a sibling stmt
+        // with no loop_ctx.
+        self.ast_emit_for(init_ast, cond_ast, post_ast, body_s);
 
         // Restore symbols shadowed by the for-init declaration so
         // the binding's scope ends with the for statement

@@ -2591,12 +2591,26 @@ impl Compiler {
                     let bf_field_off = field.offset as i64;
                     let bf_field_ty = field.ty;
                     self.pending.bf_assign_rhs = None;
+                    // emit_bitfield_access drives the c5 stack
+                    // through several Psh/Si rounds that the
+                    // AST-tracking layer treats as a normal
+                    // assignment chain. Snapshot the parser-side
+                    // vstack depth + clear ast_acc so the AST
+                    // side stays in lockstep: the helpers below
+                    // pop the leftover slots back off, and the
+                    // dedicated dual-emit for the bitfield
+                    // produces the only AST node this site needs.
+                    let bf_vstack_depth = self.ast_vstack.len();
                     self.emit_bitfield_access(
                         field.bit_offset,
                         field.bit_width,
                         field.bit_unit_size,
                         field.ty,
                     )?;
+                    if self.ast_vstack.len() > bf_vstack_depth {
+                        self.ast_vstack.truncate(bf_vstack_depth);
+                    }
+                    self.ast_acc = None;
                     // Dual-emit the AST shape now that the
                     // bytecode-side bitfield-emit has run.
                     if let Some(obj) = obj_ast {

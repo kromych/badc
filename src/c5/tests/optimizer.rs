@@ -64,6 +64,7 @@ const FIXTURES: &[(&str, i64)] = &[
     ("fn_ptr_decay_inside_block.c", 0),
     ("switch_nested_case_in_compound.c", 0),
     ("ternary_middle_comma.c", 0),
+    ("local_init_int_to_float.c", 0),
     ("quicksort.c", 0),
     ("linked_list.c", 10),
     ("binary_search_tree.c", 0),

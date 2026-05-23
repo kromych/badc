@@ -382,6 +382,7 @@ const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("fn_ptr_decay_inside_block.c", 0),
     ("switch_nested_case_in_compound.c", 0),
     ("ternary_middle_comma.c", 0),
+    ("local_init_int_to_float.c", 0),
     ("libc_basic.c", 0),
     ("static_init_cast_funcptr.c", 0),
     ("memset_mcmp.c", 42),

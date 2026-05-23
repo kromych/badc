@@ -528,7 +528,7 @@ fn run_inst(
             for &a in args {
                 arg_vals.push(frame.regs[a as usize]);
             }
-            let ret = dispatch_callext(name, &arg_vals)?;
+            let ret = dispatch_callext(name, &arg_vals, mem)?;
             frame.regs[v as usize] = ret;
             return Ok(());
         }
@@ -552,28 +552,104 @@ fn run_inst(
     Err(C5Error::Runtime(format!("vm_ssa: {name} not implemented",)))
 }
 
-/// Dispatch a libc binding by name. Each arm matches an entry in
-/// the bytecode VM's `Op::JsrExt` table (`vm/intrinsics.rs`);
+/// Dispatch a libc binding by name. Each arm matches an entry
+/// in the bytecode VM's `Op::JsrExt` table (`vm/intrinsics.rs`);
 /// implementations land here as they're ported off the
-/// `Vm<H>` host-bridge into the standalone byte-addressed
-/// model. Unimplemented bindings return a runtime error so the
-/// caller sees which shim needs writing next.
-fn dispatch_callext(name: &str, args: &[i64]) -> Result<i64, C5Error> {
+/// `Vm<H>` host-bridge into the byte-addressed `Memory` model.
+/// Unimplemented bindings return a runtime error so the caller
+/// sees which shim needs writing next.
+fn dispatch_callext(name: &str, args: &[i64], mem: &mut Memory) -> Result<i64, C5Error> {
     match name {
         // `exit(int code)` terminates the host process in libc;
         // inside the SSA-VM we route it through a sentinel error
         // that the outer driver can catch and convert to the
-        // overall return value. For unit tests that don't catch
-        // it, the exit code surfaces as the runtime-error message
-        // payload.
+        // overall return value.
         "exit" => {
             let code = args.first().copied().unwrap_or(0);
             Err(C5Error::Runtime(format!("vm_ssa: exit({code})")))
+        }
+        // `void *memcpy(void *dst, const void *src, size_t n)`.
+        // c5's cdecl pushes args right-to-left; the walker
+        // delivers them to `Inst::CallExt::args` in declared
+        // order, so `args[0] = dst`, `args[1] = src`, `args[2] = n`.
+        "memcpy" => {
+            let (dst, src, n) = libc_three_arg(name, args)?;
+            mem.copy_within(dst, src, n)?;
+            Ok(dst as i64)
+        }
+        // `void *memset(void *dst, int val, size_t n)`. C99
+        // 7.21.6.1 narrows `val` to `unsigned char` before
+        // writing.
+        "memset" => {
+            let dst = args
+                .first()
+                .copied()
+                .ok_or_else(|| C5Error::Runtime("vm_ssa: memset: missing dst".to_string()))?;
+            let val = args.get(1).copied().unwrap_or(0) as u8;
+            let n = libc_size(name, args.get(2).copied())?;
+            if (dst as usize) < mem.data_end || dst < 0 {
+                return Err(C5Error::Runtime(format!(
+                    "vm_ssa: memset: dst 0x{:x} in read-only data region",
+                    dst as usize,
+                )));
+            }
+            let buf = alloc::vec![val; n];
+            mem.write_bytes(dst as usize, &buf)?;
+            Ok(dst)
+        }
+        // `int memcmp(const void *s1, const void *s2, size_t n)`.
+        // C99 7.21.4.1: returns negative/zero/positive on the
+        // first byte that differs, comparing as `unsigned char`.
+        "memcmp" => {
+            let (s1, s2, n) = libc_three_arg(name, args)?;
+            for i in 0..n {
+                let a = mem.read_bytes(s1 + i, 1)?[0];
+                let b = mem.read_bytes(s2 + i, 1)?[0];
+                if a != b {
+                    return Ok(a as i64 - b as i64);
+                }
+            }
+            Ok(0)
         }
         _ => Err(C5Error::Runtime(format!(
             "vm_ssa: CallExt `{name}` not implemented (port from vm/intrinsics.rs)",
         ))),
     }
+}
+
+/// Parse `(dst/buf, src/buf, n)` argument triples used by
+/// memcpy / memcmp. Validates the size argument and converts
+/// pointer args to `usize`.
+fn libc_three_arg(name: &str, args: &[i64]) -> Result<(usize, usize, usize), C5Error> {
+    if args.len() < 3 {
+        return Err(C5Error::Runtime(format!(
+            "vm_ssa: {name} expects 3 args, got {}",
+            args.len(),
+        )));
+    }
+    let a = args[0];
+    let b = args[1];
+    let n = libc_size(name, Some(args[2]))?;
+    if a < 0 || b < 0 {
+        return Err(C5Error::Runtime(format!(
+            "vm_ssa: {name}: negative pointer arg",
+        )));
+    }
+    Ok((a as usize, b as usize, n))
+}
+
+/// Validate a libc size argument. Negative sizes turn into
+/// `~2^63` after an `as usize` cast and silently allocate /
+/// loop on the host; reject them up front with a diagnostic
+/// that names the offending shim.
+fn libc_size(name: &str, raw: Option<i64>) -> Result<usize, C5Error> {
+    let n = raw.ok_or_else(|| C5Error::Runtime(format!("vm_ssa: {name}: missing size arg")))?;
+    if n < 0 {
+        return Err(C5Error::Runtime(format!(
+            "vm_ssa: {name}: negative size {n}",
+        )));
+    }
+    Ok(n as usize)
 }
 
 /// Dispatch a compiler-builtin `Intrinsic`. `kind` matches the
@@ -913,6 +989,27 @@ mod tests {
                  }",
             ),
             42,
+        );
+    }
+
+    #[test]
+    fn memcpy_memset_memcmp_round_trip() {
+        // Exercises the three pure-memory libc shims through
+        // `Inst::CallExt`. <string.h> registers the bindings;
+        // the test memset's 8 bytes to 0xaa, memcpy's them into
+        // a second buffer, and asserts memcmp returns 0.
+        assert_eq!(
+            run_full_program(
+                "#include <string.h>
+                 int main(void) {
+                     char a[8];
+                     char b[8];
+                     memset(a, 0xaa, 8);
+                     memcpy(b, a, 8);
+                     return memcmp(a, b, 8);
+                 }",
+            ),
+            0,
         );
     }
 

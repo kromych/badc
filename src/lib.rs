@@ -55,15 +55,14 @@ extern crate alloc;
 /// Wrapped between two literal `**` markers so the prose can
 /// pop out of binary noise even with a noisy `strings` output.
 pub const BUILD_INFO: &str = concat!(
-    "**PRODUCED BY BADC v",
+    "BADC\n\tv",
     env!("CARGO_PKG_VERSION"),
-    ", commit ",
+    "\n\tcommit ",
     env!("BADC_GIT_COMMIT"),
-    ", branch ",
+    "\n\tbranch ",
     env!("BADC_GIT_BRANCH"),
-    ", remote ",
-    env!("BADC_GIT_REMOTE"),
-    "**",
+    "\n\tremote ",
+    env!("BADC_GIT_REMOTE")
 );
 
 pub mod c5;

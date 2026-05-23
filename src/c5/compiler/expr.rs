@@ -2680,6 +2680,7 @@ impl Compiler {
                     //                    bitfield's value in `a` for
                     //                    the surrounding expression.
                     let is_bf_assign = self.lex.tk == Token::Assign;
+                    let is_bf_compound = self.lex.tk == Token::AssignOp;
                     let bf_desc = super::super::ast::BitfieldDesc {
                         bit_offset: field.bit_offset as u8,
                         bit_width: field.bit_width as u8,
@@ -2689,6 +2690,7 @@ impl Compiler {
                     let bf_field_off = field.offset as i64;
                     let bf_field_ty = field.ty;
                     self.pending.bf_assign_rhs = None;
+                    self.pending.bf_compound_assign = None;
                     // emit_bitfield_access drives the c5 stack
                     // through several Psh/Si rounds that the
                     // AST-tracking layer treats as a normal
@@ -2727,6 +2729,44 @@ impl Compiler {
                                     bf_field_off,
                                     bf_desc,
                                     rhs,
+                                    res_ty,
+                                );
+                            }
+                        } else if is_bf_compound {
+                            // C99 6.5.16.2: `E1 OP= E2` is
+                            // equivalent to `E1 = E1 OP E2` with
+                            // E1 evaluated once. Synthesise the
+                            // equivalent AST tree here so the
+                            // walker reproduces the same
+                            // load-clear-shift-or-store sequence
+                            // as a plain bitfield assignment.
+                            if let Some((rhs, ir_op)) = self.pending.bf_compound_assign.take() {
+                                let src = self.ast_src_pos();
+                                let read = self.ast.push_expr(
+                                    super::super::ast::Expr::Member {
+                                        obj,
+                                        field_off: bf_field_off,
+                                        bitfield: Some(bf_desc),
+                                        ty: bf_field_ty,
+                                        array_size: 0,
+                                    },
+                                    src,
+                                );
+                                let combined = self.ast.push_expr(
+                                    super::super::ast::Expr::Binary {
+                                        op: ir_op,
+                                        lhs: read,
+                                        rhs,
+                                        ty: bf_field_ty,
+                                    },
+                                    src,
+                                );
+                                let res_ty = self.ty;
+                                self.ast_emit_bitfield_assign(
+                                    obj,
+                                    bf_field_off,
+                                    bf_desc,
+                                    combined,
                                     res_ty,
                                 );
                             }

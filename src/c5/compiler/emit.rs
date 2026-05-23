@@ -456,19 +456,28 @@ impl Compiler {
             // assignment.
             self.emit_op(Op::Psh); // stack: [..., field_addr, current]
             self.expr(Token::Assign as i64)?;
-            let op = match binop {
-                x if x == Token::AddOp as i64 => Op::Add,
-                x if x == Token::SubOp as i64 => Op::Sub,
-                x if x == Token::MulOp as i64 => Op::Mul,
-                x if x == Token::DivOp as i64 => Op::Div,
-                x if x == Token::ModOp as i64 => Op::Mod,
-                x if x == Token::AndOp as i64 => Op::And,
-                x if x == Token::OrOp as i64 => Op::Or,
-                x if x == Token::XorOp as i64 => Op::Xor,
-                x if x == Token::ShlOp as i64 => Op::Shl,
-                x if x == Token::ShrOp as i64 => Op::Shr,
+            // Stash the parsed rhs AST id + the binop here, before
+            // the trailing Op::Si clears `ast_acc`. The Member
+            // handler reads this to build the dual-emit equivalent
+            // `BitfieldAssign { rhs: Binop(read, op, rhs) }` per
+            // C99 6.5.16.2.
+            let rhs_ast = self.ast_acc;
+            let (op, ir_op) = match binop {
+                x if x == Token::AddOp as i64 => (Op::Add, crate::c5::ir::BinOp::Add),
+                x if x == Token::SubOp as i64 => (Op::Sub, crate::c5::ir::BinOp::Sub),
+                x if x == Token::MulOp as i64 => (Op::Mul, crate::c5::ir::BinOp::Mul),
+                x if x == Token::DivOp as i64 => (Op::Div, crate::c5::ir::BinOp::Div),
+                x if x == Token::ModOp as i64 => (Op::Mod, crate::c5::ir::BinOp::Mod),
+                x if x == Token::AndOp as i64 => (Op::And, crate::c5::ir::BinOp::And),
+                x if x == Token::OrOp as i64 => (Op::Or, crate::c5::ir::BinOp::Or),
+                x if x == Token::XorOp as i64 => (Op::Xor, crate::c5::ir::BinOp::Xor),
+                x if x == Token::ShlOp as i64 => (Op::Shl, crate::c5::ir::BinOp::Shl),
+                x if x == Token::ShrOp as i64 => (Op::Shr, crate::c5::ir::BinOp::Shr),
                 _ => return Err(self.compile_err("unsupported compound op on bitfield")),
             };
+            if let Some(r) = rhs_ast {
+                self.pending.bf_compound_assign = Some((r, ir_op));
+            }
             self.emit_op(op);
             // Mask + shift the combined value back into the slot.
             self.emit_binop_with_imm(Op::And, mask);

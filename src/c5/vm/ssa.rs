@@ -82,13 +82,59 @@ struct Memory {
     /// Fixed at construction; `malloc` allocations start here
     /// and grow upward. Retained so a future `free`/`realloc`
     /// can resolve a pointer back to its allocator origin.
-    #[allow(dead_code)]
     heap_base: usize,
     /// Next free byte in the heap. C99 7.20.3.3 leaves `malloc`'s
     /// alignment unspecified except that it must suffice for any
     /// object; we round each allocation up to 16 bytes to match
     /// what host malloc implementations typically guarantee.
     heap_top: usize,
+    /// First byte of the stack region (= `data_end`). Stack
+    /// addresses are exempt from the allocations check since
+    /// frames come and go on every call.
+    stack_base: usize,
+    /// Per-allocation registry; populated for every `malloc`
+    /// regardless of `track_pointers` so the lists stay
+    /// consistent across feature toggles.
+    allocations: Vec<Allocation>,
+    /// Monotonic allocation id; surfaces in error messages so
+    /// the offending heap region is identifiable even after
+    /// addresses get reused.
+    next_alloc_id: u64,
+    /// When true, every heap-side load / store / bulk-copy goes
+    /// through `check_data_access`. Off by default; opt in via
+    /// `run_program_with_args_tracked` (or `Vm::with_pointer_tracking`
+    /// at the bytecode-compat boundary).
+    track_pointers: bool,
+}
+
+/// Metadata for one heap allocation. The SSA-VM never reuses
+/// heap addresses (the bump-pointer `heap_top` only grows), so
+/// each allocation gets a fresh window recorded here. `free`
+/// flips `freed`; subsequent loads / stores into the window
+/// land in a `use-after-free` diagnostic.
+#[derive(Clone, Debug)]
+struct Allocation {
+    start: usize,
+    len: usize,
+    freed: bool,
+    id: u64,
+}
+
+/// Direction of a tracked access. Used purely for diagnostic
+/// wording in `check_data_access`.
+#[derive(Clone, Copy, Debug)]
+enum AccessKind {
+    Read,
+    Write,
+}
+
+impl AccessKind {
+    fn label(self) -> &'static str {
+        match self {
+            AccessKind::Read => "read",
+            AccessKind::Write => "write",
+        }
+    }
 }
 
 impl Memory {
@@ -111,7 +157,73 @@ impl Memory {
             stack_top: data_end,
             heap_base,
             heap_top: heap_base,
+            stack_base: data_end,
+            allocations: Vec::new(),
+            next_alloc_id: 1,
+            track_pointers: false,
         }
+    }
+
+    fn with_track_pointers(mut self, on: bool) -> Self {
+        self.track_pointers = on;
+        self
+    }
+
+    fn record_allocation(&mut self, start: usize, len: usize) {
+        let id = self.next_alloc_id;
+        self.next_alloc_id += 1;
+        self.allocations.push(Allocation {
+            start,
+            len,
+            freed: false,
+            id,
+        });
+    }
+
+    /// Validate a `[addr, addr+len)` access. C99 doesn't pin
+    /// dangling-pointer behaviour, but mistaken accesses get
+    /// surfaced here when `track_pointers` is on. Reads / writes
+    /// into a freed allocation, past an allocation's end, or
+    /// against a never-allocated heap byte each surface as a
+    /// runtime error. Static data, stack frames, and zero-length
+    /// reads are exempt.
+    fn check_data_access(&self, addr: usize, len: usize, kind: AccessKind) -> Result<(), C5Error> {
+        if !self.track_pointers || len == 0 {
+            return Ok(());
+        }
+        if addr < self.data_end {
+            return Ok(());
+        }
+        if (self.stack_base..self.heap_base).contains(&addr) {
+            return Ok(());
+        }
+        for alloc in &self.allocations {
+            if addr >= alloc.start && addr < alloc.start + alloc.len {
+                if alloc.freed {
+                    return Err(C5Error::Runtime(format!(
+                        "use-after-free: {} access at 0x{addr:x} inside freed allocation #{} (start=0x{:x}, len={})",
+                        kind.label(),
+                        alloc.id,
+                        alloc.start,
+                        alloc.len
+                    )));
+                }
+                if addr + len > alloc.start + alloc.len {
+                    return Err(C5Error::Runtime(format!(
+                        "out-of-bounds: {}-byte {} access at 0x{addr:x} runs past allocation #{} end=0x{:x}",
+                        len,
+                        kind.label(),
+                        alloc.id,
+                        alloc.start + alloc.len
+                    )));
+                }
+                return Ok(());
+            }
+        }
+        Err(C5Error::Runtime(format!(
+            "out-of-bounds: {} access at 0x{addr:x} ({len} bytes) is not inside any live allocation",
+            kind.label(),
+        )))
     }
 
     /// Copy a byte slice into the heap, append a NUL byte, and
@@ -148,6 +260,7 @@ impl Memory {
             *b = 0;
         }
         self.heap_top = next;
+        self.record_allocation(base, n);
         base
     }
 
@@ -392,11 +505,37 @@ pub(super) fn run_program_with_args<H: Host>(
     host: &mut H,
     args: &[alloc::string::String],
 ) -> Result<i64, C5Error> {
+    run_program_with_args_tracked(
+        funcs,
+        data,
+        binding_names,
+        tls_base,
+        entry_pc,
+        host,
+        args,
+        false,
+    )
+}
+
+/// Same as [`run_program_with_args`] with an explicit
+/// `track_pointers` flag. The bytecode-compat boundary uses this
+/// to forward `Vm::with_pointer_tracking` into the SSA-VM.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn run_program_with_args_tracked<H: Host>(
+    funcs: &[FunctionSsa],
+    data: &[u8],
+    binding_names: &[alloc::string::String],
+    tls_base: usize,
+    entry_pc: usize,
+    host: &mut H,
+    args: &[alloc::string::String],
+    track_pointers: bool,
+) -> Result<i64, C5Error> {
     let prog = Program::new(funcs)
         .with_bindings(binding_names)
         .with_tls_base(tls_base);
     let (data_with_argv, argc, argv_addr) = stage_argv(data, args);
-    let mut mem = Memory::new(&data_with_argv);
+    let mut mem = Memory::new(&data_with_argv).with_track_pointers(track_pointers);
     let entry = prog.lookup(entry_pc).ok_or_else(|| {
         C5Error::Runtime(format!(
             "vm_ssa: run_program: no function at ent_pc {entry_pc}",
@@ -611,21 +750,31 @@ fn run_inst<H: Host>(
         }
         Inst::Load { addr, kind } => {
             let a = frame.regs[*addr as usize];
-            if a & CODE_ADDR_MASK != 0 || a < 0 {
+            if a & CODE_ADDR_MASK != 0
+                || a < 0
+                || ((a as usize) >= super::super::CODE_BASE
+                    && (a as usize) < super::super::CODE_BASE + (1usize << 20))
+            {
                 return Err(C5Error::Runtime(format!(
-                    "vm_ssa: Load: addr 0x{a:016x} is not a data pointer",
+                    "vm_ssa: Load: addr 0x{a:016x} is not a data pointer (code is not data)",
                 )));
             }
+            mem.check_data_access(a as usize, load_width(*kind), AccessKind::Read)?;
             frame.regs[v as usize] = load_from_memory(mem, a as usize, *kind)?;
             return Ok(());
         }
         Inst::Store { addr, value, kind } => {
             let a = frame.regs[*addr as usize];
-            if a & CODE_ADDR_MASK != 0 || a < 0 {
+            if a & CODE_ADDR_MASK != 0
+                || a < 0
+                || ((a as usize) >= super::super::CODE_BASE
+                    && (a as usize) < super::super::CODE_BASE + (1usize << 20))
+            {
                 return Err(C5Error::Runtime(format!(
-                    "vm_ssa: Store: addr 0x{a:016x} is not a data pointer",
+                    "vm_ssa: Store: addr 0x{a:016x} is not a data pointer (code is not data)",
                 )));
             }
+            mem.check_data_access(a as usize, store_width(*kind), AccessKind::Write)?;
             let stored = narrow_store(frame.regs[*value as usize], *kind);
             store_to_memory(mem, a as usize, stored, *kind)?;
             // c5 Store leaves the stored value in the accumulator;
@@ -662,6 +811,8 @@ fn run_inst<H: Host>(
                     "vm_ssa: Mcpy: bad operands (dst=0x{dst_addr:x}, src=0x{src_addr:x}, size={size})",
                 )));
             }
+            mem.check_data_access(src_addr as usize, *size as usize, AccessKind::Read)?;
+            mem.check_data_access(dst_addr as usize, *size as usize, AccessKind::Write)?;
             mem.copy_within(dst_addr as usize, src_addr as usize, *size as usize)?;
             // Mcpy returns the destination address (c5 model).
             frame.regs[v as usize] = dst_addr;
@@ -821,6 +972,8 @@ fn dispatch_callext<H: Host>(
         // order, so `args[0] = dst`, `args[1] = src`, `args[2] = n`.
         "memcpy" => {
             let (dst, src, n) = libc_three_arg(name, args)?;
+            mem.check_data_access(src, n, AccessKind::Read)?;
+            mem.check_data_access(dst, n, AccessKind::Write)?;
             mem.copy_within(dst, src, n)?;
             Ok(dst as i64)
         }
@@ -840,6 +993,7 @@ fn dispatch_callext<H: Host>(
                     dst as usize,
                 )));
             }
+            mem.check_data_access(dst as usize, n, AccessKind::Write)?;
             let buf = alloc::vec![val; n];
             mem.write_bytes(dst as usize, &buf)?;
             Ok(dst)
@@ -849,6 +1003,8 @@ fn dispatch_callext<H: Host>(
         // first byte that differs, comparing as `unsigned char`.
         "memcmp" => {
             let (s1, s2, n) = libc_three_arg(name, args)?;
+            mem.check_data_access(s1, n, AccessKind::Read)?;
+            mem.check_data_access(s2, n, AccessKind::Read)?;
             for i in 0..n {
                 let a = mem.read_bytes(s1 + i, 1)?[0];
                 let b = mem.read_bytes(s2 + i, 1)?[0];
@@ -915,11 +1071,33 @@ fn dispatch_callext<H: Host>(
             let n = libc_size(name, args.first().copied())?;
             Ok(mem.heap_alloc(n) as i64)
         }
-        // `void free(void *p)` -- no-op until the SSA-VM grows a
-        // real allocator. Mirrors what the bytecode VM does for
-        // single-shot fixture programs that never approach the
-        // 256 KiB heap cap.
-        "free" => Ok(0),
+        // `void free(void *p)` -- no actual reclamation (the
+        // bump-pointer heap only grows). Under `track_pointers`,
+        // flips the matching allocation to `freed`; subsequent
+        // accesses surface a use-after-free. Errors on double-
+        // free or an unknown pointer.
+        "free" => {
+            let ptr = args.first().copied().unwrap_or(0);
+            if ptr == 0 || !mem.track_pointers {
+                return Ok(0);
+            }
+            let p = ptr as usize;
+            match mem.allocations.iter_mut().find(|a| a.start == p) {
+                Some(alloc) if alloc.freed => {
+                    return Err(C5Error::Runtime(format!(
+                        "double free: allocation #{} at 0x{p:x} freed twice",
+                        alloc.id
+                    )));
+                }
+                Some(alloc) => alloc.freed = true,
+                None => {
+                    return Err(C5Error::Runtime(format!(
+                        "free of unknown pointer 0x{p:x} (not returned by malloc)"
+                    )));
+                }
+            }
+            Ok(0)
+        }
         // `int printf(const char *fmt, ...)` -- minimal subset
         // (%d / %u / %x / %c / %s / %%). Walks the variadic
         // tail in `args[1..]`, formats into a String, and writes
@@ -1270,13 +1448,26 @@ fn run_intrinsic(
 /// Sign / zero extension follows C99 6.3.1.3 per the LoadKind's
 /// signedness. Bounds errors trip a runtime error so a stray
 /// pointer doesn't read uninitialised state.
-fn load_from_memory(mem: &Memory, addr: usize, kind: LoadKind) -> Result<i64, C5Error> {
-    let n = match kind {
+fn load_width(kind: LoadKind) -> usize {
+    match kind {
         LoadKind::I64 => 8,
         LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
         LoadKind::I16 | LoadKind::U16 => 2,
         LoadKind::I8 | LoadKind::U8 => 1,
-    };
+    }
+}
+
+fn store_width(kind: StoreKind) -> usize {
+    match kind {
+        StoreKind::I64 => 8,
+        StoreKind::I32 | StoreKind::F32 => 4,
+        StoreKind::I16 => 2,
+        StoreKind::I8 => 1,
+    }
+}
+
+fn load_from_memory(mem: &Memory, addr: usize, kind: LoadKind) -> Result<i64, C5Error> {
+    let n = load_width(kind);
     let slice = mem.read_bytes(addr, n)?;
     let val: i64 = match kind {
         LoadKind::I64 => i64::from_le_bytes(slice.try_into().unwrap()),

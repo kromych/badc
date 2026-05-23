@@ -80,19 +80,46 @@ fn memcpy_with_oversized_destination_is_caught() {
 
 // ---- Code/data segregation ----
 
+fn expect_either(name: &str, a: &str, b: &str) {
+    match super::try_run_fixture(name) {
+        Err(e) => {
+            let msg = e.to_string();
+            assert!(
+                msg.contains(a) || msg.contains(b),
+                "expected error containing {:?} or {:?}, got {:?}",
+                a,
+                b,
+                msg,
+            );
+        }
+        Ok(code) => panic!(
+            "expected error containing {:?} / {:?}, but program exited with {}",
+            a, b, code
+        ),
+    }
+}
+
 #[test]
 fn dereferencing_a_function_pointer_is_refused() {
     // *fp where fp = target. The function pointer carries the CODE_BASE
     // bias, so the load lands in the code segment and the access check
     // refuses it.
-    expect_error_containing("code_as_data.c", "code is not data");
+    expect_either(
+        "code_as_data.c",
+        "code is not data",
+        "is not a data pointer",
+    );
 }
 
 #[test]
 fn calling_a_forged_code_pointer_is_refused() {
     // `fp = 42; fp(0);` -- 42 isn't in the code address space, so Jsri's
     // decode rejects it instead of jumping to a garbage PC.
-    expect_error_containing("forge_code_pointer.c", "non-code address");
+    expect_either(
+        "forge_code_pointer.c",
+        "non-code address",
+        "is not a code pointer",
+    );
 }
 
 #[test]

@@ -615,16 +615,13 @@ impl<H: Host> Vm<H> {
             return Err(C5Error::Runtime("empty program".to_string()));
         }
 
-        // SSA interpreter is the default; the bytecode VM stays
-        // available as `BADC_VM_BYTECODE=1` for parity checks and
-        // for the pointer-tracking opt-in (the SSA path doesn't
-        // yet model the allocations table or per-load access
-        // checks).
+        // SSA interpreter is the production VM; the bytecode VM
+        // stays available as `BADC_VM_BYTECODE=1` for parity
+        // checks while the bytecode tape is still emitted.
         #[cfg(feature = "std")]
-        let use_ssa = !self.track_pointers
-            && !std::env::var("BADC_VM_BYTECODE").is_ok_and(|v| !v.is_empty() && v != "0");
+        let use_ssa = !std::env::var("BADC_VM_BYTECODE").is_ok_and(|v| !v.is_empty() && v != "0");
         #[cfg(not(feature = "std"))]
-        let use_ssa = !self.track_pointers;
+        let use_ssa = true;
         if use_ssa {
             // SSA interpreter path. `with_host` already pre-lifted
             // every function; surface lift errors here so callers
@@ -648,7 +645,7 @@ impl<H: Host> Vm<H> {
                     }
                 }
             }
-            return ssa::run_program_with_args(
+            return ssa::run_program_with_args_tracked(
                 funcs,
                 &self.data,
                 &self.binding_names,
@@ -656,6 +653,7 @@ impl<H: Host> Vm<H> {
                 self.entry_pc,
                 &mut self.host,
                 &self.args,
+                self.track_pointers,
             );
         }
 

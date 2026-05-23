@@ -390,6 +390,12 @@ pub(in crate::c5::compiler) struct Pending {
     /// handler in `expr.rs` to build `Expr::BitfieldAssign`.
     /// `None` outside the bitfield-assign window.
     pub bf_assign_rhs: Option<crate::c5::ast::ExprId>,
+    /// Compound-assignment counterpart of `bf_assign_rhs`. Holds
+    /// `(rhs_ast_id, op)` where `op` is the binary operator the
+    /// assignment expanded to. The Member handler reads this and
+    /// builds `Expr::BitfieldAssign { rhs: Binop(read, op, rhs) }`
+    /// per C99 6.5.16.2 (`E1 OP= E2` == `E1 = E1 OP E2`).
+    pub bf_compound_assign: Option<(crate::c5::ast::ExprId, crate::c5::ir::BinOp)>,
 }
 
 impl Default for Pending {
@@ -415,6 +421,7 @@ impl Default for Pending {
             last_loaded_local_prior_was_read: false,
             last_loaded_local_prior_pending: Vec::new(),
             bf_assign_rhs: None,
+            bf_compound_assign: None,
         }
     }
 }

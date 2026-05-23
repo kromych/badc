@@ -806,6 +806,15 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                     // every ident has to point at its slot in
                     // the merged table.
                     clone.ast.rebase_sym_indices(s_base);
+                    // Token::Sys `val` is the parser's per-unit
+                    // flat binding index; the merger's pass-2
+                    // computed `binding_remap_per_unit[i]` to
+                    // shift it into the merged image, the same
+                    // remap `apply_reloc` uses to rewrite
+                    // `Op::JsrExt` / `Op::TailExt` operands.
+                    clone
+                        .ast
+                        .rebase_sys_binding_indices(&binding_remap_per_unit[i]);
                     all.push(clone);
                 }
             }

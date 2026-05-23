@@ -619,6 +619,32 @@ impl Ast {
         }
     }
 
+    /// Linker-side fixup: remap every `Token::Sys` ident's `val`
+    /// from the unit-local `#pragma binding` flat index to the
+    /// merged binding flat index produced by `linker::link::merge`.
+    /// The bytecode side rewrites `Op::JsrExt` / `Op::TailExt`
+    /// operands through the same `binding_remap` table; the
+    /// walker reads `val` straight off the AST snapshot, so the
+    /// snapshot needs the same rewrite or the emitted
+    /// `Inst::CallExt::binding_idx` reaches the wrong libc
+    /// import.
+    pub(crate) fn rebase_sys_binding_indices(&mut self, remap: &[i64]) {
+        use crate::c5::token::Token;
+        if remap.is_empty() {
+            return;
+        }
+        for expr in &mut self.exprs {
+            if let Expr::Ident { class, val, .. } = expr
+                && *class == Token::Sys as i64
+            {
+                let idx = *val as usize;
+                if idx < remap.len() {
+                    *val = remap[idx];
+                }
+            }
+        }
+    }
+
     pub(crate) fn decl(&self, id: DeclId) -> &Decl {
         &self.decls[id as usize]
     }

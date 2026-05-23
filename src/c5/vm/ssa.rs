@@ -159,12 +159,19 @@ impl Memory {
 
 /// Multi-function program context. The SSA-VM walks
 /// `Vec<FunctionSsa>`; `Inst::Call` resolves a callee by
-/// `target_pc` through `ent_pc_to_idx`.
+/// `target_pc` through `ent_pc_to_idx`; `Inst::CallExt`
+/// resolves a libc binding by index into `binding_names`.
 struct Program<'a> {
     funcs: &'a [FunctionSsa],
     /// `ent_pc` -> index into `funcs`. Built once at program
     /// entry; `Inst::Call` does a constant-time lookup.
     ent_pc_to_idx: alloc::collections::BTreeMap<usize, usize>,
+    /// Flat list of `local_name`s in `#pragma binding(...)`
+    /// declaration order -- the same enumeration the parser
+    /// used when assigning `Inst::CallExt::binding_idx`. The
+    /// SSA-VM looks the name up and dispatches to the matching
+    /// libc shim.
+    binding_names: &'a [alloc::string::String],
 }
 
 impl<'a> Program<'a> {
@@ -177,11 +184,31 @@ impl<'a> Program<'a> {
         Self {
             funcs,
             ent_pc_to_idx,
+            binding_names: &[],
         }
+    }
+
+    fn with_bindings(mut self, names: &'a [alloc::string::String]) -> Self {
+        self.binding_names = names;
+        self
     }
 
     fn lookup(&self, ent_pc: usize) -> Option<&'a FunctionSsa> {
         self.ent_pc_to_idx.get(&ent_pc).map(|&i| &self.funcs[i])
+    }
+
+    fn binding_name(&self, idx: i64) -> Result<&'a str, C5Error> {
+        let i = usize::try_from(idx)
+            .ok()
+            .filter(|i| *i < self.binding_names.len())
+            .ok_or_else(|| {
+                C5Error::Runtime(format!(
+                    "vm_ssa: CallExt: binding_idx {idx} out of range \
+                     (program has {} bindings)",
+                    self.binding_names.len(),
+                ))
+            })?;
+        Ok(self.binding_names[i].as_str())
     }
 }
 
@@ -230,19 +257,22 @@ impl Frame<'_> {
 /// function.
 pub(super) fn run_ssa(func: &FunctionSsa) -> Result<i64, C5Error> {
     let funcs = core::slice::from_ref(func);
-    run_program(funcs, &[], func.ent_pc)
+    run_program(funcs, &[], &[], func.ent_pc)
 }
 
 /// Multi-function entry: pick the function at `entry_pc` and run
 /// it with no arguments. `Inst::Call` resolves callees through
 /// `funcs`' `ent_pc` lookup; `Inst::ImmData(off)` indexes into
-/// `data` for string-literal / global reads.
+/// `data` for string-literal / global reads;
+/// `Inst::CallExt(binding_idx, ...)` resolves `binding_idx`
+/// into `binding_names` and dispatches to a libc shim.
 pub(super) fn run_program(
     funcs: &[FunctionSsa],
     data: &[u8],
+    binding_names: &[alloc::string::String],
     entry_pc: usize,
 ) -> Result<i64, C5Error> {
-    let prog = Program::new(funcs);
+    let prog = Program::new(funcs).with_bindings(binding_names);
     let mut mem = Memory::new(data);
     let entry = prog.lookup(entry_pc).ok_or_else(|| {
         C5Error::Runtime(format!(
@@ -490,7 +520,18 @@ fn run_inst(
             frame.regs[v as usize] = ret;
             return Ok(());
         }
-        Inst::CallExt { .. } => "CallExt",
+        Inst::CallExt {
+            binding_idx, args, ..
+        } => {
+            let name = prog.binding_name(*binding_idx)?;
+            let mut arg_vals: Vec<i64> = Vec::with_capacity(args.len());
+            for &a in args {
+                arg_vals.push(frame.regs[a as usize]);
+            }
+            let ret = dispatch_callext(name, &arg_vals)?;
+            frame.regs[v as usize] = ret;
+            return Ok(());
+        }
         Inst::TailExt(_) => "TailExt",
         Inst::Intrinsic { kind, args } => {
             run_intrinsic(mem, frame, v, *kind, args)?;
@@ -509,6 +550,30 @@ fn run_inst(
         Inst::AccReload => "AccReload",
     };
     Err(C5Error::Runtime(format!("vm_ssa: {name} not implemented",)))
+}
+
+/// Dispatch a libc binding by name. Each arm matches an entry in
+/// the bytecode VM's `Op::JsrExt` table (`vm/intrinsics.rs`);
+/// implementations land here as they're ported off the
+/// `Vm<H>` host-bridge into the standalone byte-addressed
+/// model. Unimplemented bindings return a runtime error so the
+/// caller sees which shim needs writing next.
+fn dispatch_callext(name: &str, args: &[i64]) -> Result<i64, C5Error> {
+    match name {
+        // `exit(int code)` terminates the host process in libc;
+        // inside the SSA-VM we route it through a sentinel error
+        // that the outer driver can catch and convert to the
+        // overall return value. For unit tests that don't catch
+        // it, the exit code surfaces as the runtime-error message
+        // payload.
+        "exit" => {
+            let code = args.first().copied().unwrap_or(0);
+            Err(C5Error::Runtime(format!("vm_ssa: exit({code})")))
+        }
+        _ => Err(C5Error::Runtime(format!(
+            "vm_ssa: CallExt `{name}` not implemented (port from vm/intrinsics.rs)",
+        ))),
+    }
 }
 
 /// Dispatch a compiler-builtin `Intrinsic`. `kind` matches the
@@ -741,7 +806,12 @@ mod tests {
             super::super::super::Target::MacOSAarch64,
         )
         .expect("ssa lift");
-        run_program(&funcs, &program.data, program.entry_pc).expect("ssa run")
+        let binding_names: alloc::vec::Vec<alloc::string::String> = program
+            .dylibs
+            .iter()
+            .flat_map(|d| d.bindings.iter().map(|b| b.local_name.clone()))
+            .collect();
+        run_program(&funcs, &program.data, &binding_names, program.entry_pc).expect("ssa run")
     }
 
     #[test]
@@ -844,6 +914,43 @@ mod tests {
             ),
             42,
         );
+    }
+
+    #[test]
+    fn callext_unimplemented_returns_runtime_error() {
+        // `printf` lands as `Inst::CallExt { binding_idx, ... }`;
+        // the SSA-VM's dispatch table only has `exit` wired so
+        // far, so any other binding name surfaces as a runtime
+        // error pointing at the next port target. Programs that
+        // don't touch libc keep running.
+        use crate::Compiler;
+        let program = Compiler::new(
+            "#include <stdio.h>\nint main(void) { printf(\"hi\\n\"); return 0; }".to_string(),
+        )
+        .compile()
+        .expect("compile fixture");
+        let funcs = super::super::super::codegen::ssa_shadow::produce_ssa_funcs(
+            &program,
+            super::super::super::Target::MacOSAarch64,
+        )
+        .expect("ssa lift");
+        let binding_names: alloc::vec::Vec<alloc::string::String> = program
+            .dylibs
+            .iter()
+            .flat_map(|d| d.bindings.iter().map(|b| b.local_name.clone()))
+            .collect();
+        let err = run_program(&funcs, &program.data, &binding_names, program.entry_pc)
+            .expect_err("printf should land in the unimplemented arm");
+        match err {
+            crate::C5Error::Runtime(msg) => {
+                assert!(
+                    msg.contains("CallExt `printf` not implemented")
+                        || msg.contains("CallExt `_printf` not implemented"),
+                    "expected printf in the error, got: {msg}",
+                );
+            }
+            other => panic!("expected Runtime, got {other:?}"),
+        }
     }
 
     #[test]

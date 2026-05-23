@@ -2697,6 +2697,39 @@ fn emit_binop(
         Place::Spill(slot) => (scratch.primary, Some(slot)),
         _ => return false,
     };
+    // sxtw / sxth / sxtb fold for the walker-shape sign-narrow
+    // pair `Binop(Shl, X, Imm(K)); Binop(Shr, _, Imm(K))`. The
+    // allocator marked this Shr and stashed the K (32 / 48 / 56);
+    // emit one sign-extend instead of two shifts.
+    let sxtw_source = alloc
+        .sxtw_source
+        .get(v as usize)
+        .copied()
+        .unwrap_or(super::super::ir::NO_VALUE);
+    if sxtw_source != super::super::ir::NO_VALUE {
+        let src_place = alloc
+            .places
+            .get(sxtw_source as usize)
+            .copied()
+            .unwrap_or(Place::None);
+        let rn = match materialize_int(code, src_place, scratch.primary, frame) {
+            Some(r) => r,
+            None => return false,
+        };
+        let k = alloc.sxtw_k.get(v as usize).copied().unwrap_or(0);
+        let word = match k {
+            32 => super::aarch64::enc_sxtw(rd, rn),
+            48 => super::aarch64::enc_sxth(rd, rn),
+            56 => super::aarch64::enc_sxtb(rd, rn),
+            _ => return false,
+        };
+        emit(code, word);
+        if let Some(slot) = spill_to {
+            let sp_off = spill_off(frame, slot);
+            emit(code, enc_str_imm(rd, Reg(31), sp_off));
+        }
+        return true;
+    }
     let rn = match materialize_int(code, lhs_place, scratch.primary, frame) {
         Some(r) => r,
         None => return false,

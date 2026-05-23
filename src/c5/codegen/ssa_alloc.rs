@@ -115,6 +115,11 @@ pub(super) struct Allocation {
     /// consumer through the matching use_count decrement, so DCE
     /// kills it.
     pub sxtw_source: Vec<ValueId>,
+    /// Parallel to `sxtw_source`. When `sxtw_source[i] != NO_VALUE`
+    /// this holds the matching K (32 / 48 / 56) so the emit pass
+    /// can pick the right sign-extend width without re-walking the
+    /// inst's operands.
+    pub sxtw_k: Vec<i64>,
     /// True for `Binop` / `BinopI` comparison insts that the
     /// allocator recognised as the source of a `Bz` / `Bnz`
     /// terminator's cond, with cond consumed only by that
@@ -205,6 +210,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
             fp_used: Vec::new(),
             use_counts: Vec::new(),
             sxtw_source: Vec::new(),
+            sxtw_k: Vec::new(),
             branch_fused: Vec::new(),
         };
     }
@@ -334,28 +340,59 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         .filter(|r| banks.callee_fprs.contains(r))
         .collect();
     let mut use_counts = compute_use_counts(func);
-    // Recognise `BinopI(Shl, X, K); BinopI(Shr, _, K)` adjacent
-    // pairs with K in {32, 48, 56} as the c5 sign-narrow shape.
-    // Decrement the Shl's use_count so DCE removes it; the Shr's
-    // emit picks the sxtw/sxth/sxtb path via the recorded source.
+    // Recognise the c5 sign-narrow shape:
+    //   Shl(X, K) ; Shr(_, K)   with K in {32, 48, 56}
+    // The shift's rhs may arrive either as a `BinopI` (with the
+    // immediate folded into the inst) or as a `Binop` whose `rhs`
+    // names an `Imm(K)` value -- the walker produces the latter
+    // because the parser emits the narrow as wrapping `Expr::Binary`
+    // nodes carrying an `IntLit(K)` rhs. Decrement the producer
+    // counts so DCE removes the Shl, the Shr, and the Imm(s);
+    // the emit pass picks sxtw / sxth / sxtb via `sxtw_source`.
     let mut sxtw_source: Vec<ValueId> = vec![NO_VALUE; func.insts.len()];
+    let mut sxtw_k: Vec<i64> = vec![0; func.insts.len()];
+    let shift_shape = |inst: &Inst| -> Option<(BinOp, ValueId, i64, Option<ValueId>)> {
+        match inst {
+            Inst::BinopI { op, lhs, rhs_imm } => Some((*op, *lhs, *rhs_imm, None)),
+            Inst::Binop { op, lhs, rhs } => {
+                if let Some(Inst::Imm(k)) = func.insts.get(*rhs as usize) {
+                    Some((*op, *lhs, *k, Some(*rhs)))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    };
     for (i, inst) in func.insts.iter().enumerate() {
-        if let Inst::BinopI {
-            op: BinOp::Shr,
-            lhs,
-            rhs_imm,
-        } = inst
-            && matches!(rhs_imm, 32 | 48 | 56)
-            && let Some(Inst::BinopI {
-                op: BinOp::Shl,
-                lhs: shl_src,
-                rhs_imm: shl_imm,
-            }) = func.insts.get(*lhs as usize)
-            && *shl_imm == *rhs_imm
-            && use_counts.get(*lhs as usize).copied().unwrap_or(0) == 1
-        {
-            sxtw_source[i] = *shl_src;
-            use_counts[*lhs as usize] = 0;
+        let Some((shr_op, shr_lhs, shr_k, shr_imm_v)) = shift_shape(inst) else {
+            continue;
+        };
+        if shr_op != BinOp::Shr || !matches!(shr_k, 32 | 48 | 56) {
+            continue;
+        }
+        let Some(shl_inst) = func.insts.get(shr_lhs as usize) else {
+            continue;
+        };
+        let Some((shl_op, shl_src, shl_k, shl_imm_v)) = shift_shape(shl_inst) else {
+            continue;
+        };
+        if shl_op != BinOp::Shl || shl_k != shr_k {
+            continue;
+        }
+        if use_counts.get(shr_lhs as usize).copied().unwrap_or(0) != 1 {
+            continue;
+        }
+        sxtw_source[i] = shl_src;
+        sxtw_k[i] = shr_k;
+        use_counts[shr_lhs as usize] = 0;
+        if let Some(v) = shl_imm_v {
+            let slot = &mut use_counts[v as usize];
+            *slot = slot.saturating_sub(1);
+        }
+        if let Some(v) = shr_imm_v {
+            let slot = &mut use_counts[v as usize];
+            *slot = slot.saturating_sub(1);
         }
     }
     // Recognise comparison-feeding-branch sites. The terminator's
@@ -415,6 +452,7 @@ pub(super) fn allocate(func: &FunctionSsa, target: Target) -> Allocation {
         fp_used: fp_used_callee,
         use_counts,
         sxtw_source,
+        sxtw_k,
         branch_fused,
     }
 }

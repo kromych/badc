@@ -203,3 +203,45 @@ fn plt_trampoline_local_names_appear_in_every_target() {
         );
     }
 }
+
+/// C99 6.3.1.8 + 6.5p5: the walker emits the post-binop
+/// sign-narrow as `Binop(Shl, X, Imm(32)); Binop(Shr, _, Imm(32))`.
+/// The aarch64 allocator's sxtw fold collapses that pair into a
+/// single `SXTW Xd, Wn` (`SBFM Xd, Xn, #0, #31`); the x86_64
+/// emit picks `movsxd r64, r32`. Verify the encoded byte
+/// sequence shows up in the emitted text and the two-shift
+/// pair does not.
+#[test]
+fn sxtw_fold_collapses_int_mul_sign_narrow() {
+    use crate::{NativeOptions, Target, emit_native_with_options};
+    let program = super::compile_str(
+        "int product(int a, int b) { return a * b; } int main() { return product(7, 6); }",
+    );
+    let bytes_arm =
+        emit_native_with_options(&program, Target::MacOSAarch64, NativeOptions::default())
+            .expect("emit_native MacOSAarch64");
+    // `SXTW X13, W13` = 0x93407dad. Encoded little-endian: ad 7d 40 93.
+    let sxtw_x13_x13 = [0xadu8, 0x7d, 0x40, 0x93];
+    assert!(
+        bytes_arm.windows(4).any(|w| w == sxtw_x13_x13),
+        "expected SXTW byte pattern in aarch64 image (the sign-narrow Shl/Shr pair did not fold)",
+    );
+    // Pre-fold pattern: `movz x14, #32` (0e 04 80 d2) immediately
+    // before the lsl. If the fold misses, we expect this byte
+    // pattern; if it fires, it should be gone for this function.
+    let movz_x14_32 = [0x0eu8, 0x04, 0x80, 0xd2];
+    assert!(
+        !bytes_arm.windows(4).any(|w| w == movz_x14_32),
+        "expected the pre-fold `movz x14, #32` pattern to be absent post-fold",
+    );
+
+    let bytes_x64 = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+        .expect("emit_native LinuxX64");
+    // `movslq %r15d, %r15` = 4d 63 ff. The fold's x86_64 variant
+    // lands a 3-byte movsxd somewhere in `product`.
+    let movsxd_r15_r15d = [0x4du8, 0x63, 0xff];
+    assert!(
+        bytes_x64.windows(3).any(|w| w == movsxd_r15_r15d),
+        "expected `movslq %r15d, %r15` byte pattern in x86_64 image",
+    );
+}

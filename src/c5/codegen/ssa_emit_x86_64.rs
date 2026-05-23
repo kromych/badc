@@ -1720,6 +1720,46 @@ fn emit_binop(
         bail_msg("Binop: dst not int reg / spill");
         return false;
     };
+    // sxtw / movsx fold for the walker-shape sign-narrow pair
+    // `Binop(Shl, X, Imm(K)); Binop(Shr, _, Imm(K))`. The
+    // allocator marked this Shr and stashed the K (32 / 48 / 56);
+    // emit one movsxd / movsx instead of two shifts.
+    let sxtw_source = alloc
+        .sxtw_source
+        .get(v as usize)
+        .copied()
+        .unwrap_or(super::super::ir::NO_VALUE);
+    if sxtw_source != super::super::ir::NO_VALUE {
+        let src_place = alloc
+            .places
+            .get(sxtw_source as usize)
+            .copied()
+            .unwrap_or(Place::None);
+        let src_reg = match src_place {
+            Place::IntReg(r) => Reg(r),
+            Place::Spill(slot) => {
+                let sp_off = spill_slot_sp_offset(frame, slot);
+                emit_mov_r_mem(code, rd, Reg::RSP, sp_off);
+                rd
+            }
+            _ => {
+                bail_msg("Binop sxtw: src not int reg / spill");
+                return false;
+            }
+        };
+        let k = alloc.sxtw_k.get(v as usize).copied().unwrap_or(0);
+        match k {
+            32 => super::x86_64::emit_movsxd_r_r(code, rd, src_reg),
+            48 => super::x86_64::emit_movsx_r_r16(code, rd, src_reg),
+            56 => super::x86_64::emit_movsx_r_r8(code, rd, src_reg),
+            _ => {
+                bail_msg("Binop sxtw: unexpected K");
+                return false;
+            }
+        }
+        spill_dst_to_slot(code, dst, rd, frame);
+        return true;
+    }
     // Stage lhs into rd first, so the two-operand ops below can
     // `op rd, rm` and land the result in rd. When lhs is a spill,
     // load directly into rd to skip a redundant mov. When rhs is

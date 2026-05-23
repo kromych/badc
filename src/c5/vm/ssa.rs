@@ -35,7 +35,9 @@ use alloc::string::ToString;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
-use super::super::ir::{BinOp, FunctionSsa, Inst, LoadKind, StoreKind, Terminator, ValueId};
+use super::super::ir::{
+    BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, StoreKind, Terminator, ValueId,
+};
 
 /// Tagged-address marker for `LocalAddr` results. The interpreter
 /// has no real address space yet; `LocalAddr(off)` encodes the
@@ -48,6 +50,10 @@ const LOCAL_ADDR_TAG: i64 = 0x4000_0000_0000_0000;
 /// bit 61 clear (distinguishes from `LOCAL_ADDR_TAG` which sets
 /// bit 62 too). The low bits hold the data-segment byte offset.
 const DATA_ADDR_TAG: i64 = 0x2000_0000_0000_0000;
+/// Tagged-address marker for `ImmCode` results: bits 62+61 both
+/// set. The low bits hold the callee's `ent_pc` so
+/// `Inst::CallIndirect` can dispatch through `Program::lookup`.
+const CODE_ADDR_TAG: i64 = 0x6000_0000_0000_0000;
 const ADDR_TAG_MASK: i64 = 0x6000_0000_0000_0000;
 const ADDR_OFFSET_MASK: i64 = 0x0fff_ffff_ffff_ffff;
 
@@ -240,7 +246,10 @@ fn run_inst(prog: &Program<'_>, frame: &mut Frame<'_>, v: ValueId) -> Result<(),
             frame.regs[v as usize] = DATA_ADDR_TAG | (*off & ADDR_OFFSET_MASK);
             return Ok(());
         }
-        Inst::ImmCode(_) => "ImmCode",
+        Inst::ImmCode(target_pc) => {
+            frame.regs[v as usize] = CODE_ADDR_TAG | ((*target_pc as i64) & ADDR_OFFSET_MASK);
+            return Ok(());
+        }
         Inst::LocalAddr(off) => {
             // Encode the c5-slot offset into a tagged i64 so a
             // downstream `Load` / `Store` can decode it back.
@@ -320,8 +329,20 @@ fn run_inst(prog: &Program<'_>, frame: &mut Frame<'_>, v: ValueId) -> Result<(),
             frame.regs[v as usize] = apply_binop(*op, lv, *rhs_imm)?;
             return Ok(());
         }
-        Inst::Fneg(_) => "Fneg",
-        Inst::FpCast { .. } => "FpCast",
+        Inst::Fneg(src) => {
+            let raw = frame.regs[*src as usize];
+            let neg = (-f64::from_bits(raw as u64)).to_bits() as i64;
+            frame.regs[v as usize] = neg;
+            return Ok(());
+        }
+        Inst::FpCast { kind, value } => {
+            let raw = frame.regs[*value as usize];
+            frame.regs[v as usize] = match kind {
+                FpCastKind::FpToInt => f64::from_bits(raw as u64) as i64,
+                FpCastKind::IntToFp => (raw as f64).to_bits() as i64,
+            };
+            return Ok(());
+        }
         Inst::Call { target_pc, args } => {
             let callee = prog.lookup(*target_pc).ok_or_else(|| {
                 C5Error::Runtime(format!("vm_ssa: Call: no function at ent_pc {target_pc}",))
@@ -334,7 +355,27 @@ fn run_inst(prog: &Program<'_>, frame: &mut Frame<'_>, v: ValueId) -> Result<(),
             frame.regs[v as usize] = ret;
             return Ok(());
         }
-        Inst::CallIndirect { .. } => "CallIndirect",
+        Inst::CallIndirect { target, args } => {
+            let raw = frame.regs[*target as usize];
+            if raw & ADDR_TAG_MASK != CODE_ADDR_TAG {
+                return Err(C5Error::Runtime(format!(
+                    "vm_ssa: CallIndirect: target raw=0x{raw:016x} is not a code pointer",
+                )));
+            }
+            let target_pc = (raw & ADDR_OFFSET_MASK) as usize;
+            let callee = prog.lookup(target_pc).ok_or_else(|| {
+                C5Error::Runtime(format!(
+                    "vm_ssa: CallIndirect: no function at ent_pc {target_pc}",
+                ))
+            })?;
+            let mut arg_vals: Vec<i64> = Vec::with_capacity(args.len());
+            for &a in args {
+                arg_vals.push(frame.regs[a as usize]);
+            }
+            let ret = run_func(prog, callee, &arg_vals)?;
+            frame.regs[v as usize] = ret;
+            return Ok(());
+        }
         Inst::CallExt { .. } => "CallExt",
         Inst::TailExt(_) => "TailExt",
         Inst::Mcpy { .. } => "Mcpy",
@@ -454,16 +495,50 @@ fn apply_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, C5Error> {
         BinOp::Ugt => ((lhs as u64) > (rhs as u64)) as i64,
         BinOp::Ule => ((lhs as u64) <= (rhs as u64)) as i64,
         BinOp::Uge => ((lhs as u64) >= (rhs as u64)) as i64,
-        BinOp::Div | BinOp::Divu | BinOp::Mod | BinOp::Modu => {
-            return Err(C5Error::Runtime(format!(
-                "vm_ssa: BinOp::{op:?} not implemented (division-by-zero trap missing)",
-            )));
+        BinOp::Div => {
+            if rhs == 0 {
+                return Err(C5Error::Runtime(
+                    "vm_ssa: signed integer division by zero".to_string(),
+                ));
+            }
+            lhs.wrapping_div(rhs)
         }
-        _ => {
-            return Err(C5Error::Runtime(format!(
-                "vm_ssa: BinOp::{op:?} not implemented (FP)",
-            )));
+        BinOp::Mod => {
+            if rhs == 0 {
+                return Err(C5Error::Runtime(
+                    "vm_ssa: signed integer modulo by zero".to_string(),
+                ));
+            }
+            lhs.wrapping_rem(rhs)
         }
+        BinOp::Divu => {
+            let r = rhs as u64;
+            if r == 0 {
+                return Err(C5Error::Runtime(
+                    "vm_ssa: unsigned integer division by zero".to_string(),
+                ));
+            }
+            ((lhs as u64) / r) as i64
+        }
+        BinOp::Modu => {
+            let r = rhs as u64;
+            if r == 0 {
+                return Err(C5Error::Runtime(
+                    "vm_ssa: unsigned integer modulo by zero".to_string(),
+                ));
+            }
+            ((lhs as u64) % r) as i64
+        }
+        BinOp::Fadd => (f64::from_bits(lhs as u64) + f64::from_bits(rhs as u64)).to_bits() as i64,
+        BinOp::Fsub => (f64::from_bits(lhs as u64) - f64::from_bits(rhs as u64)).to_bits() as i64,
+        BinOp::Fmul => (f64::from_bits(lhs as u64) * f64::from_bits(rhs as u64)).to_bits() as i64,
+        BinOp::Fdiv => (f64::from_bits(lhs as u64) / f64::from_bits(rhs as u64)).to_bits() as i64,
+        BinOp::Feq => (f64::from_bits(lhs as u64) == f64::from_bits(rhs as u64)) as i64,
+        BinOp::Fne => (f64::from_bits(lhs as u64) != f64::from_bits(rhs as u64)) as i64,
+        BinOp::Flt => (f64::from_bits(lhs as u64) < f64::from_bits(rhs as u64)) as i64,
+        BinOp::Fgt => (f64::from_bits(lhs as u64) > f64::from_bits(rhs as u64)) as i64,
+        BinOp::Fle => (f64::from_bits(lhs as u64) <= f64::from_bits(rhs as u64)) as i64,
+        BinOp::Fge => (f64::from_bits(lhs as u64) >= f64::from_bits(rhs as u64)) as i64,
     };
     Ok(r)
 }
@@ -558,6 +633,24 @@ mod tests {
                  int main(void) { return fact(5); }",
             ),
             120,
+        );
+    }
+
+    #[test]
+    fn call_indirect_through_fn_pointer() {
+        // C99 6.5.2.2: a call through a function-pointer value
+        // delivers the args and returns the callee's result.
+        // `ImmCode` writes the encoded `ent_pc` into the register;
+        // `CallIndirect` decodes and dispatches via `Program::lookup`.
+        assert_eq!(
+            run_full_program(
+                "int double_it(int x) { return x * 2; }
+                 int main(void) {
+                     int (*fp)(int) = double_it;
+                     return fp(21);
+                 }",
+            ),
+            42,
         );
     }
 

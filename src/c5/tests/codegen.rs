@@ -245,3 +245,47 @@ fn sxtw_fold_collapses_int_mul_sign_narrow() {
         "expected `movslq %r15d, %r15` byte pattern in x86_64 image",
     );
 }
+
+/// C99 6.6 constant-expression evaluation: both-IntLit operands
+/// fold to a single SSA `Imm`. The walker's `Expr::Binary` arm
+/// detects this and emits no binop at all. Run via the in-process
+/// JIT so the fold is verified end-to-end.
+#[test]
+fn constant_fold_evaluates_binops_at_translation_time() {
+    use crate::{Compiler, jit_run};
+    // Each return value exercises one folded shape. The compile
+    // succeeds only if the fold produces a valid `Imm`; the JIT
+    // exit code confirms the value is correct.
+    let src = "
+        int add(void)   { return 7 + 3; }
+        int sub(void)   { return 100 - 42; }
+        int mul(void)   { return 4 * 6; }
+        int and_op(void){ return 0xff & 0x0f; }
+        int or_op(void) { return 0x10 | 0x01; }
+        int xor_op(void){ return 0xff ^ 0x0f; }
+        int shl(void)   { return 1 << 8; }
+        int shr(void)   { return 0x100 >> 4; }
+        int eq_lt(void) { return 5 < 9; }
+        int main(void) {
+            if (add()    != 10)   return 1;
+            if (sub()    != 58)   return 2;
+            if (mul()    != 24)   return 3;
+            if (and_op() != 0x0f) return 4;
+            if (or_op()  != 0x11) return 5;
+            if (xor_op() != 0xf0) return 6;
+            if (shl()    != 256)  return 7;
+            if (shr()    != 0x10) return 8;
+            if (eq_lt()  != 1)    return 9;
+            return 0;
+        }
+    ";
+    let program = Compiler::new(src.into())
+        .compile()
+        .expect("constant-fold fixture compiles");
+    let exit = jit_run(&program, &["constant_fold".to_string()])
+        .expect("constant-fold fixture runs under JIT");
+    assert_eq!(
+        exit, 0,
+        "constant-fold values must match standard arithmetic"
+    );
+}

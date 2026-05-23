@@ -1557,7 +1557,16 @@ impl<'a> Walker<'a> {
                     b.binop_imm(*op, old, *val)
                 } else {
                     let rhs_val = self.walk_expr_rvalue(b, *rhs)?;
-                    b.binop(*op, old, rhs_val)
+                    // The walked rhs may have constant-folded to
+                    // an `Imm` even when the AST shape isn't an
+                    // `IntLit`; route through `binop_imm` in that
+                    // case for the same reason as the
+                    // `Expr::Binary` arm.
+                    if imm_safe && let Some(rk) = b.peek_imm(rhs_val) {
+                        b.binop_imm(*op, old, rk)
+                    } else {
+                        b.binop(*op, old, rhs_val)
+                    }
                 };
                 b.store(addr, new_val, store_kind);
                 Ok(new_val)

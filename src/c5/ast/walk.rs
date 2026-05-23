@@ -787,6 +787,64 @@ impl<'a> Walker<'a> {
                 // lets those wrapping Binary nodes do the rest.
                 Ok(b.binop(*op, lv, rv))
             }
+            Expr::BitfieldAssign {
+                obj,
+                field_off,
+                bitfield,
+                rhs,
+                ..
+            } => {
+                // C99 6.7.2.1: bitfield write -- load the storage
+                // unit, clear the destination slice, mask + shift
+                // the new value into place, OR the cleared old
+                // value with the shifted new, store back. The
+                // walker mirrors `emit_bitfield_access` on the
+                // bytecode side. Returns the combined word so an
+                // outer expression chain keeps a stable rvalue.
+                let bf = *bitfield;
+                let base = self.walk_expr_rvalue(b, *obj)?;
+                let addr = if *field_off != 0 {
+                    b.binop_imm(BinOp::Add, base, *field_off)
+                } else {
+                    base
+                };
+                let (load_kind, store_kind) = match bf.unit_size {
+                    1 => (
+                        super::super::ir::LoadKind::U8,
+                        super::super::ir::StoreKind::I8,
+                    ),
+                    2 => (
+                        super::super::ir::LoadKind::U16,
+                        super::super::ir::StoreKind::I16,
+                    ),
+                    4 => (
+                        super::super::ir::LoadKind::U32,
+                        super::super::ir::StoreKind::I32,
+                    ),
+                    _ => (
+                        super::super::ir::LoadKind::I64,
+                        super::super::ir::StoreKind::I64,
+                    ),
+                };
+                let mask: i64 = if bf.bit_width >= 64 {
+                    -1
+                } else {
+                    (1i64 << bf.bit_width) - 1
+                };
+                let clear_mask: i64 = !(mask << bf.bit_offset);
+                let old = b.load(addr, load_kind);
+                let cleared = b.binop_imm(BinOp::And, old, clear_mask);
+                let rhs_v = self.walk_expr_rvalue(b, *rhs)?;
+                let masked = b.binop_imm(BinOp::And, rhs_v, mask);
+                let shifted = if bf.bit_offset > 0 {
+                    b.binop_imm(BinOp::Shl, masked, bf.bit_offset as i64)
+                } else {
+                    masked
+                };
+                let combined = b.binop(BinOp::Or, cleared, shifted);
+                b.store(addr, combined, store_kind);
+                Ok(combined)
+            }
             Expr::Assign { lhs, rhs, ty } => {
                 // C99 6.5.16.1p1 + the c5 address-as-value rule:
                 // a struct-typed assignment copies the bytes from
@@ -987,14 +1045,41 @@ impl<'a> Walker<'a> {
                 ty,
                 array_size,
             } => {
-                if bitfield.is_some() {
-                    // Bitfield read needs the load+shift+mask
-                    // pattern the bytecode tier emits; the walker
-                    // doesn't reconstruct it yet. TODO.
-                    return Err(WalkError::UnsupportedExpr {
-                        id,
-                        kind: "Member(bitfield)",
-                    });
+                if let Some(bf) = bitfield {
+                    // C99 6.7.2.1: bitfield read. Address points at
+                    // the field's storage unit (parser already
+                    // included `field_off`); load the unit, shift
+                    // the slice down to bit 0, mask, and sign-
+                    // extend per 6.7.2.1p10 when the declared base
+                    // type is signed.
+                    let base = self.walk_expr_rvalue(b, *obj)?;
+                    let addr = if *field_off != 0 {
+                        b.binop_imm(BinOp::Add, base, *field_off)
+                    } else {
+                        base
+                    };
+                    let unit_kind = match bf.unit_size {
+                        1 => super::super::ir::LoadKind::U8,
+                        2 => super::super::ir::LoadKind::U16,
+                        4 => super::super::ir::LoadKind::U32,
+                        _ => super::super::ir::LoadKind::I64,
+                    };
+                    let mut v = b.load(addr, unit_kind);
+                    if bf.bit_offset > 0 {
+                        v = b.binop_imm(BinOp::Shr, v, bf.bit_offset as i64);
+                    }
+                    let mask: i64 = if bf.bit_width >= 64 {
+                        -1
+                    } else {
+                        (1i64 << bf.bit_width) - 1
+                    };
+                    v = b.binop_imm(BinOp::And, v, mask);
+                    if bf.signed && bf.bit_width < 64 {
+                        let shift = 64i64 - (bf.bit_width as i64);
+                        v = b.binop_imm(BinOp::Shl, v, shift);
+                        v = b.binop_imm(BinOp::Shr, v, shift);
+                    }
+                    return Ok(v);
                 }
                 let base = self.walk_expr_rvalue(b, *obj)?;
                 let addr = if *field_off != 0 {
@@ -1057,6 +1142,7 @@ impl<'a> Walker<'a> {
                     | Expr::Member { ty, .. }
                     | Expr::Index { ty, .. }
                     | Expr::Assign { ty, .. }
+                    | Expr::BitfieldAssign { ty, .. }
                     | Expr::CompoundAssign { ty, .. }
                     | Expr::PreInc { ty, .. }
                     | Expr::PostInc { ty, .. }
@@ -1535,6 +1621,7 @@ fn expr_ty(e: &Expr) -> Option<i64> {
         | Expr::Member { ty, .. }
         | Expr::Index { ty, .. }
         | Expr::Assign { ty, .. }
+        | Expr::BitfieldAssign { ty, .. }
         | Expr::CompoundAssign { ty, .. }
         | Expr::PreInc { ty, .. }
         | Expr::PostInc { ty, .. }
@@ -1626,6 +1713,7 @@ fn lvalue_shape_label(expr: &Expr) -> &'static str {
         Expr::Index { .. } => "Index",
         Expr::Cast { .. } => "Cast",
         Expr::Assign { .. } => "Assign",
+        Expr::BitfieldAssign { .. } => "BitfieldAssign",
         Expr::CompoundAssign { .. } => "CompoundAssign",
         Expr::PreInc { .. } => "PreInc",
         Expr::PostInc { .. } => "PostInc",

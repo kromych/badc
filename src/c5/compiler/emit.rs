@@ -400,6 +400,12 @@ impl Compiler {
             self.emit_op(Op::And); // a = old_value & ~(mask << off); stack: [..., field_addr]
             self.emit_op(Op::Psh); // stack: [..., field_addr, cleared]
             self.expr(Token::Assign as i64)?; // a = new_value
+            // Stash the rhs AST id before the trailing Op::Si
+            // clears `ast_acc` via `ast_apply_assign`. The
+            // surrounding Member handler reads this and builds
+            // `Expr::BitfieldAssign` so the walker reproduces the
+            // load-clear-shift-or-store sequence.
+            self.pending.bf_assign_rhs = self.ast_acc;
             self.emit_op(Op::Psh); // stack: [..., field_addr, cleared, new_value]
             self.emit_imm(mask);
             self.emit_op(Op::And); // a = new_value & mask; stack: [..., field_addr, cleared]
@@ -1007,6 +1013,35 @@ impl Compiler {
                 bitfield,
                 ty,
                 array_size,
+            },
+            pos,
+        );
+        self.ast_acc = Some(id);
+    }
+
+    /// Push `Expr::BitfieldAssign`. The parser invokes this from
+    /// the bitfield-write branch of `emit_bitfield_access`, after
+    /// the RHS has been parsed (so the rhs `ExprId` is in
+    /// `ast_acc`). `obj` is the address producer for the
+    /// containing struct; `field_off` + `bitfield` describe the
+    /// destination slice; the walker re-emits the matching
+    /// load-clear-shift-or-store sequence.
+    pub(super) fn ast_emit_bitfield_assign(
+        &mut self,
+        obj: ExprId,
+        field_off: i64,
+        bitfield: super::super::ast::BitfieldDesc,
+        rhs: ExprId,
+        ty: i64,
+    ) {
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(
+            Expr::BitfieldAssign {
+                obj,
+                field_off,
+                bitfield,
+                rhs,
+                ty,
             },
             pos,
         );

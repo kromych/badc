@@ -208,6 +208,21 @@ pub(crate) enum Expr {
     /// (Ident, Deref, Member, Index, or a Cast of one); the
     /// walker chases its address producer and emits a Store.
     Assign { lhs: ExprId, rhs: ExprId, ty: i64 },
+    /// `obj.field = rhs` / `p->field = rhs` where `field` is a
+    /// bitfield. C99 6.7.2.1: write a sub-word slice of the
+    /// containing storage unit while preserving the surrounding
+    /// bits. The walker emits the load-clear-shift-or-store
+    /// sequence; the parser resolves `bitfield` from the struct
+    /// field metadata at parse time. `obj` is the address-
+    /// producing expression for the containing struct, already
+    /// offset to the storage unit by `field_off`.
+    BitfieldAssign {
+        obj: ExprId,
+        field_off: i64,
+        bitfield: BitfieldDesc,
+        rhs: ExprId,
+        ty: i64,
+    },
     /// `lhs op= rhs`. C99 6.5.16.2p3: `lhs` is evaluated exactly
     /// once; the walker spills the address and reloads.
     CompoundAssign {

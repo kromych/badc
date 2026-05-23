@@ -380,6 +380,16 @@ pub(in crate::c5::compiler) struct Pending {
     /// permanently drop the dead-store entries -- they restore
     /// alongside `was_read`.
     pub last_loaded_local_prior_pending: Vec<usize>,
+
+    /// AST id of the rhs expression that the bitfield write path
+    /// (`emit_bitfield_access`'s Assign branch) just parsed. The
+    /// storage Op::Si the same routine emits afterwards triggers
+    /// `ast_apply_assign`, which clears `ast_acc` -- so the
+    /// caller can't observe the rhs from `ast_acc`. Captured
+    /// here before the Op::Si runs and read by the Member
+    /// handler in `expr.rs` to build `Expr::BitfieldAssign`.
+    /// `None` outside the bitfield-assign window.
+    pub bf_assign_rhs: Option<crate::c5::ast::ExprId>,
 }
 
 impl Default for Pending {
@@ -404,6 +414,7 @@ impl Default for Pending {
             last_loaded_local: None,
             last_loaded_local_prior_was_read: false,
             last_loaded_local_prior_pending: Vec::new(),
+            bf_assign_rhs: None,
         }
     }
 }

@@ -2581,12 +2581,59 @@ impl Compiler {
                     //                    extraction that lands the
                     //                    bitfield's value in `a` for
                     //                    the surrounding expression.
+                    let is_bf_assign = self.lex.tk == Token::Assign;
+                    let bf_desc = super::super::ast::BitfieldDesc {
+                        bit_offset: field.bit_offset as u8,
+                        bit_width: field.bit_width as u8,
+                        unit_size: field.bit_unit_size,
+                        signed: !is_unsigned_ty(field.ty),
+                    };
+                    let bf_field_off = field.offset as i64;
+                    let bf_field_ty = field.ty;
+                    self.pending.bf_assign_rhs = None;
                     self.emit_bitfield_access(
                         field.bit_offset,
                         field.bit_width,
                         field.bit_unit_size,
                         field.ty,
                     )?;
+                    // Dual-emit the AST shape now that the
+                    // bytecode-side bitfield-emit has run.
+                    if let Some(obj) = obj_ast {
+                        if is_bf_assign {
+                            // The rhs was parsed inside
+                            // `emit_bitfield_access` (self.expr).
+                            // Its top-level AST id was stashed in
+                            // `pending.bf_assign_rhs` ahead of the
+                            // storage Op::Si (whose
+                            // `ast_apply_assign` would otherwise
+                            // have cleared `ast_acc`).
+                            if let Some(rhs) = self.pending.bf_assign_rhs.take() {
+                                let res_ty = self.ty;
+                                self.ast_emit_bitfield_assign(
+                                    obj,
+                                    bf_field_off,
+                                    bf_desc,
+                                    rhs,
+                                    res_ty,
+                                );
+                            }
+                        } else {
+                            // Read path: dual-emit
+                            // `Expr::Member { bitfield: Some(_) }`
+                            // so the walker emits the
+                            // load + shift + mask + sign-extend
+                            // sequence at the surrounding rvalue
+                            // site.
+                            self.ast_emit_member(
+                                obj,
+                                bf_field_off,
+                                Some(bf_desc),
+                                bf_field_ty,
+                                0,
+                            );
+                        }
+                    }
                 } else {
                     // Trailing Lc/Li loads the field. The assignment handler
                     // (in the same loop) converts a trailing Li/Lc to Psh, so

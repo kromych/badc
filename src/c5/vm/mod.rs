@@ -615,19 +615,22 @@ impl<H: Host> Vm<H> {
             return Err(C5Error::Runtime("empty program".to_string()));
         }
 
+        // SSA interpreter is the default; the bytecode VM stays
+        // available as `BADC_VM_BYTECODE=1` for parity checks and
+        // for the pointer-tracking opt-in (the SSA path doesn't
+        // yet model the allocations table or per-load access
+        // checks).
         #[cfg(feature = "std")]
-        if std::env::var("BADC_VM_SSA").is_ok_and(|v| !v.is_empty() && v != "0")
-            // Pointer-tracking is bytecode-side state (allocations
-            // table + per-load access checks); the SSA interpreter
-            // doesn't yet carry that surface. Fall back to the
-            // bytecode VM when tracking is on so the dangling-
-            // pointer regressions keep passing under either default.
-            && !self.track_pointers
-        {
+        let use_ssa = !self.track_pointers
+            && !std::env::var("BADC_VM_BYTECODE").is_ok_and(|v| !v.is_empty() && v != "0");
+        #[cfg(not(feature = "std"))]
+        let use_ssa = !self.track_pointers;
+        if use_ssa {
             // SSA interpreter path. `with_host` already pre-lifted
             // every function; surface lift errors here so callers
             // see a clean `Result` boundary instead of a panic.
             let funcs = self.ssa_funcs.as_ref().map_err(|e| e.clone())?;
+            #[cfg(feature = "std")]
             if std::env::var("BADC_DUMP_VM_SSA").is_ok() {
                 for f in funcs {
                     eprintln!(

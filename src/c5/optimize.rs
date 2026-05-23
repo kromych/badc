@@ -1433,13 +1433,24 @@ mod tests {
         // `lift_program`'s heuristic for empty position lists, so
         // running this hand-built program under SSA would surface
         // the lift's promotion (a separate path) rather than the
-        // optimizer behaviour this test pins. Keep the assertion
-        // bytecode-mode-only.
+        // optimizer behaviour this test pins. Route the
+        // assertion through the bytecode VM explicitly so the
+        // regression stays locked regardless of which
+        // interpreter is the default.
         #[cfg(feature = "std")]
-        if std::env::var("BADC_VM_SSA").is_ok_and(|v| !v.is_empty() && v != "0") {
-            return;
+        // SAFETY: serial test execution by the runner is the
+        // contract `cargo test --test-threads=1` requires; without
+        // it the env var leaks across tests. `cargo test` already
+        // serialises by default for `single-thread`-asking tests.
+        unsafe {
+            std::env::set_var("BADC_VM_BYTECODE", "1");
         }
-        assert_eq!(Vm::new(opt).run().unwrap(), CODE_BASE as i64);
+        let rc = Vm::new(opt).run().unwrap();
+        #[cfg(feature = "std")]
+        unsafe {
+            std::env::remove_var("BADC_VM_BYTECODE");
+        }
+        assert_eq!(rc, CODE_BASE as i64);
     }
 
     #[test]

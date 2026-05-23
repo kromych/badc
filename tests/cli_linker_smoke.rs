@@ -314,6 +314,44 @@ fn extern_deferred_size_array_decays_in_other_tu() {
 }
 
 #[test]
+fn compile_only_emit_native_writes_relocatable_elf() {
+    let dir = tempdir("co-native");
+    // The native -c path currently routes through
+    // `Compiler::compile()` which requires `main()`. Once the
+    // -c pipeline switches to the per-TU `compile_to_link_unit`
+    // (with `main`-less codegen), this fixture can drop to a
+    // bare `int seven()` helper. Today the entry point is
+    // necessary for the codegen prologue / `_start` stub even
+    // though the relocatable writer doesn't use it.
+    let src = write_source(&dir, "foo.c", "int main(void) { return 42; }\n");
+    let out = dir.join("foo-native.o");
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg("--emit=native")
+            .arg("-o")
+            .arg(&out)
+            .arg(&src)
+            .current_dir(&dir),
+        "compile-only --emit=native",
+    );
+    assert!(out.exists(), "expected {} to exist", out.display());
+    let bytes = std::fs::read(&out).expect("read .o");
+    assert!(
+        bytes.len() > 64 && &bytes[0..4] == b"\x7fELF",
+        "expected ELF magic; got {:?}",
+        &bytes.get(..16),
+    );
+    // ELF64 ET_REL (e_type = 1) at offset 0x10.
+    let e_type = u16::from_le_bytes([bytes[16], bytes[17]]);
+    assert_eq!(e_type, 1, "expected ET_REL (e_type=1), got {e_type}");
+    // ELF class is 64-bit.
+    assert_eq!(bytes[4], 2, "expected ELFCLASS64");
+    // Little-endian.
+    assert_eq!(bytes[5], 1, "expected ELFDATA2LSB");
+}
+
+#[test]
 fn compile_only_with_minus_o_writes_named_object() {
     let dir = tempdir("co-o");
     let src = write_source(&dir, "foo.c", "int seven() { return 7; }\n");

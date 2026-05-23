@@ -40,6 +40,12 @@ Multi-TU knobs:
                            `<stem>.o` next to each input. The `.o`
                            is target-independent; `--target=` is
                            decided at link time.
+  --emit=native            With `-c`, write a standard ELF64
+                           ET_REL object (machine code + symbol
+                           table + relocs) instead of the legacy
+                           bytecode blob. The result is linkable
+                           by `ld` / `lld`. Target pins at
+                           compile time.
   -L <dir>                 Archive search path for `-l<name>`.
                            Repeatable; probed in declared order.
   -l <name>                Pull `lib<name>.a` in as a static
@@ -195,6 +201,11 @@ fn main() {
     // source so the bytes can be fed back through another
     // badc invocation.
     let mut compile_only = false;
+    // `-c --emit=native`: produce a standard ELF64 ET_REL .o
+    // (machine code + symbol table + relocations) instead of the
+    // legacy bytecode-in-.o blob. Off by default until the reloc
+    // encoding covers every fixup the codegen leaves behind.
+    let mut emit_native_obj = false;
     let mut lib_names: Vec<String> = Vec::new();
     let mut library_paths: Vec<String> = Vec::new();
 
@@ -315,6 +326,12 @@ fn main() {
             // explicit -o path (when one source is named) or
             // `<stem>.o` next to each input.
             "-c" | "--compile-only" => compile_only = true,
+            // `--emit=native` / `--emit-native`: switch the `-c`
+            // output to a real ELF64 ET_REL with `.text` /
+            // `.data` / `.symtab` / `.rela.text` sections.
+            // Without this flag the legacy bytecode-in-.o
+            // format is written.
+            "--emit=native" | "--emit-native" => emit_native_obj = true,
             "-l" => match iter.next() {
                 Some(name) => lib_names.push(name),
                 None => {
@@ -634,6 +651,84 @@ fn main() {
         // would only appear if the user mixed them in, which is
         // already an error path above.
         let source_count = sources.len();
+        if emit_native_obj {
+            // Native `.o` path: re-compile each source to a
+            // standalone `Program` (the `-c` flow above produced
+            // `LinkUnit`s, which carry the bytecode but the
+            // codegen consumes `Program`), lower through
+            // `emit_native_with_options` with
+            // `OutputKind::Relocatable`, and write the ET_REL
+            // bytes.
+            use badc::{Compiler, OutputKind};
+            let mut reloc_opts = badc::NativeOptions::new().with_debug_info(emit_debug_info);
+            if optimize_flag {
+                reloc_opts = reloc_opts.with_optimize();
+            }
+            reloc_opts.output_kind = OutputKind::Relocatable;
+            if let Some(out) = output_path.as_deref() {
+                if source_count != 1 {
+                    eprintln!(
+                        "badc: `-o <path>` together with `-c` requires exactly one \
+                         `.c` input ({} given)",
+                        source_count
+                    );
+                    std::process::exit(1);
+                }
+                let src_path = &sources[0];
+                let src_bytes = match std::fs::read_to_string(src_path) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        eprint_diagnostic(format!("badc: error: cannot read `{src_path}`: {e}"));
+                        std::process::exit(1);
+                    }
+                };
+                let program = match Compiler::new(src_bytes).compile() {
+                    Ok(p) => p,
+                    Err(e) => {
+                        eprint_diagnostic(e);
+                        std::process::exit(1);
+                    }
+                };
+                let bytes = match badc::emit_native_with_options(&program, target, reloc_opts) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        eprint_diagnostic(e);
+                        std::process::exit(1);
+                    }
+                };
+                write_output(out, &bytes, quiet);
+            } else {
+                for src_path in sources.iter().take(source_count) {
+                    let p = std::path::Path::new(src_path);
+                    let out = p.with_extension("o");
+                    let src_bytes = match std::fs::read_to_string(src_path) {
+                        Ok(b) => b,
+                        Err(e) => {
+                            eprint_diagnostic(format!(
+                                "badc: error: cannot read `{src_path}`: {e}"
+                            ));
+                            std::process::exit(1);
+                        }
+                    };
+                    let program = match Compiler::new(src_bytes).compile() {
+                        Ok(p) => p,
+                        Err(e) => {
+                            eprint_diagnostic(e);
+                            std::process::exit(1);
+                        }
+                    };
+                    let bytes = match badc::emit_native_with_options(&program, target, reloc_opts) {
+                        Ok(b) => b,
+                        Err(e) => {
+                            eprint_diagnostic(e);
+                            std::process::exit(1);
+                        }
+                    };
+                    write_output(&out, &bytes, quiet);
+                }
+            }
+            return;
+        }
         if let Some(out) = output_path.as_deref() {
             if source_count != 1 {
                 eprintln!(

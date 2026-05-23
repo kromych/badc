@@ -1394,6 +1394,19 @@ fn append_build_info(build: &mut Build) {
 }
 
 fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>, C5Error> {
+    if build.output_kind == OutputKind::Relocatable {
+        // ELF64 ET_REL is the badc-internal relocatable format on
+        // every target -- single writer, single reloc table. The
+        // final executable still comes out in the target's native
+        // container (Mach-O / ELF / PE) at link time.
+        let machine = match target {
+            Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
+                Machine::Aarch64
+            }
+            Target::LinuxX64 | Target::WindowsX64 => Machine::X86_64,
+        };
+        return elf_reloc::write_relocatable(build, machine, &program.source_path);
+    }
     match target {
         Target::MacOSAarch64 => mach_o::write(program, build),
         Target::LinuxAarch64 => elf::write(program, build, Machine::Aarch64),

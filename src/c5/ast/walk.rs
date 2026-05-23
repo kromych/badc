@@ -989,7 +989,6 @@ impl<'a> Walker<'a> {
             } => self.load_ident_rvalue(b, *sym, *ty, *class, *val, *is_thread_local, *array_size),
             Expr::Unary { op, child, ty } => self.walk_unary(b, *op, *child, *ty),
             Expr::Binary { op, lhs, rhs, ty } => {
-                let mut lv = self.walk_expr_rvalue(b, *lhs)?;
                 let mask = unsigned_narrow_mask(*ty);
                 let needs_divmod_mask = mask != 0 && matches!(*op, BinOp::Divu | BinOp::Modu);
                 // Constant-rhs short-circuit: when the AST rhs is
@@ -1025,6 +1024,20 @@ impl<'a> Walker<'a> {
                         | BinOp::Ule
                         | BinOp::Uge
                 );
+                // C99 6.6: a constant expression evaluates at
+                // translation time. The parser doesn't fold the
+                // synthesised pointer-arithmetic scaling
+                // (`arr[K]` lowers to `arr + (K * sizeof(*arr))`
+                // with K and the size both literals), so do the
+                // fold here. Skip ops the per-arch BinopI lowering
+                // doesn't cover.
+                if imm_safe_op
+                    && let Expr::IntLit { val: lv_imm, .. } = *self.ast.expr(*lhs)
+                    && let Expr::IntLit { val: rv_imm, .. } = *self.ast.expr(*rhs)
+                {
+                    return Ok(b.imm(fold_int_binop(*op, lv_imm, rv_imm)));
+                }
+                let mut lv = self.walk_expr_rvalue(b, *lhs)?;
                 if imm_safe_op && let Expr::IntLit { val, .. } = self.ast.expr(*rhs) {
                     // C99 6.3.1.3 + 6.3.1.8: unsigned divide /
                     // modulo at a narrower-than-register common
@@ -1036,6 +1049,17 @@ impl<'a> Walker<'a> {
                     return Ok(b.binop_imm(*op, lv, *val));
                 }
                 let mut rv = self.walk_expr_rvalue(b, *rhs)?;
+                // The rhs AST shape isn't an `IntLit`, but walking
+                // it may have constant-folded down to one (e.g.
+                // `K * sizeof(*arr)` with both K and the size as
+                // literals). Inspect the SSA value the walker
+                // returned and route through `binop_imm` when it
+                // names an `Imm`. The producing inst becomes dead
+                // (use_counts drops to 0) and DCE skips it.
+                if imm_safe_op && let Some(rk) = b.peek_imm(rv) {
+                    debug_assert!(!needs_divmod_mask, "imm_safe_op should exclude Divu/Modu");
+                    return Ok(b.binop_imm(*op, lv, rk));
+                }
                 // C99 6.3.1.3 + 6.3.1.8: unsigned divide / modulo
                 // at a narrower-than-register common type needs
                 // each operand masked to that width *before* the
@@ -1392,8 +1416,15 @@ impl<'a> Walker<'a> {
                 // size (via `emit_binop_with_imm(Op::Mul, scale)`)
                 // when the pointee size is non-trivial. The
                 // resulting child `Binary{Mul, idx, scale}` rides
-                // through `walk_expr_rvalue`; we just add.
-                let addr = b.binop(BinOp::Add, arr, i);
+                // through `walk_expr_rvalue` above; for a
+                // literal `K`, that walk folds to a single `Imm`,
+                // so the address becomes `arr + Imm`. Route
+                // through `binop_imm` in that case so the per-arch
+                // emit picks `add r, imm12` / `add r, imm32`.
+                let addr = match b.peek_imm(i) {
+                    Some(k) => b.binop_imm(BinOp::Add, arr, k),
+                    None => b.binop(BinOp::Add, arr, i),
+                };
                 // C99 6.5.2.1p2 + the c5 address-as-value rule:
                 // when `ty` is a struct value (non-pointer
                 // struct), `arr[i]` produces the element's
@@ -1632,7 +1663,12 @@ impl<'a> Walker<'a> {
                 let (array_id, idx_id) = (*array, *idx);
                 let arr = self.walk_expr_rvalue(b, array_id)?;
                 let i = self.walk_expr_rvalue(b, idx_id)?;
-                Ok(b.binop(BinOp::Add, arr, i))
+                // Same constant-index fold as the rvalue Index
+                // path above.
+                match b.peek_imm(i) {
+                    Some(k) => Ok(b.binop_imm(BinOp::Add, arr, k)),
+                    None => Ok(b.binop(BinOp::Add, arr, i)),
+                }
             }
             // Member lvalue: `s.f = v` / `p->f = v`. Address is
             // the object's address-producer plus the field
@@ -2021,6 +2057,50 @@ fn is_struct_ty(ty: i64) -> bool {
     (ty & !UNSIGNED_BIT) >= STRUCT_BASE
 }
 
+/// Fold an integer binop on two constant operands. C99 6.6
+/// permits this at translation time. Caller restricts `op` to
+/// the set the per-arch BinopI lowering covers (no Div / Divu /
+/// Mod / Modu, no FP), so the only well-defined surfaces are
+/// arithmetic, bitwise, shift, and integer comparison. Shifts
+/// at out-of-range amounts produce 0 (matches what `lsl xd, xn,
+/// xm` with `xm >= 64` would land on; signed `asr` on a
+/// non-negative operand likewise saturates to 0, and on a
+/// negative operand to -1, so the model picks the closer of the
+/// two for the rhs's sign).
+fn fold_int_binop(op: BinOp, lhs: i64, rhs: i64) -> i64 {
+    match op {
+        BinOp::Add => lhs.wrapping_add(rhs),
+        BinOp::Sub => lhs.wrapping_sub(rhs),
+        BinOp::Mul => lhs.wrapping_mul(rhs),
+        BinOp::And => lhs & rhs,
+        BinOp::Or => lhs | rhs,
+        BinOp::Xor => lhs ^ rhs,
+        BinOp::Shl => {
+            let s = rhs as u32 & 63;
+            ((lhs as u64) << s) as i64
+        }
+        BinOp::Shr => {
+            let s = rhs as u32 & 63;
+            lhs >> s
+        }
+        BinOp::Shru => {
+            let s = rhs as u32 & 63;
+            ((lhs as u64) >> s) as i64
+        }
+        BinOp::Eq => (lhs == rhs) as i64,
+        BinOp::Ne => (lhs != rhs) as i64,
+        BinOp::Lt => (lhs < rhs) as i64,
+        BinOp::Gt => (lhs > rhs) as i64,
+        BinOp::Le => (lhs <= rhs) as i64,
+        BinOp::Ge => (lhs >= rhs) as i64,
+        BinOp::Ult => ((lhs as u64) < (rhs as u64)) as i64,
+        BinOp::Ugt => ((lhs as u64) > (rhs as u64)) as i64,
+        BinOp::Ule => ((lhs as u64) <= (rhs as u64)) as i64,
+        BinOp::Uge => ((lhs as u64) >= (rhs as u64)) as i64,
+        _ => unreachable!("fold_int_binop reached on non-imm-safe op"),
+    }
+}
+
 /// Pointer-depth count inside the struct band. Mirrors
 /// `compiler::types::struct_ptr_depth`. Zero means struct value;
 /// >= 1 means a pointer to the struct (or deeper indirection).
@@ -2067,10 +2147,10 @@ mod tests {
         alloc::vec::Vec::new()
     }
 
-    /// `return 7 + 3;` -- walker folds the integer-literal rhs
-    /// into a `BinopI(Add, Imm(7), 3)` so the per-arch emit
-    /// picks the immediate-form add. Locks both the expression
-    /// recursion wiring and the constant-rhs short-circuit.
+    /// `return 7 + 3;` -- both operands are integer literals,
+    /// so C99 6.6 constant evaluation kicks in and the walker
+    /// emits a single `Imm(10)` without producing the binop at
+    /// all.
     #[test]
     fn return_constant_add() {
         let mut ast = Ast::new();
@@ -2113,18 +2193,14 @@ mod tests {
                 _ => None,
             })
             .collect();
-        // Only the lhs literal lands as an `Imm`; the rhs literal
-        // is folded into the `BinopI`'s `rhs_imm`.
-        assert_eq!(immediates, alloc::vec![7i64]);
-        let binop_imms: alloc::vec::Vec<(BinOp, i64)> = func
+        // The walker folds `7 + 3` to the single value 10 -- no
+        // binop, just one `Imm`.
+        assert_eq!(immediates, alloc::vec![10i64]);
+        let any_binop = func
             .insts
             .iter()
-            .filter_map(|i| match i {
-                Inst::BinopI { op, rhs_imm, .. } => Some((*op, *rhs_imm)),
-                _ => None,
-            })
-            .collect();
-        assert_eq!(binop_imms, alloc::vec![(BinOp::Add, 3)]);
+            .any(|i| matches!(i, Inst::Binop { .. } | Inst::BinopI { .. }));
+        assert!(!any_binop, "constant-fold should leave no binop");
     }
 
     /// Identifier rvalue against a local symbol: walker emits a

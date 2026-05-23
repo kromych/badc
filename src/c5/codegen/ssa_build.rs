@@ -228,6 +228,19 @@ impl SsaBuilder {
         self.push(Inst::Binop { op, lhs, rhs })
     }
 
+    /// If `v` names an `Inst::Imm` in the current function, return
+    /// its constant value. Callers in the walker use this to fold
+    /// `Binop(op, X, Imm_value)` into `BinopI` when the rhs walked
+    /// out to a constant -- which catches recursive constant
+    /// expressions (e.g. `arr[K]` lowers to `arr + (K * sizeof)`,
+    /// and the inner `K * sizeof` walks down to an `Imm`).
+    pub(crate) fn peek_imm(&self, v: ValueId) -> Option<i64> {
+        match self.func.insts.get(v as usize) {
+            Some(Inst::Imm(k)) => Some(*k),
+            _ => None,
+        }
+    }
+
     /// `Inst::BinopI`.
     pub(crate) fn binop_imm(&mut self, op: BinOp, lhs: ValueId, rhs_imm: i64) -> ValueId {
         self.push(Inst::BinopI { op, lhs, rhs_imm })

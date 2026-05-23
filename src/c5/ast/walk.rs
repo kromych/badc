@@ -991,8 +991,52 @@ impl<'a> Walker<'a> {
             Expr::Unary { op, child, ty } => self.walk_unary(b, *op, *child, *ty),
             Expr::Binary { op, lhs, rhs, ty } => {
                 let mut lv = self.walk_expr_rvalue(b, *lhs)?;
-                let mut rv = self.walk_expr_rvalue(b, *rhs)?;
                 let mask = unsigned_narrow_mask(*ty);
+                let needs_divmod_mask = mask != 0 && matches!(*op, BinOp::Divu | BinOp::Modu);
+                // Constant-rhs short-circuit: when the AST rhs is
+                // an integer literal and the per-arch BinopI
+                // lowering covers `*op`, route through
+                // `binop_imm`. The per-arch emit picks the
+                // existing immediate-form peepholes
+                // (`add r, imm`, `shl r, imm8`, sxtw/sxth/sxtb,
+                // and so on) instead of materialising the literal
+                // into a register first. Ops whose BinopI path
+                // bails (Mod / Modu / Div / Divu / every FP op)
+                // stay on the register-rhs path so the SSA emit
+                // doesn't fall back to the pool path.
+                let imm_safe_op = matches!(
+                    *op,
+                    BinOp::Add
+                        | BinOp::Sub
+                        | BinOp::Mul
+                        | BinOp::And
+                        | BinOp::Or
+                        | BinOp::Xor
+                        | BinOp::Shl
+                        | BinOp::Shr
+                        | BinOp::Shru
+                        | BinOp::Eq
+                        | BinOp::Ne
+                        | BinOp::Lt
+                        | BinOp::Gt
+                        | BinOp::Le
+                        | BinOp::Ge
+                        | BinOp::Ult
+                        | BinOp::Ugt
+                        | BinOp::Ule
+                        | BinOp::Uge
+                );
+                if imm_safe_op && let Expr::IntLit { val, .. } = self.ast.expr(*rhs) {
+                    // C99 6.3.1.3 + 6.3.1.8: unsigned divide /
+                    // modulo at a narrower-than-register common
+                    // type needs each operand masked first. The
+                    // `imm_safe_op` set excludes Divu / Modu so
+                    // this branch never carries the divmod mask
+                    // path; the literal flows through unchanged.
+                    debug_assert!(!needs_divmod_mask, "imm_safe_op should exclude Divu/Modu");
+                    return Ok(b.binop_imm(*op, lv, *val));
+                }
+                let mut rv = self.walk_expr_rvalue(b, *rhs)?;
                 // C99 6.3.1.3 + 6.3.1.8: unsigned divide / modulo
                 // at a narrower-than-register common type needs
                 // each operand masked to that width *before* the
@@ -1001,7 +1045,7 @@ impl<'a> Walker<'a> {
                 // half in the 64-bit register; without the mask,
                 // `udiv` / `umod` operate on the wider pattern
                 // and produce the wrong order of magnitude.
-                if mask != 0 && matches!(*op, BinOp::Divu | BinOp::Modu) {
+                if needs_divmod_mask {
                     lv = b.binop_imm(BinOp::And, lv, mask);
                     rv = b.binop_imm(BinOp::And, rv, mask);
                 }
@@ -2002,9 +2046,10 @@ mod tests {
         alloc::vec::Vec::new()
     }
 
-    /// `return 7 + 3;` -- walker produces two Imm + one Add binop
-    /// and a Return terminator on the entry block. Locks the
-    /// expression recursion + the basic Return wiring.
+    /// `return 7 + 3;` -- walker folds the integer-literal rhs
+    /// into a `BinopI(Add, Imm(7), 3)` so the per-arch emit
+    /// picks the immediate-form add. Locks both the expression
+    /// recursion wiring and the constant-rhs short-circuit.
     #[test]
     fn return_constant_add() {
         let mut ast = Ast::new();
@@ -2047,16 +2092,18 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert_eq!(immediates, alloc::vec![7i64, 3]);
-        let binops: alloc::vec::Vec<BinOp> = func
+        // Only the lhs literal lands as an `Imm`; the rhs literal
+        // is folded into the `BinopI`'s `rhs_imm`.
+        assert_eq!(immediates, alloc::vec![7i64]);
+        let binop_imms: alloc::vec::Vec<(BinOp, i64)> = func
             .insts
             .iter()
             .filter_map(|i| match i {
-                Inst::Binop { op, .. } => Some(*op),
+                Inst::BinopI { op, rhs_imm, .. } => Some((*op, *rhs_imm)),
                 _ => None,
             })
             .collect();
-        assert_eq!(binops, alloc::vec![BinOp::Add]);
+        assert_eq!(binop_imms, alloc::vec![(BinOp::Add, 3)]);
     }
 
     /// Identifier rvalue against a local symbol: walker emits a

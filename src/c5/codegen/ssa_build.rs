@@ -241,8 +241,24 @@ impl SsaBuilder {
         }
     }
 
-    /// `Inst::BinopI`.
+    /// `Inst::BinopI`. Folds out the trivial identity cases so
+    /// no emit cycle is spent on a no-op `add rd, rn, #0` /
+    /// `sub rd, rn, #0` / `or rd, rn, #0` / `xor rd, rn, #0` /
+    /// `shift rd, rn, #0`. C99 6.5 leaves these well-defined as
+    /// returning `lhs` unchanged. `Mul` by 1 is the same shape;
+    /// `Mul` by 0 isn't an identity (the result is the constant
+    /// 0), so the caller still constant-folds that case.
     pub(crate) fn binop_imm(&mut self, op: BinOp, lhs: ValueId, rhs_imm: i64) -> ValueId {
+        let identity = match op {
+            BinOp::Add | BinOp::Sub | BinOp::Or | BinOp::Xor => rhs_imm == 0,
+            BinOp::Shl | BinOp::Shr | BinOp::Shru => rhs_imm == 0,
+            BinOp::Mul => rhs_imm == 1,
+            BinOp::And => rhs_imm == -1,
+            _ => false,
+        };
+        if identity {
+            return lhs;
+        }
         self.push(Inst::BinopI { op, lhs, rhs_imm })
     }
 

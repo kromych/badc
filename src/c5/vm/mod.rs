@@ -610,52 +610,48 @@ impl<H: Host> Vm<H> {
     /// (appending the bootstrap), `data` (staging argv), and the recorded
     /// `static_end`/heap state -- invoking it twice would corrupt those
     /// invariants. Build a fresh `Vm` for each run.
+    #[allow(unreachable_code)]
     pub fn run(mut self) -> Result<i64, C5Error> {
         if self.text.is_empty() {
             return Err(C5Error::Runtime("empty program".to_string()));
         }
 
-        // SSA interpreter is the production VM; the bytecode VM
-        // stays available as `BADC_VM_BYTECODE=1` for parity
-        // checks while the bytecode tape is still emitted.
+        // SSA interpreter is the production VM. `with_host`
+        // already pre-lifted every function; surface lift errors
+        // here so callers see a clean `Result` boundary instead
+        // of a panic. The bytecode body below is unreachable now;
+        // it stays in place until the parser bytecode emit is
+        // retired so the whole bytecode VM source file can drop
+        // along with it.
+        let funcs = self.ssa_funcs.as_ref().map_err(|e| e.clone())?;
         #[cfg(feature = "std")]
-        let use_ssa = !std::env::var("BADC_VM_BYTECODE").is_ok_and(|v| !v.is_empty() && v != "0");
-        #[cfg(not(feature = "std"))]
-        let use_ssa = true;
-        if use_ssa {
-            // SSA interpreter path. `with_host` already pre-lifted
-            // every function; surface lift errors here so callers
-            // see a clean `Result` boundary instead of a panic.
-            let funcs = self.ssa_funcs.as_ref().map_err(|e| e.clone())?;
-            #[cfg(feature = "std")]
-            if std::env::var("BADC_DUMP_VM_SSA").is_ok() {
-                for f in funcs {
+        if std::env::var("BADC_DUMP_VM_SSA").is_ok() {
+            for f in funcs {
+                eprintln!(
+                    "fn ent_pc={} n_params={} locals={} vstack_slots={}",
+                    f.ent_pc, f.n_params, f.locals, f.vstack_slots
+                );
+                for (b, blk) in f.blocks.iter().enumerate() {
                     eprintln!(
-                        "fn ent_pc={} n_params={} locals={} vstack_slots={}",
-                        f.ent_pc, f.n_params, f.locals, f.vstack_slots
+                        "  block {b}: insts {:?} term {:?}",
+                        blk.inst_range, blk.terminator
                     );
-                    for (b, blk) in f.blocks.iter().enumerate() {
-                        eprintln!(
-                            "  block {b}: insts {:?} term {:?}",
-                            blk.inst_range, blk.terminator
-                        );
-                        for v in blk.inst_range.clone() {
-                            eprintln!("    v{v}: {:?}", f.insts[v as usize]);
-                        }
+                    for v in blk.inst_range.clone() {
+                        eprintln!("    v{v}: {:?}", f.insts[v as usize]);
                     }
                 }
             }
-            return ssa::run_program_with_args_tracked(
-                funcs,
-                &self.data,
-                &self.binding_names,
-                self.tls_base,
-                self.entry_pc,
-                &mut self.host,
-                &self.args,
-                self.track_pointers,
-            );
         }
+        return ssa::run_program_with_args_tracked(
+            funcs,
+            &self.data,
+            &self.binding_names,
+            self.tls_base,
+            self.entry_pc,
+            &mut self.host,
+            &self.args,
+            self.track_pointers,
+        );
 
         let mut sp = STACK_BASE + STACK_CAPACITY * 8;
         let mut bp = sp;

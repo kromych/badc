@@ -40,7 +40,7 @@ use super::super::token::{Tok, Token, Ty};
 pub(crate) const STRUCT_BASE: i64 = 1000;
 /// Per-struct stride. Struct id `N` occupies `[STRUCT_BASE +
 /// N*STRIDE, STRUCT_BASE + (N+1)*STRIDE)`.
-pub(super) const STRUCT_STRIDE: i64 = 1000;
+pub(crate) const STRUCT_STRIDE: i64 = 1000;
 
 /// Width of each non-struct band (float, double, long). 50 pointer
 /// levels per band given the +2-per-`*` step.

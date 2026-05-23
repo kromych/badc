@@ -85,6 +85,49 @@ fn extern_global_read_and_write_across_units() {
 }
 
 #[test]
+fn struct_value_assignment_after_multi_tu_dedupe() {
+    // The linker dedupes per-unit `structs` tables by name when
+    // building `merged_structs`, so a unit's local struct id can
+    // drift relative to its position in the merged list. Without
+    // a per-unit struct-id remap on AST snapshots, the walker's
+    // `struct_size(ty)` indexes the wrong merged entry and emits
+    // `Inst::Mcpy` with the wrong byte count.
+    //
+    // TU A defines a few unrelated named structs ahead of the one
+    // both TUs care about; TU B then declares the same shared
+    // struct as TU A and exercises a struct-value assignment that
+    // requires the full byte count to copy correctly. The
+    // assertion checks every field landed in the destination so
+    // a truncated Mcpy would surface as a non-zero return.
+    let a = compile_unit(
+        "
+        struct unrelated_a { int x, y; };
+        struct unrelated_b { int a, b, c; };
+        struct shared { int p; int q; int r; int s; int t; int u; };
+        int build(struct shared *out) {
+            out->p = 1; out->q = 2; out->r = 3;
+            out->s = 4; out->t = 5; out->u = 6;
+            return 0;
+        }
+        ",
+    );
+    let b = compile_unit(
+        "
+        struct shared { int p; int q; int r; int s; int t; int u; };
+        extern int build(struct shared *out);
+        int main() {
+            struct shared a;
+            struct shared b;
+            build(&a);
+            b = a;
+            return b.p + b.q + b.r + b.s + b.t + b.u;
+        }
+        ",
+    );
+    assert_eq!(link_and_run(alloc::vec![b, a]), 21);
+}
+
+#[test]
 fn static_function_is_not_exported_cross_tu() {
     // TU A has a `static` helper -- internal linkage.
     // TU B has its own `helper` with the same name -- legal

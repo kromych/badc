@@ -717,15 +717,30 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
     // correctness. The merged list is consumed only by the
     // DWARF emitter.
     let mut merged_structs: Vec<crate::c5::compiler::StructDef> = Vec::new();
+    // Per-unit struct-id remap: `struct_remap_per_unit[i][unit_local_id]`
+    // is the index this struct lands at in `merged_structs`. The
+    // walker reads `struct_size(ty)` against `merged_structs` for
+    // every struct assignment / return / by-value param size, so
+    // the AST snapshots that ride this `Program` need their `ty`
+    // tags rebased. The bytecode tier baked sizes at parse time
+    // (`Op::Mcpy <size>` etc.) and never re-consults the table,
+    // which is why this hadn't surfaced before the walker landed.
+    let mut struct_remap_per_unit: Vec<Vec<usize>> = Vec::with_capacity(units.len());
     for unit in &units {
+        let mut remap = Vec::with_capacity(unit.structs.len());
         for s in &unit.structs {
-            if !merged_structs
-                .iter()
-                .any(|m| m.name == s.name && !s.name.is_empty())
+            let merged_idx = if !s.name.is_empty()
+                && let Some(existing) =
+                    merged_structs.iter().position(|m| m.name == s.name)
             {
+                existing
+            } else {
                 merged_structs.push(s.clone());
-            }
+                merged_structs.len() - 1
+            };
+            remap.push(merged_idx);
         }
+        struct_remap_per_unit.push(remap);
     }
 
     Ok(Program {
@@ -815,6 +830,18 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                     clone
                         .ast
                         .rebase_sys_binding_indices(&binding_remap_per_unit[i]);
+                    // Struct type tags carry unit-local struct
+                    // ids; rebase to the merged-list ids the
+                    // walker consults via `self.structs`. Also
+                    // remap per-parameter type tags so the walker
+                    // sizes struct-by-value entry-Mcpys against
+                    // the merged struct.
+                    clone
+                        .ast
+                        .rebase_struct_ids(&struct_remap_per_unit[i]);
+                    for ty in &mut clone.param_tys {
+                        *ty = crate::c5::ast::remap_struct_ty(*ty, &struct_remap_per_unit[i]);
+                    }
                     all.push(clone);
                 }
             }
@@ -866,6 +893,21 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                     // defining sibling.
                     if s.class == fun_class && s.defined_here {
                         s.val += base;
+                    }
+                    // Symbol::type_ and Symbol::params carry
+                    // unit-local struct ids; rebase to the
+                    // merged-list ids so the walker's
+                    // `is_struct_ty(sym.type_)` / `struct_size`
+                    // queries hit the right entry.
+                    s.type_ = crate::c5::ast::remap_struct_ty(
+                        s.type_,
+                        &struct_remap_per_unit[i],
+                    );
+                    for p in &mut s.params {
+                        *p = crate::c5::ast::remap_struct_ty(
+                            *p,
+                            &struct_remap_per_unit[i],
+                        );
                     }
                     merged.push(s);
                 }

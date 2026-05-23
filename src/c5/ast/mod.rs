@@ -645,8 +645,94 @@ impl Ast {
         }
     }
 
+    /// Linker-side fixup: remap every struct type tag from the
+    /// unit-local struct id to the merged struct id. The linker
+    /// dedupes structs by name when concatenating per-unit
+    /// `structs` tables, so a unit's local id can drift relative
+    /// to its position in the merged list; without this remap the
+    /// walker's `struct_size(ty)` indexes the wrong entry and
+    /// emits the wrong `Inst::Mcpy` byte count for struct
+    /// assignments / returns / struct-by-value params.
+    ///
+    /// The bytecode tier sidesteps this because the parser bakes
+    /// `Op::Mcpy <size>` at parse time with `size_of_type(ty)`;
+    /// the bytecode never re-consults the struct table after
+    /// linking.
+    pub(crate) fn rebase_struct_ids(&mut self, remap: &[usize]) {
+        if remap.is_empty() {
+            return;
+        }
+        for expr in &mut self.exprs {
+            visit_expr_ty(expr, &mut |ty| *ty = remap_struct_ty(*ty, remap));
+        }
+        for decl in &mut self.decls {
+            visit_decl_ty(decl, &mut |ty| *ty = remap_struct_ty(*ty, remap));
+        }
+    }
+
     pub(crate) fn decl(&self, id: DeclId) -> &Decl {
         &self.decls[id as usize]
+    }
+}
+
+/// Linker-side struct-id rebase helpers. Defined out of the
+/// `impl Ast` block so callers can also use them on raw type
+/// tags carried outside the AST (e.g. `FinishedFunction::param_tys`,
+/// `Symbol::type_`).
+pub(crate) fn remap_struct_ty(ty: i64, remap: &[usize]) -> i64 {
+    use crate::c5::compiler::types::UNSIGNED_BIT;
+    use crate::c5::compiler::types::{STRUCT_BASE, STRUCT_STRIDE};
+    let unsigned = ty & UNSIGNED_BIT;
+    let stripped = ty & !UNSIGNED_BIT;
+    if stripped < STRUCT_BASE {
+        return ty;
+    }
+    let old_id = ((stripped - STRUCT_BASE) / STRUCT_STRIDE) as usize;
+    if old_id >= remap.len() {
+        return ty;
+    }
+    let new_id = remap[old_id] as i64;
+    let ptr_part = (stripped - STRUCT_BASE) % STRUCT_STRIDE;
+    let rebased = STRUCT_BASE + new_id * STRUCT_STRIDE + ptr_part;
+    rebased | unsigned
+}
+
+fn visit_expr_ty(expr: &mut Expr, f: &mut impl FnMut(&mut i64)) {
+    match expr {
+        Expr::IntLit { ty, .. }
+        | Expr::FloatLit { ty, .. }
+        | Expr::StrLit { ty, .. }
+        | Expr::Ident { ty, .. }
+        | Expr::Unary { ty, .. }
+        | Expr::Binary { ty, .. }
+        | Expr::Ternary { ty, .. }
+        | Expr::Call { ty, .. }
+        | Expr::Member { ty, .. }
+        | Expr::Index { ty, .. }
+        | Expr::Assign { ty, .. }
+        | Expr::BitfieldAssign { ty, .. }
+        | Expr::CompoundAssign { ty, .. }
+        | Expr::PreInc { ty, .. }
+        | Expr::PostInc { ty, .. }
+        | Expr::Comma { ty, .. }
+        | Expr::ShortCircuit { ty, .. }
+        | Expr::Intrinsic { ty, .. } => f(ty),
+        Expr::Cast { to_ty, .. } => f(to_ty),
+        Expr::Sizeof(_) => {}
+    }
+}
+
+fn visit_decl_ty(decl: &mut Decl, f: &mut impl FnMut(&mut i64)) {
+    match decl {
+        Decl::Local { ty, init, .. } => {
+            f(ty);
+            if let LocalInit::Runtime { elements, .. } = init {
+                for e in elements {
+                    f(&mut e.ty);
+                }
+            }
+        }
+        Decl::Vla { .. } | Decl::StaticLocal { .. } => {}
     }
 }
 

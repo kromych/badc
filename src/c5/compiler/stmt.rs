@@ -45,7 +45,23 @@ impl Compiler {
         self.expr(Token::Assign as i64)?;
         while self.lex.tk == ',' {
             self.next()?;
+            // C99 6.5.17: comma operator evaluates the lhs for
+            // side effects, discards the value, then evaluates
+            // the rhs. Build `Expr::Comma { lhs, rhs }` so the
+            // walker visits the lhs before producing the rhs's
+            // value as the chain's result.
+            let lhs_ast = self.ast_acc;
             self.expr(Token::Assign as i64)?;
+            let rhs_ast = self.ast_acc;
+            if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
+                let pos = self.ast_src_pos();
+                let ty = self.ty;
+                let id = self.ast.push_expr(
+                    super::super::ast::Expr::Comma { lhs, rhs, ty },
+                    pos,
+                );
+                self.ast_acc = Some(id);
+            }
         }
         Ok(())
     }

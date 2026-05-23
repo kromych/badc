@@ -37,6 +37,7 @@ mod aarch64;
 mod disasm;
 mod dwarf;
 mod elf;
+mod elf_reloc;
 mod jit;
 mod mach_o;
 mod pe;
@@ -1186,6 +1187,14 @@ pub enum OutputKind {
     /// every `#pragma export(<name>)` becomes a callable
     /// entry point.
     SharedLibrary,
+    /// Relocatable native object (`.o` on ELF / Mach-O, `.obj` on
+    /// PE). Each function emits with cross-TU references left
+    /// as relocation entries against the unit's symbol table.
+    /// Consumed by a system linker (`ld`, `lld`, `link.exe`) or
+    /// by `link_units`' native path. Locks the target at compile
+    /// time -- a relocatable produced for one target can't be
+    /// linked into a binary for a different one.
+    Relocatable,
 }
 
 impl Default for NativeOptions {

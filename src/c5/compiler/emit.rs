@@ -1596,15 +1596,25 @@ impl Compiler {
             return;
         };
         // C99 6.5.16p2: an assignment's left operand must be a
-        // modifiable lvalue. An `Expr::Assign` node never is --
-        // its value is the stored rhs, an rvalue. When the
-        // parser-vstack handoff lands one in the lhs slot, the
-        // top of the stack belongs to a different chain (a
-        // nested assignment's value pushed for an enclosing
-        // operator) and pairing it with the current rhs would
-        // synthesise a non-C99 shape the walker rejects. Drop
-        // the build instead.
-        if matches!(self.ast.expr(lhs), super::super::ast::Expr::Assign { .. }) {
+        // modifiable lvalue. Only a small set of `Expr` shapes
+        // qualify; everything else lands on the vstack from a
+        // different chain (a nested assignment's value pushed
+        // for an enclosing operator, a constant literal pushed
+        // by a side-effect computation, ...). Drop the build
+        // rather than synthesise a non-C99 shape the walker
+        // would reject downstream.
+        if !matches!(
+            self.ast.expr(lhs),
+            super::super::ast::Expr::Ident { .. }
+                | super::super::ast::Expr::Unary {
+                    op: super::super::ast::UnOp::Deref,
+                    ..
+                }
+                | super::super::ast::Expr::Member { .. }
+                | super::super::ast::Expr::Index { .. }
+                | super::super::ast::Expr::Binary { .. }
+                | super::super::ast::Expr::Cast { .. }
+        ) {
             return;
         }
         let pos = self.ast_src_pos();

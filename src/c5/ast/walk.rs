@@ -582,7 +582,15 @@ impl<'a> Walker<'a> {
                         let mut saw_marker = false;
                         // Peel nested Case / Default markers
                         // off the head until we hit a real
-                        // statement.
+                        // statement. `Stmt::Labeled` is also
+                        // unwrapped here: tcc-style `foo:
+                        // default:` puts a regular goto target
+                        // immediately before a Default marker;
+                        // the label block is allocated lazily
+                        // by `block_for_label` so a stray
+                        // `goto foo;` still lands somewhere
+                        // walkable, and the inner Default
+                        // joins the current partition.
                         loop {
                             match self.ast.stmt(s_id) {
                                 Stmt::Case { val, body } => {
@@ -600,6 +608,21 @@ impl<'a> Walker<'a> {
                                     }
                                     current_labels.push(None);
                                     s_id = *body;
+                                }
+                                Stmt::Labeled { body, .. } => {
+                                    // Only descend when the
+                                    // wrapped statement is itself
+                                    // a Case / Default marker;
+                                    // otherwise the labeled stmt
+                                    // is a regular statement that
+                                    // belongs in the current
+                                    // partition's body.
+                                    let inner = self.ast.stmt(*body);
+                                    if matches!(inner, Stmt::Case { .. } | Stmt::Default { .. }) {
+                                        s_id = *body;
+                                    } else {
+                                        break;
+                                    }
                                 }
                                 _ => break,
                             }

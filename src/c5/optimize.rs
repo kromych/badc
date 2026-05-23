@@ -470,6 +470,33 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         })
         .collect();
 
+    // Remap `Symbol::val` for every Token::Fun symbol -- the
+    // parser stored the pre-opt `Op::Ent` PC there; the walker
+    // reads it as the call target on every `Expr::Call`. Without
+    // this remap, post-opt Call insts reference pre-opt PCs and
+    // the native emit's bc_to_native lookup misses entirely.
+    let symbols: Vec<crate::c5::symbol::Symbol> = {
+        let fun_class = crate::c5::token::Token::Fun as i64;
+        let mut syms = symbols;
+        for sym in syms.iter_mut() {
+            if sym.class != fun_class || sym.val < 0 {
+                continue;
+            }
+            let old_pc = sym.val as u64;
+            let Some(&idx) = pc_at_idx_for_pc.get(&old_pc) else {
+                continue;
+            };
+            let Some(&new_bc_pc) = new_pc.get(idx) else {
+                continue;
+            };
+            if new_bc_pc == usize::MAX {
+                continue;
+            }
+            sym.val = new_bc_pc as i64;
+        }
+        syms
+    };
+
     Ok(Program {
         text,
         data,

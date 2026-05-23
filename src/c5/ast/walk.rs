@@ -220,6 +220,26 @@ struct Walker<'a> {
 }
 
 impl<'a> Walker<'a> {
+    /// Live `ent_pc` for a `Token::Fun` symbol. The parser
+    /// stored the pre-optimization PC in `Expr::Ident.val`; the
+    /// bytecode optimizer can shift `Op::Ent` and updates
+    /// `Symbol::val` in place. Looking it up here lets every
+    /// `Expr::Call` resolve to the post-opt PC the SSA emit's
+    /// `bytecode_to_native` table holds, without re-walking the
+    /// AST after `optimize::optimize`. Sys trampolines have
+    /// their `val` patched late by `emit_sys_trampolines`;
+    /// the same live-read fits both cases.
+    fn live_fun_val(&self, sym: u32, fallback_val: i64) -> i64 {
+        let idx = sym as usize;
+        if idx < self.symbols.len()
+            && self.symbols[idx].class == Token::Fun as i64
+        {
+            self.symbols[idx].val
+        } else {
+            fallback_val
+        }
+    }
+
     /// Byte size of the struct type encoded by `ty`. Looks up
     /// the struct id (via the same band scheme the parser uses)
     /// in the propagated `structs` slice. Returns 0 when the
@@ -936,7 +956,7 @@ impl<'a> Walker<'a> {
                 // the expression's value (the c5 ABI's
                 // address-as-value rule for struct rvalues).
                 if is_struct_ty(*ty) && struct_ptr_depth(*ty) == 0 {
-                    if let Expr::Ident { class, val, .. } = self.ast.expr(*callee) {
+                    if let Expr::Ident { sym, class, val, .. } = self.ast.expr(*callee) {
                         if *class == Token::Fun as i64 {
                             let result_slot = b.alloc_synthetic_local();
                             // Spill the out-pointer through an
@@ -959,7 +979,8 @@ impl<'a> Walker<'a> {
                             for a in args {
                                 all_args.push(self.walk_expr_rvalue(b, *a)?);
                             }
-                            let _ = b.call(*val as usize, all_args);
+                            let target_pc = self.live_fun_val(*sym, *val);
+                            let _ = b.call(target_pc as usize, all_args);
                             return Ok(b.local_addr(result_slot));
                         }
                     }
@@ -994,7 +1015,7 @@ impl<'a> Walker<'a> {
                         fp_arg_mask |= 1u32 << i;
                     }
                 }
-                if let Expr::Ident { class, val, .. } = self.ast.expr(*callee) {
+                if let Expr::Ident { sym, class, val, .. } = self.ast.expr(*callee) {
                     if *class == Token::Fun as i64 {
                         // c5-internal calls pass every arg in
                         // an integer register slot (the callee
@@ -1023,7 +1044,8 @@ impl<'a> Walker<'a> {
                                     b.load_local(slot, super::super::ir::LoadKind::I64);
                             }
                         }
-                        return Ok(b.call(*val as usize, arg_vals));
+                        let target_pc = self.live_fun_val(*sym, *val);
+                        return Ok(b.call(target_pc as usize, arg_vals));
                     }
                     if *class == Token::Sys as i64 {
                         // The Ident's `val` is the binding's

@@ -705,15 +705,12 @@ impl ResolvedImports {
             pc += op.word_size();
         }
 
-        // When the AST-driven SSA walker is the source of truth
-        // (`BADC_USE_AST_SSA=1`), an `Expr::Call` whose callee is
-        // a `Token::Sys` ident lowers to `Inst::CallExt` even if
-        // the bytecode-side `Op::JsrExt` got DCE'd by the
-        // optimizer. Walk the per-function AST snapshots so each
-        // such call's binding-flat index reaches the resolved set
-        // -- without it the SSA emit bails on the CallExt and the
-        // function falls back to the pool path (which the codebase
-        // no longer carries).
+        // An `Expr::Call` whose callee is a `Token::Sys` ident
+        // lowers to `Inst::CallExt`. Walk the per-function AST
+        // snapshots so each such call's binding-flat index reaches
+        // the resolved set, regardless of whether the
+        // bytecode-tier `Op::JsrExt` survived an optimizer DCE
+        // pass.
         for func in &program.finished_functions {
             for expr in &func.ast.exprs {
                 let super::ast::Expr::Call { callee, .. } = expr else {

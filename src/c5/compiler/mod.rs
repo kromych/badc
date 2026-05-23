@@ -1141,14 +1141,6 @@ impl Compiler {
         // operands and `target_bc_pc` slots.
         self.emit_sys_trampolines();
         self.apply_fn_call_fixups()?;
-        // Shadow-validate the captured AST against the walker
-        // when the env var asks for it. Reports walker errors as
-        // warnings on the returned Program -- never fails the
-        // compile while Phase C2 wiring is still incomplete.
-        #[cfg(feature = "std")]
-        if std::env::var("BADC_VALIDATE_AST").is_ok() {
-            self.validate_finished_asts();
-        }
         let (entry_pc, dllmain_pc, resolved_entry_name) = self.resolve_entry_and_dllmain_pcs()?;
         let exports = self.resolve_exports()?;
         Ok(Program {

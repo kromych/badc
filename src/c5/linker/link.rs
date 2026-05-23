@@ -769,15 +769,10 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         entry_name,
         subsystem,
         // Linker propagates the AST tier so the post-link
-        // codegen can drive SSA from the walker (Phase C5
-        // `BADC_USE_AST_SSA=1`). Each unit's `finished_functions`
-        // has unit-local `ent_pc`s; rebase by the unit's
-        // `text_base` so the codegen-side ent_pc remains
-        // consistent with the merged bytecode. `Expr::Ident.sym`
-        // remains a unit-local index for now -- multi-TU
-        // symbol-base remapping would need a parallel
-        // `sym_base[unit]` walk on every AST Ident; defer that
-        // to when multi-TU lands an AST-driven flip. Single-unit
+        // codegen can drive SSA from the walker. Each unit's
+        // `finished_functions` has unit-local `ent_pc`s; rebase
+        // by the unit's `text_base` so the codegen-side ent_pc
+        // stays consistent with the merged bytecode. Single-unit
         // links are the immediate target and concatenate
         // verbatim.
         finished_functions: {

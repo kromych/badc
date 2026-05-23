@@ -112,18 +112,16 @@ pub struct LinkUnit {
     pub relocs: Vec<Reloc>,
     /// Per-function AST snapshots captured at parse-time by
     /// `compile_to_link_unit`. The linker preserves them so the
-    /// AST-driven SSA path (`BADC_USE_AST_SSA=1`) can drive the
-    /// codegen post-link. Multi-TU links re-base each entry's
-    /// `ent_pc` by the unit's `text_offset` (mirroring how
-    /// `code_imm_positions` and similar PC-indexed side tables
-    /// re-base).
+    /// walker can drive the codegen post-link. Multi-TU links
+    /// re-base each entry's `ent_pc` by the unit's `text_offset`
+    /// (mirroring how `code_imm_positions` and similar PC-indexed
+    /// side tables re-base).
     pub(crate) finished_functions: Vec<crate::c5::ast::FinishedFunction>,
     /// Parser symbol-table snapshot at compile-end. The walker
     /// reads `array_size` + `type_` off these for shapes the AST
     /// node fields don't yet carry. Multi-TU links concatenate;
     /// `Expr::Ident.sym` indices into this slice are unit-local
     /// and re-based by the unit's `symbols_offset` if the
-    /// linker grows that bookkeeping. Empty for objects produced
-    /// before the AST tier landed.
+    /// linker grows that bookkeeping.
     pub(crate) parser_symbols: Vec<crate::c5::symbol::Symbol>,
 }

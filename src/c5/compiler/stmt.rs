@@ -56,10 +56,9 @@ impl Compiler {
             if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
                 let pos = self.ast_src_pos();
                 let ty = self.ty;
-                let id = self.ast.push_expr(
-                    super::super::ast::Expr::Comma { lhs, rhs, ty },
-                    pos,
-                );
+                let id = self
+                    .ast
+                    .push_expr(super::super::ast::Expr::Comma { lhs, rhs, ty }, pos);
                 self.ast_acc = Some(id);
             }
         }

@@ -4,10 +4,10 @@
 //! (sys-trampolines, the CRT entry) that have no AST and any
 //! program reloaded from an archive (linker / optimizer path).
 
+use crate::c5::Target;
 use crate::c5::error::C5Error;
 use crate::c5::ir::FunctionSsa;
 use crate::c5::program::Program;
-use crate::c5::Target;
 use alloc::vec::Vec;
 
 /// AST-driven counterpart to [`super::ssa::lift_program`]. Walks
@@ -20,16 +20,12 @@ use alloc::vec::Vec;
 /// detection + `type_` for the local-decl width). If the
 /// snapshot is empty (linker / optimizer reload), the caller is
 /// expected to keep using `lift_program` instead.
-pub(crate) fn walk_program(
-    program: &Program,
-    target: Target,
-) -> Result<Vec<FunctionSsa>, C5Error> {
+pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<FunctionSsa>, C5Error> {
     // Walker entries from AST snapshots, keyed by ent_pc. Sys
     // trampolines, the synthetic CRT entry, and any other
     // post-parser function bodies don't go through the dual-emit
     // and are recovered from the bytecode lift below.
-    let mut walker_pcs: alloc::collections::BTreeSet<usize> =
-        alloc::collections::BTreeSet::new();
+    let mut walker_pcs: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
     let mut out: Vec<FunctionSsa> = Vec::with_capacity(program.finished_functions.len());
     let mut ordered: Vec<usize> = (0..program.finished_functions.len()).collect();
     ordered.sort_by_key(|&i| program.finished_functions[i].ent_pc);
@@ -137,4 +133,3 @@ fn walker_param_count(func: &FunctionSsa) -> usize {
         None => 0,
     }
 }
-

@@ -328,8 +328,7 @@ impl Compiler {
         // back on `ast_acc`.
         let lhs_ast = self.ast_vstack.pop().flatten();
         let rhs_ast = self.ast_acc.take();
-        let saved_vstack: alloc::vec::Vec<_> =
-            self.ast_vstack.drain(..).collect();
+        let saved_vstack: alloc::vec::Vec<_> = self.ast_vstack.drain(..).collect();
         self.ast_vstack.push(None);
         self.loc_offs += 1;
         if self.loc_offs > self.max_loc_offs {

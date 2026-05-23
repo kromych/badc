@@ -730,8 +730,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         let mut remap = Vec::with_capacity(unit.structs.len());
         for s in &unit.structs {
             let merged_idx = if !s.name.is_empty()
-                && let Some(existing) =
-                    merged_structs.iter().position(|m| m.name == s.name)
+                && let Some(existing) = merged_structs.iter().position(|m| m.name == s.name)
             {
                 existing
             } else {
@@ -784,8 +783,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                 sym_base.push(cum);
                 cum += unit.parser_symbols.len() as u32;
             }
-            let mut all: alloc::vec::Vec<crate::c5::ast::FinishedFunction> =
-                alloc::vec::Vec::new();
+            let mut all: alloc::vec::Vec<crate::c5::ast::FinishedFunction> = alloc::vec::Vec::new();
             for (i, unit) in units.iter().enumerate() {
                 let base = text_base[i];
                 let d_base = data_base[i] as i64;
@@ -831,9 +829,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                     // remap per-parameter type tags so the walker
                     // sizes struct-by-value entry-Mcpys against
                     // the merged struct.
-                    clone
-                        .ast
-                        .rebase_struct_ids(&struct_remap_per_unit[i]);
+                    clone.ast.rebase_struct_ids(&struct_remap_per_unit[i]);
                     for ty in &mut clone.param_tys {
                         *ty = crate::c5::ast::remap_struct_ty(*ty, &struct_remap_per_unit[i]);
                     }
@@ -866,8 +862,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
             // resolves through the `LinkUnit::symbols` canonical
             // entry, the same way `apply_reloc` patches
             // bytecode-tier `Op::Imm <data_off>` operands.
-            let mut merged: alloc::vec::Vec<crate::c5::symbol::Symbol> =
-                alloc::vec::Vec::new();
+            let mut merged: alloc::vec::Vec<crate::c5::symbol::Symbol> = alloc::vec::Vec::new();
             let fun_class = crate::c5::token::Token::Fun as i64;
             let glo_class = crate::c5::token::Token::Glo as i64;
             for (i, unit) in units.iter().enumerate() {
@@ -894,15 +889,9 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                     // merged-list ids so the walker's
                     // `is_struct_ty(sym.type_)` / `struct_size`
                     // queries hit the right entry.
-                    s.type_ = crate::c5::ast::remap_struct_ty(
-                        s.type_,
-                        &struct_remap_per_unit[i],
-                    );
+                    s.type_ = crate::c5::ast::remap_struct_ty(s.type_, &struct_remap_per_unit[i]);
                     for p in &mut s.params {
-                        *p = crate::c5::ast::remap_struct_ty(
-                            *p,
-                            &struct_remap_per_unit[i],
-                        );
+                        *p = crate::c5::ast::remap_struct_ty(*p, &struct_remap_per_unit[i]);
                     }
                     merged.push(s);
                 }
@@ -910,17 +899,42 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
             // Forward-decl resolution for Token::Fun. A Sys
             // binding's `val` is the binding-flat index, not a
             // PC, so the class check excludes it.
+            //
+            // Sources for the (name -> post-link PC) map:
+            //  * `merged` (concatenated parser_symbols) for units
+            //    parsed in this invocation -- their `defined_here`
+            //    bit + the `text_base`-shifted val already point at
+            //    the right PC.
+            //  * Each unit's [`LinkSymbol`] table for archive-pulled
+            //    units. `read_object` does not round-trip
+            //    `parser_symbols`, so those entries never reach
+            //    `merged`; the c5 object format carries the same
+            //    function names through the standard SYMTAB section
+            //    instead. Pull them in here so the walker's
+            //    `live_fun_val(sym)` resolves cross-unit
+            //    archive-defined callees instead of returning 0
+            //    (which collides with the first function in the
+            //    merged bytecode -- usually `main`).
             use crate::c5::symbol::Linkage;
-            let mut fun_def_by_name: alloc::collections::BTreeMap<
-                alloc::string::String,
-                i64,
-            > = alloc::collections::BTreeMap::new();
+            let mut fun_def_by_name: alloc::collections::BTreeMap<alloc::string::String, i64> =
+                alloc::collections::BTreeMap::new();
             for s in &merged {
-                if s.class == fun_class
-                    && s.defined_here
-                    && s.linkage == Linkage::External
-                {
+                if s.class == fun_class && s.defined_here && s.linkage == Linkage::External {
                     fun_def_by_name.insert(s.name.clone(), s.val);
+                }
+            }
+            for (i, unit) in units.iter().enumerate() {
+                let base = text_base[i] as i64;
+                for ls in &unit.symbols {
+                    if !matches!(ls.kind, SymbolKind::Function) {
+                        continue;
+                    }
+                    if !matches!(ls.linkage, Linkage::External) {
+                        continue;
+                    }
+                    fun_def_by_name
+                        .entry(ls.name.clone())
+                        .or_insert(base + ls.value as i64);
                 }
             }
             for s in &mut merged {
@@ -951,8 +965,12 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                 {
                     continue;
                 }
-                let Some(g) = defined.get(&s.name) else { continue; };
-                let Some(target) = units[g.unit_idx].symbols.get(g.sym_idx) else { continue; };
+                let Some(g) = defined.get(&s.name) else {
+                    continue;
+                };
+                let Some(target) = units[g.unit_idx].symbols.get(g.sym_idx) else {
+                    continue;
+                };
                 if matches!(target.kind, SymbolKind::Data) {
                     s.val = (data_base[g.unit_idx] as i64) + target.value as i64;
                 }

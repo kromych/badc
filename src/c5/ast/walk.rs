@@ -122,8 +122,8 @@ pub(crate) fn walk_function(
             continue;
         }
         let stripped = pty & !(1i64 << 30);
-        let is_struct_value = stripped >= STRUCT_BASE
-            && ((stripped - STRUCT_BASE) % STRUCT_STRIDE) / 2 == 0;
+        let is_struct_value =
+            stripped >= STRUCT_BASE && ((stripped - STRUCT_BASE) % STRUCT_STRIDE) / 2 == 0;
         if is_struct_value {
             let id = ((stripped - STRUCT_BASE) / STRUCT_STRIDE) as usize;
             if id >= structs.len() {
@@ -233,9 +233,7 @@ impl<'a> Walker<'a> {
     /// the same live-read fits both cases.
     fn live_fun_val(&self, sym: u32, fallback_val: i64) -> i64 {
         let idx = sym as usize;
-        if idx < self.symbols.len()
-            && self.symbols[idx].class == Token::Fun as i64
-        {
+        if idx < self.symbols.len() && self.symbols[idx].class == Token::Fun as i64 {
             self.symbols[idx].val
         } else {
             fallback_val
@@ -316,8 +314,7 @@ impl<'a> Walker<'a> {
                     // out-pointer so the call site has a stable
                     // value to chain into the surrounding
                     // assignment / Mcpy.
-                    let out_ptr = b
-                        .load_local(2, super::super::ir::LoadKind::I64);
+                    let out_ptr = b.load_local(2, super::super::ir::LoadKind::I64);
                     let src = self.walk_expr_rvalue(b, *e)?;
                     if self.return_struct_size > 0 {
                         b.mcpy(out_ptr, src, self.return_struct_size);
@@ -593,19 +590,18 @@ impl<'a> Walker<'a> {
                 let mut current: alloc::vec::Vec<super::BlockItem> = alloc::vec::Vec::new();
                 let mut pending_goto_labels: alloc::vec::Vec<super::super::ast::LabelId> =
                     alloc::vec::Vec::new();
-                let flush = |partitions: &mut alloc::vec::Vec<(
-                    alloc::vec::Vec<Option<i64>>,
-                    alloc::vec::Vec<super::BlockItem>,
-                )>,
-                             current_labels: &mut alloc::vec::Vec<Option<i64>>,
-                             current: &mut alloc::vec::Vec<super::BlockItem>| {
-                    if !current.is_empty() || !current_labels.is_empty() {
-                        partitions.push((
-                            core::mem::take(current_labels),
-                            core::mem::take(current),
-                        ));
-                    }
-                };
+                let flush =
+                    |partitions: &mut alloc::vec::Vec<(
+                        alloc::vec::Vec<Option<i64>>,
+                        alloc::vec::Vec<super::BlockItem>,
+                    )>,
+                     current_labels: &mut alloc::vec::Vec<Option<i64>>,
+                     current: &mut alloc::vec::Vec<super::BlockItem>| {
+                        if !current.is_empty() || !current_labels.is_empty() {
+                            partitions
+                                .push((core::mem::take(current_labels), core::mem::take(current)));
+                        }
+                    };
                 // Process a slice of switch-body items into the
                 // partitions / current accumulator pair. Recurses
                 // into any Compound whose body contains a case or
@@ -634,19 +630,20 @@ impl<'a> Walker<'a> {
                     current: &mut alloc::vec::Vec<super::BlockItem>,
                     pending_goto_labels: &mut alloc::vec::Vec<super::super::ast::LabelId>,
                 ) {
-                    let do_flush = |partitions: &mut alloc::vec::Vec<(
-                        alloc::vec::Vec<Option<i64>>,
-                        alloc::vec::Vec<super::BlockItem>,
-                    )>,
-                                    current_labels: &mut alloc::vec::Vec<Option<i64>>,
-                                    current: &mut alloc::vec::Vec<super::BlockItem>| {
-                        if !current.is_empty() || !current_labels.is_empty() {
-                            partitions.push((
-                                core::mem::take(current_labels),
-                                core::mem::take(current),
-                            ));
-                        }
-                    };
+                    let do_flush =
+                        |partitions: &mut alloc::vec::Vec<(
+                            alloc::vec::Vec<Option<i64>>,
+                            alloc::vec::Vec<super::BlockItem>,
+                        )>,
+                         current_labels: &mut alloc::vec::Vec<Option<i64>>,
+                         current: &mut alloc::vec::Vec<super::BlockItem>| {
+                            if !current.is_empty() || !current_labels.is_empty() {
+                                partitions.push((
+                                    core::mem::take(current_labels),
+                                    core::mem::take(current),
+                                ));
+                            }
+                        };
                     for item in items {
                         if let super::BlockItem::Stmt(s) = item {
                             let mut s_id = *s;
@@ -671,10 +668,8 @@ impl<'a> Walker<'a> {
                                     }
                                     Stmt::Labeled { label, body } => {
                                         let inner = walker.ast.stmt(*body);
-                                        if matches!(
-                                            inner,
-                                            Stmt::Case { .. } | Stmt::Default { .. }
-                                        ) {
+                                        if matches!(inner, Stmt::Case { .. } | Stmt::Default { .. })
+                                        {
                                             pending_goto_labels.push(*label);
                                             s_id = *body;
                                         } else {
@@ -721,20 +716,20 @@ impl<'a> Walker<'a> {
                         // partition correctly; if no case is reached,
                         // the recursion no-ops and the items end up
                         // pushed in order into the current partition.
-                        if let super::BlockItem::Stmt(s) = item {
-                            if let Stmt::Compound(inner_items) = walker.ast.stmt(*s) {
-                                let inner_items_owned = inner_items.clone();
-                                partition_items(
-                                    walker,
-                                    &inner_items_owned,
-                                    partitions,
-                                    peeled_label_partition,
-                                    current_labels,
-                                    current,
-                                    pending_goto_labels,
-                                );
-                                continue;
-                            }
+                        if let super::BlockItem::Stmt(s) = item
+                            && let Stmt::Compound(inner_items) = walker.ast.stmt(*s)
+                        {
+                            let inner_items_owned = inner_items.clone();
+                            partition_items(
+                                walker,
+                                &inner_items_owned,
+                                partitions,
+                                peeled_label_partition,
+                                current_labels,
+                                current,
+                                pending_goto_labels,
+                            );
+                            continue;
                         }
                         current.push(*item);
                     }
@@ -771,15 +766,13 @@ impl<'a> Walker<'a> {
                 let mut next_dispatcher_blk = b.new_block();
                 b.jmp(next_dispatcher_blk);
                 for (i, (labels, _)) in partitions.iter().enumerate() {
-                    for label in labels {
-                        if let Some(val) = label {
-                            b.switch_to(next_dispatcher_blk);
-                            let val_v = b.imm(*val);
-                            let eq = b.binop(BinOp::Eq, disc_val, val_v);
-                            let next = b.new_block();
-                            b.branch_nonzero(eq, blocks[i], next);
-                            next_dispatcher_blk = next;
-                        }
+                    for val in labels.iter().flatten() {
+                        b.switch_to(next_dispatcher_blk);
+                        let val_v = b.imm(*val);
+                        let eq = b.binop(BinOp::Eq, disc_val, val_v);
+                        let next = b.new_block();
+                        b.branch_nonzero(eq, blocks[i], next);
+                        next_dispatcher_blk = next;
                     }
                 }
                 b.switch_to(next_dispatcher_blk);
@@ -815,9 +808,7 @@ impl<'a> Walker<'a> {
                         let super::BlockItem::Stmt(s) = item else {
                             continue;
                         };
-                        if terminated
-                            && !matches!(self.ast.stmt(s), Stmt::Labeled { .. })
-                        {
+                        if terminated && !matches!(self.ast.stmt(s), Stmt::Labeled { .. }) {
                             continue;
                         }
                         terminated = self.walk_stmt(b, s)?;
@@ -993,15 +984,7 @@ impl<'a> Walker<'a> {
                 val,
                 is_thread_local,
                 array_size,
-            } => self.load_ident_rvalue(
-                b,
-                *sym,
-                *ty,
-                *class,
-                *val,
-                *is_thread_local,
-                *array_size,
-            ),
+            } => self.load_ident_rvalue(b, *sym, *ty, *class, *val, *is_thread_local, *array_size),
             Expr::Unary { op, child, ty } => self.walk_unary(b, *op, *child, *ty),
             Expr::Binary { op, lhs, rhs, ty } => {
                 let mut lv = self.walk_expr_rvalue(b, *lhs)?;
@@ -1197,35 +1180,31 @@ impl<'a> Walker<'a> {
                 // the call, and return the temp's address as
                 // the expression's value (the c5 ABI's
                 // address-as-value rule for struct rvalues).
-                if is_struct_ty(*ty) && struct_ptr_depth(*ty) == 0 {
-                    if let Expr::Ident { sym, class, val, .. } = self.ast.expr(*callee) {
-                        if *class == Token::Fun as i64 {
-                            let result_slot = b.alloc_synthetic_local();
-                            // Spill the out-pointer through an
-                            // int-typed temp so the codegen
-                            // routes it via the host int arg
-                            // register (matches what the lift
-                            // does for FP / pointer args).
-                            let addr = b.local_addr(result_slot);
-                            let temp = b.alloc_synthetic_local();
-                            b.store_local(
-                                temp,
-                                addr,
-                                super::super::ir::StoreKind::I64,
-                            );
-                            let out_arg =
-                                b.load_local(temp, super::super::ir::LoadKind::I64);
-                            let mut all_args: alloc::vec::Vec<super::super::ir::ValueId> =
-                                alloc::vec::Vec::with_capacity(args.len() + 1);
-                            all_args.push(out_arg);
-                            for a in args {
-                                all_args.push(self.walk_expr_rvalue(b, *a)?);
-                            }
-                            let target_pc = self.live_fun_val(*sym, *val);
-                            let _ = b.call(target_pc as usize, all_args);
-                            return Ok(b.local_addr(result_slot));
-                        }
+                if is_struct_ty(*ty)
+                    && struct_ptr_depth(*ty) == 0
+                    && let Expr::Ident {
+                        sym, class, val, ..
+                    } = self.ast.expr(*callee)
+                    && *class == Token::Fun as i64
+                {
+                    let result_slot = b.alloc_synthetic_local();
+                    // Spill the out-pointer through an int-typed
+                    // temp so the codegen routes it via the host
+                    // int arg register (matches what the lift
+                    // does for FP / pointer args).
+                    let addr = b.local_addr(result_slot);
+                    let temp = b.alloc_synthetic_local();
+                    b.store_local(temp, addr, super::super::ir::StoreKind::I64);
+                    let out_arg = b.load_local(temp, super::super::ir::LoadKind::I64);
+                    let mut all_args: alloc::vec::Vec<super::super::ir::ValueId> =
+                        alloc::vec::Vec::with_capacity(args.len() + 1);
+                    all_args.push(out_arg);
+                    for a in args {
+                        all_args.push(self.walk_expr_rvalue(b, *a)?);
                     }
+                    let target_pc = self.live_fun_val(*sym, *val);
+                    let _ = b.call(target_pc as usize, all_args);
+                    return Ok(b.local_addr(result_slot));
                 }
                 // Lower each arg as an rvalue, then dispatch
                 // through the callee's class. Direct
@@ -1257,7 +1236,10 @@ impl<'a> Walker<'a> {
                         fp_arg_mask |= 1u32 << i;
                     }
                 }
-                if let Expr::Ident { sym, class, val, .. } = self.ast.expr(*callee) {
+                if let Expr::Ident {
+                    sym, class, val, ..
+                } = self.ast.expr(*callee)
+                {
                     if *class == Token::Fun as i64 {
                         // c5-internal calls pass every arg in
                         // an integer register slot (the callee
@@ -1277,13 +1259,8 @@ impl<'a> Walker<'a> {
                                 .unwrap_or(false);
                             if arg_is_fp {
                                 let slot = b.alloc_synthetic_local();
-                                b.store_local(
-                                    slot,
-                                    arg_vals[i],
-                                    super::super::ir::StoreKind::I64,
-                                );
-                                arg_vals[i] =
-                                    b.load_local(slot, super::super::ir::LoadKind::I64);
+                                b.store_local(slot, arg_vals[i], super::super::ir::StoreKind::I64);
+                                arg_vals[i] = b.load_local(slot, super::super::ir::LoadKind::I64);
                             }
                         }
                         let target_pc = self.live_fun_val(*sym, *val);
@@ -1356,9 +1333,7 @@ impl<'a> Walker<'a> {
                 // address IS the rvalue. Same address-as-value
                 // rule for a struct-value field (no `*` on the
                 // declared type).
-                if *array_size != 0
-                    || (is_struct_ty(*ty) && struct_ptr_depth(*ty) == 0)
-                {
+                if *array_size != 0 || (is_struct_ty(*ty) && struct_ptr_depth(*ty) == 0) {
                     return Ok(addr);
                 }
                 let kind = load_kind_for(*ty, self.target);
@@ -1723,6 +1698,7 @@ impl<'a> Walker<'a> {
     /// `is_thread_local` straight off the snapshotted Ident node
     /// so a post-parse scope-exit that restored the symbol's
     /// pre-declaration tag doesn't invalidate the walker.
+    #[allow(clippy::too_many_arguments)]
     fn load_ident_rvalue(
         &mut self,
         b: &mut super::super::codegen::ssa_build::SsaBuilder,
@@ -1759,8 +1735,7 @@ impl<'a> Walker<'a> {
         // snapshotted at parse time on `Expr::Ident` so this
         // path keeps working after the function-end shadow
         // restoration unbinds the symbol's outer-scope value.
-        let address_only =
-            array_size != 0 || (is_struct_ty(ty) && struct_ptr_depth(ty) == 0);
+        let address_only = array_size != 0 || (is_struct_ty(ty) && struct_ptr_depth(ty) == 0);
         if address_only {
             if class == Token::Loc as i64 {
                 return Ok(b.local_addr(val));
@@ -1936,9 +1911,7 @@ fn type_size_bytes(ty: i64, target: Target) -> usize {
         1
     } else if stripped == Ty::Short as i64 {
         2
-    } else if stripped == Ty::Int as i64 {
-        4
-    } else if stripped == Ty::Float as i64 {
+    } else if stripped == Ty::Int as i64 || stripped == Ty::Float as i64 {
         4
     } else if stripped == Ty::Double as i64 {
         8
@@ -2047,8 +2020,22 @@ mod tests {
         let __ret = ast.push_stmt(Stmt::Return(Some(add)), src);
         ast.body = Some(__ret);
 
-        let func = walk_function(&ast, &empty_symbols(), &[], Target::LinuxAarch64, 0, 0, false, 0, &[], &[], false, 0, 0)
-            .expect("walk");
+        let func = walk_function(
+            &ast,
+            &empty_symbols(),
+            &[],
+            Target::LinuxAarch64,
+            0,
+            0,
+            false,
+            0,
+            &[],
+            &[],
+            false,
+            0,
+            0,
+        )
+        .expect("walk");
         let immediates: alloc::vec::Vec<i64> = func
             .insts
             .iter()
@@ -2098,7 +2085,22 @@ mod tests {
         let __ret = ast.push_stmt(Stmt::Return(Some(x)), src);
         ast.body = Some(__ret);
 
-        let func = walk_function(&ast, &syms, &[], Target::LinuxAarch64, 0, 0, false, 8, &[], &[], false, 0, 0).expect("walk");
+        let func = walk_function(
+            &ast,
+            &syms,
+            &[],
+            Target::LinuxAarch64,
+            0,
+            0,
+            false,
+            8,
+            &[],
+            &[],
+            false,
+            0,
+            0,
+        )
+        .expect("walk");
         let loads: alloc::vec::Vec<_> = func
             .insts
             .iter()
@@ -2153,7 +2155,22 @@ mod tests {
         let __ret = ast.push_stmt(Stmt::Return(Some(assign)), src);
         ast.body = Some(__ret);
 
-        let func = walk_function(&ast, &syms, &[], Target::LinuxAarch64, 0, 0, false, 8, &[], &[], false, 0, 0).expect("walk");
+        let func = walk_function(
+            &ast,
+            &syms,
+            &[],
+            Target::LinuxAarch64,
+            0,
+            0,
+            false,
+            8,
+            &[],
+            &[],
+            false,
+            0,
+            0,
+        )
+        .expect("walk");
         let store_kinds: alloc::vec::Vec<_> = func
             .insts
             .iter()
@@ -2201,8 +2218,22 @@ mod tests {
         let __ret = ast.push_stmt(Stmt::Return(Some(neg)), src);
         ast.body = Some(__ret);
 
-        let func = walk_function(&ast, &empty_symbols(), &[], Target::LinuxAarch64, 0, 0, false, 0, &[], &[], false, 0, 0)
-            .expect("walk");
+        let func = walk_function(
+            &ast,
+            &empty_symbols(),
+            &[],
+            Target::LinuxAarch64,
+            0,
+            0,
+            false,
+            0,
+            &[],
+            &[],
+            false,
+            0,
+            0,
+        )
+        .expect("walk");
         let binops: alloc::vec::Vec<BinOp> = func
             .insts
             .iter()
@@ -2230,8 +2261,22 @@ mod tests {
         );
         ast.body = Some(asm_id);
 
-        let err = walk_function(&ast, &empty_symbols(), &[], Target::LinuxAarch64, 0, 0, false, 0, &[], &[], false, 0, 0)
-            .expect_err("Asm must surface as unsupported");
+        let err = walk_function(
+            &ast,
+            &empty_symbols(),
+            &[],
+            Target::LinuxAarch64,
+            0,
+            0,
+            false,
+            0,
+            &[],
+            &[],
+            false,
+            0,
+            0,
+        )
+        .expect_err("Asm must surface as unsupported");
         assert!(matches!(
             err,
             WalkError::UnsupportedStmt { kind: "Asm", .. }

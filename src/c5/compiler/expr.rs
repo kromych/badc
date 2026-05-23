@@ -1185,10 +1185,9 @@ impl Compiler {
                     if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
                         let pos = self.ast_src_pos();
                         let ty = self.ty;
-                        let id = self.ast.push_expr(
-                            super::super::ast::Expr::Comma { lhs, rhs, ty },
-                            pos,
-                        );
+                        let id = self
+                            .ast
+                            .push_expr(super::super::ast::Expr::Comma { lhs, rhs, ty }, pos);
                         self.ast_acc = Some(id);
                     }
                 }
@@ -1742,10 +1741,9 @@ impl Compiler {
                     // scalar store.
                     if let (Some(lhs), Some(rhs)) = (struct_lhs_ast, struct_rhs_ast) {
                         let pos = self.ast_src_pos();
-                        let id = self.ast.push_expr(
-                            super::super::ast::Expr::Assign { lhs, rhs, ty: t },
-                            pos,
-                        );
+                        let id = self
+                            .ast
+                            .push_expr(super::super::ast::Expr::Assign { lhs, rhs, ty: t }, pos);
                         self.ast_acc = Some(id);
                     } else {
                         self.ast_acc = None;
@@ -2008,10 +2006,9 @@ impl Compiler {
                     if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
                         let pos = self.ast_src_pos();
                         let ty = self.ty;
-                        let id = self.ast.push_expr(
-                            super::super::ast::Expr::Comma { lhs, rhs, ty },
-                            pos,
-                        );
+                        let id = self
+                            .ast
+                            .push_expr(super::super::ast::Expr::Comma { lhs, rhs, ty }, pos);
                         self.ast_acc = Some(id);
                         then_ast = Some(id);
                     } else {
@@ -2221,8 +2218,7 @@ impl Compiler {
                         // consume, run the dance, then restore.
                         let lhs_ast = self.ast_vstack.pop().flatten();
                         let rhs_ast = self.ast_acc.take();
-                        let saved_vstack: alloc::vec::Vec<_> =
-                            self.ast_vstack.drain(..).collect();
+                        let saved_vstack: alloc::vec::Vec<_> = self.ast_vstack.drain(..).collect();
                         self.ast_vstack.push(None);
                         let scale = self.pointee_size(rhs_ty);
                         self.loc_offs += 1;
@@ -2246,9 +2242,7 @@ impl Compiler {
                         // the pointer (C99 6.5.6p8: integer added
                         // to a pointer keeps the pointer type).
                         self.ty = rhs_ty;
-                        if let (Some(lhs), Some(rhs)) =
-                            (lhs_ast, rhs_ast)
-                        {
+                        if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
                             let pos = self.ast_src_pos();
                             let scale_lit = self.ast.push_expr(
                                 super::super::ast::Expr::IntLit {
@@ -2397,8 +2391,7 @@ impl Compiler {
                         // masking from the operand type.
                         let lhs_ast = self.ast_vstack.pop().flatten();
                         let rhs_ast = self.ast_acc.take();
-                        let saved_vstack: alloc::vec::Vec<_> =
-                            self.ast_vstack.drain(..).collect();
+                        let saved_vstack: alloc::vec::Vec<_> = self.ast_vstack.drain(..).collect();
                         self.ast_vstack.push(None);
                         self.maybe_mask_operands_to_unsigned_common(t, self.ty);
                         self.emit_op(Op::Divu);
@@ -2438,8 +2431,7 @@ impl Compiler {
                 if is_unsigned_ty(common) {
                     let lhs_ast = self.ast_vstack.pop().flatten();
                     let rhs_ast = self.ast_acc.take();
-                    let saved_vstack: alloc::vec::Vec<_> =
-                        self.ast_vstack.drain(..).collect();
+                    let saved_vstack: alloc::vec::Vec<_> = self.ast_vstack.drain(..).collect();
                     self.ast_vstack.push(None);
                     self.maybe_mask_operands_to_unsigned_common(t, self.ty);
                     self.emit_op(Op::Modu);
@@ -2740,13 +2732,7 @@ impl Compiler {
                             // load + shift + mask + sign-extend
                             // sequence at the surrounding rvalue
                             // site.
-                            self.ast_emit_member(
-                                obj,
-                                bf_field_off,
-                                Some(bf_desc),
-                                bf_field_ty,
-                                0,
-                            );
+                            self.ast_emit_member(obj, bf_field_off, Some(bf_desc), bf_field_ty, 0);
                         }
                     }
                 } else {
@@ -2825,13 +2811,7 @@ impl Compiler {
                     && let Some(obj) = obj_ast
                 {
                     let mty = self.ty;
-                    self.ast_emit_member(
-                        obj,
-                        field.offset as i64,
-                        None,
-                        mty,
-                        field.array_size,
-                    );
+                    self.ast_emit_member(obj, field.offset as i64, None, mty, field.array_size);
                 }
             } else {
                 return Err(self.compile_err(format!(

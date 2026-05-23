@@ -605,7 +605,6 @@ impl Compiler {
         self.finished_functions.push(finished);
     }
 
-
     /// Current source position. Mirrors the bytecode tier's
     /// `source_lines` / `intern_source_file` columns so every AST
     /// node carries the line / file the matching Op::* would have
@@ -650,9 +649,7 @@ impl Compiler {
     /// follow).
     pub(super) fn ast_emit_str_lit(&mut self, data_off: i64, ty: i64) -> ExprId {
         let pos = self.ast_src_pos();
-        let id = self
-            .ast
-            .push_expr(Expr::StrLit { data_off, ty }, pos);
+        let id = self.ast.push_expr(Expr::StrLit { data_off, ty }, pos);
         self.ast_acc = Some(id);
         id
     }
@@ -1074,9 +1071,7 @@ impl Compiler {
     pub(super) fn ast_emit_expr_stmt(&mut self) -> Option<super::super::ast::StmtId> {
         let e = self.ast_acc?;
         let pos = self.ast_src_pos();
-        let id = self
-            .ast
-            .push_stmt(super::super::ast::Stmt::Expr(e), pos);
+        let id = self.ast.push_stmt(super::super::ast::Stmt::Expr(e), pos);
         self.ast_acc = None;
         Some(id)
     }

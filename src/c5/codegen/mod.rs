@@ -720,9 +720,7 @@ impl ResolvedImports {
                 if callee_idx >= func.ast.exprs.len() {
                     continue;
                 }
-                let super::ast::Expr::Ident { class, val, .. } =
-                    &func.ast.exprs[callee_idx]
-                else {
+                let super::ast::Expr::Ident { class, val, .. } = &func.ast.exprs[callee_idx] else {
                     continue;
                 };
                 if *class != super::token::Token::Sys as i64 {

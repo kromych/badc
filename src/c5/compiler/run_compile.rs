@@ -791,8 +791,7 @@ impl Compiler {
                     // copy. Scalar / pointer params end up
                     // with `0` in `param_local_slots`; the
                     // walker checks the slot and the type both.
-                    let param_tys: alloc::vec::Vec<i64> =
-                        params.types.iter().copied().collect();
+                    let param_tys: alloc::vec::Vec<i64> = params.types.to_vec();
                     let param_local_slots: alloc::vec::Vec<i64> = params
                         .indices
                         .iter()
@@ -807,8 +806,8 @@ impl Compiler {
                         })
                         .collect();
                     let ret_ty_for_finish = self.current_func_return_ty;
-                    let returns_struct_finish = is_struct_ty(ret_ty_for_finish)
-                        && struct_ptr_depth(ret_ty_for_finish) == 0;
+                    let returns_struct_finish =
+                        is_struct_ty(ret_ty_for_finish) && struct_ptr_depth(ret_ty_for_finish) == 0;
                     let return_struct_size_finish = if returns_struct_finish {
                         self.size_of_type(ret_ty_for_finish) as i64
                     } else {

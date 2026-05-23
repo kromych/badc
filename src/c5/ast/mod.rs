@@ -543,10 +543,13 @@ impl Ast {
         for expr in &mut self.exprs {
             match expr {
                 Expr::StrLit { data_off, .. } => *data_off += data_base,
-                Expr::Ident { class, val, is_thread_local, .. } => {
-                    if *class == Token::Glo as i64 && !*is_thread_local {
-                        *val += data_base;
-                    }
+                Expr::Ident {
+                    class,
+                    val,
+                    is_thread_local,
+                    ..
+                } if *class == Token::Glo as i64 && !*is_thread_local => {
+                    *val += data_base;
                 }
                 _ => {}
             }
@@ -555,10 +558,11 @@ impl Ast {
             if let Decl::Local { init, .. } = decl {
                 match init {
                     LocalInit::Aggregate { src_data_off, .. } => *src_data_off += data_base,
-                    LocalInit::Runtime { zero_init, .. } => {
-                        if let Some((off, _)) = zero_init {
-                            *off += data_base;
-                        }
+                    LocalInit::Runtime {
+                        zero_init: Some((off, _)),
+                        ..
+                    } => {
+                        *off += data_base;
                     }
                     _ => {}
                 }
@@ -603,9 +607,8 @@ impl Ast {
             return;
         }
         for expr in &mut self.exprs {
-            match expr {
-                Expr::Ident { sym, .. } => *sym += sym_base,
-                _ => {}
+            if let Expr::Ident { sym, .. } = expr {
+                *sym += sym_base;
             }
         }
         for decl in &mut self.decls {

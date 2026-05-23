@@ -1171,10 +1171,26 @@ impl Compiler {
                 // the last. Outside parens, comma stays a separator
                 // (function args, declarators) -- this branch only
                 // fires inside `(...)` because expr(Assign) doesn't
-                // consume `,`.
+                // consume `,`. Build `Expr::Comma { lhs, rhs }`
+                // chains on the AST so the walker visits the lhs
+                // before producing the rhs's value; without the
+                // chain the dropped lhs expressions take their
+                // side effects with them when the walker drives the
+                // codegen.
                 while self.lex.tk == ',' {
+                    let lhs_ast = self.ast_acc;
                     self.next()?;
                     self.expr(Token::Assign as i64)?;
+                    let rhs_ast = self.ast_acc;
+                    if let (Some(lhs), Some(rhs)) = (lhs_ast, rhs_ast) {
+                        let pos = self.ast_src_pos();
+                        let ty = self.ty;
+                        let id = self.ast.push_expr(
+                            super::super::ast::Expr::Comma { lhs, rhs, ty },
+                            pos,
+                        );
+                        self.ast_acc = Some(id);
+                    }
                 }
                 if self.lex.tk == ')' {
                     self.next()?;

@@ -163,6 +163,9 @@ impl Compiler {
     /// because the cast at the use site lines up with the fixed
     /// prefix the trampoline does forward.
     pub(super) fn emit_sys_trampolines(&mut self) {
+        use crate::c5::codegen::ssa_build::SsaBuilder;
+        use crate::c5::ir::{LoadKind, NO_VALUE};
+
         let entries: Vec<(usize, usize)> = self
             .sys_trampoline_sym
             .iter()
@@ -183,6 +186,40 @@ impl Compiler {
             let fixed_nargs = self.symbols[sys_idx].params.len();
             let is_variadic = self.symbols[sys_idx].is_variadic;
             let binding_idx = self.symbols[sys_idx].val;
+            // Forwarded arg count: matches the bytecode-side
+            // emit below. Variadic prefix forwards one extra so
+            // dispatch tables (open / fcntl / ioctl) line up.
+            let nargs_ssa = if fixed_nargs == 0 && !is_variadic {
+                0
+            } else if is_variadic {
+                fixed_nargs + 1
+            } else {
+                fixed_nargs
+            };
+            let mut sb = SsaBuilder::new(bc_pc, nargs_ssa, is_variadic);
+            sb.set_locals(0);
+            let _alloca = sb.alloca_init(0);
+            if fixed_nargs == 0 && !is_variadic {
+                sb.tail_ext(binding_idx);
+            } else {
+                let arg_vals: Vec<_> = (0..nargs_ssa)
+                    .map(|i| sb.load_local((i + 2) as i64, LoadKind::I64))
+                    .collect();
+                let r = sb.call_ext(binding_idx, arg_vals, 0);
+                sb.return_(r);
+            }
+            let mut func = sb.finish();
+            // `lift_program` would have stamped `end_pc` at the
+            // bytecode position just past the trampoline body;
+            // the SsaBuilder doesn't know the bc_pc until the
+            // bytecode emit below runs. Mirror what the lift
+            // does so any consumer that reads `end_pc` (e.g. the
+            // DWARF emitter's per-function range) sees the same
+            // shape it does for lift-recovered trampolines.
+            func.end_pc = bc_pc; // patched after the bytecode emit
+            let _ = NO_VALUE; // keep import non-warning
+            self.synthetic_ssa_funcs.push(func);
+            let synth_idx = self.synthetic_ssa_funcs.len() - 1;
 
             // Two trampoline shapes coexist:
             //
@@ -209,6 +246,7 @@ impl Compiler {
             if fixed_nargs == 0 && !is_variadic {
                 self.emit_op(Op::TailExt);
                 self.emit_val(binding_idx);
+                self.synthetic_ssa_funcs[synth_idx].end_pc = self.text.len();
                 continue;
             }
 
@@ -252,6 +290,12 @@ impl Compiler {
                 self.emit_val(nargs as i64);
             }
             self.emit_op(Op::Lev);
+            // Pin the synthesised SSA entry's `end_pc` to one
+            // past the last emitted bytecode op so callers that
+            // key off `[ent_pc, end_pc)` (DWARF range builder,
+            // linker rebase) match what `lift_program` would
+            // have stamped on the same trampoline body.
+            self.synthetic_ssa_funcs[synth_idx].end_pc = self.text.len();
         }
     }
 }

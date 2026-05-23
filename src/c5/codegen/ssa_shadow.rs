@@ -69,15 +69,21 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
         func.n_params = touched.max(f.n_params);
         out.push(func);
     }
-    // Recover bytecode-only functions (Sys trampolines, synthetic
-    // helpers) by lifting them. Each `Op::Ent` in the bytecode
-    // that didn't show up in `finished_functions` is one of
-    // these. The lift produces the same `FunctionSsa` shape the
-    // walker would have, so the rest of the codegen sees them
-    // identically.
+    // Parser-emitted helpers (sys-trampolines) come through
+    // `program.synthetic_ssa_funcs`; the parser builds them via
+    // `SsaBuilder` alongside their bytecode counterpart. Anything
+    // bytecode-only that didn't make it into the synthetic list
+    // (a future post-parser pass that only emits bytecode) gets
+    // picked up by the lift fallback below.
+    let mut covered_pcs: alloc::collections::BTreeSet<usize> = walker_pcs.iter().copied().collect();
+    for f in &program.synthetic_ssa_funcs {
+        if covered_pcs.insert(f.ent_pc) {
+            out.push(f.clone());
+        }
+    }
     let lift_funcs = super::ssa::lift_program(program)?;
     for f in lift_funcs {
-        if !walker_pcs.contains(&f.ent_pc) {
+        if !covered_pcs.contains(&f.ent_pc) {
             out.push(f);
         }
     }

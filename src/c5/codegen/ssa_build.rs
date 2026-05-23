@@ -366,6 +366,15 @@ impl SsaBuilder {
         self.close(Terminator::Return(value), value);
     }
 
+    /// Close the current block with `Terminator::TailExt`. Used
+    /// by parser-emitted sys-trampolines whose body is a single
+    /// `jmp [iat]` host instruction. The caller's own argument
+    /// setup owns the host ABI; the trampoline itself doesn't
+    /// touch the stack.
+    pub(crate) fn tail_ext(&mut self, binding_idx: i64) {
+        self.close(Terminator::TailExt(binding_idx), NO_VALUE);
+    }
+
     /// True if a block is currently open (the caller can still
     /// emit instructions or close it). False between a
     /// terminator and the next `switch_to`. Used by the AST

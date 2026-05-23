@@ -171,6 +171,14 @@ impl Compiler {
         for (sys_idx, tr_idx) in entries {
             let bc_pc = self.text.len();
             self.symbols[tr_idx].val = bc_pc as i64;
+            // C99 6.9 has no notion of synthetic helpers, but
+            // a trampoline body is emitted into this TU's text,
+            // so its symbol is `defined here` for the linker
+            // concat: the rebase loop in `linker::link` shifts
+            // every `Token::Fun` sym with `defined_here = true`
+            // by `text_base[i]` so post-link callers find the
+            // body at the post-link bc_pc.
+            self.symbols[tr_idx].defined_here = true;
 
             let fixed_nargs = self.symbols[sys_idx].params.len();
             let is_variadic = self.symbols[sys_idx].is_variadic;

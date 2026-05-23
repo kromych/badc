@@ -843,7 +843,19 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                 let base = text_base[i] as i64;
                 for sym in &unit.parser_symbols {
                     let mut s = sym.clone();
-                    if s.class == fun_class && s.val > 0 {
+                    // C99 6.9 + the c5 ABI: a function's `val`
+                    // is the entry PC; rebase by `text_base[i]`
+                    // when `defined_here` is set (body emitted
+                    // in this unit). `val == 0` is a valid
+                    // defining PC for the first function in
+                    // unit 0, so the rebase tracks the parser's
+                    // `defined_here` flag rather than the val
+                    // itself; forward declarations
+                    // (`defined_here == false`, `val == 0`)
+                    // stay at zero and the cross-unit pass
+                    // below patches them from the merged
+                    // defining sibling.
+                    if s.class == fun_class && s.defined_here {
                         s.val += base;
                     }
                     merged.push(s);
@@ -859,7 +871,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
             > = alloc::collections::BTreeMap::new();
             for s in &merged {
                 if s.class == fun_class
-                    && s.val > 0
+                    && s.defined_here
                     && s.linkage == Linkage::External
                 {
                     fun_def_by_name.insert(s.name.clone(), s.val);
@@ -867,7 +879,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
             }
             for s in &mut merged {
                 if s.class == fun_class
-                    && s.val == 0
+                    && !s.defined_here
                     && s.linkage == Linkage::External
                     && let Some(&resolved) = fun_def_by_name.get(&s.name)
                 {

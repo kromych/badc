@@ -40,6 +40,37 @@ fn extern_function_call_across_two_units() {
 }
 
 #[test]
+fn extern_call_resolves_to_function_at_unit_local_pc_zero() {
+    // C99 6.9 + linker concat: a defining function whose
+    // unit-local `Symbol::val` is 0 (the first function in the
+    // TU) must still be the canonical target for cross-unit
+    // forward decls. The rebase loop in `linker::link::merge`
+    // gates on the parser's `defined_here` flag rather than
+    // `val > 0`; without that the forward-decl resolver only
+    // saw later-defined siblings and the extern call dispatched
+    // to whichever function landed at the merged text's PC 0.
+    //
+    // TU `a` defines two functions in declaration order:
+    // `first` (lands at unit-local PC 0) and `second`. TU `b`
+    // forward-declares both and calls them; the answer
+    // distinguishes `first` from `second`.
+    let a = compile_unit(
+        "
+        int first(int n) { return n + 10; }
+        int second(int n) { return n + 200; }
+        ",
+    );
+    let b = compile_unit(
+        "
+        extern int first(int);
+        extern int second(int);
+        int main() { return first(1) + second(2); }
+        ",
+    );
+    assert_eq!(link_and_run(alloc::vec![b, a]), 213);
+}
+
+#[test]
 fn extern_global_read_and_write_across_units() {
     // TU A defines `counter`; TU B has `extern int counter;`
     // and reads / writes it through `main`.

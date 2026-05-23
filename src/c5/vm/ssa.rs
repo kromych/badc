@@ -240,6 +240,11 @@ struct Program<'a> {
     /// SSA-VM looks the name up and dispatches to the matching
     /// libc shim.
     binding_names: &'a [alloc::string::String],
+    /// Byte offset within `Memory::bytes` where the thread-local
+    /// block starts. `Inst::TlsAddr(off)` resolves to
+    /// `tls_base + off`; matches the bytecode VM's single-thread
+    /// model which appends the TLS block onto the data segment.
+    tls_base: usize,
 }
 
 impl<'a> Program<'a> {
@@ -253,11 +258,17 @@ impl<'a> Program<'a> {
             funcs,
             ent_pc_to_idx,
             binding_names: &[],
+            tls_base: 0,
         }
     }
 
     fn with_bindings(mut self, names: &'a [alloc::string::String]) -> Self {
         self.binding_names = names;
+        self
+    }
+
+    fn with_tls_base(mut self, tls_base: usize) -> Self {
+        self.tls_base = tls_base;
         self
     }
 
@@ -362,7 +373,7 @@ pub(super) fn run_program<H: Host>(
     entry_pc: usize,
     host: &mut H,
 ) -> Result<i64, C5Error> {
-    run_program_with_args(funcs, data, binding_names, entry_pc, host, &[])
+    run_program_with_args(funcs, data, binding_names, 0, entry_pc, host, &[])
 }
 
 /// Multi-function entry that stages `args` as `argv` for the
@@ -376,11 +387,14 @@ pub(super) fn run_program_with_args<H: Host>(
     funcs: &[FunctionSsa],
     data: &[u8],
     binding_names: &[alloc::string::String],
+    tls_base: usize,
     entry_pc: usize,
     host: &mut H,
     args: &[alloc::string::String],
 ) -> Result<i64, C5Error> {
-    let prog = Program::new(funcs).with_bindings(binding_names);
+    let prog = Program::new(funcs)
+        .with_bindings(binding_names)
+        .with_tls_base(tls_base);
     let (data_with_argv, argc, argv_addr) = stage_argv(data, args);
     let mut mem = Memory::new(&data_with_argv);
     let entry = prog.lookup(entry_pc).ok_or_else(|| {
@@ -586,7 +600,15 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = addr as i64;
             return Ok(());
         }
-        Inst::TlsAddr(_) => "TlsAddr",
+        Inst::TlsAddr(off) => {
+            // C11 7.5: the implementation chooses where the
+            // thread-local block lives. The VM is single-threaded;
+            // we concatenate the TLS block onto the data segment
+            // at `Program::tls_base` so a TLS address is just a
+            // regular data-segment offset.
+            frame.regs[v as usize] = (prog.tls_base as i64).wrapping_add(*off);
+            return Ok(());
+        }
         Inst::Load { addr, kind } => {
             let a = frame.regs[*addr as usize];
             if a & CODE_ADDR_MASK != 0 || a < 0 {
@@ -1219,13 +1241,16 @@ fn run_intrinsic(
             store_to_memory(mem, ap_addr, last_addr + 8, StoreKind::I64)
         }
         Intrinsic::VaArg => {
+            // `__builtin_va_arg(&ap)` returns the cursor's current
+            // value (the address of the next variadic slot) and
+            // advances `*ap` by 8 -- the c5 stack-slot width. The
+            // caller emits the matching `Inst::Load` to materialise
+            // the value; mirrors the bytecode VM exactly so the
+            // walker keeps a single shape.
             let ap_addr = frame.regs[args[0] as usize] as usize;
             let cursor = load_from_memory(mem, ap_addr, LoadKind::I64)?;
             store_to_memory(mem, ap_addr, cursor + 8, StoreKind::I64)?;
-            // Walker doesn't pass the value width through args
-            // here; the SSA-VM returns the cursor itself, mirroring
-            // the bytecode VM. Downstream casts truncate as needed.
-            frame.regs[v as usize] = load_from_memory(mem, cursor as usize, LoadKind::I64)?;
+            frame.regs[v as usize] = cursor;
             Ok(())
         }
         Intrinsic::VaEnd => Ok(()),
@@ -1256,7 +1281,15 @@ fn load_from_memory(mem: &Memory, addr: usize, kind: LoadKind) -> Result<i64, C5
     let val: i64 = match kind {
         LoadKind::I64 => i64::from_le_bytes(slice.try_into().unwrap()),
         LoadKind::I32 => i32::from_le_bytes(slice.try_into().unwrap()) as i64,
-        LoadKind::U32 | LoadKind::F32 => u32::from_le_bytes(slice.try_into().unwrap()) as i64,
+        LoadKind::U32 => u32::from_le_bytes(slice.try_into().unwrap()) as i64,
+        // C99 6.3.1.5: a `float` loaded into a `double`-shaped
+        // register widens to the corresponding f64 value. The c5
+        // accumulator carries f64 bit patterns, so the load
+        // expands the in-memory f32 to f64 and returns its bits.
+        LoadKind::F32 => {
+            let bits = u32::from_le_bytes(slice.try_into().unwrap());
+            (f32::from_bits(bits) as f64).to_bits() as i64
+        }
         LoadKind::I16 => i16::from_le_bytes(slice.try_into().unwrap()) as i64,
         LoadKind::U16 => u16::from_le_bytes(slice.try_into().unwrap()) as i64,
         LoadKind::I8 => slice[0] as i8 as i64,
@@ -1279,7 +1312,14 @@ fn store_to_memory(
         StoreKind::I32 => mem.write_bytes(addr, &(value as i32).to_le_bytes()),
         StoreKind::I16 => mem.write_bytes(addr, &(value as i16).to_le_bytes()),
         StoreKind::I8 => mem.write_bytes(addr, &(value as i8).to_le_bytes()),
-        StoreKind::F32 => mem.write_bytes(addr, &(value as u32).to_le_bytes()),
+        // C99 6.3.1.5: a `double` stored through an lvalue of
+        // type `float` is narrowed to single precision. The c5
+        // accumulator carries f64 bit patterns, so the store
+        // collapses to f32 before writing the 4 bytes.
+        StoreKind::F32 => {
+            let f = f64::from_bits(value as u64) as f32;
+            mem.write_bytes(addr, &f.to_le_bytes())
+        }
     }
 }
 
@@ -1295,11 +1335,14 @@ fn narrow_store(value: i64, kind: StoreKind) -> i64 {
     }
 }
 
-/// Integer binop dispatch. Mirrors `fold_int_binop` in `ast::walk`;
+/// Binop dispatch. Mirrors `fold_int_binop` in `ast::walk`;
 /// the two share C99-driven semantics for arithmetic / bitwise /
-/// shift / comparison ops. FP ops (Fadd / Feq / ...) and division
-/// by zero land in the "not implemented" path because the VM
-/// doesn't yet thread FP values or trap divisions cleanly.
+/// shift / comparison ops. FP arms (Fadd, Feq, ...) treat each
+/// operand as the bit pattern of an `f64` and return a fresh
+/// bit pattern (arithmetic) or 0 / 1 (compares). Integer divide
+/// by zero surfaces as a runtime error -- C99 6.5.5p5 leaves
+/// division-by-zero undefined and we'd rather diagnose it than
+/// invoke host-level UB.
 fn apply_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, C5Error> {
     let r = match op {
         BinOp::Add => lhs.wrapping_add(rhs),

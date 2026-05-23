@@ -642,6 +642,7 @@ impl<H: Host> Vm<H> {
                 funcs,
                 &self.data,
                 &self.binding_names,
+                self.tls_base,
                 self.entry_pc,
                 &mut self.host,
                 &self.args,

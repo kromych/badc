@@ -226,6 +226,11 @@ impl Compiler {
             self.emit_data_imm(offset);
             self.next()?;
             self.ty = Ty::Char as i64 + Ty::Ptr as i64;
+            // Dual-emit the decayed `char *` value so the walker
+            // sees the address on `ast_acc` (identical shape to a
+            // plain string literal -- the same `Expr::StrLit`
+            // carrier).
+            self.ast_emit_str_lit(offset, self.ty);
         } else if self.lex.tk == Token::Id {
             let id_idx = self.lex.curr_id_idx;
             self.next()?;

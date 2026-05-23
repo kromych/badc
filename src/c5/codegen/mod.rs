@@ -892,6 +892,12 @@ pub(crate) struct Build {
     /// this to produce one `Subprog` per function without walking
     /// the bytecode tape for `Op::Ent`.
     pub func_ent_pcs: Vec<usize>,
+    /// Per-arch call sites to external symbols recorded during
+    /// the SSA emit pass, before PLT trampoline application.
+    /// Final-image writers don't read this; the
+    /// `OutputKind::Relocatable` writer surfaces each entry as
+    /// an ELF `.rela.text` reloc against the import's symbol.
+    pub reloc_call_sites: Vec<RelocCallSite>,
     /// SSA-side `.debug_line` rows: each `(native_pc, line,
     /// file_idx)` entry says "the instruction whose first byte
     /// lives at `native_pc` in `Build::text` corresponds to source
@@ -1109,6 +1115,33 @@ pub(crate) struct MachoTlvFixup {
     /// Index into [`Build::macho_tlv_descriptors`]. The writer
     /// resolves this to the descriptor's vmaddr at patch time.
     pub descriptor_index: usize,
+}
+
+/// Relocatable-object call site: the byte offset of the BL / B
+/// (aarch64) or CALL / JMP (x86_64) placeholder that reaches an
+/// external symbol via its PLT trampoline. The final-image
+/// writer rewrites these in place after the trampoline pool is
+/// laid out; the `OutputKind::Relocatable` writer surfaces them
+/// as `R_AARCH64_CALL26` / `R_X86_64_PLT32` entries in
+/// `.rela.text` against the import's external symbol.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct RelocCallSite {
+    /// Byte offset within `Build::text` of the call instruction.
+    /// For aarch64 BL/B the imm26 occupies the low 26 bits of
+    /// the 4-byte instruction; the ELF reloc applies at this
+    /// offset directly. For x86_64 CALL/JMP rel32 the rel32
+    /// operand starts at `instr_offset + 1`; the ELF reloc
+    /// applies there.
+    pub instr_offset: usize,
+    /// Index into `Build::imports.imports` -- which external
+    /// symbol the call reaches for.
+    pub import_index: usize,
+    /// `true` for tail-jumps (`b` / `jmp rel32`), `false` for
+    /// calls (`bl` / `call rel32`). The relocation type is the
+    /// same on each arch -- the link bit / opcode prefix lives
+    /// in the placeholder bytes the codegen already emitted.
+    #[allow(dead_code)]
+    pub is_tail: bool,
 }
 
 /// Relocation for a function-pointer literal (`Op::Imm <CODE_BASE+pc>`).

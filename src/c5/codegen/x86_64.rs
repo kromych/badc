@@ -1441,6 +1441,19 @@ pub(super) fn lower(
     // their disp32 backfilled to the matching trampoline. The
     // trampoline body is a single `JMP qword ptr [rip + disp32]`
     // patched by the per-format writer via `GotFixup`.
+    // Capture call sites before the PLT-fixup pass rewrites the
+    // disp32 fields. The `OutputKind::Relocatable` writer reads
+    // these to emit `R_X86_64_PLT32` relocations against each
+    // import's external symbol; final-image writers ignore the
+    // list and rely on the PLT trampolines below.
+    let reloc_call_sites: Vec<super::RelocCallSite> = plt_call_fixups
+        .iter()
+        .map(|f| super::RelocCallSite {
+            instr_offset: f.instr_offset,
+            import_index: f.import_index,
+            is_tail: f.is_tail,
+        })
+        .collect();
     let plt_trampoline_offsets =
         emit_plt_trampolines(&mut code, &mut got_fixups, imports.imports.len());
     apply_plt_call_fixups(&mut code, &plt_call_fixups, &plt_trampoline_offsets)?;
@@ -1499,6 +1512,7 @@ pub(super) fn lower(
         func_fixups,
         bytecode_to_native,
         func_ent_pcs,
+        reloc_call_sites,
         ssa_line_rows,
         // Set by `lower_for` after this returns; see the matching
         // comment on the aarch64 lowering's `Build` construction.

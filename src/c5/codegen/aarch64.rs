@@ -1283,6 +1283,19 @@ pub(super) fn lower(
     // trampoline body's adrp+ldr pair is patched by the per-format
     // writer through the same `GotFixup` shape the inline call
     // sequence used before PLT trampolines existed.
+    // Capture call sites before the PLT-fixup pass rewrites the
+    // BL imm26 fields. The `OutputKind::Relocatable` writer reads
+    // these to emit `R_AARCH64_CALL26` relocations against each
+    // import's external symbol; final-image writers ignore the
+    // list and rely on the PLT trampolines below.
+    let reloc_call_sites: Vec<super::RelocCallSite> = plt_call_fixups
+        .iter()
+        .map(|f| super::RelocCallSite {
+            instr_offset: f.instr_offset,
+            import_index: f.import_index,
+            is_tail: f.is_tail,
+        })
+        .collect();
     let plt_trampoline_offsets =
         emit_plt_trampolines(&mut code, &mut got_fixups, imports.imports.len());
     apply_plt_call_fixups(&mut code, &plt_call_fixups, &plt_trampoline_offsets)?;
@@ -1346,6 +1359,7 @@ pub(super) fn lower(
         func_fixups,
         bytecode_to_native,
         func_ent_pcs,
+        reloc_call_sites,
         ssa_line_rows,
         // `imports` is set by `lower_for` after this returns; the
         // resolver runs once up there and the value is shared with

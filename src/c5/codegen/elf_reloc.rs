@@ -45,10 +45,18 @@ const SHT_NULL: u32 = 0;
 const SHT_PROGBITS: u32 = 1;
 const SHT_SYMTAB: u32 = 2;
 const SHT_STRTAB: u32 = 3;
+const SHT_RELA: u32 = 4;
 const SHT_NOBITS: u32 = 8;
 const SHF_WRITE: u64 = 0x1;
 const SHF_ALLOC: u64 = 0x2;
 const SHF_EXECINSTR: u64 = 0x4;
+const SHF_INFO_LINK: u64 = 0x40;
+
+// x86_64 reloc types.
+const R_X86_64_PLT32: u32 = 4;
+
+// AArch64 reloc types (ELF for the ARM 64-bit architecture, table 5-1).
+const R_AARCH64_CALL26: u32 = 283;
 const STB_LOCAL: u8 = 0;
 const STB_GLOBAL: u8 = 1;
 const STT_NOTYPE: u8 = 0;
@@ -62,6 +70,7 @@ const SHN_ABS: u16 = 0xfff1;
 const ELF64_EHDR_SIZE: usize = 64;
 const ELF64_SHDR_SIZE: usize = 64;
 const ELF64_SYM_SIZE: usize = 24;
+const ELF64_RELA_SIZE: usize = 24;
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -98,6 +107,15 @@ struct Elf64Shdr {
     sh_entsize: u64,
 }
 const _: () = assert!(core::mem::size_of::<Elf64Shdr>() == ELF64_SHDR_SIZE);
+
+#[repr(C)]
+#[derive(Copy, Clone, Default)]
+struct Elf64Rela {
+    r_offset: u64,
+    r_info: u64,
+    r_addend: i64,
+}
+const _: () = assert!(core::mem::size_of::<Elf64Rela>() == ELF64_RELA_SIZE);
 
 #[repr(C)]
 #[derive(Copy, Clone, Default)]
@@ -160,19 +178,21 @@ pub(super) fn write_relocatable(
 ) -> Result<Vec<u8>, C5Error> {
     // Section layout (indices used in symtab st_shndx):
     //   1 = .text
-    //   2 = .data
-    //   3 = .bss
-    //   4 = .symtab
-    //   5 = .strtab
-    //   6 = .shstrtab
+    //   2 = .rela.text
+    //   3 = .data
+    //   4 = .bss
+    //   5 = .symtab
+    //   6 = .strtab
+    //   7 = .shstrtab
     // Plus the null section at index 0.
     const SHIDX_TEXT: u16 = 1;
-    const SHIDX_DATA: u16 = 2;
-    const SHIDX_BSS: u16 = 3;
-    const SHIDX_SYMTAB: u16 = 4;
-    const SHIDX_STRTAB: u16 = 5;
-    const SHIDX_SHSTRTAB: u16 = 6;
-    const NUM_SECTIONS: usize = 7;
+    const SHIDX_RELA_TEXT: u16 = 2;
+    const SHIDX_DATA: u16 = 3;
+    const SHIDX_BSS: u16 = 4;
+    const SHIDX_SYMTAB: u16 = 5;
+    const SHIDX_STRTAB: u16 = 6;
+    const SHIDX_SHSTRTAB: u16 = 7;
+    const NUM_SECTIONS: usize = 8;
 
     // Strtab + symtab construction. The file symbol leads
     // (binding LOCAL, type FILE); per-function symbols follow
@@ -220,11 +240,23 @@ pub(super) fn write_relocatable(
     for ent_pc in &build.func_ent_pcs {
         func_strs.push(format!("fn_{ent_pc}"));
     }
-    // Rebuild strtab now that all names are known.
-    let mut all_names: Vec<&str> = Vec::with_capacity(1 + func_strs.len());
+    // Rebuild strtab now that all names are known: file
+    // basename + function names + import symbol names.
+    let mut all_names: Vec<&str> =
+        Vec::with_capacity(1 + func_strs.len() + build.imports.imports.len());
     all_names.push(file_basename);
     for s in &func_strs {
         all_names.push(s.as_str());
+    }
+    let func_strs_end = all_names.len();
+    // Use the portable `local_name` for the .o-level symbol --
+    // the relocatable is the badc-internal format on every
+    // target. Per-OS decoration (the leading underscore on
+    // Mach-O, no decoration on ELF, etc.) belongs to the
+    // final-image writer that converts the .o into the target
+    // container.
+    for imp in &build.imports.imports {
+        all_names.push(imp.local_name.as_str());
     }
     let (strtab_bytes, name_offs) = build_strtab(&all_names);
     // Patch the file symbol's name offset against the final
@@ -232,7 +264,8 @@ pub(super) fn write_relocatable(
     symbols[1].st_name = name_offs[0];
 
     // Function symbols. Each gets the native offset within
-    // `.text` and a placeholder size of (end_native - start_native).
+    // `.text` and a size of (next_ent - this_ent), or
+    // (text.len() - this_ent) for the last entry.
     for (i, &ent_pc) in build.func_ent_pcs.iter().enumerate() {
         let lo = build
             .bytecode_to_native
@@ -246,8 +279,6 @@ pub(super) fn write_relocatable(
                 ),
             )));
         }
-        // Function size: from `lo` to the next function's
-        // native offset (or end of .text for the last).
         let hi = build
             .func_ent_pcs
             .get(i + 1)
@@ -263,6 +294,61 @@ pub(super) fn write_relocatable(
         });
     }
 
+    // Import symbols: STB_GLOBAL + STT_NOTYPE, SHN_UNDEF. The
+    // linker resolves these against the libc / runtime the
+    // final binary pulls in. `RelocCallSite::import_index` maps
+    // through `import_sym_indices` to the symbol-table position.
+    let mut import_sym_indices: Vec<usize> = Vec::with_capacity(build.imports.imports.len());
+    for (i, _imp) in build.imports.imports.iter().enumerate() {
+        import_sym_indices.push(symbols.len());
+        symbols.push(Elf64Sym {
+            st_name: name_offs[func_strs_end + i],
+            st_info: pack_sym_info(STB_GLOBAL, STT_NOTYPE),
+            st_shndx: SHN_UNDEF,
+            ..Default::default()
+        });
+    }
+
+    // Build the `.rela.text` payload now that import symbols
+    // have their final indices.
+    let machine_for_rela = machine;
+    let mut rela_bytes: Vec<u8> =
+        Vec::with_capacity(build.reloc_call_sites.len() * ELF64_RELA_SIZE);
+    for site in &build.reloc_call_sites {
+        let sym_idx = match import_sym_indices.get(site.import_index) {
+            Some(&i) => i as u64,
+            None => {
+                return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                    &format!(
+                        "elf_reloc: reloc_call_sites[..].import_index {} out of range",
+                        site.import_index,
+                    ),
+                )));
+            }
+        };
+        // x86_64 CALL/JMP rel32 is 5 bytes: opcode + 4-byte
+        // disp32. The relocation applies to the disp32 field at
+        // `instr_offset + 1`. ELF spec for `R_X86_64_PLT32`
+        // wants `addend = -4` so the resolved value equals
+        // (S + A) - P where P points at the disp32 itself
+        // (S is the symbol value, A the addend).
+        //
+        // aarch64 BL/B is 4 bytes with the imm26 in the low
+        // bits; `R_AARCH64_CALL26` applies at the instruction
+        // start with addend 0.
+        let (rtype, r_offset, r_addend) = match machine_for_rela {
+            Machine::X86_64 => (R_X86_64_PLT32, site.instr_offset as u64 + 1, -4i64),
+            Machine::Aarch64 => (R_AARCH64_CALL26, site.instr_offset as u64, 0),
+        };
+        let r_info = (sym_idx << 32) | (rtype as u64);
+        let rela = Elf64Rela {
+            r_offset,
+            r_info,
+            r_addend,
+        };
+        write_struct(&mut rela_bytes, &rela);
+    }
+
     let symtab_bytes: Vec<u8> = symbols
         .iter()
         .flat_map(|s| {
@@ -272,9 +358,17 @@ pub(super) fn write_relocatable(
         })
         .collect();
 
-    // Section name table.
-    let (shstrtab_bytes, shstrtab_offs) =
-        build_strtab(&[".text", ".data", ".bss", ".symtab", ".strtab", ".shstrtab"]);
+    // Section name table. Index map below mirrors the SHIDX_*
+    // constants above (one entry per non-null section).
+    let (shstrtab_bytes, shstrtab_offs) = build_strtab(&[
+        ".text",
+        ".rela.text",
+        ".data",
+        ".bss",
+        ".symtab",
+        ".strtab",
+        ".shstrtab",
+    ]);
 
     // Section data layout. Each section's offset starts at the
     // running tail of the output, rounded to its alignment.
@@ -297,12 +391,32 @@ pub(super) fn write_relocatable(
         ..Default::default()
     });
 
+    // .rela.text -- one entry per `RelocCallSite`. `sh_link`
+    // points at the symbol table; `sh_info` at the section the
+    // relocations apply to (`.text`). The `SHF_INFO_LINK` flag
+    // signals the latter usage of `sh_info`.
+    let rela_off = round_up(out.len() as u64, 8);
+    out.resize(rela_off as usize, 0);
+    out.extend_from_slice(&rela_bytes);
+    sh.push(Elf64Shdr {
+        sh_name: shstrtab_offs[1],
+        sh_type: SHT_RELA,
+        sh_flags: SHF_INFO_LINK,
+        sh_offset: rela_off,
+        sh_size: rela_bytes.len() as u64,
+        sh_link: SHIDX_SYMTAB as u32,
+        sh_info: SHIDX_TEXT as u32,
+        sh_addralign: 8,
+        sh_entsize: ELF64_RELA_SIZE as u64,
+        ..Default::default()
+    });
+
     // .data
     let data_off = round_up(out.len() as u64, 8);
     out.resize(data_off as usize, 0);
     out.extend_from_slice(&build.data);
     sh.push(Elf64Shdr {
-        sh_name: shstrtab_offs[1],
+        sh_name: shstrtab_offs[2],
         sh_type: SHT_PROGBITS,
         sh_flags: SHF_ALLOC | SHF_WRITE,
         sh_offset: data_off,
@@ -313,7 +427,7 @@ pub(super) fn write_relocatable(
 
     // .bss (no file bytes)
     sh.push(Elf64Shdr {
-        sh_name: shstrtab_offs[2],
+        sh_name: shstrtab_offs[3],
         sh_type: SHT_NOBITS,
         sh_flags: SHF_ALLOC | SHF_WRITE,
         sh_offset: out.len() as u64,
@@ -327,7 +441,7 @@ pub(super) fn write_relocatable(
     out.resize(symtab_off as usize, 0);
     out.extend_from_slice(&symtab_bytes);
     sh.push(Elf64Shdr {
-        sh_name: shstrtab_offs[3],
+        sh_name: shstrtab_offs[4],
         sh_type: SHT_SYMTAB,
         sh_offset: symtab_off,
         sh_size: symtab_bytes.len() as u64,
@@ -342,7 +456,7 @@ pub(super) fn write_relocatable(
     let strtab_off = out.len() as u64;
     out.extend_from_slice(&strtab_bytes);
     sh.push(Elf64Shdr {
-        sh_name: shstrtab_offs[4],
+        sh_name: shstrtab_offs[5],
         sh_type: SHT_STRTAB,
         sh_offset: strtab_off,
         sh_size: strtab_bytes.len() as u64,
@@ -354,7 +468,7 @@ pub(super) fn write_relocatable(
     let shstrtab_off = out.len() as u64;
     out.extend_from_slice(&shstrtab_bytes);
     sh.push(Elf64Shdr {
-        sh_name: shstrtab_offs[5],
+        sh_name: shstrtab_offs[6],
         sh_type: SHT_STRTAB,
         sh_offset: shstrtab_off,
         sh_size: shstrtab_bytes.len() as u64,
@@ -436,6 +550,7 @@ mod tests {
             func_fixups: Vec::new(),
             bytecode_to_native: Vec::new(),
             func_ent_pcs: Vec::new(),
+            reloc_call_sites: Vec::new(),
             ssa_line_rows: Vec::new(),
             imports: ResolvedImports::default(),
             abi: Abi::default(),

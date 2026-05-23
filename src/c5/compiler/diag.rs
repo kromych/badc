@@ -305,6 +305,11 @@ impl Compiler {
         if lhs_is_fp && !rhs_is_fp {
             self.emit_op(Op::Fcvtif);
             self.ty = lhs;
+            // Dual-emit: wrap `ast_acc` in an `Expr::Cast { to_ty
+            // = lhs }` so the walker sees the implicit lift and
+            // emits the matching `Inst::FpCast(IntToFp)` before
+            // the wrapping FP binop runs.
+            self.ast_apply_assign_conv(lhs);
             return Ok(());
         }
         // !lhs_is_fp && rhs_is_fp -- spill float RHS, lift int LHS.

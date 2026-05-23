@@ -1830,7 +1830,7 @@ impl Compiler {
                 // captured id verbatim, so the walker re-emits
                 // the same `Mul` chain (rather than letting the
                 // walker apply its own pointer scaling).
-                let compound_rhs_ast = self.ast_acc.or(pre_scale_rhs_ast);
+                let mut compound_rhs_ast = self.ast_acc.or(pre_scale_rhs_ast);
                 // Floating-point lvalue (`double x; x *= 2.0;`) needs
                 // the FP variant of the binop, not the integer one.
                 // Without this, `x *= y` lowered to `Op::Mul` which
@@ -1852,6 +1852,12 @@ impl Compiler {
                 // double before the FP op runs.
                 if lhs_is_fp || is_floating_scalar(self.ty) {
                     self.require_both_float(lhs_ty, "compound assign")?;
+                    // `require_both_float` wrapped `ast_acc` in
+                    // an `Expr::Cast` (via the dual-emit hook in
+                    // `convert.rs`); pick up the cast'd id so
+                    // the walker emits the int->FP lift before
+                    // the FP binop.
+                    compound_rhs_ast = self.ast_acc.or(compound_rhs_ast);
                 }
                 let op = match binop {
                     x if x == Token::AddOp as i64 => {

@@ -44,6 +44,37 @@ use super::super::ir::{BinOp, FunctionSsa, Inst, LoadKind, StoreKind, Terminator
 /// future `malloc` shim) would use a different tag.
 const LOCAL_ADDR_TAG: i64 = 0x4000_0000_0000_0000;
 
+/// Multi-function program context. The SSA-VM walks
+/// `Vec<FunctionSsa>`; `Inst::Call` resolves a callee by
+/// `target_pc` through `ent_pc_to_idx`. Kept as a struct so the
+/// per-arch JIT shim, the host-call bridge, and the c5
+/// trampoline pool can later attach without changing `run_func`'s
+/// signature.
+struct Program<'a> {
+    funcs: &'a [FunctionSsa],
+    /// `ent_pc` -> index into `funcs`. Built once at program
+    /// entry; `Inst::Call` does a constant-time lookup.
+    ent_pc_to_idx: alloc::collections::BTreeMap<usize, usize>,
+}
+
+impl<'a> Program<'a> {
+    fn new(funcs: &'a [FunctionSsa]) -> Self {
+        let ent_pc_to_idx = funcs
+            .iter()
+            .enumerate()
+            .map(|(i, f)| (f.ent_pc, i))
+            .collect();
+        Self {
+            funcs,
+            ent_pc_to_idx,
+        }
+    }
+
+    fn lookup(&self, ent_pc: usize) -> Option<&'a FunctionSsa> {
+        self.ent_pc_to_idx.get(&ent_pc).map(|&i| &self.funcs[i])
+    }
+}
+
 /// Per-call frame the SSA interpreter walks. Holds the value-ID
 /// register file, the basic-block cursor, and the per-frame slot
 /// array that backs `LocalAddr` / `LoadLocal` / `Store`.
@@ -81,19 +112,31 @@ impl Frame<'_> {
     }
 }
 
-/// Run a single function's SSA. Currently supports the
-/// integer-only subset (no `Call` / `CallExt` / `Intrinsic` /
-/// FP). Multi-block control flow runs via the `Terminator`
-/// dispatch loop. Returns the function's i64 return value or
-/// `Err` with the offending opcode name.
+/// Single-function entry: wrap `func` in a one-element `Program`
+/// and run it. `Inst::Call` in this shape will fail with a
+/// "not found" runtime error because there's only one function.
 pub(super) fn run_ssa(func: &FunctionSsa) -> Result<i64, C5Error> {
-    run_ssa_with_args(func, &[])
+    let funcs = core::slice::from_ref(func);
+    let prog = Program::new(funcs);
+    run_func(&prog, func, &[])
 }
 
-/// As `run_ssa`, but with `args` staged into the parameter slots
-/// per the c5 cdecl: arg `i` lands at slot `i + 2`. Future
-/// `Inst::Call` will populate this on each frame entry.
-pub(super) fn run_ssa_with_args(func: &FunctionSsa, args: &[i64]) -> Result<i64, C5Error> {
+/// Multi-function entry: pick the function at `entry_pc` and run
+/// it with no arguments. `Inst::Call` resolves callees through
+/// `funcs`' `ent_pc` lookup.
+pub(super) fn run_program(funcs: &[FunctionSsa], entry_pc: usize) -> Result<i64, C5Error> {
+    let prog = Program::new(funcs);
+    let entry = prog.lookup(entry_pc).ok_or_else(|| {
+        C5Error::Runtime(format!(
+            "vm_ssa: run_program: no function at ent_pc {entry_pc}",
+        ))
+    })?;
+    run_func(&prog, entry, &[])
+}
+
+/// Run one function in the program context. `args` lands in the
+/// parameter slots per the c5 cdecl: arg `i` at slot `i + 2`.
+fn run_func(prog: &Program<'_>, func: &FunctionSsa, args: &[i64]) -> Result<i64, C5Error> {
     let locals = func.locals.max(0) as usize;
     let mut slots = alloc::vec![0i64; locals + args.len().max(func.n_params)];
     for (i, &v) in args.iter().enumerate() {
@@ -109,7 +152,7 @@ pub(super) fn run_ssa_with_args(func: &FunctionSsa, args: &[i64]) -> Result<i64,
     loop {
         let block = &frame.func.blocks[frame.block_idx];
         for v in block.inst_range.clone() {
-            run_inst(&mut frame, v)?;
+            run_inst(prog, &mut frame, v)?;
         }
         match block.terminator {
             Terminator::Return(rv) => {
@@ -157,7 +200,7 @@ pub(super) fn run_ssa_with_args(func: &FunctionSsa, args: &[i64]) -> Result<i64,
     }
 }
 
-fn run_inst(frame: &mut Frame<'_>, v: ValueId) -> Result<(), C5Error> {
+fn run_inst(prog: &Program<'_>, frame: &mut Frame<'_>, v: ValueId) -> Result<(), C5Error> {
     let inst = &frame.func.insts[v as usize];
     let name = match inst {
         Inst::Imm(k) => {
@@ -239,7 +282,18 @@ fn run_inst(frame: &mut Frame<'_>, v: ValueId) -> Result<(), C5Error> {
         }
         Inst::Fneg(_) => "Fneg",
         Inst::FpCast { .. } => "FpCast",
-        Inst::Call { .. } => "Call",
+        Inst::Call { target_pc, args } => {
+            let callee = prog.lookup(*target_pc).ok_or_else(|| {
+                C5Error::Runtime(format!("vm_ssa: Call: no function at ent_pc {target_pc}",))
+            })?;
+            let mut arg_vals: Vec<i64> = Vec::with_capacity(args.len());
+            for &a in args {
+                arg_vals.push(frame.regs[a as usize]);
+            }
+            let ret = run_func(prog, callee, &arg_vals)?;
+            frame.regs[v as usize] = ret;
+            return Ok(());
+        }
         Inst::CallIndirect { .. } => "CallIndirect",
         Inst::CallExt { .. } => "CallExt",
         Inst::TailExt(_) => "TailExt",
@@ -363,6 +417,18 @@ mod tests {
         funcs.into_iter().next().expect("at least one function")
     }
 
+    fn run_full_program(src: &str) -> i64 {
+        let program = Compiler::new(src.to_string())
+            .compile()
+            .expect("compile fixture");
+        let funcs = super::super::super::codegen::ssa_shadow::produce_ssa_funcs(
+            &program,
+            super::super::super::Target::MacOSAarch64,
+        )
+        .expect("ssa lift");
+        run_program(&funcs, program.entry_pc).expect("ssa run")
+    }
+
     #[test]
     fn return_constant() {
         // C99 5.1.2.2.3: `int main(void) { return 42; }` -- the
@@ -394,6 +460,34 @@ mod tests {
     fn if_branch_fallthrough() {
         let func = ssa_main_of("int main(void) { if (0) return 7; return 9; }");
         assert_eq!(run_ssa(&func).expect("ssa run"), 9);
+    }
+
+    #[test]
+    fn call_passes_args_and_returns() {
+        // Multi-function dispatch: `main` calls `add` with two
+        // arguments and returns the result. Exercises
+        // `Inst::Call` + `Program::lookup` + frame nesting.
+        assert_eq!(
+            run_full_program(
+                "int add(int a, int b) { return a + b; }
+                 int main(void) { return add(7, 35); }",
+            ),
+            42,
+        );
+    }
+
+    #[test]
+    fn recursive_factorial() {
+        // Recursion exercises the same `Inst::Call` path back
+        // into the caller and verifies the Rust stack survives
+        // a typical recursion depth (5! -> depth 6).
+        assert_eq!(
+            run_full_program(
+                "int fact(int n) { if (n < 2) return 1; return n * fact(n - 1); }
+                 int main(void) { return fact(5); }",
+            ),
+            120,
+        );
     }
 
     #[test]

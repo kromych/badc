@@ -95,7 +95,11 @@ fn entry_pc_points_at_main() {
 fn build_info_marker_appears_in_every_target() {
     use crate::{NativeOptions, Target, emit_native_with_options};
     let program = super::compile_str("int main() { return 0; }");
-    let needle = b"PRODUCED BY BADC";
+    // `BUILD_INFO` starts with `BADC\n\tv<version>` (see
+    // `src/lib.rs`). Probe the first line of the marker as a
+    // stable substring; the version and commit suffix change
+    // per build.
+    let needle = b"BADC\n\tv";
     for target in [
         Target::MacOSAarch64,
         Target::LinuxAarch64,
@@ -108,7 +112,7 @@ fn build_info_marker_appears_in_every_target() {
         let found = bytes.windows(needle.len()).any(|w| w == needle);
         assert!(
             found,
-            "{target:?}: expected `PRODUCED BY BADC` marker in emitted binary"
+            "{target:?}: expected `BADC\\n\\tv` marker prefix in emitted binary"
         );
     }
 }

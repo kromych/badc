@@ -228,6 +228,23 @@ pub(crate) struct FuncMeta {
     pub(crate) is_variadic: bool,
 }
 
+/// Upper bound on bc_pcs the lowering needs to look up. The
+/// per-arch `lower` sizes `bytecode_to_native` by this value so
+/// every `ent_pc` / `end_pc` / `block_start_pc` / sentinel write
+/// the SSA emit produces lands in range. Takes the max of
+/// `program.text.len()` (covers lift output bounded by the
+/// bytecode tape) and the largest `end_pc` across `ssa_funcs`
+/// (covers parsed-program SSA whose end_pcs match the parser's
+/// `text.len()` at compile time; once the parser stops emitting
+/// bytecode the lowering can drop the `text.len()` term).
+pub(super) fn pc_extent_for_lowering(
+    program: &Program,
+    ssa_funcs: &[crate::c5::ir::FunctionSsa],
+) -> usize {
+    let from_ssa = ssa_funcs.iter().map(|f| f.end_pc).max().unwrap_or(0);
+    program.text.len().max(from_ssa)
+}
+
 /// Recover [`FuncMeta`] for every `Op::Ent` in `program.text`.
 /// Walks the bytecode once linearly; the parameter-count scan
 /// bounds at the next `Op::Ent` so the total cost is O(text.len()).

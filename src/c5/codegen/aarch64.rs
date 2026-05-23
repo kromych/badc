@@ -1172,7 +1172,6 @@ pub(super) fn lower(
     imports: &super::ResolvedImports,
 ) -> Result<Build, C5Error> {
     let mut code = Vec::new();
-    let mut bytecode_to_native: Vec<usize> = vec![usize::MAX; program.text.len() + 1];
     let mut func_ent_pcs: Vec<usize> = Vec::new();
     let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
     let mut fixups: Vec<Fixup> = Vec::new();
@@ -1208,6 +1207,15 @@ pub(super) fn lower(
         super::ssa_emit_common::time_pass("ssa::produce_ssa_funcs (aarch64)", || {
             super::ssa_shadow::produce_ssa_funcs(program, target)
         })?;
+    // Upper bound on bc_pcs the lowering will reference. The lift
+    // and the walker both stamp `ent_pc` / `end_pc` against the
+    // bytecode PC space; archive reloads also leave their lift
+    // output bounded by `program.text.len()`. Take the max so the
+    // dense `bytecode_to_native` table holds every reachable PC
+    // even when the bytecode tape gets trimmed (or eventually
+    // empties out entirely).
+    let bc_pc_extent = super::pc_extent_for_lowering(program, &ssa_funcs);
+    let mut bytecode_to_native: Vec<usize> = vec![usize::MAX; bc_pc_extent + 1];
     let ssa_allocs: alloc::vec::Vec<super::ssa_alloc::Allocation> =
         super::ssa_emit_common::time_pass("ssa_alloc::allocate (aarch64)", || {
             ssa_funcs
@@ -1265,9 +1273,9 @@ pub(super) fn lower(
         let us = _ssa_emit_pass_start.elapsed().as_micros();
         eprintln!("pass: ssa_emit_aarch64 (block walk) -- {us}us");
     }
-    bytecode_to_native[program.text.len()] = code.len();
+    bytecode_to_native[bc_pc_extent] = code.len();
 
-    apply_fixups(&mut code, &fixups, &bytecode_to_native, program.text.len())?;
+    apply_fixups(&mut code, &fixups, &bytecode_to_native, bc_pc_extent)?;
 
     // Append one PLT trampoline per import. Every BL/B
     // placeholder recorded in `plt_call_fixups` now gets its imm26
@@ -1290,7 +1298,7 @@ pub(super) fn lower(
     // keeps that contract intact.
     let mut func_fixups: Vec<FuncFixup> = Vec::with_capacity(pending_func_fixups.len());
     for (adrp_offset, target_bc_pc) in pending_func_fixups {
-        if target_bc_pc > program.text.len() {
+        if target_bc_pc > bc_pc_extent {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(
                     "native codegen: function pointer target {target_bc_pc} past end of bytecode"

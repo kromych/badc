@@ -1426,31 +1426,18 @@ mod tests {
             Op::Lev as i64,
         ]);
         let opt = optimize(p).unwrap();
-        // The bytecode VM exercises the regression directly:
-        // a plain `Op::Imm CODE_BASE` survives the optimizer
-        // unmodified and `Op::Lev` returns it as-is. The SSA
-        // interpreter has its own ImmCode/Imm disambiguation in
-        // `lift_program`'s heuristic for empty position lists, so
-        // running this hand-built program under SSA would surface
-        // the lift's promotion (a separate path) rather than the
-        // optimizer behaviour this test pins. Route the
-        // assertion through the bytecode VM explicitly so the
-        // regression stays locked regardless of which
-        // interpreter is the default.
-        #[cfg(feature = "std")]
-        // SAFETY: serial test execution by the runner is the
-        // contract `cargo test --test-threads=1` requires; without
-        // it the env var leaks across tests. `cargo test` already
-        // serialises by default for `single-thread`-asking tests.
-        unsafe {
-            std::env::set_var("BADC_VM_BYTECODE", "1");
-        }
-        let rc = Vm::new(opt).run().unwrap();
-        #[cfg(feature = "std")]
-        unsafe {
-            std::env::remove_var("BADC_VM_BYTECODE");
-        }
-        assert_eq!(rc, CODE_BASE as i64);
+        // Inspect the optimized text directly. The regression
+        // would have rewritten the `Op::Imm CODE_BASE` pair to
+        // something else; the assertion stays bytecode-level
+        // and avoids coupling the regression check to the
+        // VM-side ImmCode/Imm disambiguation that the SSA lift
+        // applies separately on hand-built test programs.
+        let imm_pos = opt
+            .text
+            .iter()
+            .position(|&w| w == Op::Imm as i64)
+            .expect("Op::Imm must survive the optimizer");
+        assert_eq!(opt.text[imm_pos + 1], CODE_BASE as i64);
     }
 
     #[test]

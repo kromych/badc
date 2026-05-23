@@ -431,6 +431,7 @@ const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("stdint_widths.c", 0),
     ("fd_set_macros.c", 0),
     ("fn_ptr_explicit_deref.c", 42),
+    ("fn_ptr_decay_inside_block.c", 0),
     ("libc_basic.c", 0),
     ("static_init_cast_funcptr.c", 0),
     ("memset_mcmp.c", 42),

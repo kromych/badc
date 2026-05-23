@@ -389,6 +389,17 @@ impl Compiler {
         }
         while self.lex.tk != ';' {
             let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
+            // C99 6.3.2.1p4: a function-pointer rvalue auto-decays
+            // through any unary `*` chain. The `Symbol::fn_ptr_indirection`
+            // side-channel records how many indirection levels sit between
+            // the variable's loaded value and the function pointer itself
+            // so the unary-`*` handler can recognise the decay. The
+            // function-body-top path picks this up in `parse_function_body_local_decl`;
+            // an inside-block decl (`else { lua_KFunction kf = ...; }`) reaches
+            // here and the lineage must propagate equivalently or downstream
+            // `(*kf)(...)` is lowered as `Load { kind = result_tag }` and
+            // dereferences the function pointer's bit pattern.
+            let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             // C99 6.7.7p3 + 6.7.6.1: an array typedef contributes
             // its dimension only when the declarator stayed at
             // the typedef's element type. A `*` in the declarator
@@ -454,6 +465,13 @@ impl Compiler {
                     self.pending_local_runtime_elements.clear();
                 }
             }
+            // Write the lineage tag after `allocate_local_with_init`
+            // (which may have parsed an initializer) so it can't be
+            // clobbered by the init expression's symbol lookups.
+            // Static locals (promoted to Glo class) carry the same
+            // tag -- the codegen reads it at the same Ident-load
+            // site regardless of storage class.
+            self.symbols[loc_idx].fn_ptr_indirection = fn_ptr_indirection;
 
             if self.lex.tk == ',' {
                 self.next()?;

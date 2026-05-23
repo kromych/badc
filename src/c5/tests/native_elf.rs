@@ -331,6 +331,7 @@ const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("stdint_widths.c", 0),
     ("fd_set_macros.c", 0),
     ("fn_ptr_explicit_deref.c", 42),
+    ("fn_ptr_decay_inside_block.c", 0),
     ("sys_addr_in_static_init.c", 42),
     ("libc_struct_buf_size.c", 42),
     ("libc_basic.c", 0),

@@ -523,12 +523,13 @@ fn fixture_parity() {
     );
 }
 
-/// Regression marker (gh #48): post-call sub-word extension on
-/// the libc return register. See the matching test in
+/// Post-call sub-word extension on the libc return register.
+/// See the matching test in
 /// `super::native::atoi_negative_sign_extends`. PE/x86_64
-/// against msvcrt is the original repro -- msvcrt leaves the upper
-/// 32 bits of RAX unspecified for `int` returns, and without the
-/// post-call `movsxd` the c5 accumulator sees garbage above EAX.
+/// against msvcrt is the strictest variant: msvcrt leaves the
+/// upper 32 bits of RAX unspecified for `int` returns, so
+/// without the post-call `movsxd` the c5 accumulator sees
+/// garbage above EAX.
 #[test]
 fn atoi_negative_sign_extends() {
     if !host_can_run_pe() {

@@ -1,9 +1,9 @@
 //! End-to-end DWARF-validation tests: compile a fixture with badc,
 //! drop the Mach-O binary into a temp dir, then run `lldb --batch`
 //! against it and assert the type-tree output matches the expected
-//! shape. Anchors gh #57 (per-c5-tag base type DIEs), gh #58
-//! (pointer chains), and gh #59 (struct DIEs with member offsets)
-//! against regressions.
+//! shape. Cover per-c5-tag base-type DIEs, pointer-type chains,
+//! struct DIEs with member offsets, and the multi-TU line-program
+//! file table against regressions.
 //!
 //! Gated to macOS for the same reason `native.rs` is: the produced
 //! binary is a Mach-O the host loader will accept. lldb has to be
@@ -297,11 +297,10 @@ fn lldb_resolves_union_with_overlapping_fields() {
 
 #[test]
 fn dwarfdump_emits_cfi_with_post_prologue_rules() {
-    // gh #47: emit a CIE describing c5's standard prologue, plus
-    // an FDE per user function. Previously the section didn't
-    // exist and the unwinder fell back to prologue heuristics
-    // (fragile under -O / restructured frames). Verify the
-    // expected CFI rules land in `__debug_frame`.
+    // Verify the CFI section: a CIE describing c5's standard
+    // prologue plus one FDE per user function. Without it the
+    // unwinder falls back to prologue heuristics, which break
+    // under -O / restructured frames.
     let path = build_signed_mach_o(
         r#"
         int helper(int x) { return x + 1; }
@@ -449,16 +448,15 @@ fn build_signed_mach_o_two_units(
 
 #[test]
 fn multi_tu_dwarf_line_table_carries_both_files() {
-    // gh #88-shape regression: after the cross-TU linker landed, the
-    // DWARF line program must continue to attribute each PC back to
-    // the `.c` file it came from. The DWARF emitter walks
-    // `program.source_files` (skipping the lexer's `<source>`
-    // placeholder) and assigns one DWARF file number per entry; the
-    // line-program rows reach the right file via `DW_LNS_SET_FILE`
-    // through `program.source_file_indices`. If the linker's source-
-    // table merge or the file-index remap regresses, the file table
-    // would either lose one of the TUs or every PC would attribute
-    // back to file 1.
+    // The DWARF line program must attribute each PC back to the
+    // `.c` file it came from across translation units. The
+    // emitter walks `program.source_files` (skipping the lexer's
+    // `<source>` placeholder) and assigns one DWARF file number
+    // per entry; line-program rows reach the right file via
+    // `DW_LNS_SET_FILE` through `program.source_file_indices`.
+    // If the linker's source-table merge or the file-index remap
+    // regresses, the file table loses one TU or every PC
+    // attributes back to file 1.
     let path = build_signed_mach_o_two_units(
         // TU A: a helper that does a couple of statements so its
         // body has more than one line-program row.

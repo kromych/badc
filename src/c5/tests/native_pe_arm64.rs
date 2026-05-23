@@ -489,14 +489,12 @@ fn fixture_parity_native_optimized() {
     );
 }
 
-/// Regression marker (gh #48): `atoi("-17")` -- the libc return-
-/// register sign-extension contract on AAPCS64 / Win64 leaves the
-/// upper bits of X0 (or RAX) unspecified for sub-word returns, and
-/// c5's 64-bit accumulator needs the post-call `sxtw` / `movsxd`
-/// emitted by `emit_extend_x19_for_return` so a downstream
-/// `acc != -17` compare matches. The same fixture runs on every
-/// native lane (Mach-O, ELF, PE) -- this is the PE/AArch64
-/// instance.
+/// AAPCS64 / Win64 leave the upper bits of X0 (or RAX)
+/// unspecified for sub-word libc returns; c5's 64-bit
+/// accumulator needs the post-call `sxtw` / `movsxd` emitted by
+/// `emit_extend_x19_for_return` so a downstream `acc != -17`
+/// compare matches. The same fixture runs on every native lane
+/// (Mach-O, ELF, PE); this is the PE/AArch64 instance.
 #[test]
 fn atoi_negative_sign_extends() {
     if !host_can_run_pe() {

@@ -54,12 +54,12 @@ fn duplicate_global_definition() {
 
 #[test]
 fn prototype_after_definition_at_pc_zero() {
-    // gh #52: a prototype following a function definition used to
+    // A prototype following a function definition used to
     // clobber the symbol's val (= bytecode pc) when val happened
-    // to be 0 -- which is exactly the case for the *first*
-    // function in the source. The reset would point every later
-    // call site at the buffer's current pc, sending the call
-    // into nowhere-land. Pin the fix.
+    // to be 0 -- exactly the case for the *first* function in
+    // the source. The reset would point every later call site
+    // at the buffer's current pc, sending the call to a stale
+    // address. Pin the fix.
     let src = "int foo_fn(int x) { return x + 1; } \
                int foo_fn(int x); \
                int main() { return foo_fn(41); }";

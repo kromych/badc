@@ -448,11 +448,11 @@ fn fixture_parity() {
     );
 }
 
-/// Regression marker (gh #48): post-call sub-word extension on
-/// the libc return register. See the matching test in
-/// `super::native::atoi_negative_sign_extends`. ELF/glibc
-/// happens to leave the upper bits of the return register zeroed
-/// today, but the c5-emitted `sxtw` is still required per AAPCS64.
+/// Post-call sub-word extension on the libc return register.
+/// See the matching test in `super::native::atoi_negative_sign_extends`.
+/// ELF/glibc happens to leave the upper bits of the return
+/// register zeroed today, but the c5-emitted `sxtw` is still
+/// required per AAPCS64.
 #[test]
 fn atoi_negative_sign_extends() {
     let outcome = build_and_run_fixture("atoi_negative.c");

@@ -668,14 +668,14 @@ fn fixture_parity() {
     );
 }
 
-/// Regression marker (gh #48): `atoi("-17")` -- the libc return-
-/// register sign-extension contract on AAPCS64 / Win64 leaves the
-/// upper bits unspecified for sub-word returns. The fix
-/// (`emit_extend_x19_for_return` / its x86_64 sibling) emits
-/// `sxtw` / `movsxd` after every libc call. Run on every native
-/// lane (Mach-O / ELF / PE) since each backend emits its own
-/// post-call extension and the bug surfaces differently per
-/// platform-libc combination.
+/// AAPCS64 / Win64: the libc return-register sign-extension
+/// contract leaves the upper bits unspecified for sub-word
+/// returns. `emit_extend_x19_for_return` / its x86_64 sibling
+/// emit `sxtw` / `movsxd` after every libc call so an
+/// `int`-returning libc fn (`atoi("-17")`) widens to i64
+/// correctly. Run on every native lane (Mach-O / ELF / PE)
+/// since each backend emits its own post-call extension and
+/// the failure manifests differently per platform-libc pair.
 #[test]
 fn atoi_negative_sign_extends() {
     let outcome = build_and_run_fixture("atoi_negative.c");

@@ -124,4 +124,13 @@ pub struct LinkUnit {
     /// and re-based by the unit's `symbols_offset` if the
     /// linker grows that bookkeeping.
     pub(crate) parser_symbols: Vec<crate::c5::symbol::Symbol>,
+    /// Sys-trampoline `FunctionSsa` entries synthesised by
+    /// `emit_sys_trampolines`. Each one mirrors a bytecode
+    /// trampoline in the unit's text; the linker rebases
+    /// `ent_pc` / `end_pc` by `text_base[i]` and remaps the
+    /// `CallExt::binding_idx` / `Terminator::TailExt(idx)`
+    /// through `binding_remap_per_unit[i]`. Surviving across
+    /// object-file round-trips lets the codegen reach the
+    /// trampolines without re-running `lift_program`.
+    pub(crate) synthetic_ssa_funcs: Vec<crate::c5::ir::FunctionSsa>,
 }

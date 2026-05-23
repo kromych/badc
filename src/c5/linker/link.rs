@@ -998,20 +998,58 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         synthetic_ssa_funcs: alloc::vec::Vec::new(),
     })
     .and_then(|mut program| {
-        // Recover sys-trampolines from the merged bytecode into
-        // `synthetic_ssa_funcs`. The walker covers every
-        // user-declared function via `finished_functions`; any
-        // remaining lift output is a sys-trampoline (or other
-        // post-parser helper). Pre-collect the walker-covered
-        // ent_pcs so duplicate entries don't end up in the list.
+        // Walker covers every user-declared function via
+        // `finished_functions`; the remaining sys-trampolines
+        // come from either the per-unit `synthetic_ssa_funcs`
+        // (in-memory compile+link, or .o files that carry the
+        // synthesised SSA blob) or the bytecode lift (legacy
+        // .o files without the blob). Pre-collect the walker-
+        // covered ent_pcs + the unit-side synth ent_pcs so we
+        // don't double-add through the lift fallback.
         let walker_pcs: alloc::collections::BTreeSet<usize> = program
             .finished_functions
             .iter()
             .map(|f| f.ent_pc)
             .collect();
+        let mut covered: alloc::collections::BTreeSet<usize> = walker_pcs.clone();
+        for (i, unit) in units.iter().enumerate() {
+            let text_off = text_base[i];
+            let binding_remap = &binding_remap_per_unit[i];
+            for f in &unit.synthetic_ssa_funcs {
+                let mut rebased = f.clone();
+                rebased.ent_pc += text_off;
+                rebased.end_pc += text_off;
+                // Trampolines reach exactly one libc binding;
+                // the index lives in `Inst::CallExt::binding_idx`
+                // (variadic / fixed-param shape) or in
+                // `Terminator::TailExt(idx)` (zero-arg shape).
+                // Remap both through the unit's binding table.
+                for inst in &mut rebased.insts {
+                    if let crate::c5::ir::Inst::CallExt { binding_idx, .. } = inst
+                        && let Some(remapped) = binding_remap.get(*binding_idx as usize)
+                    {
+                        *binding_idx = *remapped;
+                    }
+                }
+                for blk in &mut rebased.blocks {
+                    if let crate::c5::ir::Terminator::TailExt(idx) = &mut blk.terminator
+                        && let Some(remapped) = binding_remap.get(*idx as usize)
+                    {
+                        *idx = *remapped;
+                    }
+                }
+                if covered.insert(rebased.ent_pc) {
+                    program.synthetic_ssa_funcs.push(rebased);
+                }
+            }
+        }
+        // Legacy units (or any post-parser bytecode the unit's
+        // `synthetic_ssa_funcs` doesn't cover) get recovered via
+        // `lift_program`. Entries whose `ent_pc` already showed up
+        // above (walker- or synth-covered) get filtered.
         let lifted = crate::c5::codegen::ssa::lift_program(&program)?;
         for f in lifted {
-            if !walker_pcs.contains(&f.ent_pc) {
+            if covered.insert(f.ent_pc) {
                 program.synthetic_ssa_funcs.push(f);
             }
         }

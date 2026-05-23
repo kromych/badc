@@ -386,6 +386,7 @@ impl Compiler {
             relocs,
             finished_functions: self.finished_functions,
             parser_symbols: self.symbols,
+            synthetic_ssa_funcs: self.synthetic_ssa_funcs,
         })
     }
 }

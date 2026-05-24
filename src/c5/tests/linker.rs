@@ -554,6 +554,118 @@ fn user_ssa_funcs_threaded_through_link_with_pc_rebase() {
 }
 
 #[test]
+fn user_ssa_funcs_call_target_pc_resolves_for_cross_tu_extern() {
+    use crate::c5::{LinkOptions, link_units, op::Op};
+    // Across-TU call: TU B's main calls TU A's add. At
+    // compile_to_link_unit time, B's user_ssa_funcs entry for
+    // main carries an Inst::Call with target_pc == 0 (B doesn't
+    // know A's PC yet). The merge patches Op::Jsr's operand in
+    // merged_text against A's resolved ent_pc, then
+    // `resolve_user_ssa_call_targets` propagates that PC into
+    // the matching Inst::Call::target_pc.
+    let a = compile_unit("int add(int a, int b) { return a + b; }");
+    let b = compile_unit(
+        "
+        extern int add(int a, int b);
+        int main(void) { return add(40, 2); }
+        ",
+    );
+
+    // Pre-link state: the extern call in B should currently
+    // carry target_pc == 0 (placeholder for cross-TU).
+    let mut saw_unresolved = false;
+    for f in &b.user_ssa_funcs {
+        for inst in &f.insts {
+            if let crate::c5::ir::Inst::Call { target_pc, .. } = inst
+                && *target_pc == 0
+            {
+                saw_unresolved = true;
+            }
+        }
+    }
+    assert!(
+        saw_unresolved,
+        "expected at least one Inst::Call with target_pc==0 pre-link in B",
+    );
+
+    let program =
+        link_units(alloc::vec![b, a], &[], LinkOptions::default()).expect("link_units failed");
+
+    // Post-link invariant: every Inst::Call::target_pc matches
+    // the corresponding Op::Jsr operand in program.text. The
+    // walker emits one Inst::Call per Op::Jsr in source order,
+    // and the resolver propagates the merged-PC operand into
+    // the SSA-side field. An unreachable Op::Jsr 0 in the tape
+    // (dead inline helper calling an undefined-but-unused
+    // forward decl from the prelude) maps to target_pc == 0 in
+    // the SSA -- the two stay consistent.
+    for f in &program.user_ssa_funcs {
+        let mut jsr_operands: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
+        let mut pc = f.ent_pc;
+        while pc < f.end_pc.min(program.text.len()) {
+            let raw = program.text[pc];
+            let op = Op::from_i64(raw);
+            if op == Some(Op::Jsr) && pc + 1 < program.text.len() {
+                jsr_operands.push(program.text[pc + 1]);
+            }
+            pc += op.map(|o| o.word_size()).unwrap_or(1);
+        }
+        let mut jsr_iter = jsr_operands.iter();
+        for inst in &f.insts {
+            if let crate::c5::ir::Inst::Call { target_pc, .. } = inst {
+                let expected = jsr_iter.next().copied().unwrap_or(0);
+                assert_eq!(
+                    *target_pc as i64, expected,
+                    "Inst::Call::target_pc mismatch in fn ent_pc={}",
+                    f.ent_pc,
+                );
+            }
+        }
+    }
+
+    // Sanity: TU B's main has the cross-TU extern call. Locate
+    // its Inst::Call in the merged user_ssa_funcs (its
+    // bytecode tape lives in B's range -- the first half of
+    // merged_text since B was passed first), and confirm the
+    // resolver gave it a non-zero merged-PC target.
+    let main_b = program
+        .user_ssa_funcs
+        .iter()
+        .find(|f| {
+            // B's main is the function whose body contains the
+            // single cross-TU Op::Jsr; its end_pc < text.len()/2
+            // for this two-TU layout. Picking by Inst::Call
+            // count == 1 + non-zero target is sufficient.
+            let n_calls = f
+                .insts
+                .iter()
+                .filter(|i| matches!(i, crate::c5::ir::Inst::Call { .. }))
+                .count();
+            n_calls == 1
+                && f.insts.iter().any(
+                    |i| matches!(i, crate::c5::ir::Inst::Call { target_pc, .. } if *target_pc != 0),
+                )
+        })
+        .expect("expected B's main with one resolved cross-TU Inst::Call");
+    for inst in &main_b.insts {
+        if let crate::c5::ir::Inst::Call { target_pc, .. } = inst {
+            let raw = program.text[*target_pc];
+            assert_eq!(
+                Op::from_i64(raw),
+                Some(Op::Ent),
+                "Cross-TU Inst::Call::target_pc={} does not point at Op::Ent (raw={})",
+                target_pc,
+                raw,
+            );
+        }
+    }
+
+    // End-to-end: the program runs and returns 42, requiring
+    // the cross-TU call to dispatch correctly.
+    assert_eq!(Vm::new(program).run().expect("VM run failed"), 42);
+}
+
+#[test]
 fn link_uses_object_via_round_trip() {
     use crate::c5::{read_object, write_object};
     // Same end-to-end as `extern_function_call_across_two_units`

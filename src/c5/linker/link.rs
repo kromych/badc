@@ -1050,16 +1050,13 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         }
         // User SSA from each unit's compile_to_link_unit path.
         // Per-unit ent_pcs are unit-local; rebase by text_base.
-        // Inst-level call targets (Inst::Call::target_pc,
-        // Inst::ImmCode) carry the source PC the walker recorded
-        // -- for locally-defined targets that PC was unit-local
-        // (rebase by text_base), and for cross-TU externs the
-        // walker stamped 0 and the corresponding code_relocs
-        // entry will patch the SSA-side reference at use time.
-        // Cross-TU resolution of those zero PCs is the next
-        // step toward retiring `lift_program`; this commit only
-        // rebases the in-unit PCs and threads the merged list
-        // onto `program.user_ssa_funcs`.
+        // Inst::CallExt::binding_idx and Terminator::TailExt(idx)
+        // remap through the unit's binding table (same logic the
+        // sys-trampoline loop above runs). Inst::Call::target_pc
+        // and Inst::ImmCode are resolved by the post-merge pass
+        // below against the patched bytecode tape -- the linker
+        // has already rewritten Op::Jsr / function-pointer Imm
+        // operands to their merged target PCs there.
         for (i, unit) in units.iter().enumerate() {
             let text_off = text_base[i];
             let binding_remap = &binding_remap_per_unit[i];
@@ -1069,19 +1066,10 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                 rebased.end_pc += text_off;
                 for inst in &mut rebased.insts {
                     use crate::c5::ir::Inst;
-                    match inst {
-                        Inst::Call { target_pc, .. } if *target_pc != 0 => {
-                            *target_pc += text_off;
-                        }
-                        Inst::ImmCode(pc) if *pc != 0 => {
-                            *pc += text_off;
-                        }
-                        Inst::CallExt { binding_idx, .. } => {
-                            if let Some(remapped) = binding_remap.get(*binding_idx as usize) {
-                                *binding_idx = *remapped;
-                            }
-                        }
-                        _ => {}
+                    if let Inst::CallExt { binding_idx, .. } = inst
+                        && let Some(remapped) = binding_remap.get(*binding_idx as usize)
+                    {
+                        *binding_idx = *remapped;
                     }
                 }
                 for blk in &mut rebased.blocks {
@@ -1094,6 +1082,15 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                 program.user_ssa_funcs.push(rebased);
             }
         }
+        // Resolve Inst::Call::target_pc and Inst::ImmCode against
+        // the linker-patched bytecode tape. The walker emits one
+        // Inst::Call per Op::Jsr in the source order; the i-th
+        // Inst::Call in each function's `insts` matches the i-th
+        // Op::Jsr in `program.text[ent_pc..end_pc]`. The same
+        // 1:1 ordering holds between Inst::ImmCode and the
+        // function-pointer literals recorded in
+        // `code_imm_positions` for that function's range.
+        resolve_user_ssa_call_targets(&mut program)?;
         // Legacy units (or any post-parser bytecode the unit's
         // `synthetic_ssa_funcs` doesn't cover) get recovered via
         // `lift_program`. Entries whose `ent_pc` already showed up
@@ -1106,6 +1103,77 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         }
         Ok(program)
     })
+}
+
+/// Patch every `Inst::Call::target_pc` and `Inst::ImmCode`
+/// across `program.user_ssa_funcs` from the matching bytecode-
+/// side operand. The walker emits one `Inst::Call` per `Op::Jsr`
+/// and one `Inst::ImmCode` per function-pointer `Op::Imm` in
+/// source order, so the i-th occurrence in `insts` aligns with
+/// the i-th matching operand in `program.text[ent_pc..end_pc]`.
+/// The linker has already rewritten those operands to their
+/// merged target PCs (locally-defined targets via the per-unit
+/// `text_base` shift; cross-TU externs via the relocation
+/// pass), so reading them back propagates the resolution to the
+/// SSA side uniformly.
+fn resolve_user_ssa_call_targets(program: &mut Program) -> Result<(), C5Error> {
+    use crate::c5::ir::Inst;
+    use crate::c5::op::Op;
+
+    let code_imm_positions: alloc::collections::BTreeSet<usize> =
+        program.code_imm_positions.iter().copied().collect();
+
+    for f in &mut program.user_ssa_funcs {
+        let mut jsr_targets: Vec<i64> = Vec::new();
+        let mut imm_code_targets: Vec<i64> = Vec::new();
+        let mut pc = f.ent_pc;
+        while pc < f.end_pc && pc < program.text.len() {
+            let raw = program.text[pc];
+            let Some(op) = Op::from_i64(raw) else {
+                return Err(err(&alloc::format!(
+                    "user_ssa_funcs: non-op word at bc_pc {pc} during resolver scan",
+                )));
+            };
+            let operand_pc = pc + 1;
+            match op {
+                Op::Jsr => {
+                    if operand_pc >= program.text.len() {
+                        return Err(err("user_ssa_funcs: dangling Op::Jsr at end of text"));
+                    }
+                    jsr_targets.push(program.text[operand_pc]);
+                }
+                Op::Imm if code_imm_positions.contains(&operand_pc) => {
+                    if operand_pc >= program.text.len() {
+                        return Err(err("user_ssa_funcs: dangling Op::Imm at end of text"));
+                    }
+                    imm_code_targets.push(program.text[operand_pc]);
+                }
+                _ => {}
+            }
+            pc += op.word_size();
+        }
+        let mut jsr_iter = jsr_targets.into_iter();
+        let mut imm_iter = imm_code_targets.into_iter();
+        for inst in &mut f.insts {
+            match inst {
+                Inst::Call { target_pc, .. } => {
+                    if let Some(t) = jsr_iter.next() {
+                        *target_pc = t as usize;
+                    }
+                }
+                Inst::ImmCode(pc) => {
+                    if let Some(t) = imm_iter.next() {
+                        // The bytecode side stores
+                        // CODE_BASE + bc_pc; the SSA side
+                        // stores the bare bc_pc.
+                        *pc = (t - crate::c5::CODE_BASE as i64) as usize;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]

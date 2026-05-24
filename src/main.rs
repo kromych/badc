@@ -138,6 +138,13 @@ enum Mode {
     /// linking; the archive is meant to be passed back as
     /// input to a future link.
     BuildArchive,
+    /// `--dump-native-link` -- parse a list of native ELF
+    /// `.o` files (produced by `-c --emit=native`), merge
+    /// them via `link_native_objects`, and print a summary
+    /// of the resulting `MergedNative`: per-section sizes,
+    /// defined symbols, and pending import resolutions. No
+    /// output file; diagnostic only.
+    DumpNativeLink,
 }
 
 impl Mode {
@@ -152,6 +159,7 @@ impl Mode {
             Mode::DumpHeaders => "--dump-headers",
             Mode::DumpPp => "--dump-pp",
             Mode::BuildArchive => "--ar",
+            Mode::DumpNativeLink => "--dump-native-link",
         }
     }
 }
@@ -239,6 +247,7 @@ fn main() {
             "--jit" => claim(&mut mode, Mode::Jit),
             "--shared" => claim(&mut mode, Mode::SharedLibrary),
             "--ar" | "--archive" => claim(&mut mode, Mode::BuildArchive),
+            "--dump-native-link" => claim(&mut mode, Mode::DumpNativeLink),
             "-h" | "--help" => {
                 println!("{USAGE}");
                 return;
@@ -395,7 +404,7 @@ fn main() {
     if output_path.is_some()
         && matches!(
             mode,
-            Mode::Interp | Mode::ListSymbols | Mode::DumpHeaders | Mode::Jit
+            Mode::Interp | Mode::ListSymbols | Mode::DumpHeaders | Mode::Jit | Mode::DumpNativeLink
         )
     {
         eprintln!(
@@ -413,6 +422,11 @@ fn main() {
 
     if mode == Mode::DumpHeaders {
         dump_bundled_headers();
+        return;
+    }
+
+    if mode == Mode::DumpNativeLink {
+        dump_native_link(&args[1..]);
         return;
     }
 
@@ -990,6 +1004,7 @@ fn main() {
         Mode::DumpHeaders => unreachable!("handled above"),
         Mode::DumpPp => unreachable!("handled above"),
         Mode::BuildArchive => unreachable!("handled above"),
+        Mode::DumpNativeLink => unreachable!("handled above"),
     }
 }
 
@@ -1237,6 +1252,77 @@ fn codesign(path: &std::path::Path) {
 /// the `--help` blurb -- the conventional shape is to redirect
 /// into `./include` and let `-I.` plus future filesystem search
 /// override the embedded copy).
+/// `--dump-native-link`: parse a list of native ELF `.o` files
+/// produced by `-c --emit=native`, merge them via
+/// `link_native_objects`, and print a summary. Useful for
+/// validating the relocatable .o pipeline end-to-end before the
+/// ET_EXEC writer for `MergedNative` lands. Args are taken
+/// verbatim from the command line minus the leading executable
+/// name; non-flag positional args are treated as `.o` paths.
+fn dump_native_link(rest: &[String]) {
+    let paths: Vec<&str> = rest
+        .iter()
+        .filter(|a| !a.starts_with("--") && *a != "--dump-native-link")
+        .map(|s| s.as_str())
+        .collect();
+    if paths.is_empty() {
+        eprintln!("badc: --dump-native-link requires one or more `.o` paths");
+        std::process::exit(1);
+    }
+    let mut objs: Vec<badc::NativeObject> = Vec::with_capacity(paths.len());
+    for p in &paths {
+        let bytes = match std::fs::read(p) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("badc: --dump-native-link: cannot read `{p}`: {e}");
+                std::process::exit(1);
+            }
+        };
+        if !badc::is_elf_object(&bytes) {
+            eprintln!("badc: --dump-native-link: `{p}` is not an ELF object");
+            std::process::exit(1);
+        }
+        match badc::parse_native_elf(&bytes) {
+            Ok(o) => objs.push(o),
+            Err(e) => {
+                eprintln!("badc: --dump-native-link: parse `{p}` failed: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+    let merged = match badc::link_native_objects(&objs) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("badc: --dump-native-link: link failed: {e}");
+            std::process::exit(1);
+        }
+    };
+    println!("MergedNative:");
+    println!("  machine     = {:?}", merged.machine);
+    println!("  .text size  = {}", merged.text.len());
+    println!("  .data size  = {}", merged.data.len());
+    println!("  .bss size   = {}", merged.bss_size);
+    println!("  defined     = {}", merged.defined.len());
+    for (name, sym) in &merged.defined {
+        println!(
+            "    {name} @ {:?} +{:#x} size={:#x}",
+            sym.section, sym.value, sym.size
+        );
+    }
+    println!("  imports     = {}", merged.imports.len());
+    for (i, name) in merged.imports.iter().enumerate() {
+        println!("    [{i}] {name}");
+    }
+    println!("  pending     = {} reloc(s)", merged.pending_imports.len());
+    for r in &merged.pending_imports {
+        let name = &merged.imports[r.import_index];
+        println!(
+            "    text[{:#x}] -> {name} (rtype={:#x}, addend={})",
+            r.text_offset, r.rtype, r.addend
+        );
+    }
+}
+
 fn dump_bundled_headers() {
     for (name, body) in badc::embedded_headers() {
         println!("// ===== {name} =====");

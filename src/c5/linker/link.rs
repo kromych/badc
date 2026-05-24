@@ -1059,6 +1059,8 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         // operands to their merged target PCs there.
         for (i, unit) in units.iter().enumerate() {
             let text_off = text_base[i];
+            let data_off = data_base[i];
+            let tls_off = tls_base[i];
             let binding_remap = &binding_remap_per_unit[i];
             for f in &unit.user_ssa_funcs {
                 let mut rebased = f.clone();
@@ -1066,10 +1068,27 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                 rebased.end_pc += text_off;
                 for inst in &mut rebased.insts {
                     use crate::c5::ir::Inst;
-                    if let Inst::CallExt { binding_idx, .. } = inst
-                        && let Some(remapped) = binding_remap.get(*binding_idx as usize)
-                    {
-                        *binding_idx = *remapped;
+                    match inst {
+                        Inst::CallExt { binding_idx, .. } => {
+                            if let Some(remapped) = binding_remap.get(*binding_idx as usize) {
+                                *binding_idx = *remapped;
+                            }
+                        }
+                        // Walker stamps the live unit-local
+                        // `symbol.val` for in-unit globals. Shift
+                        // by `data_base[i]` to point at the merged
+                        // data segment. Cross-TU extern references
+                        // arrive as 0 (walker has no live val);
+                        // leave those for the resolver to patch
+                        // from the linker-rewritten Op::Imm
+                        // operand. Mirror the same split for TLS.
+                        Inst::ImmData(off) if *off != 0 => {
+                            *off += data_off as i64;
+                        }
+                        Inst::TlsAddr(off) if *off != 0 => {
+                            *off += tls_off as i64;
+                        }
+                        _ => {}
                     }
                 }
                 for blk in &mut rebased.blocks {
@@ -1278,12 +1297,24 @@ fn resolve_user_ssa_call_targets(program: &mut Program) -> Result<(), C5Error> {
                     }
                 }
                 Inst::ImmData(off) => {
-                    if let Some(t) = imm_data_iter.next() {
+                    if let Some(t) = imm_data_iter.next()
+                        && *off == 0
+                    {
+                        // Cross-TU extern reference: walker
+                        // stamped 0; the linker rewrote the
+                        // matching Op::Imm operand with the
+                        // resolved target's merged data offset.
+                        // For in-unit globals the merge loop
+                        // above already added `data_base[i]`
+                        // to the walker's unit-local value, so
+                        // skip the patch there.
                         *off = t;
                     }
                 }
                 Inst::TlsAddr(off) => {
-                    if let Some(t) = tls_iter.next() {
+                    if let Some(t) = tls_iter.next()
+                        && *off == 0
+                    {
                         *off = t;
                     }
                 }

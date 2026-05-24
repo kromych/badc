@@ -666,6 +666,55 @@ fn user_ssa_funcs_call_target_pc_resolves_for_cross_tu_extern() {
 }
 
 #[test]
+fn archive_reload_runs_without_lift_program() {
+    use crate::c5::{LinkOptions, link_units, read_object, write_object};
+    // Round-trip both TUs through write_object / read_object so
+    // both arrive at the linker with empty finished_functions
+    // (no AST in the .o payload). produce_ssa_funcs must then
+    // pick up user_ssa_funcs without falling back to
+    // lift_program. End-to-end VM run pins the correctness of
+    // the path.
+    let a = compile_unit("int add(int a, int b) { return a + b; }");
+    let b = compile_unit(
+        "
+        extern int add(int a, int b);
+        int main(void) { return add(13, 29); }
+        ",
+    );
+    let a_bytes = write_object(&a);
+    let b_bytes = write_object(&b);
+    let a_parsed = read_object(&a_bytes).expect("read_object a");
+    let b_parsed = read_object(&b_bytes).expect("read_object b");
+    assert!(
+        a_parsed.finished_functions.is_empty(),
+        "round-tripped unit must surface no finished_functions",
+    );
+    assert!(
+        b_parsed.finished_functions.is_empty(),
+        "round-tripped unit must surface no finished_functions",
+    );
+    assert!(
+        !a_parsed.user_ssa_funcs.is_empty(),
+        "round-tripped unit must surface user_ssa_funcs",
+    );
+    assert!(
+        !b_parsed.user_ssa_funcs.is_empty(),
+        "round-tripped unit must surface user_ssa_funcs",
+    );
+    let program = link_units(alloc::vec![b_parsed, a_parsed], &[], LinkOptions::default())
+        .expect("link_units failed");
+    assert!(
+        program.finished_functions.is_empty(),
+        "merged program from .o reload must have no AST snapshots",
+    );
+    assert!(
+        !program.user_ssa_funcs.is_empty(),
+        "merged program must surface walker-side SSA from the .o payload",
+    );
+    assert_eq!(Vm::new(program).run().expect("VM run failed"), 42);
+}
+
+#[test]
 fn link_uses_object_via_round_trip() {
     use crate::c5::{read_object, write_object};
     // Same end-to-end as `extern_function_call_across_two_units`

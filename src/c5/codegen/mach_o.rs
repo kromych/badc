@@ -2301,6 +2301,15 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
         }
         let preferred_va = code_vmaddr_base + native_off as u64;
         let off = r.data_offset as usize;
+        if std::env::var("BADC_DEBUG_CODE_RELOCS").is_ok() {
+            std::eprintln!(
+                "[code_reloc] data_off={:#x} target_bc_pc={} native_off={:#x} preferred_va={:#x}",
+                r.data_offset,
+                bc_pc,
+                native_off,
+                preferred_va,
+            );
+        }
         if off + 8 > data_with_relocs.len() {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(

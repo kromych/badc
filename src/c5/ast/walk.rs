@@ -355,31 +355,36 @@ impl<'a> Walker<'a> {
                             // block so any earlier `goto label`,
                             // `case <val>:`, or `default:` lands
                             // somewhere walkable. Non-label dead
-                            // code is skipped per C99 6.8.6
-                            // (unreachable statements don't
-                            // constrain control flow). `Stmt::Case`
-                            // and `Stmt::Default` are equally valid
-                            // re-entry points -- skipping them
-                            // drops every case after the first
-                            // `break;`-terminated body.
+                            // code per C99 6.8.6 is still walked
+                            // into a fresh synthetic block so the
+                            // resolver's order-pair between walker
+                            // Inst and parser Op emissions stays
+                            // aligned -- the parser emits bytecode
+                            // for unreachable statements
+                            // unconditionally.
                             if !b.is_block_open()
                                 && !matches!(
                                     self.ast.stmt(*s),
                                     Stmt::Labeled { .. } | Stmt::Case { .. } | Stmt::Default { .. },
                                 )
                             {
-                                continue;
+                                let dead = b.new_block();
+                                b.switch_to(dead);
                             }
                             if self.walk_stmt(b, *s)? {
                                 continue;
                             }
                         }
                         super::BlockItem::Decl(d) => {
-                            // Skip Decls in dead-code regions (a
-                            // post-terminator declarator declares
-                            // no live storage).
+                            // Decls in dead-code regions still go
+                            // through walk_decl so the walker's
+                            // local-slot bookkeeping mirrors what
+                            // the parser stamped (per-decl
+                            // initialiser side effects land in the
+                            // same trailing dead block).
                             if !b.is_block_open() {
-                                continue;
+                                let dead = b.new_block();
+                                b.switch_to(dead);
                             }
                             let d = *d;
                             self.walk_decl(b, d)?;

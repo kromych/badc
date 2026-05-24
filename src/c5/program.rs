@@ -304,26 +304,24 @@ pub struct Program {
     /// walker reads `array_size` (for the C99 6.3.2.1p3
     /// array-to-pointer decay detection) and `type_` (for
     /// `Decl::Local` width selection) off this slice. Empty for
-    /// builds that didn't go through the parser (linker /
-    /// optimizer reload), in which case the walker path can't
-    /// run and the codegen falls back to the bytecode lift.
+    /// `Program` shapes built outside the parser pipeline; the
+    /// codegen falls back to `lift_program` for those.
     pub(crate) symbols: alloc::vec::Vec<crate::c5::symbol::Symbol>,
     /// Synthesised `FunctionSsa` entries the parser produces
-    /// outside the AST walker (sys-trampolines). The codegen
-    /// reads these directly so `lift_program` isn't needed for
-    /// the parsed-program path. Empty for archive reloads;
-    /// `produce_ssa_funcs` still calls `lift_program` there.
+    /// outside the AST walker (sys-trampolines + the synthetic
+    /// CRT entry). The codegen reads these directly through
+    /// `produce_ssa_funcs`.
     pub(crate) synthetic_ssa_funcs: alloc::vec::Vec<crate::c5::ir::FunctionSsa>,
     /// User-function `FunctionSsa` entries produced by the
     /// walker in `compile_to_link_unit`, concatenated and
     /// rebased to merged PCs by the linker. Carries the body
-    /// for every parser-declared function whose owning unit
-    /// populated `LinkUnit::user_ssa_funcs`. Empty when the
-    /// program was lifted from raw bytecode (archive members
-    /// produced before the walker became canonical);
-    /// `produce_ssa_funcs` still routes those through
-    /// `lift_program`. TODO: once every producer emits this,
-    /// retire `lift_program`.
+    /// for every parser-declared function. The codegen reads
+    /// these directly through `produce_ssa_funcs` for the
+    /// `.o`-reload path; the in-memory compile+link path
+    /// re-walks the AST snapshots. Empty only for `Program`
+    /// shapes built outside the parser pipeline (optimizer
+    /// unit tests with raw bytecode, codegen writer fixtures);
+    /// `produce_ssa_funcs` routes those through `lift_program`.
     pub(crate) user_ssa_funcs: alloc::vec::Vec<crate::c5::ir::FunctionSsa>,
     /// Cross-TU user-function imports surfaced by the parser
     /// for the `-c --emit=native` (`OutputKind::Relocatable`)

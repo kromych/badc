@@ -2,14 +2,21 @@
 //!
 //! The shape consumed by the linear-scan allocator
 //! ([`super::codegen::ssa_alloc::allocate`]) and the per-arch SSA
-//! emitters. Two producers exist today: the bytecode lift
-//! ([`super::codegen::ssa::lift_program`]), and the direct construction
-//! API ([`super::ssa_build::SsaBuilder`]).
+//! emitters. Three producers:
 //!
-//! Variants and field semantics map 1:1 to the c5 bytecode op set
-//! the lift descends from. Once the parser produces SSA directly the
-//! op references become historical; the in-memory shape stays the
-//! same so the allocator and emitters need no parallel paths.
+//!   * The AST walker ([`super::ast::walk::walk_function`]) -- the
+//!     canonical source for every parser-produced function.
+//!   * The direct construction API
+//!     ([`super::ssa_build::SsaBuilder`]) -- used by
+//!     `emit_sys_trampolines` and other parser-side synthesis.
+//!   * The bytecode lift
+//!     ([`super::codegen::ssa::lift_program`]) -- legacy fallback
+//!     for `Program` shapes built outside the parser pipeline
+//!     (optimizer unit tests, codegen writer fixtures).
+//!
+//! Variant names mirror the c5 bytecode op set the IR descends
+//! from; the in-memory shape stays stable across producers so the
+//! allocator and emitters need no parallel paths.
 
 #![allow(dead_code)]
 

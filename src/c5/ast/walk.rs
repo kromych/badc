@@ -1296,6 +1296,27 @@ impl<'a> Walker<'a> {
                 // (`Token::Sys`) go through `b.call_ext`;
                 // anything else routes through
                 // `b.call_indirect` with the callee's value.
+                //
+                // For the indirect-call shape (struct-field-then-
+                // call etc.), evaluate the callee FIRST and stash
+                // its value so the in-source-order ImmData /
+                // ImmCode emissions match the parser's bytecode
+                // -- the parser parses the callee primary
+                // expression before reaching `(` and walks the
+                // args list afterwards. The resolver's order-zip
+                // between Inst::ImmData entries and Op::Imm
+                // operands relies on the two sides agreeing on
+                // expression evaluation order.
+                let indirect_target: Option<super::super::ir::ValueId> =
+                    if let Expr::Ident { class, .. } = self.ast.expr(*callee) {
+                        if *class == Token::Fun as i64 || *class == Token::Sys as i64 {
+                            None
+                        } else {
+                            Some(self.walk_expr_rvalue(b, *callee)?)
+                        }
+                    } else {
+                        Some(self.walk_expr_rvalue(b, *callee)?)
+                    };
                 let mut arg_vals: alloc::vec::Vec<super::super::ir::ValueId> =
                     alloc::vec::Vec::with_capacity(args.len());
                 // C99 6.5.2.2p7 + ABI: each FP-typed argument
@@ -1359,7 +1380,10 @@ impl<'a> Walker<'a> {
                         return Ok(b.call_ext(*val, arg_vals, fp_arg_mask));
                     }
                 }
-                let target = self.walk_expr_rvalue(b, *callee)?;
+                let target = match indirect_target {
+                    Some(t) => t,
+                    None => self.walk_expr_rvalue(b, *callee)?,
+                };
                 Ok(b.call_indirect(target, arg_vals))
             }
             Expr::Member {

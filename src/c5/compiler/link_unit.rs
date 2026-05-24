@@ -81,6 +81,43 @@ fn walker_funcs_for(
         out.push(func);
     }
     out.sort_by_key(|f| f.ent_pc);
+    // Walker stamps the live unit-local `symbol.val` for every
+    // Glo reference -- including ones the link-unit cleanup
+    // re-classifies as undefined-here (extern with no defining
+    // initializer in this TU). Those tentative offsets land in
+    // the .o's user_ssa_funcs as ImmData(<unit-local>) but the
+    // real definition lives in another unit; without resetting
+    // them here, the linker's per-unit `data_off` shift plus
+    // the merge's resolver-from-bytecode patch loop both miss
+    // the case (post-shift the value is non-zero, so the
+    // resolver's "patch on 0" guard skips it). Zero out the
+    // ImmData for those symbols here so the resolver gets a
+    // clean placeholder slot to fill with the linker-resolved
+    // operand.
+    use crate::c5::ir::Inst;
+    use crate::c5::symbol::Linkage;
+    let stale_extern_offs: alloc::collections::BTreeSet<i64> = symbols
+        .iter()
+        .filter(|s| {
+            s.class == crate::c5::token::Token::Glo as i64
+                && s.is_extern_decl
+                && s.linkage == Linkage::External
+                && !s.defined_here
+                && s.val != 0
+        })
+        .map(|s| s.val)
+        .collect();
+    if !stale_extern_offs.is_empty() {
+        for func in &mut out {
+            for inst in &mut func.insts {
+                if let Inst::ImmData(off) = inst
+                    && stale_extern_offs.contains(off)
+                {
+                    *off = 0;
+                }
+            }
+        }
+    }
     // SsaBuilder seeds end_pc at ent_pc; the walker has no
     // way to know where the function's bytecode body ends. In
     // a sorted-by-ent_pc list the next function's ent_pc is

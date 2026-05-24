@@ -31,6 +31,16 @@ fn switch_default_routing() {
 }
 
 #[test]
+fn vtable_back_to_back() {
+    // Two adjacent struct-field-then-call expressions where the
+    // second dispatches through a pointer the first stored.
+    // Pins the walker's contract that adjacent call expressions
+    // don't cross-contaminate their dispatch base / argument
+    // evaluations.
+    assert_eq!(run_fixture("vtable_back_to_back.c"), 50);
+}
+
+#[test]
 fn switch_break_calls() {
     // C99 6.8.4.2: each case marker is a re-entry point regardless
     // of how the preceding body ended. Pins that contract end-to-

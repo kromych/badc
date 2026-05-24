@@ -1,39 +1,12 @@
-//! SSA-driven VM interpreter: walks `Vec<FunctionSsa>` instead of the
-//! bytecode tape. The bytecode VM (in `super::mod`) is the current
-//! production interpreter; this module is the retarget destination.
-//! `Vm::run` calls into [`run_ssa`] when `BADC_VM_SSA` is set in the
-//! environment; the bytecode path stays the default until every
-//! `Inst` variant has a runtime action here and the cargo suite is
-//! green under the SSA path.
+//! SSA-driven VM interpreter: walks `Vec<FunctionSsa>` instead of a
+//! bytecode tape. The historical bytecode interpreter is gone;
+//! `super::Vm::run` dispatches here unconditionally via
+//! [`run_program_with_args_tracked`].
 //!
-//! The shape mirrors the bytecode interpreter's frame model so the
-//! Host bridge, argv staging, and exit-code plumbing in
-//! `Vm::run` can stay shared. What changes is the instruction loop:
-//! instead of decoding `program.text[pc]`, the interpreter indexes
-//! into `func.insts` and a per-call `Vec<i64>` register file keyed by
-//! `ValueId`.
-//!
-//! Supported `Inst` variants today (in increasing order of
-//! complexity, implementations land iteratively):
-//!   * `Imm` -- writes the constant into the value register.
-//!   * `Return` (as a terminator) -- pops the frame and yields the
-//!     caller's resume point.
-//!
-//! Every other `Inst` returns
-//! `Err(C5Error::Runtime("vm_ssa: <opname> not implemented"))` so
-//! the regression test below lights up exactly which variants
-//! need wiring next. The bytecode VM stays untouched; production
-//! `Vm::run` continues to dispatch through the existing
-//! `text[pc]` loop until every variant lands here.
-//!
-//! Gated to `cfg(test)` for now -- the regression test below is
-//! the only caller -- so production builds don't pay any code
-//! size for the in-progress interpreter.
+//! Per-call state is a `Vec<i64>` register file keyed by `ValueId`;
+//! the host-bridge / argv staging / exit-code plumbing lives in
+//! `super::Vm`.
 
-// `Vm::run` calls `run_program` only when `BADC_VM_SSA=1`; the
-// rest of the module's helpers light up at that entry point.
-// They're tagged dead-code-tolerant module-wide so a default
-// (bytecode) build doesn't flag the unreached SSA pieces.
 #![allow(dead_code)]
 
 use alloc::format;
@@ -306,7 +279,7 @@ impl Memory {
         // global / static / BSS objects are writable. String
         // literals are UB-protected at the language level, not by
         // the runtime. Only out-of-bounds writes trip a runtime
-        // error here, mirroring the bytecode VM.
+        // error here.
         if addr + src.len() > self.bytes.len() {
             return Err(C5Error::Runtime(format!(
                 "vm_ssa: store: addr 0x{addr:x}..0x{:x} past memory len {}",
@@ -355,8 +328,9 @@ struct Program<'a> {
     binding_names: &'a [alloc::string::String],
     /// Byte offset within `Memory::bytes` where the thread-local
     /// block starts. `Inst::TlsAddr(off)` resolves to
-    /// `tls_base + off`; matches the bytecode VM's single-thread
-    /// model which appends the TLS block onto the data segment.
+    /// `tls_base + off`. The interpreter is single-threaded and
+    /// the TLS block is appended onto the data segment per C11
+    /// 7.5p1 (single-thread `_Thread_local` storage duration).
     tls_base: usize,
 }
 
@@ -441,8 +415,8 @@ impl Frame<'_> {
     /// c5-slot offset -> byte address in `Memory::bytes`.
     ///
     /// The c5 cdecl assigns local slot `-N` (N >= 1) to byte
-    /// address `bp - N*8` in the bytecode VM. Translating to the
-    /// SSA-VM's frame (which grows up from `stack_base`, with bp
+    /// address `bp - N*8`. Translating to this interpreter's
+    /// frame (which grows up from `stack_base`, with bp
     /// conceptually at `stack_base + locals*8`) gives
     /// `stack_base + (locals - N) * 8`. The previous direction
     /// (`base + (N-1)*8`) inverted the order so a multi-slot
@@ -494,8 +468,8 @@ pub(super) fn run_program<H: Host>(
 /// either as `int main(void)` or `int main(int argc, char *argv[])`;
 /// the parser emits the latter shape with `argc` at param slot 0
 /// (frame slot 2) and `argv` at param slot 1 (frame slot 3).
-/// When `args` is empty both pass through as 0, matching the
-/// bytecode VM's behavior for `main()` calls without argv.
+/// When `args` is empty both pass through as 0; C99 5.1.2.2.1
+/// allows that shape for a hosted program.
 pub(super) fn run_program_with_args<H: Host>(
     funcs: &[FunctionSsa],
     data: &[u8],

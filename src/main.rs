@@ -18,7 +18,7 @@ binary directly; two or more inputs (or any `-l` / `-L` / `-c`
 flag) run through the cross-TU linker.
 
 Output mode -- pick at most one (defaults to a native binary):
-  --interp                 Run under the bytecode VM.
+  --interp                 Run under the SSA interpreter.
   --jit                    Lower in-process and call main() directly.
   --shared                 Produce a shared library (.dylib / .so /
                            .dll) exporting every #pragma export(name)
@@ -116,7 +116,9 @@ enum Mode {
     /// disk. Same writer pipeline as `NativeExecutable` plus
     /// `OutputKind::SharedLibrary`.
     SharedLibrary,
-    /// `--interp` -- run under the bytecode VM.
+    /// `--interp` -- run under the SSA interpreter (`vm::ssa`).
+    /// The historical bytecode VM is gone; the interpreter
+    /// walks `FunctionSsa` directly via `produce_ssa_funcs`.
     Interp,
     /// `--jit` -- lower in-process and call main directly.
     Jit,

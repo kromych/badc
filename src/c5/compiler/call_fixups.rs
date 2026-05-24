@@ -212,15 +212,18 @@ impl Compiler {
             let mut sb = SsaBuilder::new(bc_pc, nargs_ssa, false);
             sb.set_locals(0);
             let _alloca = sb.alloca_init(0);
-            if fixed_nargs == 0 && !is_variadic {
-                sb.tail_ext(binding_idx);
-            } else {
-                let arg_vals: Vec<_> = (0..nargs_ssa)
-                    .map(|i| sb.load_local((i + 2) as i64, LoadKind::I64))
-                    .collect();
-                let r = sb.call_ext(binding_idx, arg_vals, 0);
-                sb.return_(r);
-            }
+            // Zero-arg and arg-forwarding shapes both flow through
+            // the standard `call_ext + return` pair so the codegen
+            // emits a matching prologue / epilogue. A bare
+            // `Terminator::TailExt` would skip the epilogue --
+            // libc's `ret` then pops the trampoline's saved rbp as
+            // its return address and the next instruction lands in
+            // stack memory.
+            let arg_vals: alloc::vec::Vec<_> = (0..nargs_ssa)
+                .map(|i| sb.load_local((i + 2) as i64, LoadKind::I64))
+                .collect();
+            let r = sb.call_ext(binding_idx, arg_vals, 0);
+            sb.return_(r);
             let mut func = sb.finish();
             // `lift_program` would have stamped `end_pc` at the
             // bytecode position just past the trampoline body;

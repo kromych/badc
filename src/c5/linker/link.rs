@@ -1162,6 +1162,53 @@ fn resolve_user_ssa_call_targets(program: &mut Program) -> Result<(), C5Error> {
             }
             pc += op.word_size();
         }
+        // Count Inst occurrences before the zip so we can flag
+        // a drift mid-function rather than silently truncating.
+        // Each of the four Inst variants has to match the
+        // matching Op count in `program.text[ent_pc..end_pc]`;
+        // a mismatch means the walker emitted (or didn't) for
+        // a case the parser handled differently and the order-
+        // based zip would land at least one inst on the wrong
+        // operand.
+        let inst_call_count = f
+            .insts
+            .iter()
+            .filter(|i| matches!(i, Inst::Call { .. }))
+            .count();
+        let inst_imm_code_count = f
+            .insts
+            .iter()
+            .filter(|i| matches!(i, Inst::ImmCode(_)))
+            .count();
+        let inst_imm_data_count = f
+            .insts
+            .iter()
+            .filter(|i| matches!(i, Inst::ImmData(_)))
+            .count();
+        let inst_tls_count = f
+            .insts
+            .iter()
+            .filter(|i| matches!(i, Inst::TlsAddr(_)))
+            .count();
+        let mismatched = inst_call_count != jsr_targets.len()
+            || inst_imm_code_count != imm_code_targets.len()
+            || inst_imm_data_count != imm_data_targets.len()
+            || inst_tls_count != tls_targets.len();
+        if mismatched && std::env::var("BADC_DEBUG_USER_SSA_RESOLVER").is_ok() {
+            std::eprintln!(
+                "[user_ssa_resolver] ent_pc={} end_pc={} Call({} vs Jsr {}) ImmCode({} vs {}) ImmData({} vs {}) Tls({} vs {})",
+                f.ent_pc,
+                f.end_pc,
+                inst_call_count,
+                jsr_targets.len(),
+                inst_imm_code_count,
+                imm_code_targets.len(),
+                inst_imm_data_count,
+                imm_data_targets.len(),
+                inst_tls_count,
+                tls_targets.len(),
+            );
+        }
         let mut jsr_iter = jsr_targets.into_iter();
         let mut imm_code_iter = imm_code_targets.into_iter();
         let mut imm_data_iter = imm_data_targets.into_iter();

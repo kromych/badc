@@ -37,6 +37,7 @@ mod aarch64;
 mod disasm;
 mod dwarf;
 mod elf;
+#[cfg(feature = "std")]
 mod elf_reloc;
 mod jit;
 mod mach_o;
@@ -909,6 +910,7 @@ pub(crate) struct Build {
     /// Final-image writers don't read this; the
     /// `OutputKind::Relocatable` writer surfaces each entry as
     /// an ELF `.rela.text` reloc against the import's symbol.
+    #[allow(dead_code)] // consumed only by the std-only elf_reloc writer
     pub reloc_call_sites: Vec<RelocCallSite>,
     /// Cross-TU user-function call sites. Each entry pairs the
     /// byte offset of the BL / CALL placeholder with the callee's
@@ -922,6 +924,7 @@ pub(crate) struct Build {
     /// in `.rela.text`. Final-image writers leave the field
     /// untouched because no `extern_function_imports` ever land
     /// in a single-TU compile path.
+    #[allow(dead_code)] // consumed only by the std-only elf_reloc writer
     pub user_extern_call_sites: Vec<UserExternCallSite>,
     /// SSA-side `.debug_line` rows: each `(native_pc, line,
     /// file_idx)` entry says "the instruction whose first byte
@@ -1150,6 +1153,7 @@ pub(crate) struct MachoTlvFixup {
 /// as `R_AARCH64_CALL26` / `R_X86_64_PLT32` entries in
 /// `.rela.text` against the import's external symbol.
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)] // consumed only by the std-only elf_reloc writer
 pub(crate) struct RelocCallSite {
     /// Byte offset within `Build::text` of the call instruction.
     /// For aarch64 BL/B the imm26 occupies the low 26 bits of
@@ -1176,6 +1180,7 @@ pub(crate) struct RelocCallSite {
 /// a second `Vec<String>` plus an index. Unique names get folded
 /// into one undefined symbol each by the writer's strtab build.
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // consumed only by the std-only elf_reloc writer
 pub(crate) struct UserExternCallSite {
     /// Byte offset within `Build::text` of the call instruction.
     /// Same convention as [`RelocCallSite::instr_offset`].
@@ -1186,7 +1191,6 @@ pub(crate) struct UserExternCallSite {
     pub symbol_name: alloc::string::String,
     /// `true` for tail-jumps (`b` / `jmp rel32`), `false` for
     /// calls (`bl` / `call rel32`).
-    #[allow(dead_code)]
     pub is_tail: bool,
 }
 
@@ -1473,6 +1477,7 @@ fn append_build_info(build: &mut Build) {
 }
 
 fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>, C5Error> {
+    #[cfg(feature = "std")]
     if build.output_kind == OutputKind::Relocatable {
         // ELF64 ET_REL is the badc-internal relocatable format on
         // every target -- single writer, single reloc table. The
@@ -1485,6 +1490,18 @@ fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>
             Target::LinuxX64 | Target::WindowsX64 => Machine::X86_64,
         };
         return elf_reloc::write_relocatable(program, build, machine);
+    }
+    // The no-std build can't reach the relocatable writer; the
+    // `-c --emit=native` path lives in the CLI, which itself is
+    // std-only. If a no-std caller ever surfaces `Relocatable` it
+    // would fall through to the final-image writers below; the
+    // unreachable branch keeps the match arms exhaustive without
+    // pulling `elf_reloc` into the no-std build.
+    #[cfg(not(feature = "std"))]
+    if build.output_kind == OutputKind::Relocatable {
+        return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+            "Relocatable output requires the `std` feature",
+        )));
     }
     match target {
         Target::MacOSAarch64 => mach_o::write(program, build),

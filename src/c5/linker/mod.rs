@@ -53,6 +53,8 @@
 mod archive;
 pub(crate) mod link;
 #[cfg(feature = "std")]
+mod native_link;
+#[cfg(feature = "std")]
 mod native_object;
 mod object;
 mod reloc;
@@ -61,6 +63,9 @@ mod unit;
 
 pub use archive::{ArchiveMember, read_archive, write_archive};
 pub use link::{LinkArchive, LinkOptions, link_units};
+#[cfg(feature = "std")]
+#[allow(unused_imports)]
+pub use native_link::{MergedNative, MergedSymbol, PendingImportReloc, link_native_objects};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use native_object::{

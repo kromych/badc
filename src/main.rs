@@ -1325,26 +1325,27 @@ fn dump_native_link(rest: &[String]) {
             r.text_offset, r.rtype, r.addend
         );
     }
-    // For x86_64 inputs, run the PLT lowering pass and surface
-    // the resulting trampoline pool. aarch64 emits an
-    // adrp+ldr+br shape that the link-pass doesn't synthesise
-    // yet; surface a one-line note rather than failing the dump.
-    if merged.machine == badc::NativeMachine::X86_64 {
-        match badc::emit_x86_64_plt(&mut merged) {
-            Ok(tramps) => {
-                println!("  PLT tramps  = {} entry(ies)", tramps.len());
-                for t in &tramps {
-                    let name = &merged.imports[t.import_index];
-                    println!("    text[{:#x}] -> {name}", t.text_offset);
-                }
-                println!("  post-PLT .text size = {}", merged.text.len());
+    // Per-arch PLT lowering pass. The trampoline shape differs
+    // between targets (six-byte JMP rip-rel on x86_64, twelve-
+    // byte adrp+ldr+br on aarch64), but the link-side
+    // contract is identical: append one trampoline per unique
+    // import, patch each call-site to reach it.
+    let plt_result = match merged.machine {
+        badc::NativeMachine::X86_64 => badc::emit_x86_64_plt(&mut merged),
+        badc::NativeMachine::Aarch64 => badc::emit_aarch64_plt(&mut merged),
+    };
+    match plt_result {
+        Ok(tramps) => {
+            println!("  PLT tramps  = {} entry(ies)", tramps.len());
+            for t in &tramps {
+                let name = &merged.imports[t.import_index];
+                println!("    text[{:#x}] -> {name}", t.text_offset);
             }
-            Err(e) => {
-                eprintln!("badc: --dump-native-link: PLT lowering failed: {e}");
-            }
+            println!("  post-PLT .text size = {}", merged.text.len());
         }
-    } else {
-        println!("  PLT tramps  = (skipped; only x86_64 lowering implemented)");
+        Err(e) => {
+            eprintln!("badc: --dump-native-link: PLT lowering failed: {e}");
+        }
     }
 }
 

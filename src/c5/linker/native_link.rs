@@ -422,6 +422,93 @@ pub fn emit_x86_64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>, 
     Ok(trampolines)
 }
 
+/// Lower every `pending_imports` entry on an aarch64 merged
+/// image into a per-import PLT trampoline appended to
+/// `MergedNative::text`, then patch each pending call-site's
+/// imm26 to reach its trampoline.
+///
+/// Each trampoline is the standard twelve-byte `adrp + ldr + br`
+/// sequence the codegen's PLT emitter uses:
+/// ```text
+///   adrp x16, page-of-got-slot   // 0x90000010, immhi/immlo = 0
+///   ldr  x16, [x16, off]         // 0xF9400210, imm12      = 0
+///   br   x16                     // 0xD61F0200
+/// ```
+/// The adrp's page-relative immediate and the ldr's offset stay
+/// zero; the final-image writer patches them once it knows the
+/// runtime address of the GOT slot for this import (the standard
+/// `R_AARCH64_ADR_PREL_PG_HI21` + `R_AARCH64_ADD_ABS_LO12_NC`
+/// shape, retargeted at the ldr's imm12 here).
+///
+/// On return:
+///   * `MergedNative::text` carries the trampoline pool past the
+///     original `.text`, 16-byte aligned.
+///   * Every `pending_imports` entry with `rtype ==
+///     R_AARCH64_CALL26` has its imm26 patched in place to reach
+///     its trampoline.
+///   * `MergedNative::pending_imports` is drained of
+///     PLT-resolvable entries; data-ref parks remain.
+pub fn emit_aarch64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>, C5Error> {
+    if merged.machine != NativeMachine::Aarch64 {
+        return Err(err(&format!(
+            "emit_aarch64_plt: only NativeMachine::Aarch64 is supported, got {:?}",
+            merged.machine,
+        )));
+    }
+    align_up(&mut merged.text, 16);
+
+    let mut tramp_for_import: BTreeMap<usize, usize> = BTreeMap::new();
+    let mut trampolines: Vec<PltTrampoline> = Vec::new();
+    let pending = core::mem::take(&mut merged.pending_imports);
+    let mut parked_back: Vec<PendingImportReloc> = Vec::new();
+    for reloc in &pending {
+        if reloc.import_index == usize::MAX {
+            parked_back.push(reloc.clone());
+            continue;
+        }
+        if reloc.rtype != R_AARCH64_CALL26 {
+            return Err(err(&format!(
+                "emit_aarch64_plt: pending reloc at text[{:#x}] has rtype {} \
+                 (only R_AARCH64_CALL26 supported on aarch64)",
+                reloc.text_offset, reloc.rtype,
+            )));
+        }
+        if let alloc::collections::btree_map::Entry::Vacant(e) =
+            tramp_for_import.entry(reloc.import_index)
+        {
+            let text_offset = merged.text.len();
+            e.insert(text_offset);
+            trampolines.push(PltTrampoline {
+                text_offset,
+                import_index: reloc.import_index,
+            });
+            // adrp x16, 0
+            merged.text.extend_from_slice(&0x9000_0010u32.to_le_bytes());
+            // ldr x16, [x16]
+            merged.text.extend_from_slice(&0xF940_0210u32.to_le_bytes());
+            // br x16
+            merged.text.extend_from_slice(&0xD61F_0200u32.to_le_bytes());
+        }
+    }
+
+    for reloc in &pending {
+        if reloc.import_index == usize::MAX {
+            continue;
+        }
+        let site = reloc.text_offset as usize;
+        let tramp = tramp_for_import
+            .get(&reloc.import_index)
+            .copied()
+            .expect("every reloc has a tramp entry from pass 1");
+        // CALL26 wants the absolute target; `patch_aarch64_call26`
+        // computes `(target - site) >> 2` internally.
+        patch_aarch64_call26(&mut merged.text, site, tramp as i64 + reloc.addend)?;
+    }
+
+    merged.pending_imports = parked_back;
+    Ok(trampolines)
+}
+
 // ---- Reloc application ----
 
 fn apply_reloc(
@@ -806,6 +893,96 @@ mod tests {
         let err = emit_x86_64_plt(&mut merged).unwrap_err();
         assert!(
             err.to_string().contains("X86_64"),
+            "unexpected error: {err}",
+        );
+    }
+
+    /// Aarch64 analogue of the x86_64 trampoline test. Compiles a
+    /// libc-using TU for Linux aarch64, runs `emit_aarch64_plt`,
+    /// and verifies one twelve-byte `adrp+ldr+br` trampoline per
+    /// unique import. `pending_imports` drains of every
+    /// `R_AARCH64_CALL26` reloc; data-ref parks stay.
+    #[test]
+    fn emit_aarch64_plt_materialises_one_trampoline_per_import() {
+        let target = Target::LinuxAarch64;
+        let mut opts = NativeOptions::new().with_debug_info(false);
+        opts.output_kind = OutputKind::Relocatable;
+        let copts = crate::CompileOptions::default().with_no_entry_point(true);
+        let a = compile_native_with(
+            "#include <stdio.h>\nint hello(void) { return printf(\"hi\\n\") + puts(\"bye\"); }\n",
+            target,
+            opts,
+            copts,
+        );
+        let mut merged = link_native_objects(&[a]).expect("link");
+        let text_pre = merged.text.len();
+        let pending_pre = merged.pending_imports.len();
+        assert!(
+            pending_pre >= 2,
+            "expected at least two pending imports (printf + puts), got {pending_pre}",
+        );
+
+        let trampolines = emit_aarch64_plt(&mut merged).expect("plt");
+        assert!(
+            trampolines.len() >= 2,
+            "expected >= 2 trampolines for printf + puts, got {}",
+            trampolines.len(),
+        );
+        for r in &merged.pending_imports {
+            assert_eq!(
+                r.import_index,
+                usize::MAX,
+                "emit_aarch64_plt should drain every non-data-ref pending import",
+            );
+        }
+        for t in &trampolines {
+            assert!(
+                t.text_offset >= text_pre,
+                "trampoline @ {:#x} should sit past original text end {:#x}",
+                t.text_offset,
+                text_pre,
+            );
+            let adrp = u32::from_le_bytes(
+                merged.text[t.text_offset..t.text_offset + 4]
+                    .try_into()
+                    .unwrap(),
+            );
+            let ldr = u32::from_le_bytes(
+                merged.text[t.text_offset + 4..t.text_offset + 8]
+                    .try_into()
+                    .unwrap(),
+            );
+            let br = u32::from_le_bytes(
+                merged.text[t.text_offset + 8..t.text_offset + 12]
+                    .try_into()
+                    .unwrap(),
+            );
+            // adrp x16, 0 -- immhi / immlo bits stay zero.
+            assert_eq!(adrp, 0x9000_0010, "trampoline @ {:#x} adrp", t.text_offset);
+            // ldr x16, [x16] -- imm12 stays zero.
+            assert_eq!(ldr, 0xF940_0210, "trampoline @ {:#x} ldr", t.text_offset);
+            // br x16
+            assert_eq!(br, 0xD61F_0200, "trampoline @ {:#x} br", t.text_offset);
+        }
+        assert_eq!(
+            trampolines[0].text_offset & 0xF,
+            0,
+            "first trampoline should be 16-byte aligned",
+        );
+    }
+
+    /// Aarch64 emitter rejects x86_64 input.
+    #[test]
+    fn emit_aarch64_plt_rejects_x86_64() {
+        let target = Target::LinuxX64;
+        let mut opts = NativeOptions::new().with_debug_info(false);
+        opts.output_kind = OutputKind::Relocatable;
+        let copts = crate::CompileOptions::default().with_no_entry_point(true);
+        let a = compile_native_with("int caller(void) { return 0; }\n", target, opts, copts);
+        let mut merged = link_native_objects(&[a]).expect("link");
+        let err = emit_aarch64_plt(&mut merged).unwrap_err();
+        assert!(
+            err.to_string().contains("Aarch64"),
             "unexpected error: {err}",
         );
     }

@@ -66,8 +66,8 @@ pub use link::{LinkArchive, LinkOptions, link_units};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use native_link::{
-    MergedNative, MergedSymbol, PendingImportReloc, PltTrampoline, emit_x86_64_plt,
-    link_native_objects,
+    MergedNative, MergedSymbol, PendingImportReloc, PltTrampoline, emit_aarch64_plt,
+    emit_x86_64_plt, link_native_objects,
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]

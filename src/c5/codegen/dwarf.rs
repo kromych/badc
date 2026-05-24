@@ -2206,83 +2206,38 @@ fn write_line_program(buf: &mut Vec<u8>, program: &Program, build: &Build, code_
     let mut state_line: i64 = 1;
     let mut state_file: u64 = 1;
 
-    if !build.ssa_line_rows.is_empty() {
-        // Walker-driven path: one row per source-position change
-        // the SSA emit recorded against the emitted native byte
-        // offset. Provides per-statement granularity inside each
-        // function instead of the single-row-per-function shape
-        // the bytecode walk would otherwise produce (walker IR
-        // has no per-Op bytecode PCs).
-        for &(native, line, file_idx) in &build.ssa_line_rows {
-            if line == 0 {
-                continue;
-            }
-            let file = dwarf_file_for_lex_idx
-                .get(file_idx as usize)
-                .copied()
-                .unwrap_or(1);
-            let target_addr = code_vmaddr + native as u64;
-            if target_addr > state_addr {
-                advance_pc(buf, target_addr - state_addr);
-                state_addr = target_addr;
-            }
-            if file != state_file {
-                buf.push(DW_LNS_SET_FILE);
-                write_uleb128(buf, file);
-                state_file = file;
-            }
-            let line_i = line as i64;
-            if line_i != state_line {
-                advance_line(buf, line_i - state_line);
-                state_line = line_i;
-            }
-            buf.push(DW_LNS_COPY);
+    // One row per source-position change the SSA emit recorded
+    // against the emitted native byte offset. Provides per-
+    // statement granularity inside each function. Native code
+    // emission flows through the SSA pipeline exclusively, so
+    // every program with executable bytes populates
+    // `ssa_line_rows`; an empty vector means no code was emitted
+    // and the closing `DW_LNE_end_sequence` below caps a zero-
+    // length sequence.
+    for &(native, line, file_idx) in &build.ssa_line_rows {
+        if line == 0 {
+            continue;
         }
-    } else {
-        let mut bc_pc = 0usize;
-        while bc_pc < program.text.len() {
-            let raw = program.text[bc_pc];
-            let Some(op) = Op::from_i64(raw) else {
-                break;
-            };
-            let native = build
-                .bytecode_to_native
-                .get(bc_pc)
-                .copied()
-                .unwrap_or(usize::MAX);
-            if native == usize::MAX {
-                bc_pc += op.word_size();
-                continue;
-            }
-            let line = program.source_lines.get(bc_pc).copied().unwrap_or(0) as i64;
-            if line == 0 {
-                bc_pc += op.word_size();
-                continue;
-            }
-            // Resolve the lexer's per-PC file index through the
-            // remap above. Programs that compiled before the
-            // file-table plumbing landed (or that never crossed an
-            // `#include` / `#line`) leave `source_file_indices`
-            // empty, in which case every PC stays on file 1.
-            let lex_idx = program.source_file_indices.get(bc_pc).copied().unwrap_or(0) as usize;
-            let file = dwarf_file_for_lex_idx.get(lex_idx).copied().unwrap_or(1);
-            let target_addr = code_vmaddr + native as u64;
-            if target_addr > state_addr {
-                advance_pc(buf, target_addr - state_addr);
-                state_addr = target_addr;
-            }
-            if file != state_file {
-                buf.push(DW_LNS_SET_FILE);
-                write_uleb128(buf, file);
-                state_file = file;
-            }
-            if line != state_line {
-                advance_line(buf, line - state_line);
-                state_line = line;
-            }
-            buf.push(DW_LNS_COPY);
-            bc_pc += op.word_size();
+        let file = dwarf_file_for_lex_idx
+            .get(file_idx as usize)
+            .copied()
+            .unwrap_or(1);
+        let target_addr = code_vmaddr + native as u64;
+        if target_addr > state_addr {
+            advance_pc(buf, target_addr - state_addr);
+            state_addr = target_addr;
         }
+        if file != state_file {
+            buf.push(DW_LNS_SET_FILE);
+            write_uleb128(buf, file);
+            state_file = file;
+        }
+        let line_i = line as i64;
+        if line_i != state_line {
+            advance_line(buf, line_i - state_line);
+            state_line = line_i;
+        }
+        buf.push(DW_LNS_COPY);
     }
 
     // Close the sequence with end_sequence at one past the last

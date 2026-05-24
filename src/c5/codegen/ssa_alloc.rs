@@ -785,7 +785,8 @@ mod tests {
         let src =
             std::fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(path)).unwrap();
         let program = Compiler::new(src).compile().expect("compile");
-        super::super::ssa::lift_program(&program).expect("lift")
+        crate::c5::codegen::ssa_shadow::produce_ssa_funcs(&program, Target::host())
+            .expect("produce_ssa_funcs")
     }
 
     /// Allocate every function in quicksort.c on aarch64. The

@@ -3143,7 +3143,8 @@ mod tests {
 
     fn lift_and_alloc(src: &str, target: Target) -> (crate::c5::ir::FunctionSsa, Allocation) {
         let program = Compiler::new(src.into()).compile().expect("compile");
-        let funcs = super::super::ssa::lift_program(&program).expect("lift");
+        let funcs = crate::c5::codegen::ssa_shadow::produce_ssa_funcs(&program, target)
+            .expect("produce_ssa_funcs");
         let main = funcs.into_iter().next().expect("at least one function");
         let alloc = super::super::ssa_alloc::allocate(&main, target);
         (main, alloc)

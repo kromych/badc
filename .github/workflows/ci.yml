@@ -421,19 +421,18 @@ jobs:
         # Compares `tcc -c` output between a reference tcc built
         # with the host compiler and a stage1 tcc built through
         # badc. HOST_PROFILES in self_host.py picks the per-host
-        # TU set plus `TCC_TARGET_*` macros. The Linux lanes
-        # (x86_64 + aarch64) gate strictly on the five-stage
-        # fixed point (samples / corpus / gen2 == gen3 /
-        # gen2-self compile / functional). The macOS aarch64 lane
-        # is soft-gated on gen2-self while a c5 miscompile in
-        # `tccmacho.c`'s Mach-O binding emit gets resolved. The
-        # Windows lanes (x86_64 + ARM64) are in active bringup
-        # and run as soft-report only; the harness publishes
-        # tallies but does not fail CI yet. KNOWN_DRIFT lists
-        # per-host residual mismatches that do not affect
-        # correctness.
-        shell: bash
-        run: python demos/tinycc/self_host.py || test $? -eq 2
+        # TU set plus `TCC_TARGET_*` macros. Every CI lane
+        # (Linux x86_64 + aarch64, macOS aarch64, Windows x86_64
+        # + ARM64) gates strictly on the five-stage fixed point:
+        # samples byte-identical, corpus byte-identical,
+        # gen2 == gen3 byte-identical, gen2-self == gen3
+        # byte-identical, and the functional hello-world round
+        # trip through stage1's own linker. `KNOWN_DRIFT` is
+        # empty on every lane; a non-empty set indicates a real
+        # regression. Exit code 2 (env_unsuitable) only fires on
+        # hosts the harness doesn't recognise -- none of the
+        # five CI runners hit that path, so the gate is hard.
+        run: python demos/tinycc/self_host.py
       - name: upload tinycc stage1 binary (Windows lanes only)
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4

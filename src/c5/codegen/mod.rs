@@ -1438,7 +1438,7 @@ fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>
             }
             Target::LinuxX64 | Target::WindowsX64 => Machine::X86_64,
         };
-        return elf_reloc::write_relocatable(build, machine, &program.source_path);
+        return elf_reloc::write_relocatable(program, build, machine);
     }
     match target {
         Target::MacOSAarch64 => mach_o::write(program, build),

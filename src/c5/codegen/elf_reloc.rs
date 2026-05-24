@@ -31,6 +31,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
+use super::super::program::Program;
 use super::Build;
 use super::Machine;
 
@@ -52,10 +53,13 @@ const SHF_ALLOC: u64 = 0x2;
 const SHF_EXECINSTR: u64 = 0x4;
 const SHF_INFO_LINK: u64 = 0x40;
 
-// x86_64 reloc types.
+// x86_64 reloc types (System V psABI x86_64 supplement, table 4.10).
+const R_X86_64_PC32: u32 = 2;
 const R_X86_64_PLT32: u32 = 4;
 
 // AArch64 reloc types (ELF for the ARM 64-bit architecture, table 5-1).
+const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
+const R_AARCH64_ADD_ABS_LO12_NC: u32 = 277;
 const R_AARCH64_CALL26: u32 = 283;
 const STB_LOCAL: u8 = 0;
 const STB_GLOBAL: u8 = 1;
@@ -172,10 +176,11 @@ fn e_machine_for(machine: Machine) -> u16 {
 /// emit `.rela.text`, so a TU with cross-TU calls produces a
 /// link error today).
 pub(super) fn write_relocatable(
+    program: &Program,
     build: &Build,
     machine: Machine,
-    source_path: &str,
 ) -> Result<Vec<u8>, C5Error> {
+    let source_path = program.source_path.as_str();
     // Section layout (indices used in symtab st_shndx):
     //   1 = .text
     //   2 = .rela.text
@@ -236,9 +241,19 @@ pub(super) fn write_relocatable(
     // via the existing DWARF builder's path. Here we synthesise
     // a `fn_<ent_pc>` placeholder; the real name plumbing lands
     // next.
+    // Function names come from `program.source_functions`,
+    // indexed by bc_pc; empty entries fall back to a
+    // `fn_<ent_pc>` placeholder so every symbol has a non-zero
+    // name regardless of whether the parser tracked it.
     let mut func_strs: Vec<String> = Vec::with_capacity(build.func_ent_pcs.len());
-    for ent_pc in &build.func_ent_pcs {
-        func_strs.push(format!("fn_{ent_pc}"));
+    for &ent_pc in &build.func_ent_pcs {
+        let name = program
+            .source_functions
+            .get(ent_pc)
+            .filter(|s| !s.is_empty())
+            .cloned()
+            .unwrap_or_else(|| format!("fn_{ent_pc}"));
+        func_strs.push(name);
     }
     // Rebuild strtab now that all names are known: file
     // basename + function names + import symbol names.
@@ -309,11 +324,21 @@ pub(super) fn write_relocatable(
         });
     }
 
+    // Section symbol indices follow the order we pushed them in
+    // above: null(0), file(1), then text(2), data(3), bss(4).
+    // Data + function-pointer fixups land against the matching
+    // section symbol; the `r_addend` carries the offset within
+    // the section.
+    let text_sym_idx: u64 = 2;
+    let data_sym_idx: u64 = 3;
+
     // Build the `.rela.text` payload now that import symbols
     // have their final indices.
     let machine_for_rela = machine;
-    let mut rela_bytes: Vec<u8> =
-        Vec::with_capacity(build.reloc_call_sites.len() * ELF64_RELA_SIZE);
+    let mut rela_bytes: Vec<u8> = Vec::with_capacity(
+        (build.reloc_call_sites.len() + build.data_fixups.len() * 2 + build.func_fixups.len() * 2)
+            * ELF64_RELA_SIZE,
+    );
     for site in &build.reloc_call_sites {
         let sym_idx = match import_sym_indices.get(site.import_index) {
             Some(&i) => i as u64,
@@ -347,6 +372,35 @@ pub(super) fn write_relocatable(
             r_addend,
         };
         write_struct(&mut rela_bytes, &rela);
+    }
+
+    // Data-segment references (string literals / globals). The
+    // codegen emits a 2-instruction page-relative pair on
+    // aarch64 (`adrp` + `add`) and a `lea rip-rel disp32` on
+    // x86_64; each becomes one or two ELF relocs against the
+    // `.data` section symbol with `r_addend = data_offset`.
+    for fx in &build.data_fixups {
+        emit_addr_fixup_relocs(
+            machine_for_rela,
+            &mut rela_bytes,
+            fx.adrp_offset as u64,
+            data_sym_idx,
+            fx.data_offset as i64,
+        );
+    }
+
+    // Function-pointer literals. Same shape as data fixups but
+    // the target is another position inside `.text`, so the
+    // section symbol is `.text` and the addend is the target's
+    // native offset within the section.
+    for fx in &build.func_fixups {
+        emit_addr_fixup_relocs(
+            machine_for_rela,
+            &mut rela_bytes,
+            fx.adrp_offset as u64,
+            text_sym_idx,
+            fx.target_native_offset as i64,
+        );
     }
 
     let symtab_bytes: Vec<u8> = symbols
@@ -519,6 +573,65 @@ fn pack_sym_info(bind: u8, ty: u8) -> u8 {
     (bind << 4) | (ty & 0xf)
 }
 
+/// Emit the relocs the per-arch lowering left behind for an
+/// address-load pair (`adrp + add` on aarch64, `lea rip-rel
+/// disp32` on x86_64). The two halves share a single symbol +
+/// addend so the linker reconstructs the final address as
+/// `S + A`:
+/// * aarch64 -- two relocs: `R_AARCH64_ADR_PREL_PG_HI21` at the
+///   instruction start (encodes bits 32..12 of the page offset
+///   into the `immhi:immlo` field) and
+///   `R_AARCH64_ADD_ABS_LO12_NC` at the next instruction
+///   (encodes bits 11..0 into the `add` imm12).
+/// * x86_64 -- one reloc: `R_X86_64_PC32` at the disp32 slot of
+///   the `lea`, with the addend pre-adjusted by `-4` so the
+///   resolved value is `(S + A) - P`.
+///
+/// `instr_offset` is the byte offset within `.text` of the
+/// first instruction of the pair (or the lea's opcode byte on
+/// x86_64). The codegen's existing `DataFixup` / `FuncFixup`
+/// already record this position.
+fn emit_addr_fixup_relocs(
+    machine: Machine,
+    out: &mut Vec<u8>,
+    instr_offset: u64,
+    sym_idx: u64,
+    addend: i64,
+) {
+    match machine {
+        Machine::Aarch64 => {
+            let hi21 = Elf64Rela {
+                r_offset: instr_offset,
+                r_info: (sym_idx << 32) | R_AARCH64_ADR_PREL_PG_HI21 as u64,
+                r_addend: addend,
+            };
+            let lo12 = Elf64Rela {
+                r_offset: instr_offset + 4,
+                r_info: (sym_idx << 32) | R_AARCH64_ADD_ABS_LO12_NC as u64,
+                r_addend: addend,
+            };
+            write_struct(out, &hi21);
+            write_struct(out, &lo12);
+        }
+        Machine::X86_64 => {
+            // The x86_64 codegen emits `lea reg, [rip + 0]`
+            // where the disp32 occupies the last 4 bytes of
+            // the instruction. For a typical REX-prefixed
+            // 7-byte LEA (`48 8d 05 + disp32`), the disp32
+            // starts at `instr_offset + 3`. The codegen
+            // currently positions the disp32 slot at
+            // `instr_offset + 3` for both LEA shapes used by
+            // data refs.
+            let rela = Elf64Rela {
+                r_offset: instr_offset + 3,
+                r_info: (sym_idx << 32) | R_X86_64_PC32 as u64,
+                r_addend: addend - 4,
+            };
+            write_struct(out, &rela);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -528,7 +641,8 @@ mod tests {
     #[test]
     fn empty_build_produces_valid_header() {
         let build = empty_build_for(Machine::X86_64);
-        let bytes = write_relocatable(&build, Machine::X86_64, "test.c").expect("write");
+        let program = empty_program("test.c");
+        let bytes = write_relocatable(&program, &build, Machine::X86_64).expect("write");
         assert!(bytes.len() >= ELF64_EHDR_SIZE);
         assert_eq!(&bytes[0..4], b"\x7fELF");
         assert_eq!(bytes[4], ELF_CLASS_64);
@@ -537,6 +651,39 @@ mod tests {
         assert_eq!(e_type, ET_REL);
         let e_machine = u16::from_le_bytes([bytes[18], bytes[19]]);
         assert_eq!(e_machine, EM_X86_64);
+    }
+
+    fn empty_program(path: &str) -> Program {
+        Program {
+            text: Vec::new(),
+            data: Vec::new(),
+            entry_pc: 0,
+            warnings: Vec::new(),
+            data_imm_positions: Vec::new(),
+            code_imm_positions: Vec::new(),
+            tls_data: Vec::new(),
+            tls_init_size: 0,
+            call_fp_arg_masks: Vec::new(),
+            variadic_functions: alloc::collections::BTreeSet::new(),
+            data_relocs: Vec::new(),
+            code_relocs: Vec::new(),
+            exports: Vec::new(),
+            dylibs: Vec::new(),
+            dllmain_pc: None,
+            source_lines: Vec::new(),
+            source_functions: Vec::new(),
+            source_files: Vec::new(),
+            source_file_indices: Vec::new(),
+            source_path: path.into(),
+            variables: Vec::new(),
+            structs: Vec::new(),
+            entry_name: None,
+            subsystem: None,
+            optimized: false,
+            finished_functions: Vec::new(),
+            symbols: Vec::new(),
+            synthetic_ssa_funcs: Vec::new(),
+        }
     }
 
     fn empty_build_for(_machine: Machine) -> Build {

@@ -179,6 +179,55 @@ jobs:
         run: |
           cargo build --release --locked
           python demos/sqlite3/smoke.py
+      - name: sqlite3 smoke crash diag (linux)
+        # Runs only when the previous step failed. Rebuilds the
+        # shell, then runs the file-backed scenario under gdb
+        # --batch with `bt`, `info reg`, and a disassembly window
+        # around the crashing PC so the next push has actionable
+        # output. Linux only -- macOS / Windows runners do not
+        # ship a usable gdb on the default image.
+        if: failure() && (matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm')
+        run: |
+          set +e
+          mkdir -p /tmp/sqldiag
+          python scripts/amalgamate.py -o - \
+              demos/sqlite3/sqlite3.c demos/sqlite3/shell.c \
+              > /tmp/sqldiag/combined.c
+          ./target/release/badc \
+              -include msvc_compat.h \
+              -DSQLITE_OMIT_LOAD_EXTENSION -DSQLITE_THREADSAFE=0 \
+              -DSQLITE_DEFAULT_MEMSTATUS=0 -DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1 \
+              -DSQLITE_DQS=0 -DSQLITE_OMIT_DEPRECATED \
+              -DSQLITE_OMIT_PROGRESS_CALLBACK -DSQLITE_OMIT_SHARED_CACHE \
+              -DSQLITE_OMIT_AUTOINIT -DSQLITE_WITHOUT_ZONEMALLOC=1 \
+              -DSQLITE_ENABLE_LOCKING_STYLE=0 -DSQLITE_DISABLE_INTRINSIC \
+              -DSQLITE_OMIT_SEH \
+              -o /tmp/sqldiag/shell /tmp/sqldiag/combined.c \
+              < /dev/null || true
+          rm -f /tmp/sqldiag/test.db
+          cat > /tmp/sqldiag/script.gdb <<'GDB'
+          set pagination off
+          set print pretty on
+          run
+          echo \n=== backtrace ===\n
+          bt 30
+          echo \n=== registers ===\n
+          info reg
+          echo \n=== disasm around RIP ===\n
+          x/16i $rip-32
+          echo \n=== disasm of CALL site (rip-32 .. rip+32) ===\n
+          x/40bx $rip-16
+          echo \n=== caller frame disasm ===\n
+          frame 1
+          info frame
+          x/16i $rip-32
+          GDB
+          echo "=== gdb script: ===" && cat /tmp/sqldiag/script.gdb
+          echo "=== gdb output: ==="
+          echo ".open /tmp/sqldiag/test.db
+          CREATE TABLE t(x INTEGER);
+          .quit" | gdb --batch -x /tmp/sqldiag/script.gdb /tmp/sqldiag/shell 2>&1 | head -200
+          true
       - name: miniz smoke (amalg + TU + archive)
         # Same shape as the sqlite step but smaller: ~9k LOC of
         # integer + bit-twiddle deflate code. Compresses + uncompresses

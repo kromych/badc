@@ -1038,14 +1038,9 @@ fn write_string(buf: &mut Vec<u8>, s: &str) {
     buf.extend_from_slice(s.as_bytes());
 }
 
-// SSA function on-wire encoding. Used by the user-function
-// tag once `lift_program` retires. Variant tags are stable and
-// disjoint from the compact `synth_shape` encoding above.
-//
-// TODO: wire write/read_ssa_func into a new TAG_USER_SSA_FUNCS
-// so user function bodies travel through the .o file as SSA
-// rather than as bytecode lifted at merge time.
-#[allow(dead_code)]
+// SSA function on-wire encoding feeding TAG_USER_SSA_FUNCS.
+// Variant tags are stable and disjoint from the compact
+// `synth_shape` encoding above.
 //
 // Per-function header (variable-width):
 //   u64 ent_pc, u64 end_pc, i64 locals,
@@ -1670,7 +1665,10 @@ impl<'a> SsaReader<'a> {
     }
 }
 
-pub(crate) fn read_ssa_func(body: &[u8], cursor: &mut usize) -> Result<crate::c5::ir::FunctionSsa, C5Error> {
+pub(crate) fn read_ssa_func(
+    body: &[u8],
+    cursor: &mut usize,
+) -> Result<crate::c5::ir::FunctionSsa, C5Error> {
     let mut r = SsaReader {
         body,
         cursor: *cursor,

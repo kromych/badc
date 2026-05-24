@@ -371,10 +371,7 @@ fn ssa_func_encoder_round_trip_handcrafted() {
             args: alloc::vec![24, 25],
         },
         Inst::AllocaInit(-128),
-        Inst::VstackSpill {
-            slot: 1,
-            value: 26,
-        },
+        Inst::VstackSpill { slot: 1, value: 26 },
         Inst::VstackReload { slot: 2 },
         Inst::AccSpill { value: 27 },
         Inst::AccReload,
@@ -447,6 +444,53 @@ fn ssa_func_encoder_round_trip_handcrafted() {
             alloc::format!("{:?}", o.terminator),
             alloc::format!("{:?}", d.terminator),
         );
+    }
+}
+
+#[test]
+fn user_ssa_funcs_populated_and_survives_object_round_trip() {
+    use crate::c5::{read_object, write_object};
+    // compile_to_link_unit must eagerly invoke the walker so
+    // every parser-finished function appears in
+    // LinkUnit::user_ssa_funcs. The .o writer carries them
+    // through TAG_USER_SSA_FUNCS; the reader reconstructs them
+    // byte-for-byte. This pins both halves of the round-trip:
+    // emission and decode.
+    let unit = compile_unit(
+        "
+        int add(int a, int b) { return a + b; }
+        int twice(int x) { return add(x, x); }
+        int main(void) { return twice(7); }
+        ",
+    );
+    assert!(
+        unit.user_ssa_funcs.len() >= 3,
+        "expected at least add/twice/main in user_ssa_funcs, got {}",
+        unit.user_ssa_funcs.len(),
+    );
+    let bytes = write_object(&unit);
+    let parsed = read_object(&bytes).expect("read_object");
+    assert_eq!(
+        parsed.user_ssa_funcs.len(),
+        unit.user_ssa_funcs.len(),
+        "user_ssa_funcs count round-trip",
+    );
+    for (orig, decoded) in unit.user_ssa_funcs.iter().zip(parsed.user_ssa_funcs.iter()) {
+        assert_eq!(orig.ent_pc, decoded.ent_pc, "ent_pc");
+        assert_eq!(orig.end_pc, decoded.end_pc, "end_pc");
+        assert_eq!(orig.locals, decoded.locals, "locals");
+        assert_eq!(orig.n_params, decoded.n_params, "n_params");
+        assert_eq!(orig.is_variadic, decoded.is_variadic, "is_variadic");
+        assert_eq!(orig.vstack_slots, decoded.vstack_slots, "vstack_slots");
+        assert_eq!(orig.insts.len(), decoded.insts.len(), "insts len");
+        assert_eq!(orig.blocks.len(), decoded.blocks.len(), "blocks len");
+        for (i, (o, d)) in orig.insts.iter().zip(decoded.insts.iter()).enumerate() {
+            assert_eq!(
+                alloc::format!("{o:?}"),
+                alloc::format!("{d:?}"),
+                "inst {i} mismatch",
+            );
+        }
     }
 }
 

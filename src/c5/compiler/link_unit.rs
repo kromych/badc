@@ -32,11 +32,78 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use super::Compiler;
-use crate::c5::error::C5Error;
+use crate::c5::Target;
+use crate::c5::ast::FinishedFunction;
+use crate::c5::error::{C5Error, fmt_internal_err};
+use crate::c5::ir::FunctionSsa;
 use crate::c5::linker::{LinkSymbol, LinkUnit, Reloc, RelocKind, SymbolKind};
 use crate::c5::op::Op;
-use crate::c5::symbol::Linkage;
+use crate::c5::symbol::{Linkage, Symbol};
 use crate::c5::token::Token;
+
+fn walker_funcs_for(
+    finished: &[FinishedFunction],
+    symbols: &[Symbol],
+    structs: &[super::StructDef],
+    target: Target,
+) -> Result<Vec<FunctionSsa>, C5Error> {
+    let mut out = Vec::with_capacity(finished.len());
+    for f in finished {
+        let mut func = crate::c5::ast::walk::walk_function(
+            &f.ast,
+            symbols,
+            structs,
+            target,
+            f.ent_pc,
+            f.n_params,
+            f.is_variadic,
+            f.n_locals,
+            &f.param_tys,
+            &f.param_local_slots,
+            f.returns_struct,
+            f.return_struct_size,
+            f.alloca_top_slot,
+        )
+        .map_err(|e| {
+            C5Error::Compile(fmt_internal_err(&alloc::format!(
+                "ast::walk: function `{}` (ent_pc={}): {}",
+                f.name,
+                f.ent_pc,
+                e,
+            )))
+        })?;
+        let touched = walker_param_count(&func);
+        // Struct-by-value params hide their slot-2 read inside
+        // the entry-Mcpy, so use the declared count when the
+        // touched scan would under-count.
+        func.n_params = touched.max(f.n_params);
+        out.push(func);
+    }
+    out.sort_by_key(|f| f.ent_pc);
+    Ok(out)
+}
+
+fn walker_param_count(func: &FunctionSsa) -> usize {
+    use crate::c5::ir::Inst;
+    let mut max_seen: Option<i64> = None;
+    for inst in &func.insts {
+        let slot = match inst {
+            Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } | Inst::LocalAddr(off) => {
+                Some(*off)
+            }
+            _ => None,
+        };
+        if let Some(s) = slot
+            && s >= 2
+        {
+            max_seen = Some(max_seen.map_or(s, |m| m.max(s)));
+        }
+    }
+    match max_seen {
+        Some(s) => (s - 1).max(0) as usize,
+        None => 0,
+    }
+}
 
 impl Compiler {
     /// Compile the source and produce a pre-link translation
@@ -358,6 +425,19 @@ impl Compiler {
             }
         });
 
+        // Eagerly lower every parser-finished function to
+        // FunctionSsa so the resulting LinkUnit carries SSA
+        // directly. The bytecode-side lift survives only for
+        // unit reloads whose user_ssa_funcs arrived empty
+        // (older .o files); once every .o producer is updated,
+        // lift_program retires.
+        let user_ssa_funcs = walker_funcs_for(
+            &self.finished_functions,
+            &self.symbols,
+            &self.structs,
+            self.target,
+        )?;
+
         Ok(LinkUnit {
             text: self.text,
             data: self.data,
@@ -387,7 +467,7 @@ impl Compiler {
             finished_functions: self.finished_functions,
             parser_symbols: self.symbols,
             synthetic_ssa_funcs: self.synthetic_ssa_funcs,
-            user_ssa_funcs: alloc::vec::Vec::new(),
+            user_ssa_funcs,
         })
     }
 }

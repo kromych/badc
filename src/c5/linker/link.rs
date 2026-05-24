@@ -1122,10 +1122,14 @@ fn resolve_user_ssa_call_targets(program: &mut Program) -> Result<(), C5Error> {
 
     let code_imm_positions: alloc::collections::BTreeSet<usize> =
         program.code_imm_positions.iter().copied().collect();
+    let data_imm_positions: alloc::collections::BTreeSet<usize> =
+        program.data_imm_positions.iter().copied().collect();
 
     for f in &mut program.user_ssa_funcs {
         let mut jsr_targets: Vec<i64> = Vec::new();
         let mut imm_code_targets: Vec<i64> = Vec::new();
+        let mut imm_data_targets: Vec<i64> = Vec::new();
+        let mut tls_targets: Vec<i64> = Vec::new();
         let mut pc = f.ent_pc;
         while pc < f.end_pc && pc < program.text.len() {
             let raw = program.text[pc];
@@ -1148,12 +1152,26 @@ fn resolve_user_ssa_call_targets(program: &mut Program) -> Result<(), C5Error> {
                     }
                     imm_code_targets.push(program.text[operand_pc]);
                 }
+                Op::Imm if data_imm_positions.contains(&operand_pc) => {
+                    if operand_pc >= program.text.len() {
+                        return Err(err("user_ssa_funcs: dangling Op::Imm at end of text"));
+                    }
+                    imm_data_targets.push(program.text[operand_pc]);
+                }
+                Op::TlsLea => {
+                    if operand_pc >= program.text.len() {
+                        return Err(err("user_ssa_funcs: dangling Op::TlsLea at end of text"));
+                    }
+                    tls_targets.push(program.text[operand_pc]);
+                }
                 _ => {}
             }
             pc += op.word_size();
         }
         let mut jsr_iter = jsr_targets.into_iter();
-        let mut imm_iter = imm_code_targets.into_iter();
+        let mut imm_code_iter = imm_code_targets.into_iter();
+        let mut imm_data_iter = imm_data_targets.into_iter();
+        let mut tls_iter = tls_targets.into_iter();
         for inst in &mut f.insts {
             match inst {
                 Inst::Call { target_pc, .. } => {
@@ -1162,11 +1180,21 @@ fn resolve_user_ssa_call_targets(program: &mut Program) -> Result<(), C5Error> {
                     }
                 }
                 Inst::ImmCode(pc) => {
-                    if let Some(t) = imm_iter.next() {
+                    if let Some(t) = imm_code_iter.next() {
                         // The bytecode side stores
                         // CODE_BASE + bc_pc; the SSA side
                         // stores the bare bc_pc.
                         *pc = (t - crate::c5::CODE_BASE as i64) as usize;
+                    }
+                }
+                Inst::ImmData(off) => {
+                    if let Some(t) = imm_data_iter.next() {
+                        *off = t;
+                    }
+                }
+                Inst::TlsAddr(off) => {
+                    if let Some(t) = tls_iter.next() {
+                        *off = t;
                     }
                 }
                 _ => {}

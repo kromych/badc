@@ -101,11 +101,27 @@ pub(crate) fn produce_ssa_funcs(
     program: &Program,
     target: Target,
 ) -> Result<Vec<FunctionSsa>, C5Error> {
-    if program.finished_functions.is_empty() {
-        super::ssa::lift_program(program)
-    } else {
-        walk_program(program, target)
+    if !program.finished_functions.is_empty() {
+        return walk_program(program, target);
     }
+    if !program.user_ssa_funcs.is_empty() {
+        let mut covered: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
+        let mut out: Vec<FunctionSsa> =
+            Vec::with_capacity(program.user_ssa_funcs.len() + program.synthetic_ssa_funcs.len());
+        for f in &program.user_ssa_funcs {
+            if covered.insert(f.ent_pc) {
+                out.push(f.clone());
+            }
+        }
+        for f in &program.synthetic_ssa_funcs {
+            if covered.insert(f.ent_pc) {
+                out.push(f.clone());
+            }
+        }
+        out.sort_by_key(|f| f.ent_pc);
+        return Ok(out);
+    }
+    super::ssa::lift_program(program)
 }
 
 /// Maximum param slot the function reads or writes. C5's

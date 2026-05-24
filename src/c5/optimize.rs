@@ -203,6 +203,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         finished_functions,
         symbols,
         synthetic_ssa_funcs,
+        extern_function_imports,
     } = program;
 
     let mut insns = decode(&text, &data_imm_positions, &in_code_imm_positions)?;
@@ -552,6 +553,11 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         // program; if a future pass rewrites their PCs, walk
         // these entries and update `ent_pc` / `end_pc`.
         synthetic_ssa_funcs,
+        // Cross-TU function-import placeholder PCs sit past the
+        // original `text.len()` and stay valid post-optimize:
+        // the optimizer only rewrites PCs within `[0, text.len())`,
+        // never the placeholder range.
+        extern_function_imports,
     })
 }
 
@@ -1413,6 +1419,7 @@ mod tests {
             finished_functions: Vec::new(),
             symbols: Vec::new(),
             synthetic_ssa_funcs: alloc::vec::Vec::new(),
+            extern_function_imports: Vec::new(),
         }
     }
 
@@ -1731,6 +1738,7 @@ mod tests {
             finished_functions: Vec::new(),
             symbols: Vec::new(),
             synthetic_ssa_funcs: alloc::vec::Vec::new(),
+            extern_function_imports: Vec::new(),
         };
         let opt = optimize(p).unwrap();
         // Main returns 5; if the ImmCode operand remapped wrong, the

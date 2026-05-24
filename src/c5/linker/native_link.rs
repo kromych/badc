@@ -358,7 +358,12 @@ fn patch_aarch64_call26(text: &mut [u8], offset: usize, target: i64) -> Result<(
 }
 
 fn patch_x86_64_pc32(text: &mut [u8], offset: usize, target: i64) -> Result<(), C5Error> {
-    let disp = target;
+    // ELF AMD64 ABI § 4.4.1: `R_X86_64_PC32` / `R_X86_64_PLT32`
+    // resolve to (`S + A`) - `P` where `S` is the symbol value,
+    // `A` the addend, and `P` the patch site. `apply_reloc`
+    // passes the sum `S + A` in `target`; the subtraction lives
+    // here so the contract matches `patch_aarch64_call26`'s.
+    let disp = target - offset as i64;
     if !(i32::MIN as i64..=i32::MAX as i64).contains(&disp) {
         return Err(err(&format!(
             "PC32 disp 0x{disp:x} doesn't fit in 32 bits at offset 0x{offset:x}",
@@ -483,38 +488,90 @@ mod tests {
         }
     }
 
-    /// Two TUs land in the merged image at distinct offsets;
-    /// both their `STB_GLOBAL` symbols survive. Doesn't yet
-    /// pin the cross-TU CALL26 reloc -- the codegen leaves
-    /// cross-TU user-function calls as `bl 0x0` with no reloc
-    /// (the bytecode tier surfaced them as
-    /// `fn_call_fixups -> text_relocs`; the native tier needs
-    /// the equivalent plumbing). Tracked as a follow-on under
-    /// task #65; the link pass already handles the reloc shape,
-    /// it's the codegen that's silent.
+    /// Cross-TU call resolves at link time. `b.c` defines
+    /// `helper`; `a.c` extern-declares it and calls. After
+    /// `link_native_objects`, the `bl 0x0` placeholder in a's
+    /// `.text` has its imm26 patched to reach b's `helper`
+    /// body at the merged offset, and `helper` no longer parks
+    /// in `pending_imports`. Pins the end-to-end relocatable
+    /// path: codegen emits the placeholder + reloc, reader
+    /// surfaces the UNDEF symbol, link pass resolves in place.
     #[test]
-    fn cross_unit_both_define_distinct_symbols() {
+    fn cross_unit_call_resolves_to_defined_symbol() {
         let target = Target::LinuxAarch64;
         let mut opts = NativeOptions::new().with_debug_info(false);
         opts.output_kind = OutputKind::Relocatable;
         let copts = crate::CompileOptions::default().with_no_entry_point(true);
 
         let a = compile_native_with(
-            "int caller_a(void){return 1;}\n",
+            "int helper(void); int caller(void){return helper();}\n",
             target,
             opts,
             copts.clone(),
         );
-        let b = compile_native_with("int caller_b(void){return 2;}\n", target, opts, copts);
+        let b = compile_native_with("int helper(void){return 7;}\n", target, opts, copts);
+
+        // Snapshot a.o's text for a before-vs-after compare on
+        // the patch site.
+        let a_text_before = a.text.clone();
+        let helper_call_site = a
+            .text_relocs
+            .iter()
+            .find(|r| {
+                a.symbols
+                    .get(r.sym_idx)
+                    .map(|s| s.name == "helper")
+                    .unwrap_or(false)
+            })
+            .map(|r| r.offset as usize)
+            .expect("a.o should carry a CALL26 reloc against helper");
+        let placeholder = u32::from_le_bytes(
+            a_text_before[helper_call_site..helper_call_site + 4]
+                .try_into()
+                .unwrap(),
+        );
+        assert_eq!(
+            placeholder & 0x03ff_ffff,
+            0,
+            "expected bl placeholder's imm26 to be zero pre-link",
+        );
 
         let merged = link_native_objects(&[a, b]).expect("link");
-        assert!(merged.defined.contains_key("caller_a"));
-        assert!(merged.defined.contains_key("caller_b"));
-        let va = merged.defined["caller_a"].value;
-        let vb = merged.defined["caller_b"].value;
-        assert_ne!(
-            va, vb,
-            "expected distinct merged .text offsets; got {va} == {vb}",
+        let helper_def = merged
+            .defined
+            .get("helper")
+            .expect("helper landed in merged defined table");
+        assert!(matches!(helper_def.section, NativeSymSection::Text));
+
+        // Every reloc against `helper` in the merged image
+        // should have been resolved in place; nothing parks in
+        // `pending_imports` with `helper` as its target.
+        for p in &merged.pending_imports {
+            let name = &merged.imports[p.import_index];
+            assert_ne!(
+                name, "helper",
+                "expected helper reloc to resolve in place, but it parked as import",
+            );
+        }
+
+        // Post-link the imm26 should reach helper_def.value
+        // from helper_call_site. Decode + compare.
+        let patched = u32::from_le_bytes(
+            merged.text[helper_call_site..helper_call_site + 4]
+                .try_into()
+                .unwrap(),
+        );
+        let imm26 = patched & 0x03ff_ffff;
+        let words = if imm26 & (1 << 25) != 0 {
+            (imm26 | 0xfc00_0000) as i32 as i64
+        } else {
+            imm26 as i64
+        };
+        let resolved = helper_call_site as i64 + (words << 2);
+        assert_eq!(
+            resolved as u64, helper_def.value,
+            "post-link bl should reach helper at 0x{:x}, got 0x{resolved:x}",
+            helper_def.value,
         );
     }
 

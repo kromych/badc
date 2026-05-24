@@ -255,10 +255,24 @@ pub(super) fn write_relocatable(
             .unwrap_or_else(|| format!("fn_{ent_pc}"));
         func_strs.push(name);
     }
+    // Unique cross-TU user-function names referenced by
+    // `user_extern_call_sites`. Each gets exactly one
+    // undefined symbol entry; multiple call sites against the
+    // same callee share it.
+    let mut user_extern_names: Vec<&str> = Vec::new();
+    for site in &build.user_extern_call_sites {
+        let s = site.symbol_name.as_str();
+        if !user_extern_names.contains(&s) {
+            user_extern_names.push(s);
+        }
+    }
+
     // Rebuild strtab now that all names are known: file
-    // basename + function names + import symbol names.
-    let mut all_names: Vec<&str> =
-        Vec::with_capacity(1 + func_strs.len() + build.imports.imports.len());
+    // basename + function names + libc-import symbol names +
+    // cross-TU user-function names.
+    let mut all_names: Vec<&str> = Vec::with_capacity(
+        1 + func_strs.len() + build.imports.imports.len() + user_extern_names.len(),
+    );
     all_names.push(file_basename);
     for s in &func_strs {
         all_names.push(s.as_str());
@@ -272,6 +286,10 @@ pub(super) fn write_relocatable(
     // container.
     for imp in &build.imports.imports {
         all_names.push(imp.local_name.as_str());
+    }
+    let user_extern_names_start = all_names.len();
+    for name in &user_extern_names {
+        all_names.push(*name);
     }
     let (strtab_bytes, name_offs) = build_strtab(&all_names);
     // Patch the file symbol's name offset against the final
@@ -324,6 +342,23 @@ pub(super) fn write_relocatable(
         });
     }
 
+    // Cross-TU user-function imports: same STB_GLOBAL +
+    // STT_NOTYPE + SHN_UNDEF shape as the libc imports. The
+    // linker resolves these against the matching defined
+    // symbols in sibling units. `user_extern_sym_idx` maps a
+    // name's position in `user_extern_names` to its symbol-table
+    // index for the reloc loop below.
+    let mut user_extern_sym_idx: Vec<usize> = Vec::with_capacity(user_extern_names.len());
+    for (i, _name) in user_extern_names.iter().enumerate() {
+        user_extern_sym_idx.push(symbols.len());
+        symbols.push(Elf64Sym {
+            st_name: name_offs[user_extern_names_start + i],
+            st_info: pack_sym_info(STB_GLOBAL, STT_NOTYPE),
+            st_shndx: SHN_UNDEF,
+            ..Default::default()
+        });
+    }
+
     // Section symbol indices follow the order we pushed them in
     // above: null(0), file(1), then text(2), data(3), bss(4).
     // Data + function-pointer fixups land against the matching
@@ -336,9 +371,30 @@ pub(super) fn write_relocatable(
     // have their final indices.
     let machine_for_rela = machine;
     let mut rela_bytes: Vec<u8> = Vec::with_capacity(
-        (build.reloc_call_sites.len() + build.data_fixups.len() * 2 + build.func_fixups.len() * 2)
+        (build.reloc_call_sites.len()
+            + build.user_extern_call_sites.len()
+            + build.data_fixups.len() * 2
+            + build.func_fixups.len() * 2)
             * ELF64_RELA_SIZE,
     );
+    for site in &build.user_extern_call_sites {
+        let pos = user_extern_names
+            .iter()
+            .position(|n| *n == site.symbol_name.as_str())
+            .expect("user_extern_names contains every site's symbol name");
+        let sym_idx = user_extern_sym_idx[pos] as u64;
+        let (rtype, r_offset, r_addend) = match machine_for_rela {
+            Machine::X86_64 => (R_X86_64_PLT32, site.instr_offset as u64 + 1, -4i64),
+            Machine::Aarch64 => (R_AARCH64_CALL26, site.instr_offset as u64, 0),
+        };
+        let r_info = (sym_idx << 32) | (rtype as u64);
+        let rela = Elf64Rela {
+            r_offset,
+            r_info,
+            r_addend,
+        };
+        write_struct(&mut rela_bytes, &rela);
+    }
     for site in &build.reloc_call_sites {
         let sym_idx = match import_sym_indices.get(site.import_index) {
             Some(&i) => i as u64,
@@ -683,6 +739,7 @@ mod tests {
             finished_functions: Vec::new(),
             symbols: Vec::new(),
             synthetic_ssa_funcs: Vec::new(),
+            extern_function_imports: Vec::new(),
         }
     }
 
@@ -698,6 +755,7 @@ mod tests {
             bytecode_to_native: Vec::new(),
             func_ent_pcs: Vec::new(),
             reloc_call_sites: Vec::new(),
+            user_extern_call_sites: Vec::new(),
             ssa_line_rows: Vec::new(),
             imports: ResolvedImports::default(),
             abi: Abi::default(),

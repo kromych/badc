@@ -243,7 +243,19 @@ pub(super) fn pc_extent_for_lowering(
     ssa_funcs: &[crate::c5::ir::FunctionSsa],
 ) -> usize {
     let from_ssa = ssa_funcs.iter().map(|f| f.end_pc).max().unwrap_or(0);
-    program.text.len().max(from_ssa)
+    // Cross-TU function-import placeholders sit past `text.len()`;
+    // the codegen's per-`Inst::Call` fixup pass uses the same
+    // dense `bytecode_to_native` table to recognise them as
+    // out-of-range, so the table has to cover the placeholder
+    // range too. `extern_function_imports` is empty for every
+    // build that didn't go through the relocatable -c path.
+    let from_imports = program
+        .extern_function_imports
+        .iter()
+        .map(|(pc, _)| *pc)
+        .max()
+        .unwrap_or(0);
+    program.text.len().max(from_ssa).max(from_imports)
 }
 
 /// Recover [`FuncMeta`] for every `Op::Ent` in `program.text`.
@@ -898,6 +910,19 @@ pub(crate) struct Build {
     /// `OutputKind::Relocatable` writer surfaces each entry as
     /// an ELF `.rela.text` reloc against the import's symbol.
     pub reloc_call_sites: Vec<RelocCallSite>,
+    /// Cross-TU user-function call sites. Each entry pairs the
+    /// byte offset of the BL / CALL placeholder with the callee's
+    /// symbol name. The codegen redirects every `Inst::Call`
+    /// whose `target_pc` matches a [`Program::extern_function_imports`]
+    /// placeholder into this list, leaves the imm26 / disp32
+    /// at zero, and skips the matching intra-unit `Fixup::Bl`
+    /// resolution. The `OutputKind::Relocatable` writer emits one
+    /// undefined-extern symbol per unique name plus one
+    /// `R_AARCH64_CALL26` / `R_X86_64_PLT32` reloc per call site
+    /// in `.rela.text`. Final-image writers leave the field
+    /// untouched because no `extern_function_imports` ever land
+    /// in a single-TU compile path.
+    pub user_extern_call_sites: Vec<UserExternCallSite>,
     /// SSA-side `.debug_line` rows: each `(native_pc, line,
     /// file_idx)` entry says "the instruction whose first byte
     /// lives at `native_pc` in `Build::text` corresponds to source
@@ -1140,6 +1165,27 @@ pub(crate) struct RelocCallSite {
     /// calls (`bl` / `call rel32`). The relocation type is the
     /// same on each arch -- the link bit / opcode prefix lives
     /// in the placeholder bytes the codegen already emitted.
+    #[allow(dead_code)]
+    pub is_tail: bool,
+}
+
+/// Cross-TU user-function call site. Same shape as
+/// [`RelocCallSite`] but the target is named directly --
+/// `extern_function_imports` lives on `Program`, not on `Build`,
+/// and a single `String` per call site is cheaper than threading
+/// a second `Vec<String>` plus an index. Unique names get folded
+/// into one undefined symbol each by the writer's strtab build.
+#[derive(Debug, Clone)]
+pub(crate) struct UserExternCallSite {
+    /// Byte offset within `Build::text` of the call instruction.
+    /// Same convention as [`RelocCallSite::instr_offset`].
+    pub instr_offset: usize,
+    /// Symbol name of the cross-TU callee. The writer interns
+    /// this into the strtab and emits one undefined symbol per
+    /// unique name.
+    pub symbol_name: alloc::string::String,
+    /// `true` for tail-jumps (`b` / `jmp rel32`), `false` for
+    /// calls (`bl` / `call rel32`).
     #[allow(dead_code)]
     pub is_tail: bool,
 }

@@ -2145,6 +2145,7 @@ mod tests {
             finished_functions: alloc::vec::Vec::new(),
             symbols: alloc::vec::Vec::new(),
             synthetic_ssa_funcs: alloc::vec::Vec::new(),
+            extern_function_imports: alloc::vec::Vec::new(),
         }
     }
 
@@ -2160,6 +2161,7 @@ mod tests {
             bytecode_to_native: Vec::new(),
             func_ent_pcs: Vec::new(),
             reloc_call_sites: Vec::new(),
+            user_extern_call_sites: Vec::new(),
             ssa_line_rows: Vec::new(),
             imports: ResolvedImports {
                 imports: vec![ResolvedImport {

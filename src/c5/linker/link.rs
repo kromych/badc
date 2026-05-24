@@ -996,6 +996,10 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         // own lift-recovery loop for sys-trampolines that came
         // through an archive boundary.
         synthetic_ssa_funcs: alloc::vec::Vec::new(),
+        // Bytecode linker resolves every cross-TU function call
+        // in place via `RelocKind::JsrPc`; no placeholder PCs
+        // survive into the merged program.
+        extern_function_imports: alloc::vec::Vec::new(),
     })
     .and_then(|mut program| {
         // Walker covers every user-declared function via

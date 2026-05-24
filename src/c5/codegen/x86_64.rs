@@ -1434,7 +1434,45 @@ pub(super) fn lower(
     }
     bytecode_to_native[bc_pc_extent] = code.len();
 
-    apply_fixups(&mut code, &fixups, &bytecode_to_native, bc_pc_extent)?;
+    // Cross-TU user-function imports surfaced by the parser as
+    // placeholder bc_pcs past `text.len()`. Each `Inst::Call`
+    // emits a `Fixup::Call` with `target_bytecode_pc` equal to
+    // the placeholder; we partition those out before
+    // `apply_fixups` and re-emit them as
+    // `Build::user_extern_call_sites` entries that the writer
+    // surfaces as `R_X86_64_PLT32` relocs against the
+    // callee's symbol. Empty for builds without
+    // `CompileOptions::no_entry_point`.
+    let extern_pc_lookup: alloc::collections::BTreeMap<usize, &str> = program
+        .extern_function_imports
+        .iter()
+        .map(|(pc, name)| (*pc, name.as_str()))
+        .collect();
+    let mut user_extern_call_sites: Vec<super::UserExternCallSite> = Vec::new();
+    let resolved_fixups: Vec<Fixup> = if extern_pc_lookup.is_empty() {
+        fixups
+    } else {
+        let mut out = Vec::with_capacity(fixups.len());
+        for f in fixups {
+            if let Some(name) = extern_pc_lookup.get(&f.target_bytecode_pc) {
+                let is_tail = matches!(f.kind, BranchKind::Jmp);
+                user_extern_call_sites.push(super::UserExternCallSite {
+                    instr_offset: f.native_offset,
+                    symbol_name: (*name).into(),
+                    is_tail,
+                });
+            } else {
+                out.push(f);
+            }
+        }
+        out
+    };
+    apply_fixups(
+        &mut code,
+        &resolved_fixups,
+        &bytecode_to_native,
+        bc_pc_extent,
+    )?;
 
     // Append one PLT trampoline per import. CALL rel32 /
     // JMP rel32 placeholders recorded in `plt_call_fixups` get
@@ -1525,6 +1563,7 @@ pub(super) fn lower(
         bytecode_to_native,
         func_ent_pcs,
         reloc_call_sites,
+        user_extern_call_sites,
         ssa_line_rows,
         // Set by `lower_for` after this returns; see the matching
         // comment on the aarch64 lowering's `Build` construction.

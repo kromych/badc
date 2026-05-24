@@ -1180,6 +1180,38 @@ impl Compiler {
         // operands and `target_bc_pc` slots.
         self.emit_sys_trampolines();
         self.apply_fn_call_fixups()?;
+        // Cross-TU function imports. Every extern-declared
+        // `Token::Fun` symbol with no body in this TU gets a
+        // unique placeholder bc_pc (past `text.len()`), then has
+        // `Symbol::val` rewritten to that PC. The walker reads
+        // `Symbol::val` through `live_fun_val` when lowering an
+        // `Inst::Call`, so the matching call site carries the
+        // placeholder as its `target_pc`. The native codegen
+        // detects the placeholder (outside `[0, text.len())`)
+        // and emits a `RelocCallSite` against the symbol's name
+        // instead of resolving in place. Single-TU compiles
+        // without `no_entry_point` never reach this branch with
+        // an unresolved call: `resolve_entry_and_dllmain_pcs`
+        // errors out first.
+        let extern_imports = if self.no_entry_point {
+            use crate::c5::symbol::Linkage;
+            let mut imports: alloc::vec::Vec<(usize, String)> = alloc::vec::Vec::new();
+            let mut next_pc = self.text.len() + 1;
+            for sym in self.symbols.iter_mut() {
+                if sym.class != Token::Fun as i64
+                    || sym.defined_here
+                    || sym.linkage != Linkage::External
+                {
+                    continue;
+                }
+                imports.push((next_pc, sym.name.clone()));
+                sym.val = next_pc as i64;
+                next_pc += 1;
+            }
+            imports
+        } else {
+            alloc::vec::Vec::new()
+        };
         let (entry_pc, dllmain_pc, resolved_entry_name) = self.resolve_entry_and_dllmain_pcs()?;
         let exports = self.resolve_exports()?;
         Ok(Program {
@@ -1228,6 +1260,7 @@ impl Compiler {
             // in sync with any later field additions.
             symbols: self.symbols,
             synthetic_ssa_funcs: self.synthetic_ssa_funcs,
+            extern_function_imports: extern_imports,
         })
     }
 }

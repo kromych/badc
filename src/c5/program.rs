@@ -314,6 +314,21 @@ pub struct Program {
     /// the parsed-program path. Empty for archive reloads;
     /// `produce_ssa_funcs` still calls `lift_program` there.
     pub(crate) synthetic_ssa_funcs: alloc::vec::Vec<crate::c5::ir::FunctionSsa>,
+    /// Cross-TU user-function imports surfaced by the parser
+    /// for the `-c --emit=native` (`OutputKind::Relocatable`)
+    /// path. Each entry is `(placeholder_pc, symbol_name)`:
+    /// the parser assigned `placeholder_pc` as a unique
+    /// out-of-range `bc_pc` to every extern-declared function
+    /// with no body in this TU. The walker forwards it
+    /// through `live_fun_val`, so the matching `Inst::Call`
+    /// carries that PC. The native codegen detects it (PC
+    /// past every real function's `end_pc`) and surfaces a
+    /// `RelocCallSite` against the symbol's name instead of
+    /// patching the BL/CALL placeholder against
+    /// `bytecode_to_native`. Empty for builds without
+    /// `CompileOptions::no_entry_point`; the regular single-
+    /// TU compile errors out on undefined externs earlier.
+    pub(crate) extern_function_imports: alloc::vec::Vec<(usize, alloc::string::String)>,
 }
 
 /// A single local variable or formal parameter belonging to a

@@ -84,49 +84,28 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
     Ok(out)
 }
 
-/// SSA-source pick for the codegen backends. Three sources, in
-/// priority order:
+/// SSA-source pick for the codegen backends. The walker drives
+/// every source function with a captured `Ast` snapshot; the
+/// bytecode lift recovers post-parser synthetic functions (Sys
+/// trampolines, the synthetic CRT entry) that have no AST.
+/// When the program carries no finished functions (linker /
+/// optimizer reload from an archive) the lift handles the whole
+/// program.
 ///
-///   1. `program.finished_functions` non-empty -> walk_program
-///      walks each AST snapshot. The in-memory compile+link
-///      path takes this branch.
-///
-///   2. `program.user_ssa_funcs` non-empty -> the linker
-///      merged per-unit walker output already; combine it with
-///      `program.synthetic_ssa_funcs` (sys-trampolines and the
-///      synthetic CRT entry). The archive-reload path of every
-///      `.o` produced after walker eagerness landed in
-///      `compile_to_link_unit` takes this branch -- no
-///      `lift_program` round trip.
-///
-///   3. Neither populated -> `lift_program` rebuilds SSA from
-///      the bytecode tape. Reached only for legacy `.o` files
-///      produced before the walker became canonical.
+/// TODO: switch the no-finished-functions branch over to
+/// `program.user_ssa_funcs` once the optimizer's DCE pass also
+/// remaps every Inst::Call::target_pc / Inst::ImmCode through
+/// `new_pc` -- without that pass the post-optimize SSA carries
+/// stale PCs that point at compacted-away bytecode.
 pub(crate) fn produce_ssa_funcs(
     program: &Program,
     target: Target,
 ) -> Result<Vec<FunctionSsa>, C5Error> {
-    if !program.finished_functions.is_empty() {
-        return walk_program(program, target);
+    if program.finished_functions.is_empty() {
+        super::ssa::lift_program(program)
+    } else {
+        walk_program(program, target)
     }
-    if !program.user_ssa_funcs.is_empty() {
-        let mut covered: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
-        let mut out: Vec<FunctionSsa> =
-            Vec::with_capacity(program.user_ssa_funcs.len() + program.synthetic_ssa_funcs.len());
-        for f in &program.user_ssa_funcs {
-            if covered.insert(f.ent_pc) {
-                out.push(f.clone());
-            }
-        }
-        for f in &program.synthetic_ssa_funcs {
-            if covered.insert(f.ent_pc) {
-                out.push(f.clone());
-            }
-        }
-        out.sort_by_key(|f| f.ent_pc);
-        return Ok(out);
-    }
-    super::ssa::lift_program(program)
 }
 
 /// Maximum param slot the function reads or writes. C5's

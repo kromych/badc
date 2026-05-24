@@ -544,22 +544,35 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
             .collect();
 
     let text_len_for_user_ssa = text.len();
-    let remapped_user_ssa: alloc::vec::Vec<crate::c5::ir::FunctionSsa> = {
-        let mut out: alloc::vec::Vec<crate::c5::ir::FunctionSsa> =
-            alloc::vec::Vec::with_capacity(user_ssa_funcs.len());
-        for mut f in user_ssa_funcs {
-            let new_ent = lookup_pc(&pc_at_idx, f.ent_pc, insns.len(), text_len_for_user_ssa)
-                .map(|idx| new_pc[idx])
-                .unwrap_or(f.ent_pc);
-            let new_end = lookup_pc(&pc_at_idx, f.end_pc, insns.len(), text_len_for_user_ssa)
-                .map(|idx| new_pc[idx])
-                .unwrap_or(f.end_pc);
+    let remapped_user_ssa: alloc::vec::Vec<crate::c5::ir::FunctionSsa> = user_ssa_funcs
+        .into_iter()
+        .filter_map(|mut f| {
+            // Functions DCE'd out of the bytecode have
+            // `new_pc[idx] == usize::MAX`. Drop those entries
+            // from user_ssa_funcs; mirrors the synthetic
+            // counterpart above. Leaving them in would seed
+            // the codegen's `bc_pc_extent` with `usize::MAX`
+            // and overflow the `bytecode_to_native` allocation.
+            let ent_idx =
+                lookup_pc(&pc_at_idx, f.ent_pc, insns.len(), text_len_for_user_ssa).ok()?;
+            let new_ent = new_pc[ent_idx];
+            if new_ent == usize::MAX {
+                return None;
+            }
+            let new_end = if f.end_pc > 0 {
+                lookup_pc(&pc_at_idx, f.end_pc, insns.len(), text_len_for_user_ssa)
+                    .ok()
+                    .and_then(|i| new_pc.get(i).copied())
+                    .filter(|&p| p != usize::MAX)
+                    .unwrap_or_else(|| new_ent + (f.end_pc - f.ent_pc))
+            } else {
+                f.end_pc
+            };
             f.ent_pc = new_ent;
             f.end_pc = new_end;
-            out.push(f);
-        }
-        out
-    };
+            Some(f)
+        })
+        .collect();
     Ok(Program {
         text,
         data,

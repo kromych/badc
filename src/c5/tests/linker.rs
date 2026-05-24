@@ -666,14 +666,16 @@ fn user_ssa_funcs_call_target_pc_resolves_for_cross_tu_extern() {
 }
 
 #[test]
-fn archive_reload_runs_without_lift_program() {
+fn archive_reload_carries_user_ssa_funcs_end_to_end() {
     use crate::c5::{LinkOptions, link_units, read_object, write_object};
     // Round-trip both TUs through write_object / read_object so
     // both arrive at the linker with empty finished_functions
-    // (no AST in the .o payload). produce_ssa_funcs must then
-    // pick up user_ssa_funcs without falling back to
-    // lift_program. End-to-end VM run pins the correctness of
-    // the path.
+    // (no AST in the .o payload). The merged program must still
+    // carry user_ssa_funcs (read off TAG_USER_SSA_FUNCS and
+    // rebased to merged PCs). The codegen-side switch to that
+    // tape is gated on the optimizer remapping every
+    // Inst::Call::target_pc through `new_pc`; until then the
+    // archive-reload path keeps routing through `lift_program`.
     let a = compile_unit("int add(int a, int b) { return a + b; }");
     let b = compile_unit(
         "

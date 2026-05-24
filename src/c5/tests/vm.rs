@@ -33,6 +33,7 @@ fn run(text: Vec<i64>) -> i64 {
         finished_functions: alloc::vec::Vec::new(),
         symbols: alloc::vec::Vec::new(),
         synthetic_ssa_funcs: alloc::vec::Vec::new(),
+        user_ssa_funcs: alloc::vec::Vec::new(),
         extern_function_imports: alloc::vec::Vec::new(),
     };
     Vm::new(program).run().unwrap()
@@ -147,6 +148,7 @@ fn invalid_opcode_is_a_runtime_error() {
         finished_functions: alloc::vec::Vec::new(),
         symbols: alloc::vec::Vec::new(),
         synthetic_ssa_funcs: alloc::vec::Vec::new(),
+        user_ssa_funcs: alloc::vec::Vec::new(),
         extern_function_imports: alloc::vec::Vec::new(),
     };
     let err = Vm::new(program).run().unwrap_err();
@@ -195,6 +197,7 @@ fn empty_program_errors_cleanly() {
         finished_functions: alloc::vec::Vec::new(),
         symbols: alloc::vec::Vec::new(),
         synthetic_ssa_funcs: alloc::vec::Vec::new(),
+        user_ssa_funcs: alloc::vec::Vec::new(),
         extern_function_imports: alloc::vec::Vec::new(),
     };
     let err = Vm::new(program).run().unwrap_err();

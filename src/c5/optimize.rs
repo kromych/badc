@@ -203,6 +203,7 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         finished_functions,
         symbols,
         synthetic_ssa_funcs,
+        user_ssa_funcs,
         extern_function_imports,
     } = program;
 
@@ -542,6 +543,23 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
             })
             .collect();
 
+    let text_len_for_user_ssa = text.len();
+    let remapped_user_ssa: alloc::vec::Vec<crate::c5::ir::FunctionSsa> = {
+        let mut out: alloc::vec::Vec<crate::c5::ir::FunctionSsa> =
+            alloc::vec::Vec::with_capacity(user_ssa_funcs.len());
+        for mut f in user_ssa_funcs {
+            let new_ent = lookup_pc(&pc_at_idx, f.ent_pc, insns.len(), text_len_for_user_ssa)
+                .map(|idx| new_pc[idx])
+                .unwrap_or(f.ent_pc);
+            let new_end = lookup_pc(&pc_at_idx, f.end_pc, insns.len(), text_len_for_user_ssa)
+                .map(|idx| new_pc[idx])
+                .unwrap_or(f.end_pc);
+            f.ent_pc = new_ent;
+            f.end_pc = new_end;
+            out.push(f);
+        }
+        out
+    };
     Ok(Program {
         text,
         data,
@@ -590,6 +608,14 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         // `bytecode_to_native[ent_pc]` slot lands on the
         // wrong instruction.
         synthetic_ssa_funcs: remapped_synthetic_ssa_funcs,
+        // User SSA carries the same per-function PC pair as
+        // synthetic_ssa_funcs; remap each through the pre-opt ->
+        // post-opt PC table so codegen `bytecode_to_native`
+        // lookups land on the right slot. Inst-level call
+        // targets, ImmCode operands, and inst_src lines are
+        // post-walker artefacts; the optimizer leaves them
+        // alone -- the codegen consumes them directly.
+        user_ssa_funcs: remapped_user_ssa,
         // Cross-TU function-import placeholder PCs sit past the
         // original `text.len()` and stay valid post-optimize:
         // the optimizer only rewrites PCs within `[0, text.len())`,
@@ -1456,6 +1482,7 @@ mod tests {
             finished_functions: Vec::new(),
             symbols: Vec::new(),
             synthetic_ssa_funcs: alloc::vec::Vec::new(),
+            user_ssa_funcs: alloc::vec::Vec::new(),
             extern_function_imports: Vec::new(),
         }
     }
@@ -1775,6 +1802,7 @@ mod tests {
             finished_functions: Vec::new(),
             symbols: Vec::new(),
             synthetic_ssa_funcs: alloc::vec::Vec::new(),
+            user_ssa_funcs: alloc::vec::Vec::new(),
             extern_function_imports: Vec::new(),
         };
         let opt = optimize(p).unwrap();

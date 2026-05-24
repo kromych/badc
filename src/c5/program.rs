@@ -314,6 +314,17 @@ pub struct Program {
     /// the parsed-program path. Empty for archive reloads;
     /// `produce_ssa_funcs` still calls `lift_program` there.
     pub(crate) synthetic_ssa_funcs: alloc::vec::Vec<crate::c5::ir::FunctionSsa>,
+    /// User-function `FunctionSsa` entries produced by the
+    /// walker in `compile_to_link_unit`, concatenated and
+    /// rebased to merged PCs by the linker. Carries the body
+    /// for every parser-declared function whose owning unit
+    /// populated `LinkUnit::user_ssa_funcs`. Empty when the
+    /// program was lifted from raw bytecode (archive members
+    /// produced before the walker became canonical);
+    /// `produce_ssa_funcs` still routes those through
+    /// `lift_program`. TODO: once every producer emits this,
+    /// retire `lift_program`.
+    pub(crate) user_ssa_funcs: alloc::vec::Vec<crate::c5::ir::FunctionSsa>,
     /// Cross-TU user-function imports surfaced by the parser
     /// for the `-c --emit=native` (`OutputKind::Relocatable`)
     /// path. Each entry is `(placeholder_pc, symbol_name)`:

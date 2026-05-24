@@ -739,6 +739,7 @@ mod tests {
             finished_functions: Vec::new(),
             symbols: Vec::new(),
             synthetic_ssa_funcs: Vec::new(),
+            user_ssa_funcs: Vec::new(),
             extern_function_imports: Vec::new(),
         }
     }

@@ -495,6 +495,65 @@ fn user_ssa_funcs_populated_and_survives_object_round_trip() {
 }
 
 #[test]
+fn user_ssa_funcs_threaded_through_link_with_pc_rebase() {
+    use crate::c5::{LinkOptions, link_units};
+    // Two TUs with locally-defined functions only. The merge
+    // rebases each unit's user_ssa_funcs by the unit's
+    // text_base; the resulting program.user_ssa_funcs covers
+    // every user function with merged-PC ent_pc / end_pc.
+    let a = compile_unit(
+        "
+        int add(int a, int b) { return a + b; }
+        int twice(int x) { return add(x, x); }
+        ",
+    );
+    let b = compile_unit(
+        "
+        extern int twice(int x);
+        int main(void) { return twice(11); }
+        ",
+    );
+    let a_user_count = a.user_ssa_funcs.len();
+    let b_user_count = b.user_ssa_funcs.len();
+    assert!(a_user_count >= 2, "a should have add + twice");
+    assert!(b_user_count >= 1, "b should have main");
+    let program =
+        link_units(alloc::vec![a, b], &[], LinkOptions::default()).expect("link_units failed");
+    assert_eq!(
+        program.user_ssa_funcs.len(),
+        a_user_count + b_user_count,
+        "every per-unit user fn should appear in the merged list",
+    );
+    // Every merged ent_pc must point inside program.text and
+    // address an Op::Ent (the linker walks merged_text from PC
+    // 0 forward, so a wrongly-rebased ent_pc would land
+    // mid-operand or past the end).
+    use crate::c5::op::Op;
+    for f in &program.user_ssa_funcs {
+        assert!(
+            f.ent_pc < program.text.len(),
+            "merged ent_pc {} >= text len {}",
+            f.ent_pc,
+            program.text.len(),
+        );
+        let raw = program.text[f.ent_pc];
+        assert_eq!(
+            crate::c5::op::Op::from_i64(raw),
+            Some(Op::Ent),
+            "merged ent_pc {} does not point at Op::Ent (raw={})",
+            f.ent_pc,
+            raw,
+        );
+        assert!(
+            f.end_pc <= program.text.len(),
+            "merged end_pc {} > text len {}",
+            f.end_pc,
+            program.text.len(),
+        );
+    }
+}
+
+#[test]
 fn link_uses_object_via_round_trip() {
     use crate::c5::{read_object, write_object};
     // Same end-to-end as `extern_function_call_across_two_units`

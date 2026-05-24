@@ -996,6 +996,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         // own lift-recovery loop for sys-trampolines that came
         // through an archive boundary.
         synthetic_ssa_funcs: alloc::vec::Vec::new(),
+        user_ssa_funcs: alloc::vec::Vec::new(),
         // Bytecode linker resolves every cross-TU function call
         // in place via `RelocKind::JsrPc`; no placeholder PCs
         // survive into the merged program.
@@ -1045,6 +1046,52 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                 if covered.insert(rebased.ent_pc) {
                     program.synthetic_ssa_funcs.push(rebased);
                 }
+            }
+        }
+        // User SSA from each unit's compile_to_link_unit path.
+        // Per-unit ent_pcs are unit-local; rebase by text_base.
+        // Inst-level call targets (Inst::Call::target_pc,
+        // Inst::ImmCode) carry the source PC the walker recorded
+        // -- for locally-defined targets that PC was unit-local
+        // (rebase by text_base), and for cross-TU externs the
+        // walker stamped 0 and the corresponding code_relocs
+        // entry will patch the SSA-side reference at use time.
+        // Cross-TU resolution of those zero PCs is the next
+        // step toward retiring `lift_program`; this commit only
+        // rebases the in-unit PCs and threads the merged list
+        // onto `program.user_ssa_funcs`.
+        for (i, unit) in units.iter().enumerate() {
+            let text_off = text_base[i];
+            let binding_remap = &binding_remap_per_unit[i];
+            for f in &unit.user_ssa_funcs {
+                let mut rebased = f.clone();
+                rebased.ent_pc += text_off;
+                rebased.end_pc += text_off;
+                for inst in &mut rebased.insts {
+                    use crate::c5::ir::Inst;
+                    match inst {
+                        Inst::Call { target_pc, .. } if *target_pc != 0 => {
+                            *target_pc += text_off;
+                        }
+                        Inst::ImmCode(pc) if *pc != 0 => {
+                            *pc += text_off;
+                        }
+                        Inst::CallExt { binding_idx, .. } => {
+                            if let Some(remapped) = binding_remap.get(*binding_idx as usize) {
+                                *binding_idx = *remapped;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                for blk in &mut rebased.blocks {
+                    if let crate::c5::ir::Terminator::TailExt(idx) = &mut blk.terminator
+                        && let Some(remapped) = binding_remap.get(*idx as usize)
+                    {
+                        *idx = *remapped;
+                    }
+                }
+                program.user_ssa_funcs.push(rebased);
             }
         }
         // Legacy units (or any post-parser bytecode the unit's

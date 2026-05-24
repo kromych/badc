@@ -1260,6 +1260,11 @@ impl Compiler {
             // in sync with any later field additions.
             symbols: self.symbols,
             synthetic_ssa_funcs: self.synthetic_ssa_funcs,
+            // The single-TU compile path doesn't run the walker
+            // eagerly; produce_ssa_funcs invokes it at codegen
+            // time via finished_functions. Leave empty so the
+            // codegen sees the walker as the source of truth.
+            user_ssa_funcs: Vec::new(),
             extern_function_imports: extern_imports,
         })
     }

@@ -31,6 +31,15 @@ fn switch_default_routing() {
 }
 
 #[test]
+fn switch_break_calls() {
+    // C99 6.8.4.2: each case marker is a re-entry point regardless
+    // of how the preceding body ended. Pins that contract end-to-
+    // end across break-terminated bodies, fall-through pairs, and
+    // the default arm.
+    assert_eq!(run_fixture("switch_break_calls.c"), 300);
+}
+
+#[test]
 fn control_flow() {
     assert_eq!(run_fixture("control_flow.c"), 1);
 }

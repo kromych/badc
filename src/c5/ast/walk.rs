@@ -352,13 +352,21 @@ impl<'a> Walker<'a> {
                             // Continue / If-both-arms-return). If
                             // this item is a `Stmt::Labeled`, the
                             // walker below resumes at its label
-                            // block so any earlier `goto label`
-                            // lands somewhere walkable. Non-label
-                            // dead code is skipped per C99 6.8.6
+                            // block so any earlier `goto label`,
+                            // `case <val>:`, or `default:` lands
+                            // somewhere walkable. Non-label dead
+                            // code is skipped per C99 6.8.6
                             // (unreachable statements don't
-                            // constrain control flow).
+                            // constrain control flow). `Stmt::Case`
+                            // and `Stmt::Default` are equally valid
+                            // re-entry points -- skipping them
+                            // drops every case after the first
+                            // `break;`-terminated body.
                             if !b.is_block_open()
-                                && !matches!(self.ast.stmt(*s), Stmt::Labeled { .. })
+                                && !matches!(
+                                    self.ast.stmt(*s),
+                                    Stmt::Labeled { .. } | Stmt::Case { .. } | Stmt::Default { .. },
+                                )
                             {
                                 continue;
                             }

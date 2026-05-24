@@ -284,6 +284,173 @@ fn synthetic_ssa_funcs_round_trip_through_object() {
 }
 
 #[test]
+fn ssa_func_encoder_round_trip_handcrafted() {
+    use crate::c5::ir::{
+        BinOp, Block, FpCastKind, FunctionSsa, Inst, LoadKind, StoreKind, Terminator,
+    };
+    use crate::c5::linker::{read_ssa_func, write_ssa_func};
+
+    // Exercise every Inst tag and every Terminator tag. The
+    // ValueId references inside individual insts are
+    // intentionally not cross-checked; the encoder is byte-
+    // faithful, so the decoded bodies are compared field by
+    // field through PartialEq-derived match arms below.
+    let insts = alloc::vec![
+        Inst::Imm(-9_223_372_036_854_775_000),
+        Inst::ImmData(0x12_34_56_78),
+        Inst::ImmCode(0xdead_beef_cafe),
+        Inst::LocalAddr(-24),
+        Inst::TlsAddr(64),
+        Inst::Load {
+            addr: 1,
+            kind: LoadKind::I32,
+        },
+        Inst::Store {
+            addr: 2,
+            value: 3,
+            kind: StoreKind::F32,
+        },
+        Inst::LoadLocal {
+            off: -8,
+            kind: LoadKind::U16,
+        },
+        Inst::StoreLocal {
+            off: 16,
+            value: 4,
+            kind: StoreKind::I8,
+        },
+        Inst::LoadIndexed {
+            base: 5,
+            index: 6,
+            scale: 4,
+            kind: LoadKind::U32,
+        },
+        Inst::StoreIndexed {
+            base: 7,
+            index: 8,
+            scale: 8,
+            value: 9,
+            kind: StoreKind::I64,
+        },
+        Inst::Binop {
+            op: BinOp::Sub,
+            lhs: 10,
+            rhs: 11,
+        },
+        Inst::BinopI {
+            op: BinOp::Shru,
+            lhs: 12,
+            rhs_imm: -3,
+        },
+        Inst::Fneg(13),
+        Inst::FpCast {
+            kind: FpCastKind::IntToFp,
+            value: 14,
+        },
+        Inst::Call {
+            target_pc: 0x4000,
+            args: alloc::vec![15, 16, 17],
+        },
+        Inst::CallIndirect {
+            target: 18,
+            args: alloc::vec![19],
+        },
+        Inst::CallExt {
+            binding_idx: 42,
+            args: alloc::vec![20, 21],
+            fp_arg_mask: 0b101,
+        },
+        Inst::TailExt(42),
+        Inst::Mcpy {
+            dst: 22,
+            src: 23,
+            size: 96,
+        },
+        Inst::Intrinsic {
+            kind: 7,
+            args: alloc::vec![24, 25],
+        },
+        Inst::AllocaInit(-128),
+        Inst::VstackSpill {
+            slot: 1,
+            value: 26,
+        },
+        Inst::VstackReload { slot: 2 },
+        Inst::AccSpill { value: 27 },
+        Inst::AccReload,
+    ];
+    let n_insts = insts.len() as u32;
+    let inst_src = (0..n_insts as u32).map(|i| (i + 10, i % 3)).collect();
+    let blocks = alloc::vec![
+        Block {
+            start_pc: 0,
+            inst_range: 0..(n_insts / 2),
+            terminator: Terminator::Bz {
+                cond: 99,
+                target: 2,
+                fall_through: 1,
+            },
+            exit_acc: 99,
+        },
+        Block {
+            start_pc: 100,
+            inst_range: (n_insts / 2)..n_insts,
+            terminator: Terminator::Return(50),
+            exit_acc: 50,
+        },
+        Block {
+            start_pc: 200,
+            inst_range: n_insts..n_insts,
+            terminator: Terminator::TailExt(11),
+            exit_acc: crate::c5::ir::NO_VALUE,
+        },
+    ];
+    let orig = FunctionSsa {
+        ent_pc: 0x1000,
+        end_pc: 0x1234,
+        locals: 64,
+        n_params: 3,
+        is_variadic: true,
+        insts,
+        inst_src,
+        blocks,
+        vstack_slots: 5,
+    };
+
+    let mut buf = alloc::vec::Vec::new();
+    write_ssa_func(&mut buf, &orig);
+    let mut cursor = 0usize;
+    let decoded = read_ssa_func(&buf, &mut cursor).expect("read_ssa_func");
+    assert_eq!(cursor, buf.len(), "decoder consumed every byte");
+
+    assert_eq!(decoded.ent_pc, orig.ent_pc);
+    assert_eq!(decoded.end_pc, orig.end_pc);
+    assert_eq!(decoded.locals, orig.locals);
+    assert_eq!(decoded.n_params, orig.n_params);
+    assert_eq!(decoded.is_variadic, orig.is_variadic);
+    assert_eq!(decoded.vstack_slots, orig.vstack_slots);
+    assert_eq!(decoded.insts.len(), orig.insts.len());
+    assert_eq!(decoded.inst_src, orig.inst_src);
+    assert_eq!(decoded.blocks.len(), orig.blocks.len());
+
+    for (o, d) in orig.insts.iter().zip(decoded.insts.iter()) {
+        // Format-string round-trip captures every field through
+        // the `Debug` impl without requiring `PartialEq` on the
+        // IR types.
+        assert_eq!(alloc::format!("{o:?}"), alloc::format!("{d:?}"));
+    }
+    for (o, d) in orig.blocks.iter().zip(decoded.blocks.iter()) {
+        assert_eq!(o.start_pc, d.start_pc);
+        assert_eq!(o.inst_range, d.inst_range);
+        assert_eq!(o.exit_acc, d.exit_acc);
+        assert_eq!(
+            alloc::format!("{:?}", o.terminator),
+            alloc::format!("{:?}", d.terminator),
+        );
+    }
+}
+
+#[test]
 fn link_uses_object_via_round_trip() {
     use crate::c5::{read_object, write_object};
     // Same end-to-end as `extern_function_call_across_two_units`

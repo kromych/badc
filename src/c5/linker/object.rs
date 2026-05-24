@@ -670,6 +670,7 @@ const TAG_WARNINGS: u8 = 19;
 /// and the libc binding index the body reaches. The reader
 /// reconstructs the FunctionSsa via `SsaBuilder`.
 const TAG_SYNTHETIC_SSA_FUNCS: u8 = 20;
+const TAG_USER_SSA_FUNCS: u8 = 21;
 
 fn encode_meta(unit: &LinkUnit) -> Vec<u8> {
     let mut buf = Vec::new();
@@ -843,6 +844,18 @@ fn encode_meta(unit: &LinkUnit) -> Vec<u8> {
             buf.push(shape);
             write_u64(&mut buf, binding_idx as u64);
         }
+    }
+    {
+        // User function SSA bodies. Variable-width per entry
+        // (variant tags, value-id arrays); the wrapping tag
+        // header carries the precomputed body byte length.
+        let mut body = Vec::new();
+        write_u32(&mut body, unit.user_ssa_funcs.len() as u32);
+        for f in &unit.user_ssa_funcs {
+            write_ssa_func(&mut body, f);
+        }
+        write_tag_header(&mut buf, TAG_USER_SSA_FUNCS, body.len() as u32);
+        buf.extend_from_slice(&body);
     }
 
     write_tag_header(&mut buf, TAG_END, 0);
@@ -1023,6 +1036,693 @@ fn write_i64(buf: &mut Vec<u8>, v: i64) {
 fn write_string(buf: &mut Vec<u8>, s: &str) {
     write_u32(buf, s.len() as u32);
     buf.extend_from_slice(s.as_bytes());
+}
+
+// SSA function on-wire encoding. Used by the user-function
+// tag once `lift_program` retires. Variant tags are stable and
+// disjoint from the compact `synth_shape` encoding above.
+//
+// TODO: wire write/read_ssa_func into a new TAG_USER_SSA_FUNCS
+// so user function bodies travel through the .o file as SSA
+// rather than as bytecode lifted at merge time.
+#[allow(dead_code)]
+//
+// Per-function header (variable-width):
+//   u64 ent_pc, u64 end_pc, i64 locals,
+//   u32 n_params, u8 is_variadic, u32 vstack_slots,
+//   u32 n_insts,         inst body * n_insts,
+//   u32 n_inst_src_rows, (u32 line, u32 file_idx) * n_inst_src_rows,
+//   u32 n_blocks,        block body * n_blocks.
+
+const SSA_INST_IMM: u8 = 0;
+const SSA_INST_IMM_DATA: u8 = 1;
+const SSA_INST_IMM_CODE: u8 = 2;
+const SSA_INST_LOCAL_ADDR: u8 = 3;
+const SSA_INST_TLS_ADDR: u8 = 4;
+const SSA_INST_LOAD: u8 = 5;
+const SSA_INST_STORE: u8 = 6;
+const SSA_INST_LOAD_LOCAL: u8 = 7;
+const SSA_INST_STORE_LOCAL: u8 = 8;
+const SSA_INST_LOAD_INDEXED: u8 = 9;
+const SSA_INST_STORE_INDEXED: u8 = 10;
+const SSA_INST_BINOP: u8 = 11;
+const SSA_INST_BINOP_I: u8 = 12;
+const SSA_INST_FNEG: u8 = 13;
+const SSA_INST_FPCAST: u8 = 14;
+const SSA_INST_CALL: u8 = 15;
+const SSA_INST_CALL_INDIRECT: u8 = 16;
+const SSA_INST_CALL_EXT: u8 = 17;
+const SSA_INST_TAIL_EXT: u8 = 18;
+const SSA_INST_MCPY: u8 = 19;
+const SSA_INST_INTRINSIC: u8 = 20;
+const SSA_INST_ALLOCA_INIT: u8 = 21;
+const SSA_INST_VSTACK_SPILL: u8 = 22;
+const SSA_INST_VSTACK_RELOAD: u8 = 23;
+const SSA_INST_ACC_SPILL: u8 = 24;
+const SSA_INST_ACC_RELOAD: u8 = 25;
+
+const SSA_TERM_JMP: u8 = 0;
+const SSA_TERM_BZ: u8 = 1;
+const SSA_TERM_BNZ: u8 = 2;
+const SSA_TERM_RETURN: u8 = 3;
+const SSA_TERM_TAIL_EXT: u8 = 4;
+const SSA_TERM_FALL_THROUGH: u8 = 5;
+
+fn load_kind_to_u8(k: crate::c5::ir::LoadKind) -> u8 {
+    use crate::c5::ir::LoadKind;
+    match k {
+        LoadKind::I64 => 0,
+        LoadKind::U8 => 1,
+        LoadKind::I8 => 2,
+        LoadKind::I32 => 3,
+        LoadKind::U32 => 4,
+        LoadKind::I16 => 5,
+        LoadKind::U16 => 6,
+        LoadKind::F32 => 7,
+    }
+}
+
+fn load_kind_from_u8(v: u8) -> Result<crate::c5::ir::LoadKind, C5Error> {
+    use crate::c5::ir::LoadKind;
+    Ok(match v {
+        0 => LoadKind::I64,
+        1 => LoadKind::U8,
+        2 => LoadKind::I8,
+        3 => LoadKind::I32,
+        4 => LoadKind::U32,
+        5 => LoadKind::I16,
+        6 => LoadKind::U16,
+        7 => LoadKind::F32,
+        _ => return Err(err("ssa LoadKind tag out of range")),
+    })
+}
+
+fn store_kind_to_u8(k: crate::c5::ir::StoreKind) -> u8 {
+    use crate::c5::ir::StoreKind;
+    match k {
+        StoreKind::I64 => 0,
+        StoreKind::I8 => 1,
+        StoreKind::I32 => 2,
+        StoreKind::I16 => 3,
+        StoreKind::F32 => 4,
+    }
+}
+
+fn store_kind_from_u8(v: u8) -> Result<crate::c5::ir::StoreKind, C5Error> {
+    use crate::c5::ir::StoreKind;
+    Ok(match v {
+        0 => StoreKind::I64,
+        1 => StoreKind::I8,
+        2 => StoreKind::I32,
+        3 => StoreKind::I16,
+        4 => StoreKind::F32,
+        _ => return Err(err("ssa StoreKind tag out of range")),
+    })
+}
+
+fn binop_to_u8(op: crate::c5::ir::BinOp) -> u8 {
+    use crate::c5::ir::BinOp;
+    match op {
+        BinOp::Or => 0,
+        BinOp::Xor => 1,
+        BinOp::And => 2,
+        BinOp::Eq => 3,
+        BinOp::Ne => 4,
+        BinOp::Lt => 5,
+        BinOp::Gt => 6,
+        BinOp::Le => 7,
+        BinOp::Ge => 8,
+        BinOp::Ult => 9,
+        BinOp::Ugt => 10,
+        BinOp::Ule => 11,
+        BinOp::Uge => 12,
+        BinOp::Shl => 13,
+        BinOp::Shr => 14,
+        BinOp::Shru => 15,
+        BinOp::Add => 16,
+        BinOp::Sub => 17,
+        BinOp::Mul => 18,
+        BinOp::Div => 19,
+        BinOp::Mod => 20,
+        BinOp::Divu => 21,
+        BinOp::Modu => 22,
+        BinOp::Fadd => 23,
+        BinOp::Fsub => 24,
+        BinOp::Fmul => 25,
+        BinOp::Fdiv => 26,
+        BinOp::Feq => 27,
+        BinOp::Fne => 28,
+        BinOp::Flt => 29,
+        BinOp::Fgt => 30,
+        BinOp::Fle => 31,
+        BinOp::Fge => 32,
+    }
+}
+
+fn binop_from_u8(v: u8) -> Result<crate::c5::ir::BinOp, C5Error> {
+    use crate::c5::ir::BinOp;
+    Ok(match v {
+        0 => BinOp::Or,
+        1 => BinOp::Xor,
+        2 => BinOp::And,
+        3 => BinOp::Eq,
+        4 => BinOp::Ne,
+        5 => BinOp::Lt,
+        6 => BinOp::Gt,
+        7 => BinOp::Le,
+        8 => BinOp::Ge,
+        9 => BinOp::Ult,
+        10 => BinOp::Ugt,
+        11 => BinOp::Ule,
+        12 => BinOp::Uge,
+        13 => BinOp::Shl,
+        14 => BinOp::Shr,
+        15 => BinOp::Shru,
+        16 => BinOp::Add,
+        17 => BinOp::Sub,
+        18 => BinOp::Mul,
+        19 => BinOp::Div,
+        20 => BinOp::Mod,
+        21 => BinOp::Divu,
+        22 => BinOp::Modu,
+        23 => BinOp::Fadd,
+        24 => BinOp::Fsub,
+        25 => BinOp::Fmul,
+        26 => BinOp::Fdiv,
+        27 => BinOp::Feq,
+        28 => BinOp::Fne,
+        29 => BinOp::Flt,
+        30 => BinOp::Fgt,
+        31 => BinOp::Fle,
+        32 => BinOp::Fge,
+        _ => return Err(err("ssa BinOp tag out of range")),
+    })
+}
+
+fn fp_cast_to_u8(k: crate::c5::ir::FpCastKind) -> u8 {
+    use crate::c5::ir::FpCastKind;
+    match k {
+        FpCastKind::FpToInt => 0,
+        FpCastKind::IntToFp => 1,
+    }
+}
+
+fn fp_cast_from_u8(v: u8) -> Result<crate::c5::ir::FpCastKind, C5Error> {
+    use crate::c5::ir::FpCastKind;
+    Ok(match v {
+        0 => FpCastKind::FpToInt,
+        1 => FpCastKind::IntToFp,
+        _ => return Err(err("ssa FpCastKind tag out of range")),
+    })
+}
+
+fn write_value_ids(buf: &mut Vec<u8>, ids: &[crate::c5::ir::ValueId]) {
+    write_u32(buf, ids.len() as u32);
+    for &id in ids {
+        write_u32(buf, id);
+    }
+}
+
+fn write_inst(buf: &mut Vec<u8>, inst: &crate::c5::ir::Inst) {
+    use crate::c5::ir::Inst;
+    match inst {
+        Inst::Imm(v) => {
+            buf.push(SSA_INST_IMM);
+            write_i64(buf, *v);
+        }
+        Inst::ImmData(v) => {
+            buf.push(SSA_INST_IMM_DATA);
+            write_i64(buf, *v);
+        }
+        Inst::ImmCode(v) => {
+            buf.push(SSA_INST_IMM_CODE);
+            write_u64(buf, *v as u64);
+        }
+        Inst::LocalAddr(off) => {
+            buf.push(SSA_INST_LOCAL_ADDR);
+            write_i64(buf, *off);
+        }
+        Inst::TlsAddr(off) => {
+            buf.push(SSA_INST_TLS_ADDR);
+            write_i64(buf, *off);
+        }
+        Inst::Load { addr, kind } => {
+            buf.push(SSA_INST_LOAD);
+            write_u32(buf, *addr);
+            buf.push(load_kind_to_u8(*kind));
+        }
+        Inst::Store { addr, value, kind } => {
+            buf.push(SSA_INST_STORE);
+            write_u32(buf, *addr);
+            write_u32(buf, *value);
+            buf.push(store_kind_to_u8(*kind));
+        }
+        Inst::LoadLocal { off, kind } => {
+            buf.push(SSA_INST_LOAD_LOCAL);
+            write_i64(buf, *off);
+            buf.push(load_kind_to_u8(*kind));
+        }
+        Inst::StoreLocal { off, value, kind } => {
+            buf.push(SSA_INST_STORE_LOCAL);
+            write_i64(buf, *off);
+            write_u32(buf, *value);
+            buf.push(store_kind_to_u8(*kind));
+        }
+        Inst::LoadIndexed {
+            base,
+            index,
+            scale,
+            kind,
+        } => {
+            buf.push(SSA_INST_LOAD_INDEXED);
+            write_u32(buf, *base);
+            write_u32(buf, *index);
+            buf.push(*scale);
+            buf.push(load_kind_to_u8(*kind));
+        }
+        Inst::StoreIndexed {
+            base,
+            index,
+            scale,
+            value,
+            kind,
+        } => {
+            buf.push(SSA_INST_STORE_INDEXED);
+            write_u32(buf, *base);
+            write_u32(buf, *index);
+            buf.push(*scale);
+            write_u32(buf, *value);
+            buf.push(store_kind_to_u8(*kind));
+        }
+        Inst::Binop { op, lhs, rhs } => {
+            buf.push(SSA_INST_BINOP);
+            buf.push(binop_to_u8(*op));
+            write_u32(buf, *lhs);
+            write_u32(buf, *rhs);
+        }
+        Inst::BinopI { op, lhs, rhs_imm } => {
+            buf.push(SSA_INST_BINOP_I);
+            buf.push(binop_to_u8(*op));
+            write_u32(buf, *lhs);
+            write_i64(buf, *rhs_imm);
+        }
+        Inst::Fneg(v) => {
+            buf.push(SSA_INST_FNEG);
+            write_u32(buf, *v);
+        }
+        Inst::FpCast { kind, value } => {
+            buf.push(SSA_INST_FPCAST);
+            buf.push(fp_cast_to_u8(*kind));
+            write_u32(buf, *value);
+        }
+        Inst::Call { target_pc, args } => {
+            buf.push(SSA_INST_CALL);
+            write_u64(buf, *target_pc as u64);
+            write_value_ids(buf, args);
+        }
+        Inst::CallIndirect { target, args } => {
+            buf.push(SSA_INST_CALL_INDIRECT);
+            write_u32(buf, *target);
+            write_value_ids(buf, args);
+        }
+        Inst::CallExt {
+            binding_idx,
+            args,
+            fp_arg_mask,
+        } => {
+            buf.push(SSA_INST_CALL_EXT);
+            write_i64(buf, *binding_idx);
+            write_value_ids(buf, args);
+            write_u32(buf, *fp_arg_mask);
+        }
+        Inst::TailExt(idx) => {
+            buf.push(SSA_INST_TAIL_EXT);
+            write_i64(buf, *idx);
+        }
+        Inst::Mcpy { dst, src, size } => {
+            buf.push(SSA_INST_MCPY);
+            write_u32(buf, *dst);
+            write_u32(buf, *src);
+            write_i64(buf, *size);
+        }
+        Inst::Intrinsic { kind, args } => {
+            buf.push(SSA_INST_INTRINSIC);
+            write_i64(buf, *kind);
+            write_value_ids(buf, args);
+        }
+        Inst::AllocaInit(slot) => {
+            buf.push(SSA_INST_ALLOCA_INIT);
+            write_i64(buf, *slot);
+        }
+        Inst::VstackSpill { slot, value } => {
+            buf.push(SSA_INST_VSTACK_SPILL);
+            write_u32(buf, *slot);
+            write_u32(buf, *value);
+        }
+        Inst::VstackReload { slot } => {
+            buf.push(SSA_INST_VSTACK_RELOAD);
+            write_u32(buf, *slot);
+        }
+        Inst::AccSpill { value } => {
+            buf.push(SSA_INST_ACC_SPILL);
+            write_u32(buf, *value);
+        }
+        Inst::AccReload => {
+            buf.push(SSA_INST_ACC_RELOAD);
+        }
+    }
+}
+
+fn write_terminator(buf: &mut Vec<u8>, term: &crate::c5::ir::Terminator) {
+    use crate::c5::ir::Terminator;
+    match term {
+        Terminator::Jmp(t) => {
+            buf.push(SSA_TERM_JMP);
+            write_u32(buf, *t);
+        }
+        Terminator::Bz {
+            cond,
+            target,
+            fall_through,
+        } => {
+            buf.push(SSA_TERM_BZ);
+            write_u32(buf, *cond);
+            write_u32(buf, *target);
+            write_u32(buf, *fall_through);
+        }
+        Terminator::Bnz {
+            cond,
+            target,
+            fall_through,
+        } => {
+            buf.push(SSA_TERM_BNZ);
+            write_u32(buf, *cond);
+            write_u32(buf, *target);
+            write_u32(buf, *fall_through);
+        }
+        Terminator::Return(v) => {
+            buf.push(SSA_TERM_RETURN);
+            write_u32(buf, *v);
+        }
+        Terminator::TailExt(idx) => {
+            buf.push(SSA_TERM_TAIL_EXT);
+            write_i64(buf, *idx);
+        }
+        Terminator::FallThrough(t) => {
+            buf.push(SSA_TERM_FALL_THROUGH);
+            write_u32(buf, *t);
+        }
+    }
+}
+
+pub(crate) fn write_ssa_func(buf: &mut Vec<u8>, f: &crate::c5::ir::FunctionSsa) {
+    write_u64(buf, f.ent_pc as u64);
+    write_u64(buf, f.end_pc as u64);
+    write_i64(buf, f.locals);
+    write_u32(buf, f.n_params as u32);
+    buf.push(u8::from(f.is_variadic));
+    write_u32(buf, f.vstack_slots);
+
+    write_u32(buf, f.insts.len() as u32);
+    for inst in &f.insts {
+        write_inst(buf, inst);
+    }
+
+    write_u32(buf, f.inst_src.len() as u32);
+    for &(line, file_idx) in &f.inst_src {
+        write_u32(buf, line);
+        write_u32(buf, file_idx);
+    }
+
+    write_u32(buf, f.blocks.len() as u32);
+    for b in &f.blocks {
+        write_u64(buf, b.start_pc as u64);
+        write_u32(buf, b.inst_range.start);
+        write_u32(buf, b.inst_range.end);
+        write_terminator(buf, &b.terminator);
+        write_u32(buf, b.exit_acc);
+    }
+}
+
+struct SsaReader<'a> {
+    body: &'a [u8],
+    cursor: usize,
+}
+
+impl<'a> SsaReader<'a> {
+    fn need(&self, n: usize) -> Result<(), C5Error> {
+        if self.cursor + n > self.body.len() {
+            return Err(err("ssa decoder ran off the end of the body"));
+        }
+        Ok(())
+    }
+
+    fn u8(&mut self) -> Result<u8, C5Error> {
+        self.need(1)?;
+        let v = self.body[self.cursor];
+        self.cursor += 1;
+        Ok(v)
+    }
+
+    fn u32(&mut self) -> Result<u32, C5Error> {
+        self.need(4)?;
+        let v = u32_at(self.body, self.cursor);
+        self.cursor += 4;
+        Ok(v)
+    }
+
+    fn u64(&mut self) -> Result<u64, C5Error> {
+        self.need(8)?;
+        let v = u64_at(self.body, self.cursor);
+        self.cursor += 8;
+        Ok(v)
+    }
+
+    fn i64(&mut self) -> Result<i64, C5Error> {
+        Ok(self.u64()? as i64)
+    }
+
+    fn value_ids(&mut self) -> Result<Vec<crate::c5::ir::ValueId>, C5Error> {
+        let n = self.u32()? as usize;
+        let mut out = Vec::with_capacity(n);
+        for _ in 0..n {
+            out.push(self.u32()?);
+        }
+        Ok(out)
+    }
+
+    fn inst(&mut self) -> Result<crate::c5::ir::Inst, C5Error> {
+        use crate::c5::ir::Inst;
+        let tag = self.u8()?;
+        Ok(match tag {
+            SSA_INST_IMM => Inst::Imm(self.i64()?),
+            SSA_INST_IMM_DATA => Inst::ImmData(self.i64()?),
+            SSA_INST_IMM_CODE => Inst::ImmCode(self.u64()? as usize),
+            SSA_INST_LOCAL_ADDR => Inst::LocalAddr(self.i64()?),
+            SSA_INST_TLS_ADDR => Inst::TlsAddr(self.i64()?),
+            SSA_INST_LOAD => {
+                let addr = self.u32()?;
+                let kind = load_kind_from_u8(self.u8()?)?;
+                Inst::Load { addr, kind }
+            }
+            SSA_INST_STORE => {
+                let addr = self.u32()?;
+                let value = self.u32()?;
+                let kind = store_kind_from_u8(self.u8()?)?;
+                Inst::Store { addr, value, kind }
+            }
+            SSA_INST_LOAD_LOCAL => {
+                let off = self.i64()?;
+                let kind = load_kind_from_u8(self.u8()?)?;
+                Inst::LoadLocal { off, kind }
+            }
+            SSA_INST_STORE_LOCAL => {
+                let off = self.i64()?;
+                let value = self.u32()?;
+                let kind = store_kind_from_u8(self.u8()?)?;
+                Inst::StoreLocal { off, value, kind }
+            }
+            SSA_INST_LOAD_INDEXED => {
+                let base = self.u32()?;
+                let index = self.u32()?;
+                let scale = self.u8()?;
+                let kind = load_kind_from_u8(self.u8()?)?;
+                Inst::LoadIndexed {
+                    base,
+                    index,
+                    scale,
+                    kind,
+                }
+            }
+            SSA_INST_STORE_INDEXED => {
+                let base = self.u32()?;
+                let index = self.u32()?;
+                let scale = self.u8()?;
+                let value = self.u32()?;
+                let kind = store_kind_from_u8(self.u8()?)?;
+                Inst::StoreIndexed {
+                    base,
+                    index,
+                    scale,
+                    value,
+                    kind,
+                }
+            }
+            SSA_INST_BINOP => {
+                let op = binop_from_u8(self.u8()?)?;
+                let lhs = self.u32()?;
+                let rhs = self.u32()?;
+                Inst::Binop { op, lhs, rhs }
+            }
+            SSA_INST_BINOP_I => {
+                let op = binop_from_u8(self.u8()?)?;
+                let lhs = self.u32()?;
+                let rhs_imm = self.i64()?;
+                Inst::BinopI { op, lhs, rhs_imm }
+            }
+            SSA_INST_FNEG => Inst::Fneg(self.u32()?),
+            SSA_INST_FPCAST => {
+                let kind = fp_cast_from_u8(self.u8()?)?;
+                let value = self.u32()?;
+                Inst::FpCast { kind, value }
+            }
+            SSA_INST_CALL => {
+                let target_pc = self.u64()? as usize;
+                let args = self.value_ids()?;
+                Inst::Call { target_pc, args }
+            }
+            SSA_INST_CALL_INDIRECT => {
+                let target = self.u32()?;
+                let args = self.value_ids()?;
+                Inst::CallIndirect { target, args }
+            }
+            SSA_INST_CALL_EXT => {
+                let binding_idx = self.i64()?;
+                let args = self.value_ids()?;
+                let fp_arg_mask = self.u32()?;
+                Inst::CallExt {
+                    binding_idx,
+                    args,
+                    fp_arg_mask,
+                }
+            }
+            SSA_INST_TAIL_EXT => Inst::TailExt(self.i64()?),
+            SSA_INST_MCPY => {
+                let dst = self.u32()?;
+                let src = self.u32()?;
+                let size = self.i64()?;
+                Inst::Mcpy { dst, src, size }
+            }
+            SSA_INST_INTRINSIC => {
+                let kind = self.i64()?;
+                let args = self.value_ids()?;
+                Inst::Intrinsic { kind, args }
+            }
+            SSA_INST_ALLOCA_INIT => Inst::AllocaInit(self.i64()?),
+            SSA_INST_VSTACK_SPILL => {
+                let slot = self.u32()?;
+                let value = self.u32()?;
+                Inst::VstackSpill { slot, value }
+            }
+            SSA_INST_VSTACK_RELOAD => {
+                let slot = self.u32()?;
+                Inst::VstackReload { slot }
+            }
+            SSA_INST_ACC_SPILL => {
+                let value = self.u32()?;
+                Inst::AccSpill { value }
+            }
+            SSA_INST_ACC_RELOAD => Inst::AccReload,
+            _ => return Err(err("ssa Inst tag out of range")),
+        })
+    }
+
+    fn terminator(&mut self) -> Result<crate::c5::ir::Terminator, C5Error> {
+        use crate::c5::ir::Terminator;
+        let tag = self.u8()?;
+        Ok(match tag {
+            SSA_TERM_JMP => Terminator::Jmp(self.u32()?),
+            SSA_TERM_BZ => {
+                let cond = self.u32()?;
+                let target = self.u32()?;
+                let fall_through = self.u32()?;
+                Terminator::Bz {
+                    cond,
+                    target,
+                    fall_through,
+                }
+            }
+            SSA_TERM_BNZ => {
+                let cond = self.u32()?;
+                let target = self.u32()?;
+                let fall_through = self.u32()?;
+                Terminator::Bnz {
+                    cond,
+                    target,
+                    fall_through,
+                }
+            }
+            SSA_TERM_RETURN => Terminator::Return(self.u32()?),
+            SSA_TERM_TAIL_EXT => Terminator::TailExt(self.i64()?),
+            SSA_TERM_FALL_THROUGH => Terminator::FallThrough(self.u32()?),
+            _ => return Err(err("ssa Terminator tag out of range")),
+        })
+    }
+}
+
+pub(crate) fn read_ssa_func(body: &[u8], cursor: &mut usize) -> Result<crate::c5::ir::FunctionSsa, C5Error> {
+    let mut r = SsaReader {
+        body,
+        cursor: *cursor,
+    };
+    let ent_pc = r.u64()? as usize;
+    let end_pc = r.u64()? as usize;
+    let locals = r.i64()?;
+    let n_params = r.u32()? as usize;
+    let is_variadic = r.u8()? != 0;
+    let vstack_slots = r.u32()?;
+
+    let n_insts = r.u32()? as usize;
+    let mut insts = Vec::with_capacity(n_insts);
+    for _ in 0..n_insts {
+        insts.push(r.inst()?);
+    }
+
+    let n_inst_src = r.u32()? as usize;
+    let mut inst_src = Vec::with_capacity(n_inst_src);
+    for _ in 0..n_inst_src {
+        let line = r.u32()?;
+        let file_idx = r.u32()?;
+        inst_src.push((line, file_idx));
+    }
+
+    let n_blocks = r.u32()? as usize;
+    let mut blocks = Vec::with_capacity(n_blocks);
+    for _ in 0..n_blocks {
+        let start_pc = r.u64()? as usize;
+        let ir_start = r.u32()?;
+        let ir_end = r.u32()?;
+        let terminator = r.terminator()?;
+        let exit_acc = r.u32()?;
+        blocks.push(crate::c5::ir::Block {
+            start_pc,
+            inst_range: ir_start..ir_end,
+            terminator,
+            exit_acc,
+        });
+    }
+    *cursor = r.cursor;
+    Ok(crate::c5::ir::FunctionSsa {
+        ent_pc,
+        end_pc,
+        locals,
+        n_params,
+        is_variadic,
+        insts,
+        inst_src,
+        blocks,
+        vstack_slots,
+    })
 }
 
 // ---- Reader ----
@@ -1541,6 +2241,18 @@ fn decode_meta(meta: &[u8], unit: &mut LinkUnit) -> Result<(), C5Error> {
             TAG_WARNINGS => unit.warnings = read_string_vec(body)?,
             TAG_SYNTHETIC_SSA_FUNCS => {
                 unit.synthetic_ssa_funcs = read_synthetic_ssa_funcs(body)?;
+            }
+            TAG_USER_SSA_FUNCS => {
+                if body.len() < 4 {
+                    return Err(err("user_ssa_funcs body too short"));
+                }
+                let n = u32_at(body, 0) as usize;
+                let mut local = 4;
+                let mut out = Vec::with_capacity(n);
+                for _ in 0..n {
+                    out.push(read_ssa_func(body, &mut local)?);
+                }
+                unit.user_ssa_funcs = out;
             }
             _ => {
                 // Unknown tag -- skip silently to preserve

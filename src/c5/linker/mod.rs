@@ -76,6 +76,8 @@ pub use native_object::{
     parse_native_elf,
 };
 pub use object::{read_object, write_object};
+#[cfg(test)]
+pub(crate) use object::{read_ssa_func, write_ssa_func};
 pub use reloc::{Reloc, RelocKind};
 pub use symbol::{LinkSymbol, SymbolKind};
 pub use unit::LinkUnit;

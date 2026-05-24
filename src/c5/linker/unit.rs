@@ -133,4 +133,14 @@ pub struct LinkUnit {
     /// object-file round-trips lets the codegen reach the
     /// trampolines without re-running `lift_program`.
     pub(crate) synthetic_ssa_funcs: Vec<crate::c5::ir::FunctionSsa>,
+    /// User-function `FunctionSsa` entries, produced by the
+    /// walker during `compile_to_link_unit`. Empty for units
+    /// produced before the walker became canonical; the link
+    /// step falls back to lifting them from
+    /// [`LinkUnit::text`]. Survives across `.o` round-trips so
+    /// archive members can carry their SSA directly without
+    /// re-lifting at merge time. TODO: once every producer
+    /// populates this and every consumer reads it, retire
+    /// `lift_program`.
+    pub(crate) user_ssa_funcs: Vec<crate::c5::ir::FunctionSsa>,
 }

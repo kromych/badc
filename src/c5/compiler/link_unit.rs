@@ -387,6 +387,7 @@ impl Compiler {
             finished_functions: self.finished_functions,
             parser_symbols: self.symbols,
             synthetic_ssa_funcs: self.synthetic_ssa_funcs,
+            user_ssa_funcs: alloc::vec::Vec::new(),
         })
     }
 }

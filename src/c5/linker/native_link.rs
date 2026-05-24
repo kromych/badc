@@ -358,7 +358,7 @@ fn patch_aarch64_call26(text: &mut [u8], offset: usize, target: i64) -> Result<(
 }
 
 fn patch_x86_64_pc32(text: &mut [u8], offset: usize, target: i64) -> Result<(), C5Error> {
-    // ELF AMD64 ABI § 4.4.1: `R_X86_64_PC32` / `R_X86_64_PLT32`
+    // ELF AMD64 ABI section 4.4.1: `R_X86_64_PC32` / `R_X86_64_PLT32`
     // resolve to (`S + A`) - `P` where `S` is the symbol value,
     // `A` the addend, and `P` the patch site. `apply_reloc`
     // passes the sum `S + A` in `target`; the subtraction lives

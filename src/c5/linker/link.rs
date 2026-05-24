@@ -1194,6 +1194,32 @@ fn resolve_user_ssa_call_targets(program: &mut Program) -> Result<(), C5Error> {
             || inst_imm_code_count != imm_code_targets.len()
             || inst_imm_data_count != imm_data_targets.len()
             || inst_tls_count != tls_targets.len();
+        if let Ok(target) = std::env::var("BADC_DUMP_USER_SSA_FUNC") {
+            let name = program
+                .source_functions
+                .get(f.ent_pc)
+                .cloned()
+                .unwrap_or_default();
+            if name == target {
+                std::eprintln!(
+                    "==== walker user_ssa_func {} ent_pc={} ====",
+                    name,
+                    f.ent_pc
+                );
+                for (i, inst) in f.insts.iter().enumerate() {
+                    std::eprintln!("  v{:<4} {:?}", i, inst);
+                }
+                for (bi, blk) in f.blocks.iter().enumerate() {
+                    std::eprintln!(
+                        "  block {} insts {}..{} term {:?}",
+                        bi,
+                        blk.inst_range.start,
+                        blk.inst_range.end,
+                        blk.terminator,
+                    );
+                }
+            }
+        }
         if mismatched && std::env::var("BADC_DEBUG_USER_SSA_RESOLVER").is_ok() {
             let name = program
                 .source_functions

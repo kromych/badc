@@ -161,24 +161,6 @@ impl<H: Host> Vm<H> {
         if funcs.is_empty() {
             return Err(C5Error::Runtime("empty program".to_string()));
         }
-        #[cfg(feature = "std")]
-        if std::env::var("BADC_DUMP_VM_SSA").is_ok() {
-            for f in funcs {
-                eprintln!(
-                    "fn ent_pc={} n_params={} locals={} vstack_slots={}",
-                    f.ent_pc, f.n_params, f.locals, f.vstack_slots
-                );
-                for (b, blk) in f.blocks.iter().enumerate() {
-                    eprintln!(
-                        "  block {b}: insts {:?} term {:?}",
-                        blk.inst_range, blk.terminator
-                    );
-                    for v in blk.inst_range.clone() {
-                        eprintln!("    v{v}: {:?}", f.insts[v as usize]);
-                    }
-                }
-            }
-        }
         ssa::run_program_with_args_tracked(
             funcs,
             &self.data,

@@ -52,6 +52,8 @@
 
 mod archive;
 pub(crate) mod link;
+#[cfg(feature = "std")]
+mod native_object;
 mod object;
 mod reloc;
 mod symbol;
@@ -59,6 +61,12 @@ mod unit;
 
 pub use archive::{ArchiveMember, read_archive, write_archive};
 pub use link::{LinkArchive, LinkOptions, link_units};
+#[cfg(feature = "std")]
+#[allow(unused_imports)]
+pub use native_object::{
+    NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol, is_elf_object,
+    parse_native_elf,
+};
 pub use object::{read_object, write_object};
 pub use reloc::{Reloc, RelocKind};
 pub use symbol::{LinkSymbol, SymbolKind};

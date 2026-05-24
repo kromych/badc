@@ -1296,9 +1296,21 @@ pub(super) fn lower(
             is_tail: f.is_tail,
         })
         .collect();
-    let plt_trampoline_offsets =
-        emit_plt_trampolines(&mut code, &mut got_fixups, imports.imports.len());
-    apply_plt_call_fixups(&mut code, &plt_call_fixups, &plt_trampoline_offsets)?;
+    // Final-image output emits one PLT trampoline per import at
+    // the tail of `.text` and rewrites every BL/B placeholder to
+    // reach the matching trampoline. Relocatable output leaves
+    // the placeholders raw (imm26 = 0) so the linker materialises
+    // the PLT pool when it produces the final image -- the
+    // matching `R_AARCH64_CALL26` reloc in `.rela.text` carries
+    // the call site's import symbol.
+    let plt_trampoline_offsets: Vec<usize> = if native.output_kind != super::OutputKind::Relocatable
+    {
+        let offsets = emit_plt_trampolines(&mut code, &mut got_fixups, imports.imports.len());
+        apply_plt_call_fixups(&mut code, &plt_call_fixups, &offsets)?;
+        offsets
+    } else {
+        Vec::new()
+    };
 
     // Function-pointer fixups resolve to each callee's body offset
     // directly: every function's prologue already spills the host

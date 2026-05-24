@@ -474,6 +474,54 @@ mod tests {
     /// every section back out. Pins the encoder / decoder
     /// contract so a writer change that breaks the round-trip
     /// surfaces immediately.
+    /// Under `OutputKind::Relocatable` the codegen skips PLT
+    /// trampoline emission, so every BL placeholder reaching an
+    /// external import stays at imm26 = 0 and the matching
+    /// `R_AARCH64_CALL26` reloc carries the import name. The
+    /// system linker (or our own native linker) materialises the
+    /// PLT pool when producing the final image.
+    #[test]
+    fn relocatable_leaves_bl_placeholders_raw_on_aarch64() {
+        use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+        let src = "#include <stdio.h>\nint main(void){printf(\"x\\n\");return 0;}\n";
+        let program = Compiler::new(src.to_string()).compile().expect("compile");
+        let mut opts = NativeOptions::new().with_debug_info(false);
+        opts.output_kind = OutputKind::Relocatable;
+        // Force aarch64; aarch64's BL is one 4-byte word, easy
+        // to inspect directly.
+        let target = Target::LinuxAarch64;
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse");
+        // Find the first reloc against an UNDEF symbol and
+        // assert the BL placeholder at its offset is the raw
+        // `b 0x0` encoding (imm26 = 0 ; opcode bits 31..26 ==
+        // 0b000101 for B, 0b100101 for BL; both have all imm26
+        // bits cleared).
+        let r = obj
+            .text_relocs
+            .iter()
+            .find(|r| {
+                obj.symbols
+                    .get(r.sym_idx)
+                    .map(|s| matches!(s.section, NativeSymSection::Undef))
+                    .unwrap_or(false)
+            })
+            .expect("expected at least one reloc against an UNDEF import");
+        let off = r.offset as usize;
+        let instr = u32::from_le_bytes([
+            obj.text[off],
+            obj.text[off + 1],
+            obj.text[off + 2],
+            obj.text[off + 3],
+        ]);
+        // imm26 occupies bits 0..26; we want them all zero.
+        let imm26 = instr & 0x03ff_ffff;
+        assert_eq!(
+            imm26, 0,
+            "expected raw BL/B placeholder (imm26 = 0); got instr = {instr:#x} at offset {off}",
+        );
+    }
+
     #[test]
     fn parses_writer_output_for_printf_hello() {
         use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};

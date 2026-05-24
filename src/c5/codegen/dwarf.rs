@@ -17,8 +17,8 @@
 //!   catalog with proper pointer-chain and struct DIEs.
 //! * `.debug_line` -- a line-number program mapping every emitted
 //!   native byte range to the C source line that produced it.
-//!   Read from `program.source_lines`, which the optimizer
-//!   preserves through PC remapping.
+//!   Read from `build.ssa_line_rows`, populated by the per-arch
+//!   SSA emit as it lays out each `Inst`.
 //!
 //! Format choice: DWARF version 4, 32-bit DWARF (4-byte length
 //! prefixes), little-endian, 8-byte addresses. DWARF 4 because

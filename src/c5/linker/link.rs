@@ -1091,16 +1091,10 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         // function-pointer literals recorded in
         // `code_imm_positions` for that function's range.
         resolve_user_ssa_call_targets(&mut program)?;
-        // Legacy units (or any post-parser bytecode the unit's
-        // `synthetic_ssa_funcs` doesn't cover) get recovered via
-        // `lift_program`. Entries whose `ent_pc` already showed up
-        // above (walker- or synth-covered) get filtered.
-        let lifted = crate::c5::codegen::ssa::lift_program(&program)?;
-        for f in lifted {
-            if covered.insert(f.ent_pc) {
-                program.synthetic_ssa_funcs.push(f);
-            }
-        }
+        // `covered` is unused now that the lift fallback below
+        // retired; the post-merge synth + user SSA cover every
+        // ent_pc the codegen reaches.
+        let _ = covered;
         Ok(program)
     })
 }

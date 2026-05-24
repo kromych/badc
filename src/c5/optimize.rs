@@ -508,6 +508,40 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         syms
     };
 
+    // Rebase synthesised SSA helpers (sys-trampolines) through
+    // the same pre-opt -> post-opt PC table. The parser emits
+    // each trampoline at its pre-opt `Op::Ent` PC and the
+    // optimizer shifts that Ent forward or drops the body
+    // entirely. Without this rebase the walker's `live_fun_val`
+    // returns the trampoline symbol's post-opt PC while the
+    // synthetic SSA's `ent_pc` still points at the pre-opt PC
+    // -- the codegen's `bytecode_to_native[walker_pc]` misses
+    // because the synthetic SSA lowered at the wrong index.
+    // Functions DCE'd out of the bytecode drop here too.
+    let remapped_synthetic_ssa_funcs: alloc::vec::Vec<crate::c5::ir::FunctionSsa> =
+        synthetic_ssa_funcs
+            .into_iter()
+            .filter_map(|mut f| {
+                let idx = *pc_at_idx_for_pc.get(&(f.ent_pc as u64))?;
+                let new_bc_pc = new_pc.get(idx).copied()?;
+                if new_bc_pc == usize::MAX {
+                    return None;
+                }
+                let new_end_pc = if f.end_pc > 0 {
+                    let end_idx = pc_at_idx_for_pc.get(&(f.end_pc as u64)).copied();
+                    end_idx
+                        .and_then(|i| new_pc.get(i).copied())
+                        .filter(|&p| p != usize::MAX)
+                        .unwrap_or_else(|| new_bc_pc + (f.end_pc - f.ent_pc))
+                } else {
+                    f.end_pc
+                };
+                f.ent_pc = new_bc_pc;
+                f.end_pc = new_end_pc;
+                Some(f)
+            })
+            .collect();
+
     Ok(Program {
         text,
         data,
@@ -547,12 +581,15 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         optimized: true,
         finished_functions: remapped_finished_functions,
         symbols,
-        // Optimizer doesn't rebase synthesised SSA helpers
-        // today (sys-trampolines aren't fused with the optimizer
-        // PC remap pass). Keep them as-is from the input
-        // program; if a future pass rewrites their PCs, walk
-        // these entries and update `ent_pc` / `end_pc`.
-        synthetic_ssa_funcs,
+        // Sys-trampolines and other synthesised SSA helpers
+        // ride the same pre-opt -> post-opt PC table as
+        // user functions. Sys symbols (Token::Fun) get their
+        // `Symbol::val` remapped above, so the walker's
+        // `live_fun_val` reads the post-opt PC; the synthetic
+        // SSA's own `ent_pc` has to follow or the codegen's
+        // `bytecode_to_native[ent_pc]` slot lands on the
+        // wrong instruction.
+        synthetic_ssa_funcs: remapped_synthetic_ssa_funcs,
         // Cross-TU function-import placeholder PCs sit past the
         // original `text.len()` and stay valid post-optimize:
         // the optimizer only rewrites PCs within `[0, text.len())`,

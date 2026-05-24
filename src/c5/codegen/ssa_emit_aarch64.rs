@@ -1458,18 +1458,31 @@ fn emit_call_ext(
             .unwrap_or(Place::None);
         match placement {
             super::ArgPlacement::IntReg(r) => {
-                let src = match materialize_int_shifted(
-                    code,
-                    arg_place,
-                    scratch.primary,
-                    frame,
-                    plan.scratch_bytes,
-                ) {
-                    Some(r) => r,
-                    None => return false,
-                };
-                if src.0 != r {
-                    emit(code, enc_mov_reg(Reg(r), src));
+                // Microsoft AArch64 variadics route every variadic
+                // arg through the integer arg-reg sequence
+                // regardless of the source type. An FP-typed
+                // variadic arg sits in a d-reg; the call planner
+                // routes it to an IntReg by setting
+                // `variadic_int_only`, so the lowering has to
+                // fmov the d-reg bit pattern into the target
+                // GPR rather than fall through `materialize_int`'s
+                // FpReg -> None bail.
+                if let Place::FpReg(dn) = arg_place {
+                    emit(code, enc_fmov_d_to_x(Reg(r), dn));
+                } else {
+                    let src = match materialize_int_shifted(
+                        code,
+                        arg_place,
+                        scratch.primary,
+                        frame,
+                        plan.scratch_bytes,
+                    ) {
+                        Some(r) => r,
+                        None => return false,
+                    };
+                    if src.0 != r {
+                        emit(code, enc_mov_reg(Reg(r), src));
+                    }
                 }
             }
             super::ArgPlacement::FpReg(r) => {

@@ -443,12 +443,6 @@ impl Compiler {
                     // reverse once they're all evaluated.
                     let saved_loc_offs = self.loc_offs;
                     let mut temp_offsets: Vec<i64> = Vec::new();
-                    // Per-arg FP flag, captured at evaluation time. Used
-                    // below when the call is `Token::Sys` to build a bit
-                    // mask the codegen reads for variadic FP packing
-                    // (`printf("%f", x)` etc.). Order matches
-                    // `temp_offsets`: index 0 = first declared arg.
-                    let mut arg_is_fp: Vec<bool> = Vec::new();
                     // Per-arg AST ExprId, captured at evaluation time
                     // (post-conversion, pre-store). Empty slot when
                     // the dual-emit hasn't wired the arg expression
@@ -517,7 +511,6 @@ impl Compiler {
                             );
                         }
 
-                        arg_is_fp.push(is_floating_scalar(self.ty));
                         // Refuse passing a struct by value to a
                         // Token::Sys callee. The c5-internal "push
                         // the address" convention works for c5-to-c5
@@ -610,22 +603,13 @@ impl Compiler {
                         // `#pragma binding(...)` directives the
                         // preprocessor parsed; the codegen / VM use it
                         // as the GOT slot lookup key (native) or the
-                        // dispatch-table key (VM).
-                        let jsrext_pc = self.text.len();
+                        // dispatch-table key (VM). `call_fp_arg_masks`
+                        // used to record per-arg FP-ness here for the
+                        // bytecode-tier lift's SSA emit; the walker
+                        // now derives the same mask from `Expr::Call`
+                        // arg types directly (see `walk_expr_rvalue`).
                         self.emit_op(Op::JsrExt);
                         self.emit_val(self.symbols[id_idx].val);
-                        // Capture per-arg FP-ness for the codegen. Only
-                        // needed when at least one arg is FP; an
-                        // all-integer call rides the existing path.
-                        let mut mask: u32 = 0;
-                        for (i, &is_fp) in arg_is_fp.iter().enumerate() {
-                            if is_fp && i < 32 {
-                                mask |= 1u32 << i;
-                            }
-                        }
-                        if mask != 0 {
-                            self.call_fp_arg_masks.push((jsrext_pc, mask));
-                        }
                     } else if self.symbols[id_idx].class == Token::Fun as i64 {
                         self.symbols[id_idx].was_referenced = true;
                         self.emit_op(Op::Jsr);

@@ -1195,10 +1195,30 @@ fn resolve_user_ssa_call_targets(program: &mut Program) -> Result<(), C5Error> {
             || inst_imm_data_count != imm_data_targets.len()
             || inst_tls_count != tls_targets.len();
         if mismatched && std::env::var("BADC_DEBUG_USER_SSA_RESOLVER").is_ok() {
+            let name = program
+                .source_functions
+                .get(f.ent_pc)
+                .cloned()
+                .unwrap_or_default();
+            let inst_intrinsic_count = f
+                .insts
+                .iter()
+                .filter(|i| matches!(i, Inst::Intrinsic { .. }))
+                .count();
+            let inst_call_ext_count = f
+                .insts
+                .iter()
+                .filter(|i| matches!(i, Inst::CallExt { .. }))
+                .count();
+            let inst_call_indirect_count = f
+                .insts
+                .iter()
+                .filter(|i| matches!(i, Inst::CallIndirect { .. }))
+                .count();
             std::eprintln!(
-                "[user_ssa_resolver] ent_pc={} end_pc={} Call({} vs Jsr {}) ImmCode({} vs {}) ImmData({} vs {}) Tls({} vs {})",
+                "[user_ssa_resolver] ent_pc={} name={:?} Call({} vs Jsr {}) ImmCode({} vs {}) ImmData({} vs {}) Tls({} vs {}) Intrinsic({}) CallExt({}) CallIndirect({})",
                 f.ent_pc,
-                f.end_pc,
+                name,
                 inst_call_count,
                 jsr_targets.len(),
                 inst_imm_code_count,
@@ -1207,6 +1227,9 @@ fn resolve_user_ssa_call_targets(program: &mut Program) -> Result<(), C5Error> {
                 imm_data_targets.len(),
                 inst_tls_count,
                 tls_targets.len(),
+                inst_intrinsic_count,
+                inst_call_ext_count,
+                inst_call_indirect_count,
             );
         }
         let mut jsr_iter = jsr_targets.into_iter();

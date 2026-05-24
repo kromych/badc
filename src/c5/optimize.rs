@@ -544,6 +544,20 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
             .collect();
 
     let text_len_for_user_ssa = text.len();
+    // Helper: remap a pre-opt PC through new_pc. Returns None
+    // if the target was DCE'd or the PC isn't an instruction
+    // start. `0` is the cross-TU placeholder Inst::Call uses
+    // when the symbol stays unresolved at link time; pass it
+    // through unchanged so the SSA-side resolver can re-link
+    // later (downstream of any further passes).
+    let remap_pc = |old: usize| -> Option<usize> {
+        if old == 0 {
+            return Some(0);
+        }
+        let idx = lookup_pc(&pc_at_idx, old, insns.len(), text_len_for_user_ssa).ok()?;
+        let new = new_pc.get(idx).copied()?;
+        if new == usize::MAX { None } else { Some(new) }
+    };
     let remapped_user_ssa: alloc::vec::Vec<crate::c5::ir::FunctionSsa> = user_ssa_funcs
         .into_iter()
         .filter_map(|mut f| {
@@ -553,21 +567,35 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
             // counterpart above. Leaving them in would seed
             // the codegen's `bc_pc_extent` with `usize::MAX`
             // and overflow the `bytecode_to_native` allocation.
-            let ent_idx =
-                lookup_pc(&pc_at_idx, f.ent_pc, insns.len(), text_len_for_user_ssa).ok()?;
-            let new_ent = new_pc[ent_idx];
-            if new_ent == usize::MAX {
-                return None;
-            }
+            let new_ent = remap_pc(f.ent_pc)?;
             let new_end = if f.end_pc > 0 {
-                lookup_pc(&pc_at_idx, f.end_pc, insns.len(), text_len_for_user_ssa)
-                    .ok()
-                    .and_then(|i| new_pc.get(i).copied())
-                    .filter(|&p| p != usize::MAX)
-                    .unwrap_or_else(|| new_ent + (f.end_pc - f.ent_pc))
+                remap_pc(f.end_pc).unwrap_or_else(|| new_ent + (f.end_pc - f.ent_pc))
             } else {
                 f.end_pc
             };
+            // Per-Inst PC references: the linker's
+            // `resolve_user_ssa_call_targets` populated these
+            // against the pre-opt bytecode tape. The optimizer
+            // shifts every survivor's PC through `new_pc`, so
+            // every Inst::Call::target_pc and Inst::ImmCode in
+            // the SSA has to follow. A target that DCE'd out
+            // means the call was reachable in the IR but its
+            // body was removed; keep the call but stamp the
+            // target at 0 -- the codegen's cross-TU placeholder
+            // path (or a later diagnostic) handles unresolved
+            // targets uniformly.
+            use crate::c5::ir::Inst;
+            for inst in &mut f.insts {
+                match inst {
+                    Inst::Call { target_pc, .. } => {
+                        *target_pc = remap_pc(*target_pc).unwrap_or(0);
+                    }
+                    Inst::ImmCode(pc) => {
+                        *pc = remap_pc(*pc).unwrap_or(0);
+                    }
+                    _ => {}
+                }
+            }
             f.ent_pc = new_ent;
             f.end_pc = new_end;
             Some(f)

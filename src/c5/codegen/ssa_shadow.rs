@@ -93,10 +93,10 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
 /// program.
 ///
 /// TODO: switch the no-finished-functions branch over to
-/// `program.user_ssa_funcs` once the optimizer's DCE pass also
-/// remaps every Inst::Call::target_pc / Inst::ImmCode through
-/// `new_pc` -- without that pass the post-optimize SSA carries
-/// stale PCs that point at compacted-away bytecode.
+/// `program.user_ssa_funcs` once the codegen produces
+/// runtime-equivalent code from that input on every demo
+/// (current gap: archive-reload of multi-TU programs segfaults
+/// at runtime even with the optimizer's Inst PC remap in place).
 pub(crate) fn produce_ssa_funcs(
     program: &Program,
     target: Target,

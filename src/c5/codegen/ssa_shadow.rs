@@ -134,6 +134,12 @@ pub(crate) fn produce_ssa_funcs(
         out.sort_by_key(|f| f.ent_pc);
         return Ok(out);
     }
+    // Bytecode-only Program shapes: optimizer unit tests that
+    // build `Program { text: ..., ... }` directly without going
+    // through the parser or linker, and the empty-program test
+    // fixtures in the codegen writer modules. `lift_program`
+    // decodes the bytecode tape into FunctionSsa for those
+    // cases. No parser-produced program reaches this branch.
     super::ssa::lift_program(program)
 }
 

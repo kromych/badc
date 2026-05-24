@@ -305,6 +305,123 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
     })
 }
 
+/// Per-import PLT trampoline metadata returned by
+/// [`emit_x86_64_plt`]. Each entry pairs the trampoline's byte
+/// offset in `MergedNative::text` with the import-name index;
+/// the final-image writer reads `text_offset` to know where the
+/// `JMP qword ptr [rip + disp32]` lives and patches its disp32
+/// to reach the matching GOT slot once the GOT's runtime
+/// address is known.
+#[derive(Debug, Clone, Copy)]
+pub struct PltTrampoline {
+    /// Byte offset within `MergedNative::text` of the trampoline's
+    /// first instruction.
+    pub text_offset: usize,
+    /// Index into [`MergedNative::imports`].
+    pub import_index: usize,
+}
+
+/// Lower every `pending_imports` entry into a per-import PLT
+/// trampoline appended to `MergedNative::text`, then patch each
+/// pending call-site's disp32 to reach its trampoline.
+///
+/// Each trampoline is the six-byte `JMP qword ptr [rip+disp32]`
+/// (`FF 25 disp32`) that x86_64 ELF stubs use. The disp32 is
+/// emitted as zero; the final-image writer patches it once it
+/// knows the runtime address of the GOT slot for this import.
+///
+/// On return:
+///   * `MergedNative::text` carries the trampoline pool past
+///     the original `.text` payload, 16-byte aligned.
+///   * Every `pending_imports` entry's call-site has been
+///     resolved in place to reach its trampoline via the
+///     standard `R_X86_64_PLT32` (`(S + A) - P`) formula.
+///   * `MergedNative::pending_imports` is cleared.
+///   * The returned `Vec<PltTrampoline>` lists every emitted
+///     trampoline in order of first occurrence (one entry per
+///     import index that had at least one call-site reloc).
+///
+/// Limited to `NativeMachine::X86_64` for now; aarch64 needs the
+/// matching `adrp + ldr + br` shape and lands separately.
+pub fn emit_x86_64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>, C5Error> {
+    if merged.machine != NativeMachine::X86_64 {
+        return Err(err(&format!(
+            "emit_x86_64_plt: only NativeMachine::X86_64 is supported, got {:?}",
+            merged.machine,
+        )));
+    }
+    // Align the trampoline pool to 16 bytes so a future writer's
+    // section-header alignment doesn't have to backfill padding
+    // before the first trampoline.
+    align_up(&mut merged.text, 16);
+
+    // One trampoline per unique import index, in order of first
+    // occurrence in `pending_imports`. An import that no call
+    // site reaches for (none of `pending_imports` references it)
+    // skips trampoline emission entirely -- the writer's
+    // dynamic-link bookkeeping still keeps the import name for
+    // symbol-table purposes.
+    let mut tramp_for_import: BTreeMap<usize, usize> = BTreeMap::new();
+    let mut trampolines: Vec<PltTrampoline> = Vec::new();
+    // Drain `pending_imports` into a local; data-ref entries
+    // (`import_index == usize::MAX`, parked by `park_data_ref`)
+    // get put back so the writer can resolve them against its
+    // own `.data` vmaddr later.
+    let pending = core::mem::take(&mut merged.pending_imports);
+    let mut parked_back: Vec<PendingImportReloc> = Vec::new();
+    for reloc in &pending {
+        if reloc.import_index == usize::MAX {
+            parked_back.push(reloc.clone());
+            continue;
+        }
+        if reloc.rtype != R_X86_64_PLT32 && reloc.rtype != R_X86_64_PC32 {
+            return Err(err(&format!(
+                "emit_x86_64_plt: pending reloc at text[{:#x}] has rtype {} \
+                 (only PLT32/PC32 supported on x86_64)",
+                reloc.text_offset, reloc.rtype,
+            )));
+        }
+        if let alloc::collections::btree_map::Entry::Vacant(e) =
+            tramp_for_import.entry(reloc.import_index)
+        {
+            let text_offset = merged.text.len();
+            e.insert(text_offset);
+            trampolines.push(PltTrampoline {
+                text_offset,
+                import_index: reloc.import_index,
+            });
+            // `jmp qword ptr [rip + 0]`. The disp32 stays zero
+            // until the writer patches it with the GOT slot's
+            // rel32. Six bytes total: `FF 25 00 00 00 00`.
+            merged
+                .text
+                .extend_from_slice(&[0xFF, 0x25, 0x00, 0x00, 0x00, 0x00]);
+        }
+    }
+
+    // Pass 2 -- patch each call-site's disp32 to reach its
+    // trampoline using the same `(S + A) - P` formula that the
+    // standard R_X86_64_PLT32 reloc uses. The site's `text_offset`
+    // points at the disp32 byte (the codegen sets it to
+    // `instr_offset + 1`), so `S` is the trampoline byte offset
+    // within the merged text.
+    for reloc in &pending {
+        if reloc.import_index == usize::MAX {
+            continue;
+        }
+        let site = reloc.text_offset as usize;
+        let tramp = tramp_for_import
+            .get(&reloc.import_index)
+            .copied()
+            .expect("every reloc has a tramp entry from pass 1");
+        let target = tramp as i64 + reloc.addend;
+        patch_x86_64_pc32(&mut merged.text, site, target)?;
+    }
+
+    merged.pending_imports = parked_back;
+    Ok(trampolines)
+}
+
 // ---- Reloc application ----
 
 fn apply_reloc(
@@ -588,6 +705,107 @@ mod tests {
         let err = link_native_objects(&[a, b]).unwrap_err();
         assert!(
             err.to_string().contains("defined in multiple objects"),
+            "unexpected error: {err}",
+        );
+    }
+
+    /// `emit_x86_64_plt` materialises one trampoline per
+    /// unique import the merged image reaches for, then
+    /// patches each call site's disp32 to reach its
+    /// trampoline. Pins the shape: one `printf` import + one
+    /// `puts` import => two trampolines past the original
+    /// `.text` payload, each starting with `FF 25` (jmp
+    /// qword ptr [rip + disp32]).
+    #[test]
+    fn emit_x86_64_plt_materialises_one_trampoline_per_import() {
+        let target = Target::LinuxX64;
+        let mut opts = NativeOptions::new().with_debug_info(false);
+        opts.output_kind = OutputKind::Relocatable;
+        let copts = crate::CompileOptions::default().with_no_entry_point(true);
+        // `#include <stdio.h>` brings printf + puts into the
+        // imports table even though only one is called;
+        // calling both pins the trampoline emit for both.
+        let a = compile_native_with(
+            "#include <stdio.h>\nint hello(void) { return printf(\"hi\\n\") + puts(\"bye\"); }\n",
+            target,
+            opts,
+            copts,
+        );
+        let mut merged = link_native_objects(&[a]).expect("link");
+        let text_pre = merged.text.len();
+        let pending_pre = merged.pending_imports.len();
+        assert!(
+            pending_pre >= 2,
+            "expected at least two pending imports (printf + puts), got {pending_pre}",
+        );
+
+        let trampolines = emit_x86_64_plt(&mut merged).expect("plt");
+        assert!(
+            trampolines.len() >= 2,
+            "expected >= 2 trampolines for printf + puts, got {}",
+            trampolines.len(),
+        );
+        // Every PLT-resolvable pending import got lowered to a
+        // trampoline; only `<data-ref>` parks (import_index ==
+        // usize::MAX, surfaced by `park_data_ref`) remain.
+        for r in &merged.pending_imports {
+            assert_eq!(
+                r.import_index,
+                usize::MAX,
+                "emit_x86_64_plt should drain every non-data-ref pending import",
+            );
+        }
+        // Trampolines are appended past the original text.
+        for t in &trampolines {
+            assert!(
+                t.text_offset >= text_pre,
+                "trampoline @ {:#x} should sit past original text end {:#x}",
+                t.text_offset,
+                text_pre,
+            );
+            // Each trampoline starts with `FF 25` (JMP qword
+            // ptr [rip + disp32]).
+            assert_eq!(
+                &merged.text[t.text_offset..t.text_offset + 2],
+                &[0xFF, 0x25],
+                "trampoline @ {:#x} prologue mismatch",
+                t.text_offset,
+            );
+            // The disp32 is still zero (writer patches it).
+            assert_eq!(
+                u32::from_le_bytes(
+                    merged.text[t.text_offset + 2..t.text_offset + 6]
+                        .try_into()
+                        .unwrap(),
+                ),
+                0,
+                "trampoline @ {:#x} disp32 should start zero",
+                t.text_offset,
+            );
+        }
+        // Trampolines should be 16-byte aligned (alignment
+        // pad lands between the original text and the first
+        // trampoline).
+        assert_eq!(
+            trampolines[0].text_offset & 0xF,
+            0,
+            "first trampoline should be 16-byte aligned",
+        );
+    }
+
+    /// Errors out cleanly on aarch64 -- that path needs an
+    /// adrp+ldr+br trampoline, not the x86_64 jmp shape.
+    #[test]
+    fn emit_x86_64_plt_rejects_aarch64() {
+        let target = Target::LinuxAarch64;
+        let mut opts = NativeOptions::new().with_debug_info(false);
+        opts.output_kind = OutputKind::Relocatable;
+        let copts = crate::CompileOptions::default().with_no_entry_point(true);
+        let a = compile_native_with("int caller(void) { return 0; }\n", target, opts, copts);
+        let mut merged = link_native_objects(&[a]).expect("link");
+        let err = emit_x86_64_plt(&mut merged).unwrap_err();
+        assert!(
+            err.to_string().contains("X86_64"),
             "unexpected error: {err}",
         );
     }

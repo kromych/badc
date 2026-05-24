@@ -1290,7 +1290,7 @@ fn dump_native_link(rest: &[String]) {
             }
         }
     }
-    let merged = match badc::link_native_objects(&objs) {
+    let mut merged = match badc::link_native_objects(&objs) {
         Ok(m) => m,
         Err(e) => {
             eprintln!("badc: --dump-native-link: link failed: {e}");
@@ -1315,11 +1315,36 @@ fn dump_native_link(rest: &[String]) {
     }
     println!("  pending     = {} reloc(s)", merged.pending_imports.len());
     for r in &merged.pending_imports {
-        let name = &merged.imports[r.import_index];
+        let name = if r.import_index == usize::MAX {
+            "<data-ref>"
+        } else {
+            merged.imports[r.import_index].as_str()
+        };
         println!(
             "    text[{:#x}] -> {name} (rtype={:#x}, addend={})",
             r.text_offset, r.rtype, r.addend
         );
+    }
+    // For x86_64 inputs, run the PLT lowering pass and surface
+    // the resulting trampoline pool. aarch64 emits an
+    // adrp+ldr+br shape that the link-pass doesn't synthesise
+    // yet; surface a one-line note rather than failing the dump.
+    if merged.machine == badc::NativeMachine::X86_64 {
+        match badc::emit_x86_64_plt(&mut merged) {
+            Ok(tramps) => {
+                println!("  PLT tramps  = {} entry(ies)", tramps.len());
+                for t in &tramps {
+                    let name = &merged.imports[t.import_index];
+                    println!("    text[{:#x}] -> {name}", t.text_offset);
+                }
+                println!("  post-PLT .text size = {}", merged.text.len());
+            }
+            Err(e) => {
+                eprintln!("badc: --dump-native-link: PLT lowering failed: {e}");
+            }
+        }
+    } else {
+        println!("  PLT tramps  = (skipped; only x86_64 lowering implemented)");
     }
 }
 

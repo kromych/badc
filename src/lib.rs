@@ -88,5 +88,6 @@ pub use c5::{
 #[cfg(all(feature = "linker", feature = "std"))]
 pub use c5::{
     MergedNative, MergedSymbol, NativeMachine, NativeObject, NativeReloc, NativeSymSection,
-    NativeSymbol, PendingImportReloc, is_elf_object, link_native_objects, parse_native_elf,
+    NativeSymbol, PendingImportReloc, PltTrampoline, emit_x86_64_plt, is_elf_object,
+    link_native_objects, parse_native_elf,
 };

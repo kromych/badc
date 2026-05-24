@@ -53,7 +53,8 @@ pub use linker::{
 #[allow(unused_imports)]
 pub use linker::{
     MergedNative, MergedSymbol, NativeMachine, NativeObject, NativeReloc, NativeSymSection,
-    NativeSymbol, PendingImportReloc, is_elf_object, link_native_objects, parse_native_elf,
+    NativeSymbol, PendingImportReloc, PltTrampoline, emit_x86_64_plt, is_elf_object,
+    link_native_objects, parse_native_elf,
 };
 #[cfg(feature = "linker")]
 pub use preprocessor::{Binding, DylibSpec, Subsystem};

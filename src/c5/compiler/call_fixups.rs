@@ -196,7 +196,20 @@ impl Compiler {
             } else {
                 fixed_nargs
             };
-            let mut sb = SsaBuilder::new(bc_pc, nargs_ssa, is_variadic);
+            // The synthesised trampoline's own signature is a
+            // fixed-arg host-ABI function: callers reach it via
+            // function pointer through `(sys_ptr)open`, which the
+            // SysV / AAPCS / win64 ABIs deliver in the integer
+            // arg registers regardless of whether the underlying
+            // libc callee is variadic. The `is_variadic` flag on
+            // the SSA function controls the prologue's arg-pickup
+            // shape (c5 stack slots vs host ABI registers) -- the
+            // trampoline always wants host ABI. The callee's
+            // variadicness is encoded on the binding and
+            // re-derived by `Inst::CallExt` lowering, so flipping
+            // the trampoline's flag to `false` leaves the libc-
+            // side `al = xmm_count` setup intact.
+            let mut sb = SsaBuilder::new(bc_pc, nargs_ssa, false);
             sb.set_locals(0);
             let _alloca = sb.alloca_init(0);
             if fixed_nargs == 0 && !is_variadic {

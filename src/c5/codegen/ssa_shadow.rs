@@ -98,18 +98,20 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
 ///      walks each AST snapshot. The in-memory compile+link
 ///      path takes this branch.
 ///
-///   2. `program.user_ssa_funcs` non-empty -> the linker merged
-///      per-unit walker output and the resolver patched every
-///      Inst::ImmData / Inst::TlsAddr / Inst::Call::target_pc /
-///      Inst::ImmCode against the linker-rewritten bytecode
-///      operand. Combine with `program.synthetic_ssa_funcs`
-///      (sys-trampolines + synthetic CRT entry). The
+///   2. `program.user_ssa_funcs` or `program.synthetic_ssa_funcs`
+///      non-empty -> the linker merged per-unit walker output and
+///      the resolver patched every Inst::ImmData / Inst::TlsAddr /
+///      Inst::Call::target_pc / Inst::ImmCode against the linker-
+///      rewritten bytecode operand. Combine the user and synthetic
+///      vectors (sys-trampolines + synthetic CRT entry). The
 ///      archive-reload path of every `.o` produced after the
 ///      walker became canonical takes this branch.
 ///
 ///   3. Neither populated -> `lift_program` rebuilds SSA from
-///      the bytecode tape. Reached only for legacy `.o` files
-///      produced before the walker became canonical.
+///      the bytecode tape. Reached only by Program shapes built
+///      outside the parser pipeline -- optimizer unit tests and
+///      codegen writer fixtures that hand-build `Program { text:
+///      ..., ... }`.
 pub(crate) fn produce_ssa_funcs(
     program: &Program,
     target: Target,
@@ -117,7 +119,7 @@ pub(crate) fn produce_ssa_funcs(
     if !program.finished_functions.is_empty() {
         return walk_program(program, target);
     }
-    if !program.user_ssa_funcs.is_empty() {
+    if !program.user_ssa_funcs.is_empty() || !program.synthetic_ssa_funcs.is_empty() {
         let mut covered: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
         let mut out: Vec<FunctionSsa> =
             Vec::with_capacity(program.user_ssa_funcs.len() + program.synthetic_ssa_funcs.len());

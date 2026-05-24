@@ -1181,14 +1181,14 @@ fn resolve_user_ssa_call_targets(program: &mut Program) -> Result<(), C5Error> {
             }
             pc += op.word_size();
         }
-        // Count Inst occurrences before the zip so we can flag
-        // a drift mid-function rather than silently truncating.
-        // Each of the four Inst variants has to match the
-        // matching Op count in `program.text[ent_pc..end_pc]`;
-        // a mismatch means the walker emitted (or didn't) for
-        // a case the parser handled differently and the order-
-        // based zip would land at least one inst on the wrong
-        // operand.
+        // The order-zip below pairs the i-th Inst with the i-th
+        // bytecode operand of the matching kind. That contract
+        // only holds when the counts match exactly; a drift
+        // means at least one Inst would receive an operand
+        // intended for a different expression. Count first and
+        // reject the link on mismatch rather than continuing
+        // with a partial zip whose surviving entries silently
+        // load wild data at run time.
         let inst_call_count = f
             .insts
             .iter()
@@ -1239,31 +1239,17 @@ fn resolve_user_ssa_call_targets(program: &mut Program) -> Result<(), C5Error> {
                 }
             }
         }
-        if mismatched && std::env::var("BADC_DEBUG_USER_SSA_RESOLVER").is_ok() {
+        if mismatched {
             let name = program
                 .source_functions
                 .get(f.ent_pc)
                 .cloned()
                 .unwrap_or_default();
-            let inst_intrinsic_count = f
-                .insts
-                .iter()
-                .filter(|i| matches!(i, Inst::Intrinsic { .. }))
-                .count();
-            let inst_call_ext_count = f
-                .insts
-                .iter()
-                .filter(|i| matches!(i, Inst::CallExt { .. }))
-                .count();
-            let inst_call_indirect_count = f
-                .insts
-                .iter()
-                .filter(|i| matches!(i, Inst::CallIndirect { .. }))
-                .count();
-            std::eprintln!(
-                "[user_ssa_resolver] ent_pc={} name={:?} Call({} vs Jsr {}) ImmCode({} vs {}) ImmData({} vs {}) Tls({} vs {}) Intrinsic({}) CallExt({}) CallIndirect({})",
-                f.ent_pc,
+            return Err(err(&alloc::format!(
+                "user_ssa_funcs: walker / parser drift in {:?} (ent_pc={}): \
+                 Call {} vs Op::Jsr {}, ImmCode {} vs {}, ImmData {} vs {}, TlsAddr {} vs Op::TlsLea {}",
                 name,
+                f.ent_pc,
                 inst_call_count,
                 jsr_targets.len(),
                 inst_imm_code_count,
@@ -1272,10 +1258,7 @@ fn resolve_user_ssa_call_targets(program: &mut Program) -> Result<(), C5Error> {
                 imm_data_targets.len(),
                 inst_tls_count,
                 tls_targets.len(),
-                inst_intrinsic_count,
-                inst_call_ext_count,
-                inst_call_indirect_count,
-            );
+            )));
         }
         let mut jsr_iter = jsr_targets.into_iter();
         let mut imm_code_iter = imm_code_targets.into_iter();

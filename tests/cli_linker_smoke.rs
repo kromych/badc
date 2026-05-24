@@ -316,14 +316,12 @@ fn extern_deferred_size_array_decays_in_other_tu() {
 #[test]
 fn compile_only_emit_native_writes_relocatable_elf() {
     let dir = tempdir("co-native");
-    // The native -c path currently routes through
-    // `Compiler::compile()` which requires `main()`. Once the
-    // -c pipeline switches to the per-TU `compile_to_link_unit`
-    // (with `main`-less codegen), this fixture can drop to a
-    // bare `int seven()` helper. Today the entry point is
-    // necessary for the codegen prologue / `_start` stub even
-    // though the relocatable writer doesn't use it.
-    let src = write_source(&dir, "foo.c", "int main(void) { return 42; }\n");
+    // `-c --emit=native` flows through
+    // `Compiler::with_options(.., no_entry_point=true)`, so a
+    // standalone helper (no main / wmain / WinMain) compiles
+    // cleanly into an ET_REL .o for the linker to pick the
+    // entry point from later.
+    let src = write_source(&dir, "foo.c", "int seven(void) { return 7; }\n");
     let out = dir.join("foo-native.o");
     run(
         Command::new(badc())
@@ -373,4 +371,84 @@ fn compile_only_with_minus_o_writes_named_object() {
         "expected ELF magic; got {:?}",
         &bytes.get(..16)
     );
+}
+
+/// Cross-TU end-to-end: compile two C sources separately via
+/// `-c --emit=native` (no shared `main`, no link-time gluing),
+/// then drive both files through the public
+/// `parse_native_elf` + `link_native_objects` API and assert
+/// the merger resolves the cross-unit `helper` reference in
+/// place. Pins the `-c --emit=native` writer -> reader ->
+/// linker chain: a regression on either side breaks here
+/// before the runtime SIGSEGVs.
+#[cfg(target_os = "linux")]
+#[test]
+fn emit_native_then_link_native_resolves_cross_unit_call() {
+    use badc::{NativeSymSection, link_native_objects, parse_native_elf};
+    let dir = tempdir("emit-link-native");
+    let a = write_source(
+        &dir,
+        "a.c",
+        "int helper(void); int caller(void) { return helper() + 35; }\n",
+    );
+    let b = write_source(&dir, "b.c", "int helper(void) { return 7; }\n");
+    let a_o = dir.join("a.o");
+    let b_o = dir.join("b.o");
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg("--emit=native")
+            .arg("--target=linux-x64")
+            .arg("-o")
+            .arg(&a_o)
+            .arg(&a)
+            .current_dir(&dir),
+        "compile a.c (-c --emit=native)",
+    );
+    run(
+        Command::new(badc())
+            .arg("-c")
+            .arg("--emit=native")
+            .arg("--target=linux-x64")
+            .arg("-o")
+            .arg(&b_o)
+            .arg(&b)
+            .current_dir(&dir),
+        "compile b.c (-c --emit=native)",
+    );
+    let a_bytes = std::fs::read(&a_o).expect("read a.o");
+    let b_bytes = std::fs::read(&b_o).expect("read b.o");
+    let a_obj = parse_native_elf(&a_bytes).expect("parse a.o");
+    let b_obj = parse_native_elf(&b_bytes).expect("parse b.o");
+    // a.o has a cross-TU call to `helper` so its reloc list
+    // carries an entry against an UNDEF symbol named "helper".
+    let unresolved = a_obj
+        .text_relocs
+        .iter()
+        .find(|r| {
+            a_obj
+                .symbols
+                .get(r.sym_idx)
+                .map(|s| s.name == "helper" && matches!(s.section, NativeSymSection::Undef))
+                .unwrap_or(false)
+        })
+        .expect("a.o should carry an UNDEF `helper` reloc");
+    let _ = unresolved;
+
+    let merged = link_native_objects(&[a_obj, b_obj]).expect("link");
+    let helper = merged
+        .defined
+        .get("helper")
+        .expect("helper resolves in merged table");
+    assert!(matches!(helper.section, NativeSymSection::Text));
+    // The cross-TU CALL26 / PLT32 to `helper` is resolved in
+    // place by the link pass; the import list must NOT carry
+    // helper as a leftover.
+    for p in &merged.pending_imports {
+        let name = &merged.imports[p.import_index];
+        assert_ne!(
+            name, "helper",
+            "expected helper reloc to resolve in place, but it parked as import",
+        );
+    }
 }

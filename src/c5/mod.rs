@@ -49,6 +49,12 @@ pub use linker::{
     ArchiveMember, LinkArchive, LinkOptions, LinkSymbol, LinkUnit, Reloc, RelocKind, SymbolKind,
     link_units, read_archive, read_object, write_archive, write_object,
 };
+#[cfg(all(feature = "linker", feature = "std"))]
+#[allow(unused_imports)]
+pub use linker::{
+    MergedNative, MergedSymbol, NativeMachine, NativeObject, NativeReloc, NativeSymSection,
+    NativeSymbol, PendingImportReloc, is_elf_object, link_native_objects, parse_native_elf,
+};
 #[cfg(feature = "linker")]
 pub use preprocessor::{Binding, DylibSpec, Subsystem};
 #[cfg(feature = "linker")]

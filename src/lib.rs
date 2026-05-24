@@ -84,3 +84,9 @@ pub use c5::{
     Reloc, RelocKind, Subsystem, SymbolKind, link_units, read_archive, read_object, write_archive,
     write_object,
 };
+
+#[cfg(all(feature = "linker", feature = "std"))]
+pub use c5::{
+    MergedNative, MergedSymbol, NativeMachine, NativeObject, NativeReloc, NativeSymSection,
+    NativeSymbol, PendingImportReloc, is_elf_object, link_native_objects, parse_native_elf,
+};

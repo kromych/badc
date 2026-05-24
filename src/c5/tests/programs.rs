@@ -31,6 +31,18 @@ fn switch_default_routing() {
 }
 
 #[test]
+fn vtable_back_to_back_4arg() {
+    // Same contract as `vtable_back_to_back` but with a 4-arg
+    // init call that mirrors bearssl's
+    // `br_hmac_drbg_vtable.init(&ctx.vtable, &sha256_vtable,
+    // seed, len)` pattern. driver() = 1 + 100 + 100 = 201
+    // only when the walker's callee-before-args evaluation
+    // pairs with the parser's bytecode in the order the
+    // post-merge resolver expects.
+    assert_eq!(run_fixture("vtable_back_to_back_4arg.c"), 201);
+}
+
+#[test]
 fn vtable_back_to_back() {
     // Two adjacent struct-field-then-call expressions where the
     // second dispatches through a pointer the first stored.

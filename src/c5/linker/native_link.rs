@@ -483,6 +483,41 @@ mod tests {
         }
     }
 
+    /// Two TUs land in the merged image at distinct offsets;
+    /// both their `STB_GLOBAL` symbols survive. Doesn't yet
+    /// pin the cross-TU CALL26 reloc -- the codegen leaves
+    /// cross-TU user-function calls as `bl 0x0` with no reloc
+    /// (the bytecode tier surfaced them as
+    /// `fn_call_fixups -> text_relocs`; the native tier needs
+    /// the equivalent plumbing). Tracked as a follow-on under
+    /// task #65; the link pass already handles the reloc shape,
+    /// it's the codegen that's silent.
+    #[test]
+    fn cross_unit_both_define_distinct_symbols() {
+        let target = Target::LinuxAarch64;
+        let mut opts = NativeOptions::new().with_debug_info(false);
+        opts.output_kind = OutputKind::Relocatable;
+        let copts = crate::CompileOptions::default().with_no_entry_point(true);
+
+        let a = compile_native_with(
+            "int caller_a(void){return 1;}\n",
+            target,
+            opts,
+            copts.clone(),
+        );
+        let b = compile_native_with("int caller_b(void){return 2;}\n", target, opts, copts);
+
+        let merged = link_native_objects(&[a, b]).expect("link");
+        assert!(merged.defined.contains_key("caller_a"));
+        assert!(merged.defined.contains_key("caller_b"));
+        let va = merged.defined["caller_a"].value;
+        let vb = merged.defined["caller_b"].value;
+        assert_ne!(
+            va, vb,
+            "expected distinct merged .text offsets; got {va} == {vb}",
+        );
+    }
+
     /// Linking the same TU twice triggers the duplicate-
     /// definition guard: every `STB_GLOBAL` defined symbol
     /// (main, helper, ...) appears in both objects.
@@ -502,6 +537,19 @@ mod tests {
 
     fn compile_native(src: &str, target: Target, opts: NativeOptions) -> NativeObject {
         let program = Compiler::new(src.to_string()).compile().expect("compile");
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        parse_native_elf(&bytes).expect("parse")
+    }
+
+    fn compile_native_with(
+        src: &str,
+        target: Target,
+        opts: NativeOptions,
+        copts: crate::CompileOptions,
+    ) -> NativeObject {
+        let program = crate::Compiler::with_options(src.to_string(), target, copts)
+            .compile()
+            .expect("compile");
         let bytes = emit_native_with_options(&program, target, opts).expect("emit");
         parse_native_elf(&bytes).expect("parse")
     }

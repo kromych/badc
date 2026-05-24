@@ -682,7 +682,12 @@ fn main() {
                         std::process::exit(1);
                     }
                 };
-                let program = match Compiler::new(src_bytes).compile() {
+                // Relocatable -c builds don't require `main`;
+                // the linker picks the entry once it merges
+                // every TU. Reuses the standard compile path
+                // otherwise (preprocessor, walker, etc.).
+                let copts = badc::CompileOptions::default().with_no_entry_point(true);
+                let program = match Compiler::with_options(src_bytes, target, copts).compile() {
                     Ok(p) => p,
                     Err(e) => {
                         eprint_diagnostic(e);
@@ -710,7 +715,12 @@ fn main() {
                             std::process::exit(1);
                         }
                     };
-                    let program = match Compiler::new(src_bytes).compile() {
+                    // Relocatable -c builds don't require `main`;
+                    // the linker picks the entry once it merges
+                    // every TU. Reuses the standard compile path
+                    // otherwise (preprocessor, walker, etc.).
+                    let copts = badc::CompileOptions::default().with_no_entry_point(true);
+                    let program = match Compiler::with_options(src_bytes, target, copts).compile() {
                         Ok(p) => p,
                         Err(e) => {
                             eprint_diagnostic(e);

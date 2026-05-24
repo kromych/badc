@@ -149,6 +149,15 @@ pub struct CompileOptions {
     /// clang's policy of shipping only the per-symbol form on by
     /// default.
     pub warn_dead_store: bool,
+    /// When true, [`Compiler::compile`] returns
+    /// `Program { entry_pc: 0, entry_name: None, .. }`
+    /// instead of erroring out on a missing `main` /
+    /// `wmain` / `WinMain` / `wWinMain`. Set for `-c`
+    /// builds where the resulting Program is fed to the
+    /// relocatable codegen (no `_start` stub, no entry-point
+    /// requirement -- the linker picks the entry once it
+    /// merges every TU).
+    pub no_entry_point: bool,
 }
 
 impl CompileOptions {
@@ -186,6 +195,15 @@ impl CompileOptions {
     /// [`Self::warn_dead_store`].
     pub fn with_warn_dead_store(mut self, on: bool) -> Self {
         self.warn_dead_store = on;
+        self
+    }
+    /// Drop the "must define main" requirement. Returns a
+    /// `Program` with `entry_pc = 0` / `entry_name = None`
+    /// when no entry function is defined, instead of erroring.
+    /// Used by the relocatable `-c` path where the entry is a
+    /// link-time decision.
+    pub fn with_no_entry_point(mut self, on: bool) -> Self {
+        self.no_entry_point = on;
         self
     }
 }
@@ -727,6 +745,12 @@ pub struct Compiler {
     /// the compiler so the parser's dead-store helpers don't
     /// have to thread the option through every call site.
     warn_dead_store: bool,
+    /// Mirror of [`CompileOptions::no_entry_point`]. Drops the
+    /// "must define main / wmain / WinMain / wWinMain" check
+    /// in `resolve_entry_and_dllmain_pcs`; `compile()` then
+    /// returns a `Program` with `entry_pc = 0` /
+    /// `entry_name = None` if no entry symbol exists.
+    no_entry_point: bool,
 
     /// Per-bytecode-PC source line, parallel to `text`. Updated
     /// on every emit_op / emit_val / emit_data_imm so each
@@ -1024,6 +1048,7 @@ impl Compiler {
             pending: Pending::default(),
             pending_store_symbols: Vec::new(),
             warn_dead_store: opts.warn_dead_store,
+            no_entry_point: opts.no_entry_point,
             source_lines: Vec::new(),
             source_functions: Vec::new(),
             source_files: Vec::new(),
@@ -1097,7 +1122,9 @@ impl Compiler {
                 self.symbols[idx].val as usize,
                 Some(self.symbols[idx].name.clone()),
             ),
-            None if !self.pending_exports.is_empty() || has_user_dllmain => (0, None),
+            None if !self.pending_exports.is_empty() || has_user_dllmain || self.no_entry_point => {
+                (0, None)
+            }
             None => {
                 return Err(self.compile_err(format!("{default_name}() not defined")));
             }

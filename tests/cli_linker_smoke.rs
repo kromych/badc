@@ -288,12 +288,6 @@ fn static_inline_helper_in_shared_header_links_across_tus() {
     );
 }
 
-// TODO: cross-TU data reloc miscalculation. Today the produced
-// binary returns 1 (sum mismatch) instead of 0; the parked
-// `R_X86_64_PC32` / `R_AARCH64_ADR_PREL_PG_HI21 + LO12_NC`
-// pair lands on the wrong byte. Re-enable once the merge
-// math is fixed.
-#[ignore]
 #[test]
 fn extern_deferred_size_array_decays_in_other_tu() {
     // C99 6.7.5.2 + 6.2.2: `extern T x[];` declares an array of

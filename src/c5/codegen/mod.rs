@@ -812,6 +812,16 @@ pub(crate) struct Build {
     /// in a single-TU compile path.
     #[allow(dead_code)] // consumed only by the std-only elf_reloc writer
     pub user_extern_call_sites: Vec<UserExternCallSite>,
+    /// Cross-TU data references. Populated by the SSA emitters
+    /// for every `Inst::ImmData(0)` whose value-id appears in
+    /// `FunctionSsa::extern_imm_data_refs`. The
+    /// `OutputKind::Relocatable` writer turns each entry into
+    /// a named undefined-data symbol + a `.rela.text` pair
+    /// (`R_AARCH64_ADR_PREL_PG_HI21 + ADD_ABS_LO12_NC` on
+    /// aarch64, `R_X86_64_PC32` on x86_64). Final-image writers
+    /// resolve them through the linker's merged symbol table.
+    #[allow(dead_code)] // consumed only by the std-only elf_reloc writer
+    pub user_extern_data_refs: Vec<UserExternDataRef>,
     /// SSA-side `.debug_line` rows: each `(native_pc, line,
     /// file_idx)` entry says "the instruction whose first byte
     /// lives at `native_pc` in `Build::text` corresponds to source
@@ -1078,6 +1088,24 @@ pub(crate) struct UserExternCallSite {
     /// `true` for tail-jumps (`b` / `jmp rel32`), `false` for
     /// calls (`bl` / `call rel32`).
     pub is_tail: bool,
+}
+
+/// Cross-TU data reference. Same `adrp + add` (aarch64) or
+/// `lea` rip-rel (x86_64) shape as [`DataFixup`], but the
+/// target is a named symbol defined in another TU rather than
+/// a local `.data` byte offset. The writer emits one undefined
+/// `STT_OBJECT STB_GLOBAL` symbol per unique name and one reloc
+/// per ref pointing at that symbol.
+#[derive(Debug, Clone)]
+#[allow(dead_code)] // consumed only by the std-only elf_reloc writer
+pub(crate) struct UserExternDataRef {
+    /// Byte offset within `Build::text` of the `adrp` /
+    /// `lea`-prefix instruction. The writer pairs it with the
+    /// follow-up `add` on aarch64 to emit both halves of the
+    /// page-relative load.
+    pub instr_offset: usize,
+    /// Symbol name of the cross-TU data global.
+    pub symbol_name: alloc::string::String,
 }
 
 /// Relocation for a function-pointer literal (`Op::Imm <CODE_BASE+pc>`).

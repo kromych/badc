@@ -162,6 +162,8 @@ pub(super) fn emit_function(
     fixups: &mut Vec<Fixup>,
     plt_call_fixups: &mut Vec<PltCallFixup>,
     data_fixups: &mut Vec<DataFixup>,
+    user_extern_data_refs: &mut Vec<super::UserExternDataRef>,
+    extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     pending_func_fixups: &mut Vec<(usize, usize)>,
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
@@ -183,6 +185,7 @@ pub(super) fn emit_function(
     let fixups_snapshot = fixups.len();
     let plt_call_fixups_snapshot = plt_call_fixups.len();
     let data_fixups_snapshot = data_fixups.len();
+    let user_extern_data_refs_snapshot = user_extern_data_refs.len();
     let pending_func_fixups_snapshot = pending_func_fixups.len();
     let tls_index_fixups_snapshot = tls_index_fixups.len();
     let macho_tlv_fixups_snapshot = macho_tlv_fixups.len();
@@ -219,6 +222,7 @@ pub(super) fn emit_function(
                 continue;
             }
             super::ssa_emit_common::record_inst_src(func, v, code.len(), ssa_line_rows);
+            let data_fixups_pre_inst = data_fixups.len();
             if !emit_inst(
                 code,
                 inst,
@@ -251,11 +255,31 @@ pub(super) fn emit_function(
                 fixups.truncate(fixups_snapshot);
                 plt_call_fixups.truncate(plt_call_fixups_snapshot);
                 data_fixups.truncate(data_fixups_snapshot);
+                user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                 pending_func_fixups.truncate(pending_func_fixups_snapshot);
                 tls_index_fixups.truncate(tls_index_fixups_snapshot);
                 macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
                 macho_tlv_descriptors.truncate(macho_tlv_descriptors_snapshot);
                 return false;
+            }
+            // Convert the just-emitted ImmData's local `.data`
+            // fixup into a named cross-TU reference when the
+            // value-id appears in `extern_data_names`. The walker
+            // emits `Inst::ImmData(0)` for every
+            // `imm_data_extern`; this hop replaces the unit-local
+            // `DataFixup` (which would lower to `.data section
+            // symbol + 0`) with a `UserExternDataRef` carrying
+            // the symbol name, so the ET_REL writer emits a
+            // named undefined-data symbol + a reloc against it.
+            if let Inst::ImmData(_) = inst
+                && let Some(name) = extern_data_names.get(&v)
+                && data_fixups.len() > data_fixups_pre_inst
+            {
+                let popped = data_fixups.pop().unwrap();
+                user_extern_data_refs.push(super::UserExternDataRef {
+                    instr_offset: popped.adrp_offset,
+                    symbol_name: name.clone(),
+                });
             }
         }
         match block.terminator {
@@ -314,6 +338,7 @@ pub(super) fn emit_function(
                             fixups.truncate(fixups_snapshot);
                             plt_call_fixups.truncate(plt_call_fixups_snapshot);
                             data_fixups.truncate(data_fixups_snapshot);
+                            user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                             pending_func_fixups.truncate(pending_func_fixups_snapshot);
                             tls_index_fixups.truncate(tls_index_fixups_snapshot);
                             macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
@@ -383,6 +408,7 @@ pub(super) fn emit_function(
                             fixups.truncate(fixups_snapshot);
                             plt_call_fixups.truncate(plt_call_fixups_snapshot);
                             data_fixups.truncate(data_fixups_snapshot);
+                            user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                             pending_func_fixups.truncate(pending_func_fixups_snapshot);
                             tls_index_fixups.truncate(tls_index_fixups_snapshot);
                             macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
@@ -429,6 +455,7 @@ pub(super) fn emit_function(
                         fixups.truncate(fixups_snapshot);
                         plt_call_fixups.truncate(plt_call_fixups_snapshot);
                         data_fixups.truncate(data_fixups_snapshot);
+                        user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         tls_index_fixups.truncate(tls_index_fixups_snapshot);
                         macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
@@ -450,6 +477,7 @@ pub(super) fn emit_function(
             fixups.truncate(fixups_snapshot);
             plt_call_fixups.truncate(plt_call_fixups_snapshot);
             data_fixups.truncate(data_fixups_snapshot);
+            user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
             pending_func_fixups.truncate(pending_func_fixups_snapshot);
             tls_index_fixups.truncate(tls_index_fixups_snapshot);
             macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
@@ -464,6 +492,7 @@ pub(super) fn emit_function(
                     fixups.truncate(fixups_snapshot);
                     plt_call_fixups.truncate(plt_call_fixups_snapshot);
                     data_fixups.truncate(data_fixups_snapshot);
+                    user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
                     macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
@@ -479,6 +508,7 @@ pub(super) fn emit_function(
                     fixups.truncate(fixups_snapshot);
                     plt_call_fixups.truncate(plt_call_fixups_snapshot);
                     data_fixups.truncate(data_fixups_snapshot);
+                    user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
                     macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
@@ -494,6 +524,7 @@ pub(super) fn emit_function(
                     fixups.truncate(fixups_snapshot);
                     plt_call_fixups.truncate(plt_call_fixups_snapshot);
                     data_fixups.truncate(data_fixups_snapshot);
+                    user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
                     macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
@@ -509,6 +540,7 @@ pub(super) fn emit_function(
                     fixups.truncate(fixups_snapshot);
                     plt_call_fixups.truncate(plt_call_fixups_snapshot);
                     data_fixups.truncate(data_fixups_snapshot);
+                    user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     tls_index_fixups.truncate(tls_index_fixups_snapshot);
                     macho_tlv_fixups.truncate(macho_tlv_fixups_snapshot);
@@ -3058,6 +3090,9 @@ mod tests {
         let variadic_targets: alloc::collections::BTreeSet<usize> =
             alloc::collections::BTreeSet::new();
         let mut tls_idx = Vec::new();
+        let mut user_data_refs: Vec<super::super::UserExternDataRef> = Vec::new();
+        let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
+            alloc::collections::BTreeMap::new();
         let mut tlv_fx = Vec::new();
         let mut tlv_desc = Vec::new();
         let mut bytecode_to_native = alloc::vec![usize::MAX; func.end_pc + 1];
@@ -3070,6 +3105,8 @@ mod tests {
             &mut fx,
             &mut plt,
             &mut data_fx,
+            &mut user_data_refs,
+            &extern_data_names,
             &mut pf_fx,
             &imps,
             &variadic_targets,
@@ -3113,6 +3150,9 @@ mod tests {
         let variadic_targets: alloc::collections::BTreeSet<usize> =
             alloc::collections::BTreeSet::new();
         let mut tls_idx = Vec::new();
+        let mut user_data_refs: Vec<super::super::UserExternDataRef> = Vec::new();
+        let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
+            alloc::collections::BTreeMap::new();
         let mut tlv_fx = Vec::new();
         let mut tlv_desc = Vec::new();
         let mut bytecode_to_native = alloc::vec![usize::MAX; func.end_pc + 1];
@@ -3125,6 +3165,8 @@ mod tests {
             &mut fx,
             &mut plt,
             &mut data_fx,
+            &mut user_data_refs,
+            &extern_data_names,
             &mut pf_fx,
             &imps,
             &variadic_targets,
@@ -3161,6 +3203,9 @@ mod tests {
         let variadic_targets: alloc::collections::BTreeSet<usize> =
             alloc::collections::BTreeSet::new();
         let mut tls_idx = Vec::new();
+        let mut user_data_refs: Vec<super::super::UserExternDataRef> = Vec::new();
+        let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
+            alloc::collections::BTreeMap::new();
         let mut tlv_fx = Vec::new();
         let mut tlv_desc = Vec::new();
         let mut bytecode_to_native = alloc::vec![usize::MAX; func.end_pc + 1];
@@ -3173,6 +3218,8 @@ mod tests {
             &mut fx,
             &mut plt,
             &mut data_fx,
+            &mut user_data_refs,
+            &extern_data_names,
             &mut pf_fx,
             &imps,
             &variadic_targets,

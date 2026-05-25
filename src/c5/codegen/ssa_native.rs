@@ -56,6 +56,9 @@ pub(crate) fn compile_function_to_bytes(
             let mut fixups: Vec<Fixup> = Vec::new();
             let mut plt_call_fixups: Vec<PltCallFixup> = Vec::new();
             let mut data_fixups: Vec<super::DataFixup> = Vec::new();
+            let mut user_extern_data_refs: Vec<super::UserExternDataRef> = Vec::new();
+            let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
+                alloc::collections::BTreeMap::new();
             let mut pending_func_fixups: Vec<(usize, usize)> = Vec::new();
             let mut tls_index_fixups: Vec<super::TlsIndexFixup> = Vec::new();
             let mut macho_tlv_fixups: Vec<super::MachoTlvFixup> = Vec::new();
@@ -68,6 +71,8 @@ pub(crate) fn compile_function_to_bytes(
                 &mut fixups,
                 &mut plt_call_fixups,
                 &mut data_fixups,
+                &mut user_extern_data_refs,
+                &extern_data_names,
                 &mut pending_func_fixups,
                 &imports,
                 &variadic_targets,
@@ -101,6 +106,9 @@ pub(crate) fn compile_function_to_bytes(
             let mut plt_call_fixups: Vec<PltCallFixup> = Vec::new();
             let mut got_fixups: Vec<super::GotFixup> = Vec::new();
             let mut data_fixups: Vec<super::DataFixup> = Vec::new();
+            let mut user_extern_data_refs: Vec<super::UserExternDataRef> = Vec::new();
+            let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
+                alloc::collections::BTreeMap::new();
             let mut pending_func_fixups: Vec<(usize, usize)> = Vec::new();
             let mut tls_index_fixups: Vec<super::TlsIndexFixup> = Vec::new();
             let ok = super::ssa_emit_x86_64::emit_function(
@@ -112,6 +120,8 @@ pub(crate) fn compile_function_to_bytes(
                 &mut plt_call_fixups,
                 &mut got_fixups,
                 &mut data_fixups,
+                &mut user_extern_data_refs,
+                &extern_data_names,
                 &mut pending_func_fixups,
                 &imports,
                 &variadic_targets,

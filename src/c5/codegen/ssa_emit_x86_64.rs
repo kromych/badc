@@ -372,6 +372,8 @@ pub(super) fn emit_function(
     plt_call_fixups: &mut Vec<PltCallFixup>,
     _got_fixups: &mut Vec<GotFixup>,
     data_fixups: &mut Vec<DataFixup>,
+    user_extern_data_refs: &mut Vec<super::UserExternDataRef>,
+    extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     pending_func_fixups: &mut Vec<(usize, usize)>,
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
@@ -384,6 +386,7 @@ pub(super) fn emit_function(
     let fixups_snapshot = fixups.len();
     let plt_call_fixups_snapshot = plt_call_fixups.len();
     let data_fixups_snapshot = data_fixups.len();
+    let user_extern_data_refs_snapshot = user_extern_data_refs.len();
     let pending_func_fixups_snapshot = pending_func_fixups.len();
     let frame = Frame::for_function(func, alloc);
     let abi = target.abi();
@@ -413,6 +416,7 @@ pub(super) fn emit_function(
                 continue;
             }
             super::ssa_emit_common::record_inst_src(func, v, code.len(), ssa_line_rows);
+            let data_fixups_pre_inst = data_fixups.len();
             if !emit_inst(
                 code,
                 inst,
@@ -443,8 +447,23 @@ pub(super) fn emit_function(
                 fixups.truncate(fixups_snapshot);
                 plt_call_fixups.truncate(plt_call_fixups_snapshot);
                 data_fixups.truncate(data_fixups_snapshot);
+                user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                 pending_func_fixups.truncate(pending_func_fixups_snapshot);
                 return false;
+            }
+            // Convert the just-emitted ImmData's local `.data`
+            // fixup into a named cross-TU reference when the
+            // value-id appears in `extern_data_names`. See the
+            // matching comment in ssa_emit_aarch64.
+            if let Inst::ImmData(_) = inst
+                && let Some(name) = extern_data_names.get(&v)
+                && data_fixups.len() > data_fixups_pre_inst
+            {
+                let popped = data_fixups.pop().unwrap();
+                user_extern_data_refs.push(super::UserExternDataRef {
+                    instr_offset: popped.adrp_offset,
+                    symbol_name: name.clone(),
+                });
             }
         }
         match block.terminator {
@@ -490,6 +509,7 @@ pub(super) fn emit_function(
                     fixups.truncate(fixups_snapshot);
                     plt_call_fixups.truncate(plt_call_fixups_snapshot);
                     data_fixups.truncate(data_fixups_snapshot);
+                    user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     return false;
                 };
@@ -544,6 +564,7 @@ pub(super) fn emit_function(
                     fixups.truncate(fixups_snapshot);
                     plt_call_fixups.truncate(plt_call_fixups_snapshot);
                     data_fixups.truncate(data_fixups_snapshot);
+                    user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                     pending_func_fixups.truncate(pending_func_fixups_snapshot);
                     return false;
                 };
@@ -588,6 +609,7 @@ pub(super) fn emit_function(
                         fixups.truncate(fixups_snapshot);
                         plt_call_fixups.truncate(plt_call_fixups_snapshot);
                         data_fixups.truncate(data_fixups_snapshot);
+                        user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                         pending_func_fixups.truncate(pending_func_fixups_snapshot);
                         return false;
                     }
@@ -616,6 +638,7 @@ pub(super) fn emit_function(
                 fixups.truncate(fixups_snapshot);
                 plt_call_fixups.truncate(plt_call_fixups_snapshot);
                 data_fixups.truncate(data_fixups_snapshot);
+                user_extern_data_refs.truncate(user_extern_data_refs_snapshot);
                 pending_func_fixups.truncate(pending_func_fixups_snapshot);
                 return false;
             }

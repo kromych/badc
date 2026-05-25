@@ -1349,6 +1349,7 @@ pub(super) fn lower(
     let mut ssa_line_rows: Vec<(usize, u32, u32)> = Vec::new();
     let mut fixups: Vec<Fixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();
+    let mut user_extern_data_refs: Vec<super::UserExternDataRef> = Vec::new();
     let mut got_fixups: Vec<GotFixup> = Vec::new();
     // Each `JsrExt` / `TailExt` site records a `CALL rel32`
     // / `JMP rel32` placeholder; displacements get backfilled once
@@ -1398,6 +1399,14 @@ pub(super) fn lower(
         let ent_pc = func_ssa.ent_pc;
         bytecode_to_native[ent_pc] = code.len();
         func_ent_pcs.push(ent_pc);
+        // Pre-resolve every `imm_data_extern` value-id to the
+        // symbol name once per function so `emit_function` can
+        // tag the matching `DataFixup` with the cross-TU name.
+        let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> = func_ssa
+            .extern_imm_data_refs
+            .iter()
+            .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].name.clone()))
+            .collect();
         let ok = super::ssa_emit_x86_64::emit_function(
             func_ssa,
             alloc_for,
@@ -1407,6 +1416,8 @@ pub(super) fn lower(
             &mut plt_call_fixups,
             &mut got_fixups,
             &mut data_fixups,
+            &mut user_extern_data_refs,
+            &extern_data_names,
             &mut pending_func_fixups,
             imports,
             &variadic_targets,
@@ -1569,6 +1580,7 @@ pub(super) fn lower(
         func_ent_pcs,
         reloc_call_sites,
         user_extern_call_sites,
+        user_extern_data_refs,
         ssa_line_rows,
         // Set by `lower_for` after this returns; see the matching
         // comment on the aarch64 lowering's `Build` construction.

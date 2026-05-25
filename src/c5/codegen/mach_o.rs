@@ -2453,6 +2453,7 @@ mod tests {
             func_ent_pcs: Vec::new(),
             reloc_call_sites: Vec::new(),
             user_extern_call_sites: Vec::new(),
+            user_extern_data_refs: Vec::new(),
             ssa_line_rows: Vec::new(),
             imports: ResolvedImports {
                 imports: vec![ResolvedImport {

@@ -267,11 +267,50 @@ pub(super) fn write_relocatable(
         }
     }
 
+    // Defined data globals visible to other TUs. C99 6.2.2 +
+    // 6.9.2: every file-scope object with external linkage
+    // surfaces as a named STT_OBJECT symbol. The cross-TU
+    // linker needs the name to resolve `extern T x;`
+    // references in sibling units. `Symbol::val` is the byte
+    // offset within `.data`; size is left at zero (the parser
+    // doesn't track per-symbol storage size yet; tools that
+    // need it consult DWARF).
+    let mut defined_data_globals: Vec<(&str, i64)> = Vec::new();
+    {
+        use crate::c5::symbol::Linkage;
+        use crate::c5::token::Token;
+        for sym in &program.symbols {
+            if sym.class == Token::Glo as i64
+                && sym.defined_here
+                && sym.linkage == Linkage::External
+                && !sym.name.is_empty()
+            {
+                defined_data_globals.push((sym.name.as_str(), sym.val));
+            }
+        }
+    }
+
+    // Unique cross-TU user-data names referenced by
+    // `user_extern_data_refs`. Same dedup shape as the function
+    // case above.
+    let mut user_extern_data_names: Vec<&str> = Vec::new();
+    for r in &build.user_extern_data_refs {
+        let s = r.symbol_name.as_str();
+        if !user_extern_data_names.contains(&s) {
+            user_extern_data_names.push(s);
+        }
+    }
+
     // Rebuild strtab now that all names are known: file
     // basename + function names + libc-import symbol names +
-    // cross-TU user-function names.
+    // cross-TU user-function names + defined data globals +
+    // cross-TU user-data names.
     let mut all_names: Vec<&str> = Vec::with_capacity(
-        1 + func_strs.len() + build.imports.imports.len() + user_extern_names.len(),
+        1 + func_strs.len()
+            + build.imports.imports.len()
+            + user_extern_names.len()
+            + defined_data_globals.len()
+            + user_extern_data_names.len(),
     );
     all_names.push(file_basename);
     for s in &func_strs {
@@ -289,6 +328,14 @@ pub(super) fn write_relocatable(
     }
     let user_extern_names_start = all_names.len();
     for name in &user_extern_names {
+        all_names.push(*name);
+    }
+    let defined_data_globals_start = all_names.len();
+    for (name, _) in &defined_data_globals {
+        all_names.push(*name);
+    }
+    let user_extern_data_names_start = all_names.len();
+    for name in &user_extern_data_names {
         all_names.push(*name);
     }
     let (strtab_bytes, name_offs) = build_strtab(&all_names);
@@ -354,6 +401,33 @@ pub(super) fn write_relocatable(
         symbols.push(Elf64Sym {
             st_name: name_offs[user_extern_names_start + i],
             st_info: pack_sym_info(STB_GLOBAL, STT_NOTYPE),
+            st_shndx: SHN_UNDEF,
+            ..Default::default()
+        });
+    }
+
+    // Defined data globals: STB_GLOBAL + STT_OBJECT, shndx
+    // points at `.data`. C99 6.2.2: external-linkage objects
+    // surface by name so sibling TUs can resolve `extern T x;`.
+    for (i, (_, val)) in defined_data_globals.iter().enumerate() {
+        symbols.push(Elf64Sym {
+            st_name: name_offs[defined_data_globals_start + i],
+            st_info: pack_sym_info(STB_GLOBAL, STT_OBJECT),
+            st_shndx: SHIDX_DATA,
+            st_value: *val as u64,
+            ..Default::default()
+        });
+    }
+
+    // Cross-TU user-data imports: STB_GLOBAL + STT_OBJECT +
+    // SHN_UNDEF. The linker resolves these against the matching
+    // defined-data globals emitted by sibling units (above).
+    let mut user_extern_data_sym_idx: Vec<usize> = Vec::with_capacity(user_extern_data_names.len());
+    for (i, _name) in user_extern_data_names.iter().enumerate() {
+        user_extern_data_sym_idx.push(symbols.len());
+        symbols.push(Elf64Sym {
+            st_name: name_offs[user_extern_data_names_start + i],
+            st_info: pack_sym_info(STB_GLOBAL, STT_OBJECT),
             st_shndx: SHN_UNDEF,
             ..Default::default()
         });
@@ -442,6 +516,26 @@ pub(super) fn write_relocatable(
             fx.adrp_offset as u64,
             data_sym_idx,
             fx.data_offset as i64,
+        );
+    }
+
+    // Cross-TU data references. Same encoding shape as the
+    // local data_fixups, but the reloc targets the named
+    // undefined-data symbol so the linker resolves it against
+    // the defining TU's storage. The addend is zero -- the
+    // base of the symbol is the location to reach.
+    for r in &build.user_extern_data_refs {
+        let pos = user_extern_data_names
+            .iter()
+            .position(|n| *n == r.symbol_name.as_str())
+            .expect("user_extern_data_names contains every ref's name");
+        let sym_idx = user_extern_data_sym_idx[pos] as u64;
+        emit_addr_fixup_relocs(
+            machine_for_rela,
+            &mut rela_bytes,
+            r.instr_offset as u64,
+            sym_idx,
+            0,
         );
     }
 
@@ -750,6 +844,7 @@ mod tests {
             func_ent_pcs: Vec::new(),
             reloc_call_sites: Vec::new(),
             user_extern_call_sites: Vec::new(),
+            user_extern_data_refs: Vec::new(),
             ssa_line_rows: Vec::new(),
             imports: ResolvedImports::default(),
             abi: Abi::default(),

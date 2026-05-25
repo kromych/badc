@@ -240,15 +240,48 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
                 }
                 NativeSymSection::Undef => {
                     if let Some(def) = defined.get(&sym.name) {
-                        // Cross-unit reference to a globally-
-                        // defined symbol. Resolve in place.
-                        let base = match def.section {
-                            NativeSymSection::Text => 0i64,
-                            NativeSymSection::Data => 0i64,
-                            _ => 0i64,
-                        };
-                        let target = def.value as i64 + reloc.addend + base;
-                        apply_reloc(machine, &mut text, patch_offset, reloc, target)?;
+                        // Cross-unit reference to a globally
+                        // defined symbol. Text-section targets
+                        // can be patched in place because the
+                        // text segment's vmaddr is anchored
+                        // before the merge runs; data / bss
+                        // targets depend on the final-image
+                        // writer's `.text`-to-`.data` gap, so
+                        // park them through the same path that
+                        // local data refs use.
+                        match def.section {
+                            NativeSymSection::Text => {
+                                let target = def.value as i64 + reloc.addend;
+                                apply_reloc(machine, &mut text, patch_offset, reloc, target)?;
+                            }
+                            NativeSymSection::Data => {
+                                let data_off = def.value as i64 + reloc.addend;
+                                park_data_ref(
+                                    machine,
+                                    &mut pending_imports,
+                                    patch_offset,
+                                    reloc,
+                                    data_off,
+                                );
+                            }
+                            NativeSymSection::Bss => {
+                                let bss_off = def.value as i64 + reloc.addend;
+                                park_data_ref(
+                                    machine,
+                                    &mut pending_imports,
+                                    patch_offset,
+                                    reloc,
+                                    bss_off,
+                                );
+                            }
+                            NativeSymSection::Undef | NativeSymSection::Abs => {
+                                return Err(err(&format!(
+                                    "link_native_objects: defined entry for `{}` has \
+                                     non-progbits section {:?}",
+                                    sym.name, def.section,
+                                )));
+                            }
+                        }
                     } else if !sym.name.is_empty() {
                         // Library import -- park for the
                         // PLT pass.

@@ -1148,6 +1148,28 @@ impl Compiler {
                 sym.val = next_pc as i64;
                 next_pc += 1;
             }
+            // C99 6.7.1 + 6.9.2: an `extern T x;` / `extern T
+            // x[N];` declaration with no defining initializer in
+            // this TU contributes no storage. The parser-time
+            // tentative slot at `sym.val` is meaningless once the
+            // unit is linked against the defining TU; clear it so
+            // the walker's `live_glo_addr` returns
+            // `GloAddr::Extern` and routes the address producer
+            // through `imm_data_extern`. Without this clear, the
+            // walker emits `Inst::ImmData(stale_offset)` and the
+            // ET_REL writer lowers it as a `.data section symbol +
+            // 0` reloc, losing the symbol identity needed for
+            // cross-TU resolution.
+            for sym in self.symbols.iter_mut() {
+                if sym.class == Token::Glo as i64
+                    && sym.linkage == Linkage::External
+                    && sym.is_extern_decl
+                    && !sym.has_initializer
+                {
+                    sym.defined_here = false;
+                    sym.val = 0;
+                }
+            }
             imports
         } else {
             alloc::vec::Vec::new()

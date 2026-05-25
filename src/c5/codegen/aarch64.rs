@@ -1178,6 +1178,7 @@ pub(super) fn lower(
     // laid out at the tail of `code`.
     let mut plt_call_fixups: Vec<PltCallFixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();
+    let mut user_extern_data_refs: Vec<super::UserExternDataRef> = Vec::new();
     // Function-pointer Imms get their target resolved post-walk against
     // `bytecode_to_native`, so we record (adrp_offset, target_bytecode_pc)
     // here and rewrite into `Build::func_fixups` once the map is final.
@@ -1245,6 +1246,14 @@ pub(super) fn lower(
         let ent_pc = func_ssa.ent_pc;
         bytecode_to_native[ent_pc] = code.len();
         func_ent_pcs.push(ent_pc);
+        // Pre-resolve every `imm_data_extern` value-id to the
+        // symbol name once per function so `emit_function` can
+        // tag the matching `DataFixup` with the cross-TU name.
+        let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> = func_ssa
+            .extern_imm_data_refs
+            .iter()
+            .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].name.clone()))
+            .collect();
         let ok = super::ssa_emit_aarch64::emit_function(
             func_ssa,
             alloc_for,
@@ -1253,6 +1262,8 @@ pub(super) fn lower(
             &mut fixups,
             &mut plt_call_fixups,
             &mut data_fixups,
+            &mut user_extern_data_refs,
+            &extern_data_names,
             &mut pending_func_fixups,
             imports,
             &variadic_targets,
@@ -1413,6 +1424,7 @@ pub(super) fn lower(
         func_ent_pcs,
         reloc_call_sites,
         user_extern_call_sites,
+        user_extern_data_refs,
         ssa_line_rows,
         // `imports` is set by `lower_for` after this returns; the
         // resolver runs once up there and the value is shared with

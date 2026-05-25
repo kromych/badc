@@ -658,19 +658,26 @@ fn main() {
             eprint_diagnostic(format!("badc: error: PLT lowering failed: {e}"));
             std::process::exit(1);
         }
-        // TODO: emit a runnable ET_EXEC / ET_DYN / MH_EXECUTE /
-        // IMAGE_EXECUTABLE from `merged`. The link side is in
-        // place; the writer is the remaining piece.
-        eprint_diagnostic(format!(
-            "badc: native ELF link parsed {} object(s) into MergedNative \
-             (.text={} bytes, .data={} bytes, imports={}); final-image writer \
-             from MergedNative is not yet implemented",
-            native_paths.len(),
-            merged.text.len(),
-            merged.data.len(),
-            merged.imports.len(),
-        ));
-        std::process::exit(1);
+        let entry_name = "main";
+        let bytes = match badc::write_executable_elf64(&merged, entry_name) {
+            Ok(b) => b,
+            Err(e) => {
+                eprint_diagnostic(format!("badc: error: native image write failed: {e}"));
+                std::process::exit(1);
+            }
+        };
+        let out = match output_path.as_deref() {
+            Some(o) => o,
+            None => {
+                eprint_diagnostic(
+                    "badc: error: native ELF link requires `-o <path>` for the executable output",
+                );
+                std::process::exit(1);
+            }
+        };
+        write_output(out, &bytes, quiet);
+        let _ = native_paths;
+        return;
     }
 
     if show_includes {

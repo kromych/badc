@@ -17,23 +17,21 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum RelocKind {
-    /// `Op::Jsr <bc_pc>` operand: patch the i64 word at
-    /// `location` (an index into `LinkUnit::text`) with
-    /// `(symbol.value as i64) + addend`. The symbol must be
+    /// `Op::Jsr <bc_pc>` operand cross-TU reference. Retired:
+    /// `apply_reloc` no-ops these entries; the walker's
+    /// `extern_call_refs` channel resolves the matching
+    /// `Inst::Call::target_pc` independently. Symbol must be
     /// `SymbolKind::Function`.
     JsrPc = 1,
     /// `Op::Imm` operand carrying a function-pointer literal
-    /// (`CODE_BASE + bc_pc`): patch the i64 word at `location`
-    /// with `CODE_BASE as i64 + (symbol.value as i64) + addend`.
-    /// Symbol must be `Function`.
+    /// (`CODE_BASE + bc_pc`). Retired alongside `JsrPc`; the
+    /// walker's `extern_imm_code_refs` channel resolves the
+    /// matching `Inst::ImmCode`. Symbol must be `Function`.
     ImmCodeAddr = 2,
     /// `Op::Imm` operand carrying the address of a global
-    /// variable: patch the i64 word at `location` with
-    /// `(symbol.value as i64) + addend`. Symbol must be `Data`
-    /// or `TlsData`; the existing data-imm-position bookkeeping
-    /// in `Program::data_imm_positions` reports which Imm
-    /// operands hold data addresses so the codegen can map
-    /// them to the per-target image vmaddr.
+    /// variable. Retired alongside `JsrPc`; the walker's
+    /// `extern_imm_data_refs` channel resolves the matching
+    /// `Inst::ImmData`. Symbol must be `Data` or `TlsData`.
     ImmDataAddr = 3,
     /// 8-byte little-endian slot in the data segment that
     /// stores the address of a global. The merged program's

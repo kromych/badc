@@ -338,21 +338,12 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         merged_tls.extend(core::iter::repeat_n(0u8, bss_len));
     }
 
-    // Now emit text per unit with bytecode-PC remapping for
-    // intra-unit references that carry unit-local PCs:
-    //   * Op::Jsr <bc_pc>: add text_base[i]
-    //   * Op::Imm <CODE_BASE + bc_pc> (in code_imm_positions):
-    //       add text_base[i] to the operand
-    //   * Op::Imm <data_offset> (in data_imm_positions): add
-    //       data_base[i]
-    //
-    // Then walk symbolic relocations in a second pass.
-    //
-    // To find each operand's PC, walk the bytecode using
-    // Op::operand_count(). The compiler already records
-    // code_imm_positions and data_imm_positions so the
-    // function-pointer / data Imm sites can be distinguished
-    // from ordinary integer-constant Imms.
+    // Emit text per unit as a pure concat. The SSA tier handles
+    // every cross-unit reference (Inst::Call, Inst::ImmCode,
+    // Inst::ImmData, Inst::CallExt, Inst::TlsAddr) through the
+    // walker-recorded `extern_*_refs` + `binding_remap_per_unit`
+    // rebase below; the bytecode tape's operand contents are
+    // only consumed by disasm.
 
     let mut merged_source_functions: Vec<String> = Vec::new();
     let mut merged_source_files: Vec<String> = Vec::new();

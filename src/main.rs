@@ -677,9 +677,7 @@ fn main() {
             match badc::parse_native_elf(&bytes) {
                 Ok(o) => native_objs.push(o),
                 Err(e) => {
-                    eprint_diagnostic(format!(
-                        "badc: error: failed to re-parse `{src_path}` ET_REL: {e}"
-                    ));
+                    eprint_diagnostic(format!("badc: {src_path}: {e}"));
                     std::process::exit(1);
                 }
             }
@@ -702,9 +700,7 @@ fn main() {
             match badc::parse_native_elf(&bytes) {
                 Ok(o) => native_objs.push(o),
                 Err(e) => {
-                    eprint_diagnostic(format!(
-                        "badc: error: failed to parse native ELF `{obj_path}`: {e}"
-                    ));
+                    eprint_diagnostic(format!("badc: {obj_path}: {e}"));
                     std::process::exit(1);
                 }
             }
@@ -720,9 +716,7 @@ fn main() {
             let members = match badc::read_archive(&bytes) {
                 Ok(m) => m,
                 Err(e) => {
-                    eprint_diagnostic(format!(
-                        "badc: error: failed to parse archive `{a_path}`: {e}"
-                    ));
+                    eprint_diagnostic(format!("badc: {a_path}: {e}"));
                     std::process::exit(1);
                 }
             };
@@ -737,10 +731,7 @@ fn main() {
                 match badc::parse_native_elf(&m.bytes) {
                     Ok(o) => native_objs.push(o),
                     Err(e) => {
-                        eprint_diagnostic(format!(
-                            "badc: error: failed to parse archive `{a_path}` member `{}`: {e}",
-                            m.name
-                        ));
+                        eprint_diagnostic(format!("badc: {a_path}({}): {e}", m.name));
                         std::process::exit(1);
                     }
                 }
@@ -753,7 +744,7 @@ fn main() {
         let mut merged = match badc::link_native_objects(&native_objs) {
             Ok(m) => m,
             Err(e) => {
-                eprint_diagnostic(format!("badc: error: native link failed: {e}"));
+                eprint_diagnostic(format!("badc: {e}"));
                 std::process::exit(1);
             }
         };
@@ -762,14 +753,14 @@ fn main() {
             badc::NativeMachine::Aarch64 => badc::emit_aarch64_plt(&mut merged),
         };
         if let Err(e) = plt {
-            eprint_diagnostic(format!("badc: error: PLT lowering failed: {e}"));
+            eprint_diagnostic(format!("badc: {e}"));
             std::process::exit(1);
         }
         let entry_name = entry_override.as_deref().unwrap_or("main");
         let bytes = match badc::write_executable_elf64(&merged, entry_name) {
             Ok(b) => b,
             Err(e) => {
-                eprint_diagnostic(format!("badc: error: native image write failed: {e}"));
+                eprint_diagnostic(format!("badc: {e}"));
                 std::process::exit(1);
             }
         };
@@ -1006,7 +997,7 @@ fn main() {
         match badc::LinkArchive::parse(a.clone(), &bytes) {
             Ok(la) => link_archives.push(la),
             Err(e) => {
-                eprint_diagnostic(format!("badc: error: failed to parse `{a}`: {e}"));
+                eprint_diagnostic(format!("badc: {a}: {e}"));
                 std::process::exit(1);
             }
         }
@@ -1165,7 +1156,7 @@ fn native_defined_globals(bytes: &[u8], path: &str) -> Vec<String> {
     let obj = match badc::parse_native_elf(bytes) {
         Ok(o) => o,
         Err(e) => {
-            eprint_diagnostic(format!("badc: error: failed to parse `{path}`: {e}"));
+            eprint_diagnostic(format!("badc: {path}: {e}"));
             std::process::exit(1);
         }
     };
@@ -1456,7 +1447,7 @@ fn dump_native_link(rest: &[String]) {
         match badc::parse_native_elf(&bytes) {
             Ok(o) => objs.push(o),
             Err(e) => {
-                eprintln!("badc: --dump-native-link: parse `{p}` failed: {e}");
+                eprintln!("badc: --dump-native-link: {p}: {e}");
                 std::process::exit(1);
             }
         }
@@ -1464,7 +1455,7 @@ fn dump_native_link(rest: &[String]) {
     let mut merged = match badc::link_native_objects(&objs) {
         Ok(m) => m,
         Err(e) => {
-            eprintln!("badc: --dump-native-link: link failed: {e}");
+            eprintln!("badc: --dump-native-link: {e}");
             std::process::exit(1);
         }
     };

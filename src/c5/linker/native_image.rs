@@ -107,15 +107,13 @@ pub fn write_executable_elf64(merged: &MergedNative, entry_name: &str) -> Result
 fn write_static_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8>, C5Error> {
     // Resolve the entry function's text-segment offset.
     let entry_sym = merged.defined.get(entry_name).ok_or_else(|| {
-        err(&format!(
-            "native ELF executable writer: entry symbol `{entry_name}` not defined \
-             in any input object"
+        link_err(&format!(
+            "entry symbol `{entry_name}` not defined in any input object"
         ))
     })?;
     if !matches!(entry_sym.section, NativeSymSection::Text) {
-        return Err(err(&format!(
-            "native ELF executable writer: entry symbol `{entry_name}` is not in .text \
-             (found {:?})",
+        return Err(link_err(&format!(
+            "entry symbol `{entry_name}` is not in .text (found {:?})",
             entry_sym.section
         )));
     }
@@ -366,6 +364,10 @@ fn err(msg: &str) -> C5Error {
     C5Error::Compile(crate::c5::error::fmt_internal_err(msg))
 }
 
+fn link_err(msg: &str) -> C5Error {
+    C5Error::Compile(crate::c5::error::fmt_link_err(msg))
+}
+
 /// Emit a dynamically-linked ELF64 ET_EXEC for `merged` whose
 /// imports are resolved against libc.so.6 at startup by the
 /// system dynamic linker (DT_BIND_NOW eager binding).
@@ -393,15 +395,13 @@ fn err(msg: &str) -> C5Error {
 /// PLT-trampoline patch shape differ.
 fn write_dynamic_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8>, C5Error> {
     let entry_sym = merged.defined.get(entry_name).ok_or_else(|| {
-        err(&format!(
-            "native ELF executable writer: entry symbol `{entry_name}` not defined in any input \
-             object"
+        link_err(&format!(
+            "entry symbol `{entry_name}` not defined in any input object"
         ))
     })?;
     if !matches!(entry_sym.section, NativeSymSection::Text) {
-        return Err(err(&format!(
-            "native ELF executable writer: entry symbol `{entry_name}` is not in .text (found \
-             {:?})",
+        return Err(link_err(&format!(
+            "entry symbol `{entry_name}` is not in .text (found {:?})",
             entry_sym.section
         )));
     }

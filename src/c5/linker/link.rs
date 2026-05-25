@@ -443,13 +443,8 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
     }
 
     for (ui, unit) in units.iter().enumerate() {
-        // Walk this unit's bytecode, emit into merged_text
-        // with PC remapping.
         let text_off = text_base[ui];
         let data_off = data_base[ui];
-        let tls_off = tls_base[ui]; // init region
-        let tls_bss_off = tls_bss_base[ui];
-        let tls_init_local = unit.tls_init_size.min(unit.tls_data.len());
 
         // PC-indexed source_functions parallel to merged_text:
         // DWARF / disasm look this up by post-merge bc_pc. The
@@ -475,15 +470,14 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
             merged_warnings.push(w.clone());
         }
 
-        // Bytecode-tape merge is now a pure concat. Every
-        // operand (PC, data offset, function-pointer literal,
-        // TLS offset, binding index, plain integer) survives
-        // the merge unchanged. The merged tape's contents are
-        // only consumed by disasm; the SSA tier handles
-        // cross-unit references through walker-recorded
-        // `extern_*_refs` + `binding_remap_per_unit` applied
-        // to `synthetic_ssa_funcs` / `user_ssa_funcs` below.
-        let _ = (text_off, tls_off, tls_bss_off, tls_init_local);
+        // Bytecode-tape merge is a pure concat. Every operand
+        // (PC, data offset, function-pointer literal, TLS
+        // offset, binding index, plain integer) survives the
+        // merge unchanged. The merged tape's contents are only
+        // consumed by disasm; the SSA tier handles cross-unit
+        // references through walker-recorded `extern_*_refs` +
+        // `binding_remap_per_unit` applied to
+        // `synthetic_ssa_funcs` / `user_ssa_funcs` below.
         merged_text.extend_from_slice(&unit.text);
 
         // Apply intra-unit data_relocs (shift both endpoints).

@@ -47,35 +47,31 @@ fn static_local_shadows_extern_fn() {
 #[test]
 fn indirect_call_through_global_fn_ptr() {
     // C99 6.5.2.2: Path 1 indirect call (callee is a plain Glo
-    // Ident holding a function pointer). The parser emits args
-    // before the callee's data-imm load; the walker must defer
-    // the callee walk so f.insts ImmData order matches the
-    // bytecode Op::Imm order. driver() returns 42 only when the
-    // resolver pairs every Inst::ImmData with the right Op::Imm
-    // operand.
+    // Ident holding a function pointer). The walker defers the
+    // callee walk past the arg loop so the load-of-function-
+    // pointer Inst::ImmData lands after the arg-evaluating
+    // Inst::*. driver() returns 42 only when the walker emits
+    // every Inst::ImmData against the right Glo offset.
     assert_eq!(run_fixture("indirect_call_through_global_fn_ptr.c"), 42);
 }
 
 #[test]
 fn for_loop_call_body_and_step() {
-    // C99 6.8.5.3: the parser's bytecode layout places step
-    // before body in linear PC order. The walker must mirror
-    // that in `f.insts` so the post-merge resolver pairs each
-    // Inst::Call with the matching Op::Jsr operand. The driver
-    // returns 7 (add_one count) * 6 = 42 only when both calls
-    // resolve to their own targets.
+    // C99 6.8.5.3: the walker mirrors the parser's step-before-
+    // body block layout (so the post-merge linker rebase keeps
+    // the i-th `Inst::Call` referring to the same callee the
+    // C source named). driver() returns 7 (add_one count) * 6 =
+    // 42 only when both calls resolve to their own targets.
     assert_eq!(run_fixture("for_loop_call_body_and_step.c"), 42);
 }
 
 #[test]
 fn vtable_back_to_back_4arg() {
     // Same contract as `vtable_back_to_back` but with a 4-arg
-    // init call that mirrors bearssl's
-    // `br_hmac_drbg_vtable.init(&ctx.vtable, &sha256_vtable,
-    // seed, len)` pattern. driver() = 1 + 100 + 100 = 201
-    // only when the walker's callee-before-args evaluation
-    // pairs with the parser's bytecode in the order the
-    // post-merge resolver expects.
+    // init call. driver() = 1 + 100 + 100 = 201 only when the
+    // walker's callee-before-args evaluation lays Inst out so
+    // each `Inst::CallIndirect` target resolves through the
+    // right vtable slot.
     assert_eq!(run_fixture("vtable_back_to_back_4arg.c"), 201);
 }
 

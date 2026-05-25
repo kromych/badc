@@ -458,10 +458,9 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         let tls_init_local = unit.tls_init_size.min(unit.tls_data.len());
 
         // First record per-PC bookkeeping (source_lines /
-        // source_functions / source_file_indices /
-        // call_fp_arg_masks) -- these are PC-indexed parallel
-        // arrays. Pad to text_off so indices align after the
-        // append.
+        // source_functions / source_file_indices) -- these are
+        // PC-indexed parallel arrays. Pad to text_off so indices
+        // align after the append.
         // source_lines + source_functions + source_file_indices
         // must end up parallel to merged_text. We extend by
         // unit.text.len() so the indices match the bytecode
@@ -1098,9 +1097,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                 }
                 // Resolve every walker-recorded extern reference
                 // via the unit's LinkSymbol table + global symbol
-                // map. The post-merge resolver still runs as a
-                // sanity check against the bytecode-tape Op::Jsr /
-                // Op::Imm / Op::TlsLea operands.
+                // map.
                 resolve_extern_refs(
                     &mut rebased,
                     unit,
@@ -1145,7 +1142,8 @@ fn resolve_extern_refs(
     // symbol-resolution logic) for a given (link_sym_idx, expected
     // kind). Returns None when the symbol can't be resolved or
     // doesn't match the expected kind; callers leave the Inst at
-    // 0 for the bytecode-tape resolver to handle.
+    // 0, which the codegen surfaces as a relocation if the symbol
+    // is genuinely unresolved at link time.
     let resolve = |link_sym_idx: u32, want_kind: SymbolKind| -> Option<i64> {
         let link_sym = unit.symbols.get(link_sym_idx as usize)?;
         let target = if matches!(link_sym.linkage, crate::c5::symbol::Linkage::Internal) {

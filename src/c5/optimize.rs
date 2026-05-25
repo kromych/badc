@@ -503,8 +503,8 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
     // if the target was DCE'd or the PC isn't an instruction
     // start. `0` is the cross-TU placeholder Inst::Call uses
     // when the symbol stays unresolved at link time; pass it
-    // through unchanged so the SSA-side resolver can re-link
-    // later (downstream of any further passes).
+    // through unchanged so the linker can re-link via the
+    // walker-recorded extern-ref side channel.
     let remap_pc = |old: usize| -> Option<usize> {
         if old == 0 {
             return Some(0);

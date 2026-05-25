@@ -599,11 +599,12 @@ fn user_ssa_funcs_call_target_pc_resolves_for_cross_tu_extern() {
     // Post-link invariant: every Inst::Call::target_pc matches
     // the corresponding Op::Jsr operand in program.text. The
     // walker emits one Inst::Call per Op::Jsr in source order,
-    // and the resolver propagates the merged-PC operand into
-    // the SSA-side field. An unreachable Op::Jsr 0 in the tape
-    // (dead inline helper calling an undefined-but-unused
-    // forward decl from the prelude) maps to target_pc == 0 in
-    // the SSA -- the two stay consistent.
+    // stamping target_pc directly from the live symbol value
+    // for same-unit calls and through resolve_extern_refs for
+    // cross-TU ones. An unreachable Op::Jsr 0 in the tape (dead
+    // inline helper calling an undefined-but-unused forward
+    // decl from the prelude) maps to target_pc == 0 in the SSA
+    // -- the two stay consistent.
     for f in &program.user_ssa_funcs {
         let mut jsr_operands: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
         let mut pc = f.ent_pc;
@@ -631,8 +632,8 @@ fn user_ssa_funcs_call_target_pc_resolves_for_cross_tu_extern() {
     // Sanity: TU B's main has the cross-TU extern call. Locate
     // its Inst::Call in the merged user_ssa_funcs (its
     // bytecode tape lives in B's range -- the first half of
-    // merged_text since B was passed first), and confirm the
-    // resolver gave it a non-zero merged-PC target.
+    // merged_text since B was passed first), and confirm
+    // resolve_extern_refs gave it a non-zero merged-PC target.
     let main_b = program
         .user_ssa_funcs
         .iter()

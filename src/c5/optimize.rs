@@ -528,9 +528,9 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
             } else {
                 f.end_pc
             };
-            // Per-Inst PC references: the linker's
-            // `resolve_user_ssa_call_targets` populated these
-            // against the pre-opt bytecode tape. The optimizer
+            // Per-Inst PC references: the walker stamps every
+            // Inst::Call::target_pc / Inst::ImmCode from the
+            // live symbol value at AST-walk time. The optimizer
             // shifts every survivor's PC through `new_pc`, so
             // every Inst::Call::target_pc and Inst::ImmCode in
             // the SSA has to follow. A target that DCE'd out

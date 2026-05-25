@@ -564,9 +564,10 @@ fn user_ssa_funcs_call_target_pc_resolves_for_cross_tu_extern() {
     // compile_to_link_unit time, B's user_ssa_funcs entry for
     // main carries an Inst::Call with target_pc == 0 (B doesn't
     // know A's PC yet). The merge patches Op::Jsr's operand in
-    // merged_text against A's resolved ent_pc, then
-    // `resolve_user_ssa_call_targets` propagates that PC into
-    // the matching Inst::Call::target_pc.
+    // merged_text against A's resolved ent_pc, and
+    // `resolve_extern_refs` patches the matching
+    // Inst::Call::target_pc via the walker-recorded symbol-ref
+    // side channel.
     let a = compile_unit("int add(int a, int b) { return a + b; }");
     let b = compile_unit(
         "

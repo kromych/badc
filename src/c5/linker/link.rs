@@ -1309,40 +1309,10 @@ fn resolve_user_ssa_call_targets(program: &mut Program) -> Result<(), C5Error> {
         // value by the matching section base, so we patch from the
         // bytecode operand only when the walker stamped 0 (the
         // cross-TU extern case where parser_symbol.val was 0
-        // because the defining unit hadn't been linked yet).
-        // Drift between walker-stamped values and bytecode-side
-        // operands marks a walker / parser layout divergence (the
-        // most recent case was the for-loop body / step block
-        // order, fixed in commit b86eec5). Strict mode -- gated by
-        // BADC_STRICT_RESOLVER=1 -- fails the link so the next
-        // divergence surfaces immediately; otherwise the bytecode
-        // operand wins and the divergence emits a single warning
-        // line per function on stderr so it shows up in CI logs
-        // without breaking builds. TODO: retire the bytecode-side
-        // operand entirely once every Inst variant carries enough
-        // information for the linker to resolve cross-TU references
-        // from the symbol table directly.
-        #[cfg(feature = "std")]
-        let strict = std::env::var("BADC_STRICT_RESOLVER").is_ok();
-        #[cfg(not(feature = "std"))]
-        let strict = false;
-        let mut drift_reported_for_this_fn = false;
-        let mut report_drift = |kind: &str, walker_val: i64, bytecode_val: i64| {
-            if drift_reported_for_this_fn {
-                return;
-            }
-            drift_reported_for_this_fn = true;
-            #[cfg(feature = "std")]
-            std::eprintln!(
-                "[resolver] {kind} drift in {:?} (ent_pc={}): walker={walker_val}, bytecode={bytecode_val} -- bytecode wins",
-                program
-                    .source_functions
-                    .get(f.ent_pc)
-                    .cloned()
-                    .unwrap_or_default(),
-                f.ent_pc,
-            );
-        };
+        // because the defining unit hadn't been linked yet). Any
+        // non-zero walker value that disagrees with the bytecode
+        // operand marks a walker / parser layout divergence and
+        // is a hard linker error.
         for inst in &mut f.insts {
             match inst {
                 Inst::Call { target_pc, .. } => {
@@ -1350,21 +1320,17 @@ fn resolve_user_ssa_call_targets(program: &mut Program) -> Result<(), C5Error> {
                         if *target_pc == 0 {
                             *target_pc = t as usize;
                         } else if *target_pc != t as usize {
-                            if strict {
-                                return Err(err(&alloc::format!(
-                                    "Inst::Call::target_pc drift in {:?} (ent_pc={}): walker={}, bytecode={}",
-                                    program
-                                        .source_functions
-                                        .get(f.ent_pc)
-                                        .cloned()
-                                        .unwrap_or_default(),
-                                    f.ent_pc,
-                                    *target_pc,
-                                    t,
-                                )));
-                            }
-                            report_drift("Inst::Call::target_pc", *target_pc as i64, t);
-                            *target_pc = t as usize;
+                            return Err(err(&alloc::format!(
+                                "Inst::Call::target_pc drift in {:?} (ent_pc={}): walker={}, bytecode={}",
+                                program
+                                    .source_functions
+                                    .get(f.ent_pc)
+                                    .cloned()
+                                    .unwrap_or_default(),
+                                f.ent_pc,
+                                *target_pc,
+                                t,
+                            )));
                         }
                     }
                 }
@@ -1376,21 +1342,17 @@ fn resolve_user_ssa_call_targets(program: &mut Program) -> Result<(), C5Error> {
                         if *pc == 0 {
                             *pc = bytecode_pc;
                         } else if *pc != bytecode_pc {
-                            if strict {
-                                return Err(err(&alloc::format!(
-                                    "Inst::ImmCode drift in {:?} (ent_pc={}): walker={}, bytecode={}",
-                                    program
-                                        .source_functions
-                                        .get(f.ent_pc)
-                                        .cloned()
-                                        .unwrap_or_default(),
-                                    f.ent_pc,
-                                    *pc,
-                                    bytecode_pc,
-                                )));
-                            }
-                            report_drift("Inst::ImmCode", *pc as i64, bytecode_pc as i64);
-                            *pc = bytecode_pc;
+                            return Err(err(&alloc::format!(
+                                "Inst::ImmCode drift in {:?} (ent_pc={}): walker={}, bytecode={}",
+                                program
+                                    .source_functions
+                                    .get(f.ent_pc)
+                                    .cloned()
+                                    .unwrap_or_default(),
+                                f.ent_pc,
+                                *pc,
+                                bytecode_pc,
+                            )));
                         }
                     }
                 }
@@ -1399,21 +1361,17 @@ fn resolve_user_ssa_call_targets(program: &mut Program) -> Result<(), C5Error> {
                         if *off == 0 {
                             *off = t;
                         } else if *off != t {
-                            if strict {
-                                return Err(err(&alloc::format!(
-                                    "Inst::ImmData drift in {:?} (ent_pc={}): walker={}, bytecode={}",
-                                    program
-                                        .source_functions
-                                        .get(f.ent_pc)
-                                        .cloned()
-                                        .unwrap_or_default(),
-                                    f.ent_pc,
-                                    *off,
-                                    t,
-                                )));
-                            }
-                            report_drift("Inst::ImmData", *off, t);
-                            *off = t;
+                            return Err(err(&alloc::format!(
+                                "Inst::ImmData drift in {:?} (ent_pc={}): walker={}, bytecode={}",
+                                program
+                                    .source_functions
+                                    .get(f.ent_pc)
+                                    .cloned()
+                                    .unwrap_or_default(),
+                                f.ent_pc,
+                                *off,
+                                t,
+                            )));
                         }
                     }
                 }
@@ -1422,21 +1380,17 @@ fn resolve_user_ssa_call_targets(program: &mut Program) -> Result<(), C5Error> {
                         if *off == 0 {
                             *off = t;
                         } else if *off != t {
-                            if strict {
-                                return Err(err(&alloc::format!(
-                                    "Inst::TlsAddr drift in {:?} (ent_pc={}): walker={}, bytecode={}",
-                                    program
-                                        .source_functions
-                                        .get(f.ent_pc)
-                                        .cloned()
-                                        .unwrap_or_default(),
-                                    f.ent_pc,
-                                    *off,
-                                    t,
-                                )));
-                            }
-                            report_drift("Inst::TlsAddr", *off, t);
-                            *off = t;
+                            return Err(err(&alloc::format!(
+                                "Inst::TlsAddr drift in {:?} (ent_pc={}): walker={}, bytecode={}",
+                                program
+                                    .source_functions
+                                    .get(f.ent_pc)
+                                    .cloned()
+                                    .unwrap_or_default(),
+                                f.ent_pc,
+                                *off,
+                                t,
+                            )));
                         }
                     }
                 }

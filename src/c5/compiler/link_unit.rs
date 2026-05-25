@@ -296,10 +296,27 @@ impl Compiler {
         // glo_imm_refs: external Glo references become
         // ImmDataAddr relocations; defined-locally entries
         // need no fixup (the operand already holds `val`).
+        //
+        // The push to `glo_imm_refs` happens at parse time when
+        // the symbol's class / val reflect the inner-scope binding;
+        // by the time we iterate here, block_symbols restoration
+        // has rolled class / val back to the outer scope. C99
+        // 6.2.1p2 lets an inner-scope `static T arr[];` shadow an
+        // outer file-scope declaration of the same name (the tcc
+        // codebase has `static const unsigned char expect[]`
+        // inside a switch case that shadows the prototyped
+        // `void expect(const char *)`). After restore the symbol's
+        // class returns to the outer Token::Fun even though the
+        // operand at `operand_pc` already encodes the static-
+        // local's data offset. Filter on `sym.class == Token::Glo`
+        // so the reloc only fires for genuine cross-TU global
+        // references that survived the restore.
         let glo_imm_refs = core::mem::take(&mut self.glo_imm_refs);
         for (operand_pc, sym_idx) in glo_imm_refs {
             let sym = &self.symbols[sym_idx];
-            let is_external_undefined = sym.linkage == Linkage::External && !sym.defined_here;
+            let is_external_undefined = sym.class == Token::Glo as i64
+                && sym.linkage == Linkage::External
+                && !sym.defined_here;
             if is_external_undefined {
                 if sym.is_thread_local {
                     return Err(self.compile_err(alloc::format!(
@@ -309,9 +326,9 @@ impl Compiler {
                         sym.name
                     )));
                 }
-                // Operand was emitted as `0` because the
-                // symbol's val is 0 for an undefined extern;
-                // leave it cleared and emit the reloc.
+                // Operand was emitted with the tentative-storage
+                // offset; clear it so the linker resolves to the
+                // defining unit instead of this unit's placeholder.
                 self.text[operand_pc] = 0;
                 text_relocs.push((RelocKind::ImmDataAddr, operand_pc as u64, sym_idx));
             }

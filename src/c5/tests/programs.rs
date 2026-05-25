@@ -31,6 +31,20 @@ fn switch_default_routing() {
 }
 
 #[test]
+fn static_local_shadows_extern_fn() {
+    // C99 6.2.1p4: an inner-block `static const T arr[];` shadows
+    // an outer function declaration of the same name. The parser's
+    // hash-keyed symbol table mutates class/val for the duration
+    // of the block and restores them on block exit; the
+    // link_unit glo_imm_refs filter must look at class==Glo (not
+    // just linkage) so the restored-to-Fun outer state doesn't
+    // trip a cross-TU ImmDataAddr reloc against the operand.
+    // driver(1) returns 42 only when the static-local `expect[]`
+    // read resolves to the local data segment.
+    assert_eq!(run_fixture("static_local_shadows_extern_fn.c"), 42);
+}
+
+#[test]
 fn indirect_call_through_global_fn_ptr() {
     // C99 6.5.2.2: Path 1 indirect call (callee is a plain Glo
     // Ident holding a function pointer). The parser emits args

@@ -132,6 +132,38 @@ impl Compiler {
             self.code_reloc_sym_idx.push(sym_idx);
             return Ok(());
         }
+        // Bare global array reference in a pointer initializer:
+        // `int arr[N] = ...; int *p = arr;`. C99 6.3.2.1p3: an
+        // lvalue of array type decays to a pointer to its first
+        // element in every non-lvalue context, including a
+        // global initializer. Emit the same `DataReloc` shape as
+        // `&arr[0]` would: the slot holds the array's
+        // data-segment offset; the writer / linker patches the
+        // runtime VA at image-load time.
+        if self.lex.tk == Token::Id
+            && self.symbols[self.lex.curr_id_idx].class == Token::Glo as i64
+            && self.symbols[self.lex.curr_id_idx].array_size > 0
+            && is_pointer_ty(var_ty)
+        {
+            if is_thread_local {
+                return Err(self.compile_err_at(
+                    line,
+                    "array-decay initializer for `_Thread_local` not supported",
+                ));
+            }
+            let target_idx = self.lex.curr_id_idx;
+            let target_offset = self.symbols[target_idx].val;
+            self.symbols[target_idx].was_referenced = true;
+            self.next()?;
+            let bytes = (target_offset as u64).to_le_bytes();
+            self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
+            self.data_relocs.push(crate::c5::program::DataReloc {
+                data_offset: var_offset as u64,
+                target_offset: target_offset as u64,
+            });
+            self.data_reloc_sym_idx.push(target_idx);
+            return Ok(());
+        }
         // String literal in a `char *p` global initializer.
         if self.lex.tk == '"' && is_pointer_ty(var_ty) {
             if is_thread_local {

@@ -323,6 +323,48 @@ fn function_pointer_initializer_resolves_at_link_time() {
     );
 }
 
+// C99 6.3.2.1p3: an array name in a non-lvalue context
+// decays to a pointer to its first element. The global
+// initializer parser used to reject bare-array RHS as
+// `constant integer expected`; now it emits the same
+// DataReloc as `&arr[0]` would.
+#[cfg(target_os = "linux")]
+#[test]
+fn array_to_pointer_decay_in_global_initializer() {
+    let dir = tempdir("array-decay");
+    write_source(
+        &dir,
+        "lib.c",
+        "int a = 1, b = 2, c = 3;\n\
+         int *arr2[] = { &a, &b, &c };\n\
+         int **pparr = arr2;\n",
+    );
+    write_source(
+        &dir,
+        "use.c",
+        "extern int **pparr;\n\
+         int main(void) { return (*pparr[0]) + (*pparr[1]) + (*pparr[2]); }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("lib.c"))
+            .arg(dir.join("use.c"))
+            .current_dir(&dir),
+        "link array-decay-as-pointer global initializer",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(
+        out.status.code(),
+        Some(6),
+        "exit code mismatch: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
 // C99 6.7.9p23 + 6.2.2: a function-pointer initializer whose
 // target lives in another TU must resolve to the defining
 // unit's `.text` offset. The native ET_REL writer emits the

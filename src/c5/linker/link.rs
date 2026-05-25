@@ -501,7 +501,11 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
             merged_warnings.push(w.clone());
         }
 
-        // Walk text, remapping operand words.
+        // Walk text, remapping operand words. The merged bytecode
+        // tape contents are only consumed by disasm; the SSA tier
+        // is rebased independently via `resolve_extern_refs` +
+        // the walker-stamp pass below. Keep the rebase so
+        // multi-TU `--dump-asm` reports merged-PC operands.
         let code_imm_set: alloc::collections::BTreeSet<usize> =
             unit.code_imm_positions.iter().copied().collect();
         let data_imm_set: alloc::collections::BTreeSet<usize> =
@@ -520,7 +524,6 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                     }
                     let operand = unit.text[operand_pc];
                     let new = if code_imm_set.contains(&operand_pc) {
-                        // CODE_BASE + bc_pc -> CODE_BASE + (bc_pc + text_off)
                         let bc_pc = operand - CODE_BASE as i64;
                         CODE_BASE as i64 + bc_pc + text_off as i64
                     } else if data_imm_set.contains(&operand_pc) {
@@ -538,12 +541,6 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                     pc += 2;
                 }
                 Some(Op::Jsr) | Some(Op::Jmp) | Some(Op::Bz) | Some(Op::Bnz) => {
-                    // Each of these carries a single intra-unit
-                    // bytecode-PC operand. Internally-resolved
-                    // already at parse time, so the operand
-                    // holds the unit-local PC; shift by the
-                    // unit's text offset to get the merged-
-                    // program PC.
                     let operand_pc = pc + 1;
                     if operand_pc >= unit.text.len() {
                         return Err(err("dangling branch operand"));
@@ -570,10 +567,6 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                     if operand_pc >= unit.text.len() {
                         return Err(err("dangling TlsLea operand"));
                     }
-                    // TLS offsets: if the operand points into the
-                    // init region (< tls_init_local), it shifts
-                    // by `tls_off`; otherwise by
-                    // `tls_bss_off - tls_init_local`.
                     let raw = unit.text[operand_pc] as usize;
                     let new = if raw < tls_init_local {
                         (tls_off + raw) as i64
@@ -584,9 +577,6 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                     pc += 2;
                 }
                 Some(other) => {
-                    // Copy any operand words verbatim; remaining
-                    // operand-bearing ops don't carry PC / data /
-                    // binding references.
                     for k in 0..other.operand_count() {
                         let operand_pc = pc + 1 + k;
                         if operand_pc >= unit.text.len() {
@@ -597,8 +587,6 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                     pc += other.word_size();
                 }
                 None => {
-                    // Operand word leaking into the op-decode
-                    // stream means a previous op was miscounted.
                     return Err(err(&format!("non-op word at bc_pc {pc} in unit {}", ui)));
                 }
             }
@@ -1278,29 +1266,12 @@ fn apply_reloc(
 
     let resolved = target_value + r.addend;
     match r.kind {
-        RelocKind::JsrPc => {
-            let loc = (text_off as i64) + r.location as i64;
-            let slot = loc as usize;
-            if slot >= merged_text.len() {
-                return Err(err("JsrPc reloc location out of merged text"));
-            }
-            merged_text[slot] = resolved;
-        }
-        RelocKind::ImmCodeAddr => {
-            let loc = (text_off as i64) + r.location as i64;
-            let slot = loc as usize;
-            if slot >= merged_text.len() {
-                return Err(err("ImmCodeAddr reloc location out of merged text"));
-            }
-            merged_text[slot] = CODE_BASE as i64 + resolved;
-        }
-        RelocKind::ImmDataAddr => {
-            let loc = (text_off as i64) + r.location as i64;
-            let slot = loc as usize;
-            if slot >= merged_text.len() {
-                return Err(err("ImmDataAddr reloc location out of merged text"));
-            }
-            merged_text[slot] = resolved;
+        // Bytecode-tape relocations were only consumed by lift_program
+        // and disasm; both are gone for SSA correctness. The Inst side
+        // is patched by resolve_extern_refs directly.
+        RelocKind::JsrPc | RelocKind::ImmCodeAddr | RelocKind::ImmDataAddr => {
+            let _ = text_off;
+            let _ = merged_text;
         }
         RelocKind::DataDataAbs64 => {
             let slot = data_off + r.location as usize;

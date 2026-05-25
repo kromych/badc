@@ -1837,10 +1837,18 @@ impl<'a> Walker<'a> {
             Ok(b.local_addr(*val))
         } else if *class == Token::Glo as i64 {
             if *is_thread_local {
-                Ok(b.tls_addr(*val))
+                if *val == 0 {
+                    Ok(b.tls_addr_extern(*sym))
+                } else {
+                    Ok(b.tls_addr(*val))
+                }
             } else {
                 let live_val = self.live_glo_val(*sym, *val);
-                Ok(b.imm_data(live_val))
+                if live_val == 0 {
+                    Ok(b.imm_data_extern(*sym))
+                } else {
+                    Ok(b.imm_data(live_val))
+                }
             }
         } else if *class == Token::Fun as i64 {
             // Sys-trampoline symbols are added late and have
@@ -1858,7 +1866,11 @@ impl<'a> Walker<'a> {
             } else {
                 *val
             };
-            Ok(b.imm_code(live_val as usize))
+            if live_val == 0 {
+                Ok(b.imm_code_extern(*sym))
+            } else {
+                Ok(b.imm_code(live_val as usize))
+            }
         } else {
             Err(WalkError::UnknownSymbolClass {
                 sym: *sym,
@@ -1916,8 +1928,14 @@ impl<'a> Walker<'a> {
             if class == Token::Loc as i64 {
                 return Ok(b.local_addr(val));
             } else if class == Token::Glo as i64 && !is_thread_local {
+                if val == 0 {
+                    return Ok(b.imm_data_extern(_sym));
+                }
                 return Ok(b.imm_data(val));
             } else if class == Token::Glo as i64 && is_thread_local {
+                if val == 0 {
+                    return Ok(b.tls_addr_extern(_sym));
+                }
                 return Ok(b.tls_addr(val));
             }
         }
@@ -1925,15 +1943,27 @@ impl<'a> Walker<'a> {
             let kind = load_kind_for(ty, self.target);
             Ok(b.load_local(val, kind))
         } else if class == Token::Glo as i64 && !is_thread_local {
-            let addr = b.imm_data(val);
+            let addr = if val == 0 {
+                b.imm_data_extern(_sym)
+            } else {
+                b.imm_data(val)
+            };
             let kind = load_kind_for(ty, self.target);
             Ok(b.load(addr, kind))
         } else if class == Token::Glo as i64 && is_thread_local {
-            let addr = b.tls_addr(val);
+            let addr = if val == 0 {
+                b.tls_addr_extern(_sym)
+            } else {
+                b.tls_addr(val)
+            };
             let kind = load_kind_for(ty, self.target);
             Ok(b.load(addr, kind))
         } else if class == Token::Fun as i64 {
-            Ok(b.imm_code(val as usize))
+            if val == 0 {
+                Ok(b.imm_code_extern(_sym))
+            } else {
+                Ok(b.imm_code(val as usize))
+            }
         } else if class == Token::Num as i64 {
             // Enum constants and `#define`-via-const-decl idioms
             // both surface as `Token::Num`-class symbols; `val`

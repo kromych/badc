@@ -382,4 +382,18 @@ pub(crate) struct FunctionSsa {
     /// `ent_pc` without consulting the bytecode tape. Empty for
     /// functions built outside the walker.
     pub extern_call_refs: Vec<(u32, u32)>,
+    /// Per-Inst extern symbol references for `Inst::ImmCode(pc)`.
+    /// Same shape as `extern_call_refs`; the linker resolves the
+    /// referenced sym to a `SymbolKind::Function`'s merged ent_pc.
+    pub extern_imm_code_refs: Vec<(u32, u32)>,
+    /// Per-Inst extern symbol references for `Inst::ImmData(off)`.
+    /// Same shape as `extern_call_refs`; the linker resolves the
+    /// referenced sym to a `SymbolKind::Data`'s merged data
+    /// offset.
+    pub extern_imm_data_refs: Vec<(u32, u32)>,
+    /// Per-Inst extern symbol references for `Inst::TlsAddr(off)`.
+    /// Same shape as `extern_call_refs`; the linker resolves the
+    /// referenced sym to a `SymbolKind::TlsData`'s merged TLS
+    /// offset.
+    pub extern_tls_refs: Vec<(u32, u32)>,
 }

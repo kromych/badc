@@ -1720,9 +1720,13 @@ pub(crate) fn read_ssa_func(
         inst_src,
         blocks,
         vstack_slots,
-        // TODO: serialize `extern_call_refs` once every walker
-        // emit site populates it and the resolver can retire.
+        // TODO: serialize the four `extern_*_refs` vectors once
+        // every walker emit site populates them and the resolver
+        // can retire.
         extern_call_refs: alloc::vec::Vec::new(),
+        extern_imm_code_refs: alloc::vec::Vec::new(),
+        extern_imm_data_refs: alloc::vec::Vec::new(),
+        extern_tls_refs: alloc::vec::Vec::new(),
     })
 }
 

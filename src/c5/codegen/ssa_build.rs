@@ -93,6 +93,9 @@ impl SsaBuilder {
             blocks: Vec::new(),
             vstack_slots: 0,
             extern_call_refs: Vec::new(),
+            extern_imm_code_refs: Vec::new(),
+            extern_imm_data_refs: Vec::new(),
+            extern_tls_refs: Vec::new(),
         };
         let mut b = Self {
             func,
@@ -175,9 +178,27 @@ impl SsaBuilder {
         self.push(Inst::ImmData(off))
     }
 
+    /// `Inst::ImmData(0)` whose target lives in another TU.
+    /// Records the parser-symbol index for later linker
+    /// resolution.
+    pub(crate) fn imm_data_extern(&mut self, sym_idx: u32) -> ValueId {
+        let v = self.push(Inst::ImmData(0));
+        self.func.extern_imm_data_refs.push((v, sym_idx));
+        v
+    }
+
     /// `Inst::ImmCode` (function-pointer literal).
     pub(crate) fn imm_code(&mut self, target_pc: usize) -> ValueId {
         self.push(Inst::ImmCode(target_pc))
+    }
+
+    /// `Inst::ImmCode(0)` whose target lives in another TU.
+    /// Records the parser-symbol index for later linker
+    /// resolution.
+    pub(crate) fn imm_code_extern(&mut self, sym_idx: u32) -> ValueId {
+        let v = self.push(Inst::ImmCode(0));
+        self.func.extern_imm_code_refs.push((v, sym_idx));
+        v
     }
 
     /// `Inst::AllocaInit` -- per-function alloca bookkeeping
@@ -200,6 +221,15 @@ impl SsaBuilder {
     /// `Inst::TlsAddr`.
     pub(crate) fn tls_addr(&mut self, off: i64) -> ValueId {
         self.push(Inst::TlsAddr(off))
+    }
+
+    /// `Inst::TlsAddr(0)` whose target lives in another TU.
+    /// Records the parser-symbol index for later linker
+    /// resolution.
+    pub(crate) fn tls_addr_extern(&mut self, sym_idx: u32) -> ValueId {
+        let v = self.push(Inst::TlsAddr(0));
+        self.func.extern_tls_refs.push((v, sym_idx));
+        v
     }
 
     /// `Inst::Load` through a precomputed address.

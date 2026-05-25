@@ -1107,33 +1107,21 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                         *idx = *remapped;
                     }
                 }
-                // Resolve every `Inst::Call::target_pc` whose
-                // walker stamp was 0 (cross-TU extern) via the
-                // unit's LinkSymbol table + global symbol map.
-                // The post-merge resolver still runs as a sanity
-                // check against the bytecode-tape Op::Jsr operand.
-                for &(inst_idx, link_sym_idx) in &rebased.extern_call_refs {
-                    let link_sym = match unit.symbols.get(link_sym_idx as usize) {
-                        Some(s) => s,
-                        None => continue,
-                    };
-                    let resolved = defined.get(&link_sym.name).and_then(|g| {
-                        let target_unit = &units[g.unit_idx];
-                        let target_sym = target_unit.symbols.get(g.sym_idx)?;
-                        if !matches!(target_sym.kind, SymbolKind::Function) {
-                            return None;
-                        }
-                        Some(text_base[g.unit_idx] + target_sym.value as usize)
-                    });
-                    if let Some(target_pc) = resolved
-                        && let Some(crate::c5::ir::Inst::Call {
-                            target_pc: slot, ..
-                        }) = rebased.insts.get_mut(inst_idx as usize)
-                        && *slot == 0
-                    {
-                        *slot = target_pc;
-                    }
-                }
+                // Resolve every walker-recorded extern reference
+                // via the unit's LinkSymbol table + global symbol
+                // map. The post-merge resolver still runs as a
+                // sanity check against the bytecode-tape Op::Jsr /
+                // Op::Imm / Op::TlsLea operands.
+                resolve_extern_refs(
+                    &mut rebased,
+                    unit,
+                    &units,
+                    &text_base,
+                    &data_base,
+                    &tls_base,
+                    &tls_bss_base,
+                    &defined,
+                );
                 program.user_ssa_funcs.push(rebased);
             }
         }
@@ -1426,6 +1414,98 @@ fn resolve_user_ssa_call_targets(program: &mut Program) -> Result<(), C5Error> {
         }
     }
     Ok(())
+}
+
+/// Patch every `Inst::{Call,ImmCode,ImmData,TlsAddr}` whose
+/// walker-stamped value was 0 (cross-TU extern) by resolving the
+/// recorded symbol reference through the unit's `LinkSymbol`
+/// table and the global `defined` map. The four refs vectors
+/// were populated by the walker and remapped to LinkUnit symbol
+/// indices in `link_unit`.
+#[allow(clippy::too_many_arguments)]
+fn resolve_extern_refs(
+    rebased: &mut crate::c5::ir::FunctionSsa,
+    unit: &LinkUnit,
+    units: &[LinkUnit],
+    text_base: &[usize],
+    data_base: &[usize],
+    tls_base: &[usize],
+    tls_bss_base: &[usize],
+    defined: &HashMap<String, GlobalSymbol>,
+) {
+    use crate::c5::ir::Inst;
+
+    // Helper: look up the target_value (mirrors apply_reloc's
+    // symbol-resolution logic) for a given (link_sym_idx, expected
+    // kind). Returns None when the symbol can't be resolved or
+    // doesn't match the expected kind; callers leave the Inst at
+    // 0 for the bytecode-tape resolver to handle.
+    let resolve = |link_sym_idx: u32, want_kind: SymbolKind| -> Option<i64> {
+        let link_sym = unit.symbols.get(link_sym_idx as usize)?;
+        let target = if matches!(link_sym.linkage, crate::c5::symbol::Linkage::Internal) {
+            (
+                units.iter().position(|u| core::ptr::eq(u, unit))?,
+                link_sym.clone(),
+            )
+        } else {
+            let g = defined.get(&link_sym.name)?;
+            (g.unit_idx, units[g.unit_idx].symbols[g.sym_idx].clone())
+        };
+        let (target_unit_idx, target_sym_def) = target;
+        if !std::mem::discriminant(&target_sym_def.kind).eq(&std::mem::discriminant(&want_kind)) {
+            return None;
+        }
+        let v = match target_sym_def.kind {
+            SymbolKind::Function => (text_base[target_unit_idx] as i64) + target_sym_def.value as i64,
+            SymbolKind::Data => (data_base[target_unit_idx] as i64) + target_sym_def.value as i64,
+            SymbolKind::TlsData => {
+                let owner = &units[target_unit_idx];
+                let init_local = owner.tls_init_size.min(owner.tls_data.len());
+                if (target_sym_def.value as usize) < init_local {
+                    (tls_base[target_unit_idx] as i64) + target_sym_def.value as i64
+                } else {
+                    (tls_bss_base[target_unit_idx] as i64)
+                        + (target_sym_def.value as i64 - init_local as i64)
+                }
+            }
+            SymbolKind::Undefined => return None,
+        };
+        Some(v)
+    };
+
+    for &(inst_idx, link_sym_idx) in &rebased.extern_call_refs {
+        if let Some(target_pc) = resolve(link_sym_idx, SymbolKind::Function)
+            && let Some(Inst::Call { target_pc: slot, .. }) =
+                rebased.insts.get_mut(inst_idx as usize)
+            && *slot == 0
+        {
+            *slot = target_pc as usize;
+        }
+    }
+    for &(inst_idx, link_sym_idx) in &rebased.extern_imm_code_refs {
+        if let Some(target_pc) = resolve(link_sym_idx, SymbolKind::Function)
+            && let Some(Inst::ImmCode(slot)) = rebased.insts.get_mut(inst_idx as usize)
+            && *slot == 0
+        {
+            *slot = target_pc as usize;
+        }
+    }
+    for &(inst_idx, link_sym_idx) in &rebased.extern_imm_data_refs {
+        if let Some(off) = resolve(link_sym_idx, SymbolKind::Data)
+            && let Some(Inst::ImmData(slot)) = rebased.insts.get_mut(inst_idx as usize)
+            && *slot == 0
+        {
+            *slot = off;
+        }
+    }
+    for &(inst_idx, link_sym_idx) in &rebased.extern_tls_refs {
+        if let Some(off) = resolve(link_sym_idx, SymbolKind::TlsData)
+            && let Some(Inst::TlsAddr(slot)) = rebased.insts.get_mut(inst_idx as usize)
+            && *slot == 0
+        {
+            *slot = off;
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -519,14 +519,20 @@ impl Compiler {
         // anchored the symbol, which itself would be a
         // walker / parser drift caught by the resolver.
         for func in &mut user_ssa_funcs {
-            func.extern_call_refs.retain_mut(|(_, sym_idx)| {
-                let remapped = sym_remap.get(*sym_idx as usize).copied().unwrap_or(-1);
-                if remapped < 0 {
-                    return false;
-                }
-                *sym_idx = remapped as u32;
-                true
-            });
+            let remap = |refs: &mut alloc::vec::Vec<(u32, u32)>| {
+                refs.retain_mut(|(_, sym_idx)| {
+                    let remapped = sym_remap.get(*sym_idx as usize).copied().unwrap_or(-1);
+                    if remapped < 0 {
+                        return false;
+                    }
+                    *sym_idx = remapped as u32;
+                    true
+                });
+            };
+            remap(&mut func.extern_call_refs);
+            remap(&mut func.extern_imm_code_refs);
+            remap(&mut func.extern_imm_data_refs);
+            remap(&mut func.extern_tls_refs);
         }
 
         Ok(LinkUnit {

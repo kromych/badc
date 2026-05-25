@@ -892,6 +892,9 @@ pub(crate) fn lift_function(
         blocks,
         vstack_slots,
         extern_call_refs: Vec::new(),
+        extern_imm_code_refs: Vec::new(),
+        extern_imm_data_refs: Vec::new(),
+        extern_tls_refs: Vec::new(),
     })
 }
 

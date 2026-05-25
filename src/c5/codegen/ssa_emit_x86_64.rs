@@ -658,9 +658,9 @@ fn emit_prologue(
     frame: Frame,
     abi: super::Abi,
 ) {
-    // Host-arg-reg spill. Skipped for variadic functions; the
-    // pool path's same prologue does this too. Mirrors the
-    // x86_64 pool emit_prologue's shape.
+    // Host-arg-reg spill. Skipped for variadic functions
+    // (the body reads varargs through the c5 cdecl stack
+    // slots the caller wrote, not the host arg registers).
     let entry_spill = if func.is_variadic { 0 } else { func.n_params };
     if entry_spill > 0 {
         emit_pop_r(code, Reg::R10);
@@ -777,7 +777,7 @@ fn emit_inst(
     match inst {
         Inst::AllocaInit(slot) => {
             // Slot 0: this function doesn't use alloca; emit
-            // nothing (matches the pool path). Non-zero: the
+            // nothing. Non-zero: the
             // bookkeeping slot lives at `[rbp - slot*8]`; the
             // matching `Op::Intrinsic(Alloca)` reads + writes it
             // to allocate from a per-frame arena. Initialise the

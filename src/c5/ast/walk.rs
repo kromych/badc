@@ -490,8 +490,8 @@ impl<'a> Walker<'a> {
                     None => {}
                 }
                 let header = b.new_block();
-                let body_blk = b.new_block();
                 let post_blk = b.new_block();
+                let body_blk = b.new_block();
                 let after = b.new_block();
                 b.jmp(header);
                 b.switch_to(header);
@@ -500,6 +500,21 @@ impl<'a> Walker<'a> {
                     None => b.imm(1),
                 };
                 b.branch_zero(cond_v, after, body_blk);
+                // C99 6.8.5.3 specifies the *evaluation* order
+                // (cond, body, post) but leaves layout open; the
+                // parser's bytecode tier emits step before body
+                // (Op::Jmp from step jumps forward to body which
+                // jumps back to step). Walk post first so the
+                // post-merge resolver's order-zip between walker
+                // Inst::Call entries and bytecode Op::Jsr operands
+                // remains aligned. Control flow is unaffected --
+                // each block's terminator routes execution in the
+                // C99 order regardless of inst-vec layout.
+                b.switch_to(post_blk);
+                if let Some(p) = post_clone {
+                    let _ = self.walk_expr_rvalue(b, p)?;
+                }
+                b.jmp(header);
                 b.switch_to(body_blk);
                 self.loop_ctx.push((after, post_blk));
                 let body_terminated = self.walk_stmt(b, body_clone)?;
@@ -507,11 +522,6 @@ impl<'a> Walker<'a> {
                 if !body_terminated {
                     b.jmp(post_blk);
                 }
-                b.switch_to(post_blk);
-                if let Some(p) = post_clone {
-                    let _ = self.walk_expr_rvalue(b, p)?;
-                }
-                b.jmp(header);
                 b.switch_to(after);
                 Ok(false)
             }

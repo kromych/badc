@@ -31,6 +31,17 @@ fn switch_default_routing() {
 }
 
 #[test]
+fn for_loop_call_body_and_step() {
+    // C99 6.8.5.3: the parser's bytecode layout places step
+    // before body in linear PC order. The walker must mirror
+    // that in `f.insts` so the post-merge resolver pairs each
+    // Inst::Call with the matching Op::Jsr operand. The driver
+    // returns 7 (add_one count) * 6 = 42 only when both calls
+    // resolve to their own targets.
+    assert_eq!(run_fixture("for_loop_call_body_and_step.c"), 42);
+}
+
+#[test]
 fn vtable_back_to_back_4arg() {
     // Same contract as `vtable_back_to_back` but with a 4-arg
     // init call that mirrors bearssl's

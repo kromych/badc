@@ -1282,34 +1282,62 @@ fn resolve_user_ssa_call_targets(program: &mut Program) -> Result<(), C5Error> {
         for inst in &mut f.insts {
             match inst {
                 Inst::Call { target_pc, .. } => {
-                    if let Some(t) = jsr_iter.next()
-                        && *target_pc == 0
-                    {
-                        *target_pc = t as usize;
+                    if let Some(t) = jsr_iter.next() {
+                        if *target_pc == 0 {
+                            *target_pc = t as usize;
+                        } else if *target_pc != t as usize {
+                            return Err(err(&alloc::format!(
+                                "Inst::Call::target_pc drift in {:?} (ent_pc={}): walker={}, bytecode={}",
+                                program.source_functions.get(f.ent_pc).cloned().unwrap_or_default(),
+                                f.ent_pc,
+                                *target_pc, t,
+                            )));
+                        }
                     }
                 }
                 Inst::ImmCode(pc) => {
-                    if let Some(t) = imm_code_iter.next()
-                        && *pc == 0
-                    {
-                        // The bytecode side stores
-                        // CODE_BASE + bc_pc; the SSA side
-                        // stores the bare bc_pc.
-                        *pc = (t - crate::c5::CODE_BASE as i64) as usize;
+                    if let Some(t) = imm_code_iter.next() {
+                        // Bytecode side stores CODE_BASE + bc_pc;
+                        // the SSA side stores the bare bc_pc.
+                        let bytecode_pc = (t - crate::c5::CODE_BASE as i64) as usize;
+                        if *pc == 0 {
+                            *pc = bytecode_pc;
+                        } else if *pc != bytecode_pc {
+                            return Err(err(&alloc::format!(
+                                "Inst::ImmCode drift in {:?} (ent_pc={}): walker={}, bytecode={}",
+                                program.source_functions.get(f.ent_pc).cloned().unwrap_or_default(),
+                                f.ent_pc,
+                                *pc, bytecode_pc,
+                            )));
+                        }
                     }
                 }
                 Inst::ImmData(off) => {
-                    if let Some(t) = imm_data_iter.next()
-                        && *off == 0
-                    {
-                        *off = t;
+                    if let Some(t) = imm_data_iter.next() {
+                        if *off == 0 {
+                            *off = t;
+                        } else if *off != t {
+                            return Err(err(&alloc::format!(
+                                "Inst::ImmData drift in {:?} (ent_pc={}): walker={}, bytecode={}",
+                                program.source_functions.get(f.ent_pc).cloned().unwrap_or_default(),
+                                f.ent_pc,
+                                *off, t,
+                            )));
+                        }
                     }
                 }
                 Inst::TlsAddr(off) => {
-                    if let Some(t) = tls_iter.next()
-                        && *off == 0
-                    {
-                        *off = t;
+                    if let Some(t) = tls_iter.next() {
+                        if *off == 0 {
+                            *off = t;
+                        } else if *off != t {
+                            return Err(err(&alloc::format!(
+                                "Inst::TlsAddr drift in {:?} (ent_pc={}): walker={}, bytecode={}",
+                                program.source_functions.get(f.ent_pc).cloned().unwrap_or_default(),
+                                f.ent_pc,
+                                *off, t,
+                            )));
+                        }
                     }
                 }
                 _ => {}

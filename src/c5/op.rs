@@ -145,57 +145,11 @@ pub enum Op {
     /// Modulo `%` (unsigned). See [`Op::Divu`].
     Modu,
 
-    // --- Immediate-form arithmetic / comparison ---
-    //
-    // Each takes one operand `N`. They fuse the common `Psh; Imm N; <op>`
-    // sequence emitted for `<expr> <op> <constant>` patterns into a
-    // single dispatch -- `a = a <op> N`. The optimizer pass produces them;
-    // the compiler never emits them directly.
-    /// `a = a + N`
-    AddI,
-    /// `a = a - N`
-    SubI,
-    /// `a = a * N`
-    MulI,
-    /// `a = a & N`
-    AndI,
-    /// `a = a | N`
-    OrI,
-    /// `a = a ^ N`
-    XorI,
-    /// `a = a << N`
-    ShlI,
-    /// `a = a >> N` (arithmetic / sign-extending)
-    ShrI,
-    /// `a = a >> N` (logical / zero-extending). Emitted when the
-    /// LHS has an unsigned integer type. ARM64 `LSR`, x86_64 `SHR`.
-    ShruI,
-    /// `a = (a == N) as i64`
-    EqI,
-    /// `a = (a != N) as i64`
-    NeI,
-    /// `a = (a < N) as i64` (signed)
-    LtI,
-    /// `a = (a > N) as i64` (signed)
-    GtI,
-    /// `a = (a <= N) as i64` (signed)
-    LeI,
-    /// `a = (a >= N) as i64` (signed)
-    GeI,
-    /// `a = ((a as u64) < (N as u64)) as i64`
-    UltI,
-    /// `a = ((a as u64) > (N as u64)) as i64`
-    UgtI,
-    /// `a = ((a as u64) <= (N as u64)) as i64`
-    UleI,
-    /// `a = ((a as u64) >= (N as u64)) as i64`
-    UgeI,
-
     // --- Load-local fusion ---
-    /// `a = *(i64*)(bp + N*8)` -- fused `Lea N; Li`.
+    /// `a = *(i64*)(bp + N*8)` -- fused `Lea N; Li`. Emitted by
+    /// the bitfield-read path in `compiler/emit.rs` to reload a
+    /// freshly-stored slot without disturbing the c5 stack.
     LdLocI,
-    /// `a = *(u8*)(bp + N*8)` -- fused `Lea N; Lc`.
-    LdLocC,
     /// `*(i64*)(bp + N*8) = a` -- store accumulator into a local
     /// frame slot at the given offset, without disturbing the c5
     /// stack or the accumulator. The compiler emits this when it
@@ -358,7 +312,7 @@ pub enum Op {
     AllocaInit,
 }
 
-const OPS: [Op; 88] = [
+const OPS: [Op; 68] = [
     Op::Lea,
     Op::Imm,
     Op::Jmp,
@@ -405,28 +359,7 @@ const OPS: [Op; 88] = [
     Op::Mod,
     Op::Divu,
     Op::Modu,
-    // Immediate-form ops (optimizer-emitted).
-    Op::AddI,
-    Op::SubI,
-    Op::MulI,
-    Op::AndI,
-    Op::OrI,
-    Op::XorI,
-    Op::ShlI,
-    Op::ShrI,
-    Op::ShruI,
-    Op::EqI,
-    Op::NeI,
-    Op::LtI,
-    Op::GtI,
-    Op::LeI,
-    Op::GeI,
-    Op::UltI,
-    Op::UgtI,
-    Op::UleI,
-    Op::UgeI,
     Op::LdLocI,
-    Op::LdLocC,
     Op::StLocI,
     // Floating-point arithmetic / comparison / casts.
     Op::Fadd,
@@ -565,12 +498,10 @@ impl Op {
         use Op::*;
         match self {
             // Single-operand ops: control flow, frame setup, libc
-            // dispatch, and the immediate-form arithmetic /
-            // comparison ops.
-            Lea | Imm | Jmp | Jsr | Bz | Bnz | Ent | Adj | JsrExt | TailExt | AddI | SubI
-            | MulI | AndI | OrI | XorI | ShlI | ShrI | ShruI | EqI | NeI | LtI | GtI | LeI
-            | GeI | UltI | UgtI | UleI | UgeI | LdLocI | LdLocC | StLocI | Mcpy | TlsLea
-            | Intrinsic | AllocaInit => 1,
+            // dispatch, the local-slot fused load / store, and the
+            // intrinsic / memcpy / TLS dispatchers.
+            Lea | Imm | Jmp | Jsr | Bz | Bnz | Ent | Adj | JsrExt | TailExt | LdLocI | StLocI
+            | Mcpy | TlsLea | Intrinsic | AllocaInit => 1,
             // Everything else -- arithmetic, loads/stores, push,
             // indirect-jump, return, etc. -- is encoded in a
             // single word with no operand.

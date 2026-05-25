@@ -3151,7 +3151,7 @@ mod tests {
              int main(void) { return test(5); }",
             Target::MacOSAarch64,
         );
-        // The first function is `test`; the lift order is
+        // The first function is `test`; the walker order is
         // declaration order, but `Inst::Call` for main isn't in
         // the thin slice yet, so we only check that `test` emits
         // cleanly. main will fall back.

@@ -2110,28 +2110,17 @@ fn decode_meta(meta: &[u8], unit: &mut LinkUnit) -> Result<(), C5Error> {
                 }
                 unit.tls_init_size = u64_at(body, 0) as usize;
             }
-            TAG_DATA_IMM_POSITIONS | TAG_CODE_IMM_POSITIONS => {
+            TAG_DATA_IMM_POSITIONS
+            | TAG_CODE_IMM_POSITIONS
+            | TAG_CALL_FP_ARG_MASKS
+            | TAG_SOURCE_LINES
+            | TAG_SOURCE_FILE_INDICES => {
                 // Retired side-tables. Older `.o` files still
-                // carry the tags; skip silently to preserve
-                // forward compatibility.
-            }
-            TAG_CALL_FP_ARG_MASKS => {
-                // Retired side-table. Older `.o` files still
-                // carry the tag; skip silently to preserve
-                // forward compatibility.
-            }
-            TAG_SOURCE_LINES => {
-                // Retired side-table. Older `.o` files still
-                // carry the tag; skip silently to preserve
+                // carry these tags; skip silently to preserve
                 // forward compatibility.
             }
             TAG_SOURCE_FUNCTIONS => unit.source_functions = read_string_vec(body)?,
             TAG_SOURCE_FILES => unit.source_files = read_string_vec(body)?,
-            TAG_SOURCE_FILE_INDICES => {
-                // Retired side-table. Older `.o` files still
-                // carry the tag; skip silently to preserve
-                // forward compatibility.
-            }
             TAG_VARIABLES => {
                 if body.len() < 4 {
                     return Err(err("variables body too short"));

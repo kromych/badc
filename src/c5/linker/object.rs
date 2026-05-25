@@ -245,13 +245,17 @@ impl Writer {
         // emitted last with absolute file offsets.
         let mut sections: [(u64, u64); NUM_SECTIONS] = [(0, 0); NUM_SECTIONS];
 
-        // .text: i64 words, little-endian.
+        // .text: retired. The merged-program consumers
+        // (SSA codegen, VM, linker) read `FunctionSsa` and
+        // walker-tier symbol-ref channels; only the per-unit
+        // bc_pc range size survives, and it ships in the
+        // META section's `TAG_TEXT_SIZE` tag. The ELF
+        // section header is kept (zero-sized) so existing
+        // `readelf` / `objdump` invocations see the
+        // accustomed table shape.
         self.align_to(8);
         let text_off = self.out.len();
-        for w in &unit.text {
-            self.out.extend_from_slice(&w.to_le_bytes());
-        }
-        sections[SHIDX_TEXT as usize] = (text_off as u64, (self.out.len() - text_off) as u64);
+        sections[SHIDX_TEXT as usize] = (text_off as u64, 0);
 
         // .data: raw bytes.
         self.align_to(8);
@@ -665,6 +669,13 @@ const TAG_WARNINGS: u8 = 19;
 /// reconstructs the FunctionSsa via `SsaBuilder`.
 const TAG_SYNTHETIC_SSA_FUNCS: u8 = 20;
 const TAG_USER_SSA_FUNCS: u8 = 21;
+/// Number of i64 words in the per-unit bytecode tape. Linker
+/// merge consumes this through `LinkUnit::text_size` to compute
+/// the per-unit bc_pc base offset. The bytecode bytes
+/// themselves are not serialized into the `.text` section any
+/// more; only the size survives, which is what every remaining
+/// merged-program consumer needs.
+const TAG_TEXT_SIZE: u8 = 22;
 
 fn encode_meta(unit: &LinkUnit) -> Vec<u8> {
     let mut buf = Vec::new();
@@ -672,6 +683,7 @@ fn encode_meta(unit: &LinkUnit) -> Vec<u8> {
     buf.extend_from_slice(&META_VERSION.to_le_bytes());
 
     write_tag_u64(&mut buf, TAG_TLS_INIT_SIZE, unit.tls_init_size as u64);
+    write_tag_u64(&mut buf, TAG_TEXT_SIZE, unit.text_size as u64);
 
     {
         let body_len = u32_string_vec_len(&unit.source_functions);
@@ -1817,6 +1829,11 @@ impl<'a> Reader<'a> {
         for chunk in text_bytes.chunks_exact(8) {
             text_words.push(i64::from_le_bytes(chunk.try_into().unwrap()));
         }
+        // `text_size` ships in the META section's
+        // `TAG_TEXT_SIZE` tag now that the bytecode bytes have
+        // retired; fall back to the decoded word count for
+        // backward compatibility with `.o` files written before
+        // the tag landed.
         unit.text_size = text_words.len();
         unit.text = text_words;
 
@@ -2096,6 +2113,12 @@ fn decode_meta(meta: &[u8], unit: &mut LinkUnit) -> Result<(), C5Error> {
                     return Err(err("tls_init_size body too short"));
                 }
                 unit.tls_init_size = u64_at(body, 0) as usize;
+            }
+            TAG_TEXT_SIZE => {
+                if body.len() < 8 {
+                    return Err(err("text_size body too short"));
+                }
+                unit.text_size = u64_at(body, 0) as usize;
             }
             TAG_DATA_IMM_POSITIONS
             | TAG_CODE_IMM_POSITIONS

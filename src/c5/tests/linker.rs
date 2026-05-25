@@ -244,9 +244,12 @@ fn object_round_trip_through_elf_wrapper() {
         "object bytes should at least contain an ELF header"
     );
     let parsed = read_object(&bytes).expect("read_object");
-    // Same bytecode + data lengths -- the writer/reader pair
-    // is round-trip stable on the core payload.
-    assert_eq!(parsed.text, a.text, "text round-trip");
+    // Bytecode bytes no longer travel through `.o`; the linker
+    // consumes `text_size` (the per-unit bc_pc range count) and
+    // walker-tier `FunctionSsa` entries instead. Round-trip on
+    // the size is what matters.
+    assert_eq!(parsed.text_size, a.text_size, "text_size round-trip");
+    assert!(parsed.text.is_empty(), "text bytes retired from `.o`");
     assert_eq!(parsed.data, a.data, "data round-trip");
     assert_eq!(parsed.dylibs.len(), a.dylibs.len(), "dylib count");
     assert_eq!(parsed.structs.len(), a.structs.len(), "struct count");

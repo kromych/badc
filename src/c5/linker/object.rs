@@ -1825,17 +1825,12 @@ impl<'a> Reader<'a> {
             text.sh_size as usize,
             ".badc.text",
         )?;
-        let mut text_words = Vec::with_capacity(text_bytes.len() / 8);
-        for chunk in text_bytes.chunks_exact(8) {
-            text_words.push(i64::from_le_bytes(chunk.try_into().unwrap()));
-        }
         // `text_size` ships in the META section's
         // `TAG_TEXT_SIZE` tag now that the bytecode bytes have
         // retired; fall back to the decoded word count for
         // backward compatibility with `.o` files written before
         // the tag landed.
-        unit.text_size = text_words.len();
-        unit.text = text_words;
+        unit.text_size = text_bytes.len() / 8;
 
         // .data
         unit.data = slice_of(

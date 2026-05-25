@@ -249,7 +249,6 @@ fn object_round_trip_through_elf_wrapper() {
     // walker-tier `FunctionSsa` entries instead. Round-trip on
     // the size is what matters.
     assert_eq!(parsed.text_size, a.text_size, "text_size round-trip");
-    assert!(parsed.text.is_empty(), "text bytes retired from `.o`");
     assert_eq!(parsed.data, a.data, "data round-trip");
     assert_eq!(parsed.dylibs.len(), a.dylibs.len(), "dylib count");
     assert_eq!(parsed.structs.len(), a.structs.len(), "struct count");
@@ -857,7 +856,6 @@ fn cross_tu_call_through_secondary_dylib() {
         extern_tls_refs: alloc::vec::Vec::new(),
     };
     let mut lib_unit = LinkUnit {
-        text: lib_text.clone(),
         text_size: lib_text.len(),
         dylibs: alloc::vec![
             DylibSpec {
@@ -894,7 +892,6 @@ fn cross_tu_call_through_secondary_dylib() {
     // libc -- not libutil.
     let unit2_text = alloc::vec![Op::Ent as i64, 0, Op::Lev as i64];
     let mut other_unit = LinkUnit {
-        text: unit2_text.clone(),
         text_size: unit2_text.len(),
         dylibs: alloc::vec![DylibSpec {
             name: "libc".to_string(),

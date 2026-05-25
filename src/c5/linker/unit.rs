@@ -34,14 +34,13 @@ use super::symbol::LinkSymbol;
 /// existing `emit_native_*` codegen unchanged.
 #[derive(Debug, Clone, Default)]
 pub struct LinkUnit {
-    // ---- Bytecode and static data (mirror of Program) ----
-    pub text: Vec<i64>,
+    // ---- Static data + bc_pc range (mirror of Program) ----
     /// Number of i64 words the parser emitted into this unit's
-    /// bytecode tape. Decoupled from `text.len()` so the
-    /// per-unit bc_pc base offset survives the eventual retire
-    /// of the bytecode-tape content. Set to `text.len()` by
-    /// every constructor today; future commits will let
-    /// `.o`-round-trip drop the bytes while keeping the size.
+    /// bytecode tape. Used by the linker to compute each unit's
+    /// bc_pc base offset; the actual bytecode bytes are no
+    /// longer carried on `LinkUnit` -- every merged-program
+    /// consumer reads SSA via `user_ssa_funcs` /
+    /// `synthetic_ssa_funcs` instead.
     pub text_size: usize,
     pub data: Vec<u8>,
     pub tls_data: Vec<u8>,

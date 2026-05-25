@@ -1207,7 +1207,6 @@ impl Compiler {
             source_lines: self.source_lines,
             source_functions: self.source_functions,
             source_files: self.source_files,
-            source_file_indices: self.source_file_indices,
             // The compiler doesn't see the input path -- the CLI
             // shim sets this on the returned `Program` before
             // calling `emit_native_*`.

@@ -358,7 +358,6 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
 
     let mut merged_source_lines: Vec<u32> = Vec::new();
     let mut merged_source_functions: Vec<String> = Vec::new();
-    let mut merged_source_file_indices: Vec<u16> = Vec::new();
     let mut merged_source_files: Vec<String> = Vec::new();
     let mut source_file_offset_per_unit: Vec<u16> = Vec::with_capacity(n);
     let mut merged_variables: Vec<crate::c5::program::VariableInfo> = Vec::new();
@@ -455,35 +454,20 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         let tls_bss_off = tls_bss_base[ui];
         let tls_init_local = unit.tls_init_size.min(unit.tls_data.len());
 
-        // First record per-PC bookkeeping (source_lines /
-        // source_functions / source_file_indices) -- these are
-        // PC-indexed parallel arrays. Pad to text_off so indices
-        // align after the append.
-        // source_lines + source_functions + source_file_indices
-        // must end up parallel to merged_text. We extend by
-        // unit.text.len() so the indices match the bytecode
-        // length copy below.
+        // Record per-PC bookkeeping (source_lines /
+        // source_functions) -- PC-indexed parallel arrays. The
+        // walker carries the per-Inst file index inline through
+        // `inst_src`, so no parallel file-index column is needed
+        // here. Pad to `merged_text.len() + unit.text.len()` so
+        // disasm's lookup by post-merge bc_pc lands in range.
         merged_source_lines.extend(unit.source_lines.iter().copied());
         merged_source_functions.extend(unit.source_functions.iter().cloned());
-        let fo = source_file_offset_per_unit[ui];
-        for &idx in &unit.source_file_indices {
-            // Cap to avoid wrap-around if a unit's source_file_indices
-            // somehow exceeds its source_files (would be a bug).
-            let new_idx = (idx as u32) + (fo as u32);
-            merged_source_file_indices.push(new_idx.min(u16::MAX as u32) as u16);
-        }
-        // Pad PC-indexed columns up to text_off + unit.text.len()
-        // if any of them happens to be shorter (units produced
-        // by paths that didn't fill them).
         let want = merged_text.len() + unit.text.len();
         if merged_source_lines.len() < want {
             merged_source_lines.resize(want, 0);
         }
         if merged_source_functions.len() < want {
             merged_source_functions.resize(want, String::new());
-        }
-        if merged_source_file_indices.len() < want {
-            merged_source_file_indices.resize(want, 0);
         }
         // Variables: shift function_bc_pc.
         for v in &unit.variables {
@@ -727,7 +711,6 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         source_lines: merged_source_lines,
         source_functions: merged_source_functions,
         source_files: merged_source_files,
-        source_file_indices: merged_source_file_indices,
         source_path,
         variables: merged_variables,
         structs: merged_structs,

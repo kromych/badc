@@ -725,7 +725,6 @@ mod tests {
             source_lines: Vec::new(),
             source_functions: Vec::new(),
             source_files: Vec::new(),
-            source_file_indices: Vec::new(),
             source_path: path.into(),
             variables: Vec::new(),
             structs: Vec::new(),

@@ -408,7 +408,7 @@ struct SectionHeader {
 
 fn err(msg: &str) -> C5Error {
     C5Error::Compile(crate::c5::error::fmt_internal_err(&format!(
-        "native_object: {msg}",
+        "linker::object: {msg}",
     )))
 }
 

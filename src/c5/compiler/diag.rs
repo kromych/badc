@@ -281,7 +281,7 @@ impl Compiler {
     }
 
     /// Reconcile mixed int/float operands for an arithmetic /
-    /// comparison op so the matching `Op::Fxxx` can run. Two
+    /// comparison op so the matching FP op can run. Two
     /// shapes need bytecode work:
     ///   * LHS float, RHS int: RHS is in `a`; emit `Op::Fcvtif`
     ///     in place to lift it to f64.

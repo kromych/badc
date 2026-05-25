@@ -64,8 +64,8 @@ impl Compiler {
         self.pending.fn_ptr_chain_depth = -1;
         // Any scalar load whose source is *not* the
         // identifier-rvalue path (field access through `->` /
-        // `.`, array indexing through `Op::Brak`, deref through
-        // `*`, bitfield extraction) invalidates the tracked
+        // `.`, array indexing, deref through `*`, bitfield
+        // extraction) invalidates the tracked
         // identifier whose load was previously trailing. Once
         // the trailing Li belongs to a non-identifier address,
         // a downstream `pop_trailing_scalar_load` /

@@ -366,9 +366,10 @@ pub(in crate::c5::compiler) struct Pending {
     pub fn_ptr_chain_depth: i64,
 
     /// Symbol index of the Token::Loc whose value was loaded by
-    /// the most recently emitted scalar `Op::Li` / `Op::Lc` /
-    /// `Op::Lh` / `Op::Lw` (or fused `Op::LdLoc*`) in the
-    /// identifier-rvalue path. The assignment / address-of
+    /// the most recently emitted scalar load (`Op::Li` /
+    /// `Op::Lc` / `Op::Lh` / `Op::Lw`, or the fused local-load
+    /// shorthand) in the identifier-rvalue path. The
+    /// assignment / address-of
     /// callers consult this when they pop or rewrite that
     /// trailing load: if the load is removed before the
     /// program text is finalised, the symbol's was_read flag

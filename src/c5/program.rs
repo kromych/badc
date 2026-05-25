@@ -255,8 +255,8 @@ pub struct Program {
     /// shapes built outside the parser pipeline.
     pub(crate) user_ssa_funcs: alloc::vec::Vec<crate::c5::ir::FunctionSsa>,
     /// Cross-TU user-function imports surfaced by the parser
-    /// for the `-c --emit=native` (`OutputKind::Relocatable`)
-    /// path. Each entry is `(placeholder_pc, symbol_name)`:
+    /// for the `-c` (`OutputKind::Relocatable`) path. Each
+    /// entry is `(placeholder_pc, symbol_name)`:
     /// the parser assigned `placeholder_pc` as a unique
     /// out-of-range `bc_pc` to every extern-declared function
     /// with no body in this TU. The walker forwards it

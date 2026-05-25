@@ -1371,11 +1371,11 @@ fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>
         return elf_reloc::write_relocatable(program, build, machine);
     }
     // The no-std build can't reach the relocatable writer; the
-    // `-c --emit=native` path lives in the CLI, which itself is
-    // std-only. If a no-std caller ever surfaces `Relocatable` it
-    // would fall through to the final-image writers below; the
-    // unreachable branch keeps the match arms exhaustive without
-    // pulling `elf_reloc` into the no-std build.
+    // `-c` path lives in the CLI, which itself is std-only. If
+    // a no-std caller ever surfaces `Relocatable` it would
+    // fall through to the final-image writers below; the
+    // unreachable branch keeps the match arms exhaustive
+    // without pulling `elf_reloc` into the no-std build.
     #[cfg(not(feature = "std"))]
     if build.output_kind == OutputKind::Relocatable {
         return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(

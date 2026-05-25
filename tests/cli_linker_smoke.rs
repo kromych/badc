@@ -314,24 +314,25 @@ fn extern_deferred_size_array_decays_in_other_tu() {
 }
 
 #[test]
-fn compile_only_emit_native_writes_relocatable_elf() {
+fn compile_only_writes_relocatable_elf() {
     let dir = tempdir("co-native");
-    // `-c --emit=native` flows through
+    // `-c` flows through
     // `Compiler::with_options(.., no_entry_point=true)`, so a
     // standalone helper (no main / wmain / WinMain) compiles
-    // cleanly into an ET_REL .o for the linker to pick the
-    // entry point from later.
+    // cleanly into an ET_REL `.o` for the linker to pick the
+    // entry point from later. Native ELF is the only `-c`
+    // output today; the legacy badc-format `.o` writer has
+    // retired.
     let src = write_source(&dir, "foo.c", "int seven(void) { return 7; }\n");
     let out = dir.join("foo-native.o");
     run(
         Command::new(badc())
             .arg("-c")
-            .arg("--emit=native")
             .arg("-o")
             .arg(&out)
             .arg(&src)
             .current_dir(&dir),
-        "compile-only --emit=native",
+        "compile-only",
     );
     assert!(out.exists(), "expected {} to exist", out.display());
     let bytes = std::fs::read(&out).expect("read .o");
@@ -374,13 +375,12 @@ fn compile_only_with_minus_o_writes_named_object() {
 }
 
 /// Cross-TU end-to-end: compile two C sources separately via
-/// `-c --emit=native` (no shared `main`, no link-time gluing),
-/// then drive both files through the public
-/// `parse_native_elf` + `link_native_objects` API and assert
-/// the merger resolves the cross-unit `helper` reference in
-/// place. Pins the `-c --emit=native` writer -> reader ->
-/// linker chain: a regression on either side breaks here
-/// before the runtime SIGSEGVs.
+/// `-c` (no shared `main`, no link-time gluing), then drive
+/// both files through the public `parse_native_elf` +
+/// `link_native_objects` API and assert the merger resolves
+/// the cross-unit `helper` reference in place. Pins the
+/// writer -> reader -> linker chain: a regression on either
+/// side breaks here before the runtime SIGSEGVs.
 #[cfg(target_os = "linux")]
 #[test]
 fn emit_native_then_link_native_resolves_cross_unit_call() {
@@ -397,24 +397,22 @@ fn emit_native_then_link_native_resolves_cross_unit_call() {
     run(
         Command::new(badc())
             .arg("-c")
-            .arg("--emit=native")
             .arg("--target=linux-x64")
             .arg("-o")
             .arg(&a_o)
             .arg(&a)
             .current_dir(&dir),
-        "compile a.c (-c --emit=native)",
+        "compile a.c (-c)",
     );
     run(
         Command::new(badc())
             .arg("-c")
-            .arg("--emit=native")
             .arg("--target=linux-x64")
             .arg("-o")
             .arg(&b_o)
             .arg(&b)
             .current_dir(&dir),
-        "compile b.c (-c --emit=native)",
+        "compile b.c (-c)",
     );
     let a_bytes = std::fs::read(&a_o).expect("read a.o");
     let b_bytes = std::fs::read(&b_o).expect("read b.o");

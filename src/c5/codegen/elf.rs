@@ -2121,8 +2121,6 @@ mod tests {
             data: Vec::new(),
             entry_pc: 0,
             warnings: Vec::new(),
-            data_imm_positions: Vec::new(),
-            code_imm_positions: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,
             data_relocs: Vec::new(),

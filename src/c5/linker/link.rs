@@ -725,8 +725,6 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         data: merged_data,
         entry_pc,
         warnings: merged_warnings,
-        data_imm_positions: merged_data_imm_positions,
-        code_imm_positions: merged_code_imm_positions,
         tls_data: merged_tls,
         tls_init_size: merged_tls_init,
         exports: merged_exports,

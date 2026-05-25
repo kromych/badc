@@ -73,34 +73,12 @@ pub struct CodeReloc {
 /// any non-fatal diagnostics the compiler emitted (type mismatches,
 /// arity issues). The compiler never fails on a warning -- callers
 /// decide whether to print, ignore, or treat them as errors.
-///
-/// `data_imm_positions` is a side channel for the native codegen: each
-/// entry is a bytecode index where an `Op::Imm` operand holds an
-/// offset into `data` (a string-literal address or a global-variable
-/// address). The VM ignores it -- pointers are just integers there --
-/// but the native backend needs to relocate these into __DATA's actual
-/// load address, and there's no way to recover that distinction by
-/// inspecting the bytecode alone (data offsets and plain integer
-/// constants are indistinguishable).
 #[derive(Debug, Clone)]
 pub struct Program {
     pub text: Vec<i64>,
     pub data: Vec<u8>,
     pub entry_pc: usize,
     pub warnings: Vec<String>,
-    pub data_imm_positions: Vec<usize>,
-    /// Mirror of `data_imm_positions` for function-pointer
-    /// literals: each entry is a bytecode index whose `Op::Imm`
-    /// operand holds (CODE_BASE + bc_pc) -- i.e. the address of
-    /// a function. Without this list the native codegen would
-    /// have to guess from the value alone, and any user constant
-    /// that happens to fall in the [CODE_BASE, CODE_BASE +
-    /// text.len()) range would be misclassified as a function
-    /// pointer (e.g. `0x20000000` clashes with CODE_BASE
-    /// exactly). The compiler records every func-ptr-Imm
-    /// operand_pc here so the codegen knows precisely which Imm
-    /// values to treat as function addresses.
-    pub code_imm_positions: Vec<usize>,
     /// Initialised + zero-init thread-local data. Layout matches
     /// the way `data` does for ordinary globals: a flat byte array
     /// indexed by `Op::TlsLea`'s operand. The image writers copy

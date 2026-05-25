@@ -74,9 +74,9 @@ fn push_bytecode_listing(out: &mut String, program: &Program, build: &Build) {
 
         let native_start = build.bytecode_to_native[bc_pc];
         if native_start == usize::MAX {
-            // The optimizer / DCE shouldn't leave dangling indices in
-            // the live bytecode, but if one slipped through, skip it
-            // rather than misalign the rest of the listing.
+            // Bytecode positions the codegen never emitted native
+            // code for (operand words, padding). Skip rather than
+            // misalign the rest of the listing.
             bc_pc += op.word_size();
             continue;
         }
@@ -86,7 +86,7 @@ fn push_bytecode_listing(out: &mut String, program: &Program, build: &Build) {
         // Function-boundary marker: when the source function name
         // changes, drop a `; <function>` header so the listing is
         // navigable by C function name. Quiet when the debug map
-        // is empty (e.g. -O ran).
+        // is empty.
         let cur_fn = program.source_functions.get(bc_pc);
         if let Some(fn_name) = cur_fn
             && !fn_name.is_empty()
@@ -102,8 +102,7 @@ fn push_bytecode_listing(out: &mut String, program: &Program, build: &Build) {
             String::new()
         };
         // Source-line annotation. Indexed by bc_pc; 0 means
-        // "unknown" (the optimizer drops the map; data emit
-        // doesn't push entries).
+        // "unknown" (data emit doesn't push entries).
         let line_str = match program.source_lines.get(bc_pc).copied() {
             Some(0) | None => String::new(),
             Some(n) => format!("    ; line {n}"),

@@ -1169,7 +1169,7 @@ pub enum OutputKind {
 }
 
 impl Default for NativeOptions {
-    /// Defaults: optimizer off, executable output, DWARF on.
+    /// Defaults: executable output, DWARF on, no relocatable kind.
     fn default() -> Self {
         Self::new()
     }

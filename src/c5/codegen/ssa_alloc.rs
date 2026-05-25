@@ -159,17 +159,16 @@ impl RegBanks {
     pub fn for_target(target: Target) -> Self {
         match target {
             Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => Self {
-                // x20..x27 are the callee-saved bank the existing
-                // pool regalloc already uses; x9..x15 are
-                // caller-saved scratch the optimizer routed
-                // short-lived values through. x16/x17 stay
+                // x20..x27 are the callee-saved bank used for
+                // long-lived values. x9..x15 are caller-saved
+                // scratch for short-lived values. x16/x17 stay
                 // reserved as encoder scratch. x18 is reserved
                 // on Windows (TEB pointer) and unused on Linux /
                 // macOS; the allocator keeps off it everywhere.
                 // x19 is reserved as the accumulator/scratch by
-                // the legacy lowering; the SSA path stays off it
-                // to avoid stepping on existing helpers that
-                // assume x19 is theirs.
+                // the SSA emit's data-imm / code-imm fixups; the
+                // allocator stays off it to avoid stepping on
+                // the in-place patch sites.
                 callee_gprs: &[20, 21, 22, 23, 24, 25, 26, 27],
                 caller_gprs: &[9, 10, 11, 12, 13, 14, 15],
                 callee_fprs: &[8, 9, 10, 11, 12, 13, 14, 15],

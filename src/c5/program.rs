@@ -267,8 +267,8 @@ pub struct Program {
     /// shaped metadata (ent_pc, n_params, is_variadic, n_locals,
     /// name). Populated by the parser's dual-emit; the SSA walker
     /// reads from here to lower each function. Empty for builds
-    /// that didn't go through the parser path (linker / optimizer
-    /// reload from a `.o` / `.a`).
+    /// that didn't go through the parser path (linker reload from
+    /// a `.o` / `.a`).
     pub(crate) finished_functions: alloc::vec::Vec<crate::c5::ast::FinishedFunction>,
     /// Symbol-table snapshot taken at `compile()` close. The AST
     /// walker reads `array_size` (for the C99 6.3.2.1p3

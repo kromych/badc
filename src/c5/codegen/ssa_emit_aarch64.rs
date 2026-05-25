@@ -2862,9 +2862,8 @@ fn emit_binop_imm(
     }
     if matches!(op, BinOp::Mod | BinOp::Modu) {
         // Need a third scratch reg distinct from rn / rm; the
-        // pool path's `<op>I N` fusion guarantees the optimizer
-        // won't emit Mod / Modu under BinopI, so falling back is
-        // safe for now.
+        // walker doesn't emit Mod / Modu under BinopI, so falling
+        // back to the non-immediate path is safe.
         return false;
     }
     let word = match op {
@@ -3106,9 +3105,9 @@ mod tests {
     }
 
     /// `return 1 + 2;` exercises the Binop + BinopI handlers
-    /// (the c5 compiler emits `Imm 1; Psh; Imm 2; Add` plus the
-    /// int-promotion shl/shr; the optimizer constant-folds it,
-    /// but we run without -O here to keep the binop in play).
+    /// (the walker emits `Imm 1; Psh; Imm 2; Add` plus the
+    /// int-promotion shl/shr; the walker's BinopI imm-fold may
+    /// rewrite the Add into BinopI directly).
     #[test]
     fn emit_return_one_plus_two() {
         let (func, alloc) =

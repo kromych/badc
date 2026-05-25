@@ -1307,23 +1307,30 @@ impl<'a> Walker<'a> {
                 // anything else routes through
                 // `b.call_indirect` with the callee's value.
                 //
-                // For the indirect-call shape (struct-field-then-
-                // call etc.), evaluate the callee FIRST and stash
-                // its value so the in-source-order ImmData /
-                // ImmCode emissions match the parser's bytecode
-                // -- the parser parses the callee primary
-                // expression before reaching `(` and walks the
-                // args list afterwards. The resolver's order-zip
-                // between Inst::ImmData entries and Op::Imm
-                // operands relies on the two sides agreeing on
-                // expression evaluation order.
+                // Indirect-call shape splits by callee form:
+                //   * Non-Ident callee (struct-field-then-call,
+                //     `*fp(...)`, ...): the parser's Pratt loop
+                //     already evaluated the callee into the
+                //     accumulator before reaching `(`, then
+                //     spilled it to a temp via Op::StLocI and
+                //     evaluated args. To match that bytecode
+                //     order, the walker evaluates the callee
+                //     FIRST and stashes the resulting ValueId.
+                //   * Ident callee of class Loc / Glo (simple
+                //     function-pointer variable): the parser's
+                //     dedicated `()`-after-identifier path
+                //     evaluates args FIRST, then loads the
+                //     callee's stored function-pointer value,
+                //     then Jsri. To match that bytecode order,
+                //     the walker defers the callee walk to after
+                //     the args loop.
+                // Token::Fun / Token::Sys never reach the
+                // indirect-call site (the per-class branches
+                // below dispatch to b.call / b.call_ext) so they
+                // don't walk the callee at all.
                 let indirect_target: Option<super::super::ir::ValueId> =
-                    if let Expr::Ident { class, .. } = self.ast.expr(*callee) {
-                        if *class == Token::Fun as i64 || *class == Token::Sys as i64 {
-                            None
-                        } else {
-                            Some(self.walk_expr_rvalue(b, *callee)?)
-                        }
+                    if let Expr::Ident { .. } = self.ast.expr(*callee) {
+                        None
                     } else {
                         Some(self.walk_expr_rvalue(b, *callee)?)
                     };

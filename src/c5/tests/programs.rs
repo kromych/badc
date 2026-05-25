@@ -31,6 +31,18 @@ fn switch_default_routing() {
 }
 
 #[test]
+fn indirect_call_through_global_fn_ptr() {
+    // C99 6.5.2.2: Path 1 indirect call (callee is a plain Glo
+    // Ident holding a function pointer). The parser emits args
+    // before the callee's data-imm load; the walker must defer
+    // the callee walk so f.insts ImmData order matches the
+    // bytecode Op::Imm order. driver() returns 42 only when the
+    // resolver pairs every Inst::ImmData with the right Op::Imm
+    // operand.
+    assert_eq!(run_fixture("indirect_call_through_global_fn_ptr.c"), 42);
+}
+
+#[test]
 fn for_loop_call_body_and_step() {
     // C99 6.8.5.3: the parser's bytecode layout places step
     // before body in linear PC order. The walker must mirror

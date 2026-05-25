@@ -590,6 +590,7 @@ impl Compiler {
         let finished = super::super::ast::FinishedFunction {
             ast: core::mem::take(&mut self.ast),
             ent_pc,
+            end_pc: self.text.len(),
             n_params,
             is_variadic,
             n_locals: self.max_loc_offs,

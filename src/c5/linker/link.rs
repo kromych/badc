@@ -643,6 +643,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                 for f in &unit.finished_functions {
                     let mut clone = f.clone();
                     clone.ent_pc += base;
+                    clone.end_pc += base;
                     // Parser-time `data_off` / Glo `val` snapshots
                     // are relative to this unit's own data segment
                     // start (post-`compile_to_link_unit`, before

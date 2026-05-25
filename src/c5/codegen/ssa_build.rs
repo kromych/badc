@@ -113,6 +113,15 @@ impl SsaBuilder {
         self.func.locals = n;
     }
 
+    /// One-past-the-last bytecode PC the source function spans.
+    /// Callers driving `walk_function` from the parser-side
+    /// `FinishedFunction::end_pc` set this so the SSA tier no
+    /// longer has to bound the range against `program.text.len()`
+    /// post-walk.
+    pub(crate) fn set_end_pc(&mut self, end_pc: usize) {
+        self.func.end_pc = end_pc;
+    }
+
     /// Reserve a new basic block and return its id. The new block
     /// is not made current; the caller drives that via
     /// [`Self::switch_to`].

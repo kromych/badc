@@ -66,6 +66,7 @@ pub(crate) fn walk_function(
     structs: &[crate::c5::compiler::StructDef],
     target: Target,
     ent_pc: usize,
+    end_pc: usize,
     n_params: usize,
     is_variadic: bool,
     n_locals: i64,
@@ -76,6 +77,7 @@ pub(crate) fn walk_function(
     alloca_top_slot: i64,
 ) -> Result<FunctionSsa, WalkError> {
     let mut b = super::super::codegen::ssa_build::SsaBuilder::new(ent_pc, n_params, is_variadic);
+    b.set_end_pc(end_pc);
     // C99 6.8: the function's stack frame holds the declared
     // locals plus, when the body calls `alloca`, the per-frame
     // arena. The arena occupies the slots above the alloca-top
@@ -2292,6 +2294,7 @@ mod tests {
             Target::LinuxAarch64,
             0,
             0,
+            0,
             false,
             0,
             &[],
@@ -2353,6 +2356,7 @@ mod tests {
             &syms,
             &[],
             Target::LinuxAarch64,
+            0,
             0,
             0,
             false,
@@ -2425,6 +2429,7 @@ mod tests {
             Target::LinuxAarch64,
             0,
             0,
+            0,
             false,
             8,
             &[],
@@ -2488,6 +2493,7 @@ mod tests {
             Target::LinuxAarch64,
             0,
             0,
+            0,
             false,
             0,
             &[],
@@ -2529,6 +2535,7 @@ mod tests {
             &empty_symbols(),
             &[],
             Target::LinuxAarch64,
+            0,
             0,
             0,
             false,

@@ -41,7 +41,6 @@ fn walker_funcs_for(
     symbols: &[Symbol],
     structs: &[super::StructDef],
     target: Target,
-    text_len: usize,
 ) -> Result<Vec<FunctionSsa>, C5Error> {
     let mut out = Vec::with_capacity(finished.len());
     for f in finished {
@@ -51,6 +50,7 @@ fn walker_funcs_for(
             structs,
             target,
             f.ent_pc,
+            f.end_pc,
             f.n_params,
             f.is_variadic,
             f.n_locals,
@@ -112,20 +112,6 @@ fn walker_funcs_for(
                 }
             }
         }
-    }
-    // SsaBuilder seeds end_pc at ent_pc; the walker has no
-    // way to know where the function's bytecode body ends. In
-    // a sorted-by-ent_pc list the next function's ent_pc is
-    // the current one's end_pc; the trailing entry runs up to
-    // `text_len`.
-    let n = out.len();
-    for i in 0..n {
-        let end = if i + 1 < n {
-            out[i + 1].ent_pc
-        } else {
-            text_len
-        };
-        out[i].end_pc = end;
     }
     Ok(out)
 }
@@ -297,7 +283,6 @@ impl Compiler {
             &self.symbols,
             &self.structs,
             self.target,
-            self.text.len(),
         )?;
 
         // Compute the set of parser-symbol indices that are

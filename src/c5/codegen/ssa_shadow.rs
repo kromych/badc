@@ -30,6 +30,7 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
             &program.structs,
             target,
             f.ent_pc,
+            f.end_pc,
             f.n_params,
             f.is_variadic,
             f.n_locals,
@@ -80,25 +81,6 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
         }
     }
     out.sort_by_key(|f| f.ent_pc);
-    // `SsaBuilder` seeds `end_pc = ent_pc`; the walker has no
-    // way to know where the bytecode body ends. After the
-    // ent_pc sort, each entry's `end_pc` is the next entry's
-    // `ent_pc`, and the trailing entry runs up to
-    // `program.text.len()`. Mirrors the same fixup in
-    // `compiler::link_unit::walker_funcs_for` so single-TU
-    // and multi-TU `FunctionSsa`s carry identical end_pcs.
-    let text_len = program.text.len();
-    let n = out.len();
-    for i in 0..n {
-        let end = if i + 1 < n {
-            out[i + 1].ent_pc
-        } else {
-            text_len
-        };
-        if out[i].end_pc < end {
-            out[i].end_pc = end;
-        }
-    }
     Ok(out)
 }
 

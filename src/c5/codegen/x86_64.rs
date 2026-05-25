@@ -1381,11 +1381,32 @@ pub(super) fn lower(
     // Per-callee variadic flag, derived from FunctionSsa::is_variadic.
     // Each call site reads it to pick the host-ABI vs c5-stack arg
     // passing shape for the callee.
-    let variadic_targets: alloc::collections::BTreeSet<usize> = ssa_funcs
+    let mut variadic_targets: alloc::collections::BTreeSet<usize> = ssa_funcs
         .iter()
         .filter(|f| f.is_variadic)
         .map(|f| f.ent_pc)
         .collect();
+    // Cross-TU extern variadic callees too: see the matching
+    // comment on the aarch64 lowering's `variadic_targets`.
+    {
+        use crate::c5::symbol::Linkage;
+        use crate::c5::token::Token;
+        let extern_pcs: alloc::collections::BTreeSet<usize> = program
+            .extern_function_imports
+            .iter()
+            .map(|(pc, _)| *pc)
+            .collect();
+        for sym in &program.symbols {
+            if sym.class == Token::Fun as i64
+                && !sym.defined_here
+                && sym.linkage == Linkage::External
+                && sym.is_variadic
+                && extern_pcs.contains(&(sym.val as usize))
+            {
+                variadic_targets.insert(sym.val as usize);
+            }
+        }
+    }
     let ssa_allocs: alloc::vec::Vec<super::ssa_alloc::Allocation> =
         super::ssa_emit_common::time_pass("ssa_alloc::allocate (x86_64)", || {
             ssa_funcs

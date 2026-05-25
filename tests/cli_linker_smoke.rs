@@ -323,6 +323,61 @@ fn function_pointer_initializer_resolves_at_link_time() {
     );
 }
 
+// C99 7.16: a variadic function's prototype carries the
+// trailing `...`. c5's variadic ABI is custom -- args go on
+// the c5 stack at 16-byte stride, the callee skips the host-
+// arg-reg spill step -- so caller and callee must agree on
+// `is_variadic`. The per-arch lowerer's `variadic_targets`
+// set used to ride on `FunctionSsa::is_variadic` only, which
+// missed cross-TU extern callees (their bodies live in a
+// sibling TU). Folding `Symbol::is_variadic` into the set
+// closes the gap.
+#[cfg(target_os = "linux")]
+#[test]
+fn variadic_call_resolves_across_tus() {
+    let dir = tempdir("variadic-xtu");
+    write_source(
+        &dir,
+        "vad.c",
+        "#include <stdarg.h>\n\
+         int va_test(int n, ...) {\n\
+         \tva_list ap; va_start(ap, n);\n\
+         \tint s = 0;\n\
+         \tfor (int i = 0; i < n; i++) s += va_arg(ap, int);\n\
+         \tva_end(ap);\n\
+         \treturn s;\n\
+         }\n",
+    );
+    write_source(
+        &dir,
+        "use.c",
+        "extern int va_test(int, ...);\n\
+         int main(void) {\n\
+         \tint a = va_test(2, 10, 20);\n\
+         \tint b = va_test(4, 1, 2, 3, 4);\n\
+         \treturn a + b;\n\
+         }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("vad.c"))
+            .arg(dir.join("use.c"))
+            .current_dir(&dir),
+        "link variadic call cross-TU",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(
+        out.status.code(),
+        Some(40),
+        "exit code mismatch: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
 // C99 6.5.16: `fp = some_function;` reduces to taking the
 // function's address. The aarch64 emitter lowers
 // `&some_function` to an `adrp + add` pair whose

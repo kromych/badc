@@ -122,7 +122,7 @@ fn walker_funcs_for(
     // way to know where the function's bytecode body ends. In
     // a sorted-by-ent_pc list the next function's ent_pc is
     // the current one's end_pc; the trailing entry runs up to
-    // `text_len`. Mirrors what `lift_program` already sets.
+    // `text_len`.
     let n = out.len();
     for i in 0..n {
         let end = if i + 1 < n {
@@ -495,10 +495,9 @@ impl Compiler {
 
         // Eagerly lower every parser-finished function to
         // FunctionSsa so the resulting LinkUnit carries SSA
-        // directly. The bytecode-side lift survives only for
-        // unit reloads whose user_ssa_funcs arrived empty
-        // (older .o files); once every .o producer is updated,
-        // lift_program retires.
+        // directly. Object-file round-trips ship the FunctionSsa
+        // vector verbatim, so the codegen reads SSA from
+        // `user_ssa_funcs` for both fresh compiles and reloads.
         let mut user_ssa_funcs = walker_funcs_for(
             &self.finished_functions,
             &self.symbols,

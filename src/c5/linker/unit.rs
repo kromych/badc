@@ -120,17 +120,11 @@ pub struct LinkUnit {
     /// trampoline in the unit's text; the linker rebases
     /// `ent_pc` / `end_pc` by `text_base[i]` and remaps the
     /// `CallExt::binding_idx` / `Terminator::TailExt(idx)`
-    /// through `binding_remap_per_unit[i]`. Surviving across
-    /// object-file round-trips lets the codegen reach the
-    /// trampolines without re-running `lift_program`.
+    /// through `binding_remap_per_unit[i]`.
     pub(crate) synthetic_ssa_funcs: Vec<crate::c5::ir::FunctionSsa>,
     /// User-function `FunctionSsa` entries, produced by the
     /// walker during `compile_to_link_unit`. Carries the
     /// canonical SSA across `.o` round-trips so the codegen
     /// can consume it directly from the archive-reload path.
-    /// Empty only for `Program` shapes built outside the
-    /// parser pipeline (optimizer unit tests with raw
-    /// bytecode, codegen writer fixtures); `produce_ssa_funcs`
-    /// routes those through `lift_program`.
     pub(crate) user_ssa_funcs: Vec<crate::c5::ir::FunctionSsa>,
 }

@@ -1,14 +1,9 @@
 //! Direct construction of [`FunctionSsa`] from a syntactic walk.
 //!
-//! Companion to [`super::ssa::lift_program`], which derives the same
-//! SSA from c5 stack-machine bytecode. The lift exists because the
-//! current parser emits bytecode; this builder exists so a future
-//! parser can produce SSA without that intermediate.
-//!
-//! The shape is intentionally identical to what the lift produces:
-//! same [`Inst`] enum, same [`Block`] layout, same [`Terminator`]
-//! semantics. Anything constructed here is consumed by the existing
-//! allocator and per-arch emit unchanged.
+//! The builder feeds the AST walker (`ast::walk::walk_function`) and
+//! parser-side synthesis (`emit_sys_trampolines`, the synthetic CRT
+//! entry); anything constructed here is consumed by the allocator
+//! and per-arch emit unchanged.
 //!
 //! Ergonomic API:
 //!

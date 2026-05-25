@@ -2,17 +2,13 @@
 //!
 //! The shape consumed by the linear-scan allocator
 //! ([`super::codegen::ssa_alloc::allocate`]) and the per-arch SSA
-//! emitters. Three producers:
+//! emitters. Two producers:
 //!
 //!   * The AST walker ([`super::ast::walk::walk_function`]) -- the
 //!     canonical source for every parser-produced function.
 //!   * The direct construction API
 //!     ([`super::ssa_build::SsaBuilder`]) -- used by
 //!     `emit_sys_trampolines` and other parser-side synthesis.
-//!   * The bytecode lift
-//!     ([`super::codegen::ssa::lift_program`]) -- legacy fallback
-//!     for `Program` shapes built outside the parser pipeline
-//!     (optimizer unit tests, codegen writer fixtures).
 //!
 //! Variant names mirror the c5 bytecode op set the IR descends
 //! from; the in-memory shape stays stable across producers so the

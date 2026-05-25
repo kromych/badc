@@ -3,7 +3,7 @@
 //! All AArch64 instructions are 32 bits wide and little-endian on every
 //! supported OS, which makes the encoder a flat catalogue of
 //! `fn enc_xxx(...) -> u32`. Per-function code generation routes
-//! through [`super::ssa::lift_program`] +
+//! through [`super::ssa_shadow::produce_ssa_funcs`] +
 //! [`super::ssa_alloc::allocate`] + `super::ssa_emit_aarch64`; this
 //! module's `lower()` is the shell that drives the SSA pipeline and
 //! the post-pass fixups (PLT trampolines, branch fixups,

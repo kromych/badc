@@ -1,8 +1,8 @@
 //! x86_64 instruction encoder + per-function lowering shell.
 //!
 //! Mirrors the structure of [`super::aarch64`]. Per-function code
-//! generation routes through [`super::ssa::lift_program`] +
-//! [`super::ssa_alloc::allocate`] + `super::ssa_emit_x86_64`; this
+//! generation routes through [`super::ssa_shadow::produce_ssa_funcs`]
+//! + [`super::ssa_alloc::allocate`] + `super::ssa_emit_x86_64`; this
 //! module owns the encoder catalogue, the start-stub, the PLT
 //! trampoline emit, and the post-pass fixup walks that the SSA emit
 //! defers to.

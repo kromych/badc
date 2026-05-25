@@ -5,7 +5,8 @@
 //!
 //! ## Pipeline
 //!
-//! [`Program`] -> [`ssa::lift_program`] (per-function SSA + CFG) ->
+//! [`Program`] -> [`ssa_shadow::produce_ssa_funcs`] (per-function
+//! SSA + CFG, sourced from the walker / cached `user_ssa_funcs`) ->
 //! [`ssa_alloc::allocate`] (linear-scan register allocation) ->
 //! per-arch SSA emit (`ssa_emit_aarch64` / `ssa_emit_x86_64`) ->
 //! raw machine code -> per-OS image writer -> bytes on disk ->
@@ -209,11 +210,9 @@ pub(crate) enum ReturnExt {
 /// per-arch `lower` sizes `bytecode_to_native` by this value so
 /// every `ent_pc` / `end_pc` / `block_start_pc` / sentinel write
 /// the SSA emit produces lands in range. Takes the max of
-/// `program.text.len()` (covers lift output bounded by the
-/// bytecode tape) and the largest `end_pc` across `ssa_funcs`
-/// (covers parsed-program SSA whose end_pcs match the parser's
-/// `text.len()` at compile time; once the parser stops emitting
-/// bytecode the lowering can drop the `text.len()` term).
+/// `program.text.len()` and the largest `end_pc` across
+/// `ssa_funcs`; the codegen still walks the bytecode tape for
+/// the post-function CRT epilogue stub.
 pub(super) fn pc_extent_for_lowering(
     program: &Program,
     ssa_funcs: &[crate::c5::ir::FunctionSsa],

@@ -225,13 +225,10 @@ impl Compiler {
             let r = sb.call_ext(binding_idx, arg_vals, 0);
             sb.return_(r);
             let mut func = sb.finish();
-            // `lift_program` would have stamped `end_pc` at the
-            // bytecode position just past the trampoline body;
-            // the SsaBuilder doesn't know the bc_pc until the
-            // bytecode emit below runs. Mirror what the lift
-            // does so any consumer that reads `end_pc` (e.g. the
-            // DWARF emitter's per-function range) sees the same
-            // shape it does for lift-recovered trampolines.
+            // SsaBuilder doesn't know the bc_pc until the
+            // bytecode emit below runs. Patch `end_pc` after
+            // the bytecode emit so the DWARF emitter's per-
+            // function range covers the trampoline body.
             func.end_pc = bc_pc; // patched after the bytecode emit
             let _ = NO_VALUE; // keep import non-warning
             self.synthetic_ssa_funcs.push(func);
@@ -309,8 +306,7 @@ impl Compiler {
             // Pin the synthesised SSA entry's `end_pc` to one
             // past the last emitted bytecode op so callers that
             // key off `[ent_pc, end_pc)` (DWARF range builder,
-            // linker rebase) match what `lift_program` would
-            // have stamped on the same trampoline body.
+            // linker rebase) see the trampoline body's PC range.
             self.synthetic_ssa_funcs[synth_idx].end_pc = self.text.len();
         }
     }

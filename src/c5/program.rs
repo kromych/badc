@@ -283,8 +283,7 @@ pub struct Program {
     /// walker reads `array_size` (for the C99 6.3.2.1p3
     /// array-to-pointer decay detection) and `type_` (for
     /// `Decl::Local` width selection) off this slice. Empty for
-    /// `Program` shapes built outside the parser pipeline; the
-    /// codegen falls back to `lift_program` for those.
+    /// `Program` shapes built outside the parser pipeline.
     pub(crate) symbols: alloc::vec::Vec<crate::c5::symbol::Symbol>,
     /// Synthesised `FunctionSsa` entries the parser produces
     /// outside the AST walker (sys-trampolines + the synthetic
@@ -298,9 +297,7 @@ pub struct Program {
     /// these directly through `produce_ssa_funcs` for the
     /// `.o`-reload path; the in-memory compile+link path
     /// re-walks the AST snapshots. Empty only for `Program`
-    /// shapes built outside the parser pipeline (optimizer
-    /// unit tests with raw bytecode, codegen writer fixtures);
-    /// `produce_ssa_funcs` routes those through `lift_program`.
+    /// shapes built outside the parser pipeline.
     pub(crate) user_ssa_funcs: alloc::vec::Vec<crate::c5::ir::FunctionSsa>,
     /// Cross-TU user-function imports surfaced by the parser
     /// for the `-c --emit=native` (`OutputKind::Relocatable`)

@@ -908,11 +908,11 @@ impl<'a> Walker<'a> {
                             return Ok(());
                         }
                         let kind = store_kind_for(ty, self.target);
-                        // Match `lift_function`'s StoreLocal fuse:
-                        // only I64 fuses into StoreLocal because
-                        // the per-arch emit's StoreLocal handles
-                        // only the 8-byte width. Narrower widths
-                        // go through LocalAddr + Store.
+                        // Only the I64 width fuses into a single
+                        // `StoreLocal`; narrower widths route
+                        // through `LocalAddr` + `Store` because
+                        // the per-arch emit's `StoreLocal` only
+                        // handles 8-byte stores.
                         if matches!(kind, super::super::ir::StoreKind::I64) {
                             b.store_local(slot, v, kind);
                         } else {
@@ -1185,14 +1185,9 @@ impl<'a> Walker<'a> {
                 // Local-target shortcut: a Token::Loc-class
                 // Ident lvalue lowers to a single `StoreLocal`
                 // instead of `LocalAddr` + `Store`, but only for
-                // the I64 width. `ssa::lift_function` performs
-                // the same fuse on the bytecode side
-                // (`Op::Lea N; Op::Psh; ...; Op::Si` -> a single
-                // `StoreLocal { slot: N }`) and keeps narrower
-                // widths as `Inst::Store` because the per-arch
-                // emit's `StoreLocal` only handles 8-byte stores.
-                // Mirroring the same gate keeps walker and lift
-                // category histograms aligned.
+                // the I64 width. The per-arch emit's `StoreLocal`
+                // only handles 8-byte stores, so narrower widths
+                // stay on the `LocalAddr` + `Store` path.
                 let kind = store_kind_for(*ty, self.target);
                 if matches!(kind, StoreKind::I64)
                     && let Expr::Ident {

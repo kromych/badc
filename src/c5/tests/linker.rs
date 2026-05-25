@@ -551,46 +551,36 @@ fn user_ssa_funcs_threaded_through_link_with_pc_rebase() {
         a_user_count + b_user_count,
         "every per-unit user fn should appear in the merged list",
     );
-    // Every merged ent_pc must point inside program.text and
-    // address an Op::Ent (the linker walks merged_text from PC
-    // 0 forward, so a wrongly-rebased ent_pc would land
-    // mid-operand or past the end).
-    use crate::c5::op::Op;
+    // Every merged ent_pc is unique and bounds a non-empty
+    // `[ent_pc, end_pc)` range. The linker rebases per-unit
+    // bc_pcs by `text_base[i]`, so two units' functions cannot
+    // share an ent_pc after the shift; a wrongly-rebased entry
+    // would collide with a sibling's range or wrap to PC 0.
+    let mut seen: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
     for f in &program.user_ssa_funcs {
         assert!(
-            f.ent_pc < program.text.len(),
-            "merged ent_pc {} >= text len {}",
+            seen.insert(f.ent_pc),
+            "merged ent_pc {} appears twice across user_ssa_funcs",
             f.ent_pc,
-            program.text.len(),
-        );
-        let raw = program.text[f.ent_pc];
-        assert_eq!(
-            crate::c5::op::Op::from_i64(raw),
-            Some(Op::Ent),
-            "merged ent_pc {} does not point at Op::Ent (raw={})",
-            f.ent_pc,
-            raw,
         );
         assert!(
-            f.end_pc <= program.text.len(),
-            "merged end_pc {} > text len {}",
+            f.ent_pc < f.end_pc,
+            "merged ent_pc {} >= end_pc {}",
+            f.ent_pc,
             f.end_pc,
-            program.text.len(),
         );
     }
 }
 
 #[test]
 fn user_ssa_funcs_call_target_pc_resolves_for_cross_tu_extern() {
-    use crate::c5::{LinkOptions, link_units, op::Op};
+    use crate::c5::{LinkOptions, link_units};
     // Across-TU call: TU B's main calls TU A's add. At
     // compile_to_link_unit time, B's user_ssa_funcs entry for
     // main carries an Inst::Call with target_pc == 0 (B doesn't
-    // know A's PC yet). The merge patches Op::Jsr's operand in
-    // merged_text against A's resolved ent_pc, and
-    // `resolve_extern_refs` patches the matching
-    // Inst::Call::target_pc via the walker-recorded symbol-ref
-    // side channel.
+    // know A's PC yet). `resolve_extern_refs` patches the slot
+    // through the walker-recorded `extern_call_refs` channel
+    // against the merged symbol table.
     let a = compile_unit("int add(int a, int b) { return a + b; }");
     let b = compile_unit(
         "
@@ -599,89 +589,65 @@ fn user_ssa_funcs_call_target_pc_resolves_for_cross_tu_extern() {
         ",
     );
 
-    // Pre-link state: the extern call in B should currently
-    // carry target_pc == 0 (placeholder for cross-TU).
-    let mut saw_unresolved = false;
+    // Pre-link state: B emits one `Inst::Call` for the
+    // forward-declared `add`. Its `target_pc` is whatever the
+    // walker stamped from `live_fun_val(add)` -- the extern's
+    // tentative `Symbol::val` if any, 0 when the parser has no
+    // placeholder. Either way, an `extern_call_refs` entry was
+    // recorded so the resolver can rewrite the slot post-merge.
+    let mut pre_call_count = 0usize;
     for f in &b.user_ssa_funcs {
         for inst in &f.insts {
-            if let crate::c5::ir::Inst::Call { target_pc, .. } = inst
-                && *target_pc == 0
-            {
-                saw_unresolved = true;
+            if matches!(inst, crate::c5::ir::Inst::Call { .. }) {
+                pre_call_count += 1;
             }
         }
     }
     assert!(
-        saw_unresolved,
-        "expected at least one Inst::Call with target_pc==0 pre-link in B",
+        pre_call_count >= 1,
+        "expected at least one Inst::Call pre-link in B",
     );
 
     let program =
         link_units(alloc::vec![b, a], &[], LinkOptions::default()).expect("link_units failed");
 
-    // Post-link invariant: the walker emits one `Inst::Call`
-    // per parser-emitted `Op::Jsr`. Count both sides and assert
-    // they agree -- the walker's value-stamping is checked
-    // separately by the per-call assertion below.
-    for f in &program.user_ssa_funcs {
-        let mut jsr_count = 0usize;
-        let mut pc = f.ent_pc;
-        while pc < f.end_pc.min(program.text.len()) {
-            let raw = program.text[pc];
-            let op = Op::from_i64(raw);
-            if op == Some(Op::Jsr) {
-                jsr_count += 1;
-            }
-            pc += op.map(|o| o.word_size()).unwrap_or(1);
-        }
-        let call_count = f
-            .insts
-            .iter()
-            .filter(|i| matches!(i, crate::c5::ir::Inst::Call { .. }))
-            .count();
-        assert_eq!(
-            call_count, jsr_count,
-            "Inst::Call count mismatch in fn ent_pc={}",
-            f.ent_pc,
-        );
-    }
-
-    // Sanity: TU B's main has the cross-TU extern call. Locate
-    // its Inst::Call in the merged user_ssa_funcs (its
-    // bytecode tape lives in B's range -- the first half of
-    // merged_text since B was passed first), and confirm
-    // resolve_extern_refs gave it a non-zero merged-PC target.
-    let main_b = program
+    // Post-link sanity: B's `main` carries a single
+    // `Inst::Call` whose `target_pc` matches the merged
+    // `ent_pc` of A's `add`. Locate both functions by name
+    // through the merged `finished_functions` and compare.
+    let add_ent = program
+        .finished_functions
+        .iter()
+        .find(|f| f.name == "add")
+        .map(|f| f.ent_pc)
+        .expect("merged finished_functions must include `add`");
+    let main_ent = program
+        .finished_functions
+        .iter()
+        .find(|f| f.name == "main")
+        .map(|f| f.ent_pc)
+        .expect("merged finished_functions must include `main`");
+    let main_ssa = program
         .user_ssa_funcs
         .iter()
-        .find(|f| {
-            // B's main is the function whose body contains the
-            // single cross-TU Op::Jsr; its end_pc < text.len()/2
-            // for this two-TU layout. Picking by Inst::Call
-            // count == 1 + non-zero target is sufficient.
-            let n_calls = f
-                .insts
-                .iter()
-                .filter(|i| matches!(i, crate::c5::ir::Inst::Call { .. }))
-                .count();
-            n_calls == 1
-                && f.insts.iter().any(
-                    |i| matches!(i, crate::c5::ir::Inst::Call { target_pc, .. } if *target_pc != 0),
-                )
+        .find(|f| f.ent_pc == main_ent)
+        .expect("main's FunctionSsa must be in user_ssa_funcs");
+    let main_call_targets: alloc::vec::Vec<usize> = main_ssa
+        .insts
+        .iter()
+        .filter_map(|i| {
+            if let crate::c5::ir::Inst::Call { target_pc, .. } = i {
+                Some(*target_pc)
+            } else {
+                None
+            }
         })
-        .expect("expected B's main with one resolved cross-TU Inst::Call");
-    for inst in &main_b.insts {
-        if let crate::c5::ir::Inst::Call { target_pc, .. } = inst {
-            let raw = program.text[*target_pc];
-            assert_eq!(
-                Op::from_i64(raw),
-                Some(Op::Ent),
-                "Cross-TU Inst::Call::target_pc={} does not point at Op::Ent (raw={})",
-                target_pc,
-                raw,
-            );
-        }
-    }
+        .collect();
+    assert_eq!(
+        main_call_targets,
+        alloc::vec![add_ent],
+        "main's single Inst::Call should resolve to add's merged ent_pc",
+    );
 
     // End-to-end: the program runs and returns 42, requiring
     // the cross-TU call to dispatch correctly.

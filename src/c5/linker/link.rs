@@ -262,7 +262,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
 
     // Reserve the leading 8-byte zero pad in `.data` (the
     // NULL-pointer guard rail the single-TU compile uses).
-    let mut merged_text: Vec<i64> = Vec::new();
+    let merged_text: Vec<i64> = Vec::new();
     let mut merged_data: Vec<u8> = alloc::vec![0u8; 8];
     let mut merged_tls: Vec<u8> = Vec::new();
     let mut merged_tls_init: usize = 0;
@@ -338,12 +338,14 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         merged_tls.extend(core::iter::repeat_n(0u8, bss_len));
     }
 
-    // Emit text per unit as a pure concat. The SSA tier handles
-    // every cross-unit reference (Inst::Call, Inst::ImmCode,
-    // Inst::ImmData, Inst::CallExt, Inst::TlsAddr) through the
-    // walker-recorded `extern_*_refs` + `binding_remap_per_unit`
-    // rebase below; the bytecode tape's operand contents are
-    // only consumed by disasm.
+    // The bytecode tape is no longer concatenated into the
+    // merged program. The SSA tier sizes itself off
+    // `FunctionSsa::end_pc` and resolves cross-unit references
+    // through walker-recorded `extern_*_refs` +
+    // `binding_remap_per_unit`. `Program::text` ends up empty
+    // for multi-TU links; per-unit `LinkUnit::text` is retained
+    // for the .o round-trip (the on-disk artifact still carries
+    // it) but no merged-program consumer reads its contents.
 
     let mut merged_source_functions: Vec<String> = Vec::new();
     let mut merged_source_files: Vec<String> = Vec::new();
@@ -437,13 +439,13 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         let text_off = text_base[ui];
         let data_off = data_base[ui];
 
-        // PC-indexed source_functions parallel to merged_text:
-        // DWARF / disasm look this up by post-merge bc_pc. The
-        // walker carries the per-Inst file + line inline through
-        // `inst_src`, so no parallel line / file columns are
-        // needed here.
+        // PC-indexed source_functions parallel to the per-unit
+        // bytecode tape. DWARF / disasm look this up by
+        // post-merge bc_pc. The walker carries the per-Inst
+        // file + line inline through `inst_src`, so no parallel
+        // line / file columns are needed here.
         merged_source_functions.extend(unit.source_functions.iter().cloned());
-        let want = merged_text.len() + unit.text.len();
+        let want = text_base[ui] + unit.text.len();
         if merged_source_functions.len() < want {
             merged_source_functions.resize(want, String::new());
         }
@@ -469,8 +471,6 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         // references through walker-recorded `extern_*_refs` +
         // `binding_remap_per_unit` applied to
         // `synthetic_ssa_funcs` / `user_ssa_funcs` below.
-        merged_text.extend_from_slice(&unit.text);
-
         // Apply intra-unit data_relocs (shift both endpoints).
         for r in &unit.data_relocs {
             merged_data_relocs.push(DataReloc {
@@ -524,16 +524,13 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
 
     // Cross-TU symbolic relocations.
     for (ui, unit) in units.iter().enumerate() {
-        let text_off = text_base[ui];
         let data_off = data_base[ui];
         for r in &unit.relocs {
             apply_reloc(
-                &mut merged_text,
                 &mut merged_data,
                 &mut merged_data_relocs,
                 &mut merged_code_relocs,
                 ui,
-                text_off,
                 data_off,
                 r,
                 unit,
@@ -1075,12 +1072,10 @@ fn resolve_extern_refs(
 
 #[allow(clippy::too_many_arguments)]
 fn apply_reloc(
-    merged_text: &mut [i64],
     merged_data: &mut [u8],
     merged_data_relocs: &mut Vec<DataReloc>,
     merged_code_relocs: &mut Vec<CodeReloc>,
     ui: usize,
-    text_off: usize,
     data_off: usize,
     r: &Reloc,
     unit: &LinkUnit,
@@ -1141,8 +1136,6 @@ fn apply_reloc(
         }
     };
 
-    let _ = text_off;
-    let _ = merged_text;
     let resolved = target_value + r.addend;
     match r.kind {
         RelocKind::DataDataAbs64 => {

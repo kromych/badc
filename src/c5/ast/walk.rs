@@ -193,6 +193,17 @@ pub(crate) fn walk_function(
     Ok(b.finish())
 }
 
+/// Resolution result for a `Token::Glo` address producer.
+/// `Resolved(off)` selects `Inst::ImmData(off)`; `Extern`
+/// selects `Inst::ImmData(0)` plus an entry in
+/// `FunctionSsa::extern_imm_data_refs` so the linker patches
+/// the slot from the merged symbol table.
+#[derive(Clone, Copy)]
+enum GloAddr {
+    Resolved(i64),
+    Extern,
+}
+
 /// Per-walk context. Mutable so the walker can stack break /
 /// continue targets across nested loops + switches and intern
 /// `LabelId -> BlockId` for cross-stmt gotos.
@@ -238,28 +249,29 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Live data offset for a `Token::Glo` symbol. The linker
-    /// has patched the merged `Symbol::val` to the canonical
-    /// defining unit's absolute offset (see
-    /// `linker::link.rs::merge`); the AST snapshot from a
-    /// caller-unit `extern` decl carries the unit-local
-    /// placeholder rebased by `Ast::rebase_data_offsets` and
-    /// would land in the caller's data segment instead of the
-    /// shared one. Trigger only when:
-    ///   * `is_extern_decl == true` -- C99 6.7.1 extern
-    ///     reference, no in-unit storage. A static local
-    ///     (`linkage == None`) or a file-scope `static`
-    ///     (`linkage == Internal`) never hits this path, so
-    ///     the parser's shadow of `Symbol::val` across
-    ///     same-named per-function statics doesn't reach the
-    ///     walker through this read.
-    ///   * `linkage == External`.
-    ///   * `val != 0` -- the linker found a defining sibling
-    ///     and rewrote `val`. If no def exists (the program
-    ///     has only declarations and the linker would have
-    ///     flagged a missing definition anyway), the AST
-    ///     snapshot is no worse a guess than `0`.
-    fn live_glo_val(&self, sym: u32, fallback_val: i64) -> i64 {
+    /// Resolve a `Token::Glo` address producer to either an
+    /// intra-unit data offset or a cross-TU symbol reference.
+    ///
+    /// * `GloAddr::Resolved(off)` -- use `Inst::ImmData(off)`.
+    ///   The offset is unit-local pre-link (rebased by the
+    ///   linker's merge) or the canonical defining unit's
+    ///   absolute offset post-link.
+    /// * `GloAddr::Extern` -- the symbol has no in-unit
+    ///   storage in this TU. The walker emits
+    ///   `Inst::ImmData(0)` and records the parser-symbol idx
+    ///   in `FunctionSsa::extern_imm_data_refs`; the linker
+    ///   patches the slot against the merged symbol table.
+    ///
+    /// The `extern` reclassification in
+    /// `compile_to_link_unit` clears the parser-tentative slot
+    /// on the live `Symbol`, so a symbol with
+    /// `is_extern_decl && !defined_here` reaches this path
+    /// with `val == 0` pre-link and the merge-resolved offset
+    /// post-link. The AST `Expr::Ident` snapshot in
+    /// `fallback_val` still carries the parser-tentative
+    /// offset and is only used when nothing in the live entry
+    /// updates it.
+    fn live_glo_addr(&self, sym: u32, fallback_val: i64) -> GloAddr {
         use crate::c5::symbol::Linkage;
         let idx = sym as usize;
         if idx < self.symbols.len() {
@@ -267,12 +279,23 @@ impl<'a> Walker<'a> {
             if s.class == Token::Glo as i64
                 && s.is_extern_decl
                 && s.linkage == Linkage::External
+                && !s.defined_here
+            {
+                return if s.val == 0 {
+                    GloAddr::Extern
+                } else {
+                    GloAddr::Resolved(s.val)
+                };
+            }
+            if s.class == Token::Glo as i64
+                && s.is_extern_decl
+                && s.linkage == Linkage::External
                 && s.val != 0
             {
-                return s.val;
+                return GloAddr::Resolved(s.val);
             }
         }
-        fallback_val
+        GloAddr::Resolved(fallback_val)
     }
 
     /// Byte size of the struct type encoded by `ty`. Looks up
@@ -1833,11 +1856,9 @@ impl<'a> Walker<'a> {
                     Ok(b.tls_addr(*val))
                 }
             } else {
-                let live_val = self.live_glo_val(*sym, *val);
-                if live_val == 0 {
-                    Ok(b.imm_data_extern(*sym))
-                } else {
-                    Ok(b.imm_data(live_val))
+                match self.live_glo_addr(*sym, *val) {
+                    GloAddr::Extern => Ok(b.imm_data_extern(*sym)),
+                    GloAddr::Resolved(off) => Ok(b.imm_data(off)),
                 }
             }
         } else if *class == Token::Fun as i64 {
@@ -1893,11 +1914,16 @@ impl<'a> Walker<'a> {
         // patch theirs late). Other classes (`Token::Loc` /
         // `Token::Glo` / `Token::Num`) carry a stable per-frame
         // slot / data offset / constant, so the snapshot stays
-        // correct.
+        // correct. Glo non-TLS routes through `live_glo_addr`
+        // which discriminates a cross-TU extern from an
+        // intra-unit data offset without a 0 sentinel.
+        let glo_addr = if class == Token::Glo as i64 && !is_thread_local {
+            Some(self.live_glo_addr(_sym, val))
+        } else {
+            None
+        };
         let val: i64 = if class == Token::Fun as i64 {
             self.live_fun_val(_sym, val)
-        } else if class == Token::Glo as i64 && !is_thread_local {
-            self.live_glo_val(_sym, val)
         } else {
             val
         };
@@ -1916,11 +1942,11 @@ impl<'a> Walker<'a> {
         if address_only {
             if class == Token::Loc as i64 {
                 return Ok(b.local_addr(val));
-            } else if class == Token::Glo as i64 && !is_thread_local {
-                if val == 0 {
-                    return Ok(b.imm_data_extern(_sym));
-                }
-                return Ok(b.imm_data(val));
+            } else if let Some(addr) = glo_addr {
+                return Ok(match addr {
+                    GloAddr::Extern => b.imm_data_extern(_sym),
+                    GloAddr::Resolved(off) => b.imm_data(off),
+                });
             } else if class == Token::Glo as i64 && is_thread_local {
                 if val == 0 {
                     return Ok(b.tls_addr_extern(_sym));
@@ -1931,14 +1957,13 @@ impl<'a> Walker<'a> {
         if class == Token::Loc as i64 {
             let kind = load_kind_for(ty, self.target);
             Ok(b.load_local(val, kind))
-        } else if class == Token::Glo as i64 && !is_thread_local {
-            let addr = if val == 0 {
-                b.imm_data_extern(_sym)
-            } else {
-                b.imm_data(val)
+        } else if let Some(addr) = glo_addr {
+            let addr_v = match addr {
+                GloAddr::Extern => b.imm_data_extern(_sym),
+                GloAddr::Resolved(off) => b.imm_data(off),
             };
             let kind = load_kind_for(ty, self.target);
-            Ok(b.load(addr, kind))
+            Ok(b.load(addr_v, kind))
         } else if class == Token::Glo as i64 && is_thread_local {
             let addr = if val == 0 {
                 b.tls_addr_extern(_sym)

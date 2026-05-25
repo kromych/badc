@@ -85,6 +85,36 @@ fn extern_global_read_and_write_across_units() {
 }
 
 #[test]
+fn extern_global_array_indexed_across_units() {
+    // C99 6.7.1: `extern T x[N];` declares an array whose
+    // storage lives in another TU. The parser allocates a
+    // tentative local slot so single-TU `Compiler::compile()`
+    // stays permissive; `compile_to_link_unit` re-classifies
+    // the symbol as `Undefined` and clears `val` so the
+    // walker emits `Inst::ImmData(0)` plus an
+    // `extern_imm_data_refs` entry. The linker resolves the
+    // slot from the defining TU's data segment. Pre-fix the
+    // walker read the dummy parser offset and emitted
+    // `Inst::ImmData(<dummy>)` with no extern_*_refs entry,
+    // so the merged image dereferenced data near the .bss
+    // start instead of the canonical array. Reproduced as
+    // -4 (`BZ_DATA_ERROR`) on bzip2's reference-stream
+    // scenario when crctable.c was its own translation unit.
+    let a = compile_unit(
+        "
+        int table[4] = { 11, 22, 33, 44 };
+        ",
+    );
+    let b = compile_unit(
+        "
+        extern int table[4];
+        int main() { return table[0] + table[1] + table[2] + table[3]; }
+        ",
+    );
+    assert_eq!(link_and_run(alloc::vec![b, a]), 110);
+}
+
+#[test]
 fn struct_value_assignment_after_multi_tu_dedupe() {
     // The linker dedupes per-unit `structs` tables by name when
     // building `merged_structs`, so a unit's local struct id can

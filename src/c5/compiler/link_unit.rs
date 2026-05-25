@@ -196,6 +196,21 @@ impl Compiler {
                 && !sym.has_initializer
             {
                 sym.defined_here = false;
+                // C99 6.7.1 + 6.9.2: an `extern T x;` / `extern
+                // T x[N];` with no defining initializer in this
+                // TU contributes no storage. The parser-time
+                // tentative slot at `sym.val` is dropped from
+                // the LinkUnit symbol table (kind = Undefined
+                // below), so its in-unit offset is meaningless.
+                // Clear `val` here so the walker's
+                // `live_glo_addr` returns `GloAddr::Extern` and
+                // the address producer routes through
+                // `imm_data_extern`; otherwise the dummy offset
+                // would ride through as an `Inst::ImmData` with
+                // no `extern_imm_data_refs` entry and the
+                // linker would have nothing to patch against
+                // the defining TU.
+                sym.val = 0;
             }
         }
 

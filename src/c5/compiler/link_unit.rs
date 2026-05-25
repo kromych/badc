@@ -543,7 +543,6 @@ impl Compiler {
             code_imm_positions: self.code_imm_positions,
             source_functions: self.source_functions,
             source_files: self.source_files,
-            source_file_indices: self.source_file_indices,
             variables: self.variables,
             data_relocs: self.data_relocs,
             code_relocs: self.code_relocs,

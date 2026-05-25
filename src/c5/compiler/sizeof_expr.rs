@@ -154,7 +154,6 @@ impl Compiler {
             // function's name.
             self.text.truncate(saved_text_len);
             self.source_functions.truncate(saved_text_len);
-            self.source_file_indices.truncate(saved_text_len);
             self.data_imm_positions.truncate(saved_data_imm_positions);
             self.fn_call_fixups.truncate(saved_fn_call_fixups);
             self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);

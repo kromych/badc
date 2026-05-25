@@ -93,13 +93,13 @@ impl Compiler {
             _ => {}
         }
         self.text.push(op as i64);
-        // Mirror text.len() one-for-one in source_functions /
-        // source_file_indices so a bc_pc lookup is a direct
-        // index. Operand slots inherit the op's source position.
-        let file_idx = self.intern_source_file();
+        // Mirror text.len() one-for-one in source_functions so a
+        // bc_pc lookup is a direct index. Operand slots inherit
+        // the op's source function. intern_source_file keeps
+        // the `source_files` table fresh for the DWARF emitter.
+        let _ = self.intern_source_file();
         self.source_functions
             .push(self.current_function_name.clone());
-        self.source_file_indices.push(file_idx);
         // Dual-emit hook -- keep the AST in lockstep with the
         // bytecode for ops whose AST shape is determined by `op`
         // alone (push / pop of the parser-side vstack, arithmetic
@@ -114,10 +114,9 @@ impl Compiler {
 
     pub(super) fn emit_val(&mut self, val: i64) {
         self.text.push(val);
-        let file_idx = self.intern_source_file();
+        let _ = self.intern_source_file();
         self.source_functions
             .push(self.current_function_name.clone());
-        self.source_file_indices.push(file_idx);
     }
 
     /// Look up the lexer's current `(file)` in `source_files`,
@@ -318,7 +317,6 @@ impl Compiler {
             // text.len() and every later emit_op lands in the
             // wrong slot.
             self.source_functions.pop();
-            self.source_file_indices.pop();
             // The load is gone -- the symbol's value never gets
             // read at runtime through this path. Revert the
             // tentative `was_read` the identifier-rvalue path

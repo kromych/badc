@@ -53,14 +53,11 @@ pub struct LinkUnit {
     /// merge concatenates these so disasm / DWARF can attribute
     /// each PC to a function name.
     pub source_functions: Vec<String>,
-    /// Filename table for the unit. Indices in
-    /// `source_file_indices` reference this list; the linker
-    /// merges per-unit tables into a single global file table
-    /// and re-indexes the per-PC vector.
+    /// Filename table for the unit. The linker merges per-unit
+    /// tables into a single global file table; the walker
+    /// stamps per-Inst file indices through `inst_src`, which
+    /// the linker re-bases against the merged table.
     pub source_files: Vec<String>,
-    /// Mirror of `Program::source_file_indices`, parallel to
-    /// `text`.
-    pub source_file_indices: Vec<u16>,
     /// Mirror of `Program::variables` -- per-function DWARF
     /// locals. `function_bc_pc` is unit-local and re-based by
     /// `text_offset[unit]` at link.

@@ -741,15 +741,9 @@ pub struct Compiler {
     /// `(file, line)` state (i.e. crossing a GNU line marker on
     /// `#include` enter / a `#line N "file"` directive) gets
     /// a fresh entry. The DWARF emitter writes one
-    /// `DW_LNE_define_file` per entry and switches with
-    /// `DW_LNS_set_file` when `source_file_indices` changes.
+    /// `DW_LNE_define_file` per entry and switches with the
+    /// walker's per-Inst `inst_src` file index.
     source_files: Vec<String>,
-    /// Per-bytecode-PC index into `source_files`, parallel to
-    /// `source_lines`. The two columns together pin a PC to a
-    /// specific (file, line). Without this column lldb would
-    /// claim every PC came from the user's translation unit even
-    /// when it actually originated inside a header.
-    source_file_indices: Vec<u16>,
     /// Label of the primary translation-unit source as supplied
     /// through [`CompileOptions::source_label`]. Compared against
     /// [`lexer::Lexer::file`] at declaration sites so unused-symbol
@@ -1023,7 +1017,6 @@ impl Compiler {
             no_entry_point: opts.no_entry_point,
             source_functions: Vec::new(),
             source_files: Vec::new(),
-            source_file_indices: Vec::new(),
             source_label: opts.source_label.clone(),
             variables: Vec::new(),
             current_function_name: String::new(),

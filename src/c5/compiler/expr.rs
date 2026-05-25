@@ -1589,7 +1589,6 @@ impl Compiler {
                     if is_load {
                         self.text.pop();
                         self.source_functions.pop();
-                        self.source_file_indices.pop();
                         self.ty += Ty::Ptr as i64;
                     }
                 }

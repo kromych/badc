@@ -594,15 +594,10 @@ fn main() {
         return;
     }
 
-    // Load each `.o` input. The driver auto-detects native
-    // ELF64 ET_REL objects (the `-c` output format) and routes
-    // them through `parse_native_elf` + `link_native_objects`;
-    // legacy badc-format `.o` files fall through to
-    // `read_object` and the SSA-tier link path. Mixed inputs
-    // are rejected -- the two link paths produce different
-    // shapes and the writer can only handle one at a time.
-    let mut native_objs: Vec<badc::NativeObject> = Vec::new();
-    let mut native_paths: Vec<String> = Vec::new();
+    // Load each `.o` input. Every `.o` must be a native ELF64
+    // ET_REL produced by the current `-c`; the legacy badc-
+    // format reader has retired (no users depend on it).
+    let mut native_objs: Vec<badc::NativeObject> = Vec::with_capacity(objects.len());
     for obj_path in &objects {
         let bytes = match std::fs::read(obj_path) {
             Ok(b) => b,
@@ -611,38 +606,25 @@ fn main() {
                 std::process::exit(1);
             }
         };
-        if badc::is_elf_object(&bytes) {
-            match badc::parse_native_elf(&bytes) {
-                Ok(o) => {
-                    native_objs.push(o);
-                    native_paths.push(obj_path.clone());
-                }
-                Err(e) => {
-                    eprint_diagnostic(format!(
-                        "badc: error: failed to parse native ELF `{obj_path}`: {e}"
-                    ));
-                    std::process::exit(1);
-                }
-            }
-        } else {
-            match badc::read_object(&bytes) {
-                Ok(u) => units.push(u),
-                Err(e) => {
-                    eprint_diagnostic(format!("badc: error: failed to parse `{obj_path}`: {e}"));
-                    std::process::exit(1);
-                }
+        if !badc::is_elf_object(&bytes) {
+            eprint_diagnostic(format!(
+                "badc: error: `{obj_path}` is not a native ELF object; only the ELF format is \
+                 supported"
+            ));
+            std::process::exit(1);
+        }
+        match badc::parse_native_elf(&bytes) {
+            Ok(o) => native_objs.push(o),
+            Err(e) => {
+                eprint_diagnostic(format!(
+                    "badc: error: failed to parse native ELF `{obj_path}`: {e}"
+                ));
+                std::process::exit(1);
             }
         }
     }
 
     if !native_objs.is_empty() {
-        if !units.is_empty() {
-            eprint_diagnostic(
-                "badc: error: mixing native ELF `.o` and legacy badc-format `.o` inputs \
-                 is not supported; rebuild the legacy units with the current `-c`",
-            );
-            std::process::exit(1);
-        }
         let mut merged = match badc::link_native_objects(&native_objs) {
             Ok(m) => m,
             Err(e) => {
@@ -676,7 +658,6 @@ fn main() {
             }
         };
         write_output(out, &bytes, quiet);
-        let _ = native_paths;
         return;
     }
 

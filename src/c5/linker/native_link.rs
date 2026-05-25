@@ -227,19 +227,17 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
                     apply_reloc(machine, &mut text, patch_offset, reloc, target)?;
                 }
                 NativeSymSection::Data => {
-                    let target =
-                        (data_bases[i] as i64 + sym.value as i64 + reloc.addend) - text_base as i64;
-                    // The reloc encodes a section-relative
-                    // offset in the addend; the writer expects
-                    // the resolved value to point at the
-                    // section's runtime base + the addend. For
-                    // a position-independent merge the target
-                    // address has to wait for the final-image
-                    // writer (which knows the runtime vmaddr
-                    // gap between `.text` and `.data`). Park
-                    // these as pending data refs for that pass.
-                    let _ = target;
-                    park_data_ref(machine, &mut pending_imports, patch_offset, reloc);
+                    // Resolved data offset within `merged.data`
+                    // for the writer. We can't apply the reloc
+                    // yet because the runtime vmaddr gap
+                    // between `.text` and `.data` is unknown
+                    // until the final-image writer commits a
+                    // layout. Park the offset in the reloc's
+                    // addend so the writer reads it back
+                    // without rebuilding the per-unit base
+                    // table.
+                    let data_off = data_bases[i] as i64 + sym.value as i64 + reloc.addend;
+                    park_data_ref(machine, &mut pending_imports, patch_offset, reloc, data_off);
                 }
                 NativeSymSection::Undef => {
                     if let Some(def) = defined.get(&sym.name) {
@@ -274,10 +272,11 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
                     }
                 }
                 NativeSymSection::Bss => {
-                    let target =
-                        (bss_bases[i] as i64 + sym.value as i64 + reloc.addend) - text_base as i64;
-                    let _ = target;
-                    park_data_ref(machine, &mut pending_imports, patch_offset, reloc);
+                    // `.bss` sits past `.data` in the merged
+                    // image; same parking rule as Data, with
+                    // the offset taken against the bss base.
+                    let bss_off = bss_bases[i] as i64 + sym.value as i64 + reloc.addend;
+                    park_data_ref(machine, &mut pending_imports, patch_offset, reloc, bss_off);
                 }
                 NativeSymSection::Abs => {
                     // Absolute symbol -- the value goes in
@@ -613,19 +612,20 @@ fn park_data_ref(
     pending: &mut Vec<PendingImportReloc>,
     patch_offset: usize,
     reloc: &NativeReloc,
+    target_offset: i64,
 ) {
     // The .data / .bss reference resolves once the final-image
     // writer knows the runtime page-relative distance between
-    // `.text` and `.data`. We park the reloc in the
+    // `.text` and `.data`. Park the reloc in the
     // `pending_imports` queue with a sentinel import index of
     // `usize::MAX` so the writer can pick it up the same way it
-    // handles PLT imports -- a refactor pass will rename the
-    // queue once both directions land cleanly.
+    // handles PLT imports; the resolved data / bss byte offset
+    // travels in the addend slot.
     pending.push(PendingImportReloc {
         text_offset: patch_offset as u64,
         import_index: usize::MAX,
         rtype: reloc.rtype,
-        addend: reloc.addend,
+        addend: target_offset,
     });
 }
 

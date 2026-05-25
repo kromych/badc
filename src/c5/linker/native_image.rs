@@ -3,25 +3,24 @@
 //! Consumes the merged sections produced by
 //! [`super::native_link::link_native_objects`] (plus per-arch
 //! PLT trampolines from `emit_*_plt`) and emits a runnable
-//! ELF64 file. Today's scope is statically-linked Linux
-//! executables: every cross-unit reference has been resolved
-//! by the link step, and `MergedNative::imports` must be empty
-//! -- libc / libdl imports need a dynamic-section pass that
-//! lives in a follow-up commit.
+//! ELF64 file for Linux. Two paths:
 //!
-//! Layout (matches the conventional `ld -static -no-pie`
-//! output close enough that `readelf -l` / `objdump -d` work):
+//!   * Static: `merged.imports` is empty. The writer drops two
+//!     PT_LOAD segments (R+X .text, R+W .data) and a per-arch
+//!     `_start` stub appended after `.text` that calls the
+//!     named entry function and invokes `exit_group` via
+//!     syscall.
 //!
-//!   * Page 0 starting at `BASE_ADDR`: ELF header + program
-//!     headers + `.text` bytes. R+X mapping.
-//!   * Next page: `.data` bytes + `.bss` (memsz beyond filesz).
-//!     R+W mapping.
-//!
-//! A tiny per-arch `_start` stub is appended after `.text` to
-//! call the named entry symbol and exit via the kernel's
-//! `exit_group` syscall. The stub is the executable's entry
-//! point; the entry symbol is invoked as a normal C function
-//! taking `(argc, argv)`.
+//!   * Dynamic: `merged.imports` is non-empty. The writer adds
+//!     a PT_INTERP (`/lib64/ld-linux-x86-64.so.2` /
+//!     `/lib/ld-linux-aarch64.so.1`), a `.dynstr` / `.dynsym` /
+//!     `.rela.plt` triple for the imports, a `.got.plt` of one
+//!     slot per import (DT_BIND_NOW eager resolution -- the
+//!     dynamic linker writes the resolved address into each
+//!     slot at startup, no PLT0 stub needed), and a PT_DYNAMIC
+//!     directing the linker at the binding tables. PLT
+//!     trampolines emitted by `emit_*_plt` are patched to
+//!     dereference their `.got.plt` slot.
 //!
 //! Output is little-endian; both supported architectures
 //! (x86_64, aarch64) are LE on Linux.
@@ -48,10 +47,42 @@ const EM_AARCH64: u16 = 183;
 const EV_CURRENT: u32 = 1;
 
 const PT_LOAD: u32 = 1;
+const PT_DYNAMIC: u32 = 2;
+const PT_INTERP: u32 = 3;
+const PT_PHDR: u32 = 6;
 
 const PF_X: u32 = 1;
 const PF_W: u32 = 2;
 const PF_R: u32 = 4;
+
+// Dynamic-section tags (Elf64_Dyn::d_tag).
+const DT_NULL: u64 = 0;
+const DT_NEEDED: u64 = 1;
+const DT_PLTRELSZ: u64 = 2;
+const DT_PLTGOT: u64 = 3;
+const DT_STRTAB: u64 = 5;
+const DT_SYMTAB: u64 = 6;
+const DT_STRSZ: u64 = 10;
+const DT_SYMENT: u64 = 11;
+const DT_BIND_NOW: u64 = 24;
+const DT_PLTREL: u64 = 20;
+const DT_JMPREL: u64 = 23;
+const DT_FLAGS: u64 = 30;
+
+const DF_BIND_NOW: u64 = 0x8;
+
+// Reloc kinds the dynamic linker resolves at startup.
+const R_X86_64_JUMP_SLOT: u32 = 7;
+const R_AARCH64_JUMP_SLOT: u32 = 1026;
+
+// Symbol-table bookkeeping for `.dynsym`.
+const STB_GLOBAL: u8 = 1;
+const STT_FUNC: u8 = 2;
+const SHN_UNDEF: u16 = 0;
+
+const ELF64_SYM_SIZE: u64 = 24;
+const ELF64_RELA_SIZE: u64 = 24;
+const ELF64_DYN_SIZE: u64 = 16;
 
 const ELF_HEADER_SIZE: u16 = 64;
 const PROGRAM_HEADER_SIZE: u16 = 56;
@@ -62,24 +93,18 @@ const PROGRAM_HEADER_SIZE: u16 = 56;
 const BASE_ADDR: u64 = 0x400000;
 const PAGE_SIZE: u64 = 0x1000;
 
-/// Emit a static ELF64 ET_EXEC executable for `merged`.
-///
-/// `entry_name` names the user-level entry function; today
-/// that is `main`, which the start stub calls with the kernel
-/// argc / argv on the stack. Errors out when
-/// `merged.imports` is non-empty -- the dynamic-linker
-/// scaffolding (PT_INTERP / PT_DYNAMIC / `.dynsym` / `.rela.plt`)
-/// is not implemented yet.
+/// Emit an ELF64 ET_EXEC executable for `merged`. Dispatches
+/// to the static or dynamic writer depending on whether the
+/// merged image carries libc / libdl / ... imports.
 pub fn write_executable_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8>, C5Error> {
-    if !merged.imports.is_empty() {
-        return Err(err(&format!(
-            "native ELF executable writer: {} unresolved import(s) (first: {:?}); \
-             dynamic-linker section emission is not yet implemented",
-            merged.imports.len(),
-            merged.imports.first(),
-        )));
+    if merged.imports.is_empty() {
+        write_static_elf64(merged, entry_name)
+    } else {
+        write_dynamic_elf64(merged, entry_name)
     }
+}
 
+fn write_static_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8>, C5Error> {
     // Resolve the entry function's text-segment offset.
     let entry_sym = merged.defined.get(entry_name).ok_or_else(|| {
         err(&format!(
@@ -131,6 +156,19 @@ pub fn write_executable_elf64(merged: &MergedNative, entry_name: &str) -> Result
     let data_vaddr: u64 = page_align(text_vaddr + text_file_size) + PAGE_SIZE;
     let data_file_size: u64 = merged.data.len() as u64;
     let data_mem_size: u64 = data_file_size + merged.bss_size as u64;
+
+    // Resolve every parked data-ref reloc against the now-
+    // known runtime data vmaddr. PLT-bound entries should not
+    // appear in the static path (we already errored on
+    // non-empty `imports` above), so only data sentinels
+    // remain.
+    patch_data_refs(
+        &mut text,
+        text_vaddr,
+        data_vaddr,
+        &merged.pending_imports,
+        merged.machine,
+    )?;
 
     let mut out: Vec<u8> = Vec::with_capacity(
         headers_size as usize + text.len() + merged.data.len() + PAGE_SIZE as usize,
@@ -328,6 +366,481 @@ fn err(msg: &str) -> C5Error {
     C5Error::Compile(crate::c5::error::fmt_internal_err(msg))
 }
 
+/// Emit a dynamically-linked ELF64 ET_EXEC for `merged` whose
+/// imports are resolved against libc.so.6 at startup by the
+/// system dynamic linker (DT_BIND_NOW eager binding).
+///
+/// Image layout:
+///
+/// ```text
+///   page 0 (R+X):
+///     ELF header (64 bytes)
+///     PHDR table (5 entries)
+///     .interp ("/lib64/ld-linux-x86-64.so.2\0" or aarch64 form)
+///     .dynstr (libc.so.6 + every import name, NUL-separated)
+///     .dynsym (null entry + one Elf64_Sym per import)
+///     .rela.plt (one Elf64_Rela per import)
+///     .text + start stub + PLT trampolines
+///   page 1 (R+W):
+///     .got.plt (one i64 slot per import; dynamic linker fills
+///               in resolved addresses at startup)
+///     .data + .bss
+///     .dynamic
+/// ```
+///
+/// Both supported architectures route through the same layout;
+/// only the interp string, the JUMP_SLOT reloc kind, and the
+/// PLT-trampoline patch shape differ.
+fn write_dynamic_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8>, C5Error> {
+    let entry_sym = merged.defined.get(entry_name).ok_or_else(|| {
+        err(&format!(
+            "native ELF executable writer: entry symbol `{entry_name}` not defined in any input \
+             object"
+        ))
+    })?;
+    if !matches!(entry_sym.section, NativeSymSection::Text) {
+        return Err(err(&format!(
+            "native ELF executable writer: entry symbol `{entry_name}` is not in .text (found \
+             {:?})",
+            entry_sym.section
+        )));
+    }
+    let entry_text_offset = entry_sym.value as usize;
+    let n_imports = merged.imports.len();
+
+    let (machine_em, interp_path, jump_slot_rtype) = match merged.machine {
+        NativeMachine::X86_64 => (EM_X86_64, "/lib64/ld-linux-x86-64.so.2", R_X86_64_JUMP_SLOT),
+        NativeMachine::Aarch64 => (
+            EM_AARCH64,
+            "/lib/ld-linux-aarch64.so.1",
+            R_AARCH64_JUMP_SLOT,
+        ),
+    };
+    let interp_bytes: Vec<u8> = {
+        let mut v = interp_path.as_bytes().to_vec();
+        v.push(0);
+        v
+    };
+
+    // Append the entry-call stub to the merged text. The
+    // trampolines already produced by `emit_*_plt` are part of
+    // `merged.text`; the stub lands past them.
+    let mut text = merged.text.clone();
+    let stub_text_offset = text.len();
+    let stub_bytes = start_stub_bytes(merged.machine, stub_text_offset, entry_text_offset);
+    text.extend_from_slice(&stub_bytes);
+
+    // .dynstr layout: a leading "\0", then "libc.so.6\0", then
+    // every import name NUL-terminated. Record per-import
+    // string offsets so .dynsym entries can refer back to them.
+    let mut dynstr: Vec<u8> = Vec::new();
+    dynstr.push(0);
+    let libc_name_off = dynstr.len() as u32;
+    dynstr.extend_from_slice(b"libc.so.6");
+    dynstr.push(0);
+    let mut import_name_off: Vec<u32> = Vec::with_capacity(n_imports);
+    for name in &merged.imports {
+        import_name_off.push(dynstr.len() as u32);
+        dynstr.extend_from_slice(name.as_bytes());
+        dynstr.push(0);
+    }
+
+    // .dynsym layout: null symbol + one STT_FUNC per import.
+    let mut dynsym: Vec<u8> = Vec::with_capacity((n_imports + 1) * ELF64_SYM_SIZE as usize);
+    write_elf64_sym(&mut dynsym, 0, 0, 0, SHN_UNDEF, 0, 0);
+    for off in &import_name_off {
+        let st_info = (STB_GLOBAL << 4) | STT_FUNC;
+        write_elf64_sym(&mut dynsym, *off, st_info, 0, SHN_UNDEF, 0, 0);
+    }
+
+    // Lay out the file. The header offsets need the final
+    // addresses to compute reloc offsets, so first walk
+    // forward picking offsets, then write the bytes.
+    let phnum: u16 = 5;
+    let phoff: u64 = ELF_HEADER_SIZE as u64;
+    let headers_size: u64 = phoff + (PROGRAM_HEADER_SIZE as u64) * (phnum as u64);
+
+    let interp_off = headers_size;
+    let interp_size = interp_bytes.len() as u64;
+    let dynstr_off = interp_off + interp_size;
+    let dynstr_size = dynstr.len() as u64;
+    let dynsym_off = dynstr_off + dynstr_size;
+    let dynsym_size = dynsym.len() as u64;
+    let rela_plt_off = dynsym_off + dynsym_size;
+    let rela_plt_size = (n_imports as u64) * ELF64_RELA_SIZE;
+    let text_off = rela_plt_off + rela_plt_size;
+    let text_size = text.len() as u64;
+
+    // Second PT_LOAD starts on the next page after the text
+    // segment. Page-align both the file offset and the load
+    // vaddr; the kernel's mmap requires
+    // `vaddr % PAGE_SIZE == offset % PAGE_SIZE`.
+    let data_seg_file_off = page_align(text_off + text_size);
+    let data_seg_vaddr = page_align(BASE_ADDR + text_off + text_size) + PAGE_SIZE;
+    let got_plt_off = data_seg_file_off;
+    let got_plt_size: u64 = (n_imports as u64) * 8;
+    let data_off = got_plt_off + got_plt_size;
+    let data_size = merged.data.len() as u64;
+    let dynamic_off = data_off + data_size;
+    let dynamic_size: u64 = {
+        // Tag list: NEEDED, STRTAB, SYMTAB, STRSZ, SYMENT,
+        // PLTGOT, PLTREL, JMPREL, PLTRELSZ, FLAGS, BIND_NOW,
+        // NULL.
+        let n_tags: u64 = 12;
+        n_tags * ELF64_DYN_SIZE
+    };
+
+    // Compute VA addresses now that file offsets are fixed.
+    let interp_vaddr = BASE_ADDR + interp_off;
+    let dynstr_vaddr = BASE_ADDR + dynstr_off;
+    let dynsym_vaddr = BASE_ADDR + dynsym_off;
+    let rela_plt_vaddr = BASE_ADDR + rela_plt_off;
+    let text_vaddr = BASE_ADDR + text_off;
+    let got_plt_vaddr = data_seg_vaddr;
+    let dynamic_vaddr = data_seg_vaddr + (dynamic_off - data_seg_file_off);
+    let entry_vaddr = text_vaddr + stub_text_offset as u64;
+
+    // Patch the PLT trampolines to dereference their .got.plt
+    // slot. The codegen left `0` placeholders; we know each
+    // trampoline's text offset because `emit_*_plt` placed them
+    // contiguously past the user .text.
+    let user_text_end = merged.text.len() - n_imports * plt_trampoline_size(merged.machine);
+    for (i, _name) in merged.imports.iter().enumerate() {
+        let tramp_offset = user_text_end + i * plt_trampoline_size(merged.machine);
+        let slot_vaddr = got_plt_vaddr + (i as u64) * 8;
+        patch_plt_trampoline(
+            &mut text,
+            tramp_offset,
+            text_vaddr + tramp_offset as u64,
+            slot_vaddr,
+            merged.machine,
+        )?;
+    }
+
+    // Resolve every parked data-ref reloc against the now-
+    // known runtime `.data` vmaddr. The dynamic-section layout
+    // puts `.data` after the `.got.plt` slots; the addend on
+    // each parked reloc is the byte offset within `merged.data`
+    // (set by `link_native_objects`).
+    let data_vaddr = got_plt_vaddr + got_plt_size;
+    patch_data_refs(
+        &mut text,
+        text_vaddr,
+        data_vaddr,
+        &merged.pending_imports,
+        merged.machine,
+    )?;
+
+    let mut out: Vec<u8> =
+        Vec::with_capacity((dynamic_off + dynamic_size + PAGE_SIZE) as usize + merged.data.len());
+
+    // ELF identification.
+    out.extend_from_slice(&ELF_MAGIC);
+    out.push(EI_CLASS_64);
+    out.push(EI_DATA_LSB);
+    out.push(EI_VERSION_CURRENT);
+    out.push(EI_OSABI_SYSV);
+    out.push(0);
+    out.extend_from_slice(&[0u8; 7]);
+
+    // ELF header (e_type onwards).
+    write_u16(&mut out, ET_EXEC);
+    write_u16(&mut out, machine_em);
+    write_u32(&mut out, EV_CURRENT);
+    write_u64(&mut out, entry_vaddr);
+    write_u64(&mut out, phoff);
+    write_u64(&mut out, 0);
+    write_u32(&mut out, 0);
+    write_u16(&mut out, ELF_HEADER_SIZE);
+    write_u16(&mut out, PROGRAM_HEADER_SIZE);
+    write_u16(&mut out, phnum);
+    write_u16(&mut out, 0);
+    write_u16(&mut out, 0);
+    write_u16(&mut out, 0);
+    debug_assert_eq!(out.len() as u64, phoff);
+
+    // Program headers.
+    write_phdr(
+        &mut out,
+        PT_PHDR,
+        PF_R,
+        phoff,
+        BASE_ADDR + phoff,
+        BASE_ADDR + phoff,
+        (PROGRAM_HEADER_SIZE as u64) * (phnum as u64),
+        (PROGRAM_HEADER_SIZE as u64) * (phnum as u64),
+        8,
+    );
+    write_phdr(
+        &mut out,
+        PT_INTERP,
+        PF_R,
+        interp_off,
+        interp_vaddr,
+        interp_vaddr,
+        interp_size,
+        interp_size,
+        1,
+    );
+    let text_seg_file_size = text_off + text_size;
+    write_phdr(
+        &mut out,
+        PT_LOAD,
+        PF_R | PF_X,
+        0,
+        BASE_ADDR,
+        BASE_ADDR,
+        text_seg_file_size,
+        text_seg_file_size,
+        PAGE_SIZE,
+    );
+    let data_seg_file_size = (dynamic_off + dynamic_size) - data_seg_file_off;
+    let data_seg_mem_size = data_seg_file_size + merged.bss_size as u64;
+    write_phdr(
+        &mut out,
+        PT_LOAD,
+        PF_R | PF_W,
+        data_seg_file_off,
+        data_seg_vaddr,
+        data_seg_vaddr,
+        data_seg_file_size,
+        data_seg_mem_size,
+        PAGE_SIZE,
+    );
+    write_phdr(
+        &mut out,
+        PT_DYNAMIC,
+        PF_R | PF_W,
+        dynamic_off,
+        dynamic_vaddr,
+        dynamic_vaddr,
+        dynamic_size,
+        dynamic_size,
+        8,
+    );
+
+    // .interp / .dynstr / .dynsym
+    debug_assert_eq!(out.len() as u64, interp_off);
+    out.extend_from_slice(&interp_bytes);
+    debug_assert_eq!(out.len() as u64, dynstr_off);
+    out.extend_from_slice(&dynstr);
+    debug_assert_eq!(out.len() as u64, dynsym_off);
+    out.extend_from_slice(&dynsym);
+
+    // .rela.plt -- one Elf64_Rela per import. r_offset points
+    // at the import's .got.plt slot; r_info encodes the dynsym
+    // index (1-based; the null entry sits at 0) and the
+    // JUMP_SLOT reloc type. r_addend stays 0.
+    debug_assert_eq!(out.len() as u64, rela_plt_off);
+    for (i, _name) in merged.imports.iter().enumerate() {
+        let slot_vaddr = got_plt_vaddr + (i as u64) * 8;
+        let sym_idx = (i + 1) as u64;
+        let r_info = (sym_idx << 32) | jump_slot_rtype as u64;
+        write_u64(&mut out, slot_vaddr);
+        write_u64(&mut out, r_info);
+        write_u64(&mut out, 0);
+    }
+
+    // .text (with PLT trampolines patched + start stub).
+    debug_assert_eq!(out.len() as u64, text_off);
+    out.extend_from_slice(&text);
+
+    // Pad to next page for the data segment.
+    while (out.len() as u64) < data_seg_file_off {
+        out.push(0);
+    }
+
+    // .got.plt -- one i64 zero per import (dynamic linker will
+    // overwrite at startup).
+    debug_assert_eq!(out.len() as u64, got_plt_off);
+    for _ in 0..n_imports {
+        write_u64(&mut out, 0);
+    }
+
+    // .data
+    debug_assert_eq!(out.len() as u64, data_off);
+    out.extend_from_slice(&merged.data);
+
+    // .dynamic
+    debug_assert_eq!(out.len() as u64, dynamic_off);
+    write_dyn(&mut out, DT_NEEDED, libc_name_off as u64);
+    write_dyn(&mut out, DT_STRTAB, dynstr_vaddr);
+    write_dyn(&mut out, DT_SYMTAB, dynsym_vaddr);
+    write_dyn(&mut out, DT_STRSZ, dynstr_size);
+    write_dyn(&mut out, DT_SYMENT, ELF64_SYM_SIZE);
+    write_dyn(&mut out, DT_PLTGOT, got_plt_vaddr);
+    write_dyn(&mut out, DT_PLTREL, 7); // 7 = DT_RELA
+    write_dyn(&mut out, DT_JMPREL, rela_plt_vaddr);
+    write_dyn(&mut out, DT_PLTRELSZ, rela_plt_size);
+    write_dyn(&mut out, DT_FLAGS, DF_BIND_NOW);
+    write_dyn(&mut out, DT_BIND_NOW, 0);
+    write_dyn(&mut out, DT_NULL, 0);
+
+    Ok(out)
+}
+
+/// Walk `pending` for parked data / bss references
+/// (`import_index == usize::MAX`) and patch the matching
+/// text site with the runtime PC-relative displacement to the
+/// resolved data byte. The link step stored the target's data
+/// byte offset in the reloc's addend.
+fn patch_data_refs(
+    text: &mut [u8],
+    text_vaddr: u64,
+    data_vaddr: u64,
+    pending: &[super::native_link::PendingImportReloc],
+    machine: NativeMachine,
+) -> Result<(), C5Error> {
+    use super::native_link::PendingImportReloc;
+    const R_X86_64_PC32: u32 = 2;
+    const R_X86_64_PLT32: u32 = 4;
+    const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
+    const R_AARCH64_ADD_ABS_LO12_NC: u32 = 277;
+
+    for r in pending {
+        let r: &PendingImportReloc = r;
+        if r.import_index != usize::MAX {
+            continue;
+        }
+        let site_vaddr = text_vaddr + r.text_offset;
+        let target_vaddr = data_vaddr as i64 + r.addend;
+        let site = r.text_offset as usize;
+        match (machine, r.rtype) {
+            (NativeMachine::X86_64, R_X86_64_PC32) | (NativeMachine::X86_64, R_X86_64_PLT32) => {
+                let disp = target_vaddr - site_vaddr as i64;
+                let disp32 = i32::try_from(disp).map_err(|_| {
+                    err(&format!(
+                        "data-ref reloc at text[{site:#x}]: PC32 displacement {disp:#x} out of \
+                         range"
+                    ))
+                })?;
+                text[site..site + 4].copy_from_slice(&disp32.to_le_bytes());
+            }
+            (NativeMachine::Aarch64, R_AARCH64_ADR_PREL_PG_HI21) => {
+                let adrp_pc = site_vaddr;
+                let page_disp =
+                    ((target_vaddr & !0xfff) - (adrp_pc as i64 & !0xfff)) / PAGE_SIZE as i64;
+                let page_disp_u = (page_disp as u32) & 0x1fffff;
+                let immlo = page_disp_u & 0x3;
+                let immhi = (page_disp_u >> 2) & 0x7ffff;
+                let mut w = u32::from_le_bytes(text[site..site + 4].try_into().unwrap());
+                // Clear the old immlo/immhi bits before OR'ing
+                // in the resolved page displacement.
+                w &= !((0x3 << 29) | (0x7ffff << 5));
+                w |= (immlo << 29) | (immhi << 5);
+                text[site..site + 4].copy_from_slice(&w.to_le_bytes());
+            }
+            (NativeMachine::Aarch64, R_AARCH64_ADD_ABS_LO12_NC) => {
+                let lo12 = (target_vaddr as u32) & 0xfff;
+                let mut w = u32::from_le_bytes(text[site..site + 4].try_into().unwrap());
+                w &= !(0xfff << 10);
+                w |= lo12 << 10;
+                text[site..site + 4].copy_from_slice(&w.to_le_bytes());
+            }
+            _ => {
+                return Err(err(&format!(
+                    "data-ref reloc at text[{site:#x}]: unsupported (machine={:?}, rtype={})",
+                    machine, r.rtype
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn plt_trampoline_size(machine: NativeMachine) -> usize {
+    match machine {
+        // `jmp [rip + disp32]`
+        NativeMachine::X86_64 => 6,
+        // `adrp x16, pg; ldr x16, [x16, off]; br x16`
+        NativeMachine::Aarch64 => 12,
+    }
+}
+
+/// Patch the per-arch PLT trampoline starting at `text[tramp_offset]`
+/// to fetch its target through `slot_vaddr` (a `.got.plt` slot).
+/// `tramp_vaddr` is the runtime VA of the trampoline's first
+/// byte; the calling convention each emitter uses is a
+/// RIP-relative (x86_64) or PC-relative (aarch64) load.
+fn patch_plt_trampoline(
+    text: &mut [u8],
+    tramp_offset: usize,
+    tramp_vaddr: u64,
+    slot_vaddr: u64,
+    machine: NativeMachine,
+) -> Result<(), C5Error> {
+    match machine {
+        NativeMachine::X86_64 => {
+            // `jmp [rip+disp32]` -- disp32 sits at offset 2 of
+            // the 6-byte trampoline; rip is at `tramp_vaddr + 6`.
+            let rip = tramp_vaddr + 6;
+            let disp = (slot_vaddr as i64) - (rip as i64);
+            let disp32 = i32::try_from(disp).map_err(|_| {
+                err(&format!(
+                    "PLT trampoline at {tramp_offset:#x}: GOT slot disp32 out of range \
+                     ({disp:#x})"
+                ))
+            })?;
+            text[tramp_offset + 2..tramp_offset + 6].copy_from_slice(&disp32.to_le_bytes());
+            Ok(())
+        }
+        NativeMachine::Aarch64 => {
+            // adrp imm: page-of(slot) - page-of(tramp). Each
+            // page is PAGE_SIZE (0x1000) bytes. The adrp's
+            // displacement counts pages, encoded across immlo
+            // (bits 30:29) and immhi (bits 23:5). The ldr's
+            // imm12 carries the slot's offset within its page,
+            // scaled by 8 (the load is 64-bit).
+            let adrp_pc = tramp_vaddr;
+            let page_disp =
+                ((slot_vaddr & !0xfff) as i64 - (adrp_pc & !0xfff) as i64) / PAGE_SIZE as i64;
+            let page_disp_u = (page_disp as u32) & 0x1fffff; // 21 bits
+            let immlo = page_disp_u & 0x3;
+            let immhi = (page_disp_u >> 2) & 0x7ffff;
+            let mut adrp_word =
+                u32::from_le_bytes(text[tramp_offset..tramp_offset + 4].try_into().unwrap());
+            adrp_word |= (immlo << 29) | (immhi << 5);
+            text[tramp_offset..tramp_offset + 4].copy_from_slice(&adrp_word.to_le_bytes());
+            let page_off = (slot_vaddr & 0xfff) as u32;
+            if !page_off.is_multiple_of(8) {
+                return Err(err(&format!(
+                    "PLT trampoline at {tramp_offset:#x}: GOT slot offset {page_off} is not \
+                     8-byte aligned"
+                )));
+            }
+            let imm12 = (page_off >> 3) & 0xfff;
+            let mut ldr_word =
+                u32::from_le_bytes(text[tramp_offset + 4..tramp_offset + 8].try_into().unwrap());
+            ldr_word |= imm12 << 10;
+            text[tramp_offset + 4..tramp_offset + 8].copy_from_slice(&ldr_word.to_le_bytes());
+            Ok(())
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn write_elf64_sym(
+    out: &mut Vec<u8>,
+    st_name: u32,
+    st_info: u8,
+    st_other: u8,
+    st_shndx: u16,
+    st_value: u64,
+    st_size: u64,
+) {
+    write_u32(out, st_name);
+    out.push(st_info);
+    out.push(st_other);
+    write_u16(out, st_shndx);
+    write_u64(out, st_value);
+    write_u64(out, st_size);
+}
+
+fn write_dyn(out: &mut Vec<u8>, d_tag: u64, d_val: u64) {
+    write_u64(out, d_tag);
+    write_u64(out, d_val);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -368,12 +881,25 @@ mod tests {
     }
 
     #[test]
-    fn refuses_to_emit_when_imports_unresolved() {
+    fn dynamic_path_writes_pt_interp_and_pt_dynamic_when_imports_present() {
         let mut merged = text_then_data_image();
         merged.imports = alloc::vec!["printf".to_string()];
-        let err = write_executable_elf64(&merged, "main").expect_err("imports must reject");
-        let msg = alloc::format!("{}", err);
-        assert!(msg.contains("unresolved import"), "unexpected error: {msg}",);
+        let bytes = write_executable_elf64(&merged, "main").expect("dynamic write");
+        // Verify the header reports five program headers (PT_PHDR,
+        // PT_INTERP, two PT_LOADs, PT_DYNAMIC).
+        let e_phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap());
+        assert_eq!(e_phnum, 5, "dynamic image must carry five program headers");
+        // The interp string lands right after the PHDR table.
+        let interp_off = 64 + 5 * 56;
+        let mut end = interp_off;
+        while bytes[end] != 0 {
+            end += 1;
+        }
+        let interp = core::str::from_utf8(&bytes[interp_off..end]).unwrap();
+        assert!(
+            interp.contains("ld-linux"),
+            "interp path looks wrong: {interp}",
+        );
     }
 
     #[test]

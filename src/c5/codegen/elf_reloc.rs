@@ -49,10 +49,12 @@ const SHF_EXECINSTR: u64 = 0x4;
 const SHF_INFO_LINK: u64 = 0x40;
 
 // x86_64 reloc types (System V psABI x86_64 supplement, table 4.10).
+const R_X86_64_64: u32 = 1;
 const R_X86_64_PC32: u32 = 2;
 const R_X86_64_PLT32: u32 = 4;
 
 // AArch64 reloc types (ELF for the ARM 64-bit architecture, table 5-1).
+const R_AARCH64_ABS64: u32 = 257;
 const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
 const R_AARCH64_ADD_ABS_LO12_NC: u32 = 277;
 const R_AARCH64_CALL26: u32 = 283;
@@ -192,7 +194,8 @@ pub(super) fn write_relocatable(
     const SHIDX_SYMTAB: u16 = 5;
     const SHIDX_STRTAB: u16 = 6;
     const SHIDX_SHSTRTAB: u16 = 7;
-    const NUM_SECTIONS: usize = 8;
+    const SHIDX_RELA_DATA: u16 = 8;
+    const NUM_SECTIONS: usize = 9;
 
     // Strtab + symtab construction. The file symbol leads
     // (binding LOCAL, type FILE); per-function symbols follow
@@ -615,6 +618,7 @@ pub(super) fn write_relocatable(
         ".symtab",
         ".strtab",
         ".shstrtab",
+        ".rela.data",
     ]);
 
     // Section data layout. Each section's offset starts at the
@@ -722,6 +726,45 @@ pub(super) fn write_relocatable(
         sh_addralign: 1,
         ..Default::default()
     });
+
+    // .rela.data -- absolute 64-bit relocations for
+    // pointer-to-global initializers. `Build::data_relocs` carries
+    // `(slot_data_offset, target_data_offset)`; each becomes a
+    // `R_X86_64_64` / `R_AARCH64_ABS64` reloc at `slot_data_offset`
+    // against the `.data` section symbol with
+    // `r_addend = target_data_offset`. The linker resolves to
+    // `data_vaddr + target_offset`, the runtime VA of the
+    // pointed-at global.
+    let mut rela_data_bytes: Vec<u8> =
+        Vec::with_capacity(build.data_relocs.len() * ELF64_RELA_SIZE);
+    for r in &build.data_relocs {
+        let rtype = match machine_for_rela {
+            Machine::X86_64 => R_X86_64_64,
+            Machine::Aarch64 => R_AARCH64_ABS64,
+        };
+        let rela = Elf64Rela {
+            r_offset: r.data_offset,
+            r_info: (data_sym_idx << 32) | rtype as u64,
+            r_addend: r.target_offset as i64,
+        };
+        write_struct(&mut rela_data_bytes, &rela);
+    }
+    let rela_data_off = round_up(out.len() as u64, 8);
+    out.resize(rela_data_off as usize, 0);
+    out.extend_from_slice(&rela_data_bytes);
+    sh.push(Elf64Shdr {
+        sh_name: shstrtab_offs[7],
+        sh_type: SHT_RELA,
+        sh_flags: SHF_INFO_LINK,
+        sh_offset: rela_data_off,
+        sh_size: rela_data_bytes.len() as u64,
+        sh_link: SHIDX_SYMTAB as u32,
+        sh_info: SHIDX_DATA as u32,
+        sh_addralign: 8,
+        sh_entsize: ELF64_RELA_SIZE as u64,
+        ..Default::default()
+    });
+    let _ = SHIDX_RELA_DATA;
 
     debug_assert_eq!(sh.len(), NUM_SECTIONS);
 

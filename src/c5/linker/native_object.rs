@@ -127,6 +127,12 @@ pub struct NativeObject {
     pub bss_size: usize,
     pub symbols: Vec<NativeSymbol>,
     pub text_relocs: Vec<NativeReloc>,
+    /// `.rela.data` entries (`R_X86_64_64` / `R_AARCH64_ABS64`)
+    /// the writer emitted for pointer-to-global initializers.
+    /// Linker resolves each to `data_vaddr + target.value`,
+    /// patching the 8-byte slot at `offset` in the merged
+    /// `.data`.
+    pub data_relocs: Vec<NativeReloc>,
 }
 
 /// True when `bytes` starts with the ELF magic. Cheap
@@ -223,6 +229,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     let mut bss_idx: Option<usize> = None;
     let mut symtab_idx: Option<usize> = None;
     let mut rela_text_idx: Option<usize> = None;
+    let mut rela_data_idx: Option<usize> = None;
     for (i, sh) in shdrs.iter().enumerate() {
         let name = strtab_str(shstrtab_bytes, sh.name as usize)?;
         match name {
@@ -231,6 +238,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
             ".bss" => bss_idx = Some(i),
             ".symtab" => symtab_idx = Some(i),
             ".rela.text" => rela_text_idx = Some(i),
+            ".rela.data" => rela_data_idx = Some(i),
             _ => {}
         }
     }
@@ -341,6 +349,39 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         }
     }
 
+    // Decode `.rela.data` the same way as `.rela.text`; the
+    // section is optional and absent when the TU has no
+    // pointer-to-global initializers.
+    let mut data_relocs: Vec<NativeReloc> = Vec::new();
+    if let Some(i) = rela_data_idx {
+        let rela_sh = &shdrs[i];
+        if rela_sh.sh_type != SHT_RELA {
+            return Err(err(".rela.data section is not SHT_RELA"));
+        }
+        if rela_sh.entsize != ELF64_RELA_SIZE {
+            return Err(err(&format!(
+                ".rela.data entry size is {} bytes; expected {ELF64_RELA_SIZE}",
+                rela_sh.entsize,
+            )));
+        }
+        let rela_bytes = section_slice(bytes, rela_sh)?;
+        let n_relocs = rela_bytes.len() / ELF64_RELA_SIZE;
+        for j in 0..n_relocs {
+            let off = j * ELF64_RELA_SIZE;
+            let r_offset = u64_at(rela_bytes, off);
+            let r_info = u64_at(rela_bytes, off + 8);
+            let r_addend = i64_at(rela_bytes, off + 16);
+            let sym_idx = (r_info >> 32) as usize;
+            let rtype = (r_info & 0xffff_ffff) as u32;
+            data_relocs.push(NativeReloc {
+                offset: r_offset,
+                sym_idx,
+                rtype,
+                addend: r_addend,
+            });
+        }
+    }
+
     Ok(NativeObject {
         machine,
         text: text_bytes,
@@ -348,6 +389,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         bss_size,
         symbols,
         text_relocs,
+        data_relocs,
     })
 }
 

@@ -168,6 +168,12 @@ fn write_static_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8>
         merged.machine,
     )?;
 
+    // Apply absolute data-segment relocations. `int *gp =
+    // &storage;` records a slot at `slot_offset` in `.data`
+    // that needs `data_vaddr + target_offset` written into it.
+    let mut data = merged.data.clone();
+    patch_data_abs_relocs(&mut data, data_vaddr, &merged.data_abs_relocs)?;
+
     let mut out: Vec<u8> = Vec::with_capacity(
         headers_size as usize + text.len() + merged.data.len() + PAGE_SIZE as usize,
     );
@@ -239,9 +245,32 @@ fn write_static_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8>
     while (out.len() as u64) < data_file_off {
         out.push(0);
     }
-    out.extend_from_slice(&merged.data);
+    out.extend_from_slice(&data);
 
     Ok(out)
+}
+
+/// Apply each `R_*_64` data-segment relocation to `data` in
+/// place. The slot at `slot_offset` is overwritten with the
+/// little-endian u64 `data_vaddr + target_offset`.
+fn patch_data_abs_relocs(
+    data: &mut [u8],
+    data_vaddr: u64,
+    relocs: &[super::native_link::DataAbsReloc],
+) -> Result<(), C5Error> {
+    for r in relocs {
+        let slot = r.slot_offset as usize;
+        if slot + 8 > data.len() {
+            return Err(err(&format!(
+                "data abs reloc at slot 0x{:x} extends past .data (len 0x{:x})",
+                slot,
+                data.len()
+            )));
+        }
+        let value = data_vaddr + r.target_offset;
+        data[slot..slot + 8].copy_from_slice(&value.to_le_bytes());
+    }
+    Ok(())
 }
 
 /// Page-align `n` up to the next multiple of [`PAGE_SIZE`].
@@ -531,6 +560,11 @@ fn write_dynamic_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8
         merged.machine,
     )?;
 
+    // Apply absolute data-segment relocations the same way as
+    // in the static path.
+    let mut data = merged.data.clone();
+    patch_data_abs_relocs(&mut data, data_vaddr, &merged.data_abs_relocs)?;
+
     let mut out: Vec<u8> =
         Vec::with_capacity((dynamic_off + dynamic_size + PAGE_SIZE) as usize + merged.data.len());
 
@@ -659,7 +693,7 @@ fn write_dynamic_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8
 
     // .data
     debug_assert_eq!(out.len() as u64, data_off);
-    out.extend_from_slice(&merged.data);
+    out.extend_from_slice(&data);
 
     // .dynamic
     debug_assert_eq!(out.len() as u64, dynamic_off);
@@ -863,6 +897,7 @@ mod tests {
             defined,
             imports: alloc::vec![],
             pending_imports: alloc::vec![],
+            data_abs_relocs: alloc::vec![],
             machine: NativeMachine::X86_64,
         }
     }

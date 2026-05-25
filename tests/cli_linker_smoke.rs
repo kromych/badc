@@ -278,6 +278,43 @@ fn static_inline_helper_in_shared_header_links_across_tus() {
     );
 }
 
+// C99 6.7.9p23: a static-storage-duration object initialized
+// with the address of another static-storage object resolves
+// at translation-unit-load time. The native ET_REL writer
+// emits a `.rela.data` `R_X86_64_64` / `R_AARCH64_ABS64`
+// against the target's `.data` offset; the link / final-image
+// writer pair patches the slot to hold the target's runtime
+// VA before the executable runs.
+#[cfg(target_os = "linux")]
+#[test]
+fn pointer_to_global_initializer_resolves_at_link_time() {
+    let dir = tempdir("ptr-to-global");
+    write_source(&dir, "ptr.c", "int storage = 42;\nint *gp = &storage;\n");
+    write_source(
+        &dir,
+        "deref.c",
+        "extern int *gp;\nint main(void) { return *gp; }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("ptr.c"))
+            .arg(dir.join("deref.c"))
+            .current_dir(&dir),
+        "link pointer-to-global initializer across TUs",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(
+        out.status.code(),
+        Some(42),
+        "exit code mismatch: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
 #[test]
 fn extern_deferred_size_array_decays_in_other_tu() {
     // C99 6.7.5.2 + 6.2.2: `extern T x[];` declares an array of

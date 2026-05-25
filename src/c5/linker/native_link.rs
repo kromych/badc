@@ -68,9 +68,29 @@ pub struct MergedNative {
     /// kind. The writer applies these against the trampoline
     /// pool it appends to `.text`.
     pub pending_imports: Vec<PendingImportReloc>,
+    /// Pointer-to-global initializer slots (`R_X86_64_64` /
+    /// `R_AARCH64_ABS64`). Each entry is `(slot_data_offset,
+    /// target_data_offset)`: the 8-byte slot at
+    /// `slot_data_offset` within [`Self::data`] needs to hold
+    /// `data_vaddr + target_data_offset` once the final-image
+    /// writer commits a layout.
+    pub data_abs_relocs: Vec<DataAbsReloc>,
     /// Architecture of the merged image. Every unit must agree;
     /// the link errors out if they don't.
     pub machine: NativeMachine,
+}
+
+/// Pending `R_*_64` relocation that the final-image writer
+/// resolves once it knows the data segment's vmaddr.
+#[derive(Debug, Clone, Copy)]
+pub struct DataAbsReloc {
+    /// Byte offset within `MergedNative::data` of the 8-byte
+    /// slot to patch.
+    pub slot_offset: u64,
+    /// Byte offset within `MergedNative::data` of the target
+    /// global. The writer fills the slot with
+    /// `data_vaddr + target_offset`.
+    pub target_offset: u64,
 }
 
 /// Where a defined symbol lives in the merged image.
@@ -337,6 +357,72 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
         }
     }
 
+    // Pass 5 -- `.rela.data` entries. Each unit's data_relocs
+    // points at an 8-byte slot in its own `.data` whose final
+    // value is the runtime VA of another global. Resolve the
+    // target to a merged-image data offset and queue it for
+    // the writer to patch once `data_vaddr` is committed.
+    let mut data_abs_relocs: Vec<DataAbsReloc> = Vec::new();
+    for (i, obj) in objs.iter().enumerate() {
+        for reloc in &obj.data_relocs {
+            if reloc.sym_idx >= obj.symbols.len() {
+                return Err(err(&format!(
+                    "link_native_objects: .rela.data sym_idx {} out of range in object {i}",
+                    reloc.sym_idx,
+                )));
+            }
+            let sym = &obj.symbols[reloc.sym_idx];
+            let slot_offset = data_bases[i] as u64 + reloc.offset;
+            // Data-segment targets only for now. Text-pointer
+            // initializers (`static const VTable v = { .xClose
+            // = my_close };`) flow through a separate
+            // `code_relocs` channel the bytecode-era writer
+            // still owns; surface a clear error if one shows
+            // up here so the gap is visible.
+            let resolved_section = match sym.section {
+                NativeSymSection::Undef => {
+                    defined.get(&sym.name).map(|d| d.section).ok_or_else(|| {
+                        link_err(&format!(
+                            "undefined reference to `{}` (data initializer)",
+                            sym.name,
+                        ))
+                    })?
+                }
+                other => other,
+            };
+            let resolved_value = match sym.section {
+                NativeSymSection::Undef => defined.get(&sym.name).map(|d| d.value as i64).unwrap(),
+                NativeSymSection::Data => data_bases[i] as i64 + sym.value as i64,
+                NativeSymSection::Bss => bss_bases[i] as i64 + sym.value as i64,
+                NativeSymSection::Text => text_bases[i] as i64 + sym.value as i64,
+                NativeSymSection::Abs => {
+                    return Err(err(&format!(
+                        "link_native_objects: .rela.data points at ABS symbol `{}`",
+                        sym.name,
+                    )));
+                }
+            };
+            if !matches!(resolved_section, NativeSymSection::Data) {
+                return Err(err(&format!(
+                    "link_native_objects: .rela.data target `{}` lives in {:?}; only \
+                     .data targets are supported",
+                    sym.name, resolved_section,
+                )));
+            }
+            let target_offset = resolved_value + reloc.addend;
+            if target_offset < 0 {
+                return Err(err(&format!(
+                    "link_native_objects: .rela.data resolved to negative data offset {}",
+                    target_offset,
+                )));
+            }
+            data_abs_relocs.push(DataAbsReloc {
+                slot_offset,
+                target_offset: target_offset as u64,
+            });
+        }
+    }
+
     Ok(MergedNative {
         text,
         data,
@@ -344,6 +430,7 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
         defined,
         imports,
         pending_imports,
+        data_abs_relocs,
         machine,
     })
 }

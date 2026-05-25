@@ -1246,6 +1246,41 @@ fn resolve_user_ssa_call_targets(program: &mut Program) -> Result<(), C5Error> {
                         blk.terminator,
                     );
                 }
+                let walker_imm_data: alloc::vec::Vec<(usize, i64, u32)> = f
+                    .insts
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, inst)| {
+                        if let Inst::ImmData(off) = inst {
+                            let line = f
+                                .inst_src
+                                .get(i)
+                                .map(|&(l, _)| l)
+                                .unwrap_or(0);
+                            Some((i, *off, line))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                std::eprintln!(
+                    "---- walker ImmData (idx,value,line): {:?}",
+                    walker_imm_data
+                );
+                std::eprintln!("---- bytecode imm_data_targets: {:?}", imm_data_targets);
+                let walker_imm_code: alloc::vec::Vec<usize> = f
+                    .insts
+                    .iter()
+                    .filter_map(|i| {
+                        if let Inst::ImmCode(pc) = i {
+                            Some(*pc)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                std::eprintln!("---- walker ImmCode values: {:?}", walker_imm_code);
+                std::eprintln!("---- bytecode imm_code_targets: {:?}", imm_code_targets);
             }
         }
         if mismatched {

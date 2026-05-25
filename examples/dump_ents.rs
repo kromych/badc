@@ -9,10 +9,6 @@ fn main() {
         .unwrap();
     println!("# program.text.len() = {}", program.text.len());
     println!(
-        "# program.source_lines.len() = {}",
-        program.source_lines.len()
-    );
-    println!(
         "# program.source_functions.len() = {}",
         program.source_functions.len()
     );
@@ -28,8 +24,7 @@ fn main() {
                 .get(bc)
                 .cloned()
                 .unwrap_or_default();
-            let line = program.source_lines.get(bc).copied().unwrap_or(0);
-            println!("  bc={:>5}: name={:?} line={}", bc, name, line);
+            println!("  bc={:>5}: name={:?}", bc, name);
         }
         bc += op.word_size();
     }

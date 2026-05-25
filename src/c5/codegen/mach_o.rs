@@ -2424,7 +2424,6 @@ mod tests {
             exports: Vec::new(),
             dylibs: Vec::new(),
             dllmain_pc: None,
-            source_lines: Vec::new(),
             source_functions: Vec::new(),
             source_files: Vec::new(),
             source_path: String::new(),

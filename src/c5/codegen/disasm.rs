@@ -101,16 +101,7 @@ fn push_bytecode_listing(out: &mut String, program: &Program, build: &Build) {
         } else {
             String::new()
         };
-        // Source-line annotation. Indexed by bc_pc; 0 means
-        // "unknown" (data emit doesn't push entries).
-        let line_str = match program.source_lines.get(bc_pc).copied() {
-            Some(0) | None => String::new(),
-            Some(n) => format!("    ; line {n}"),
-        };
-        out.push_str(&format!(
-            "[bc={:>4}] {:?}{}{}\n",
-            bc_pc, op, operand_str, line_str
-        ));
+        out.push_str(&format!("[bc={:>4}] {:?}{}\n", bc_pc, op, operand_str));
         push_hex_bytes(out, &build.text[native_start..native_end], native_start);
 
         bc_pc += op.word_size();

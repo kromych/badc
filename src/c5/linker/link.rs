@@ -356,7 +356,6 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
     // function-pointer / data Imm sites can be distinguished
     // from ordinary integer-constant Imms.
 
-    let mut merged_source_lines: Vec<u32> = Vec::new();
     let mut merged_source_functions: Vec<String> = Vec::new();
     let mut merged_source_files: Vec<String> = Vec::new();
     let mut source_file_offset_per_unit: Vec<u16> = Vec::with_capacity(n);
@@ -454,18 +453,13 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         let tls_bss_off = tls_bss_base[ui];
         let tls_init_local = unit.tls_init_size.min(unit.tls_data.len());
 
-        // Record per-PC bookkeeping (source_lines /
-        // source_functions) -- PC-indexed parallel arrays. The
-        // walker carries the per-Inst file index inline through
-        // `inst_src`, so no parallel file-index column is needed
-        // here. Pad to `merged_text.len() + unit.text.len()` so
-        // disasm's lookup by post-merge bc_pc lands in range.
-        merged_source_lines.extend(unit.source_lines.iter().copied());
+        // PC-indexed source_functions parallel to merged_text:
+        // DWARF / disasm look this up by post-merge bc_pc. The
+        // walker carries the per-Inst file + line inline through
+        // `inst_src`, so no parallel line / file columns are
+        // needed here.
         merged_source_functions.extend(unit.source_functions.iter().cloned());
         let want = merged_text.len() + unit.text.len();
-        if merged_source_lines.len() < want {
-            merged_source_lines.resize(want, 0);
-        }
         if merged_source_functions.len() < want {
             merged_source_functions.resize(want, String::new());
         }
@@ -708,7 +702,6 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         code_relocs: merged_code_relocs,
         dylibs: merged_dylibs,
         dllmain_pc,
-        source_lines: merged_source_lines,
         source_functions: merged_source_functions,
         source_files: merged_source_files,
         source_path,

@@ -691,16 +691,6 @@ fn encode_meta(unit: &LinkUnit) -> Vec<u8> {
         unit.code_imm_positions.iter().map(|&v| v as u64),
         unit.code_imm_positions.len(),
     );
-    {
-        let len = unit.call_fp_arg_masks.len();
-        let body_len = 4 + (len * 12) as u32;
-        write_tag_header(&mut buf, TAG_CALL_FP_ARG_MASKS, body_len);
-        write_u32(&mut buf, len as u32);
-        for &(pc, mask) in &unit.call_fp_arg_masks {
-            write_u64(&mut buf, pc as u64);
-            write_u32(&mut buf, mask);
-        }
-    }
     write_tag_vec_u32(&mut buf, TAG_SOURCE_LINES, &unit.source_lines);
 
     {
@@ -2212,22 +2202,9 @@ fn decode_meta(meta: &[u8], unit: &mut LinkUnit) -> Result<(), C5Error> {
                     .collect();
             }
             TAG_CALL_FP_ARG_MASKS => {
-                if body.len() < 4 {
-                    return Err(err("call_fp_arg_masks body too short"));
-                }
-                let n = u32_at(body, 0) as usize;
-                let mut local = 4;
-                let mut out = Vec::with_capacity(n);
-                for _ in 0..n {
-                    if local + 12 > body.len() {
-                        return Err(err("call_fp_arg_masks truncated"));
-                    }
-                    let pc = u64_at(body, local) as usize;
-                    let mask = u32_at(body, local + 8);
-                    out.push((pc, mask));
-                    local += 12;
-                }
-                unit.call_fp_arg_masks = out;
+                // Retired side-table from the bytecode-tier lift
+                // path. Older `.o` files still carry the tag;
+                // skip silently to preserve forward compatibility.
             }
             TAG_SOURCE_LINES => unit.source_lines = read_vec_u32(body)?,
             TAG_SOURCE_FUNCTIONS => unit.source_functions = read_string_vec(body)?,

@@ -101,16 +101,6 @@ pub struct Program {
     /// operand_pc here so the codegen knows precisely which Imm
     /// values to treat as function addresses.
     pub code_imm_positions: Vec<usize>,
-    /// For each `Op::JsrExt` whose call has any floating-point
-    /// argument, record the call's bytecode PC and a bitmap of
-    /// which arg positions are FP scalars (low bit = arg 0). The
-    /// codegen reads this so it can route FP args through the
-    /// platform's FP-arg registers (XMM0..7 on SysV / Win64,
-    /// V0..V7 on AAPCS64) instead of the integer-arg path which
-    /// currently funnels everything as raw 8-byte words. Calls
-    /// with no FP args don't appear here -- absence is "all
-    /// integer", which keeps the per-call lookup cheap.
-    pub call_fp_arg_masks: Vec<(usize, u32)>,
     /// Bytecode PCs of every `Op::Ent` whose declarator ended in
     /// `...`. The native codegen reads this to decide call-site
     /// shape: callers of variadic c5 functions keep the c5-stack

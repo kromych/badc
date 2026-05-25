@@ -665,13 +665,6 @@ pub struct Compiler {
     /// bytecode PC. Empty for executables that don't reach
     /// for the directive.
     pending_exports: Vec<String>,
-    /// Per-libc-call FP-argument bitmaps. Filled when emitting an
-    /// `Op::JsrExt` whose argument list contains at least one
-    /// floating-point operand; the codegen reads it back to route
-    /// those args through the platform's FP-arg registers. Empty
-    /// for the all-integer case, which is most calls.
-    call_fp_arg_masks: Vec<(usize, u32)>,
-
     /// Bytecode PCs of every `Op::Ent` whose declarator ended in
     /// `...`. Recorded at function emit time straight from the
     /// `Symbol::is_variadic` flag the parser set on the matching
@@ -1041,7 +1034,6 @@ impl Compiler {
             data_relocs: Vec::new(),
             code_relocs: Vec::new(),
             pending_exports,
-            call_fp_arg_masks: Vec::new(),
             variadic_functions: Vec::new(),
             current_func_return_ty: 0,
             current_func_returns_void: false,
@@ -1223,7 +1215,6 @@ impl Compiler {
             code_imm_positions: self.code_imm_positions,
             tls_data: self.tls_data,
             tls_init_size: self.tls_init_size,
-            call_fp_arg_masks: self.call_fp_arg_masks,
             variadic_functions: self.variadic_functions.into_iter().collect(),
             exports,
             data_relocs: self.data_relocs,

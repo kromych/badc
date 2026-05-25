@@ -183,7 +183,6 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         code_imm_positions: in_code_imm_positions,
         tls_data,
         tls_init_size,
-        call_fp_arg_masks,
         variadic_functions: in_variadic_functions,
         data_relocs,
         code_relocs,
@@ -417,30 +416,6 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         })
         .collect();
 
-    // Remap each `(JsrExt pc, fp_arg_mask)` tuple from the
-    // pre-opt PC space to the post-opt PC space. Without this,
-    // the codegen's `fp_arg_mask_at(jsrext_pc, ...)` lookup at
-    // the new (post-opt) JsrExt PC returns 0 -- the call site
-    // then loads every arg through the integer-arg register set,
-    // sending the FP bit pattern into x0 / rdi instead of d0 /
-    // xmm0 and feeding `sin(0.5)` an interpretation of 0.5's
-    // bit pattern as an integer (4602678819172646912 -- which
-    // libm reads as a vast double, returning sin(huge)=junk or
-    // 0). Standard ABI surface: any FP argument in a libc call
-    // through the optimizer has to keep its argument-register
-    // mask intact across the PC remap.
-    let remapped_call_fp_arg_masks: Vec<(usize, u32)> = call_fp_arg_masks
-        .iter()
-        .filter_map(|&(old_pc, mask)| {
-            let idx = *pc_at_idx_for_pc.get(&(old_pc as u64))?;
-            let new_bc_pc = new_pc.get(idx).copied()?;
-            if new_bc_pc == usize::MAX {
-                return None;
-            }
-            Some((new_bc_pc, mask))
-        })
-        .collect();
-
     // Variadic-function PCs are unit-local `Op::Ent` indices into
     // `text`. The decode/encode round-trip can shift those PCs
     // (DCE can drop a function entirely; peephole fusions shorten
@@ -617,7 +592,6 @@ pub fn optimize(program: Program) -> Result<Program, C5Error> {
         code_imm_positions,
         tls_data,
         tls_init_size,
-        call_fp_arg_masks: remapped_call_fp_arg_masks,
         variadic_functions: remapped_variadic_functions,
         data_relocs,
         code_relocs: remapped_code_relocs,
@@ -1503,7 +1477,6 @@ mod tests {
             code_imm_positions: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,
-            call_fp_arg_masks: Vec::new(),
             variadic_functions: alloc::collections::BTreeSet::new(),
             data_relocs: Vec::new(),
             code_relocs: Vec::new(),
@@ -1823,7 +1796,6 @@ mod tests {
             code_imm_positions: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,
-            call_fp_arg_masks: Vec::new(),
             variadic_functions: alloc::collections::BTreeSet::new(),
             data_relocs: Vec::new(),
             code_relocs: Vec::new(),

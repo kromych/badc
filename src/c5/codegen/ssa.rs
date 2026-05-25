@@ -89,7 +89,6 @@ pub(crate) fn lift_program(program: &Program) -> Result<Vec<FunctionSsa>, C5Erro
             meta,
             &program.data_imm_positions,
             &program.code_imm_positions,
-            &program.call_fp_arg_masks,
         )?;
         out.push(func);
     }
@@ -106,7 +105,6 @@ pub(crate) fn lift_function(
     meta: super::FuncMeta,
     data_imm_positions: &[usize],
     code_imm_positions: &[usize],
-    call_fp_arg_masks: &[(usize, u32)],
 ) -> Result<FunctionSsa, C5Error> {
     // Sanity check the entry.
     if Op::from_i64(text[ent_pc]) != Some(Op::Ent) {
@@ -777,17 +775,19 @@ pub(crate) fn lift_function(
                     // the mask in the SSA inst lets the emit
                     // route FP args to d0..d7 without threading
                     // the bytecode pc through the call helpers.
-                    let fp_arg_mask = call_fp_arg_masks
-                        .iter()
-                        .find(|(p, _)| *p == pc)
-                        .map(|(_, m)| *m)
-                        .unwrap_or(0);
+                    // lift_program runs only on the legacy
+                    // bytecode-only path (optimizer unit tests +
+                    // codegen writer fixtures); those programs
+                    // never call libc with floating-point args.
+                    // The walker carries the real per-call
+                    // fp_arg_mask through `Inst::CallExt`
+                    // directly from the AST.
                     def(
                         &mut insts,
                         Inst::CallExt {
                             binding_idx,
                             args,
-                            fp_arg_mask,
+                            fp_arg_mask: 0,
                         },
                         &mut acc,
                     );

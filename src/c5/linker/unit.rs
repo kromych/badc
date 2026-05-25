@@ -49,9 +49,6 @@ pub struct LinkUnit {
     /// `CODE_BASE + bc_pc`. Mirror of
     /// `Program::code_imm_positions`.
     pub code_imm_positions: Vec<usize>,
-    /// Mirror of `Program::call_fp_arg_masks`. The PC is i64
-    /// word index; remapped by `text_offset[unit]` at link.
-    pub call_fp_arg_masks: Vec<(usize, u32)>,
     /// Mirror of `Program::variadic_functions`. Each entry is the
     /// unit-local `Op::Ent` PC of a c5 function whose declarator
     /// ended in `...`. The linker re-bases each by

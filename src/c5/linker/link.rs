@@ -476,17 +476,15 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
             merged_warnings.push(w.clone());
         }
 
-        // Walk text, remapping operand words. The merged bytecode
-        // tape's contents are only consumed by disasm; the SSA
-        // tier is rebased independently via `resolve_extern_refs`
-        // + the walker-stamp pass below. Op::Imm operands
-        // (data offsets, function-pointer literals, plain
-        // integer constants) are no longer distinguished --
-        // the `data_imm_positions` / `code_imm_positions`
-        // gate retired with the bytecode-tape SSA lift, so
-        // each `Op::Imm` operand survives the merge unchanged.
-        // Multi-TU `--dump-asm` shows the unit-local value
-        // for these operands as a consequence.
+        // Walk text, remapping only `Op::JsrExt` / `Op::TailExt`
+        // binding indices. The merged bytecode tape's contents
+        // are only consumed by disasm; the SSA tier is rebased
+        // independently via `resolve_extern_refs` and the
+        // walker-stamp pass below, so per-PC operands (Op::Jsr,
+        // Op::Jmp, Op::Bz, Op::Bnz, Op::TlsLea, Op::Imm) survive
+        // the merge unchanged. Multi-TU `--dump-asm` shows the
+        // unit-local value for those operands as a consequence.
+        let _ = (text_off, tls_off, tls_bss_off, tls_init_local);
         let mut pc = 0usize;
         let binding_remap = &binding_remap_per_unit[ui];
         while pc < unit.text.len() {
@@ -494,15 +492,6 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
             merged_text.push(raw);
             let op = Op::from_i64(raw);
             match op {
-                Some(Op::Jsr) | Some(Op::Jmp) | Some(Op::Bz) | Some(Op::Bnz) => {
-                    let operand_pc = pc + 1;
-                    if operand_pc >= unit.text.len() {
-                        return Err(err("dangling branch operand"));
-                    }
-                    let bc_pc = unit.text[operand_pc];
-                    merged_text.push(bc_pc + text_off as i64);
-                    pc += 2;
-                }
                 Some(Op::JsrExt) | Some(Op::TailExt) => {
                     let operand_pc = pc + 1;
                     if operand_pc >= unit.text.len() {
@@ -514,20 +503,6 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                         .copied()
                         .unwrap_or(local_idx);
                     merged_text.push(new_idx);
-                    pc += 2;
-                }
-                Some(Op::TlsLea) => {
-                    let operand_pc = pc + 1;
-                    if operand_pc >= unit.text.len() {
-                        return Err(err("dangling TlsLea operand"));
-                    }
-                    let raw = unit.text[operand_pc] as usize;
-                    let new = if raw < tls_init_local {
-                        (tls_off + raw) as i64
-                    } else {
-                        (tls_bss_off + (raw - tls_init_local)) as i64
-                    };
-                    merged_text.push(new);
                     pc += 2;
                 }
                 Some(other) => {

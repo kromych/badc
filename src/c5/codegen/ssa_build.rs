@@ -92,6 +92,7 @@ impl SsaBuilder {
             inst_src: Vec::new(),
             blocks: Vec::new(),
             vstack_slots: 0,
+            extern_call_refs: Vec::new(),
         };
         let mut b = Self {
             func,
@@ -282,6 +283,20 @@ impl SsaBuilder {
     /// `Inst::Call` -- direct user-function call.
     pub(crate) fn call(&mut self, target_pc: usize, args: Vec<ValueId>) -> ValueId {
         self.push(Inst::Call { target_pc, args })
+    }
+
+    /// `Inst::Call` whose `target_pc` is 0 because the callee
+    /// lives in another translation unit. Records the parser-
+    /// symbol index in `extern_call_refs` so the linker can
+    /// resolve to the merged ent_pc after symbol unification.
+    pub(crate) fn call_extern(
+        &mut self,
+        sym_idx: u32,
+        args: Vec<ValueId>,
+    ) -> ValueId {
+        let v = self.push(Inst::Call { target_pc: 0, args });
+        self.func.extern_call_refs.push((v, sym_idx));
+        v
     }
 
     /// `Inst::CallIndirect` -- function-pointer call.

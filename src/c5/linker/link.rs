@@ -1107,6 +1107,33 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                         *idx = *remapped;
                     }
                 }
+                // Resolve every `Inst::Call::target_pc` whose
+                // walker stamp was 0 (cross-TU extern) via the
+                // unit's LinkSymbol table + global symbol map.
+                // The post-merge resolver still runs as a sanity
+                // check against the bytecode-tape Op::Jsr operand.
+                for &(inst_idx, link_sym_idx) in &rebased.extern_call_refs {
+                    let link_sym = match unit.symbols.get(link_sym_idx as usize) {
+                        Some(s) => s,
+                        None => continue,
+                    };
+                    let resolved = defined.get(&link_sym.name).and_then(|g| {
+                        let target_unit = &units[g.unit_idx];
+                        let target_sym = target_unit.symbols.get(g.sym_idx)?;
+                        if !matches!(target_sym.kind, SymbolKind::Function) {
+                            return None;
+                        }
+                        Some(text_base[g.unit_idx] + target_sym.value as usize)
+                    });
+                    if let Some(target_pc) = resolved
+                        && let Some(crate::c5::ir::Inst::Call {
+                            target_pc: slot, ..
+                        }) = rebased.insts.get_mut(inst_idx as usize)
+                        && *slot == 0
+                    {
+                        *slot = target_pc;
+                    }
+                }
                 program.user_ssa_funcs.push(rebased);
             }
         }

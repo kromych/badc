@@ -499,13 +499,35 @@ impl Compiler {
         // unit reloads whose user_ssa_funcs arrived empty
         // (older .o files); once every .o producer is updated,
         // lift_program retires.
-        let user_ssa_funcs = walker_funcs_for(
+        let mut user_ssa_funcs = walker_funcs_for(
             &self.finished_functions,
             &self.symbols,
             &self.structs,
             self.target,
             self.text.len(),
         )?;
+
+        // Remap each FunctionSsa's `extern_call_refs` sym_idx
+        // from the parser-symbol space to the compact LinkUnit
+        // symbol space via `sym_remap`. The linker later
+        // resolves the LinkSymbol through the merged symbol map
+        // and patches `Inst::Call::target_pc` without the
+        // bytecode-tape order-zip. Entries whose remap is -1
+        // (the symbol was filtered out of the LinkUnit table)
+        // are dropped; this can only happen if the parser
+        // recorded the extern reference but no relocation
+        // anchored the symbol, which itself would be a
+        // walker / parser drift caught by the resolver.
+        for func in &mut user_ssa_funcs {
+            func.extern_call_refs.retain_mut(|(_, sym_idx)| {
+                let remapped = sym_remap.get(*sym_idx as usize).copied().unwrap_or(-1);
+                if remapped < 0 {
+                    return false;
+                }
+                *sym_idx = remapped as u32;
+                true
+            });
+        }
 
         Ok(LinkUnit {
             text: self.text,

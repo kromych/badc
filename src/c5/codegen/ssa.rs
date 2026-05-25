@@ -891,6 +891,7 @@ pub(crate) fn lift_function(
         inst_src: alloc::vec![(0u32, 0u32); inst_count],
         blocks,
         vstack_slots,
+        extern_call_refs: Vec::new(),
     })
 }
 

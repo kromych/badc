@@ -372,4 +372,14 @@ pub(crate) struct FunctionSsa {
     /// past the regular `locals` reservation; `VstackSpill` /
     /// `VstackReload` insts read and write through them.
     pub vstack_slots: u32,
+    /// Per-Inst extern symbol references: `(inst_idx, sym_idx)`
+    /// pairs where `sym_idx` is the parser-symbol index (into the
+    /// unit's `parser_symbols`) for an `Inst::Call::target_pc`
+    /// whose target lives in another translation unit. The walker
+    /// records the sym at parse time; the linker resolves each
+    /// pair after merging through the unit's `sym_remap` so
+    /// `Inst::Call::target_pc` lands on the defining unit's
+    /// `ent_pc` without consulting the bytecode tape. Empty for
+    /// functions built outside the walker.
+    pub extern_call_refs: Vec<(u32, u32)>,
 }

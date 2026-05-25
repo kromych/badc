@@ -412,6 +412,7 @@ fn ssa_func_encoder_round_trip_handcrafted() {
         inst_src,
         blocks,
         vstack_slots: 5,
+        extern_call_refs: alloc::vec::Vec::new(),
     };
 
     let mut buf = alloc::vec::Vec::new();

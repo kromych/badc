@@ -1298,7 +1298,11 @@ impl<'a> Walker<'a> {
                         all_args.push(self.walk_expr_rvalue(b, *a)?);
                     }
                     let target_pc = self.live_fun_val(*sym, *val);
-                    let _ = b.call(target_pc as usize, all_args);
+                    if target_pc == 0 {
+                        let _ = b.call_extern(*sym, all_args);
+                    } else {
+                        let _ = b.call(target_pc as usize, all_args);
+                    }
                     return Ok(b.local_addr(result_slot));
                 }
                 // Lower each arg as an rvalue, then dispatch
@@ -1387,6 +1391,9 @@ impl<'a> Walker<'a> {
                             }
                         }
                         let target_pc = self.live_fun_val(*sym, *val);
+                        if target_pc == 0 {
+                            return Ok(b.call_extern(*sym, arg_vals));
+                        }
                         return Ok(b.call(target_pc as usize, arg_vals));
                     }
                     if *class == Token::Sys as i64 {

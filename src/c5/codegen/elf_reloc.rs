@@ -63,6 +63,7 @@ const R_AARCH64_ADD_ABS_LO12_NC: u32 = 277;
 const R_AARCH64_CALL26: u32 = 283;
 const STB_LOCAL: u8 = 0;
 const STB_GLOBAL: u8 = 1;
+const STB_WEAK: u8 = 2;
 const STT_NOTYPE: u8 = 0;
 const STT_OBJECT: u8 = 1;
 const STT_FUNC: u8 = 2;
@@ -232,7 +233,10 @@ pub(super) fn write_relocatable(
             ..Default::default()
         });
     }
-    let first_global = symbols.len() as u32;
+    // `first_global` is set after the static-linkage function
+    // symbols are pushed below; ELF requires every LOCAL symbol
+    // to precede every GLOBAL one and `.symtab`'s `sh_info`
+    // points at the first GLOBAL entry.
 
     // Function symbols. The build records each emitted function's
     // entry bc_pc in `func_ent_pcs`; the matching native offset
@@ -245,8 +249,28 @@ pub(super) fn write_relocatable(
     // indexed by bc_pc; empty entries fall back to a
     // `fn_<ent_pc>` placeholder so every symbol has a non-zero
     // name regardless of whether the parser tracked it.
+    //
+    // C99 6.2.2 + 6.7.1: a `static` function has internal
+    // linkage and must not surface to sibling TUs. The ET_REL
+    // writer maps `Linkage::Internal` to `STB_LOCAL`;
+    // everything else (`Linkage::External` and the default
+    // `None` used for the synthetic CRT entry) maps to
+    // `STB_GLOBAL`. ELF requires LOCAL symbols to precede
+    // GLOBAL ones in `.symtab`, so split the function list now
+    // and merge the emit order below.
+    let func_linkage_by_pc: alloc::collections::BTreeMap<usize, crate::c5::symbol::Linkage> = {
+        use crate::c5::token::Token;
+        program
+            .symbols
+            .iter()
+            .filter(|s| s.class == Token::Fun as i64 && s.defined_here)
+            .map(|s| (s.val as usize, s.linkage))
+            .collect()
+    };
+    let mut local_func_idxs: Vec<usize> = Vec::new();
+    let mut global_func_idxs: Vec<usize> = Vec::new();
     let mut func_strs: Vec<String> = Vec::with_capacity(build.func_ent_pcs.len());
-    for &ent_pc in &build.func_ent_pcs {
+    for (i, &ent_pc) in build.func_ent_pcs.iter().enumerate() {
         let name = program
             .source_functions
             .get(ent_pc)
@@ -254,6 +278,10 @@ pub(super) fn write_relocatable(
             .cloned()
             .unwrap_or_else(|| format!("fn_{ent_pc}"));
         func_strs.push(name);
+        match func_linkage_by_pc.get(&ent_pc) {
+            Some(crate::c5::symbol::Linkage::Internal) => local_func_idxs.push(i),
+            _ => global_func_idxs.push(i),
+        }
     }
     // Unique cross-TU user-function names referenced by
     // `user_extern_call_sites`. Each gets exactly one
@@ -343,10 +371,8 @@ pub(super) fn write_relocatable(
     // strtab.
     symbols[1].st_name = name_offs[0];
 
-    // Function symbols. Each gets the native offset within
-    // `.text` and a size of (next_ent - this_ent), or
-    // (text.len() - this_ent) for the last entry.
-    for (i, &ent_pc) in build.func_ent_pcs.iter().enumerate() {
+    let func_extent = |i: usize| -> Result<(usize, usize), C5Error> {
+        let ent_pc = build.func_ent_pcs[i];
         let lo = build
             .bytecode_to_native
             .get(ent_pc)
@@ -364,6 +390,25 @@ pub(super) fn write_relocatable(
             .get(i + 1)
             .and_then(|&next_ent| build.bytecode_to_native.get(next_ent).copied())
             .unwrap_or(build.text.len());
+        Ok((lo, hi))
+    };
+    // STB_LOCAL function symbols. Emitted before `first_global`
+    // so the LOCAL block is contiguous as ELF requires.
+    for &i in &local_func_idxs {
+        let (lo, hi) = func_extent(i)?;
+        symbols.push(Elf64Sym {
+            st_name: name_offs[1 + i],
+            st_info: pack_sym_info(STB_LOCAL, STT_FUNC),
+            st_shndx: SHIDX_TEXT,
+            st_value: lo as u64,
+            st_size: hi.saturating_sub(lo) as u64,
+            ..Default::default()
+        });
+    }
+    let first_global = symbols.len() as u32;
+    // STB_GLOBAL function symbols.
+    for &i in &global_func_idxs {
+        let (lo, hi) = func_extent(i)?;
         symbols.push(Elf64Sym {
             st_name: name_offs[1 + i],
             st_info: pack_sym_info(STB_GLOBAL, STT_FUNC),
@@ -374,16 +419,20 @@ pub(super) fn write_relocatable(
         });
     }
 
-    // Import symbols: STB_GLOBAL + STT_NOTYPE, SHN_UNDEF. The
-    // linker resolves these against the libc / runtime the
-    // final binary pulls in. `RelocCallSite::import_index` maps
-    // through `import_sym_indices` to the symbol-table position.
+    // Import symbols: STB_WEAK + STT_NOTYPE, SHN_UNDEF. The
+    // dynamic linker resolves these against libc (or whichever
+    // dylib `#pragma binding` named) at runtime, so an
+    // unresolved entry at static-link time isn't a fatal
+    // error. Marking them weak distinguishes them from
+    // user-extern UNDEF references (kept STB_GLOBAL below),
+    // which must resolve against a sibling TU's defined symbol
+    // or the link fails.
     let mut import_sym_indices: Vec<usize> = Vec::with_capacity(build.imports.imports.len());
     for (i, _imp) in build.imports.imports.iter().enumerate() {
         import_sym_indices.push(symbols.len());
         symbols.push(Elf64Sym {
             st_name: name_offs[func_strs_end + i],
-            st_info: pack_sym_info(STB_GLOBAL, STT_NOTYPE),
+            st_info: pack_sym_info(STB_WEAK, STT_NOTYPE),
             st_shndx: SHN_UNDEF,
             ..Default::default()
         });

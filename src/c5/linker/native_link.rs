@@ -283,8 +283,20 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
                             }
                         }
                     } else if !sym.name.is_empty() {
-                        // Library import -- park for the
-                        // PLT pass.
+                        // STB_GLOBAL UNDEF that doesn't resolve
+                        // against any defining unit is a
+                        // user-extern reference the program
+                        // needs but the link set doesn't
+                        // supply. STB_WEAK UNDEF entries are
+                        // libc imports the dynamic linker
+                        // resolves at load time; let them
+                        // through to the PLT pass.
+                        if sym.binding == 1 {
+                            return Err(link_err(&format!(
+                                "undefined reference to `{}`",
+                                sym.name,
+                            )));
+                        }
                         let idx = record_import(&sym.name, &mut imports, &mut import_idx_for_name);
                         pending_imports.push(PendingImportReloc {
                             text_offset: patch_offset as u64,

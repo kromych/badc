@@ -126,11 +126,6 @@ fn archive_resolves_via_minus_l_search() {
     assert_eq!(out.status.code(), Some(38), "exit code mismatch");
 }
 
-// TODO: `link_native_objects` lets unresolved user-extern call
-// sites slip through as PLT imports instead of erroring like
-// `ld -e`. Re-enable once the linker distinguishes libc-import
-// from user-extern references.
-#[ignore]
 #[test]
 fn unresolved_extern_function_fails_link() {
     let dir = tempdir("unresolved");
@@ -226,11 +221,6 @@ fn duplicate_function_definition_fails_link() {
     );
 }
 
-// TODO: the native ELF writer emits every function as
-// `STB_GLOBAL`; the per-TU `static inline` copies of `helper`
-// then collide in the merger. Re-enable once linkage is
-// threaded into `elf_reloc::write_relocatable`.
-#[ignore]
 #[test]
 fn static_inline_helper_in_shared_header_links_across_tus() {
     // C99 6.7.4 + 6.2.2: a `static inline` function at file scope

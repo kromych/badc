@@ -15,7 +15,7 @@ use std::path::PathBuf;
 use super::lexer::{self as lex_helpers, Lexer};
 use super::symbol::Symbol;
 use super::token::{Tok, Token};
-use super::{C5Error, Compiler, Op, Program, Vm};
+use super::{C5Error, Compiler, Program, Vm};
 
 mod codegen;
 mod deferred;

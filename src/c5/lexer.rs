@@ -1568,12 +1568,30 @@ pub(crate) fn init_symbols(
             } else {
                 let winner = lookup_binding_dylib(dylibs, name);
                 if winner != Some(spec.name.as_str()) {
-                    warn_shadowed_binding(
-                        name,
-                        winner.unwrap_or("<unknown>"),
-                        spec.name.as_str(),
-                        binding.real_symbol.as_str(),
-                    );
+                    // Skip the warning when the shadowed
+                    // binding resolves to the same dynamic
+                    // symbol. Two headers declaring the same
+                    // libc / libdl shim against the same
+                    // `real_symbol` are equivalent in effect;
+                    // the dylib-name divergence is bookkeeping
+                    // and surfacing it produces no actionable
+                    // signal for the user.
+                    let winner_real = winner.and_then(|w| {
+                        dylibs.iter().find(|s| s.name.as_str() == w).and_then(|s| {
+                            s.bindings
+                                .iter()
+                                .find(|b| b.local_name == name)
+                                .map(|b| b.real_symbol.as_str())
+                        })
+                    });
+                    if winner_real != Some(binding.real_symbol.as_str()) {
+                        warn_shadowed_binding(
+                            name,
+                            winner.unwrap_or("<unknown>"),
+                            spec.name.as_str(),
+                            binding.real_symbol.as_str(),
+                        );
+                    }
                 }
             }
             binding_idx += 1;

@@ -34,7 +34,6 @@ use super::error::C5Error;
 use super::program::Program;
 
 mod aarch64;
-mod disasm;
 mod dwarf;
 mod elf;
 #[cfg(feature = "std")]
@@ -1393,28 +1392,6 @@ fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>
 }
 
 /// Render a textual listing of the lowered native code for `target`,
-/// grouped by the c4 op that produced each region. Output is hex
-/// bytes per op plus header metadata (target, sizes, entry offset,
-/// fixup counts). Triggered by the CLI's `--dump-asm` flag.
-pub fn dump_native_listing(
-    program: &Program,
-    target: Target,
-) -> Result<alloc::string::String, C5Error> {
-    dump_native_listing_with_options(program, target, NativeOptions::default())
-}
-
-/// Variant of [`dump_native_listing`] that accepts optimization
-/// knobs. The returned listing reflects whatever lowering the
-/// options selected.
-pub fn dump_native_listing_with_options(
-    program: &Program,
-    target: Target,
-    options: NativeOptions,
-) -> Result<alloc::string::String, C5Error> {
-    let build = lower_for(program, target, options)?;
-    Ok(disasm::dump(program, &build, target))
-}
-
 /// Per-target ABI knobs that affect lowering, not just the final
 /// Architecture flavour the lowering pass picks. Mirrors
 /// [`Machine`] but lives next to [`Abi`] so the per-target table

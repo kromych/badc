@@ -2,8 +2,8 @@ use std::io::{IsTerminal, Read, Write};
 use std::path::PathBuf;
 
 use badc::{
-    Compiler, NativeOptions, PredefinedKind, Target, Vm, dump_native_listing_with_options,
-    emit_native_with_options, jit_run_with_options, predefined_symbols,
+    Compiler, NativeOptions, PredefinedKind, Target, Vm, emit_native_with_options,
+    jit_run_with_options, predefined_symbols,
 };
 
 const USAGE: &str = "\
@@ -23,7 +23,6 @@ Output mode -- pick at most one (defaults to a native binary):
   --shared                 Produce a shared library (.dylib / .so /
                            .dll) exporting every #pragma export(name)
                            function.
-  --dump-asm               Print the lowered native listing and exit.
   --list-symbols           Print built-in keywords / library calls /
                            constants and exit.
   --dump-headers           Print every bundled header to stdout and
@@ -97,7 +96,7 @@ VM-only knobs (require --interp):
   --track-pointers         Allocation tracking + use-after-free guard.
   --trace                  Per-instruction stdout trace (noisy).
 
-Mutually exclusive: --interp / --jit / --shared / --dump-asm /
+Mutually exclusive: --interp / --jit / --shared /
 --list-symbols / --dump-headers all pick the output mode; only one
 applies. --track-pointers and --trace require --interp. -o has no
 effect under --interp / --list-symbols / --dump-headers.";
@@ -124,8 +123,6 @@ enum Mode {
     Interp,
     /// `--jit` -- lower in-process and call main directly.
     Jit,
-    /// `--dump-asm` -- print the native listing and exit.
-    DumpAsm,
     /// `--list-symbols` -- print the pre-defined symbol table
     /// and exit. Takes no source file.
     ListSymbols,
@@ -158,7 +155,6 @@ impl Mode {
             Mode::SharedLibrary => "--shared",
             Mode::Interp => "--interp",
             Mode::Jit => "--jit",
-            Mode::DumpAsm => "--dump-asm",
             Mode::ListSymbols => "--list-symbols",
             Mode::DumpHeaders => "--dump-headers",
             Mode::DumpPp => "--dump-pp",
@@ -247,7 +243,6 @@ fn main() {
             "--optimize" | "-O" => optimize_flag = true,
             "--dump-ssa" => dump_ssa = true,
             "--no-debug" | "-g0" => emit_debug_info = false,
-            "--dump-asm" => claim(&mut mode, Mode::DumpAsm),
             "--jit" => claim(&mut mode, Mode::Jit),
             "--shared" => claim(&mut mode, Mode::SharedLibrary),
             "--ar" | "--archive" => claim(&mut mode, Mode::BuildArchive),
@@ -915,13 +910,6 @@ fn main() {
     }
 
     match mode {
-        Mode::DumpAsm => match dump_native_listing_with_options(&program, target, native_opts) {
-            Ok(s) => print!("{s}"),
-            Err(e) => {
-                eprint_diagnostic(e);
-                std::process::exit(1);
-            }
-        },
         Mode::Jit => {
             // The JIT loader picks the host arch on its own; --target is
             // ignored (the JIT can't cross-compile, and the lowering it

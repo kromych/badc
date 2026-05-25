@@ -21,7 +21,7 @@
 
 use std::time::{Duration, Instant};
 
-use badc::{Compiler, NativeOptions, Program, Vm, jit_run_with_options, optimize};
+use badc::{Compiler, NativeOptions, Program, Vm, jit_run_with_options};
 
 /// One pipeline = one column in the output table.
 struct Pipeline {
@@ -231,13 +231,10 @@ fn measure(pipeline: &Pipeline, program: &Program, args: &[String], iter: usize)
     // is well under the run-to-run noise, but it's worth flagging
     // when comparing across pipelines.
     let argv: Vec<String> = args.to_vec();
-    let prepared: Program = match pipeline.label {
-        // Pipelines whose label implies the bytecode optimizer ran first.
-        // For JIT, "jit-O" also flips on the native optimizer via
-        // [`run_jit_optimized`] -- single-flag model.
-        "vm-O" | "jit-O" => optimize(program.clone()).expect("optimize"),
-        _ => program.clone(),
-    };
+    // The bytecode optimizer was retired with `lift_program`;
+    // the `-O` pipelines compare identically to their no-O peers
+    // until a walker-side optimizer takes its place.
+    let prepared: Program = program.clone();
     let mut samples = Vec::with_capacity(iter);
     for _ in 0..iter {
         let t = Instant::now();

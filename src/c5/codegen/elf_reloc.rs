@@ -733,7 +733,6 @@ mod tests {
             structs: Vec::new(),
             entry_name: None,
             subsystem: None,
-            optimized: false,
             finished_functions: Vec::new(),
             symbols: Vec::new(),
             synthetic_ssa_funcs: Vec::new(),

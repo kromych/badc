@@ -73,37 +73,6 @@ pub(crate) fn fmt_link_err(message: &str) -> String {
     format!("error: {message}")
 }
 
-/// Build the trailing `ctx: [pc-N]=Op ...` window the ICE
-/// helpers append. Decodes each preceding slot as an `Op` when
-/// it falls inside the enum range, otherwise emits `?<raw>` so a
-/// drifted-into-operand-territory scanner shows the raw word.
-/// Window is fixed at 16 slots -- enough to see the last few
-/// op/operand pairs without burying the headline.
-fn fmt_bytecode_window(text: &[i64], pc: usize) -> alloc::string::String {
-    use alloc::format;
-    use alloc::string::String;
-    let lo = pc.saturating_sub(16);
-    let mut ctx = String::new();
-    for (i, &v) in text.iter().enumerate().take(pc).skip(lo) {
-        let opn = crate::c5::op::Op::from_i64(v)
-            .map(|o| format!("{o:?}"))
-            .unwrap_or_else(|| format!("?{v}"));
-        ctx.push_str(&format!(" [{i}]={opn}"));
-    }
-    ctx
-}
-
-/// Helper: rich ICE diagnostic for a bytecode-scanner failure
-/// that only has access to the raw text slice. Reports the
-/// surrounding op window and the raw word at `pc` without a
-/// function / file / line.
-pub(crate) fn fmt_ice_text(message: &str, text: &[i64], pc: usize) -> String {
-    use alloc::format;
-    let raw = text.get(pc).copied().unwrap_or(0);
-    let ctx = fmt_bytecode_window(text, pc);
-    format!("error: internal compiler error: {message} (pc={pc} raw={raw} ctx:{ctx})")
-}
-
 // std::error::Error doesn't exist in core; only register as an Error
 // when std is available. Any Display impl is enough for `?` propagation
 // either way.

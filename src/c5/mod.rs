@@ -9,7 +9,6 @@ mod lexer;
 #[cfg(feature = "linker")]
 mod linker;
 mod op;
-mod optimize;
 mod preprocessor;
 mod program;
 mod symbol;
@@ -35,7 +34,6 @@ pub use {
     host::{Host, Overwrite},
     lexer::{PredefinedKind, PredefinedSymbol, predefined_symbols},
     op::Op,
-    optimize::optimize,
     program::{Program, VariableInfo},
     vm::{Trace, Vm},
 };

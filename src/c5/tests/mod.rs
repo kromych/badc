@@ -15,7 +15,7 @@ use std::path::PathBuf;
 use super::lexer::{self as lex_helpers, Lexer};
 use super::symbol::Symbol;
 use super::token::{Tok, Token};
-use super::{C5Error, Compiler, Op, Program, Vm, optimize};
+use super::{C5Error, Compiler, Op, Program, Vm};
 
 mod codegen;
 mod deferred;
@@ -30,7 +30,6 @@ mod native_elf;
 mod native_elf_x64;
 mod native_pe_arm64;
 mod native_pe_x64;
-mod optimizer;
 mod parser;
 mod pointer_tracking;
 mod programs;
@@ -132,26 +131,6 @@ where
         .unwrap()
 }
 
-/// Compile + optimize + run a fixture. Used by the optimizer e2e tests
-/// to confirm `-O` doesn't change observable behavior.
-pub fn run_optimized_fixture(name: &str) -> i64 {
-    let program = optimize(compile_fixture(name)).expect("optimizer failed");
-    Vm::new(program).with_pointer_tracking().run().unwrap()
-}
-
-/// Optimize-and-run with extra `args` for the hosted program.
-pub fn run_optimized_fixture_with_args<I, S>(name: &str, args: I) -> i64
-where
-    I: IntoIterator<Item = S>,
-    S: Into<String>,
-{
-    let program = optimize(compile_fixture(name)).expect("optimizer failed");
-    Vm::new(program)
-        .with_pointer_tracking()
-        .with_args(args)
-        .run()
-        .unwrap()
-}
 
 /// Compile + run a fixture and return the raw `Result` so callers can
 /// assert on either the exit code (no error) or the diagnostic message

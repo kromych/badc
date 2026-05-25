@@ -1034,7 +1034,7 @@ fn write_string(buf: &mut Vec<u8>, s: &str) {
 //
 // Per-function header (variable-width):
 //   u64 ent_pc, u64 end_pc, i64 locals,
-//   u32 n_params, u8 is_variadic, u32 vstack_slots,
+//   u32 n_params, u8 is_variadic,
 //   u32 n_insts,         inst body * n_insts,
 //   u32 n_inst_src_rows, (u32 line, u32 file_idx) * n_inst_src_rows,
 //   u32 n_blocks,        block body * n_blocks.
@@ -1445,7 +1445,6 @@ fn write_ssa_func_inner(buf: &mut Vec<u8>, f: &crate::c5::ir::FunctionSsa, remap
     write_i64(buf, f.locals);
     write_u32(buf, f.n_params as u32);
     buf.push(u8::from(f.is_variadic));
-    write_u32(buf, f.vstack_slots);
 
     write_u32(buf, f.insts.len() as u32);
     for inst in &f.insts {
@@ -1708,7 +1707,6 @@ pub(crate) fn read_ssa_func(
     let locals = r.i64()?;
     let n_params = r.u32()? as usize;
     let is_variadic = r.u8()? != 0;
-    let vstack_slots = r.u32()?;
 
     let n_insts = r.u32()? as usize;
     let mut insts = Vec::with_capacity(n_insts);
@@ -1766,7 +1764,6 @@ pub(crate) fn read_ssa_func(
         insts,
         inst_src,
         blocks,
-        vstack_slots,
         extern_call_refs,
         extern_imm_code_refs,
         extern_imm_data_refs,

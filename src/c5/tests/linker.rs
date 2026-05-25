@@ -407,7 +407,6 @@ fn ssa_func_encoder_round_trip_handcrafted() {
         insts,
         inst_src,
         blocks,
-        vstack_slots: 5,
         extern_call_refs: alloc::vec::Vec::new(),
         extern_imm_code_refs: alloc::vec::Vec::new(),
         extern_imm_data_refs: alloc::vec::Vec::new(),
@@ -425,7 +424,6 @@ fn ssa_func_encoder_round_trip_handcrafted() {
     assert_eq!(decoded.locals, orig.locals);
     assert_eq!(decoded.n_params, orig.n_params);
     assert_eq!(decoded.is_variadic, orig.is_variadic);
-    assert_eq!(decoded.vstack_slots, orig.vstack_slots);
     assert_eq!(decoded.insts.len(), orig.insts.len());
     assert_eq!(decoded.inst_src, orig.inst_src);
     assert_eq!(decoded.blocks.len(), orig.blocks.len());
@@ -481,7 +479,6 @@ fn user_ssa_funcs_populated_and_survives_object_round_trip() {
         assert_eq!(orig.locals, decoded.locals, "locals");
         assert_eq!(orig.n_params, decoded.n_params, "n_params");
         assert_eq!(orig.is_variadic, decoded.is_variadic, "is_variadic");
-        assert_eq!(orig.vstack_slots, decoded.vstack_slots, "vstack_slots");
         assert_eq!(orig.insts.len(), decoded.insts.len(), "insts len");
         assert_eq!(orig.blocks.len(), decoded.blocks.len(), "blocks len");
         for (i, (o, d)) in orig.insts.iter().zip(decoded.insts.iter()).enumerate() {

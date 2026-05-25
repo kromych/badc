@@ -8,7 +8,7 @@
 //! Format (one block at a time):
 //!
 //! ```text
-//! fn ent_pc=128 n_params=3 variadic=false locals=40 vstack_slots=2
+//! fn ent_pc=128 n_params=3 variadic=false locals=40
 //!   spill_count=1 gpr_used=[20] fp_used=[]
 //!   block 0  start_pc=128
 //!     v0  Imm(42)                       -> x20
@@ -17,7 +17,7 @@
 //!     ...
 //!     terminator Return(v2)
 //!   block 1  start_pc=160
-//!     v8  VstackReload { slot=0 }       -> x20
+//!     v8  LocalAddr(-3)                 -> x20
 //!     ...
 //! ```
 //!
@@ -43,8 +43,8 @@ use super::ssa_alloc::{Allocation, Place};
 pub(super) fn dump_function(func: &FunctionSsa, alloc: &Allocation) -> String {
     let mut out = String::new();
     out.push_str(&format!(
-        "fn ent_pc={} n_params={} variadic={} locals={} vstack_slots={}\n",
-        func.ent_pc, func.n_params, func.is_variadic, func.locals, func.vstack_slots,
+        "fn ent_pc={} n_params={} variadic={} locals={}\n",
+        func.ent_pc, func.n_params, func.is_variadic, func.locals,
     ));
     out.push_str(&format!(
         "  spill_count={} gpr_used={:?} fp_used={:?}\n",

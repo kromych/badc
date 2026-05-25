@@ -68,13 +68,9 @@ use super::ssa_alloc::{Allocation, Place};
 #[derive(Debug, Clone, Copy)]
 pub(super) struct Frame {
     /// Total frame size below fp, sub-spilled once at prologue
-    /// entry. Includes locals, vstack region, allocator spills,
-    /// and saved callee-saved regs.
+    /// entry. Includes locals, allocator spills, and saved
+    /// callee-saved regs.
     pub frame_bytes: u32,
-    /// Byte distance from fp down to the dedicated cross-block
-    /// accumulator slot. Single 8-byte slot, padded to 16 to
-    /// keep the next region aligned.
-    pub acc_slot_off: u32,
     /// Byte distance from fp down to the start of the
     /// allocator-managed spill region.
     pub alloc_spill_base: u32,
@@ -83,8 +79,6 @@ pub(super) struct Frame {
 impl Frame {
     pub fn for_function(func: &FunctionSsa, alloc: &Allocation) -> Self {
         let locals_bytes = ((func.locals.max(0) as u32) * 8 + 15) & !15;
-        let vstack_bytes = (func.vstack_slots * 8 + 15) & !15;
-        let acc_bytes = 16u32;
         let alloc_spill_bytes = (alloc.spill_count * 8 + 15) & !15;
         let saved_gpr_bytes = ((alloc.gpr_used.len() as u32) * 8 + 15) & !15;
         let saved_fpr_bytes = ((alloc.fp_used.len() as u32) * 8 + 15) & !15;
@@ -97,16 +91,13 @@ impl Frame {
         // prologue saves it and the epilogue restores it.
         let x19_save_bytes = 16u32;
         let frame_bytes = locals_bytes
-            + vstack_bytes
-            + acc_bytes
             + alloc_spill_bytes
             + saved_gpr_bytes
             + saved_fpr_bytes
             + x19_save_bytes;
         Self {
             frame_bytes,
-            acc_slot_off: locals_bytes + vstack_bytes + 8,
-            alloc_spill_base: locals_bytes + vstack_bytes + acc_bytes,
+            alloc_spill_base: locals_bytes,
         }
     }
 }

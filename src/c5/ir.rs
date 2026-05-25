@@ -341,11 +341,6 @@ pub(crate) struct FunctionSsa {
     /// Basic blocks in source / execution order. Block 0 is the
     /// entry block.
     pub blocks: Vec<Block>,
-    /// Function-wide count of vstack spill slots. The per-arch
-    /// lowering reserves this many additional 8-byte frame slots
-    /// past the regular `locals` reservation; `VstackSpill` /
-    /// `VstackReload` insts read and write through them.
-    pub vstack_slots: u32,
     /// Per-Inst extern symbol references: `(inst_idx, sym_idx)`
     /// pairs where `sym_idx` is the parser-symbol index (into the
     /// unit's `parser_symbols`) for an `Inst::Call::target_pc`

@@ -91,7 +91,6 @@ impl SsaBuilder {
             insts: Vec::new(),
             inst_src: Vec::new(),
             blocks: Vec::new(),
-            vstack_slots: 0,
             extern_call_refs: Vec::new(),
             extern_imm_code_refs: Vec::new(),
             extern_imm_data_refs: Vec::new(),

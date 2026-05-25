@@ -62,23 +62,18 @@ use super::x86_64::{
 #[derive(Debug, Clone, Copy)]
 pub(super) struct Frame {
     pub frame_bytes: u32,
-    pub acc_slot_off: u32,
     pub alloc_spill_base: u32,
 }
 
 impl Frame {
     pub fn for_function(func: &FunctionSsa, alloc: &Allocation) -> Self {
         let locals_bytes = ((func.locals.max(0) as u32) * 8 + 15) & !15;
-        let vstack_bytes = (func.vstack_slots * 8 + 15) & !15;
-        let acc_bytes = 16u32;
         let alloc_spill_bytes = (alloc.spill_count * 8 + 15) & !15;
         let saved_gpr_bytes = ((alloc.gpr_used.len() as u32) * 8 + 15) & !15;
-        let frame_bytes =
-            locals_bytes + vstack_bytes + acc_bytes + alloc_spill_bytes + saved_gpr_bytes;
+        let frame_bytes = locals_bytes + alloc_spill_bytes + saved_gpr_bytes;
         Self {
             frame_bytes,
-            acc_slot_off: locals_bytes + vstack_bytes + 8,
-            alloc_spill_base: locals_bytes + vstack_bytes + acc_bytes,
+            alloc_spill_base: locals_bytes,
         }
     }
 }

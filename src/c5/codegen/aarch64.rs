@@ -1397,6 +1397,18 @@ pub(super) fn lower(
     // keeps that contract intact.
     let mut func_fixups: Vec<FuncFixup> = Vec::with_capacity(pending_func_fixups.len());
     for (adrp_offset, target_bc_pc) in pending_func_fixups {
+        // Cross-TU target: the placeholder bc_pc has no entry
+        // in `bytecode_to_native`. Route to the same named-
+        // symbol channel that data extern refs use; the linker
+        // resolves the ADRP+ADD pair to `text_vaddr + target`
+        // via the data_abs_relocs Text-section path.
+        if let Some(&name) = extern_pc_lookup.get(&target_bc_pc) {
+            user_extern_data_refs.push(super::UserExternDataRef {
+                instr_offset: adrp_offset,
+                symbol_name: (*name).into(),
+            });
+            continue;
+        }
         if target_bc_pc > bc_pc_extent {
             return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
                 &format!(

@@ -323,6 +323,54 @@ fn function_pointer_initializer_resolves_at_link_time() {
     );
 }
 
+// Cross-TU function-pointer argument: qsort in main.c gets a
+// `cmp` defined in another TU. `Inst::ImmCode(target_bc_pc)`
+// lowered to an adrp+add against a placeholder bc_pc with no
+// `bytecode_to_native` entry; the codegen ICE'd until the
+// fixup pass partitioned extern targets into the same
+// named-symbol channel that data extern refs use.
+#[cfg(target_os = "linux")]
+#[test]
+fn qsort_with_cross_tu_compare() {
+    let dir = tempdir("qsort-xtu");
+    write_source(
+        &dir,
+        "cmp.c",
+        "int cmp(const void *a, const void *b) {\n\
+         \treturn *(const int*)a - *(const int*)b;\n\
+         }\n",
+    );
+    write_source(
+        &dir,
+        "main.c",
+        "#include <stdlib.h>\n\
+         extern int cmp(const void *, const void *);\n\
+         int main(void) {\n\
+         \tint a[] = { 5, 3, 8, 1, 9, 2, 7 };\n\
+         \tqsort(a, 7, sizeof(int), cmp);\n\
+         \treturn a[0] == 1 && a[6] == 9 ? 0 : 1;\n\
+         }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("cmp.c"))
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "link qsort cross-TU compare",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "exit code mismatch: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
 // stdio buffers were lost when the writer's `_start` stub
 // called `exit_group` via syscall, bypassing libc's atexit
 // chain. The embedded runtime (`lib/runtime.c`) now exports

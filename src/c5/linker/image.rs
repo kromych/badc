@@ -755,7 +755,18 @@ fn patch_data_refs(
             continue;
         }
         let site_vaddr = text_vaddr + r.text_offset;
-        let target_vaddr = data_vaddr as i64 + r.addend;
+        let target_base = match r.target_section {
+            NativeSymSection::Text => text_vaddr as i64,
+            NativeSymSection::Data => data_vaddr as i64,
+            NativeSymSection::Bss => data_vaddr as i64,
+            NativeSymSection::Undef | NativeSymSection::Abs => {
+                return Err(err(&format!(
+                    "parked reloc at text[{:#x}] has unexpected target section {:?}",
+                    r.text_offset, r.target_section,
+                )));
+            }
+        };
+        let target_vaddr = target_base + r.addend;
         let site = r.text_offset as usize;
         match (machine, r.rtype) {
             (NativeMachine::X86_64, R_X86_64_PC32) | (NativeMachine::X86_64, R_X86_64_PLT32) => {

@@ -323,6 +323,61 @@ fn function_pointer_initializer_resolves_at_link_time() {
     );
 }
 
+// C99 6.5.16: `fp = some_function;` reduces to taking the
+// function's address. The aarch64 emitter lowers
+// `&some_function` to an `adrp + add` pair whose
+// `R_AARCH64_ADR_PREL_PG_HI21 + ADD_ABS_LO12_NC` immediates
+// depend on the runtime VA of `.text`. The `.text` segment's
+// vmaddr in a c5-produced ELF is `BASE + ELF header + 2
+// program headers = 0x4000b0` -- non-page-aligned -- so the
+// link step has to defer the patch to the final-image writer
+// (which knows `text_vaddr`).
+#[cfg(target_os = "linux")]
+#[test]
+fn function_pointer_runtime_assign_targets_local_function() {
+    let dir = tempdir("fp-runtime-assign");
+    write_source(
+        &dir,
+        "fns.c",
+        "int alpha(int n) { return n + 1; }\n\
+         int beta(int n) { return n * 2; }\n\
+         typedef int (*fp_t)(int);\n\
+         fp_t current = alpha;\n\
+         void set_beta(void) { current = beta; }\n",
+    );
+    write_source(
+        &dir,
+        "use.c",
+        "typedef int (*fp_t)(int);\n\
+         extern fp_t current;\n\
+         extern void set_beta(void);\n\
+         int main(void) {\n\
+         \tint a = current(5);\n\
+         \tset_beta();\n\
+         \tint b = current(5);\n\
+         \treturn (a == 6 && b == 10) ? 0 : 1;\n\
+         }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("fns.c"))
+            .arg(dir.join("use.c"))
+            .current_dir(&dir),
+        "link function-pointer runtime assignment",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "exit code mismatch: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
 // C99 6.3.2.1p3: an array name in a non-lvalue context
 // decays to a pointer to its first element. The global
 // initializer parser used to reject bare-array RHS as

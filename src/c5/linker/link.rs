@@ -109,24 +109,41 @@ pub struct MergedSymbol {
     pub size: u64,
 }
 
-/// Call-site reloc the linker couldn't resolve from the merged
-/// units alone -- the target is an external import (libc
-/// `printf` / `malloc` / ...). The final-image writer
-/// materialises one PLT trampoline per import name, then
-/// patches each placeholder at `text_offset` with the rel32 /
-/// imm26 reaching the trampoline.
+/// Call-site / address-of reloc the linker parks for the
+/// final-image writer to apply. Three flavours, discriminated
+/// by `target_section`:
+///
+///   * `Undef`: a libc / dylib import. `import_index` selects
+///     the `MergedNative::imports` slot. The writer emits a
+///     PLT trampoline per import and patches the placeholder
+///     to reach it.
+///   * `Data` / `Bss`: a data-segment reference whose runtime
+///     VA needs `data_vaddr` (or `data_vaddr + data_size` for
+///     bss) in hand. `addend` carries the target's byte offset
+///     within the merged data; `import_index` is `usize::MAX`.
+///   * `Text`: a text-segment reference whose ADRP+ADD pair
+///     can't be applied at link time on aarch64 because
+///     `text_vaddr & 0xfff` is non-zero and the ADD_ABS_LO12
+///     immediate depends on it. `addend` carries the target's
+///     byte offset within the merged text; `import_index` is
+///     `usize::MAX`.
 #[derive(Debug, Clone)]
 pub struct PendingImportReloc {
     /// Byte offset within `MergedNative::text` of the
     /// placeholder.
     pub text_offset: u64,
-    /// Index into `MergedNative::imports`.
+    /// Index into `MergedNative::imports`. `usize::MAX` for
+    /// parked data / text refs (`target_section != Undef`).
     pub import_index: usize,
     /// ELF reloc kind (`R_AARCH64_CALL26` etc.).
     pub rtype: u32,
     /// The reloc's signed addend; mostly `-4` for x86_64
-    /// `PLT32` and `0` for aarch64 `CALL26`.
+    /// `PLT32` and `0` for aarch64 `CALL26`; for parked refs
+    /// carries the target's byte offset within the merged
+    /// section identified by `target_section`.
     pub addend: i64,
+    /// Section the target lives in (see the type-level doc).
+    pub target_section: NativeSymSection,
 }
 
 /// Merge `objs` into a single [`MergedNative`]. Per-unit
@@ -248,7 +265,18 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
             match sym.section {
                 NativeSymSection::Text => {
                     let target = text_bases[i] as i64 + sym.value as i64 + reloc.addend;
-                    apply_reloc(machine, &mut text, patch_offset, reloc, target)?;
+                    if is_aarch64_text_pageref(machine, reloc.rtype) {
+                        park_section_ref(
+                            machine,
+                            &mut pending_imports,
+                            patch_offset,
+                            reloc,
+                            target,
+                            NativeSymSection::Text,
+                        );
+                    } else {
+                        apply_reloc(machine, &mut text, patch_offset, reloc, target)?;
+                    }
                 }
                 NativeSymSection::Data => {
                     // Resolved data offset within `merged.data`
@@ -277,7 +305,18 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
                         match def.section {
                             NativeSymSection::Text => {
                                 let target = def.value as i64 + reloc.addend;
-                                apply_reloc(machine, &mut text, patch_offset, reloc, target)?;
+                                if is_aarch64_text_pageref(machine, reloc.rtype) {
+                                    park_section_ref(
+                                        machine,
+                                        &mut pending_imports,
+                                        patch_offset,
+                                        reloc,
+                                        target,
+                                        NativeSymSection::Text,
+                                    );
+                                } else {
+                                    apply_reloc(machine, &mut text, patch_offset, reloc, target)?;
+                                }
                             }
                             NativeSymSection::Data => {
                                 let data_off = def.value as i64 + reloc.addend;
@@ -328,6 +367,7 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
                             import_index: idx,
                             rtype: reloc.rtype,
                             addend: reloc.addend,
+                            target_section: NativeSymSection::Undef,
                         });
                     } else {
                         // UNDEF with no name -- shouldn't
@@ -740,26 +780,53 @@ fn patch_aarch64_add_lo12(text: &mut [u8], offset: usize, target: i64) -> Result
     Ok(())
 }
 
-fn park_data_ref(
+fn is_aarch64_text_pageref(machine: NativeMachine, rtype: u32) -> bool {
+    matches!(machine, NativeMachine::Aarch64)
+        && matches!(
+            rtype,
+            R_AARCH64_ADR_PREL_PG_HI21 | R_AARCH64_ADD_ABS_LO12_NC
+        )
+}
+
+fn park_section_ref(
     _machine: NativeMachine,
     pending: &mut Vec<PendingImportReloc>,
     patch_offset: usize,
     reloc: &NativeReloc,
     target_offset: i64,
+    target_section: NativeSymSection,
 ) {
-    // The .data / .bss reference resolves once the final-image
-    // writer knows the runtime page-relative distance between
-    // `.text` and `.data`. Park the reloc in the
-    // `pending_imports` queue with a sentinel import index of
-    // `usize::MAX` so the writer can pick it up the same way it
-    // handles PLT imports; the resolved data / bss byte offset
-    // travels in the addend slot.
+    // The reference resolves once the final-image writer
+    // knows the runtime vmaddr of the target's section. Park
+    // it in the `pending_imports` queue with a sentinel
+    // import index of `usize::MAX`; the writer picks it up
+    // the same way it handles PLT imports. `target_section`
+    // tells the writer whether to apply `text_vaddr`,
+    // `data_vaddr`, or `data_vaddr + data_size` as the base.
     pending.push(PendingImportReloc {
         text_offset: patch_offset as u64,
         import_index: usize::MAX,
         rtype: reloc.rtype,
         addend: target_offset,
+        target_section,
     });
+}
+
+fn park_data_ref(
+    machine: NativeMachine,
+    pending: &mut Vec<PendingImportReloc>,
+    patch_offset: usize,
+    reloc: &NativeReloc,
+    target_offset: i64,
+) {
+    park_section_ref(
+        machine,
+        pending,
+        patch_offset,
+        reloc,
+        target_offset,
+        NativeSymSection::Data,
+    );
 }
 
 // ---- helpers ----

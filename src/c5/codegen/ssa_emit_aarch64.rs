@@ -154,8 +154,8 @@ enum LocalBranchKind {
 ///
 /// `fixups` is the function-pointer / direct-call fixup table the
 /// surrounding writer already maintains. The SSA emit appends one
-/// `Fixup::Bl` per `Inst::Call`; the pool path's `apply_fixups`
-/// post-pass resolves them once `bytecode_to_native` is final.
+/// `Fixup::Bl` per `Inst::Call`; the `apply_fixups` post-pass
+/// resolves them once `bytecode_to_native` is final.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_function(
     func: &FunctionSsa,
@@ -181,9 +181,8 @@ pub(super) fn emit_function(
     // Snapshot every fixup vector at function entry so a partial
     // emit can be rolled back cleanly. Without this, a bailed SSA
     // emit leaves queued fixups pointing into the truncated code
-    // region; the pool fallback's re-emit appends its own fixups
-    // on top, and the stale entries patch later code with the
-    // wrong offsets.
+    // region and the caller's surrounding pass would patch later
+    // code with the wrong offsets.
     let fixups_snapshot = fixups.len();
     let plt_call_fixups_snapshot = plt_call_fixups.len();
     let data_fixups_snapshot = data_fixups.len();
@@ -304,9 +303,8 @@ pub(super) fn emit_function(
                 // branches Bz, anything else branches Bnz. An
                 // FpReg-placed cond carries an f64 in d-reg
                 // form; bridge it through `fmov x, d` so the
-                // CBZ/CBNZ has an integer to compare. Matches
-                // the pool path's behaviour where the cond
-                // already sits in x19 with the raw bit pattern.
+                // CBZ/CBNZ has an integer to compare on the
+                // raw bit pattern.
                 let rt = if let Place::FpReg(dr) = cond_place {
                     emit(code, enc_fmov_d_to_x(scratch.primary, dr));
                     scratch.primary
@@ -374,9 +372,8 @@ pub(super) fn emit_function(
                 // branches Bz, anything else branches Bnz. An
                 // FpReg-placed cond carries an f64 in d-reg
                 // form; bridge it through `fmov x, d` so the
-                // CBZ/CBNZ has an integer to compare. Matches
-                // the pool path's behaviour where the cond
-                // already sits in x19 with the raw bit pattern.
+                // CBZ/CBNZ has an integer to compare on the
+                // raw bit pattern.
                 let rt = if let Place::FpReg(dr) = cond_place {
                     emit(code, enc_fmov_d_to_x(scratch.primary, dr));
                     scratch.primary
@@ -426,8 +423,7 @@ pub(super) fn emit_function(
                 // Tail-jump through the GOT-patched trampoline:
                 // `adrp x16, _ ; ldr x16, [x16, _] ; br x16`.
                 // The writer fills the adrp / ldr immediates once
-                // the trampoline target's RVA is final, mirroring
-                // the pool path's `emit_got_tail_jump` shape.
+                // the trampoline target's RVA is final.
                 let import_index = match imports.index_of_binding(binding_idx) {
                     Some(i) => i,
                     None => {
@@ -557,8 +553,7 @@ fn emit_prologue(
     frame: Frame,
     abi: super::Abi,
 ) {
-    // Host-arg-reg spill. Same shape as the pool path's
-    // `emit_prologue` for non-variadic functions: spill each
+    // Host-arg-reg spill for non-variadic functions: spill each
     // declared int param into a 16-byte c5 cdecl slot above fp,
     // restripe any host-stack overflow into 16-byte slots.
     let entry_spill = if func.is_variadic { 0 } else { func.n_params };

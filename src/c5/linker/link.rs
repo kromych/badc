@@ -356,8 +356,6 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
     // function-pointer / data Imm sites can be distinguished
     // from ordinary integer-constant Imms.
 
-    let mut merged_code_imm_positions: Vec<usize> = Vec::new();
-    let mut merged_data_imm_positions: Vec<usize> = Vec::new();
     let mut merged_source_lines: Vec<u32> = Vec::new();
     let mut merged_source_functions: Vec<String> = Vec::new();
     let mut merged_source_file_indices: Vec<u16> = Vec::new();
@@ -532,12 +530,6 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                         operand
                     };
                     merged_text.push(new);
-                    if code_imm_set.contains(&operand_pc) {
-                        merged_code_imm_positions.push(merged_text.len() - 1);
-                    }
-                    if data_imm_set.contains(&operand_pc) {
-                        merged_data_imm_positions.push(merged_text.len() - 1);
-                    }
                     pc += 2;
                 }
                 Some(Op::Jsr) | Some(Op::Jmp) | Some(Op::Bz) | Some(Op::Bnz) => {

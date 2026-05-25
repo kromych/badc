@@ -323,6 +323,44 @@ fn function_pointer_initializer_resolves_at_link_time() {
     );
 }
 
+// C99 6.7.9p23 + 6.2.2: a function-pointer initializer whose
+// target lives in another TU must resolve to the defining
+// unit's `.text` offset. The native ET_REL writer emits the
+// `.rela.data` row against the named UNDEF function symbol
+// (not the `.text` section symbol); the link / final-image
+// writer pair resolves the slot to `text_vaddr + target`.
+#[cfg(target_os = "linux")]
+#[test]
+fn function_pointer_init_targets_extern_function() {
+    let dir = tempdir("fp-init-extern");
+    write_source(&dir, "def.c", "int add(int a, int b) { return a + b; }\n");
+    write_source(
+        &dir,
+        "refer.c",
+        "extern int add(int, int);\n\
+         int (*const fp)(int,int) = add;\n\
+         int main(void) { return fp(20, 22); }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("def.c"))
+            .arg(dir.join("refer.c"))
+            .current_dir(&dir),
+        "link function-pointer init -> extern function",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(
+        out.status.code(),
+        Some(42),
+        "exit code mismatch: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
 // C99 6.7.9p23: a static-storage-duration object initialized
 // with the address of another static-storage object resolves
 // at translation-unit-load time. The native ET_REL writer

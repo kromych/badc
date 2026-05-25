@@ -292,6 +292,23 @@ pub(super) fn write_relocatable(
             user_extern_names.push(s);
         }
     }
+    // `code_relocs` targeting an extern function (the
+    // `extern_function_imports` map; placeholder bc_pcs past
+    // `text.len()`) also need a named UNDEF entry in `.symtab`
+    // so the `.rela.data` row below can point at it. Fold
+    // those names into the same dedup list.
+    let extern_fn_by_pc: alloc::collections::BTreeMap<usize, &str> = program
+        .extern_function_imports
+        .iter()
+        .map(|(pc, name)| (*pc, name.as_str()))
+        .collect();
+    for r in &build.code_relocs {
+        if let Some(&name) = extern_fn_by_pc.get(&(r.target_bc_pc as usize))
+            && !user_extern_names.contains(&name)
+        {
+            user_extern_names.push(name);
+        }
+    }
 
     // Defined data globals visible to other TUs. C99 6.2.2 +
     // 6.9.2: every file-scope object with external linkage
@@ -758,6 +775,25 @@ pub(super) fn write_relocatable(
     // `text_vaddr + target_offset`.
     for r in &build.code_relocs {
         let bc_pc = r.target_bc_pc as usize;
+        // Cross-TU target: emit against the named UNDEF
+        // function symbol so the linker resolves it against
+        // the sibling unit's defined entry. `r_addend = 0`
+        // since the named symbol carries the target's text
+        // offset directly.
+        if let Some(&name) = extern_fn_by_pc.get(&bc_pc) {
+            let pos = user_extern_names
+                .iter()
+                .position(|n| *n == name)
+                .expect("user_extern_names contains every code-reloc extern callee");
+            let sym_idx = user_extern_sym_idx[pos] as u64;
+            let rela = Elf64Rela {
+                r_offset: r.data_offset,
+                r_info: (sym_idx << 32) | rtype_abs64 as u64,
+                r_addend: 0,
+            };
+            write_struct(&mut rela_data_bytes, &rela);
+            continue;
+        }
         let native_off = build
             .bytecode_to_native
             .get(bc_pc)

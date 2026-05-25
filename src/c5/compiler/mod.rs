@@ -1170,6 +1170,31 @@ impl Compiler {
                     sym.val = 0;
                 }
             }
+            // Function-pointer initializers (`int (*const fp)
+            // (...) = some_fn;`) recorded a `code_relocs` row
+            // whose `target_bc_pc` was the symbol's val at
+            // parse time -- before the loop above assigned
+            // placeholder PCs to extern callees. Refresh each
+            // row whose source symbol is an extern function so
+            // the ET_REL writer can identify it as a cross-TU
+            // reference. Local code_relocs already carry the
+            // function's bytecode PC and keep it.
+            for (reloc, &sym_idx) in self
+                .code_relocs
+                .iter_mut()
+                .zip(self.code_reloc_sym_idx.iter())
+            {
+                if sym_idx == usize::MAX || sym_idx >= self.symbols.len() {
+                    continue;
+                }
+                let sym = &self.symbols[sym_idx];
+                if sym.class == Token::Fun as i64
+                    && !sym.defined_here
+                    && sym.linkage == Linkage::External
+                {
+                    reloc.target_bc_pc = sym.val as u64;
+                }
+            }
             imports
         } else {
             alloc::vec::Vec::new()

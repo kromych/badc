@@ -53,7 +53,7 @@ pub(super) enum Place {
     /// SSA spill region. The emit pass adds the per-function
     /// base offset to land on a real `[fp - X]`.
     Spill(u32),
-    /// No defined value (Store, AllocaInit, VstackSpill, ...).
+    /// No defined value (Store, AllocaInit, ...).
     None,
 }
 

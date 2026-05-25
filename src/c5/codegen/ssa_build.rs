@@ -604,12 +604,12 @@ mod tests {
     /// ```
     ///
     /// Validates that the builder produces a CFG with a back-edge
-    /// (loop-body -> loop-header) and that the linear-scan allocator
-    /// computes live ranges across the back-edge without diagnostics.
-    /// Loop-header reads of `i` reach via the local slot rather
-    /// than a phi -- mirrors the SSA shape the lift produces for
-    /// `address_escaped`-style locals today; mem2reg promotion is
-    /// tracked separately (TODO).
+    /// (loop-body -> loop-header) and that the linear-scan
+    /// allocator computes live ranges across the back-edge
+    /// without diagnostics. Loop-header reads of `i` reach via
+    /// the local slot rather than a phi for `address_escaped`-
+    /// style locals; mem2reg promotion is tracked separately
+    /// (TODO).
     #[test]
     fn loop_back_edge_round_trip() {
         let mut b = SsaBuilder::new(0, 1, false);

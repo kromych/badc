@@ -822,7 +822,7 @@ pub(crate) struct Build {
     /// SSA emit each time the walker-recorded source position
     /// changes between consecutive `Inst`s. `file_idx` is an index
     /// into `Program::source_files`. Empty for builds whose SSA
-    /// has no source info attached (lift-produced functions).
+    /// has no source info attached.
     pub ssa_line_rows: Vec<(usize, u32, u32)>,
     /// Per-Build resolved import set. Built by lowering once it knows
     /// which libc ops the program uses; consumed by the wire-format

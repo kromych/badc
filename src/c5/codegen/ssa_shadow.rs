@@ -131,8 +131,7 @@ pub(crate) fn produce_ssa_funcs(
 /// frame slot `i + 2`; the codegen prologue spills the matching
 /// argument register into that slot. Returns the *touched*
 /// count -- a declared-but-unused param is dropped so the frame
-/// stays in step with `codegen::param_count_for_func`, the
-/// bytecode-side equivalent the lift produces.
+/// matches the body's actual reads.
 fn walker_param_count(func: &FunctionSsa) -> usize {
     use crate::c5::ir::Inst;
     let mut max_seen: Option<i64> = None;

@@ -1,13 +1,13 @@
-//! x86_64 native emit consuming the SSA lift + allocator output.
-//! Mirrors the aarch64 counterpart's structure; the difference is
-//! the per-target instruction encodings and the SysV / Win64 ABI
-//! shape applied to argument and return placement.
+//! x86_64 native emit consuming the SSA + allocator output.
+//! Mirrors the aarch64 counterpart's structure; the difference
+//! is the per-target instruction encodings and the SysV / Win64
+//! ABI shape applied to argument and return placement.
 //!
 //! ## Pass shape
 //!
 //! For each function:
 //!
-//! 1. Prologue: push rbp, set rbp = rsp, reserve locals + vstack +
+//! 1. Prologue: push rbp, set rbp = rsp, reserve locals +
 //!    allocator-spill bytes, save the callee-saved GPRs the
 //!    allocator reported as used, and spill the host-ABI arg
 //!    registers into the c5 cdecl slots the body's
@@ -24,7 +24,6 @@
 //!   c5 cdecl param slots          [rbp + 16*i + 16]
 //!   saved rbp, ret address        [rbp]
 //!   locals area                   [rbp - locals_bytes .. rbp]
-//!   vstack spill slots            [rbp - locals_bytes - vstack_bytes .. ...]
 //!   allocator spill slots         ...
 //!   saved callee-saved GPRs       rsp
 //! ```
@@ -35,7 +34,7 @@
 //! function end-to-end and `false` when any encountered op is
 //! outside the implemented subset. The caller (`x86_64::lower`)
 //! turns `false` into a hard compile error -- the IR + emit
-//! contract has to cover every shape the lift produces.
+//! contract has to cover every shape the walker produces.
 
 #![allow(dead_code, clippy::too_many_arguments)]
 
@@ -1042,13 +1041,10 @@ fn emit_tls_addr(
 
 use super::ssa_emit_common::c5_slot_to_fp_offset;
 
-/// Single-instruction rbp-relative load for the lift's fused
-/// `Inst::LoadLocal`. The c5 slot offset folds into the load's
-/// ModR/M disp directly, skipping the `LocalAddr`
-/// materialisation the `LocalAddr` + `Load` pair would have
-/// required. The lift only emits LoadLocal with `kind = I64`
-/// (`Op::LdLocI`); other widths stay on the unfused
-/// `LocalAddr` + `Load` path and never reach this helper.
+/// Single-instruction rbp-relative load for `Inst::LoadLocal`.
+/// The c5 slot offset folds into the load's ModR/M disp
+/// directly, skipping the `LocalAddr` materialisation the
+/// `LocalAddr` + `Load` pair would have required.
 fn emit_load_local(code: &mut Vec<u8>, dst: Place, off: i64, kind: LoadKind, frame: Frame) -> bool {
     let disp = match i32::try_from(c5_slot_to_fp_offset(off)) {
         Ok(v) => v,
@@ -1088,10 +1084,10 @@ fn emit_load_local(code: &mut Vec<u8>, dst: Place, off: i64, kind: LoadKind, fra
     true
 }
 
-/// Single-instruction rbp-relative store for the lift's fused
-/// `Inst::StoreLocal`. Mirrors [`emit_load_local`]; the c5 store
-/// ops leave the stored value in the accumulator, so the
-/// destination `Place` receives a copy after the store lands.
+/// Single-instruction rbp-relative store for `Inst::StoreLocal`.
+/// Mirrors [`emit_load_local`]; the c5 store ops leave the
+/// stored value in the accumulator, so the destination `Place`
+/// receives a copy after the store lands.
 fn emit_store_local(
     code: &mut Vec<u8>,
     dst: Place,
@@ -1147,8 +1143,8 @@ fn emit_store_local(
 
 /// Lower `Inst::LoadIndexed`: `dst = *(kind*)(base + index * scale)`.
 /// Emitted as a single MOVSXD/MOV/MOVSX/MOVZX with SIB-byte
-/// addressing (`[base + index * scale]`). F32 indexed loads aren't a
-/// shape the c5 lift produces today.
+/// addressing (`[base + index * scale]`). F32 indexed loads aren't
+/// a shape the walker produces today.
 #[allow(clippy::too_many_arguments)]
 fn emit_load_indexed(
     code: &mut Vec<u8>,

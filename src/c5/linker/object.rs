@@ -2165,9 +2165,9 @@ fn decode_meta(meta: &[u8], unit: &mut LinkUnit) -> Result<(), C5Error> {
                     .collect();
             }
             TAG_CALL_FP_ARG_MASKS => {
-                // Retired side-table from the bytecode-tier lift
-                // path. Older `.o` files still carry the tag;
-                // skip silently to preserve forward compatibility.
+                // Retired side-table. Older `.o` files still
+                // carry the tag; skip silently to preserve
+                // forward compatibility.
             }
             TAG_SOURCE_LINES => unit.source_lines = read_vec_u32(body)?,
             TAG_SOURCE_FUNCTIONS => unit.source_functions = read_string_vec(body)?,

@@ -1207,13 +1207,10 @@ pub(super) fn lower(
         super::ssa_emit_common::time_pass("ssa::produce_ssa_funcs (aarch64)", || {
             super::ssa_shadow::produce_ssa_funcs(program, target)
         })?;
-    // Upper bound on bc_pcs the lowering will reference. The lift
-    // and the walker both stamp `ent_pc` / `end_pc` against the
-    // bytecode PC space; archive reloads also leave their lift
-    // output bounded by `program.text.len()`. Take the max so the
-    // dense `bytecode_to_native` table holds every reachable PC
-    // even when the bytecode tape gets trimmed (or eventually
-    // empties out entirely).
+    // Upper bound on bc_pcs the lowering will reference. The
+    // walker stamps `ent_pc` / `end_pc` against the bytecode PC
+    // space, and the dense `bytecode_to_native` table holds
+    // every reachable PC.
     let bc_pc_extent = super::pc_extent_for_lowering(program, &ssa_funcs);
     let mut bytecode_to_native: Vec<usize> = vec![usize::MAX; bc_pc_extent + 1];
     // Per-callee variadic flag, derived from FunctionSsa::is_variadic.

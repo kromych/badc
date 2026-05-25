@@ -976,10 +976,9 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
             }
             merged
         },
-        // Populated below from the merged bytecode tape so the
-        // codegen-side `produce_ssa_funcs` no longer needs its
-        // own lift-recovery loop for sys-trampolines that came
-        // through an archive boundary.
+        // Populated below from each unit's per-TU
+        // `synthetic_ssa_funcs` so the codegen reads SSA for
+        // sys-trampolines that came through an archive boundary.
         synthetic_ssa_funcs: alloc::vec::Vec::new(),
         user_ssa_funcs: alloc::vec::Vec::new(),
         // Bytecode linker resolves every cross-TU function call
@@ -990,12 +989,10 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
     .and_then(|mut program| {
         // Walker covers every user-declared function via
         // `finished_functions`; the remaining sys-trampolines
-        // come from either the per-unit `synthetic_ssa_funcs`
-        // (in-memory compile+link, or .o files that carry the
-        // synthesised SSA blob) or the bytecode lift (legacy
-        // .o files without the blob). Pre-collect the walker-
-        // covered ent_pcs + the unit-side synth ent_pcs so we
-        // don't double-add through the lift fallback.
+        // come from each unit's `synthetic_ssa_funcs`. Pre-collect
+        // the walker-covered ent_pcs + the unit-side synth ent_pcs
+        // so we don't double-add a function the linker has
+        // already merged.
         let walker_pcs: alloc::collections::BTreeSet<usize> = program
             .finished_functions
             .iter()
@@ -1108,9 +1105,8 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                 program.user_ssa_funcs.push(rebased);
             }
         }
-        // `covered` is unused now that the lift fallback below
-        // retired; the post-merge synth + user SSA cover every
-        // ent_pc the codegen reaches.
+        // `covered` was used inside the loops above to dedupe;
+        // it's no longer read after this point.
         let _ = covered;
         Ok(program)
     })

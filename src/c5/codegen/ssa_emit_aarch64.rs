@@ -1,19 +1,18 @@
-//! AArch64 native emit consuming the SSA lift + allocator output.
+//! AArch64 native emit consuming the SSA + allocator output.
 //! A per-function bail is a hard error -- the IR + emit contract
-//! has to cover every shape the lift produces.
+//! has to cover every shape the walker produces.
 //!
 //! ## Pass shape
 //!
 //! For each function:
 //!
 //! 1. Prologue: save fp / lr, set the frame pointer, reserve
-//!    locals + vstack + allocator-spill bytes, save the
-//!    callee-saved GPRs / FP regs the allocator reported as used,
-//!    and spill the host-ABI argument registers into the c5
-//!    cdecl slots the body's `LocalAddr(>=2)` references.
-//! 2. Walk each block in source order. Emit `VstackReload`s at
-//!    block start, per-`Inst` native code in `inst_range`, then
-//!    `VstackSpill`s, then the terminator.
+//!    locals + allocator-spill bytes, save the callee-saved
+//!    GPRs / FP regs the allocator reported as used, and spill
+//!    the host-ABI argument registers into the c5 cdecl slots
+//!    the body's `LocalAddr(>=2)` references.
+//! 2. Walk each block in source order. Emit per-`Inst` native
+//!    code in `inst_range`, then the terminator.
 //! 3. Epilogue lands inline at every `Terminator::Return`: load
 //!    the return value into x0, restore saved regs, drop the
 //!    frame, `ret`.
@@ -24,7 +23,6 @@
 //!   c5 cdecl param slots          [fp + 16*i]
 //!   saved fp, saved lr            [fp +  0]
 //!   locals area                   [fp - locals_bytes .. fp]
-//!   vstack spill slots            [fp - locals_bytes - vstack_bytes .. fp - locals_bytes]
 //!   allocator spill slots         ...
 //!   saved callee-saved GPRs
 //!   saved callee-saved FP regs    sp
@@ -40,7 +38,7 @@
 //! function end-to-end and `false` when any encountered op is
 //! outside the implemented subset. The caller (`aarch64::lower`)
 //! turns `false` into a hard compile error -- the IR + emit
-//! contract has to cover every shape the lift produces.
+//! contract has to cover every shape the walker produces.
 
 #![allow(dead_code, clippy::too_many_arguments)]
 
@@ -1340,9 +1338,9 @@ fn emit_call_ext(
     // place the variadic tail per the host's variadic ABI
     // (macOS arm64: all on the stack; Win arm64 / Win64: int regs
     // first, then stack; Linux: standard register sequence). The
-    // FP-arg bit mask flows from the lift (it was filed at the
-    // bytecode `Op::Si` for each declared FP arg) so the planner
-    // routes those args to d0..d7 instead of x0..x7.
+    // walker stamps the FP-arg bit mask from each `Expr::Call`'s
+    // per-arg type so the planner routes FP args to d0..d7
+    // instead of x0..x7.
     let fixed = if imp.is_variadic {
         imp.fixed_args.min(args.len())
     } else {
@@ -2093,12 +2091,11 @@ fn emit_load(
     true
 }
 
-/// Single-instruction fp-relative load for the lift's fused
-/// `Inst::LoadLocal`. The c5 slot offset converts to a signed
-/// byte displacement; `ldur` covers the unscaled 9-bit field
-/// `[-256, 255]` directly. Falls back to the general path when
-/// the displacement doesn't fit, since the lift only emits this
-/// inst with `kind = I64` (`Op::LdLocI`).
+/// Single-instruction fp-relative load for `Inst::LoadLocal`.
+/// The c5 slot offset converts to a signed byte displacement;
+/// `ldur` covers the unscaled 9-bit field `[-256, 255]`
+/// directly. Falls back to the general path when the
+/// displacement doesn't fit.
 fn emit_load_local(
     code: &mut Vec<u8>,
     dst: Place,
@@ -2191,8 +2188,8 @@ fn emit_load_local(
     true
 }
 
-/// Single-instruction fp-relative store for the lift's fused
-/// `Inst::StoreLocal`. Mirrors [`emit_load_local`].
+/// Single-instruction fp-relative store for `Inst::StoreLocal`.
+/// Mirrors [`emit_load_local`].
 fn emit_store_local(
     code: &mut Vec<u8>,
     dst: Place,
@@ -2276,7 +2273,7 @@ fn emit_store_local_large_disp(
 /// Lower `Inst::LoadIndexed`: `dst = *(kind*)(base + index * scale)`.
 /// Emitted as one scaled-indexed load (`ldr Xt, [Xn, Xm, lsl #N]`)
 /// when `scale` matches the natural width of `kind`. F32 indexed
-/// loads aren't a shape the c5 lift produces today (no `float arr[]`
+/// loads aren't a shape the walker produces today (no `float arr[]`
 /// access path goes through the indexed fold yet); the FP variant
 /// would need a separate `ldr St, [Xn, Xm, lsl #2]` + `fcvt d, s`.
 #[allow(clippy::too_many_arguments)]

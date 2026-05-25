@@ -84,9 +84,7 @@ pub(crate) enum Inst {
     /// (`ldr Wt, [Xn, Xm, lsl #log2(scale)]` on aarch64, scaled
     /// SIB on x86_64). `scale` is in bytes and matches the
     /// natural width of `kind` (1 for I8/U8, 2 for I16/U16, 4 for
-    /// I32/U32, 8 for I64). The lift only produces this when the
-    /// upstream `Add` and `Mul/Shl` are immediately consumed by
-    /// this load.
+    /// I32/U32, 8 for I64).
     LoadIndexed {
         base: ValueId,
         index: ValueId,
@@ -284,8 +282,7 @@ pub(crate) enum Terminator {
 #[derive(Debug, Clone)]
 pub(crate) struct Block {
     /// Bytecode PC of the block's first op. Useful for debug
-    /// output and for the bytecode-to-native PC map. Zero for
-    /// blocks built outside the lift.
+    /// output and for the bytecode-to-native PC map.
     pub start_pc: usize,
     /// Instructions in execution order. Each entry's index within
     /// the function's flat `insts` list is its [`ValueId`]; the
@@ -305,12 +302,10 @@ pub(crate) struct Block {
 /// per-arch lowering.
 #[derive(Debug, Clone)]
 pub(crate) struct FunctionSsa {
-    /// Bytecode PC of the function's `Op::Ent`. Zero for functions
-    /// built outside the lift.
+    /// Bytecode PC of the function's `Op::Ent`.
     pub ent_pc: usize,
     /// Bytecode PC one past the function's last op (the start of
-    /// whatever follows). Zero for functions built outside the
-    /// lift.
+    /// whatever follows).
     pub end_pc: usize,
     /// Local-slot count from `Op::Ent`'s operand. Set by the
     /// producer; consumed by the per-arch frame layout.

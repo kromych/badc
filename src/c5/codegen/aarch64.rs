@@ -1216,6 +1216,14 @@ pub(super) fn lower(
     // empties out entirely).
     let bc_pc_extent = super::pc_extent_for_lowering(program, &ssa_funcs);
     let mut bytecode_to_native: Vec<usize> = vec![usize::MAX; bc_pc_extent + 1];
+    // Per-callee variadic flag, derived from FunctionSsa::is_variadic.
+    // Each call site reads it to pick the host-ABI vs c5-stack arg
+    // passing shape for the callee.
+    let variadic_targets: alloc::collections::BTreeSet<usize> = ssa_funcs
+        .iter()
+        .filter(|f| f.is_variadic)
+        .map(|f| f.ent_pc)
+        .collect();
     let ssa_allocs: alloc::vec::Vec<super::ssa_alloc::Allocation> =
         super::ssa_emit_common::time_pass("ssa_alloc::allocate (aarch64)", || {
             ssa_funcs
@@ -1253,7 +1261,7 @@ pub(super) fn lower(
             &mut data_fixups,
             &mut pending_func_fixups,
             imports,
-            &program.variadic_functions,
+            &variadic_targets,
             &mut tls_index_fixups,
             &mut macho_tlv_fixups,
             &mut macho_tlv_descriptors,

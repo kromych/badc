@@ -850,7 +850,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         // program.
         extern_function_imports: alloc::vec::Vec::new(),
     })
-    .and_then(|mut program| {
+    .map(|mut program| {
         // Walker covers every user-declared function via
         // `finished_functions`; the remaining sys-trampolines
         // come from each unit's `synthetic_ssa_funcs`. Pre-collect
@@ -972,7 +972,7 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         // `covered` was used inside the loops above to dedupe;
         // it's no longer read after this point.
         let _ = covered;
-        Ok(program)
+        program
     })
 }
 

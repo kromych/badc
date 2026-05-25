@@ -146,12 +146,11 @@ impl Compiler {
             let array_bytes = self.pending.last_array_decay_bytes;
             let expr_ty = self.ty;
             // Drop the operand's emitted code. Keep the parallel
-            // debug tables (source_lines / source_functions /
-            // source_file_indices) in lockstep with `text` -- if
-            // any grows past `text`, every subsequent `emit_op`
-            // attributes its bytecode PC to the wrong source row,
-            // and DWARF subprogram DIEs land on the previous
-            // function's name.
+            // `source_functions` column in lockstep with `text`
+            // -- if it grows past `text`, every subsequent
+            // `emit_op` attributes its bytecode PC to the wrong
+            // function name, and DWARF subprogram DIEs land on
+            // the previous function's name.
             self.text.truncate(saved_text_len);
             self.source_functions.truncate(saved_text_len);
             self.data_imm_positions.truncate(saved_data_imm_positions);

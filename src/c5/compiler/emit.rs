@@ -1,18 +1,17 @@
 //! Low-level emit primitives plus the small "rewrite the trailing
 //! op" helpers and the per-symbol shadow / restore pair.
 //!
-//! Everything in here pushes onto `self.text` (the bytecode stream)
-//! and the parallel `source_lines` / `source_functions` /
-//! `source_file_indices` columns so a bc_pc lookup is a direct
-//! index. The fn-pointer chain tracker (`fn_ptr_chain_depth`) is
-//! invalidated by every `emit_op`; identifier-loads and unary `*`
-//! re-seed it inside `expr()`.
+//! Everything in here pushes onto `self.text` (the bytecode
+//! stream) and the parallel `source_functions` column so a
+//! bc_pc lookup is a direct index. The fn-pointer chain tracker
+//! (`fn_ptr_chain_depth`) is invalidated by every `emit_op`;
+//! identifier-loads and unary `*` re-seed it inside `expr()`.
 //!
 //! The trailing-load rewriters (`rewrite_trailing_load_as_psh`,
 //! `pop_trailing_scalar_load`) implement the assignment / `&expr`
 //! protocols by reaching into the last emitted op and converting it
 //! from an rvalue load to a stack push or address. Both keep the
-//! parallel debug-info columns in sync.
+//! parallel `source_functions` column in sync.
 
 use super::super::ast::{Expr, ExprId, SrcPos};
 use super::super::error::C5Error;
@@ -311,11 +310,11 @@ impl Compiler {
     pub(super) fn pop_trailing_scalar_load(&mut self) -> bool {
         if matches!(self.text.last(), Some(&op) if is_scalar_load_op_val(op)) {
             self.text.pop();
-            // Keep parallel debug arrays in sync with `text`.
-            // Without these matching pops the
-            // source_functions / source_lines tail drifts past
-            // text.len() and every later emit_op lands in the
-            // wrong slot.
+            // Keep the parallel `source_functions` column in
+            // sync with `text`. Without the matching pop, the
+            // column's tail drifts past `text.len()` and every
+            // later `emit_op` attributes its bytecode PC to the
+            // wrong function name.
             self.source_functions.pop();
             // The load is gone -- the symbol's value never gets
             // read at runtime through this path. Revert the
@@ -605,10 +604,9 @@ impl Compiler {
         self.finished_functions.push(finished);
     }
 
-    /// Current source position. Mirrors the bytecode tier's
-    /// `source_lines` / `intern_source_file` columns so every AST
-    /// node carries the line / file the matching Op::* would have
-    /// gotten.
+    /// Current source position. Used by the parser's dual-emit
+    /// to attach line / file info to every AST node so the
+    /// walker can stamp `inst_src` rows for DWARF.
     pub(super) fn ast_src_pos(&mut self) -> SrcPos {
         let file = self.intern_source_file();
         SrcPos {

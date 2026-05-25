@@ -44,9 +44,9 @@ pub(crate) type DeclId = u32;
 /// `Stmt::Labeled` is emitted.
 pub(crate) type LabelId = u32;
 
-/// Source position attached to every node. Mirrors the
-/// `source_lines` / `source_file_indices` columns the bytecode tier
-/// maintains today so DWARF emit keeps byte-for-byte fidelity.
+/// Source position attached to every node. The walker stamps
+/// the live `(file, line)` into `inst_src` so DWARF lands
+/// per-Inst rows in the right file.
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct SrcPos {
     /// 1-based source line.

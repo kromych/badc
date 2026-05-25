@@ -299,13 +299,15 @@ static inline void __clear_cache(void *begin, void *end) {
                           (long long)((char *)end - (char *)begin));
 }
 // msvcrt exposes the environment vector through the `_environ`
-// data symbol. The c5 dialect has no dynamic-data-import binding
-// yet, so each TU contributes a tentative definition (C99 6.9.2)
-// that the linker collapses into one zero-initialised slot.
-// Programs that need the real msvcrt environ have to populate
-// this slot themselves from `main`'s `envp` argument.
-// TODO: replace the tentative definition with a real data
-// import once the binding-pragma surface grows a data form.
-char **environ;
+// data symbol. `environ` lives in `lib/runtime.c` as a single
+// canonical definition; user code declares it `extern` here.
+// `_environ` stays as a tentative def until the same migration
+// happens for the Windows side. Programs that need the real
+// msvcrt environ value populate the slot themselves from
+// `main`'s `envp` argument.
+// TODO: replace this slot with a real data import once
+// `#pragma binding`'s data form lands so msvcrt's own
+// `_environ` is bound directly.
+extern char **environ;
 char **_environ;
 #endif

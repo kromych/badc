@@ -141,16 +141,16 @@
 #pragma binding(libc::sync,      "sync")
 #pragma binding(libc::confstr,   "confstr")
 // POSIX `environ` is exposed by glibc as a data symbol pointing
-// at the per-process environment vector. The c5 dialect has no
-// dynamic-data-import binding yet, so each TU contributes a
-// tentative definition (C99 6.9.2) that the linker collapses
-// into a single zero-initialised slot. Programs that need the
-// real glibc environ value -- e.g., to pass it through to a
-// child process -- have to populate this slot themselves from
-// the `envp` argument of `main`.
-// TODO: replace the tentative definition with a real data
-// import once the binding-pragma surface grows a data form.
-char **environ;
+// at the per-process environment vector. The single definition
+// lives in `lib/runtime.c` and ships with every native ELF
+// image; here we declare the extern so user code can read or
+// write it. Programs that need the real glibc environ value
+// -- e.g., to pass it through to a child process -- populate
+// it themselves from the `envp` argument of `main`.
+// TODO: replace this slot with a real data import once
+// `#pragma binding`'s data form lands so glibc's own `environ`
+// is bound directly.
+extern char **environ;
 #endif
 
 #ifdef _WIN32

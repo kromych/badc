@@ -1,30 +1,26 @@
 //! ELF64 ET_REL writer -- emits a standard relocatable object
-//! file from a per-TU [`Build`]. The result is consumable by
-//! `ld` / `lld`: `.text` carries the per-function machine code,
+//! from a per-TU [`Build`]. Consumable by `ld` / `lld`:
+//! `.text` carries the per-function machine code,
 //! `.data` / `.bss` carry the static segment, `.symtab` /
-//! `.strtab` list the function names, and `.rela.text` records
-//! cross-TU references the linker resolves at link time.
+//! `.strtab` list function and global names, and `.rela.text`
+//! records cross-TU and libc-import references the linker
+//! resolves at link time.
+//!
+//! Sections emitted: `.text`, `.data`, `.bss`, `.rela.text`,
+//! `.symtab`, `.strtab`, `.shstrtab` plus the null section.
+//! `.symtab` carries: file symbol, the three section symbols,
+//! one `STT_FUNC STB_LOCAL` per `static`-linkage function and
+//! one `STT_FUNC STB_GLOBAL` per externally-linked function,
+//! libc imports as `STT_NOTYPE STB_WEAK` (the dynamic linker
+//! resolves them at load time), cross-TU function and data
+//! UNDEFs as `STB_GLOBAL` (the linker rejects unresolved
+//! `STB_GLOBAL` UNDEF as `undefined reference to <name>`),
+//! and defined data globals as `STT_OBJECT STB_GLOBAL`.
 //!
 //! Distinct from `codegen/elf.rs`, which writes ET_EXEC /
-//! ET_DYN load-time images. The relocatable writer is the
-//! produces-`.o` side of the planned native-object pipeline;
-//! the linker concats one or more `.o` files into a final image.
-//!
-//! Scope today (intentionally narrow):
-//!   * Single-section `.text`, `.data`, `.bss`.
-//!   * `.symtab` entries: a file symbol + one `STT_FUNC` per
-//!     emitted function (from `Build::func_ent_pcs`).
-//!   * No `.rela.text` entries yet; cross-TU references error.
-//!     The reloc encoding land next iteration.
+//! ET_DYN load-time images.
 
 #![cfg(feature = "std")]
-// The relocatable writer is the entry point for the new native
-// `.o` pipeline; until the CLI / compile path is wired to call
-// it, every helper and constant in this file is dead-code-only
-// from the surrounding codegen. Tagged module-wide so the
-// dead-code lint doesn't fire while the wiring lands in the
-// next commit.
-#![allow(dead_code)]
 
 use alloc::format;
 use alloc::string::String;
@@ -42,7 +38,6 @@ const ELF_VERSION_CURRENT: u8 = 1;
 const ET_REL: u16 = 1;
 const EM_X86_64: u16 = 62;
 const EM_AARCH64: u16 = 183;
-const SHT_NULL: u32 = 0;
 const SHT_PROGBITS: u32 = 1;
 const SHT_SYMTAB: u32 = 2;
 const SHT_STRTAB: u32 = 3;
@@ -192,7 +187,6 @@ pub(super) fn write_relocatable(
     //   7 = .shstrtab
     // Plus the null section at index 0.
     const SHIDX_TEXT: u16 = 1;
-    const SHIDX_RELA_TEXT: u16 = 2;
     const SHIDX_DATA: u16 = 3;
     const SHIDX_BSS: u16 = 4;
     const SHIDX_SYMTAB: u16 = 5;

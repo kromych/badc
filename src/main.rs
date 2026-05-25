@@ -47,10 +47,8 @@ Multi-TU knobs:
                            library. Members are pulled in on demand.
 
 Compile knobs:
-  -O, --optimize           Retired knob. The bytecode optimizer
-                           was deleted along with lift_program;
-                           the flag is recognised for source
-                           compatibility but has no effect.
+  -O, --optimize           Enable the native peephole + register
+                           allocator pass.
   --no-debug, -g0          Skip DWARF emission. Shrinks
                            the output by ~10-30%.
   --target=<spec>          Pick the binary format (one of
@@ -113,9 +111,8 @@ enum Mode {
     /// disk. Same writer pipeline as `NativeExecutable` plus
     /// `OutputKind::SharedLibrary`.
     SharedLibrary,
-    /// `--interp` -- run under the SSA interpreter (`vm::ssa`).
-    /// The historical bytecode VM is gone; the interpreter
-    /// walks `FunctionSsa` directly via `produce_ssa_funcs`.
+    /// `--interp` -- run under the SSA interpreter (`vm::ssa`),
+    /// walking `FunctionSsa` directly via `produce_ssa_funcs`.
     Interp,
     /// `--jit` -- lower in-process and call main directly.
     Jit,
@@ -481,8 +478,8 @@ fn main() {
     }
 
     // Fall back to stdin when no positional source was given
-    // and stdin isn't a terminal -- the legacy
-    // `cat foo.c | badc` pipeline.
+    // and stdin isn't a terminal -- the `cat foo.c | badc`
+    // pipeline.
     if sources.is_empty()
         && objects.is_empty()
         && archives.is_empty()
@@ -1021,10 +1018,10 @@ fn main() {
         program.source_path = path.clone();
     }
 
-    // `-O` is a no-op: the bytecode-tape optimizer was retired
-    // along with `lift_program`. The walker is the canonical SSA
-    // producer and reads AST snapshots directly, so the optimizer's
-    // bytecode rewriting no longer reaches the codegen path.
+    // `-O` is currently a no-op on the codegen side. The flag
+    // remains accepted so build scripts that pass `-O` keep
+    // working; the per-arch peephole + register allocator is
+    // always on regardless.
     let _ = optimize_flag;
 
     // Type-mismatch / arity / signature-redecl warnings (if any) --
@@ -1038,11 +1035,8 @@ fn main() {
         eprintln!("{}", colorize_diagnostic(w, stderr_is_tty));
     }
 
-    // `--optimize` / `-O` enables both the bytecode optimizer (above)
-    // and the native peephole + register allocator. The two halves are
-    // independent -- the native pass is correct on either pre- or
-    // post-bytecode-optimizer input -- but turning them on together
-    // produces the fastest emitted code.
+    // `--optimize` / `-O` enables the native peephole + register
+    // allocator pass.
     let mut native_opts = if optimize_flag {
         NativeOptions::new().with_optimize()
     } else {

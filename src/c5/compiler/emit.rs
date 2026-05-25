@@ -93,12 +93,10 @@ impl Compiler {
             _ => {}
         }
         self.text.push(op as i64);
-        // Mirror text.len() one-for-one in source_lines /
-        // source_functions / source_file_indices so a bc_pc
-        // lookup is a direct index. Operand slots inherit the
-        // op's source position.
+        // Mirror text.len() one-for-one in source_functions /
+        // source_file_indices so a bc_pc lookup is a direct
+        // index. Operand slots inherit the op's source position.
         let file_idx = self.intern_source_file();
-        self.source_lines.push(self.lex.line as u32);
         self.source_functions
             .push(self.current_function_name.clone());
         self.source_file_indices.push(file_idx);
@@ -117,7 +115,6 @@ impl Compiler {
     pub(super) fn emit_val(&mut self, val: i64) {
         self.text.push(val);
         let file_idx = self.intern_source_file();
-        self.source_lines.push(self.lex.line as u32);
         self.source_functions
             .push(self.current_function_name.clone());
         self.source_file_indices.push(file_idx);
@@ -320,7 +317,6 @@ impl Compiler {
             // source_functions / source_lines tail drifts past
             // text.len() and every later emit_op lands in the
             // wrong slot.
-            self.source_lines.pop();
             self.source_functions.pop();
             self.source_file_indices.pop();
             // The load is gone -- the symbol's value never gets

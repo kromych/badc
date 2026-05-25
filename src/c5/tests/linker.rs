@@ -861,7 +861,6 @@ fn cross_tu_call_through_secondary_dylib() {
         }],
         ..Default::default()
     };
-    lib_unit.source_lines = alloc::vec![0; lib_text.len()];
     lib_unit.source_functions = alloc::vec![String::new(); lib_text.len()];
     lib_unit.source_file_indices = alloc::vec![0; lib_text.len()];
     let _ = lib_text;
@@ -888,7 +887,6 @@ fn cross_tu_call_through_secondary_dylib() {
         }],
         ..Default::default()
     };
-    other_unit.source_lines = alloc::vec![0; unit2_text.len()];
     other_unit.source_functions = alloc::vec![String::new(); unit2_text.len()];
     other_unit.source_file_indices = alloc::vec![0; unit2_text.len()];
 

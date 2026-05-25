@@ -732,12 +732,6 @@ pub struct Compiler {
     /// `entry_name = None` if no entry symbol exists.
     no_entry_point: bool,
 
-    /// Per-bytecode-PC source line, parallel to `text`. Updated
-    /// on every emit_op / emit_val / emit_data_imm so each
-    /// emitted word carries the line number of the C statement
-    /// it came from. The codegen surfaces this through
-    /// `--dump-asm` and the runtime crash reporter.
-    source_lines: Vec<u32>,
     /// Per-bytecode-PC current function name, parallel to
     /// `text`. Empty string for top-level emit (data
     /// initializers, file-scope decls).
@@ -1027,7 +1021,6 @@ impl Compiler {
             pending_store_symbols: Vec::new(),
             warn_dead_store: opts.warn_dead_store,
             no_entry_point: opts.no_entry_point,
-            source_lines: Vec::new(),
             source_functions: Vec::new(),
             source_files: Vec::new(),
             source_file_indices: Vec::new(),

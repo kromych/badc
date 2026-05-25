@@ -49,9 +49,9 @@ pub struct LinkUnit {
     /// `CODE_BASE + bc_pc`. Mirror of
     /// `Program::code_imm_positions`.
     pub code_imm_positions: Vec<usize>,
-    /// Mirror of `Program::source_lines`, parallel to `text`.
-    pub source_lines: Vec<u32>,
-    /// Mirror of `Program::source_functions`, parallel to `text`.
+    /// Per-bytecode-PC function names, parallel to `text`. The
+    /// merge concatenates these so disasm / DWARF can attribute
+    /// each PC to a function name.
     pub source_functions: Vec<String>,
     /// Filename table for the unit. Indices in
     /// `source_file_indices` reference this list; the linker

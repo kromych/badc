@@ -691,8 +691,6 @@ fn encode_meta(unit: &LinkUnit) -> Vec<u8> {
         unit.code_imm_positions.iter().map(|&v| v as u64),
         unit.code_imm_positions.len(),
     );
-    write_tag_vec_u32(&mut buf, TAG_SOURCE_LINES, &unit.source_lines);
-
     {
         let body_len = u32_string_vec_len(&unit.source_functions);
         write_tag_header(&mut buf, TAG_SOURCE_FUNCTIONS, body_len);
@@ -895,15 +893,6 @@ fn write_tag_vec_u64(buf: &mut Vec<u8>, tag: u8, iter: impl IntoIterator<Item = 
     write_tag_header(buf, tag, body_len);
     write_u32(buf, len as u32);
     for v in iter {
-        buf.extend_from_slice(&v.to_le_bytes());
-    }
-}
-
-fn write_tag_vec_u32(buf: &mut Vec<u8>, tag: u8, src: &[u32]) {
-    let body_len = 4 + (src.len() * 4) as u32;
-    write_tag_header(buf, tag, body_len);
-    write_u32(buf, src.len() as u32);
-    for &v in src {
         buf.extend_from_slice(&v.to_le_bytes());
     }
 }
@@ -2169,7 +2158,11 @@ fn decode_meta(meta: &[u8], unit: &mut LinkUnit) -> Result<(), C5Error> {
                 // carry the tag; skip silently to preserve
                 // forward compatibility.
             }
-            TAG_SOURCE_LINES => unit.source_lines = read_vec_u32(body)?,
+            TAG_SOURCE_LINES => {
+                // Retired side-table. Older `.o` files still
+                // carry the tag; skip silently to preserve
+                // forward compatibility.
+            }
             TAG_SOURCE_FUNCTIONS => unit.source_functions = read_string_vec(body)?,
             TAG_SOURCE_FILES => unit.source_files = read_string_vec(body)?,
             TAG_SOURCE_FILE_INDICES => unit.source_file_indices = read_vec_u16(body)?,
@@ -2307,21 +2300,6 @@ fn read_vec_u64(body: &[u8]) -> Result<Vec<u64>, C5Error> {
     let mut out = Vec::with_capacity(n);
     for i in 0..n {
         out.push(u64_at(body, 4 + i * 8));
-    }
-    Ok(out)
-}
-
-fn read_vec_u32(body: &[u8]) -> Result<Vec<u32>, C5Error> {
-    if body.len() < 4 {
-        return Err(err("vec_u32 body too short"));
-    }
-    let n = u32_at(body, 0) as usize;
-    if body.len() < 4 + n * 4 {
-        return Err(err("vec_u32 truncated"));
-    }
-    let mut out = Vec::with_capacity(n);
-    for i in 0..n {
-        out.push(u32_at(body, 4 + i * 4));
     }
     Ok(out)
 }

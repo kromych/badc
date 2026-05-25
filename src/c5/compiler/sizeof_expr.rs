@@ -153,7 +153,6 @@ impl Compiler {
             // and DWARF subprogram DIEs land on the previous
             // function's name.
             self.text.truncate(saved_text_len);
-            self.source_lines.truncate(saved_text_len);
             self.source_functions.truncate(saved_text_len);
             self.source_file_indices.truncate(saved_text_len);
             self.data_imm_positions.truncate(saved_data_imm_positions);

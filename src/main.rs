@@ -975,8 +975,8 @@ fn main() {
             // it executable, and (on macOS hosts emitting Mach-O)
             // ad-hoc codesign so dyld accepts it.
             //
-            // gh #28 piped-output: if the user passed `-o -` or
-            // didn't specify -o and stdout is a pipe (= we're in
+            // Piped output: if the user passed `-o -` or didn't
+            // specify -o and stdout is a pipe (the process is in
             // the middle of a shell pipeline like
             // `... | badc | run-on-target`), write the bytes
             // straight to stdout instead of disk. The
@@ -1105,10 +1105,10 @@ fn default_output_path(source: &str, target: Target, mode: Mode) -> PathBuf {
 /// binaries don't need signing; cross-format combinations print an
 /// advisory line and skip the signing step.
 /// Lower the program to a native binary and write it to stdout
-/// rather than a file on disk. Used by gh #28's pipe-mode (the
-/// caller redirected stdout, or asked for `-o -`). No
-/// mark-executable / codesign / per-target reminder -- the
-/// downstream of the pipe gets to handle those.
+/// rather than a file on disk. Used by pipe-mode (the caller
+/// redirected stdout, or asked for `-o -`). No mark-executable
+/// / codesign / per-target reminder -- the downstream of the
+/// pipe gets to handle those.
 fn emit_native_binary_to_stdout(program: &badc::Program, target: Target, options: NativeOptions) {
     let bytes = match emit_native_with_options(program, target, options) {
         Ok(b) => b,

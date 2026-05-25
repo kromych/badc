@@ -710,13 +710,15 @@ impl<'a> Walker<'a> {
                                 for lab in pending_goto_labels.drain(..) {
                                     peeled_label_partition.push((lab, target_idx));
                                 }
-                                // C99 6.8.4.2p4 + the Duff's-device
-                                // shape sqlite's `case OP_ReopenIdx:
-                                // { ... case OP_OpenRead: ... }` uses:
-                                // when a case's body is itself a
-                                // Compound, descend so any case
-                                // labels at the next depth still
-                                // become partition boundaries.
+                                // C99 6.8.4.2p4: case labels scope
+                                // to the nearest enclosing switch
+                                // regardless of nesting depth. When
+                                // a case body is itself a Compound,
+                                // descend so any case labels at the
+                                // next depth still become partition
+                                // boundaries (the Duff's-device
+                                // `case A: { ... case B: ... }`
+                                // shape).
                                 if let Stmt::Compound(inner_items) = walker.ast.stmt(s_id) {
                                     let inner_items_owned = inner_items.clone();
                                     partition_items(

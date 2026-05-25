@@ -274,8 +274,7 @@ pub(crate) struct Preprocessor {
     /// asked to disable -- the `-` form. Like `warning_disabled`
     /// above, c5 doesn't currently filter against these but the
     /// parse is real (so typos surface) and the recorded set is
-    /// visible for future per-code filtering. sqlite3 uses this
-    /// form for `-rch` / `-aus` / etc.
+    /// visible for future per-code filtering.
     pub(crate) warn_disabled: BTreeSet<alloc::string::String>,
     /// `#pragma intrinsic("name")` declarations -- a map from
     /// callable identifier to the `Intrinsic` discriminant the
@@ -1537,9 +1536,9 @@ impl Preprocessor {
         {
             return self.parse_pragma_warning(inner.trim(), line_no, filename);
         }
-        // Borland / Watcom `#pragma warn -<code>` form -- sqlite3
-        // uses `-rch` / `-aus` / etc. Parsed for visibility into
-        // `warn_disabled`; see `parse_pragma_warn` for the syntax.
+        // Borland / Watcom `#pragma warn -<code>` form (`-rch`,
+        // `-aus`, ...). Parsed for visibility into `warn_disabled`;
+        // see `parse_pragma_warn` for the syntax.
         if let Some(inner) = args.strip_prefix("warn ") {
             return self.parse_pragma_warn(inner.trim(), line_no, filename);
         }
@@ -1698,7 +1697,7 @@ impl Preprocessor {
         Ok(())
     }
 
-    /// Borland / Watcom `#pragma warn` -- mostly seen in sqlite3:
+    /// Borland / Watcom `#pragma warn` syntax:
     ///
     /// ```text
     /// #pragma warn -rch  /* disable "unreachable code" */
@@ -3835,8 +3834,8 @@ int x_2 = __COUNTER__;
 
     #[test]
     fn pragma_warning_disable_records_ids() {
-        // `#pragma warning(disable : N N N)` -- the headline
-        // sqlite3 case. Each ID lands in `warning_disabled`.
+        // `#pragma warning(disable : N N N)`. Each ID lands in
+        // `warning_disabled`.
         let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
         let _ = pp
             .process("#pragma warning(disable : 4054 4055 4100)\n")
@@ -3933,9 +3932,8 @@ int x_2 = __COUNTER__;
 
     #[test]
     fn pragma_warn_disable_codes_recorded() {
-        // Borland / Watcom form sqlite3 sprinkles in: `-<code>`
-        // for each warning category it wants silenced. Multiple
-        // tokens per line are accepted.
+        // Borland / Watcom form: `-<code>` per warning category
+        // to silence. Multiple tokens per line are accepted.
         let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
         let _ = pp
             .process(

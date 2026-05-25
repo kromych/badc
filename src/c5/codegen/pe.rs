@@ -1871,9 +1871,8 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
             // c5 uses the mingw default so portable programs that
             // exercise recursion to a depth tuned for the Linux /
             // macOS C stack budget don't fault the guard page on
-            // Windows before whatever counter the program uses to
-            // self-limit fires (`LUAI_MAXCCALLS`, `tcc_state->
-            // nb_errors`, etc.).
+            // Windows before whatever in-program counter would
+            // otherwise enforce the recursion limit.
             size_of_stack_reserve: 0x80_0000, // 8 MiB
             size_of_stack_commit: 0x1000,
             size_of_heap_reserve: 0x10_0000,

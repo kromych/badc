@@ -1157,10 +1157,12 @@ impl Compiler {
         if self.lex.tk == '(' {
             self.next()?;
             // C-style cast in a constant float expression:
-            // `(float)EXPR` / `(double)EXPR`. Recognised so
-            // stb sources that pin the result width explicitly
-            // still fold. Pointer / non-arithmetic types in
-            // this position would be a type error.
+            // `(float)EXPR` / `(double)EXPR`. C99 6.5.4 allows the
+            // operand of a cast in a constant expression; we
+            // recognise the form so the surrounding constant
+            // folder treats it as a pin on the result width.
+            // Pointer / non-arithmetic types in this position
+            // would be a type error.
             if self.lex_is_type_start() {
                 let _ = self.parse_decl_base_type()?;
                 while self.lex.tk == Token::MulOp || self.lex.tk == Token::TypeQual {

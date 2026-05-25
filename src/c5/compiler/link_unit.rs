@@ -301,16 +301,15 @@ impl Compiler {
         // the symbol's class / val reflect the inner-scope binding;
         // by the time we iterate here, block_symbols restoration
         // has rolled class / val back to the outer scope. C99
-        // 6.2.1p2 lets an inner-scope `static T arr[];` shadow an
-        // outer file-scope declaration of the same name (the tcc
-        // codebase has `static const unsigned char expect[]`
-        // inside a switch case that shadows the prototyped
-        // `void expect(const char *)`). After restore the symbol's
-        // class returns to the outer Token::Fun even though the
-        // operand at `operand_pc` already encodes the static-
-        // local's data offset. Filter on `sym.class == Token::Glo`
-        // so the reloc only fires for genuine cross-TU global
-        // references that survived the restore.
+        // 6.2.1p4 lets an inner-scope `static T arr[];` shadow an
+        // outer file-scope declaration of the same name, including
+        // one whose outer class is `Token::Fun` (a function
+        // prototype). After restore the symbol's class returns to
+        // the outer Token::Fun even though the operand at
+        // `operand_pc` already encodes the static-local's data
+        // offset. Filter on `sym.class == Token::Glo` so the reloc
+        // only fires for genuine cross-TU global references that
+        // survived the restore.
         let glo_imm_refs = core::mem::take(&mut self.glo_imm_refs);
         for (operand_pc, sym_idx) in glo_imm_refs {
             let sym = &self.symbols[sym_idx];

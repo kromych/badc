@@ -319,10 +319,11 @@ pub(crate) enum Token {
     /// carried out-of-band by
     /// [`super::compiler::Compiler::pending_base_was_void`] and
     /// [`super::symbol::Symbol::returns_void`]. The earlier
-    /// attempt to add a `Ty::Void` band collided with
-    /// function-pointer encoding in sqlite3 dispatch tables
-    /// (`void (*xFunc)(...)`); keeping the encoding untouched and
-    /// carrying void-ness on the side avoids that trap.
+    /// attempt to add a `Ty::Void` band collided with the
+    /// function-pointer slot encoding C99 6.7.6.3 requires for
+    /// `void (*)(...)` members of dispatch-table structs;
+    /// keeping the encoding untouched and carrying void-ness on
+    /// the side avoids that collision.
     Void,
 }
 

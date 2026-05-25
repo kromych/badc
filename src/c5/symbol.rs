@@ -119,8 +119,8 @@ pub(crate) struct Symbol {
     /// was bare `void`. The type encoding (`type_`) still records
     /// `Ty::Char | UNSIGNED_BIT` -- a side-channel rather than
     /// a separate `Ty::Void` band, because a real band collides
-    /// with the function-pointer call-table encoding sqlite3
-    /// uses (`void (*xFunc)(...)`). Consumed by:
+    /// with the function-pointer encoding C99 6.7.6.3 uses for
+    /// `void (*)(...)` slots inside dispatch tables. Consumed by:
     ///   * the function-body emit path: prepends `Op::Imm 0`
     ///     before the trailing synthetic `Op::Lev` so a caller
     ///     that misclassifies the prototype reads `0` rather

@@ -2,17 +2,14 @@
 // process control.
 //
 // `exit` on Windows binds to `msvcrt!exit`, which runs the CRT's
-// atexit chain + flushes stdout / stderr before terminating. The
-// previous binding (`kernel32!ExitProcess`) was chosen back when
-// no fixture depended on stdio flushing -- a fast, no-init exit
-// for the small fixtures that just `return 0`. sqlite's shell
-// changed that: a piped `printf "select 1;" | sqlite3 :memory:`
-// run produced empty output with `ExitProcess` because every
-// SELECT row sat in stdout's fully-buffered pipe and got
-// discarded on the unflushed exit. msvcrt's `exit` is already
-// loaded for everything else we link, so the CRT-init concern
-// from the original comment doesn't apply to programs that
-// touch stdio at all.
+// atexit chain + flushes stdout / stderr before terminating per
+// C99 7.20.4.3p2. The earlier binding (`kernel32!ExitProcess`)
+// terminates without draining buffered stdio streams, so a
+// program writing through fully-buffered stdout to a pipe loses
+// every row that sat unflushed at exit. msvcrt's `exit` is
+// already loaded for everything else we link, so the CRT-init
+// concern from the original comment doesn't apply to programs
+// that touch stdio at all.
 
 #pragma once
 

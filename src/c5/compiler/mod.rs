@@ -602,22 +602,6 @@ pub struct Compiler {
     /// for the regular Psh/Jsr/JsrExt + Adj sequence.
     pp_intrinsics: alloc::collections::BTreeMap<String, i64>,
 
-    /// Bytecode positions (indices into `text`) of `Op::Imm` operands
-    /// that hold an offset into the data segment. Recorded at emit time
-    /// because the native backend can't rediscover them from the
-    /// bytecode alone -- a small Imm could be a global's address or
-    /// just an integer literal. The VM doesn't care; this rides along
-    /// in `Program` for the native codegen to consume.
-    data_imm_positions: Vec<usize>,
-    /// Mirror of [`Self::data_imm_positions`] for function-
-    /// pointer literals. Each entry is the bc index of an
-    /// `Op::Imm` operand whose value is (CODE_BASE + bc_pc).
-    /// Recorded explicitly so the codegen can disambiguate
-    /// without a value-range heuristic that would misclassify
-    /// any user integer constant in the [CODE_BASE, CODE_BASE +
-    /// text.len()) range.
-    code_imm_positions: Vec<usize>,
-
     /// Thread-local data segment. Same shape as `data` but the
     /// codegen lowers accesses with the per-target TLS sequence
     /// (TPIDR_EL0 + offset on aarch64, fs:0 + offset on x86_64,
@@ -976,8 +960,6 @@ impl Compiler {
             target,
             text: Vec::new(),
             data,
-            data_imm_positions: Vec::new(),
-            code_imm_positions: Vec::new(),
             ty: 0,
             loc_offs: 0,
             max_loc_offs: 0,

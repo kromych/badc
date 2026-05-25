@@ -186,15 +186,14 @@ impl Compiler {
         self.emit_op(op);
     }
 
-    /// Emit `Op::Imm <data_offset>` and record the operand's bytecode
-    /// position in [`Compiler::data_imm_positions`]. Use this anywhere
-    /// the immediate is the address of a string literal or a global --
-    /// the VM treats the result identically to a plain `Op::Imm`, but
-    /// the native backend needs the side channel to relocate the value
-    /// against the real `__data` vmaddr at link time.
+    /// Emit `Op::Imm <data_offset>` -- the immediate is the
+    /// address of a string literal or a global. Equivalent to a
+    /// plain `Op::Imm` from the parser's perspective; the
+    /// surrounding caller records the operand_pc into
+    /// `glo_imm_refs` so the linker can rebase the address
+    /// against the merged data segment.
     pub(super) fn emit_data_imm(&mut self, data_offset: i64) {
         self.emit_op(Op::Imm);
-        self.data_imm_positions.push(self.text.len());
         self.emit_val(data_offset);
     }
 

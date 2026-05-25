@@ -539,8 +539,6 @@ impl Compiler {
             data: self.data,
             tls_data: self.tls_data,
             tls_init_size: self.tls_init_size,
-            data_imm_positions: self.data_imm_positions,
-            code_imm_positions: self.code_imm_positions,
             source_functions: self.source_functions,
             source_files: self.source_files,
             variables: self.variables,

@@ -122,7 +122,6 @@ impl Compiler {
             // landed at the recorded operand PC, drifting the
             // op/operand alignment for the rest of the function.
             let saved_text_len = self.text.len();
-            let saved_data_imm_positions = self.data_imm_positions.len();
             let saved_fn_call_fixups = self.fn_call_fixups.len();
             let saved_code_reloc_sym_idx = self.code_reloc_sym_idx.len();
             // If sizeof consumed a leading `(` but the inner
@@ -153,7 +152,6 @@ impl Compiler {
             // the previous function's name.
             self.text.truncate(saved_text_len);
             self.source_functions.truncate(saved_text_len);
-            self.data_imm_positions.truncate(saved_data_imm_positions);
             self.fn_call_fixups.truncate(saved_fn_call_fixups);
             self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);
             self.pending.last_array_decay_size = 0;

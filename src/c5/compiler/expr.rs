@@ -643,7 +643,7 @@ impl Compiler {
                             self.emit_lea(self.symbols[id_idx].val);
                         } else {
                             self.emit_data_imm(self.symbols[id_idx].val);
-                            let operand_pc = *self.data_imm_positions.last().unwrap();
+                            let operand_pc = self.text.len() - 1;
                             self.glo_imm_refs.push((operand_pc, id_idx));
                         }
                         self.emit_op(Op::Li);
@@ -749,7 +749,6 @@ impl Compiler {
                 // a user constant that happens to land in the
                 // [CODE_BASE, CODE_BASE + text.len()) range would be
                 // misclassified as a function-pointer literal.
-                self.code_imm_positions.push(operand_pc);
                 self.emit_val(CODE_BASE as i64 + self.symbols[id_idx].val);
                 // Type as `int*` rather than `char*`: matches the
                 // conventional `int *fp = some_function;` idiom and
@@ -779,7 +778,6 @@ impl Compiler {
                 self.emit_op(Op::Imm);
                 let operand_pc = self.text.len();
                 self.fn_call_fixups.push((operand_pc, tr_idx));
-                self.code_imm_positions.push(operand_pc);
                 self.emit_val(CODE_BASE as i64);
                 self.ty = Ty::Int as i64 + Ty::Ptr as i64;
                 // Dual-emit: the trampoline symbol is Token::Fun
@@ -807,7 +805,7 @@ impl Compiler {
                     self.emit_val(self.symbols[id_idx].val);
                 } else if self.symbols[id_idx].class == Token::Glo as i64 {
                     self.emit_data_imm(self.symbols[id_idx].val);
-                    let operand_pc = *self.data_imm_positions.last().unwrap();
+                    let operand_pc = self.text.len() - 1;
                     self.glo_imm_refs.push((operand_pc, id_idx));
                 } else {
                     return Err(self

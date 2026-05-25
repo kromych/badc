@@ -40,15 +40,6 @@ pub struct LinkUnit {
     pub tls_data: Vec<u8>,
     pub tls_init_size: usize,
 
-    // ---- Per-PC side tables (PC-indexed; remapped at link) ----
-    /// Indices into `text` of `Op::Imm` operands whose value is a
-    /// data-segment byte offset. Mirror of
-    /// `Program::data_imm_positions`.
-    pub data_imm_positions: Vec<usize>,
-    /// Indices into `text` of `Op::Imm` operands whose value is
-    /// `CODE_BASE + bc_pc`. Mirror of
-    /// `Program::code_imm_positions`.
-    pub code_imm_positions: Vec<usize>,
     /// Per-bytecode-PC function names, parallel to `text`. The
     /// merge concatenates these so disasm / DWARF can attribute
     /// each PC to a function name.

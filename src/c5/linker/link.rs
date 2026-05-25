@@ -41,7 +41,6 @@ use alloc::vec::Vec;
 
 use hashbrown::{HashMap, HashSet};
 
-use crate::c5::CODE_BASE;
 use crate::c5::error::C5Error;
 use crate::c5::op::Op;
 use crate::c5::preprocessor::DylibSpec;
@@ -478,14 +477,16 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         }
 
         // Walk text, remapping operand words. The merged bytecode
-        // tape contents are only consumed by disasm; the SSA tier
-        // is rebased independently via `resolve_extern_refs` +
-        // the walker-stamp pass below. Keep the rebase so
-        // multi-TU `--dump-asm` reports merged-PC operands.
-        let code_imm_set: alloc::collections::BTreeSet<usize> =
-            unit.code_imm_positions.iter().copied().collect();
-        let data_imm_set: alloc::collections::BTreeSet<usize> =
-            unit.data_imm_positions.iter().copied().collect();
+        // tape's contents are only consumed by disasm; the SSA
+        // tier is rebased independently via `resolve_extern_refs`
+        // + the walker-stamp pass below. Op::Imm operands
+        // (data offsets, function-pointer literals, plain
+        // integer constants) are no longer distinguished --
+        // the `data_imm_positions` / `code_imm_positions`
+        // gate retired with the bytecode-tape SSA lift, so
+        // each `Op::Imm` operand survives the merge unchanged.
+        // Multi-TU `--dump-asm` shows the unit-local value
+        // for these operands as a consequence.
         let mut pc = 0usize;
         let binding_remap = &binding_remap_per_unit[ui];
         while pc < unit.text.len() {
@@ -493,23 +494,6 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
             merged_text.push(raw);
             let op = Op::from_i64(raw);
             match op {
-                Some(Op::Imm) => {
-                    let operand_pc = pc + 1;
-                    if operand_pc >= unit.text.len() {
-                        return Err(err("dangling Imm operand at end of text"));
-                    }
-                    let operand = unit.text[operand_pc];
-                    let new = if code_imm_set.contains(&operand_pc) {
-                        let bc_pc = operand - CODE_BASE as i64;
-                        CODE_BASE as i64 + bc_pc + text_off as i64
-                    } else if data_imm_set.contains(&operand_pc) {
-                        operand + data_off as i64
-                    } else {
-                        operand
-                    };
-                    merged_text.push(new);
-                    pc += 2;
-                }
                 Some(Op::Jsr) | Some(Op::Jmp) | Some(Op::Bz) | Some(Op::Bnz) => {
                     let operand_pc = pc + 1;
                     if operand_pc >= unit.text.len() {

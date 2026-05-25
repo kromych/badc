@@ -679,18 +679,6 @@ fn encode_meta(unit: &LinkUnit) -> Vec<u8> {
 
     write_tag_u64(&mut buf, TAG_TLS_INIT_SIZE, unit.tls_init_size as u64);
 
-    write_tag_vec_u64(
-        &mut buf,
-        TAG_DATA_IMM_POSITIONS,
-        unit.data_imm_positions.iter().map(|&v| v as u64),
-        unit.data_imm_positions.len(),
-    );
-    write_tag_vec_u64(
-        &mut buf,
-        TAG_CODE_IMM_POSITIONS,
-        unit.code_imm_positions.iter().map(|&v| v as u64),
-        unit.code_imm_positions.len(),
-    );
     {
         let body_len = u32_string_vec_len(&unit.source_functions);
         write_tag_header(&mut buf, TAG_SOURCE_FUNCTIONS, body_len);
@@ -885,15 +873,6 @@ fn write_tag_header(buf: &mut Vec<u8>, tag: u8, body_len: u32) {
 fn write_tag_u64(buf: &mut Vec<u8>, tag: u8, v: u64) {
     write_tag_header(buf, tag, 8);
     buf.extend_from_slice(&v.to_le_bytes());
-}
-
-fn write_tag_vec_u64(buf: &mut Vec<u8>, tag: u8, iter: impl IntoIterator<Item = u64>, len: usize) {
-    let body_len = 4 + (len * 8) as u32;
-    write_tag_header(buf, tag, body_len);
-    write_u32(buf, len as u32);
-    for v in iter {
-        buf.extend_from_slice(&v.to_le_bytes());
-    }
 }
 
 fn u32_string_vec_len(v: &[String]) -> u32 {
@@ -2131,17 +2110,10 @@ fn decode_meta(meta: &[u8], unit: &mut LinkUnit) -> Result<(), C5Error> {
                 }
                 unit.tls_init_size = u64_at(body, 0) as usize;
             }
-            TAG_DATA_IMM_POSITIONS => {
-                unit.data_imm_positions = read_vec_u64(body)?
-                    .into_iter()
-                    .map(|v| v as usize)
-                    .collect();
-            }
-            TAG_CODE_IMM_POSITIONS => {
-                unit.code_imm_positions = read_vec_u64(body)?
-                    .into_iter()
-                    .map(|v| v as usize)
-                    .collect();
+            TAG_DATA_IMM_POSITIONS | TAG_CODE_IMM_POSITIONS => {
+                // Retired side-tables. Older `.o` files still
+                // carry the tags; skip silently to preserve
+                // forward compatibility.
             }
             TAG_CALL_FP_ARG_MASKS => {
                 // Retired side-table. Older `.o` files still
@@ -2281,21 +2253,6 @@ fn decode_meta(meta: &[u8], unit: &mut LinkUnit) -> Result<(), C5Error> {
         }
     }
     Ok(())
-}
-
-fn read_vec_u64(body: &[u8]) -> Result<Vec<u64>, C5Error> {
-    if body.len() < 4 {
-        return Err(err("vec_u64 body too short"));
-    }
-    let n = u32_at(body, 0) as usize;
-    if body.len() < 4 + n * 8 {
-        return Err(err("vec_u64 truncated"));
-    }
-    let mut out = Vec::with_capacity(n);
-    for i in 0..n {
-        out.push(u64_at(body, 4 + i * 8));
-    }
-    Ok(out)
 }
 
 fn read_synthetic_ssa_funcs(body: &[u8]) -> Result<Vec<crate::c5::ir::FunctionSsa>, C5Error> {

@@ -3,7 +3,6 @@
 //! - [`lexer`]    -- drives `Lexer::next` directly and inspects the token stream.
 //! - [`parser`]   -- feeds malformed C to the compiler and asserts on errors.
 //! - [`codegen`]  -- compiles valid C and inspects `program.text`.
-//! - [`vm`]       -- builds `Program` literals by hand and runs them.
 //! - [`programs`] -- end-to-end: load a `.c` fixture, compile, run, assert exit code.
 //!
 //! Tests that contain meaningful C source load it from `tests/fixtures/c/<name>.c`
@@ -36,7 +35,6 @@ mod parser;
 mod pointer_tracking;
 mod programs;
 mod types;
-mod vm;
 
 /// Absolute path of `tests/fixtures/c/<name>` relative to the crate root.
 fn fixture_path(name: &str) -> PathBuf {

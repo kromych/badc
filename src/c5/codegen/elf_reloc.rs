@@ -7,7 +7,8 @@
 //! resolves at link time.
 //!
 //! Sections emitted: `.text`, `.data`, `.bss`, `.rela.text`,
-//! `.symtab`, `.strtab`, `.shstrtab` plus the null section.
+//! `.symtab`, `.strtab`, `.shstrtab`, `.rela.data` plus the
+//! null section.
 //! `.symtab` carries: file symbol, the three section symbols,
 //! one `STT_FUNC STB_LOCAL` per `static`-linkage function and
 //! one `STT_FUNC STB_GLOBAL` per externally-linked function,

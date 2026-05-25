@@ -886,7 +886,7 @@ pub(crate) fn lift_function(
         end_pc: function_end_pc,
         locals,
         n_params: meta.n_params,
-        is_variadic: meta.is_variadic,
+        is_variadic: false,
         insts,
         inst_src: alloc::vec![(0u32, 0u32); inst_count],
         blocks,

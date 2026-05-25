@@ -207,11 +207,11 @@ pub(crate) enum ReturnExt {
     Zero32,
 }
 
-/// Per-function metadata extracted from the bytecode and consumed by
-/// the per-arch lowering at `Op::Ent` (prologue shape), `Op::Lev`
-/// (epilogue undo), and `Op::Jsr` (caller-side argument marshalling).
-/// Indexed by the function's `Op::Ent` PC. Built once at the top of
-/// `lower()`.
+/// Per-function metadata extracted from the bytecode tape for
+/// the `lift_program` path. Indexed by the function's `Op::Ent`
+/// PC. The walker carries equivalent metadata directly on
+/// `FunctionSsa`; this struct is reached only by hand-built
+/// bytecode-only test fixtures.
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct FuncMeta {
     /// Declared parameter count, recovered by scanning the body's
@@ -219,15 +219,6 @@ pub(crate) struct FuncMeta {
     /// hands the i'th declared parameter the slot index `i + 2`,
     /// so the max operand `>= 2` seen minus one is the count.
     pub(crate) n_params: usize,
-    /// True if the body matches the c5 `va_start(ap, last)` macro
-    /// expansion (a `Lea LAST; Psh; Imm 2; Psh; Imm 8; Mul; Add; Si`
-    /// sequence). Variadic functions keep the c5-stack-based ABI:
-    /// callers reach them via the bare-`bl` shape with args on the
-    /// c5 stack, the body reads each arg via `Op::Lea`, and
-    /// `va_start` walks the c5-stack arg slots directly. Non-
-    /// variadic functions instead receive args in host arg
-    /// registers per the host ABI.
-    pub(crate) is_variadic: bool,
 }
 
 /// Upper bound on bc_pcs the lowering needs to look up. The
@@ -262,12 +253,6 @@ pub(super) fn pc_extent_for_lowering(
 /// Recover [`FuncMeta`] for every `Op::Ent` in `program.text`.
 /// Walks the bytecode once linearly; the parameter-count scan
 /// bounds at the next `Op::Ent` so the total cost is O(text.len()).
-/// `is_variadic` defaults to false; `lift_program` (the only
-/// caller of this path) runs solely against bytecode-only
-/// `Program` shapes produced by optimizer unit tests and codegen
-/// writer fixtures, whose programs never define a variadic
-/// function. The walker carries `is_variadic` per-function
-/// through `FunctionSsa::is_variadic` for every real compile.
 pub(super) fn scan_func_meta(program: &Program) -> ssa_emit_common::FxIntMap<usize, FuncMeta> {
     let text = &program.text;
     let mut funcs = ssa_emit_common::FxIntMap::default();
@@ -282,7 +267,6 @@ pub(super) fn scan_func_meta(program: &Program) -> ssa_emit_common::FxIntMap<usi
                 pc,
                 FuncMeta {
                     n_params: param_count_for_func(text, pc),
-                    is_variadic: false,
                 },
             );
         }

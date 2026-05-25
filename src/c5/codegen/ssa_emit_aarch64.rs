@@ -88,11 +88,8 @@ impl Frame {
         // gpr_used. x19 is callee-saved per AAPCS64, so the
         // prologue saves it and the epilogue restores it.
         let x19_save_bytes = 16u32;
-        let frame_bytes = locals_bytes
-            + alloc_spill_bytes
-            + saved_gpr_bytes
-            + saved_fpr_bytes
-            + x19_save_bytes;
+        let frame_bytes =
+            locals_bytes + alloc_spill_bytes + saved_gpr_bytes + saved_fpr_bytes + x19_save_bytes;
         Self {
             frame_bytes,
             alloc_spill_base: locals_bytes,

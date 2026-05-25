@@ -583,19 +583,17 @@ fn encode_relocs(unit: &LinkUnit) -> (Vec<u8>, Vec<u8>) {
     // the cross-TU resolution at read time.
     let elf_sym_index = build_elf_sym_index_map(unit);
 
-    let mut rt = Vec::new();
+    let rt = Vec::new();
     let mut rd = Vec::new();
     // Stable ordering by location keeps the output deterministic
     // and gives the reader a clean "scan in order" loop.
     let mut sorted: Vec<&Reloc> = unit.relocs.iter().collect();
     sorted.sort_by_key(|r| (r.kind.as_u8(), r.location));
     for r in sorted {
+        // Only data-segment relocations survive the bytecode-
+        // tape retirement; the writer routes every entry into
+        // `.rela.badc.data`. `rt` stays empty.
         let r_offset: u64 = match r.kind {
-            RelocKind::JsrPc | RelocKind::ImmCodeAddr | RelocKind::ImmDataAddr => {
-                // text relocations: r_offset = byte offset of the
-                // operand i64 within .badc.text.
-                r.location * 8
-            }
             RelocKind::DataDataAbs64 | RelocKind::DataCodeAbs64 => r.location,
         };
         let elf_idx = elf_sym_index
@@ -608,11 +606,7 @@ fn encode_relocs(unit: &LinkUnit) -> (Vec<u8>, Vec<u8>) {
             r_info,
             r_addend: r.addend,
         };
-        let target = match r.kind {
-            RelocKind::JsrPc | RelocKind::ImmCodeAddr | RelocKind::ImmDataAddr => &mut rt,
-            RelocKind::DataDataAbs64 | RelocKind::DataCodeAbs64 => &mut rd,
-        };
-        write_struct(target, &rela);
+        write_struct(&mut rd, &rela);
     }
     (rt, rd)
 }
@@ -2019,19 +2013,11 @@ fn decode_relocs(table: &[u8], is_text: bool, unit: &mut LinkUnit) -> Result<(),
         // sorted view.
         let kind = RelocKind::from_u8(kind_byte)
             .ok_or_else(|| err(&format!("unknown relocation kind {kind_byte}")))?;
+        if is_text {
+            return Err(err("data-kind reloc in .rela.badc.text"));
+        }
         let location = match kind {
-            RelocKind::JsrPc | RelocKind::ImmCodeAddr | RelocKind::ImmDataAddr => {
-                if !is_text {
-                    return Err(err("text-kind reloc in .rela.badc.data"));
-                }
-                r_offset / 8
-            }
-            RelocKind::DataDataAbs64 | RelocKind::DataCodeAbs64 => {
-                if is_text {
-                    return Err(err("data-kind reloc in .rela.badc.text"));
-                }
-                r_offset
-            }
+            RelocKind::DataDataAbs64 | RelocKind::DataCodeAbs64 => r_offset,
         };
         unit.relocs.push(Reloc {
             kind,

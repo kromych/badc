@@ -7,20 +7,24 @@
 //! Three behaviours diverge from a regular [`Compiler::compile`]:
 //!
 //!   1. `fn_call_fixups` entries whose target symbol is an
-//!      undefined extern become [`Reloc`]s instead of having
-//!      their operand bytes overwritten with `0`. Locally-
-//!      defined targets resolve in place the same way they
-//!      do today.
+//!      undefined extern are dropped; the walker has already
+//!      recorded the cross-TU reference on the matching
+//!      `FunctionSsa::extern_call_refs` /
+//!      `extern_imm_code_refs` entry, which `resolve_extern_refs`
+//!      patches against the merged symbol table. Locally-defined
+//!      targets resolve in place via `apply_fn_call_fixups` the
+//!      same way they do for single-TU compiles.
 //!   2. `code_relocs` / `code_reloc_sym_idx` entries whose
 //!      target is an undefined extern become
 //!      `RelocKind::DataCodeAbs64` relocations -- their
 //!      `target_bc_pc` field would otherwise be left at `0`.
 //!   3. `glo_imm_refs` entries (recorded at every `Op::Imm
 //!      <data_offset>` emit for a `Token::Glo` symbol) whose
-//!      target is an undefined extern become
-//!      `RelocKind::ImmDataAddr` relocations; the operand
-//!      bytes already in `self.text` are kept at `0` so the
-//!      linker's patch lands on a clean slot.
+//!      target is an undefined extern are dropped; the
+//!      walker's `extern_imm_data_refs` (or
+//!      `extern_tls_refs` for TLS globals) carries the
+//!      reference, and `resolve_extern_refs` patches the
+//!      slot from the merged symbol table.
 //!
 //! Internal-linkage symbols stay in the link unit's local
 //! symbol table so cross-TU relocations can reference them
@@ -37,7 +41,6 @@ use crate::c5::ast::FinishedFunction;
 use crate::c5::error::{C5Error, fmt_internal_err};
 use crate::c5::ir::FunctionSsa;
 use crate::c5::linker::{LinkSymbol, LinkUnit, Reloc, RelocKind, SymbolKind};
-use crate::c5::op::Op;
 use crate::c5::symbol::{Linkage, Symbol};
 use crate::c5::token::Token;
 
@@ -214,44 +217,22 @@ impl Compiler {
             }
         }
 
-        // Partition fn_call_fixups: locally-defined targets
-        // keep the existing apply_fn_call_fixups behaviour;
-        // undefined externals become relocations.
-        let mut local_fn_fixups: Vec<(usize, usize)> = Vec::new();
-        let mut text_relocs: Vec<(RelocKind, u64, usize)> = Vec::new();
-        // Take the fixup list so we can hand the "local"
-        // subset back to apply_fn_call_fixups.
+        // Filter fn_call_fixups down to locally-defined targets.
+        // External undefined fn references are resolved through
+        // the walker-tier `extern_call_refs` /
+        // `extern_imm_code_refs` channels recorded on each
+        // `FunctionSsa`; the bytecode-tape `Op::Jsr` /
+        // `Op::Imm` operands for those sites stay at their
+        // forward-decl placeholder (0) and are not consumed by
+        // the post-link codegen.
         let fn_fixups = core::mem::take(&mut self.fn_call_fixups);
-        for (operand_pc, sym_idx) in fn_fixups {
-            let sym = &self.symbols[sym_idx];
-            let is_external_undefined = sym.linkage == Linkage::External && !sym.defined_here;
-            if is_external_undefined {
-                // The preceding word distinguishes a Jsr call
-                // from a function-pointer literal (`Op::Imm`).
-                // Mirrors the bias-decision in
-                // apply_fn_call_fixups.
-                let prev_op = if operand_pc >= 1 {
-                    self.text[operand_pc - 1]
-                } else {
-                    0
-                };
-                let kind = if prev_op == Op::Imm as i64 {
-                    RelocKind::ImmCodeAddr
-                } else {
-                    RelocKind::JsrPc
-                };
-                // Clear the operand slot so the linker patches
-                // a clean zero. `apply_fn_call_fixups` skipped
-                // it; without zeroing, the stale forward-decl
-                // placeholder (typically `0`) would still be
-                // there, which is harmless but easier to debug
-                // when explicit.
-                self.text[operand_pc] = 0;
-                text_relocs.push((kind, operand_pc as u64, sym_idx));
-            } else {
-                local_fn_fixups.push((operand_pc, sym_idx));
-            }
-        }
+        let local_fn_fixups: Vec<(usize, usize)> = fn_fixups
+            .into_iter()
+            .filter(|(_, sym_idx)| {
+                let sym = &self.symbols[*sym_idx];
+                !(sym.linkage == Linkage::External && !sym.defined_here)
+            })
+            .collect();
 
         // Partition code_relocs (data-segment function-ptr
         // slots) similarly.
@@ -308,60 +289,68 @@ impl Compiler {
         // code_reloc target_bc_pc filled in.
         self.apply_fn_call_fixups()?;
 
-        // glo_imm_refs: external Glo references become
-        // ImmDataAddr relocations; defined-locally entries
-        // need no fixup (the operand already holds `val`).
-        //
-        // The push to `glo_imm_refs` happens at parse time when
-        // the symbol's class / val reflect the inner-scope binding;
-        // by the time we iterate here, block_symbols restoration
-        // has rolled class / val back to the outer scope. C99
-        // 6.2.1p4 lets an inner-scope `static T arr[];` shadow an
-        // outer file-scope declaration of the same name, including
-        // one whose outer class is `Token::Fun` (a function
-        // prototype). After restore the symbol's class returns to
-        // the outer Token::Fun even though the operand at
-        // `operand_pc` already encodes the static-local's data
-        // offset. Filter on `sym.class == Token::Glo` so the reloc
-        // only fires for genuine cross-TU global references that
-        // survived the restore.
+        // Diagnose unsupported cross-TU `_Thread_local` Glo
+        // references. The walker's `extern_tls_refs` channel
+        // covers fully-resolved TLS references on systems c5
+        // supports today; a cross-TU reference to a
+        // `_Thread_local` global requires per-target rebase
+        // bookkeeping that has not landed (TODO).
         let glo_imm_refs = core::mem::take(&mut self.glo_imm_refs);
-        for (operand_pc, sym_idx) in glo_imm_refs {
+        for (_operand_pc, sym_idx) in glo_imm_refs {
             let sym = &self.symbols[sym_idx];
             let is_external_undefined = sym.class == Token::Glo as i64
                 && sym.linkage == Linkage::External
                 && !sym.defined_here;
-            if is_external_undefined {
-                if sym.is_thread_local {
-                    return Err(self.compile_err(alloc::format!(
-                        "cross-TU references to `_Thread_local` globals \
-                         are not yet supported (`{}`); declare the variable \
-                         in this translation unit",
-                        sym.name
-                    )));
-                }
-                // Operand was emitted with the tentative-storage
-                // offset; clear it so the linker resolves to the
-                // defining unit instead of this unit's placeholder.
-                self.text[operand_pc] = 0;
-                text_relocs.push((RelocKind::ImmDataAddr, operand_pc as u64, sym_idx));
+            if is_external_undefined && sym.is_thread_local {
+                return Err(self.compile_err(alloc::format!(
+                    "cross-TU references to `_Thread_local` globals \
+                     are not yet supported (`{}`); declare the variable \
+                     in this translation unit",
+                    sym.name
+                )));
             }
         }
 
+        // Lower every parser-finished function to FunctionSsa
+        // up-front so the symbol-table build below can gate
+        // undefined-external entries against walker-tier refs
+        // as well as bytecode-tier relocations. Object-file
+        // round-trips ship the FunctionSsa vector verbatim, so
+        // the codegen reads SSA from `user_ssa_funcs` for both
+        // fresh compiles and reloads.
+        let mut user_ssa_funcs = walker_funcs_for(
+            &self.finished_functions,
+            &self.symbols,
+            &self.structs,
+            self.target,
+            self.text.len(),
+        )?;
+
         // Compute the set of parser-symbol indices that are
-        // *referenced* by a relocation. Used to gate undefined-
-        // external entries: an `extern int wprintf(...)`
-        // prototype in a header that the user never actually
-        // calls shouldn't create an undefined link symbol --
-        // gcc / clang ld only surface a name when a real use
-        // points to it.
+        // *referenced* by a relocation or by a walker-tier
+        // extern reference. Used to gate undefined-external
+        // entries: an `extern int wprintf(...)` prototype in a
+        // header that the user never actually calls shouldn't
+        // create an undefined link symbol -- gcc / clang ld
+        // only surface a name when a real use points to it.
         let mut referenced: alloc::collections::BTreeSet<usize> =
             alloc::collections::BTreeSet::new();
-        for (_, _, sym_idx) in &text_relocs {
-            referenced.insert(*sym_idx);
-        }
         for (_, _, sym_idx) in &data_relocs_pending {
             referenced.insert(*sym_idx);
+        }
+        for func in &user_ssa_funcs {
+            for (_, sym_idx) in &func.extern_call_refs {
+                referenced.insert(*sym_idx as usize);
+            }
+            for (_, sym_idx) in &func.extern_imm_code_refs {
+                referenced.insert(*sym_idx as usize);
+            }
+            for (_, sym_idx) in &func.extern_imm_data_refs {
+                referenced.insert(*sym_idx as usize);
+            }
+            for (_, sym_idx) in &func.extern_tls_refs {
+                referenced.insert(*sym_idx as usize);
+            }
         }
 
         // Build the per-unit symbol table. Defined external /
@@ -419,27 +408,11 @@ impl Compiler {
         }
 
         // Translate the pending relocation list to use the
-        // compact LinkUnit symbol indices.
-        let mut relocs: Vec<Reloc> =
-            Vec::with_capacity(text_relocs.len() + data_relocs_pending.len());
-        for (kind, location, sym_idx) in text_relocs {
-            let remapped = sym_remap.get(sym_idx).copied().unwrap_or(-1);
-            if remapped < 0 {
-                return Err(self.compile_err(alloc::format!(
-                    "internal: relocation refers to a symbol not surfaced in the link table \
-                     (sym idx {sym_idx})"
-                )));
-            }
-            // For text-operand relocations, `location` is the
-            // i64 word index (`operand_pc`). Stored verbatim
-            // in `Reloc::location`.
-            relocs.push(Reloc {
-                kind,
-                location,
-                sym_index: remapped as u32,
-                addend: 0,
-            });
-        }
+        // compact LinkUnit symbol indices. Only the data-side
+        // `DataDataAbs64` / `DataCodeAbs64` kinds survive --
+        // text-side relocations were retired alongside the
+        // bytecode-tape resolver.
+        let mut relocs: Vec<Reloc> = Vec::with_capacity(data_relocs_pending.len());
         for (kind, location, sym_idx) in data_relocs_pending {
             let remapped = sym_remap.get(sym_idx).copied().unwrap_or(-1);
             if remapped < 0 {
@@ -507,19 +480,6 @@ impl Compiler {
                 None
             }
         });
-
-        // Eagerly lower every parser-finished function to
-        // FunctionSsa so the resulting LinkUnit carries SSA
-        // directly. Object-file round-trips ship the FunctionSsa
-        // vector verbatim, so the codegen reads SSA from
-        // `user_ssa_funcs` for both fresh compiles and reloads.
-        let mut user_ssa_funcs = walker_funcs_for(
-            &self.finished_functions,
-            &self.symbols,
-            &self.structs,
-            self.target,
-            self.text.len(),
-        )?;
 
         // Remap each FunctionSsa's `extern_call_refs` sym_idx
         // from the parser-symbol space to the compact LinkUnit

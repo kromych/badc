@@ -768,15 +768,13 @@ pub struct Compiler {
     code_reloc_sym_idx: Vec<usize>,
     /// (text_index, sym_idx) for every `Op::Imm <data_offset>`
     /// emitted as a `Token::Glo` address-of -- the data
-    /// reference shape that becomes a cross-TU relocation when
+    /// reference shape that becomes a cross-TU reference when
     /// the target global is defined in another translation
     /// unit. Empty in single-TU compiles; the link-unit
-    /// conversion walks the list to decide which entries need
-    /// an `ImmDataAddr` relocation versus an already-resolved
-    /// data offset. Distinct from `data_imm_positions`, which
-    /// records every Imm operand that holds *some* data offset
-    /// (string literals included) without identifying the
-    /// originating symbol.
+    /// conversion walks the list to diagnose unsupported
+    /// shapes (cross-TU TLS) before the walker's
+    /// `extern_imm_data_refs` / `extern_tls_refs` channels
+    /// take over resolution.
     pub(super) glo_imm_refs: alloc::vec::Vec<(usize, usize)>,
     /// Per-`data_relocs` originating symbol index. Tracks the
     /// `Token::Glo` whose address an initializer like

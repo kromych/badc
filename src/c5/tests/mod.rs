@@ -131,7 +131,6 @@ where
         .unwrap()
 }
 
-
 /// Compile + run a fixture and return the raw `Result` so callers can
 /// assert on either the exit code (no error) or the diagnostic message
 /// (use-after-free / double-free / OOB). Pointer tracking is on, same as

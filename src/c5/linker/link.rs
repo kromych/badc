@@ -844,9 +844,10 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         // sys-trampolines that came through an archive boundary.
         synthetic_ssa_funcs: alloc::vec::Vec::new(),
         user_ssa_funcs: alloc::vec::Vec::new(),
-        // Bytecode linker resolves every cross-TU function call
-        // in place via `RelocKind::JsrPc`; no placeholder PCs
-        // survive into the merged program.
+        // Walker-tier `extern_call_refs` / `extern_imm_code_refs`
+        // resolve every cross-TU function reference in place
+        // post-merge; no placeholder PCs survive into the merged
+        // program.
         extern_function_imports: alloc::vec::Vec::new(),
     })
     .and_then(|mut program| {
@@ -1139,15 +1140,10 @@ fn apply_reloc(
         }
     };
 
+    let _ = text_off;
+    let _ = merged_text;
     let resolved = target_value + r.addend;
     match r.kind {
-        // Bytecode-tape relocations were only consumed by lift_program
-        // and disasm; both are gone for SSA correctness. The Inst side
-        // is patched by resolve_extern_refs directly.
-        RelocKind::JsrPc | RelocKind::ImmCodeAddr | RelocKind::ImmDataAddr => {
-            let _ = text_off;
-            let _ = merged_text;
-        }
         RelocKind::DataDataAbs64 => {
             let slot = data_off + r.location as usize;
             if slot + 8 > merged_data.len() {

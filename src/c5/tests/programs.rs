@@ -38,7 +38,7 @@ fn static_local_shadows_extern_fn() {
     // of the block and restores them on block exit; the
     // link_unit glo_imm_refs filter must look at class==Glo (not
     // just linkage) so the restored-to-Fun outer state doesn't
-    // trip a cross-TU ImmDataAddr reloc against the operand.
+    // surface a cross-TU data reference against the operand.
     // driver(1) returns 42 only when the static-local `expect[]`
     // read resolves to the local data segment.
     assert_eq!(run_fixture("static_local_shadows_extern_fn.c"), 42);

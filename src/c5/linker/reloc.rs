@@ -10,29 +10,15 @@
 //! variability. Operand-sized fixups are unnecessary because
 //! the c5 bytecode model uses one i64 per operand.
 
-/// What to patch and how. Matches the bytecode shapes the c5
-/// compiler emits today: every cross-TU reference reduces to
-/// patching one i64 word (either in the text segment as an
-/// operand, or in the data segment as a 64-bit slot).
+/// What to patch and how. Cross-TU references whose target
+/// lives in the bytecode text were retired alongside the
+/// bytecode-tape resolver; only the data-segment fixups
+/// survive here. Walker-tier `Inst::*` references are carried
+/// on `FunctionSsa::extern_*_refs` channels and resolved
+/// independently of this enum.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum RelocKind {
-    /// `Op::Jsr <bc_pc>` operand cross-TU reference. Retired:
-    /// `apply_reloc` no-ops these entries; the walker's
-    /// `extern_call_refs` channel resolves the matching
-    /// `Inst::Call::target_pc` independently. Symbol must be
-    /// `SymbolKind::Function`.
-    JsrPc = 1,
-    /// `Op::Imm` operand carrying a function-pointer literal
-    /// (`CODE_BASE + bc_pc`). Retired alongside `JsrPc`; the
-    /// walker's `extern_imm_code_refs` channel resolves the
-    /// matching `Inst::ImmCode`. Symbol must be `Function`.
-    ImmCodeAddr = 2,
-    /// `Op::Imm` operand carrying the address of a global
-    /// variable. Retired alongside `JsrPc`; the walker's
-    /// `extern_imm_data_refs` channel resolves the matching
-    /// `Inst::ImmData`. Symbol must be `Data` or `TlsData`.
-    ImmDataAddr = 3,
     /// 8-byte little-endian slot in the data segment that
     /// stores the address of a global. The merged program's
     /// `data_relocs` list gains one entry (`data_offset =
@@ -58,9 +44,6 @@ impl RelocKind {
     /// error instead of silently mis-patching.
     pub fn from_u8(v: u8) -> Option<RelocKind> {
         match v {
-            1 => Some(RelocKind::JsrPc),
-            2 => Some(RelocKind::ImmCodeAddr),
-            3 => Some(RelocKind::ImmDataAddr),
             4 => Some(RelocKind::DataDataAbs64),
             5 => Some(RelocKind::DataCodeAbs64),
             _ => None,
@@ -80,12 +63,8 @@ impl RelocKind {
 pub struct Reloc {
     /// What to patch and how (see [`RelocKind`]).
     pub kind: RelocKind,
-    /// Section-relative location. Interpretation depends on
-    /// `kind`:
-    ///   * `JsrPc`, `ImmCodeAddr`, `ImmDataAddr`: i64 word
-    ///     index into `LinkUnit::text`.
-    ///   * `DataDataAbs64`, `DataCodeAbs64`: byte offset into
-    ///     `LinkUnit::data` (always 8-byte aligned).
+    /// Section-relative byte offset into `LinkUnit::data`,
+    /// always 8-byte aligned.
     pub location: u64,
     /// Index into `LinkUnit::symbols`. The linker resolves the
     /// `LinkSymbol` to a merged-program address based on its

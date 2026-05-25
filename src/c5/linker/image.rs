@@ -1,7 +1,7 @@
 //! Final-image writer for a [`MergedNative`].
 //!
 //! Consumes the merged sections produced by
-//! [`super::native_link::link_native_objects`] (plus per-arch
+//! [`super::link::link_native_objects`] (plus per-arch
 //! PLT trampolines from `emit_*_plt`) and emits a runnable
 //! ELF64 file for Linux. Two paths:
 //!
@@ -32,8 +32,8 @@ use alloc::vec::Vec;
 
 use crate::c5::error::C5Error;
 
-use super::native_link::MergedNative;
-use super::native_object::{NativeMachine, NativeSymSection};
+use super::link::MergedNative;
+use super::object::{NativeMachine, NativeSymSection};
 
 const ELF_MAGIC: [u8; 4] = [0x7f, b'E', b'L', b'F'];
 const EI_CLASS_64: u8 = 2;
@@ -263,9 +263,9 @@ fn patch_data_abs_relocs(
     data: &mut [u8],
     text_vaddr: u64,
     data_vaddr: u64,
-    relocs: &[super::native_link::DataAbsReloc],
+    relocs: &[super::link::DataAbsReloc],
 ) -> Result<(), C5Error> {
-    use crate::c5::linker::native_object::NativeSymSection;
+    use crate::c5::linker::object::NativeSymSection;
     for r in relocs {
         let slot = r.slot_offset as usize;
         if slot + 8 > data.len() {
@@ -740,10 +740,10 @@ fn patch_data_refs(
     text: &mut [u8],
     text_vaddr: u64,
     data_vaddr: u64,
-    pending: &[super::native_link::PendingImportReloc],
+    pending: &[super::link::PendingImportReloc],
     machine: NativeMachine,
 ) -> Result<(), C5Error> {
-    use super::native_link::PendingImportReloc;
+    use super::link::PendingImportReloc;
     const R_X86_64_PC32: u32 = 2;
     const R_X86_64_PLT32: u32 = 4;
     const R_AARCH64_ADR_PREL_PG_HI21: u32 = 275;
@@ -901,7 +901,7 @@ mod tests {
         let mut defined = alloc::collections::BTreeMap::new();
         defined.insert(
             "main".to_string(),
-            super::super::native_link::MergedSymbol {
+            super::super::link::MergedSymbol {
                 section: NativeSymSection::Text,
                 value: 0,
                 size: 8,

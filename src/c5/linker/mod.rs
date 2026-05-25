@@ -51,38 +51,38 @@
 //! DWARF variable list.
 
 mod archive;
+pub(crate) mod bytecode_link;
+mod bytecode_object;
+mod bytecode_reloc;
+mod bytecode_symbol;
+mod bytecode_unit;
+#[cfg(feature = "std")]
+mod image;
+#[cfg(feature = "std")]
 pub(crate) mod link;
 #[cfg(feature = "std")]
-mod native_image;
-#[cfg(feature = "std")]
-mod native_link;
-#[cfg(feature = "std")]
-mod native_object;
 mod object;
-mod reloc;
-mod symbol;
-mod unit;
 
 pub use archive::{ArchiveMember, read_archive, write_archive};
-pub use link::{LinkArchive, LinkOptions, link_units};
+pub use bytecode_link::{LinkArchive, LinkOptions, link_units};
+pub use bytecode_object::{read_object, write_object};
+#[cfg(test)]
+pub(crate) use bytecode_object::{read_ssa_func, write_ssa_func};
+pub use bytecode_reloc::{Reloc, RelocKind};
+pub use bytecode_symbol::{LinkSymbol, SymbolKind};
+pub use bytecode_unit::LinkUnit;
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
-pub use native_image::write_executable_elf64;
+pub use image::write_executable_elf64;
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
-pub use native_link::{
+pub use link::{
     MergedNative, MergedSymbol, PendingImportReloc, PltTrampoline, emit_aarch64_plt,
     emit_x86_64_plt, link_native_objects,
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
-pub use native_object::{
+pub use object::{
     NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol, is_elf_object,
     parse_native_elf,
 };
-pub use object::{read_object, write_object};
-#[cfg(test)]
-pub(crate) use object::{read_ssa_func, write_ssa_func};
-pub use reloc::{Reloc, RelocKind};
-pub use symbol::{LinkSymbol, SymbolKind};
-pub use unit::LinkUnit;

@@ -18,8 +18,8 @@ use crate::c5::compiler::StructDef;
 use crate::c5::preprocessor::{DylibSpec, Subsystem};
 use crate::c5::program::{CodeReloc, DataReloc, ExportedFunction, VariableInfo};
 
-use super::reloc::Reloc;
-use super::symbol::LinkSymbol;
+use super::bytecode_reloc::Reloc;
+use super::bytecode_symbol::LinkSymbol;
 
 /// Pre-link, single-translation-unit container. Field layout
 /// intentionally mirrors [`Program`] so the [`Program`] -> writer

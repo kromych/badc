@@ -594,37 +594,162 @@ fn main() {
         return;
     }
 
-    // Load each `.o` input. Every `.o` must be a native ELF64
-    // ET_REL produced by the current `-c`; the legacy badc-
-    // format reader has retired (no users depend on it).
-    let mut native_objs: Vec<badc::NativeObject> = Vec::with_capacity(objects.len());
-    for obj_path in &objects {
-        let bytes = match std::fs::read(obj_path) {
-            Ok(b) => b,
-            Err(e) => {
-                eprint_diagnostic(format!("badc: error: cannot read `{obj_path}`: {e}"));
-                std::process::exit(1);
+    // Mode::NativeExecutable consumes the whole input set
+    // through the native pipeline:
+    //   .c sources -> Compiler::compile() -> ET_REL bytes
+    //                                     -> parse_native_elf
+    //   .o inputs  -> parse_native_elf
+    //   .a inputs  -> read_archive -> per-member parse_native_elf
+    // All collected NativeObjects feed link_native_objects, the
+    // per-arch PLT pass, and write_executable_elf64. Other modes
+    // (Jit / Interp / SharedLibrary) continue through the
+    // LinkUnit path further down, as does `-c`, which writes per-
+    // source ET_REL blobs without ever running the link merger.
+    // Mac and Windows binary emit (`Target::MacOSAarch64`, the
+    // `WindowsX64` / `WindowsAarch64` PE pair) still goes
+    // through the LinkUnit + `emit_native_with_options` path:
+    // `write_executable_elf64` produces Linux ELF unconditionally,
+    // so routing those targets through it would write a Linux
+    // image with the wrong container.
+    let native_link_target = matches!(target, Target::LinuxX64 | Target::LinuxAarch64);
+    if mode == Mode::NativeExecutable && !compile_only && native_link_target {
+        use badc::{Compiler, OutputKind};
+        let mut native_objs: Vec<badc::NativeObject> =
+            Vec::with_capacity(sources.len() + objects.len() + archives.len());
+
+        let mut reloc_opts = badc::NativeOptions::new().with_debug_info(emit_debug_info);
+        if optimize_flag {
+            reloc_opts = reloc_opts.with_optimize();
+        }
+        reloc_opts.output_kind = OutputKind::Relocatable;
+        // `.c` -> in-memory native ELF64 ET_REL. The earlier
+        // LinkUnit pass already validated each source; redoing the
+        // compile pulls SsaWalker output through the native
+        // emitter without writing intermediate `.o` files to disk.
+        let compile_one = |src_path: &str| -> (Vec<u8>, Option<String>) {
+            let src_bytes = if src_path == "-" {
+                read_stdin_source()
+            } else {
+                match std::fs::read_to_string(src_path) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        eprint_diagnostic(format!("badc: error: cannot read `{src_path}`: {e}"));
+                        std::process::exit(1);
+                    }
+                }
+            };
+            let copts = badc::CompileOptions::default()
+                .with_defines(defines.clone())
+                .with_undefines(undefines.clone())
+                .with_include_paths(include_paths.clone())
+                .with_force_includes(force_includes.clone())
+                .with_source_label(src_path.to_string())
+                .with_no_entry_point(true);
+            let program = match Compiler::with_options(src_bytes, target, copts).compile() {
+                Ok(p) => p,
+                Err(e) => {
+                    eprint_diagnostic(e);
+                    std::process::exit(1);
+                }
+            };
+            let entry = program.entry_name.clone();
+            match badc::emit_native_with_options(&program, target, reloc_opts) {
+                Ok(b) => (b, entry),
+                Err(e) => {
+                    eprint_diagnostic(e);
+                    std::process::exit(1);
+                }
             }
         };
-        if !badc::is_elf_object(&bytes) {
-            eprint_diagnostic(format!(
-                "badc: error: `{obj_path}` is not a native ELF object; only the ELF format is \
-                 supported"
-            ));
-            std::process::exit(1);
+        // `#pragma entrypoint(<name>)` overrides the default
+        // `main`. The pragma is per-TU; the first TU that
+        // surfaces a non-default entry wins. C99 leaves the
+        // hosted-environment entry-point name to implementations
+        // (5.1.2.2.1), so the standard doesn't pick between
+        // multi-TU pragmas; the first-wins convention matches
+        // how the LinkUnit pipeline resolved it.
+        let mut entry_override: Option<String> = None;
+        for src_path in &sources {
+            let (bytes, entry) = compile_one(src_path);
+            if entry_override.is_none() {
+                entry_override = entry;
+            }
+            match badc::parse_native_elf(&bytes) {
+                Ok(o) => native_objs.push(o),
+                Err(e) => {
+                    eprint_diagnostic(format!(
+                        "badc: error: failed to re-parse `{src_path}` ET_REL: {e}"
+                    ));
+                    std::process::exit(1);
+                }
+            }
         }
-        match badc::parse_native_elf(&bytes) {
-            Ok(o) => native_objs.push(o),
-            Err(e) => {
+        for obj_path in &objects {
+            let bytes = match std::fs::read(obj_path) {
+                Ok(b) => b,
+                Err(e) => {
+                    eprint_diagnostic(format!("badc: error: cannot read `{obj_path}`: {e}"));
+                    std::process::exit(1);
+                }
+            };
+            if !badc::is_elf_object(&bytes) {
                 eprint_diagnostic(format!(
-                    "badc: error: failed to parse native ELF `{obj_path}`: {e}"
+                    "badc: error: `{obj_path}` is not a native ELF object; \
+                     only the ELF format is supported"
                 ));
                 std::process::exit(1);
             }
+            match badc::parse_native_elf(&bytes) {
+                Ok(o) => native_objs.push(o),
+                Err(e) => {
+                    eprint_diagnostic(format!(
+                        "badc: error: failed to parse native ELF `{obj_path}`: {e}"
+                    ));
+                    std::process::exit(1);
+                }
+            }
         }
-    }
-
-    if !native_objs.is_empty() {
+        for a_path in &archives {
+            let bytes = match std::fs::read(a_path) {
+                Ok(b) => b,
+                Err(e) => {
+                    eprint_diagnostic(format!("badc: error: cannot read `{a_path}`: {e}"));
+                    std::process::exit(1);
+                }
+            };
+            let members = match badc::read_archive(&bytes) {
+                Ok(m) => m,
+                Err(e) => {
+                    eprint_diagnostic(format!(
+                        "badc: error: failed to parse archive `{a_path}`: {e}"
+                    ));
+                    std::process::exit(1);
+                }
+            };
+            for m in members {
+                if !badc::is_elf_object(&m.bytes) {
+                    eprint_diagnostic(format!(
+                        "badc: error: archive `{a_path}` member `{}` is not a native ELF object",
+                        m.name
+                    ));
+                    std::process::exit(1);
+                }
+                match badc::parse_native_elf(&m.bytes) {
+                    Ok(o) => native_objs.push(o),
+                    Err(e) => {
+                        eprint_diagnostic(format!(
+                            "badc: error: failed to parse archive `{a_path}` member `{}`: {e}",
+                            m.name
+                        ));
+                        std::process::exit(1);
+                    }
+                }
+            }
+        }
+        if native_objs.is_empty() {
+            eprint_diagnostic("badc: error: no inputs");
+            std::process::exit(1);
+        }
         let mut merged = match badc::link_native_objects(&native_objs) {
             Ok(m) => m,
             Err(e) => {
@@ -640,7 +765,7 @@ fn main() {
             eprint_diagnostic(format!("badc: error: PLT lowering failed: {e}"));
             std::process::exit(1);
         }
-        let entry_name = "main";
+        let entry_name = entry_override.as_deref().unwrap_or("main");
         let bytes = match badc::write_executable_elf64(&merged, entry_name) {
             Ok(b) => b,
             Err(e) => {
@@ -648,16 +773,20 @@ fn main() {
                 std::process::exit(1);
             }
         };
-        let out = match output_path.as_deref() {
+        let default_path;
+        let out: &std::path::Path = match output_path.as_deref() {
             Some(o) => o,
             None => {
-                eprint_diagnostic(
-                    "badc: error: native ELF link requires `-o <path>` for the executable output",
+                default_path = default_output_path(
+                    unit_source_paths.first().map(|s| s.as_str()).unwrap_or("a"),
+                    target,
+                    mode,
                 );
-                std::process::exit(1);
+                &default_path
             }
         };
         write_output(out, &bytes, quiet);
+        set_executable(out);
         return;
     }
 
@@ -759,11 +888,13 @@ fn main() {
         return;
     }
 
-    // `--ar` mode: bundle every input unit (compiled `.c`
-    // plus any `.o`) into a single archive named by `-o`.
-    // Each member is the unit's `.o` bytes; the SysV symbol
-    // index lists every externally-linkable defined name so
-    // pull-in works without re-parsing each member.
+    // `--ar` mode: bundle each `.c` input (compiled to native
+    // ELF64 ET_REL) plus any passed-in `.o` into a single
+    // SysV `ar` archive named by `-o`. Member bytes are the
+    // exact same blob `-c` would have written to disk; the
+    // SysV symbol index lists every `STB_GLOBAL`-defined name
+    // so the linker's archive pull-in can resolve undefined
+    // references without re-parsing each member.
     if mode == Mode::BuildArchive {
         if !archives.is_empty() || !lib_names.is_empty() {
             eprintln!(
@@ -776,43 +907,84 @@ fn main() {
             eprint_diagnostic("badc: error: --ar requires -o <archive>.a");
             std::process::exit(1);
         };
-        if units.is_empty() {
+        let total_inputs = sources.len() + objects.len();
+        if total_inputs == 0 {
             eprint_diagnostic("badc: error: --ar requires at least one input");
             std::process::exit(1);
         }
-        let mut members: Vec<badc::ArchiveMember> = Vec::with_capacity(units.len());
-        let mut sym_index: Vec<(usize, Vec<String>)> = Vec::with_capacity(units.len());
-        // Member name comes from the source / object path's
-        // file stem with a `.o` suffix -- mirrors how a regular
-        // `-c` invocation would name the per-source output.
-        let source_count = sources.len();
-        for (i, unit) in units.iter().enumerate() {
-            let base = if i < source_count {
-                std::path::Path::new(&unit_source_paths[i])
-                    .file_stem()
-                    .map(|s| s.to_string_lossy().into_owned())
-                    .unwrap_or_else(|| format!("tu{i}"))
-            } else {
-                std::path::Path::new(&objects[i - source_count])
-                    .file_stem()
-                    .map(|s| s.to_string_lossy().into_owned())
-                    .unwrap_or_else(|| format!("tu{i}"))
+        use badc::{Compiler, OutputKind};
+        let mut reloc_opts = badc::NativeOptions::new().with_debug_info(emit_debug_info);
+        if optimize_flag {
+            reloc_opts = reloc_opts.with_optimize();
+        }
+        reloc_opts.output_kind = OutputKind::Relocatable;
+        let compile_one = |src_path: &str| -> Vec<u8> {
+            let src_bytes = match std::fs::read_to_string(src_path) {
+                Ok(b) => b,
+                Err(e) => {
+                    eprint_diagnostic(format!("badc: error: cannot read `{src_path}`: {e}"));
+                    std::process::exit(1);
+                }
             };
-            let bytes = badc::write_object(unit);
-            let defined: Vec<String> = unit
-                .symbols
-                .iter()
-                .filter(|s| {
-                    !matches!(s.kind, badc::SymbolKind::Undefined)
-                        && !matches!(s.linkage, badc::Linkage::Internal | badc::Linkage::None)
-                })
-                .map(|s| s.name.clone())
-                .collect();
+            let copts = badc::CompileOptions::default().with_no_entry_point(true);
+            let program = match Compiler::with_options(src_bytes, target, copts).compile() {
+                Ok(p) => p,
+                Err(e) => {
+                    eprint_diagnostic(e);
+                    std::process::exit(1);
+                }
+            };
+            match badc::emit_native_with_options(&program, target, reloc_opts) {
+                Ok(b) => b,
+                Err(e) => {
+                    eprint_diagnostic(e);
+                    std::process::exit(1);
+                }
+            }
+        };
+        let mut members: Vec<badc::ArchiveMember> = Vec::with_capacity(total_inputs);
+        let mut sym_index: Vec<(usize, Vec<String>)> = Vec::with_capacity(total_inputs);
+        // Member name comes from the input path's file stem
+        // with a `.o` suffix -- mirrors how a regular `-c`
+        // invocation would name the per-source output.
+        for (i, src_path) in sources.iter().enumerate() {
+            let base = std::path::Path::new(src_path)
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_else(|| format!("tu{i}"));
+            let bytes = compile_one(src_path);
+            let defined = native_defined_globals(&bytes, src_path);
+            sym_index.push((members.len(), defined));
             members.push(badc::ArchiveMember {
                 name: format!("{base}.o"),
                 bytes,
             });
-            sym_index.push((i, defined));
+        }
+        for (i, obj_path) in objects.iter().enumerate() {
+            let base = std::path::Path::new(obj_path)
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_else(|| format!("obj{i}"));
+            let bytes = match std::fs::read(obj_path) {
+                Ok(b) => b,
+                Err(e) => {
+                    eprint_diagnostic(format!("badc: error: cannot read `{obj_path}`: {e}"));
+                    std::process::exit(1);
+                }
+            };
+            if !badc::is_elf_object(&bytes) {
+                eprint_diagnostic(format!(
+                    "badc: error: `{obj_path}` is not a native ELF object; \
+                     only the ELF format is supported"
+                ));
+                std::process::exit(1);
+            }
+            let defined = native_defined_globals(&bytes, obj_path);
+            sym_index.push((members.len(), defined));
+            members.push(badc::ArchiveMember {
+                name: format!("{base}.o"),
+                bytes,
+            });
         }
         let blob = badc::write_archive(&members, &sym_index);
         write_output(&out_path, &blob, quiet);
@@ -983,6 +1155,35 @@ fn main() {
 /// warning the CLI emits -- it's a no-op for messages that don't
 /// look like a diagnostic, so plain "badc: file not found" lines
 /// pass through unchanged.
+/// Enumerate the `STB_GLOBAL`-defined symbol names from a
+/// native ELF64 ET_REL blob. Used to populate the SysV `ar`
+/// symbol index when `--ar` bundles native objects: any name
+/// listed here resolves -- via the archive's `/` member -- to
+/// the containing member's file offset, which is how the
+/// linker's archive pull-in decides which members to load.
+fn native_defined_globals(bytes: &[u8], path: &str) -> Vec<String> {
+    let obj = match badc::parse_native_elf(bytes) {
+        Ok(o) => o,
+        Err(e) => {
+            eprint_diagnostic(format!("badc: error: failed to parse `{path}`: {e}"));
+            std::process::exit(1);
+        }
+    };
+    obj.symbols
+        .into_iter()
+        .filter(|s| {
+            // STB_GLOBAL = 1; only section-resident defs are
+            // visible at archive-pull-in time.
+            s.binding == 1
+                && !matches!(
+                    s.section,
+                    badc::NativeSymSection::Undef | badc::NativeSymSection::Abs
+                )
+        })
+        .map(|s| s.name)
+        .collect()
+}
+
 fn eprint_diagnostic(msg: impl core::fmt::Display) {
     let stderr_is_tty = std::io::stderr().is_terminal();
     let s = msg.to_string();

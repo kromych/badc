@@ -50,7 +50,7 @@ use super::Target;
 use super::aarch64::{
     BranchKind, Cond, Fixup, JB_D8_OFF, JB_PC_OFF, JB_SP_OFF, JB_X19_OFF, JB_X29_OFF, PltCallFixup,
     Reg, emit, emit_add_sp_imm, emit_setjmp_aarch64, emit_sub_sp_imm, enc_add_imm, enc_add_reg,
-    enc_adrp, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_blr, enc_br, enc_cbnz, enc_cbz,
+    enc_adrp, enc_and_reg, enc_asrv, enc_b, enc_b_cond, enc_bl, enc_blr, enc_br, enc_cbnz, enc_cbz,
     enc_cinc, enc_cmp_reg, enc_cset, enc_eor_reg, enc_fadd_d, enc_fcmp_d, enc_fcvt_d_s,
     enc_fcvt_s_d, enc_fcvtzs_x_d, enc_fdiv_d, enc_fmov_d_to_x, enc_fmov_x_to_d, enc_fmul_d,
     enc_fneg_d, enc_fsub_d, enc_ldp_post, enc_ldr_d_imm, enc_ldr_imm, enc_ldr_post, enc_ldr_s_imm,
@@ -1576,7 +1576,7 @@ fn emit_call(
             target_bytecode_pc: target_pc,
             kind: BranchKind::Bl,
         });
-        emit(code, enc_b(0));
+        emit(code, enc_bl(0));
         if !args.is_empty() {
             emit(
                 code,
@@ -1683,7 +1683,7 @@ fn emit_call(
         target_bytecode_pc: target_pc,
         kind: BranchKind::Bl,
     });
-    emit(code, enc_b(0));
+    emit(code, enc_bl(0));
     if plan.scratch_bytes > 0 {
         emit(code, enc_add_imm(Reg(31), Reg(31), plan.scratch_bytes));
     }

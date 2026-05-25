@@ -177,9 +177,8 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
                 size: sym.size,
             };
             if let Some(prev) = defined.get(&sym.name) {
-                return Err(err(&format!(
-                    "link_native_objects: symbol `{}` is defined in multiple objects (first at \
-                     offset 0x{:x}, also at 0x{:x})",
+                return Err(link_err(&format!(
+                    "multiple definition of `{}` (first at offset 0x{:x}, also at 0x{:x})",
                     sym.name, prev.value, merged.value,
                 )));
             }
@@ -645,6 +644,10 @@ fn err(msg: &str) -> C5Error {
     C5Error::Compile(crate::c5::error::fmt_internal_err(msg))
 }
 
+fn link_err(msg: &str) -> C5Error {
+    C5Error::Compile(crate::c5::error::fmt_link_err(msg))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -791,7 +794,7 @@ mod tests {
         let b = compile_native("int main(void){return 0;}\n", target, opts);
         let err = link_native_objects(&[a, b]).unwrap_err();
         assert!(
-            err.to_string().contains("defined in multiple objects"),
+            err.to_string().contains("multiple definition of"),
             "unexpected error: {err}",
         );
     }

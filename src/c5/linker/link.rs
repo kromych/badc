@@ -42,7 +42,6 @@ use alloc::vec::Vec;
 use hashbrown::{HashMap, HashSet};
 
 use crate::c5::error::C5Error;
-use crate::c5::op::Op;
 use crate::c5::preprocessor::DylibSpec;
 use crate::c5::program::{CodeReloc, DataReloc, ExportedFunction, Program};
 
@@ -476,50 +475,16 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
             merged_warnings.push(w.clone());
         }
 
-        // Walk text, remapping only `Op::JsrExt` / `Op::TailExt`
-        // binding indices. The merged bytecode tape's contents
-        // are only consumed by disasm; the SSA tier is rebased
-        // independently via `resolve_extern_refs` and the
-        // walker-stamp pass below, so per-PC operands (Op::Jsr,
-        // Op::Jmp, Op::Bz, Op::Bnz, Op::TlsLea, Op::Imm) survive
-        // the merge unchanged. Multi-TU `--dump-asm` shows the
-        // unit-local value for those operands as a consequence.
+        // Bytecode-tape merge is now a pure concat. Every
+        // operand (PC, data offset, function-pointer literal,
+        // TLS offset, binding index, plain integer) survives
+        // the merge unchanged. The merged tape's contents are
+        // only consumed by disasm; the SSA tier handles
+        // cross-unit references through walker-recorded
+        // `extern_*_refs` + `binding_remap_per_unit` applied
+        // to `synthetic_ssa_funcs` / `user_ssa_funcs` below.
         let _ = (text_off, tls_off, tls_bss_off, tls_init_local);
-        let mut pc = 0usize;
-        let binding_remap = &binding_remap_per_unit[ui];
-        while pc < unit.text.len() {
-            let raw = unit.text[pc];
-            merged_text.push(raw);
-            let op = Op::from_i64(raw);
-            match op {
-                Some(Op::JsrExt) | Some(Op::TailExt) => {
-                    let operand_pc = pc + 1;
-                    if operand_pc >= unit.text.len() {
-                        return Err(err("dangling JsrExt operand"));
-                    }
-                    let local_idx = unit.text[operand_pc];
-                    let new_idx = binding_remap
-                        .get(local_idx as usize)
-                        .copied()
-                        .unwrap_or(local_idx);
-                    merged_text.push(new_idx);
-                    pc += 2;
-                }
-                Some(other) => {
-                    for k in 0..other.operand_count() {
-                        let operand_pc = pc + 1 + k;
-                        if operand_pc >= unit.text.len() {
-                            return Err(err("dangling operand at end of text"));
-                        }
-                        merged_text.push(unit.text[operand_pc]);
-                    }
-                    pc += other.word_size();
-                }
-                None => {
-                    return Err(err(&format!("non-op word at bc_pc {pc} in unit {}", ui)));
-                }
-            }
-        }
+        merged_text.extend_from_slice(&unit.text);
 
         // Apply intra-unit data_relocs (shift both endpoints).
         for r in &unit.data_relocs {

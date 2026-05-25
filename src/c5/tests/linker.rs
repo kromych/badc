@@ -834,6 +834,29 @@ fn cross_tu_call_through_secondary_dylib() {
         2, // libutil::do_work in unit 1's view
         Op::Lev as i64,
     ];
+    let lib_synthetic = crate::c5::ir::FunctionSsa {
+        ent_pc: 0,
+        end_pc: lib_text.len(),
+        locals: 0,
+        n_params: 0,
+        is_variadic: false,
+        insts: alloc::vec![crate::c5::ir::Inst::CallExt {
+            binding_idx: 2,
+            args: alloc::vec::Vec::new(),
+            fp_arg_mask: 0,
+        }],
+        inst_src: alloc::vec![(0u32, 0u32)],
+        blocks: alloc::vec![crate::c5::ir::Block {
+            start_pc: 0,
+            inst_range: 0..1,
+            terminator: crate::c5::ir::Terminator::Return(crate::c5::ir::NO_VALUE),
+            exit_acc: crate::c5::ir::NO_VALUE,
+        }],
+        extern_call_refs: alloc::vec::Vec::new(),
+        extern_imm_code_refs: alloc::vec::Vec::new(),
+        extern_imm_data_refs: alloc::vec::Vec::new(),
+        extern_tls_refs: alloc::vec::Vec::new(),
+    };
     let mut lib_unit = LinkUnit {
         text: lib_text.clone(),
         dylibs: alloc::vec![
@@ -859,6 +882,7 @@ fn cross_tu_call_through_secondary_dylib() {
             size: 0,
             type_tag: 0,
         }],
+        synthetic_ssa_funcs: alloc::vec![lib_synthetic],
         ..Default::default()
     };
     lib_unit.source_functions = alloc::vec![String::new(); lib_text.len()];
@@ -895,17 +919,17 @@ fn cross_tu_call_through_secondary_dylib() {
     )
     .expect("link_units failed");
 
-    // Find lib_call's JsrExt and confirm its operand resolves
-    // to the libutil::do_work binding in the merged dylib
-    // table -- not whatever libc binding the buggy merge would
-    // have shifted it to.
+    // Walk the merged synthetic_ssa_funcs for Inst::CallExt and
+    // confirm each binding_idx resolves to libutil::do_work in
+    // the merged dylib table -- not whatever libc binding the
+    // buggy merge would have shifted it to.
     let mut found = false;
-    let mut pc = 0usize;
-    while pc + 1 < program.text.len() {
-        if program.text[pc] == Op::JsrExt as i64 {
-            let flat = program.text[pc + 1] as usize;
-            // Walk merged dylibs in declared order to resolve.
-            let mut cursor = flat;
+    for f in &program.synthetic_ssa_funcs {
+        for inst in &f.insts {
+            let crate::c5::ir::Inst::CallExt { binding_idx, .. } = inst else {
+                continue;
+            };
+            let mut cursor = *binding_idx as usize;
             let mut resolved: Option<&str> = None;
             for d in program.dylibs.iter() {
                 if cursor < d.bindings.len() {
@@ -917,13 +941,14 @@ fn cross_tu_call_through_secondary_dylib() {
             assert_eq!(
                 resolved,
                 Some("do_work"),
-                "merged JsrExt operand {flat} resolved to {resolved:?}, not do_work; \
-                 the binding flat-index shift hazard is back"
+                "merged CallExt binding_idx {} resolved to {:?}, not do_work; \
+                 the binding flat-index shift hazard is back",
+                binding_idx,
+                resolved,
             );
             found = true;
-            break;
         }
-        pc += 1;
     }
-    assert!(found, "expected to find a JsrExt in the merged text");
+    assert!(found, "expected to find a CallExt in the merged SSA");
+    let _ = Op::JsrExt;
 }

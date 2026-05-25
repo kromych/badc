@@ -174,12 +174,9 @@ impl Compiler {
 
     /// Emit `Psh; Imm <val>; <op>` -- the three-op idiom for
     /// "apply `op` to the accumulator with `val` as the right-
-    /// hand operand". The optimizer's immediate-form pass fuses
-    /// the same triple into AddI / MulI / ShlI / etc., so the
-    /// runtime cost is identical; this helper just consolidates
-    /// the 11-odd parser sites that emit pointer-arithmetic
-    /// scaling, bitfield mask-and-shift, post/pre-increment step
-    /// values, and the like.
+    /// hand operand". Consolidates the parser sites that emit
+    /// pointer-arithmetic scaling, bitfield mask-and-shift,
+    /// post/pre-increment step values, and the like.
     pub(super) fn emit_binop_with_imm(&mut self, op: Op, val: i64) {
         self.emit_op(Op::Psh);
         self.emit_imm(val);

@@ -1277,8 +1277,8 @@ impl<'a> Walker<'a> {
                     let result_slot = b.alloc_synthetic_local();
                     // Spill the out-pointer through an int-typed
                     // temp so the codegen routes it via the host
-                    // int arg register (matches what the lift
-                    // does for FP / pointer args).
+                    // int arg register, matching the way FP and
+                    // pointer args are routed.
                     let addr = b.local_addr(result_slot);
                     let temp = b.alloc_synthetic_local();
                     b.store_local(temp, addr, super::super::ir::StoreKind::I64);
@@ -1369,9 +1369,7 @@ impl<'a> Walker<'a> {
                         // int register class -- StoreLocal /
                         // LoadLocal -- so the codegen places
                         // the value in x0..x7 instead of
-                        // d0..d7. Mirror what the lift
-                        // produces for FP args at c5-internal
-                        // call sites.
+                        // d0..d7.
                         for (i, a) in args.iter().enumerate() {
                             let arg_is_fp = expr_ty(self.ast.expr(*a))
                                 .map(is_floating_scalar)

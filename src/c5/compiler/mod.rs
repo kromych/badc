@@ -520,9 +520,7 @@ pub struct Compiler {
 
     /// Synthesised `FunctionSsa` entries for parser-emitted
     /// helpers that aren't built from source (sys-trampolines).
-    /// The codegen reads these directly via `produce_ssa_funcs`
-    /// so the lift step doesn't need to recover them from the
-    /// bytecode tape.
+    /// The codegen reads these directly via `produce_ssa_funcs`.
     pub(super) synthetic_ssa_funcs: Vec<super::ir::FunctionSsa>,
 
     /// Per-function map from goto label name -> AST `LabelId`.

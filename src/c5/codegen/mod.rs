@@ -209,28 +209,26 @@ pub(crate) enum ReturnExt {
 /// Upper bound on bc_pcs the lowering needs to look up. The
 /// per-arch `lower` sizes `bytecode_to_native` by this value so
 /// every `ent_pc` / `end_pc` / `block_start_pc` / sentinel write
-/// the SSA emit produces lands in range. Takes the max of
-/// `program.text.len()` and the largest `end_pc` across
-/// `ssa_funcs`; the codegen still walks the bytecode tape for
-/// the post-function CRT epilogue stub.
+/// the SSA emit produces lands in range.
 pub(super) fn pc_extent_for_lowering(
     program: &Program,
     ssa_funcs: &[crate::c5::ir::FunctionSsa],
 ) -> usize {
     let from_ssa = ssa_funcs.iter().map(|f| f.end_pc).max().unwrap_or(0);
-    // Cross-TU function-import placeholders sit past `text.len()`;
-    // the codegen's per-`Inst::Call` fixup pass uses the same
-    // dense `bytecode_to_native` table to recognise them as
-    // out-of-range, so the table has to cover the placeholder
-    // range too. `extern_function_imports` is empty for every
-    // build that didn't go through the relocatable -c path.
+    // Cross-TU function-import placeholders sit past the
+    // highest `end_pc`; the codegen's per-`Inst::Call` fixup
+    // pass uses the same dense `bytecode_to_native` table to
+    // recognise them as out-of-range, so the table has to
+    // cover the placeholder range too. `extern_function_imports`
+    // is empty for every build that didn't go through the
+    // relocatable -c path.
     let from_imports = program
         .extern_function_imports
         .iter()
         .map(|(pc, _)| *pc)
         .max()
         .unwrap_or(0);
-    program.text.len().max(from_ssa).max(from_imports)
+    from_ssa.max(from_imports)
 }
 
 /// Where a single call argument lands on the host ABI. Produced

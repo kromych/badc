@@ -895,13 +895,15 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
         }
         // User SSA from each unit's compile_to_link_unit path.
         // Per-unit ent_pcs are unit-local; rebase by text_base.
-        // Inst::CallExt::binding_idx and Terminator::TailExt(idx)
-        // remap through the unit's binding table (same logic the
-        // sys-trampoline loop above runs). Inst::Call::target_pc
-        // and Inst::ImmCode are resolved by the post-merge pass
-        // below against the patched bytecode tape -- the linker
-        // has already rewritten Op::Jsr / function-pointer Imm
-        // operands to their merged target PCs there.
+        // `Inst::CallExt::binding_idx` and
+        // `Terminator::TailExt(idx)` remap through the unit's
+        // binding table (same logic the sys-trampoline loop
+        // above runs). `Inst::Call::target_pc` and
+        // `Inst::ImmCode` for in-unit references shift by
+        // `text_off`; cross-TU externs ride through as
+        // `value == 0` and are resolved by
+        // `resolve_extern_refs` against the walker-recorded
+        // `extern_*_refs` channels.
         for (i, unit) in units.iter().enumerate() {
             let text_off = text_base[i];
             let data_off = data_base[i];

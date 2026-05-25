@@ -685,80 +685,52 @@ impl ResolvedImports {
     /// `LoadLibraryA` (in `kernel32`) gets two dylibs in that
     /// declaration order.
     ///
-    /// Source: walker AST (`Expr::Call` with `Sys` callee) plus
-    /// every `Inst::CallExt` / `Terminator::TailExt` reachable
-    /// from `synthetic_ssa_funcs` and `user_ssa_funcs`. The two
-    /// SSA vectors cover both fresh compiles (AST + synth) and
-    /// archive reloads (round-tripped user SSA + synth). The
-    /// fallback bytecode walk fires only for a `Program`
-    /// constructed without any walker-produced IR -- the
-    /// optimizer unit tests and codegen writer fixtures that
-    /// hand-build `Program { text: ..., ... }`.
+    /// Sources: every walker AST `Expr::Call` with a `Sys` callee
+    /// plus every `Inst::CallExt` / `Terminator::TailExt`
+    /// reachable from `synthetic_ssa_funcs` and `user_ssa_funcs`.
+    /// The two SSA vectors cover both fresh compiles (AST +
+    /// synth) and archive reloads (round-tripped user SSA + synth).
     pub fn resolve(program: &Program) -> Result<Self, C5Error> {
         let mut seen: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
         let mut used: Vec<i64> = Vec::new();
-        let has_ssa = !program.finished_functions.is_empty()
-            || !program.synthetic_ssa_funcs.is_empty()
-            || !program.user_ssa_funcs.is_empty();
-        if has_ssa {
-            for func in &program.finished_functions {
-                for expr in &func.ast.exprs {
-                    let super::ast::Expr::Call { callee, .. } = expr else {
-                        continue;
-                    };
-                    let callee_idx = *callee as usize;
-                    if callee_idx >= func.ast.exprs.len() {
-                        continue;
-                    }
-                    let super::ast::Expr::Ident { class, val, .. } = &func.ast.exprs[callee_idx]
-                    else {
-                        continue;
-                    };
-                    if *class != super::token::Token::Sys as i64 {
-                        continue;
-                    }
-                    if seen.insert(*val) {
-                        used.push(*val);
-                    }
-                }
-            }
-            for func in program
-                .synthetic_ssa_funcs
-                .iter()
-                .chain(program.user_ssa_funcs.iter())
-            {
-                for inst in &func.insts {
-                    if let crate::c5::ir::Inst::CallExt { binding_idx, .. } = inst
-                        && seen.insert(*binding_idx)
-                    {
-                        used.push(*binding_idx);
-                    }
-                }
-                for blk in &func.blocks {
-                    if let crate::c5::ir::Terminator::TailExt(idx) = blk.terminator
-                        && seen.insert(idx)
-                    {
-                        used.push(idx);
-                    }
-                }
-            }
-        } else {
-            // Pure-bytecode `Program` (no walker SSA, no AST
-            // snapshots): scan `text` for the binding operands of
-            // `Op::JsrExt` and `Op::TailExt`. Reached only by
-            // optimizer unit tests and writer fixtures.
-            let mut pc = 0;
-            while pc < program.text.len() {
-                let Some(op) = Op::from_i64(program.text[pc]) else {
-                    break;
+        for func in &program.finished_functions {
+            for expr in &func.ast.exprs {
+                let super::ast::Expr::Call { callee, .. } = expr else {
+                    continue;
                 };
-                if matches!(op, Op::JsrExt | Op::TailExt) {
-                    let idx = program.text[pc + 1];
-                    if seen.insert(idx) {
-                        used.push(idx);
-                    }
+                let callee_idx = *callee as usize;
+                if callee_idx >= func.ast.exprs.len() {
+                    continue;
                 }
-                pc += op.word_size();
+                let super::ast::Expr::Ident { class, val, .. } = &func.ast.exprs[callee_idx] else {
+                    continue;
+                };
+                if *class != super::token::Token::Sys as i64 {
+                    continue;
+                }
+                if seen.insert(*val) {
+                    used.push(*val);
+                }
+            }
+        }
+        for func in program
+            .synthetic_ssa_funcs
+            .iter()
+            .chain(program.user_ssa_funcs.iter())
+        {
+            for inst in &func.insts {
+                if let crate::c5::ir::Inst::CallExt { binding_idx, .. } = inst
+                    && seen.insert(*binding_idx)
+                {
+                    used.push(*binding_idx);
+                }
+            }
+            for blk in &func.blocks {
+                if let crate::c5::ir::Terminator::TailExt(idx) = blk.terminator
+                    && seen.insert(idx)
+                {
+                    used.push(idx);
+                }
             }
         }
 

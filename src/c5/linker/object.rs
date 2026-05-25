@@ -852,7 +852,7 @@ fn encode_meta(unit: &LinkUnit) -> Vec<u8> {
         let mut body = Vec::new();
         write_u32(&mut body, unit.user_ssa_funcs.len() as u32);
         for f in &unit.user_ssa_funcs {
-            write_ssa_func(&mut body, f);
+            write_ssa_func_with_unit(&mut body, f, unit);
         }
         write_tag_header(&mut buf, TAG_USER_SSA_FUNCS, body.len() as u32);
         buf.extend_from_slice(&body);
@@ -1430,7 +1430,46 @@ fn write_terminator(buf: &mut Vec<u8>, term: &crate::c5::ir::Terminator) {
     }
 }
 
+/// LinkUnit-local symbol-index permutation that `write_ssa_func`
+/// applies to `extern_*_refs` entries before serialising. Mirror
+/// of the sort in `encode_symtab` -- the symbol table on disk is
+/// reordered by binding, and the relocs use
+/// `build_elf_sym_index_map` to follow that reshuffle.
+/// `extern_*_refs` need the same treatment, but as a 0-based map
+/// into the read-side `unit.symbols` instead of the ELF symtab
+/// (the `+1` sentinel is not part of `extern_*_refs`).
+fn build_extern_refs_sym_remap(unit: &crate::c5::linker::LinkUnit) -> Vec<u32> {
+    let mut writer_order: Vec<usize> = (0..unit.symbols.len()).collect();
+    writer_order.sort_by_key(|&i| match unit.symbols[i].linkage {
+        crate::c5::symbol::Linkage::Internal => 0,
+        _ => 1,
+    });
+    let mut map = alloc::vec![u32::MAX; unit.symbols.len()];
+    for (pos, &orig) in writer_order.iter().enumerate() {
+        map[orig] = pos as u32;
+    }
+    map
+}
+
+pub(crate) fn write_ssa_func_with_unit(
+    buf: &mut Vec<u8>,
+    f: &crate::c5::ir::FunctionSsa,
+    unit: &crate::c5::linker::LinkUnit,
+) {
+    let remap = build_extern_refs_sym_remap(unit);
+    write_ssa_func_inner(buf, f, &remap);
+}
+
+#[cfg(test)]
 pub(crate) fn write_ssa_func(buf: &mut Vec<u8>, f: &crate::c5::ir::FunctionSsa) {
+    // Identity remap -- used by tests that don't go through the
+    // full LinkUnit pipeline. Safe because `extern_*_refs` is
+    // empty in those paths.
+    let identity: Vec<u32> = (0..u32::MAX).take(0).collect();
+    write_ssa_func_inner(buf, f, &identity);
+}
+
+fn write_ssa_func_inner(buf: &mut Vec<u8>, f: &crate::c5::ir::FunctionSsa, remap: &[u32]) {
     write_u64(buf, f.ent_pc as u64);
     write_u64(buf, f.end_pc as u64);
     write_i64(buf, f.locals);
@@ -1457,6 +1496,41 @@ pub(crate) fn write_ssa_func(buf: &mut Vec<u8>, f: &crate::c5::ir::FunctionSsa) 
         write_terminator(buf, &b.terminator);
         write_u32(buf, b.exit_acc);
     }
+
+    // Per-Inst extern symbol references. Each pair is
+    // (inst_idx, sym_idx) where sym_idx indexes the LinkUnit's
+    // LinkSymbol table at compile time. `encode_symtab` sorts
+    // the on-disk symbol table by binding, so we remap each
+    // sym_idx through the same permutation so the reader's
+    // re-indexed table lines up with the relocs / refs.
+    // Identity remap (used by SsaBuilder unit tests) leaves
+    // refs untouched.
+    let write_refs = |buf: &mut Vec<u8>, refs: &[(u32, u32)]| {
+        let kept: Vec<(u32, u32)> = refs
+            .iter()
+            .filter_map(|&(inst_idx, sym_idx)| {
+                if remap.is_empty() {
+                    Some((inst_idx, sym_idx))
+                } else {
+                    let mapped = remap.get(sym_idx as usize).copied().unwrap_or(u32::MAX);
+                    if mapped == u32::MAX {
+                        None
+                    } else {
+                        Some((inst_idx, mapped))
+                    }
+                }
+            })
+            .collect();
+        write_u32(buf, kept.len() as u32);
+        for (inst_idx, sym_idx) in kept {
+            write_u32(buf, inst_idx);
+            write_u32(buf, sym_idx);
+        }
+    };
+    write_refs(buf, &f.extern_call_refs);
+    write_refs(buf, &f.extern_imm_code_refs);
+    write_refs(buf, &f.extern_imm_data_refs);
+    write_refs(buf, &f.extern_tls_refs);
 }
 
 struct SsaReader<'a> {
@@ -1709,6 +1783,23 @@ pub(crate) fn read_ssa_func(
             exit_acc,
         });
     }
+    // Per-Inst extern symbol references; same shape as the
+    // writer. Each pair is (inst_idx, link_sym_idx).
+    let read_refs = |r: &mut SsaReader<'_>| -> Result<Vec<(u32, u32)>, C5Error> {
+        let n = r.u32()? as usize;
+        let mut out = Vec::with_capacity(n);
+        for _ in 0..n {
+            let inst_idx = r.u32()?;
+            let sym_idx = r.u32()?;
+            out.push((inst_idx, sym_idx));
+        }
+        Ok(out)
+    };
+    let extern_call_refs = read_refs(&mut r)?;
+    let extern_imm_code_refs = read_refs(&mut r)?;
+    let extern_imm_data_refs = read_refs(&mut r)?;
+    let extern_tls_refs = read_refs(&mut r)?;
+
     *cursor = r.cursor;
     Ok(crate::c5::ir::FunctionSsa {
         ent_pc,
@@ -1720,13 +1811,10 @@ pub(crate) fn read_ssa_func(
         inst_src,
         blocks,
         vstack_slots,
-        // TODO: serialize the four `extern_*_refs` vectors once
-        // every walker emit site populates them and the resolver
-        // can retire.
-        extern_call_refs: alloc::vec::Vec::new(),
-        extern_imm_code_refs: alloc::vec::Vec::new(),
-        extern_imm_data_refs: alloc::vec::Vec::new(),
-        extern_tls_refs: alloc::vec::Vec::new(),
+        extern_call_refs,
+        extern_imm_code_refs,
+        extern_imm_data_refs,
+        extern_tls_refs,
     })
 }
 

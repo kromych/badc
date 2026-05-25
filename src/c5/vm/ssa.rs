@@ -399,16 +399,6 @@ struct Frame<'a> {
     /// Number of declared locals (slot offsets `-1..=-locals`).
     locals: usize,
     block_idx: usize,
-    /// Function-wide spill slots for `Inst::VstackSpill` /
-    /// `Inst::VstackReload`. Sized by `FunctionSsa::vstack_slots`;
-    /// stores i64 values that the walker spilled at block exits
-    /// and reloads at successor block entries.
-    vstack: Vec<i64>,
-    /// Cross-block accumulator spill. The c5 bytecode model
-    /// preserves the accumulator across edges, so a successor
-    /// block whose entry-acc isn't materialised by a writer in
-    /// the predecessor reads through here via `Inst::AccReload`.
-    acc_spill: i64,
 }
 
 impl Frame<'_> {
@@ -615,8 +605,6 @@ fn run_func<H: Host>(
         frame_bytes,
         locals,
         block_idx: 0,
-        vstack: alloc::vec![0; func.vstack_slots as usize],
-        acc_spill: 0,
     };
     let result: Result<i64, C5Error> = loop {
         let block = &frame.func.blocks[frame.block_idx];

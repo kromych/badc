@@ -619,9 +619,16 @@ impl Compiler {
                     // forward declaration -- the function is now
                     // defined in this translation unit.
                     self.symbols[id_idx].is_extern_decl = false;
-                    if self.symbols[id_idx].is_variadic {
-                        self.variadic_functions.push(ent_pc);
-                    }
+                    // `Program::variadic_functions` was the codegen's
+                    // call-site shape source pre-walker; the per-arch
+                    // SSA emit now derives it from
+                    // `FunctionSsa::is_variadic` directly (set by the
+                    // walker through `SsaBuilder::new`). The field
+                    // remains on `Program` only as a backwards-
+                    // compatible feed for `lift_program`, which is
+                    // reachable only from optimizer test fixtures with
+                    // no variadic function definitions.
+                    let _ = ent_pc;
                     self.emit_op(Op::Ent);
                     self.emit_val(0); // patched below
                     // Placeholder AllocaInit. If the function body

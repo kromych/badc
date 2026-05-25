@@ -1075,13 +1075,22 @@ fn merge(units: Vec<LinkUnit>, defined: HashMap<String, GlobalSymbol>) -> Result
                             }
                         }
                         // Walker stamps the live unit-local
-                        // `symbol.val` for in-unit globals. Shift
-                        // by `data_base[i]` to point at the merged
-                        // data segment. Cross-TU extern references
-                        // arrive as 0 (walker has no live val);
-                        // leave those for the resolver to patch
-                        // from the linker-rewritten Op::Imm
-                        // operand. Mirror the same split for TLS.
+                        // `symbol.val` for in-unit references. Shift
+                        // by the matching section base so the value
+                        // points at the merged segment. Cross-TU
+                        // externs arrive as 0 (walker has no live
+                        // val); leave those for the resolver to
+                        // patch from the linker-rewritten bytecode
+                        // operand. Inst::Call::target_pc and
+                        // Inst::ImmCode hold unit-local function PCs
+                        // -> shift by `text_off`; ImmData / TlsAddr
+                        // hold unit-local data / TLS offsets.
+                        Inst::Call { target_pc, .. } if *target_pc != 0 => {
+                            *target_pc += text_off;
+                        }
+                        Inst::ImmCode(pc) if *pc != 0 => {
+                            *pc += text_off;
+                        }
                         Inst::ImmData(off) if *off != 0 => {
                             *off += data_off as i64;
                         }
@@ -1264,15 +1273,25 @@ fn resolve_user_ssa_call_targets(program: &mut Program) -> Result<(), C5Error> {
         let mut imm_code_iter = imm_code_targets.into_iter();
         let mut imm_data_iter = imm_data_targets.into_iter();
         let mut tls_iter = tls_targets.into_iter();
+        // For every Inst variant the resolver handles, the merge
+        // loop above already shifted any walker-stamped non-zero
+        // value by the matching section base, so we patch from the
+        // bytecode operand only when the walker stamped 0 (the
+        // cross-TU extern case where parser_symbol.val was 0
+        // because the defining unit hadn't been linked yet).
         for inst in &mut f.insts {
             match inst {
                 Inst::Call { target_pc, .. } => {
-                    if let Some(t) = jsr_iter.next() {
+                    if let Some(t) = jsr_iter.next()
+                        && *target_pc == 0
+                    {
                         *target_pc = t as usize;
                     }
                 }
                 Inst::ImmCode(pc) => {
-                    if let Some(t) = imm_code_iter.next() {
+                    if let Some(t) = imm_code_iter.next()
+                        && *pc == 0
+                    {
                         // The bytecode side stores
                         // CODE_BASE + bc_pc; the SSA side
                         // stores the bare bc_pc.
@@ -1283,14 +1302,6 @@ fn resolve_user_ssa_call_targets(program: &mut Program) -> Result<(), C5Error> {
                     if let Some(t) = imm_data_iter.next()
                         && *off == 0
                     {
-                        // Cross-TU extern reference: walker
-                        // stamped 0; the linker rewrote the
-                        // matching Op::Imm operand with the
-                        // resolved target's merged data offset.
-                        // For in-unit globals the merge loop
-                        // above already added `data_base[i]`
-                        // to the walker's unit-local value, so
-                        // skip the patch there.
                         *off = t;
                     }
                 }

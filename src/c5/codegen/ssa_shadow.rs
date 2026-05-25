@@ -91,27 +91,24 @@ pub(crate) fn walk_program(program: &Program, target: Target) -> Result<Vec<Func
     Ok(out)
 }
 
-/// SSA-source pick for the codegen backends. Three sources, in
-/// priority order:
+/// SSA-source pick for the codegen backends and the Vm. Three
+/// sources, in priority order:
 ///
 ///   1. `program.finished_functions` non-empty -> walk_program
 ///      walks each AST snapshot. The in-memory compile+link
 ///      path takes this branch.
 ///
 ///   2. `program.user_ssa_funcs` or `program.synthetic_ssa_funcs`
-///      non-empty -> the linker merged per-unit walker output and
-///      the resolver patched every Inst::ImmData / Inst::TlsAddr /
-///      Inst::Call::target_pc / Inst::ImmCode against the linker-
-///      rewritten bytecode operand. Combine the user and synthetic
-///      vectors (sys-trampolines + synthetic CRT entry). The
-///      archive-reload path of every `.o` produced after the
-///      walker became canonical takes this branch.
+///      non-empty -> the linker merged per-unit walker output.
+///      Combine the user and synthetic vectors (sys-trampolines +
+///      synthetic CRT entry). The archive-reload path of every
+///      `.o` produced after the walker became canonical takes
+///      this branch.
 ///
 ///   3. Neither populated -> `lift_program` rebuilds SSA from
-///      the bytecode tape. Reached only by Program shapes built
-///      outside the parser pipeline -- optimizer unit tests and
-///      codegen writer fixtures that hand-build `Program { text:
-///      ..., ... }`.
+///      the bytecode tape. Reached by the Vm's hand-built test
+///      fixtures and by optimizer unit tests that exercise the
+///      Vm on raw bytecode.
 pub(crate) fn produce_ssa_funcs(
     program: &Program,
     target: Target,
@@ -136,12 +133,9 @@ pub(crate) fn produce_ssa_funcs(
         out.sort_by_key(|f| f.ent_pc);
         return Ok(out);
     }
-    // Bytecode-only Program shapes: optimizer unit tests that
-    // build `Program { text: ..., ... }` directly without going
-    // through the parser or linker, and the empty-program test
-    // fixtures in the codegen writer modules. `lift_program`
-    // decodes the bytecode tape into FunctionSsa for those
-    // cases. No parser-produced program reaches this branch.
+    if program.text.is_empty() {
+        return Ok(Vec::new());
+    }
     super::ssa::lift_program(program)
 }
 

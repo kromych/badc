@@ -319,11 +319,7 @@ impl SsaBuilder {
     /// lives in another translation unit. Records the parser-
     /// symbol index in `extern_call_refs` so the linker can
     /// resolve to the merged ent_pc after symbol unification.
-    pub(crate) fn call_extern(
-        &mut self,
-        sym_idx: u32,
-        args: Vec<ValueId>,
-    ) -> ValueId {
+    pub(crate) fn call_extern(&mut self, sym_idx: u32, args: Vec<ValueId>) -> ValueId {
         let v = self.push(Inst::Call { target_pc: 0, args });
         self.func.extern_call_refs.push((v, sym_idx));
         v

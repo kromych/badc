@@ -1456,7 +1456,9 @@ fn resolve_extern_refs(
             return None;
         }
         let v = match target_sym_def.kind {
-            SymbolKind::Function => (text_base[target_unit_idx] as i64) + target_sym_def.value as i64,
+            SymbolKind::Function => {
+                (text_base[target_unit_idx] as i64) + target_sym_def.value as i64
+            }
             SymbolKind::Data => (data_base[target_unit_idx] as i64) + target_sym_def.value as i64,
             SymbolKind::TlsData => {
                 let owner = &units[target_unit_idx];
@@ -1475,8 +1477,9 @@ fn resolve_extern_refs(
 
     for &(inst_idx, link_sym_idx) in &rebased.extern_call_refs {
         if let Some(target_pc) = resolve(link_sym_idx, SymbolKind::Function)
-            && let Some(Inst::Call { target_pc: slot, .. }) =
-                rebased.insts.get_mut(inst_idx as usize)
+            && let Some(Inst::Call {
+                target_pc: slot, ..
+            }) = rebased.insts.get_mut(inst_idx as usize)
             && *slot == 0
         {
             *slot = target_pc as usize;

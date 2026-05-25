@@ -1252,11 +1252,7 @@ fn resolve_user_ssa_call_targets(program: &mut Program) -> Result<(), C5Error> {
                     .enumerate()
                     .filter_map(|(i, inst)| {
                         if let Inst::ImmData(off) = inst {
-                            let line = f
-                                .inst_src
-                                .get(i)
-                                .map(|&(l, _)| l)
-                                .unwrap_or(0);
+                            let line = f.inst_src.get(i).map(|&(l, _)| l).unwrap_or(0);
                             Some((i, *off, line))
                         } else {
                             None

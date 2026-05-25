@@ -323,6 +323,47 @@ fn function_pointer_initializer_resolves_at_link_time() {
     );
 }
 
+// AArch64 calling convention: a libc / dylib call must use
+// `BL` (branch-with-link) so the callee's `RET` returns into
+// the caller. The SSA emit's PLT call placeholder used `B`
+// (unconditional branch); the apply_plt_call_fixups patcher
+// only rewrote the imm26 and left the opcode as B. Result:
+// the libc call became a tail jump, the callee `ret`'d to
+// `_start`'s lr (post-`bl main`), and main's epilogue never
+// ran -- the exit-group syscall picked up the libc call's
+// return value as the program's exit code.
+#[cfg(target_os = "linux")]
+#[test]
+fn libc_call_then_return_constant() {
+    let dir = tempdir("libc-then-return");
+    write_source(
+        &dir,
+        "main.c",
+        "#include <stdio.h>\n\
+         int main(void) {\n\
+         \tint n = printf(\"hi\\n\");\n\
+         \treturn n + 100;\n\
+         }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "link libc call + return",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(
+        out.status.code(),
+        Some(103),
+        "exit code mismatch: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
 // C99 7.16: a variadic function's prototype carries the
 // trailing `...`. c5's variadic ABI is custom -- args go on
 // the c5 stack at 16-byte stride, the callee skips the host-

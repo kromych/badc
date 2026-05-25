@@ -123,7 +123,18 @@ fn write_static_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8>
     // the writer's job is to call `entry_name` and then exit
     // via `exit_group(rax)`. Both the call placeholder and
     // the syscall sequence are per-arch.
+    //
+    // aarch64 requires every instruction fetch to be 4-byte
+    // aligned, and the kernel raises SIGBUS BUS_ADRALN on the
+    // first fetch if the entry point isn't. `merged.text` ends
+    // after BUILD_INFO bytes the codegen appends and may sit
+    // at any offset, so align before recording the stub's
+    // entry point. 4 bytes is also the right alignment for
+    // x86_64's `xor ebp, ebp; ...` start stub.
     let mut text = merged.text.clone();
+    while text.len() & 3 != 0 {
+        text.push(0);
+    }
     let stub_text_offset = text.len();
     let stub_bytes = start_stub_bytes(merged.machine, stub_text_offset, entry_text_offset);
     text.extend_from_slice(&stub_bytes);
@@ -471,8 +482,13 @@ fn write_dynamic_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8
 
     // Append the entry-call stub to the merged text. The
     // trampolines already produced by `emit_*_plt` are part of
-    // `merged.text`; the stub lands past them.
+    // `merged.text`; the stub lands past them. Pad to 4 bytes
+    // first so the entry point is instruction-aligned on
+    // aarch64 (matching the static path).
     let mut text = merged.text.clone();
+    while text.len() & 3 != 0 {
+        text.push(0);
+    }
     let stub_text_offset = text.len();
     let stub_bytes = start_stub_bytes(merged.machine, stub_text_offset, entry_text_offset);
     text.extend_from_slice(&stub_bytes);
@@ -515,7 +531,10 @@ fn write_dynamic_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8
     let dynsym_size = dynsym.len() as u64;
     let rela_plt_off = dynsym_off + dynsym_size;
     let rela_plt_size = (n_imports as u64) * ELF64_RELA_SIZE;
-    let text_off = rela_plt_off + rela_plt_size;
+    // 4-align so `text_vaddr = BASE_ADDR + text_off` and every
+    // instruction landing in `.text` is 4-byte aligned for
+    // aarch64.
+    let text_off = (rela_plt_off + rela_plt_size + 3) & !3;
     let text_size = text.len() as u64;
 
     // Second PT_LOAD starts on the next page after the text
@@ -694,6 +713,10 @@ fn write_dynamic_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8
     }
 
     // .text (with PLT trampolines patched + start stub).
+    // Pad any gap left by 4-aligning `text_off`.
+    while (out.len() as u64) < text_off {
+        out.push(0);
+    }
     debug_assert_eq!(out.len() as u64, text_off);
     out.extend_from_slice(&text);
 

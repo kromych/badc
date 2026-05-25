@@ -1459,7 +1459,13 @@ fn emit_call_ext(
         import_index,
         is_tail: false,
     });
-    emit(code, enc_b(0));
+    // BL: non-tail libc call -- the AAPCS64 return goes back
+    // into main below for the result handling + `return`
+    // epilogue. The apply_plt_call_fixups patcher only
+    // rewrites imm26, so the placeholder opcode has to be BL
+    // (`0x94000000`) not B (`0x14000000`); otherwise printf
+    // ret's to main's caller and main's epilogue never runs.
+    emit(code, enc_bl(0));
     // AAPCS64 returns `long double` (IEEE binary128) in v0 as a
     // single 128-bit Q register. c5 stores `long double` in an
     // 8-byte FP64 slot, so a `long double` libc return needs a

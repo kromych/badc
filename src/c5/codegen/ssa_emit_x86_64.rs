@@ -12,9 +12,8 @@
 //!    allocator reported as used, and spill the host-ABI arg
 //!    registers into the c5 cdecl slots the body's
 //!    `LocalAddr(>=2)` references.
-//! 2. Walk each block in source order. Emit `VstackReload`s at
-//!    block start, per-`Inst` native code in `inst_range`, then
-//!    `VstackSpill`s, then the terminator.
+//! 2. Walk each block in source order. Emit per-`Inst` native
+//!    code in `inst_range`, then the terminator.
 //! 3. Epilogue lands inline at every `Terminator::Return`: move
 //!    the return value into rax, restore saved regs, drop the
 //!    frame, pop rbp, ret.
@@ -891,8 +890,6 @@ fn emit_inst(
         Inst::ImmCode(target_bc_pc) => {
             emit_imm_code(code, dst, *target_bc_pc, pending_func_fixups, frame)
         }
-        Inst::VstackSpill { slot, value } => emit_vstack_spill(code, *slot, *value, alloc, frame),
-        Inst::VstackReload { slot } => emit_vstack_reload(code, dst, *slot, frame),
         Inst::Mcpy {
             dst: d,
             src: s,
@@ -903,62 +900,6 @@ fn emit_inst(
         }
         Inst::Intrinsic { kind, args } => {
             emit_intrinsic(code, *kind, args, dst, alloc, frame, *current_alloca_top)
-        }
-        Inst::AccSpill { value } => {
-            let value_place = alloc
-                .places
-                .get(*value as usize)
-                .copied()
-                .unwrap_or(Place::None);
-            let sp_off = (frame.frame_bytes - frame.acc_slot_off) as i32;
-            let rs = match value_place {
-                Place::IntReg(r) => Reg(r),
-                Place::Spill(_) => {
-                    // Source already spilled. Load into SCRATCH_R10
-                    // and then store to the acc slot.
-                    let Some(r) = materialize_int(code, value_place, SCRATCH_R10, frame) else {
-                        bail_msg("AccSpill: value materialize failed");
-                        return false;
-                    };
-                    r
-                }
-                Place::FpReg(r) => {
-                    // f64 bit pattern lives in xmm[r]; movq into the
-                    // acc slot via SCRATCH_R10.
-                    super::x86_64::emit_movq_r_xmm(code, SCRATCH_R10, Reg(r));
-                    SCRATCH_R10
-                }
-                Place::None => {
-                    bail_msg("AccSpill: value Place::None");
-                    return false;
-                }
-            };
-            emit_mov_mem_r(code, Reg::RSP, sp_off, rs);
-            true
-        }
-        Inst::AccReload => {
-            let sp_off = (frame.frame_bytes - frame.acc_slot_off) as i32;
-            match dst {
-                Place::IntReg(r) => {
-                    emit_mov_r_mem(code, Reg(r), Reg::RSP, sp_off);
-                    true
-                }
-                Place::Spill(_) => {
-                    // Reload via SCRATCH_R10, then store to dst's
-                    // spill slot.
-                    emit_mov_r_mem(code, SCRATCH_R10, Reg::RSP, sp_off);
-                    spill_dst_to_slot(code, dst, SCRATCH_R10, frame);
-                    true
-                }
-                Place::FpReg(r) => {
-                    // Acc slot holds an integer-encoded bit pattern;
-                    // reinterpret into xmm[r] via movq.
-                    emit_mov_r_mem(code, SCRATCH_R10, Reg::RSP, sp_off);
-                    super::x86_64::emit_movq_xmm_r(code, Reg(r), SCRATCH_R10);
-                    true
-                }
-                Place::None => true,
-            }
         }
         Inst::Fneg(value) => emit_fneg(code, dst, *value, alloc, frame),
         Inst::FpCast { kind, value } => emit_fp_cast(code, dst, *kind, *value, alloc, frame),
@@ -2701,62 +2642,6 @@ fn emit_imm_code(
     super::x86_64::emit_lea_r_rip32(code, rd, 0);
     spill_dst_to_slot(code, dst, rd, frame);
     true
-}
-
-fn emit_vstack_spill(
-    code: &mut Vec<u8>,
-    slot: u32,
-    value: u32,
-    alloc: &Allocation,
-    frame: Frame,
-) -> bool {
-    let value_place = alloc
-        .places
-        .get(value as usize)
-        .copied()
-        .unwrap_or(Place::None);
-    let sp_off = (frame.frame_bytes - frame.acc_slot_off + 8 + slot * 8) as i32;
-    let rs = match value_place {
-        Place::IntReg(r) => Reg(r),
-        Place::Spill(_) => {
-            let Some(r) = materialize_int(code, value_place, SCRATCH_R10, frame) else {
-                bail_msg("VstackSpill: materialize failed");
-                return false;
-            };
-            r
-        }
-        Place::FpReg(r) => {
-            super::x86_64::emit_movq_r_xmm(code, SCRATCH_R10, Reg(r));
-            SCRATCH_R10
-        }
-        Place::None => {
-            bail_msg("VstackSpill: value Place::None");
-            return false;
-        }
-    };
-    emit_mov_mem_r(code, Reg::RSP, sp_off, rs);
-    true
-}
-
-fn emit_vstack_reload(code: &mut Vec<u8>, dst: Place, slot: u32, frame: Frame) -> bool {
-    let sp_off = (frame.frame_bytes - frame.acc_slot_off + 8 + slot * 8) as i32;
-    match dst {
-        Place::IntReg(r) => {
-            emit_mov_r_mem(code, Reg(r), Reg::RSP, sp_off);
-            true
-        }
-        Place::Spill(_) => {
-            emit_mov_r_mem(code, SCRATCH_R10, Reg::RSP, sp_off);
-            spill_dst_to_slot(code, dst, SCRATCH_R10, frame);
-            true
-        }
-        Place::FpReg(r) => {
-            emit_mov_r_mem(code, SCRATCH_R10, Reg::RSP, sp_off);
-            super::x86_64::emit_movq_xmm_r(code, Reg(r), SCRATCH_R10);
-            true
-        }
-        Place::None => true,
-    }
 }
 
 fn emit_mcpy(

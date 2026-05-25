@@ -885,36 +885,6 @@ fn run_inst<H: Host>(
             // arena get the "not implemented" path below.
             return Ok(());
         }
-        Inst::VstackSpill { slot, value } => {
-            let s = *slot as usize;
-            if s >= frame.vstack.len() {
-                return Err(C5Error::Runtime(format!(
-                    "vm_ssa: VstackSpill: slot {s} out of {len}",
-                    len = frame.vstack.len(),
-                )));
-            }
-            frame.vstack[s] = frame.regs[*value as usize];
-            return Ok(());
-        }
-        Inst::VstackReload { slot } => {
-            let s = *slot as usize;
-            if s >= frame.vstack.len() {
-                return Err(C5Error::Runtime(format!(
-                    "vm_ssa: VstackReload: slot {s} out of {len}",
-                    len = frame.vstack.len(),
-                )));
-            }
-            frame.regs[v as usize] = frame.vstack[s];
-            return Ok(());
-        }
-        Inst::AccSpill { value } => {
-            frame.acc_spill = frame.regs[*value as usize];
-            return Ok(());
-        }
-        Inst::AccReload => {
-            frame.regs[v as usize] = frame.acc_spill;
-            return Ok(());
-        }
     };
     Err(C5Error::Runtime(format!("vm_ssa: {name} not implemented",)))
 }

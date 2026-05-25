@@ -1061,10 +1061,6 @@ const SSA_INST_TAIL_EXT: u8 = 18;
 const SSA_INST_MCPY: u8 = 19;
 const SSA_INST_INTRINSIC: u8 = 20;
 const SSA_INST_ALLOCA_INIT: u8 = 21;
-const SSA_INST_VSTACK_SPILL: u8 = 22;
-const SSA_INST_VSTACK_RELOAD: u8 = 23;
-const SSA_INST_ACC_SPILL: u8 = 24;
-const SSA_INST_ACC_RELOAD: u8 = 25;
 
 const SSA_TERM_JMP: u8 = 0;
 const SSA_TERM_BZ: u8 = 1;
@@ -1358,22 +1354,6 @@ fn write_inst(buf: &mut Vec<u8>, inst: &crate::c5::ir::Inst) {
         Inst::AllocaInit(slot) => {
             buf.push(SSA_INST_ALLOCA_INIT);
             write_i64(buf, *slot);
-        }
-        Inst::VstackSpill { slot, value } => {
-            buf.push(SSA_INST_VSTACK_SPILL);
-            write_u32(buf, *slot);
-            write_u32(buf, *value);
-        }
-        Inst::VstackReload { slot } => {
-            buf.push(SSA_INST_VSTACK_RELOAD);
-            write_u32(buf, *slot);
-        }
-        Inst::AccSpill { value } => {
-            buf.push(SSA_INST_ACC_SPILL);
-            write_u32(buf, *value);
-        }
-        Inst::AccReload => {
-            buf.push(SSA_INST_ACC_RELOAD);
         }
     }
 }
@@ -1678,20 +1658,6 @@ impl<'a> SsaReader<'a> {
                 Inst::Intrinsic { kind, args }
             }
             SSA_INST_ALLOCA_INIT => Inst::AllocaInit(self.i64()?),
-            SSA_INST_VSTACK_SPILL => {
-                let slot = self.u32()?;
-                let value = self.u32()?;
-                Inst::VstackSpill { slot, value }
-            }
-            SSA_INST_VSTACK_RELOAD => {
-                let slot = self.u32()?;
-                Inst::VstackReload { slot }
-            }
-            SSA_INST_ACC_SPILL => {
-                let value = self.u32()?;
-                Inst::AccSpill { value }
-            }
-            SSA_INST_ACC_RELOAD => Inst::AccReload,
             _ => return Err(err("ssa Inst tag out of range")),
         })
     }

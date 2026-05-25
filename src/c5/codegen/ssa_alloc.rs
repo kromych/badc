@@ -531,8 +531,6 @@ fn is_pure_inst(inst: &Inst) -> bool {
             | Inst::BinopI { .. }
             | Inst::Fneg(_)
             | Inst::FpCast { .. }
-            | Inst::VstackReload { .. }
-            | Inst::AccReload
     )
 }
 
@@ -546,8 +544,6 @@ fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
         | Inst::TlsAddr(_)
         | Inst::AllocaInit(_)
         | Inst::TailExt(_)
-        | Inst::VstackReload { .. }
-        | Inst::AccReload
         | Inst::LoadLocal { .. } => {}
         Inst::Load { addr, .. } => f(*addr),
         Inst::Store { addr, value, .. } => {
@@ -585,8 +581,6 @@ fn for_each_operand(inst: &Inst, mut f: impl FnMut(ValueId)) {
             f(*dst);
             f(*src);
         }
-        Inst::VstackSpill { value, .. } => f(*value),
-        Inst::AccSpill { value } => f(*value),
     }
 }
 
@@ -634,10 +628,6 @@ fn result_kind(inst: &Inst) -> ResultKind {
         Mcpy { .. } => ResultKind::Int,
         Intrinsic { .. } => ResultKind::Int,
         AllocaInit(_) => ResultKind::None,
-        VstackSpill { .. } => ResultKind::None,
-        VstackReload { .. } => ResultKind::Int,
-        AccSpill { .. } => ResultKind::None,
-        AccReload => ResultKind::Int,
     }
 }
 
@@ -664,9 +654,7 @@ fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
             | Inst::LocalAddr(_)
             | Inst::TlsAddr(_)
             | Inst::AllocaInit(_)
-            | Inst::TailExt(_)
-            | Inst::VstackReload { .. }
-            | Inst::AccReload => {}
+            | Inst::TailExt(_) => {}
             Inst::Load { addr, .. } => bump(*addr, pc, &mut last_use),
             Inst::Store { addr, value, .. } => {
                 bump(*addr, pc, &mut last_use);
@@ -712,8 +700,6 @@ fn compute_last_use(func: &FunctionSsa) -> Vec<u32> {
                     bump(a, pc, &mut last_use);
                 }
             }
-            Inst::VstackSpill { value, .. } => bump(*value, pc, &mut last_use),
-            Inst::AccSpill { value } => bump(*value, pc, &mut last_use),
         }
     }
     // Also: each block's exit_acc keeps that value live to the

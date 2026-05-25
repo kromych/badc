@@ -371,10 +371,6 @@ fn ssa_func_encoder_round_trip_handcrafted() {
             args: alloc::vec![24, 25],
         },
         Inst::AllocaInit(-128),
-        Inst::VstackSpill { slot: 1, value: 26 },
-        Inst::VstackReload { slot: 2 },
-        Inst::AccSpill { value: 27 },
-        Inst::AccReload,
     ];
     let n_insts = insts.len() as u32;
     let inst_src = (0..n_insts as u32).map(|i| (i + 10, i % 3)).collect();

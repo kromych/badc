@@ -167,32 +167,6 @@ pub(crate) enum Inst {
     /// Slot index is the alloca-top FP-slot offset. Produces no
     /// SSA value; emitted purely for the side effect.
     AllocaInit(i64),
-    /// Spill a c5 vstack value to a function-wide spill slot.
-    /// Emitted at block end when the c5 virtual stack is non-
-    /// empty -- e.g. an outer expression's `Op::Psh` of the LHS
-    /// straddles a branch (ternary / short-circuit) before the
-    /// matching binop consumes it.
-    VstackSpill { slot: u32, value: ValueId },
-    /// Reload a function-wide vstack spill slot. Emitted at
-    /// block start, one per still-live vstack entry. The
-    /// instruction's id becomes the new SSA name for the
-    /// reloaded value; the block uses it on its local vstack
-    /// without referencing the predecessor's writer.
-    VstackReload { slot: u32 },
-    /// Spill the accumulator across a block boundary. The c5
-    /// bytecode model treats the accumulator as a single
-    /// function-wide value preserved across every control-flow
-    /// edge; the SSA lift instead materialises it as a fresh
-    /// value per block, so cross-block reads need a memory
-    /// round trip. Emitted at block exit before the terminator
-    /// whenever the block has a successor that reads the entry
-    /// accumulator without having written it first.
-    AccSpill { value: ValueId },
-    /// Reload the cross-block accumulator at block entry. The
-    /// instruction's id becomes the block's initial accumulator
-    /// value; subsequent ops that read `acc` (binops, stores,
-    /// terminators) reference it.
-    AccReload,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

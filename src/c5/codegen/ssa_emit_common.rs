@@ -149,8 +149,6 @@ pub(super) fn is_dead_pure(
             | BinopI { .. }
             | Fneg(_)
             | FpCast { .. }
-            | VstackReload { .. }
-            | AccReload
     );
     if !pure {
         return false;

@@ -223,15 +223,12 @@ struct Walker<'a> {
 }
 
 impl<'a> Walker<'a> {
-    /// Live `ent_pc` for a `Token::Fun` symbol. The parser
-    /// stored the pre-optimization PC in `Expr::Ident.val`; the
-    /// bytecode optimizer can shift `Op::Ent` and updates
-    /// `Symbol::val` in place. Looking it up here lets every
-    /// `Expr::Call` resolve to the post-opt PC the SSA emit's
-    /// `bytecode_to_native` table holds, without re-walking the
-    /// AST after `optimize::optimize`. Sys trampolines have
-    /// their `val` patched late by `emit_sys_trampolines`;
-    /// the same live-read fits both cases.
+    /// Live `ent_pc` for a `Token::Fun` symbol. Reading the
+    /// symbol's current `val` lets every `Expr::Call` resolve to
+    /// the matching `bytecode_to_native` slot the codegen will
+    /// populate. Sys trampolines have their `val` patched late
+    /// by `emit_sys_trampolines`; the same live-read fits both
+    /// cases.
     fn live_fun_val(&self, sym: u32, fallback_val: i64) -> i64 {
         let idx = sym as usize;
         if idx < self.symbols.len() && self.symbols[idx].class == Token::Fun as i64 {
@@ -1892,13 +1889,12 @@ impl<'a> Walker<'a> {
         is_thread_local: bool,
         array_size: i64,
     ) -> Result<super::super::ir::ValueId, WalkError> {
-        // The parser snapshotted `val` as the `Op::Ent` PC the
-        // pre-optimizer saw. The bytecode optimizer can shift
-        // `Op::Ent`; for `Token::Fun` references the live PC
-        // lives on `self.symbols[sym].val`. Other classes
-        // (`Token::Loc` / `Token::Glo` / `Token::Num`) carry
-        // a stable per-frame slot / data offset / constant the
-        // optimizer never rewrites, so the snapshot stays
+        // The parser snapshotted `val` as the `Op::Ent` PC at
+        // emit time; for `Token::Fun` references the live PC
+        // lives on `self.symbols[sym].val` (sys trampolines
+        // patch theirs late). Other classes (`Token::Loc` /
+        // `Token::Glo` / `Token::Num`) carry a stable per-frame
+        // slot / data offset / constant, so the snapshot stays
         // correct.
         let val: i64 = if class == Token::Fun as i64 {
             self.live_fun_val(_sym, val)

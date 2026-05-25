@@ -67,14 +67,12 @@ pub(crate) enum Inst {
     /// represented as a single instruction so the per-arch emit
     /// folds the address into the load's addressing mode and
     /// the allocator does not need to assign a register to the
-    /// intermediate address. Produced by the lift for the
-    /// optimizer's fused `Op::LdLocI` / `Op::LdLocC` ops.
+    /// intermediate address.
     LoadLocal { off: i64, kind: LoadKind },
     /// Store to a local / parameter slot. Same shape as
     /// [`Self::Store`] but with the address represented as a
     /// constant slot offset, so the emit folds it into the
-    /// store's addressing mode. Produced by the lift for the
-    /// optimizer's fused `Op::StLocI` op.
+    /// store's addressing mode.
     StoreLocal {
         off: i64,
         value: ValueId,
@@ -112,8 +110,7 @@ pub(crate) enum Inst {
         lhs: ValueId,
         rhs: ValueId,
     },
-    /// Same as `Binop` but `rhs` is a literal immediate (the
-    /// optimizer's `<op>I N` fusion).
+    /// Same as `Binop` but `rhs` is a literal immediate.
     BinopI {
         op: BinOp,
         lhs: ValueId,

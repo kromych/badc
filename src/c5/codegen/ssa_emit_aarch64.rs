@@ -216,12 +216,11 @@ pub(super) fn emit_function(
             let inst = &func.insts[v as usize];
             let place = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
             // Skip pure insts whose value isn't consumed by any
-            // other inst or terminator. The lift's pattern-folds
-            // (LoadLocal, indexed-load) sometimes leave the upstream
-            // Add / BinopI dead; the existing optimizer's tail
-            // shapes (post-increment trailing Sub 1) leave the
-            // adjustment dead too. The result computation produces
-            // no machine code if no one will read it.
+            // other inst or terminator. Walker-side pattern folds
+            // (LoadLocal, indexed-load) sometimes leave the
+            // upstream `Add` / `BinopI` dead; the result
+            // computation produces no machine code if no one
+            // will read it.
             if super::ssa_emit_common::is_dead_pure(inst, v, alloc) {
                 continue;
             }

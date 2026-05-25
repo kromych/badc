@@ -1105,13 +1105,12 @@ pub(crate) struct FuncFixup {
 /// delegate.
 #[derive(Debug, Clone, Copy)]
 pub struct NativeOptions {
-    /// Run the bytecode optimizer + the SSA allocator's
-    /// peephole-friendly arrangement (constant folding, dead-store
-    /// elimination, fusion of compare + branch). Off by default;
-    /// `--optimize` / `-O` flips it on. The optimizer and the SSA
-    /// allocator are independent -- each is correct on the other's
-    /// input -- but together they produce the fastest emitted
-    /// code.
+    /// Retired knob. The bytecode-tape optimizer was deleted
+    /// along with `lift_program`; the walker is the canonical
+    /// SSA producer and reads AST snapshots directly. The flag
+    /// is left on the public API for source compatibility but
+    /// the codegen path ignores it. Future walker-side
+    /// optimization passes may rebind it.
     pub optimize: bool,
     /// Pick the kind of binary the writer should produce.
     /// Default is [`OutputKind::Executable`] -- a normal
@@ -1233,14 +1232,8 @@ pub fn emit_native(program: &Program, target: Target) -> Result<Vec<u8>, C5Error
 }
 
 /// Variant of [`emit_native`] that accepts user-controllable
-/// optimization knobs.
-///
-/// `options.optimize` is informational: the CLI's `-O` path
-/// runs the bytecode optimizer separately via `optimize()`
-/// before calling here, and re-running the optimizer on
-/// already-optimized bytecode is not idempotent. Tests that
-/// want `-O` codegen must call `optimize()` themselves and
-/// hand the result to this function.
+/// [`NativeOptions`]. `options.optimize` is currently a no-op
+/// (see [`NativeOptions::optimize`]).
 pub fn emit_native_with_options(
     program: &Program,
     target: Target,

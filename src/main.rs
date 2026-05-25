@@ -52,8 +52,10 @@ Multi-TU knobs:
                            library. Members are pulled in on demand.
 
 Compile knobs:
-  -O, --optimize           Enable the bytecode optimizer + native
-                           regalloc.
+  -O, --optimize           Retired knob. The bytecode optimizer
+                           was deleted along with lift_program;
+                           the flag is recognised for source
+                           compatibility but has no effect.
   --no-debug, -g0          Skip DWARF emission. Shrinks
                            the output by ~10-30%.
   --target=<spec>          Pick the binary format (one of

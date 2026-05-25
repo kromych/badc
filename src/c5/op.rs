@@ -558,16 +558,15 @@ impl Op {
 
     /// Number of operand i64 words that follow this op in the
     /// bytecode. Single source of truth -- every bytecode walker
-    /// (the optimizer's decode pass, the regalloc analyzer, the
-    /// codegen lowering, the import resolver, the disassembler)
-    /// reads its operand-skip count from here. Adding a new
-    /// operand-bearing op only requires an entry in this match.
+    /// (the linker merge, the disassembler) reads its operand-
+    /// skip count from here. Adding a new operand-bearing op
+    /// only requires an entry in this match.
     pub fn operand_count(self) -> usize {
         use Op::*;
         match self {
             // Single-operand ops: control flow, frame setup, libc
-            // dispatch, and the optimizer's immediate-form
-            // arithmetic / comparison ops.
+            // dispatch, and the immediate-form arithmetic /
+            // comparison ops.
             Lea | Imm | Jmp | Jsr | Bz | Bnz | Ent | Adj | JsrExt | TailExt | AddI | SubI
             | MulI | AndI | OrI | XorI | ShlI | ShrI | ShruI | EqI | NeI | LtI | GtI | LeI
             | GeI | UltI | UgtI | UleI | UgeI | LdLocI | LdLocC | StLocI | Mcpy | TlsLea

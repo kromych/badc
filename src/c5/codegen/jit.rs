@@ -53,9 +53,10 @@ pub fn jit_run(program: &Program, args: &[String]) -> Result<i32, C5Error> {
     jit_run_with_options(program, args, NativeOptions::default())
 }
 
-/// Variant of [`jit_run`] that accepts user-controllable optimization
-/// knobs. Currently the only knob is [`NativeOptions::optimize`];
-/// future ones will land here too.
+/// Variant of [`jit_run`] that accepts user-controllable
+/// [`NativeOptions`]. The `optimize` knob is currently a no-op
+/// (see [`NativeOptions::optimize`]); the other knobs control
+/// `OutputKind`, DWARF emission, and so on.
 pub fn jit_run_with_options(
     program: &Program,
     args: &[String],

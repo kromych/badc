@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use badc::{
     Compiler, NativeOptions, PredefinedKind, Target, Vm, dump_native_listing_with_options,
-    emit_native_with_options, jit_run_with_options, optimize, predefined_symbols,
+    emit_native_with_options, jit_run_with_options, predefined_symbols,
 };
 
 const USAGE: &str = "\
@@ -877,17 +877,11 @@ fn main() {
         program.source_path = path.clone();
     }
 
-    let program = if optimize_flag && std::env::var("BADC_BC_OPT_OFF").is_err() {
-        match optimize(program) {
-            Ok(p) => p,
-            Err(e) => {
-                eprint_diagnostic(e);
-                std::process::exit(1);
-            }
-        }
-    } else {
-        program
-    };
+    // `-O` is a no-op: the bytecode-tape optimizer was retired
+    // along with `lift_program`. The walker is the canonical SSA
+    // producer and reads AST snapshots directly, so the optimizer's
+    // bytecode rewriting no longer reaches the codegen path.
+    let _ = optimize_flag;
 
     // Type-mismatch / arity / signature-redecl warnings (if any) --
     // print once, before the program runs. They never fail the

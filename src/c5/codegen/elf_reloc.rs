@@ -736,17 +736,42 @@ pub(super) fn write_relocatable(
     // `r_addend = target_data_offset`. The linker resolves to
     // `data_vaddr + target_offset`, the runtime VA of the
     // pointed-at global.
+    let rtype_abs64 = match machine_for_rela {
+        Machine::X86_64 => R_X86_64_64,
+        Machine::Aarch64 => R_AARCH64_ABS64,
+    };
     let mut rela_data_bytes: Vec<u8> =
-        Vec::with_capacity(build.data_relocs.len() * ELF64_RELA_SIZE);
+        Vec::with_capacity((build.data_relocs.len() + build.code_relocs.len()) * ELF64_RELA_SIZE);
     for r in &build.data_relocs {
-        let rtype = match machine_for_rela {
-            Machine::X86_64 => R_X86_64_64,
-            Machine::Aarch64 => R_AARCH64_ABS64,
-        };
         let rela = Elf64Rela {
             r_offset: r.data_offset,
-            r_info: (data_sym_idx << 32) | rtype as u64,
+            r_info: (data_sym_idx << 32) | rtype_abs64 as u64,
             r_addend: r.target_offset as i64,
+        };
+        write_struct(&mut rela_data_bytes, &rela);
+    }
+    // Function-pointer initializers: same `R_*_64` shape as
+    // pointer-to-global, but the addend is the target
+    // function's native byte offset within `.text` (looked up
+    // via `bytecode_to_native`) and the reloc points at the
+    // `.text` section symbol. The linker resolves to
+    // `text_vaddr + target_offset`.
+    for r in &build.code_relocs {
+        let bc_pc = r.target_bc_pc as usize;
+        let native_off = build
+            .bytecode_to_native
+            .get(bc_pc)
+            .copied()
+            .unwrap_or(usize::MAX);
+        if native_off == usize::MAX {
+            return Err(C5Error::Compile(crate::c5::error::fmt_internal_err(
+                &format!("elf_reloc: code reloc references missing bytecode pc {bc_pc}",),
+            )));
+        }
+        let rela = Elf64Rela {
+            r_offset: r.data_offset,
+            r_info: (text_sym_idx << 32) | rtype_abs64 as u64,
+            r_addend: native_off as i64,
         };
         write_struct(&mut rela_data_bytes, &rela);
     }

@@ -278,6 +278,51 @@ fn static_inline_helper_in_shared_header_links_across_tus() {
     );
 }
 
+// C99 6.7.9p23: function-pointer initializers like
+// `static const VTable v = { .fp = doubled };` must carry
+// the target function's runtime VA. The ET_REL writer emits
+// a `.rela.data` `R_X86_64_64` / `R_AARCH64_ABS64` against
+// the `.text` section symbol with `r_addend = native offset
+// of the target function`; the link / final-image writer
+// pair patches the slot to `text_vaddr + offset`.
+#[cfg(target_os = "linux")]
+#[test]
+fn function_pointer_initializer_resolves_at_link_time() {
+    let dir = tempdir("fp-init");
+    write_source(
+        &dir,
+        "lib.c",
+        "int doubled(int n) { return n + n; }\n\
+         typedef int (*fp_t)(int);\n\
+         const fp_t vtable[] = { doubled };\n",
+    );
+    write_source(
+        &dir,
+        "main.c",
+        "typedef int (*fp_t)(int);\n\
+         extern const fp_t vtable[];\n\
+         int main(void) { return vtable[0](21); }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("lib.c"))
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "link function-pointer initializer across TUs",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(
+        out.status.code(),
+        Some(42),
+        "exit code mismatch: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
 // C99 6.7.9p23: a static-storage-duration object initialized
 // with the address of another static-storage object resolves
 // at translation-unit-load time. The native ET_REL writer

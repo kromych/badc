@@ -81,16 +81,21 @@ pub struct MergedNative {
 }
 
 /// Pending `R_*_64` relocation that the final-image writer
-/// resolves once it knows the data segment's vmaddr.
+/// resolves once it knows the runtime vmaddrs.
 #[derive(Debug, Clone, Copy)]
 pub struct DataAbsReloc {
     /// Byte offset within `MergedNative::data` of the 8-byte
     /// slot to patch.
     pub slot_offset: u64,
-    /// Byte offset within `MergedNative::data` of the target
-    /// global. The writer fills the slot with
-    /// `data_vaddr + target_offset`.
+    /// Byte offset within the merged image's section of the
+    /// pointed-at target.
     pub target_offset: u64,
+    /// Section the target lives in. `Data` -> writer patches
+    /// `data_vaddr + target_offset`; `Text` -> writer patches
+    /// `text_vaddr + target_offset`; `Bss` -> writer patches
+    /// `data_vaddr + data_size + target_offset` (bss sits past
+    /// `.data` in the runtime image).
+    pub target_section: NativeSymSection,
 }
 
 /// Where a defined symbol lives in the merged image.
@@ -373,12 +378,6 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
             }
             let sym = &obj.symbols[reloc.sym_idx];
             let slot_offset = data_bases[i] as u64 + reloc.offset;
-            // Data-segment targets only for now. Text-pointer
-            // initializers (`static const VTable v = { .xClose
-            // = my_close };`) flow through a separate
-            // `code_relocs` channel the bytecode-era writer
-            // still owns; surface a clear error if one shows
-            // up here so the gap is visible.
             let resolved_section = match sym.section {
                 NativeSymSection::Undef => {
                     defined.get(&sym.name).map(|d| d.section).ok_or_else(|| {
@@ -402,23 +401,26 @@ pub fn link_native_objects(objs: &[NativeObject]) -> Result<MergedNative, C5Erro
                     )));
                 }
             };
-            if !matches!(resolved_section, NativeSymSection::Data) {
-                return Err(err(&format!(
-                    "link_native_objects: .rela.data target `{}` lives in {:?}; only \
-                     .data targets are supported",
-                    sym.name, resolved_section,
-                )));
-            }
             let target_offset = resolved_value + reloc.addend;
             if target_offset < 0 {
                 return Err(err(&format!(
-                    "link_native_objects: .rela.data resolved to negative data offset {}",
+                    "link_native_objects: .rela.data resolved to negative offset {}",
                     target_offset,
+                )));
+            }
+            if !matches!(
+                resolved_section,
+                NativeSymSection::Data | NativeSymSection::Bss | NativeSymSection::Text
+            ) {
+                return Err(err(&format!(
+                    "link_native_objects: .rela.data target `{}` lives in {:?}",
+                    sym.name, resolved_section,
                 )));
             }
             data_abs_relocs.push(DataAbsReloc {
                 slot_offset,
                 target_offset: target_offset as u64,
+                target_section: resolved_section,
             });
         }
     }

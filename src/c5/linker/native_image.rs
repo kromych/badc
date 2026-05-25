@@ -171,8 +171,11 @@ fn write_static_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8>
     // Apply absolute data-segment relocations. `int *gp =
     // &storage;` records a slot at `slot_offset` in `.data`
     // that needs `data_vaddr + target_offset` written into it.
+    // Function-pointer initializers (`static const VTable v =
+    // { .fp = my_close };`) carry `target_section == Text` and
+    // resolve against `text_vaddr` instead.
     let mut data = merged.data.clone();
-    patch_data_abs_relocs(&mut data, data_vaddr, &merged.data_abs_relocs)?;
+    patch_data_abs_relocs(&mut data, text_vaddr, data_vaddr, &merged.data_abs_relocs)?;
 
     let mut out: Vec<u8> = Vec::with_capacity(
         headers_size as usize + text.len() + merged.data.len() + PAGE_SIZE as usize,
@@ -252,12 +255,17 @@ fn write_static_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8>
 
 /// Apply each `R_*_64` data-segment relocation to `data` in
 /// place. The slot at `slot_offset` is overwritten with the
-/// little-endian u64 `data_vaddr + target_offset`.
+/// little-endian u64 `base + target_offset`, picking
+/// `text_vaddr` or `data_vaddr` per the reloc's
+/// `target_section`. Bss targets sit past `.data` at runtime,
+/// hence the `data.len()` shift.
 fn patch_data_abs_relocs(
     data: &mut [u8],
+    text_vaddr: u64,
     data_vaddr: u64,
     relocs: &[super::native_link::DataAbsReloc],
 ) -> Result<(), C5Error> {
+    use crate::c5::linker::native_object::NativeSymSection;
     for r in relocs {
         let slot = r.slot_offset as usize;
         if slot + 8 > data.len() {
@@ -267,7 +275,17 @@ fn patch_data_abs_relocs(
                 data.len()
             )));
         }
-        let value = data_vaddr + r.target_offset;
+        let value = match r.target_section {
+            NativeSymSection::Data => data_vaddr + r.target_offset,
+            NativeSymSection::Text => text_vaddr + r.target_offset,
+            NativeSymSection::Bss => data_vaddr + data.len() as u64 + r.target_offset,
+            other => {
+                return Err(err(&format!(
+                    "data abs reloc at slot 0x{:x} has unsupported target section {:?}",
+                    slot, other,
+                )));
+            }
+        };
         data[slot..slot + 8].copy_from_slice(&value.to_le_bytes());
     }
     Ok(())
@@ -563,7 +581,7 @@ fn write_dynamic_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8
     // Apply absolute data-segment relocations the same way as
     // in the static path.
     let mut data = merged.data.clone();
-    patch_data_abs_relocs(&mut data, data_vaddr, &merged.data_abs_relocs)?;
+    patch_data_abs_relocs(&mut data, text_vaddr, data_vaddr, &merged.data_abs_relocs)?;
 
     let mut out: Vec<u8> =
         Vec::with_capacity((dynamic_off + dynamic_size + PAGE_SIZE) as usize + merged.data.len());

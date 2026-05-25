@@ -323,6 +323,50 @@ fn function_pointer_initializer_resolves_at_link_time() {
     );
 }
 
+// stdio buffers were lost when the writer's `_start` stub
+// called `exit_group` via syscall, bypassing libc's atexit
+// chain. The embedded runtime (`lib/runtime.c`) now exports
+// `__c5_exit` which calls libc `exit`; the writer's stub
+// routes the tail through it when the symbol is present.
+// Redirecting stdout to a file forces full buffering, so the
+// test would have surfaced an empty file under the bug.
+#[cfg(target_os = "linux")]
+#[test]
+fn printf_output_survives_redirected_stdout() {
+    let dir = tempdir("stdio-flush");
+    write_source(
+        &dir,
+        "main.c",
+        "#include <stdio.h>\n\
+         int main(void) {\n\
+         \tprintf(\"hello\\n\");\n\
+         \treturn 0;\n\
+         }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("main.c"))
+            .current_dir(&dir),
+        "link stdio-flush program",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "exit code mismatch: stderr={:?}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout).as_ref(),
+        "hello\n",
+        "stdout mismatch: stdout={:?}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+}
+
 // AArch64 calling convention: a libc / dylib call must use
 // `BL` (branch-with-link) so the callee's `RET` returns into
 // the caller. The SSA emit's PLT call placeholder used `B`

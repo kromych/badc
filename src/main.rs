@@ -658,6 +658,31 @@ fn main() {
                 }
             }
         };
+        // In-memory variant for the embedded runtime sources
+        // below: same compile + emit chain, no filesystem read.
+        let compile_in_memory = |label: &str, src: String| -> Vec<u8> {
+            let copts = badc::CompileOptions::default()
+                .with_defines(defines.clone())
+                .with_undefines(undefines.clone())
+                .with_include_paths(include_paths.clone())
+                .with_force_includes(force_includes.clone())
+                .with_source_label(label.to_string())
+                .with_no_entry_point(true);
+            let program = match Compiler::with_options(src, target, copts).compile() {
+                Ok(p) => p,
+                Err(e) => {
+                    eprint_diagnostic(e);
+                    std::process::exit(1);
+                }
+            };
+            match badc::emit_native_with_options(&program, target, reloc_opts) {
+                Ok(b) => b,
+                Err(e) => {
+                    eprint_diagnostic(e);
+                    std::process::exit(1);
+                }
+            }
+        };
         // `#pragma entrypoint(<name>)` overrides the default
         // `main`. The pragma is per-TU; the first TU that
         // surfaces a non-default entry wins. C99 leaves the
@@ -675,6 +700,20 @@ fn main() {
                 Ok(o) => native_objs.push(o),
                 Err(e) => {
                     eprint_diagnostic(format!("badc: {src_path}: {e}"));
+                    std::process::exit(1);
+                }
+            }
+        }
+        // Embedded runtime sources. Compiled in-memory and
+        // appended to `native_objs` so every executable picks
+        // them up; the writer's start stub uses any helper
+        // they define (e.g. `__c5_exit`) when available.
+        for (name, body) in badc::embedded_runtime() {
+            let bytes = compile_in_memory(name, body.to_string());
+            match badc::parse_native_elf(&bytes) {
+                Ok(o) => native_objs.push(o),
+                Err(e) => {
+                    eprint_diagnostic(format!("badc: <runtime/{name}>: {e}"));
                     std::process::exit(1);
                 }
             }

@@ -11,6 +11,8 @@ mod linker;
 mod op;
 mod preprocessor;
 mod program;
+#[cfg(feature = "linker")]
+mod runtime;
 mod symbol;
 mod token;
 mod vm;
@@ -56,6 +58,8 @@ pub use linker::{
 };
 #[cfg(feature = "linker")]
 pub use preprocessor::{Binding, DylibSpec, Subsystem};
+#[cfg(feature = "linker")]
+pub use runtime::embedded_runtime;
 #[cfg(feature = "linker")]
 pub use symbol::Linkage;
 

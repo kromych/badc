@@ -131,12 +131,26 @@ fn write_static_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8>
     // at any offset, so align before recording the stub's
     // entry point. 4 bytes is also the right alignment for
     // x86_64's `xor ebp, ebp; ...` start stub.
+    // If the embedded runtime defined `__c5_exit`, route the
+    // stub's tail through it (and through libc's `exit`)
+    // instead of the raw `exit_group` syscall. libc's `exit`
+    // runs the atexit chain (stdio fflush etc.) before the
+    // kernel reaps the process.
+    let exit_text_offset = merged.defined.get("__c5_exit").and_then(|sym| {
+        matches!(sym.section, NativeSymSection::Text).then_some(sym.value as usize)
+    });
+
     let mut text = merged.text.clone();
     while text.len() & 3 != 0 {
         text.push(0);
     }
     let stub_text_offset = text.len();
-    let stub_bytes = start_stub_bytes(merged.machine, stub_text_offset, entry_text_offset);
+    let stub_bytes = start_stub_bytes(
+        merged.machine,
+        stub_text_offset,
+        entry_text_offset,
+        exit_text_offset,
+    );
     text.extend_from_slice(&stub_bytes);
 
     let machine = match merged.machine {
@@ -351,70 +365,95 @@ fn start_stub_bytes(
     machine: NativeMachine,
     stub_text_offset: usize,
     entry_text_offset: usize,
+    exit_text_offset: Option<usize>,
 ) -> Vec<u8> {
     match machine {
-        NativeMachine::X86_64 => x86_64_start_stub(stub_text_offset, entry_text_offset),
-        NativeMachine::Aarch64 => aarch64_start_stub(stub_text_offset, entry_text_offset),
+        NativeMachine::X86_64 => {
+            x86_64_start_stub(stub_text_offset, entry_text_offset, exit_text_offset)
+        }
+        NativeMachine::Aarch64 => {
+            aarch64_start_stub(stub_text_offset, entry_text_offset, exit_text_offset)
+        }
     }
 }
 
-fn x86_64_start_stub(stub_text_offset: usize, entry_text_offset: usize) -> Vec<u8> {
+fn x86_64_start_stub(
+    stub_text_offset: usize,
+    entry_text_offset: usize,
+    exit_text_offset: Option<usize>,
+) -> Vec<u8> {
     // xor    ebp, ebp                                ; clear frame ptr
     // pop    rdi                                     ; argc
     // mov    rsi, rsp                                ; argv
     // call   <entry>                                 ; rel32
     // mov    rdi, rax                                ; exit code
-    // mov    eax, 0xe7                               ; sys_exit_group = 231
-    // syscall
-    let mut buf: Vec<u8> = Vec::with_capacity(20);
+    // -- if `__c5_exit` is in the merged image --
+    //   call <__c5_exit>                             ; rel32 -> libc exit via lib helper
+    //   ud2                                          ; unreachable
+    // -- otherwise (no libc; static path) --
+    //   mov  eax, 0xe7                               ; sys_exit_group = 231
+    //   syscall
+    let mut buf: Vec<u8> = Vec::with_capacity(24);
     buf.extend_from_slice(&[0x31, 0xed]); // xor ebp, ebp
     buf.push(0x5f); // pop rdi
     buf.extend_from_slice(&[0x48, 0x89, 0xe6]); // mov rsi, rsp
-    // call rel32 -- rel = entry - (call_end). The call's
-    // opcode is 1 byte (0xe8); end-of-call sits 5 bytes after
-    // the call's start.
-    let call_start = stub_text_offset + buf.len();
-    let call_end = call_start + 5;
-    let rel = (entry_text_offset as i64) - (call_end as i64);
+    let call_entry_start = stub_text_offset + buf.len();
+    let call_entry_end = call_entry_start + 5;
+    let rel_entry = (entry_text_offset as i64) - (call_entry_end as i64);
     buf.push(0xe8);
-    buf.extend_from_slice(&(rel as i32).to_le_bytes());
+    buf.extend_from_slice(&(rel_entry as i32).to_le_bytes());
     buf.extend_from_slice(&[0x48, 0x89, 0xc7]); // mov rdi, rax
-    buf.extend_from_slice(&[0xb8, 0xe7, 0x00, 0x00, 0x00]); // mov eax, 231
-    buf.extend_from_slice(&[0x0f, 0x05]); // syscall
+    if let Some(exit_off) = exit_text_offset {
+        let call_exit_start = stub_text_offset + buf.len();
+        let call_exit_end = call_exit_start + 5;
+        let rel_exit = (exit_off as i64) - (call_exit_end as i64);
+        buf.push(0xe8);
+        buf.extend_from_slice(&(rel_exit as i32).to_le_bytes());
+        buf.extend_from_slice(&[0x0f, 0x0b]); // ud2 -- unreachable
+    } else {
+        buf.extend_from_slice(&[0xb8, 0xe7, 0x00, 0x00, 0x00]); // mov eax, 231
+        buf.extend_from_slice(&[0x0f, 0x05]); // syscall
+    }
     buf
 }
 
-fn aarch64_start_stub(stub_text_offset: usize, entry_text_offset: usize) -> Vec<u8> {
+fn aarch64_start_stub(
+    stub_text_offset: usize,
+    entry_text_offset: usize,
+    exit_text_offset: Option<usize>,
+) -> Vec<u8> {
     // ldr    x0, [sp]                                ; argc
     // add    x1, sp, #8                              ; argv
     // bl     <entry>                                 ; imm26
-    // mov    x8, #94                                 ; sys_exit_group
-    // svc    #0
-    let mut buf: Vec<u8> = Vec::with_capacity(20);
-    // ldr x0, [sp]  -- LDR (immediate, unsigned offset),
-    // 64-bit: 0xF9400000 | (imm12 << 10) | (Rn << 5) | Rt.
-    // imm12 = 0, Rn = sp (31), Rt = x0.
+    // -- if `__c5_exit` is in the merged image --
+    //   bl    <__c5_exit>                            ; libc exit via lib helper
+    //   brk   #1                                     ; unreachable
+    // -- otherwise (static path, no libc) --
+    //   mov   x8, #94                                ; sys_exit_group
+    //   svc   #0
+    let mut buf: Vec<u8> = Vec::with_capacity(24);
     let ldr_x0_sp: u32 = 0xF9400000 | (31 << 5);
     buf.extend_from_slice(&ldr_x0_sp.to_le_bytes());
-    // add x1, sp, #8 -- ADD (immediate), 64-bit:
-    // 0x91000000 | (imm12 << 10) | (Rn << 5) | Rd.
     let add_x1_sp_8: u32 = 0x91000000 | (8 << 10) | (31 << 5) | 1;
     buf.extend_from_slice(&add_x1_sp_8.to_le_bytes());
-    // bl <imm26> -- 0x94000000 | (imm26 & 0x03ffffff).
-    // imm26 counts 4-byte instructions, signed.
-    let bl_offset = stub_text_offset + buf.len();
-    let bl_target = entry_text_offset as i64;
-    let bl_imm: i64 = (bl_target - bl_offset as i64) / 4;
-    let bl_imm26 = (bl_imm as u32) & 0x03ff_ffff;
-    let bl_word: u32 = 0x94000000 | bl_imm26;
-    buf.extend_from_slice(&bl_word.to_le_bytes());
-    // mov x8, #94 -- MOVZ (imm16, lsl#0) into x8.
-    // 0xD2800000 | (imm16 << 5) | Rd.
-    let movz_x8_94: u32 = 0xD2800000 | (94 << 5) | 8;
-    buf.extend_from_slice(&movz_x8_94.to_le_bytes());
-    // svc #0 -- 0xD4000001.
-    let svc_0: u32 = 0xD4000001;
-    buf.extend_from_slice(&svc_0.to_le_bytes());
+    let bl_entry_offset = stub_text_offset + buf.len();
+    let bl_entry_imm = (entry_text_offset as i64 - bl_entry_offset as i64) / 4;
+    let bl_entry_word: u32 = 0x94000000 | ((bl_entry_imm as u32) & 0x03ff_ffff);
+    buf.extend_from_slice(&bl_entry_word.to_le_bytes());
+    if let Some(exit_off) = exit_text_offset {
+        let bl_exit_offset = stub_text_offset + buf.len();
+        let bl_exit_imm = (exit_off as i64 - bl_exit_offset as i64) / 4;
+        let bl_exit_word: u32 = 0x94000000 | ((bl_exit_imm as u32) & 0x03ff_ffff);
+        buf.extend_from_slice(&bl_exit_word.to_le_bytes());
+        // brk #1 -- catches the case where __c5_exit somehow
+        // returns. 0xD4200020 = brk #1.
+        buf.extend_from_slice(&0xD4200020u32.to_le_bytes());
+    } else {
+        let movz_x8_94: u32 = 0xD2800000 | (94 << 5) | 8;
+        buf.extend_from_slice(&movz_x8_94.to_le_bytes());
+        let svc_0: u32 = 0xD4000001;
+        buf.extend_from_slice(&svc_0.to_le_bytes());
+    }
     buf
 }
 
@@ -485,12 +524,20 @@ fn write_dynamic_elf64(merged: &MergedNative, entry_name: &str) -> Result<Vec<u8
     // `merged.text`; the stub lands past them. Pad to 4 bytes
     // first so the entry point is instruction-aligned on
     // aarch64 (matching the static path).
+    let exit_text_offset = merged.defined.get("__c5_exit").and_then(|sym| {
+        matches!(sym.section, NativeSymSection::Text).then_some(sym.value as usize)
+    });
     let mut text = merged.text.clone();
     while text.len() & 3 != 0 {
         text.push(0);
     }
     let stub_text_offset = text.len();
-    let stub_bytes = start_stub_bytes(merged.machine, stub_text_offset, entry_text_offset);
+    let stub_bytes = start_stub_bytes(
+        merged.machine,
+        stub_text_offset,
+        entry_text_offset,
+        exit_text_offset,
+    );
     text.extend_from_slice(&stub_bytes);
 
     // .dynstr layout: a leading "\0", then "libc.so.6\0", then

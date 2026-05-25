@@ -583,6 +583,30 @@ fn main() {
         units.push(unit);
     }
 
+    // Embedded runtime sources -- compiled to LinkUnits and
+    // appended to `units` so cross-target builds (Mac Mach-O,
+    // Windows PE, plus the bytecode `link_units` path on Linux
+    // when applicable) pick up `__c5_exit`, `environ`, and
+    // anything else `lib/*.c` provides. The Linux native ELF
+    // path injects the same registry through a parallel loop
+    // in the native-link block below; both paths see the same
+    // runtime image.
+    if mode != Mode::DumpPp {
+        for (name, body) in badc::embedded_runtime() {
+            let copts = badc::CompileOptions::default().with_source_label((*name).to_string());
+            let runtime_compiler = Compiler::with_options(body.to_string(), target, copts);
+            let mut unit = match runtime_compiler.compile_to_link_unit() {
+                Ok(u) => u,
+                Err(e) => {
+                    eprint_diagnostic(format!("badc: <runtime/{name}>: {e}"));
+                    std::process::exit(1);
+                }
+            };
+            unit.source_path = format!("<runtime/{name}>");
+            units.push(unit);
+        }
+    }
+
     // --dump-pp is a per-source dump; nothing downstream of the
     // per-source loop applies (no link, no codegen, no output
     // file). Return now so the rest of the driver doesn't trip on
